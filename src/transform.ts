@@ -1,5 +1,7 @@
 import type { API, FileInfo, Options } from "jscodeshift";
+import type { Expression, TemplateElement } from "estree";
 import { compile } from "stylis";
+import type { Element } from "stylis";
 import type { Adapter } from "./adapter.js";
 import { defaultAdapter } from "./adapter.js";
 
@@ -263,12 +265,14 @@ function resolveStyledTarget(tag: any, styledName: string): StyledTarget | null 
   return null;
 }
 
-function buildPlaceholderCSS(quasi: any): { css: string; placeholders: any[] } {
+function buildPlaceholderCSS(
+  quasi: any,
+): { css: string; placeholders: (Expression | null)[] } {
   const parts: string[] = [];
-  const placeholders: any[] = [];
-  quasi.quasis.forEach((q, index) => {
+  const placeholders: (Expression | null)[] = [];
+  quasi.quasis.forEach((q: TemplateElement, index: number) => {
     parts.push(q.value.raw);
-    const expr = quasi.expressions[index];
+    const expr = (quasi.expressions[index] as Expression | null | undefined) ?? null;
     if (expr) {
       parts.push(`var(--__stylex_dyn_${index}__)`);
       placeholders.push(expr);
@@ -279,13 +283,13 @@ function buildPlaceholderCSS(quasi: any): { css: string; placeholders: any[] } {
 
 function parseStyle(
   css: string,
-  placeholders: any[],
+  placeholders: (Expression | null)[],
   j: API["jscodeshift"],
 ): Record<string, unknown> | null {
   const scope = ".__stylex_scope__";
   const ast = compile(`${scope}{${css}}`);
   const rule = ast.find(
-    (node) => node.type === "rule" && Array.isArray(node.props) && node.props.includes(scope),
+    (node: Element) => node.type === "rule" && Array.isArray(node.props) && node.props.includes(scope),
   );
   if (!rule) return null;
 
@@ -312,7 +316,11 @@ function normalizePropertyName(prop: string): string | null {
   return prop.replace(/-([a-z])/g, (_, c) => c.toUpperCase());
 }
 
-function buildValue(value: string, placeholders: any[], j: API["jscodeshift"]): unknown {
+function buildValue(
+  value: string,
+  placeholders: (Expression | null)[],
+  j: API["jscodeshift"],
+): unknown {
   const placeholderRegex = /var\(--__stylex_dyn_(\d+)__\)/g;
   const parts: (string | any)[] = [];
   let lastIndex = 0;
@@ -341,25 +349,25 @@ function buildValue(value: string, placeholders: any[], j: API["jscodeshift"]): 
     return only;
   }
 
-    const quasis: any[] = [];
-    const exprs: any[] = [];
-    for (const part of parts) {
-      if (typeof part === "string") {
-        quasis.push(j.templateElement({ cooked: part, raw: part }, false));
-      } else {
-        exprs.push(part);
-        if (quasis.length === exprs.length - 1) {
-          quasis.push(j.templateElement({ cooked: "", raw: "" }, false));
-        }
+  const quasis: any[] = [];
+  const exprs: any[] = [];
+  for (const part of parts) {
+    if (typeof part === "string") {
+      quasis.push(j.templateElement({ cooked: part, raw: part }, false));
+    } else {
+      exprs.push(part);
+      if (quasis.length === exprs.length - 1) {
+        quasis.push(j.templateElement({ cooked: "", raw: "" }, false));
       }
     }
-    if (quasis.length === exprs.length) {
-      quasis.push(j.templateElement({ cooked: "", raw: "" }, true));
-    } else if (quasis.length > 0) {
-      quasis[quasis.length - 1]!.tail = true;
-    }
-    return j.templateLiteral(quasis, exprs);
   }
+  if (quasis.length === exprs.length) {
+    quasis.push(j.templateElement({ cooked: "", raw: "" }, true));
+  } else if (quasis.length > 0) {
+    quasis[quasis.length - 1]!.tail = true;
+  }
+  return j.templateLiteral(quasis, exprs);
+}
 
 function normalizeLiteralValue(value: string): string | number {
   const trimmed = value.trim();
@@ -405,7 +413,7 @@ function buildWrapperComponent({
     ),
   ];
 
-  const element = j.jsxElement(opening, closing, children, false);
+  const element = j.jsxElement(opening, closing, children);
   return j.arrowFunctionExpression([j.identifier("props")], element);
 }
 
@@ -473,7 +481,7 @@ function pruneStyledImports(
 
   styledImports.forEach((path) => {
     const specifiers = path.node.specifiers ?? [];
-    const remaining = specifiers.filter((spec) => {
+    const remaining = specifiers.filter((spec: any) => {
       if (spec.type === "ImportDefaultSpecifier" && spec.local?.name === styledLocal) {
         return styledStillUsed;
       }
