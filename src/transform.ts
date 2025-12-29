@@ -95,7 +95,7 @@ export function transformWithWarnings(
       if (!base) return;
       const quasi = tagged.quasi;
       const { css, placeholders } = buildPlaceholderCSS(quasi);
-      const parsed = parseStyle(css, placeholders, j);
+      const parsed = parseStyle(css, placeholders, j, warnings, adapter);
       if (!parsed) return;
 
       const key = toStyleKey(path.node.id);
@@ -118,7 +118,7 @@ export function transformWithWarnings(
 
   injectStylexImport(root, j);
 
-  const program = getProgram(root);
+  const program = getProgram(root, j);
   if (!program) {
     return { code: root.toSource(), warnings };
   }
@@ -135,7 +135,9 @@ export function transformWithWarnings(
     program.body.splice(0, 0, ...adapterImportNodes);
   }
   if (adapterDecls.length > 0) {
-    const declNodes = adapterDecls.map((raw) => j.template.statement([raw])({}) as any);
+    const declNodes = adapterDecls
+      .map((raw) => parseStatement(j, raw))
+      .filter(Boolean) as any[];
     program.body.splice(findLastImportIndex(program.body) + 1, 0, ...declNodes);
   }
 
@@ -285,23 +287,53 @@ function parseStyle(
   css: string,
   placeholders: (Expression | null)[],
   j: API["jscodeshift"],
+  warnings: TransformWarning[],
+  adapter: Adapter,
 ): Record<string, unknown> | null {
   const scope = ".__stylex_scope__";
   const ast = compile(`${scope}{${css}}`);
-  const rule = ast.find(
-    (node: Element) => node.type === "rule" && Array.isArray(node.props) && node.props.includes(scope),
-  );
-  if (!rule) return null;
-
   const properties: Record<string, unknown> = {};
-  const children = (rule as any).children ?? [];
-  for (const child of children) {
-    if (child.type !== "decl") continue;
-    const propName = normalizePropertyName(String(child.props));
-    if (!propName) continue;
-    const value = buildValue(String(child.children ?? ""), placeholders, j);
-    properties[propName] = value;
-  }
+
+  const processRule = (
+    nodes: Element[],
+    atRules: string[],
+  ) => {
+    for (const node of nodes) {
+      if (node.type === "rule") {
+        const props = Array.isArray(node.props) ? node.props : [];
+        const selector = props.find((p) => typeof p === "string" && p.includes(scope));
+        if (!selector) continue;
+        const selectorTail = selector.replace(scope, "").trim();
+        const selectorContexts = selectorTail ? normalizeSelectorTail(selectorTail, warnings) : [];
+        const children = (node as any).children ?? [];
+        for (const child of children) {
+          if (child.type !== "decl") continue;
+          const propName = normalizePropertyName(String(child.props));
+          if (!propName) continue;
+          const rawValue = String(child.children ?? child.value ?? "");
+          const value = buildValue(rawValue, placeholders, j, adapter);
+          properties[propName] = mergeContextValue(
+            properties[propName],
+            [...atRules, ...selectorContexts],
+            value,
+          );
+        }
+      } else if (node.type === "@media" || node.type === "@supports") {
+        const mediaChildren = (node as any).children ?? [];
+        const label = `${node.value}`;
+        processRule(mediaChildren, [...atRules, label]);
+      } else if (node.type === "@keyframes") {
+        warnings.push({
+          type: "unsupported-feature",
+          feature: "keyframes",
+          message: "keyframes are not converted yet; manual migration required",
+        });
+      }
+    }
+  };
+
+  processRule(ast as Element[], []);
+  if (Object.keys(properties).length === 0) return null;
   return properties;
 }
 
@@ -320,6 +352,7 @@ function buildValue(
   value: string,
   placeholders: (Expression | null)[],
   j: API["jscodeshift"],
+  adapter: Adapter,
 ): unknown {
   const placeholderRegex = /var\(--__stylex_dyn_(\d+)__\)/g;
   const parts: (string | any)[] = [];
@@ -331,7 +364,7 @@ function buildValue(
     if (match.index > lastIndex) {
       parts.push(value.slice(lastIndex, match.index));
     }
-    parts.push(placeholders[index]);
+    parts.push(normalizeExpressionPlaceholder(placeholders[index] ?? null, adapter, j));
     lastIndex = match.index + full.length;
   }
   if (lastIndex < value.length) {
@@ -375,6 +408,93 @@ function normalizeLiteralValue(value: string): string | number {
     return Number.parseFloat(trimmed);
   }
   return trimmed;
+}
+
+function normalizeExpressionPlaceholder(
+  expr: Expression | null,
+  adapter: Adapter,
+  j: API["jscodeshift"],
+): any {
+  if (!expr) return expr;
+  const path = expressionToPath(expr);
+  if (!path) return expr;
+
+  const adapterValue = adapter.transformValue({
+    path,
+    valueType: "theme",
+  });
+  const literalMatch = adapterValue.match(/^['"](.*)['"]$/);
+  if (literalMatch) {
+    return j.literal(literalMatch[1] ?? "");
+  }
+  const stmt = j.template.statement`const __stylex_val = ${adapterValue};`();
+  if (stmt && stmt.type === "VariableDeclaration") {
+    const decl = stmt.declarations?.[0];
+    if (decl && decl.type === "VariableDeclarator") {
+      return decl.init as any;
+    }
+  }
+  return j.literal(adapterValue);
+}
+
+function expressionToPath(expr: Expression): string | null {
+  if (expr.type === "MemberExpression" && !expr.computed) {
+    const parts: string[] = [];
+    let current: any = expr;
+    while (current?.type === "MemberExpression" && !current.computed) {
+      const property = current.property;
+      if (property.type === "Identifier") {
+        parts.unshift(property.name);
+      }
+      current = current.object;
+    }
+    if (current?.type === "Identifier" && current.name === "theme") {
+      return parts.join(".");
+    }
+    if (
+      current?.type === "MemberExpression" &&
+      current.object.type === "Identifier" &&
+      current.object.name === "props" &&
+      current.property.type === "Identifier" &&
+      current.property.name === "theme"
+    ) {
+      return parts.join(".");
+    }
+  }
+  if (expr.type === "ArrowFunctionExpression") {
+    const body = expr.body as Expression;
+    const path = body && expressionToPath(body as Expression);
+    if (path) return path;
+  }
+  return null;
+}
+
+function normalizeSelectorTail(selectorTail: string, _warnings: TransformWarning[]): string[] {
+  if (!selectorTail) return [];
+  if (selectorTail.startsWith(":")) {
+    return [selectorTail];
+  }
+  return [];
+}
+
+function mergeContextValue(
+  current: unknown,
+  contexts: string[],
+  value: unknown,
+): unknown {
+  if (contexts.length === 0) return value;
+  const [head, ...rest] = contexts as [string, ...string[]];
+  const existing: Record<string, unknown> =
+    current && typeof current === "object" && !Array.isArray(current)
+      ? (current as Record<string, unknown>)
+      : { default: current ?? null };
+
+  const nextValue = mergeContextValue(existing[head], rest, value);
+  existing[head] = nextValue;
+  if (!("default" in existing)) {
+    existing.default = null;
+  }
+  return existing;
 }
 
 function toStyleKey(id: unknown): string | null {
@@ -458,7 +578,7 @@ function injectStylexImport(root: ReturnType<API["jscodeshift"]>, j: API["jscode
     [j.importNamespaceSpecifier(j.identifier("stylex"))],
     j.literal("@stylexjs/stylex"),
   );
-  const program = getProgram(root);
+  const program = getProgram(root, j);
   if (!program) return;
   program.body.splice(findLastImportIndex(program.body) + 1, 0, stylexImport);
 }
@@ -496,19 +616,28 @@ function pruneStyledImports(
   });
 }
 
-function getProgram(root: ReturnType<API["jscodeshift"]>): { body: any[] } | null {
-  const nodePath = root.get?.();
-  const program = (nodePath as any)?.node ?? (nodePath as any)?.value;
-  if (program && Array.isArray((program as any).body)) {
-    return program as any;
+function getProgram(
+  root: ReturnType<API["jscodeshift"]>,
+  j: API["jscodeshift"],
+): { body: any[] } | null {
+  const programPath = root.find(j.Program).paths?.()[0];
+  if (programPath?.node && Array.isArray((programPath.node as any).body)) {
+    return programPath.node as any;
   }
   return null;
 }
 
 function adapterImportToAST(j: API["jscodeshift"], adapterImports: string[]): any[] {
-  return adapterImports
-    .map((raw) => j.template.statement([raw])({}) as any)
-    .filter(Boolean);
+  return adapterImports.map((raw) => parseStatement(j, raw)).filter(Boolean) as any[];
+}
+
+function parseStatement(j: API["jscodeshift"], raw: string): any | null {
+  const parsed = j(raw);
+  const body = (parsed.nodes?.()[0] as any)?.program?.body ?? (parsed.nodes?.()[0] as any)?.body;
+  if (Array.isArray(body) && body[0]) {
+    return body[0] as any;
+  }
+  return null;
 }
 
 function buildStylesDeclaration(j: API["jscodeshift"], entries: StyleEntry[]) {
@@ -528,7 +657,10 @@ function buildStylesDeclaration(j: API["jscodeshift"], entries: StyleEntry[]) {
 function objectFromRecord(j: API["jscodeshift"], record: Record<string, unknown>): any {
   const props: any[] = [];
   for (const [key, value] of Object.entries(record)) {
-    props.push(j.objectProperty(j.identifier(key), valueToAST(j, value)));
+    const propertyKey = /^(?:[A-Za-z_$][\w$]*)$/.test(key)
+      ? j.identifier(key)
+      : j.literal(key);
+    props.push(j.objectProperty(propertyKey as any, valueToAST(j, value)));
   }
   return j.objectExpression(props);
 }
@@ -536,6 +668,9 @@ function objectFromRecord(j: API["jscodeshift"], record: Record<string, unknown>
 function valueToAST(j: API["jscodeshift"], value: unknown): any {
   if (value && typeof value === "object" && (value as any).type) {
     return value as any;
+  }
+  if (value && typeof value === "object" && !Array.isArray(value)) {
+    return objectFromRecord(j, value as Record<string, unknown>);
   }
   if (typeof value === "number") {
     return j.literal(value);

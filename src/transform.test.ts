@@ -389,3 +389,40 @@ export const App = () => <Button>Click</Button>;
     expect(result.warnings).toHaveLength(0);
   });
 });
+
+describe("stylis parsing", () => {
+  const source = `
+import styled from 'styled-components';
+
+const Button = styled.button\`
+  color: blue;
+  &:hover { color: red; }
+  @media (min-width: 500px) { color: green; }
+  outline: \${({ theme }) => theme.outline};
+\`;
+
+export const App = () => <Button/>;
+`;
+
+  it("should map pseudo-classes and media queries into nested properties", () => {
+    const result = transformWithWarnings(
+      { source, path: "test.tsx" },
+      { jscodeshift, j: jscodeshift, stats: () => {}, report: () => {} },
+      { adapter: defaultAdapter },
+    );
+
+    expect(result.warnings.map((w) => w.feature)).not.toContain("selector-interpolation");
+    expect(result.code).toContain("\":hover\"");
+    expect(result.code).toContain("@media (min-width: 500px)");
+  });
+
+  it("should pass theme references through the adapter", () => {
+    const result = transformWithWarnings(
+      { source, path: "test.tsx" },
+      { jscodeshift, j: jscodeshift, stats: () => {}, report: () => {} },
+      { adapter: defaultAdapter },
+    );
+
+    expect(result.code).toContain("var(--outline)");
+  });
+});
