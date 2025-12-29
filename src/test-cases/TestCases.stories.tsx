@@ -1,15 +1,13 @@
-import type { Meta, StoryObj } from '@storybook/react';
-import React from 'react';
+import type { Meta, StoryObj } from "@storybook/react";
+import React from "react";
 
 // Auto-discover all test case modules using Vite's glob import
-const inputModules = import.meta.glob<{ App: React.ComponentType }>(
-  './*.input.tsx',
-  { eager: true }
-);
-const outputModules = import.meta.glob<{ App: React.ComponentType }>(
-  './*.output.tsx',
-  { eager: true }
-);
+const inputModules = import.meta.glob<{ App: React.ComponentType }>("./*.input.tsx", {
+  eager: true,
+});
+const outputModules = import.meta.glob<{ App: React.ComponentType }>("./*.output.tsx", {
+  eager: true,
+});
 
 // Extract test case names from file paths
 function getTestCaseName(path: string): string {
@@ -38,42 +36,38 @@ const Comparison: React.FC<ComparisonProps> = ({ testCase }) => {
   const OutputComponent = outputModules[outputPath]?.App;
 
   return (
-    <div style={{ display: 'flex', gap: '2rem', padding: '1rem' }}>
+    <div style={{ display: "flex", gap: "2rem", padding: "1rem" }}>
       <div style={{ flex: 1 }}>
-        <h3 style={{ margin: '0 0 1rem', fontFamily: 'system-ui' }}>
-          Input (styled-components)
-        </h3>
+        <h3 style={{ margin: "0 0 1rem", fontFamily: "system-ui" }}>Input (styled-components)</h3>
         <div
           style={{
-            border: '1px solid #e0e0e0',
-            borderRadius: '8px',
-            padding: '1rem',
-            background: '#fafafa',
+            border: "1px solid #e0e0e0",
+            borderRadius: "8px",
+            padding: "1rem",
+            background: "#fafafa",
           }}
         >
           {InputComponent ? (
             <InputComponent />
           ) : (
-            <div style={{ color: '#999' }}>No input file found</div>
+            <div style={{ color: "#999" }}>No input file found</div>
           )}
         </div>
       </div>
       <div style={{ flex: 1 }}>
-        <h3 style={{ margin: '0 0 1rem', fontFamily: 'system-ui' }}>
-          Output (StyleX)
-        </h3>
+        <h3 style={{ margin: "0 0 1rem", fontFamily: "system-ui" }}>Output (StyleX)</h3>
         <div
           style={{
-            border: '1px solid #e0e0e0',
-            borderRadius: '8px',
-            padding: '1rem',
-            background: '#fafafa',
+            border: "1px solid #e0e0e0",
+            borderRadius: "8px",
+            padding: "1rem",
+            background: "#fafafa",
           }}
         >
           {OutputComponent ? (
             <OutputComponent />
           ) : (
-            <div style={{ color: '#999' }}>No output file found</div>
+            <div style={{ color: "#999" }}>No output file found</div>
           )}
         </div>
       </div>
@@ -85,14 +79,14 @@ const Comparison: React.FC<ComparisonProps> = ({ testCase }) => {
 const AllTestCases: React.FC = () => (
   <div>
     {testCaseNames.map((name) => (
-      <div key={name} id={`testcase-${name}`} style={{ marginBottom: '2rem' }}>
+      <div key={name} id={`testcase-${name}`} style={{ marginBottom: "2rem" }}>
         <h2
           style={{
-            fontFamily: 'system-ui',
-            padding: '0 1rem',
-            margin: '1rem 0',
-            borderBottom: '1px solid #e0e0e0',
-            paddingBottom: '0.5rem',
+            fontFamily: "system-ui",
+            padding: "0 1rem",
+            margin: "1rem 0",
+            borderBottom: "1px solid #e0e0e0",
+            paddingBottom: "0.5rem",
           }}
         >
           {name}
@@ -104,9 +98,9 @@ const AllTestCases: React.FC = () => (
 );
 
 const meta: Meta = {
-  title: 'Test Cases',
+  title: "Test Cases",
   parameters: {
-    layout: 'fullscreen',
+    layout: "fullscreen",
   },
 };
 

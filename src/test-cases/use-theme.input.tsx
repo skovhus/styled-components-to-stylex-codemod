@@ -1,16 +1,16 @@
-import styled, { ThemeProvider, useTheme } from 'styled-components';
+import styled, { ThemeProvider, useTheme } from "styled-components";
 
 const theme = {
   colors: {
-    primary: '#BF4F74',
-    secondary: '#4F74BF',
+    primary: "#BF4F74",
+    secondary: "#4F74BF",
   },
 };
 
 const Button = styled.button`
-  color: ${props => props.theme.colors.primary};
+  color: ${(props) => props.theme.colors.primary};
   background: white;
-  border: 2px solid ${props => props.theme.colors.primary};
+  border: 2px solid ${(props) => props.theme.colors.primary};
 `;
 
 const ThemeInfo = () => {

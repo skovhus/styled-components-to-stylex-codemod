@@ -1,4 +1,4 @@
-import styled from 'styled-components';
+import styled from "styled-components";
 
 // Using !important to override inline styles or third-party CSS
 const OverrideButton = styled.button`
@@ -37,11 +37,11 @@ const ImportantHover = styled.a`
 
 export const App = () => (
   <div>
-    <OverrideButton style={{ background: 'blue' }}>
+    <OverrideButton style={{ background: "blue" }}>
       Should be pink despite inline style
     </OverrideButton>
     <ForceWidth>Full width content</ForceWidth>
-    <MixedStyles style={{ color: 'red', margin: '20px' }}>
+    <MixedStyles style={{ color: "red", margin: "20px" }}>
       Color and margin should be overridden
     </MixedStyles>
     <ImportantHover href="#">Hover me</ImportantHover>

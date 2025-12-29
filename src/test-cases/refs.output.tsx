@@ -1,14 +1,14 @@
-import * as stylex from '@stylexjs/stylex';
-import { useRef, useEffect } from 'react';
+import * as stylex from "@stylexjs/stylex";
+import { useRef, useEffect } from "react";
 
 const styles = stylex.create({
   input: {
-    padding: '0.5em',
-    margin: '0.5em',
-    color: '#BF4F74',
-    backgroundColor: 'papayawhip',
-    borderStyle: 'none',
-    borderRadius: '3px',
+    padding: "0.5em",
+    margin: "0.5em",
+    color: "#BF4F74",
+    backgroundColor: "papayawhip",
+    borderStyle: "none",
+    borderRadius: "3px",
   },
 });
 

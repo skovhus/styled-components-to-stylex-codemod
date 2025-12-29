@@ -1,8 +1,8 @@
-import styled from 'styled-components';
+import styled from "styled-components";
 
 // withConfig for displayName (debugging)
 const Button = styled.button.withConfig({
-  displayName: 'PrimaryButton',
+  displayName: "PrimaryButton",
 })`
   background: #BF4F74;
   color: white;
@@ -13,8 +13,8 @@ const Button = styled.button.withConfig({
 
 // withConfig for componentId (stable class names)
 const Card = styled.div.withConfig({
-  displayName: 'Card',
-  componentId: 'sc-card-123',
+  displayName: "Card",
+  componentId: "sc-card-123",
 })`
   padding: 16px;
   background: white;
@@ -24,17 +24,17 @@ const Card = styled.div.withConfig({
 
 // Combining withConfig options
 const Input = styled.input.withConfig({
-  displayName: 'StyledInput',
-  componentId: 'sc-input-456',
-  shouldForwardProp: (prop) => prop !== 'hasError',
+  displayName: "StyledInput",
+  componentId: "sc-input-456",
+  shouldForwardProp: (prop) => prop !== "hasError",
 })<{ hasError?: boolean }>`
   padding: 8px 12px;
-  border: 2px solid ${props => props.hasError ? 'red' : '#ccc'};
+  border: 2px solid ${(props) => (props.hasError ? "red" : "#ccc")};
   border-radius: 4px;
   font-size: 14px;
 
   &:focus {
-    border-color: ${props => props.hasError ? 'red' : '#BF4F74'};
+    border-color: ${(props) => (props.hasError ? "red" : "#BF4F74")};
     outline: none;
   }
 `;
@@ -46,7 +46,7 @@ const BaseButton = styled.button`
 `;
 
 const ExtendedButton = styled(BaseButton).withConfig({
-  displayName: 'ExtendedButton',
+  displayName: "ExtendedButton",
 })`
   background: #4F74BF;
   color: white;

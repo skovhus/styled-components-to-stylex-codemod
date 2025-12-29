@@ -1,17 +1,17 @@
-import * as stylex from '@stylexjs/stylex';
+import * as stylex from "@stylexjs/stylex";
 
 const styles = stylex.create({
   equalDivider: {
-    display: 'flex',
-    margin: '0.5rem',
-    padding: '1rem',
-    backgroundColor: 'papayawhip',
+    display: "flex",
+    margin: "0.5rem",
+    padding: "1rem",
+    backgroundColor: "papayawhip",
   },
   child: {
     flex: 1,
   },
   childNotFirst: {
-    marginLeft: '1rem',
+    marginLeft: "1rem",
   },
 });
 

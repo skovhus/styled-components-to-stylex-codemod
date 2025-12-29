@@ -1,4 +1,4 @@
-import styled from 'styled-components';
+import styled from "styled-components";
 
 const Input = styled.input`
   padding: 8px 12px;
@@ -68,7 +68,9 @@ export const App = () => (
     <Input type="text" readOnly value="Read only" />
     <br />
     <Link href="/page">Internal Link</Link>
-    <Link href="https://example.com" target="_blank">External HTTPS Link</Link>
+    <Link href="https://example.com" target="_blank">
+      External HTTPS Link
+    </Link>
     <Link href="/document.pdf">PDF Link</Link>
   </div>
 );

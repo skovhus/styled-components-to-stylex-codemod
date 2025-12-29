@@ -1,4 +1,4 @@
-import styled from 'styled-components';
+import styled from "styled-components";
 
 const Button = styled.button`
   display: inline-block;
@@ -13,6 +13,8 @@ const Button = styled.button`
 export const App = () => (
   <div>
     <Button>Normal Button</Button>
-    <Button as="a" href="#">Link with Button styles</Button>
+    <Button as="a" href="#">
+      Link with Button styles
+    </Button>
   </div>
 );

@@ -1,60 +1,60 @@
-import React from 'react';
-import * as stylex from '@stylexjs/stylex';
+import React from "react";
+import * as stylex from "@stylexjs/stylex";
 
 const styles = stylex.create({
   multiSelector: {},
   multiSelectorHoverFocus: {
-    backgroundColor: '#BF4F74',
-    color: 'white',
+    backgroundColor: "#BF4F74",
+    color: "white",
   },
   multiSelectorActiveFocusVisible: {
-    outline: '2px solid #4F74BF',
-    outlineOffset: '2px',
+    outline: "2px solid #4F74BF",
+    outlineOffset: "2px",
   },
   multiSelectorSelected: {
-    backgroundColor: '#4F74BF',
-    color: 'white',
+    backgroundColor: "#4F74BF",
+    color: "white",
   },
   compoundSelector: {},
   compoundHighlighted: {
-    borderWidth: '2px',
-    borderStyle: 'solid',
-    borderColor: 'gold',
+    borderWidth: "2px",
+    borderStyle: "solid",
+    borderColor: "gold",
   },
   compoundError: {
-    borderWidth: '2px',
-    borderStyle: 'solid',
-    borderColor: 'red',
-    backgroundColor: '#fee',
+    borderWidth: "2px",
+    borderStyle: "solid",
+    borderColor: "red",
+    backgroundColor: "#fee",
   },
   chainedPseudo: {},
   chainedPseudoFocusEnabled: {
-    borderColor: '#BF4F74',
+    borderColor: "#BF4F74",
   },
   chainedPseudoHoverEnabled: {
-    borderColor: '#999',
+    borderColor: "#999",
   },
   chainedPseudoCheckedEnabled: {
-    backgroundColor: '#BF4F74',
+    backgroundColor: "#BF4F74",
   },
   nav: {},
   navLink: {
-    color: '#333',
-    textDecoration: 'none',
+    color: "#333",
+    textDecoration: "none",
   },
   navLinkHoverFocus: {
-    color: '#BF4F74',
+    color: "#BF4F74",
   },
   navLinkActive: {
-    fontWeight: 'bold',
-    color: '#4F74BF',
+    fontWeight: "bold",
+    color: "#4F74BF",
   },
   heading: {
-    marginBottom: '0.5em',
+    marginBottom: "0.5em",
     lineHeight: 1.2,
   },
   textBlock: {
-    marginBottom: '1em',
+    marginBottom: "1em",
     lineHeight: 1.6,
   },
 });
@@ -75,7 +75,7 @@ function MultiSelector({ isActive, isSelected, ...props }: MultiSelectorProps) {
         styles.multiSelector,
         (isHovered || isFocused) && styles.multiSelectorHoverFocus,
         (isPressed || isFocused) && styles.multiSelectorActiveFocusVisible,
-        (isActive || isSelected) && styles.multiSelectorSelected
+        (isActive || isSelected) && styles.multiSelectorSelected,
       )}
       onFocus={() => setIsFocused(true)}
       onBlur={() => setIsFocused(false)}
@@ -100,7 +100,7 @@ function CompoundSelector({ highlighted, error, children }: CompoundSelectorProp
       {...stylex.props(
         styles.compoundSelector,
         highlighted && styles.compoundHighlighted,
-        error && styles.compoundError
+        error && styles.compoundError,
       )}
     >
       {children}
@@ -119,7 +119,7 @@ function ChainedPseudo({ disabled, ...props }: ChainedPseudoProps) {
       {...stylex.props(
         styles.chainedPseudo,
         !disabled && isFocused && styles.chainedPseudoFocusEnabled,
-        !disabled && isHovered && !isFocused && styles.chainedPseudoHoverEnabled
+        !disabled && isHovered && !isFocused && styles.chainedPseudoHoverEnabled,
       )}
       disabled={disabled}
       onFocus={() => setIsFocused(true)}
@@ -147,7 +147,7 @@ function NavLink({ href, isActive, children }: NavLinkProps) {
       {...stylex.props(
         styles.navLink,
         (isHovered || isFocused) && styles.navLinkHoverFocus,
-        isActive && styles.navLinkActive
+        isActive && styles.navLinkActive,
       )}
       onFocus={() => setIsFocused(true)}
       onBlur={() => setIsFocused(false)}
@@ -165,7 +165,9 @@ export const App = () => (
     <CompoundSelector highlighted>Compound</CompoundSelector>
     <ChainedPseudo type="checkbox" />
     <nav {...stylex.props(styles.nav)}>
-      <NavLink href="#" isActive>Active Link</NavLink>
+      <NavLink href="#" isActive>
+        Active Link
+      </NavLink>
       <NavLink href="#">Normal Link</NavLink>
     </nav>
     <div>

@@ -1,16 +1,16 @@
-import React from 'react';
-import * as stylex from '@stylexjs/stylex';
+import React from "react";
+import * as stylex from "@stylexjs/stylex";
 
 const styles = stylex.create({
   thing: {
-    color: 'blue',
+    color: "blue",
   },
   adjacentSibling: {
-    color: 'red',
-    backgroundColor: 'lime',
+    color: "red",
+    backgroundColor: "lime",
   },
   siblingAfterSomething: {
-    backgroundColor: 'yellow',
+    backgroundColor: "yellow",
   },
 });
 
@@ -27,7 +27,7 @@ const Thing = ({ children, isAdjacentSibling, isSiblingAfterSomething, className
     {...stylex.props(
       styles.thing,
       isAdjacentSibling && styles.adjacentSibling,
-      isSiblingAfterSomething && styles.siblingAfterSomething
+      isSiblingAfterSomething && styles.siblingAfterSomething,
     )}
   >
     {children}
@@ -38,8 +38,14 @@ export const App = () => (
   <div>
     <Thing>First (blue)</Thing>
     <Thing isAdjacentSibling>Second (red, lime background - adjacent to first)</Thing>
-    <Thing isAdjacentSibling className="something">Third with .something class</Thing>
-    <Thing isAdjacentSibling isSiblingAfterSomething>Fourth (yellow background - sibling after .something)</Thing>
-    <Thing isAdjacentSibling isSiblingAfterSomething>Fifth (yellow background - sibling after .something)</Thing>
+    <Thing isAdjacentSibling className="something">
+      Third with .something class
+    </Thing>
+    <Thing isAdjacentSibling isSiblingAfterSomething>
+      Fourth (yellow background - sibling after .something)
+    </Thing>
+    <Thing isAdjacentSibling isSiblingAfterSomething>
+      Fifth (yellow background - sibling after .something)
+    </Thing>
   </div>
 );

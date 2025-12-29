@@ -1,16 +1,16 @@
-import * as stylex from '@stylexjs/stylex';
+import * as stylex from "@stylexjs/stylex";
 
 const styles = stylex.create({
   thing: {
     color: {
-      default: 'blue',
-      ':hover': 'red',
+      default: "blue",
+      ":hover": "red",
     },
     outline: {
       default: null,
-      ':focus': '2px solid blue',
+      ":focus": "2px solid blue",
     },
-    '::before': {
+    "::before": {
       content: '"🔥"',
     },
   },

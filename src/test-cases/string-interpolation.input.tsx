@@ -1,9 +1,9 @@
-import styled from 'styled-components';
+import styled from "styled-components";
 
 // String interpolation for dynamic values
-const dynamicColor = '#BF4F74';
+const dynamicColor = "#BF4F74";
 const spacing = 16;
-const borderRadius = '4px';
+const borderRadius = "4px";
 
 const Button = styled.button`
   background: ${dynamicColor};
@@ -26,8 +26,8 @@ const Text = styled.p`
 // Conditional string interpolation
 const isPrimary = true;
 const ConditionalButton = styled.button`
-  background: ${isPrimary ? '#BF4F74' : '#ccc'};
-  color: ${isPrimary ? 'white' : '#333'};
+  background: ${isPrimary ? "#BF4F74" : "#ccc"};
+  color: ${isPrimary ? "white" : "#333"};
   padding: 8px 16px;
   border: none;
   border-radius: 4px;
@@ -36,12 +36,12 @@ const ConditionalButton = styled.button`
 // Array/object property interpolation
 const theme = {
   colors: {
-    primary: '#BF4F74',
-    secondary: '#4F74BF',
+    primary: "#BF4F74",
+    secondary: "#4F74BF",
   },
   spacing: {
-    sm: '8px',
-    md: '16px',
+    sm: "8px",
+    md: "16px",
   },
 };
 
@@ -53,10 +53,10 @@ const ThemedCard = styled.div`
 `;
 
 // Function returning string
-const getColor = (variant: string) => variant === 'primary' ? '#BF4F74' : '#4F74BF';
+const getColor = (variant: string) => (variant === "primary" ? "#BF4F74" : "#4F74BF");
 
 const DynamicBox = styled.div<{ variant: string }>`
-  background: ${props => getColor(props.variant)};
+  background: ${(props) => getColor(props.variant)};
   padding: 16px;
   color: white;
   border-radius: 4px;

@@ -1,14 +1,14 @@
-import * as stylex from '@stylexjs/stylex';
+import * as stylex from "@stylexjs/stylex";
 
 const styles = stylex.create({
   title: {
-    fontSize: '1.5em',
-    textAlign: 'center',
-    color: '#BF4F74',
+    fontSize: "1.5em",
+    textAlign: "center",
+    color: "#BF4F74",
   },
   wrapper: {
-    padding: '4em',
-    backgroundColor: 'papayawhip',
+    padding: "4em",
+    backgroundColor: "papayawhip",
   },
 });
 

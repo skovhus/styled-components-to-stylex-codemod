@@ -1,20 +1,11 @@
 import { describe, it, expect } from "vitest";
 import { applyTransform } from "jscodeshift/src/testUtils.js";
 import jscodeshift from "jscodeshift";
-import {
-  readdirSync,
-  readFileSync,
-  existsSync,
-  writeFileSync,
-  unlinkSync,
-} from "node:fs";
+import { readdirSync, readFileSync, existsSync, writeFileSync, unlinkSync } from "node:fs";
 import { join, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
 import { execSync } from "node:child_process";
-import transform, {
-  transformWithWarnings,
-  defaultAdapter,
-} from "./transform.js";
+import transform, { transformWithWarnings, defaultAdapter } from "./transform.js";
 import type { Adapter, TransformOptions } from "./transform.js";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
@@ -24,9 +15,7 @@ const defineVarsAdapter: Adapter = {
   transformValue({ path }) {
     const varName = path
       .split(".")
-      .map((part, i) =>
-        i === 0 ? part : part.charAt(0).toUpperCase() + part.slice(1)
-      )
+      .map((part, i) => (i === 0 ? part : part.charAt(0).toUpperCase() + part.slice(1)))
       .join("");
     return `themeVars.${varName}`;
   },
@@ -57,12 +46,8 @@ function getTestCases(): string[] {
   const inputFiles = files.filter((f) => f.endsWith(".input.tsx"));
   const outputFiles = files.filter((f) => f.endsWith(".output.tsx"));
 
-  const inputNames = new Set(
-    inputFiles.map((f) => f.replace(".input.tsx", ""))
-  );
-  const outputNames = new Set(
-    outputFiles.map((f) => f.replace(".output.tsx", ""))
-  );
+  const inputNames = new Set(inputFiles.map((f) => f.replace(".input.tsx", "")));
+  const outputNames = new Set(outputFiles.map((f) => f.replace(".output.tsx", "")));
 
   // Check for mismatched files
   for (const name of inputNames) {
@@ -102,12 +87,7 @@ function readTestCase(name: string): {
 
 function runTransform(source: string, options: TransformOptions = {}): string {
   const opts = { adapter: defaultAdapter, ...options };
-  const result = applyTransform(
-    transform,
-    opts,
-    { source, path: "test.tsx" },
-    { parser: "tsx" }
-  );
+  const result = applyTransform(transform, opts, { source, path: "test.tsx" }, { parser: "tsx" });
   // applyTransform returns empty string when no changes, return original source
   return result || source;
 }
@@ -119,9 +99,7 @@ function lintCode(code: string, name: string): void {
     execSync(`pnpm oxlint "${tempFile}"`, { encoding: "utf-8", stdio: "pipe" });
   } catch (error) {
     const err = error as { stdout?: string; stderr?: string };
-    throw new Error(
-      `Lint errors in transformed output:\n${err.stdout ?? err.stderr ?? ""}`
-    );
+    throw new Error(`Lint errors in transformed output:\n${err.stdout ?? err.stderr ?? ""}`);
   } finally {
     if (existsSync(tempFile)) {
       unlinkSync(tempFile);
@@ -141,8 +119,7 @@ function assertExportsApp(source: string, fileLabel: string): void {
         }
         if (decl?.type === "VariableDeclaration") {
           return decl.declarations.some(
-            (d) =>
-              "id" in d && d.id.type === "Identifier" && d.id.name === "App"
+            (d) => "id" in d && d.id.type === "Identifier" && d.id.name === "App",
           );
         }
         // export { App } (or export { App as Something })
@@ -164,16 +141,14 @@ function assertExportsApp(source: string, fileLabel: string): void {
 
   if (!hasExportedApp) {
     throw new Error(
-      `${fileLabel} must export a named App component (required by Storybook auto-discovery).`
+      `${fileLabel} must export a named App component (required by Storybook auto-discovery).`,
     );
   }
 }
 
 type ExpectedWarning = { feature: string; type?: string };
 
-function readExpectedWarningsFromComments(
-  source: string
-): ExpectedWarning[] | null {
+function readExpectedWarningsFromComments(source: string): ExpectedWarning[] | null {
   // Convention (place near top of fixture):
   //   // expected-warnings: createGlobalStyle, component-selector
   // Can appear multiple times; values are merged.
@@ -210,26 +185,20 @@ describe("test case file pairing", () => {
 describe("test case exports", () => {
   const testCases = getTestCases();
 
-  it.each(testCases)(
-    "%s should export App in both input and output",
-    (name) => {
-      const { input, output } = readTestCase(name);
-      assertExportsApp(input, `${name}.input.tsx`);
-      assertExportsApp(output, `${name}.output.tsx`);
-    }
-  );
+  it.each(testCases)("%s should export App in both input and output", (name) => {
+    const { input, output } = readTestCase(name);
+    assertExportsApp(input, `${name}.input.tsx`);
+    assertExportsApp(output, `${name}.output.tsx`);
+  });
 });
 
 describe("output invariants", () => {
   const testCases = getTestCases();
 
-  it.each(testCases)(
-    "%s output should not import styled-components",
-    (name) => {
-      const { output } = readTestCase(name);
-      expect(output).not.toMatch(/from\s+['"]styled-components['"]/);
-    }
-  );
+  it.each(testCases)("%s output should not import styled-components", (name) => {
+    const { output } = readTestCase(name);
+    expect(output).not.toMatch(/from\s+['"]styled-components['"]/);
+  });
 });
 
 describe("output file linting", () => {
@@ -245,29 +214,26 @@ describe("output file linting", () => {
 describe("fixture warning expectations", () => {
   const testCases = getTestCases();
 
-  it.each(testCases)(
-    "%s warnings should match expectations (if provided)",
-    (name) => {
-      const { input } = readTestCase(name);
-      const expected = readExpectedWarningsFromComments(input);
+  it.each(testCases)("%s warnings should match expectations (if provided)", (name) => {
+    const { input } = readTestCase(name);
+    const expected = readExpectedWarningsFromComments(input);
 
-      const result = transformWithWarnings(
-        { source: input, path: `${name}.input.tsx` },
-        { jscodeshift: j, j, stats: () => {}, report: () => {} },
-        { adapter: defaultAdapter }
-      );
+    const result = transformWithWarnings(
+      { source: input, path: `${name}.input.tsx` },
+      { jscodeshift: j, j, stats: () => {}, report: () => {} },
+      { adapter: defaultAdapter },
+    );
 
-      const actualFeatures = result.warnings.map((w) => w.feature).sort();
+    const actualFeatures = result.warnings.map((w) => w.feature).sort();
 
-      if (!expected) {
-        expect(actualFeatures).toEqual([]);
-        return;
-      }
-
-      const expectedFeatures = expected.map((w) => w.feature).sort();
-      expect(actualFeatures).toEqual(expectedFeatures);
+    if (!expected) {
+      expect(actualFeatures).toEqual([]);
+      return;
     }
-  );
+
+    const expectedFeatures = expected.map((w) => w.feature).sort();
+    expect(actualFeatures).toEqual(expectedFeatures);
+  });
 });
 
 // TODO: Enable these tests once the transform is fully implemented.
@@ -307,7 +273,7 @@ export const App = () => (
     const result = transformWithWarnings(
       { source, path: "test.tsx" },
       { jscodeshift, j: jscodeshift, stats: () => {}, report: () => {} },
-      { adapter: defaultAdapter }
+      { adapter: defaultAdapter },
     );
 
     expect(result.warnings).toHaveLength(1);
@@ -316,9 +282,7 @@ export const App = () => (
       type: "unsupported-feature",
       feature: "createGlobalStyle",
     });
-    expect(warning.message).toContain(
-      "createGlobalStyle is not supported in StyleX"
-    );
+    expect(warning.message).toContain("createGlobalStyle is not supported in StyleX");
   });
 
   it("should not warn when createGlobalStyle is not used", () => {
@@ -333,7 +297,7 @@ const Button = styled.button\`
     const result = transformWithWarnings(
       { source, path: "test.tsx" },
       { jscodeshift, j: jscodeshift, stats: () => {}, report: () => {} },
-      { adapter: defaultAdapter }
+      { adapter: defaultAdapter },
     );
 
     expect(result.warnings).toHaveLength(0);
@@ -355,7 +319,7 @@ export const App = () => <Button>Click</Button>;
     const result = transformWithWarnings(
       { source: themeSource, path: "test.tsx" },
       { jscodeshift, j: jscodeshift, stats: () => {}, report: () => {} },
-      { adapter: defaultAdapter }
+      { adapter: defaultAdapter },
     );
 
     // Transform runs without error
@@ -366,7 +330,7 @@ export const App = () => <Button>Click</Button>;
     const result = transformWithWarnings(
       { source: themeSource, path: "test.tsx" },
       { jscodeshift, j: jscodeshift, stats: () => {}, report: () => {} },
-      { adapter: defineVarsAdapter }
+      { adapter: defineVarsAdapter },
     );
 
     expect(result.warnings).toHaveLength(0);
@@ -376,7 +340,7 @@ export const App = () => <Button>Click</Button>;
     const result = transformWithWarnings(
       { source: themeSource, path: "test.tsx" },
       { jscodeshift, j: jscodeshift, stats: () => {}, report: () => {} },
-      { adapter: inlineValuesAdapter }
+      { adapter: inlineValuesAdapter },
     );
 
     expect(result.warnings).toHaveLength(0);
@@ -398,7 +362,7 @@ export const App = () => <Button>Click</Button>;
     const result = transformWithWarnings(
       { source: themeSource, path: "test.tsx" },
       { jscodeshift, j: jscodeshift, stats: () => {}, report: () => {} },
-      { adapter: customAdapter }
+      { adapter: customAdapter },
     );
 
     expect(result.warnings).toHaveLength(0);
@@ -408,7 +372,7 @@ export const App = () => <Button>Click</Button>;
     const result = transformWithWarnings(
       { source: themeSource, path: "test.tsx" },
       { jscodeshift, j: jscodeshift, stats: () => {}, report: () => {} },
-      {}
+      {},
     );
 
     // Should run without error using default adapter
@@ -419,7 +383,7 @@ export const App = () => <Button>Click</Button>;
     const result = transformWithWarnings(
       { source: themeSource, path: "test.tsx" },
       { jscodeshift, j: jscodeshift, stats: () => {}, report: () => {} },
-      { adapter: defineVarsAdapter }
+      { adapter: defineVarsAdapter },
     );
 
     expect(result.warnings).toHaveLength(0);

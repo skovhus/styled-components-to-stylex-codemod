@@ -1,34 +1,34 @@
-import * as stylex from '@stylexjs/stylex';
-import { calcVars } from './css-calc.stylex';
+import * as stylex from "@stylexjs/stylex";
+import { calcVars } from "./css-calc.stylex";
 
 const styles = stylex.create({
   container: {
-    width: 'calc(100% - 40px)',
-    maxWidth: 'calc(1200px - 2rem)',
+    width: "calc(100% - 40px)",
+    maxWidth: "calc(1200px - 2rem)",
     marginTop: 0,
-    marginRight: 'auto',
+    marginRight: "auto",
     marginBottom: 0,
-    marginLeft: 'auto',
-    padding: 'calc(16px + 1vw)',
+    marginLeft: "auto",
+    padding: "calc(16px + 1vw)",
   },
   sidebar: {
-    width: 'calc(25% - 20px)',
-    minWidth: 'calc(200px + 2vw)',
-    height: 'calc(100vh - 60px)',
-    padding: 'calc(8px * 2)',
+    width: "calc(25% - 20px)",
+    minWidth: "calc(200px + 2vw)",
+    height: "calc(100vh - 60px)",
+    padding: "calc(8px * 2)",
   },
   grid: {
-    display: 'grid',
-    gridTemplateColumns: 'repeat(3, calc(33.333% - 20px))',
-    gap: 'calc(10px + 0.5vw)',
+    display: "grid",
+    gridTemplateColumns: "repeat(3, calc(33.333% - 20px))",
+    gap: "calc(10px + 0.5vw)",
   },
   flexItem: {
-    flex: '0 0 calc(50% - 1rem)',
-    padding: 'calc(1rem / 2)',
+    flex: "0 0 calc(50% - 1rem)",
+    padding: "calc(1rem / 2)",
   },
   complexCalc: {
-    width: 'calc(100% - calc(20px + 2rem))',
-    margin: 'calc(10px + calc(5px * 2))',
+    width: "calc(100% - calc(20px + 2rem))",
+    margin: "calc(10px + calc(5px * 2))",
   },
   withVariables: {
     width: `calc(${calcVars.baseSize} * 10)`,

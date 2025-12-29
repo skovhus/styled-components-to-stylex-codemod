@@ -1,13 +1,13 @@
-import * as stylex from '@stylexjs/stylex';
-import { vars, textVars } from './css-variables.stylex';
+import * as stylex from "@stylexjs/stylex";
+import { vars, textVars } from "./css-variables.stylex";
 
 const styles = stylex.create({
   button: {
     padding: `${vars.spacingSm} ${vars.spacingMd}`,
     backgroundColor: vars.colorPrimary,
-    color: 'white',
-    borderWidth: '2px',
-    borderStyle: 'solid',
+    color: "white",
+    borderWidth: "2px",
+    borderStyle: "solid",
     borderColor: vars.colorSecondary,
     borderRadius: vars.borderRadius,
   },
@@ -16,8 +16,8 @@ const styles = stylex.create({
   },
   card: {
     padding: vars.spacingLg,
-    borderWidth: '1px',
-    borderStyle: 'solid',
+    borderWidth: "1px",
+    borderStyle: "solid",
     borderColor: vars.colorSecondary,
     borderRadius: vars.borderRadius,
     margin: vars.spacingMd,

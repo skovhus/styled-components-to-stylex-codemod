@@ -2,6 +2,19 @@
   "name": "styled-components-to-stylex-codemod",
   "version": "0.0.0",
   "description": "Codemod to transform styled-components to StyleX",
+  "keywords": [
+    "codemod",
+    "css-in-js",
+    "jscodeshift",
+    "styled-components",
+    "stylex",
+    "transform"
+  ],
+  "license": "MIT",
+  "author": "",
+  "files": [
+    "dist"
+  ],
   "type": "module",
   "main": "./dist/index.mjs",
   "types": "./dist/index.d.mts",
@@ -13,14 +26,12 @@
     "./transform": {
       "types": "./dist/transform.d.mts",
       "import": "./dist/transform.mjs"
+    },
+    "./run": {
+      "types": "./dist/run.d.mts",
+      "import": "./dist/run.mjs"
     }
   },
-  "bin": {
-    "styled-components-to-stylex": "./dist/cli.mjs"
-  },
-  "files": [
-    "dist"
-  ],
   "scripts": {
     "build": "tsdown",
     "dev": "tsdown --watch",
@@ -28,28 +39,15 @@
     "test:run": "vitest run",
     "test:coverage": "vitest run --coverage",
     "lint": "oxlint --ignore-pattern 'src/test-cases/**' --ignore-pattern 'storybook-static/**'",
-    "lint:fix": "oxlint --fix",
-    "typecheck": "tsc --noEmit && pnpm run typecheck:fixtures",
-    "typecheck:fixtures": "tsc -p tsconfig.fixtures.json",
+    "lint:fix": "oxfmt && oxlint --fix",
+    "typecheck": "tsc --noEmit",
     "ci": "pnpm run lint && pnpm run typecheck && pnpm run test:run",
     "prepublishOnly": "pnpm run build",
     "storybook": "storybook dev -p 6006"
   },
-  "keywords": [
-    "codemod",
-    "jscodeshift",
-    "styled-components",
-    "stylex",
-    "css-in-js",
-    "transform"
-  ],
-  "author": "",
-  "license": "MIT",
-  "engines": {
-    "node": ">=22.20",
-    "pnpm": ">=10.22.0"
+  "dependencies": {
+    "jscodeshift": "^17.3.0"
   },
-  "packageManager": "pnpm@10.22.0",
   "devDependencies": {
     "@emotion/is-prop-valid": "^1.4.0",
     "@playwright/test": "^1.57.0",
@@ -63,6 +61,7 @@
     "@types/react": "^19.2.7",
     "@types/react-dom": "^19.2.3",
     "@vitejs/plugin-react": "^5.1.2",
+    "oxfmt": "^0.20.0",
     "oxlint": "^1.35.0",
     "react": "^19.2.3",
     "react-dom": "^19.2.3",
@@ -73,7 +72,9 @@
     "vite": "^7.3.0",
     "vitest": "^4.0.16"
   },
-  "dependencies": {
-    "jscodeshift": "^17.3.0"
-  }
+  "engines": {
+    "node": ">=22.20",
+    "pnpm": ">=10.22.0"
+  },
+  "packageManager": "pnpm@10.22.0"
 }

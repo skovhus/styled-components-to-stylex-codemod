@@ -1,25 +1,25 @@
-import * as stylex from '@stylexjs/stylex';
-import { themeVars } from './adhoc-theme.stylex';
+import * as stylex from "@stylexjs/stylex";
+import { themeVars } from "./adhoc-theme.stylex";
 
 const greenTheme = stylex.createTheme(themeVars, {
-  main: '#4CAF50',
-  secondary: '#2E7D32',
+  main: "#4CAF50",
+  secondary: "#2E7D32",
 });
 
 const blueTheme = stylex.createTheme(themeVars, {
-  main: '#2196F3',
-  secondary: '#1565C0',
+  main: "#2196F3",
+  secondary: "#1565C0",
 });
 
 const styles = stylex.create({
   button: {
-    padding: '8px 16px',
+    padding: "8px 16px",
     backgroundColor: themeVars.main,
-    color: 'white',
-    borderWidth: '2px',
-    borderStyle: 'solid',
+    color: "white",
+    borderWidth: "2px",
+    borderStyle: "solid",
     borderColor: themeVars.secondary,
-    borderRadius: '4px',
+    borderRadius: "4px",
   },
 });
 

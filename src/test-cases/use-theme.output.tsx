@@ -1,12 +1,12 @@
-import * as stylex from '@stylexjs/stylex';
-import { themeVars } from './tokens.stylex';
+import * as stylex from "@stylexjs/stylex";
+import { themeVars } from "./tokens.stylex";
 
 const styles = stylex.create({
   button: {
     color: themeVars.primaryColor,
-    backgroundColor: 'white',
-    borderWidth: '2px',
-    borderStyle: 'solid',
+    backgroundColor: "white",
+    borderWidth: "2px",
+    borderStyle: "solid",
     borderColor: themeVars.primaryColor,
   },
 });

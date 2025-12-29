@@ -1,9 +1,9 @@
-import React from 'react';
-import { ThemeProvider, withTheme } from 'styled-components';
+import React from "react";
+import { ThemeProvider, withTheme } from "styled-components";
 
 const theme = {
   colors: {
-    primary: '#BF4F74',
+    primary: "#BF4F74",
   },
 };
 

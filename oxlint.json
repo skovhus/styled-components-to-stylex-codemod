@@ -5,5 +5,11 @@
     "no-console": "warn",
     "eqeqeq": "error"
   },
-  "ignorePatterns": ["dist/**", "node_modules/**", "coverage/**", "src/test-cases/**", "storybook-static/**"]
+  "ignorePatterns": [
+    "dist/**",
+    "node_modules/**",
+    "coverage/**",
+    "src/test-cases/**",
+    "storybook-static/**"
+  ]
 }

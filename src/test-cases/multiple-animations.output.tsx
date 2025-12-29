@@ -1,4 +1,4 @@
-import * as stylex from '@stylexjs/stylex';
+import * as stylex from "@stylexjs/stylex";
 
 const fadeIn = stylex.keyframes({
   from: {
@@ -11,51 +11,51 @@ const fadeIn = stylex.keyframes({
 
 const slideIn = stylex.keyframes({
   from: {
-    transform: 'translateX(-100%)',
+    transform: "translateX(-100%)",
   },
   to: {
-    transform: 'translateX(0)',
+    transform: "translateX(0)",
   },
 });
 
 const scaleUp = stylex.keyframes({
-  '0%': {
-    transform: 'scale(0.5)',
+  "0%": {
+    transform: "scale(0.5)",
   },
-  '50%': {
-    transform: 'scale(1.1)',
+  "50%": {
+    transform: "scale(1.1)",
   },
-  '100%': {
-    transform: 'scale(1)',
+  "100%": {
+    transform: "scale(1)",
   },
 });
 
 const styles = stylex.create({
   fadeBox: {
     animationName: fadeIn,
-    animationDuration: '0.5s',
-    animationTimingFunction: 'ease-in-out',
+    animationDuration: "0.5s",
+    animationTimingFunction: "ease-in-out",
   },
   animatedCard: {
     animationName: `${fadeIn}, ${slideIn}`,
-    animationDuration: '0.3s, 0.5s',
-    animationTimingFunction: 'ease-out, ease-out',
-    padding: '20px',
-    backgroundColor: 'white',
-    borderRadius: '8px',
-    boxShadow: '0 2px 8px rgba(0, 0, 0, 0.1)',
+    animationDuration: "0.3s, 0.5s",
+    animationTimingFunction: "ease-out, ease-out",
+    padding: "20px",
+    backgroundColor: "white",
+    borderRadius: "8px",
+    boxShadow: "0 2px 8px rgba(0, 0, 0, 0.1)",
   },
   bounceIn: {
     animationName: scaleUp,
-    animationDuration: '0.6s',
-    animationTimingFunction: 'cubic-bezier(0.68, -0.55, 0.265, 1.55)',
-    animationFillMode: 'both',
+    animationDuration: "0.6s",
+    animationTimingFunction: "cubic-bezier(0.68, -0.55, 0.265, 1.55)",
+    animationFillMode: "both",
   },
   sequentialAnimation: {
     animationName: `${fadeIn}, ${slideIn}`,
-    animationDuration: '0.3s, 0.5s',
-    animationTimingFunction: 'ease-out, ease-out',
-    animationDelay: '0s, 0.3s',
+    animationDuration: "0.3s, 0.5s",
+    animationTimingFunction: "ease-out, ease-out",
+    animationDelay: "0s, 0.3s",
   },
 });
 

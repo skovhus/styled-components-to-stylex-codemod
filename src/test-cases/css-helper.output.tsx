@@ -1,21 +1,21 @@
-import * as stylex from '@stylexjs/stylex';
+import * as stylex from "@stylexjs/stylex";
 
 const truncate = {
-  whiteSpace: 'nowrap',
-  overflow: 'hidden',
-  textOverflow: 'ellipsis',
+  whiteSpace: "nowrap",
+  overflow: "hidden",
+  textOverflow: "ellipsis",
 } as const;
 
 const styles = stylex.create({
   title: {
     ...truncate,
-    fontSize: '1.5em',
-    color: '#BF4F74',
+    fontSize: "1.5em",
+    color: "#BF4F74",
   },
   subtitle: {
     ...truncate,
-    fontSize: '1em',
-    color: '#666',
+    fontSize: "1em",
+    color: "#666",
   },
 });
 

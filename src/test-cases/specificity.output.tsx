@@ -1,12 +1,12 @@
-import React from 'react';
-import * as stylex from '@stylexjs/stylex';
+import React from "react";
+import * as stylex from "@stylexjs/stylex";
 
 const styles = stylex.create({
   thing: {
-    color: 'blue',
+    color: "blue",
   },
   overrideStyles: {
-    backgroundColor: 'papayawhip',
+    backgroundColor: "papayawhip",
   },
 });
 

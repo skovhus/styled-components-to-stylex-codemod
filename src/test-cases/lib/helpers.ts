@@ -1,4 +1,4 @@
-import type { DefaultTheme } from 'styled-components';
+import type { DefaultTheme } from "styled-components";
 
 interface ThemedStyledProps {
   theme: DefaultTheme;
@@ -8,7 +8,7 @@ interface ThemedStyledProps {
 export const color =
   (colorName: string) =>
   (props: ThemedStyledProps): string =>
-    props.theme.colors?.[colorName] ?? '';
+    props.theme.colors?.[colorName] ?? "";
 
 // CSS snippet helper - returns a CSS string for text truncation
 export const truncate = () => `

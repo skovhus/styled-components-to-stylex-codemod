@@ -1,8 +1,8 @@
-import type { Preview } from '@storybook/react';
+import type { Preview } from "@storybook/react";
 
 const preview: Preview = {
   parameters: {
-    layout: 'padded',
+    layout: "padded",
   },
 };
 

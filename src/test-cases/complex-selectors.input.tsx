@@ -1,4 +1,4 @@
-import styled from 'styled-components';
+import styled from "styled-components";
 
 // Multiple selectors (comma-separated)
 const MultiSelector = styled.button`
@@ -88,7 +88,9 @@ export const App = () => (
     <CompoundSelector className="card highlighted">Compound</CompoundSelector>
     <ChainedPseudo type="checkbox" />
     <ComplexNested>
-      <a href="#" className="active">Active Link</a>
+      <a href="#" className="active">
+        Active Link
+      </a>
       <a href="#">Normal Link</a>
     </ComplexNested>
     <GroupDescendant>

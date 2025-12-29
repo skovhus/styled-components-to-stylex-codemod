@@ -1,5 +1,5 @@
-import styled from 'styled-components';
-import { useRef, useEffect } from 'react';
+import styled from "styled-components";
+import { useRef, useEffect } from "react";
 
 const Input = styled.input`
   padding: 0.5em;

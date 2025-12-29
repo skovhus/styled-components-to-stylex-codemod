@@ -1,15 +1,15 @@
-import React from 'react';
-import * as stylex from '@stylexjs/stylex';
+import React from "react";
+import * as stylex from "@stylexjs/stylex";
 
 const styles = stylex.create({
   comp: {
-    color: 'red',
+    color: "red",
   },
   compDraggable: {
-    cursor: 'move',
+    cursor: "move",
   },
   compDefault: {
-    cursor: 'pointer',
+    cursor: "pointer",
   },
 });
 
@@ -21,15 +21,17 @@ const Comp = ({ $draggable, children }: { $draggable?: boolean; children: React.
 
 const linkStyles = stylex.create({
   link: {
-    color: 'blue',
+    color: "blue",
   },
   linkRed: {
-    color: 'red',
+    color: "red",
   },
 });
 
 const Link = ({ className, text, ...props }: { className?: string; text: string }) => (
-  <a {...props} className={className}>{text}</a>
+  <a {...props} className={className}>
+    {text}
+  </a>
 );
 
 const StyledLink = ({ $red, ...props }: { $red?: boolean; text: string }) => (

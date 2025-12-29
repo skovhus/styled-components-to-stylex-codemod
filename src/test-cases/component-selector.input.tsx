@@ -1,5 +1,5 @@
 // expected-warnings: component-selector
-import styled from 'styled-components';
+import styled from "styled-components";
 
 const Link = styled.a`
   display: flex;

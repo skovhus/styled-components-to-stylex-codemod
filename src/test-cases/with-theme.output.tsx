@@ -1,6 +1,6 @@
-import React from 'react';
-import * as stylex from '@stylexjs/stylex';
-import { themeVars } from './tokens.stylex';
+import React from "react";
+import * as stylex from "@stylexjs/stylex";
+import { themeVars } from "./tokens.stylex";
 
 const styles = stylex.create({
   themed: {
@@ -14,6 +14,4 @@ class MyComponent extends React.Component {
   }
 }
 
-export const App = () => (
-  <MyComponent />
-);
+export const App = () => <MyComponent />;

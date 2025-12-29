@@ -1,5 +1,5 @@
 // expected-warnings: createGlobalStyle
-import styled, { createGlobalStyle } from 'styled-components';
+import styled, { createGlobalStyle } from "styled-components";
 
 // Global CSS variables defined with createGlobalStyle
 const GlobalStyles = createGlobalStyle`

@@ -38,7 +38,7 @@ export interface TransformOptions extends Options {
 export default function transform(
   file: FileInfo,
   api: API,
-  options: TransformOptions
+  options: TransformOptions,
 ): string | null {
   const result = transformWithWarnings(file, api, options);
 
@@ -47,9 +47,7 @@ export default function transform(
     const location = warning.line
       ? ` (${file.path}:${warning.line}:${warning.column ?? 0})`
       : ` (${file.path})`;
-    console.warn(
-      `[styled-components-to-stylex] Warning${location}: ${warning.message}`
-    );
+    console.warn(`[styled-components-to-stylex] Warning${location}: ${warning.message}`);
   }
 
   return result.code;
@@ -61,7 +59,7 @@ export default function transform(
 export function transformWithWarnings(
   file: FileInfo,
   api: API,
-  options: TransformOptions
+  options: TransformOptions,
 ): TransformResult {
   const j = api.jscodeshift;
   const root = j(file.source);

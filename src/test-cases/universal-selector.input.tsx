@@ -1,4 +1,4 @@
-import styled from 'styled-components';
+import styled from "styled-components";
 
 // Universal selector for all children
 const ResetBox = styled.div`
@@ -72,7 +72,9 @@ export const App = () => (
       <span>Hover parent to change color</span>
     </HoverContainer>
     <DeepReset>
-      <div><span>Deep nested</span></div>
+      <div>
+        <span>Deep nested</span>
+      </div>
     </DeepReset>
   </div>
 );

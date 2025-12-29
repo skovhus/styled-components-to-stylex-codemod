@@ -18,7 +18,7 @@ const config: StorybookConfig = {
           type: "commonJS",
           rootDir: process.cwd(),
         },
-      })
+      }),
     );
 
     // Force esbuild to treat .ts files as tsx with automatic JSX runtime

@@ -1,25 +1,25 @@
-import * as stylex from '@stylexjs/stylex';
-import { baseThemeVars } from './function-theme.stylex';
+import * as stylex from "@stylexjs/stylex";
+import { baseThemeVars } from "./function-theme.stylex";
 
 const extendedTheme = stylex.createTheme(baseThemeVars, {
-  colorsPrimary: '#4CAF50',
+  colorsPrimary: "#4CAF50",
 });
 
 const styles = stylex.create({
   button: {
     padding: baseThemeVars.spacingMedium,
     backgroundColor: baseThemeVars.colorsPrimary,
-    color: 'white',
+    color: "white",
     borderWidth: 0,
-    borderStyle: 'none',
-    borderRadius: '4px',
+    borderStyle: "none",
+    borderRadius: "4px",
   },
   card: {
     padding: baseThemeVars.spacingMedium,
-    borderWidth: '2px',
-    borderStyle: 'solid',
+    borderWidth: "2px",
+    borderStyle: "solid",
     borderColor: baseThemeVars.colorsSecondary,
-    borderRadius: '8px',
+    borderRadius: "8px",
   },
 });
 

@@ -60,6 +60,7 @@ src/
 Create matching `.input.ts` and `.output.ts` files in `src/test-cases/`. Tests auto-discover all pairs and fail if any file is missing its counterpart.
 
 **Test categories:**
+
 - **File pairing**: Verifies all test cases have matching input/output files
 - **Output linting**: Runs oxlint on all output files to ensure valid code
 - **Transform tests** (skipped): Will verify transform produces expected output once implemented
@@ -107,11 +108,11 @@ npx styled-components-to-stylex --adapter ./my-adapter.js src/
 
 Available in `src/adapters/adapter.ts`:
 
-| Adapter | Output Example | Use Case |
-|---------|---------------|----------|
+| Adapter               | Output Example                     | Use Case                                     |
+| --------------------- | ---------------------------------- | -------------------------------------------- |
 | `cssVariablesAdapter` | `'var(--colors-primary, #BF4F74)'` | Runtime theming with CSS variables (default) |
-| `defineVarsAdapter` | `themeVars.primaryColor` | Type-safe StyleX variables |
-| `inlineValuesAdapter` | `'#BF4F74'` | Static themes, no runtime switching |
+| `defineVarsAdapter`   | `themeVars.primaryColor`           | Type-safe StyleX variables                   |
+| `inlineValuesAdapter` | `'#BF4F74'`                        | Static themes, no runtime switching          |
 
 ### Custom Adapters
 
@@ -163,49 +164,50 @@ Output files must use valid StyleX syntax:
 
 ## Test Cases (from styled-components docs)
 
-| Test Case | Pattern |
-|-----------|---------|
-| `basic` | `styled.h1`, `styled.section` |
-| `adapting-props` | Props interpolation with `${props => ...}` |
-| `extending-styles` | `styled(Component)` inheritance |
-| `pseudo-selectors` | `&:hover`, `&:focus`, `&::before` |
-| `keyframes` | `keyframes` + animation |
-| `attrs` | `.attrs()` for default props |
-| `theming` | `ThemeProvider` + `props.theme` |
-| `css-helper` | `css` helper for shared styles |
-| `as-prop` | Polymorphic `as` prop |
-| `global-styles` | `createGlobalStyle` |
-| `media-queries` | `@media (min-width: ...)` responsive styles |
-| `nesting` | Child selectors `> *`, `&:not(:first-child)` |
-| `component-selector` | `${Link}:hover &` referencing other components |
-| `style-objects` | Object syntax `styled.div({...})` |
-| `conditional-styles` | Short-circuit `${props => props.x && '...'}` |
-| `styled-component` | `styled(CustomComponent)` with className |
-| `transient-props` | `$prefix` props to prevent DOM forwarding |
-| `refs` | Ref forwarding to styled components |
-| `use-theme` | `useTheme` hook for accessing theme |
-| `with-theme` | `withTheme` HOC for class components |
-| `sibling-selectors` | Adjacent `& + &` and general `& ~ &` sibling selectors |
-| `specificity` | Double ampersand `&&` and `&&&` for specificity boost |
-| `descendant-component-selector` | `${Child} { ... }` parent styling child component |
-| `forwarded-as` | `forwardedAs` prop for passing `as` through HOCs |
-| `function-theme` | `theme={fn}` function that receives parent theme |
-| `adhoc-theme` | Per-instance `theme` prop override |
-| `attribute-selectors` | `&[disabled]`, `&[type="text"]`, `&[href^="https"]` |
-| `css-variables` | `var(--custom-property)` CSS custom properties |
-| `css-calc` | `calc()` expressions in styles |
-| `multiple-animations` | Combining multiple keyframes animations |
-| `important` | `!important` declarations (removed in output) |
-| `universal-selector` | `& *` universal descendant selector |
-| `complex-selectors` | Multiple/compound selectors `&:hover, &:focus` |
-| `string-interpolation` | Static string interpolations `${variable}` |
-| `should-forward-prop` | `.withConfig({ shouldForwardProp })` prop filtering |
-| `with-config` | `.withConfig({ displayName, componentId })` |
-| `helpers` | Helper functions: `color()` theme accessor, `truncate()` CSS snippet |
+| Test Case                       | Pattern                                                              |
+| ------------------------------- | -------------------------------------------------------------------- |
+| `basic`                         | `styled.h1`, `styled.section`                                        |
+| `adapting-props`                | Props interpolation with `${props => ...}`                           |
+| `extending-styles`              | `styled(Component)` inheritance                                      |
+| `pseudo-selectors`              | `&:hover`, `&:focus`, `&::before`                                    |
+| `keyframes`                     | `keyframes` + animation                                              |
+| `attrs`                         | `.attrs()` for default props                                         |
+| `theming`                       | `ThemeProvider` + `props.theme`                                      |
+| `css-helper`                    | `css` helper for shared styles                                       |
+| `as-prop`                       | Polymorphic `as` prop                                                |
+| `global-styles`                 | `createGlobalStyle`                                                  |
+| `media-queries`                 | `@media (min-width: ...)` responsive styles                          |
+| `nesting`                       | Child selectors `> *`, `&:not(:first-child)`                         |
+| `component-selector`            | `${Link}:hover &` referencing other components                       |
+| `style-objects`                 | Object syntax `styled.div({...})`                                    |
+| `conditional-styles`            | Short-circuit `${props => props.x && '...'}`                         |
+| `styled-component`              | `styled(CustomComponent)` with className                             |
+| `transient-props`               | `$prefix` props to prevent DOM forwarding                            |
+| `refs`                          | Ref forwarding to styled components                                  |
+| `use-theme`                     | `useTheme` hook for accessing theme                                  |
+| `with-theme`                    | `withTheme` HOC for class components                                 |
+| `sibling-selectors`             | Adjacent `& + &` and general `& ~ &` sibling selectors               |
+| `specificity`                   | Double ampersand `&&` and `&&&` for specificity boost                |
+| `descendant-component-selector` | `${Child} { ... }` parent styling child component                    |
+| `forwarded-as`                  | `forwardedAs` prop for passing `as` through HOCs                     |
+| `function-theme`                | `theme={fn}` function that receives parent theme                     |
+| `adhoc-theme`                   | Per-instance `theme` prop override                                   |
+| `attribute-selectors`           | `&[disabled]`, `&[type="text"]`, `&[href^="https"]`                  |
+| `css-variables`                 | `var(--custom-property)` CSS custom properties                       |
+| `css-calc`                      | `calc()` expressions in styles                                       |
+| `multiple-animations`           | Combining multiple keyframes animations                              |
+| `important`                     | `!important` declarations (removed in output)                        |
+| `universal-selector`            | `& *` universal descendant selector                                  |
+| `complex-selectors`             | Multiple/compound selectors `&:hover, &:focus`                       |
+| `string-interpolation`          | Static string interpolations `${variable}`                           |
+| `should-forward-prop`           | `.withConfig({ shouldForwardProp })` prop filtering                  |
+| `with-config`                   | `.withConfig({ displayName, componentId })`                          |
+| `helpers`                       | Helper functions: `color()` theme accessor, `truncate()` CSS snippet |
 
 ## Transformation Goals
 
 The codemod should handle conversions like:
+
 - `styled.div` / `styled(Component)` → `stylex.create()` + `stylex.props()`
 - Template literal CSS → StyleX object syntax
 - Dynamic props/interpolations → StyleX variants or dynamic styles

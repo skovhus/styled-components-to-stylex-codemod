@@ -7,5 +7,3 @@ declare module "styled-components" {
     [key: string]: any;
   }
 }
-
-
