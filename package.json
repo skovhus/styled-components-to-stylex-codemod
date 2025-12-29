@@ -46,7 +46,8 @@
     "storybook": "storybook dev -p 6006"
   },
   "dependencies": {
-    "jscodeshift": "^17.3.0"
+    "jscodeshift": "^17.3.0",
+    "stylis": "^4.3.6"
   },
   "devDependencies": {
     "@emotion/is-prop-valid": "^1.4.0",

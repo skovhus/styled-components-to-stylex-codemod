@@ -11,6 +11,9 @@ importers:
       jscodeshift:
         specifier: ^17.3.0
         version: 17.3.0
+      stylis:
+        specifier: ^4.3.6
+        version: 4.3.6
     devDependencies:
       '@emotion/is-prop-valid':
         specifier: ^1.4.0
@@ -1874,6 +1877,9 @@ packages:
 
   stylis@4.3.2:
     resolution: {integrity: sha512-bhtUjWd/z6ltJiQwg0dUfxEJ+W+jdqQd8TbWLWyeIJHlnsqmGLRFFd8e5mA0AZi/zx90smXRlN66YMTcaSFifg==}
+
+  stylis@4.3.6:
+    resolution: {integrity: sha512-yQ3rwFWRfwNUY7H5vpU0wfdkNSnvnJinhF9830Swlaxl03zsOjCfmX0ugac+3LtK0lYSgwL/KXc8oYL3mG4YFQ==}
 
   supports-preserve-symlinks-flag@1.0.0:
     resolution: {integrity: sha512-ot0WnXS9fgdkgIcePe6RHNk1WA8+muPa6cSjeR3V8K27q9BB1rTE3R1p7Hv0z1ZyAc8s6Vvv8DIyWf681MAt0w==}
@@ -3799,6 +3805,8 @@ snapshots:
   styleq@0.2.1: {}
 
   stylis@4.3.2: {}
+
+  stylis@4.3.6: {}
 
   supports-preserve-symlinks-flag@1.0.0: {}
 
