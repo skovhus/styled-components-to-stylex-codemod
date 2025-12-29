@@ -1,12 +1,12 @@
-import type { API, FileInfo, Options } from 'jscodeshift';
-import type { Adapter } from './adapters/adapter.js';
-import { cssVariablesAdapter, defineVarsAdapter, inlineValuesAdapter } from './adapters/adapter.js';
+import type { API, FileInfo, Options } from "jscodeshift";
+import type { Adapter } from "./adapter.js";
+import { defaultAdapter } from "./adapter.js";
 
 /**
  * Warning emitted during transformation for unsupported features
  */
 export interface TransformWarning {
-  type: 'unsupported-feature';
+  type: "unsupported-feature";
   feature: string;
   message: string;
   line?: number;
@@ -25,51 +25,8 @@ export interface TransformResult {
  * Options for the transform
  */
 export interface TransformOptions extends Options {
-  /** Path to adapter module or built-in adapter name (prefixed with 'builtin:') */
-  adapter?: string | Adapter;
-}
-
-/**
- * Get the adapter from options
- */
-function getAdapter(options: TransformOptions): Adapter {
-  const { adapter } = options;
-
-  if (!adapter) {
-    return cssVariablesAdapter;
-  }
-
-  // If adapter is already an Adapter object (passed directly in tests)
-  if (typeof adapter === 'object' && 'transformValue' in adapter) {
-    return adapter;
-  }
-
-  // Handle built-in adapter names
-  if (typeof adapter === 'string') {
-    if (adapter.startsWith('builtin:')) {
-      const name = adapter.slice('builtin:'.length);
-      switch (name) {
-        case 'cssVariables':
-          return cssVariablesAdapter;
-        case 'defineVars':
-          return defineVarsAdapter;
-        case 'inlineValues':
-          return inlineValuesAdapter;
-        default:
-          console.warn(`Unknown built-in adapter: ${name}, using cssVariables`);
-          return cssVariablesAdapter;
-      }
-    }
-
-    // Custom adapter path - dynamically import
-    // Note: This is async, so for CLI usage we handle it differently
-    // For now, we support sync usage with built-in adapters and direct Adapter objects
-    console.warn(`Custom adapter paths require async loading. Using cssVariables adapter.`);
-    console.warn(`For custom adapters, use the programmatic API with adapter object.`);
-    return cssVariablesAdapter;
-  }
-
-  return cssVariablesAdapter;
+  /** Adapter for transforming theme values (defaults to cssVariablesAdapter) */
+  adapter?: Adapter;
 }
 
 /**
@@ -87,8 +44,12 @@ export default function transform(
 
   // Log warnings to console
   for (const warning of result.warnings) {
-    const location = warning.line ? ` (${file.path}:${warning.line}:${warning.column ?? 0})` : ` (${file.path})`;
-    console.warn(`[styled-components-to-stylex] Warning${location}: ${warning.message}`);
+    const location = warning.line
+      ? ` (${file.path}:${warning.line}:${warning.column ?? 0})`
+      : ` (${file.path})`;
+    console.warn(
+      `[styled-components-to-stylex] Warning${location}: ${warning.message}`
+    );
   }
 
   return result.code;
@@ -105,16 +66,15 @@ export function transformWithWarnings(
   const j = api.jscodeshift;
   const root = j(file.source);
   const warnings: TransformWarning[] = [];
-  // Get adapter for future use in transformation
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars
-  const adapter = getAdapter(options);
-  void adapter; // Suppress unused warning until transform is implemented
+  // Use provided adapter or default
+  const adapter: Adapter = options.adapter ?? defaultAdapter;
+  void adapter; // Currently unused while transform is a stub
 
   let hasChanges = false;
 
   // Find styled-components imports
   const styledImports = root.find(j.ImportDeclaration, {
-    source: { value: 'styled-components' },
+    source: { value: "styled-components" },
   });
 
   if (styledImports.length === 0) {
@@ -126,14 +86,15 @@ export function transformWithWarnings(
     const specifiers = importPath.node.specifiers ?? [];
     for (const specifier of specifiers) {
       if (
-        specifier.type === 'ImportSpecifier' &&
-        specifier.imported.type === 'Identifier' &&
-        specifier.imported.name === 'createGlobalStyle'
+        specifier.type === "ImportSpecifier" &&
+        specifier.imported.type === "Identifier" &&
+        specifier.imported.name === "createGlobalStyle"
       ) {
         const warning: TransformWarning = {
-          type: 'unsupported-feature',
-          feature: 'createGlobalStyle',
-          message: 'createGlobalStyle is not supported in StyleX. Global styles should be handled separately (e.g., in a CSS file or using CSS reset libraries).',
+          type: "unsupported-feature",
+          feature: "createGlobalStyle",
+          message:
+            "createGlobalStyle is not supported in StyleX. Global styles should be handled separately (e.g., in a CSS file or using CSS reset libraries).",
         };
         if (specifier.loc) {
           warning.line = specifier.loc.start.line;
@@ -143,6 +104,49 @@ export function transformWithWarnings(
       }
     }
   });
+
+  // Detect patterns that aren't directly representable in StyleX (or require semantic rewrites).
+  // These warnings are used for per-fixture expectations and help guide manual follow-ups.
+  let hasComponentSelector = false;
+  let hasSpecificityHack = false;
+
+  root.find(j.TemplateLiteral).forEach((p) => {
+    const tl = p.node;
+
+    // Specificity hacks like `&&` / `&&&` inside styled template literals.
+    for (const quasi of tl.quasis) {
+      if (quasi.value.raw.includes("&&")) {
+        hasSpecificityHack = true;
+      }
+    }
+
+    // Component selector patterns like `${Link}:hover & { ... }`
+    for (let i = 0; i < tl.expressions.length; i++) {
+      const expr = tl.expressions[i];
+      const after = tl.quasis[i + 1]?.value.raw ?? "";
+      if (expr?.type === "Identifier" && after.includes(":hover &")) {
+        hasComponentSelector = true;
+      }
+    }
+  });
+
+  if (hasComponentSelector) {
+    warnings.push({
+      type: "unsupported-feature",
+      feature: "component-selector",
+      message:
+        "Component selectors like `${OtherComponent}:hover &` are not directly representable in StyleX. Manual refactor is required to preserve relationship/hover semantics.",
+    });
+  }
+
+  if (hasSpecificityHack) {
+    warnings.push({
+      type: "unsupported-feature",
+      feature: "specificity",
+      message:
+        "Styled-components specificity hacks like `&&` / `&&&` are not representable in StyleX. The output may not preserve selector specificity and may require manual adjustments.",
+    });
+  }
 
   // TODO: Implement the actual transformation using the adapter
   // The adapter can be used like:
@@ -155,9 +159,7 @@ export function transformWithWarnings(
   // Example: Add a comment to indicate this file needs manual review
   styledImports.forEach((path) => {
     const comments = path.node.comments ?? [];
-    comments.push(
-      j.commentLine(' TODO: Convert to StyleX', true, false)
-    );
+    comments.push(j.commentLine(" TODO: Convert to StyleX", true, false));
     path.node.comments = comments;
     hasChanges = true;
   });
@@ -169,5 +171,5 @@ export function transformWithWarnings(
 }
 
 // Re-export adapter types for convenience
-export type { Adapter, AdapterContext } from './adapters/adapter.js';
-export { cssVariablesAdapter, defineVarsAdapter, inlineValuesAdapter } from './adapters/adapter.js';
+export type { Adapter, AdapterContext } from "./adapter.js";
+export { defaultAdapter } from "./adapter.js";

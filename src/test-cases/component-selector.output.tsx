@@ -30,9 +30,9 @@ export const App = () => (
   </a>
 );
 
-function Icon({ viewBox, children, styles }: { viewBox: string; children: React.ReactNode; styles: typeof styles }) {
+function Icon({ viewBox, children, styles: sx }: { viewBox: string; children: React.ReactNode; styles: typeof styles }) {
   return (
-    <svg viewBox={viewBox} {...stylex.props(styles.icon)}>
+    <svg viewBox={viewBox} {...stylex.props(sx.icon)}>
       {children}
     </svg>
   );

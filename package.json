@@ -29,7 +29,8 @@
     "test:coverage": "vitest run --coverage",
     "lint": "oxlint --ignore-pattern 'src/test-cases/**' --ignore-pattern 'storybook-static/**'",
     "lint:fix": "oxlint --fix",
-    "typecheck": "tsc --noEmit",
+    "typecheck": "tsc --noEmit && pnpm run typecheck:fixtures",
+    "typecheck:fixtures": "tsc -p tsconfig.fixtures.json",
     "ci": "pnpm run lint && pnpm run typecheck && pnpm run test:run",
     "prepublishOnly": "pnpm run build",
     "storybook": "storybook dev -p 6006"

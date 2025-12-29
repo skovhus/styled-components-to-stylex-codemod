@@ -6,9 +6,9 @@ interface ThemedStyledProps {
 
 // Theme accessor helper - returns a function that extracts a color from the theme
 export const color =
-  (colorName: keyof DefaultTheme['colors']) =>
-  (props: ThemedStyledProps) =>
-    props.theme.colors[colorName];
+  (colorName: string) =>
+  (props: ThemedStyledProps): string =>
+    props.theme.colors?.[colorName] ?? '';
 
 // CSS snippet helper - returns a CSS string for text truncation
 export const truncate = () => `

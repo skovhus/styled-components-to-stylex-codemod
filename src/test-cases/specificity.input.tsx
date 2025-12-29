@@ -1,3 +1,4 @@
+// expected-warnings: specificity
 import styled from 'styled-components';
 
 const Thing = styled.div`

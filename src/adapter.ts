@@ -11,7 +11,7 @@ export interface AdapterContext {
   /** The default/fallback value if available */
   defaultValue?: string;
   /** The type of value being transformed */
-  valueType: 'theme' | 'helper' | 'interpolation';
+  valueType: "theme" | "helper" | "interpolation";
 }
 
 export interface Adapter {
@@ -39,52 +39,13 @@ export interface Adapter {
  * Default adapter: Uses CSS custom properties with fallbacks.
  * Generates: `color: 'var(--colors-primary, #BF4F74)'`
  */
-export const cssVariablesAdapter: Adapter = {
+export const defaultAdapter: Adapter = {
   transformValue({ path, defaultValue }) {
-    const varName = path.replace(/\./g, '-');
+    const varName = path.replace(/\./g, "-");
     if (defaultValue) {
       return `'var(--${varName}, ${defaultValue})'`;
     }
     return `'var(--${varName})'`;
-  },
-  getImports() {
-    return [];
-  },
-  getDeclarations() {
-    return [];
-  },
-};
-
-/**
- * StyleX defineVars adapter: Uses exported StyleX variables.
- * Requires a separate tokens file with exported defineVars.
- * Generates: `color: themeVars.primaryColor`
- */
-export const defineVarsAdapter: Adapter = {
-  transformValue({ path }) {
-    // Convert path like "colors.primary" to "colorsPrimary"
-    const varName = path
-      .split('.')
-      .map((part, i) => (i === 0 ? part : part.charAt(0).toUpperCase() + part.slice(1)))
-      .join('');
-    return `themeVars.${varName}`;
-  },
-  getImports() {
-    return ["import { themeVars } from './tokens.stylex';"];
-  },
-  getDeclarations() {
-    return [];
-  },
-};
-
-/**
- * Inline values adapter: Replaces theme references with literal values.
- * Useful for static themes that don't need runtime switching.
- * Generates: `color: '#BF4F74'`
- */
-export const inlineValuesAdapter: Adapter = {
-  transformValue({ defaultValue }) {
-    return defaultValue ? `'${defaultValue}'` : "''";
   },
   getImports() {
     return [];

@@ -1,3 +1,4 @@
+// expected-warnings: component-selector
 import styled from 'styled-components';
 
 const Link = styled.a`

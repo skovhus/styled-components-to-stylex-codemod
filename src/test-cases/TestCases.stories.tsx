@@ -3,18 +3,18 @@ import React from 'react';
 
 // Auto-discover all test case modules using Vite's glob import
 const inputModules = import.meta.glob<{ App: React.ComponentType }>(
-  './*.input.ts',
+  './*.input.tsx',
   { eager: true }
 );
 const outputModules = import.meta.glob<{ App: React.ComponentType }>(
-  './*.output.ts',
+  './*.output.tsx',
   { eager: true }
 );
 
 // Extract test case names from file paths
 function getTestCaseName(path: string): string {
-  const match = path.match(/\.\/(.+)\.(input|output)\.ts$/);
-  return match ? match[1] : path;
+  const match = path.match(/\.\/(.+)\.(input|output)\.tsx$/);
+  return match?.[1] ?? path;
 }
 
 // Get unique test case names
@@ -31,8 +31,8 @@ interface ComparisonProps {
 }
 
 const Comparison: React.FC<ComparisonProps> = ({ testCase }) => {
-  const inputPath = `./${testCase}.input.ts`;
-  const outputPath = `./${testCase}.output.ts`;
+  const inputPath = `./${testCase}.input.tsx`;
+  const outputPath = `./${testCase}.output.tsx`;
 
   const InputComponent = inputModules[inputPath]?.App;
   const OutputComponent = outputModules[outputPath]?.App;
