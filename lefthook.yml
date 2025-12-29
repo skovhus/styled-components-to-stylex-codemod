@@ -1,4 +1,10 @@
+output:
+  - summary
+  - success
+  - failure
+
 pre-commit:
+  parallel: true
   jobs:
     - name: lint
       run: pnpm lint:fix {staged_files}
