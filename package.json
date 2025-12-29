@@ -41,7 +41,7 @@
     "lint": "oxlint --ignore-pattern 'test-cases/**' --ignore-pattern 'storybook-static/**'",
     "lint:fix": "oxfmt && oxlint --fix",
     "typecheck": "tsc --noEmit",
-    "ci": "pnpm run lint && pnpm run typecheck && pnpm run test:run",
+    "ci": "pnpm install --frozen-lockfile && pnpm run lint && pnpm run typecheck && pnpm run test:run",
     "prepublishOnly": "pnpm run build",
     "storybook": "storybook dev -p 6006"
   },
