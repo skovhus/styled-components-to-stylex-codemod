@@ -1,6 +1,13 @@
-import type { API, FileInfo, Options } from "jscodeshift";
+import type {
+  API,
+  FileInfo,
+  Options,
+  TaggedTemplateExpression,
+  TemplateLiteral,
+} from "jscodeshift";
 import type { Adapter } from "./adapter.js";
 import { defaultAdapter } from "./adapter.js";
+import { compile } from "stylis";
 
 /**
  * Warning emitted during transformation for unsupported features
@@ -28,6 +35,289 @@ export interface TransformOptions extends Options {
   /** Adapter for transforming theme values (defaults to cssVariablesAdapter) */
   adapter?: Adapter;
 }
+
+function createPlaceholder(index: number): string {
+  return `${PLACEHOLDER_PREFIX}${index}__)`;
+}
+
+function extractChunks(template: TemplateLiteral): {
+  chunks: CSSChunk[];
+  tokens: DynamicToken[];
+} {
+  const chunks: CSSChunk[] = [];
+  const tokens: DynamicToken[] = [];
+
+  template.quasis.forEach((quasi, index) => {
+    const raw = quasi.value.raw;
+    if (raw) {
+      chunks.push({ kind: "static", value: raw });
+    }
+
+    const expr = template.expressions[index];
+    if (expr) {
+      const token: DynamicToken = {
+        id: index,
+        placeholder: createPlaceholder(index),
+        expression: expr,
+      };
+      chunks.push({ kind: "dynamic", token });
+      tokens.push(token);
+    }
+  });
+
+  return { chunks, tokens };
+}
+
+function renderChunks(chunks: CSSChunk[]): string {
+  return chunks
+    .map((chunk) => (chunk.kind === "static" ? chunk.value : chunk.token.placeholder))
+    .join("");
+}
+
+function parseDeclarationValue(raw: string, tokens: DynamicToken[]): ParsedDeclarationValue {
+  const segments: ParsedDeclarationValue["segments"] = [];
+  let remaining = raw;
+  for (const token of tokens) {
+    const idx = remaining.indexOf(token.placeholder);
+    if (idx === -1) {
+      continue;
+    }
+
+    if (idx > 0) {
+      segments.push({ kind: "text", value: remaining.slice(0, idx) });
+    }
+    segments.push({ kind: "dynamic", token });
+    remaining = remaining.slice(idx + token.placeholder.length);
+  }
+
+  if (remaining) {
+    segments.push({ kind: "text", value: remaining });
+  }
+
+  return { raw, segments };
+}
+
+function parseTemplateLiteral(template: TemplateLiteral): ParsedTemplateLiteral {
+  const { chunks, tokens } = extractChunks(template);
+  const cssText = renderChunks(chunks);
+  const ast = compile(cssText);
+  const rules: ParsedRule[] = [];
+
+  function walk(
+    nodes: ReturnType<typeof compile>,
+    atRulePath: string[],
+    selectorPath: string[],
+  ): void {
+    for (const node of nodes) {
+      if (node.type === "rule") {
+        const declarations: ParsedDeclaration[] = [];
+        const children = Array.isArray(node.children) ? node.children : [];
+        for (const decl of children) {
+          if (decl.type !== "decl") continue;
+          const prop = typeof decl.props === "string" ? decl.props : decl.props?.[0];
+          const value = typeof decl.children === "string" ? decl.children : (decl.value ?? "");
+          if (prop) {
+            declarations.push({
+              property: prop,
+              value: parseDeclarationValue(value, tokens),
+            });
+          }
+        }
+
+        rules.push({
+          selectors: Array.isArray(node.props) ? node.props : selectorPath,
+          atRulePath,
+          declarations,
+        });
+      } else if (
+        typeof node.type === "string" &&
+        node.type.startsWith("@") &&
+        Array.isArray(node.children)
+      ) {
+        const nextAtRulePath = [...atRulePath, node.value ?? node.type];
+        walk(node.children, nextAtRulePath, selectorPath);
+      }
+    }
+  }
+
+  walk(ast, [], []);
+
+  return { chunks, cssText, rules };
+}
+
+function findDynamicContexts(parsed: ParsedTemplateLiteral): DynamicContext[] {
+  const contexts: DynamicContext[] = [];
+  const tokenByPlaceholder = new Map(
+    parsed.chunks
+      .filter((chunk): chunk is DynamicChunk => chunk.kind === "dynamic")
+      .map((chunk) => [chunk.token.placeholder, chunk.token]),
+  );
+
+  const placeholderPattern = new RegExp(String.raw`${PLACEHOLDER_PREFIX}(\d+)__)`, "g");
+
+  for (const rule of parsed.rules) {
+    const selectorString = rule.selectors.join(", ");
+    for (const match of selectorString.matchAll(placeholderPattern)) {
+      const id = Number(match[1]);
+      const placeholder = createPlaceholder(id);
+      const token = tokenByPlaceholder.get(placeholder);
+      if (!token) continue;
+      contexts.push({
+        kind: "selector",
+        token,
+        selectorPath: rule.selectors,
+        atRulePath: rule.atRulePath,
+      });
+    }
+
+    for (const decl of rule.declarations) {
+      for (const segment of decl.value.segments) {
+        if (segment.kind === "dynamic") {
+          contexts.push({
+            kind: "declaration-value",
+            token: segment.token,
+            selectorPath: rule.selectors,
+            atRulePath: rule.atRulePath,
+            property: decl.property,
+          });
+        }
+      }
+    }
+
+    const lastAtRule = rule.atRulePath.at(-1);
+    if (lastAtRule) {
+      for (const match of lastAtRule.matchAll(placeholderPattern)) {
+        const id = Number(match[1]);
+        const placeholder = createPlaceholder(id);
+        const token = tokenByPlaceholder.get(placeholder);
+        if (!token) continue;
+        contexts.push({
+          kind: "at-rule-params",
+          token,
+          selectorPath: rule.selectors,
+          atRulePath: rule.atRulePath,
+        });
+      }
+    }
+  }
+
+  return contexts;
+}
+
+function runDynamicPlugins(contexts: DynamicContext[], plugins: DynamicPlugin[]): PluginResult[] {
+  const results: PluginResult[] = [];
+
+  for (const context of contexts) {
+    for (const plugin of plugins) {
+      const result = plugin(context);
+      if (!result) continue;
+      results.push(result);
+      if (result.action === "bail") break;
+    }
+  }
+
+  return results;
+}
+
+const defaultDynamicPlugins: DynamicPlugin[] = [
+  (context) => {
+    if (context.kind === "declaration-value") {
+      return { action: "keep" };
+    }
+    return { action: "keep" };
+  },
+];
+
+function getStyledIdentifiers(
+  j: API["jscodeshift"],
+  root: ReturnType<API["jscodeshift"]>,
+): {
+  styled: Set<string>;
+} {
+  const styled = new Set<string>();
+
+  root.find(j.ImportDeclaration, { source: { value: "styled-components" } }).forEach((path) => {
+    const specs = path.node.specifiers ?? [];
+    for (const spec of specs) {
+      if (spec.type === "ImportDefaultSpecifier" && spec.local?.type === "Identifier") {
+        styled.add(spec.local.name);
+      }
+    }
+  });
+
+  return { styled };
+}
+
+function isStyledTemplate(node: TaggedTemplateExpression, styledIdentifiers: Set<string>): boolean {
+  const { tag } = node;
+  if (tag.type === "MemberExpression" && tag.object.type === "Identifier") {
+    return styledIdentifiers.has(tag.object.name);
+  }
+  if (tag.type === "CallExpression" && tag.callee.type === "Identifier") {
+    return styledIdentifiers.has(tag.callee.name);
+  }
+  return false;
+}
+
+type DynamicToken = {
+  id: number;
+  placeholder: string;
+  expression: unknown;
+};
+
+type StaticChunk = {
+  kind: "static";
+  value: string;
+};
+
+type DynamicChunk = {
+  kind: "dynamic";
+  token: DynamicToken;
+};
+
+type CSSChunk = StaticChunk | DynamicChunk;
+
+export interface ParsedDeclarationValue {
+  raw: string;
+  segments: ({ kind: "text"; value: string } | { kind: "dynamic"; token: DynamicToken })[];
+}
+
+export interface ParsedDeclaration {
+  property: string;
+  value: ParsedDeclarationValue;
+}
+
+export interface ParsedRule {
+  selectors: string[];
+  atRulePath: string[];
+  declarations: ParsedDeclaration[];
+}
+
+export interface ParsedTemplateLiteral {
+  chunks: CSSChunk[];
+  cssText: string;
+  rules: ParsedRule[];
+}
+
+export type DynamicContextKind = "declaration-value" | "selector" | "at-rule-params" | "unknown";
+
+export interface DynamicContext {
+  kind: DynamicContextKind;
+  token: DynamicToken;
+  selectorPath: string[];
+  atRulePath: string[];
+  property?: string;
+}
+
+export interface PluginResult {
+  action: "keep" | "replace" | "bail";
+  reason?: string;
+  replacement?: string;
+}
+
+export type DynamicPlugin = (context: DynamicContext) => PluginResult | void;
+
+const PLACEHOLDER_PREFIX = "var(--__dyn_";
 
 /**
  * Transform styled-components to StyleX
@@ -67,8 +357,6 @@ export function transformWithWarnings(
   // Use provided adapter or default
   const adapter: Adapter = options.adapter ?? defaultAdapter;
   void adapter; // Currently unused while transform is a stub
-
-  let hasChanges = false;
 
   // Find styled-components imports
   const styledImports = root.find(j.ImportDeclaration, {
@@ -146,24 +434,29 @@ export function transformWithWarnings(
     });
   }
 
-  // TODO: Implement the actual transformation using the adapter
-  // The adapter can be used like:
-  // const transformedValue = adapter.transformValue({
-  //   path: 'colors.primary',
-  //   defaultValue: '#BF4F74',
-  //   valueType: 'theme'
-  // });
+  const { styled: styledIdentifiers } = getStyledIdentifiers(j, root);
+  if (styledIdentifiers.size > 0) {
+    root.find(j.TaggedTemplateExpression).forEach((path) => {
+      if (!isStyledTemplate(path.node, styledIdentifiers)) return;
 
-  // Example: Add a comment to indicate this file needs manual review
-  styledImports.forEach((path) => {
-    const comments = path.node.comments ?? [];
-    comments.push(j.commentLine(" TODO: Convert to StyleX", true, false));
-    path.node.comments = comments;
-    hasChanges = true;
-  });
+      const quasi = path.node.quasi;
+      try {
+        const parsed = parseTemplateLiteral(quasi);
+        const contexts = findDynamicContexts(parsed);
+        runDynamicPlugins(contexts, defaultDynamicPlugins);
+      } catch (error) {
+        const err = error as Error;
+        warnings.push({
+          type: "unsupported-feature",
+          feature: "css-parse", // general parse warning
+          message: `Failed to parse styled-components template: ${err.message}`,
+        });
+      }
+    });
+  }
 
   return {
-    code: hasChanges ? root.toSource() : null,
+    code: null,
     warnings,
   };
 }
