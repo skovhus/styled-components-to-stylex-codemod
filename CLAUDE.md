@@ -1,0 +1,215 @@
+# CLAUDE.md
+
+This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
+
+## Project Overview
+
+Codemod to transform styled-components to StyleX using jscodeshift.
+
+## Tech Stack
+
+- **Runtime**: Node.js >=22.20
+- **Package Manager**: pnpm >=10.22.0
+- **Language**: TypeScript (ESM)
+- **Build**: tsdown
+- **Test**: vitest
+- **Lint**: oxlint
+- **Visual Testing**: Storybook 10
+- **Codemod Framework**: jscodeshift
+
+## Commands
+
+```bash
+pnpm install          # Install dependencies
+pnpm build            # Build with tsdown
+pnpm test             # Run tests (watch mode)
+pnpm test:run         # Run tests once
+pnpm typecheck        # Type check with tsc
+pnpm lint             # Lint with oxlint
+pnpm run ci           # Run lint + typecheck + test
+pnpm storybook        # Start Storybook dev server (port 6006)
+```
+
+## Project Structure
+
+```
+src/
+├── index.ts                    # Main exports
+├── transform.ts                # Transform implementation
+├── transform.test.ts           # Test runner (auto-discovers test cases)
+├── cli.ts                      # CLI wrapper (for preprocessing)
+├── adapters/
+│   └── adapter.ts              # Transformation adapters (user-configurable)
+└── test-cases/
+    ├── *.input.ts              # Input files (styled-components)
+    ├── *.output.ts             # Expected output files (StyleX)
+    ├── *.stylex.ts             # StyleX theme variables (defineVars)
+    ├── lib/                    # Helper files for test cases
+    │   ├── helpers.ts          # styled-components helpers (color, truncate)
+    │   ├── helpers.stylex.ts   # StyleX version of helpers
+    │   └── colors.stylex.ts    # StyleX color variables
+    └── TestCases.stories.tsx   # Auto-discovering Storybook stories
+
+.storybook/
+├── main.ts                     # Storybook config (Vite, React, StyleX)
+└── preview.ts                  # Storybook preview config
+```
+
+## Adding Test Cases
+
+Create matching `.input.ts` and `.output.ts` files in `src/test-cases/`. Tests auto-discover all pairs and fail if any file is missing its counterpart.
+
+**Test categories:**
+- **File pairing**: Verifies all test cases have matching input/output files
+- **Output linting**: Runs oxlint on all output files to ensure valid code
+- **Transform tests** (skipped): Will verify transform produces expected output once implemented
+
+**Note**: The transform is currently a stub that adds TODO comments. The transform tests are skipped until implementation is complete. Output files represent the expected transformation results.
+
+## Storybook Visual Testing
+
+Storybook renders all test cases side-by-side (input with styled-components, output with StyleX) to visually verify the transformation produces identical styles.
+
+- **Auto-discovery**: Test cases are automatically discovered from `src/test-cases/*.input.ts` and `*.output.ts` files
+- **Side-by-side view**: Each test case shows "Input (styled-components)" and "Output (StyleX)" panels
+- **"All" story**: Shows all test cases on a single page at `http://localhost:6006/?path=/story/test-cases--all`
+
+Run `pnpm storybook` to start the dev server and visually compare transformations.
+
+## Visual Inspection with Playwright MCP
+
+Use the Playwright MCP to inspect test case rendering:
+
+1. Start Storybook: `pnpm storybook`
+2. Navigate to `http://localhost:6006/?path=/story/test-cases--all`
+3. Use Playwright MCP to take screenshots and verify input/output match visually
+
+The "All" story shows every test case side-by-side, making it easy to compare styled-components input with StyleX output.
+
+## Adapter System
+
+The codemod uses a plugin/adapter system for value transformations, allowing customization of how styled-components values are converted to StyleX. Users can provide custom adapters via the CLI `--adapter` option.
+
+### CLI Usage
+
+```bash
+# Use default adapter (cssVariables)
+npx styled-components-to-stylex src/
+
+# Use a built-in adapter
+npx styled-components-to-stylex --adapter defineVars src/
+
+# Use a custom adapter
+npx styled-components-to-stylex --adapter ./my-adapter.js src/
+```
+
+### Built-in Adapters
+
+Available in `src/adapters/adapter.ts`:
+
+| Adapter | Output Example | Use Case |
+|---------|---------------|----------|
+| `cssVariablesAdapter` | `'var(--colors-primary, #BF4F74)'` | Runtime theming with CSS variables (default) |
+| `defineVarsAdapter` | `themeVars.primaryColor` | Type-safe StyleX variables |
+| `inlineValuesAdapter` | `'#BF4F74'` | Static themes, no runtime switching |
+
+### Custom Adapters
+
+Create a custom adapter module that exports a default `Adapter` object:
+
+```typescript
+// my-adapter.js
+import type { Adapter } from 'styled-components-to-stylex-codemod';
+
+const myAdapter: Adapter = {
+  transformValue({ path, defaultValue, valueType }) {
+    // Return StyleX-compatible value
+    // valueType is 'theme' | 'helper' | 'interpolation'
+  },
+  getImports() {
+    // Return required import statements
+    return ["import { myVars } from './my-vars.stylex';"];
+  },
+  getDeclarations() {
+    // Return module-level declarations
+    return [];
+  },
+};
+
+export default myAdapter;
+```
+
+### Programmatic Usage
+
+Pass adapter directly when using the transform programmatically:
+
+```typescript
+import { transform, defineVarsAdapter } from 'styled-components-to-stylex-codemod';
+
+// Use built-in adapter
+transform(file, api, { adapter: defineVarsAdapter });
+
+// Use custom adapter
+transform(file, api, { adapter: myCustomAdapter });
+```
+
+## StyleX Requirements
+
+Output files must use valid StyleX syntax:
+
+- **No CSS shorthands**: Use `backgroundColor` not `background`, `borderWidth`/`borderStyle`/`borderColor` not `border`
+- **defineVars must be exported**: Theme variables must be in separate `.stylex.ts` files with named exports
+- **createTheme needs base vars**: `stylex.createTheme(baseVars, overrides)` requires two arguments
+
+## Test Cases (from styled-components docs)
+
+| Test Case | Pattern |
+|-----------|---------|
+| `basic` | `styled.h1`, `styled.section` |
+| `adapting-props` | Props interpolation with `${props => ...}` |
+| `extending-styles` | `styled(Component)` inheritance |
+| `pseudo-selectors` | `&:hover`, `&:focus`, `&::before` |
+| `keyframes` | `keyframes` + animation |
+| `attrs` | `.attrs()` for default props |
+| `theming` | `ThemeProvider` + `props.theme` |
+| `css-helper` | `css` helper for shared styles |
+| `as-prop` | Polymorphic `as` prop |
+| `global-styles` | `createGlobalStyle` |
+| `media-queries` | `@media (min-width: ...)` responsive styles |
+| `nesting` | Child selectors `> *`, `&:not(:first-child)` |
+| `component-selector` | `${Link}:hover &` referencing other components |
+| `style-objects` | Object syntax `styled.div({...})` |
+| `conditional-styles` | Short-circuit `${props => props.x && '...'}` |
+| `styled-component` | `styled(CustomComponent)` with className |
+| `transient-props` | `$prefix` props to prevent DOM forwarding |
+| `refs` | Ref forwarding to styled components |
+| `use-theme` | `useTheme` hook for accessing theme |
+| `with-theme` | `withTheme` HOC for class components |
+| `sibling-selectors` | Adjacent `& + &` and general `& ~ &` sibling selectors |
+| `specificity` | Double ampersand `&&` and `&&&` for specificity boost |
+| `descendant-component-selector` | `${Child} { ... }` parent styling child component |
+| `forwarded-as` | `forwardedAs` prop for passing `as` through HOCs |
+| `function-theme` | `theme={fn}` function that receives parent theme |
+| `adhoc-theme` | Per-instance `theme` prop override |
+| `attribute-selectors` | `&[disabled]`, `&[type="text"]`, `&[href^="https"]` |
+| `css-variables` | `var(--custom-property)` CSS custom properties |
+| `css-calc` | `calc()` expressions in styles |
+| `multiple-animations` | Combining multiple keyframes animations |
+| `important` | `!important` declarations (removed in output) |
+| `universal-selector` | `& *` universal descendant selector |
+| `complex-selectors` | Multiple/compound selectors `&:hover, &:focus` |
+| `string-interpolation` | Static string interpolations `${variable}` |
+| `should-forward-prop` | `.withConfig({ shouldForwardProp })` prop filtering |
+| `with-config` | `.withConfig({ displayName, componentId })` |
+| `helpers` | Helper functions: `color()` theme accessor, `truncate()` CSS snippet |
+
+## Transformation Goals
+
+The codemod should handle conversions like:
+- `styled.div` / `styled(Component)` → `stylex.create()` + `stylex.props()`
+- Template literal CSS → StyleX object syntax
+- Dynamic props/interpolations → StyleX variants or dynamic styles
+- `keyframes` → `stylex.keyframes()`
+- Theme values → CSS variables or `stylex.createTheme()`
+- `css` helper → Plain style objects
+- `.attrs()` → Inline props on element

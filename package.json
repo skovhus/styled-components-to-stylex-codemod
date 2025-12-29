@@ -1,0 +1,78 @@
+{
+  "name": "styled-components-to-stylex-codemod",
+  "version": "0.0.0",
+  "description": "Codemod to transform styled-components to StyleX",
+  "type": "module",
+  "main": "./dist/index.mjs",
+  "types": "./dist/index.d.mts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.mts",
+      "import": "./dist/index.mjs"
+    },
+    "./transform": {
+      "types": "./dist/transform.d.mts",
+      "import": "./dist/transform.mjs"
+    }
+  },
+  "bin": {
+    "styled-components-to-stylex": "./dist/cli.mjs"
+  },
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "build": "tsdown",
+    "dev": "tsdown --watch",
+    "test": "vitest",
+    "test:run": "vitest run",
+    "test:coverage": "vitest run --coverage",
+    "lint": "oxlint --ignore-pattern 'src/test-cases/**' --ignore-pattern 'storybook-static/**'",
+    "lint:fix": "oxlint --fix",
+    "typecheck": "tsc --noEmit",
+    "ci": "pnpm run lint && pnpm run typecheck && pnpm run test:run",
+    "prepublishOnly": "pnpm run build",
+    "storybook": "storybook dev -p 6006"
+  },
+  "keywords": [
+    "codemod",
+    "jscodeshift",
+    "styled-components",
+    "stylex",
+    "css-in-js",
+    "transform"
+  ],
+  "author": "",
+  "license": "MIT",
+  "engines": {
+    "node": ">=22.20",
+    "pnpm": ">=10.22.0"
+  },
+  "packageManager": "pnpm@10.22.0",
+  "devDependencies": {
+    "@emotion/is-prop-valid": "^1.4.0",
+    "@playwright/test": "^1.57.0",
+    "@storybook/react": "^10.1.10",
+    "@storybook/react-vite": "^10.1.10",
+    "@stylexjs/babel-plugin": "^0.17.4",
+    "@stylexjs/stylex": "^0.17.4",
+    "@stylexjs/unplugin": "^0.17.4",
+    "@types/jscodeshift": "^17.3.0",
+    "@types/node": "^25.0.3",
+    "@types/react": "^19.2.7",
+    "@types/react-dom": "^19.2.3",
+    "@vitejs/plugin-react": "^5.1.2",
+    "oxlint": "^1.35.0",
+    "react": "^19.2.3",
+    "react-dom": "^19.2.3",
+    "storybook": "^10.1.10",
+    "styled-components": "^6.1.19",
+    "tsdown": "^0.18.3",
+    "typescript": "^5.9.3",
+    "vite": "^7.3.0",
+    "vitest": "^4.0.16"
+  },
+  "dependencies": {
+    "jscodeshift": "^17.3.0"
+  }
+}
