@@ -34,6 +34,8 @@ export interface TransformResult {
 export interface TransformOptions extends Options {
   /** Adapter for transforming theme values (defaults to cssVariablesAdapter) */
   adapter?: Adapter;
+  /** Optional plugins to handle dynamic CSS contexts (primarily for experimentation/testing) */
+  dynamicPlugins?: DynamicPlugin[];
 }
 
 function createPlaceholder(index: number): string {
@@ -100,6 +102,13 @@ function parseDeclarationValue(raw: string, tokens: DynamicToken[]): ParsedDecla
 function parseTemplateLiteral(template: TemplateLiteral): ParsedTemplateLiteral {
   const { chunks, tokens } = extractChunks(template);
   const cssText = renderChunks(chunks);
+
+  // Ensure every token placeholder survived reconstruction so parsing errors can be surfaced early.
+  for (const token of tokens) {
+    if (!cssText.includes(token.placeholder)) {
+      throw new Error(`Placeholder ${token.placeholder} missing from rendered CSS text`);
+    }
+  }
   const ast = compile(cssText);
   const rules: ParsedRule[] = [];
 
@@ -153,7 +162,7 @@ function findDynamicContexts(parsed: ParsedTemplateLiteral): DynamicContext[] {
       .map((chunk) => [chunk.token.placeholder, chunk.token]),
   );
 
-  const placeholderPattern = new RegExp(String.raw`${PLACEHOLDER_PREFIX}(\d+)__)`, "g");
+  const placeholderPattern = /var\(--__dyn_(\d+)__\)/g;
 
   for (const rule of parsed.rules) {
     const selectorString = rule.selectors.join(", ");
@@ -219,14 +228,17 @@ function runDynamicPlugins(contexts: DynamicContext[], plugins: DynamicPlugin[])
   return results;
 }
 
-const defaultDynamicPlugins: DynamicPlugin[] = [
-  (context) => {
-    if (context.kind === "declaration-value") {
-      return { action: "keep" };
-    }
-    return { action: "keep" };
-  },
-];
+function collectDynamicWarnings(results: PluginResult[]): TransformWarning[] {
+  return results
+    .filter((result): result is PluginResult & { action: "bail" } => result.action === "bail")
+    .map((result) => ({
+      type: "unsupported-feature",
+      feature: "dynamic-css",
+      message: result.reason ?? "Dynamic CSS interpolation not supported",
+    }));
+}
+
+const defaultDynamicPlugins: DynamicPlugin[] = [() => ({ action: "keep" })];
 
 function getStyledIdentifiers(
   j: API["jscodeshift"],
@@ -259,7 +271,7 @@ function isStyledTemplate(node: TaggedTemplateExpression, styledIdentifiers: Set
   return false;
 }
 
-type DynamicToken = {
+export type DynamicToken = {
   id: number;
   placeholder: string;
   expression: unknown;
@@ -356,6 +368,7 @@ export function transformWithWarnings(
   const warnings: TransformWarning[] = [];
   // Use provided adapter or default
   const adapter: Adapter = options.adapter ?? defaultAdapter;
+  const dynamicPlugins = options.dynamicPlugins ?? defaultDynamicPlugins;
   void adapter; // Currently unused while transform is a stub
 
   // Find styled-components imports
@@ -443,7 +456,8 @@ export function transformWithWarnings(
       try {
         const parsed = parseTemplateLiteral(quasi);
         const contexts = findDynamicContexts(parsed);
-        runDynamicPlugins(contexts, defaultDynamicPlugins);
+        const results = runDynamicPlugins(contexts, dynamicPlugins);
+        warnings.push(...collectDynamicWarnings(results));
       } catch (error) {
         const err = error as Error;
         warnings.push({
@@ -464,3 +478,4 @@ export function transformWithWarnings(
 // Re-export adapter types for convenience
 export type { Adapter, AdapterContext } from "./adapter.js";
 export { defaultAdapter } from "./adapter.js";
+export { parseTemplateLiteral, findDynamicContexts, runDynamicPlugins, collectDynamicWarnings };
