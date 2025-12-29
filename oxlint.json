@@ -9,7 +9,7 @@
     "dist/**",
     "node_modules/**",
     "coverage/**",
-    "src/test-cases/**",
+    "test-cases/**",
     "storybook-static/**"
   ]
 }

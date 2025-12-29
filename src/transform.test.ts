@@ -38,7 +38,7 @@ const inlineValuesAdapter: Adapter = {
     return [];
   },
 };
-const testCasesDir = join(__dirname, "test-cases");
+const testCasesDir = join(__dirname, "..", "test-cases");
 const j = jscodeshift.withParser("tsx");
 
 function getTestCases(): string[] {

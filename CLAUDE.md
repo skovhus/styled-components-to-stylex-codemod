@@ -34,30 +34,31 @@ pnpm storybook        # Start Storybook dev server (port 6006)
 
 ```
 src/
-├── index.ts                    # Main exports
-├── transform.ts                # Transform implementation
-├── transform.test.ts           # Test runner (auto-discovers test cases)
-├── cli.ts                      # CLI wrapper (for preprocessing)
-├── adapters/
-│   └── adapter.ts              # Transformation adapters (user-configurable)
-└── test-cases/
-    ├── *.input.ts              # Input files (styled-components)
-    ├── *.output.ts             # Expected output files (StyleX)
-    ├── *.stylex.ts             # StyleX theme variables (defineVars)
-    ├── lib/                    # Helper files for test cases
-    │   ├── helpers.ts          # styled-components helpers (color, truncate)
-    │   ├── helpers.stylex.ts   # StyleX version of helpers
-    │   └── colors.stylex.ts    # StyleX color variables
-    └── TestCases.stories.tsx   # Auto-discovering Storybook stories
+├── index.ts              # Main exports
+├── transform.ts          # Transform implementation
+├── transform.test.ts     # Test runner (auto-discovers test cases)
+├── run.ts                # Programmatic runner (runTransform)
+└── adapter.ts            # Adapter interface and default adapter
+
+test-cases/
+├── *.input.tsx           # Input files (styled-components)
+├── *.output.tsx          # Expected output files (StyleX)
+├── *.stylex.ts           # StyleX theme variables (defineVars)
+├── *.warnings.json       # Expected warnings for test cases
+├── lib/                  # Helper files for test cases
+│   ├── helpers.ts        # styled-components helpers (color, truncate)
+│   ├── helpers.stylex.ts # StyleX version of helpers
+│   └── colors.stylex.ts  # StyleX color variables
+└── TestCases.stories.tsx # Auto-discovering Storybook stories
 
 .storybook/
-├── main.ts                     # Storybook config (Vite, React, StyleX)
-└── preview.ts                  # Storybook preview config
+├── main.ts               # Storybook config (Vite, React, StyleX)
+└── preview.ts            # Storybook preview config
 ```
 
 ## Adding Test Cases
 
-Create matching `.input.ts` and `.output.ts` files in `src/test-cases/`. Tests auto-discover all pairs and fail if any file is missing its counterpart.
+Create matching `.input.tsx` and `.output.tsx` files in `test-cases/`. Tests auto-discover all pairs and fail if any file is missing its counterpart.
 
 **Test categories:**
 
@@ -71,7 +72,7 @@ Create matching `.input.ts` and `.output.ts` files in `src/test-cases/`. Tests a
 
 Storybook renders all test cases side-by-side (input with styled-components, output with StyleX) to visually verify the transformation produces identical styles.
 
-- **Auto-discovery**: Test cases are automatically discovered from `src/test-cases/*.input.ts` and `*.output.ts` files
+- **Auto-discovery**: Test cases are automatically discovered from `test-cases/*.input.tsx` and `*.output.tsx` files
 - **Side-by-side view**: Each test case shows "Input (styled-components)" and "Output (StyleX)" panels
 - **"All" story**: Shows all test cases on a single page at `http://localhost:6006/?path=/story/test-cases--all`
 
@@ -89,69 +90,48 @@ The "All" story shows every test case side-by-side, making it easy to compare st
 
 ## Adapter System
 
-The codemod uses a plugin/adapter system for value transformations, allowing customization of how styled-components values are converted to StyleX. Users can provide custom adapters via the CLI `--adapter` option.
+The codemod uses an adapter system for value transformations, allowing customization of how styled-components values are converted to StyleX.
 
-### CLI Usage
+### Programmatic Usage
 
-```bash
-# Use default adapter (cssVariables)
-npx styled-components-to-stylex src/
-
-# Use a built-in adapter
-npx styled-components-to-stylex --adapter defineVars src/
-
-# Use a custom adapter
-npx styled-components-to-stylex --adapter ./my-adapter.js src/
-```
-
-### Built-in Adapters
-
-Available in `src/adapters/adapter.ts`:
-
-| Adapter               | Output Example                     | Use Case                                     |
-| --------------------- | ---------------------------------- | -------------------------------------------- |
-| `cssVariablesAdapter` | `'var(--colors-primary, #BF4F74)'` | Runtime theming with CSS variables (default) |
-| `defineVarsAdapter`   | `themeVars.primaryColor`           | Type-safe StyleX variables                   |
-| `inlineValuesAdapter` | `'#BF4F74'`                        | Static themes, no runtime switching          |
-
-### Custom Adapters
-
-Create a custom adapter module that exports a default `Adapter` object:
+Create a script to run the transform with a custom adapter:
 
 ```typescript
-// my-adapter.js
-import type { Adapter } from 'styled-components-to-stylex-codemod';
+// run-transform.ts
+import { runTransform } from "styled-components-to-stylex-codemod";
+import type { Adapter } from "styled-components-to-stylex-codemod";
 
 const myAdapter: Adapter = {
   transformValue({ path, defaultValue, valueType }) {
     // Return StyleX-compatible value
     // valueType is 'theme' | 'helper' | 'interpolation'
+    return `themeVars.${path.replace(/\./g, "_")}`;
   },
   getImports() {
-    // Return required import statements
-    return ["import { myVars } from './my-vars.stylex';"];
+    return ["import { themeVars } from './theme.stylex';"];
   },
   getDeclarations() {
-    // Return module-level declarations
     return [];
   },
 };
 
-export default myAdapter;
+await runTransform({
+  files: "src/**/*.tsx",
+  adapter: myAdapter,
+  dryRun: true, // Set to false to write changes
+  parser: "tsx",
+});
 ```
 
-### Programmatic Usage
+Run with: `npx tsx run-transform.ts`
 
-Pass adapter directly when using the transform programmatically:
+### Default Adapter
+
+The default adapter converts theme values to CSS custom properties:
 
 ```typescript
-import { transform, defineVarsAdapter } from 'styled-components-to-stylex-codemod';
-
-// Use built-in adapter
-transform(file, api, { adapter: defineVarsAdapter });
-
-// Use custom adapter
-transform(file, api, { adapter: myCustomAdapter });
+// Input: props.theme.colors.primary
+// Output: 'var(--colors-primary, #defaultValue)'
 ```
 
 ## StyleX Requirements

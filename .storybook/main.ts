@@ -2,7 +2,7 @@ import type { StorybookConfig } from "@storybook/react-vite";
 import stylex from "@stylexjs/unplugin";
 
 const config: StorybookConfig = {
-  stories: ["../src/**/*.stories.@(js|jsx|mjs|ts|tsx)"],
+  stories: ["../test-cases/**/*.stories.@(js|jsx|mjs|ts|tsx)"],
   framework: {
     name: "@storybook/react-vite",
     options: {},
