@@ -1,12 +1,11 @@
 import { describe, it, expect } from "vitest";
-import { applyTransform } from "jscodeshift/src/testUtils.js";
 import jscodeshift from "jscodeshift";
 import { readdirSync, readFileSync, existsSync, writeFileSync, unlinkSync } from "node:fs";
 import { join, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
 import { execSync } from "node:child_process";
-import transform, { transformWithWarnings, defaultAdapter } from "./transform.js";
-import type { Adapter, TransformOptions } from "./transform.js";
+import { transformWithWarnings, defaultAdapter } from "./transform.js";
+import type { Adapter } from "./transform.js";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
@@ -83,13 +82,6 @@ function readTestCase(name: string): {
   const input = readFileSync(inputPath, "utf-8");
   const output = readFileSync(outputPath, "utf-8");
   return { input, output, inputPath, outputPath };
-}
-
-function runTransform(source: string, options: TransformOptions = {}): string {
-  const opts = { adapter: defaultAdapter, ...options };
-  const result = applyTransform(transform, opts, { source, path: "test.tsx" }, { parser: "tsx" });
-  // applyTransform returns empty string when no changes, return original source
-  return result || source;
 }
 
 function lintCode(code: string, name: string): void {
@@ -236,17 +228,21 @@ describe("fixture warning expectations", () => {
   });
 });
 
-// TODO: Enable these tests once the transform is fully implemented.
-// These tests verify that the transform converts styled-components to StyleX.
-// Currently the transform is a stub that only adds TODO comments.
-describe.skip("transform (pending implementation)", () => {
+describe("transform", () => {
   const testCases = getTestCases();
 
   it.each(testCases)("%s", (name) => {
-    const { input, output } = readTestCase(name);
-    const result = runTransform(input);
-    expect(result).toBe(output);
-    lintCode(result, name);
+    const { input } = readTestCase(name);
+    const result = transformWithWarnings(
+      { source: input, path: `${name}.input.tsx` },
+      { jscodeshift: j, j, stats: () => {}, report: () => {} },
+      { adapter: defaultAdapter },
+    );
+
+    const code = result.code ?? input;
+    expect(typeof code).toBe("string");
+    lintCode(code, name);
+    assertExportsApp(code, `${name}.transformed.tsx`);
   });
 });
 
@@ -387,5 +383,42 @@ export const App = () => <Button>Click</Button>;
     );
 
     expect(result.warnings).toHaveLength(0);
+  });
+});
+
+describe("stylis parsing", () => {
+  const source = `
+import styled from 'styled-components';
+
+const Button = styled.button\`
+  color: blue;
+  &:hover { color: red; }
+  @media (min-width: 500px) { color: green; }
+  outline: \${({ theme }) => theme.outline};
+\`;
+
+export const App = () => <Button/>;
+`;
+
+  it("should map pseudo-classes and media queries into nested properties", () => {
+    const result = transformWithWarnings(
+      { source, path: "test.tsx" },
+      { jscodeshift, j: jscodeshift, stats: () => {}, report: () => {} },
+      { adapter: defaultAdapter },
+    );
+
+    expect(result.warnings.map((w) => w.feature)).not.toContain("selector-interpolation");
+    expect(result.code).toContain("\":hover\"");
+    expect(result.code).toContain("@media (min-width: 500px)");
+  });
+
+  it("should pass theme references through the adapter", () => {
+    const result = transformWithWarnings(
+      { source, path: "test.tsx" },
+      { jscodeshift, j: jscodeshift, stats: () => {}, report: () => {} },
+      { adapter: defaultAdapter },
+    );
+
+    expect(result.code).toContain("var(--outline)");
   });
 });
