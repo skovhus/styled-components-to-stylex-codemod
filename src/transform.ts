@@ -38,6 +38,8 @@ export interface TransformOptions extends Options {
   dynamicPlugins?: DynamicPlugin[];
 }
 
+const PLACEHOLDER_PATTERN = /var\(--__dyn_(\d+)__\)/g;
+
 function createPlaceholder(index: number): string {
   return `${PLACEHOLDER_PREFIX}${index}__)`;
 }
@@ -138,6 +140,22 @@ function parseTemplateLiteral(template: TemplateLiteral): ParsedTemplateLiteral 
           atRulePath,
           declarations,
         });
+      } else if (node.type === "decl") {
+        const prop = typeof node.props === "string" ? node.props : node.props?.[0];
+        const value = typeof node.children === "string" ? node.children : (node.value ?? "");
+
+        if (prop) {
+          rules.push({
+            selectors: selectorPath.length > 0 ? selectorPath : ["&"],
+            atRulePath,
+            declarations: [
+              {
+                property: prop,
+                value: parseDeclarationValue(value, tokens),
+              },
+            ],
+          });
+        }
       } else if (
         typeof node.type === "string" &&
         node.type.startsWith("@") &&
@@ -162,11 +180,9 @@ function findDynamicContexts(parsed: ParsedTemplateLiteral): DynamicContext[] {
       .map((chunk) => [chunk.token.placeholder, chunk.token]),
   );
 
-  const placeholderPattern = /var\(--__dyn_(\d+)__\)/g;
-
   for (const rule of parsed.rules) {
     const selectorString = rule.selectors.join(", ");
-    for (const match of selectorString.matchAll(placeholderPattern)) {
+    for (const match of selectorString.matchAll(PLACEHOLDER_PATTERN)) {
       const id = Number(match[1]);
       const placeholder = createPlaceholder(id);
       const token = tokenByPlaceholder.get(placeholder);
@@ -195,7 +211,7 @@ function findDynamicContexts(parsed: ParsedTemplateLiteral): DynamicContext[] {
 
     const lastAtRule = rule.atRulePath.at(-1);
     if (lastAtRule) {
-      for (const match of lastAtRule.matchAll(placeholderPattern)) {
+      for (const match of lastAtRule.matchAll(PLACEHOLDER_PATTERN)) {
         const id = Number(match[1]);
         const placeholder = createPlaceholder(id);
         const token = tokenByPlaceholder.get(placeholder);
@@ -239,6 +255,30 @@ function collectDynamicWarnings(results: PluginResult[]): TransformWarning[] {
 }
 
 const defaultDynamicPlugins: DynamicPlugin[] = [() => ({ action: "keep" })];
+
+function collectUnclassifiedDynamicWarnings(
+  parsed: ParsedTemplateLiteral,
+  contexts: DynamicContext[],
+): TransformWarning[] {
+  const warnings: TransformWarning[] = [];
+  if (contexts.length === 0 && parsed.rules.length === 0) {
+    const usedPlaceholders = new Set(contexts.map((ctx) => ctx.token.placeholder));
+
+    for (const chunk of parsed.chunks) {
+      if (chunk.kind !== "dynamic") continue;
+      if (usedPlaceholders.has(chunk.token.placeholder)) continue;
+
+      warnings.push({
+        type: "unsupported-feature",
+        feature: "dynamic-css",
+        message:
+          "Dynamic interpolation could not be classified (e.g., comment or unsupported position) and requires manual handling.",
+      });
+    }
+  }
+
+  return warnings;
+}
 
 function getStyledIdentifiers(
   j: API["jscodeshift"],
@@ -458,6 +498,7 @@ export function transformWithWarnings(
         const contexts = findDynamicContexts(parsed);
         const results = runDynamicPlugins(contexts, dynamicPlugins);
         warnings.push(...collectDynamicWarnings(results));
+        warnings.push(...collectUnclassifiedDynamicWarnings(parsed, contexts));
       } catch (error) {
         const err = error as Error;
         warnings.push({
@@ -478,4 +519,10 @@ export function transformWithWarnings(
 // Re-export adapter types for convenience
 export type { Adapter, AdapterContext } from "./adapter.js";
 export { defaultAdapter } from "./adapter.js";
-export { parseTemplateLiteral, findDynamicContexts, runDynamicPlugins, collectDynamicWarnings };
+export {
+  parseTemplateLiteral,
+  findDynamicContexts,
+  runDynamicPlugins,
+  collectDynamicWarnings,
+  collectUnclassifiedDynamicWarnings,
+};

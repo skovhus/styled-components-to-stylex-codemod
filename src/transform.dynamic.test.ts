@@ -1,8 +1,13 @@
 import { describe, expect, it } from "vitest";
+import jscodeshift from "jscodeshift";
 import {
   collectDynamicWarnings,
+  collectUnclassifiedDynamicWarnings,
   findDynamicContexts,
+  parseTemplateLiteral,
   runDynamicPlugins,
+  transformWithWarnings,
+  defaultAdapter,
   type DynamicContext,
   type DynamicPlugin,
   type DynamicToken,
@@ -93,5 +98,70 @@ describe("dynamic plugin bailouts", () => {
         message: "Dynamic declaration requires manual handling",
       },
     ]);
+  });
+});
+
+describe("unclassified dynamic warnings", () => {
+  it("warns when placeholders cannot be mapped to a CSS context", () => {
+    const source = `
+import styled from 'styled-components';
+
+const placeholder = () => "";
+
+const Button = styled.button\`
+  /* \${placeholder()} */
+\`;
+
+export const App = () => <Button />;
+`;
+
+    const quasi = jscodeshift(source).find(jscodeshift.TaggedTemplateExpression).paths()[0]!
+      .node.quasi;
+    const parsed = parseTemplateLiteral(quasi);
+    const contexts = findDynamicContexts(parsed);
+
+    expect(collectUnclassifiedDynamicWarnings(parsed, contexts)).toEqual([
+      {
+        type: "unsupported-feature",
+        feature: "dynamic-css",
+        message:
+          "Dynamic interpolation could not be classified (e.g., comment or unsupported position) and requires manual handling.",
+      },
+    ]);
+
+    const result = transformWithWarnings(
+      { source, path: "test.tsx" },
+      { jscodeshift, j: jscodeshift, stats: () => {}, report: () => {} },
+      { adapter: defaultAdapter },
+    );
+
+    expect(result.warnings).toEqual([
+      {
+        type: "unsupported-feature",
+        feature: "dynamic-css",
+        message:
+          "Dynamic interpolation could not be classified (e.g., comment or unsupported position) and requires manual handling.",
+      },
+    ]);
+  });
+
+  it("does not warn for standard declaration interpolations", () => {
+    const source = `
+import styled from 'styled-components';
+
+const Button = styled.button\`
+  color: \${props => props.color};
+\`;
+
+export const App = () => <Button color="red" />;
+`;
+
+    const result = transformWithWarnings(
+      { source, path: "test.tsx" },
+      { jscodeshift, j: jscodeshift, stats: () => {}, report: () => {} },
+      { adapter: defaultAdapter },
+    );
+
+    expect(result.warnings).toEqual([]);
   });
 });
