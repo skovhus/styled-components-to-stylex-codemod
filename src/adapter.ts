@@ -2,7 +2,7 @@
  * Adapter Interface
  *
  * Allows customizing how styled-components values are transformed to StyleX.
- * Users can provide their own adapter implementation via the CLI --adapter option.
+ * Users can provide their own adapter implementation via the `adapter` option in `runTransform`.
  */
 
 export interface AdapterContext {

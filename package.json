@@ -12,9 +12,6 @@
   ],
   "license": "MIT",
   "author": "",
-  "bin": {
-    "styled-components-to-stylex": "./dist/cli.mjs"
-  },
   "files": [
     "dist"
   ],
