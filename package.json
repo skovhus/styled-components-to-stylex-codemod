@@ -12,6 +12,9 @@
   ],
   "license": "MIT",
   "author": "",
+  "bin": {
+    "styled-components-to-stylex": "./dist/cli.mjs"
+  },
   "files": [
     "dist"
   ],
@@ -30,6 +33,10 @@
     "./run": {
       "types": "./dist/run.d.mts",
       "import": "./dist/run.mjs"
+    },
+    "./hook": {
+      "types": "./dist/hook.d.mts",
+      "import": "./dist/hook.mjs"
     }
   },
   "scripts": {

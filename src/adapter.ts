@@ -54,3 +54,39 @@ export const defaultAdapter: Adapter = {
     return [];
   },
 };
+
+/**
+ * Example adapter: Treat theme paths as references to a generated `themeVars` module.
+ *
+ * Generates: `color: themeVars.colorsPrimary`
+ */
+export const defineVarsAdapter: Adapter = {
+  transformValue({ path }) {
+    const varName = path
+      .split(".")
+      .map((part, i) => (i === 0 ? part : part.charAt(0).toUpperCase() + part.slice(1)))
+      .join("");
+    return `themeVars.${varName}`;
+  },
+  getImports() {
+    return ["import { themeVars } from './tokens.stylex';"];
+  },
+  getDeclarations() {
+    return [];
+  },
+};
+
+/**
+ * Example adapter: Inline the defaultValue (when available) as a string literal.
+ */
+export const inlineValuesAdapter: Adapter = {
+  transformValue({ defaultValue }) {
+    return defaultValue ? `'${defaultValue}'` : "''";
+  },
+  getImports() {
+    return [];
+  },
+  getDeclarations() {
+    return [];
+  },
+};

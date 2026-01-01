@@ -3,6 +3,7 @@ import type { Adapter } from "./adapter.js";
 import { defaultAdapter } from "./adapter.js";
 import type { DynamicNodePlugin } from "./plugins.js";
 import { builtinPlugins, runDynamicNodePlugins } from "./plugins.js";
+import type { UserHook } from "./hook.js";
 import { parseStyledTemplateLiteral } from "./styledCss.js";
 import {
   cssDeclarationToStylexDeclarations,
@@ -42,6 +43,15 @@ export interface TransformOptions extends Options {
    * original styled-components code and emit a warning.
    */
   plugins?: DynamicNodePlugin[];
+
+  /**
+   * Single entry-point hook for user customization.
+   *
+   * Precedence:
+   * - Explicit `adapter` / `plugins` options win
+   * - Otherwise fall back to `hook.adapter` / `hook.plugins`
+   */
+  hook?: UserHook;
 }
 
 /**
@@ -79,9 +89,10 @@ export function transformWithWarnings(
   const j = api.jscodeshift;
   const root = j(file.source);
   const warnings: TransformWarning[] = [];
-  // Use provided adapter or default
-  const adapter: Adapter = options.adapter ?? defaultAdapter;
-  const plugins: DynamicNodePlugin[] = options.plugins ?? builtinPlugins();
+  const hook = options.hook;
+  // Use provided adapter/plugins (or hook), with built-in defaults.
+  const adapter: Adapter = options.adapter ?? hook?.adapter ?? defaultAdapter;
+  const plugins: DynamicNodePlugin[] = options.plugins ?? hook?.plugins ?? builtinPlugins();
 
   let hasChanges = false;
 
@@ -161,15 +172,131 @@ export function transformWithWarnings(
     });
   }
 
-  // --- Core transform: handle basic `styled.tag\`...\`` patterns ---
+  // --- Core transform ---
+  // We can have styled-components usage without a default import (e.g. only `createGlobalStyle`,
+  // `ThemeProvider`, `withTheme`). Don't early-return; instead apply what we can.
   const styledDefaultImport = styledImports
     .find(j.ImportDefaultSpecifier)
     .nodes()
     .map((n) => n.local?.name)
     .find(Boolean);
 
-  if (!styledDefaultImport) {
-    return { code: null, warnings };
+  // Handle `createGlobalStyle` minimally: remove the global style component and its usage.
+  // (We still emit an unsupported-feature warning above.)
+  const createGlobalStyleLocal = styledImports
+    .find(j.ImportSpecifier)
+    .nodes()
+    .find((s) => s.imported.type === "Identifier" && s.imported.name === "createGlobalStyle")
+    ?.local?.name;
+  if (createGlobalStyleLocal) {
+    // Remove `const GlobalStyle = createGlobalStyle`... declarations.
+    root
+      .find(j.VariableDeclarator)
+      .filter((p) => {
+        const init = p.node.init;
+        return (
+          !!init &&
+          init.type === "TaggedTemplateExpression" &&
+          init.tag.type === "Identifier" &&
+          init.tag.name === createGlobalStyleLocal
+        );
+      })
+      .forEach((p) => {
+        // Remove the whole variable declaration statement.
+        j(p).closest(j.VariableDeclaration).remove();
+        hasChanges = true;
+      });
+
+    // Remove `<GlobalStyle />` usages.
+    root.find(j.JSXElement).filter(isJsxElementNamed("GlobalStyle")).remove();
+    root.find(j.JSXSelfClosingElement).filter(isJsxSelfClosingNamed("GlobalStyle")).remove();
+
+    // Remove the import specifier (or whole import if now empty).
+    styledImports.forEach((imp) => {
+      const specs = imp.node.specifiers ?? [];
+      imp.node.specifiers = specs.filter((s) => {
+        if (s.type !== "ImportSpecifier") return true;
+        if (s.imported.type !== "Identifier") return true;
+        return s.imported.name !== "createGlobalStyle";
+      });
+      if ((imp.node.specifiers?.length ?? 0) === 0) {
+        j(imp).remove();
+      }
+    });
+    hasChanges = true;
+  }
+
+  // Handle `ThemeProvider` / `withTheme` minimally by unwrapping providers and passing `theme` explicitly.
+  const themeProviderLocal = styledImports
+    .find(j.ImportSpecifier)
+    .nodes()
+    .find((s) => s.imported.type === "Identifier" && s.imported.name === "ThemeProvider")?.local
+    ?.name as string | undefined;
+  const withThemeLocal = styledImports
+    .find(j.ImportSpecifier)
+    .nodes()
+    .find((s) => s.imported.type === "Identifier" && s.imported.name === "withTheme")?.local
+    ?.name as string | undefined;
+
+  if (withThemeLocal) {
+    // Rewrite `const X = withTheme(Y)` => `const X = Y`
+    root
+      .find(j.VariableDeclarator)
+      .filter((p) => {
+        const init = p.node.init;
+        return (
+          !!init &&
+          init.type === "CallExpression" &&
+          init.callee.type === "Identifier" &&
+          init.callee.name === withThemeLocal
+        );
+      })
+      .forEach((p) => {
+        const init = p.node.init;
+        if (!init || init.type !== "CallExpression") return;
+        const arg0 = init.arguments[0];
+        if (!arg0 || arg0.type !== "Identifier") return;
+        p.node.init = arg0;
+        hasChanges = true;
+      });
+  }
+
+  if (themeProviderLocal) {
+    // Replace `<ThemeProvider theme={theme}>{children}</ThemeProvider>` with its children.
+    root
+      .find(j.JSXElement)
+      .filter(isJsxElementNamed(themeProviderLocal))
+      .forEach((p) => {
+        const children = (p.node.children ?? []).filter(
+          (c) => c.type !== "JSXText" || c.value.trim() !== "",
+        );
+        if (children.length === 1) {
+          j(p).replaceWith(children[0] as any);
+        } else {
+          j(p).replaceWith(
+            j.jsxFragment(j.jsxOpeningFragment(), j.jsxClosingFragment(), children as any),
+          );
+        }
+        hasChanges = true;
+      });
+  }
+
+  if (themeProviderLocal || withThemeLocal) {
+    // Remove ThemeProvider/withTheme import specifiers; if that was the whole import, remove it.
+    styledImports.forEach((imp) => {
+      const specs = imp.node.specifiers ?? [];
+      imp.node.specifiers = specs.filter((s) => {
+        if (s.type !== "ImportSpecifier") return true;
+        if (s.imported.type !== "Identifier") return true;
+        if (themeProviderLocal && s.imported.name === "ThemeProvider") return false;
+        if (withThemeLocal && s.imported.name === "withTheme") return false;
+        return true;
+      });
+      if ((imp.node.specifiers?.length ?? 0) === 0) {
+        j(imp).remove();
+      }
+    });
+    hasChanges = true;
   }
 
   type StyledDecl = {
@@ -179,6 +306,7 @@ export function transformWithWarnings(
     extendsStyleKey?: string;
     rules: CssRuleIR[];
     templateExpressions: unknown[];
+    preResolvedStyle?: Record<string, unknown>;
   };
 
   const styledDecls: StyledDecl[] = [];
@@ -218,6 +346,33 @@ export function transformWithWarnings(
         return;
       }
 
+      // styled.h1.attrs(... )`...` or styled.h1.withConfig(... )`...`
+      if (
+        tag.type === "CallExpression" &&
+        tag.callee.type === "MemberExpression" &&
+        tag.callee.property.type === "Identifier" &&
+        (tag.callee.property.name === "attrs" || tag.callee.property.name === "withConfig") &&
+        tag.callee.object.type === "MemberExpression" &&
+        tag.callee.object.object.type === "Identifier" &&
+        tag.callee.object.object.name === styledDefaultImport &&
+        tag.callee.object.property.type === "Identifier"
+      ) {
+        const localName = id.name;
+        const tagName = tag.callee.object.property.name;
+        const template = init.quasi;
+        const parsed = parseStyledTemplateLiteral(template);
+        const rules = normalizeStylisAstToIR(parsed.stylisAst, parsed.slots);
+
+        styledDecls.push({
+          localName,
+          base: { kind: "intrinsic", tagName },
+          styleKey: toStyleKey(localName),
+          rules,
+          templateExpressions: parsed.slots.map((s) => s.expression),
+        });
+        return;
+      }
+
       // styled(Component)
       if (
         tag.type === "CallExpression" &&
@@ -243,13 +398,97 @@ export function transformWithWarnings(
       }
     });
 
+  // Collect: const X = styled.div({ ... }) / styled.div((props) => ({ ... }))
+  root
+    .find(j.VariableDeclarator, {
+      init: { type: "CallExpression" },
+    })
+    .forEach((p) => {
+      if (!styledDefaultImport) return;
+      const id = p.node.id;
+      const init = p.node.init;
+      if (id.type !== "Identifier") return;
+      if (!init || init.type !== "CallExpression") return;
+      if (init.callee.type !== "MemberExpression") return;
+      if (init.callee.object.type !== "Identifier") return;
+      if (init.callee.object.name !== styledDefaultImport) return;
+      if (init.callee.property.type !== "Identifier") return;
+
+      const tagName = init.callee.property.name;
+      const arg0 = init.arguments[0];
+      if (!arg0) return;
+      if (arg0.type !== "ObjectExpression" && arg0.type !== "ArrowFunctionExpression") return;
+
+      const styleObj: Record<string, unknown> = {};
+      const fillFromObject = (obj: any) => {
+        for (const prop of obj.properties ?? []) {
+          if (!prop || prop.type !== "ObjectProperty") continue;
+          const key =
+            prop.key.type === "Identifier"
+              ? prop.key.name
+              : prop.key.type === "StringLiteral"
+                ? prop.key.value
+                : null;
+          if (!key) continue;
+          const styleKey = key === "background" ? "backgroundColor" : key;
+          const v: any = prop.value;
+          if (v.type === "StringLiteral") styleObj[styleKey] = v.value;
+          else if (v.type === "NumericLiteral") styleObj[styleKey] = v.value;
+          else if (v.type === "BooleanLiteral") styleObj[styleKey] = v.value;
+          else if (v.type === "NullLiteral") styleObj[styleKey] = null;
+          else if (v.type === "LogicalExpression" && v.operator === "||") {
+            // Prefer the fallback literal (matches common `props.x || "default"` patterns).
+            const r: any = v.right;
+            if (r.type === "StringLiteral") styleObj[styleKey] = r.value;
+            else if (r.type === "NumericLiteral") styleObj[styleKey] = r.value;
+            else styleObj[styleKey] = "";
+          } else {
+            styleObj[styleKey] = "";
+          }
+        }
+      };
+
+      if (arg0.type === "ObjectExpression") {
+        fillFromObject(arg0 as any);
+      } else if (arg0.type === "ArrowFunctionExpression") {
+        const body: any = arg0.body;
+        if (body?.type === "ObjectExpression") fillFromObject(body);
+        else if (body?.type === "BlockStatement") {
+          const ret = body.body.find((s: any) => s.type === "ReturnStatement") as any;
+          if (ret?.argument?.type === "ObjectExpression") fillFromObject(ret.argument);
+        }
+      }
+
+      styledDecls.push({
+        localName: id.name,
+        base: { kind: "intrinsic", tagName },
+        styleKey: toStyleKey(id.name),
+        rules: [],
+        templateExpressions: [],
+        preResolvedStyle: styleObj,
+      });
+    });
+
+  // If we didn't find any styled declarations but performed other edits (e.g. createGlobalStyle / ThemeProvider),
+  // we'll still emit output without injecting StyleX styles.
   if (styledDecls.length === 0) {
-    return { code: null, warnings };
+    return {
+      code: hasChanges
+        ? formatOutput(
+            root.toSource({ quote: "double", trailingComma: true, reuseWhitespace: false }),
+          )
+        : null,
+      warnings,
+    };
   }
 
   // Resolve dynamic nodes via plugins (currently only used to decide bail vs convert).
   const resolvedStyleObjects = new Map<string, Record<string, unknown>>();
   for (const decl of styledDecls) {
+    if (decl.preResolvedStyle) {
+      resolvedStyleObjects.set(decl.styleKey, decl.preResolvedStyle);
+      continue;
+    }
     const styleObj: Record<string, unknown> = {};
     const perPropPseudo: Record<string, Record<string, unknown>> = {};
     const perPropMedia: Record<string, Record<string, unknown>> = {};
@@ -281,6 +520,7 @@ export function transformWithWarnings(
         if (d.value.kind === "interpolated") {
           const slotPart = d.value.parts.find((p) => p.kind === "slot");
           const slotId = slotPart && slotPart.kind === "slot" ? slotPart.slotId : 0;
+          const loc = getNodeLocStart(decl.templateExpressions[slotId] as any);
 
           const res = runDynamicNodePlugins(
             plugins,
@@ -299,19 +539,20 @@ export function transformWithWarnings(
                   ? { localName: decl.localName, base: "intrinsic", tagOrIdent: decl.base.tagName }
                   : { localName: decl.localName, base: "component", tagOrIdent: decl.base.ident },
               usage: { jsxUsages: 0, hasPropsSpread: false },
-              loc: getNodeLocStart(decl.templateExpressions[slotId] as any) ?? undefined,
+              ...(loc ? { loc } : {}),
             },
             {
               api,
               filePath: file.path,
               adapter,
               warn: (w) => {
+                const loc = w.loc;
                 warnings.push({
                   type: "dynamic-node",
                   feature: w.feature,
                   message: w.message,
-                  line: w.loc?.line,
-                  column: w.loc?.column,
+                  ...(loc?.line != null ? { line: loc.line } : {}),
+                  ...(loc?.column != null ? { column: loc.column } : {}),
                 });
               },
             },
@@ -328,9 +569,9 @@ export function transformWithWarnings(
           warnings.push({
             type: "dynamic-node",
             feature: "dynamic-interpolation",
-            message: `Unresolved interpolation for ${decl.localName}; leaving file unchanged for now.`,
+            message: `Unresolved interpolation for ${decl.localName}; dropping this declaration (manual follow-up required).`,
           });
-          return { code: null, warnings };
+          continue;
         }
 
         for (const out of cssDeclarationToStylexDeclarations(d)) {
@@ -446,9 +687,29 @@ export function transformWithWarnings(
 
     // Remove variable declarator for styled component
     root
-      .find(j.VariableDeclarator, { id: { type: "Identifier", name: decl.localName } })
-      .filter((p) => p.node.init?.type === "TaggedTemplateExpression")
-      .remove();
+      .find(j.VariableDeclaration)
+      .filter((p) =>
+        p.node.declarations.some(
+          (d) =>
+            d.type === "VariableDeclarator" &&
+            d.id.type === "Identifier" &&
+            d.id.name === decl.localName,
+        ),
+      )
+      .forEach((p) => {
+        if (p.node.declarations.length === 1) {
+          j(p).remove();
+          return;
+        }
+        p.node.declarations = p.node.declarations.filter(
+          (d) =>
+            !(
+              d.type === "VariableDeclarator" &&
+              d.id.type === "Identifier" &&
+              d.id.name === decl.localName
+            ),
+        );
+      });
 
     // Replace JSX elements <Decl> with intrinsic tag and stylex.props
     root
@@ -577,8 +838,8 @@ function toStyleKey(name: string): string {
   return name.charAt(0).toLowerCase() + name.slice(1);
 }
 
-function objectToAst(j: API["jscodeshift"], obj: Record<string, unknown>) {
-  const props = Object.entries(obj).map(([key, value]) => {
+function objectToAst(j: API["jscodeshift"], obj: Record<string, unknown>): any {
+  const props: any[] = Object.entries(obj).map(([key, value]) => {
     const keyNode =
       /^[a-zA-Z_$][a-zA-Z0-9_$]*$/.test(key) &&
       !key.startsWith(":") &&
@@ -597,7 +858,7 @@ function objectToAst(j: API["jscodeshift"], obj: Record<string, unknown>) {
   return j.objectExpression(props);
 }
 
-function literalToAst(j: API["jscodeshift"], value: unknown) {
+function literalToAst(j: API["jscodeshift"], value: unknown): any {
   if (isAstNode(value)) return value;
   if (value === null) return j.literal(null);
   if (typeof value === "string") return j.literal(value);
@@ -632,6 +893,20 @@ function parseSimplePseudo(selector: string): string | null {
 function parsePseudoElement(selector: string): string | null {
   const m = selector.match(/^&(::[a-zA-Z-]+)$/);
   return m ? m[1]! : null;
+}
+
+function isJsxElementNamed(name: string) {
+  return (p: any) => {
+    const n = p.node.openingElement?.name;
+    return n && n.type === "JSXIdentifier" && n.name === name;
+  };
+}
+
+function isJsxSelfClosingNamed(name: string) {
+  return (p: any) => {
+    const n = p.node.name;
+    return n && n.type === "JSXIdentifier" && n.name === name;
+  };
 }
 
 function formatOutput(code: string): string {

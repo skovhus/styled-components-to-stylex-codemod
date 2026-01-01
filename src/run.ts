@@ -4,6 +4,8 @@ import { dirname, join } from "node:path";
 import { glob } from "node:fs/promises";
 import type { Adapter } from "./adapter.js";
 import { defaultAdapter } from "./adapter.js";
+import type { DynamicNodePlugin } from "./plugins.js";
+import type { UserHook } from "./hook.js";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
@@ -20,6 +22,21 @@ export interface RunTransformOptions {
    * @default defaultAdapter (CSS variables)
    */
   adapter?: Adapter;
+
+  /**
+   * Plugins that can resolve or rewrite dynamic styled-components interpolations.
+   * @default builtinPlugins() (when running via the transform directly)
+   */
+  plugins?: DynamicNodePlugin[];
+
+  /**
+   * Single entry-point hook for user customization.
+   *
+   * Precedence:
+   * - Explicit `adapter` / `plugins` options win
+   * - Otherwise fall back to `hook.adapter` / `hook.plugins`
+   */
+  hook?: UserHook;
 
   /**
    * Dry run - don't write changes to files
@@ -80,13 +97,10 @@ export interface RunTransformResult {
  * ```
  */
 export async function runTransform(options: RunTransformOptions): Promise<RunTransformResult> {
-  const {
-    files,
-    adapter = defaultAdapter,
-    dryRun = false,
-    print = false,
-    parser = "tsx",
-  } = options;
+  const { files, dryRun = false, print = false, parser = "tsx" } = options;
+  const hook = options.hook;
+  const adapter = options.adapter ?? hook?.adapter ?? defaultAdapter;
+  const plugins = options.plugins ?? hook?.plugins;
 
   // Resolve file paths from glob patterns
   const patterns = Array.isArray(files) ? files : [files];
@@ -117,6 +131,7 @@ export async function runTransform(options: RunTransformOptions): Promise<RunTra
     dry: dryRun,
     print,
     adapter,
+    ...(plugins ? { plugins } : {}),
   });
 
   return {

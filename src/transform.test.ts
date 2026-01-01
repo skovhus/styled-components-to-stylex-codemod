@@ -271,17 +271,10 @@ describe("transform (pending implementation)", () => {
   it.each(testCases)("%s", (name) => {
     const { input, output } = readTestCase(name);
     const result = runTransform(input);
-    // General-purpose mode:
-    // - If the codemod can't safely convert dynamic patterns, it may bail and leave code unchanged.
-    // - If it does convert, it must remove styled-components and produce lint-clean output.
-    if (
-      result === input ||
-      formatCode(result, `${name}_actual_cmp`) === formatCode(input, `${name}_input_cmp`)
-    ) {
-      // Bail/unchanged is acceptable.
-      return;
-    }
-
+    // Must transform: leaving the file unchanged is NOT acceptable.
+    expect(formatCode(result, `${name}_actual_cmp`)).not.toBe(
+      formatCode(input, `${name}_input_cmp`),
+    );
     expect(result).not.toMatch(/from\s+['"]styled-components['"]/);
     lintCode(result, name);
     // Output fixtures remain as reference implementations; we don't require exact match.
