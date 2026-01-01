@@ -9,8 +9,12 @@ import type {
   ObjectProperty,
 } from "jscodeshift";
 import type { Adapter, DynamicNodeContext, DynamicNodeDecision } from "./adapter.js";
-import { defaultAdapter, executeDynamicNodeHandlers, getFallbackDecision } from "./adapter.js";
-import { defaultHandlers } from "./handlers.js";
+import {
+  defaultAdapter,
+  executeDynamicNodeHandlers,
+  getFallbackDecision,
+  defaultHandlers,
+} from "./adapter.js";
 import { parseStyledCSS, extractDeclarations, type InterpolationLocation } from "./css-parser.js";
 import {
   cssRuleToStyleX,
@@ -1283,5 +1287,9 @@ export type {
   FallbackBehavior,
   VariantStyle,
 } from "./adapter.js";
-export { defaultAdapter, createAdapter, executeDynamicNodeHandlers } from "./adapter.js";
-export { defaultHandlers } from "./handlers.js";
+export {
+  defaultAdapter,
+  createAdapter,
+  executeDynamicNodeHandlers,
+  defaultHandlers,
+} from "./adapter.js";

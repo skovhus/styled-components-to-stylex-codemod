@@ -5,6 +5,7 @@ import { readdirSync, readFileSync, existsSync, writeFileSync, unlinkSync } from
 import { join, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
 import { execSync } from "node:child_process";
+import { format } from "oxfmt";
 import transform, { transformWithWarnings, defaultAdapter } from "./transform.js";
 import type { Adapter, TransformOptions } from "./transform.js";
 
@@ -93,25 +94,11 @@ function runTransform(source: string, options: TransformOptions = {}): string {
 }
 
 /**
- * Normalize code for comparison - handles formatting differences
- * (trailing commas, blank lines, etc.)
+ * Normalize code for comparison using oxfmt formatter
  */
-function normalizeCode(code: string): string {
-  return (
-    code
-      // Normalize line endings
-      .replace(/\r\n/g, "\n")
-      // Remove trailing whitespace on each line
-      .replace(/[ \t]+$/gm, "")
-      // Remove trailing commas before closing braces/brackets (normalize to no trailing comma)
-      .replace(/,(\s*\n\s*[}\]])/g, "$1")
-      // Remove all blank lines (normalize to no blank lines)
-      .replace(/\n\s*\n/g, "\n")
-      // Trim trailing whitespace
-      .trimEnd() +
-    // Ensure trailing newline
-    "\n"
-  );
+async function normalizeCode(code: string): Promise<string> {
+  const { code: formatted } = await format("test.tsx", code);
+  return formatted;
 }
 
 function lintCode(code: string, name: string): void {
@@ -271,10 +258,10 @@ describe("fixture warning expectations", () => {
 describe("transform output comparison", () => {
   const testCases = getTestCases();
 
-  it.each(testCases)("%s", (name) => {
+  it.each(testCases)("%s", async (name) => {
     const { input, output } = readTestCase(name);
     const result = runTransform(input);
-    if (normalizeCode(result) === normalizeCode(input)) {
+    if ((await normalizeCode(result)) === (await normalizeCode(input))) {
       // Bail/unchanged is acceptable for unsupported patterns.
       return;
     }

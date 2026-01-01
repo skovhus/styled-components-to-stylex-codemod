@@ -3,9 +3,11 @@ export { default as transform, transformWithWarnings } from "./transform.js";
 export { runTransform } from "./run.js";
 
 // Adapter and handler exports
-export { defaultAdapter, createAdapter, executeDynamicNodeHandlers } from "./adapter.js";
-export { defaultHandlers } from "./handlers.js";
 export {
+  defaultAdapter,
+  createAdapter,
+  executeDynamicNodeHandlers,
+  defaultHandlers,
   staticValueHandler,
   keyframesHandler,
   conditionalHandler,
@@ -14,7 +16,7 @@ export {
   propAccessHandler,
   helperHandler,
   componentSelectorHandler,
-} from "./handlers.js";
+} from "./adapter.js";
 
 // CSS conversion utilities
 export { toPropertyLevelConditionals, cssRuleToStyleX } from "./css-to-stylex.js";
