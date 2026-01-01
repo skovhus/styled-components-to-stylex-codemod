@@ -5,6 +5,8 @@ output:
 
 pre-commit:
   parallel: true
-  jobs:
-    - name: lint
+  commands:
+    lint:
+      glob: "*.{json,css,yaml,yml,html,md,graphql,js,jsx,ts,tsx}"
       run: pnpm lint:fix {staged_files}
+      stage_fixed: true
