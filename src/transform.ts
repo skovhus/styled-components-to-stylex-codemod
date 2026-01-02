@@ -1,14 +1,6 @@
 import type { API, FileInfo, Options } from "jscodeshift";
 import type { Hook, DynamicHandler, Adapter } from "./hook.js";
-import {
-  defaultResolveValue,
-  builtinHandlers,
-  builtinPlugins,
-  runHandlers,
-  normalizeHook,
-  adapterToHook,
-  isAdapter,
-} from "./hook.js";
+import { builtinHandlers, runHandlers, normalizeHook, adapterToHook, isAdapter } from "./hook.js";
 import { parseStyledTemplateLiteral } from "./styledCss.js";
 import {
   cssDeclarationToStylexDeclarations,
@@ -484,7 +476,11 @@ export function transformWithWarnings(
     return {
       code: hasChanges
         ? formatOutput(
-            root.toSource({ quote: "double", trailingComma: true, reuseWhitespace: false }),
+            root.toSource({
+              quote: "double",
+              trailingComma: true,
+              reuseWhitespace: false,
+            }),
           )
         : null,
       warnings,
@@ -545,8 +541,16 @@ export function transformWithWarnings(
               },
               component:
                 decl.base.kind === "intrinsic"
-                  ? { localName: decl.localName, base: "intrinsic", tagOrIdent: decl.base.tagName }
-                  : { localName: decl.localName, base: "component", tagOrIdent: decl.base.ident },
+                  ? {
+                      localName: decl.localName,
+                      base: "intrinsic",
+                      tagOrIdent: decl.base.tagName,
+                    }
+                  : {
+                      localName: decl.localName,
+                      base: "component",
+                      tagOrIdent: decl.base.ident,
+                    },
               usage: { jsxUsages: 0, hasPropsSpread: false },
               ...(loc ? { loc } : {}),
             },
@@ -723,7 +727,9 @@ export function transformWithWarnings(
     // Replace JSX elements <Decl> with intrinsic tag and stylex.props
     root
       .find(j.JSXElement, {
-        openingElement: { name: { type: "JSXIdentifier", name: decl.localName } },
+        openingElement: {
+          name: { type: "JSXIdentifier", name: decl.localName },
+        },
       })
       .forEach((p) => {
         const opening = p.node.openingElement;
@@ -831,7 +837,11 @@ export function transformWithWarnings(
   return {
     code: hasChanges
       ? formatOutput(
-          root.toSource({ quote: "double", trailingComma: true, reuseWhitespace: false }),
+          root.toSource({
+            quote: "double",
+            trailingComma: true,
+            reuseWhitespace: false,
+          }),
         )
       : null,
     warnings,

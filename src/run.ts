@@ -88,8 +88,9 @@ export async function runTransform(options: RunTransformOptions): Promise<RunTra
   const { files, dryRun = false, print = false, parser = "tsx" } = options;
 
   // Normalize hook from various input shapes
-  const rawHook: Hook | undefined = options.hook
-    ?? (options.adapter && isAdapter(options.adapter) ? adapterToHook(options.adapter) : undefined);
+  const rawHook: Hook | undefined =
+    options.hook ??
+    (options.adapter && isAdapter(options.adapter) ? adapterToHook(options.adapter) : undefined);
   const hook = rawHook ? normalizeHook(rawHook) : undefined;
 
   // Resolve file paths from glob patterns

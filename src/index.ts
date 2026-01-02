@@ -22,5 +22,11 @@ export {
 } from "./hook.js";
 
 // Backwards compatibility (deprecated)
-export type { Adapter, AdapterContext, DynamicNodePlugin, PluginContext, PluginResult } from "./hook.js";
+export type {
+  Adapter,
+  AdapterContext,
+  DynamicNodePlugin,
+  PluginContext,
+  PluginResult,
+} from "./hook.js";
 export { defaultAdapter, defineVarsAdapter, inlineValuesAdapter, builtinPlugins } from "./hook.js";
