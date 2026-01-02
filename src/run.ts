@@ -2,10 +2,8 @@ import { run as jscodeshiftRun } from "jscodeshift/src/Runner.js";
 import { fileURLToPath } from "node:url";
 import { dirname, join } from "node:path";
 import { glob } from "node:fs/promises";
-import type { Adapter } from "./adapter.js";
-import { defaultAdapter } from "./adapter.js";
-import type { DynamicNodePlugin } from "./plugins.js";
-import type { UserHook } from "./hook.js";
+import type { Hook, Adapter, DynamicHandler } from "./hook.js";
+import { normalizeHook, adapterToHook, isAdapter } from "./hook.js";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
@@ -18,25 +16,20 @@ export interface RunTransformOptions {
   files: string | string[];
 
   /**
-   * Adapter for transforming theme values
-   * @default defaultAdapter (CSS variables)
+   * Hook for customizing the transform.
+   * Controls value resolution, imports, declarations, and custom handlers.
+   */
+  hook?: Hook;
+
+  /**
+   * @deprecated Use hook instead
    */
   adapter?: Adapter;
 
   /**
-   * Plugins that can resolve or rewrite dynamic styled-components interpolations.
-   * @default builtinPlugins() (when running via the transform directly)
+   * @deprecated Use hook.handlers instead
    */
-  plugins?: DynamicNodePlugin[];
-
-  /**
-   * Single entry-point hook for user customization.
-   *
-   * Precedence:
-   * - Explicit `adapter` / `plugins` options win
-   * - Otherwise fall back to `hook.adapter` / `hook.plugins`
-   */
-  hook?: UserHook;
+  handlers?: DynamicHandler[];
 
   /**
    * Dry run - don't write changes to files
@@ -75,32 +68,29 @@ export interface RunTransformResult {
  *
  * @example
  * ```ts
- * import { runTransform } from 'styled-components-to-stylex-codemod';
+ * import { runTransform, defineHook } from 'styled-components-to-stylex-codemod';
  *
- * const myAdapter = {
- *   transformValue({ path, defaultValue }) {
+ * const myHook = defineHook({
+ *   resolveValue({ path }) {
  *     return `themeVars.${path.replace(/\./g, '_')}`;
  *   },
- *   getImports() {
- *     return ["import { themeVars } from './theme.stylex';"];
- *   },
- *   getDeclarations() {
- *     return [];
- *   },
- * };
+ *   imports: ["import { themeVars } from './theme.stylex';"],
+ * });
  *
  * await runTransform({
  *   files: 'src/**\/*.tsx',
- *   adapter: myAdapter,
+ *   hook: myHook,
  *   dryRun: true,
  * });
  * ```
  */
 export async function runTransform(options: RunTransformOptions): Promise<RunTransformResult> {
   const { files, dryRun = false, print = false, parser = "tsx" } = options;
-  const hook = options.hook;
-  const adapter = options.adapter ?? hook?.adapter ?? defaultAdapter;
-  const plugins = options.plugins ?? hook?.plugins;
+
+  // Normalize hook from various input shapes
+  const rawHook: Hook | undefined = options.hook
+    ?? (options.adapter && isAdapter(options.adapter) ? adapterToHook(options.adapter) : undefined);
+  const hook = rawHook ? normalizeHook(rawHook) : undefined;
 
   // Resolve file paths from glob patterns
   const patterns = Array.isArray(files) ? files : [files];
@@ -130,8 +120,8 @@ export async function runTransform(options: RunTransformOptions): Promise<RunTra
     parser,
     dry: dryRun,
     print,
-    adapter,
-    ...(plugins ? { plugins } : {}),
+    ...(hook ? { hook } : {}),
+    ...(options.handlers ? { handlers: options.handlers } : {}),
   });
 
   return {

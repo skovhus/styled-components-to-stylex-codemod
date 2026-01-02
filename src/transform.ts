@@ -1,9 +1,14 @@
 import type { API, FileInfo, Options } from "jscodeshift";
-import type { Adapter } from "./adapter.js";
-import { defaultAdapter } from "./adapter.js";
-import type { DynamicNodePlugin } from "./plugins.js";
-import { builtinPlugins, runDynamicNodePlugins } from "./plugins.js";
-import type { UserHook } from "./hook.js";
+import type { Hook, DynamicHandler, Adapter } from "./hook.js";
+import {
+  defaultResolveValue,
+  builtinHandlers,
+  builtinPlugins,
+  runHandlers,
+  normalizeHook,
+  adapterToHook,
+  isAdapter,
+} from "./hook.js";
 import { parseStyledTemplateLiteral } from "./styledCss.js";
 import {
   cssDeclarationToStylexDeclarations,
@@ -35,23 +40,21 @@ export interface TransformResult {
  * Options for the transform
  */
 export interface TransformOptions extends Options {
-  /** Adapter for transforming theme values (defaults to cssVariablesAdapter) */
-  adapter?: Adapter;
   /**
-   * Plugins that can resolve or rewrite dynamic styled-components interpolations.
-   * If plugins cannot handle a dynamic node, the default behavior is to keep the
-   * original styled-components code and emit a warning.
+   * Hook for customizing the transform.
+   * Controls value resolution, imports, declarations, and custom handlers.
    */
-  plugins?: DynamicNodePlugin[];
+  hook?: Hook;
 
   /**
-   * Single entry-point hook for user customization.
-   *
-   * Precedence:
-   * - Explicit `adapter` / `plugins` options win
-   * - Otherwise fall back to `hook.adapter` / `hook.plugins`
+   * @deprecated Use hook instead
    */
-  hook?: UserHook;
+  adapter?: Adapter;
+
+  /**
+   * @deprecated Use hook.handlers instead
+   */
+  handlers?: DynamicHandler[];
 }
 
 /**
@@ -89,10 +92,16 @@ export function transformWithWarnings(
   const j = api.jscodeshift;
   const root = j(file.source);
   const warnings: TransformWarning[] = [];
-  const hook = options.hook;
-  // Use provided adapter/plugins (or hook), with built-in defaults.
-  const adapter: Adapter = options.adapter ?? hook?.adapter ?? defaultAdapter;
-  const plugins: DynamicNodePlugin[] = options.plugins ?? hook?.plugins ?? builtinPlugins();
+
+  // Normalize hook from various input shapes (hook, legacy adapter, etc.)
+  const rawHook: Hook | undefined =
+    options.hook ??
+    (options.adapter && isAdapter(options.adapter) ? adapterToHook(options.adapter) : undefined);
+  const hook = normalizeHook(rawHook);
+
+  // Combine user handlers with built-in handlers (user handlers run first)
+  const userHandlers = options.handlers ?? hook.handlers;
+  const allHandlers: DynamicHandler[] = [...userHandlers, ...builtinHandlers()];
 
   let hasChanges = false;
 
@@ -522,8 +531,8 @@ export function transformWithWarnings(
           const slotId = slotPart && slotPart.kind === "slot" ? slotPart.slotId : 0;
           const loc = getNodeLocStart(decl.templateExpressions[slotId] as any);
 
-          const res = runDynamicNodePlugins(
-            plugins,
+          const res = runHandlers(
+            allHandlers,
             {
               slotId,
               expr: decl.templateExpressions[slotId],
@@ -544,7 +553,7 @@ export function transformWithWarnings(
             {
               api,
               filePath: file.path,
-              adapter,
+              resolveValue: hook.resolveValue,
               warn: (w) => {
                 const loc = w.loc;
                 warnings.push({
@@ -829,10 +838,22 @@ export function transformWithWarnings(
   };
 }
 
-// Re-export adapter types for convenience
-export type { Adapter, AdapterContext } from "./adapter.js";
-export { defaultAdapter } from "./adapter.js";
-export type { DynamicNodePlugin, DynamicNode, PluginContext, PluginResult } from "./plugins.js";
+// Re-export hook types for convenience
+export type {
+  Hook,
+  ValueContext,
+  DynamicHandler,
+  DynamicNode,
+  HandlerContext,
+  HandlerResult,
+  // Backwards compatibility
+  Adapter,
+  AdapterContext,
+  DynamicNodePlugin,
+  PluginContext,
+  PluginResult,
+} from "./hook.js";
+export { defaultHook, defaultResolveValue, defineHook, defaultAdapter } from "./hook.js";
 
 function toStyleKey(name: string): string {
   return name.charAt(0).toLowerCase() + name.slice(1);
