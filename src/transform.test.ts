@@ -44,8 +44,11 @@ const j = jscodeshift.withParser("tsx");
 
 function getTestCases(): string[] {
   const files = readdirSync(testCasesDir);
-  const inputFiles = files.filter((f) => f.endsWith(".input.tsx"));
-  const outputFiles = files.filter((f) => f.endsWith(".output.tsx"));
+  // Exclude unsupported-* files from main test cases
+  const inputFiles = files.filter((f) => f.endsWith(".input.tsx") && !f.startsWith("unsupported-"));
+  const outputFiles = files.filter(
+    (f) => f.endsWith(".output.tsx") && !f.startsWith("unsupported-"),
+  );
 
   const inputNames = new Set(inputFiles.map((f) => f.replace(".input.tsx", "")));
   const outputNames = new Set(outputFiles.map((f) => f.replace(".output.tsx", "")));
@@ -251,23 +254,27 @@ describe("fixture warning expectations", () => {
   });
 });
 
-// General-purpose contract:
-// - If the transformer can't safely support a file (e.g. `withTheme` without styled blocks),
-//   it may bail and leave the file unchanged.
-// - If it does transform, it must remove styled-components and produce lint-clean output.
+// All test cases must be fully transformed:
+// - Transform must produce a change (no bail/unchanged allowed)
+// - Result must not import styled-components
+// - Result must pass linting
+// If a pattern can't be transformed, remove its .output file instead.
 describe("transform output comparison", () => {
   const testCases = getTestCases();
 
   it.each(testCases)("%s", async (name) => {
     const { input, output } = readTestCase(name);
     const result = runTransform(input);
-    if ((await normalizeCode(result)) === (await normalizeCode(input))) {
-      // Bail/unchanged is acceptable for unsupported patterns.
-      return;
-    }
 
+    // Transform must produce a change - no bailing allowed
+    expect(await normalizeCode(result)).not.toEqual(await normalizeCode(input));
+
+    // Result must not import styled-components
     expect(result).not.toMatch(/from\s+['"]styled-components['"]/);
+
+    // Result must pass linting
     lintCode(result, name);
+
     void output; // keep fixture as reference only
   });
 });
