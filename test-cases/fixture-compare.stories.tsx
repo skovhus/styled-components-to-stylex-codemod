@@ -3,13 +3,18 @@ import React from "react";
 
 type FixtureModule = { App?: React.ComponentType<any> };
 
-const inputModules = import.meta.glob("./*.input.tsx", {
-  eager: true,
-}) as Record<string, FixtureModule>;
+// Keep Storybook lightweight/stable by only loading the fixture under active development.
+// Many fixtures are intentionally "compiler-edge" and may not be valid StyleX at runtime yet.
+import * as descendantInput from "./descendant-component-selector.input";
+import * as descendantOutput from "./descendant-component-selector.output";
 
-const outputModules = import.meta.glob("./*.output.tsx", {
-  eager: true,
-}) as Record<string, FixtureModule>;
+const inputModules = {
+  "./descendant-component-selector.input.tsx": descendantInput,
+} as Record<string, FixtureModule>;
+
+const outputModules = {
+  "./descendant-component-selector.output.tsx": descendantOutput,
+} as Record<string, FixtureModule>;
 
 function fileToName(path: string): string {
   // ./basic.input.tsx -> basic
@@ -19,11 +24,7 @@ function fileToName(path: string): string {
     .replace(/\.output\.tsx$/, "");
 }
 
-const inputNames = Object.keys(inputModules).map(fileToName);
-const outputNames = new Set(Object.keys(outputModules).map(fileToName));
-
-// Only include fixtures that have both input and output.
-const fixtureNames = inputNames.filter((n) => outputNames.has(n)).sort();
+const fixtureNames = ["descendant-component-selector"];
 
 type CompareProps = { name: string };
 

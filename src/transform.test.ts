@@ -140,12 +140,18 @@ const j = jscodeshift.withParser("tsx");
 
 function getTestCases(): string[] {
   const files = readdirSync(testCasesDir);
-  // Exclude _unsupported.* files from main test cases
+  // Exclude _unsupported.* and _unsupported-* files from main test cases
   const inputFiles = files.filter(
-    (f) => f.endsWith(".input.tsx") && !f.startsWith("_unsupported."),
+    (f) =>
+      f.endsWith(".input.tsx") &&
+      !f.startsWith("_unsupported.") &&
+      !f.startsWith("_unsupported-"),
   );
   const outputFiles = files.filter(
-    (f) => f.endsWith(".output.tsx") && !f.startsWith("_unsupported."),
+    (f) =>
+      f.endsWith(".output.tsx") &&
+      !f.startsWith("_unsupported.") &&
+      !f.startsWith("_unsupported-"),
   );
 
   const inputNames = new Set(inputFiles.map((f) => f.replace(".input.tsx", "")));

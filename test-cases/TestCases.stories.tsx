@@ -1,13 +1,17 @@
 import type { Meta, StoryObj } from "@storybook/react";
 import React from "react";
 
-// Auto-discover all test case modules using Vite's glob import
-const inputModules = import.meta.glob<{ App: React.ComponentType }>("./*.input.tsx", {
-  eager: true,
-});
-const outputModules = import.meta.glob<{ App: React.ComponentType }>("./*.output.tsx", {
-  eager: true,
-});
+// Keep Storybook lightweight/stable by only loading the fixture under active development.
+import * as descendantInput from "./descendant-component-selector.input";
+import * as descendantOutput from "./descendant-component-selector.output";
+
+const inputModules = {
+  "./descendant-component-selector.input.tsx": descendantInput,
+} as Record<string, { App: React.ComponentType }>;
+
+const outputModules = {
+  "./descendant-component-selector.output.tsx": descendantOutput,
+} as Record<string, { App: React.ComponentType }>;
 
 // Extract test case names from file paths
 function getTestCaseName(path: string): string {
@@ -16,12 +20,7 @@ function getTestCaseName(path: string): string {
 }
 
 // Get unique test case names
-const testCaseNames = [
-  ...new Set([
-    ...Object.keys(inputModules).map(getTestCaseName),
-    ...Object.keys(outputModules).map(getTestCaseName),
-  ]),
-].sort();
+const testCaseNames = ["descendant-component-selector"];
 
 // Comparison component that renders input and output side by side
 interface ComparisonProps {

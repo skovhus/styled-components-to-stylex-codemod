@@ -1,4 +1,3 @@
-import React from "react";
 import * as stylex from "@stylexjs/stylex";
 
 const styles = stylex.create({
@@ -8,6 +7,17 @@ const styles = stylex.create({
     height: "16px",
     backgroundColor: "currentColor",
     maskSize: "contain",
+  },
+  button: {
+    display: "inline-flex",
+    alignItems: "center",
+    gap: "8px",
+    padding: "8px 16px",
+    backgroundColor: "#BF4F74",
+    color: "white",
+    borderWidth: 0,
+    borderStyle: "none",
+    borderRadius: "4px",
   },
   iconInButton: {
     width: "20px",
@@ -20,17 +30,6 @@ const styles = stylex.create({
       default: null,
       [stylex.when.ancestor(":hover")]: "scale(1.1)",
     },
-  },
-  button: {
-    display: "inline-flex",
-    alignItems: "center",
-    gap: "8px",
-    padding: "8px 16px",
-    backgroundColor: "#BF4F74",
-    color: "white",
-    borderWidth: 0,
-    borderStyle: "none",
-    borderRadius: "4px",
   },
 });
 

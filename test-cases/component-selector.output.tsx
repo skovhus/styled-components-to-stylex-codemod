@@ -1,3 +1,4 @@
+import React from "react";
 import * as stylex from "@stylexjs/stylex";
 
 const styles = stylex.create({
@@ -14,17 +15,33 @@ const styles = stylex.create({
     height: "48px",
     fill: "#BF4F74",
     transition: "fill 0.25s",
-    "__INTERPOLATION_0__:hover &": {
-      fill: "rebeccapurple",
-    },
+  },
+  iconHover: {
+    fill: "rebeccapurple",
   },
 });
 
 export const App = () => (
   <a href="#" {...stylex.props(styles.link)}>
-    <svg viewBox="0 0 20 20" {...stylex.props(styles.icon)}>
+    <Icon viewBox="0 0 20 20" styles={styles}>
       <path d="M10 15l-5.878 3.09 1.123-6.545L.489 6.91l6.572-.955L10 0l2.939 5.955 6.572.955-4.756 4.635 1.123 6.545z" />
-    </svg>
+    </Icon>
     Hover me
   </a>
 );
+
+function Icon({
+  viewBox,
+  children,
+  styles: sx,
+}: {
+  viewBox: string;
+  children: React.ReactNode;
+  styles: typeof styles;
+}) {
+  return (
+    <svg viewBox={viewBox} {...stylex.props(sx.icon)}>
+      {children}
+    </svg>
+  );
+}

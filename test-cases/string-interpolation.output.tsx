@@ -1,4 +1,23 @@
+import React from "react";
 import * as stylex from "@stylexjs/stylex";
+
+const dynamicColor = "#BF4F74";
+const spacing = 16;
+const borderRadius = "4px";
+const fontSize = 14;
+const lineHeight = 1.5;
+const isPrimary = true;
+
+const theme = {
+  colors: {
+    primary: "#BF4F74",
+    secondary: "#4F74BF",
+  },
+  spacing: {
+    sm: "8px",
+    md: "16px",
+  },
+};
 
 const styles = stylex.create({
   button: {
@@ -12,11 +31,14 @@ const styles = stylex.create({
   text: {
     fontSize: `${fontSize}px`,
     lineHeight: lineHeight,
-    margin: `${spacing / 2}px 0`,
+    marginTop: `${spacing / 2}px`,
+    marginRight: 0,
+    marginBottom: `${spacing / 2}px`,
+    marginLeft: 0,
   },
   conditionalButton: {
-    backgroundColor: "#ccc",
-    color: "#333",
+    backgroundColor: isPrimary ? "#BF4F74" : "#ccc",
+    color: isPrimary ? "white" : "#333",
     padding: "8px 16px",
     borderWidth: 0,
     borderStyle: "none",
@@ -26,44 +48,41 @@ const styles = stylex.create({
     backgroundColor: theme.colors.primary,
     borderWidth: "1px",
     borderStyle: "solid",
+    borderColor: theme.colors.secondary,
     padding: theme.spacing.md,
     borderRadius: "8px",
-    border: `1px solid ${theme.colors.secondary}`,
   },
-  dynamicBox: {
-    backgroundColor: "(props) => getColor(props.variant)",
+  dynamicBoxBase: {
     padding: "16px",
     color: "white",
     borderRadius: "4px",
   },
+  dynamicBoxPrimary: {
+    backgroundColor: "#BF4F74",
+  },
+  dynamicBoxSecondary: {
+    backgroundColor: "#4F74BF",
+  },
 });
 
-// String interpolation for dynamic values
-const dynamicColor = "#BF4F74";
-const spacing = 16;
-const borderRadius = "4px";
+interface DynamicBoxProps {
+  variant: "primary" | "secondary";
+  children?: React.ReactNode;
+}
 
-// Template literal with expressions
-const fontSize = 14;
-const lineHeight = 1.5;
-
-// Conditional string interpolation
-const isPrimary = true;
-
-// Array/object property interpolation
-const theme = {
-  colors: {
-    primary: "#BF4F74",
-    secondary: "#4F74BF",
-  },
-  spacing: {
-    sm: "8px",
-    md: "16px",
-  },
-};
-
-// Function returning string
-const getColor = (variant: string) => (variant === "primary" ? "#BF4F74" : "#4F74BF");
+function DynamicBox({ variant, children }: DynamicBoxProps) {
+  return (
+    <div
+      {...stylex.props(
+        styles.dynamicBoxBase,
+        variant === "primary" && styles.dynamicBoxPrimary,
+        variant === "secondary" && styles.dynamicBoxSecondary,
+      )}
+    >
+      {children}
+    </div>
+  );
+}
 
 export const App = () => (
   <div>
@@ -71,11 +90,7 @@ export const App = () => (
     <p {...stylex.props(styles.text)}>Some text</p>
     <button {...stylex.props(styles.conditionalButton)}>Conditional</button>
     <div {...stylex.props(styles.themedCard)}>Themed Card</div>
-    <div variant="primary" {...stylex.props(styles.dynamicBox)}>
-      Primary
-    </div>
-    <div variant="secondary" {...stylex.props(styles.dynamicBox)}>
-      Secondary
-    </div>
+    <DynamicBox variant="primary">Primary</DynamicBox>
+    <DynamicBox variant="secondary">Secondary</DynamicBox>
   </div>
 );
