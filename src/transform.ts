@@ -100,6 +100,20 @@ export function transformWithWarnings(
     visit(node, "root");
   };
 
+  /**
+   * Create an object-pattern property with shorthand enabled when possible.
+   * This avoids lint issues like `no-useless-rename` from `{ foo: foo }`.
+   */
+  const patternProp = (keyName: string, valueId?: any) => {
+    const key = j.identifier(keyName);
+    const value = valueId ?? key;
+    const p = j.property("init", key, value) as any;
+    if (value?.type === "Identifier" && value.name === keyName) {
+      p.shorthand = true;
+    }
+    return p;
+  };
+
   const hook = normalizeHook(options.hook);
   const allHandlers: DynamicHandler[] = [...hook.handlers, ...builtinHandlers()];
 
@@ -2875,9 +2889,9 @@ export function transformWithWarnings(
         const declStmt = j.variableDeclaration("const", [
           j.variableDeclarator(
             j.objectPattern([
-              j.property("init", j.identifier(propName), variantId) as any,
-              j.property("init", j.identifier("children"), childrenId) as any,
-              j.property("init", j.identifier("className"), classNameId) as any,
+              patternProp(propName, variantId),
+              patternProp("children", childrenId),
+              patternProp("className", classNameId),
               j.restElement(restId),
             ] as any),
             propsId,
@@ -3043,13 +3057,11 @@ export function transformWithWarnings(
       const isVoidTag = tagName === "input";
 
       const patternProps: any[] = [
-        j.property("init", j.identifier("className"), classNameId) as any,
+        patternProp("className", classNameId),
         // Pull out `children` for non-void elements so we don't forward it as an attribute.
-        ...(isVoidTag ? [] : [j.property("init", j.identifier("children"), childrenId) as any]),
-        j.property("init", j.identifier("style"), styleId) as any,
-        ...destructureParts
-          .filter(Boolean)
-          .map((name) => j.property("init", j.identifier(name), j.identifier(name)) as any),
+        ...(isVoidTag ? [] : [patternProp("children", childrenId)]),
+        patternProp("style", styleId),
+        ...destructureParts.filter(Boolean).map((name) => patternProp(name)),
         j.restElement(restId),
       ];
 
@@ -3166,10 +3178,10 @@ export function transformWithWarnings(
       const declStmt = j.variableDeclaration("const", [
         j.variableDeclarator(
           j.objectPattern([
-            j.property("init", j.identifier("children"), childrenId) as any,
-            j.property("init", j.identifier("className"), classNameId) as any,
-            j.property("init", j.identifier(sw.propAdjacent), adjId) as any,
-            j.property("init", j.identifier(afterId.name), afterId) as any,
+            patternProp("children", childrenId),
+            patternProp("className", classNameId),
+            patternProp(sw.propAdjacent, adjId),
+            patternProp(afterId.name, afterId),
             j.restElement(restId),
           ] as any),
           propsId,

@@ -25,7 +25,7 @@ const styles = stylex.create({
 });
 
 function DynamicBox(props) {
-  const { className: className, children: children, style: style, ...rest } = props;
+  const { className, children, style, ...rest } = props;
 
   for (const k of Object.keys(rest)) {
     if (k.startsWith("$")) delete rest[k];

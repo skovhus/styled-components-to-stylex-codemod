@@ -73,7 +73,7 @@ const styles = stylex.create({
 });
 
 function DynamicBox(props) {
-  const { $variant: $variant, children: children, className: className, ...rest } = props;
+  const { $variant, children, className, ...rest } = props;
 
   const sx = stylex.props(
     styles.dynamicBoxBase,

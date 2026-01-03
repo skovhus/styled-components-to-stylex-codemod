@@ -56,14 +56,7 @@ const styles = stylex.create({
 });
 
 function Button(props) {
-  const {
-    className: className,
-    children: children,
-    style: style,
-    color: color,
-    size: size,
-    ...rest
-  } = props;
+  const { className, children, style, color, size, ...rest } = props;
 
   const sx = stylex.props(
     styles.button,
@@ -84,13 +77,7 @@ function Button(props) {
 }
 
 function Link(props) {
-  const {
-    className: className,
-    children: children,
-    style: style,
-    isActive: isActive,
-    ...rest
-  } = props;
+  const { className, children, style, isActive, ...rest } = props;
 
   const sx = stylex.props(styles.link, isActive && styles.linkActive);
 
@@ -107,7 +94,7 @@ function Link(props) {
 }
 
 function Box(props) {
-  const { className: className, children: children, style: style, ...rest } = props;
+  const { className, children, style, ...rest } = props;
 
   for (const k of Object.keys(rest)) {
     if (k.startsWith("$")) delete rest[k];
@@ -132,15 +119,7 @@ function Box(props) {
 }
 
 function Card(props) {
-  const {
-    className: className,
-    children: children,
-    style: style,
-    variant: variant,
-    elevation: elevation,
-    rounded: rounded,
-    ...rest
-  } = props;
+  const { className, children, style, variant, elevation, rounded, ...rest } = props;
 
   const sx = stylex.props(
     styles.card,

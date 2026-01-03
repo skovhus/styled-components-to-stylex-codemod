@@ -51,7 +51,7 @@ const styles = stylex.create({
 });
 
 function Input(props) {
-  const { className: className, style: style, hasError: hasError, ...rest } = props;
+  const { className, style, hasError, ...rest } = props;
 
   const sx = stylex.props(styles.input, hasError && styles.inputHasError);
 

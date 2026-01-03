@@ -42,7 +42,7 @@
     "test": "vitest",
     "test:run": "vitest run",
     "test:coverage": "vitest run --coverage",
-    "lint": "oxlint --ignore-pattern 'test-cases/**' --ignore-pattern 'storybook-static/**'",
+    "lint": "oxlint",
     "lint:fix": "oxfmt && oxlint --fix",
     "typecheck": "tsc --noEmit",
     "ci": "pnpm run lint && pnpm run typecheck && pnpm run test:run",

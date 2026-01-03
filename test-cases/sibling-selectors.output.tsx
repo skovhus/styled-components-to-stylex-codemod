@@ -14,13 +14,7 @@ const styles = stylex.create({
 });
 
 function Thing(props) {
-  const {
-    children: children,
-    className: className,
-    isAdjacentSibling: isAdjacentSibling,
-    isSiblingAfterSomething: isSiblingAfterSomething,
-    ...rest
-  } = props;
+  const { children, className, isAdjacentSibling, isSiblingAfterSomething, ...rest } = props;
 
   const sx = stylex.props(
     styles.thing,
