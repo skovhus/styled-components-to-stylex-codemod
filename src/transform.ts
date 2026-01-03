@@ -1,10 +1,4 @@
-import type {
-  API,
-  FileInfo,
-  Options,
-  Collection,
-  JSCodeshift,
-} from "jscodeshift";
+import type { API, FileInfo, Options, Collection, JSCodeshift } from "jscodeshift";
 import type {
   VariableDeclaration,
   CallExpression,
@@ -17,11 +11,7 @@ import type {
   MemberExpression,
   ObjectExpression,
 } from "jscodeshift";
-import type {
-  Adapter,
-  DynamicNodeContext,
-  DynamicNodeDecision,
-} from "./adapter.js";
+import type { Adapter, DynamicNodeContext, DynamicNodeDecision } from "./adapter.js";
 import {
   defaultAdapter,
   executeDynamicNodeHandlers,
@@ -143,7 +133,7 @@ interface StyleInfo {
 export default function transform(
   file: FileInfo,
   api: API,
-  options: TransformOptions
+  options: TransformOptions,
 ): string | null {
   const result = transformWithWarnings(file, api, options);
 
@@ -152,9 +142,7 @@ export default function transform(
     const location = warning.line
       ? ` (${file.path}:${warning.line}:${warning.column ?? 0})`
       : ` (${file.path})`;
-    console.warn(
-      `[styled-components-to-stylex] Warning${location}: ${warning.message}`
-    );
+    console.warn(`[styled-components-to-stylex] Warning${location}: ${warning.message}`);
   }
 
   return result.code;
@@ -166,7 +154,7 @@ export default function transform(
 export function transformWithWarnings(
   file: FileInfo,
   api: API,
-  options: TransformOptions
+  options: TransformOptions,
 ): TransformResult {
   const j = api.jscodeshift;
   const root = j(file.source);
@@ -177,9 +165,7 @@ export function transformWithWarnings(
   const adapter: Adapter = {
     ...providedAdapter,
     // Always include default handlers if none provided
-    handlers: providedAdapter.handlers?.length
-      ? providedAdapter.handlers
-      : defaultHandlers,
+    handlers: providedAdapter.handlers?.length ? providedAdapter.handlers : defaultHandlers,
   };
 
   // Find styled-components imports
@@ -210,15 +196,11 @@ export function transformWithWarnings(
             // Track keyframes declarations later
           } else if (imported.name === "css") {
             const localName =
-              specifier.local?.type === "Identifier"
-                ? specifier.local.name
-                : imported.name;
+              specifier.local?.type === "Identifier" ? specifier.local.name : imported.name;
             cssHelperIdentifiers.add(localName);
           } else if (imported.name === "createGlobalStyle") {
             const localName =
-              specifier.local?.type === "Identifier"
-                ? specifier.local.name
-                : imported.name;
+              specifier.local?.type === "Identifier" ? specifier.local.name : imported.name;
             createGlobalStyleIdentifiers.add(localName);
             const warning: TransformWarning = {
               type: "unsupported-feature",
@@ -250,19 +232,13 @@ export function transformWithWarnings(
         }
       }
       // Track createGlobalStyle declarations
-      if (
-        init.tag.type === "Identifier" &&
-        createGlobalStyleIdentifiers.has(init.tag.name)
-      ) {
+      if (init.tag.type === "Identifier" && createGlobalStyleIdentifiers.has(init.tag.name)) {
         if (path.node.id.type === "Identifier") {
           globalStyleDeclarations.add(path.node.id.name);
         }
       }
       // Track css`` helper variable names (e.g., const truncate = css`...`)
-      if (
-        init.tag.type === "Identifier" &&
-        cssHelperIdentifiers.has(init.tag.name)
-      ) {
+      if (init.tag.type === "Identifier" && cssHelperIdentifiers.has(init.tag.name)) {
         if (path.node.id.type === "Identifier") {
           cssHelperVariables.add(path.node.id.name);
         }
@@ -304,7 +280,7 @@ export function transformWithWarnings(
     keyframesIdentifiers,
     styledComponentIdentifiers,
     cssHelperVariables, // Use variable names, not import names
-    getSource
+    getSource,
   );
 
   // Collect all style infos
@@ -320,9 +296,7 @@ export function transformWithWarnings(
     }
 
     const componentName =
-      path.node.id.type === "Identifier"
-        ? path.node.id.name
-        : "UnnamedComponent";
+      path.node.id.type === "Identifier" ? path.node.id.name : "UnnamedComponent";
 
     const styleInfo = processStyledComponent(
       j,
@@ -332,7 +306,7 @@ export function transformWithWarnings(
       classificationCtx,
       adapter,
       warnings,
-      additionalImports
+      additionalImports,
     );
 
     if (styleInfo) {
@@ -355,24 +329,16 @@ export function transformWithWarnings(
     .forEach((path) => {
       const init = path.node.init as TaggedTemplateExpression;
       if (init.tag.type === "Identifier" && init.tag.name === "keyframes") {
-        const name =
-          path.node.id.type === "Identifier" ? path.node.id.name : "animation";
+        const name = path.node.id.type === "Identifier" ? path.node.id.name : "animation";
         const keyframeStyles = processKeyframes(j, init, classificationCtx);
         if (keyframeStyles) {
           keyframesStyles.set(name, keyframeStyles);
         }
       }
       // Process css`` helpers
-      if (
-        init.tag.type === "Identifier" &&
-        cssHelperIdentifiers.has(init.tag.name)
-      ) {
-        const name =
-          path.node.id.type === "Identifier" ? path.node.id.name : "cssHelper";
-        const parsed = parseStyledCSS(
-          init.quasi.quasis,
-          init.quasi.expressions as Expression[]
-        );
+      if (init.tag.type === "Identifier" && cssHelperIdentifiers.has(init.tag.name)) {
+        const name = path.node.id.type === "Identifier" ? path.node.id.name : "cssHelper";
+        const parsed = parseStyledCSS(init.quasi.quasis, init.quasi.expressions as Expression[]);
         const rules = extractDeclarations(parsed.root);
         if (rules.length > 0) {
           const mainRule = rules[0]!;
@@ -387,13 +353,7 @@ export function transformWithWarnings(
     hasChanges = true;
 
     // Generate stylex.create() and stylex.keyframes() calls
-    const stylexCode = generateStyleXCode(
-      j,
-      styleInfos,
-      keyframesStyles,
-      adapter,
-      cssHelperStyles
-    );
+    const stylexCode = generateStyleXCode(j, styleInfos, keyframesStyles, adapter, cssHelperStyles);
 
     // Remove styled-components import and add stylex import
     styledImports.remove();
@@ -401,7 +361,7 @@ export function transformWithWarnings(
     // Add stylex import at the top
     const stylexImport = j.importDeclaration(
       [j.importNamespaceSpecifier(j.identifier("stylex"))],
-      j.literal("@stylexjs/stylex")
+      j.literal("@stylexjs/stylex"),
     );
 
     // Find the first import or the start of the file
@@ -417,10 +377,7 @@ export function transformWithWarnings(
       const parsed = j(importStatement);
       const importDecl = parsed.find(j.ImportDeclaration).at(0);
       if (importDecl.length > 0) {
-        root
-          .find(j.ImportDeclaration)
-          .at(-1)
-          .insertAfter(importDecl.nodes()[0]!);
+        root.find(j.ImportDeclaration).at(-1).insertAfter(importDecl.nodes()[0]!);
       }
     }
 
@@ -429,10 +386,7 @@ export function transformWithWarnings(
       const parsed = j(importStatement);
       const importDecl = parsed.find(j.ImportDeclaration).at(0);
       if (importDecl.length > 0) {
-        root
-          .find(j.ImportDeclaration)
-          .at(-1)
-          .insertAfter(importDecl.nodes()[0]!);
+        root.find(j.ImportDeclaration).at(-1).insertAfter(importDecl.nodes()[0]!);
       }
     }
 
@@ -518,13 +472,7 @@ export function transformWithWarnings(
     }
 
     // Transform JSX usage
-    transformJSXUsage(
-      j,
-      root,
-      styleInfos,
-      styledComponentIdentifiers,
-      file.source
-    );
+    transformJSXUsage(j, root, styleInfos, styledComponentIdentifiers, file.source);
 
     // Remove JSX elements using createGlobalStyle declarations (e.g., <GlobalStyles />)
     if (globalStyleDeclarations.size > 0) {
@@ -559,9 +507,7 @@ export function transformWithWarnings(
 /**
  * Check if an expression is a styled component declaration
  */
-function isStyledComponentDeclaration(
-  expr: Expression | null | undefined
-): boolean {
+function isStyledComponentDeclaration(expr: Expression | null | undefined): boolean {
   if (!expr) return false;
 
   // styled.div`...` or styled(Component)`...`
@@ -587,14 +533,8 @@ function isStyledComponentDeclaration(
     // styled.div.attrs(...)`...` or styled.div.withConfig(...)`...`
     if (tag.type === "CallExpression") {
       const callee = tag.callee;
-      if (
-        callee.type === "MemberExpression" &&
-        callee.property.type === "Identifier"
-      ) {
-        if (
-          callee.property.name === "attrs" ||
-          callee.property.name === "withConfig"
-        ) {
+      if (callee.type === "MemberExpression" && callee.property.type === "Identifier") {
+        if (callee.property.name === "attrs" || callee.property.name === "withConfig") {
           // Check if the object is styled.element or styled(Component)
           return isStyledBase(callee.object as Expression);
         }
@@ -653,10 +593,7 @@ function isStyledBase(expr: Expression | null | undefined): boolean {
   // styled.div
   if (expr.type === "MemberExpression") {
     const memberExpr = expr as MemberExpression;
-    if (
-      memberExpr.object.type === "Identifier" &&
-      memberExpr.object.name === "styled"
-    ) {
+    if (memberExpr.object.type === "Identifier" && memberExpr.object.name === "styled") {
       return true;
     }
   }
@@ -664,10 +601,7 @@ function isStyledBase(expr: Expression | null | undefined): boolean {
   // styled(Component)
   if (expr.type === "CallExpression") {
     const callExpr = expr as CallExpression;
-    if (
-      callExpr.callee.type === "Identifier" &&
-      callExpr.callee.name === "styled"
-    ) {
+    if (callExpr.callee.type === "Identifier" && callExpr.callee.name === "styled") {
       return true;
     }
   }
@@ -686,7 +620,7 @@ function processStyledComponent(
   classificationCtx: ReturnType<typeof createClassificationContext>,
   adapter: Adapter,
   warnings: TransformWarning[],
-  additionalImports: Set<string>
+  additionalImports: Set<string>,
 ): StyleInfo | null {
   let templateLiteral: TemplateLiteral | null = null;
   let styleObject: Expression | null = null;
@@ -719,8 +653,7 @@ function processStyledComponent(
         const memberExpr = tag.callee;
         if (
           memberExpr.property.type === "Identifier" &&
-          (memberExpr.property.name === "attrs" ||
-            memberExpr.property.name === "withConfig")
+          (memberExpr.property.name === "attrs" || memberExpr.property.name === "withConfig")
         ) {
           // Extract attrs config if present
           if (memberExpr.property.name === "attrs" && tag.arguments[0]) {
@@ -730,17 +663,11 @@ function processStyledComponent(
 
           // Get the base from the object
           const obj = memberExpr.object;
-          if (
-            obj.type === "MemberExpression" &&
-            obj.property.type === "Identifier"
-          ) {
+          if (obj.type === "MemberExpression" && obj.property.type === "Identifier") {
             baseElement = obj.property.name;
           } else if (obj.type === "CallExpression") {
             const innerCallee = obj.callee;
-            if (
-              innerCallee.type === "Identifier" &&
-              innerCallee.name === "styled"
-            ) {
+            if (innerCallee.type === "Identifier" && innerCallee.name === "styled") {
               const arg = obj.arguments[0];
               if (arg?.type === "Identifier") {
                 isExtending = true;
@@ -767,10 +694,7 @@ function processStyledComponent(
         const arg = callExpr.arguments[0];
         if (arg?.type === "ObjectExpression") {
           styleObject = arg;
-        } else if (
-          arg?.type === "ArrowFunctionExpression" ||
-          arg?.type === "FunctionExpression"
-        ) {
+        } else if (arg?.type === "ArrowFunctionExpression" || arg?.type === "FunctionExpression") {
           hasDynamicStyleFn = true;
           // Extract param name
           const param = arg.params[0];
@@ -783,10 +707,7 @@ function processStyledComponent(
           } else if (arg.body.type === "BlockStatement") {
             // Look for return statement
             for (const stmt of arg.body.body) {
-              if (
-                stmt.type === "ReturnStatement" &&
-                stmt.argument?.type === "ObjectExpression"
-              ) {
+              if (stmt.type === "ReturnStatement" && stmt.argument?.type === "ObjectExpression") {
                 styleObject = stmt.argument;
                 break;
               }
@@ -826,7 +747,7 @@ function processStyledComponent(
     // Template literal syntax - parse CSS
     const parsed = parseStyledCSS(
       templateLiteral.quasis,
-      templateLiteral.expressions as Expression[]
+      templateLiteral.expressions as Expression[],
     );
     const rules = extractDeclarations(parsed.root);
 
@@ -855,7 +776,7 @@ function processStyledComponent(
       extraStyles,
       jsxRewriteRules,
       parsed.interpolations,
-      componentName
+      componentName,
     );
 
     // Now convert remaining styles to property-level conditionals
@@ -864,12 +785,7 @@ function processStyledComponent(
     // Process each interpolation
     for (const [_index, location] of parsed.interpolations) {
       const classified = classifyInterpolation(location, classificationCtx);
-      const context = buildDynamicNodeContext(
-        classified,
-        location,
-        componentName,
-        filePath
-      );
+      const context = buildDynamicNodeContext(classified, location, componentName, filePath);
 
       const decision =
         executeDynamicNodeHandlers(context, adapter) ??
@@ -884,7 +800,7 @@ function processStyledComponent(
         variantStyles,
         dynamicFns,
         additionalImports,
-        warnings
+        warnings,
       );
     }
   } else if (styleObject && styleObject.type === "ObjectExpression") {
@@ -893,7 +809,7 @@ function processStyledComponent(
       j,
       styleObject as ObjectExpression,
       hasDynamicStyleFn,
-      dynamicStyleParam
+      dynamicStyleParam,
     );
   } else {
     return null;
@@ -913,8 +829,7 @@ function processStyledComponent(
       const propPart = variantName.slice(baseStyleName.length);
       if (propPart) {
         // Convert PascalCase to $camelCase (e.g., "Draggable" -> "$draggable")
-        const propName =
-          "$" + propPart.charAt(0).toLowerCase() + propPart.slice(1);
+        const propName = "$" + propPart.charAt(0).toLowerCase() + propPart.slice(1);
         transientProps.push({
           name: propName,
           type: "boolean",
@@ -958,11 +873,11 @@ function processStyledComponent(
 function extractDirectChildSelectorStyles(
   styles: StyleXObject,
   extraStyles: Map<string, StyleXObject>,
-  jsxRewriteRules: StyleInfo["jsxRewriteRules"]
+  jsxRewriteRules: StyleInfo["jsxRewriteRules"],
 ): void {
   const childSelectorKeys = [">*", "> *"];
   const foundKey = childSelectorKeys.find(
-    (k) => typeof styles[k] === "object" && styles[k] !== null
+    (k) => typeof styles[k] === "object" && styles[k] !== null,
   );
   if (!foundKey) return;
 
@@ -971,13 +886,13 @@ function extractDirectChildSelectorStyles(
 
   // First check for :not(:first-child) nested INSIDE the child block
   let notFirstKeyInChild = [":not(:first-child)", "&:not(:first-child)"].find(
-    (k) => typeof childBlock[k] === "object" && childBlock[k] !== null
+    (k) => typeof childBlock[k] === "object" && childBlock[k] !== null,
   );
 
   // Also check for :not(:first-child) as a SIBLING to the child selector
   // (this happens because stylis hoists nested selectors)
   const notFirstKeySibling = [":not(:first-child)", "&:not(:first-child)"].find(
-    (k) => typeof styles[k] === "object" && styles[k] !== null
+    (k) => typeof styles[k] === "object" && styles[k] !== null,
   );
 
   let childBase: StyleXObject = {};
@@ -1028,7 +943,7 @@ function extractStyledComponentDescendantSelectorStyles(
   extraStyles: Map<string, StyleXObject>,
   jsxRewriteRules: StyleInfo["jsxRewriteRules"],
   interpolations: Map<number, import("./css-parser.js").InterpolationLocation>,
-  parentComponentName: string
+  parentComponentName: string,
 ): boolean {
   let needsMarker = false;
 
@@ -1058,9 +973,7 @@ function extractStyledComponentDescendantSelectorStyles(
     // - "& __INTERPOLATION_0__" (may occur depending on stylis output)
     // - ":hover __INTERPOLATION_0__" (comes from "&:hover __INTERPOLATION_0__")
     const trimmed = selectorKey.trim();
-    const withoutAmp = trimmed.startsWith("&")
-      ? trimmed.slice(1).trim()
-      : trimmed;
+    const withoutAmp = trimmed.startsWith("&") ? trimmed.slice(1).trim() : trimmed;
 
     let ancestorPseudo: string | null = null;
     let isDescendantComponentSelector = false;
@@ -1070,11 +983,7 @@ function extractStyledComponentDescendantSelectorStyles(
     } else {
       // Try to parse ":hover __INTERPOLATION_0__"
       const parts = withoutAmp.split(/\s+/).filter(Boolean);
-      if (
-        parts.length === 2 &&
-        parts[1] === placeholder &&
-        parts[0]!.startsWith(":")
-      ) {
+      if (parts.length === 2 && parts[1] === placeholder && parts[0]!.startsWith(":")) {
         ancestorPseudo = parts[0]!;
         isDescendantComponentSelector = true;
       }
@@ -1099,11 +1008,7 @@ function extractStyledComponentDescendantSelectorStyles(
       for (const [prop, propValue] of Object.entries(nestedStyles)) {
         const existingValue = existing[prop];
         const computedKey = `[stylex.when.ancestor('${ancestorPseudo}')]`;
-        if (
-          existingValue &&
-          typeof existingValue === "object" &&
-          existingValue !== null
-        ) {
+        if (existingValue && typeof existingValue === "object" && existingValue !== null) {
           // Already a conditional object - add/overwrite the computed key
           (existingValue as StyleXObject)[computedKey] =
             propValue as StyleXObject[keyof StyleXObject];
@@ -1159,10 +1064,7 @@ function parseAttrsConfig(_j: JSCodeshift, arg: Expression): AttrsConfig {
         }
       }
     }
-  } else if (
-    arg.type === "ArrowFunctionExpression" ||
-    arg.type === "FunctionExpression"
-  ) {
+  } else if (arg.type === "ArrowFunctionExpression" || arg.type === "FunctionExpression") {
     // Dynamic attrs: .attrs((props) => ({ type: 'text', size: props.$small ? 5 : undefined }))
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     let body: any = (arg as any).body;
@@ -1189,13 +1091,11 @@ function parseAttrsConfig(_j: JSCodeshift, arg: Expression): AttrsConfig {
             config.staticAttrs[key] = prop.value.value;
           } else if (prop.value.type === "ConditionalExpression") {
             // Dynamic conditional: props.$small ? 5 : undefined
-            const cond =
-              prop.value as import("jscodeshift").ConditionalExpression;
+            const cond = prop.value as import("jscodeshift").ConditionalExpression;
             // Extract the condition's prop reference (e.g., props.$small -> $small)
             let propRef = "";
             if (cond.test.type === "MemberExpression") {
-              const member =
-                cond.test as import("jscodeshift").MemberExpression;
+              const member = cond.test as import("jscodeshift").MemberExpression;
               if (member.property.type === "Identifier") {
                 propRef = member.property.name;
               }
@@ -1203,13 +1103,9 @@ function parseAttrsConfig(_j: JSCodeshift, arg: Expression): AttrsConfig {
             // Get the truthy value
             let truthyVal: string | number | undefined;
             if (cond.consequent.type === "NumericLiteral") {
-              truthyVal = (
-                cond.consequent as import("jscodeshift").NumericLiteral
-              ).value;
+              truthyVal = (cond.consequent as import("jscodeshift").NumericLiteral).value;
             } else if (cond.consequent.type === "StringLiteral") {
-              truthyVal = (
-                cond.consequent as import("jscodeshift").StringLiteral
-              ).value;
+              truthyVal = (cond.consequent as import("jscodeshift").StringLiteral).value;
             }
             if (propRef && truthyVal !== undefined) {
               config.dynamicAttrs.push({
@@ -1242,7 +1138,7 @@ function convertObjectExpressionToStyles(
   _j: JSCodeshift,
   objExpr: ObjectExpression,
   _hasDynamicFn: boolean,
-  _paramName: string | undefined
+  _paramName: string | undefined,
 ): StyleXObject {
   const styles: StyleXObject = {};
 
@@ -1265,10 +1161,7 @@ function convertObjectExpressionToStyles(
         styles[normalizedKey] = prop.value.value;
       } else if (prop.value.type === "NumericLiteral") {
         styles[normalizedKey] = prop.value.value;
-      } else if (
-        prop.value.type === "TemplateLiteral" &&
-        prop.value.expressions.length === 0
-      ) {
+      } else if (prop.value.type === "TemplateLiteral" && prop.value.expressions.length === 0) {
         // Simple template literal without expressions
         styles[normalizedKey] = prop.value.quasis[0]?.value.cooked ?? "";
       } else {
@@ -1288,12 +1181,12 @@ function convertObjectExpressionToStyles(
 function processKeyframes(
   _j: JSCodeshift,
   expr: TaggedTemplateExpression,
-  _classificationCtx: ReturnType<typeof createClassificationContext>
+  _classificationCtx: ReturnType<typeof createClassificationContext>,
 ): StyleXObject | null {
   const templateLiteral = expr.quasi;
   const parsed = parseStyledCSS(
     templateLiteral.quasis,
-    templateLiteral.expressions as Expression[]
+    templateLiteral.expressions as Expression[],
   );
 
   const rules = extractDeclarations(parsed.root);
@@ -1311,10 +1204,7 @@ function processKeyframes(
       const frameStyles: StyleXObject = {};
       for (const decl of rule.declarations) {
         // Use convertValue to properly convert numeric values
-        frameStyles[decl.property] = convertValue(
-          stripImportant(decl.value),
-          decl.property
-        );
+        frameStyles[decl.property] = convertValue(stripImportant(decl.value), decl.property);
       }
       keyframeStyles[selector] = frameStyles;
     }
@@ -1322,16 +1212,12 @@ function processKeyframes(
     // Process nested rules (the actual keyframe definitions)
     for (const nested of rule.nestedRules) {
       let nestedSelector = nested.selector.trim();
-      if (nestedSelector.startsWith("&"))
-        nestedSelector = nestedSelector.slice(1).trim();
+      if (nestedSelector.startsWith("&")) nestedSelector = nestedSelector.slice(1).trim();
 
       const frameStyles: StyleXObject = {};
       for (const decl of nested.declarations) {
         // Use convertValue to properly convert numeric values
-        frameStyles[decl.property] = convertValue(
-          stripImportant(decl.value),
-          decl.property
-        );
+        frameStyles[decl.property] = convertValue(stripImportant(decl.value), decl.property);
       }
 
       if (Object.keys(frameStyles).length > 0) {
@@ -1350,7 +1236,7 @@ function buildDynamicNodeContext(
   classified: ClassifiedInterpolation,
   location: InterpolationLocation,
   componentName: string,
-  filePath: string
+  filePath: string,
 ): DynamicNodeContext {
   return {
     type: classified.type,
@@ -1390,7 +1276,7 @@ function applyDecision(
     { paramName: string; paramType: string | undefined; styles: StyleXObject }
   >,
   additionalImports: Set<string>,
-  warnings: TransformWarning[]
+  warnings: TransformWarning[],
 ): void {
   // Add any imports from the decision
   if ("imports" in decision && decision.imports) {
@@ -1405,10 +1291,7 @@ function applyDecision(
       if (context.cssProperty) {
         // Special handling for animation shorthand with keyframes:
         // After expansion, the keyframes name should go to animationName, not animation
-        if (
-          context.cssProperty === "animation" &&
-          context.type === "keyframes"
-        ) {
+        if (context.cssProperty === "animation" && context.type === "keyframes") {
           // For multiple animations, accumulate keyframes names
           const existingName = styles["animationName"];
           if (
@@ -1432,10 +1315,7 @@ function applyDecision(
         } else {
           styles[context.cssProperty] = decision.value;
         }
-      } else if (
-        context.type === "helper" &&
-        typeof decision.value === "string"
-      ) {
+      } else if (context.type === "helper" && typeof decision.value === "string") {
         // CSS helper spread (e.g., ${truncate}) - add as spread element
         styles[SPREAD_PREFIX + decision.value] = null;
       }
@@ -1468,9 +1348,7 @@ function applyDecision(
 
       // Add variant styles
       for (const variant of decision.variants) {
-        const variantName = `${toCamelCase(context.componentName)}${
-          variant.name
-        }`;
+        const variantName = `${toCamelCase(context.componentName)}${variant.name}`;
         const existing = variantStyles.get(variantName) ?? {};
         variantStyles.set(variantName, { ...existing, ...variant.styles });
       }
@@ -1479,9 +1357,7 @@ function applyDecision(
 
     case "dynamic-fn": {
       // Create a dynamic style function
-      const fnName = `${toCamelCase(context.componentName)}${capitalize(
-        decision.paramName
-      )}`;
+      const fnName = `${toCamelCase(context.componentName)}${capitalize(decision.paramName)}`;
       const fnStyles: StyleXObject = {};
       if (context.cssProperty) {
         fnStyles[context.cssProperty] = decision.valueExpression;
@@ -1509,10 +1385,7 @@ function cleanupDynamicPlaceholders(styles: StyleXObject): StyleXObject {
         continue;
       }
       cleaned[key] = cleanupDynamicPlaceholders(value as StyleXObject);
-    } else if (
-      typeof value === "string" &&
-      value.includes("__INTERPOLATION_")
-    ) {
+    } else if (typeof value === "string" && value.includes("__INTERPOLATION_")) {
       // Skip unresolved interpolations
       continue;
     } else {
@@ -1532,7 +1405,7 @@ function generateStyleXCode(
   styleInfos: StyleInfo[],
   keyframesStyles: Map<string, StyleXObject>,
   _adapter: Adapter,
-  cssHelperStyles?: Map<string, StyleXObject>
+  cssHelperStyles?: Map<string, StyleXObject>,
 ): VariableDeclaration[] {
   const statements: VariableDeclaration[] = [];
 
@@ -1541,12 +1414,10 @@ function generateStyleXCode(
     const styleObj = styleObjectToAST(j, keyframeStyles);
     const keyframesCall = j.callExpression(
       j.memberExpression(j.identifier("stylex"), j.identifier("keyframes")),
-      [styleObj as unknown as Parameters<typeof j.callExpression>[1][number]]
+      [styleObj as unknown as Parameters<typeof j.callExpression>[1][number]],
     );
     statements.push(
-      j.variableDeclaration("const", [
-        j.variableDeclarator(j.identifier(name), keyframesCall),
-      ])
+      j.variableDeclaration("const", [j.variableDeclarator(j.identifier(name), keyframesCall)]),
     );
   }
 
@@ -1558,15 +1429,15 @@ function generateStyleXCode(
       // Add `as const` type assertion for better type inference
       const asConst = j.tsAsExpression(
         styleObj as unknown as Parameters<typeof j.tsAsExpression>[0],
-        j.tsTypeReference(j.identifier("const"))
+        j.tsTypeReference(j.identifier("const")),
       );
       statements.push(
         j.variableDeclaration("const", [
           j.variableDeclarator(
             j.identifier(name),
-            asConst as unknown as Parameters<typeof j.variableDeclarator>[1]
+            asConst as unknown as Parameters<typeof j.variableDeclarator>[1],
           ),
-        ])
+        ]),
       );
     }
   }
@@ -1603,19 +1474,17 @@ function generateStyleXCode(
       const param = j.identifier(fnConfig.paramName);
       if (fnConfig.paramType) {
         param.typeAnnotation = j.tsTypeAnnotation(
-          j.tsTypeReference(j.identifier(fnConfig.paramType))
+          j.tsTypeReference(j.identifier(fnConfig.paramType)),
         );
       }
       const fnBody = styleObjectToAST(j, fnConfig.styles);
       // Use parenthesized expression for object return (cast to any for jscodeshift type compat)
       const parenthesizedBody = j.parenthesizedExpression(
-        fnBody as unknown as Parameters<typeof j.parenthesizedExpression>[0]
+        fnBody as unknown as Parameters<typeof j.parenthesizedExpression>[0],
       );
       const arrowFn = j.arrowFunctionExpression(
         [param],
-        parenthesizedBody as unknown as Parameters<
-          typeof j.arrowFunctionExpression
-        >[1]
+        parenthesizedBody as unknown as Parameters<typeof j.arrowFunctionExpression>[1],
       );
       properties.push({
         key: j.identifier(fnName),
@@ -1626,23 +1495,18 @@ function generateStyleXCode(
 
   // Build the object expression (cast to any for jscodeshift type compat)
   const objectProps = properties.map(({ key, value }) =>
-    j.objectProperty(
-      key,
-      value as unknown as Parameters<typeof j.objectProperty>[1]
-    )
+    j.objectProperty(key, value as unknown as Parameters<typeof j.objectProperty>[1]),
   );
 
   // Create stylex.create() call
   const createCall = j.callExpression(
     j.memberExpression(j.identifier("stylex"), j.identifier("create")),
-    [j.objectExpression(objectProps)]
+    [j.objectExpression(objectProps)],
   );
 
   // Add styles declaration
   statements.push(
-    j.variableDeclaration("const", [
-      j.variableDeclarator(j.identifier("styles"), createCall),
-    ])
+    j.variableDeclaration("const", [j.variableDeclarator(j.identifier("styles"), createCall)]),
   );
 
   return statements;
@@ -1676,8 +1540,8 @@ function styleObjectToAST(j: JSCodeshift, styles: StyleXObject): Expression {
     const keyNode = computedExpr
       ? computedExpr
       : isValidIdentifier(key)
-      ? j.identifier(key)
-      : j.literal(key);
+        ? j.identifier(key)
+        : j.literal(key);
 
     let valueNode: Expression;
 
@@ -1711,7 +1575,7 @@ function styleObjectToAST(j: JSCodeshift, styles: StyleXObject): Expression {
 
     const prop = j.objectProperty(
       keyNode as unknown as Parameters<typeof j.objectProperty>[0],
-      valueNode as unknown as Parameters<typeof j.objectProperty>[1]
+      valueNode as unknown as Parameters<typeof j.objectProperty>[1],
     );
     if (computedExpr) {
       (prop as unknown as { computed?: boolean }).computed = true;
@@ -1721,21 +1585,16 @@ function styleObjectToAST(j: JSCodeshift, styles: StyleXObject): Expression {
 
   // Spread properties come first, then regular properties
   const allProperties = [...spreadProperties, ...regularProperties];
-  return j.objectExpression(
-    allProperties as unknown as Parameters<typeof j.objectExpression>[0]
-  );
+  return j.objectExpression(allProperties as unknown as Parameters<typeof j.objectExpression>[0]);
 }
 
-function parseBracketComputedKeyToExpression(
-  j: JSCodeshift,
-  key: string
-): Expression | null {
+function parseBracketComputedKeyToExpression(j: JSCodeshift, key: string): Expression | null {
   const trimmed = key.trim();
   if (!trimmed.startsWith("[") || !trimmed.endsWith("]")) return null;
   const inner = trimmed.slice(1, -1).trim();
 
   const match = inner.match(
-    /^stylex\.when\.(ancestor|descendant|anySibling|siblingBefore|siblingAfter)\(\s*(['"])([^'"]+)\2\s*(?:,\s*(.+)\s*)?\)$/
+    /^stylex\.when\.(ancestor|descendant|anySibling|siblingBefore|siblingAfter)\(\s*(['"])([^'"]+)\2\s*(?:,\s*(.+)\s*)?\)$/,
   );
   if (!match) return null;
 
@@ -1745,7 +1604,7 @@ function parseBracketComputedKeyToExpression(
 
   const callee = j.memberExpression(
     j.memberExpression(j.identifier("stylex"), j.identifier("when")),
-    j.identifier(method)
+    j.identifier(method),
   );
 
   const args: Expression[] = [j.literal(pseudo) as unknown as Expression];
@@ -1754,12 +1613,9 @@ function parseBracketComputedKeyToExpression(
     if (markerArg === "stylex.defaultMarker()") {
       args.push(
         j.callExpression(
-          j.memberExpression(
-            j.identifier("stylex"),
-            j.identifier("defaultMarker")
-          ),
-          []
-        ) as unknown as Expression
+          j.memberExpression(j.identifier("stylex"), j.identifier("defaultMarker")),
+          [],
+        ) as unknown as Expression,
       );
     } else if (/^[a-zA-Z_$][a-zA-Z0-9_$.]*$/.test(markerArg)) {
       args.push(parseMemberExpression(j, markerArg));
@@ -1770,7 +1626,7 @@ function parseBracketComputedKeyToExpression(
 
   return j.callExpression(
     callee,
-    args as unknown as Parameters<typeof j.callExpression>[1]
+    args as unknown as Parameters<typeof j.callExpression>[1],
   ) as unknown as Expression;
 }
 
@@ -2063,9 +1919,7 @@ function isTemplateLiteral(value: string): boolean {
  * Strip the variable reference marker prefix if present
  */
 function stripVarRefPrefix(value: string): string {
-  return value.startsWith(VAR_REF_PREFIX)
-    ? value.slice(VAR_REF_PREFIX.length)
-    : value;
+  return value.startsWith(VAR_REF_PREFIX) ? value.slice(VAR_REF_PREFIX.length) : value;
 }
 
 /**
@@ -2120,12 +1974,12 @@ function parseTemplateLiteral(j: JSCodeshift, template: string): Expression {
 
   // Build template literal
   const templateQuasis = quasis.map((q, i) =>
-    j.templateElement({ raw: q.raw, cooked: q.cooked }, i === quasis.length - 1)
+    j.templateElement({ raw: q.raw, cooked: q.cooked }, i === quasis.length - 1),
   );
 
   return j.templateLiteral(
     templateQuasis as unknown as Parameters<typeof j.templateLiteral>[0],
-    expressions as unknown as Parameters<typeof j.templateLiteral>[1]
+    expressions as unknown as Parameters<typeof j.templateLiteral>[1],
   );
 }
 
@@ -2136,16 +1990,12 @@ function parseTemplateLiteral(j: JSCodeshift, template: string): Expression {
 function parseMemberExpression(j: JSCodeshift, exprStr: string): Expression {
   const parts = exprStr.split(".");
   // jscodeshift typing expects ExpressionKind; keep internal as unknown and cast at the end.
-  let expr = j.identifier(parts[0]!) as unknown as Parameters<
-    typeof j.memberExpression
-  >[0];
+  let expr = j.identifier(parts[0]!) as unknown as Parameters<typeof j.memberExpression>[0];
 
   for (let i = 1; i < parts.length; i++) {
     expr = j.memberExpression(
       expr,
-      j.identifier(parts[i]!) as unknown as Parameters<
-        typeof j.memberExpression
-      >[1]
+      j.identifier(parts[i]!) as unknown as Parameters<typeof j.memberExpression>[1],
     ) as unknown as Parameters<typeof j.memberExpression>[0];
   }
 
@@ -2163,7 +2013,7 @@ function parseBinaryExpression(j: JSCodeshift, exprStr: string): Expression {
     return j.binaryExpression(
       "/",
       j.identifier(divMatch[1]!),
-      j.literal(parseInt(divMatch[2]!, 10))
+      j.literal(parseInt(divMatch[2]!, 10)),
     );
   }
 
@@ -2172,7 +2022,7 @@ function parseBinaryExpression(j: JSCodeshift, exprStr: string): Expression {
     return j.binaryExpression(
       "*",
       j.identifier(mulMatch[1]!),
-      j.literal(parseInt(mulMatch[2]!, 10))
+      j.literal(parseInt(mulMatch[2]!, 10)),
     );
   }
 
@@ -2188,7 +2038,7 @@ function transformJSXUsage(
   root: Collection,
   styleInfos: StyleInfo[],
   _styledComponentIdentifiers: Set<string>,
-  source: string
+  source: string,
 ): void {
   // Map component names to their info
   const componentMap = new Map<string, StyleInfo>();
@@ -2252,8 +2102,7 @@ function transformJSXUsage(
 
     // Check for `as` or `forwardedAs` prop to override base element
     for (const attr of existingAttrs) {
-      if (attr.type !== "JSXAttribute" || attr.name.type !== "JSXIdentifier")
-        continue;
+      if (attr.type !== "JSXAttribute" || attr.name.type !== "JSXIdentifier") continue;
       if (attr.name.name === "as" || attr.name.name === "forwardedAs") {
         // Extract the element name from the as/forwardedAs prop value
         if (attr.value?.type === "StringLiteral") {
@@ -2280,20 +2129,14 @@ function transformJSXUsage(
     const attributes = opening.attributes;
 
     for (const attr of attributes) {
-      if (attr.type !== "JSXAttribute" || attr.name.type !== "JSXIdentifier")
-        continue;
+      if (attr.type !== "JSXAttribute" || attr.name.type !== "JSXIdentifier") continue;
 
       const propName = attr.name.name;
 
       // Check if this prop controls a variant
       for (const [variantName] of info.variantStyles) {
-        const expectedProp = variantName.replace(
-          toCamelCase(info.componentName),
-          ""
-        );
-        const propWithPrefix = `$${expectedProp
-          .charAt(0)
-          .toLowerCase()}${expectedProp.slice(1)}`;
+        const expectedProp = variantName.replace(toCamelCase(info.componentName), "");
+        const propWithPrefix = `$${expectedProp.charAt(0).toLowerCase()}${expectedProp.slice(1)}`;
         // Also check for "is" prefixed versions (e.g., $isActive matches Active)
         const propWithIsPrefix = `$is${expectedProp}`;
 
@@ -2306,10 +2149,7 @@ function transformJSXUsage(
           if (attr.value === null) {
             // Boolean prop (e.g., $primary)
             styleRefs.push(`styles.${variantName}`);
-          } else if (
-            attr.value &&
-            attr.value.type === "JSXExpressionContainer"
-          ) {
+          } else if (attr.value && attr.value.type === "JSXExpressionContainer") {
             // Expression value - add conditional
             const exprNode = attr.value.expression;
             const start = (exprNode as unknown as { start?: number }).start;
@@ -2326,9 +2166,7 @@ function transformJSXUsage(
 
       // Check if this prop is used in a dynamic function
       for (const [fnName, fnConfig] of info.dynamicFns) {
-        const cleanPropName = propName.startsWith("$")
-          ? propName.slice(1)
-          : propName;
+        const cleanPropName = propName.startsWith("$") ? propName.slice(1) : propName;
         if (cleanPropName.toLowerCase() === fnConfig.paramName.toLowerCase()) {
           // Add dynamic style function call
           if (attr.value?.type === "JSXExpressionContainer") {
@@ -2355,15 +2193,10 @@ function transformJSXUsage(
       // Collect static attrs first
       for (const [key, value] of Object.entries(info.attrsConfig.staticAttrs)) {
         if (typeof value === "string") {
-          attrsToAdd.push(
-            j.jsxAttribute(j.jsxIdentifier(key), j.literal(value))
-          );
+          attrsToAdd.push(j.jsxAttribute(j.jsxIdentifier(key), j.literal(value)));
         } else if (typeof value === "number") {
           attrsToAdd.push(
-            j.jsxAttribute(
-              j.jsxIdentifier(key),
-              j.jsxExpressionContainer(j.literal(value))
-            )
+            j.jsxAttribute(j.jsxIdentifier(key), j.jsxExpressionContainer(j.literal(value))),
           );
         } else if (typeof value === "boolean" && value) {
           attrsToAdd.push(j.jsxAttribute(j.jsxIdentifier(key), null));
@@ -2373,16 +2206,13 @@ function transformJSXUsage(
       // Collect dynamic attrs - check existing JSX props and apply computed values
       for (const dynamicAttr of info.attrsConfig.dynamicAttrs) {
         // Use the new conditionProp and truthyValue fields if available
-        if (
-          dynamicAttr.conditionProp &&
-          dynamicAttr.truthyValue !== undefined
-        ) {
+        if (dynamicAttr.conditionProp && dynamicAttr.truthyValue !== undefined) {
           // Find if the condition prop is present in JSX
           const conditionAttr = attributes.find(
             (attr) =>
               attr.type === "JSXAttribute" &&
               attr.name.type === "JSXIdentifier" &&
-              attr.name.name === dynamicAttr.conditionProp
+              attr.name.name === dynamicAttr.conditionProp,
           );
 
           if (conditionAttr && conditionAttr.type === "JSXAttribute") {
@@ -2393,15 +2223,15 @@ function transformJSXUsage(
                 attrsToAdd.push(
                   j.jsxAttribute(
                     j.jsxIdentifier(dynamicAttr.prop),
-                    j.jsxExpressionContainer(j.literal(dynamicAttr.truthyValue))
-                  )
+                    j.jsxExpressionContainer(j.literal(dynamicAttr.truthyValue)),
+                  ),
                 );
               } else if (typeof dynamicAttr.truthyValue === "string") {
                 attrsToAdd.push(
                   j.jsxAttribute(
                     j.jsxIdentifier(dynamicAttr.prop),
-                    j.literal(dynamicAttr.truthyValue)
-                  )
+                    j.literal(dynamicAttr.truthyValue),
+                  ),
                 );
               }
               propsToRemove.push(dynamicAttr.conditionProp);
@@ -2413,29 +2243,20 @@ function transformJSXUsage(
 
         // Fallback for legacy format without conditionProp
         for (const attr of attributes) {
-          if (
-            attr.type !== "JSXAttribute" ||
-            attr.name.type !== "JSXIdentifier"
-          )
-            continue;
+          if (attr.type !== "JSXAttribute" || attr.name.type !== "JSXIdentifier") continue;
           const propName = attr.name.name;
 
           if (dynamicAttr.expr.includes(propName)) {
             if (attr.value === null) {
               // Boolean prop - extract numeric value from ternary expression
-              if (
-                dynamicAttr.expr.includes("?") &&
-                dynamicAttr.expr.includes(":")
-              ) {
+              if (dynamicAttr.expr.includes("?") && dynamicAttr.expr.includes(":")) {
                 const match = dynamicAttr.expr.match(/\?\s*(\d+)\s*:/);
                 if (match) {
                   attrsToAdd.push(
                     j.jsxAttribute(
                       j.jsxIdentifier(dynamicAttr.prop),
-                      j.jsxExpressionContainer(
-                        j.literal(parseInt(match[1]!, 10))
-                      )
-                    )
+                      j.jsxExpressionContainer(j.literal(parseInt(match[1]!, 10))),
+                    ),
                   );
                   propsToRemove.push(propName);
                 }
@@ -2453,8 +2274,7 @@ function transformJSXUsage(
     if (!info.needsWrapper) {
       // Remove variant/dynamic props
       opening.attributes = opening.attributes.filter((attr) => {
-        if (attr.type !== "JSXAttribute" || attr.name.type !== "JSXIdentifier")
-          return true;
+        if (attr.type !== "JSXAttribute" || attr.name.type !== "JSXIdentifier") return true;
         return !propsToRemove.includes(attr.name.name);
       });
 
@@ -2467,7 +2287,7 @@ function transformJSXUsage(
           return j.logicalExpression(
             "&&",
             j.identifier(condition!.trim()),
-            j.identifier(style!.trim())
+            j.identifier(style!.trim()),
           ) as unknown as Expression;
         }
         // Check if it's a function call like styles.fnName("arg")
@@ -2475,16 +2295,15 @@ function transformJSXUsage(
         if (fnCallMatch) {
           const [, fnPath, arg] = fnCallMatch;
           const [obj, prop] = fnPath!.split(".");
-          return j.callExpression(
-            j.memberExpression(j.identifier(obj!), j.identifier(prop!)),
-            [j.literal(arg!)]
-          ) as unknown as Expression;
+          return j.callExpression(j.memberExpression(j.identifier(obj!), j.identifier(prop!)), [
+            j.literal(arg!),
+          ]) as unknown as Expression;
         }
         return j.identifier(ref) as unknown as Expression;
       });
       const stylexPropsCall = j.callExpression(
         j.memberExpression(j.identifier("stylex"), j.identifier("props")),
-        stylexArgs as unknown as Parameters<typeof j.callExpression>[1]
+        stylexArgs as unknown as Parameters<typeof j.callExpression>[1],
       );
 
       const spreadAttr = j.jsxSpreadAttribute(stylexPropsCall);
@@ -2500,7 +2319,7 @@ function transformJSXUsage(
           a.argument.callee.object.type === "Identifier" &&
           a.argument.callee.object.name === "stylex" &&
           a.argument.callee.property.type === "Identifier" &&
-          a.argument.callee.property.name === "props"
+          a.argument.callee.property.name === "props",
       );
 
       if (existingSpread && existingSpread.type === "JSXSpreadAttribute") {
@@ -2508,7 +2327,7 @@ function transformJSXUsage(
         if (call.type === "CallExpression") {
           // Prepend so later-added styles (already in the spread) keep override priority.
           call.arguments.unshift(
-            ...(stylexArgs as unknown as Parameters<typeof j.callExpression>[1])
+            ...(stylexArgs as unknown as Parameters<typeof j.callExpression>[1]),
           );
         }
       } else {
@@ -2520,7 +2339,7 @@ function transformJSXUsage(
     if (info.jsxRewriteRules.length > 0) {
       const children = path.node.children ?? [];
       const directChildElements = children.filter(
-        (c): c is import("jscodeshift").JSXElement => c.type === "JSXElement"
+        (c): c is import("jscodeshift").JSXElement => c.type === "JSXElement",
       );
 
       // Apply `child` to all direct children, and `childNotFirst` to all except first
@@ -2552,26 +2371,24 @@ function transformJSXUsage(
             a.argument.callee.object.type === "Identifier" &&
             a.argument.callee.object.name === "stylex" &&
             a.argument.callee.property.type === "Identifier" &&
-            a.argument.callee.property.name === "props"
+            a.argument.callee.property.name === "props",
         );
 
         const extraArgs = uniqueStyleNames.map((n) =>
-          j.memberExpression(j.identifier("styles"), j.identifier(n))
+          j.memberExpression(j.identifier("styles"), j.identifier(n)),
         ) as unknown as Expression[];
 
         if (existingSpread && existingSpread.type === "JSXSpreadAttribute") {
           const call = existingSpread.argument;
           if (call.type === "CallExpression") {
             call.arguments.push(
-              ...(extraArgs as unknown as Parameters<
-                typeof j.callExpression
-              >[1])
+              ...(extraArgs as unknown as Parameters<typeof j.callExpression>[1]),
             );
           }
         } else {
           const propsCall = j.callExpression(
             j.memberExpression(j.identifier("stylex"), j.identifier("props")),
-            extraArgs as unknown as Parameters<typeof j.callExpression>[1]
+            extraArgs as unknown as Parameters<typeof j.callExpression>[1],
           );
           childOpening.attributes.push(j.jsxSpreadAttribute(propsCall));
         }
@@ -2580,12 +2397,9 @@ function transformJSXUsage(
 
     // Apply descendant styled-component rewrite rules (e.g., `${Icon}` blocks inside `${Button}`).
     const descendantRules = info.jsxRewriteRules.filter(
-      (r) => r.type === "descendant-styled-component"
+      (r) => r.type === "descendant-styled-component",
     ) as Array<
-      Extract<
-        StyleInfo["jsxRewriteRules"][number],
-        { type: "descendant-styled-component" }
-      >
+      Extract<StyleInfo["jsxRewriteRules"][number], { type: "descendant-styled-component" }>
     >;
 
     if (descendantRules.length > 0) {
@@ -2594,12 +2408,7 @@ function transformJSXUsage(
         const key = `${rule.targetComponentName}::${rule.styleName}`;
         if (seen.has(key)) continue;
         seen.add(key);
-        applyStyleToDescendantComponents(
-          j,
-          path.node,
-          rule.targetComponentName,
-          rule.styleName
-        );
+        applyStyleToDescendantComponents(j, path.node, rule.targetComponentName, rule.styleName);
       }
     }
   });
@@ -2609,13 +2418,11 @@ function applyStyleToDescendantComponents(
   j: JSCodeshift,
   rootEl: import("jscodeshift").JSXElement,
   targetComponentName: string,
-  styleName: string
+  styleName: string,
 ): void {
   const targetStyleKey = toCamelCase(targetComponentName);
 
-  function hasBaseStyleApplied(
-    opening: import("jscodeshift").JSXOpeningElement
-  ): boolean {
+  function hasBaseStyleApplied(opening: import("jscodeshift").JSXOpeningElement): boolean {
     const attrs = opening.attributes ?? [];
     for (const a of attrs) {
       if (a.type !== "JSXSpreadAttribute") continue;
@@ -2645,9 +2452,7 @@ function applyStyleToDescendantComponents(
     return false;
   }
 
-  function ensureStyleApplied(
-    opening: import("jscodeshift").JSXOpeningElement
-  ): void {
+  function ensureStyleApplied(opening: import("jscodeshift").JSXOpeningElement): void {
     if (!opening.attributes) opening.attributes = [];
 
     const existingSpread = opening.attributes.find(
@@ -2658,13 +2463,10 @@ function applyStyleToDescendantComponents(
         a.argument.callee.object.type === "Identifier" &&
         a.argument.callee.object.name === "stylex" &&
         a.argument.callee.property.type === "Identifier" &&
-        a.argument.callee.property.name === "props"
+        a.argument.callee.property.name === "props",
     );
 
-    const extraArg = j.memberExpression(
-      j.identifier("styles"),
-      j.identifier(styleName)
-    );
+    const extraArg = j.memberExpression(j.identifier("styles"), j.identifier(styleName));
 
     if (existingSpread && existingSpread.type === "JSXSpreadAttribute") {
       const call = existingSpread.argument;
@@ -2680,9 +2482,7 @@ function applyStyleToDescendantComponents(
         });
         if (!alreadyHas) {
           call.arguments.push(
-            extraArg as unknown as Parameters<
-              typeof j.callExpression
-            >[1][number]
+            extraArg as unknown as Parameters<typeof j.callExpression>[1][number],
           );
         }
       }
@@ -2691,7 +2491,7 @@ function applyStyleToDescendantComponents(
 
     const propsCall = j.callExpression(
       j.memberExpression(j.identifier("stylex"), j.identifier("props")),
-      [extraArg as unknown as Parameters<typeof j.callExpression>[1][number]]
+      [extraArg as unknown as Parameters<typeof j.callExpression>[1][number]],
     );
     opening.attributes.push(j.jsxSpreadAttribute(propsCall));
   }
@@ -2703,10 +2503,7 @@ function applyStyleToDescendantComponents(
 
       if (opening.name.type === "JSXIdentifier") {
         // Match before conversion (<Icon />) OR after conversion (element with styles.icon already applied).
-        if (
-          opening.name.name === targetComponentName ||
-          hasBaseStyleApplied(opening)
-        ) {
+        if (opening.name.name === targetComponentName || hasBaseStyleApplied(opening)) {
           ensureStyleApplied(opening);
         }
       }
@@ -2724,7 +2521,7 @@ function applyStyleToDescendantComponents(
 function detectWarningPatterns(
   j: JSCodeshift,
   root: Collection,
-  warnings: TransformWarning[]
+  warnings: TransformWarning[],
 ): void {
   let hasComponentSelector = false;
   let hasSpecificityHack = false;
@@ -2771,22 +2568,13 @@ function detectWarningPatterns(
 /**
  * Generate wrapper components for styled components that need them
  */
-function generateWrapperComponents(
-  j: JSCodeshift,
-  styleInfos: StyleInfo[]
-): VariableDeclaration[] {
+function generateWrapperComponents(j: JSCodeshift, styleInfos: StyleInfo[]): VariableDeclaration[] {
   const wrappers: VariableDeclaration[] = [];
 
   for (const info of styleInfos) {
     if (!info.needsWrapper) continue;
 
-    const {
-      componentName,
-      baseElement,
-      transientProps,
-      isExtending,
-      extendsFrom,
-    } = info;
+    const { componentName, baseElement, transientProps, isExtending, extendsFrom } = info;
     const styleName = toCamelCase(componentName);
 
     // Build props destructure
@@ -2800,9 +2588,7 @@ function generateWrapperComponents(
     // Build props type
     const propsTypeParts: string[] = [];
     for (const prop of transientProps) {
-      propsTypeParts.push(
-        `${prop.name}${prop.optional ? "?" : ""}: ${prop.type}`
-      );
+      propsTypeParts.push(`${prop.name}${prop.optional ? "?" : ""}: ${prop.type}`);
     }
     propsTypeParts.push("children?: React.ReactNode");
 
@@ -2825,13 +2611,12 @@ function generateWrapperComponents(
     const styleExpr = `{...stylex.props(${styleArgs.join(", ")})}`;
 
     // Determine element to render
-    const isComponent =
-      baseElement.charAt(0) === baseElement.charAt(0).toUpperCase();
+    const isComponent = baseElement.charAt(0) === baseElement.charAt(0).toUpperCase();
     const element = isComponent ? baseElement : baseElement;
 
     // Generate the component
     const componentCode = `const ${componentName} = ({ ${propsDestructure.join(
-      ", "
+      ", ",
     )} }: { ${propsTypeParts.join("; ")} }) => (
   <${element} ${styleExpr} {...props}>
     {children}

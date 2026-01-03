@@ -16,10 +16,8 @@ const config: StorybookConfig = {
     config.server = {
       ...config.server,
       fs: {
-        ...(config.server?.fs ?? {}),
-        allow: Array.from(
-          new Set([...(config.server?.fs?.allow ?? []), resolve(process.cwd())]),
-        ),
+        ...config.server?.fs,
+        allow: Array.from(new Set([...(config.server?.fs?.allow ?? []), resolve(process.cwd())])),
       },
     };
 

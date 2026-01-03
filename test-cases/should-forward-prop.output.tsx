@@ -56,8 +56,14 @@ const styles = stylex.create({
 });
 
 function Button(props) {
-  const { className: className, children: children, style: style, color: color, size: size, ...rest } =
-    props;
+  const {
+    className: className,
+    children: children,
+    style: style,
+    color: color,
+    size: size,
+    ...rest
+  } = props;
 
   const sx = stylex.props(
     styles.button,
@@ -66,19 +72,35 @@ function Button(props) {
   );
 
   return (
-    <button {...sx} className={[sx.className, className].filter(Boolean).join(" ")} style={style} {...rest}>
+    <button
+      {...sx}
+      className={[sx.className, className].filter(Boolean).join(" ")}
+      style={style}
+      {...rest}
+    >
       {children}
     </button>
   );
 }
 
 function Link(props) {
-  const { className: className, children: children, style: style, isActive: isActive, ...rest } = props;
+  const {
+    className: className,
+    children: children,
+    style: style,
+    isActive: isActive,
+    ...rest
+  } = props;
 
   const sx = stylex.props(styles.link, isActive && styles.linkActive);
 
   return (
-    <a {...sx} className={[sx.className, className].filter(Boolean).join(" ")} style={style} {...rest}>
+    <a
+      {...sx}
+      className={[sx.className, className].filter(Boolean).join(" ")}
+      style={style}
+      {...rest}
+    >
       {children}
     </a>
   );
@@ -98,7 +120,12 @@ function Box(props) {
   );
 
   return (
-    <div {...sx} className={[sx.className, className].filter(Boolean).join(" ")} style={style} {...rest}>
+    <div
+      {...sx}
+      className={[sx.className, className].filter(Boolean).join(" ")}
+      style={style}
+      {...rest}
+    >
       {children}
     </div>
   );
@@ -115,7 +142,11 @@ function Card(props) {
     ...rest
   } = props;
 
-  const sx = stylex.props(styles.card, variant === "primary" && styles.cardVariantPrimary, rounded && styles.cardRounded);
+  const sx = stylex.props(
+    styles.card,
+    variant === "primary" && styles.cardVariantPrimary,
+    rounded && styles.cardRounded,
+  );
 
   return (
     <div
@@ -123,7 +154,10 @@ function Card(props) {
       className={[sx.className, className].filter(Boolean).join(" ")}
       style={{
         ...style,
-        boxShadow: ((props) => `0 ${(props.elevation || 1) * 2}px ${(props.elevation || 1) * 4}px rgba(0, 0, 0, 0.1)`)(props),
+        boxShadow: ((props) =>
+          `0 ${(props.elevation || 1) * 2}px ${(props.elevation || 1) * 4}px rgba(0, 0, 0, 0.1)`)(
+          props,
+        ),
       }}
       {...rest}
     >
@@ -152,4 +186,3 @@ export const App = () => (
     </Card>
   </div>
 );
-
