@@ -145,6 +145,16 @@ export type FallbackBehavior =
   | "throw"; // Fail the transform
 
 /**
+ * Result from resolving a CSS variable
+ */
+export interface CssVariableResolution {
+  /** The code to use in place of var(--name) */
+  code: string;
+  /** Additional imports needed */
+  imports?: string[];
+}
+
+/**
  * Adapter interface for customizing the transform
  */
 export interface Adapter {
@@ -190,6 +200,25 @@ export interface Adapter {
    * @returns Array of declaration statements (e.g., defineVars calls)
    */
   getDeclarations(): string[];
+
+  /**
+   * Resolve a CSS variable reference to StyleX-compatible code.
+   * Called when encountering var(--name) or var(--name, fallback) in CSS values.
+   * Return undefined to keep the original var() syntax.
+   * @param name - The CSS variable name without -- prefix (e.g., "color-primary")
+   * @param fallback - Optional fallback value from var(--name, fallback)
+   * @returns Resolution with code and imports, or undefined to keep original
+   */
+  resolveCssVariable?(name: string, fallback?: string): CssVariableResolution | undefined;
+
+  /**
+   * Resolve a theme path to StyleX-compatible code.
+   * Called for props.theme.x.y access patterns.
+   * Return undefined to use default handling.
+   * @param pathParts - The path parts after "theme" (e.g., ["colors", "primary"])
+   * @returns Resolution with code and imports, or undefined for default handling
+   */
+  resolveThemePath?(pathParts: string[]): CssVariableResolution | undefined;
 }
 
 /**
@@ -490,11 +519,12 @@ export const propAccessHandler: DynamicNodeHandler = (ctx): DynamicNodeDecision 
   }
 
   // Generate a dynamic style function
+  // Mark the valueExpression as a variable reference so it's rendered as an identifier, not a string
   return {
     action: "dynamic-fn",
     paramName: cleanPropName(propName),
     paramType: "string",
-    valueExpression: cleanPropName(propName),
+    valueExpression: VAR_REF_PREFIX + cleanPropName(propName),
   };
 };
 

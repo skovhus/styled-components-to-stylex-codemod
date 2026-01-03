@@ -78,6 +78,45 @@ const PLACEHOLDER_REGEX = /__INTERPOLATION_(\d+)__/g;
 const PLACEHOLDER_TEST_REGEX = /__INTERPOLATION_(\d+)__/;
 
 /**
+ * Clean property names that incorrectly include interpolation placeholders.
+ * This can happen when an interpolation is a full CSS declaration on its own line,
+ * causing stylis to concatenate it with the next property name.
+ *
+ * Example: `__INTERPOLATION_0__ textAlign` -> `textAlign` (with interpolation tracked separately)
+ */
+function cleanPropertyNameWithPlaceholder(property: string): {
+  cleanedProperty: string;
+  leadingPlaceholderIndices: number[];
+} {
+  const leadingPlaceholderIndices: number[] = [];
+
+  // Check if property starts with one or more placeholders
+  let cleanedProperty = property;
+  let match: RegExpExecArray | null;
+
+  // Use a regex to find all placeholders at the start
+  const leadingPlaceholderRegex = /^(__INTERPOLATION_(\d+)__\s*)+/;
+  const leadingMatch = leadingPlaceholderRegex.exec(property);
+
+  if (leadingMatch) {
+    // Extract all placeholder indices from the leading part
+    const leadingPart = leadingMatch[0];
+    PLACEHOLDER_REGEX.lastIndex = 0;
+    while ((match = PLACEHOLDER_REGEX.exec(leadingPart)) !== null) {
+      leadingPlaceholderIndices.push(parseInt(match[1]!, 10));
+    }
+    // Remove the leading placeholders from the property name
+    cleanedProperty = property.slice(leadingMatch[0].length).trim();
+    // Convert to camelCase if needed
+    if (cleanedProperty.includes("-")) {
+      cleanedProperty = cssPropertyToCamelCase(cleanedProperty);
+    }
+  }
+
+  return { cleanedProperty, leadingPlaceholderIndices };
+}
+
+/**
  * Create a placeholder string for an interpolation index
  */
 export function createPlaceholder(index: number): string {
@@ -221,7 +260,12 @@ export function parseStyledCSS(
  * Convert kebab-case CSS property to camelCase
  */
 export function cssPropertyToCamelCase(prop: string): string {
-  // Handle vendor prefixes
+  // Preserve CSS custom properties (--name) as-is
+  if (prop.startsWith("--")) {
+    return prop;
+  }
+
+  // Handle vendor prefixes (-webkit-, -moz-, etc.)
   if (prop.startsWith("-")) {
     const withoutPrefix = prop.slice(1);
     const parts = withoutPrefix.split("-");
@@ -251,11 +295,20 @@ export function extractDeclarations(root: Element[]): CSSRule[] {
     if (node.type === "decl") {
       const parsed = parseStylisDeclaration(String(node.value ?? ""));
       if (!parsed) continue;
+      // Clean property name if it has leading interpolation placeholders
+      const { cleanedProperty, leadingPlaceholderIndices } = cleanPropertyNameWithPlaceholder(
+        cssPropertyToCamelCase(parsed.property),
+      );
+      // Skip if property becomes empty or only whitespace after cleaning
+      if (!cleanedProperty) continue;
       mainRule.declarations.push({
-        property: cssPropertyToCamelCase(parsed.property),
+        property: cleanedProperty,
         value: parsed.value,
         selector: "&",
-        interpolationIndices: extractInterpolationIndices(parsed.value),
+        interpolationIndices: [
+          ...leadingPlaceholderIndices,
+          ...extractInterpolationIndices(parsed.value),
+        ],
       });
       continue;
     }
@@ -282,11 +335,20 @@ function extractStylisRule(node: Element, selector: string): CSSRule {
     if (child.type === "decl") {
       const parsed = parseStylisDeclaration(String(child.value ?? ""));
       if (!parsed) continue;
+      // Clean property name if it has leading interpolation placeholders
+      const { cleanedProperty, leadingPlaceholderIndices } = cleanPropertyNameWithPlaceholder(
+        cssPropertyToCamelCase(parsed.property),
+      );
+      // Skip if property becomes empty after cleaning
+      if (!cleanedProperty) continue;
       result.declarations.push({
-        property: cssPropertyToCamelCase(parsed.property),
+        property: cleanedProperty,
         value: parsed.value,
         selector,
-        interpolationIndices: extractInterpolationIndices(parsed.value),
+        interpolationIndices: [
+          ...leadingPlaceholderIndices,
+          ...extractInterpolationIndices(parsed.value),
+        ],
       });
     } else if (child.type === "rule") {
       const sel = normalizeStylisSelector(String(child.value ?? ""));
@@ -309,11 +371,20 @@ function extractStylisAtRule(node: Element): CSSRule {
     if (child.type === "decl") {
       const parsed = parseStylisDeclaration(String(child.value ?? ""));
       if (!parsed) continue;
+      // Clean property name if it has leading interpolation placeholders
+      const { cleanedProperty, leadingPlaceholderIndices } = cleanPropertyNameWithPlaceholder(
+        cssPropertyToCamelCase(parsed.property),
+      );
+      // Skip if property becomes empty after cleaning
+      if (!cleanedProperty) continue;
       result.declarations.push({
-        property: cssPropertyToCamelCase(parsed.property),
+        property: cleanedProperty,
         value: parsed.value,
         selector,
-        interpolationIndices: extractInterpolationIndices(parsed.value),
+        interpolationIndices: [
+          ...leadingPlaceholderIndices,
+          ...extractInterpolationIndices(parsed.value),
+        ],
       });
     } else if (child.type === "rule") {
       const sel = normalizeStylisSelector(String(child.value ?? ""));

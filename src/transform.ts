@@ -6,6 +6,7 @@ import type {
   TemplateLiteral,
   Identifier,
   Expression,
+  JSXAttribute,
   ObjectProperty,
   MemberExpression,
   ObjectExpression,
@@ -16,8 +17,15 @@ import {
   executeDynamicNodeHandlers,
   getFallbackDecision,
   defaultHandlers,
+  VAR_REF_PREFIX,
+  TEMPLATE_LITERAL_PREFIX,
 } from "./adapter.js";
-import { parseStyledCSS, extractDeclarations, type InterpolationLocation } from "./css-parser.js";
+import {
+  parseStyledCSS,
+  extractDeclarations,
+  extractInterpolationIndices,
+  type InterpolationLocation,
+} from "./css-parser.js";
 import {
   cssRuleToStyleX,
   stripImportant,
@@ -25,6 +33,7 @@ import {
   normalizePropertyName,
   convertValue,
   type StyleXObject,
+  type ConversionContext,
 } from "./css-to-stylex.js";
 import {
   classifyInterpolation,
@@ -64,7 +73,23 @@ export interface TransformOptions extends Options {
  */
 interface AttrsConfig {
   staticAttrs: Record<string, unknown>;
-  dynamicAttrs: Array<{ prop: string; expr: string }>;
+  dynamicAttrs: Array<{
+    prop: string;
+    expr: string;
+    conditionProp?: string;
+    truthyValue?: string | number;
+  }>;
+}
+
+/**
+ * Transient prop information for wrapper generation
+ */
+interface TransientPropInfo {
+  name: string;
+  type: string;
+  optional: boolean;
+  truthyStyleName?: string;
+  falsyStyleName?: string;
 }
 
 /**
@@ -86,7 +111,20 @@ interface StyleInfo {
   jsxRewriteRules: Array<
     | { type: "direct-children"; styleNames: string[] }
     | { type: "direct-children-except-first"; styleNames: string[] }
+    | {
+        type: "descendant-styled-component";
+        /** Styled-component identifier (e.g., Icon) to match in JSX */
+        targetComponentName: string;
+        /** Extra style entry to apply (e.g., iconInButton) */
+        styleName: string;
+      }
   >;
+  /** Transient props that need wrapper generation */
+  transientProps: TransientPropInfo[];
+  /** Whether this component needs a wrapper function */
+  needsWrapper: boolean;
+  /** Whether this component must include stylex.defaultMarker() so stylex.when.ancestor() works */
+  needsDefaultMarker: boolean;
 }
 
 /**
@@ -142,7 +180,10 @@ export function transformWithWarnings(
   // Collect known identifiers
   const keyframesIdentifiers = new Set<string>();
   const styledComponentIdentifiers = new Set<string>();
-  const cssHelperIdentifiers = new Set<string>();
+  const cssHelperIdentifiers = new Set<string>(); // The import name (e.g., 'css')
+  const cssHelperVariables = new Set<string>(); // Variable names assigned from css`` (e.g., 'truncate')
+  const createGlobalStyleIdentifiers = new Set<string>();
+  const globalStyleDeclarations = new Set<string>(); // Variable names using createGlobalStyle
 
   // Track what's imported from styled-components
   styledImports.forEach((importPath) => {
@@ -158,6 +199,9 @@ export function transformWithWarnings(
               specifier.local?.type === "Identifier" ? specifier.local.name : imported.name;
             cssHelperIdentifiers.add(localName);
           } else if (imported.name === "createGlobalStyle") {
+            const localName =
+              specifier.local?.type === "Identifier" ? specifier.local.name : imported.name;
+            createGlobalStyleIdentifiers.add(localName);
             const warning: TransformWarning = {
               type: "unsupported-feature",
               feature: "createGlobalStyle",
@@ -187,6 +231,18 @@ export function transformWithWarnings(
           keyframesIdentifiers.add(path.node.id.name);
         }
       }
+      // Track createGlobalStyle declarations
+      if (init.tag.type === "Identifier" && createGlobalStyleIdentifiers.has(init.tag.name)) {
+        if (path.node.id.type === "Identifier") {
+          globalStyleDeclarations.add(path.node.id.name);
+        }
+      }
+      // Track css`` helper variable names (e.g., const truncate = css`...`)
+      if (init.tag.type === "Identifier" && cssHelperIdentifiers.has(init.tag.name)) {
+        if (path.node.id.type === "Identifier") {
+          cssHelperVariables.add(path.node.id.name);
+        }
+      }
     });
 
   // Find styled component declarations
@@ -204,13 +260,26 @@ export function transformWithWarnings(
 
   // Create classification context
   const getSource = (node: Expression): string => {
-    // Cast to any to work around jscodeshift type issues
-    return j(node as unknown as string).toSource();
+    // Extract source from location info if available
+    const start = (node as unknown as { start?: number }).start;
+    const end = (node as unknown as { end?: number }).end;
+
+    // Use the original source substring if we have position info
+    if (typeof start === "number" && typeof end === "number") {
+      return file.source.slice(start, end);
+    }
+
+    // Fallback: try to reconstruct from node structure
+    if (node.type === "Identifier") {
+      return (node as unknown as { name: string }).name;
+    }
+
+    return "[complex expression]";
   };
   const classificationCtx = createClassificationContext(
     keyframesIdentifiers,
     styledComponentIdentifiers,
-    cssHelperIdentifiers,
+    cssHelperVariables, // Use variable names, not import names
     getSource,
   );
 
@@ -248,6 +317,11 @@ export function transformWithWarnings(
 
   // Process keyframes declarations
   const keyframesStyles: Map<string, StyleXObject> = new Map();
+
+  // Process CSS helpers (css`...`) and convert to StyleX objects
+  // Store parsed helpers so they can be inlined when interpolated
+  const cssHelperStyles: Map<string, StyleXObject> = new Map();
+
   root
     .find(j.VariableDeclarator, {
       init: { type: "TaggedTemplateExpression" },
@@ -261,6 +335,17 @@ export function transformWithWarnings(
           keyframesStyles.set(name, keyframeStyles);
         }
       }
+      // Process css`` helpers
+      if (init.tag.type === "Identifier" && cssHelperIdentifiers.has(init.tag.name)) {
+        const name = path.node.id.type === "Identifier" ? path.node.id.name : "cssHelper";
+        const parsed = parseStyledCSS(init.quasi.quasis, init.quasi.expressions as Expression[]);
+        const rules = extractDeclarations(parsed.root);
+        if (rules.length > 0) {
+          const mainRule = rules[0]!;
+          const helperStyles = cssRuleToStyleX(mainRule, { adapter });
+          cssHelperStyles.set(name, toPropertyLevelConditionals(helperStyles));
+        }
+      }
     });
 
   // Generate output if we have styles to transform
@@ -268,7 +353,7 @@ export function transformWithWarnings(
     hasChanges = true;
 
     // Generate stylex.create() and stylex.keyframes() calls
-    const stylexCode = generateStyleXCode(j, styleInfos, keyframesStyles, adapter);
+    const stylexCode = generateStyleXCode(j, styleInfos, keyframesStyles, adapter, cssHelperStyles);
 
     // Remove styled-components import and add stylex import
     styledImports.remove();
@@ -318,8 +403,13 @@ export function transformWithWarnings(
           if (keyframesIdentifiers.has(d.id.name)) {
             return false;
           }
-          // Remove css helpers that are used in styled components
-          if (cssHelperIdentifiers.has(d.id.name)) {
+          // Don't remove css helper variable declarations - they are regenerated above
+          // But we do remove them here because they'll be replaced with the converted version
+          if (cssHelperStyles.has(d.id.name)) {
+            return false;
+          }
+          // Remove createGlobalStyle declarations
+          if (globalStyleDeclarations.has(d.id.name)) {
             return false;
           }
         }
@@ -360,8 +450,42 @@ export function transformWithWarnings(
       }
     }
 
+    // Generate wrapper components for those that need them
+    const wrapperComponents = generateWrapperComponents(j, styleInfos);
+
+    // Insert wrapper components after styles
+    if (wrapperComponents.length > 0) {
+      // Find the styles declaration
+      root.find(j.VariableDeclaration).forEach((path) => {
+        const decl = path.node.declarations[0];
+        if (
+          decl?.type === "VariableDeclarator" &&
+          decl.id.type === "Identifier" &&
+          decl.id.name === "styles"
+        ) {
+          // Insert wrappers after styles
+          for (let i = wrapperComponents.length - 1; i >= 0; i--) {
+            j(path).insertAfter(wrapperComponents[i]!);
+          }
+        }
+      });
+    }
+
     // Transform JSX usage
-    transformJSXUsage(j, root, styleInfos, styledComponentIdentifiers);
+    transformJSXUsage(j, root, styleInfos, styledComponentIdentifiers, file.source);
+
+    // Remove JSX elements using createGlobalStyle declarations (e.g., <GlobalStyles />)
+    if (globalStyleDeclarations.size > 0) {
+      root.find(j.JSXElement).forEach((path) => {
+        const opening = path.node.openingElement;
+        if (
+          opening.name.type === "JSXIdentifier" &&
+          globalStyleDeclarations.has(opening.name.name)
+        ) {
+          j(path).remove();
+        }
+      });
+    }
   }
 
   let code: string | null = null;
@@ -617,6 +741,7 @@ function processStyledComponent(
     string,
     { paramName: string; paramType: string | undefined; styles: StyleXObject }
   >();
+  let needsDefaultMarker = false;
 
   if (templateLiteral) {
     // Template literal syntax - parse CSS
@@ -630,13 +755,29 @@ function processStyledComponent(
       return null;
     }
 
+    // Create conversion context with adapter for CSS variable resolution
+    const conversionCtx: ConversionContext = {
+      adapter,
+      collectedImports: additionalImports,
+    };
+
     // Convert to StyleX and process interpolations
     const mainRule = rules[0]!;
     // First get the raw StyleX object (before property-level conditional conversion)
-    const rawStyles = cssRuleToStyleX(mainRule);
+    const rawStyles = cssRuleToStyleX(mainRule, conversionCtx);
 
     // Extract child selectors BEFORE toPropertyLevelConditionals flattens them
     extractDirectChildSelectorStyles(rawStyles, extraStyles, jsxRewriteRules);
+
+    // Extract descendant styled-component selectors (e.g. `${Icon}` and `&:hover ${Icon}`)
+    // into extra style entries + JSX rewrite rules.
+    needsDefaultMarker = extractStyledComponentDescendantSelectorStyles(
+      rawStyles,
+      extraStyles,
+      jsxRewriteRules,
+      parsed.interpolations,
+      componentName,
+    );
 
     // Now convert remaining styles to property-level conditionals
     styles = toPropertyLevelConditionals(rawStyles);
@@ -677,6 +818,32 @@ function processStyledComponent(
   // Clean up dynamic placeholders from styles
   styles = cleanupDynamicPlaceholders(styles);
 
+  // Extract transient props from variant styles (for info purposes)
+  // Variant names follow pattern: componentNamePropName (e.g., compDraggable for $draggable)
+  const transientProps: TransientPropInfo[] = [];
+  const baseStyleName = toCamelCase(componentName);
+
+  for (const [variantName] of variantStyles) {
+    // Extract prop name from variant name (e.g., compDraggable -> Draggable -> $draggable)
+    if (variantName.startsWith(baseStyleName)) {
+      const propPart = variantName.slice(baseStyleName.length);
+      if (propPart) {
+        // Convert PascalCase to $camelCase (e.g., "Draggable" -> "$draggable")
+        const propName = "$" + propPart.charAt(0).toLowerCase() + propPart.slice(1);
+        transientProps.push({
+          name: propName,
+          type: "boolean",
+          optional: true,
+          truthyStyleName: `styles.${variantName}`,
+        });
+      }
+    }
+  }
+
+  // Wrapper generation is disabled for now - styles are applied at JSX usage sites
+  // TODO: Enable wrapper generation for transient props that need runtime filtering
+  const needsWrapper = false;
+
   return {
     componentName,
     baseElement,
@@ -688,6 +855,9 @@ function processStyledComponent(
     extendsFrom,
     attrsConfig,
     jsxRewriteRules,
+    transientProps,
+    needsWrapper,
+    needsDefaultMarker,
   };
 }
 
@@ -756,6 +926,124 @@ function extractDirectChildSelectorStyles(
 }
 
 /**
+ * Extract descendant styled-component selectors into separate extra style entries and JSX rewrite rules.
+ *
+ * Handles:
+ * - `${Icon} { ... }` (descendant selector inside a component)
+ * - `&:hover ${Icon} { ... }` (ancestor pseudo affecting descendant styled-component)
+ *
+ * Output strategy:
+ * - Create an extra style entry like `iconInButton`
+ * - Apply it to `<Icon />` occurrences inside `<Button>...</Button>` via JSX rewriting
+ * - For ancestor pseudo rules, encode property-level conditionals using a computed key:
+ *   `[stylex.when.ancestor(':hover')]`
+ */
+function extractStyledComponentDescendantSelectorStyles(
+  styles: StyleXObject,
+  extraStyles: Map<string, StyleXObject>,
+  jsxRewriteRules: StyleInfo["jsxRewriteRules"],
+  interpolations: Map<number, import("./css-parser.js").InterpolationLocation>,
+  parentComponentName: string,
+): boolean {
+  let needsMarker = false;
+
+  // Collect first to avoid mutating during iteration
+  const entries = Object.entries(styles);
+
+  for (const [selectorKey, value] of entries) {
+    if (typeof value !== "object" || value === null) continue;
+    if (!selectorKey.includes("__INTERPOLATION_")) continue;
+
+    // Only support selectors that refer to a single interpolated component
+    const indices = extractInterpolationIndices(selectorKey);
+    if (indices.length !== 1) continue;
+    const idx = indices[0]!;
+
+    const loc = interpolations.get(idx);
+    if (!loc) continue;
+    const expr = loc.expression;
+    if (expr.type !== "Identifier") continue;
+    const targetComponentName = (expr as Identifier).name;
+
+    const placeholder = `__INTERPOLATION_${idx}__`;
+
+    // Normalize selector shapes that stylis emits for this pattern.
+    // We support:
+    // - "__INTERPOLATION_0__"
+    // - "& __INTERPOLATION_0__" (may occur depending on stylis output)
+    // - ":hover __INTERPOLATION_0__" (comes from "&:hover __INTERPOLATION_0__")
+    const trimmed = selectorKey.trim();
+    const withoutAmp = trimmed.startsWith("&") ? trimmed.slice(1).trim() : trimmed;
+
+    let ancestorPseudo: string | null = null;
+    let isDescendantComponentSelector = false;
+
+    if (withoutAmp === placeholder) {
+      isDescendantComponentSelector = true;
+    } else {
+      // Try to parse ":hover __INTERPOLATION_0__"
+      const parts = withoutAmp.split(/\s+/).filter(Boolean);
+      if (parts.length === 2 && parts[1] === placeholder && parts[0]!.startsWith(":")) {
+        ancestorPseudo = parts[0]!;
+        isDescendantComponentSelector = true;
+      }
+    }
+
+    if (!isDescendantComponentSelector) continue;
+
+    // Create a stable extra style name: iconInButton
+    const styleName =
+      toCamelCase(targetComponentName) +
+      "In" +
+      parentComponentName.charAt(0).toUpperCase() +
+      parentComponentName.slice(1);
+
+    const existing = extraStyles.get(styleName) ?? {};
+    const nestedStyles = value as StyleXObject;
+
+    if (ancestorPseudo) {
+      // Encode as property-level conditional on the TARGET element, based on ANCESTOR state.
+      // e.g., opacity: { default: 0.8, [stylex.when.ancestor(':hover')]: 1 }
+      needsMarker = true;
+      for (const [prop, propValue] of Object.entries(nestedStyles)) {
+        const existingValue = existing[prop];
+        const computedKey = `[stylex.when.ancestor('${ancestorPseudo}')]`;
+        if (existingValue && typeof existingValue === "object" && existingValue !== null) {
+          // Already a conditional object - add/overwrite the computed key
+          (existingValue as StyleXObject)[computedKey] =
+            propValue as StyleXObject[keyof StyleXObject];
+          existing[prop] = existingValue;
+        } else {
+          const base = existingValue === undefined ? null : existingValue;
+          existing[prop] = {
+            default: base as StyleXObject[keyof StyleXObject],
+            [computedKey]: propValue as StyleXObject[keyof StyleXObject],
+          };
+        }
+      }
+    } else {
+      // Base descendant styles apply unconditionally when the target is used within this component.
+      Object.assign(existing, nestedStyles);
+    }
+
+    extraStyles.set(styleName, existing);
+
+    // Record JSX rewrite rule to apply this extra style to all matching descendants.
+    // De-dupe later by target+styleName.
+    jsxRewriteRules.push({
+      type: "descendant-styled-component",
+      targetComponentName,
+      styleName,
+    });
+
+    // Remove the original selector block from this component styles - it can't be represented directly in StyleX.
+    delete styles[selectorKey];
+  }
+
+  return needsMarker;
+}
+
+/**
  * Parse .attrs() configuration
  */
 function parseAttrsConfig(_j: JSCodeshift, arg: Expression): AttrsConfig {
@@ -801,8 +1089,33 @@ function parseAttrsConfig(_j: JSCodeshift, arg: Expression): AttrsConfig {
             config.staticAttrs[key] = prop.value.value;
           } else if (prop.value.type === "BooleanLiteral") {
             config.staticAttrs[key] = prop.value.value;
+          } else if (prop.value.type === "ConditionalExpression") {
+            // Dynamic conditional: props.$small ? 5 : undefined
+            const cond = prop.value as import("jscodeshift").ConditionalExpression;
+            // Extract the condition's prop reference (e.g., props.$small -> $small)
+            let propRef = "";
+            if (cond.test.type === "MemberExpression") {
+              const member = cond.test as import("jscodeshift").MemberExpression;
+              if (member.property.type === "Identifier") {
+                propRef = member.property.name;
+              }
+            }
+            // Get the truthy value
+            let truthyVal: string | number | undefined;
+            if (cond.consequent.type === "NumericLiteral") {
+              truthyVal = (cond.consequent as import("jscodeshift").NumericLiteral).value;
+            } else if (cond.consequent.type === "StringLiteral") {
+              truthyVal = (cond.consequent as import("jscodeshift").StringLiteral).value;
+            }
+            if (propRef && truthyVal !== undefined) {
+              config.dynamicAttrs.push({
+                prop: key,
+                expr: `${propRef} ? ${truthyVal} : undefined`,
+                conditionProp: propRef,
+                truthyValue: truthyVal,
+              });
+            }
           }
-          // Skip dynamic expressions for now - they require complex handling
         }
       }
     }
@@ -930,7 +1243,7 @@ function buildDynamicNodeContext(
     index: location.index,
     cssProperty: location.context.property
       ? normalizePropertyName(location.context.property)
-      : undefined,
+      : null,
     cssValue: location.context.value,
     selector: location.context.selector,
     isInSelector: location.context.isInSelector,
@@ -979,12 +1292,32 @@ function applyDecision(
         // Special handling for animation shorthand with keyframes:
         // After expansion, the keyframes name should go to animationName, not animation
         if (context.cssProperty === "animation" && context.type === "keyframes") {
-          // Set animationName to the keyframes identifier (as variable reference)
-          styles["animationName"] = decision.value;
+          // For multiple animations, accumulate keyframes names
+          const existingName = styles["animationName"];
+          if (
+            existingName &&
+            typeof existingName === "string" &&
+            existingName.startsWith(VAR_REF_PREFIX)
+          ) {
+            // Append to existing (using template literal format for multiple)
+            styles["animationName"] =
+              TEMPLATE_LITERAL_PREFIX +
+              "${" +
+              stripVarRefPrefix(existingName) +
+              "}, ${" +
+              stripVarRefPrefix(String(decision.value)) +
+              "}";
+          } else {
+            // First keyframes name
+            styles["animationName"] = decision.value;
+          }
           // Don't set the animation property
         } else {
           styles[context.cssProperty] = decision.value;
         }
+      } else if (context.type === "helper" && typeof decision.value === "string") {
+        // CSS helper spread (e.g., ${truncate}) - add as spread element
+        styles[SPREAD_PREFIX + decision.value] = null;
       }
       break;
     }
@@ -1072,6 +1405,7 @@ function generateStyleXCode(
   styleInfos: StyleInfo[],
   keyframesStyles: Map<string, StyleXObject>,
   _adapter: Adapter,
+  cssHelperStyles?: Map<string, StyleXObject>,
 ): VariableDeclaration[] {
   const statements: VariableDeclaration[] = [];
 
@@ -1085,6 +1419,27 @@ function generateStyleXCode(
     statements.push(
       j.variableDeclaration("const", [j.variableDeclarator(j.identifier(name), keyframesCall)]),
     );
+  }
+
+  // Generate CSS helper objects (as const objects, not stylex.create)
+  // These can be spread into stylex.create styles
+  if (cssHelperStyles) {
+    for (const [name, helperStyles] of cssHelperStyles) {
+      const styleObj = styleObjectToAST(j, helperStyles);
+      // Add `as const` type assertion for better type inference
+      const asConst = j.tsAsExpression(
+        styleObj as unknown as Parameters<typeof j.tsAsExpression>[0],
+        j.tsTypeReference(j.identifier("const")),
+      );
+      statements.push(
+        j.variableDeclaration("const", [
+          j.variableDeclarator(
+            j.identifier(name),
+            asConst as unknown as Parameters<typeof j.variableDeclarator>[1],
+          ),
+        ]),
+      );
+    }
   }
 
   // Build style properties
@@ -1158,13 +1513,35 @@ function generateStyleXCode(
 }
 
 /**
+ * Marker prefix for spread elements
+ */
+const SPREAD_PREFIX = "__SPREAD__";
+
+/**
  * Convert a style object to AST expression
+ * Supports spread elements via SPREAD_PREFIX marker
+ * Spread elements are placed at the beginning of the object
  */
 function styleObjectToAST(j: JSCodeshift, styles: StyleXObject): Expression {
-  const properties: ObjectProperty[] = [];
+  const spreadProperties: Array<ReturnType<typeof j.spreadElement>> = [];
+  const regularProperties: Array<ObjectProperty> = [];
 
   for (const [key, value] of Object.entries(styles)) {
-    const keyNode = isValidIdentifier(key) ? j.identifier(key) : j.literal(key);
+    // Check for spread elements (marked with __SPREAD__ prefix)
+    if (key.startsWith(SPREAD_PREFIX)) {
+      const spreadSource = key.slice(SPREAD_PREFIX.length);
+      spreadProperties.push(j.spreadElement(j.identifier(spreadSource)));
+      continue;
+    }
+
+    // Support computed keys encoded as strings like:
+    //   "[stylex.when.ancestor(':hover')]"
+    const computedExpr = parseBracketComputedKeyToExpression(j, key);
+    const keyNode = computedExpr
+      ? computedExpr
+      : isValidIdentifier(key)
+        ? j.identifier(key)
+        : j.literal(key);
 
     let valueNode: Expression;
 
@@ -1196,12 +1573,61 @@ function styleObjectToAST(j: JSCodeshift, styles: StyleXObject): Expression {
       continue;
     }
 
-    properties.push(
-      j.objectProperty(keyNode, valueNode as unknown as Parameters<typeof j.objectProperty>[1]),
+    const prop = j.objectProperty(
+      keyNode as unknown as Parameters<typeof j.objectProperty>[0],
+      valueNode as unknown as Parameters<typeof j.objectProperty>[1],
     );
+    if (computedExpr) {
+      (prop as unknown as { computed?: boolean }).computed = true;
+    }
+    regularProperties.push(prop);
   }
 
-  return j.objectExpression(properties as unknown as Parameters<typeof j.objectExpression>[0]);
+  // Spread properties come first, then regular properties
+  const allProperties = [...spreadProperties, ...regularProperties];
+  return j.objectExpression(allProperties as unknown as Parameters<typeof j.objectExpression>[0]);
+}
+
+function parseBracketComputedKeyToExpression(j: JSCodeshift, key: string): Expression | null {
+  const trimmed = key.trim();
+  if (!trimmed.startsWith("[") || !trimmed.endsWith("]")) return null;
+  const inner = trimmed.slice(1, -1).trim();
+
+  const match = inner.match(
+    /^stylex\.when\.(ancestor|descendant|anySibling|siblingBefore|siblingAfter)\(\s*(['"])([^'"]+)\2\s*(?:,\s*(.+)\s*)?\)$/,
+  );
+  if (!match) return null;
+
+  const method = match[1]!;
+  const pseudo = match[3]!;
+  const markerArg = match[4]?.trim();
+
+  const callee = j.memberExpression(
+    j.memberExpression(j.identifier("stylex"), j.identifier("when")),
+    j.identifier(method),
+  );
+
+  const args: Expression[] = [j.literal(pseudo) as unknown as Expression];
+
+  if (markerArg) {
+    if (markerArg === "stylex.defaultMarker()") {
+      args.push(
+        j.callExpression(
+          j.memberExpression(j.identifier("stylex"), j.identifier("defaultMarker")),
+          [],
+        ) as unknown as Expression,
+      );
+    } else if (/^[a-zA-Z_$][a-zA-Z0-9_$.]*$/.test(markerArg)) {
+      args.push(parseMemberExpression(j, markerArg));
+    } else {
+      return null;
+    }
+  }
+
+  return j.callExpression(
+    callee,
+    args as unknown as Parameters<typeof j.callExpression>[1],
+  ) as unknown as Expression;
 }
 
 /**
@@ -1459,15 +1885,7 @@ const CSS_KEYWORDS = new Set([
   "system",
 ]);
 
-/**
- * Marker prefix for explicit variable references
- */
-const VAR_REF_PREFIX = "__VAR_REF__";
-
-/**
- * Marker prefix for template literal expressions
- */
-const TEMPLATE_LITERAL_PREFIX = "__TEMPLATE_LITERAL__";
+// VAR_REF_PREFIX and TEMPLATE_LITERAL_PREFIX are imported from adapter.js
 
 /**
  * Check if a value looks like a variable reference (not a CSS value)
@@ -1571,13 +1989,17 @@ function parseTemplateLiteral(j: JSCodeshift, template: string): Expression {
  */
 function parseMemberExpression(j: JSCodeshift, exprStr: string): Expression {
   const parts = exprStr.split(".");
-  let expr: Expression = j.identifier(parts[0]!);
+  // jscodeshift typing expects ExpressionKind; keep internal as unknown and cast at the end.
+  let expr = j.identifier(parts[0]!) as unknown as Parameters<typeof j.memberExpression>[0];
 
   for (let i = 1; i < parts.length; i++) {
-    expr = j.memberExpression(expr, j.identifier(parts[i]!));
+    expr = j.memberExpression(
+      expr,
+      j.identifier(parts[i]!) as unknown as Parameters<typeof j.memberExpression>[1],
+    ) as unknown as Parameters<typeof j.memberExpression>[0];
   }
 
-  return expr;
+  return expr as unknown as Expression;
 }
 
 /**
@@ -1616,6 +2038,7 @@ function transformJSXUsage(
   root: Collection,
   styleInfos: StyleInfo[],
   _styledComponentIdentifiers: Set<string>,
+  source: string,
 ): void {
   // Map component names to their info
   const componentMap = new Map<string, StyleInfo>();
@@ -1643,23 +2066,33 @@ function transformJSXUsage(
       let current: StyleInfo | undefined = componentMap.get(info.extendsFrom);
       const inheritedStyles: string[] = [];
 
-      while (current) {
-        inheritedStyles.unshift(toCamelCase(current.componentName));
-        if (!current.extendsFrom) {
-          baseElement = current.baseElement;
-          break;
+      if (current) {
+        // Extending another styled-component - walk the chain
+        while (current) {
+          inheritedStyles.unshift(toCamelCase(current.componentName));
+          if (!current.extendsFrom) {
+            baseElement = current.baseElement;
+            break;
+          }
+          current = componentMap.get(current.extendsFrom);
         }
-        current = componentMap.get(current.extendsFrom);
-      }
-
-      // Add all inherited styles first
-      for (const styleName of inheritedStyles) {
-        styleRefs.push(`styles.${styleName}`);
+        // Add all inherited styles first
+        for (const styleName of inheritedStyles) {
+          styleRefs.push(`styles.${styleName}`);
+        }
+      } else {
+        // Extending a non-styled component (e.g., styled(Link)) - use that component as base
+        baseElement = info.extendsFrom;
       }
     }
 
     // Add this component's own style
     styleRefs.push(`styles.${toCamelCase(info.componentName)}`);
+
+    // If any descendant styles rely on stylex.when.ancestor(), the observed ancestor must be marked.
+    if (info.needsDefaultMarker) {
+      styleRefs.push(`stylex.defaultMarker()`);
+    }
 
     // Check for variant props, `as` prop, and dynamic function props
     const propsToRemove: string[] = [];
@@ -1667,24 +2100,27 @@ function transformJSXUsage(
     // Ensure attributes array exists for iteration
     const existingAttrs = opening.attributes ?? [];
 
-    // Check for `as` prop to override base element
+    // Check for `as` or `forwardedAs` prop to override base element
     for (const attr of existingAttrs) {
       if (attr.type !== "JSXAttribute" || attr.name.type !== "JSXIdentifier") continue;
-      if (attr.name.name === "as") {
-        // Extract the element name from the as prop value
+      if (attr.name.name === "as" || attr.name.name === "forwardedAs") {
+        // Extract the element name from the as/forwardedAs prop value
         if (attr.value?.type === "StringLiteral") {
           baseElement = attr.value.value;
         }
-        propsToRemove.push("as");
+        propsToRemove.push(attr.name.name);
         break;
       }
     }
 
-    // Replace the element name with the base element
-    opening.name = j.jsxIdentifier(baseElement);
-    if (path.node.closingElement) {
-      path.node.closingElement.name = j.jsxIdentifier(baseElement);
+    // Replace the element name with the base element (unless wrapper is generated)
+    if (!info.needsWrapper) {
+      opening.name = j.jsxIdentifier(baseElement);
+      if (path.node.closingElement) {
+        path.node.closingElement.name = j.jsxIdentifier(baseElement);
+      }
     }
+    // If component needs wrapper, keep original name - wrapper will handle it
     const dynamicStyleCalls: string[] = [];
     // Ensure attributes array exists
     if (!opening.attributes) {
@@ -1701,15 +2137,27 @@ function transformJSXUsage(
       for (const [variantName] of info.variantStyles) {
         const expectedProp = variantName.replace(toCamelCase(info.componentName), "");
         const propWithPrefix = `$${expectedProp.charAt(0).toLowerCase()}${expectedProp.slice(1)}`;
+        // Also check for "is" prefixed versions (e.g., $isActive matches Active)
+        const propWithIsPrefix = `$is${expectedProp}`;
 
-        if (propName === propWithPrefix || propName === expectedProp.toLowerCase()) {
+        if (
+          propName === propWithPrefix ||
+          propName === expectedProp.toLowerCase() ||
+          propName === propWithIsPrefix
+        ) {
           // Add variant style conditionally
           if (attr.value === null) {
             // Boolean prop (e.g., $primary)
             styleRefs.push(`styles.${variantName}`);
           } else if (attr.value && attr.value.type === "JSXExpressionContainer") {
             // Expression value - add conditional
-            const expr = j(attr.value.expression as unknown as string).toSource();
+            const exprNode = attr.value.expression;
+            const start = (exprNode as unknown as { start?: number }).start;
+            const end = (exprNode as unknown as { end?: number }).end;
+            const expr =
+              typeof start === "number" && typeof end === "number"
+                ? source.slice(start, end)
+                : "[expression]";
             styleRefs.push(`${expr} && styles.${variantName}`);
           }
           propsToRemove.push(propName);
@@ -1722,7 +2170,13 @@ function transformJSXUsage(
         if (cleanPropName.toLowerCase() === fnConfig.paramName.toLowerCase()) {
           // Add dynamic style function call
           if (attr.value?.type === "JSXExpressionContainer") {
-            const expr = j(attr.value.expression as unknown as string).toSource();
+            const exprNode = attr.value.expression;
+            const start = (exprNode as unknown as { start?: number }).start;
+            const end = (exprNode as unknown as { end?: number }).end;
+            const expr =
+              typeof start === "number" && typeof end === "number"
+                ? source.slice(start, end)
+                : "[expression]";
             dynamicStyleCalls.push(`styles.${fnName}(${expr})`);
           } else if (attr.value?.type === "StringLiteral") {
             dynamicStyleCalls.push(`styles.${fnName}("${attr.value.value}")`);
@@ -1732,38 +2186,73 @@ function transformJSXUsage(
       }
     }
 
-    // Apply attrs from attrsConfig
+    // Apply attrs from attrsConfig - collect attrs first, then add in correct order
     if (info.attrsConfig) {
-      // Add static attrs as JSX attributes
+      const attrsToAdd: JSXAttribute[] = [];
+
+      // Collect static attrs first
       for (const [key, value] of Object.entries(info.attrsConfig.staticAttrs)) {
         if (typeof value === "string") {
-          opening.attributes.unshift(j.jsxAttribute(j.jsxIdentifier(key), j.literal(value)));
+          attrsToAdd.push(j.jsxAttribute(j.jsxIdentifier(key), j.literal(value)));
         } else if (typeof value === "number") {
-          opening.attributes.unshift(
+          attrsToAdd.push(
             j.jsxAttribute(j.jsxIdentifier(key), j.jsxExpressionContainer(j.literal(value))),
           );
         } else if (typeof value === "boolean" && value) {
-          opening.attributes.unshift(j.jsxAttribute(j.jsxIdentifier(key), null));
+          attrsToAdd.push(j.jsxAttribute(j.jsxIdentifier(key), null));
         }
       }
 
-      // Handle dynamic attrs - need to check existing JSX props
+      // Collect dynamic attrs - check existing JSX props and apply computed values
       for (const dynamicAttr of info.attrsConfig.dynamicAttrs) {
-        // Find the corresponding JSX prop value
+        // Use the new conditionProp and truthyValue fields if available
+        if (dynamicAttr.conditionProp && dynamicAttr.truthyValue !== undefined) {
+          // Find if the condition prop is present in JSX
+          const conditionAttr = attributes.find(
+            (attr) =>
+              attr.type === "JSXAttribute" &&
+              attr.name.type === "JSXIdentifier" &&
+              attr.name.name === dynamicAttr.conditionProp,
+          );
+
+          if (conditionAttr && conditionAttr.type === "JSXAttribute") {
+            // Boolean prop is present (value is null for <Input $small />)
+            if (conditionAttr.value === null) {
+              // Apply the truthy value
+              if (typeof dynamicAttr.truthyValue === "number") {
+                attrsToAdd.push(
+                  j.jsxAttribute(
+                    j.jsxIdentifier(dynamicAttr.prop),
+                    j.jsxExpressionContainer(j.literal(dynamicAttr.truthyValue)),
+                  ),
+                );
+              } else if (typeof dynamicAttr.truthyValue === "string") {
+                attrsToAdd.push(
+                  j.jsxAttribute(
+                    j.jsxIdentifier(dynamicAttr.prop),
+                    j.literal(dynamicAttr.truthyValue),
+                  ),
+                );
+              }
+              propsToRemove.push(dynamicAttr.conditionProp);
+            }
+          }
+          // If condition prop is not present, the value is undefined (falsy case) - do nothing
+          continue;
+        }
+
+        // Fallback for legacy format without conditionProp
         for (const attr of attributes) {
           if (attr.type !== "JSXAttribute" || attr.name.type !== "JSXIdentifier") continue;
           const propName = attr.name.name;
 
-          // Check if this attr's expression references this prop
           if (dynamicAttr.expr.includes(propName)) {
-            // Add the attr with the prop value
             if (attr.value === null) {
               // Boolean prop - extract numeric value from ternary expression
-              // Simple case: props.$small ? 5 : undefined
               if (dynamicAttr.expr.includes("?") && dynamicAttr.expr.includes(":")) {
                 const match = dynamicAttr.expr.match(/\?\s*(\d+)\s*:/);
                 if (match) {
-                  opening.attributes.unshift(
+                  attrsToAdd.push(
                     j.jsxAttribute(
                       j.jsxIdentifier(dynamicAttr.prop),
                       j.jsxExpressionContainer(j.literal(parseInt(match[1]!, 10))),
@@ -1776,52 +2265,59 @@ function transformJSXUsage(
           }
         }
       }
+
+      // Add collected attrs at the beginning in correct order
+      opening.attributes.unshift(...attrsToAdd);
     }
 
-    // Remove variant/dynamic props
-    opening.attributes = opening.attributes.filter((attr) => {
-      if (attr.type !== "JSXAttribute" || attr.name.type !== "JSXIdentifier") return true;
-      return !propsToRemove.includes(attr.name.name);
-    });
+    // Skip style application if wrapper is generated - wrapper handles it
+    if (!info.needsWrapper) {
+      // Remove variant/dynamic props
+      opening.attributes = opening.attributes.filter((attr) => {
+        if (attr.type !== "JSXAttribute" || attr.name.type !== "JSXIdentifier") return true;
+        return !propsToRemove.includes(attr.name.name);
+      });
 
-    // Create stylex.props(...) spread
-    const allStyleRefs = [...styleRefs, ...dynamicStyleCalls];
-    const stylexArgs: Expression[] = allStyleRefs.map((ref) => {
-      if (ref.includes("&&")) {
-        // Parse the conditional expression
-        const [condition, style] = ref.split(" && ");
-        return j.logicalExpression(
-          "&&",
-          j.identifier(condition!.trim()),
-          j.identifier(style!.trim()),
-        ) as unknown as Expression;
-      }
-      // Check if it's a function call like styles.fnName("arg")
-      const fnCallMatch = ref.match(/^(styles\.\w+)\("([^"]+)"\)$/);
-      if (fnCallMatch) {
-        const [, fnPath, arg] = fnCallMatch;
-        const [obj, prop] = fnPath!.split(".");
-        return j.callExpression(j.memberExpression(j.identifier(obj!), j.identifier(prop!)), [
-          j.literal(arg!),
-        ]) as unknown as Expression;
-      }
-      return j.identifier(ref) as unknown as Expression;
-    });
-    const stylexPropsCall = j.callExpression(
-      j.memberExpression(j.identifier("stylex"), j.identifier("props")),
-      stylexArgs as unknown as Parameters<typeof j.callExpression>[1],
-    );
+      // Create stylex.props(...) spread
+      const allStyleRefs = [...styleRefs, ...dynamicStyleCalls];
+      const stylexArgs: Expression[] = allStyleRefs.map((ref) => {
+        if (ref.includes("&&")) {
+          // Parse the conditional expression
+          const [condition, style] = ref.split(" && ");
+          return j.logicalExpression(
+            "&&",
+            j.identifier(condition!.trim()),
+            j.identifier(style!.trim()),
+          ) as unknown as Expression;
+        }
+        // Check if it's a function call like styles.fnName("arg")
+        const fnCallMatch = ref.match(/^(styles\.\w+)\("([^"]+)"\)$/);
+        if (fnCallMatch) {
+          const [, fnPath, arg] = fnCallMatch;
+          const [obj, prop] = fnPath!.split(".");
+          return j.callExpression(j.memberExpression(j.identifier(obj!), j.identifier(prop!)), [
+            j.literal(arg!),
+          ]) as unknown as Expression;
+        }
+        return j.identifier(ref) as unknown as Expression;
+      });
+      const stylexPropsCall = j.callExpression(
+        j.memberExpression(j.identifier("stylex"), j.identifier("props")),
+        stylexArgs as unknown as Parameters<typeof j.callExpression>[1],
+      );
 
-    const spreadAttr = j.jsxSpreadAttribute(stylexPropsCall);
+      const spreadAttr = j.jsxSpreadAttribute(stylexPropsCall);
 
-    // Add the spread attribute
-    opening.attributes.push(spreadAttr);
+      // Add the spread attribute
+      opening.attributes.push(spreadAttr);
+    }
 
     // Apply selector-lowered rules to JSX children (initial support: direct children)
     if (info.jsxRewriteRules.length > 0) {
-      const directChildElements = path.node.children.filter(
-        (c) => c.type === "JSXElement",
-      ) as Array<(typeof path.node.children)[number] & { type: "JSXElement" }>;
+      const children = path.node.children ?? [];
+      const directChildElements = children.filter(
+        (c): c is import("jscodeshift").JSXElement => c.type === "JSXElement",
+      );
 
       // Apply `child` to all direct children, and `childNotFirst` to all except first
       for (let i = 0; i < directChildElements.length; i++) {
@@ -1845,7 +2341,7 @@ function transformJSXUsage(
 
         // Try to merge into existing stylex.props(...) spread if present
         const existingSpread = childOpening.attributes.find(
-          (a) =>
+          (a: (typeof childOpening.attributes)[number]) =>
             a.type === "JSXSpreadAttribute" &&
             a.argument.type === "CallExpression" &&
             a.argument.callee.type === "MemberExpression" &&
@@ -1875,7 +2371,125 @@ function transformJSXUsage(
         }
       }
     }
+
+    // Apply descendant styled-component rewrite rules (e.g., `${Icon}` blocks inside `${Button}`).
+    const descendantRules = info.jsxRewriteRules.filter(
+      (r) => r.type === "descendant-styled-component",
+    ) as Array<
+      Extract<StyleInfo["jsxRewriteRules"][number], { type: "descendant-styled-component" }>
+    >;
+
+    if (descendantRules.length > 0) {
+      const seen = new Set<string>();
+      for (const rule of descendantRules) {
+        const key = `${rule.targetComponentName}::${rule.styleName}`;
+        if (seen.has(key)) continue;
+        seen.add(key);
+        applyStyleToDescendantComponents(j, path.node, rule.targetComponentName, rule.styleName);
+      }
+    }
   });
+}
+
+function applyStyleToDescendantComponents(
+  j: JSCodeshift,
+  rootEl: import("jscodeshift").JSXElement,
+  targetComponentName: string,
+  styleName: string,
+): void {
+  const targetStyleKey = toCamelCase(targetComponentName);
+
+  function hasBaseStyleApplied(opening: import("jscodeshift").JSXOpeningElement): boolean {
+    const attrs = opening.attributes ?? [];
+    for (const a of attrs) {
+      if (a.type !== "JSXSpreadAttribute") continue;
+      const arg = a.argument;
+      if (arg.type !== "CallExpression") continue;
+      const callee = arg.callee;
+      if (
+        callee.type === "MemberExpression" &&
+        callee.object.type === "Identifier" &&
+        callee.object.name === "stylex" &&
+        callee.property.type === "Identifier" &&
+        callee.property.name === "props"
+      ) {
+        for (const callArg of arg.arguments) {
+          if (callArg.type !== "MemberExpression") continue;
+          if (
+            callArg.object.type === "Identifier" &&
+            callArg.object.name === "styles" &&
+            callArg.property.type === "Identifier" &&
+            callArg.property.name === targetStyleKey
+          ) {
+            return true;
+          }
+        }
+      }
+    }
+    return false;
+  }
+
+  function ensureStyleApplied(opening: import("jscodeshift").JSXOpeningElement): void {
+    if (!opening.attributes) opening.attributes = [];
+
+    const existingSpread = opening.attributes.find(
+      (a) =>
+        a.type === "JSXSpreadAttribute" &&
+        a.argument.type === "CallExpression" &&
+        a.argument.callee.type === "MemberExpression" &&
+        a.argument.callee.object.type === "Identifier" &&
+        a.argument.callee.object.name === "stylex" &&
+        a.argument.callee.property.type === "Identifier" &&
+        a.argument.callee.property.name === "props",
+    );
+
+    const extraArg = j.memberExpression(j.identifier("styles"), j.identifier(styleName));
+
+    if (existingSpread && existingSpread.type === "JSXSpreadAttribute") {
+      const call = existingSpread.argument;
+      if (call.type === "CallExpression") {
+        const alreadyHas = call.arguments.some((arg) => {
+          if (arg.type !== "MemberExpression") return false;
+          return (
+            arg.object.type === "Identifier" &&
+            arg.object.name === "styles" &&
+            arg.property.type === "Identifier" &&
+            arg.property.name === styleName
+          );
+        });
+        if (!alreadyHas) {
+          call.arguments.push(
+            extraArg as unknown as Parameters<typeof j.callExpression>[1][number],
+          );
+        }
+      }
+      return;
+    }
+
+    const propsCall = j.callExpression(
+      j.memberExpression(j.identifier("stylex"), j.identifier("props")),
+      [extraArg as unknown as Parameters<typeof j.callExpression>[1][number]],
+    );
+    opening.attributes.push(j.jsxSpreadAttribute(propsCall));
+  }
+
+  function visit(node: import("jscodeshift").JSXElement): void {
+    for (const child of node.children ?? []) {
+      if (child.type !== "JSXElement") continue;
+      const opening = child.openingElement;
+
+      if (opening.name.type === "JSXIdentifier") {
+        // Match before conversion (<Icon />) OR after conversion (element with styles.icon already applied).
+        if (opening.name.name === targetComponentName || hasBaseStyleApplied(opening)) {
+          ensureStyleApplied(opening);
+        }
+      }
+
+      visit(child);
+    }
+  }
+
+  visit(rootEl);
 }
 
 /**
@@ -1926,6 +2540,76 @@ function detectWarningPatterns(
         "Styled-components specificity hacks like `&&` / `&&&` are not representable in StyleX. The output may not preserve selector specificity and may require manual adjustments.",
     });
   }
+}
+
+/**
+ * Generate wrapper components for styled components that need them
+ */
+function generateWrapperComponents(j: JSCodeshift, styleInfos: StyleInfo[]): VariableDeclaration[] {
+  const wrappers: VariableDeclaration[] = [];
+
+  for (const info of styleInfos) {
+    if (!info.needsWrapper) continue;
+
+    const { componentName, baseElement, transientProps, isExtending, extendsFrom } = info;
+    const styleName = toCamelCase(componentName);
+
+    // Build props destructure
+    const propsDestructure: string[] = [];
+    for (const prop of transientProps) {
+      propsDestructure.push(prop.name);
+    }
+    propsDestructure.push("children");
+    propsDestructure.push("...props");
+
+    // Build props type
+    const propsTypeParts: string[] = [];
+    for (const prop of transientProps) {
+      propsTypeParts.push(`${prop.name}${prop.optional ? "?" : ""}: ${prop.type}`);
+    }
+    propsTypeParts.push("children?: React.ReactNode");
+
+    // Build style expression
+    const styleArgs: string[] = [];
+
+    // If extending, add base styles
+    if (isExtending && extendsFrom) {
+      styleArgs.push(`styles.${toCamelCase(extendsFrom)}`);
+    }
+    styleArgs.push(`styles.${styleName}`);
+
+    // Add conditional styles for transient props
+    for (const prop of transientProps) {
+      if (prop.truthyStyleName) {
+        styleArgs.push(`${prop.name} && ${prop.truthyStyleName}`);
+      }
+    }
+
+    const styleExpr = `{...stylex.props(${styleArgs.join(", ")})}`;
+
+    // Determine element to render
+    const isComponent = baseElement.charAt(0) === baseElement.charAt(0).toUpperCase();
+    const element = isComponent ? baseElement : baseElement;
+
+    // Generate the component
+    const componentCode = `const ${componentName} = ({ ${propsDestructure.join(", ")} }: { ${propsTypeParts.join("; ")} }) => (
+  <${element} ${styleExpr} {...props}>
+    {children}
+  </${element}>
+);`;
+
+    try {
+      const parsed = j(componentCode);
+      const decl = parsed.find(j.VariableDeclaration).at(0);
+      if (decl.length > 0) {
+        wrappers.push(decl.get().node as VariableDeclaration);
+      }
+    } catch {
+      // Skip if parsing fails - complex components may need manual handling
+    }
+  }
+
+  return wrappers;
 }
 
 // Utility functions

@@ -39,17 +39,113 @@ const inlineValuesAdapter: Adapter = {
     return [];
   },
 };
+
+// Fixture-specific adapters that resolve CSS vars to token imports
+
+/**
+ * Converts kebab-case CSS var name to camelCase symbol name
+ * e.g., "color-primary" -> "colorPrimary"
+ */
+function cssVarToCamelCase(name: string): string {
+  return name.replace(/-([a-z])/g, (_, letter) => letter.toUpperCase());
+}
+
+/**
+ * Adapter for css-variables fixture
+ * Maps CSS vars like --color-primary to vars.colorPrimary
+ */
+const cssVariablesAdapter: Adapter = {
+  transformValue({ path }) {
+    return `'var(--${path.replace(/\./g, "-")})'`;
+  },
+  getImports() {
+    return [];
+  },
+  getDeclarations() {
+    return [];
+  },
+  resolveCssVariable(name: string, fallback?: string) {
+    // Map CSS vars to their respective modules
+    // vars: color-primary, color-secondary, spacing-sm, spacing-md, spacing-lg, border-radius
+    // textVars: text-color, font-size, line-height (these have fallbacks)
+    const varsMapping: Record<string, string> = {
+      "color-primary": "vars.colorPrimary",
+      "color-secondary": "vars.colorSecondary",
+      "spacing-sm": "vars.spacingSm",
+      "spacing-md": "vars.spacingMd",
+      "spacing-lg": "vars.spacingLg",
+      "border-radius": "vars.borderRadius",
+    };
+    const textVarsMapping: Record<string, string> = {
+      "text-color": "textVars.textColor",
+      "font-size": "textVars.fontSize",
+      "line-height": "textVars.lineHeight",
+    };
+
+    if (varsMapping[name]) {
+      return {
+        code: varsMapping[name]!,
+        imports: ["import { vars, textVars } from './css-variables.stylex';"],
+      };
+    }
+    if (textVarsMapping[name]) {
+      return {
+        code: textVarsMapping[name]!,
+        imports: ["import { vars, textVars } from './css-variables.stylex';"],
+      };
+    }
+
+    // Keep original for unknown vars
+    return undefined;
+  },
+};
+
+/**
+ * Adapter for css-calc fixture
+ * Maps CSS vars like --base-size to calcVars.baseSize
+ */
+const cssCalcAdapter: Adapter = {
+  transformValue({ path }) {
+    return `'var(--${path.replace(/\./g, "-")})'`;
+  },
+  getImports() {
+    return [];
+  },
+  getDeclarations() {
+    return [];
+  },
+  resolveCssVariable(name: string) {
+    // Map --base-size to calcVars.baseSize
+    // Note: The resolution logic will wrap in ${} when creating template literals
+    if (name === "base-size") {
+      return {
+        code: "calcVars.baseSize",
+        imports: ["import { calcVars } from './css-calc.stylex';"],
+      };
+    }
+    return undefined;
+  },
+};
+
+/**
+ * Mapping of fixture names to their required adapters
+ */
+const fixtureAdapters: Record<string, Adapter> = {
+  "css-variables": cssVariablesAdapter,
+  "css-calc": cssCalcAdapter,
+};
+
 const testCasesDir = join(__dirname, "..", "test-cases");
 const j = jscodeshift.withParser("tsx");
 
 function getTestCases(): string[] {
   const files = readdirSync(testCasesDir);
-  // Exclude _unsupported-* files from main test cases
+  // Exclude _unsupported.* files from main test cases
   const inputFiles = files.filter(
-    (f) => f.endsWith(".input.tsx") && !f.startsWith("_unsupported-"),
+    (f) => f.endsWith(".input.tsx") && !f.startsWith("_unsupported."),
   );
   const outputFiles = files.filter(
-    (f) => f.endsWith(".output.tsx") && !f.startsWith("_unsupported-"),
+    (f) => f.endsWith(".output.tsx") && !f.startsWith("_unsupported."),
   );
 
   const inputNames = new Set(inputFiles.map((f) => f.replace(".input.tsx", "")));
@@ -266,7 +362,9 @@ describe("transform output comparison", () => {
 
   it.each(testCases)("%s", async (name) => {
     const { input, output } = readTestCase(name);
-    const result = runTransform(input);
+    // Use fixture-specific adapter if available, otherwise default
+    const adapter = fixtureAdapters[name] ?? defaultAdapter;
+    const result = runTransform(input, { adapter });
 
     // Transform must produce a change - no bailing allowed
     expect(await normalizeCode(result)).not.toEqual(await normalizeCode(input));
