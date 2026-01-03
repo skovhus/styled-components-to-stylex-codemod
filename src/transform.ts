@@ -647,6 +647,8 @@ export function transformWithWarnings(
       propAdjacent: string;
       propAfter?: string;
     };
+    // Leading comments (JSDoc, line comments) from the original styled component declaration
+    leadingComments?: any[];
   };
 
   const styledDecls: StyledDecl[] = [];
@@ -857,6 +859,21 @@ export function transformWithWarnings(
     };
   };
 
+  /**
+   * Extract leading comments from the parent VariableDeclaration if it has a single declarator.
+   * This captures JSDoc and line comments for preservation in the output.
+   */
+  const getLeadingComments = (declaratorPath: any): any[] | undefined => {
+    const parentPath = declaratorPath.parentPath;
+    if (!parentPath || parentPath.node?.type !== "VariableDeclaration") return;
+    // Only capture comments if this is the sole declarator (const X = ...; not const X = ..., Y = ...;)
+    if (parentPath.node.declarations?.length !== 1) return;
+    const comments = parentPath.node.comments ?? parentPath.node.leadingComments;
+    if (!comments || !Array.isArray(comments) || comments.length === 0) return;
+    // Only capture leading comments
+    return comments.filter((c: any) => c.leading !== false);
+  };
+
   // Collect: const X = styled.h1`...`;
   root
     .find(j.VariableDeclarator, {
@@ -867,6 +884,7 @@ export function transformWithWarnings(
       const init = p.node.init;
       if (!init || init.type !== "TaggedTemplateExpression") return;
       if (id.type !== "Identifier") return;
+      const leadingComments = getLeadingComments(p);
 
       const tag = init.tag;
       // styled.h1
@@ -889,6 +907,7 @@ export function transformWithWarnings(
           rules,
           templateExpressions: parsed.slots.map((s) => s.expression),
           rawCss: parsed.rawCss,
+          ...(leadingComments ? { leadingComments } : {}),
         });
         return;
       }
@@ -930,6 +949,7 @@ export function transformWithWarnings(
           ...(attrsInfo ? { attrsInfo } : {}),
           ...(shouldForwardProp ? { shouldForwardProp } : {}),
           ...(withConfigMeta ? { withConfig: withConfigMeta } : {}),
+          ...(leadingComments ? { leadingComments } : {}),
         });
         return;
       }
@@ -956,6 +976,7 @@ export function transformWithWarnings(
           rules,
           templateExpressions: parsed.slots.map((s) => s.expression),
           rawCss: parsed.rawCss,
+          ...(leadingComments ? { leadingComments } : {}),
         });
       }
 
@@ -988,6 +1009,7 @@ export function transformWithWarnings(
           rawCss: parsed.rawCss,
           ...(shouldForwardProp ? { shouldForwardProp } : {}),
           ...(withConfigMeta ? { withConfig: withConfigMeta } : {}),
+          ...(leadingComments ? { leadingComments } : {}),
         });
       }
     });
@@ -1002,6 +1024,7 @@ export function transformWithWarnings(
       const id = p.node.id;
       const init = p.node.init;
       if (id.type !== "Identifier") return;
+      const leadingComments = getLeadingComments(p);
       if (!init || init.type !== "CallExpression") return;
       if (init.callee.type !== "MemberExpression") return;
       if (init.callee.object.type !== "Identifier") return;
@@ -1100,6 +1123,7 @@ export function transformWithWarnings(
               needsWrapperComponent: true,
             }
           : {}),
+        ...(leadingComments ? { leadingComments } : {}),
       });
     });
 
@@ -2364,21 +2388,39 @@ export function transformWithWarnings(
     for (const [k, v] of next.entries()) resolvedStyleObjects.set(k, v);
   }
 
+  // Build a map from styleKey to leadingComments for comment preservation
+  const styleKeyToComments = new Map<string, any[]>();
+  for (const decl of styledDecls) {
+    if (decl.leadingComments && decl.leadingComments.length > 0) {
+      styleKeyToComments.set(decl.styleKey, decl.leadingComments);
+    }
+  }
+
   // Insert `const styles = stylex.create(...)` near top (after imports)
   const stylesDecl = j.variableDeclaration("const", [
     j.variableDeclarator(
       j.identifier("styles"),
       j.callExpression(j.memberExpression(j.identifier("stylex"), j.identifier("create")), [
         j.objectExpression(
-          [...resolvedStyleObjects.entries()].map(([k, v]) =>
-            j.property(
+          [...resolvedStyleObjects.entries()].map(([k, v]) => {
+            const prop = j.property(
               "init",
               j.identifier(k),
               v && typeof v === "object" && !isAstNode(v)
                 ? objectToAst(j, v as Record<string, unknown>)
                 : literalToAst(j, v),
-            ),
-          ),
+            );
+            // Attach leading comments (JSDoc, line comments) from original styled component
+            const comments = styleKeyToComments.get(k);
+            if (comments && comments.length > 0) {
+              (prop as any).comments = comments.map((c: any) => ({
+                ...c,
+                leading: true,
+                trailing: false,
+              }));
+            }
+            return prop;
+          }),
         ),
       ]),
     ),
