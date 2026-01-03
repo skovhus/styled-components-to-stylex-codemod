@@ -13,7 +13,7 @@ const styles = stylex.create({
     },
   },
   inputPadding: (padding: string) => ({
-    padding: padding,
+    padding,
   }),
 });
 
