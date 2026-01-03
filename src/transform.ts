@@ -1,6 +1,6 @@
 import type { API, FileInfo, Options } from "jscodeshift";
-import type { Hook, DynamicHandler, Adapter } from "./hook.js";
-import { builtinHandlers, runHandlers, normalizeHook, adapterToHook, isAdapter } from "./hook.js";
+import type { Hook, DynamicHandler } from "./hook.js";
+import { builtinHandlers, runHandlers, normalizeHook } from "./hook.js";
 import { parseStyledTemplateLiteral } from "./styledCss.js";
 import {
   cssDeclarationToStylexDeclarations,
@@ -37,16 +37,6 @@ export interface TransformOptions extends Options {
    * Controls value resolution, imports, declarations, and custom handlers.
    */
   hook?: Hook;
-
-  /**
-   * @deprecated Use hook instead
-   */
-  adapter?: Adapter;
-
-  /**
-   * @deprecated Use hook.handlers instead
-   */
-  handlers?: DynamicHandler[];
 }
 
 /**
@@ -85,15 +75,8 @@ export function transformWithWarnings(
   const root = j(file.source);
   const warnings: TransformWarning[] = [];
 
-  // Normalize hook from various input shapes (hook, legacy adapter, etc.)
-  const rawHook: Hook | undefined =
-    options.hook ??
-    (options.adapter && isAdapter(options.adapter) ? adapterToHook(options.adapter) : undefined);
-  const hook = normalizeHook(rawHook);
-
-  // Combine user handlers with built-in handlers (user handlers run first)
-  const userHandlers = options.handlers ?? hook.handlers;
-  const allHandlers: DynamicHandler[] = [...userHandlers, ...builtinHandlers()];
+  const hook = normalizeHook(options.hook);
+  const allHandlers: DynamicHandler[] = [...hook.handlers, ...builtinHandlers()];
 
   let hasChanges = false;
 
@@ -104,6 +87,26 @@ export function transformWithWarnings(
 
   if (styledImports.length === 0) {
     return { code: null, warnings: [] };
+  }
+
+  // If ThemeProvider is used, skip transforming this file entirely.
+  // Themed styled-components usage typically needs a project-specific strategy.
+  const themeProviderImportForSkip = styledImports
+    .find(j.ImportSpecifier, {
+      imported: { type: "Identifier", name: "ThemeProvider" },
+    })
+    .nodes()[0];
+  const themeProviderLocalForSkip =
+    themeProviderImportForSkip?.local?.type === "Identifier"
+      ? themeProviderImportForSkip.local.name
+      : themeProviderImportForSkip?.imported?.type === "Identifier"
+        ? themeProviderImportForSkip.imported.name
+        : undefined;
+  if (themeProviderLocalForSkip) {
+    const used = root.find(j.JSXIdentifier, { name: themeProviderLocalForSkip }).size() > 0;
+    if (used) {
+      return { code: null, warnings: [] };
+    }
   }
 
   // Check for createGlobalStyle usage
@@ -305,6 +308,7 @@ export function transformWithWarnings(
     base: { kind: "intrinsic"; tagName: string } | { kind: "component"; ident: string };
     styleKey: string;
     extendsStyleKey?: string;
+    variantStyleKeys?: Record<string, string>; // conditionProp -> styleKey
     rules: CssRuleIR[];
     templateExpressions: unknown[];
     preResolvedStyle?: Record<string, unknown>;
@@ -498,19 +502,10 @@ export function transformWithWarnings(
     const perPropPseudo: Record<string, Record<string, unknown>> = {};
     const perPropMedia: Record<string, Record<string, unknown>> = {};
     const nestedSelectors: Record<string, Record<string, unknown>> = {};
-
-    const baseRule = decl.rules.find((r) => r.selector === "&" && r.atRuleStack.length === 0);
-    if (baseRule) {
-      for (const d of baseRule.declarations) {
-        for (const out of cssDeclarationToStylexDeclarations(d)) {
-          styleObj[out.prop] = cssValueToJs(out.value);
-        }
-      }
-    }
+    const variantBuckets = new Map<string, Record<string, unknown>>();
+    const variantStyleKeys: Record<string, string> = {};
 
     for (const rule of decl.rules) {
-      if (rule.selector === "&" && rule.atRuleStack.length === 0) continue;
-
       // Media query at-rules: represent as prop maps `prop: { default, "@media ...": value }`
       const media = rule.atRuleStack.find((a) => a.startsWith("@media"));
 
@@ -536,7 +531,7 @@ export function transformWithWarnings(
                 kind: "declaration",
                 selector: rule.selector,
                 atRuleStack: rule.atRuleStack,
-                property: d.property,
+                ...(d.property ? { property: d.property } : {}),
                 valueRaw: d.valueRaw,
               },
               component:
@@ -575,6 +570,22 @@ export function transformWithWarnings(
             // Treat as direct JS expression
             for (const out of cssDeclarationToStylexDeclarations(d)) {
               styleObj[out.prop] = j.template.expression`${j.identifier(res.result.value)}` as any;
+            }
+            continue;
+          }
+
+          if (res.kind === "resolved" && res.result.type === "splitVariants") {
+            const neg = res.result.variants.find((v) => v.when.startsWith("!"));
+            const pos = res.result.variants.find((v) => !v.when.startsWith("!"));
+
+            if (neg) Object.assign(styleObj, neg.style);
+            if (pos) {
+              const when = pos.when.replace(/^!/, "");
+              variantBuckets.set(when, {
+                ...variantBuckets.get(when),
+                ...pos.style,
+              });
+              variantStyleKeys[when] ??= `${decl.styleKey}${toSuffixFromProp(when)}`;
             }
             continue;
           }
@@ -642,6 +653,13 @@ export function transformWithWarnings(
     }
 
     resolvedStyleObjects.set(decl.styleKey, styleObj);
+    for (const [when, obj] of variantBuckets.entries()) {
+      const key = variantStyleKeys[when]!;
+      resolvedStyleObjects.set(key, obj);
+    }
+    if (Object.keys(variantStyleKeys).length) {
+      decl.variantStyleKeys = variantStyleKeys;
+    }
   }
 
   // Remove styled-components import(s)
@@ -788,12 +806,49 @@ export function transformWithWarnings(
         }
 
         // Insert {...stylex.props(styles.key)} after structural attrs like href/type/size (matches fixtures).
-        const styleArgs = [
+        const styleArgs: any[] = [
           ...(decl.extendsStyleKey
             ? [j.memberExpression(j.identifier("styles"), j.identifier(decl.extendsStyleKey))]
             : []),
           j.memberExpression(j.identifier("styles"), j.identifier(decl.styleKey)),
         ];
+
+        const variantKeys = decl.variantStyleKeys ?? {};
+        const variantProps = new Set(Object.keys(variantKeys));
+        const keptAfterVariants: typeof rest = [];
+        for (const attr of rest) {
+          if (attr.type !== "JSXAttribute" || attr.name.type !== "JSXIdentifier") {
+            keptAfterVariants.push(attr);
+            continue;
+          }
+          const n = attr.name.name;
+          if (!variantProps.has(n)) {
+            keptAfterVariants.push(attr);
+            continue;
+          }
+
+          const variantStyleKey = variantKeys[n]!;
+          if (!attr.value) {
+            // <X $prop>
+            styleArgs.push(
+              j.memberExpression(j.identifier("styles"), j.identifier(variantStyleKey)),
+            );
+            continue;
+          }
+          if (attr.value.type === "JSXExpressionContainer") {
+            // <X $prop={expr}>
+            styleArgs.push(
+              j.logicalExpression(
+                "&&",
+                attr.value.expression as any,
+                j.memberExpression(j.identifier("styles"), j.identifier(variantStyleKey)),
+              ),
+            );
+            continue;
+          }
+          // Any other value shape: drop the prop without attempting to apply a variant.
+        }
+
         opening.attributes = [
           ...leading,
           j.jsxSpreadAttribute(
@@ -801,7 +856,7 @@ export function transformWithWarnings(
               ...styleArgs,
             ]),
           ),
-          ...rest,
+          ...keptAfterVariants,
         ];
       });
   }
@@ -856,14 +911,14 @@ export type {
   DynamicNode,
   HandlerContext,
   HandlerResult,
-  // Backwards compatibility
-  Adapter,
-  AdapterContext,
-  DynamicNodePlugin,
-  PluginContext,
-  PluginResult,
 } from "./hook.js";
-export { defaultHook, defaultResolveValue, defineHook, defaultAdapter } from "./hook.js";
+export {
+  defaultHook,
+  defaultResolveValue,
+  defineHook,
+  defineVarsHook,
+  inlineValuesHook,
+} from "./hook.js";
 
 function toStyleKey(name: string): string {
   return name.charAt(0).toLowerCase() + name.slice(1);
@@ -924,6 +979,13 @@ function parseSimplePseudo(selector: string): string | null {
 function parsePseudoElement(selector: string): string | null {
   const m = selector.match(/^&(::[a-zA-Z-]+)$/);
   return m ? m[1]! : null;
+}
+
+function toSuffixFromProp(propName: string): string {
+  // `$isActive` => `IsActive`, `primary` => `Primary`
+  const raw = propName.startsWith("$") ? propName.slice(1) : propName;
+  if (!raw) return "Variant";
+  return raw.charAt(0).toUpperCase() + raw.slice(1);
 }
 
 function isJsxElementNamed(name: string) {

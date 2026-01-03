@@ -11,6 +11,7 @@ import {
   getMemberPathFromIdentifier,
   isArrowFunctionExpression,
 } from "./utils.js";
+import { cssDeclarationToStylexDeclarations } from "./ir.js";
 
 // ────────────────────────────────────────────────────────────────────────────
 // Value Resolution
@@ -144,32 +145,6 @@ export interface Hook {
 }
 
 // ────────────────────────────────────────────────────────────────────────────
-// Backwards Compatibility (deprecated, will be removed)
-// ────────────────────────────────────────────────────────────────────────────
-
-/** @deprecated Use Hook instead */
-export interface Adapter {
-  transformValue(context: ValueContext): string;
-  getImports(): string[];
-  getDeclarations(): string[];
-}
-
-/** @deprecated Use Hook instead */
-export type AdapterContext = ValueContext;
-
-/** @deprecated Use DynamicHandler instead */
-export type DynamicNodePlugin = DynamicHandler;
-
-/** @deprecated Use HandlerContext instead */
-export type PluginContext = HandlerContext;
-
-/** @deprecated Use HandlerResult instead */
-export type PluginResult = HandlerResult;
-
-/** @deprecated Use HandlerWarning instead */
-export type PluginWarning = HandlerWarning;
-
-// ────────────────────────────────────────────────────────────────────────────
 // Default Value Resolver
 // ────────────────────────────────────────────────────────────────────────────
 
@@ -211,39 +186,6 @@ export const inlineValuesHook: Hook = {
   resolveValue({ defaultValue }) {
     return defaultValue ? `'${defaultValue}'` : "''";
   },
-};
-
-// ────────────────────────────────────────────────────────────────────────────
-// Backwards Compatibility Adapters (deprecated)
-// ────────────────────────────────────────────────────────────────────────────
-
-/** @deprecated Use defaultHook instead */
-export const defaultAdapter: Adapter = {
-  transformValue: defaultResolveValue,
-  getImports: () => [],
-  getDeclarations: () => [],
-};
-
-/** @deprecated Use defineVarsHook instead */
-export const defineVarsAdapter: Adapter = {
-  transformValue({ path }) {
-    const varName = path
-      .split(".")
-      .map((part, i) => (i === 0 ? part : part.charAt(0).toUpperCase() + part.slice(1)))
-      .join("");
-    return `themeVars.${varName}`;
-  },
-  getImports: () => ["import { themeVars } from './tokens.stylex';"],
-  getDeclarations: () => [],
-};
-
-/** @deprecated Use inlineValuesHook instead */
-export const inlineValuesAdapter: Adapter = {
-  transformValue({ defaultValue }) {
-    return defaultValue ? `'${defaultValue}'` : "''";
-  },
-  getImports: () => [],
-  getDeclarations: () => [],
 };
 
 // ────────────────────────────────────────────────────────────────────────────
@@ -295,10 +237,50 @@ export const conditionalValueHandler: DynamicHandler = {
     return {
       type: "splitVariants",
       variants: [
-        { nameHint: "truthy", when: whenExpr, style: { [node.css.property]: cons } },
-        { nameHint: "falsy", when: `!${whenExpr}`, style: { [node.css.property]: alt } },
+        {
+          nameHint: "truthy",
+          when: whenExpr,
+          style: styleFromSingleDeclaration(node.css.property, cons),
+        },
+        {
+          nameHint: "falsy",
+          when: `!${whenExpr}`,
+          style: styleFromSingleDeclaration(node.css.property, alt),
+        },
       ],
     };
+  },
+};
+
+export const conditionalCssBlockHandler: DynamicHandler = {
+  name: "conditional-css-block",
+  handle(node) {
+    const expr = node.expr;
+    if (!isArrowFunctionExpression(expr)) return null;
+    const paramName = getArrowFnSingleParamName(expr);
+    if (!paramName) return null;
+
+    // Support patterns like:
+    //   ${(props) => props.$upsideDown && "transform: rotate(180deg);"}
+    if (expr.body.type === "LogicalExpression" && expr.body.operator === "&&") {
+      const { left, right } = expr.body;
+      const testPath =
+        left.type === "MemberExpression" ? getMemberPathFromIdentifier(left, paramName) : null;
+      if (!testPath || testPath.length !== 1) return null;
+
+      const cssText = literalToString(right);
+      if (cssText == null) return null;
+
+      const style = parseCssDeclarationBlock(cssText);
+      if (!style) return null;
+
+      return {
+        type: "splitVariants",
+        variants: [{ nameHint: "truthy", when: testPath[0]!, style }],
+      };
+    }
+
+    return null;
   },
 };
 
@@ -323,18 +305,20 @@ export const propAccessHandler: DynamicHandler = {
       type: "emitStyleFunction",
       nameHint,
       params: "value: string",
-      body: `{ ${cssProp}: value }`,
+      body: `{ ${Object.keys(styleFromSingleDeclaration(cssProp, "value"))[0]}: value }`,
       call: propName,
     };
   },
 };
 
 export function builtinHandlers(): DynamicHandler[] {
-  return [themeAccessHandler, conditionalValueHandler, propAccessHandler];
+  return [
+    themeAccessHandler,
+    conditionalValueHandler,
+    conditionalCssBlockHandler,
+    propAccessHandler,
+  ];
 }
-
-/** @deprecated Use builtinHandlers instead */
-export const builtinPlugins = builtinHandlers;
 
 // ────────────────────────────────────────────────────────────────────────────
 // Runtime
@@ -353,9 +337,6 @@ export function runHandlers(
   return { kind: "unhandled" };
 }
 
-/** @deprecated Use runHandlers instead */
-export const runDynamicNodePlugins = runHandlers;
-
 // ────────────────────────────────────────────────────────────────────────────
 // Hook Normalization
 // ────────────────────────────────────────────────────────────────────────────
@@ -370,30 +351,6 @@ export function normalizeHook(hook: Hook | undefined): Required<Hook> {
     declarations: hook?.declarations ?? [],
     handlers: hook?.handlers ?? [],
   };
-}
-
-/**
- * Convert a legacy Adapter to the new Hook interface.
- */
-export function adapterToHook(adapter: Adapter): Hook {
-  return {
-    resolveValue: (ctx) => adapter.transformValue(ctx),
-    imports: adapter.getImports(),
-    declarations: adapter.getDeclarations(),
-  };
-}
-
-/**
- * Check if an object looks like a legacy Adapter.
- */
-export function isAdapter(x: unknown): x is Adapter {
-  if (!x || typeof x !== "object") return false;
-  const a = x as Record<string, unknown>;
-  return (
-    typeof a.transformValue === "function" &&
-    typeof a.getImports === "function" &&
-    typeof a.getDeclarations === "function"
-  );
 }
 
 /**
@@ -442,6 +399,68 @@ function literalToStaticValue(node: unknown): string | number | null {
   return null;
 }
 
+function literalToString(node: unknown): string | null {
+  const v = literalToStaticValue(node);
+  return typeof v === "string" ? v : null;
+}
+
 function sanitizeIdentifier(s: string): string {
   return s.replace(/[^a-zA-Z0-9_]/g, "_");
+}
+
+function styleFromSingleDeclaration(
+  property: string,
+  value: string | number,
+): Record<string, unknown> {
+  const valueRaw = typeof value === "number" ? String(value) : value;
+  const decl = {
+    property,
+    value: { kind: "static" as const, value: valueRaw },
+    important: false,
+    valueRaw,
+  };
+  const style: Record<string, unknown> = {};
+  for (const out of cssDeclarationToStylexDeclarations(decl)) {
+    // Keep numbers as numbers if the source literal was numeric (e.g. opacity: 1)
+    style[out.prop] = typeof value === "number" ? value : coerceStaticCss(out.value);
+  }
+  return style;
+}
+
+function parseCssDeclarationBlock(cssText: string): Record<string, unknown> | null {
+  // Very small parser for blocks like `transform: rotate(180deg); color: red;`
+  // This is intentionally conservative: only supports static values.
+  const chunks = cssText
+    .split(";")
+    .map((c) => c.trim())
+    .filter(Boolean);
+  if (chunks.length === 0) return null;
+
+  const style: Record<string, unknown> = {};
+  for (const chunk of chunks) {
+    const m = chunk.match(/^([^:]+):([\s\S]+)$/);
+    if (!m) return null;
+    const property = m[1]!.trim();
+    const valueRaw = m[2]!.trim();
+    const decl = {
+      property,
+      value: { kind: "static" as const, value: valueRaw },
+      important: false,
+      valueRaw,
+    };
+    for (const out of cssDeclarationToStylexDeclarations(decl)) {
+      style[out.prop] = coerceStaticCss(out.value);
+    }
+  }
+  return style;
+}
+
+function coerceStaticCss(value: unknown): unknown {
+  if (!value || typeof value !== "object") return value;
+  const v = value as { kind?: string; value?: unknown };
+  if (v.kind === "static" && typeof v.value === "string") {
+    if (/^-?\d+(\.\d+)?$/.test(v.value)) return Number(v.value);
+    return v.value;
+  }
+  return value;
 }

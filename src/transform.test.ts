@@ -6,48 +6,38 @@ import { join, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
 import { execSync } from "node:child_process";
 import { format } from "oxfmt";
-import transform, { transformWithWarnings, defaultAdapter } from "./transform.js";
-import type { Adapter, TransformOptions } from "./transform.js";
+import transform, {
+  transformWithWarnings,
+  defineHook,
+  defaultHook,
+  defineVarsHook,
+  inlineValuesHook,
+} from "./transform.js";
+import type { TransformOptions } from "./transform.js";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
-// Test adapters - these are examples of custom adapters
-const defineVarsAdapter: Adapter = {
-  transformValue({ path }) {
-    const varName = path
-      .split(".")
-      .map((part, i) => (i === 0 ? part : part.charAt(0).toUpperCase() + part.slice(1)))
-      .join("");
-    return `themeVars.${varName}`;
+// Test hooks - examples of custom hook usage
+const customHook = defineHook({
+  resolveValue({ path, defaultValue }) {
+    return `customVar('${path}', '${defaultValue ?? ""}')`;
   },
-  getImports() {
-    return ["import { themeVars } from './tokens.stylex';"];
-  },
-  getDeclarations() {
-    return [];
-  },
-};
-
-const inlineValuesAdapter: Adapter = {
-  transformValue({ defaultValue }) {
-    return defaultValue ? `'${defaultValue}'` : "''";
-  },
-  getImports() {
-    return [];
-  },
-  getDeclarations() {
-    return [];
-  },
-};
+  imports: ["import { customVar } from './custom-theme';"],
+});
 const testCasesDir = join(__dirname, "..", "test-cases");
 const j = jscodeshift.withParser("tsx");
 
 function getTestCases(): string[] {
   const files = readdirSync(testCasesDir);
-  // Exclude unsupported-* files from main test cases
-  const inputFiles = files.filter((f) => f.endsWith(".input.tsx") && !f.startsWith("unsupported-"));
+  // Exclude unsupported fixtures from main test cases
+  // Convention: `_unsupported.<case>.input.tsx` has NO output file.
+  const inputFiles = files.filter(
+    (f) =>
+      f.endsWith(".input.tsx") && !f.startsWith("_unsupported.") && !f.startsWith("unsupported-"),
+  );
   const outputFiles = files.filter(
-    (f) => f.endsWith(".output.tsx") && !f.startsWith("unsupported-"),
+    (f) =>
+      f.endsWith(".output.tsx") && !f.startsWith("_unsupported.") && !f.startsWith("unsupported-"),
   );
 
   const inputNames = new Set(inputFiles.map((f) => f.replace(".input.tsx", "")));
@@ -90,7 +80,7 @@ function readTestCase(name: string): {
 }
 
 function runTransform(source: string, options: TransformOptions = {}): string {
-  const opts = { adapter: defaultAdapter, ...options };
+  const opts = { hook: defaultHook, ...options };
   const result = applyTransform(transform, opts, { source, path: "test.tsx" }, { parser: "tsx" });
   // applyTransform returns empty string when no changes, return original source
   return result || source;
@@ -233,7 +223,7 @@ describe("fixture warning expectations", () => {
     const result = transformWithWarnings(
       { source: input, path: `${name}.input.tsx` },
       { jscodeshift: j, j, stats: () => {}, report: () => {} },
-      { adapter: defaultAdapter },
+      { hook: defaultHook },
     );
 
     // Fixture expectations only cover stable `unsupported-feature` warnings.
@@ -303,7 +293,7 @@ export const App = () => (
     const result = transformWithWarnings(
       { source, path: "test.tsx" },
       { jscodeshift, j: jscodeshift, stats: () => {}, report: () => {} },
-      { adapter: defaultAdapter },
+      { hook: defaultHook },
     );
 
     expect(result.warnings).toHaveLength(1);
@@ -327,14 +317,14 @@ const Button = styled.button\`
     const result = transformWithWarnings(
       { source, path: "test.tsx" },
       { jscodeshift, j: jscodeshift, stats: () => {}, report: () => {} },
-      { adapter: defaultAdapter },
+      { hook: defaultHook },
     );
 
     expect(result.warnings).toHaveLength(0);
   });
 });
 
-describe("adapter configuration", () => {
+describe("hook configuration", () => {
   const themeSource = `
 import styled from 'styled-components';
 
@@ -345,75 +335,63 @@ const Button = styled.button\`
 export const App = () => <Button>Click</Button>;
 `;
 
-  it("should accept defaultAdapter", () => {
+  it("should accept defaultHook", () => {
     const result = transformWithWarnings(
       { source: themeSource, path: "test.tsx" },
       { jscodeshift, j: jscodeshift, stats: () => {}, report: () => {} },
-      { adapter: defaultAdapter },
+      { hook: defaultHook },
     );
 
     // Transform runs without error
     expect(result.warnings).toHaveLength(0);
   });
 
-  it("should accept defineVarsAdapter", () => {
+  it("should accept defineVarsHook", () => {
     const result = transformWithWarnings(
       { source: themeSource, path: "test.tsx" },
       { jscodeshift, j: jscodeshift, stats: () => {}, report: () => {} },
-      { adapter: defineVarsAdapter },
+      { hook: defineVarsHook },
     );
 
     expect(result.warnings).toHaveLength(0);
   });
 
-  it("should accept inlineValuesAdapter", () => {
+  it("should accept inlineValuesHook", () => {
     const result = transformWithWarnings(
       { source: themeSource, path: "test.tsx" },
       { jscodeshift, j: jscodeshift, stats: () => {}, report: () => {} },
-      { adapter: inlineValuesAdapter },
+      { hook: inlineValuesHook },
     );
 
     expect(result.warnings).toHaveLength(0);
   });
 
-  it("should accept custom adapter", () => {
-    const customAdapter: Adapter = {
-      transformValue({ path, defaultValue }) {
-        return `customVar('${path}', '${defaultValue ?? ""}')`;
-      },
-      getImports() {
-        return ["import { customVar } from './custom-theme';"];
-      },
-      getDeclarations() {
-        return [];
-      },
-    };
-
+  it("should accept custom hook", () => {
     const result = transformWithWarnings(
       { source: themeSource, path: "test.tsx" },
       { jscodeshift, j: jscodeshift, stats: () => {}, report: () => {} },
-      { adapter: customAdapter },
+      { hook: customHook },
     );
 
     expect(result.warnings).toHaveLength(0);
   });
 
-  it("should use defaultAdapter when no adapter specified", () => {
+  it("should use defaultHook when no hook specified", () => {
     const result = transformWithWarnings(
       { source: themeSource, path: "test.tsx" },
       { jscodeshift, j: jscodeshift, stats: () => {}, report: () => {} },
       {},
     );
 
-    // Should run without error using default adapter
+    // Should run without error using default hook
     expect(result.warnings).toHaveLength(0);
   });
 
-  it("should accept defineVarsAdapter", () => {
+  it("should accept defineVarsHook", () => {
     const result = transformWithWarnings(
       { source: themeSource, path: "test.tsx" },
       { jscodeshift, j: jscodeshift, stats: () => {}, report: () => {} },
-      { adapter: defineVarsAdapter },
+      { hook: defineVarsHook },
     );
 
     expect(result.warnings).toHaveLength(0);

@@ -31,14 +31,11 @@ interface RunTransformOptions {
   /** Glob pattern(s) for files to transform */
   files: string | string[];
 
-  /** Adapter for transforming theme values (default: CSS variables) */
-  adapter?: Adapter;
-
-  /** Plugins for resolving dynamic interpolations */
-  plugins?: DynamicNodePlugin[];
-
-  /** Hook for user customization (alternative to adapter/plugins) */
-  hook?: UserHook;
+  /**
+   * Hook for customizing the transform.
+   * Controls value resolution, imports, declarations, and custom handlers.
+   */
+  hook?: Hook;
 
   /** Dry run - don't write changes to files (default: false) */
   dryRun?: boolean;
@@ -63,47 +60,43 @@ await runTransform({
 });
 ```
 
-### Custom Adapter
+### Custom Hook
 
-Adapters control how theme values are transformed. Three built-in adapters are provided:
+Hooks control how theme values are resolved and how dynamic interpolations are handled.
+Three built-in hooks are provided:
 
 ```ts
 import {
   runTransform,
-  defaultAdapter,      // CSS custom properties: var(--colors-primary)
-  defineVarsAdapter,   // StyleX vars: themeVars.colorsPrimary
-  inlineValuesAdapter, // Inline literal values
+  defaultHook,      // CSS custom properties: var(--colors-primary)
+  defineVarsHook,   // StyleX vars: themeVars.colorsPrimary
+  inlineValuesHook, // Inline literal values
 } from "styled-components-to-stylex-codemod";
 
 await runTransform({
   files: "src/**/*.tsx",
-  adapter: defineVarsAdapter,
+  hook: defineVarsHook,
 });
 ```
 
-Create a custom adapter:
+Create a custom hook:
 
 ```ts
 import { runTransform } from "styled-components-to-stylex-codemod";
-import type { Adapter } from "styled-components-to-stylex-codemod";
+import { defineHook } from "styled-components-to-stylex-codemod";
 
-const myAdapter: Adapter = {
-  transformValue({ path, defaultValue }) {
+const myHook = defineHook({
+  resolveValue({ path, defaultValue }) {
     // Transform theme.colors.primary → tokens.colorsPrimary
     const varName = path.replace(/\./g, "_");
     return `tokens.${varName}`;
   },
-  getImports() {
-    return ["import { tokens } from './design-system.stylex';"];
-  },
-  getDeclarations() {
-    return [];
-  },
-};
+  imports: ["import { tokens } from './design-system.stylex';"],
+});
 
 await runTransform({
   files: "src/**/*.tsx",
-  adapter: myAdapter,
+  hook: myHook,
 });
 ```
 

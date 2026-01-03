@@ -53,8 +53,8 @@ export function normalizeStylisAstToIR(
     }
 
     if (node.type === "decl") {
-      const decl = parseDeclaration(String(node.value ?? ""), slotByPlaceholder);
-      if (decl) ensureRule("&", atRuleStack).declarations.push(decl);
+      const decls = parseDeclarations(String(node.value ?? ""), slotByPlaceholder);
+      if (decls.length) ensureRule("&", atRuleStack).declarations.push(...decls);
       return;
     }
 
@@ -69,8 +69,8 @@ export function normalizeStylisAstToIR(
         if (Array.isArray(children)) {
           for (const child of children) {
             if (child?.type === "decl") {
-              const decl = parseDeclaration(String(child.value ?? ""), slotByPlaceholder);
-              if (decl) rule.declarations.push(decl);
+              const decls = parseDeclarations(String(child.value ?? ""), slotByPlaceholder);
+              if (decls.length) rule.declarations.push(...decls);
             } else {
               visit(child as Element);
             }
@@ -97,15 +97,37 @@ export function normalizeStylisAstToIR(
   return rules;
 }
 
-function parseDeclaration(
+function parseDeclarations(
   declValue: string,
   slotByPlaceholder: Map<string, number>,
-): CssDeclarationIR | null {
+): CssDeclarationIR[] {
   const trimmed = declValue.trim();
-  if (!trimmed) return null;
+  if (!trimmed) return [];
+
+  // Stylis can merge a standalone interpolation placeholder with the following declaration:
+  //   __SC_EXPR_0__ text-align:center;
+  // Recover by splitting into:
+  //   1) a synthetic "dynamic block" decl that points at the slot
+  //   2) the real declaration (text-align:center)
+  //
+  // This enables handlers like `props => props.$x && "transform: ...;"` to be processed.
+  const leadingSlot = trimmed.match(/^(__SC_EXPR_(\d+)__)\s+([\s\S]+)$/);
+  if (leadingSlot) {
+    const slotId = Number(leadingSlot[2]);
+    const rest = leadingSlot[3] ?? "";
+    return [
+      {
+        property: "",
+        value: { kind: "interpolated", parts: [{ kind: "slot", slotId }] },
+        important: false,
+        valueRaw: leadingSlot[1]!,
+      },
+      ...parseDeclarations(rest, slotByPlaceholder),
+    ];
+  }
 
   const match = trimmed.match(/^([^:]+):([\s\S]+?);?$/);
-  if (!match) return null;
+  if (!match) return [];
 
   const property = match[1]!.trim();
   let valueRaw = match[2]!.trim();
@@ -117,7 +139,7 @@ function parseDeclaration(
   }
 
   const value = parseCssValue(valueRaw, slotByPlaceholder);
-  return { property, value, important, valueRaw };
+  return [{ property, value, important, valueRaw }];
 }
 
 function parseCssValue(valueRaw: string, slotByPlaceholder: Map<string, number>): CssValue {

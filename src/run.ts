@@ -2,8 +2,8 @@ import { run as jscodeshiftRun } from "jscodeshift/src/Runner.js";
 import { fileURLToPath } from "node:url";
 import { dirname, join } from "node:path";
 import { glob } from "node:fs/promises";
-import type { Hook, Adapter, DynamicHandler } from "./hook.js";
-import { normalizeHook, adapterToHook, isAdapter } from "./hook.js";
+import type { Hook } from "./hook.js";
+import { normalizeHook } from "./hook.js";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
@@ -20,16 +20,6 @@ export interface RunTransformOptions {
    * Controls value resolution, imports, declarations, and custom handlers.
    */
   hook?: Hook;
-
-  /**
-   * @deprecated Use hook instead
-   */
-  adapter?: Adapter;
-
-  /**
-   * @deprecated Use hook.handlers instead
-   */
-  handlers?: DynamicHandler[];
 
   /**
    * Dry run - don't write changes to files
@@ -87,11 +77,7 @@ export interface RunTransformResult {
 export async function runTransform(options: RunTransformOptions): Promise<RunTransformResult> {
   const { files, dryRun = false, print = false, parser = "tsx" } = options;
 
-  // Normalize hook from various input shapes
-  const rawHook: Hook | undefined =
-    options.hook ??
-    (options.adapter && isAdapter(options.adapter) ? adapterToHook(options.adapter) : undefined);
-  const hook = rawHook ? normalizeHook(rawHook) : undefined;
+  const hook = options.hook ? normalizeHook(options.hook) : undefined;
 
   // Resolve file paths from glob patterns
   const patterns = Array.isArray(files) ? files : [files];
@@ -122,7 +108,6 @@ export async function runTransform(options: RunTransformOptions): Promise<RunTra
     dry: dryRun,
     print,
     ...(hook ? { hook } : {}),
-    ...(options.handlers ? { handlers: options.handlers } : {}),
   });
 
   return {
