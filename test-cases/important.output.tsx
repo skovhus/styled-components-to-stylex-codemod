@@ -1,4 +1,3 @@
-import React from "react";
 import * as stylex from "@stylexjs/stylex";
 
 const styles = stylex.create({
@@ -13,10 +12,7 @@ const styles = stylex.create({
   forceWidth: {
     width: "100%",
     maxWidth: "500px",
-    marginTop: 0,
-    marginRight: "auto",
-    marginBottom: 0,
-    marginLeft: "auto",
+    margin: "0 auto",
   },
   mixedStyles: {
     fontSize: "16px",
@@ -25,31 +21,28 @@ const styles = stylex.create({
     margin: 0,
   },
   importantHover: {
-    color: "#BF4F74",
-    textDecoration: "none",
-  },
-  importantHoverHover: {
-    color: "#4F74BF",
-    textDecoration: "underline",
+    color: {
+      default: "#BF4F74",
+      ":hover": "#4F74BF",
+    },
+    textDecoration: {
+      default: "none",
+      ":hover": "underline",
+    },
   },
 });
 
-export const App = () => {
-  const [isHovered, setIsHovered] = React.useState(false);
-
-  return (
-    <div>
-      <button {...stylex.props(styles.overrideButton)}>Should be pink despite inline style</button>
-      <div {...stylex.props(styles.forceWidth)}>Full width content</div>
-      <p {...stylex.props(styles.mixedStyles)}>Color and margin should be overridden</p>
-      <a
-        href="#"
-        {...stylex.props(styles.importantHover, isHovered && styles.importantHoverHover)}
-        onMouseEnter={() => setIsHovered(true)}
-        onMouseLeave={() => setIsHovered(false)}
-      >
-        Hover me
-      </a>
-    </div>
-  );
-};
+export const App = () => (
+  <div>
+    <button {...stylex.props(styles.overrideButton)} style={{ background: "blue" }}>
+      Should be pink despite inline style
+    </button>
+    <div {...stylex.props(styles.forceWidth)}>Full width content</div>
+    <p {...stylex.props(styles.mixedStyles)} style={{ color: "red", margin: "20px" }}>
+      Color and margin should be overridden
+    </p>
+    <a href="#" {...stylex.props(styles.importantHover)}>
+      Hover me
+    </a>
+  </div>
+);

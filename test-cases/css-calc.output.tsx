@@ -1,14 +1,10 @@
 import * as stylex from "@stylexjs/stylex";
-import { calcVars } from "./css-calc.stylex";
 
 const styles = stylex.create({
   container: {
     width: "calc(100% - 40px)",
     maxWidth: "calc(1200px - 2rem)",
-    marginTop: 0,
-    marginRight: "auto",
-    marginBottom: 0,
-    marginLeft: "auto",
+    margin: "0 auto",
     padding: "calc(16px + 1vw)",
   },
   sidebar: {
@@ -31,8 +27,9 @@ const styles = stylex.create({
     margin: "calc(10px + calc(5px * 2))",
   },
   withVariables: {
-    width: `calc(${calcVars.baseSize} * 10)`,
-    padding: `calc(${calcVars.baseSize} / 2)`,
+    "--base-size": "16px",
+    width: "calc(var(--base-size) * 10)",
+    padding: "calc(var(--base-size) / 2)",
   },
 });
 

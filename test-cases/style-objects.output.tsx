@@ -1,4 +1,5 @@
 import * as stylex from "@stylexjs/stylex";
+import React from "react";
 
 const styles = stylex.create({
   staticBox: {
@@ -12,28 +13,28 @@ const styles = stylex.create({
   },
 });
 
-function StaticBox() {
-  return <div {...stylex.props(styles.staticBox)} />;
-}
-
-function DynamicBox({
-  $background = "#BF4F74",
-  $size = "50px",
-}: {
+interface DynamicBoxProps extends React.HTMLAttributes<HTMLDivElement> {
   $background?: string;
   $size?: string;
-}) {
+}
+
+function DynamicBox({ $background, $size, ...props }: DynamicBoxProps) {
   return (
     <div
       {...stylex.props(styles.dynamicBox)}
-      style={{ backgroundColor: $background, height: $size, width: $size }}
+      style={{
+        backgroundColor: $background || "#BF4F74",
+        height: $size || "50px",
+        width: $size || "50px",
+      }}
+      {...props}
     />
   );
 }
 
 export const App = () => (
   <div>
-    <StaticBox />
+    <div {...stylex.props(styles.staticBox)} />
     <DynamicBox $background="mediumseagreen" $size="100px" />
   </div>
 );

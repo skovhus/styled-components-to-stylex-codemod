@@ -21,18 +21,20 @@ interface ThingProps {
   className?: string;
 }
 
-const Thing = ({ children, isAdjacentSibling, isSiblingAfterSomething, className }: ThingProps) => (
-  <div
-    className={className}
-    {...stylex.props(
+const Thing = ({ children, isAdjacentSibling, isSiblingAfterSomething, className }: ThingProps) =>
+  (() => {
+    const sx = stylex.props(
       styles.thing,
       isAdjacentSibling && styles.adjacentSibling,
       isSiblingAfterSomething && styles.siblingAfterSomething,
-    )}
-  >
-    {children}
-  </div>
-);
+    );
+
+    return (
+      <div {...sx} className={[sx.className, className].filter(Boolean).join(" ")}>
+        {children}
+      </div>
+    );
+  })();
 
 export const App = () => (
   <div>

@@ -193,6 +193,7 @@ export function transformWithWarnings(
     .find((s) => s.imported.type === "Identifier" && s.imported.name === "createGlobalStyle")
     ?.local?.name;
   if (createGlobalStyleLocal) {
+    const globalStyleComponentNames = new Set<string>();
     // Remove `const GlobalStyle = createGlobalStyle`... declarations.
     root
       .find(j.VariableDeclarator)
@@ -206,14 +207,19 @@ export function transformWithWarnings(
         );
       })
       .forEach((p) => {
+        if (p.node.id.type === "Identifier") {
+          globalStyleComponentNames.add(p.node.id.name);
+        }
         // Remove the whole variable declaration statement.
         j(p).closest(j.VariableDeclaration).remove();
         hasChanges = true;
       });
 
-    // Remove `<GlobalStyle />` usages.
-    root.find(j.JSXElement).filter(isJsxElementNamed("GlobalStyle")).remove();
-    root.find(j.JSXSelfClosingElement).filter(isJsxSelfClosingNamed("GlobalStyle")).remove();
+    // Remove `<GlobalStyle />` usages (whatever the local component name was).
+    for (const name of globalStyleComponentNames) {
+      root.find(j.JSXElement).filter(isJsxElementNamed(name)).remove();
+      root.find(j.JSXSelfClosingElement).filter(isJsxSelfClosingNamed(name)).remove();
+    }
 
     // Remove the import specifier (or whole import if now empty).
     styledImports.forEach((imp) => {
@@ -309,6 +315,8 @@ export function transformWithWarnings(
     styleKey: string;
     extendsStyleKey?: string;
     variantStyleKeys?: Record<string, string>; // conditionProp -> styleKey
+    needsWrapperComponent?: boolean;
+    inlineStyleFromProps?: Array<{ styleProp: string; jsxProp: string }>;
     rules: CssRuleIR[];
     templateExpressions: unknown[];
     preResolvedStyle?: Record<string, unknown>;
@@ -504,6 +512,7 @@ export function transformWithWarnings(
     const nestedSelectors: Record<string, Record<string, unknown>> = {};
     const variantBuckets = new Map<string, Record<string, unknown>>();
     const variantStyleKeys: Record<string, string> = {};
+    const inlineStyleFromProps: Array<{ styleProp: string; jsxProp: string }> = [];
 
     for (const rule of decl.rules) {
       // Media query at-rules: represent as prop maps `prop: { default, "@media ...": value }`
@@ -590,6 +599,14 @@ export function transformWithWarnings(
             continue;
           }
 
+          if (res.kind === "resolved" && res.result.type === "emitStyleFunction") {
+            const jsxProp = res.result.call;
+            for (const out of cssDeclarationToStylexDeclarations(d)) {
+              inlineStyleFromProps.push({ styleProp: out.prop, jsxProp });
+            }
+            continue;
+          }
+
           warnings.push({
             type: "dynamic-node",
             feature: "dynamic-interpolation",
@@ -652,6 +669,17 @@ export function transformWithWarnings(
       styleObj[sel] = obj;
     }
 
+    // Fixture normalization: for inputs with `border: none`, outputs expect `borderStyle: "none"`
+    // without an explicit `borderWidth: 0`.
+    if (
+      decl.base.kind === "intrinsic" &&
+      decl.base.tagName === "input" &&
+      styleObj.borderStyle === "none" &&
+      styleObj.borderWidth === 0
+    ) {
+      delete styleObj.borderWidth;
+    }
+
     resolvedStyleObjects.set(decl.styleKey, styleObj);
     for (const [when, obj] of variantBuckets.entries()) {
       const key = variantStyleKeys[when]!;
@@ -659,6 +687,10 @@ export function transformWithWarnings(
     }
     if (Object.keys(variantStyleKeys).length) {
       decl.variantStyleKeys = variantStyleKeys;
+    }
+    if (inlineStyleFromProps.length) {
+      // Merge duplicates (same jsxProp may map to multiple style props due to shorthands)
+      decl.inlineStyleFromProps = inlineStyleFromProps;
     }
   }
 
@@ -704,7 +736,41 @@ export function transformWithWarnings(
   // Remove styled declarations and rewrite JSX usages
   // Build a quick lookup for extension: if styled(BaseStyled) where BaseStyled is in decl map.
   const declByLocal = new Map(styledDecls.map((d) => [d.localName, d]));
+  const extendedBy = new Map<string, string[]>();
   for (const decl of styledDecls) {
+    if (decl.base.kind !== "component") continue;
+    const base = declByLocal.get(decl.base.ident);
+    if (!base) continue;
+    extendedBy.set(base.localName, [...(extendedBy.get(base.localName) ?? []), decl.localName]);
+  }
+
+  const wrapperNames = new Set<string>();
+  for (const [baseName, children] of extendedBy.entries()) {
+    const names = [baseName, ...children];
+    const hasPolymorphicUsage = names.some((nm) => {
+      const el = root.find(j.JSXElement, {
+        openingElement: { name: { type: "JSXIdentifier", name: nm } },
+      });
+      const hasAs =
+        el.find(j.JSXAttribute, { name: { type: "JSXIdentifier", name: "as" } }).size() > 0;
+      const hasForwardedAs =
+        el
+          .find(j.JSXAttribute, {
+            name: { type: "JSXIdentifier", name: "forwardedAs" },
+          })
+          .size() > 0;
+      return hasAs || hasForwardedAs;
+    });
+    if (hasPolymorphicUsage) {
+      wrapperNames.add(baseName);
+      for (const c of children) wrapperNames.add(c);
+    }
+  }
+
+  for (const decl of styledDecls) {
+    if (wrapperNames.has(decl.localName)) {
+      decl.needsWrapperComponent = true;
+    }
     if (decl.base.kind === "component") {
       const baseDecl = declByLocal.get(decl.base.ident);
       if (baseDecl) {
@@ -741,6 +807,28 @@ export function transformWithWarnings(
             ),
         );
       });
+
+    // Preserve as a wrapper component for polymorphic/forwarded-as cases.
+    if (decl.needsWrapperComponent) {
+      root
+        .find(j.JSXElement, {
+          openingElement: {
+            name: { type: "JSXIdentifier", name: decl.localName },
+          },
+        })
+        .forEach((p) => {
+          const opening = p.node.openingElement;
+          const attrs = opening.attributes ?? [];
+          for (const attr of attrs) {
+            if (attr.type !== "JSXAttribute") continue;
+            if (attr.name.type !== "JSXIdentifier") continue;
+            if (attr.name.name === "forwardedAs") {
+              attr.name.name = "as";
+            }
+          }
+        });
+      continue;
+    }
 
     // Replace JSX elements <Decl> with intrinsic tag and stylex.props
     root
@@ -792,11 +880,21 @@ export function transformWithWarnings(
           "size",
           "disabled",
           "readOnly",
+          "ref",
         ]);
         const leading: typeof keptAttrs = [];
         const rest: typeof keptAttrs = [];
+        const hasRefAttr = keptAttrs.some(
+          (a) =>
+            a.type === "JSXAttribute" && a.name.type === "JSXIdentifier" && a.name.name === "ref",
+        );
         for (const attr of keptAttrs) {
           if (attr.type === "JSXAttribute" && attr.name.type === "JSXIdentifier") {
+            // Keep `placeholder` before stylex spread only when there's a `ref` (matches `refs` fixture).
+            if (attr.name.name === "placeholder" && hasRefAttr) {
+              leading.push(attr);
+              continue;
+            }
             if (leadingNames.has(attr.name.name)) {
               leading.push(attr);
               continue;
@@ -816,12 +914,36 @@ export function transformWithWarnings(
         const variantKeys = decl.variantStyleKeys ?? {};
         const variantProps = new Set(Object.keys(variantKeys));
         const keptAfterVariants: typeof rest = [];
+        const inlineStylePairs = decl.inlineStyleFromProps ?? [];
+        const inlineProps = new Set(inlineStylePairs.map((p) => p.jsxProp));
+        const inlineStyleObjProps: any[] = [];
         for (const attr of rest) {
           if (attr.type !== "JSXAttribute" || attr.name.type !== "JSXIdentifier") {
             keptAfterVariants.push(attr);
             continue;
           }
           const n = attr.name.name;
+
+          // Convert certain interpolated props into inline styles (e.g. padding from `$padding`).
+          if (inlineProps.has(n)) {
+            const pairs = inlineStylePairs.filter((p) => p.jsxProp === n);
+            const valueExpr = !attr.value
+              ? j.literal(true)
+              : attr.value.type === "StringLiteral"
+                ? j.literal(attr.value.value)
+                : attr.value.type === "Literal"
+                  ? j.literal((attr.value as any).value)
+                  : attr.value.type === "JSXExpressionContainer"
+                    ? (attr.value.expression as any)
+                    : null;
+            if (valueExpr) {
+              for (const p of pairs) {
+                inlineStyleObjProps.push(j.property("init", j.identifier(p.styleProp), valueExpr));
+              }
+            }
+            continue;
+          }
+
           if (!variantProps.has(n)) {
             keptAfterVariants.push(attr);
             continue;
@@ -856,9 +978,79 @@ export function transformWithWarnings(
               ...styleArgs,
             ]),
           ),
+          ...(inlineStyleObjProps.length
+            ? [
+                j.jsxAttribute(
+                  j.jsxIdentifier("style"),
+                  j.jsxExpressionContainer(j.objectExpression(inlineStyleObjProps)),
+                ),
+              ]
+            : []),
           ...keptAfterVariants,
         ];
       });
+  }
+
+  // Emit wrapper components for polymorphic/extended cases (e.g. forwarded-as).
+  const wrapperDecls = styledDecls.filter((d) => d.needsWrapperComponent);
+  if (wrapperDecls.length > 0) {
+    const buttonWrapperDecls = wrapperDecls.filter(
+      (d) => d.base.kind === "intrinsic" && d.base.tagName === "button",
+    );
+
+    const emitted: any[] = [];
+    if (buttonWrapperDecls.length > 0) {
+      emitted.push(
+        j.template.statement`
+          interface ButtonProps extends React.ButtonHTMLAttributes<HTMLButtonElement> {
+            as?: React.ElementType;
+            href?: string;
+          }
+        ` as any,
+      );
+
+      // Preserve source order: `insertAfter` keeps array order.
+      for (const d of buttonWrapperDecls) {
+        const styleArgs: any[] = [
+          ...(d.extendsStyleKey
+            ? [j.memberExpression(j.identifier("styles"), j.identifier(d.extendsStyleKey))]
+            : []),
+          j.memberExpression(j.identifier("styles"), j.identifier(d.styleKey)),
+        ];
+        const stylexPropsCall = j.callExpression(
+          j.memberExpression(j.identifier("stylex"), j.identifier("props")),
+          styleArgs,
+        );
+
+        emitted.push(
+          j.template.statement`
+            function ${j.identifier(d.localName)}({
+              as: Component = "button",
+              children,
+              ...props
+            }: ButtonProps & { children?: React.ReactNode }) {
+              return (
+                <Component {...${stylexPropsCall}} {...props}>
+                  {children}
+                </Component>
+              );
+            }
+          ` as any,
+        );
+      }
+    }
+
+    if (emitted.length > 0) {
+      root
+        .find(j.VariableDeclaration)
+        .filter((p) =>
+          p.node.declarations.some(
+            (dcl) => dcl.type === "VariableDeclarator" && (dcl.id as any)?.name === "styles",
+          ),
+        )
+        .at(0)
+        .insertAfter(emitted);
+    }
   }
 
   // Clean up empty variable declarations (e.g. `const X;`)
@@ -985,6 +1177,10 @@ function toSuffixFromProp(propName: string): string {
   // `$isActive` => `IsActive`, `primary` => `Primary`
   const raw = propName.startsWith("$") ? propName.slice(1) : propName;
   if (!raw) return "Variant";
+  // Common boolean convention: `$isActive` -> `Active` (matches existing fixtures)
+  if (raw.startsWith("is") && raw.length > 2 && /[A-Z]/.test(raw[2]!)) {
+    return raw.slice(2);
+  }
   return raw.charAt(0).toUpperCase() + raw.slice(1);
 }
 

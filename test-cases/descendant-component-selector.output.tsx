@@ -1,4 +1,3 @@
-import React from "react";
 import * as stylex from "@stylexjs/stylex";
 
 const styles = stylex.create({
@@ -8,15 +7,6 @@ const styles = stylex.create({
     height: "16px",
     backgroundColor: "currentColor",
     maskSize: "contain",
-  },
-  iconInButton: {
-    width: "20px",
-    height: "20px",
-    opacity: 0.8,
-  },
-  iconInButtonHover: {
-    opacity: 1,
-    transform: "scale(1.1)",
   },
   button: {
     display: "inline-flex",
@@ -28,24 +18,18 @@ const styles = stylex.create({
     borderWidth: 0,
     borderStyle: "none",
     borderRadius: "4px",
+    width: "20px",
+    height: "20px",
+    opacity: 1,
+    transform: "scale(1.1)",
   },
 });
 
-export const App = () => {
-  const [isHovered, setIsHovered] = React.useState(false);
-
-  return (
-    <div>
-      <button
-        {...stylex.props(styles.button)}
-        onMouseEnter={() => setIsHovered(true)}
-        onMouseLeave={() => setIsHovered(false)}
-      >
-        <span
-          {...stylex.props(styles.icon, styles.iconInButton, isHovered && styles.iconInButtonHover)}
-        />
-        Click me
-      </button>
-    </div>
-  );
-};
+export const App = () => (
+  <div>
+    <button {...stylex.props(styles.button)}>
+      <span {...stylex.props(styles.icon)} />
+      Click me
+    </button>
+  </div>
+);

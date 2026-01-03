@@ -9,6 +9,10 @@ const styles = stylex.create({
     backgroundColor: "papayawhip",
     borderStyle: "none",
     borderRadius: "3px",
+    outline: {
+      default: null,
+      ":focus": "none",
+    },
   },
 });
 
