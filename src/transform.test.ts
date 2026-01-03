@@ -6,13 +6,7 @@ import { join, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
 import { execSync } from "node:child_process";
 import { format } from "oxfmt";
-import transform, {
-  transformWithWarnings,
-  defineHook,
-  defaultHook,
-  defineVarsHook,
-  inlineValuesHook,
-} from "./transform.js";
+import transform, { transformWithWarnings, defineHook } from "./transform.js";
 import type { TransformOptions } from "./transform.js";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
@@ -24,6 +18,14 @@ const customHook = defineHook({
   },
   imports: ["import { customVar } from './custom-theme';"],
 });
+
+// Fixtures don't use theme resolution, but the transformer requires a hook.
+const fixtureHook = defineHook({
+  resolveValue({ path }) {
+    return `tokens.${path.replace(/\./g, "_")}`;
+  },
+});
+
 const testCasesDir = join(__dirname, "..", "test-cases");
 const j = jscodeshift.withParser("tsx");
 
@@ -79,8 +81,12 @@ function readTestCase(name: string): {
   return { input, output, inputPath, outputPath };
 }
 
-function runTransform(source: string, options: TransformOptions = {}): string {
-  const opts = { hook: defaultHook, ...options };
+type TestTransformOptions = Partial<Omit<TransformOptions, "hook">> & {
+  hook?: TransformOptions["hook"];
+};
+
+function runTransform(source: string, options: TestTransformOptions = {}): string {
+  const opts: TransformOptions = { hook: fixtureHook, ...(options as any) };
   const result = applyTransform(transform, opts, { source, path: "test.tsx" }, { parser: "tsx" });
   // applyTransform returns empty string when no changes, return original source
   return result || source;
@@ -223,7 +229,7 @@ describe("fixture warning expectations", () => {
     const result = transformWithWarnings(
       { source: input, path: `${name}.input.tsx` },
       { jscodeshift: j, j, stats: () => {}, report: () => {} },
-      { hook: defaultHook },
+      { hook: fixtureHook },
     );
 
     // Fixture expectations only cover stable `unsupported-feature` warnings.
@@ -293,7 +299,7 @@ export const App = () => (
     const result = transformWithWarnings(
       { source, path: "test.tsx" },
       { jscodeshift, j: jscodeshift, stats: () => {}, report: () => {} },
-      { hook: defaultHook },
+      { hook: fixtureHook },
     );
 
     expect(result.warnings).toHaveLength(1);
@@ -317,7 +323,7 @@ const Button = styled.button\`
     const result = transformWithWarnings(
       { source, path: "test.tsx" },
       { jscodeshift, j: jscodeshift, stats: () => {}, report: () => {} },
-      { hook: defaultHook },
+      { hook: fixtureHook },
     );
 
     expect(result.warnings).toHaveLength(0);
@@ -335,63 +341,11 @@ const Button = styled.button\`
 export const App = () => <Button>Click</Button>;
 `;
 
-  it("should accept defaultHook", () => {
-    const result = transformWithWarnings(
-      { source: themeSource, path: "test.tsx" },
-      { jscodeshift, j: jscodeshift, stats: () => {}, report: () => {} },
-      { hook: defaultHook },
-    );
-
-    // Transform runs without error
-    expect(result.warnings).toHaveLength(0);
-  });
-
-  it("should accept defineVarsHook", () => {
-    const result = transformWithWarnings(
-      { source: themeSource, path: "test.tsx" },
-      { jscodeshift, j: jscodeshift, stats: () => {}, report: () => {} },
-      { hook: defineVarsHook },
-    );
-
-    expect(result.warnings).toHaveLength(0);
-  });
-
-  it("should accept inlineValuesHook", () => {
-    const result = transformWithWarnings(
-      { source: themeSource, path: "test.tsx" },
-      { jscodeshift, j: jscodeshift, stats: () => {}, report: () => {} },
-      { hook: inlineValuesHook },
-    );
-
-    expect(result.warnings).toHaveLength(0);
-  });
-
   it("should accept custom hook", () => {
     const result = transformWithWarnings(
       { source: themeSource, path: "test.tsx" },
       { jscodeshift, j: jscodeshift, stats: () => {}, report: () => {} },
       { hook: customHook },
-    );
-
-    expect(result.warnings).toHaveLength(0);
-  });
-
-  it("should use defaultHook when no hook specified", () => {
-    const result = transformWithWarnings(
-      { source: themeSource, path: "test.tsx" },
-      { jscodeshift, j: jscodeshift, stats: () => {}, report: () => {} },
-      {},
-    );
-
-    // Should run without error using default hook
-    expect(result.warnings).toHaveLength(0);
-  });
-
-  it("should accept defineVarsHook", () => {
-    const result = transformWithWarnings(
-      { source: themeSource, path: "test.tsx" },
-      { jscodeshift, j: jscodeshift, stats: () => {}, report: () => {} },
-      { hook: defineVarsHook },
     );
 
     expect(result.warnings).toHaveLength(0);

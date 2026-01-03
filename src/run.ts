@@ -19,7 +19,7 @@ export interface RunTransformOptions {
    * Hook for customizing the transform.
    * Controls value resolution, imports, declarations, and custom handlers.
    */
-  hook?: Hook;
+  hook: Hook;
 
   /**
    * Dry run - don't write changes to files
@@ -77,7 +77,7 @@ export interface RunTransformResult {
 export async function runTransform(options: RunTransformOptions): Promise<RunTransformResult> {
   const { files, dryRun = false, print = false, parser = "tsx" } = options;
 
-  const hook = options.hook ? normalizeHook(options.hook) : undefined;
+  const hook = normalizeHook(options.hook);
 
   // Resolve file paths from glob patterns
   const patterns = Array.isArray(files) ? files : [files];
@@ -107,7 +107,7 @@ export async function runTransform(options: RunTransformOptions): Promise<RunTra
     parser,
     dry: dryRun,
     print,
-    ...(hook ? { hook } : {}),
+    hook,
   });
 
   return {

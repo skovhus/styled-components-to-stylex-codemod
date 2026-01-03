@@ -37,7 +37,7 @@ export interface TransformOptions extends Options {
    * Hook for customizing the transform.
    * Controls value resolution, imports, declarations, and custom handlers.
    */
-  hook?: Hook;
+  hook: Hook;
 }
 
 /**
@@ -46,12 +46,8 @@ export interface TransformOptions extends Options {
  * This is a sample transform that serves as a starting point.
  * You'll need to implement the actual transformation logic based on your needs.
  */
-export default function transform(
-  file: FileInfo,
-  api: API,
-  options: TransformOptions,
-): string | null {
-  const result = transformWithWarnings(file, api, options);
+export default function transform(file: FileInfo, api: API, options: Options): string | null {
+  const result = transformWithWarnings(file, api, options as TransformOptions);
 
   // Log warnings to stderr
   for (const warning of result.warnings) {
@@ -605,6 +601,7 @@ export function transformWithWarnings(
     needsWrapperComponent?: boolean;
     styleFnFromProps?: Array<{ fnKey: string; jsxProp: string }>;
     shouldForwardProp?: { dropProps: string[]; dropPrefix?: string };
+    withConfig?: { displayName?: string; componentId?: string };
     attrsInfo?: {
       staticAttrs: Record<string, any>;
       conditionalAttrs: Array<{
@@ -827,6 +824,37 @@ export function transformWithWarnings(
     };
   };
 
+  const parseWithConfigMeta = (arg0: any): StyledDecl["withConfig"] | undefined => {
+    if (!arg0 || arg0.type !== "ObjectExpression") return undefined;
+    let displayName: string | undefined;
+    let componentId: string | undefined;
+    for (const p of arg0.properties ?? []) {
+      if (!p || p.type !== "ObjectProperty") continue;
+      const key =
+        p.key?.type === "Identifier"
+          ? p.key.name
+          : p.key?.type === "StringLiteral"
+            ? p.key.value
+            : null;
+      if (!key) continue;
+      const v: any = p.value;
+      const val =
+        v?.type === "StringLiteral"
+          ? v.value
+          : v?.type === "Literal" && typeof v.value === "string"
+            ? v.value
+            : null;
+      if (!val) continue;
+      if (key === "displayName") displayName = val;
+      if (key === "componentId") componentId = val;
+    }
+    if (!displayName && !componentId) return undefined;
+    return {
+      ...(displayName ? { displayName } : {}),
+      ...(componentId ? { componentId } : {}),
+    };
+  };
+
   // Collect: const X = styled.h1`...`;
   root
     .find(j.VariableDeclarator, {
@@ -885,6 +913,10 @@ export function transformWithWarnings(
           tag.callee.property.name === "withConfig"
             ? parseShouldForwardProp(tag.arguments[0])
             : undefined;
+        const withConfigMeta =
+          tag.callee.property.name === "withConfig"
+            ? parseWithConfigMeta(tag.arguments[0])
+            : undefined;
 
         styledDecls.push({
           localName,
@@ -895,6 +927,7 @@ export function transformWithWarnings(
           rawCss: parsed.rawCss,
           ...(attrsInfo ? { attrsInfo } : {}),
           ...(shouldForwardProp ? { shouldForwardProp } : {}),
+          ...(withConfigMeta ? { withConfig: withConfigMeta } : {}),
         });
         return;
       }
@@ -942,6 +975,7 @@ export function transformWithWarnings(
         const parsed = parseStyledTemplateLiteral(template);
         const rules = normalizeStylisAstToIR(parsed.stylisAst, parsed.slots);
         const shouldForwardProp = parseShouldForwardProp(tag.arguments[0]);
+        const withConfigMeta = parseWithConfigMeta(tag.arguments[0]);
 
         styledDecls.push({
           localName,
@@ -951,6 +985,7 @@ export function transformWithWarnings(
           templateExpressions: parsed.slots.map((s) => s.expression),
           rawCss: parsed.rawCss,
           ...(shouldForwardProp ? { shouldForwardProp } : {}),
+          ...(withConfigMeta ? { withConfig: withConfigMeta } : {}),
         });
       }
     });
@@ -2338,6 +2373,15 @@ export function transformWithWarnings(
       }
     }
 
+    // Preserve `withConfig({ displayName/componentId })` semantics by keeping a wrapper component.
+    // This ensures the component boundary remains (useful for debugging/devtools), even if the styles are static.
+    if (
+      decl.base.kind === "intrinsic" &&
+      (decl.withConfig?.displayName || decl.withConfig?.componentId)
+    ) {
+      decl.needsWrapperComponent = true;
+    }
+
     // Remove variable declarator for styled component
     root
       .find(j.VariableDeclaration)
@@ -2694,6 +2738,8 @@ export function transformWithWarnings(
     );
 
     const emitted: any[] = [];
+    const forceReactImport =
+      wrapperDecls.some((d) => d.withConfig?.displayName || d.withConfig?.componentId) || false;
 
     if (inputWrapperDecls.length > 0) {
       emitted.push(
@@ -3165,6 +3211,151 @@ export function transformWithWarnings(
       emitted.push(
         j.functionDeclaration(j.identifier(d.localName), [propsId], j.blockStatement(fnBodyStmts)),
       );
+
+      const displayName = d.withConfig?.displayName;
+      if (displayName) {
+        emitted.push(
+          j.expressionStatement(
+            j.assignmentExpression(
+              "=",
+              j.memberExpression(j.identifier(d.localName), j.identifier("displayName")),
+              j.literal(displayName),
+            ),
+          ),
+        );
+      }
+    }
+
+    // Simple wrappers for `withConfig({ displayName/componentId })` cases where we just want to
+    // preserve a component boundary (and optionally set `.displayName`) without prop filtering.
+    const simpleWithConfigWrappers = wrapperDecls.filter((d) => {
+      if (d.base.kind !== "intrinsic") return false;
+      const tagName = d.base.tagName;
+      if (!(d.withConfig?.displayName || d.withConfig?.componentId)) return false;
+      if (d.shouldForwardProp) return false;
+      if (d.enumVariant) return false;
+      if (d.siblingWrapper) return false;
+      if (d.attrWrapper) return false;
+      // Don't duplicate the polymorphic wrapper path.
+      if (tagName === "button" && wrapperNames.has(d.localName)) return false;
+      // Avoid duplicating other specialized wrappers.
+      if (tagName === "input" || tagName === "a") return false;
+      return true;
+    });
+
+    for (const d of simpleWithConfigWrappers) {
+      if (d.base.kind !== "intrinsic") continue;
+      const tagName = d.base.tagName;
+      const displayName = d.withConfig?.displayName;
+      const styleArgs: any[] = [
+        ...(d.extendsStyleKey
+          ? [j.memberExpression(j.identifier("styles"), j.identifier(d.extendsStyleKey))]
+          : []),
+        j.memberExpression(j.identifier("styles"), j.identifier(d.styleKey)),
+      ];
+
+      const propsId = j.identifier("props");
+      const classNameId = j.identifier("className");
+      const childrenId = j.identifier("children");
+      const styleId = j.identifier("style");
+      const restId = j.identifier("rest");
+
+      const voidTags = new Set([
+        "area",
+        "base",
+        "br",
+        "col",
+        "embed",
+        "hr",
+        "img",
+        "input",
+        "link",
+        "meta",
+        "param",
+        "source",
+        "track",
+        "wbr",
+      ]);
+      const isVoidTag = voidTags.has(tagName);
+
+      const patternProps: any[] = [
+        patternProp("className", classNameId),
+        ...(isVoidTag ? [] : [patternProp("children", childrenId)]),
+        patternProp("style", styleId),
+        j.restElement(restId),
+      ];
+      const declStmt = j.variableDeclaration("const", [
+        j.variableDeclarator(j.objectPattern(patternProps as any), propsId),
+      ]);
+
+      const sxDecl = j.variableDeclaration("const", [
+        j.variableDeclarator(
+          j.identifier("sx"),
+          j.callExpression(
+            j.memberExpression(j.identifier("stylex"), j.identifier("props")),
+            styleArgs,
+          ),
+        ),
+      ]);
+
+      const mergedClassName = j.callExpression(
+        j.memberExpression(
+          j.callExpression(
+            j.memberExpression(
+              j.arrayExpression([
+                j.memberExpression(j.identifier("sx"), j.identifier("className")),
+                classNameId,
+              ]),
+              j.identifier("filter"),
+            ),
+            [j.identifier("Boolean")],
+          ),
+          j.identifier("join"),
+        ),
+        [j.literal(" ")],
+      );
+
+      const openingEl = j.jsxOpeningElement(
+        j.jsxIdentifier(tagName),
+        [
+          j.jsxSpreadAttribute(j.identifier("sx")),
+          j.jsxAttribute(j.jsxIdentifier("className"), j.jsxExpressionContainer(mergedClassName)),
+          j.jsxAttribute(j.jsxIdentifier("style"), j.jsxExpressionContainer(styleId)),
+          j.jsxSpreadAttribute(restId),
+        ],
+        false,
+      );
+
+      const jsx = isVoidTag
+        ? ({
+            type: "JSXElement",
+            openingElement: { ...openingEl, selfClosing: true },
+            closingElement: null,
+            children: [],
+          } as any)
+        : j.jsxElement(openingEl, j.jsxClosingElement(j.jsxIdentifier(tagName)), [
+            j.jsxExpressionContainer(childrenId),
+          ]);
+
+      emitted.push(
+        j.functionDeclaration(
+          j.identifier(d.localName),
+          [propsId],
+          j.blockStatement([declStmt, sxDecl, j.returnStatement(jsx as any)]),
+        ),
+      );
+
+      if (displayName) {
+        emitted.push(
+          j.expressionStatement(
+            j.assignmentExpression(
+              "=",
+              j.memberExpression(j.identifier(d.localName), j.identifier("displayName")),
+              j.literal(displayName),
+            ),
+          ),
+        );
+      }
     }
 
     // Sibling selector wrappers (Thing + variants)
@@ -3267,6 +3458,28 @@ export function transformWithWarnings(
         .at(0)
         .insertAfter(emitted);
     }
+
+    // If we emitted wrappers that reference React types, ensure React is imported.
+    // (Some fixtures live outside the main tsconfig include, so this avoids TS "UMD global" diagnostics.)
+    if (forceReactImport) {
+      const hasReactImport =
+        root
+          .find(j.ImportDeclaration, { source: { value: "react" } })
+          .find(j.ImportDefaultSpecifier)
+          .size() > 0;
+      if (!hasReactImport) {
+        const firstImport = root.find(j.ImportDeclaration).at(0);
+        const reactImport = j.importDeclaration(
+          [j.importDefaultSpecifier(j.identifier("React"))],
+          j.literal("react"),
+        );
+        if (firstImport.size() > 0) {
+          firstImport.insertBefore(reactImport);
+        } else {
+          root.get().node.program.body.unshift(reactImport);
+        }
+      }
+    }
   }
 
   // Clean up empty variable declarations (e.g. `const X;`)
@@ -3361,11 +3574,12 @@ export type {
   HandlerResult,
 } from "./hook.js";
 export {
-  defaultHook,
-  defaultResolveValue,
   defineHook,
+  builtinHandlers,
+  defaultHook,
   defineVarsHook,
   inlineValuesHook,
+  defaultResolveValue,
 } from "./hook.js";
 
 function toStyleKey(name: string): string {

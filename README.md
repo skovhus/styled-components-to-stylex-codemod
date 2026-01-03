@@ -15,10 +15,17 @@ pnpm add styled-components-to-stylex-codemod
 Use `runTransform` to transform files matching a glob pattern:
 
 ```ts
-import { runTransform } from "styled-components-to-stylex-codemod";
+import { runTransform, defineHook } from "styled-components-to-stylex-codemod";
+
+const hook = defineHook({
+  resolveValue({ path }) {
+    return `tokens.${path.replace(/\./g, "_")}`;
+  },
+});
 
 const result = await runTransform({
   files: "src/**/*.tsx",
+  hook,
 });
 
 console.log(`Transformed ${result.transformed} files`);
@@ -35,7 +42,7 @@ interface RunTransformOptions {
    * Hook for customizing the transform.
    * Controls value resolution, imports, declarations, and custom handlers.
    */
-  hook?: Hook;
+  hook: Hook;
 
   /** Dry run - don't write changes to files (default: false) */
   dryRun?: boolean;
@@ -55,6 +62,7 @@ Preview changes without modifying files:
 ```ts
 await runTransform({
   files: "src/**/*.tsx",
+  hook,
   dryRun: true,
   print: true, // prints transformed output to stdout
 });
@@ -67,22 +75,6 @@ Hooks are the main extension point. They let you control:
 - how theme paths are turned into StyleX-compatible JS values (`resolveValue`)
 - what extra imports/declarations to inject into transformed files (`imports`, `declarations`)
 - how to handle dynamic interpolations inside template literals (`handlers`)
-
-Three built-in hooks are provided:
-
-```ts
-import {
-  runTransform,
-  defaultHook,      // CSS custom properties: var(--colors-primary)
-  defineVarsHook,   // StyleX vars: themeVars.colorsPrimary
-  inlineValuesHook, // Inline literal values
-} from "styled-components-to-stylex-codemod";
-
-await runTransform({
-  files: "src/**/*.tsx",
-  hook: defineVarsHook,
-});
-```
 
 #### `Hook` interface (what you can customize)
 
@@ -97,7 +89,7 @@ export interface Hook {
    * `path` is the member path after `theme`, e.g. "colors.primary".
    * Return a JS expression string, e.g. "themeVars.colorsPrimary" or "'var(--colors-primary)'".
    */
-  resolveValue?: (context: {
+  resolveValue: (context: {
     path: string;
     defaultValue?: string;
     valueType: "theme" | "helper" | "interpolation";

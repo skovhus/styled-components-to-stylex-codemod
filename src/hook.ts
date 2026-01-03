@@ -26,6 +26,38 @@ export interface ValueContext {
   valueType: "theme" | "helper" | "interpolation";
 }
 
+/**
+ * Default resolver: Uses CSS custom properties with fallbacks.
+ * Generates: `'var(--colors-primary, #BF4F74)'`
+ */
+export function defaultResolveValue({ path, defaultValue }: ValueContext): string {
+  const varName = path.replace(/\./g, "-");
+  if (defaultValue) return `'var(--${varName}, ${defaultValue})'`;
+  return `'var(--${varName})'`;
+}
+
+/** Default hook: CSS custom properties with fallbacks */
+export const defaultHook: Hook = { resolveValue: defaultResolveValue };
+
+/** Hook that references StyleX vars from a tokens module */
+export const defineVarsHook: Hook = {
+  resolveValue({ path }: ValueContext) {
+    const parts = path.split(".");
+    const ident = parts
+      .map((part, i) => (i === 0 ? part : part.charAt(0).toUpperCase() + part.slice(1)))
+      .join("");
+    return `themeVars.${ident}`;
+  },
+  imports: ["import { themeVars } from './tokens.stylex';"],
+};
+
+/** Hook that inlines literal values */
+export const inlineValuesHook: Hook = {
+  resolveValue({ defaultValue }: ValueContext) {
+    return defaultValue ? `'${defaultValue}'` : "''";
+  },
+};
+
 // ────────────────────────────────────────────────────────────────────────────
 // Dynamic Node Types
 // ────────────────────────────────────────────────────────────────────────────
@@ -126,7 +158,7 @@ export interface Hook {
    * @param context - The context about the value being transformed
    * @returns StyleX-compatible value (string literal, variable reference, or expression)
    */
-  resolveValue?: (context: ValueContext) => string;
+  resolveValue: (context: ValueContext) => string;
 
   /**
    * Extra imports to inject into transformed files.
@@ -147,50 +179,6 @@ export interface Hook {
    */
   handlers?: DynamicHandler[];
 }
-
-// ────────────────────────────────────────────────────────────────────────────
-// Default Value Resolver
-// ────────────────────────────────────────────────────────────────────────────
-
-/**
- * Default resolver: Uses CSS custom properties with fallbacks.
- * Generates: `'var(--colors-primary, #BF4F74)'`
- */
-export function defaultResolveValue({ path, defaultValue }: ValueContext): string {
-  const varName = path.replace(/\./g, "-");
-  if (defaultValue) {
-    return `'var(--${varName}, ${defaultValue})'`;
-  }
-  return `'var(--${varName})'`;
-}
-
-// ────────────────────────────────────────────────────────────────────────────
-// Built-in Hooks (presets)
-// ────────────────────────────────────────────────────────────────────────────
-
-/** Default hook: CSS custom properties with fallbacks */
-export const defaultHook: Hook = {
-  resolveValue: defaultResolveValue,
-};
-
-/** Hook that references StyleX vars from a tokens module */
-export const defineVarsHook: Hook = {
-  resolveValue({ path }) {
-    const varName = path
-      .split(".")
-      .map((part, i) => (i === 0 ? part : part.charAt(0).toUpperCase() + part.slice(1)))
-      .join("");
-    return `themeVars.${varName}`;
-  },
-  imports: ["import { themeVars } from './tokens.stylex';"],
-};
-
-/** Hook that inlines literal values */
-export const inlineValuesHook: Hook = {
-  resolveValue({ defaultValue }) {
-    return defaultValue ? `'${defaultValue}'` : "''";
-  },
-};
 
 // ────────────────────────────────────────────────────────────────────────────
 // Built-in Handlers
@@ -398,12 +386,12 @@ export function runHandlers(
 /**
  * Normalize a hook to ensure all fields are populated with defaults.
  */
-export function normalizeHook(hook: Hook | undefined): Required<Hook> {
+export function normalizeHook(hook: Hook): Required<Hook> {
   return {
     resolveValue: hook?.resolveValue ?? defaultResolveValue,
-    imports: hook?.imports ?? [],
-    declarations: hook?.declarations ?? [],
-    handlers: hook?.handlers ?? [],
+    imports: hook.imports ?? [],
+    declarations: hook.declarations ?? [],
+    handlers: hook.handlers ?? [],
   };
 }
 
@@ -413,13 +401,8 @@ export function normalizeHook(hook: Hook | undefined): Required<Hook> {
 export function isHook(x: unknown): x is Hook {
   if (!x || typeof x !== "object") return false;
   const h = x as Record<string, unknown>;
-  // A hook has at least one of these optional fields
-  return (
-    typeof h.resolveValue === "function" ||
-    Array.isArray(h.imports) ||
-    Array.isArray(h.declarations) ||
-    Array.isArray(h.handlers)
-  );
+  // `resolveValue` is required for a valid Hook.
+  return typeof h.resolveValue === "function";
 }
 
 // ────────────────────────────────────────────────────────────────────────────

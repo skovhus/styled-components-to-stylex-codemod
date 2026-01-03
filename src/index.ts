@@ -12,11 +12,4 @@ export type {
   HandlerContext,
   HandlerResult,
 } from "./hook.js";
-export {
-  defineHook,
-  defaultHook,
-  defineVarsHook,
-  inlineValuesHook,
-  defaultResolveValue,
-  builtinHandlers,
-} from "./hook.js";
+export { defineHook, builtinHandlers } from "./hook.js";
