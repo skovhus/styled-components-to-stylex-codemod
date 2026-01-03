@@ -225,26 +225,76 @@ export const conditionalValueHandler: DynamicHandler = {
     if (expr.body.type !== "ConditionalExpression") return null;
     const { test, consequent, alternate } = expr.body;
 
-    const testPath =
-      test.type === "MemberExpression" ? getMemberPathFromIdentifier(test, paramName) : null;
-    if (!testPath || testPath.length !== 1) return null;
-
-    const whenExpr = testPath[0]!;
     const cons = literalToStaticValue(consequent);
     const alt = literalToStaticValue(alternate);
     if (cons === null || alt === null) return null;
+
+    // 1) props.foo ? a : b
+    const testPath =
+      test.type === "MemberExpression" ? getMemberPathFromIdentifier(test, paramName) : null;
+    if (testPath && testPath.length === 1) {
+      const whenExpr = testPath[0]!;
+      return {
+        type: "splitVariants",
+        variants: [
+          {
+            nameHint: "truthy",
+            when: whenExpr,
+            style: styleFromSingleDeclaration(node.css.property, cons),
+          },
+          {
+            nameHint: "falsy",
+            when: `!${whenExpr}`,
+            style: styleFromSingleDeclaration(node.css.property, alt),
+          },
+        ],
+      };
+    }
+
+    // 2) props.foo === "bar" ? a : b
+    if (
+      test.type === "BinaryExpression" &&
+      (test.operator === "===" || test.operator === "!==") &&
+      test.left.type === "MemberExpression"
+    ) {
+      const leftPath = getMemberPathFromIdentifier(test.left, paramName);
+      if (!leftPath || leftPath.length !== 1) return null;
+      const propName = leftPath[0]!;
+      const right = literalToStaticValue(test.right as any);
+      if (right === null) return null;
+      const rhs = JSON.stringify(right);
+      const cond = `${propName} ${test.operator} ${rhs}`;
+
+      // Use the existing transformer behavior: the `!…` variant is merged into base styles,
+      // and the positive variant becomes a conditional style key.
+      return {
+        type: "splitVariants",
+        variants: [
+          {
+            nameHint: "default",
+            when: `!(${cond})`,
+            style: styleFromSingleDeclaration(node.css.property, alt),
+          },
+          {
+            nameHint: "match",
+            when: cond,
+            style: styleFromSingleDeclaration(node.css.property, cons),
+          },
+        ],
+      };
+    }
 
     return {
       type: "splitVariants",
       variants: [
         {
           nameHint: "truthy",
-          when: whenExpr,
+          when: testPath?.[0] ?? "",
           style: styleFromSingleDeclaration(node.css.property, cons),
         },
         {
           nameHint: "falsy",
-          when: `!${whenExpr}`,
+          when: testPath?.[0] ? `!${testPath[0]}` : "",
           style: styleFromSingleDeclaration(node.css.property, alt),
         },
       ],

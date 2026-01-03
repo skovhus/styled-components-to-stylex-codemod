@@ -18,17 +18,25 @@ const styles = stylex.create({
     borderWidth: 0,
     borderStyle: "none",
     borderRadius: "4px",
+  },
+  iconInButton: {
     width: "20px",
     height: "20px",
-    opacity: 1,
-    transform: "scale(1.1)",
+    opacity: {
+      default: 0.8,
+      [stylex.when.ancestor(":hover")]: 1,
+    },
+    transform: {
+      default: null,
+      [stylex.when.ancestor(":hover")]: "scale(1.1)",
+    },
   },
 });
 
 export const App = () => (
   <div>
-    <button {...stylex.props(styles.button)}>
-      <span {...stylex.props(styles.icon)} />
+    <button {...stylex.props(styles.button, stylex.defaultMarker())}>
+      <span {...stylex.props(styles.icon, styles.iconInButton)} />
       Click me
     </button>
   </div>

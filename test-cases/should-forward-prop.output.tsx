@@ -1,148 +1,131 @@
-import React from "react";
 import * as stylex from "@stylexjs/stylex";
 
 const styles = stylex.create({
-  buttonBase: {
+  button: {
+    backgroundColor: "#BF4F74",
+    padding: "8px 16px",
+    fontSize: "14px",
     color: "white",
     borderWidth: 0,
     borderStyle: "none",
     borderRadius: "4px",
   },
-  buttonDefault: {
-    backgroundColor: "#BF4F74",
-    padding: "8px 16px",
-    fontSize: "14px",
-  },
-  buttonLarge: {
+  buttonSizeLarge: {
     padding: "12px 24px",
     fontSize: "18px",
   },
-  buttonColorGreen: {
-    backgroundColor: "#4CAF50",
-  },
-  linkBase: {
+  buttonBackgroundColor: (backgroundColor: string) => ({
+    backgroundColor,
+  }),
+  link: {
+    color: {
+      default: "#333",
+      ":hover": "#BF4F74",
+    },
+    fontWeight: "normal",
     textDecoration: "none",
   },
   linkActive: {
     color: "#BF4F74",
     fontWeight: "bold",
   },
-  linkInactive: {
-    color: "#333",
-    fontWeight: "normal",
-  },
-  linkHover: {
-    color: "#BF4F74",
-  },
-  boxBase: {
+  box: {
+    backgroundColor: "white",
+    padding: "16px",
     borderRadius: "8px",
     boxShadow: "0 2px 4px rgba(0, 0, 0, 0.1)",
   },
-  boxDefault: {
-    backgroundColor: "white",
-    padding: "16px",
-  },
-  cardBase: {
+  boxBackgroundColor: (backgroundColor: string) => ({
+    backgroundColor,
+  }),
+  boxPadding: (padding: string) => ({
+    padding,
+  }),
+  card: {
+    backgroundColor: "#4F74BF",
+    borderRadius: "4px",
     padding: "16px",
     color: "white",
   },
-  cardPrimary: {
+  cardVariantPrimary: {
     backgroundColor: "#BF4F74",
-  },
-  cardSecondary: {
-    backgroundColor: "#4F74BF",
   },
   cardRounded: {
     borderRadius: "16px",
   },
-  cardSquare: {
-    borderRadius: "4px",
-  },
 });
 
-interface ButtonProps extends React.ButtonHTMLAttributes<HTMLButtonElement> {
-  color?: string;
-  size?: "small" | "large";
-}
+function Button(props) {
+  const { className: className, children: children, style: style, color: color, size: size, ...rest } =
+    props;
 
-function Button({ color, size, children, ...props }: ButtonProps) {
+  const sx = stylex.props(
+    styles.button,
+    size === "large" && styles.buttonSizeLarge,
+    color && styles.buttonBackgroundColor(color),
+  );
+
   return (
-    <button
-      {...stylex.props(
-        styles.buttonBase,
-        styles.buttonDefault,
-        size === "large" && styles.buttonLarge,
-        color === "#4CAF50" && styles.buttonColorGreen,
-      )}
-      style={color && color !== "#4CAF50" ? { backgroundColor: color } : undefined}
-      {...props}
-    >
+    <button {...sx} className={[sx.className, className].filter(Boolean).join(" ")} style={style} {...rest}>
       {children}
     </button>
   );
 }
 
-interface LinkProps extends React.AnchorHTMLAttributes<HTMLAnchorElement> {
-  isActive?: boolean;
-}
+function Link(props) {
+  const { className: className, children: children, style: style, isActive: isActive, ...rest } = props;
 
-function Link({ isActive, children, ...props }: LinkProps) {
-  const [isHovered, setIsHovered] = React.useState(false);
+  const sx = stylex.props(styles.link, isActive && styles.linkActive);
 
   return (
-    <a
-      {...stylex.props(
-        styles.linkBase,
-        isActive ? styles.linkActive : styles.linkInactive,
-        isHovered && styles.linkHover,
-      )}
-      onMouseEnter={() => setIsHovered(true)}
-      onMouseLeave={() => setIsHovered(false)}
-      {...props}
-    >
+    <a {...sx} className={[sx.className, className].filter(Boolean).join(" ")} style={style} {...rest}>
       {children}
     </a>
   );
 }
 
-interface BoxProps extends React.HTMLAttributes<HTMLDivElement> {
-  $background?: string;
-  $padding?: string;
-}
+function Box(props) {
+  const { className: className, children: children, style: style, ...rest } = props;
 
-function Box({ $background, $padding, children, ...props }: BoxProps) {
+  for (const k of Object.keys(rest)) {
+    if (k.startsWith("$")) delete rest[k];
+  }
+
+  const sx = stylex.props(
+    styles.box,
+    props["$background"] && styles.boxBackgroundColor(props["$background"]),
+    props["$padding"] && styles.boxPadding(props["$padding"]),
+  );
+
   return (
-    <div
-      {...stylex.props(styles.boxBase, styles.boxDefault)}
-      style={{
-        backgroundColor: $background || undefined,
-        padding: $padding || undefined,
-      }}
-      {...props}
-    >
+    <div {...sx} className={[sx.className, className].filter(Boolean).join(" ")} style={style} {...rest}>
       {children}
     </div>
   );
 }
 
-interface CardProps extends React.HTMLAttributes<HTMLDivElement> {
-  variant?: "primary" | "secondary";
-  elevation?: number;
-  rounded?: boolean;
-}
+function Card(props) {
+  const {
+    className: className,
+    children: children,
+    style: style,
+    variant: variant,
+    elevation: elevation,
+    rounded: rounded,
+    ...rest
+  } = props;
 
-function Card({ variant = "primary", elevation = 1, rounded, children, ...props }: CardProps) {
+  const sx = stylex.props(styles.card, variant === "primary" && styles.cardVariantPrimary, rounded && styles.cardRounded);
+
   return (
     <div
-      {...stylex.props(
-        styles.cardBase,
-        variant === "primary" ? styles.cardPrimary : styles.cardSecondary,
-        rounded ? styles.cardRounded : styles.cardSquare,
-      )}
+      {...sx}
+      className={[sx.className, className].filter(Boolean).join(" ")}
       style={{
-        boxShadow: `0 ${elevation * 2}px ${elevation * 4}px rgba(0, 0, 0, 0.1)`,
+        ...style,
+        boxShadow: ((props) => `0 ${(props.elevation || 1) * 2}px ${(props.elevation || 1) * 4}px rgba(0, 0, 0, 0.1)`)(props),
       }}
-      {...props}
+      {...rest}
     >
       {children}
     </div>
@@ -169,3 +152,4 @@ export const App = () => (
     </Card>
   </div>
 );
+
