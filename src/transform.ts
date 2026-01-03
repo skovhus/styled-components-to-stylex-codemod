@@ -363,7 +363,10 @@ export function transformWithWarnings(
   if (hasChanges) {
     code = root.toSource();
     // Remove spurious blank lines that jscodeshift/recast inserts between object properties
-    code = code.replace(/\n\n+/g, "\n\n").replace(/{\n\n/g, "{\n").replace(/,\n\n(\s*["\w])/g, ",\n$1");
+    code = code
+      .replace(/\n\n+/g, "\n\n")
+      .replace(/{\n\n/g, "{\n")
+      .replace(/,\n\n(\s*["\w])/g, ",\n$1");
   }
 
   return {

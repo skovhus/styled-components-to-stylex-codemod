@@ -582,7 +582,11 @@ function propNameToVariantName(propName: string): string {
   let cleanName = propName.startsWith("$") ? propName.slice(1) : propName;
 
   // Remove "is" prefix for boolean-style naming (isActive -> Active, isDisabled -> Disabled)
-  if (cleanName.startsWith("is") && cleanName.length > 2 && cleanName[2]!.toUpperCase() === cleanName[2]) {
+  if (
+    cleanName.startsWith("is") &&
+    cleanName.length > 2 &&
+    cleanName[2]!.toUpperCase() === cleanName[2]
+  ) {
     cleanName = cleanName.slice(2);
   }
 
