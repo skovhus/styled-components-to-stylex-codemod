@@ -602,6 +602,8 @@ export function transformWithWarnings(
     styleFnFromProps?: Array<{ fnKey: string; jsxProp: string }>;
     shouldForwardProp?: { dropProps: string[]; dropPrefix?: string };
     withConfig?: { displayName?: string; componentId?: string };
+    // For `> *` rules we can materialize a child style and apply it to direct JSX children.
+    directChildStyles?: { childKey: string; childNotFirstKey?: string };
     attrsInfo?: {
       staticAttrs: Record<string, any>;
       conditionalAttrs: Array<{
@@ -1119,6 +1121,14 @@ export function transformWithWarnings(
   // Resolve dynamic nodes via plugins (currently only used to decide bail vs convert).
   const resolvedStyleObjects = new Map<string, Record<string, unknown>>();
   const declByLocalName = new Map(styledDecls.map((d) => [d.localName, d]));
+  const descendantOverrides: Array<{
+    parentStyleKey: string;
+    childStyleKey: string;
+    overrideStyleKey: string;
+  }> = [];
+  const ancestorSelectorParents = new Set<string>();
+  const descendantOverrideBase = new Map<string, Record<string, unknown>>();
+  const descendantOverrideHover = new Map<string, Record<string, unknown>>();
   for (const decl of styledDecls) {
     if (decl.preResolvedStyle) {
       resolvedStyleObjects.set(decl.styleKey, decl.preResolvedStyle);
@@ -1139,6 +1149,8 @@ export function transformWithWarnings(
     const styleFnDecls = new Map<string, any>();
     const attrBuckets = new Map<string, Record<string, unknown>>();
     const inlineStyleProps: Array<{ prop: string; expr: any }> = [];
+    let directChildBaseObj: Record<string, unknown> | null = null;
+    let directChildNotFirstObj: Record<string, unknown> | null = null;
 
     const toKebab = (s: string) =>
       s
@@ -1589,6 +1601,31 @@ export function transformWithWarnings(
         continue;
       }
 
+      // Direct-child selectors (nesting): `> * { ... }` and `> *:not(:first-child) { ... }`.
+      // We materialize these as separate child styles and apply them to direct JSX children.
+      if (/^&?\s*>\s*\*\s*$/.test(selTrim)) {
+        directChildBaseObj ??= {};
+        for (const d of rule.declarations) {
+          if (d.value.kind !== "static") continue;
+          for (const out of cssDeclarationToStylexDeclarations(d)) {
+            if (out.value.kind !== "static") continue;
+            (directChildBaseObj as any)[out.prop] = cssValueToJs(out.value);
+          }
+        }
+        continue;
+      }
+      if (/^&?\s*>\s*\*\s*:not\(:first-child\)\s*$/.test(selTrim)) {
+        directChildNotFirstObj ??= {};
+        for (const d of rule.declarations) {
+          if (d.value.kind !== "static") continue;
+          for (const out of cssDeclarationToStylexDeclarations(d)) {
+            if (out.value.kind !== "static") continue;
+            (directChildNotFirstObj as any)[out.prop] = cssValueToJs(out.value);
+          }
+        }
+        continue;
+      }
+
       // ───────────────────────────────────────────────────────────────────
       // Component selector emulation via inherited CSS variables
       //
@@ -1636,60 +1673,33 @@ export function transformWithWarnings(
           continue;
         }
 
-        // `${Child}` / `&:hover ${Child}` (Button styling a descendant Icon)
+        // `${Child}` / `&:hover ${Child}` (Parent styling a descendant child)
+        //
+        // Prefer emitting a child-in-parent style (applied in JSX via ancestor selectors)
+        // over CSS-variable indirection.
         if (otherLocal && selTrim.startsWith("&")) {
           const childDecl = declByLocalName.get(otherLocal);
-          const childStyle = childDecl && resolvedStyleObjects.get(childDecl.styleKey);
           const isHover = rule.selector.includes(":hover");
-          if (childStyle) {
-            const varSize = `--sc2sx-${toKebab(otherLocal)}-size`;
-            const varOpacity = `--sc2sx-${toKebab(otherLocal)}-opacity`;
-            const varTransform = `--sc2sx-${toKebab(otherLocal)}-transform`;
-
-            // Ensure child reads from vars with fallbacks.
-            const rawW = (childStyle as any).width as unknown;
-            const rawH = (childStyle as any).height as unknown;
-            const baseW =
-              typeof rawW === "string" || typeof rawW === "number" ? String(rawW) : "16px";
-            const baseH =
-              typeof rawH === "string" || typeof rawH === "number" ? String(rawH) : "16px";
-            childStyle.width = `var(${varSize}, ${baseW})`;
-            childStyle.height = `var(${varSize}, ${baseH})`;
-            childStyle.opacity = `var(${varOpacity}, 1)`;
-            childStyle.transform = `var(${varTransform}, none)`;
+          if (childDecl) {
+            const overrideStyleKey = `${toStyleKey(otherLocal)}In${decl.localName}`;
+            ancestorSelectorParents.add(decl.styleKey);
+            descendantOverrides.push({
+              parentStyleKey: decl.styleKey,
+              childStyleKey: childDecl.styleKey,
+              overrideStyleKey,
+            });
+            const baseBucket = descendantOverrideBase.get(overrideStyleKey) ?? {};
+            const hoverBucket = descendantOverrideHover.get(overrideStyleKey) ?? {};
+            descendantOverrideBase.set(overrideStyleKey, baseBucket);
+            descendantOverrideHover.set(overrideStyleKey, hoverBucket);
 
             for (const d of rule.declarations) {
               if (d.value.kind !== "static") continue;
               for (const out of cssDeclarationToStylexDeclarations(d)) {
                 if (out.value.kind !== "static") continue;
-                const v = out.value.value;
-                if (out.prop === "width" || out.prop === "height") {
-                  styleObj[varSize] = v;
-                }
-                if (out.prop === "opacity") {
-                  const existing: any = styleObj[varOpacity];
-                  if (!isHover) {
-                    styleObj[varOpacity] = v;
-                  } else {
-                    styleObj[varOpacity] = {
-                      default:
-                        typeof existing === "string" ? existing : (existing?.default ?? null),
-                      ":hover": v,
-                    };
-                  }
-                }
-                if (out.prop === "transform") {
-                  const existing: any = styleObj[varTransform];
-                  if (!isHover) {
-                    styleObj[varTransform] = v;
-                  } else {
-                    styleObj[varTransform] = {
-                      default:
-                        typeof existing === "string" ? existing : (existing?.default ?? "none"),
-                      ":hover": v,
-                    };
-                  }
-                }
+                const v = cssValueToJs(out.value);
+                if (!isHover) (baseBucket as any)[out.prop] = v;
+                else (hoverBucket as any)[out.prop] = v;
               }
             }
           }

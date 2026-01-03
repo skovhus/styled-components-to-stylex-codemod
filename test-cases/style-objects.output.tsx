@@ -25,26 +25,17 @@ const styles = stylex.create({
 });
 
 function DynamicBox(props) {
-  const { className, children, style, ...rest } = props;
-
-  for (const k of Object.keys(rest)) {
-    if (k.startsWith("$")) delete rest[k];
-  }
+  const { className, children, style, $background, $size } = props;
 
   const sx = stylex.props(
     styles.dynamicBox,
-    props["$background"] && styles.dynamicBoxBackgroundColor(props["$background"]),
-    props["$size"] && styles.dynamicBoxHeight(props["$size"]),
-    props["$size"] && styles.dynamicBoxWidth(props["$size"]),
+    $background && styles.dynamicBoxBackgroundColor($background),
+    $size && styles.dynamicBoxHeight($size),
+    $size && styles.dynamicBoxWidth($size),
   );
 
   return (
-    <div
-      {...sx}
-      className={[sx.className, className].filter(Boolean).join(" ")}
-      style={style}
-      {...rest}
-    >
+    <div {...sx} className={[sx.className, className].filter(Boolean).join(" ")} style={style}>
       {children}
     </div>
   );

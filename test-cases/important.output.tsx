@@ -34,11 +34,11 @@ const styles = stylex.create({
 
 export const App = () => (
   <div>
-    <button {...stylex.props(styles.overrideButton)} style={{ background: "blue" }}>
+    <button style={{ background: "blue" }} {...stylex.props(styles.overrideButton)}>
       Should be pink despite inline style
     </button>
     <div {...stylex.props(styles.forceWidth)}>Full width content</div>
-    <p {...stylex.props(styles.mixedStyles)} style={{ color: "red", margin: "20px" }}>
+    <p style={{ color: "red", margin: "20px" }} {...stylex.props(styles.mixedStyles)}>
       Color and margin should be overridden
     </p>
     <a href="#" {...stylex.props(styles.importantHover)}>

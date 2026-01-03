@@ -7,12 +7,9 @@ const styles = stylex.create({
     margin: "0.5em",
     color: "#BF4F74",
     backgroundColor: "papayawhip",
+    borderWidth: 0,
     borderStyle: "none",
     borderRadius: "3px",
-    outline: {
-      default: null,
-      ":focus": "none",
-    },
   },
 });
 
