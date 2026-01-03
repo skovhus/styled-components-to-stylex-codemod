@@ -5,10 +5,7 @@ const styles = stylex.create({
   container: {
     width: "calc(100% - 40px)",
     maxWidth: "calc(1200px - 2rem)",
-    marginTop: 0,
-    marginRight: "auto",
-    marginBottom: 0,
-    marginLeft: "auto",
+    margin: "0 auto",
     padding: "calc(16px + 1vw)",
   },
   sidebar: {

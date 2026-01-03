@@ -4,15 +4,15 @@ import { vars, textVars } from "./css-variables.stylex";
 const styles = stylex.create({
   button: {
     padding: `${vars.spacingSm} ${vars.spacingMd}`,
-    backgroundColor: vars.colorPrimary,
+    backgroundColor: {
+      default: vars.colorPrimary,
+      ":hover": vars.colorSecondary,
+    },
     color: "white",
     borderWidth: "2px",
     borderStyle: "solid",
     borderColor: vars.colorSecondary,
     borderRadius: vars.borderRadius,
-  },
-  buttonHover: {
-    backgroundColor: vars.colorSecondary,
   },
   card: {
     padding: vars.spacingLg,
@@ -30,8 +30,10 @@ const styles = stylex.create({
 });
 
 export const App = () => (
-  <div {...stylex.props(styles.card)}>
-    <p {...stylex.props(styles.text)}>Some text content</p>
-    <button {...stylex.props(styles.button)}>Click me</button>
-  </div>
+  <>
+    <div {...stylex.props(styles.card)}>
+      <p {...stylex.props(styles.text)}>Some text content</p>
+      <button {...stylex.props(styles.button)}>Click me</button>
+    </div>
+  </>
 );

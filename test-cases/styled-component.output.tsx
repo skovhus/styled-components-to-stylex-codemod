@@ -1,8 +1,7 @@
-import React from "react";
 import * as stylex from "@stylexjs/stylex";
 
 const styles = stylex.create({
-  link: {
+  styledLink: {
     color: "#BF4F74",
     fontWeight: "bold",
     textDecoration: {
@@ -27,7 +26,7 @@ const Link = ({
 );
 
 export const App = () => (
-  <Link href="https://example.com" {...stylex.props(styles.link)}>
+  <Link href="https://example.com" {...stylex.props(styles.styledLink)}>
     Visit Example
   </Link>
 );
