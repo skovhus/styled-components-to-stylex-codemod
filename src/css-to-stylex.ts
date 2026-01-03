@@ -121,7 +121,9 @@ function parseBorderShorthand(value: string): {
   style?: string;
   color?: string;
 } {
-  const parts = value.split(/\s+/);
+  // Strip !important first (it should already be stripped, but be safe)
+  const cleanValue = stripImportant(value);
+  const parts = cleanValue.split(/\s+/).filter(Boolean);
   const result: { width?: string; style?: string; color?: string } = {};
 
   const borderStyles = [

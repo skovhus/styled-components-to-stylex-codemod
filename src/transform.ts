@@ -620,18 +620,18 @@ function processStyledComponent(
 
   if (templateLiteral) {
     // Template literal syntax - parse CSS
-  const parsed = parseStyledCSS(
-    templateLiteral.quasis,
-    templateLiteral.expressions as Expression[],
-  );
-  const rules = extractDeclarations(parsed.root);
+    const parsed = parseStyledCSS(
+      templateLiteral.quasis,
+      templateLiteral.expressions as Expression[],
+    );
+    const rules = extractDeclarations(parsed.root);
 
-  if (rules.length === 0) {
-    return null;
-  }
+    if (rules.length === 0) {
+      return null;
+    }
 
-  // Convert to StyleX and process interpolations
-  const mainRule = rules[0]!;
+    // Convert to StyleX and process interpolations
+    const mainRule = rules[0]!;
     // First get the raw StyleX object (before property-level conditional conversion)
     const rawStyles = cssRuleToStyleX(mainRule);
 
@@ -641,26 +641,26 @@ function processStyledComponent(
     // Now convert remaining styles to property-level conditionals
     styles = toPropertyLevelConditionals(rawStyles);
 
-  // Process each interpolation
-  for (const [_index, location] of parsed.interpolations) {
-    const classified = classifyInterpolation(location, classificationCtx);
-    const context = buildDynamicNodeContext(classified, location, componentName, filePath);
+    // Process each interpolation
+    for (const [_index, location] of parsed.interpolations) {
+      const classified = classifyInterpolation(location, classificationCtx);
+      const context = buildDynamicNodeContext(classified, location, componentName, filePath);
 
-    const decision =
-      executeDynamicNodeHandlers(context, adapter) ??
-      getFallbackDecision(context, adapter.fallbackBehavior);
+      const decision =
+        executeDynamicNodeHandlers(context, adapter) ??
+        getFallbackDecision(context, adapter.fallbackBehavior);
 
-    // Apply the decision
-    applyDecision(
-      j,
-      decision,
-      context,
-      styles,
-      variantStyles,
-      dynamicFns,
-      additionalImports,
-      warnings,
-    );
+      // Apply the decision
+      applyDecision(
+        j,
+        decision,
+        context,
+        styles,
+        variantStyles,
+        dynamicFns,
+        additionalImports,
+        warnings,
+      );
     }
   } else if (styleObject && styleObject.type === "ObjectExpression") {
     // Object syntax - convert object properties to styles
@@ -706,7 +706,9 @@ function extractDirectChildSelectorStyles(
   jsxRewriteRules: StyleInfo["jsxRewriteRules"],
 ): void {
   const childSelectorKeys = [">*", "> *"];
-  const foundKey = childSelectorKeys.find((k) => typeof styles[k] === "object" && styles[k] !== null);
+  const foundKey = childSelectorKeys.find(
+    (k) => typeof styles[k] === "object" && styles[k] !== null,
+  );
   if (!foundKey) return;
 
   const childBlock = styles[foundKey] as StyleXObject;
@@ -810,6 +812,13 @@ function parseAttrsConfig(_j: JSCodeshift, arg: Expression): AttrsConfig {
 }
 
 /**
+ * Property rename map for object syntax (same as CSS-to-StyleX)
+ */
+const OBJECT_PROPERTY_RENAMES: Record<string, string> = {
+  background: "backgroundColor",
+};
+
+/**
  * Convert an ObjectExpression to StyleX styles
  */
 function convertObjectExpressionToStyles(
@@ -831,14 +840,17 @@ function convertObjectExpressionToStyles(
         continue;
       }
 
+      // Apply property renames (e.g., background -> backgroundColor)
+      const normalizedKey = OBJECT_PROPERTY_RENAMES[key] ?? key;
+
       // Convert value
       if (prop.value.type === "StringLiteral") {
-        styles[key] = prop.value.value;
+        styles[normalizedKey] = prop.value.value;
       } else if (prop.value.type === "NumericLiteral") {
-        styles[key] = prop.value.value;
+        styles[normalizedKey] = prop.value.value;
       } else if (prop.value.type === "TemplateLiteral" && prop.value.expressions.length === 0) {
         // Simple template literal without expressions
-        styles[key] = prop.value.quasis[0]?.value.cooked ?? "";
+        styles[normalizedKey] = prop.value.quasis[0]?.value.cooked ?? "";
       } else {
         // Dynamic value - skip for now (will be handled as inline style)
         // For dynamic object syntax, we can't easily convert to StyleX
@@ -971,7 +983,7 @@ function applyDecision(
           styles["animationName"] = decision.value;
           // Don't set the animation property
         } else {
-        styles[context.cssProperty] = decision.value;
+          styles[context.cssProperty] = decision.value;
         }
       }
       break;
@@ -1496,7 +1508,9 @@ function stripVarRefPrefix(value: string): string {
  * Strip the template literal prefix if present
  */
 function stripTemplateLiteralPrefix(value: string): string {
-  return value.startsWith(TEMPLATE_LITERAL_PREFIX) ? value.slice(TEMPLATE_LITERAL_PREFIX.length) : value;
+  return value.startsWith(TEMPLATE_LITERAL_PREFIX)
+    ? value.slice(TEMPLATE_LITERAL_PREFIX.length)
+    : value;
 }
 
 /**
@@ -1521,7 +1535,12 @@ function parseTemplateLiteral(j: JSCodeshift, template: string): Expression {
     const exprStr = match[1]!.trim();
     if (exprStr.includes(".")) {
       expressions.push(parseMemberExpression(j, exprStr));
-    } else if (exprStr.includes("/") || exprStr.includes("*") || exprStr.includes("+") || exprStr.includes("-")) {
+    } else if (
+      exprStr.includes("/") ||
+      exprStr.includes("*") ||
+      exprStr.includes("+") ||
+      exprStr.includes("-")
+    ) {
       // Binary expression like spacing / 2
       expressions.push(parseBinaryExpression(j, exprStr));
     } else {
@@ -1836,15 +1855,16 @@ function transformJSXUsage(
             a.argument.callee.property.name === "props",
         );
 
-        const extraArgs = uniqueStyleNames.map((n) => j.memberExpression(
-          j.identifier("styles"),
-          j.identifier(n),
-        )) as unknown as Expression[];
+        const extraArgs = uniqueStyleNames.map((n) =>
+          j.memberExpression(j.identifier("styles"), j.identifier(n)),
+        ) as unknown as Expression[];
 
         if (existingSpread && existingSpread.type === "JSXSpreadAttribute") {
           const call = existingSpread.argument;
           if (call.type === "CallExpression") {
-            call.arguments.push(...(extraArgs as unknown as Parameters<typeof j.callExpression>[1]));
+            call.arguments.push(
+              ...(extraArgs as unknown as Parameters<typeof j.callExpression>[1]),
+            );
           }
         } else {
           const propsCall = j.callExpression(

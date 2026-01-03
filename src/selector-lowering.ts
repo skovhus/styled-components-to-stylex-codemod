@@ -229,4 +229,3 @@ export function generateStyleName(componentName: string, suffix: string): string
   const baseName = componentName.charAt(0).toLowerCase() + componentName.slice(1);
   return baseName + suffix.charAt(0).toUpperCase() + suffix.slice(1);
 }
-

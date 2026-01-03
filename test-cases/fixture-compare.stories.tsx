@@ -13,7 +13,10 @@ const outputModules = import.meta.glob("./*.output.tsx", {
 
 function fileToName(path: string): string {
   // ./basic.input.tsx -> basic
-  return path.replace(/^\.\//, "").replace(/\.input\.tsx$/, "").replace(/\.output\.tsx$/, "");
+  return path
+    .replace(/^\.\//, "")
+    .replace(/\.input\.tsx$/, "")
+    .replace(/\.output\.tsx$/, "");
 }
 
 const inputNames = Object.keys(inputModules).map(fileToName);
@@ -80,5 +83,3 @@ export default meta;
 type Story = StoryObj<typeof Compare>;
 
 export const SideBySide: Story = {};
-
-
