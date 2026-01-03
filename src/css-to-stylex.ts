@@ -48,7 +48,22 @@ const EXPAND_SHORTHANDS = new Set([
   "borderRight",
   "borderBottom",
   "borderLeft",
+  "animation",
 ]);
+
+/**
+ * Properties where we rename the key even if the value is dynamic
+ */
+const SIMPLE_RENAMES: Record<string, string> = {
+  background: "backgroundColor",
+};
+
+/**
+ * Normalize a CSS property name for StyleX (apply simple renames)
+ */
+export function normalizePropertyName(property: string): string {
+  return SIMPLE_RENAMES[property] ?? property;
+}
 
 /**
  * Convert a CSS value to a StyleX-compatible value
@@ -196,7 +211,9 @@ export function expandShorthand(
 ): Array<{ property: string; value: StyleXValue }> {
   // Don't expand if value has interpolation that spans the whole value
   if (hasInterpolation(value) && !EXPAND_SHORTHANDS.has(property)) {
-    return [{ property, value: convertValue(value) }];
+    // Still apply simple renames even for dynamic values
+    const renamedProperty = SIMPLE_RENAMES[property] ?? property;
+    return [{ property: renamedProperty, value: convertValue(value) }];
   }
 
   switch (property) {
@@ -406,9 +423,18 @@ function isPseudoElement(key: string): boolean {
 }
 
 /**
- * Check if a key is a media query or other at-rule (should stay nested)
+ * Check if a key is a media query (should become property-level conditional)
+ */
+function isMediaQuery(key: string): boolean {
+  return key.startsWith("@media");
+}
+
+/**
+ * Check if a key is an at-rule that should stay nested (not media queries)
  */
 function isAtRule(key: string): boolean {
+  // Media queries should be property-level conditionals, not nested
+  if (isMediaQuery(key)) return false;
   return key.startsWith("@");
 }
 
@@ -433,35 +459,31 @@ function isAtRule(key: string): boolean {
  */
 export function toPropertyLevelConditionals(styles: StyleXObject): StyleXObject {
   const result: StyleXObject = {};
-  const pseudoClasses: Array<{ selector: string; styles: StyleXObject }> = [];
+  const conditionalBlocks: Array<{ selector: string; styles: StyleXObject }> = [];
+  const nestedBlocks: Array<{ key: string; value: StyleXObject }> = [];
 
-  // First pass: separate base properties from pseudo-classes and pseudo-elements
+  // First pass: separate base properties from pseudo-classes, media queries, and pseudo-elements
   for (const [key, value] of Object.entries(styles)) {
-    if (isPseudoClass(key) && typeof value === "object" && value !== null) {
-      // Pseudo-classes will be merged into property-level conditionals
-      pseudoClasses.push({ selector: key, styles: value as StyleXObject });
+    if ((isPseudoClass(key) || isMediaQuery(key)) && typeof value === "object" && value !== null) {
+      // Pseudo-classes and media queries will be merged into property-level conditionals
+      conditionalBlocks.push({ selector: key, styles: value as StyleXObject });
     } else if (
       (isPseudoElement(key) || isAtRule(key)) &&
       typeof value === "object" &&
       value !== null
     ) {
-      // Pseudo-elements and at-rules stay nested
-      result[key] = value;
+      // Pseudo-elements and non-media at-rules stay nested - collect for later
+      nestedBlocks.push({ key, value: value as StyleXObject });
     } else {
       result[key] = value;
     }
   }
 
-  // If no pseudo-classes, return as-is
-  if (pseudoClasses.length === 0) {
-    return result;
-  }
-
-  // Second pass: merge pseudo-classes into property-level format
-  for (const { selector, styles: condStyles } of pseudoClasses) {
+  // Second pass: merge conditional blocks into property-level format
+  for (const { selector, styles: condStyles } of conditionalBlocks) {
     for (const [prop, condValue] of Object.entries(condStyles)) {
       // Skip nested selectors (handle them recursively)
-      if (isPseudoClass(prop) || isPseudoElement(prop) || isAtRule(prop)) {
+      if (isPseudoClass(prop) || isPseudoElement(prop) || isAtRule(prop) || isMediaQuery(prop)) {
         // Keep nested selectors
         if (!result[selector]) {
           result[selector] = {};
@@ -489,6 +511,11 @@ export function toPropertyLevelConditionals(styles: StyleXObject): StyleXObject 
         };
       }
     }
+  }
+
+  // Third pass: add nested blocks (pseudo-elements, at-rules) at the end
+  for (const { key, value } of nestedBlocks) {
+    result[key] = value;
   }
 
   return result;

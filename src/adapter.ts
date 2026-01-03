@@ -303,16 +303,22 @@ export const staticValueHandler: DynamicNodeHandler = (ctx): DynamicNodeDecision
 };
 
 /**
+ * Marker prefix for variable references (to distinguish from string literals)
+ */
+export const VAR_REF_PREFIX = "__VAR_REF__";
+
+/**
  * Handler for keyframes references
  * Handles: animation: ${rotate} 2s linear
  */
 export const keyframesHandler: DynamicNodeHandler = (ctx): DynamicNodeDecision | undefined => {
   if (ctx.type !== "keyframes") return undefined;
 
-  // Return the keyframes identifier reference
+  // Return the keyframes identifier reference, marked as a variable
+  const identifier = ctx.keyframesName ?? ctx.sourceCode;
   return {
     action: "convert",
-    value: ctx.keyframesName ?? ctx.sourceCode,
+    value: VAR_REF_PREFIX + identifier,
   };
 };
 
@@ -539,9 +545,9 @@ export const defaultHandlers: DynamicNodeHandler[] = [
 // Handler helper functions
 
 /**
- * Clean up a value string (remove quotes, trim)
+ * Clean up a value string (remove quotes, trim) and convert to appropriate type
  */
-function cleanValue(value: string): string {
+function cleanValue(value: string): string | number {
   let cleaned = value.trim();
 
   // Remove surrounding quotes
@@ -557,16 +563,28 @@ function cleanValue(value: string): string {
     cleaned = cleaned.slice(1, -1);
   }
 
-  return cleaned.trim();
+  cleaned = cleaned.trim();
+
+  // Convert numeric strings to numbers
+  if (/^-?\d+(\.\d+)?$/.test(cleaned)) {
+    return parseFloat(cleaned);
+  }
+
+  return cleaned;
 }
 
 /**
  * Convert a prop name to a variant style name
- * $primary -> Primary, $isActive -> IsActive
+ * $primary -> Primary, $isActive -> Active, $upsideDown -> UpsideDown
  */
 function propNameToVariantName(propName: string): string {
   // Remove $ prefix if present
-  const cleanName = propName.startsWith("$") ? propName.slice(1) : propName;
+  let cleanName = propName.startsWith("$") ? propName.slice(1) : propName;
+
+  // Remove "is" prefix for boolean-style naming (isActive -> Active, isDisabled -> Disabled)
+  if (cleanName.startsWith("is") && cleanName.length > 2 && cleanName[2]!.toUpperCase() === cleanName[2]) {
+    cleanName = cleanName.slice(2);
+  }
 
   // Capitalize first letter
   return cleanName.charAt(0).toUpperCase() + cleanName.slice(1);
