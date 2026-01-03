@@ -1,178 +1,94 @@
-import React from "react";
 import * as stylex from "@stylexjs/stylex";
 
 const styles = stylex.create({
-  multiSelector: {},
-  multiSelectorHoverFocus: {
-    backgroundColor: "#BF4F74",
-    color: "white",
+  multiSelector: {
+    '&.active,&[aria-selected="true"]': {
+      backgroundColor: "#4F74BF",
+      color: "white",
+    },
+    backgroundColor: {
+      default: null,
+      ":hover,&:focus": "#BF4F74",
+    },
+    color: {
+      default: null,
+      ":hover,&:focus": "white",
+    },
+    outline: {
+      default: null,
+      ":active,&:focus-visible": "2px solid #4F74BF",
+    },
+    outlineOffset: {
+      default: null,
+      ":active,&:focus-visible": "2px",
+    },
   },
-  multiSelectorActiveFocusVisible: {
-    outline: "2px solid #4F74BF",
-    outlineOffset: "2px",
+  compoundSelector: {
+    "&.card.highlighted": {
+      borderWidth: "2px",
+      borderStyle: "solid",
+      borderColor: "gold",
+    },
+    "&.card.error": {
+      borderWidth: "2px",
+      borderStyle: "solid",
+      borderColor: "red",
+      backgroundColor: "#fee",
+    },
   },
-  multiSelectorSelected: {
-    backgroundColor: "#4F74BF",
-    color: "white",
+  chainedPseudo: {
+    borderColor: {
+      default: null,
+      ":focus:not(:disabled)": "#BF4F74",
+      ":hover:not(:disabled):not(:focus)": "#999",
+    },
+    backgroundColor: {
+      default: null,
+      ":checked:not(:disabled)": "#BF4F74",
+    },
   },
-  compoundSelector: {},
-  compoundHighlighted: {
-    borderWidth: "2px",
-    borderStyle: "solid",
-    borderColor: "gold",
+  complexNested: {
+    "& a": {
+      color: "#333",
+      textDecoration: "none",
+    },
+    "&.active": {
+      fontWeight: "bold",
+      color: "#4F74BF",
+    },
+    color: {
+      default: null,
+      ":hover,&:focus": "#BF4F74",
+    },
   },
-  compoundError: {
-    borderWidth: "2px",
-    borderStyle: "solid",
-    borderColor: "red",
-    backgroundColor: "#fee",
-  },
-  chainedPseudo: {},
-  chainedPseudoFocusEnabled: {
-    borderColor: "#BF4F74",
-  },
-  chainedPseudoHoverEnabled: {
-    borderColor: "#999",
-  },
-  chainedPseudoCheckedEnabled: {
-    backgroundColor: "#BF4F74",
-  },
-  nav: {},
-  navLink: {
-    color: "#333",
-    textDecoration: "none",
-  },
-  navLinkHoverFocus: {
-    color: "#BF4F74",
-  },
-  navLinkActive: {
-    fontWeight: "bold",
-    color: "#4F74BF",
-  },
-  heading: {
-    marginBottom: "0.5em",
-    lineHeight: 1.2,
-  },
-  textBlock: {
-    marginBottom: "1em",
-    lineHeight: 1.6,
+  groupDescendant: {
+    "& h1,& h2,& h3": {
+      marginBottom: "0.5em",
+      lineHeight: 1.2,
+    },
+    "& p,& li": {
+      marginBottom: "1em",
+      lineHeight: 1.6,
+    },
   },
 });
 
-interface MultiSelectorProps extends React.ButtonHTMLAttributes<HTMLButtonElement> {
-  isActive?: boolean;
-  isSelected?: boolean;
-}
-
-function MultiSelector({ isActive, isSelected, ...props }: MultiSelectorProps) {
-  const [isFocused, setIsFocused] = React.useState(false);
-  const [isHovered, setIsHovered] = React.useState(false);
-  const [isPressed, setIsPressed] = React.useState(false);
-
-  return (
-    <button
-      {...stylex.props(
-        styles.multiSelector,
-        (isHovered || isFocused) && styles.multiSelectorHoverFocus,
-        (isPressed || isFocused) && styles.multiSelectorActiveFocusVisible,
-        (isActive || isSelected) && styles.multiSelectorSelected,
-      )}
-      onFocus={() => setIsFocused(true)}
-      onBlur={() => setIsFocused(false)}
-      onMouseEnter={() => setIsHovered(true)}
-      onMouseLeave={() => setIsHovered(false)}
-      onMouseDown={() => setIsPressed(true)}
-      onMouseUp={() => setIsPressed(false)}
-      {...props}
-    />
-  );
-}
-
-interface CompoundSelectorProps {
-  highlighted?: boolean;
-  error?: boolean;
-  children?: React.ReactNode;
-}
-
-function CompoundSelector({ highlighted, error, children }: CompoundSelectorProps) {
-  return (
-    <div
-      {...stylex.props(
-        styles.compoundSelector,
-        highlighted && styles.compoundHighlighted,
-        error && styles.compoundError,
-      )}
-    >
-      {children}
-    </div>
-  );
-}
-
-interface ChainedPseudoProps extends React.InputHTMLAttributes<HTMLInputElement> {}
-
-function ChainedPseudo({ disabled, ...props }: ChainedPseudoProps) {
-  const [isFocused, setIsFocused] = React.useState(false);
-  const [isHovered, setIsHovered] = React.useState(false);
-
-  return (
-    <input
-      {...stylex.props(
-        styles.chainedPseudo,
-        !disabled && isFocused && styles.chainedPseudoFocusEnabled,
-        !disabled && isHovered && !isFocused && styles.chainedPseudoHoverEnabled,
-      )}
-      disabled={disabled}
-      onFocus={() => setIsFocused(true)}
-      onBlur={() => setIsFocused(false)}
-      onMouseEnter={() => setIsHovered(true)}
-      onMouseLeave={() => setIsHovered(false)}
-      {...props}
-    />
-  );
-}
-
-interface NavLinkProps {
-  href: string;
-  isActive?: boolean;
-  children?: React.ReactNode;
-}
-
-function NavLink({ href, isActive, children }: NavLinkProps) {
-  const [isHovered, setIsHovered] = React.useState(false);
-  const [isFocused, setIsFocused] = React.useState(false);
-
-  return (
-    <a
-      href={href}
-      {...stylex.props(
-        styles.navLink,
-        (isHovered || isFocused) && styles.navLinkHoverFocus,
-        isActive && styles.navLinkActive,
-      )}
-      onFocus={() => setIsFocused(true)}
-      onBlur={() => setIsFocused(false)}
-      onMouseEnter={() => setIsHovered(true)}
-      onMouseLeave={() => setIsHovered(false)}
-    >
-      {children}
-    </a>
-  );
-}
-
 export const App = () => (
   <div>
-    <MultiSelector>Multi Selector</MultiSelector>
-    <CompoundSelector highlighted>Compound</CompoundSelector>
-    <ChainedPseudo type="checkbox" />
-    <nav {...stylex.props(styles.nav)}>
-      <NavLink href="#" isActive>
+    <button {...stylex.props(styles.multiSelector)}>Multi Selector</button>
+    <div className="card highlighted" {...stylex.props(styles.compoundSelector)}>
+      Compound
+    </div>
+    <input type="checkbox" {...stylex.props(styles.chainedPseudo)} />
+    <nav {...stylex.props(styles.complexNested)}>
+      <a href="#" className="active">
         Active Link
-      </NavLink>
-      <NavLink href="#">Normal Link</NavLink>
+      </a>
+      <a href="#">Normal Link</a>
     </nav>
-    <div>
-      <h1 {...stylex.props(styles.heading)}>Heading</h1>
-      <p {...stylex.props(styles.textBlock)}>Paragraph</p>
+    <div {...stylex.props(styles.groupDescendant)}>
+      <h1>Heading</h1>
+      <p>Paragraph</p>
     </div>
   </div>
 );

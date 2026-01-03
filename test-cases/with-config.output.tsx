@@ -1,4 +1,3 @@
-import React from "react";
 import * as stylex from "@stylexjs/stylex";
 
 const styles = stylex.create({
@@ -16,26 +15,22 @@ const styles = stylex.create({
     borderRadius: "8px",
     boxShadow: "0 2px 4px rgba(0, 0, 0, 0.1)",
   },
-  inputBase: {
+  input: {
     padding: "8px 12px",
     borderWidth: "2px",
     borderStyle: "solid",
+    borderColor: "#BF4F74",
     borderRadius: "4px",
     fontSize: "14px",
+    outline: {
+      default: null,
+      ":focus": "none",
+    },
+    border: "#ccc",
   },
-  inputNormal: {
-    borderColor: "#ccc",
-  },
-  inputError: {
+  inputHasError: {
+    border: "red",
     borderColor: "red",
-  },
-  inputFocusNormal: {
-    borderColor: "#BF4F74",
-    outline: "none",
-  },
-  inputFocusError: {
-    borderColor: "red",
-    outline: "none",
   },
   baseButton: {
     fontSize: "14px",
@@ -51,69 +46,14 @@ const styles = stylex.create({
   },
 });
 
-function Button({ children, ...props }: React.ButtonHTMLAttributes<HTMLButtonElement>) {
-  return (
-    <button {...stylex.props(styles.button)} {...props}>
-      {children}
-    </button>
-  );
-}
-Button.displayName = "PrimaryButton";
-
-function Card({ children, ...props }: React.HTMLAttributes<HTMLDivElement>) {
-  return (
-    <div {...stylex.props(styles.card)} {...props}>
-      {children}
-    </div>
-  );
-}
-Card.displayName = "Card";
-
-interface InputProps extends Omit<React.InputHTMLAttributes<HTMLInputElement>, "style"> {
-  hasError?: boolean;
-}
-
-function Input({ hasError, ...props }: InputProps) {
-  const [isFocused, setIsFocused] = React.useState(false);
-
-  return (
-    <input
-      {...stylex.props(
-        styles.inputBase,
-        hasError ? styles.inputError : styles.inputNormal,
-        isFocused && (hasError ? styles.inputFocusError : styles.inputFocusNormal),
-      )}
-      onFocus={(e) => {
-        setIsFocused(true);
-        props.onFocus?.(e);
-      }}
-      onBlur={(e) => {
-        setIsFocused(false);
-        props.onBlur?.(e);
-      }}
-      {...props}
-    />
-  );
-}
-Input.displayName = "StyledInput";
-
-function ExtendedButton({ children, ...props }: React.ButtonHTMLAttributes<HTMLButtonElement>) {
-  return (
-    <button {...stylex.props(styles.baseButton, styles.extendedButton)} {...props}>
-      {children}
-    </button>
-  );
-}
-ExtendedButton.displayName = "ExtendedButton";
-
 export const App = () => (
   <div>
-    <Button>Primary Button</Button>
-    <Card>
+    <button {...stylex.props(styles.button)}>Primary Button</button>
+    <div {...stylex.props(styles.card)}>
       <p>Card content</p>
-    </Card>
-    <Input placeholder="Normal input" />
-    <Input hasError placeholder="Error input" />
-    <ExtendedButton>Extended Button</ExtendedButton>
+    </div>
+    <input placeholder="Normal input" {...stylex.props(styles.input)} />
+    <input hasError placeholder="Error input" {...stylex.props(styles.input)} />
+    <button {...stylex.props(styles.baseButton, styles.extendedButton)}>Extended Button</button>
   </div>
 );

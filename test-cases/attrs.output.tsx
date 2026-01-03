@@ -13,18 +13,18 @@ const styles = stylex.create({
     },
   },
   inputPadding: (padding: string) => ({
-    padding,
+    padding: padding,
   }),
 });
 
 export const App = () => (
   <>
-    <input type="text" size={5} {...stylex.props(styles.input)} placeholder="Small" />
-    <input type="text" {...stylex.props(styles.input)} placeholder="Normal" />
+    <input type="text" size={5} placeholder="Small" {...stylex.props(styles.input)} />
+    <input type="text" placeholder="Normal" {...stylex.props(styles.input)} />
     <input
       type="text"
-      {...stylex.props(styles.input, styles.inputPadding("2em"))}
       placeholder="Padded"
+      {...stylex.props(styles.input, styles.inputPadding("2em"))}
     />
   </>
 );

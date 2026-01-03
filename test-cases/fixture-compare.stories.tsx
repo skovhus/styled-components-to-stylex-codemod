@@ -44,7 +44,12 @@ function Compare({ name }: CompareProps) {
       }}
     >
       <div style={{ border: "1px solid #ddd", padding: 12 }}>
-        <div style={{ fontFamily: "ui-monospace, SFMono-Regular, Menlo, monospace", fontSize: 12 }}>
+        <div
+          style={{
+            fontFamily: "ui-monospace, SFMono-Regular, Menlo, monospace",
+            fontSize: 12,
+          }}
+        >
           Input (styled-components): {name}
         </div>
         <div style={{ marginTop: 12 }}>
@@ -53,7 +58,12 @@ function Compare({ name }: CompareProps) {
       </div>
 
       <div style={{ border: "1px solid #ddd", padding: 12 }}>
-        <div style={{ fontFamily: "ui-monospace, SFMono-Regular, Menlo, monospace", fontSize: 12 }}>
+        <div
+          style={{
+            fontFamily: "ui-monospace, SFMono-Regular, Menlo, monospace",
+            fontSize: 12,
+          }}
+        >
           Output (StyleX): {name}
         </div>
         <div style={{ marginTop: 12 }}>
