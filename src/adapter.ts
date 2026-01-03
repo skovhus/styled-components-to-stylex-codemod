@@ -289,16 +289,40 @@ export function createAdapter(options: Partial<Adapter>): Adapter {
 // =============================================================================
 
 /**
+ * Marker prefix for template literal expressions (to preserve template literal syntax)
+ */
+export const TEMPLATE_LITERAL_PREFIX = "__TEMPLATE_LITERAL__";
+
+/**
  * Handler for static value interpolations
  * Handles: ${variable}, ${object.property}, ${value}
  */
 export const staticValueHandler: DynamicNodeHandler = (ctx): DynamicNodeDecision | undefined => {
   if (ctx.type !== "static") return undefined;
 
-  // Return the variable reference directly
+  // If the interpolation spans the full value, just use the variable reference
+  if (ctx.isFullValue) {
+    return {
+      action: "convert",
+      value: VAR_REF_PREFIX + ctx.sourceCode,
+    };
+  }
+
+  // For partial values like "${spacing}px", create a template literal
+  // Replace the placeholder with ${expression} in the original value
+  if (ctx.cssValue) {
+    const placeholder = `__INTERPOLATION_${ctx.index}__`;
+    const templateValue = ctx.cssValue.replace(placeholder, `\${${ctx.sourceCode}}`);
+    return {
+      action: "convert",
+      value: TEMPLATE_LITERAL_PREFIX + templateValue,
+    };
+  }
+
+  // Fallback: just use the variable reference
   return {
     action: "convert",
-    value: ctx.sourceCode,
+    value: VAR_REF_PREFIX + ctx.sourceCode,
   };
 };
 

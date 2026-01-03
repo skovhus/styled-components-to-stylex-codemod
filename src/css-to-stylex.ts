@@ -69,7 +69,8 @@ export function normalizePropertyName(property: string): string {
  * Convert a CSS value to a StyleX-compatible value
  */
 export function convertValue(value: string, property?: string): StyleXValue {
-  const trimmed = value.trim();
+  // Strip !important - StyleX doesn't support it
+  const trimmed = stripImportant(value).trim();
 
   // Check for interpolations - return as dynamic
   if (hasInterpolation(trimmed)) {
@@ -226,7 +227,13 @@ export function expandShorthand(
       const prefix = property === "border" ? "border" : property;
       const result: Array<{ property: string; value: StyleXValue }> = [];
 
-      if (width) {
+      // When style is "none", we need to explicitly set width to 0 to reset the border
+      if (style === "none" && !width) {
+        result.push({
+          property: `${prefix}Width`,
+          value: 0,
+        });
+      } else if (width) {
         result.push({
           property: `${prefix}Width`,
           value: convertValue(width),

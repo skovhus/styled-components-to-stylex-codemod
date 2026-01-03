@@ -74,6 +74,7 @@ interface StyleInfo {
   componentName: string;
   baseElement: string;
   styles: StyleXObject;
+  extraStyles: Map<string, StyleXObject>;
   variantStyles: Map<string, StyleXObject>;
   dynamicFns: Map<
     string,
@@ -82,6 +83,10 @@ interface StyleInfo {
   isExtending: boolean;
   extendsFrom: string | undefined;
   attrsConfig: AttrsConfig | undefined;
+  jsxRewriteRules: Array<
+    | { type: "direct-children"; styleNames: string[] }
+    | { type: "direct-children-except-first"; styleNames: string[] }
+  >;
 }
 
 /**
@@ -605,6 +610,8 @@ function processStyledComponent(
 
   // Process based on what we found
   let styles: StyleXObject = {};
+  const extraStyles = new Map<string, StyleXObject>();
+  const jsxRewriteRules: StyleInfo["jsxRewriteRules"] = [];
   const variantStyles = new Map<string, StyleXObject>();
   const dynamicFns = new Map<
     string,
@@ -613,40 +620,47 @@ function processStyledComponent(
 
   if (templateLiteral) {
     // Template literal syntax - parse CSS
-    const parsed = parseStyledCSS(
-      templateLiteral.quasis,
-      templateLiteral.expressions as Expression[],
+  const parsed = parseStyledCSS(
+    templateLiteral.quasis,
+    templateLiteral.expressions as Expression[],
+  );
+  const rules = extractDeclarations(parsed.root);
+
+  if (rules.length === 0) {
+    return null;
+  }
+
+  // Convert to StyleX and process interpolations
+  const mainRule = rules[0]!;
+    // First get the raw StyleX object (before property-level conditional conversion)
+    const rawStyles = cssRuleToStyleX(mainRule);
+
+    // Extract child selectors BEFORE toPropertyLevelConditionals flattens them
+    extractDirectChildSelectorStyles(rawStyles, extraStyles, jsxRewriteRules);
+
+    // Now convert remaining styles to property-level conditionals
+    styles = toPropertyLevelConditionals(rawStyles);
+
+  // Process each interpolation
+  for (const [_index, location] of parsed.interpolations) {
+    const classified = classifyInterpolation(location, classificationCtx);
+    const context = buildDynamicNodeContext(classified, location, componentName, filePath);
+
+    const decision =
+      executeDynamicNodeHandlers(context, adapter) ??
+      getFallbackDecision(context, adapter.fallbackBehavior);
+
+    // Apply the decision
+    applyDecision(
+      j,
+      decision,
+      context,
+      styles,
+      variantStyles,
+      dynamicFns,
+      additionalImports,
+      warnings,
     );
-    const rules = extractDeclarations(parsed.root);
-
-    if (rules.length === 0) {
-      return null;
-    }
-
-    // Convert to StyleX and process interpolations
-    const mainRule = rules[0]!;
-    styles = toPropertyLevelConditionals(cssRuleToStyleX(mainRule));
-
-    // Process each interpolation
-    for (const [_index, location] of parsed.interpolations) {
-      const classified = classifyInterpolation(location, classificationCtx);
-      const context = buildDynamicNodeContext(classified, location, componentName, filePath);
-
-      const decision =
-        executeDynamicNodeHandlers(context, adapter) ??
-        getFallbackDecision(context, adapter.fallbackBehavior);
-
-      // Apply the decision
-      applyDecision(
-        j,
-        decision,
-        context,
-        styles,
-        variantStyles,
-        dynamicFns,
-        additionalImports,
-        warnings,
-      );
     }
   } else if (styleObject && styleObject.type === "ObjectExpression") {
     // Object syntax - convert object properties to styles
@@ -667,12 +681,76 @@ function processStyledComponent(
     componentName,
     baseElement,
     styles,
+    extraStyles,
     variantStyles,
     dynamicFns,
     isExtending,
     extendsFrom,
     attrsConfig,
+    jsxRewriteRules,
   };
+}
+
+/**
+ * Extract direct-child selector styles (e.g. `> *`) into separate StyleX styles
+ * and record JSX rewrite rules to apply them to direct JSX children.
+ *
+ * This is intentionally conservative and is currently aimed at matching fixtures like `nesting`.
+ *
+ * NOTE: Stylis (the CSS parser) hoists nested selectors like `> * { &:not(:first-child) {...} }`
+ * to become siblings: `>*` and `&:not(:first-child)`. We handle both cases.
+ */
+function extractDirectChildSelectorStyles(
+  styles: StyleXObject,
+  extraStyles: Map<string, StyleXObject>,
+  jsxRewriteRules: StyleInfo["jsxRewriteRules"],
+): void {
+  const childSelectorKeys = [">*", "> *"];
+  const foundKey = childSelectorKeys.find((k) => typeof styles[k] === "object" && styles[k] !== null);
+  if (!foundKey) return;
+
+  const childBlock = styles[foundKey] as StyleXObject;
+  delete styles[foundKey];
+
+  // First check for :not(:first-child) nested INSIDE the child block
+  let notFirstKeyInChild = [":not(:first-child)", "&:not(:first-child)"].find(
+    (k) => typeof childBlock[k] === "object" && childBlock[k] !== null,
+  );
+
+  // Also check for :not(:first-child) as a SIBLING to the child selector
+  // (this happens because stylis hoists nested selectors)
+  const notFirstKeySibling = [":not(:first-child)", "&:not(:first-child)"].find(
+    (k) => typeof styles[k] === "object" && styles[k] !== null,
+  );
+
+  let childBase: StyleXObject = {};
+  let childNotFirst: StyleXObject | null = null;
+
+  for (const [k, v] of Object.entries(childBlock)) {
+    if (notFirstKeyInChild && k === notFirstKeyInChild) continue;
+    childBase[k] = v as StyleXObject[keyof StyleXObject];
+  }
+
+  // Get childNotFirst from whichever location has it
+  if (notFirstKeyInChild) {
+    childNotFirst = childBlock[notFirstKeyInChild] as StyleXObject;
+  } else if (notFirstKeySibling) {
+    // Found at sibling level - extract and remove from parent styles
+    childNotFirst = styles[notFirstKeySibling] as StyleXObject;
+    delete styles[notFirstKeySibling];
+  }
+
+  // Fixture naming convention
+  extraStyles.set("child", childBase);
+  jsxRewriteRules.push({ type: "direct-children", styleNames: ["child"] });
+
+  if (childNotFirst && Object.keys(childNotFirst).length > 0) {
+    extraStyles.set("childNotFirst", childNotFirst);
+    jsxRewriteRules.push({
+      type: "direct-children-except-first",
+      styleNames: ["child", "childNotFirst"],
+    });
+  }
 }
 
 /**
@@ -893,7 +971,7 @@ function applyDecision(
           styles["animationName"] = decision.value;
           // Don't set the animation property
         } else {
-          styles[context.cssProperty] = decision.value;
+        styles[context.cssProperty] = decision.value;
         }
       }
       break;
@@ -1008,6 +1086,14 @@ function generateStyleXCode(
       value: styleObjectToAST(j, info.styles),
     });
 
+    // Add extra styles created by selector lowering (e.g. child rules)
+    for (const [extraName, extraStylesObj] of info.extraStyles) {
+      properties.push({
+        key: j.identifier(extraName),
+        value: styleObjectToAST(j, extraStylesObj),
+      });
+    }
+
     // Add variant styles
     for (const [variantName, variantStyles] of info.variantStyles) {
       properties.push({
@@ -1074,10 +1160,19 @@ function styleObjectToAST(j: JSCodeshift, styles: StyleXObject): Expression {
       // Handle null values explicitly (used for default: null in conditionals)
       valueNode = j.literal(null);
     } else if (typeof value === "string") {
-      // Check if it's a variable reference or expression
-      if (isVariableReference(value)) {
+      // Check if it's a template literal
+      if (isTemplateLiteral(value)) {
+        const templateValue = stripTemplateLiteralPrefix(value);
+        valueNode = parseTemplateLiteral(j, templateValue);
+      } else if (isVariableReference(value)) {
         // Strip the variable reference marker prefix if present
-        valueNode = j.identifier(stripVarRefPrefix(value));
+        const cleanValue = stripVarRefPrefix(value);
+        // Handle member expressions (e.g., theme.colors.primary)
+        if (cleanValue.includes(".")) {
+          valueNode = parseMemberExpression(j, cleanValue);
+        } else {
+          valueNode = j.identifier(cleanValue);
+        }
       } else {
         valueNode = j.literal(value);
       }
@@ -1358,6 +1453,11 @@ const CSS_KEYWORDS = new Set([
 const VAR_REF_PREFIX = "__VAR_REF__";
 
 /**
+ * Marker prefix for template literal expressions
+ */
+const TEMPLATE_LITERAL_PREFIX = "__TEMPLATE_LITERAL__";
+
+/**
  * Check if a value looks like a variable reference (not a CSS value)
  * Only certain patterns should be treated as JS identifiers
  */
@@ -1379,10 +1479,114 @@ function isVariableReference(value: string): boolean {
 }
 
 /**
+ * Check if a value is a template literal expression
+ */
+function isTemplateLiteral(value: string): boolean {
+  return value.startsWith(TEMPLATE_LITERAL_PREFIX);
+}
+
+/**
  * Strip the variable reference marker prefix if present
  */
 function stripVarRefPrefix(value: string): string {
   return value.startsWith(VAR_REF_PREFIX) ? value.slice(VAR_REF_PREFIX.length) : value;
+}
+
+/**
+ * Strip the template literal prefix if present
+ */
+function stripTemplateLiteralPrefix(value: string): string {
+  return value.startsWith(TEMPLATE_LITERAL_PREFIX) ? value.slice(TEMPLATE_LITERAL_PREFIX.length) : value;
+}
+
+/**
+ * Parse a template literal string into AST
+ * Handles: `${spacing}px`, `${value}`
+ */
+function parseTemplateLiteral(j: JSCodeshift, template: string): Expression {
+  // Find all ${...} expressions in the template
+  const regex = /\$\{([^}]+)\}/g;
+  const quasis: Array<{ raw: string; cooked: string }> = [];
+  const expressions: Expression[] = [];
+
+  let lastIndex = 0;
+  let match;
+
+  while ((match = regex.exec(template)) !== null) {
+    // Add the quasi (text before this expression)
+    const quasiText = template.slice(lastIndex, match.index);
+    quasis.push({ raw: quasiText, cooked: quasiText });
+
+    // Parse the expression
+    const exprStr = match[1]!.trim();
+    if (exprStr.includes(".")) {
+      expressions.push(parseMemberExpression(j, exprStr));
+    } else if (exprStr.includes("/") || exprStr.includes("*") || exprStr.includes("+") || exprStr.includes("-")) {
+      // Binary expression like spacing / 2
+      expressions.push(parseBinaryExpression(j, exprStr));
+    } else {
+      expressions.push(j.identifier(exprStr));
+    }
+
+    lastIndex = regex.lastIndex;
+  }
+
+  // Add the final quasi (text after the last expression)
+  const finalQuasi = template.slice(lastIndex);
+  quasis.push({ raw: finalQuasi, cooked: finalQuasi });
+
+  // Build template literal
+  const templateQuasis = quasis.map((q, i) =>
+    j.templateElement({ raw: q.raw, cooked: q.cooked }, i === quasis.length - 1),
+  );
+
+  return j.templateLiteral(
+    templateQuasis as unknown as Parameters<typeof j.templateLiteral>[0],
+    expressions as unknown as Parameters<typeof j.templateLiteral>[1],
+  );
+}
+
+/**
+ * Parse a member expression string into AST
+ * Handles: theme.colors.primary
+ */
+function parseMemberExpression(j: JSCodeshift, exprStr: string): Expression {
+  const parts = exprStr.split(".");
+  let expr: Expression = j.identifier(parts[0]!);
+
+  for (let i = 1; i < parts.length; i++) {
+    expr = j.memberExpression(expr, j.identifier(parts[i]!));
+  }
+
+  return expr;
+}
+
+/**
+ * Parse a simple binary expression
+ * Handles: spacing / 2, value + 1
+ */
+function parseBinaryExpression(j: JSCodeshift, exprStr: string): Expression {
+  // Simple parsing for common patterns
+  const divMatch = exprStr.match(/^(\w+)\s*\/\s*(\d+)$/);
+  if (divMatch) {
+    return j.binaryExpression(
+      "/",
+      j.identifier(divMatch[1]!),
+      j.literal(parseInt(divMatch[2]!, 10)),
+    );
+  }
+
+  const mulMatch = exprStr.match(/^(\w+)\s*\*\s*(\d+)$/);
+  if (mulMatch) {
+    return j.binaryExpression(
+      "*",
+      j.identifier(mulMatch[1]!),
+      j.literal(parseInt(mulMatch[2]!, 10)),
+    );
+  }
+
+  // Fallback: just use the string as an identifier
+  return j.identifier(exprStr.replace(/\s+/g, ""));
 }
 
 /**
@@ -1593,6 +1797,64 @@ function transformJSXUsage(
 
     // Add the spread attribute
     opening.attributes.push(spreadAttr);
+
+    // Apply selector-lowered rules to JSX children (initial support: direct children)
+    if (info.jsxRewriteRules.length > 0) {
+      const directChildElements = path.node.children.filter(
+        (c) => c.type === "JSXElement",
+      ) as Array<(typeof path.node.children)[number] & { type: "JSXElement" }>;
+
+      // Apply `child` to all direct children, and `childNotFirst` to all except first
+      for (let i = 0; i < directChildElements.length; i++) {
+        const childEl = directChildElements[i]!;
+        const childOpening = childEl.openingElement;
+        if (!childOpening.attributes) childOpening.attributes = [];
+
+        // Determine styles to apply for this child index
+        const styleNames: string[] = [];
+        for (const rule of info.jsxRewriteRules) {
+          if (rule.type === "direct-children") {
+            styleNames.push(...rule.styleNames);
+          } else if (rule.type === "direct-children-except-first" && i > 0) {
+            styleNames.push(...rule.styleNames);
+          }
+        }
+
+        // De-dupe while preserving order
+        const uniqueStyleNames = [...new Set(styleNames)];
+        if (uniqueStyleNames.length === 0) continue;
+
+        // Try to merge into existing stylex.props(...) spread if present
+        const existingSpread = childOpening.attributes.find(
+          (a) =>
+            a.type === "JSXSpreadAttribute" &&
+            a.argument.type === "CallExpression" &&
+            a.argument.callee.type === "MemberExpression" &&
+            a.argument.callee.object.type === "Identifier" &&
+            a.argument.callee.object.name === "stylex" &&
+            a.argument.callee.property.type === "Identifier" &&
+            a.argument.callee.property.name === "props",
+        );
+
+        const extraArgs = uniqueStyleNames.map((n) => j.memberExpression(
+          j.identifier("styles"),
+          j.identifier(n),
+        )) as unknown as Expression[];
+
+        if (existingSpread && existingSpread.type === "JSXSpreadAttribute") {
+          const call = existingSpread.argument;
+          if (call.type === "CallExpression") {
+            call.arguments.push(...(extraArgs as unknown as Parameters<typeof j.callExpression>[1]));
+          }
+        } else {
+          const propsCall = j.callExpression(
+            j.memberExpression(j.identifier("stylex"), j.identifier("props")),
+            extraArgs as unknown as Parameters<typeof j.callExpression>[1],
+          );
+          childOpening.attributes.push(j.jsxSpreadAttribute(propsCall));
+        }
+      }
+    }
   });
 }
 
