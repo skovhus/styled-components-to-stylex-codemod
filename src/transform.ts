@@ -53,12 +53,12 @@ export default function transform(
 ): string | null {
   const result = transformWithWarnings(file, api, options);
 
-  // Log warnings to console
+  // Log warnings to stderr
   for (const warning of result.warnings) {
     const location = warning.line
       ? ` (${file.path}:${warning.line}:${warning.column ?? 0})`
       : ` (${file.path})`;
-    console.warn(`[styled-components-to-stylex] Warning${location}: ${warning.message}`);
+    process.stderr.write(`[styled-components-to-stylex] Warning${location}: ${warning.message}\n`);
   }
 
   return result.code;
@@ -1008,7 +1008,7 @@ export function transformWithWarnings(
               l.property.name.startsWith("$")
                 ? l.property.name
                 : null;
-            if (propName && fallback != null) {
+            if (propName && fallback !== null) {
               wantsDollarStrip = true;
               styleObj[styleKey] = fallback;
               const fnKey = `${toStyleKey(id.name)}${toSuffixFromProp(styleKey)}`;
@@ -1023,7 +1023,7 @@ export function transformWithWarnings(
                   j.objectExpression([p]),
                 );
               }
-            } else if (fallback != null) {
+            } else if (fallback !== null) {
               styleObj[styleKey] = fallback;
             } else {
               styleObj[styleKey] = "";
@@ -1238,7 +1238,7 @@ export function transformWithWarnings(
       return false;
     };
 
-    const buildInterpolatedTemplate = (cssValue: any): any | null => {
+    const buildInterpolatedTemplate = (cssValue: any): unknown | null => {
       // Build a JS TemplateLiteral from CssValue parts when it’s basically string interpolation,
       // e.g. `${spacing}px`, `${spacing / 2}px 0`, `1px solid ${theme.colors.secondary}` (handled elsewhere).
       if (!cssValue || cssValue.kind !== "interpolated") return null;
@@ -1565,7 +1565,7 @@ export function transformWithWarnings(
       if (typeof rule.selector === "string" && rule.selector.includes("__SC_EXPR_")) {
         const slotMatch = rule.selector.match(/__SC_EXPR_(\d+)__/);
         const slotId = slotMatch ? Number(slotMatch[1]) : null;
-        const slotExpr = slotId != null ? (decl.templateExpressions[slotId] as any) : null;
+        const slotExpr = slotId !== null ? (decl.templateExpressions[slotId] as any) : null;
         const otherLocal = slotExpr?.type === "Identifier" ? (slotExpr.name as string) : null;
 
         const selTrim = rule.selector.trim();
@@ -1585,7 +1585,9 @@ export function transformWithWarnings(
               for (const out of cssDeclarationToStylexDeclarations(d)) {
                 if (out.value.kind !== "static") continue;
                 const hoverValue = out.value.value;
-                const baseValue = String(styleObj[out.prop] ?? "");
+                const rawBase = (styleObj as any)[out.prop] as unknown;
+                const baseValue =
+                  typeof rawBase === "string" || typeof rawBase === "number" ? String(rawBase) : "";
                 const varName = `--sc2sx-${toKebab(decl.localName)}-${toKebab(out.prop)}`;
                 parentStyle[varName] = {
                   default: baseValue || null,
@@ -1610,8 +1612,12 @@ export function transformWithWarnings(
             const varTransform = `--sc2sx-${toKebab(otherLocal)}-transform`;
 
             // Ensure child reads from vars with fallbacks.
-            const baseW = String(childStyle.width ?? "16px");
-            const baseH = String(childStyle.height ?? "16px");
+            const rawW = (childStyle as any).width as unknown;
+            const rawH = (childStyle as any).height as unknown;
+            const baseW =
+              typeof rawW === "string" || typeof rawW === "number" ? String(rawW) : "16px";
+            const baseH =
+              typeof rawH === "string" || typeof rawH === "number" ? String(rawH) : "16px";
             childStyle.width = `var(${varSize}, ${baseW})`;
             childStyle.height = `var(${varSize}, ${baseH})`;
             childStyle.opacity = `var(${varOpacity}, 1)`;
@@ -1820,8 +1826,8 @@ export function transformWithWarnings(
                   type: "dynamic-node",
                   feature: w.feature,
                   message: w.message,
-                  ...(loc?.line != null ? { line: loc.line } : {}),
-                  ...(loc?.column != null ? { column: loc.column } : {}),
+                  ...(loc?.line !== undefined ? { line: loc.line } : {}),
+                  ...(loc?.column !== undefined ? { column: loc.column } : {}),
                 });
               },
             },
@@ -2104,7 +2110,7 @@ export function transformWithWarnings(
       decl.base.kind === "intrinsic" &&
       decl.base.tagName === "input" &&
       styleObj.borderStyle === "none" &&
-      styleObj.outline == null
+      (styleObj.outline === null || styleObj.outline === undefined)
     ) {
       styleObj.outline = { default: null, ":focus": "none" };
     }
@@ -2265,7 +2271,7 @@ export function transformWithWarnings(
     return last >= 0 ? last : null;
   })();
 
-  if (declsRefIdx != null) {
+  if (declsRefIdx !== null) {
     programBody.splice(declsRefIdx + 1, 0, stylesDecl as any);
   } else if (insertionAnchor) {
     insertionAnchor.insertAfter(stylesDecl);
@@ -3407,7 +3413,18 @@ function literalToAst(j: API["jscodeshift"], value: unknown): any {
   if (typeof value === "string") return j.literal(value);
   if (typeof value === "number") return j.literal(value);
   if (typeof value === "boolean") return j.literal(value);
-  // fallback
+  if (typeof value === "undefined") return j.identifier("undefined");
+  if (typeof value === "bigint") return j.literal(value.toString());
+  if (typeof value === "symbol") return j.literal(value.description ?? "");
+  if (typeof value === "function") return j.literal("[Function]");
+  if (typeof value === "object") {
+    try {
+      return j.literal(JSON.stringify(value));
+    } catch {
+      return j.literal("[Object]");
+    }
+  }
+  // fallback (should be unreachable, but keep it defensive)
   return j.literal(String(value));
 }
 

@@ -323,7 +323,7 @@ export const conditionalCssBlockHandler: DynamicHandler = {
       if (!testPath || testPath.length !== 1) return null;
 
       const cssText = literalToString(right);
-      if (cssText == null) return null;
+      if (cssText === null || cssText === undefined) return null;
 
       const style = parseCssDeclarationBlock(cssText);
       if (!style) return null;
