@@ -1,10 +1,6 @@
-import React from "react";
 import * as stylex from "@stylexjs/stylex";
 
 const styles = stylex.create({
-  thing: {
-    color: "blue",
-  },
   adjacentSibling: {
     color: "red",
     backgroundColor: "lime",
@@ -12,35 +8,38 @@ const styles = stylex.create({
   siblingAfterSomething: {
     backgroundColor: "yellow",
   },
+  thing: {
+    color: "blue",
+  },
 });
 
-interface ThingProps {
-  children: React.ReactNode;
-  isAdjacentSibling?: boolean;
-  isSiblingAfterSomething?: boolean;
-  className?: string;
+function Thing(props) {
+  const {
+    children: children,
+    className: className,
+    isAdjacentSibling: isAdjacentSibling,
+    isSiblingAfterSomething: isSiblingAfterSomething,
+    ...rest
+  } = props;
+
+  const sx = stylex.props(
+    styles.thing,
+    isAdjacentSibling && styles.adjacentSibling,
+    isSiblingAfterSomething && styles.siblingAfterSomething,
+  );
+
+  return (
+    <div {...sx} className={[sx.className, className].filter(Boolean).join(" ")} {...rest}>
+      {children}
+    </div>
+  );
 }
-
-const Thing = ({ children, isAdjacentSibling, isSiblingAfterSomething, className }: ThingProps) =>
-  (() => {
-    const sx = stylex.props(
-      styles.thing,
-      isAdjacentSibling && styles.adjacentSibling,
-      isSiblingAfterSomething && styles.siblingAfterSomething,
-    );
-
-    return (
-      <div {...sx} className={[sx.className, className].filter(Boolean).join(" ")}>
-        {children}
-      </div>
-    );
-  })();
 
 export const App = () => (
   <div>
     <Thing>First (blue)</Thing>
     <Thing isAdjacentSibling>Second (red, lime background - adjacent to first)</Thing>
-    <Thing isAdjacentSibling className="something">
+    <Thing className="something" isAdjacentSibling>
       Third with .something class
     </Thing>
     <Thing isAdjacentSibling isSiblingAfterSomething>

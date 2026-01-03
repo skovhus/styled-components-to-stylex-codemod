@@ -1,5 +1,4 @@
 import * as stylex from "@stylexjs/stylex";
-import React from "react";
 
 const styles = stylex.create({
   staticBox: {
@@ -9,26 +8,45 @@ const styles = stylex.create({
     borderRadius: "4px",
   },
   dynamicBox: {
+    backgroundColor: "#BF4F74",
+    height: "50px",
+    width: "50px",
     borderRadius: "4px",
   },
+  dynamicBoxBackgroundColor: (backgroundColor: string) => ({
+    backgroundColor,
+  }),
+  dynamicBoxHeight: (height: string) => ({
+    height,
+  }),
+  dynamicBoxWidth: (width: string) => ({
+    width,
+  }),
 });
 
-interface DynamicBoxProps extends React.HTMLAttributes<HTMLDivElement> {
-  $background?: string;
-  $size?: string;
-}
+function DynamicBox(props) {
+  const { className: className, children: children, style: style, ...rest } = props;
 
-function DynamicBox({ $background, $size, ...props }: DynamicBoxProps) {
+  for (const k of Object.keys(rest)) {
+    if (k.startsWith("$")) delete rest[k];
+  }
+
+  const sx = stylex.props(
+    styles.dynamicBox,
+    props["$background"] && styles.dynamicBoxBackgroundColor(props["$background"]),
+    props["$size"] && styles.dynamicBoxHeight(props["$size"]),
+    props["$size"] && styles.dynamicBoxWidth(props["$size"]),
+  );
+
   return (
     <div
-      {...stylex.props(styles.dynamicBox)}
-      style={{
-        backgroundColor: $background || "#BF4F74",
-        height: $size || "50px",
-        width: $size || "50px",
-      }}
-      {...props}
-    />
+      {...sx}
+      className={[sx.className, className].filter(Boolean).join(" ")}
+      style={style}
+      {...rest}
+    >
+      {children}
+    </div>
   );
 }
 

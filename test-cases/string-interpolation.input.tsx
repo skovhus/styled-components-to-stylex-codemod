@@ -55,8 +55,8 @@ const ThemedCard = styled.div`
 // Function returning string
 const getColor = (variant: string) => (variant === "primary" ? "#BF4F74" : "#4F74BF");
 
-const DynamicBox = styled.div<{ variant: string }>`
-  background: ${(props) => getColor(props.variant)};
+const DynamicBox = styled.div<{ $variant: string }>`
+  background: ${(props) => getColor(props.$variant)};
   padding: 16px;
   color: white;
   border-radius: 4px;
@@ -68,7 +68,7 @@ export const App = () => (
     <Text>Some text</Text>
     <ConditionalButton>Conditional</ConditionalButton>
     <ThemedCard>Themed Card</ThemedCard>
-    <DynamicBox variant="primary">Primary</DynamicBox>
-    <DynamicBox variant="secondary">Secondary</DynamicBox>
+    <DynamicBox $variant="primary">Primary</DynamicBox>
+    <DynamicBox $variant="secondary">Secondary</DynamicBox>
   </div>
 );

@@ -1,5 +1,4 @@
 import * as stylex from "@stylexjs/stylex";
-import { calcVars } from "./css-calc.stylex";
 
 const styles = stylex.create({
   container: {
@@ -28,8 +27,9 @@ const styles = stylex.create({
     margin: "calc(10px + calc(5px * 2))",
   },
   withVariables: {
-    width: `calc(${calcVars.baseSize} * 10)`,
-    padding: `calc(${calcVars.baseSize} / 2)`,
+    "--base-size": "16px",
+    width: "calc(var(--base-size) * 10)",
+    padding: "calc(var(--base-size) / 2)",
   },
 });
 

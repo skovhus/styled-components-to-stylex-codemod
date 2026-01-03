@@ -3,10 +3,12 @@ import * as stylex from "@stylexjs/stylex";
 const styles = stylex.create({
   icon: {
     display: "inline-block",
-    width: "16px",
-    height: "16px",
+    width: "var(--sc2sx-icon-size, 16px)",
+    height: "var(--sc2sx-icon-size, 16px)",
     backgroundColor: "currentColor",
     maskSize: "contain",
+    opacity: "var(--sc2sx-icon-opacity, 1)",
+    transform: "var(--sc2sx-icon-transform, none)",
   },
   button: {
     display: "inline-flex",
@@ -18,25 +20,22 @@ const styles = stylex.create({
     borderWidth: 0,
     borderStyle: "none",
     borderRadius: "4px",
-  },
-  iconInButton: {
-    width: "20px",
-    height: "20px",
-    opacity: {
-      default: 0.8,
-      [stylex.when.ancestor(":hover")]: 1,
+    "--sc2sx-icon-opacity": {
+      default: "0.8",
+      ":hover": "1",
     },
-    transform: {
-      default: null,
-      [stylex.when.ancestor(":hover")]: "scale(1.1)",
+    "--sc2sx-icon-transform": {
+      default: "none",
+      ":hover": "scale(1.1)",
     },
+    "--sc2sx-icon-size": "20px",
   },
 });
 
 export const App = () => (
   <div>
-    <button {...stylex.props(styles.button, stylex.defaultMarker())}>
-      <span {...stylex.props(styles.icon, styles.iconInButton)} />
+    <button {...stylex.props(styles.button)}>
+      <span {...stylex.props(styles.icon)} />
       Click me
     </button>
   </div>

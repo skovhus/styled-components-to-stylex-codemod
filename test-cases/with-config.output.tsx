@@ -55,7 +55,14 @@ function Input(props) {
 
   const sx = stylex.props(styles.input, hasError && styles.inputHasError);
 
-  return <input {...sx} className={[sx.className, className].filter(Boolean).join(" ")} style={style} {...rest} />;
+  return (
+    <input
+      {...sx}
+      className={[sx.className, className].filter(Boolean).join(" ")}
+      style={style}
+      {...rest}
+    />
+  );
 }
 
 export const App = () => (
@@ -69,4 +76,3 @@ export const App = () => (
     <button {...stylex.props(styles.baseButton, styles.extendedButton)}>Extended Button</button>
   </div>
 );
-

@@ -97,7 +97,11 @@ export type HandlerResult =
     }
   | {
       type: "splitVariants";
-      variants: Array<{ nameHint: string; when: string; style: Record<string, unknown> }>;
+      variants: Array<{
+        nameHint: string;
+        when: string;
+        style: Record<string, unknown>;
+      }>;
     }
   | { type: "keepOriginal"; reason: string };
 
