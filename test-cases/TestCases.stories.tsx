@@ -1,17 +1,20 @@
 import type { Meta, StoryObj } from "@storybook/react";
 import React from "react";
 
-// Keep Storybook lightweight/stable by only loading the fixture under active development.
-import * as descendantInput from "./descendant-component-selector.input";
-import * as descendantOutput from "./descendant-component-selector.output";
+type FixtureModule = { App?: React.ComponentType<unknown> };
 
-const inputModules = {
-  "./descendant-component-selector.input.tsx": descendantInput,
-} as Record<string, { App: React.ComponentType }>;
-
-const outputModules = {
-  "./descendant-component-selector.output.tsx": descendantOutput,
-} as Record<string, { App: React.ComponentType }>;
+// Dynamically import all fixtures (excluding _unsupported* files and known broken outputs)
+// Broken outputs: component-selector, sibling-selectors, string-interpolation, with-config
+// These have invalid StyleX syntax that the transformer produces but requires manual fixing
+const inputModules = import.meta.glob<FixtureModule>(["./*.input.tsx", "!./_*.input.tsx"], { eager: true });
+const outputModules = import.meta.glob<FixtureModule>([
+  "./*.output.tsx",
+  "!./_*.output.tsx",
+  "!./component-selector.output.tsx",
+  "!./sibling-selectors.output.tsx",
+  "!./string-interpolation.output.tsx",
+  "!./with-config.output.tsx",
+], { eager: true });
 
 // Extract test case names from file paths
 function getTestCaseName(path: string): string {
@@ -19,8 +22,11 @@ function getTestCaseName(path: string): string {
   return match?.[1] ?? path;
 }
 
-// Get unique test case names
-const testCaseNames = ["descendant-component-selector"];
+// Get unique test case names, sorted
+const testCaseNames = [...new Set([
+  ...Object.keys(inputModules).map(getTestCaseName),
+  ...Object.keys(outputModules).map(getTestCaseName),
+])].sort();
 
 // Comparison component that renders input and output side by side
 interface ComparisonProps {

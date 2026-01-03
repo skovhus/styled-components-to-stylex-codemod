@@ -16,18 +16,22 @@ const styles = stylex.create({
       default: null,
       ":focus": "none",
     },
+    "::placeholder": {
+      color: "#999",
+      fontStyle: "italic",
+    },
   },
   inputDisabled: {
     backgroundColor: "#f5f5f5",
     color: "#999",
     cursor: "not-allowed",
   },
-  inputCheckbox: {
+  inputTypeCheckbox: {
     width: "20px",
     height: "20px",
     padding: 0,
   },
-  inputRadio: {
+  inputTypeRadio: {
     width: "20px",
     height: "20px",
     padding: 0,
@@ -37,26 +41,20 @@ const styles = stylex.create({
     backgroundColor: "#fafafa",
     borderStyle: "dashed",
   },
-  inputPlaceholder: {
-    "::placeholder": {
-      color: "#999",
-      fontStyle: "italic",
-    },
-  },
   link: {
     color: "#BF4F74",
     textDecoration: "none",
   },
-  linkExternal: {
+  linkTargetBlank: {
     "::after": {
       content: '" ↗"',
       fontSize: "0.8em",
     },
   },
-  linkHttps: {
+  linkHrefHttps: {
     color: "#4CAF50",
   },
-  linkPdf: {
+  linkHrefPdf: {
     color: "#F44336",
   },
 });
@@ -64,48 +62,43 @@ const styles = stylex.create({
 interface InputProps extends React.InputHTMLAttributes<HTMLInputElement> {}
 
 function Input(props: InputProps) {
-  const { type, disabled, readOnly, className, ...rest } = props;
+  const { disabled, type, readonly, className, ...rest } = props;
   const sx = stylex.props(
     styles.input,
-    styles.inputPlaceholder,
     disabled && styles.inputDisabled,
-    readOnly && styles.inputReadonly,
-    type === "checkbox" && styles.inputCheckbox,
-    type === "radio" && styles.inputRadio,
+    type === "checkbox" && styles.inputTypeCheckbox,
+    type === "radio" && styles.inputTypeRadio,
+    readonly && styles.inputReadonly
   );
   return (
     <input
       {...sx}
       className={[sx.className, className].filter(Boolean).join(" ")}
-      type={type}
       disabled={disabled}
-      readOnly={readOnly}
+      type={type}
+      readonly={readonly}
       {...rest}
     />
   );
 }
-
 interface LinkProps extends React.AnchorHTMLAttributes<HTMLAnchorElement> {
   children?: React.ReactNode;
 }
 
-function Link({ href, target, className, children, ...props }: LinkProps) {
-  const isHttps = href?.startsWith("https");
-  const isPdf = href?.endsWith(".pdf");
-  const isExternal = target === "_blank";
+function Link({ target, href, className, ...rest }: LinkProps) {
   const sx = stylex.props(
     styles.link,
-    isExternal && styles.linkExternal,
-    isHttps && styles.linkHttps,
-    isPdf && styles.linkPdf,
+    target === "_blank" && styles.linkTargetBlank,
+    href?.startsWith("https") && styles.linkHrefHttps,
+    href?.endsWith(".pdf") && styles.linkHrefPdf
   );
   return (
     <a
       {...sx}
       className={[sx.className, className].filter(Boolean).join(" ")}
-      href={href}
       target={target}
-      {...props}
+      href={href}
+      {...rest}
     >
       {children}
     </a>

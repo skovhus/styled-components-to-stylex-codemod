@@ -1,20 +1,26 @@
 import type { Meta, StoryObj } from "@storybook/react";
 import React from "react";
 
-type FixtureModule = { App?: React.ComponentType<any> };
+type FixtureModule = { App?: React.ComponentType<unknown> };
 
-// Keep Storybook lightweight/stable by only loading the fixture under active development.
-// Many fixtures are intentionally "compiler-edge" and may not be valid StyleX at runtime yet.
-import * as descendantInput from "./descendant-component-selector.input";
-import * as descendantOutput from "./descendant-component-selector.output";
-
-const inputModules = {
-  "./descendant-component-selector.input.tsx": descendantInput,
-} as Record<string, FixtureModule>;
-
-const outputModules = {
-  "./descendant-component-selector.output.tsx": descendantOutput,
-} as Record<string, FixtureModule>;
+// Dynamically import all fixtures (excluding _unsupported* files and known broken outputs)
+// Broken outputs: component-selector, sibling-selectors, string-interpolation, with-config
+// These have invalid StyleX syntax that the transformer produces but requires manual fixing
+const inputModules = import.meta.glob<FixtureModule>(
+  ["./*.input.tsx", "!./_*.input.tsx"],
+  { eager: true }
+);
+const outputModules = import.meta.glob<FixtureModule>(
+  [
+    "./*.output.tsx",
+    "!./_*.output.tsx",
+    "!./component-selector.output.tsx",
+    "!./sibling-selectors.output.tsx",
+    "!./string-interpolation.output.tsx",
+    "!./with-config.output.tsx",
+  ],
+  { eager: true }
+);
 
 function fileToName(path: string): string {
   // ./basic.input.tsx -> basic
@@ -24,7 +30,15 @@ function fileToName(path: string): string {
     .replace(/\.output\.tsx$/, "");
 }
 
-const fixtureNames = ["descendant-component-selector"];
+// Filter out unsupported fixtures (those starting with _)
+const fixtureNames = [
+  ...new Set([
+    ...Object.keys(inputModules).map(fileToName),
+    ...Object.keys(outputModules).map(fileToName),
+  ]),
+]
+  .filter((name) => !name.startsWith("_"))
+  .sort();
 
 type CompareProps = { name: string };
 

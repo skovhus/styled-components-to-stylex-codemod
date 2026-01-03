@@ -1,9 +1,5 @@
 import styled from "styled-components";
 
-// expected-warnings: none
-// NOTE: This fixture uses universal selectors (e.g. `& *`, `&:hover *`) which are not
-// currently representable in StyleX. It's excluded from Storybook/test pairing by the `_unsupported-` prefix.
-
 // Universal selector for all children
 const ResetBox = styled.div`
   & * {
@@ -41,7 +37,7 @@ const List = styled.ul`
 // Universal in hover state
 const HoverContainer = styled.div`
   &:hover * {
-    color: #bf4f74;
+    color: #BF4F74;
   }
 `;
 

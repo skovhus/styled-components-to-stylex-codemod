@@ -1,8 +1,9 @@
+import React from "react";
 import * as stylex from "@stylexjs/stylex";
+import isPropValid from "@emotion/is-prop-valid";
 
 const styles = stylex.create({
   button: {
-    backgroundColor: "#BF4F74",
     padding: "8px 16px",
     fontSize: "14px",
     color: "white",
@@ -10,18 +11,15 @@ const styles = stylex.create({
     borderStyle: "none",
     borderRadius: "4px",
   },
-  buttonSizeLarge: {
+  buttonColor: {
+    backgroundColor: "#BF4F74",
+  },
+  buttonSize: {
     padding: "12px 24px",
     fontSize: "18px",
   },
-  buttonBackgroundColor: (backgroundColor: string) => ({
-    backgroundColor,
-  }),
   link: {
-    color: {
-      default: "#333",
-      ":hover": "#BF4F74",
-    },
+    color: "#333",
     fontWeight: "normal",
     textDecoration: "none",
   },
@@ -30,24 +28,22 @@ const styles = stylex.create({
     fontWeight: "bold",
   },
   box: {
-    backgroundColor: "white",
-    padding: "16px",
     borderRadius: "8px",
     boxShadow: "0 2px 4px rgba(0, 0, 0, 0.1)",
   },
-  boxBackgroundColor: (backgroundColor: string) => ({
-    backgroundColor,
-  }),
-  boxPadding: (padding: string) => ({
-    padding,
-  }),
+  boxBackground: {
+    backgroundColor: "white",
+  },
+  boxPadding: {
+    padding: "16px",
+  },
   card: {
     backgroundColor: "#4F74BF",
     borderRadius: "4px",
     padding: "16px",
     color: "white",
   },
-  cardVariantPrimary: {
+  cardVariant: {
     backgroundColor: "#BF4F74",
   },
   cardRounded: {
@@ -62,13 +58,17 @@ function Button(props) {
     style: style,
     color: color,
     size: size,
+    $color: $color,
+    $size: $size,
     ...rest
   } = props;
 
   const sx = stylex.props(
     styles.button,
-    size === "large" && styles.buttonSizeLarge,
-    color && styles.buttonBackgroundColor(color),
+    color === "color" && styles.buttonColor,
+    size === "size" && styles.buttonSize,
+    $color && styles.buttonColor,
+    $size && styles.buttonSize,
   );
 
   return (
@@ -82,41 +82,25 @@ function Button(props) {
     </button>
   );
 }
-
-function Link(props) {
+function Box(props) {
   const {
     className: className,
     children: children,
     style: style,
-    isActive: isActive,
+    $background: $background,
+    $padding: $padding,
     ...rest
   } = props;
-
-  const sx = stylex.props(styles.link, isActive && styles.linkActive);
-
-  return (
-    <a
-      {...sx}
-      className={[sx.className, className].filter(Boolean).join(" ")}
-      style={style}
-      {...rest}
-    >
-      {children}
-    </a>
-  );
-}
-
-function Box(props) {
-  const { className: className, children: children, style: style, ...rest } = props;
 
   for (const k of Object.keys(rest)) {
     if (k.startsWith("$")) delete rest[k];
   }
-
   const sx = stylex.props(
     styles.box,
-    props["$background"] && styles.boxBackgroundColor(props["$background"]),
-    props["$padding"] && styles.boxPadding(props["$padding"]),
+    background === "background" && styles.boxBackground,
+    padding === "padding" && styles.boxPadding,
+    $background && styles.boxBackground,
+    $padding && styles.boxPadding,
   );
 
   return (
@@ -130,7 +114,6 @@ function Box(props) {
     </div>
   );
 }
-
 function Card(props) {
   const {
     className: className,
@@ -139,26 +122,24 @@ function Card(props) {
     variant: variant,
     elevation: elevation,
     rounded: rounded,
+    $variant: $variant,
+    $rounded: $rounded,
     ...rest
   } = props;
 
   const sx = stylex.props(
     styles.card,
-    variant === "primary" && styles.cardVariantPrimary,
-    rounded && styles.cardRounded,
+    variant === "variant" && styles.cardVariant,
+    rounded === "rounded" && styles.cardRounded,
+    $variant && styles.cardVariant,
+    $rounded && styles.cardRounded,
   );
 
   return (
     <div
       {...sx}
       className={[sx.className, className].filter(Boolean).join(" ")}
-      style={{
-        ...style,
-        boxShadow: ((props) =>
-          `0 ${(props.elevation || 1) * 2}px ${(props.elevation || 1) * 4}px rgba(0, 0, 0, 0.1)`)(
-          props,
-        ),
-      }}
+      style={style}
       {...rest}
     >
       {children}
@@ -173,10 +154,12 @@ export const App = () => (
     </Button>
     <Button>Default Button</Button>
     <br />
-    <Link href="#" isActive>
+    <a href="#" isActive {...stylex.props(styles.link)}>
       Active Link
-    </Link>
-    <Link href="#">Normal Link</Link>
+    </a>
+    <a href="#" {...stylex.props(styles.link)}>
+      Normal Link
+    </a>
     <br />
     <Box $background="#f0f0f0" $padding="24px">
       Box with transient-like props

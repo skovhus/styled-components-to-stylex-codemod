@@ -1,4 +1,3 @@
-import React from "react";
 import * as stylex from "@stylexjs/stylex";
 
 const styles = stylex.create({
@@ -18,43 +17,14 @@ const styles = stylex.create({
   },
 });
 
-interface ButtonProps extends React.ButtonHTMLAttributes<HTMLButtonElement> {
-  as?: React.ElementType;
-  href?: string;
-}
-
-function Button({
-  as: Component = "button",
-  children,
-  ...props
-}: ButtonProps & { children?: React.ReactNode }) {
-  return (
-    <Component {...stylex.props(styles.button)} {...props}>
-      {children}
-    </Component>
-  );
-}
-
-function ButtonWrapper({
-  as: Component = "button",
-  children,
-  ...props
-}: ButtonProps & { children?: React.ReactNode }) {
-  return (
-    <Component {...stylex.props(styles.button, styles.buttonWrapper)} {...props}>
-      {children}
-    </Component>
-  );
-}
-
 export const App = () => (
   <div>
-    <Button>Regular Button</Button>
-    <Button as="a" href="#">
+    <button {...stylex.props(styles.button)}>Regular Button</button>
+    <a href="#" {...stylex.props(styles.button)}>
       Button as Link
-    </Button>
-    <ButtonWrapper as="a" href="#">
+    </a>
+    <a href="#" {...stylex.props(styles.button, styles.buttonWrapper)}>
       Wrapper forwards as Link
-    </ButtonWrapper>
+    </a>
   </div>
 );

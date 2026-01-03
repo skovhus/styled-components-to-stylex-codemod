@@ -13,7 +13,6 @@ const styles = stylex.create({
 const Thing = ({ children }: { children: React.ReactNode }) => (
   <div {...stylex.props(styles.thing)}>{children}</div>
 );
-
 const OverrideStyles = ({ children }: { children: React.ReactNode }) => (
   <div {...stylex.props(styles.overrideStyles)}>{children}</div>
 );
