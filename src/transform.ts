@@ -1238,7 +1238,7 @@ export function transformWithWarnings(
       return false;
     };
 
-    const buildInterpolatedTemplate = (cssValue: any): unknown | null => {
+    const buildInterpolatedTemplate = (cssValue: any): unknown => {
       // Build a JS TemplateLiteral from CssValue parts when it’s basically string interpolation,
       // e.g. `${spacing}px`, `${spacing / 2}px 0`, `1px solid ${theme.colors.secondary}` (handled elsewhere).
       if (!cssValue || cssValue.kind !== "interpolated") return null;
@@ -3425,7 +3425,7 @@ function literalToAst(j: API["jscodeshift"], value: unknown): any {
     }
   }
   // fallback (should be unreachable, but keep it defensive)
-  return j.literal(String(value));
+  return j.literal("[Unknown]");
 }
 
 function isAstNode(v: unknown): v is { type: string } {

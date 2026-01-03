@@ -43,8 +43,8 @@ interface RunTransformOptions {
   /** Print transformed output to stdout (default: false) */
   print?: boolean;
 
-  /** Parser to use: "babel" | "babylon" | "flow" | "ts" | "tsx" (default: "tsx") */
-  parser?: string;
+  /** Parser to use (default: "tsx") */
+  parser?: "babel" | "babylon" | "flow" | "ts" | "tsx";
 }
 ```
 
@@ -62,7 +62,12 @@ await runTransform({
 
 ### Custom Hook
 
-Hooks control how theme values are resolved and how dynamic interpolations are handled.
+Hooks are the main extension point. They let you control:
+
+- how theme paths are turned into StyleX-compatible JS values (`resolveValue`)
+- what extra imports/declarations to inject into transformed files (`imports`, `declarations`)
+- how to handle dynamic interpolations inside template literals (`handlers`)
+
 Three built-in hooks are provided:
 
 ```ts
@@ -79,15 +84,66 @@ await runTransform({
 });
 ```
 
-Create a custom hook:
+#### `Hook` interface (what you can customize)
 
 ```ts
-import { runTransform } from "styled-components-to-stylex-codemod";
-import { defineHook } from "styled-components-to-stylex-codemod";
+export interface Hook {
+  /**
+   * Resolve a theme/token path to a StyleX-compatible value.
+   *
+   * Called by built-in handlers for patterns like:
+   *   ${(props) => props.theme.colors.primary}
+   *
+   * `path` is the member path after `theme`, e.g. "colors.primary".
+   * Return a JS expression string, e.g. "themeVars.colorsPrimary" or "'var(--colors-primary)'".
+   */
+  resolveValue?: (context: {
+    path: string;
+    defaultValue?: string;
+    valueType: "theme" | "helper" | "interpolation";
+  }) => string;
+
+  /** Extra imports to inject into transformed files */
+  imports?: string[];
+
+  /** Extra module-level declarations to inject into transformed files */
+  declarations?: string[];
+
+  /**
+   * Custom handlers for dynamic expressions (template interpolations).
+   * These run BEFORE built-in handlers.
+   */
+  handlers?: Array<{
+    name: string;
+    handle: (node: unknown, ctx: unknown) => unknown | null;
+  }>;
+}
+```
+
+#### How handler ordering works
+
+When the codemod encounters an interpolation inside a styled template literal, it tries handlers in this order:
+
+- `hook.handlers` (your custom handlers, in array order)
+- built-in handlers (`builtinHandlers()`), which cover common cases like:
+  - theme access (`props.theme...`)
+  - prop access (`props.foo`)
+  - conditionals (`props.foo ? "a" : "b"`, `props.foo && "color: red;"`)
+
+If no handler can resolve an interpolation:
+
+- for `withConfig({ shouldForwardProp })` wrappers, the transform preserves the value as an inline style so output keeps visual parity
+- otherwise, the declaration containing that interpolation is **dropped** and a warning is produced (manual follow-up required)
+
+#### Create a custom hook (theme path → tokens)
+
+```ts
+import { runTransform, defineHook } from "styled-components-to-stylex-codemod";
 
 const myHook = defineHook({
   resolveValue({ path, defaultValue }) {
-    // Transform theme.colors.primary → tokens.colorsPrimary
+    // Example: theme.colors.primary -> tokens.colors_primary
+    // NOTE: return a JS expression string.
     const varName = path.replace(/\./g, "_");
     return `tokens.${varName}`;
   },
@@ -99,6 +155,44 @@ await runTransform({
   hook: myHook,
 });
 ```
+
+#### Create a custom handler (advanced)
+
+Most projects won’t need custom handlers. If you do, handlers let you convert an interpolation into:
+
+- a resolved value (inline into the generated style object)
+- a style function (generated helper + call site wiring)
+- split variants (turn a conditional into base + conditional style keys)
+
+If you want to implement handlers, start by importing the types:
+
+```ts
+import type { DynamicHandler, DynamicNode, HandlerContext } from "styled-components-to-stylex-codemod";
+```
+
+Then add handlers to your hook:
+
+```ts
+import { defineHook } from "styled-components-to-stylex-codemod";
+
+export default defineHook({
+  handlers: [
+    {
+      name: "my-handler",
+      handle(node: any, ctx: any) {
+        // Return null to let the next handler try.
+        // Return a handler result object to tell the transform what to emit.
+        return null;
+      },
+    },
+  ],
+});
+```
+
+### Notes / Limitations
+
+- **ThemeProvider**: if a file imports and uses `ThemeProvider` from `styled-components`, the transform **skips the entire file** (theming strategy is project-specific).
+- **createGlobalStyle**: detected usage is reported as an **unsupported-feature** warning (StyleX does not support global styles in the same way).
 
 ### Transform Result
 
