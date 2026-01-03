@@ -7,18 +7,18 @@ const styles = stylex.create({
     padding: "1rem",
     backgroundColor: "papayawhip",
   },
-  child: {
+  equalDividerChild: {
     flex: 1,
   },
-  childNotFirst: {
+  equalDividerChildNotFirst: {
     marginLeft: "1rem",
   },
 });
 
 export const App = () => (
   <div {...stylex.props(styles.equalDivider)}>
-    <div {...stylex.props(styles.child)}>First</div>
-    <div {...stylex.props(styles.child, styles.childNotFirst)}>Second</div>
-    <div {...stylex.props(styles.child, styles.childNotFirst)}>Third</div>
+    <div {...stylex.props(styles.equalDividerChild)}>First</div>
+    <div {...stylex.props(styles.equalDividerChild, styles.equalDividerChildNotFirst)}>Second</div>
+    <div {...stylex.props(styles.equalDividerChild, styles.equalDividerChildNotFirst)}>Third</div>
   </div>
 );

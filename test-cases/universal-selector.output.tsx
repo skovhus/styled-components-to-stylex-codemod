@@ -1,68 +1,69 @@
 import * as stylex from "@stylexjs/stylex";
 
 const styles = stylex.create({
-  resetBox: {
-    "& *": {
-      boxSizing: "border-box",
-      margin: 0,
-      padding: 0,
-    },
+  resetBox: {},
+  resetBoxChild: {
+    boxSizing: "border-box",
+    margin: 0,
+    padding: 0,
   },
   container: {
     display: "flex",
     gap: "16px",
-    "&>*": {
-      flex: 1,
-      minWidth: 0,
-    },
+  },
+  containerChild: {
+    flex: 1,
+    minWidth: 0,
   },
   list: {
     listStyle: "none",
     padding: 0,
-    "&>*:not(:last-child)": {
-      marginBottom: "8px",
-    },
-    "&>*:first-child": {
-      fontWeight: "bold",
-    },
+  },
+  listChildNotLast: {
+    marginBottom: "8px",
+  },
+  listChildFirst: {
+    fontWeight: "bold",
   },
   hoverContainer: {
-    color: {
-      default: null,
-      ":hover *": "#BF4F74",
+    "--sc2sx-hoverContainer-color": {
+      default: "inherit",
+      ":hover": "#BF4F74",
     },
   },
-  deepReset: {
-    "& *": {
-      fontFamily: "inherit",
-    },
-    "& * *": {
-      fontSize: "inherit",
-    },
+  hoverContainerChild: {
+    color: "var(--sc2sx-hoverContainer-color)",
+  },
+  deepReset: {},
+  deepResetChild: {
+    fontFamily: "inherit",
+  },
+  deepResetGrandchild: {
+    fontSize: "inherit",
   },
 });
 
 export const App = () => (
   <div>
     <div {...stylex.props(styles.resetBox)}>
-      <p>Paragraph</p>
-      <span>Span</span>
+      <p {...stylex.props(styles.resetBoxChild)}>Paragraph</p>
+      <span {...stylex.props(styles.resetBoxChild)}>Span</span>
     </div>
     <div {...stylex.props(styles.container)}>
-      <div>Item 1</div>
-      <div>Item 2</div>
-      <div>Item 3</div>
+      <div {...stylex.props(styles.containerChild)}>Item 1</div>
+      <div {...stylex.props(styles.containerChild)}>Item 2</div>
+      <div {...stylex.props(styles.containerChild)}>Item 3</div>
     </div>
     <ul {...stylex.props(styles.list)}>
-      <li>First (bold)</li>
-      <li>Second</li>
+      <li {...stylex.props(styles.listChildNotLast, styles.listChildFirst)}>First (bold)</li>
+      <li {...stylex.props(styles.listChildNotLast)}>Second</li>
       <li>Third</li>
     </ul>
     <div {...stylex.props(styles.hoverContainer)}>
-      <span>Hover parent to change color</span>
+      <span {...stylex.props(styles.hoverContainerChild)}>Hover parent to change color</span>
     </div>
     <div {...stylex.props(styles.deepReset)}>
-      <div>
+      <div {...stylex.props(styles.deepResetChild)}>
         <span>Deep nested</span>
       </div>
     </div>

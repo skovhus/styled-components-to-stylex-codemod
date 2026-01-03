@@ -68,7 +68,7 @@ function Input(props: InputProps) {
     disabled && styles.inputDisabled,
     type === "checkbox" && styles.inputTypeCheckbox,
     type === "radio" && styles.inputTypeRadio,
-    readonly && styles.inputReadonly
+    readonly && styles.inputReadonly,
   );
   return (
     <input
@@ -90,7 +90,7 @@ function Link({ target, href, className, ...rest }: LinkProps) {
     styles.link,
     target === "_blank" && styles.linkTargetBlank,
     href?.startsWith("https") && styles.linkHrefHttps,
-    href?.endsWith(".pdf") && styles.linkHrefPdf
+    href?.endsWith(".pdf") && styles.linkHrefPdf,
   );
   return (
     <a
