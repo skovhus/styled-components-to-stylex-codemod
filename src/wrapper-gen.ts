@@ -5,7 +5,7 @@
  * cannot be directly mapped to StyleX.
  */
 
-import type { JSCodeshift, Identifier, VariableDeclaration } from "jscodeshift";
+import type { JSCodeshift, VariableDeclaration } from "jscodeshift";
 
 export interface WrapperConfig {
   /** Component name (e.g., "Comp") */
@@ -46,7 +46,7 @@ export function generateWrapperComponent(
   j: JSCodeshift,
   config: WrapperConfig,
 ): VariableDeclaration {
-  const { name, baseElement, isComponent, styleRefs, transientProps, supportsAs } = config;
+  const { name, baseElement, styleRefs, transientProps, supportsAs } = config;
 
   // Build destructured props
   const propsDestructure: string[] = [];
@@ -87,7 +87,6 @@ export function generateWrapperComponent(
   }
 
   // Build element to render
-  const elementName = supportsAs ? "Component" : isComponent ? baseElement : `"${baseElement}"`;
   const actualElement = supportsAs ? "Component" : baseElement;
 
   // Build props type
@@ -152,7 +151,9 @@ export function generateStyledComponentWrapper(
   // Add the base component's props (simplified - just use text for Link example)
   propsTypeParts.push("text: string");
 
-  const componentCode = `const ${name} = ({ ${propsDestructure.join(", ")} }: { ${propsTypeParts.join("; ")} }) => (
+  const componentCode = `const ${name} = ({ ${propsDestructure.join(
+    ", ",
+  )} }: { ${propsTypeParts.join("; ")} }) => (
     <${baseComponent} {...props} ${styleExpr} />
   )`;
 

@@ -43,14 +43,6 @@ const inlineValuesAdapter: Adapter = {
 // Fixture-specific adapters that resolve CSS vars to token imports
 
 /**
- * Converts kebab-case CSS var name to camelCase symbol name
- * e.g., "color-primary" -> "colorPrimary"
- */
-function cssVarToCamelCase(name: string): string {
-  return name.replace(/-([a-z])/g, (_, letter) => letter.toUpperCase());
-}
-
-/**
  * Adapter for css-variables fixture
  * Maps CSS vars like --color-primary to vars.colorPrimary
  */
@@ -64,7 +56,7 @@ const cssVariablesAdapter: Adapter = {
   getDeclarations() {
     return [];
   },
-  resolveCssVariable(name: string, fallback?: string) {
+  resolveCssVariable(name: string, _fallback?: string) {
     // Map CSS vars to their respective modules
     // vars: color-primary, color-secondary, spacing-sm, spacing-md, spacing-lg, border-radius
     // textVars: text-color, font-size, line-height (these have fallbacks)

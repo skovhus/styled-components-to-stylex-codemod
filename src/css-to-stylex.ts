@@ -11,7 +11,7 @@
 
 import type { CSSRule, CSSDeclaration } from "./css-parser.js";
 import { hasInterpolation, extractInterpolationIndices } from "./css-parser.js";
-import type { Adapter, CssVariableResolution } from "./adapter.js";
+import type { Adapter } from "./adapter.js";
 import { TEMPLATE_LITERAL_PREFIX, VAR_REF_PREFIX } from "./adapter.js";
 
 /**

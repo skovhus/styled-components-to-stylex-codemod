@@ -9,17 +9,9 @@ type FixtureModule = { App?: React.ComponentType<unknown> };
 const inputModules = import.meta.glob<FixtureModule>(["./*.input.tsx", "!./_*.input.tsx"], {
   eager: true,
 });
-const outputModules = import.meta.glob<FixtureModule>(
-  [
-    "./*.output.tsx",
-    "!./_*.output.tsx",
-    "!./component-selector.output.tsx",
-    "!./sibling-selectors.output.tsx",
-    "!./string-interpolation.output.tsx",
-    "!./with-config.output.tsx",
-  ],
-  { eager: true },
-);
+const outputModules = import.meta.glob<FixtureModule>(["./*.output.tsx", "!./_*.output.tsx"], {
+  eager: true,
+});
 
 // Extract test case names from file paths
 function getTestCaseName(path: string): string {

@@ -73,19 +73,11 @@ function isGeneralSiblingSelector(selector: string): boolean {
 }
 
 /**
- * Extract pseudo-class from a selector
- */
-function extractPseudoClass(selector: string): string | null {
-  const match = selector.match(/:([a-zA-Z-]+(?:\([^)]*\))?)/);
-  return match ? match[0] : null;
-}
-
-/**
  * Lower selectors from a StyleX object into separate style entries
  */
 export function lowerSelectors(
   styles: StyleXObject,
-  componentName: string,
+  _componentName: string,
 ): SelectorLoweringResult {
   const baseStyles: StyleXObject = {};
   const additionalStyles = new Map<string, StyleXObject>();

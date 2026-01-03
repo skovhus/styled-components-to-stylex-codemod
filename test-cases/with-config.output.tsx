@@ -19,18 +19,22 @@ const styles = stylex.create({
     padding: "8px 12px",
     borderWidth: "2px",
     borderStyle: "solid",
-    borderColor: "#BF4F74",
+    borderColor: {
+      default: "#ccc",
+      ":focus": "#BF4F74",
+    },
     borderRadius: "4px",
     fontSize: "14px",
     outline: {
       default: null,
       ":focus": "none",
     },
-    border: "#ccc",
   },
   inputHasError: {
-    border: "red",
-    borderColor: "red",
+    borderColor: {
+      default: "red",
+      ":focus": "red",
+    },
   },
   baseButton: {
     fontSize: "14px",
@@ -46,14 +50,29 @@ const styles = stylex.create({
   },
 });
 
+function Input(props) {
+  const { className, style, hasError, ...rest } = props;
+
+  const sx = stylex.props(styles.input, hasError && styles.inputHasError);
+
+  return (
+    <input
+      {...sx}
+      className={[sx.className, className].filter(Boolean).join(" ")}
+      style={style}
+      {...rest}
+    />
+  );
+}
+
 export const App = () => (
   <div>
     <button {...stylex.props(styles.button)}>Primary Button</button>
     <div {...stylex.props(styles.card)}>
       <p>Card content</p>
     </div>
-    <input placeholder="Normal input" {...stylex.props(styles.input)} />
-    <input hasError placeholder="Error input" {...stylex.props(styles.input)} />
+    <Input placeholder="Normal input" />
+    <Input hasError placeholder="Error input" />
     <button {...stylex.props(styles.baseButton, styles.extendedButton)}>Extended Button</button>
   </div>
 );

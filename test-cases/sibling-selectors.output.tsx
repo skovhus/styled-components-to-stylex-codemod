@@ -1,10 +1,6 @@
-import React from "react";
 import * as stylex from "@stylexjs/stylex";
 
 const styles = stylex.create({
-  thing: {
-    color: "blue",
-  },
   adjacentSibling: {
     color: "red",
     backgroundColor: "lime",
@@ -12,41 +8,39 @@ const styles = stylex.create({
   siblingAfterSomething: {
     backgroundColor: "yellow",
   },
+  thing: {
+    color: "blue",
+  },
 });
 
-interface ThingProps {
-  isAdjacentSibling?: boolean;
-  isSiblingAfterSomething?: boolean;
-  children?: React.ReactNode;
-  className?: string;
+function Thing(props) {
+  const { children, className, isAdjacentSibling, isSiblingAfterSomething, ...rest } = props;
+
+  const sx = stylex.props(
+    styles.thing,
+    isAdjacentSibling && styles.adjacentSibling,
+    isSiblingAfterSomething && styles.siblingAfterSomething,
+  );
+
+  return (
+    <div {...sx} className={[sx.className, className].filter(Boolean).join(" ")} {...rest}>
+      {children}
+    </div>
+  );
 }
-
-const Thing = ({ isAdjacentSibling, isSiblingAfterSomething, className, ...rest }: ThingProps) =>
-  (() => {
-    const sx = stylex.props(
-      styles.thing,
-      isAdjacentSibling && styles.adjacentSibling,
-      isSiblingAfterSomething && styles.siblingAfterSomething,
-    );
-
-    return (
-      <div {...sx} className={[sx.className, className].filter(Boolean).join(" ")}>
-        {children}
-      </div>
-    );
-  })();
-const sx = stylex.props(
-  styles.thing,
-  isAdjacentSibling && styles.adjacentSibling,
-  isSiblingAfterSomething && styles.siblingAfterSomething,
-);
 
 export const App = () => (
   <div>
     <Thing>First (blue)</Thing>
-    <Thing>Second (red, lime background - adjacent to first)</Thing>
-    <Thing className="something">Third with .something class</Thing>
-    <Thing>Fourth (yellow background - sibling after .something)</Thing>
-    <Thing>Fifth (yellow background - sibling after .something)</Thing>
+    <Thing isAdjacentSibling>Second (red, lime background - adjacent to first)</Thing>
+    <Thing className="something" isAdjacentSibling>
+      Third with .something class
+    </Thing>
+    <Thing isAdjacentSibling isSiblingAfterSomething>
+      Fourth (yellow background - sibling after .something)
+    </Thing>
+    <Thing isAdjacentSibling isSiblingAfterSomething>
+      Fifth (yellow background - sibling after .something)
+    </Thing>
   </div>
 );
