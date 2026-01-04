@@ -15,8 +15,10 @@ pnpm add styled-components-to-stylex-codemod
 Use `runTransform` to transform files matching a glob pattern:
 
 ```ts
-import { runTransform } from "styled-components-to-stylex-codemod";
-import { defineAdapter } from "styled-components-to-stylex-codemod/adapter";
+import {
+  runTransform,
+  defineAdapter,
+} from "styled-components-to-stylex-codemod";
 
 const adapter = defineAdapter({
   resolveValue(ctx) {
@@ -138,8 +140,10 @@ If no handler can resolve an interpolation:
 #### Create a custom adapter (theme path → tokens)
 
 ```ts
-import { runTransform } from "styled-components-to-stylex-codemod";
-import { defineAdapter } from "styled-components-to-stylex-codemod/adapter";
+import {
+  runTransform,
+  defineAdapter,
+} from "styled-components-to-stylex-codemod";
 
 const adapter = defineAdapter({
   resolveValue(ctx) {
@@ -185,13 +189,13 @@ import type {
   DynamicHandler,
   DynamicNode,
   HandlerContext,
-} from "styled-components-to-stylex-codemod/adapter";
+} from "styled-components-to-stylex-codemod";
 ```
 
 Then add handlers to your adapter:
 
 ```ts
-import { defineAdapter } from "styled-components-to-stylex-codemod/adapter";
+import { defineAdapter } from "styled-components-to-stylex-codemod";
 
 export default defineAdapter({
   handlers: [
@@ -224,17 +228,14 @@ interface RunTransformResult {
 }
 ```
 
-## Single File Transform
+## Public API
 
-For programmatic single-file transforms without the jscodeshift runner:
+This package intentionally exposes a small public API:
 
-```ts
-import { transform } from "styled-components-to-stylex-codemod";
-import type { API, FileInfo } from "jscodeshift";
+- **`defineAdapter`**: define how theme paths / CSS variables resolve, plus custom handlers
+- **`runTransform`**: run the codemod over a set of files (uses jscodeshift under the hood)
 
-// Use with jscodeshift API
-const output = transform(fileInfo, api, options);
-```
+The underlying jscodeshift transform function is considered **internal** and is not a supported public entrypoint.
 
 ## License
 

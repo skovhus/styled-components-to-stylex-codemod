@@ -96,7 +96,7 @@ The codemod exposes an adapter-based API for customization (value resolution + d
 
 ```ts
 import { runTransform } from "styled-components-to-stylex-codemod";
-import { defineAdapter } from "styled-components-to-stylex-codemod/adapter";
+import { defineAdapter } from "styled-components-to-stylex-codemod";
 
 const adapter = defineAdapter({
   resolveValue(ctx) {

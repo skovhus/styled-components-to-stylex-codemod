@@ -59,7 +59,7 @@ export interface RunTransformResult {
  * @example
  * ```ts
  * import { runTransform } from 'styled-components-to-stylex-codemod';
- * import { defineAdapter } from 'styled-components-to-stylex-codemod/adapter';
+ * import { defineAdapter } from 'styled-components-to-stylex-codemod';
  *
  * const adapter = defineAdapter({
  *   resolveValue(ctx) {
@@ -104,8 +104,9 @@ export async function runTransform(options: RunTransformOptions): Promise<RunTra
     };
   }
 
-  // Path to the transform module (single-entry build)
-  const transformPath = join(__dirname, "index.mjs");
+  // Path to the internal transform module for the jscodeshift Runner.
+  // This file is built into `dist/transform-runner.mjs` and is not exported as public API.
+  const transformPath = join(__dirname, "transform-runner.mjs");
 
   const result = await jscodeshiftRun(transformPath, filePaths, {
     parser,
