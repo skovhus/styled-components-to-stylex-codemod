@@ -98,9 +98,15 @@ export interface Adapter {
    * - `imports`: import statements required by `expr`
    * - `dropDefinition?`: (CSS variables only) drop local `--x: ...` definitions when true
    */
-  resolveValue: (context:
-    | { kind: "theme"; path: string }
-    | { kind: "cssVariable"; name: string; fallback?: string; definedValue?: string }
+  resolveValue: (
+    context:
+      | { kind: "theme"; path: string }
+      | {
+          kind: "cssVariable";
+          name: string;
+          fallback?: string;
+          definedValue?: string;
+        }
   ) => { expr: string; imports: string[]; dropDefinition?: boolean } | null;
 
   /**
@@ -119,7 +125,7 @@ export interface Adapter {
 When the codemod encounters an interpolation inside a styled template literal, it tries handlers in this order:
 
 - `adapter.handlers` (your custom handlers, in array order)
-- built-in handlers (`builtinHandlers()`), which cover common cases like:
+- internal built-in handlers (always enabled), which cover common cases like:
   - theme access (`props.theme...`)
   - prop access (`props.foo`)
   - conditionals (`props.foo ? "a" : "b"`, `props.foo && "color: red;"`)
@@ -140,7 +146,10 @@ const adapter = defineAdapter({
     if (ctx.kind === "theme") {
       // Example: theme.colors.primary -> tokens.colors_primary
       const varName = ctx.path.replace(/\./g, "_");
-      return { expr: `tokens.${varName}`, imports: ["import { tokens } from './design-system.stylex';"] };
+      return {
+        expr: `tokens.${varName}`,
+        imports: ["import { tokens } from './design-system.stylex';"],
+      };
     }
     if (ctx.kind === "cssVariable") {
       // Example: var(--spacing-sm) -> vars.spacingSm
@@ -172,7 +181,11 @@ Most projects won’t need custom handlers. If you do, handlers let you convert 
 If you want to implement handlers, start by importing the types:
 
 ```ts
-import type { DynamicHandler, DynamicNode, HandlerContext } from "styled-components-to-stylex-codemod/adapter";
+import type {
+  DynamicHandler,
+  DynamicNode,
+  HandlerContext,
+} from "styled-components-to-stylex-codemod/adapter";
 ```
 
 Then add handlers to your adapter:
@@ -203,9 +216,9 @@ export default defineAdapter({
 
 ```ts
 interface RunTransformResult {
-  errors: number;      // Files that had errors
-  unchanged: number;   // Files that were unchanged
-  skipped: number;     // Files that were skipped
+  errors: number; // Files that had errors
+  unchanged: number; // Files that were unchanged
+  skipped: number; // Files that were skipped
   transformed: number; // Files that were transformed
   timeElapsed: number; // Total time in seconds
 }

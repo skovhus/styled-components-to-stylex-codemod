@@ -1,6 +1,7 @@
 import type { API, FileInfo, Options } from "jscodeshift";
 import type { Adapter, DynamicHandler } from "./adapter.js";
-import { builtinHandlers, runHandlers, normalizeAdapter } from "./adapter.js";
+import { runHandlers, normalizeAdapter } from "./adapter.js";
+import { builtinHandlers } from "./internal/builtin-handlers.js";
 import { parseStyledTemplateLiteral } from "./styledCss.js";
 import { compile } from "stylis";
 import {
@@ -4169,7 +4170,7 @@ export type {
   HandlerContext,
   HandlerResult,
 } from "./adapter.js";
-export { defineAdapter, builtinHandlers } from "./adapter.js";
+export { defineAdapter } from "./adapter.js";
 
 function toStyleKey(name: string): string {
   return name.charAt(0).toLowerCase() + name.slice(1);
