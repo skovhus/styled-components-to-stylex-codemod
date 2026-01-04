@@ -6,7 +6,8 @@ import { join, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
 import { execSync } from "node:child_process";
 import { format } from "oxfmt";
-import transform, { transformWithWarnings, defineAdapter } from "./transform.js";
+import transform, { transformWithWarnings } from "./transform.js";
+import { defineAdapter } from "./adapter.js";
 import type { TransformOptions } from "./transform.js";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));

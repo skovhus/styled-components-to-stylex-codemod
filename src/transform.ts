@@ -2473,6 +2473,28 @@ export function transformWithWarnings(
     }
   }
 
+  // Preserve file header directives (e.g. `// oxlint-disable ...`). Depending on the parser/printer,
+  // the comment can be stored on `program.comments`, `node.comments`, or `node.leadingComments`.
+  // We remove styled-components imports, so without this we can drop the directive (notably in
+  // fixtures like string-interpolation).
+  const preservedHeaderComments: any[] = [];
+  const addHeaderComments = (comments: unknown) => {
+    if (!Array.isArray(comments)) return;
+    for (const c of comments as any[]) {
+      const v = typeof c?.value === "string" ? String(c.value).trim() : "";
+      const line = c?.loc?.start?.line;
+      if (v.startsWith("oxlint-disable") && (line === 1 || line === 0 || line === undefined)) {
+        preservedHeaderComments.push(c);
+      }
+    }
+  };
+  const programAny = root.get().node.program as any;
+  addHeaderComments(programAny.comments);
+  for (const n of styledImports.nodes()) {
+    addHeaderComments((n as any)?.leadingComments);
+    addHeaderComments((n as any)?.comments);
+  }
+
   // Remove styled-components import(s)
   styledImports.remove();
 
@@ -2489,6 +2511,30 @@ export function transformWithWarnings(
       firstImport.insertBefore(stylexImport);
     } else {
       root.get().node.program.body.unshift(stylexImport);
+    }
+  }
+
+  // Re-attach preserved header comments to the first statement (preferably the stylex import).
+  if (preservedHeaderComments.length > 0) {
+    const body = root.get().node.program.body as any[];
+    if (body.length > 0) {
+      const firstStmt = body[0]!;
+      const existingLeading = (firstStmt as any).leadingComments;
+      const existingComments = (firstStmt as any).comments;
+      const merged = [
+        ...preservedHeaderComments,
+        ...(Array.isArray(existingLeading) ? existingLeading : []),
+        ...(Array.isArray(existingComments) ? existingComments : []),
+      ] as any[];
+      const seen = new Set<string>();
+      const deduped = merged.filter((c) => {
+        const key = `${(c as any)?.type ?? "Comment"}:${String((c as any)?.value ?? "").trim()}`;
+        if (seen.has(key)) return false;
+        seen.add(key);
+        return true;
+      });
+      (firstStmt as any).leadingComments = deduped;
+      (firstStmt as any).comments = deduped;
     }
   }
 
@@ -4159,18 +4205,6 @@ export function transformWithWarnings(
 
   return { code, warnings };
 }
-
-// Re-export adapter types for convenience
-export type {
-  Adapter,
-  ResolveContext,
-  ResolveResult,
-  DynamicHandler,
-  DynamicNode,
-  HandlerContext,
-  HandlerResult,
-} from "./adapter.js";
-export { defineAdapter } from "./adapter.js";
 
 function toStyleKey(name: string): string {
   return name.charAt(0).toLowerCase() + name.slice(1);

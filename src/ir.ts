@@ -208,12 +208,12 @@ export function cssDeclarationToStylexDeclarations(decl: CssDeclarationIR): Styl
   return [{ prop: cssPropertyToStylexProp(prop), value: decl.value }];
 }
 
-export function cssPropertyToStylexProp(prop: string): string {
+function cssPropertyToStylexProp(prop: string): string {
   if (prop.startsWith("--")) return prop;
   return prop.replace(/-([a-z])/g, (_, ch: string) => ch.toUpperCase());
 }
 
-export function borderShorthandToStylex(valueRaw: string): StylexPropDecl[] {
+function borderShorthandToStylex(valueRaw: string): StylexPropDecl[] {
   const v = valueRaw.trim();
   if (v === "none") {
     return [
@@ -258,36 +258,6 @@ export function borderShorthandToStylex(valueRaw: string): StylexPropDecl[] {
   if (color) out.push({ prop: "borderColor", value: { kind: "static", value: color } });
   if (out.length === 0) return [{ prop: "border", value: { kind: "static", value: v } }];
   return out;
-}
-
-export function expandBoxShorthand(valueRaw: string): {
-  top: string;
-  right: string;
-  bottom: string;
-  left: string;
-} | null {
-  const tokens = valueRaw.trim().split(/\s+/).filter(Boolean);
-  if (tokens.length === 0 || tokens.length > 4) return null;
-  const [a, b, c, d] = tokens;
-  if (tokens.length === 1) return { top: a!, right: a!, bottom: a!, left: a! };
-  if (tokens.length === 2) return { top: a!, right: b!, bottom: a!, left: b! };
-  if (tokens.length === 3) return { top: a!, right: b!, bottom: c!, left: b! };
-  return { top: a!, right: b!, bottom: c!, left: d! };
-}
-
-export function boxShorthandToLonghands(
-  prop: "margin" | "padding",
-  valueRaw: string,
-): Array<{ prop: string; value: string }> | null {
-  const expanded = expandBoxShorthand(valueRaw);
-  if (!expanded) return null;
-  const base = prop === "margin" ? "margin" : "padding";
-  return [
-    { prop: `${base}Top`, value: expanded.top },
-    { prop: `${base}Right`, value: expanded.right },
-    { prop: `${base}Bottom`, value: expanded.bottom },
-    { prop: `${base}Left`, value: expanded.left },
-  ];
 }
 
 function looksLikeLength(token: string): boolean {

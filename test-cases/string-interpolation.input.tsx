@@ -1,3 +1,4 @@
+// oxlint-disable no-unused-vars
 import styled from "styled-components";
 
 // String interpolation for dynamic values

@@ -6,7 +6,7 @@ import type {
   Node,
 } from "jscodeshift";
 
-export function isIdentifier(node: unknown, name?: string): node is Identifier {
+function isIdentifier(node: unknown, name?: string): node is Identifier {
   return (
     !!node &&
     typeof node === "object" &&
@@ -15,7 +15,7 @@ export function isIdentifier(node: unknown, name?: string): node is Identifier {
   );
 }
 
-export function isMemberExpression(node: unknown): node is MemberExpression {
+function isMemberExpression(node: unknown): node is MemberExpression {
   return (
     !!node && typeof node === "object" && (node as { type?: string }).type === "MemberExpression"
   );

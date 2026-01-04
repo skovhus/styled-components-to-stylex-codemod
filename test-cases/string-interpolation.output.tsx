@@ -1,3 +1,4 @@
+// oxlint-disable no-unused-vars
 import * as stylex from "@stylexjs/stylex";
 
 // String interpolation for dynamic values
