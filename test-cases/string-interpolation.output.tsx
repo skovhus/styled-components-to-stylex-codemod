@@ -89,7 +89,7 @@ function DynamicBox(props) {
 }
 
 // Function returning string
-const getColor = (variant: string) => (variant === "primary" ? "#BF4F74" : "#4F74BF");
+const _getColor = (variant: string) => (variant === "primary" ? "#BF4F74" : "#4F74BF");
 
 export const App = () => (
   <div>

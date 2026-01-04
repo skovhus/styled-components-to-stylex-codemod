@@ -196,6 +196,8 @@ interface StyleInfo {
   cssVarInjections: CSSVarInjection[];
   /** Whether dynamic functions are from object syntax (need special wrapper) */
   hasObjectSyntaxDynamicFns: boolean;
+  /** Leading comments from the original styled component declaration (JSDoc, etc.) */
+  leadingComments: Array<{ type: string; value: string }> | undefined;
 }
 
 /**
@@ -394,6 +396,11 @@ export function transformWithWarnings(
     const componentName =
       path.node.id.type === "Identifier" ? path.node.id.name : "UnnamedComponent";
 
+    // Capture leading comments from the parent VariableDeclaration
+    const varDeclPath = path.parentPath;
+    const leadingComments =
+      varDeclPath?.node?.comments?.filter((c: { leading?: boolean }) => c.leading !== false) ?? [];
+
     const styleInfo = processStyledComponent(
       j,
       init as TaggedTemplateExpression | CallExpression,
@@ -404,6 +411,7 @@ export function transformWithWarnings(
       warnings,
       additionalImports,
       componentsWithForwardedAsProp.has(componentName),
+      leadingComments.length > 0 ? leadingComments : undefined,
     );
 
     if (styleInfo) {
@@ -527,7 +535,6 @@ export function transformWithWarnings(
 
     // Find the first styled component VariableDeclaration BEFORE removing them
     // This preserves variable declarations that styles might reference (e.g., const dynamicColor = "#BF4F74")
-    const styledComponentNames = new Set(styleInfos.map((s) => s.componentName));
 
     // Collect AST nodes that should be removed (save references before any modifications)
     const nodesToRemove: ASTPath<VariableDeclaration>[] = [];
@@ -543,15 +550,13 @@ export function transformWithWarnings(
     }
 
     // Track declarations of base components (non-styled components that get extended)
-    let insertBeforeBaseComponent: ASTPath<VariableDeclaration | FunctionDeclaration> | null = null;
+    let insertBeforeBaseComponent: ASTPath | null = null;
 
     // Check for base components defined as function declarations first
     root.find(j.FunctionDeclaration).forEach((path) => {
       if (path.node.id?.type === "Identifier" && baseComponentsToFind.has(path.node.id.name)) {
         if (!insertBeforeBaseComponent) {
-          insertBeforeBaseComponent = path as unknown as ASTPath<
-            VariableDeclaration | FunctionDeclaration
-          >;
+          insertBeforeBaseComponent = path;
         }
       }
     });
@@ -568,9 +573,7 @@ export function transformWithWarnings(
       });
 
       if (hasBaseComponent && !insertBeforeBaseComponent) {
-        insertBeforeBaseComponent = path as unknown as ASTPath<
-          VariableDeclaration | FunctionDeclaration
-        >;
+        insertBeforeBaseComponent = path;
       }
 
       const hasStyledComponent = declarators.some((d) => {
@@ -876,6 +879,7 @@ function processStyledComponent(
   warnings: TransformWarning[],
   additionalImports: Set<string>,
   hasAsPropInJSX = false,
+  leadingComments?: Array<{ type: string; value: string }>,
 ): StyleInfo | null {
   let templateLiteral: TemplateLiteral | null = null;
   let styleObject: Expression | null = null;
@@ -1201,6 +1205,7 @@ function processStyledComponent(
     hasSpecificityHacks,
     cssVarInjections,
     hasObjectSyntaxDynamicFns,
+    leadingComments,
   };
 }
 
@@ -4347,13 +4352,31 @@ const ${componentName} = ({ ${destructureList.join(", ")} }: ${propsTypeAnnotati
         wrappers.push(p.node);
       });
 
-      // Add function or variable declaration
+      // Add function or variable declaration with leading comments if any
       if (funcDecls.length > 0) {
-        funcDecls.forEach((p) => {
+        funcDecls.forEach((p, idx) => {
+          // Attach leading comments to the first function declaration
+          if (idx === 0 && info.leadingComments && info.leadingComments.length > 0) {
+            p.node.comments = info.leadingComments.map((c) => {
+              if (c.type === "CommentBlock" || c.type === "Block") {
+                return j.commentBlock(c.value, true, false);
+              }
+              return j.commentLine(c.value, true, false);
+            });
+          }
           wrappers.push(p.node);
         });
       } else if (varDecls.length > 0) {
-        varDecls.forEach((p) => {
+        varDecls.forEach((p, idx) => {
+          // Attach leading comments to the first variable declaration
+          if (idx === 0 && info.leadingComments && info.leadingComments.length > 0) {
+            p.node.comments = info.leadingComments.map((c) => {
+              if (c.type === "CommentBlock" || c.type === "Block") {
+                return j.commentBlock(c.value, true, false);
+              }
+              return j.commentLine(c.value, true, false);
+            });
+          }
           wrappers.push(p.node);
         });
       }

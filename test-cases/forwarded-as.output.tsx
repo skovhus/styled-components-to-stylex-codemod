@@ -35,6 +35,7 @@ function Button({
   );
 }
 
+// Wrapper that always renders as a specific element but passes `as` through
 function ButtonWrapper({
   as: Component = "button",
   children,

@@ -55,6 +55,7 @@ const styles = stylex.create({
   },
 });
 
+// Using shouldForwardProp to filter props (v5 pattern)
 function Button(props) {
   const { className, children, style, color, size, ...rest } = props;
 
@@ -76,6 +77,7 @@ function Button(props) {
   );
 }
 
+// Using isPropValid from @emotion
 function Link(props) {
   const { className, children, style, isActive, ...rest } = props;
 
@@ -93,6 +95,7 @@ function Link(props) {
   );
 }
 
+// Custom prop filtering logic (transient props pattern)
 function Box(props) {
   const { className, children, style, ...rest } = props;
 
@@ -118,8 +121,9 @@ function Box(props) {
   );
 }
 
+// Filter multiple custom props
 function Card(props) {
-  const { className, children, style, variant, elevation, rounded, ...rest } = props;
+  const { className, children, style, variant, elevation: _elevation, rounded, ...rest } = props;
 
   const sx = stylex.props(
     styles.card,

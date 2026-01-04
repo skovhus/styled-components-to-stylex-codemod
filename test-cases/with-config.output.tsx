@@ -50,6 +50,7 @@ const styles = stylex.create({
   },
 });
 
+// Combining withConfig options
 function Input(props) {
   const { className, style, hasError, ...rest } = props;
 
