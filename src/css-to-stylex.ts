@@ -12,7 +12,7 @@
 import type { CSSRule, CSSDeclaration } from "./css-parser.js";
 import { hasInterpolation, extractInterpolationIndices } from "./css-parser.js";
 import type { Adapter } from "./adapter.js";
-import { TEMPLATE_LITERAL_PREFIX, VAR_REF_PREFIX } from "./adapter.js";
+import { TEMPLATE_LITERAL_PREFIX, VAR_REF_PREFIX } from "./builtin-handlers.js";
 
 /**
  * Context for CSS value conversion (adapter + import collection)
@@ -70,7 +70,13 @@ export function parseCssVarReferences(
         name = inner.trim().replace(/^--/, "");
       }
 
-      results.push({ name, fallback, fullMatch, start: varStart, end: j });
+      // With `exactOptionalPropertyTypes`, we must omit the optional field entirely
+      // rather than setting it to `undefined`.
+      if (fallback !== undefined) {
+        results.push({ name, fallback, fullMatch, start: varStart, end: j });
+      } else {
+        results.push({ name, fullMatch, start: varStart, end: j });
+      }
     }
 
     i = j;

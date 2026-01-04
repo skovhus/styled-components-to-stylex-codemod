@@ -190,7 +190,6 @@ For advanced use cases, add custom handlers for specific interpolation patterns:
 import {
   runTransform,
   createAdapter,
-  defaultHandlers,
   type DynamicNodeHandler,
 } from "styled-components-to-stylex-codemod";
 
@@ -214,8 +213,8 @@ const adapter = createAdapter({
   },
   getImports: () => [],
   getDeclarations: () => [],
-  // Add your custom handler before the defaults
-  handlers: [myCustomHandler, ...defaultHandlers],
+  // Add your custom handler(s). Built-in handlers are always applied after these.
+  handlers: [myCustomHandler],
 });
 ```
 

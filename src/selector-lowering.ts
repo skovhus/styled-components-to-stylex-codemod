@@ -143,8 +143,8 @@ export function lowerSelectors(
           childNotFirstStyles[key] = notFirstValue;
         }
 
-        // Keep only the default in base styles if it's not null
-        if (conditional.default !== null) {
+        // Keep only the default in base styles if it's not null/undefined
+        if (conditional.default !== null && conditional.default !== undefined) {
           baseStyles[key] = conditional.default;
         }
         continue;

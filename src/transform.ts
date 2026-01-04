@@ -13,14 +13,8 @@ import type {
   ASTPath,
 } from "jscodeshift";
 import type { Adapter, DynamicNodeContext, DynamicNodeDecision } from "./adapter.js";
-import {
-  defaultAdapter,
-  executeDynamicNodeHandlers,
-  getFallbackDecision,
-  defaultHandlers,
-  VAR_REF_PREFIX,
-  TEMPLATE_LITERAL_PREFIX,
-} from "./adapter.js";
+import { defaultAdapter, executeDynamicNodeHandlers, getFallbackDecision } from "./adapter.js";
+import { defaultHandlers, TEMPLATE_LITERAL_PREFIX, VAR_REF_PREFIX } from "./builtin-handlers.js";
 import {
   parseStyledCSS,
   extractDeclarations,
@@ -252,8 +246,8 @@ export function transformWithWarnings(
   const providedAdapter = options.adapter ?? defaultAdapter;
   const adapter: Adapter = {
     ...providedAdapter,
-    // Always include default handlers if none provided
-    handlers: providedAdapter.handlers?.length ? providedAdapter.handlers : defaultHandlers,
+    // Always include built-in handlers; user handlers run first so they can override defaults.
+    handlers: [...(providedAdapter.handlers ?? []), ...defaultHandlers],
   };
 
   // Find styled-components imports
@@ -5047,9 +5041,4 @@ export type {
   FallbackBehavior,
   VariantStyle,
 } from "./adapter.js";
-export {
-  defaultAdapter,
-  createAdapter,
-  executeDynamicNodeHandlers,
-  defaultHandlers,
-} from "./adapter.js";
+export { defaultAdapter, createAdapter, executeDynamicNodeHandlers } from "./adapter.js";
