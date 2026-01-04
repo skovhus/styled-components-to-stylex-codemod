@@ -1762,6 +1762,30 @@ export function transformWithWarnings(
       // - & + &  (adjacent sibling)
       // - &.something ~ & (general sibling after a class marker)
       const selTrim = rule.selector.trim();
+
+      // Universal selector in hover state: `&:hover * { ... }`
+      //
+      // StyleX cannot target arbitrary descendants, but for inheritable props like `color`
+      // we can approximate by putting the hover style on the parent and relying on inheritance.
+      // This avoids emitting invalid StyleX patterns (e.g. conditional CSS variables).
+      if (/^&\s*:\s*hover\s+\*\s*$/.test(selTrim)) {
+        for (const d of rule.declarations) {
+          if (d.value.kind !== "static") continue;
+          for (const out of cssDeclarationToStylexDeclarations(d)) {
+            if (out.value.kind !== "static") continue;
+            const value = cssValueToJs(out.value);
+            // Only hoist known-inheritable properties. Others would be incorrect.
+            if (out.prop !== "color") continue;
+            perPropPseudo[out.prop] ??= {};
+            const existing = perPropPseudo[out.prop]!;
+            if (!("default" in existing)) {
+              existing.default = "inherit";
+            }
+            existing[":hover"] = value;
+          }
+        }
+        continue;
+      }
       if (selTrim === "& + &" || /^&\s*\+\s*&$/.test(selTrim)) {
         decl.needsWrapperComponent = true;
         decl.siblingWrapper ??= {

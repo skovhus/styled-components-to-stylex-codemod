@@ -26,7 +26,10 @@ const styles = stylex.create({
 
   // Universal in hover state
   hoverContainer: {
-    color: "#BF4F74",
+    color: {
+      default: "inherit",
+      ":hover": "#bf4f74",
+    },
   },
 
   // Nested universal selectors
