@@ -61,7 +61,7 @@ function Button(props) {
   const sx = stylex.props(
     styles.button,
     size === "large" && styles.buttonSizeLarge,
-    color && styles.buttonBackgroundColor(color)
+    color && styles.buttonBackgroundColor(color),
   );
 
   return (
@@ -103,7 +103,7 @@ function Box(props) {
   const sx = stylex.props(
     styles.box,
     props["$background"] && styles.boxBackgroundColor(props["$background"]),
-    props["$padding"] && styles.boxPadding(props["$padding"])
+    props["$padding"] && styles.boxPadding(props["$padding"]),
   );
 
   return (
@@ -119,13 +119,12 @@ function Box(props) {
 }
 
 function Card(props) {
-  const { className, children, style, variant, elevation, rounded, ...rest } =
-    props;
+  const { className, children, style, variant, elevation, rounded, ...rest } = props;
 
   const sx = stylex.props(
     styles.card,
     variant === "primary" && styles.cardVariantPrimary,
-    rounded && styles.cardRounded
+    rounded && styles.cardRounded,
   );
 
   return (
@@ -135,9 +134,9 @@ function Card(props) {
       style={{
         ...style,
         boxShadow: ((props) =>
-          `0 ${(props.elevation || 1) * 2}px ${
-            (props.elevation || 1) * 4
-          }px rgba(0, 0, 0, 0.1)`)(props),
+          `0 ${(props.elevation || 1) * 2}px ${(props.elevation || 1) * 4}px rgba(0, 0, 0, 0.1)`)(
+          props,
+        ),
       }}
       {...rest}
     >

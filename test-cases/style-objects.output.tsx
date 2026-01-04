@@ -31,15 +31,11 @@ function DynamicBox(props) {
     styles.dynamicBox,
     $background && styles.dynamicBoxBackgroundColor($background),
     $size && styles.dynamicBoxHeight($size),
-    $size && styles.dynamicBoxWidth($size)
+    $size && styles.dynamicBoxWidth($size),
   );
 
   return (
-    <div
-      {...sx}
-      className={[sx.className, className].filter(Boolean).join(" ")}
-      style={style}
-    >
+    <div {...sx} className={[sx.className, className].filter(Boolean).join(" ")} style={style}>
       {children}
     </div>
   );

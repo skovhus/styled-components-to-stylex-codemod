@@ -49,13 +49,13 @@ npx tsx run-transform.ts
 
 ### Options
 
-| Option    | Type                                              | Default   | Description                            |
-| --------- | ------------------------------------------------- | --------- | -------------------------------------- |
-| `files`   | `string \| string[]`                              | (required)| Glob pattern(s) for files to transform |
-| `adapter` | `Adapter`                                         | (required)| Adapter for value transformations      |
-| `dryRun`  | `boolean`                                         | `false`   | Don't write changes to files           |
-| `print`   | `boolean`                                         | `false`   | Print transformed output to stdout     |
-| `parser`  | `"babel" \| "babylon" \| "flow" \| "ts" \| "tsx"` | `"tsx"`   | jscodeshift parser to use              |
+| Option    | Type                                              | Default    | Description                            |
+| --------- | ------------------------------------------------- | ---------- | -------------------------------------- |
+| `files`   | `string \| string[]`                              | (required) | Glob pattern(s) for files to transform |
+| `adapter` | `Adapter`                                         | (required) | Adapter for value transformations      |
+| `dryRun`  | `boolean`                                         | `false`    | Don't write changes to files           |
+| `print`   | `boolean`                                         | `false`    | Print transformed output to stdout     |
+| `parser`  | `"babel" \| "babylon" \| "flow" \| "ts" \| "tsx"` | `"tsx"`    | jscodeshift parser to use              |
 
 ### Result
 
@@ -232,52 +232,52 @@ type DynamicNodeDecision =
   | { action: "dynamic-fn"; paramName: string; paramType?: string; valueExpression: string };
 ```
 
-| Action       | Description                                              |
-| ------------ | -------------------------------------------------------- |
-| `convert`    | Convert to a static StyleX value                         |
-| `rewrite`    | Rewrite the expression to different code                 |
-| `bail`       | Skip transformation with a warning                       |
-| `variant`    | Generate StyleX variant styles for conditional values    |
-| `dynamic-fn` | Generate a dynamic style function                        |
+| Action       | Description                                           |
+| ------------ | ----------------------------------------------------- |
+| `convert`    | Convert to a static StyleX value                      |
+| `rewrite`    | Rewrite the expression to different code              |
+| `bail`       | Skip transformation with a warning                    |
+| `variant`    | Generate StyleX variant styles for conditional values |
+| `dynamic-fn` | Generate a dynamic style function                     |
 
 ### Built-in Handlers
 
 The codemod includes built-in handlers for common patterns:
 
-| Handler                    | Pattern                                        |
-| -------------------------- | ---------------------------------------------- |
-| `staticValueHandler`       | `${variable}`, `${object.property}`            |
-| `keyframesHandler`         | `animation: ${rotate} 2s linear`               |
-| `conditionalHandler`       | `${props => props.$primary ? 'a' : 'b'}`       |
-| `logicalHandler`           | `${props => props.$active && 'transform: ...'}`|
-| `themeAccessHandler`       | `${props => props.theme.colors.primary}`       |
-| `propAccessHandler`        | `${props => props.$padding}`                   |
-| `helperHandler`            | `${helperFn()}`, `` ${css`...`} ``             |
-| `componentSelectorHandler` | `${OtherComponent}:hover &`                    |
+| Handler                    | Pattern                                         |
+| -------------------------- | ----------------------------------------------- |
+| `staticValueHandler`       | `${variable}`, `${object.property}`             |
+| `keyframesHandler`         | `animation: ${rotate} 2s linear`                |
+| `conditionalHandler`       | `${props => props.$primary ? 'a' : 'b'}`        |
+| `logicalHandler`           | `${props => props.$active && 'transform: ...'}` |
+| `themeAccessHandler`       | `${props => props.theme.colors.primary}`        |
+| `propAccessHandler`        | `${props => props.$padding}`                    |
+| `helperHandler`            | `${helperFn()}`, ``${css`...`}``                |
+| `componentSelectorHandler` | `${OtherComponent}:hover &`                     |
 
 ## Supported Patterns
 
-| Pattern                     | Status | Notes                                      |
-| --------------------------- | ------ | ------------------------------------------ |
-| `styled.element`            | ✅     | All HTML elements                          |
-| `styled(Component)`         | ✅     | Component extension                        |
-| Template literal CSS        | ✅     | Full CSS support                           |
-| Object syntax               | ✅     | `styled.div({ ... })`                      |
-| Prop interpolations         | ✅     | Converted to variants                      |
-| Pseudo-selectors            | ✅     | `:hover`, `:focus`, `:active`, etc.        |
-| Pseudo-elements             | ✅     | `::before`, `::after`                      |
-| Media queries               | ✅     | `@media (min-width: ...)`                  |
-| Keyframes                   | ✅     | `keyframes` → `stylex.keyframes()`         |
-| `.attrs()`                  | ✅     | Converted to inline props                  |
-| Transient props (`$prop`)   | ✅     | Proper prop filtering                      |
-| `as` prop                   | ✅     | Polymorphic components                     |
-| `shouldForwardProp`         | ✅     | Via `.withConfig()`                        |
-| CSS variables               | ✅     | `var(--name)` preserved or transformed     |
-| `css` helper                | ✅     | Shared style objects                       |
-| Nesting                     | ✅     | Child selectors, combinators               |
-| Theme access                | ✅     | Via adapter system                         |
-| `createGlobalStyle`         | ⚠️     | Warning emitted, manual migration needed   |
-| Component selectors         | ⚠️     | `${Component}` in selectors needs refactor |
+| Pattern                   | Status | Notes                                      |
+| ------------------------- | ------ | ------------------------------------------ |
+| `styled.element`          | ✅     | All HTML elements                          |
+| `styled(Component)`       | ✅     | Component extension                        |
+| Template literal CSS      | ✅     | Full CSS support                           |
+| Object syntax             | ✅     | `styled.div({ ... })`                      |
+| Prop interpolations       | ✅     | Converted to variants                      |
+| Pseudo-selectors          | ✅     | `:hover`, `:focus`, `:active`, etc.        |
+| Pseudo-elements           | ✅     | `::before`, `::after`                      |
+| Media queries             | ✅     | `@media (min-width: ...)`                  |
+| Keyframes                 | ✅     | `keyframes` → `stylex.keyframes()`         |
+| `.attrs()`                | ✅     | Converted to inline props                  |
+| Transient props (`$prop`) | ✅     | Proper prop filtering                      |
+| `as` prop                 | ✅     | Polymorphic components                     |
+| `shouldForwardProp`       | ✅     | Via `.withConfig()`                        |
+| CSS variables             | ✅     | `var(--name)` preserved or transformed     |
+| `css` helper              | ✅     | Shared style objects                       |
+| Nesting                   | ✅     | Child selectors, combinators               |
+| Theme access              | ✅     | Via adapter system                         |
+| `createGlobalStyle`       | ⚠️     | Warning emitted, manual migration needed   |
+| Component selectors       | ⚠️     | `${Component}` in selectors needs refactor |
 
 ## Requirements
 

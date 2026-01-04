@@ -506,6 +506,7 @@ export function expandShorthand(
     case "margin":
     case "padding": {
       // StyleX supports shorthand values directly as strings
+      // When value contains interpolation, keep as shorthand to let interpolation handler process it
       return [{ property, value: convertValue(value, undefined, ctx) }];
     }
 

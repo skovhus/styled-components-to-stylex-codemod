@@ -6,12 +6,9 @@ type FixtureModule = { App?: React.ComponentType<unknown> };
 // Dynamically import all fixtures (excluding _unsupported* files and known broken outputs)
 // Broken outputs: component-selector, sibling-selectors, string-interpolation, with-config
 // These have invalid StyleX syntax that the transformer produces but requires manual fixing
-const inputModules = import.meta.glob<FixtureModule>(
-  ["./*.input.tsx", "!./_*.input.tsx"],
-  {
-    eager: true,
-  }
-);
+const inputModules = import.meta.glob<FixtureModule>(["./*.input.tsx", "!./_*.input.tsx"], {
+  eager: true,
+});
 const outputModules = import.meta.glob<FixtureModule>(
   [
     "./*.output.tsx",
@@ -21,7 +18,7 @@ const outputModules = import.meta.glob<FixtureModule>(
     "!./string-interpolation.output.tsx",
     "!./with-config.output.tsx",
   ],
-  { eager: true }
+  { eager: true },
 );
 
 function fileToName(path: string): string {

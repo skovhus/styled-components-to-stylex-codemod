@@ -10,6 +10,7 @@ import type {
   ObjectProperty,
   MemberExpression,
   ObjectExpression,
+  ASTPath,
 } from "jscodeshift";
 import type { Adapter, DynamicNodeContext, DynamicNodeDecision } from "./adapter.js";
 import {
@@ -148,7 +149,12 @@ interface StyleInfo {
   variantStyles: Map<string, StyleXObject>;
   dynamicFns: Map<
     string,
-    { paramName: string; paramType: string | undefined; styles: StyleXObject }
+    {
+      paramName: string;
+      paramType: string | undefined;
+      styles: StyleXObject;
+      originalPropName?: string;
+    }
   >;
   isExtending: boolean;
   extendsFrom: string | undefined;
@@ -188,6 +194,8 @@ interface StyleInfo {
   hasSpecificityHacks: boolean;
   /** CSS variable injections needed for parent components (ancestor-hover pattern) */
   cssVarInjections: CSSVarInjection[];
+  /** Whether dynamic functions are from object syntax (need special wrapper) */
+  hasObjectSyntaxDynamicFns: boolean;
 }
 
 /**
@@ -351,6 +359,31 @@ export function transformWithWarnings(
   const additionalImports: Set<string> = new Set();
   let hasChanges = false;
 
+  // Pre-scan JSX to detect which components use `forwardedAs` props (these need wrappers)
+  // When forwardedAs is used, the component AND related components need wrappers
+  // Note: we also need to track the inheritance chain
+  const componentsWithForwardedAsProp = new Set<string>();
+  root.find(j.JSXElement).forEach((path) => {
+    const opening = path.node.openingElement;
+    if (opening.name.type !== "JSXIdentifier") return;
+
+    const componentName = opening.name.name;
+    if (!styledComponentIdentifiers.has(componentName)) return;
+
+    for (const attr of opening.attributes ?? []) {
+      if (attr.type !== "JSXAttribute" || attr.name.type !== "JSXIdentifier") continue;
+      // Only `forwardedAs` triggers wrapper generation, not plain `as`
+      if (attr.name.name === "forwardedAs") {
+        componentsWithForwardedAsProp.add(componentName);
+        break;
+      }
+    }
+  });
+
+  // When a component uses forwardedAs, also mark parent components in the inheritance chain
+  // because they also need `as` support for the pattern to work
+  // This is determined post-process after we know which components extend which
+
   // Process styled component declarations
   root.find(j.VariableDeclarator).forEach((path) => {
     const init = path.node.init;
@@ -370,6 +403,7 @@ export function transformWithWarnings(
       adapter,
       warnings,
       additionalImports,
+      componentsWithForwardedAsProp.has(componentName),
     );
 
     if (styleInfo) {
@@ -389,6 +423,29 @@ export function transformWithWarnings(
           default: injection.defaultValue,
           [injection.pseudo]: injection.pseudoValue,
         };
+      }
+    }
+  }
+
+  // When a component uses forwardedAs, also mark parent components in the inheritance chain
+  // because they also need `as` support (e.g., ButtonWrapper extends Button, both need wrappers)
+  for (const info of styleInfos) {
+    if (info.supportsAs && info.extendsFrom) {
+      // Walk up the inheritance chain and mark all parent components
+      let current = info.extendsFrom;
+      while (current) {
+        const parentInfo = styleInfos.find((s) => s.componentName === current);
+        if (parentInfo) {
+          parentInfo.supportsAs = true;
+          parentInfo.needsWrapper = true;
+          if (parentInfo.extendsFrom) {
+            current = parentInfo.extendsFrom;
+          } else {
+            break;
+          }
+        } else {
+          break;
+        }
       }
     }
   }
@@ -468,28 +525,107 @@ export function transformWithWarnings(
       }
     }
 
-    // Remove styled component variable declarations
+    // Find the first styled component VariableDeclaration BEFORE removing them
+    // This preserves variable declarations that styles might reference (e.g., const dynamicColor = "#BF4F74")
+    const styledComponentNames = new Set(styleInfos.map((s) => s.componentName));
+
+    // Collect AST nodes that should be removed (save references before any modifications)
+    const nodesToRemove: ASTPath<VariableDeclaration>[] = [];
+    let firstStyledDecl: ASTPath<VariableDeclaration> | null = null;
+    let lastStyledDecl: ASTPath<VariableDeclaration> | null = null;
+
+    // Find base components that styled components extend (non-styled components)
+    const baseComponentsToFind = new Set<string>();
+    for (const info of styleInfos) {
+      if (info.extendsFrom && !styledComponentIdentifiers.has(info.extendsFrom)) {
+        baseComponentsToFind.add(info.extendsFrom);
+      }
+    }
+
+    // Track declarations of base components (non-styled components that get extended)
+    let insertBeforeBaseComponent: ASTPath<VariableDeclaration | FunctionDeclaration> | null = null;
+
+    // Check for base components defined as function declarations first
+    root.find(j.FunctionDeclaration).forEach((path) => {
+      if (path.node.id?.type === "Identifier" && baseComponentsToFind.has(path.node.id.name)) {
+        if (!insertBeforeBaseComponent) {
+          insertBeforeBaseComponent = path as unknown as ASTPath<
+            VariableDeclaration | FunctionDeclaration
+          >;
+        }
+      }
+    });
+
     root.find(j.VariableDeclaration).forEach((path) => {
+      const declarators = path.node.declarations;
+
+      // Check if this declaration contains a base component we're looking for
+      const hasBaseComponent = declarators.some((d) => {
+        if (d.type === "VariableDeclarator" && d.id.type === "Identifier") {
+          return baseComponentsToFind.has(d.id.name);
+        }
+        return false;
+      });
+
+      if (hasBaseComponent && !insertBeforeBaseComponent) {
+        insertBeforeBaseComponent = path as unknown as ASTPath<
+          VariableDeclaration | FunctionDeclaration
+        >;
+      }
+
+      const hasStyledComponent = declarators.some((d) => {
+        if (d.type === "VariableDeclarator" && d.id.type === "Identifier") {
+          if (styledComponentIdentifiers.has(d.id.name)) return true;
+          if (keyframesIdentifiers.has(d.id.name)) return true;
+          if (cssHelperStyles.has(d.id.name)) return true;
+          if (globalStyleDeclarations.has(d.id.name)) return true;
+        }
+        return false;
+      });
+
+      if (hasStyledComponent) {
+        if (!firstStyledDecl) {
+          firstStyledDecl = path;
+        }
+        lastStyledDecl = path; // Track the last styled component
+        nodesToRemove.push(path);
+      }
+    });
+
+    // Determine the insertion point:
+    // 1. If a styled component extends a non-styled component defined in the file, insert before that base component
+    // 2. Otherwise, insert before the LAST styled component (to ensure all referenced variables are declared first)
+    // 3. Fall back to after the last import
+    const insertionPoint = insertBeforeBaseComponent ?? lastStyledDecl ?? firstStyledDecl;
+
+    if (insertionPoint) {
+      for (const code of stylexCode) {
+        j(insertionPoint).insertBefore(code);
+      }
+    } else {
+      // Fall back to inserting after last import
+      const lastImport = root.find(j.ImportDeclaration).at(-1);
+      if (lastImport.length > 0) {
+        for (let i = stylexCode.length - 1; i >= 0; i--) {
+          lastImport.insertAfter(stylexCode[i]!);
+        }
+      } else {
+        // Insert at beginning in correct order
+        for (let i = stylexCode.length - 1; i >= 0; i--) {
+          root.get().node.program.body.unshift(stylexCode[i]!);
+        }
+      }
+    }
+
+    // Now remove the original styled component declarations (using saved references)
+    for (const path of nodesToRemove) {
       const declarators = path.node.declarations;
       const remainingDeclarators = declarators.filter((d) => {
         if (d.type === "VariableDeclarator" && d.id.type === "Identifier") {
-          // Remove styled components
-          if (styledComponentIdentifiers.has(d.id.name)) {
-            return false;
-          }
-          // Remove keyframes
-          if (keyframesIdentifiers.has(d.id.name)) {
-            return false;
-          }
-          // Don't remove css helper variable declarations - they are regenerated above
-          // But we do remove them here because they'll be replaced with the converted version
-          if (cssHelperStyles.has(d.id.name)) {
-            return false;
-          }
-          // Remove createGlobalStyle declarations
-          if (globalStyleDeclarations.has(d.id.name)) {
-            return false;
-          }
+          if (styledComponentIdentifiers.has(d.id.name)) return false;
+          if (keyframesIdentifiers.has(d.id.name)) return false;
+          if (cssHelperStyles.has(d.id.name)) return false;
+          if (globalStyleDeclarations.has(d.id.name)) return false;
         }
         return true;
       });
@@ -499,7 +635,7 @@ export function transformWithWarnings(
       } else if (remainingDeclarators.length < declarators.length) {
         path.node.declarations = remainingDeclarators;
       }
-    });
+    }
 
     // Remove defaultProps assignments
     root.find(j.ExpressionStatement).forEach((path) => {
@@ -514,32 +650,52 @@ export function transformWithWarnings(
       }
     });
 
-    // Insert styles declarations after imports (stylexCode is an array)
-    const lastImport = root.find(j.ImportDeclaration).at(-1);
-    if (lastImport.length > 0) {
-      // Insert in reverse order so they appear in correct order
-      for (let i = stylexCode.length - 1; i >= 0; i--) {
-        lastImport.insertAfter(stylexCode[i]!);
-      }
-    } else {
-      // Insert at beginning in correct order
-      for (let i = stylexCode.length - 1; i >= 0; i--) {
-        root.get().node.program.body.unshift(stylexCode[i]!);
-      }
-    }
-
     // Generate wrapper components for those that need them
     const wrapperComponents = generateWrapperComponents(j, styleInfos);
 
     // Insert wrapper components after styles
     if (wrapperComponents.length > 0) {
-      // Add React import for wrapper components (TypeScript types need it)
+      // Check if any wrapper needs React types (TypeScript interfaces, React.ReactNode, etc.)
+      // Wrappers that use sibling selectors or shouldForwardProp with simple `function Name(props)` don't need React
+      const needsReactImport = styleInfos.some((info) => {
+        if (!info.needsWrapper) return false;
+        // Sibling-only wrappers don't need React (they use untyped props)
+        if (
+          info.siblingSelectors.length > 0 &&
+          info.attributeSelectors.length === 0 &&
+          !info.hasShouldForwardProp &&
+          info.dynamicFns.size === 0 &&
+          info.transientProps.length === 0
+        ) {
+          return false;
+        }
+        // shouldForwardProp-only wrappers for input/anchor don't need React
+        if (
+          info.hasShouldForwardProp &&
+          info.siblingSelectors.length === 0 &&
+          info.attributeSelectors.length === 0 &&
+          (info.baseElement === "input" || info.baseElement === "a")
+        ) {
+          return false;
+        }
+        // Object-syntax dynamic function wrappers don't need React (simple function pattern)
+        if (
+          info.hasObjectSyntaxDynamicFns &&
+          !info.supportsAs &&
+          info.attributeSelectors.length === 0
+        ) {
+          return false;
+        }
+        // Other wrappers may need React for TypeScript types
+        return true;
+      });
+
       const hasReactImport = root.find(j.ImportDeclaration).some((p) => {
         const source = p.node.source.value;
         return source === "react";
       });
 
-      if (!hasReactImport) {
+      if (needsReactImport && !hasReactImport) {
         const reactImport = j.importDeclaration(
           [j.importDefaultSpecifier(j.identifier("React"))],
           j.literal("react"),
@@ -719,6 +875,7 @@ function processStyledComponent(
   adapter: Adapter,
   warnings: TransformWarning[],
   additionalImports: Set<string>,
+  hasAsPropInJSX = false,
 ): StyleInfo | null {
   let templateLiteral: TemplateLiteral | null = null;
   let styleObject: Expression | null = null;
@@ -847,7 +1004,7 @@ function processStyledComponent(
   let hasShouldForwardProp = false;
   let filteredProps: string[] = [];
   let filterTransientProps = false;
-  let supportsAs = false;
+  let supportsAs = hasAsPropInJSX;
 
   // Check for .withConfig({ shouldForwardProp: ... }) pattern
   if (expr.type === "TaggedTemplateExpression") {
@@ -953,12 +1110,18 @@ function processStyledComponent(
     }
   } else if (styleObject && styleObject.type === "ObjectExpression") {
     // Object syntax - convert object properties to styles
-    styles = convertObjectExpressionToStyles(
+    const objectResult = convertObjectExpressionToStyles(
       j,
       styleObject as ObjectExpression,
       hasDynamicStyleFn,
       dynamicStyleParam,
+      componentName,
     );
+    styles = objectResult.styles;
+    // Merge dynamic functions from object syntax
+    for (const [fnName, fnConfig] of objectResult.dynamicFns) {
+      dynamicFns.set(fnName, fnConfig);
+    }
   } else {
     return null;
   }
@@ -995,16 +1158,25 @@ function processStyledComponent(
   // - Has shouldForwardProp with extractable prop filtering logic
   // - Styles use specificity hacks (wrapper simplifies output)
   // - Uses `as` prop for polymorphism (detected from JSX usage later)
-  // NOTE: dynamicFns alone don't require a wrapper - they can be called inline in JSX
+  // - Has dynamic functions from object syntax (props need to be stripped from DOM)
+  // NOTE: dynamicFns from template literals can be called inline in JSX
+  // NOTE: dynamicFns from object syntax need wrapper to filter transient props
   // NOTE: Simple shouldForwardProp like `prop !== "x"` doesn't require wrapper
   const needsWrapperForForwardProp =
     hasShouldForwardProp && (filteredProps.length > 0 || filterTransientProps);
+
+  // Check if any dynamic function has an original prop name (from object syntax)
+  const hasObjectSyntaxDynamicFns = Array.from(dynamicFns.values()).some(
+    (fn) => fn.originalPropName !== undefined,
+  );
 
   const needsWrapper =
     attributeSelectors.length > 0 ||
     siblingSelectors.length > 0 ||
     needsWrapperForForwardProp ||
-    hasSpecificityHacks;
+    hasSpecificityHacks ||
+    supportsAs ||
+    hasObjectSyntaxDynamicFns;
 
   return {
     componentName,
@@ -1028,6 +1200,7 @@ function processStyledComponent(
     filterTransientProps,
     hasSpecificityHacks,
     cssVarInjections,
+    hasObjectSyntaxDynamicFns,
   };
 }
 
@@ -1695,6 +1868,14 @@ function parseShouldForwardProp(expr: Expression): {
       }
     }
 
+    // Check for prop !== "propName" pattern (simple inequality check)
+    if (body.type === "BinaryExpression" && body.operator === "!==") {
+      // (prop) => prop !== "hasError"
+      if (body.right.type === "StringLiteral") {
+        result.filteredProps.push(body.right.value);
+      }
+    }
+
     // Check for isPropValid(prop) && prop !== "..." pattern (or similar)
     // This is a more complex pattern, just mark as having shouldForwardProp
   }
@@ -1791,15 +1972,38 @@ const OBJECT_PROPERTY_RENAMES: Record<string, string> = {
 };
 
 /**
+ * Result from converting an object expression to styles
+ */
+interface ObjectStylesResult {
+  styles: StyleXObject;
+  dynamicFns: Map<
+    string,
+    {
+      paramName: string;
+      paramType: string | undefined;
+      styles: StyleXObject;
+      originalPropName?: string;
+    }
+  >;
+  needsWrapper: boolean;
+}
+
+/**
  * Convert an ObjectExpression to StyleX styles
  */
 function convertObjectExpressionToStyles(
   _j: JSCodeshift,
   objExpr: ObjectExpression,
-  _hasDynamicFn: boolean,
-  _paramName: string | undefined,
-): StyleXObject {
+  hasDynamicFn: boolean,
+  paramName: string | undefined,
+  componentName?: string,
+): ObjectStylesResult {
   const styles: StyleXObject = {};
+  const dynamicFns = new Map<
+    string,
+    { paramName: string; paramType: string | undefined; styles: StyleXObject }
+  >();
+  let needsWrapper = false;
 
   for (const prop of objExpr.properties) {
     if (prop.type === "ObjectProperty") {
@@ -1823,15 +2027,64 @@ function convertObjectExpressionToStyles(
       } else if (prop.value.type === "TemplateLiteral" && prop.value.expressions.length === 0) {
         // Simple template literal without expressions
         styles[normalizedKey] = prop.value.quasis[0]?.value.cooked ?? "";
+      } else if (
+        hasDynamicFn &&
+        paramName &&
+        prop.value.type === "LogicalExpression" &&
+        prop.value.operator === "||"
+      ) {
+        // Handle props.$prop || defaultValue pattern
+        const left = prop.value.left;
+        const right = prop.value.right;
+
+        // Extract default value from right side
+        let defaultValue: string | number | null = null;
+        if (right.type === "StringLiteral") {
+          defaultValue = right.value;
+        } else if (right.type === "NumericLiteral") {
+          defaultValue = right.value;
+        }
+
+        // Extract prop name from left side (props.$background -> $background)
+        let propAccessName: string | null = null;
+        if (
+          left.type === "MemberExpression" &&
+          left.object.type === "Identifier" &&
+          left.object.name === paramName &&
+          left.property.type === "Identifier"
+        ) {
+          propAccessName = left.property.name;
+        }
+
+        if (defaultValue !== null && propAccessName) {
+          // Add default value to base styles
+          styles[normalizedKey] = defaultValue;
+
+          // Create dynamic function for this prop
+          // e.g., dynamicBoxBackgroundColor: (backgroundColor: string) => ({ backgroundColor })
+          const baseStyleName = componentName ? toCamelCase(componentName) : "";
+          const fnName = `${baseStyleName}${capitalize(normalizedKey)}`;
+          // Use the normalized key as the param name (e.g., backgroundColor)
+          // Store original prop name for wrapper generation (e.g., $background)
+          dynamicFns.set(fnName, {
+            paramName: normalizedKey,
+            paramType: "string",
+            styles: { [normalizedKey]: VAR_REF_PREFIX + normalizedKey },
+            originalPropName: propAccessName,
+          });
+          needsWrapper = true;
+        } else {
+          // Can't extract - skip
+          continue;
+        }
       } else {
-        // Dynamic value - skip for now (will be handled as inline style)
-        // For dynamic object syntax, we can't easily convert to StyleX
+        // Dynamic value we can't handle - skip
         continue;
       }
     }
   }
 
-  return styles;
+  return { styles, dynamicFns, needsWrapper };
 }
 
 /**
@@ -1897,17 +2150,34 @@ function buildDynamicNodeContext(
   componentName: string,
   filePath: string,
 ): DynamicNodeContext {
+  let cssProperty = location.context.property
+    ? normalizePropertyName(location.context.property)
+    : null;
+
+  // Map shorthand properties to their expanded form when interpolation is in a specific position
+  // Only apply to border shorthand (border, borderTop, borderRight, borderBottom, borderLeft)
+  // NOT to borderRadius, borderColor, borderWidth, borderStyle
+  let isFullValue = location.context.isFullValue;
+  const borderShorthands = ["border", "borderTop", "borderRight", "borderBottom", "borderLeft"];
+  if (cssProperty && borderShorthands.includes(cssProperty)) {
+    // For border shorthand with interpolation, determine which expanded property it maps to
+    const mapping = mapBorderInterpolationToProperty(location.context.value, location.index);
+    if (mapping) {
+      cssProperty = mapping.property;
+      // Update isFullValue based on whether the interpolation is the full value for the expanded property
+      isFullValue = mapping.isFullValue;
+    }
+  }
+
   return {
     type: classified.type,
     index: location.index,
-    cssProperty: location.context.property
-      ? normalizePropertyName(location.context.property)
-      : null,
+    cssProperty,
     cssValue: location.context.value,
     selector: location.context.selector,
     isInSelector: location.context.isInSelector,
     isInPropertyName: location.context.isInPropertyName,
-    isFullValue: location.context.isFullValue,
+    isFullValue,
     filePath,
     componentName,
     sourceCode: classified.sourceCode,
@@ -1922,6 +2192,171 @@ function buildDynamicNodeContext(
 }
 
 /**
+ * Map a border interpolation to the correct expanded property
+ * Returns both the property name and whether the interpolation is the full value
+ */
+function mapBorderInterpolationToProperty(
+  cssValue: string,
+  interpolationIndex: number,
+): { property: string; isFullValue: boolean } | null {
+  const placeholder = `__INTERPOLATION_${interpolationIndex}__`;
+
+  // Split the value to find which part the interpolation is in
+  const parts = cssValue.split(/\s+/);
+
+  const borderStyles = [
+    "none",
+    "hidden",
+    "dotted",
+    "dashed",
+    "solid",
+    "double",
+    "groove",
+    "ridge",
+    "inset",
+    "outset",
+  ];
+
+  for (const part of parts) {
+    if (part.includes(placeholder)) {
+      // This part contains the interpolation
+      // Determine what type of value it is based on what else is in the part
+      const withoutPlaceholder = part.replace(placeholder, "").trim();
+
+      // If the part is just the placeholder, it's a full value
+      const isFullValue = part === placeholder;
+
+      // If the part is just the placeholder (or placeholder with color hash), it's the color
+      if (!withoutPlaceholder || withoutPlaceholder === "#") {
+        return { property: "borderColor", isFullValue };
+      }
+
+      // If the remaining part looks like a unit, it's the width
+      if (/^(px|em|rem|%|vh|vw|pt|cm|mm|in)$/.test(withoutPlaceholder)) {
+        return { property: "borderWidth", isFullValue: false };
+      }
+
+      // Check if it might be a style
+      for (const style of borderStyles) {
+        if (part.includes(style)) {
+          return { property: "borderStyle", isFullValue: false };
+        }
+      }
+
+      // Default to color if we can't determine
+      return { property: "borderColor", isFullValue };
+    }
+  }
+
+  return null;
+}
+
+/**
+ * Extract pseudo-class from a CSS selector (e.g., "&:focus" -> ":focus")
+ */
+function extractPseudoClass(selector: string): string | null {
+  // Match patterns like "&:hover", "&:focus", "&::before", etc.
+  const match = selector.match(/&(:[:\w-]+)/);
+  return match ? match[1]! : null;
+}
+
+/**
+ * Check if a template literal value has whitespace outside of ${} expressions
+ * (indicating multiple values in a shorthand property)
+ */
+function hasWhitespaceOutsideExpressions(value: string): boolean {
+  let braceDepth = 0;
+
+  for (let i = 0; i < value.length; i++) {
+    const char = value[i]!;
+    if (char === "$" && value[i + 1] === "{") {
+      braceDepth++;
+      i++; // Skip the {
+    } else if (char === "}" && braceDepth > 0) {
+      braceDepth--;
+    } else if (/\s/.test(char) && braceDepth === 0) {
+      return true;
+    }
+  }
+  return false;
+}
+
+/**
+ * Expand margin/padding shorthand template literal to longhand properties
+ */
+function expandMarginPaddingShorthand(
+  property: "margin" | "padding",
+  templateValue: string,
+): Record<string, string | number> {
+  const prefix = property === "margin" ? "margin" : "padding";
+
+  // Split the template value by whitespace, but preserve ${...} expressions
+  const parts: string[] = [];
+  let current = "";
+  let braceDepth = 0;
+
+  for (let i = 0; i < templateValue.length; i++) {
+    const char = templateValue[i]!;
+    if (char === "$" && templateValue[i + 1] === "{") {
+      braceDepth++;
+      current += char;
+    } else if (char === "{" && braceDepth > 0) {
+      current += char;
+    } else if (char === "}") {
+      if (braceDepth > 0) braceDepth--;
+      current += char;
+    } else if (/\s/.test(char) && braceDepth === 0) {
+      if (current.trim()) {
+        parts.push(current.trim());
+      }
+      current = "";
+    } else {
+      current += char;
+    }
+  }
+  if (current.trim()) {
+    parts.push(current.trim());
+  }
+
+  // Map based on number of values
+  let top: string | number, right: string | number, bottom: string | number, left: string | number;
+
+  // Convert parts to appropriate types (number for "0", template literal for expressions)
+  const convertPart = (part: string): string | number => {
+    if (part === "0") return 0;
+    if (/^\d+$/.test(part)) return parseInt(part, 10);
+    // If it contains an expression, wrap in template literal prefix
+    if (part.includes("${")) {
+      return TEMPLATE_LITERAL_PREFIX + part;
+    }
+    return part;
+  };
+
+  if (parts.length === 1) {
+    top = right = bottom = left = convertPart(parts[0]!);
+  } else if (parts.length === 2) {
+    top = bottom = convertPart(parts[0]!);
+    right = left = convertPart(parts[1]!);
+  } else if (parts.length === 3) {
+    top = convertPart(parts[0]!);
+    right = left = convertPart(parts[1]!);
+    bottom = convertPart(parts[2]!);
+  } else {
+    top = convertPart(parts[0]!);
+    right = convertPart(parts[1]!);
+    bottom = convertPart(parts[2]!);
+    left = convertPart(parts[3]!);
+  }
+
+  return {
+    [`${prefix}Top`]: top,
+    [`${prefix}Right`]: right,
+    [`${prefix}Bottom`]: bottom,
+    [`${prefix}Left`]: left,
+  };
+}
+
+/**
  * Apply a handler decision to the styles
  */
 function applyDecision(
@@ -1932,7 +2367,12 @@ function applyDecision(
   variantStyles: Map<string, StyleXObject>,
   dynamicFns: Map<
     string,
-    { paramName: string; paramType: string | undefined; styles: StyleXObject }
+    {
+      paramName: string;
+      paramType: string | undefined;
+      styles: StyleXObject;
+      originalPropName?: string;
+    }
   >,
   additionalImports: Set<string>,
   warnings: TransformWarning[],
@@ -1971,6 +2411,28 @@ function applyDecision(
             styles["animationName"] = decision.value;
           }
           // Don't set the animation property
+        } else if (
+          (context.cssProperty === "margin" || context.cssProperty === "padding") &&
+          typeof decision.value === "string" &&
+          decision.value.startsWith(TEMPLATE_LITERAL_PREFIX)
+        ) {
+          // Special handling for margin/padding shorthand with interpolations:
+          // Only expand to longhand properties when there are multiple values
+          const templateValue = decision.value.slice(TEMPLATE_LITERAL_PREFIX.length);
+          // Check if there's whitespace outside of ${} expressions (indicating multiple values)
+          const hasMultipleValues = hasWhitespaceOutsideExpressions(templateValue);
+
+          if (hasMultipleValues) {
+            const expandedStyles = expandMarginPaddingShorthand(context.cssProperty, templateValue);
+            for (const [prop, val] of Object.entries(expandedStyles)) {
+              styles[prop] = val;
+            }
+            // Remove the original shorthand if it exists
+            delete styles[context.cssProperty];
+          } else {
+            // Single value - keep as shorthand
+            styles[context.cssProperty] = decision.value;
+          }
         } else {
           styles[context.cssProperty] = decision.value;
         }
@@ -2000,16 +2462,76 @@ function applyDecision(
     }
 
     case "variant": {
+      // Extract pseudo-class from selector if present (e.g., "&:focus" -> ":focus")
+      const pseudoClass = extractPseudoClass(context.selector);
+
       // Set base value in main styles
       if (context.cssProperty && decision.baseValue !== "") {
-        styles[context.cssProperty] = decision.baseValue;
+        if (pseudoClass) {
+          // Merge into pseudo-class object
+          const existing = styles[context.cssProperty];
+          if (typeof existing === "object" && existing !== null) {
+            (existing as Record<string, unknown>)[pseudoClass] = decision.baseValue;
+          } else if (existing !== undefined) {
+            styles[context.cssProperty] = {
+              default: existing,
+              [pseudoClass]: decision.baseValue,
+            };
+          } else {
+            styles[context.cssProperty] = {
+              default: null,
+              [pseudoClass]: decision.baseValue,
+            };
+          }
+        } else {
+          // Check if there's already a pseudo-class object and merge into default
+          const existing = styles[context.cssProperty];
+          if (typeof existing === "object" && existing !== null && "default" in existing) {
+            (existing as Record<string, unknown>)["default"] = decision.baseValue;
+          } else {
+            styles[context.cssProperty] = decision.baseValue;
+          }
+        }
       }
 
       // Add variant styles
       for (const variant of decision.variants) {
         const variantName = `${toCamelCase(context.componentName)}${variant.name}`;
         const existing = variantStyles.get(variantName) ?? {};
-        variantStyles.set(variantName, { ...existing, ...variant.styles });
+
+        // For each style in the variant, merge pseudo-class context
+        for (const [prop, value] of Object.entries(variant.styles)) {
+          if (pseudoClass) {
+            const existingProp = existing[prop];
+            if (typeof existingProp === "object" && existingProp !== null) {
+              (existingProp as Record<string, unknown>)[pseudoClass] = value;
+            } else if (existingProp !== undefined) {
+              existing[prop] = {
+                default: existingProp,
+                [pseudoClass]: value,
+              };
+            } else {
+              existing[prop] = {
+                default: null,
+                [pseudoClass]: value,
+              };
+            }
+          } else {
+            // Check if there's already a pseudo-class object and set the default
+            const existingProp = existing[prop];
+            if (
+              typeof existingProp === "object" &&
+              existingProp !== null &&
+              "default" in existingProp
+            ) {
+              (existingProp as Record<string, unknown>)["default"] = value;
+            } else {
+              existing[prop] = value;
+            }
+          }
+        }
+
+        variantStyles.set(variantName, existing);
       }
       break;
     }
@@ -2107,17 +2629,37 @@ function generateStyleXCode(
   // Add component styles
   for (const info of styleInfos) {
     const styleName = toCamelCase(info.componentName);
-    properties.push({
-      key: j.identifier(styleName),
-      value: styleObjectToAST(j, info.styles),
-    });
 
-    // Add extra styles created by selector lowering (e.g. child rules)
-    for (const [extraName, extraStylesObj] of info.extraStyles) {
+    // For sibling selectors, add extra styles BEFORE the base style
+    // For other patterns, add base style first then extra styles
+    const hasSiblingSelectors = info.siblingSelectors && info.siblingSelectors.length > 0;
+
+    if (hasSiblingSelectors) {
+      // Add extra styles first for sibling selector patterns
+      for (const [extraName, extraStylesObj] of info.extraStyles) {
+        properties.push({
+          key: j.identifier(extraName),
+          value: styleObjectToAST(j, extraStylesObj),
+        });
+      }
+      // Then add base style
       properties.push({
-        key: j.identifier(extraName),
-        value: styleObjectToAST(j, extraStylesObj),
+        key: j.identifier(styleName),
+        value: styleObjectToAST(j, info.styles),
       });
+    } else {
+      // Add base style first for other patterns
+      properties.push({
+        key: j.identifier(styleName),
+        value: styleObjectToAST(j, info.styles),
+      });
+      // Then add extra styles
+      for (const [extraName, extraStylesObj] of info.extraStyles) {
+        properties.push({
+          key: j.identifier(extraName),
+          value: styleObjectToAST(j, extraStylesObj),
+        });
+      }
     }
 
     // Add variant styles
@@ -2238,6 +2780,15 @@ function styleObjectToAST(j: JSCodeshift, styles: StyleXObject): Expression {
     );
     if (computedExpr) {
       (prop as unknown as { computed?: boolean }).computed = true;
+    }
+    // Enable shorthand syntax when key and value are identical identifiers
+    // e.g., { backgroundColor } instead of { backgroundColor: backgroundColor }
+    if (
+      keyNode.type === "Identifier" &&
+      valueNode.type === "Identifier" &&
+      keyNode.name === valueNode.name
+    ) {
+      (prop as unknown as { shorthand?: boolean }).shorthand = true;
     }
     regularProperties.push(prop);
   }
@@ -2767,7 +3318,15 @@ function transformJSXUsage(
         if (attr.value?.type === "StringLiteral") {
           baseElement = attr.value.value;
         }
-        propsToRemove.push(attr.name.name);
+        // If wrapper supports `as`, convert `forwardedAs` to `as` but don't remove
+        if (info.supportsAs) {
+          if (attr.name.name === "forwardedAs") {
+            attr.name.name = "as";
+          }
+          // Don't add to propsToRemove - keep the prop for the wrapper
+        } else {
+          propsToRemove.push(attr.name.name);
+        }
         break;
       }
     }
@@ -3077,6 +3636,125 @@ function transformJSXUsage(
       }
     }
   });
+
+  // Add sibling selector props to JSX elements
+  // For components with sibling selectors (e.g., & + &), we need to add props
+  // like isAdjacentSibling based on element position among siblings
+  const componentsWithSiblingSelectors = new Map<string, SiblingSelectorInfo[]>();
+  for (const info of styleInfos) {
+    if (info.siblingSelectors.length > 0) {
+      componentsWithSiblingSelectors.set(info.componentName, info.siblingSelectors);
+    }
+  }
+
+  if (componentsWithSiblingSelectors.size > 0) {
+    // Find all JSX elements that could be parents of sibling styled components
+    root.find(j.JSXElement).forEach((parentPath) => {
+      const children = parentPath.node.children ?? [];
+      const jsxChildren = children.filter(
+        (c): c is import("jscodeshift").JSXElement => c.type === "JSXElement",
+      );
+
+      if (jsxChildren.length < 2) return;
+
+      // Track which component types we've seen and their positions
+      type SiblingTracker = {
+        seenFirst: boolean;
+        afterClassName: string | null;
+      };
+      const trackers = new Map<string, SiblingTracker>();
+
+      for (const childEl of jsxChildren) {
+        const childOpening = childEl.openingElement;
+        if (childOpening.name.type !== "JSXIdentifier") continue;
+
+        const childComponentName = childOpening.name.name;
+        const siblingSelectors = componentsWithSiblingSelectors.get(childComponentName);
+        if (!siblingSelectors) continue;
+
+        // Get or create tracker for this component type
+        let tracker = trackers.get(childComponentName);
+        if (!tracker) {
+          tracker = { seenFirst: false, afterClassName: null };
+          trackers.set(childComponentName, tracker);
+        }
+
+        // Check if this element has a className
+        const classNameAttr = (childOpening.attributes ?? []).find(
+          (a) =>
+            a.type === "JSXAttribute" &&
+            a.name.type === "JSXIdentifier" &&
+            a.name.name === "className",
+        );
+        let currentClassName: string | null = null;
+        if (classNameAttr && classNameAttr.type === "JSXAttribute") {
+          if (classNameAttr.value?.type === "StringLiteral") {
+            currentClassName = classNameAttr.value.value;
+          }
+        }
+
+        // Ensure attributes array exists
+        if (!childOpening.attributes) childOpening.attributes = [];
+
+        // If we've already seen one of this component type, this is an adjacent sibling
+        if (tracker.seenFirst) {
+          // Add isAdjacentSibling prop for & + & selector
+          const hasAdjacentSelector = siblingSelectors.some(
+            (s) => s.selector === "& + &" || s.selector === "&+&",
+          );
+          if (hasAdjacentSelector) {
+            const propName = siblingSelectors.find(
+              (s) => s.selector === "& + &" || s.selector === "&+&",
+            )!.propName;
+            // Check if prop already exists
+            const exists = childOpening.attributes.some(
+              (a) =>
+                a.type === "JSXAttribute" &&
+                a.name.type === "JSXIdentifier" &&
+                a.name.name === propName,
+            );
+            if (!exists) {
+              childOpening.attributes.push(j.jsxAttribute(j.jsxIdentifier(propName), null));
+            }
+          }
+
+          // Add isSiblingAfterSomething prop if we're after an element with .something class
+          if (tracker.afterClassName) {
+            const generalSibSelector = siblingSelectors.find((s) => {
+              const match = s.selector.match(/^&\.(\w+)\s*~\s*&$/);
+              return match && match[1] === tracker!.afterClassName;
+            });
+            if (generalSibSelector) {
+              const exists = childOpening.attributes.some(
+                (a) =>
+                  a.type === "JSXAttribute" &&
+                  a.name.type === "JSXIdentifier" &&
+                  a.name.name === generalSibSelector.propName,
+              );
+              if (!exists) {
+                childOpening.attributes.push(
+                  j.jsxAttribute(j.jsxIdentifier(generalSibSelector.propName), null),
+                );
+              }
+            }
+          }
+        }
+
+        // Update tracker state
+        tracker.seenFirst = true;
+        // If this element has a matching className for a general sibling selector, track it
+        if (currentClassName) {
+          const hasMatchingSelector = siblingSelectors.some((s) => {
+            const match = s.selector.match(/^&\.(\w+)\s*~\s*&$/);
+            return match && match[1] === currentClassName;
+          });
+          if (hasMatchingSelector) {
+            tracker.afterClassName = currentClassName;
+          }
+        }
+      }
+    });
+  }
 }
 
 function applyStyleToDescendantComponents(
@@ -3247,12 +3925,17 @@ function generateWrapperComponents(
     | import("jscodeshift").TSInterfaceDeclaration
   )[] = [];
 
+  // Build a map for looking up base elements of components
+  const componentBaseElements = new Map<string, string>();
+  for (const info of styleInfos) {
+    componentBaseElements.set(info.componentName, info.baseElement);
+  }
+
   for (const info of styleInfos) {
     if (!info.needsWrapper) continue;
 
     const {
       componentName,
-      baseElement,
       transientProps,
       attributeSelectors,
       siblingSelectors,
@@ -3264,6 +3947,26 @@ function generateWrapperComponents(
       extendsFrom,
       hasSpecificityHacks,
     } = info;
+
+    // Resolve the actual base element (walking inheritance chain if needed)
+    let baseElement = info.baseElement;
+    if (isExtending && extendsFrom) {
+      // Walk up the inheritance chain to find the root base element
+      let current = extendsFrom;
+      while (current) {
+        const parentInfo = styleInfos.find((s) => s.componentName === current);
+        if (parentInfo) {
+          baseElement = parentInfo.baseElement;
+          if (parentInfo.extendsFrom) {
+            current = parentInfo.extendsFrom;
+          } else {
+            break;
+          }
+        } else {
+          break;
+        }
+      }
+    }
 
     const styleName = toCamelCase(componentName);
     const isInputElement = baseElement === "input";
@@ -3297,9 +4000,11 @@ function generateWrapperComponents(
 
     // Add dynamic function props
     for (const [, fnConfig] of dynamicFns) {
-      if (!propsToDestructure.includes(fnConfig.paramName)) {
-        propsToDestructure.push(fnConfig.paramName);
-        propsToFilter.push(fnConfig.paramName);
+      // Use originalPropName if available (from object syntax), otherwise use paramName
+      const propToUse = fnConfig.originalPropName ?? fnConfig.paramName;
+      if (!propsToDestructure.includes(propToUse)) {
+        propsToDestructure.push(propToUse);
+        propsToFilter.push(propToUse);
       }
     }
 
@@ -3377,7 +4082,9 @@ function generateWrapperComponents(
 
     // Dynamic function calls
     for (const [fnName, fnConfig] of dynamicFns) {
-      styleConditions.push(`${fnConfig.paramName} && styles.${fnName}(${fnConfig.paramName})`);
+      // Use originalPropName if available (from object syntax), otherwise use paramName
+      const propToUse = fnConfig.originalPropName ?? fnConfig.paramName;
+      styleConditions.push(`${propToUse} && styles.${fnName}(${propToUse})`);
     }
 
     // Transient prop conditionals
@@ -3399,13 +4106,15 @@ function generateWrapperComponents(
       interfaceProps.push("children?: React.ReactNode");
     }
 
-    let interfaceCode = "";
-    if (siblingSelectors.length > 0 || (!isInputElement && !isAnchorElement)) {
-      interfaceCode = `interface ${interfaceName} {
-  ${interfaceProps.join(";\n  ")};
-  className?: string;
-}`;
-    }
+    // Interface code generated but currently not used in all wrapper patterns
+    // (TypeScript interfaces are only included for specific wrapper types)
+    const _unusedInterfaceCode =
+      siblingSelectors.length > 0 || (!isInputElement && !isAnchorElement)
+        ? `interface ${interfaceName} {\n  ${interfaceProps.join(
+            ";\n  ",
+          )};\n  className?: string;\n}`
+        : "";
+    void _unusedInterfaceCode; // Silence unused variable warning
 
     // Generate function body
     const destructureList = [...propsToDestructure, "...rest"];
@@ -3421,8 +4130,42 @@ function generateWrapperComponents(
     // Build the component code
     let componentCode: string;
 
-    if (isInputElement) {
-      // Input-specific wrapper (no children)
+    if (isInputElement && hasShouldForwardProp && attributeSelectors.length === 0) {
+      // Simple shouldForwardProp-only Input wrapper (no attribute selectors)
+      // Build the list of props to destructure: className, style, filtered props, ...rest
+      const inputDestructure = ["className", "style"];
+      for (const prop of filteredProps) {
+        if (!inputDestructure.includes(prop)) {
+          inputDestructure.push(prop);
+        }
+      }
+      inputDestructure.push("...rest");
+
+      // Build simple conditional style conditions
+      const inputStyleConditions = [`styles.${styleName}`];
+      for (const prop of filteredProps) {
+        // Create variant style name from filtered prop
+        const variantStyleName = `${styleName}${capitalize(prop)}`;
+        inputStyleConditions.push(`${prop} && styles.${variantStyleName}`);
+      }
+
+      componentCode = `
+function ${componentName}(props) {
+  const { ${inputDestructure.join(", ")} } = props;
+
+  const sx = stylex.props(${inputStyleConditions.join(", ")});
+
+  return (
+    <input
+      {...sx}
+      className={[sx.className, className].filter(Boolean).join(" ")}
+      style={style}
+      {...rest}
+    />
+  );
+}`;
+    } else if (isInputElement) {
+      // Input wrapper with attribute selectors (TypeScript interface needed)
       componentCode = `
 interface InputProps extends React.InputHTMLAttributes<HTMLInputElement> {}
 
@@ -3469,22 +4212,23 @@ function ${componentName}({ ${destructureList.join(", ")} }: LinkProps) {
   );
 }`;
     } else if (siblingSelectors.length > 0) {
-      // Sibling selector wrapper with IIFE pattern (matching fixture)
+      // Sibling selector wrapper with function pattern
       componentCode = `
-${interfaceCode}
+function ${componentName}(props) {
+  const { children, className, ${siblingSelectors
+    .map((s) => s.propName)
+    .join(", ")}, ...rest } = props;
 
-const ${componentName} = ({ ${destructureList.join(", ")} }: ${propsTypeAnnotation}) =>
-  (() => {
-    const sx = stylex.props(
-      ${styleConditions.join(",\n      ")}
-    );
+  const sx = stylex.props(
+    ${styleConditions.join(",\n    ")}
+  );
 
-    return (
-      <${baseElement} {...sx} className={[sx.className, className].filter(Boolean).join(" ")}>
-        {children}
-      </${baseElement}>
-    );
-  })();`;
+  return (
+    <${baseElement} {...sx} className={[sx.className, className].filter(Boolean).join(" ")} {...rest}>
+      {children}
+    </${baseElement}>
+  );
+}`;
     } else if (hasShouldForwardProp) {
       // shouldForwardProp wrapper
       let filterCode = "";
@@ -3516,6 +4260,35 @@ ${filterCode}
     </${baseElement}>
   );
 }`;
+    } else if (info.supportsAs) {
+      // Polymorphic wrapper with `as` prop support
+      // If extending another component, reuse parent's props interface
+      const propsInterfaceName =
+        isExtending && extendsFrom ? `${extendsFrom}Props` : `${componentName}Props`;
+      const needsInterface = !isExtending || !extendsFrom;
+
+      const interfaceDecl = needsInterface
+        ? `interface ${propsInterfaceName} extends React.ButtonHTMLAttributes<HTMLButtonElement> {
+  as?: React.ElementType;
+  href?: string;
+}
+
+`
+        : "";
+
+      componentCode = `
+${interfaceDecl}
+function ${componentName}({
+  as: Component = "${baseElement}",
+  children,
+  ...props
+}: ${propsInterfaceName} & { children?: React.ReactNode }) {
+  return (
+    <Component {...stylex.props(${styleConditions.join(", ")})} {...props}>
+      {children}
+    </Component>
+  );
+}`;
     } else if (
       hasSpecificityHacks &&
       attributeSelectors.length === 0 &&
@@ -3528,6 +4301,31 @@ ${filterCode}
 const ${componentName} = ({ children }: { children: React.ReactNode }) => (
   <${baseElement} {...stylex.props(styles.${styleName})}>{children}</${baseElement}>
 );`;
+    } else if (info.hasObjectSyntaxDynamicFns) {
+      // Object-syntax dynamic function wrapper (styled.div((props) => ({...})) pattern)
+      // Uses simple function pattern without TypeScript types
+      const objDestructure = ["className", "children", "style"];
+      for (const [, fnConfig] of dynamicFns) {
+        const propToUse = fnConfig.originalPropName ?? fnConfig.paramName;
+        if (!objDestructure.includes(propToUse)) {
+          objDestructure.push(propToUse);
+        }
+      }
+
+      componentCode = `
+function ${componentName}(props) {
+  const { ${objDestructure.join(", ")} } = props;
+
+  const sx = stylex.props(
+    ${styleConditions.join(",\n    ")}
+  );
+
+  return (
+    <${baseElement} {...sx} className={[sx.className, className].filter(Boolean).join(" ")} style={style}>
+      {children}
+    </${baseElement}>
+  );
+}`;
     } else {
       // Generic wrapper
       componentCode = `

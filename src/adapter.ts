@@ -390,11 +390,17 @@ export const conditionalHandler: DynamicNodeHandler = (ctx): DynamicNodeDecision
   const cleanFalsy = cleanValue(falsy);
 
   if (!propName) {
-    // Can't determine prop name, but we can still convert to an inline ternary
-    // This preserves the conditional logic for manual review
+    // Static conditional (e.g., isPrimary ? "#BF4F74" : "#ccc")
+    // Preserve the full conditional expression
     return {
       action: "convert",
-      value: `${cleanFalsy}`, // Use the falsy value as default
+      value:
+        VAR_REF_PREFIX +
+        ctx.conditionalBranches.condition +
+        " ? " +
+        (typeof cleanTruthy === "string" ? `"${cleanTruthy}"` : cleanTruthy) +
+        " : " +
+        (typeof cleanFalsy === "string" ? `"${cleanFalsy}"` : cleanFalsy),
     };
   }
 
