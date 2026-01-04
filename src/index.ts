@@ -13,3 +13,7 @@ export type {
   HandlerResult,
 } from "./adapter.js";
 export { defineAdapter, builtinHandlers } from "./adapter.js";
+
+// jscodeshift runner expects a module with a default export transform function.
+// Point `runTransform()` at `dist/index.mjs` to keep a single build entry.
+export { default } from "./transform.js";

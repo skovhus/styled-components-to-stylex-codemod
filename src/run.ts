@@ -101,8 +101,8 @@ export async function runTransform(options: RunTransformOptions): Promise<RunTra
     };
   }
 
-  // Path to the transform module
-  const transformPath = join(__dirname, "transform.mjs");
+  // Path to the transform module (single-entry build)
+  const transformPath = join(__dirname, "index.mjs");
 
   const result = await jscodeshiftRun(transformPath, filePaths, {
     parser,
