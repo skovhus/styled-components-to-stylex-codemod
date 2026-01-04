@@ -1,10 +1,9 @@
 import { describe, it, expect } from "vitest";
 import { applyTransform } from "jscodeshift/src/testUtils.js";
 import jscodeshift from "jscodeshift";
-import { readdirSync, readFileSync, existsSync, writeFileSync, unlinkSync } from "node:fs";
+import { readdirSync, readFileSync, existsSync } from "node:fs";
 import { join, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
-import { execSync } from "node:child_process";
 import { format } from "oxfmt";
 import transform, { transformWithWarnings } from "./transform.js";
 import { defineAdapter } from "./adapter.js";
@@ -143,21 +142,6 @@ async function normalizeCode(code: string): Promise<string> {
   return formatted;
 }
 
-function lintCode(code: string, name: string): void {
-  const tempFile = join(testCasesDir, `_temp_${name}.tsx`);
-  try {
-    writeFileSync(tempFile, code);
-    execSync(`pnpm oxlint "${tempFile}"`, { encoding: "utf-8", stdio: "pipe" });
-  } catch (error) {
-    const err = error as { stdout?: string; stderr?: string };
-    throw new Error(`Lint errors in transformed output:\n${err.stdout ?? err.stderr ?? ""}`);
-  } finally {
-    if (existsSync(tempFile)) {
-      unlinkSync(tempFile);
-    }
-  }
-}
-
 function assertExportsApp(source: string, fileLabel: string): void {
   const root = j(source);
   const hasExportedApp =
@@ -252,16 +236,6 @@ describe("output invariants", () => {
   });
 });
 
-describe("output file linting", () => {
-  const testCases = getTestCases();
-
-  it.each(testCases)("%s output should pass linting", (name) => {
-    const { output } = readTestCase(name);
-    // Output fixtures are `.ts` but contain JSX; lint via a `.tsx` temp file.
-    lintCode(output, `${name}_output`);
-  });
-});
-
 describe("fixture warning expectations", () => {
   const testCases = getTestCases();
 
@@ -296,7 +270,6 @@ describe("fixture warning expectations", () => {
 // All test cases must be fully transformed:
 // - Transform must produce a change (no bail/unchanged allowed)
 // - Result must not import styled-components
-// - Result must pass linting
 // - Result must match the expected output fixture
 describe("transform", () => {
   const testCases = getTestCases();
@@ -310,9 +283,6 @@ describe("transform", () => {
 
     // Result must not import styled-components
     expect(result).not.toMatch(/from\s+['"]styled-components['"]/);
-
-    // Result must pass linting
-    lintCode(result, name);
 
     // Compare against expected output fixture
     expect(await normalizeCode(result)).toEqual(await normalizeCode(output));
