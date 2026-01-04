@@ -85,7 +85,7 @@ interface LinkProps extends React.AnchorHTMLAttributes<HTMLAnchorElement> {
   children?: React.ReactNode;
 }
 
-function Link({ target, href, className, ...rest }: LinkProps) {
+function Link({ target, href, className, children, ...rest }: LinkProps) {
   const sx = stylex.props(
     styles.link,
     target === "_blank" && styles.linkTargetBlank,

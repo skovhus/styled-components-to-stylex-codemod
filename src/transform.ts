@@ -4680,6 +4680,13 @@ function generateWrapperComponents(
 
     // Generate function body
     const destructureList = [...propsToDestructure, "...rest"];
+    // If the wrapper renders children (all non-input elements in our wrapper templates), ensure
+    // `children` is in scope. Some wrapper types (e.g. anchor wrappers) render `{children}` but
+    // don't otherwise require children for style conditions, so it may not be in propsToDestructure.
+    if (!isInputElement && !destructureList.includes("children")) {
+      // Insert before ...rest
+      destructureList.splice(destructureList.length - 1, 0, "children");
+    }
     const propsTypeAnnotation =
       siblingSelectors.length > 0
         ? interfaceName
