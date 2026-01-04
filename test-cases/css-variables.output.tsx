@@ -30,10 +30,8 @@ const styles = stylex.create({
 });
 
 export const App = () => (
-  <>
-    <div {...stylex.props(styles.card)}>
-      <p {...stylex.props(styles.text)}>Some text content</p>
-      <button {...stylex.props(styles.button)}>Click me</button>
-    </div>
-  </>
+  <div {...stylex.props(styles.card)}>
+    <p {...stylex.props(styles.text)}>Some text content</p>
+    <button {...stylex.props(styles.button)}>Click me</button>
+  </div>
 );

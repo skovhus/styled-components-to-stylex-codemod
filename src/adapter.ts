@@ -119,6 +119,8 @@ export type DynamicNodeDecision =
       variants: VariantStyle[];
       /** The prop name that controls the variant */
       propName: string;
+      /** The comparison value (e.g., "large" from props.size === "large") */
+      comparisonValue?: string;
     }
   | {
       /** Generate a dynamic style function */
@@ -129,6 +131,10 @@ export type DynamicNodeDecision =
       paramType?: string;
       /** The dynamic value expression using the parameter */
       valueExpression: string;
+      /** Optional fallback value for the base style (for || patterns) */
+      fallbackValue?: string | number;
+      /** Original prop name for wrapper generation (e.g., "color" for props.color || default) */
+      originalPropName?: string;
     };
 
 /**
@@ -383,7 +389,7 @@ export const keyframesHandler: DynamicNodeHandler = (ctx): DynamicNodeDecision |
 export const conditionalHandler: DynamicNodeHandler = (ctx): DynamicNodeDecision | undefined => {
   if (ctx.type !== "conditional" || !ctx.conditionalBranches) return undefined;
 
-  const { truthy, falsy, propName } = ctx.conditionalBranches;
+  const { truthy, falsy, propName, comparisonValue } = ctx.conditionalBranches;
 
   // Clean up quoted values
   const cleanTruthy = cleanValue(truthy);
@@ -405,9 +411,13 @@ export const conditionalHandler: DynamicNodeHandler = (ctx): DynamicNodeDecision
   }
 
   // Generate variant styles
-  const variantName = propNameToVariantName(propName);
+  // Include comparison value in variant name if present (e.g., "SizeLarge" for size === "large")
+  let variantName = propNameToVariantName(propName);
+  if (comparisonValue) {
+    variantName = variantName + capitalize(comparisonValue);
+  }
 
-  return {
+  const decision: DynamicNodeDecision = {
     action: "variant",
     baseValue: cleanFalsy,
     variants: [
@@ -418,16 +428,31 @@ export const conditionalHandler: DynamicNodeHandler = (ctx): DynamicNodeDecision
     ],
     propName,
   };
+
+  if (comparisonValue) {
+    decision.comparisonValue = comparisonValue;
+  }
+
+  return decision;
 };
 
 /**
+ * Capitalize first letter
+ */
+function capitalize(str: string): string {
+  return str.charAt(0).toUpperCase() + str.slice(1);
+}
+
+/**
  * Handler for logical expressions (short-circuit evaluation)
- * Handles: ${props => props.$upsideDown && 'transform: rotate(180deg);'}
+ * Handles:
+ * - && pattern: ${props => props.$upsideDown && 'transform: rotate(180deg);'} -> variant style
+ * - || pattern: ${props => props.color || "#default"} -> dynamic function with fallback
  */
 export const logicalHandler: DynamicNodeHandler = (ctx): DynamicNodeDecision | undefined => {
   if (ctx.type !== "logical" || !ctx.logicalInfo) return undefined;
 
-  const { propName, value } = ctx.logicalInfo;
+  const { propName, value, operator } = ctx.logicalInfo;
 
   if (!propName) {
     return {
@@ -436,14 +461,33 @@ export const logicalHandler: DynamicNodeHandler = (ctx): DynamicNodeDecision | u
     };
   }
 
-  // Clean up the value (might be CSS declarations string)
+  // Clean up the value (might be CSS declarations string or default value)
   const cleanedValue = cleanValue(value);
 
-  // Generate variant styles
+  // || pattern: prop with fallback value -> generate dynamic function
+  // e.g., props.color || "#BF4F74" means "use color prop if truthy, else fallback"
+  if (operator === "||") {
+    // Generate a dynamic style function
+    // The base style will have the fallback value, and the dynamic function
+    // will apply the prop value when it's provided
+    // Use the CSS property name for the function param (e.g., backgroundColor), not the prop name (color)
+    const cssPropertyName = ctx.cssProperty ?? cleanPropName(propName);
+    return {
+      action: "dynamic-fn",
+      paramName: cssPropertyName,
+      paramType: "string",
+      valueExpression: VAR_REF_PREFIX + cssPropertyName,
+      fallbackValue: cleanedValue,
+      // Keep original prop name with $ prefix for wrapper generation
+      originalPropName: propName,
+    };
+  }
+
+  // && pattern: conditional style -> generate variant
   const variantName = propNameToVariantName(propName);
 
   // If the value contains CSS declarations (multiple properties)
-  if (cleanedValue.includes(":") && !ctx.cssProperty) {
+  if (typeof cleanedValue === "string" && cleanedValue.includes(":") && !ctx.cssProperty) {
     // This is a CSS snippet, need special handling
     return {
       action: "variant",

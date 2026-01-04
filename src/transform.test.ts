@@ -190,10 +190,16 @@ function runTransform(source: string, options: TransformOptions = {}): string {
 
 /**
  * Normalize code for comparison using oxfmt formatter
+ * Also normalizes blank lines for consistent comparison
  */
 async function normalizeCode(code: string): Promise<string> {
   const { code: formatted } = await format("test.tsx", code);
-  return formatted;
+  // Normalize blank lines: collapse multiple blank lines into one
+  // and ensure consistent blank lines before function/variable declarations
+  return formatted
+    .replace(/\n{3,}/g, "\n\n") // Collapse 3+ newlines into 2
+    .replace(/}\n(\/\/|\/\*|function |const |export )/g, "}\n\n$1") // Ensure blank line after } before declarations
+    .trim();
 }
 
 function lintCode(code: string, name: string): void {

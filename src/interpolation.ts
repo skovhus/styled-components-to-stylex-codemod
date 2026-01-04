@@ -41,6 +41,8 @@ export interface ConditionalBranches {
   condition: string;
   /** The prop name being checked (if identifiable) */
   propName?: string;
+  /** The comparison value (e.g., "large" from props.size === "large") */
+  comparisonValue?: string;
   /** The truthy branch value */
   truthy: string;
   /** The falsy branch value */
@@ -57,6 +59,8 @@ export interface LogicalInfo {
   propName?: string;
   /** The value if condition is truthy */
   value: string;
+  /** The logical operator (&& or ||) */
+  operator: "&&" | "||";
 }
 
 /**
@@ -390,6 +394,9 @@ function extractConditionalBranches(
   // Try to extract prop name from condition
   const propName = extractPropNameFromCondition(expr.test as Expression);
 
+  // Try to extract comparison value from condition (e.g., "large" from props.size === "large")
+  const comparisonValue = extractComparisonValue(expr.test as Expression);
+
   const result: ConditionalBranches = {
     condition,
     truthy,
@@ -400,7 +407,31 @@ function extractConditionalBranches(
     result.propName = propName;
   }
 
+  if (comparisonValue !== undefined) {
+    result.comparisonValue = comparisonValue;
+  }
+
   return result;
+}
+
+/**
+ * Extract comparison value from a binary expression (e.g., "large" from props.size === "large")
+ */
+function extractComparisonValue(expr: Expression): string | undefined {
+  if (expr.type === "BinaryExpression") {
+    const binExpr = expr as BinaryExpression;
+    if (binExpr.operator === "===" || binExpr.operator === "==") {
+      // Check right side for string literal
+      if (binExpr.right.type === "StringLiteral") {
+        return (binExpr.right as import("jscodeshift").StringLiteral).value;
+      }
+      // Check left side for string literal (props.size === "large" or "large" === props.size)
+      if (binExpr.left.type === "StringLiteral") {
+        return (binExpr.left as import("jscodeshift").StringLiteral).value;
+      }
+    }
+  }
+  return undefined;
 }
 
 /**
@@ -409,6 +440,7 @@ function extractConditionalBranches(
 function extractLogicalInfo(expr: LogicalExpression, ctx: ClassificationContext): LogicalInfo {
   const condition = ctx.getSource(expr.left as Expression);
   const value = ctx.getSource(expr.right as Expression);
+  const operator = expr.operator as "&&" | "||";
 
   // Try to extract prop name from condition
   const propName = extractPropNameFromCondition(expr.left as Expression);
@@ -416,6 +448,7 @@ function extractLogicalInfo(expr: LogicalExpression, ctx: ClassificationContext)
   const result: LogicalInfo = {
     condition,
     value,
+    operator,
   };
 
   if (propName !== undefined) {

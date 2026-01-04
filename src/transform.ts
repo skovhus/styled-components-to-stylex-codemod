@@ -147,6 +147,8 @@ interface StyleInfo {
   styles: StyleXObject;
   extraStyles: Map<string, StyleXObject>;
   variantStyles: Map<string, StyleXObject>;
+  /** Variant conditions: maps variant name to prop name and comparison value */
+  variantConditions: Map<string, { propName: string; comparisonValue?: string }>;
   dynamicFns: Map<
     string,
     {
@@ -198,6 +200,12 @@ interface StyleInfo {
   hasObjectSyntaxDynamicFns: boolean;
   /** Leading comments from the original styled component declaration (JSDoc, etc.) */
   leadingComments: Array<{ type: string; value: string }> | undefined;
+  /** Bailed expressions that reference props - need inline styles */
+  bailedExpressions: Array<{
+    cssProperty: string;
+    sourceCode: string;
+    referencedProps: string[];
+  }>;
 }
 
 /**
@@ -501,6 +509,13 @@ export function transformWithWarnings(
     // Remove styled-components import and add stylex import
     styledImports.remove();
 
+    // Remove @emotion/is-prop-valid import (used by shouldForwardProp but not needed in output)
+    root
+      .find(j.ImportDeclaration, {
+        source: { value: "@emotion/is-prop-valid" },
+      })
+      .remove();
+
     // Add stylex import at the top
     const stylexImport = j.importDeclaration(
       [j.importNamespaceSpecifier(j.identifier("stylex"))],
@@ -672,12 +687,12 @@ export function transformWithWarnings(
         ) {
           return false;
         }
-        // shouldForwardProp-only wrappers for input/anchor don't need React
+        // shouldForwardProp-only wrappers don't need React (they use simple function pattern)
         if (
           info.hasShouldForwardProp &&
           info.siblingSelectors.length === 0 &&
           info.attributeSelectors.length === 0 &&
-          (info.baseElement === "input" || info.baseElement === "a")
+          !info.supportsAs
         ) {
           return false;
         }
@@ -709,6 +724,22 @@ export function transformWithWarnings(
         } else {
           root.get().node.program.body.unshift(reactImport);
         }
+      } else if (!needsReactImport && hasReactImport) {
+        // Remove React import if it's no longer needed (e.g., after converting styled-components)
+        root
+          .find(j.ImportDeclaration, {
+            source: { value: "react" },
+          })
+          .filter((p) => {
+            // Only remove default import of React that's not used elsewhere
+            const specifiers = p.node.specifiers ?? [];
+            return (
+              specifiers.length === 1 &&
+              specifiers[0]?.type === "ImportDefaultSpecifier" &&
+              specifiers[0].local?.name === "React"
+            );
+          })
+          .remove();
       }
 
       // Find the styles declaration
@@ -996,9 +1027,15 @@ function processStyledComponent(
   const extraStyles = new Map<string, StyleXObject>();
   const jsxRewriteRules: StyleInfo["jsxRewriteRules"] = [];
   const variantStyles = new Map<string, StyleXObject>();
+  const variantConditions = new Map<string, { propName: string; comparisonValue?: string }>();
   const dynamicFns = new Map<
     string,
-    { paramName: string; paramType: string | undefined; styles: StyleXObject }
+    {
+      paramName: string;
+      paramType: string | undefined;
+      styles: StyleXObject;
+      originalPropName?: string;
+    }
   >();
   let needsDefaultMarker = false;
   let attributeSelectors: AttributeSelectorInfo[] = [];
@@ -1009,6 +1046,11 @@ function processStyledComponent(
   let filteredProps: string[] = [];
   let filterTransientProps = false;
   let supportsAs = hasAsPropInJSX;
+  const bailedExpressions: Array<{
+    cssProperty: string;
+    sourceCode: string;
+    referencedProps: string[];
+  }> = [];
 
   // Check for .withConfig({ shouldForwardProp: ... }) pattern
   if (expr.type === "TaggedTemplateExpression") {
@@ -1107,9 +1149,11 @@ function processStyledComponent(
         context,
         styles,
         variantStyles,
+        variantConditions,
         dynamicFns,
         additionalImports,
         warnings,
+        bailedExpressions,
       );
     }
   } else if (styleObject && styleObject.type === "ObjectExpression") {
@@ -1135,10 +1179,16 @@ function processStyledComponent(
 
   // Extract transient props from variant styles (for info purposes)
   // Variant names follow pattern: componentNamePropName (e.g., compDraggable for $draggable)
+  // Skip variants that have explicit condition info (from variantConditions) - those use their own prop
   const transientProps: TransientPropInfo[] = [];
   const baseStyleName = toCamelCase(componentName);
 
   for (const [variantName] of variantStyles) {
+    // Skip if this variant has explicit condition info (handled by variantConditions)
+    if (variantConditions.has(variantName)) {
+      continue;
+    }
+
     // Extract prop name from variant name (e.g., compDraggable -> Draggable -> $draggable)
     if (variantName.startsWith(baseStyleName)) {
       const propPart = variantName.slice(baseStyleName.length);
@@ -1180,7 +1230,8 @@ function processStyledComponent(
     needsWrapperForForwardProp ||
     hasSpecificityHacks ||
     supportsAs ||
-    hasObjectSyntaxDynamicFns;
+    hasObjectSyntaxDynamicFns ||
+    bailedExpressions.length > 0;
 
   return {
     componentName,
@@ -1188,6 +1239,7 @@ function processStyledComponent(
     styles,
     extraStyles,
     variantStyles,
+    variantConditions,
     dynamicFns,
     isExtending,
     extendsFrom,
@@ -1206,6 +1258,7 @@ function processStyledComponent(
     cssVarInjections,
     hasObjectSyntaxDynamicFns,
     leadingComments,
+    bailedExpressions,
   };
 }
 
@@ -1882,7 +1935,50 @@ function parseShouldForwardProp(expr: Expression): {
     }
 
     // Check for isPropValid(prop) && prop !== "..." pattern (or similar)
-    // This is a more complex pattern, just mark as having shouldForwardProp
+    // Handle LogicalExpression with && operator
+    if (body.type === "LogicalExpression" && body.operator === "&&") {
+      const logicalBody = body as import("jscodeshift").LogicalExpression;
+      // Recursively check both sides for prop filtering expressions
+      const extractPropsFromExpr = (expr: Expression): void => {
+        // Check for prop !== "propName"
+        if (expr.type === "BinaryExpression") {
+          const binExpr = expr as import("jscodeshift").BinaryExpression;
+          if (binExpr.operator === "!==" && binExpr.right.type === "StringLiteral") {
+            result.filteredProps.push((binExpr.right as import("jscodeshift").StringLiteral).value);
+          }
+        }
+        // Check for !["prop1", "prop2"].includes(prop)
+        if (expr.type === "UnaryExpression") {
+          const unaryExpr = expr as import("jscodeshift").UnaryExpression;
+          if (unaryExpr.operator === "!") {
+            const arg = unaryExpr.argument;
+            if (
+              arg.type === "CallExpression" &&
+              arg.callee.type === "MemberExpression" &&
+              arg.callee.object.type === "ArrayExpression" &&
+              arg.callee.property.type === "Identifier" &&
+              arg.callee.property.name === "includes"
+            ) {
+              for (const el of arg.callee.object.elements) {
+                if (el?.type === "StringLiteral") {
+                  result.filteredProps.push(el.value);
+                }
+              }
+            }
+          }
+        }
+        // Recurse into nested LogicalExpressions
+        if (expr.type === "LogicalExpression") {
+          const logicalExpr = expr as import("jscodeshift").LogicalExpression;
+          if (logicalExpr.operator === "&&") {
+            extractPropsFromExpr(logicalExpr.left as Expression);
+            extractPropsFromExpr(logicalExpr.right as Expression);
+          }
+        }
+      };
+      extractPropsFromExpr(logicalBody.left as Expression);
+      extractPropsFromExpr(logicalBody.right as Expression);
+    }
   }
 
   return result;
@@ -2006,7 +2102,12 @@ function convertObjectExpressionToStyles(
   const styles: StyleXObject = {};
   const dynamicFns = new Map<
     string,
-    { paramName: string; paramType: string | undefined; styles: StyleXObject }
+    {
+      paramName: string;
+      paramType: string | undefined;
+      styles: StyleXObject;
+      originalPropName?: string;
+    }
   >();
   let needsWrapper = false;
 
@@ -2370,6 +2471,7 @@ function applyDecision(
   context: DynamicNodeContext,
   styles: StyleXObject,
   variantStyles: Map<string, StyleXObject>,
+  variantConditions: Map<string, { propName: string; comparisonValue?: string }>,
   dynamicFns: Map<
     string,
     {
@@ -2381,6 +2483,11 @@ function applyDecision(
   >,
   additionalImports: Set<string>,
   warnings: TransformWarning[],
+  bailedExpressions: Array<{
+    cssProperty: string;
+    sourceCode: string;
+    referencedProps: string[];
+  }>,
 ): void {
   // Add any imports from the decision
   if ("imports" in decision && decision.imports) {
@@ -2463,6 +2570,40 @@ function applyDecision(
         feature: context.type,
         message: decision.reason,
       });
+
+      // Track bailed expressions that reference props for inline style generation
+      if (context.cssProperty) {
+        let referencedProps: string[] = [];
+
+        // Try to get props from propPath first
+        if (context.propPath && context.propPath.length > 0) {
+          referencedProps = context.propPath
+            .filter((p) => p !== "props" && p !== "p")
+            .filter(Boolean);
+        }
+
+        // If no props from propPath, try to extract from source code
+        // Match patterns like: props.propName, props["propName"], p.propName
+        if (referencedProps.length === 0 && context.sourceCode) {
+          const propMatches = context.sourceCode.matchAll(
+            /(?:props|p)\.(\w+)|(?:props|p)\["(\w+)"\]/g,
+          );
+          const extractedProps = new Set<string>();
+          for (const match of propMatches) {
+            const propName = match[1] ?? match[2];
+            if (propName) extractedProps.add(propName);
+          }
+          referencedProps = Array.from(extractedProps);
+        }
+
+        if (referencedProps.length > 0) {
+          bailedExpressions.push({
+            cssProperty: context.cssProperty,
+            sourceCode: context.sourceCode,
+            referencedProps,
+          });
+        }
+      }
       break;
     }
 
@@ -2537,6 +2678,15 @@ function applyDecision(
         }
 
         variantStyles.set(variantName, existing);
+
+        // Store variant condition for wrapper generation
+        const conditionInfo: { propName: string; comparisonValue?: string } = {
+          propName: decision.propName,
+        };
+        if (decision.comparisonValue !== undefined) {
+          conditionInfo.comparisonValue = decision.comparisonValue;
+        }
+        variantConditions.set(variantName, conditionInfo);
       }
       break;
     }
@@ -2547,12 +2697,25 @@ function applyDecision(
       const fnStyles: StyleXObject = {};
       if (context.cssProperty) {
         fnStyles[context.cssProperty] = decision.valueExpression;
+        // If there's a fallback value, set it as the base style
+        if (decision.fallbackValue !== undefined) {
+          styles[context.cssProperty] = decision.fallbackValue;
+        }
       }
-      dynamicFns.set(fnName, {
+      const fnConfig: {
+        paramName: string;
+        paramType: string | undefined;
+        styles: StyleXObject;
+        originalPropName?: string;
+      } = {
         paramName: decision.paramName,
         paramType: decision.paramType,
         styles: fnStyles,
-      });
+      };
+      if (decision.originalPropName) {
+        fnConfig.originalPropName = decision.originalPropName;
+      }
+      dynamicFns.set(fnName, fnConfig);
       break;
     }
   }
@@ -4004,9 +4167,14 @@ function generateWrapperComponents(
     }
 
     // Add dynamic function props
+    // For filterTransientProps mode, don't destructure $-prefixed props (they'll be accessed via props["$..."])
     for (const [, fnConfig] of dynamicFns) {
       // Use originalPropName if available (from object syntax), otherwise use paramName
       const propToUse = fnConfig.originalPropName ?? fnConfig.paramName;
+      // Skip $-prefixed props when filterTransientProps is true (they're deleted from rest anyway)
+      if (filterTransientProps && propToUse.startsWith("$")) {
+        continue;
+      }
       if (!propsToDestructure.includes(propToUse)) {
         propsToDestructure.push(propToUse);
         propsToFilter.push(propToUse);
@@ -4018,6 +4186,26 @@ function generateWrapperComponents(
       if (!propsToDestructure.includes(prop.name)) {
         propsToDestructure.push(prop.name);
         propsToFilter.push(prop.name);
+      }
+    }
+
+    // Add bailed expression props with underscore prefix (to avoid unused variable warnings)
+    // These props are destructured but not passed to the DOM element
+    const bailedPropRenames: Map<string, string> = new Map();
+    for (const bailed of info.bailedExpressions) {
+      for (const prop of bailed.referencedProps) {
+        // Check if prop is already in the list (possibly without underscore prefix)
+        const existingIndex = propsToDestructure.indexOf(prop);
+        if (existingIndex !== -1) {
+          // Replace with underscore-prefixed version
+          propsToDestructure[existingIndex] = `${prop}: _${prop}`;
+          bailedPropRenames.set(prop, `_${prop}`);
+        } else if (!propsToDestructure.includes(`${prop}: _${prop}`)) {
+          // Add with underscore prefix for renaming
+          propsToDestructure.push(`${prop}: _${prop}`);
+          bailedPropRenames.set(prop, `_${prop}`);
+          propsToFilter.push(prop);
+        }
       }
     }
 
@@ -4076,12 +4264,24 @@ function generateWrapperComponents(
 
     // Variant style conditionals
     for (const [variantName] of info.variantStyles) {
-      const propPart = variantName.slice(styleName.length);
-      if (propPart) {
-        const propName = propPart.charAt(0).toLowerCase() + propPart.slice(1);
-        styleConditions.push(
-          `${propName} === "${propPart.toLowerCase()}" && styles.${variantName}`,
-        );
+      const condition = info.variantConditions.get(variantName);
+      if (condition) {
+        // Use stored condition info (prop name and comparison value)
+        if (condition.comparisonValue) {
+          styleConditions.push(
+            `${condition.propName} === "${condition.comparisonValue}" && styles.${variantName}`,
+          );
+        } else {
+          // Boolean variant (no comparison value)
+          styleConditions.push(`${condition.propName} && styles.${variantName}`);
+        }
+      } else {
+        // Fallback: parse variant name (legacy behavior)
+        const propPart = variantName.slice(styleName.length);
+        if (propPart) {
+          const propName = propPart.charAt(0).toLowerCase() + propPart.slice(1);
+          styleConditions.push(`${propName} && styles.${variantName}`);
+        }
       }
     }
 
@@ -4089,7 +4289,12 @@ function generateWrapperComponents(
     for (const [fnName, fnConfig] of dynamicFns) {
       // Use originalPropName if available (from object syntax), otherwise use paramName
       const propToUse = fnConfig.originalPropName ?? fnConfig.paramName;
-      styleConditions.push(`${propToUse} && styles.${fnName}(${propToUse})`);
+      // For filterTransientProps with $-prefixed props, use props["$..."] syntax
+      if (filterTransientProps && propToUse.startsWith("$")) {
+        styleConditions.push(`props["${propToUse}"] && styles.${fnName}(props["${propToUse}"])`);
+      } else {
+        styleConditions.push(`${propToUse} && styles.${fnName}(${propToUse})`);
+      }
     }
 
     // Transient prop conditionals
@@ -4191,8 +4396,35 @@ function ${componentName}(props: InputProps) {
     />
   );
 }`;
+    } else if (isAnchorElement && hasShouldForwardProp && attributeSelectors.length === 0) {
+      // Simple shouldForwardProp-only Anchor wrapper (no interface needed)
+      const anchorDestructure = ["className", "children", "style"];
+      for (const prop of filteredProps) {
+        if (!anchorDestructure.includes(prop)) {
+          anchorDestructure.push(prop);
+        }
+      }
+      anchorDestructure.push("...rest");
+
+      componentCode = `
+function ${componentName}(props) {
+  const { ${anchorDestructure.join(", ")} } = props;
+
+  const sx = stylex.props(${styleConditions.join(", ")});
+
+  return (
+    <a
+      {...sx}
+      className={[sx.className, className].filter(Boolean).join(" ")}
+      style={style}
+      {...rest}
+    >
+      {children}
+    </a>
+  );
+}`;
     } else if (isAnchorElement) {
-      // Anchor-specific wrapper
+      // Anchor-specific wrapper (with interface)
       componentCode = `
 interface LinkProps extends React.AnchorHTMLAttributes<HTMLAnchorElement> {
   children?: React.ReactNode;
@@ -4241,14 +4473,37 @@ function ${componentName}(props) {
         filterCode = `
   for (const k of Object.keys(rest)) {
     if (k.startsWith("$")) delete rest[k];
-  }`;
+  }
+`;
+      }
+
+      // Build destructure list - handle props with underscore prefix for bailed expressions
+      const destructureProps = ["className", "children", "style"];
+      for (const prop of propsToFilter) {
+        // Check if this prop has a bailed expression rename
+        const rename = bailedPropRenames.get(prop);
+        if (rename) {
+          if (!destructureProps.includes(`${prop}: ${rename}`)) {
+            destructureProps.push(`${prop}: ${rename}`);
+          }
+        } else if (!destructureProps.includes(prop)) {
+          destructureProps.push(prop);
+        }
+      }
+
+      // Build inline style expression for bailed expressions
+      let styleExpr = "{style}";
+      if (info.bailedExpressions.length > 0) {
+        const inlineStyles = info.bailedExpressions.map((bailed) => {
+          // Generate IIFE: ((props) => expression)(props)
+          return `${bailed.cssProperty}: (${bailed.sourceCode})(props)`;
+        });
+        styleExpr = `{{\n          ...style,\n          ${inlineStyles.join(",\n          ")},\n        }}`;
       }
 
       componentCode = `
 function ${componentName}(props) {
-  const { className: className, children: children, style: style, ${propsToFilter
-    .map((p) => `${p}: ${p}`)
-    .join(", ")}${propsToFilter.length > 0 ? ", " : ""}...rest } = props;
+  const { ${destructureProps.join(", ")}, ...rest } = props;
 ${filterCode}
   const sx = stylex.props(
     ${styleConditions.join(",\n    ")}
@@ -4258,7 +4513,7 @@ ${filterCode}
     <${baseElement}
       {...sx}
       className={[sx.className, className].filter(Boolean).join(" ")}
-      style={style}
+      style=${styleExpr}
       {...rest}
     >
       {children}
@@ -4342,7 +4597,24 @@ const ${componentName} = ({ ${destructureList.join(", ")} }: ${propsTypeAnnotati
     }
 
     try {
-      const parsed = j(componentCode);
+      // Build comment prefix for the component code
+      let commentPrefix = "";
+      if (info.leadingComments && info.leadingComments.length > 0) {
+        commentPrefix = info.leadingComments
+          .map((c) => {
+            if (c.type === "CommentBlock" || c.type === "Block") {
+              return `/*${c.value}*/`;
+            }
+            return `//${c.value}`;
+          })
+          .join("\n");
+        commentPrefix += "\n";
+      }
+
+      // Prepend comment to component code (with blank line before for separation)
+      const fullCode = `\n${commentPrefix}${componentCode.trim()}`;
+
+      const parsed = j(fullCode);
       const funcDecls = parsed.find(j.FunctionDeclaration);
       const varDecls = parsed.find(j.VariableDeclaration);
       const interfaceDecls = parsed.find(j.TSInterfaceDeclaration);
@@ -4352,31 +4624,13 @@ const ${componentName} = ({ ${destructureList.join(", ")} }: ${propsTypeAnnotati
         wrappers.push(p.node);
       });
 
-      // Add function or variable declaration with leading comments if any
+      // Add function or variable declaration
       if (funcDecls.length > 0) {
-        funcDecls.forEach((p, idx) => {
-          // Attach leading comments to the first function declaration
-          if (idx === 0 && info.leadingComments && info.leadingComments.length > 0) {
-            p.node.comments = info.leadingComments.map((c) => {
-              if (c.type === "CommentBlock" || c.type === "Block") {
-                return j.commentBlock(c.value, true, false);
-              }
-              return j.commentLine(c.value, true, false);
-            });
-          }
+        funcDecls.forEach((p) => {
           wrappers.push(p.node);
         });
       } else if (varDecls.length > 0) {
-        varDecls.forEach((p, idx) => {
-          // Attach leading comments to the first variable declaration
-          if (idx === 0 && info.leadingComments && info.leadingComments.length > 0) {
-            p.node.comments = info.leadingComments.map((c) => {
-              if (c.type === "CommentBlock" || c.type === "Block") {
-                return j.commentBlock(c.value, true, false);
-              }
-              return j.commentLine(c.value, true, false);
-            });
-          }
+        varDecls.forEach((p) => {
           wrappers.push(p.node);
         });
       }
