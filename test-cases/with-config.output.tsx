@@ -60,7 +60,7 @@ function Input(props) {
     <input
       {...sx}
       className={[sx.className, className].filter(Boolean).join(" ")}
-      style={style}
+      style={{ ...sx.style, ...style }}
       {...rest}
     />
   );

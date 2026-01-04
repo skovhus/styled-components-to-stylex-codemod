@@ -4728,7 +4728,7 @@ function ${componentName}(props) {
     <input
       {...sx}
       className={[sx.className, className].filter(Boolean).join(" ")}
-      style={style}
+      style={{ ...sx.style, ...style }}
       {...rest}
     />
   );
@@ -4775,7 +4775,7 @@ function ${componentName}(props) {
     <a
       {...sx}
       className={[sx.className, className].filter(Boolean).join(" ")}
-      style={style}
+      style={{ ...sx.style, ...style }}
       {...rest}
     >
       {children}
@@ -4851,13 +4851,13 @@ function ${componentName}(props) {
       }
 
       // Build inline style expression for bailed expressions
-      let styleExpr = "{style}";
+      let styleExpr = "{{ ...sx.style, ...style }}";
       if (info.bailedExpressions.length > 0) {
         const inlineStyles = info.bailedExpressions.map((bailed) => {
           // Generate IIFE: ((props) => expression)(props)
           return `${bailed.cssProperty}: (${bailed.sourceCode})(props)`;
         });
-        styleExpr = `{{\n          ...style,\n          ${inlineStyles.join(",\n          ")},\n        }}`;
+        styleExpr = `{{\n          ...sx.style,\n          ...style,\n          ${inlineStyles.join(",\n          ")},\n        }}`;
       }
 
       componentCode = `
@@ -4940,7 +4940,11 @@ function ${componentName}(props) {
   );
 
   return (
-    <${baseElement} {...sx} className={[sx.className, className].filter(Boolean).join(" ")} style={style}>
+    <${baseElement}
+      {...sx}
+      className={[sx.className, className].filter(Boolean).join(" ")}
+      style={{ ...sx.style, ...style }}
+    >
       {children}
     </${baseElement}>
   );
