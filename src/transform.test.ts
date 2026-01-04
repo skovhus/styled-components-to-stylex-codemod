@@ -6,21 +6,21 @@ import { join, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
 import { execSync } from "node:child_process";
 import { format } from "oxfmt";
-import transform, { transformWithWarnings, defineHook } from "./transform.js";
+import transform, { transformWithWarnings, defineAdapter } from "./transform.js";
 import type { TransformOptions } from "./transform.js";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
-// Test hooks - examples of custom hook usage
-const customHook = defineHook({
+// Test adapters - examples of custom adapter usage
+const customAdapter = defineAdapter({
   resolveValue({ path, defaultValue }) {
     return `customVar('${path}', '${defaultValue ?? ""}')`;
   },
   imports: ["import { customVar } from './custom-theme';"],
 });
 
-// Fixtures don't use theme resolution, but the transformer requires a hook.
-const fixtureHook = defineHook({
+// Fixtures don't use theme resolution, but the transformer requires an adapter.
+const fixtureAdapter = defineAdapter({
   resolveValue({ path }) {
     return `tokens.${path.replace(/\./g, "_")}`;
   },
@@ -81,12 +81,15 @@ function readTestCase(name: string): {
   return { input, output, inputPath, outputPath };
 }
 
-type TestTransformOptions = Partial<Omit<TransformOptions, "hook">> & {
-  hook?: TransformOptions["hook"];
+type TestTransformOptions = Partial<Omit<TransformOptions, "adapter">> & {
+  adapter?: TransformOptions["adapter"];
 };
 
 function runTransform(source: string, options: TestTransformOptions = {}): string {
-  const opts: TransformOptions = { hook: fixtureHook, ...(options as any) };
+  const opts: TransformOptions = {
+    adapter: fixtureAdapter,
+    ...(options as any),
+  };
   const result = applyTransform(transform, opts, { source, path: "test.tsx" }, { parser: "tsx" });
   // applyTransform returns empty string when no changes, return original source
   return result || source;
@@ -229,7 +232,7 @@ describe("fixture warning expectations", () => {
     const result = transformWithWarnings(
       { source: input, path: `${name}.input.tsx` },
       { jscodeshift: j, j, stats: () => {}, report: () => {} },
-      { hook: fixtureHook },
+      { adapter: fixtureAdapter },
     );
 
     // Fixture expectations only cover stable `unsupported-feature` warnings.
@@ -299,7 +302,7 @@ export const App = () => (
     const result = transformWithWarnings(
       { source, path: "test.tsx" },
       { jscodeshift, j: jscodeshift, stats: () => {}, report: () => {} },
-      { hook: fixtureHook },
+      { adapter: fixtureAdapter },
     );
 
     expect(result.warnings).toHaveLength(1);
@@ -323,14 +326,14 @@ const Button = styled.button\`
     const result = transformWithWarnings(
       { source, path: "test.tsx" },
       { jscodeshift, j: jscodeshift, stats: () => {}, report: () => {} },
-      { hook: fixtureHook },
+      { adapter: fixtureAdapter },
     );
 
     expect(result.warnings).toHaveLength(0);
   });
 });
 
-describe("hook configuration", () => {
+describe("adapter configuration", () => {
   const themeSource = `
 import styled from 'styled-components';
 
@@ -341,11 +344,11 @@ const Button = styled.button\`
 export const App = () => <Button>Click</Button>;
 `;
 
-  it("should accept custom hook", () => {
+  it("should accept custom adapter", () => {
     const result = transformWithWarnings(
       { source: themeSource, path: "test.tsx" },
       { jscodeshift, j: jscodeshift, stats: () => {}, report: () => {} },
-      { hook: customHook },
+      { adapter: customAdapter },
     );
 
     expect(result.warnings).toHaveLength(0);

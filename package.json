@@ -31,9 +31,9 @@
       "types": "./dist/run.d.mts",
       "import": "./dist/run.mjs"
     },
-    "./hook": {
-      "types": "./dist/hook.d.mts",
-      "import": "./dist/hook.mjs"
+    "./adapter": {
+      "types": "./dist/adapter.d.mts",
+      "import": "./dist/adapter.mjs"
     }
   },
   "scripts": {

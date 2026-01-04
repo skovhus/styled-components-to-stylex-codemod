@@ -3,13 +3,13 @@ export { runTransform } from "./run.js";
 export type { TransformOptions, TransformWarning, TransformResult } from "./transform.js";
 export type { RunTransformOptions, RunTransformResult } from "./run.js";
 
-// Hook exports (primary API)
+// Adapter exports (primary API)
 export type {
-  Hook,
+  Adapter,
   ValueContext,
   DynamicHandler,
   DynamicNode,
   HandlerContext,
   HandlerResult,
-} from "./hook.js";
-export { defineHook, builtinHandlers } from "./hook.js";
+} from "./adapter.js";
+export { defineAdapter, builtinHandlers } from "./adapter.js";

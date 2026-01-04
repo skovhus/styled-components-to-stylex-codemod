@@ -1,8 +1,5 @@
 /**
- * Hook - Single user entry point for customizing the codemod.
- *
- * The Hook interface unifies value resolution (how theme paths become StyleX code)
- * and dynamic expression handling (how interpolations are transformed).
+ * Adapter - Single user entry point for customizing the codemod.
  */
 
 import type { API } from "jscodeshift";
@@ -36,11 +33,11 @@ export function defaultResolveValue({ path, defaultValue }: ValueContext): strin
   return `'var(--${varName})'`;
 }
 
-/** Default hook: CSS custom properties with fallbacks */
-export const defaultHook: Hook = { resolveValue: defaultResolveValue };
+/** Default adapter: CSS custom properties with fallbacks */
+export const defaultAdapter: Adapter = { resolveValue: defaultResolveValue };
 
-/** Hook that references StyleX vars from a tokens module */
-export const defineVarsHook: Hook = {
+/** Adapter that references StyleX vars from a tokens module */
+export const defineVarsAdapter: Adapter = {
   resolveValue({ path }: ValueContext) {
     const parts = path.split(".");
     const ident = parts
@@ -51,8 +48,8 @@ export const defineVarsHook: Hook = {
   imports: ["import { themeVars } from './tokens.stylex';"],
 };
 
-/** Hook that inlines literal values */
-export const inlineValuesHook: Hook = {
+/** Adapter that inlines literal values */
+export const inlineValuesAdapter: Adapter = {
   resolveValue({ defaultValue }: ValueContext) {
     return defaultValue ? `'${defaultValue}'` : "''";
   },
@@ -147,10 +144,10 @@ export type HandlerResolution =
   | { kind: "unhandled" };
 
 // ────────────────────────────────────────────────────────────────────────────
-// Hook Interface
+// Adapter Interface
 // ────────────────────────────────────────────────────────────────────────────
 
-export interface Hook {
+export interface Adapter {
   /**
    * Transform a value reference to StyleX-compatible code.
    * Called for theme accesses like `props.theme.colors.primary`.
@@ -380,28 +377,28 @@ export function runHandlers(
 }
 
 // ────────────────────────────────────────────────────────────────────────────
-// Hook Normalization
+// Adapter Normalization
 // ────────────────────────────────────────────────────────────────────────────
 
 /**
- * Normalize a hook to ensure all fields are populated with defaults.
+ * Normalize an adapter to ensure all fields are populated with defaults.
  */
-export function normalizeHook(hook: Hook): Required<Hook> {
+export function normalizeAdapter(adapter: Adapter): Required<Adapter> {
   return {
-    resolveValue: hook?.resolveValue ?? defaultResolveValue,
-    imports: hook.imports ?? [],
-    declarations: hook.declarations ?? [],
-    handlers: hook.handlers ?? [],
+    resolveValue: adapter?.resolveValue ?? defaultResolveValue,
+    imports: adapter.imports ?? [],
+    declarations: adapter.declarations ?? [],
+    handlers: adapter.handlers ?? [],
   };
 }
 
 /**
- * Check if an object looks like a Hook.
+ * Check if an object looks like an Adapter.
  */
-export function isHook(x: unknown): x is Hook {
+export function isAdapter(x: unknown): x is Adapter {
   if (!x || typeof x !== "object") return false;
   const h = x as Record<string, unknown>;
-  // `resolveValue` is required for a valid Hook.
+  // `resolveValue` is required for a valid Adapter.
   return typeof h.resolveValue === "function";
 }
 
@@ -413,15 +410,15 @@ export function isHook(x: unknown): x is Hook {
  * Helper for nicer user authoring + type inference.
  *
  * Usage:
- *   export default defineHook({
+ *   export default defineAdapter({
  *     resolveValue({ path }) {
  *       return `tokens.${path}`;
  *     },
  *     imports: ["import { tokens } from './tokens';"],
  *   });
  */
-export function defineHook(hook: Hook): Hook {
-  return hook;
+export function defineAdapter(adapter: Adapter): Adapter {
+  return adapter;
 }
 
 // ────────────────────────────────────────────────────────────────────────────

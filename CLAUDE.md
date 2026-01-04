@@ -38,7 +38,7 @@ src/
 ├── transform.ts          # Transform implementation
 ├── transform.test.ts     # Test runner (auto-discovers test cases)
 ├── run.ts                # Programmatic runner (runTransform)
-└── hook.ts               # Hook API (value resolution + dynamic handlers)
+└── adapter.ts            # Adapter API (value resolution + dynamic handlers)
 
 test-cases/
 ├── *.input.tsx           # Input files (styled-components)
@@ -88,16 +88,17 @@ Use the Playwright MCP to inspect test case rendering:
 
 The "All" story shows every test case side-by-side, making it easy to compare styled-components input with StyleX output.
 
-## Hook API
+## Adapter API
 
-The codemod exposes a hook-based API for customization (value resolution + dynamic interpolation handling).
+The codemod exposes an adapter-based API for customization (value resolution + dynamic interpolation handling).
 
 ### Programmatic Usage
 
 ```ts
-import { runTransform, defineHook } from "styled-components-to-stylex-codemod";
+import { runTransform } from "styled-components-to-stylex-codemod";
+import { defineAdapter } from "styled-components-to-stylex-codemod/adapter";
 
-const myHook = defineHook({
+const adapter = defineAdapter({
   resolveValue({ path }) {
     return `themeVars.${path.replace(/\./g, "_")}`;
   },
@@ -106,7 +107,7 @@ const myHook = defineHook({
 
 await runTransform({
   files: "src/**/*.tsx",
-  hook: myHook,
+  adapter,
   dryRun: true, // Set to false to write changes
   parser: "tsx",
 });

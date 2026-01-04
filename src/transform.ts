@@ -1,6 +1,6 @@
 import type { API, FileInfo, Options } from "jscodeshift";
-import type { Hook, DynamicHandler } from "./hook.js";
-import { builtinHandlers, runHandlers, normalizeHook } from "./hook.js";
+import type { Adapter, DynamicHandler } from "./adapter.js";
+import { builtinHandlers, runHandlers, normalizeAdapter } from "./adapter.js";
 import { parseStyledTemplateLiteral } from "./styledCss.js";
 import { compile } from "stylis";
 import {
@@ -34,10 +34,10 @@ export interface TransformResult {
  */
 export interface TransformOptions extends Options {
   /**
-   * Hook for customizing the transform.
+   * Adapter for customizing the transform.
    * Controls value resolution, imports, declarations, and custom handlers.
    */
-  hook: Hook;
+  adapter: Adapter;
 }
 
 /**
@@ -110,8 +110,8 @@ export function transformWithWarnings(
     return p;
   };
 
-  const hook = normalizeHook(options.hook);
-  const allHandlers: DynamicHandler[] = [...hook.handlers, ...builtinHandlers()];
+  const adapter = normalizeAdapter(options.adapter);
+  const allHandlers: DynamicHandler[] = [...adapter.handlers, ...builtinHandlers()];
 
   let hasChanges = false;
 
@@ -1904,7 +1904,7 @@ export function transformWithWarnings(
             {
               api,
               filePath: file.path,
-              resolveValue: hook.resolveValue,
+              resolveValue: adapter.resolveValue,
               warn: (w) => {
                 const loc = w.loc;
                 warnings.push({
@@ -3971,23 +3971,23 @@ export function transformWithWarnings(
   return { code, warnings };
 }
 
-// Re-export hook types for convenience
+// Re-export adapter types for convenience
 export type {
-  Hook,
+  Adapter,
   ValueContext,
   DynamicHandler,
   DynamicNode,
   HandlerContext,
   HandlerResult,
-} from "./hook.js";
+} from "./adapter.js";
 export {
-  defineHook,
+  defineAdapter,
   builtinHandlers,
-  defaultHook,
-  defineVarsHook,
-  inlineValuesHook,
+  defaultAdapter,
+  defineVarsAdapter,
+  inlineValuesAdapter,
   defaultResolveValue,
-} from "./hook.js";
+} from "./adapter.js";
 
 function toStyleKey(name: string): string {
   return name.charAt(0).toLowerCase() + name.slice(1);

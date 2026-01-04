@@ -2,8 +2,8 @@ import { run as jscodeshiftRun } from "jscodeshift/src/Runner.js";
 import { fileURLToPath } from "node:url";
 import { dirname, join } from "node:path";
 import { glob } from "node:fs/promises";
-import type { Hook } from "./hook.js";
-import { normalizeHook } from "./hook.js";
+import type { Adapter } from "./adapter.js";
+import { normalizeAdapter } from "./adapter.js";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
@@ -16,10 +16,10 @@ export interface RunTransformOptions {
   files: string | string[];
 
   /**
-   * Hook for customizing the transform.
+   * Adapter for customizing the transform.
    * Controls value resolution, imports, declarations, and custom handlers.
    */
-  hook: Hook;
+  adapter: Adapter;
 
   /**
    * Dry run - don't write changes to files
@@ -58,9 +58,10 @@ export interface RunTransformResult {
  *
  * @example
  * ```ts
- * import { runTransform, defineHook } from 'styled-components-to-stylex-codemod';
+ * import { runTransform } from 'styled-components-to-stylex-codemod';
+ * import { defineAdapter } from 'styled-components-to-stylex-codemod/adapter';
  *
- * const myHook = defineHook({
+ * const adapter = defineAdapter({
  *   resolveValue({ path }) {
  *     return `themeVars.${path.replace(/\./g, '_')}`;
  *   },
@@ -69,7 +70,7 @@ export interface RunTransformResult {
  *
  * await runTransform({
  *   files: 'src/**\/*.tsx',
- *   hook: myHook,
+ *   adapter,
  *   dryRun: true,
  * });
  * ```
@@ -77,7 +78,7 @@ export interface RunTransformResult {
 export async function runTransform(options: RunTransformOptions): Promise<RunTransformResult> {
   const { files, dryRun = false, print = false, parser = "tsx" } = options;
 
-  const hook = normalizeHook(options.hook);
+  const adapter = normalizeAdapter(options.adapter);
 
   // Resolve file paths from glob patterns
   const patterns = Array.isArray(files) ? files : [files];
@@ -107,7 +108,7 @@ export async function runTransform(options: RunTransformOptions): Promise<RunTra
     parser,
     dry: dryRun,
     print,
-    hook,
+    adapter,
   });
 
   return {

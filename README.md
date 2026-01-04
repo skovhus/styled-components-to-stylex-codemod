@@ -15,9 +15,10 @@ pnpm add styled-components-to-stylex-codemod
 Use `runTransform` to transform files matching a glob pattern:
 
 ```ts
-import { runTransform, defineHook } from "styled-components-to-stylex-codemod";
+import { runTransform } from "styled-components-to-stylex-codemod";
+import { defineAdapter } from "styled-components-to-stylex-codemod/adapter";
 
-const hook = defineHook({
+const adapter = defineAdapter({
   resolveValue({ path }) {
     return `tokens.${path.replace(/\./g, "_")}`;
   },
@@ -25,7 +26,7 @@ const hook = defineHook({
 
 const result = await runTransform({
   files: "src/**/*.tsx",
-  hook,
+  adapter,
 });
 
 console.log(`Transformed ${result.transformed} files`);
@@ -39,10 +40,10 @@ interface RunTransformOptions {
   files: string | string[];
 
   /**
-   * Hook for customizing the transform.
+   * Adapter for customizing the transform.
    * Controls value resolution, imports, declarations, and custom handlers.
    */
-  hook: Hook;
+  adapter: Adapter;
 
   /** Dry run - don't write changes to files (default: false) */
   dryRun?: boolean;
@@ -62,24 +63,24 @@ Preview changes without modifying files:
 ```ts
 await runTransform({
   files: "src/**/*.tsx",
-  hook,
+  adapter,
   dryRun: true,
   print: true, // prints transformed output to stdout
 });
 ```
 
-### Custom Hook
+### Custom Adapter
 
-Hooks are the main extension point. They let you control:
+Adapters are the main extension point. They let you control:
 
 - how theme paths are turned into StyleX-compatible JS values (`resolveValue`)
 - what extra imports/declarations to inject into transformed files (`imports`, `declarations`)
 - how to handle dynamic interpolations inside template literals (`handlers`)
 
-#### `Hook` interface (what you can customize)
+#### `Adapter` interface (what you can customize)
 
 ```ts
-export interface Hook {
+export interface Adapter {
   /**
    * Resolve a theme/token path to a StyleX-compatible value.
    *
@@ -116,7 +117,7 @@ export interface Hook {
 
 When the codemod encounters an interpolation inside a styled template literal, it tries handlers in this order:
 
-- `hook.handlers` (your custom handlers, in array order)
+- `adapter.handlers` (your custom handlers, in array order)
 - built-in handlers (`builtinHandlers()`), which cover common cases like:
   - theme access (`props.theme...`)
   - prop access (`props.foo`)
@@ -127,12 +128,13 @@ If no handler can resolve an interpolation:
 - for `withConfig({ shouldForwardProp })` wrappers, the transform preserves the value as an inline style so output keeps visual parity
 - otherwise, the declaration containing that interpolation is **dropped** and a warning is produced (manual follow-up required)
 
-#### Create a custom hook (theme path → tokens)
+#### Create a custom adapter (theme path → tokens)
 
 ```ts
-import { runTransform, defineHook } from "styled-components-to-stylex-codemod";
+import { runTransform } from "styled-components-to-stylex-codemod";
+import { defineAdapter } from "styled-components-to-stylex-codemod/adapter";
 
-const myHook = defineHook({
+const adapter = defineAdapter({
   resolveValue({ path, defaultValue }) {
     // Example: theme.colors.primary -> tokens.colors_primary
     // NOTE: return a JS expression string.
@@ -144,7 +146,7 @@ const myHook = defineHook({
 
 await runTransform({
   files: "src/**/*.tsx",
-  hook: myHook,
+  adapter,
 });
 ```
 
@@ -159,15 +161,15 @@ Most projects won’t need custom handlers. If you do, handlers let you convert 
 If you want to implement handlers, start by importing the types:
 
 ```ts
-import type { DynamicHandler, DynamicNode, HandlerContext } from "styled-components-to-stylex-codemod";
+import type { DynamicHandler, DynamicNode, HandlerContext } from "styled-components-to-stylex-codemod/adapter";
 ```
 
-Then add handlers to your hook:
+Then add handlers to your adapter:
 
 ```ts
-import { defineHook } from "styled-components-to-stylex-codemod";
+import { defineAdapter } from "styled-components-to-stylex-codemod/adapter";
 
-export default defineHook({
+export default defineAdapter({
   handlers: [
     {
       name: "my-handler",
