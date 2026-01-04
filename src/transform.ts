@@ -117,6 +117,13 @@ export function transformWithWarnings(
 
   let hasChanges = false;
 
+  const hasUniversalSelectorInRules = (rules: CssRuleIR[]): boolean => {
+    // Rule selectors come from Stylis output (not from JS), so a literal `*` here
+    // always indicates a CSS universal selector (descendant/direct-child/etc).
+    // We currently treat ANY universal selector usage as unsupported and skip the file.
+    return rules.some((r) => typeof r.selector === "string" && r.selector.includes("*"));
+  };
+
   // Find styled-components imports
   const styledImports = root.find(j.ImportDeclaration, {
     source: { value: "styled-components" },
@@ -768,8 +775,6 @@ export function transformWithWarnings(
     styleFnFromProps?: Array<{ fnKey: string; jsxProp: string }>;
     shouldForwardProp?: { dropProps: string[]; dropPrefix?: string };
     withConfig?: { displayName?: string; componentId?: string };
-    // For `> *` rules we can materialize a child style and apply it to direct JSX children.
-    directChildStyles?: { childKey: string; childNotFirstKey?: string };
     attrsInfo?: {
       staticAttrs: Record<string, any>;
       conditionalAttrs: Array<{
@@ -815,6 +820,7 @@ export function transformWithWarnings(
   };
 
   const styledDecls: StyledDecl[] = [];
+  let hasUniversalSelectors = false;
 
   const parseAttrsArg = (arg0: any): StyledDecl["attrsInfo"] | undefined => {
     if (!arg0) return undefined;
@@ -1062,6 +1068,7 @@ export function transformWithWarnings(
         const template = init.quasi;
         const parsed = parseStyledTemplateLiteral(template);
         const rules = normalizeStylisAstToIR(parsed.stylisAst, parsed.slots);
+        if (hasUniversalSelectorInRules(rules)) hasUniversalSelectors = true;
 
         styledDecls.push({
           localName,
@@ -1091,6 +1098,7 @@ export function transformWithWarnings(
         const template = init.quasi;
         const parsed = parseStyledTemplateLiteral(template);
         const rules = normalizeStylisAstToIR(parsed.stylisAst, parsed.slots);
+        if (hasUniversalSelectorInRules(rules)) hasUniversalSelectors = true;
         const attrsInfo =
           tag.callee.property.name === "attrs" ? parseAttrsArg(tag.arguments[0]) : undefined;
         const shouldForwardProp =
@@ -1131,6 +1139,7 @@ export function transformWithWarnings(
         const template = init.quasi;
         const parsed = parseStyledTemplateLiteral(template);
         const rules = normalizeStylisAstToIR(parsed.stylisAst, parsed.slots);
+        if (hasUniversalSelectorInRules(rules)) hasUniversalSelectors = true;
 
         styledDecls.push({
           localName,
@@ -1160,6 +1169,7 @@ export function transformWithWarnings(
         const template = init.quasi;
         const parsed = parseStyledTemplateLiteral(template);
         const rules = normalizeStylisAstToIR(parsed.stylisAst, parsed.slots);
+        if (hasUniversalSelectorInRules(rules)) hasUniversalSelectors = true;
         const shouldForwardProp = parseShouldForwardProp(tag.arguments[0]);
         const withConfigMeta = parseWithConfigMeta(tag.arguments[0]);
 
@@ -1308,6 +1318,18 @@ export function transformWithWarnings(
     };
   }
 
+  // Universal selectors (`*`) are currently unsupported (too many edge cases to map to StyleX safely).
+  // Skip transforming the entire file to avoid producing incorrect output.
+  if (hasUniversalSelectors) {
+    warnings.push({
+      type: "unsupported-feature",
+      feature: "universal-selector",
+      message:
+        "Universal selectors (`*`) are currently unsupported; skipping this file (manual follow-up required).",
+    });
+    return { code: null, warnings };
+  }
+
   // Resolve dynamic nodes via plugins (currently only used to decide bail vs convert).
   const resolvedStyleObjects = new Map<string, Record<string, unknown>>();
   const declByLocalName = new Map(styledDecls.map((d) => [d.localName, d]));
@@ -1319,15 +1341,6 @@ export function transformWithWarnings(
   const ancestorSelectorParents = new Set<string>();
   const descendantOverrideBase = new Map<string, Record<string, unknown>>();
   const descendantOverrideHover = new Map<string, Record<string, unknown>>();
-  const pendingChildStyles = new Map<
-    string,
-    {
-      childKey: string;
-      childObj: Record<string, unknown>;
-      childNotFirstKey: string;
-      childNotFirstObj: Record<string, unknown>;
-    }
-  >();
   for (const decl of styledDecls) {
     if (decl.preResolvedStyle) {
       resolvedStyleObjects.set(decl.styleKey, decl.preResolvedStyle);
@@ -1348,8 +1361,6 @@ export function transformWithWarnings(
     const styleFnDecls = new Map<string, any>();
     const attrBuckets = new Map<string, Record<string, unknown>>();
     const inlineStyleProps: Array<{ prop: string; expr: any }> = [];
-    let directChildBaseObj: Record<string, unknown> | null = null;
-    let directChildNotFirstObj: Record<string, unknown> | null = null;
     const localVarValues = new Map<string, string>();
 
     const toKebab = (s: string) =>
@@ -1760,29 +1771,6 @@ export function transformWithWarnings(
       // - &.something ~ & (general sibling after a class marker)
       const selTrim = rule.selector.trim();
 
-      // Universal selector in hover state: `&:hover * { ... }`
-      //
-      // StyleX cannot target arbitrary descendants, but for inheritable props like `color`
-      // we can approximate by putting the hover style on the parent and relying on inheritance.
-      // This avoids emitting invalid StyleX patterns (e.g. conditional CSS variables).
-      if (/^&\s*:\s*hover\s+\*\s*$/.test(selTrim)) {
-        for (const d of rule.declarations) {
-          if (d.value.kind !== "static") continue;
-          for (const out of cssDeclarationToStylexDeclarations(d)) {
-            if (out.value.kind !== "static") continue;
-            const value = cssValueToJs(out.value, d.important);
-            // Only hoist known-inheritable properties. Others would be incorrect.
-            if (out.prop !== "color") continue;
-            perPropPseudo[out.prop] ??= {};
-            const existing = perPropPseudo[out.prop]!;
-            if (!("default" in existing)) {
-              existing.default = "inherit";
-            }
-            existing[":hover"] = value;
-          }
-        }
-        continue;
-      }
       if (selTrim === "& + &" || /^&\s*\+\s*&$/.test(selTrim)) {
         decl.needsWrapperComponent = true;
         decl.siblingWrapper ??= {
@@ -1822,33 +1810,6 @@ export function transformWithWarnings(
           }
         }
         resolvedStyleObjects.set(decl.siblingWrapper.afterKey, obj);
-        continue;
-      }
-
-      // Direct-child selectors (nesting): `> * { ... }` and `> *:not(:first-child) { ... }`.
-      // We capture these so we can decide later whether to:
-      // - flatten onto parent (universal-selector fixtures), or
-      // - materialize child styles and apply them in JSX (nesting fixture).
-      if (/^&?\s*>\s*\*\s*$/.test(selTrim)) {
-        directChildBaseObj ??= {};
-        for (const d of rule.declarations) {
-          if (d.value.kind !== "static") continue;
-          for (const out of cssDeclarationToStylexDeclarations(d)) {
-            if (out.value.kind !== "static") continue;
-            (directChildBaseObj as any)[out.prop] = cssValueToJs(out.value, d.important);
-          }
-        }
-        continue;
-      }
-      if (/^&?\s*>\s*\*\s*:not\(:first-child\)\s*$/.test(selTrim)) {
-        directChildNotFirstObj ??= {};
-        for (const d of rule.declarations) {
-          if (d.value.kind !== "static") continue;
-          for (const out of cssDeclarationToStylexDeclarations(d)) {
-            if (out.value.kind !== "static") continue;
-            (directChildNotFirstObj as any)[out.prop] = cssValueToJs(out.value, d.important);
-          }
-        }
         continue;
       }
 
@@ -2257,53 +2218,6 @@ export function transformWithWarnings(
       delete (styleObj as any)[name];
     }
 
-    // Decide how to handle `& > *` rules.
-    // - If we also saw `& > *:not(:first-child)`, materialize child styles and apply them in JSX
-    //   (needed for the `nesting` fixture).
-    // - Otherwise, flatten `& > *` styles onto the parent (keeps `universal-selector` fixture stable).
-    if (!directChildNotFirstObj && directChildBaseObj && "marginLeft" in directChildBaseObj) {
-      // Heuristic: Stylis sometimes flattens nested `&:not(:first-child)` into the `& > *` rule.
-      // If we see `marginLeft` on the direct-child rule, treat it as not-first-child.
-      directChildNotFirstObj = {
-        marginLeft: (directChildBaseObj as any).marginLeft,
-      };
-      delete (directChildBaseObj as any).marginLeft;
-    }
-    if (directChildNotFirstObj) {
-      const childKey = `${decl.styleKey}Child`;
-      const childNotFirstKey = `${decl.styleKey}ChildNotFirst`;
-      pendingChildStyles.set(decl.styleKey, {
-        childKey,
-        childObj: (directChildBaseObj ?? {}) as any,
-        childNotFirstKey,
-        childNotFirstObj: directChildNotFirstObj as any,
-      });
-      decl.directChildStyles = { childKey, childNotFirstKey };
-    } else if (directChildBaseObj) {
-      Object.assign(styleObj, directChildBaseObj);
-    }
-
-    // Fallback: if Stylis flattened `> *` rules into the base selector, recover them for `:not(:first-child)` cases.
-    if (
-      !decl.directChildStyles &&
-      typeof decl.rawCss === "string" &&
-      decl.rawCss.includes(":not(:first-child)") &&
-      (styleObj as any).flex !== undefined &&
-      (styleObj as any).marginLeft !== undefined
-    ) {
-      const childKey = `${decl.styleKey}Child`;
-      const childNotFirstKey = `${decl.styleKey}ChildNotFirst`;
-      pendingChildStyles.set(decl.styleKey, {
-        childKey,
-        childObj: { flex: (styleObj as any).flex } as any,
-        childNotFirstKey,
-        childNotFirstObj: { marginLeft: (styleObj as any).marginLeft } as any,
-      });
-      delete (styleObj as any).flex;
-      delete (styleObj as any).marginLeft;
-      decl.directChildStyles = { childKey, childNotFirstKey };
-    }
-
     // Raw-CSS fixup for descendant component selectors that Stylis sometimes flattens:
     //   ${Icon} { ... }
     //   &:hover ${Icon} { ... }
@@ -2567,39 +2481,6 @@ export function transformWithWarnings(
         stylexIdx >= 0 ? stylexIdx + 1 : lastImportIdx >= 0 ? lastImportIdx + 1 : 0;
       if (importNodes.length) body.splice(importInsertAt, 0, ...importNodes);
     }
-  }
-
-  // Ensure child-style keys (e.g. `equalDividerChild`) come AFTER the parent style key in `stylex.create(...)`.
-  // This stabilizes fixture ordering and avoids accidental reordering when we synthesize child styles.
-  if (pendingChildStyles.size > 0) {
-    const drop = new Set<string>();
-    for (const v of pendingChildStyles.values()) {
-      drop.add(v.childKey);
-      drop.add(v.childNotFirstKey);
-    }
-
-    // Preserve any already-inserted values if they exist (e.g. older paths), otherwise use pending.
-    const existingVals = new Map<string, Record<string, unknown>>();
-    for (const [k, v] of resolvedStyleObjects.entries()) {
-      if (drop.has(k)) existingVals.set(k, v);
-    }
-
-    const next = new Map<string, Record<string, unknown>>();
-    for (const [k, v] of resolvedStyleObjects.entries()) {
-      if (drop.has(k)) continue;
-      next.set(k, v);
-      const pending = pendingChildStyles.get(k);
-      if (pending) {
-        next.set(pending.childKey, existingVals.get(pending.childKey) ?? pending.childObj);
-        next.set(
-          pending.childNotFirstKey,
-          existingVals.get(pending.childNotFirstKey) ?? pending.childNotFirstObj,
-        );
-      }
-    }
-    // Replace map contents while keeping the same reference.
-    resolvedStyleObjects.clear();
-    for (const [k, v] of next.entries()) resolvedStyleObjects.set(k, v);
   }
 
   // Build a map from styleKey to leadingComments for comment preservation
@@ -3123,49 +3004,6 @@ export function transformWithWarnings(
           ),
           ...keptAfterVariants,
         ];
-
-        // Apply `> *` child styles for cases we chose to materialize (currently `:not(:first-child)`).
-        if (decl.directChildStyles?.childKey) {
-          const childKey = decl.directChildStyles.childKey;
-          const childNotFirstKey = decl.directChildStyles.childNotFirstKey;
-          const children = (p.node.children ?? []).filter(
-            (c: any) => c && c.type === "JSXElement",
-          ) as any[];
-
-          children.forEach((child, idx) => {
-            const args: any[] = [
-              j.memberExpression(j.identifier("styles"), j.identifier(childKey)),
-              ...(childNotFirstKey && idx > 0
-                ? [j.memberExpression(j.identifier("styles"), j.identifier(childNotFirstKey))]
-                : []),
-            ];
-
-            const attrs = (child.openingElement.attributes ?? []) as any[];
-            const existing = attrs.find(
-              (a) =>
-                a.type === "JSXSpreadAttribute" &&
-                a.argument?.type === "CallExpression" &&
-                a.argument.callee?.type === "MemberExpression" &&
-                a.argument.callee.object?.type === "Identifier" &&
-                a.argument.callee.object.name === "stylex" &&
-                a.argument.callee.property?.type === "Identifier" &&
-                a.argument.callee.property.name === "props",
-            );
-            if (existing) {
-              existing.argument.arguments = [...(existing.argument.arguments ?? []), ...args];
-            } else {
-              child.openingElement.attributes = [
-                j.jsxSpreadAttribute(
-                  j.callExpression(
-                    j.memberExpression(j.identifier("stylex"), j.identifier("props")),
-                    args,
-                  ),
-                ),
-                ...attrs,
-              ];
-            }
-          });
-        }
       });
   }
 

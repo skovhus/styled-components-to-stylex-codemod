@@ -341,6 +341,33 @@ const Button = styled.button\`
 
     expect(result.warnings).toHaveLength(0);
   });
+
+  it("should warn and skip when universal selectors are used", () => {
+    const source = `
+import styled from 'styled-components';
+
+const Box = styled.div\`
+  & * {
+    box-sizing: border-box;
+  }
+\`;
+
+export const App = () => <Box><span /></Box>;
+`;
+
+    const result = transformWithWarnings(
+      { source, path: "test.tsx" },
+      { jscodeshift, j: jscodeshift, stats: () => {}, report: () => {} },
+      { adapter: fixtureAdapter },
+    );
+
+    expect(result.code).toBeNull();
+    expect(
+      result.warnings.some(
+        (w) => w.type === "unsupported-feature" && w.feature === "universal-selector",
+      ),
+    ).toBe(true);
+  });
 });
 
 describe("adapter configuration", () => {
