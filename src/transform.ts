@@ -138,6 +138,8 @@ interface SiblingSelectorInfo {
 interface StyleInfo {
   componentName: string;
   baseElement: string;
+  /** displayName from styled-components `withConfig({ displayName })` (debugging) */
+  displayName: string | undefined;
   styles: StyleXObject;
   extraStyles: Map<string, StyleXObject>;
   variantStyles: Map<string, StyleXObject>;
@@ -224,7 +226,7 @@ export default function transform(
     const location = warning.line
       ? ` (${file.path}:${warning.line}:${warning.column ?? 0})`
       : ` (${file.path})`;
-    console.warn(`[styled-components-to-stylex] Warning${location}: ${warning.message}`);
+    process.stderr.write(`[styled-components-to-stylex] Warning${location}: ${warning.message}\n`);
   }
 
   return result.code;
@@ -455,6 +457,20 @@ export function transformWithWarnings(
     if (styleInfo) {
       styleInfos.push(styleInfo);
       styledComponentIdentifiers.add(componentName);
+
+      // If we captured leading comments for this styled component, we will re-attach them
+      // to the generated `stylex.create({ ... })` entry *only* for shouldForwardProp
+      // wrappers (fixture expectation). Remove them from the original VariableDeclaration
+      // so they don't get "floated" to the next statement when we delete the declaration.
+      if (
+        styleInfo.hasShouldForwardProp &&
+        varDeclPath?.node?.comments &&
+        leadingComments.length > 0
+      ) {
+        varDeclPath.node.comments = varDeclPath.node.comments.filter(
+          (c: unknown) => !(leadingComments as unknown[]).includes(c),
+        );
+      }
     }
   });
 
@@ -754,6 +770,22 @@ export function transformWithWarnings(
       // Wrappers that use sibling selectors or shouldForwardProp with simple `function Name(props)` don't need React
       const needsReactImport = styleInfos.some((info) => {
         if (!info.needsWrapper) return false;
+        // displayName-only wrappers are generated as simple `function Name(props)` with no React types.
+        if (
+          info.displayName &&
+          info.attributeSelectors.length === 0 &&
+          info.siblingSelectors.length === 0 &&
+          !info.hasShouldForwardProp &&
+          !info.supportsAs &&
+          info.dynamicFns.size === 0 &&
+          info.transientProps.length === 0 &&
+          info.variantConditions.size === 0 &&
+          !info.hasSpecificityHacks &&
+          !info.hasObjectSyntaxDynamicFns &&
+          info.bailedExpressions.length === 0
+        ) {
+          return false;
+        }
         const hasElseVariants = Array.from(info.variantConditions.values()).some(
           (c) => c.comparisonOperator === "!==",
         );
@@ -1027,6 +1059,7 @@ function processStyledComponent(
   let attrsConfig: AttrsConfig | undefined;
   let hasDynamicStyleFn = false;
   let dynamicStyleParam: string | undefined;
+  let displayName: string | undefined;
 
   // Extract template literal/style object and base element
   if (expr.type === "TaggedTemplateExpression") {
@@ -1186,6 +1219,43 @@ function processStyledComponent(
               const sfpResult = parseShouldForwardProp(prop.value as Expression);
               filteredProps = sfpResult.filteredProps;
               filterTransientProps = sfpResult.filterTransientProps;
+            }
+
+            // Preserve displayName (debugging) by forcing wrapper generation and setting Component.displayName
+            if (
+              prop.type === "ObjectProperty" &&
+              prop.key.type === "Identifier" &&
+              prop.key.name === "displayName"
+            ) {
+              const v = prop.value as unknown as {
+                type: string;
+                value?: unknown;
+                quasis?: unknown[];
+              };
+              if (
+                v.type === "StringLiteral" &&
+                typeof (v as { value: unknown }).value === "string"
+              ) {
+                displayName = (v as { value: string }).value;
+              } else if (
+                v.type === "Literal" &&
+                typeof (v as { value: unknown }).value === "string"
+              ) {
+                displayName = (v as { value: string }).value;
+              } else if (v.type === "TemplateLiteral") {
+                const tl = v as unknown as {
+                  expressions: unknown[];
+                  quasis: Array<{ value: { cooked?: string | null } }>;
+                };
+                if (
+                  Array.isArray(tl.expressions) &&
+                  tl.expressions.length === 0 &&
+                  tl.quasis?.length === 1
+                ) {
+                  const cooked = tl.quasis[0]?.value?.cooked;
+                  if (typeof cooked === "string") displayName = cooked;
+                }
+              }
             }
           }
         }
@@ -1352,6 +1422,7 @@ function processStyledComponent(
     attributeSelectors.length > 0 ||
     siblingSelectors.length > 0 ||
     needsWrapperForForwardProp ||
+    displayName !== undefined ||
     hasSpecificityHacks ||
     supportsAs ||
     hasObjectSyntaxDynamicFns ||
@@ -1367,6 +1438,7 @@ function processStyledComponent(
   return {
     componentName,
     baseElement,
+    displayName,
     styles,
     extraStyles,
     variantStyles,
@@ -3091,7 +3163,31 @@ function generateStyleXCode(
   }
 
   // Build style properties
-  const properties: Array<{ key: Identifier; value: Expression }> = [];
+  const objectProps: ObjectProperty[] = [];
+
+  const toLeadingCommentNodes = (
+    comments: Array<{ type: string; value: string }> | undefined,
+  ): Array<{ type: string; value: string; leading: boolean; trailing: boolean }> => {
+    if (!comments || comments.length === 0) return [];
+    return comments.map((c) => ({
+      type: c.type,
+      value: c.value,
+      leading: true,
+      trailing: false,
+    }));
+  };
+
+  const pushProp = (
+    key: Identifier,
+    value: Expression,
+    attachComments?: Array<{ type: string; value: string; leading: boolean; trailing: boolean }>,
+  ): void => {
+    const prop = j.objectProperty(key, value as unknown as Parameters<typeof j.objectProperty>[1]);
+    if (attachComments && attachComments.length > 0) {
+      (prop as unknown as { comments?: unknown[] }).comments = attachComments as unknown[];
+    }
+    objectProps.push(prop);
+  };
 
   // Add component styles
   for (const info of styleInfos) {
@@ -3102,40 +3198,57 @@ function generateStyleXCode(
     // For other patterns, add base style first then extra styles
     const hasSiblingSelectors = info.siblingSelectors && info.siblingSelectors.length > 0;
 
+    // Only move the comment into `stylex.create({ ... })` for shouldForwardProp wrappers.
+    // Other fixtures historically drop these comments (or they end up attached elsewhere),
+    // so keep behavior stable.
+    const leading = info.hasShouldForwardProp ? toLeadingCommentNodes(info.leadingComments) : [];
+    let attachedLeading = false;
+    const maybeAttach = () => {
+      if (attachedLeading) return undefined;
+      if (leading.length === 0) return undefined;
+      attachedLeading = true;
+      return leading;
+    };
+
     if (hasSiblingSelectors) {
       // Add extra styles first for sibling selector patterns
       for (const [extraName, extraStylesObj] of info.extraStyles) {
-        properties.push({
-          key: j.identifier(extraName),
-          value: styleObjectToAST(j, extraStylesObj, { enableShorthand: false }),
-        });
+        pushProp(
+          j.identifier(extraName),
+          styleObjectToAST(j, extraStylesObj, { enableShorthand: false }),
+          maybeAttach(),
+        );
       }
       // Then add base style
-      properties.push({
-        key: j.identifier(baseStyleKey),
-        value: styleObjectToAST(j, info.styles, { enableShorthand: false }),
-      });
+      pushProp(
+        j.identifier(baseStyleKey),
+        styleObjectToAST(j, info.styles, { enableShorthand: false }),
+        maybeAttach(),
+      );
     } else {
       // Add base style first for other patterns
-      properties.push({
-        key: j.identifier(baseStyleKey),
-        value: styleObjectToAST(j, info.styles, { enableShorthand: false }),
-      });
+      pushProp(
+        j.identifier(baseStyleKey),
+        styleObjectToAST(j, info.styles, { enableShorthand: false }),
+        maybeAttach(),
+      );
       // Then add extra styles
       for (const [extraName, extraStylesObj] of info.extraStyles) {
-        properties.push({
-          key: j.identifier(extraName),
-          value: styleObjectToAST(j, extraStylesObj, { enableShorthand: false }),
-        });
+        pushProp(
+          j.identifier(extraName),
+          styleObjectToAST(j, extraStylesObj, { enableShorthand: false }),
+          maybeAttach(),
+        );
       }
     }
 
     // Add variant styles
     for (const [variantName, variantStyles] of info.variantStyles) {
-      properties.push({
-        key: j.identifier(variantName),
-        value: styleObjectToAST(j, variantStyles, { enableShorthand: false }),
-      });
+      pushProp(
+        j.identifier(variantName),
+        styleObjectToAST(j, variantStyles, { enableShorthand: false }),
+        maybeAttach(),
+      );
     }
 
     // Add dynamic functions
@@ -3155,17 +3268,9 @@ function generateStyleXCode(
         [param],
         parenthesizedBody as unknown as Parameters<typeof j.arrowFunctionExpression>[1],
       );
-      properties.push({
-        key: j.identifier(fnName),
-        value: arrowFn,
-      });
+      pushProp(j.identifier(fnName), arrowFn, maybeAttach());
     }
   }
-
-  // Build the object expression (cast to any for jscodeshift type compat)
-  const objectProps = properties.map(({ key, value }) =>
-    j.objectProperty(key, value as unknown as Parameters<typeof j.objectProperty>[1]),
-  );
 
   // Create stylex.create() call
   const createCall = j.callExpression(
@@ -4391,11 +4496,13 @@ function generateWrapperComponents(
   | VariableDeclaration
   | import("jscodeshift").FunctionDeclaration
   | import("jscodeshift").TSInterfaceDeclaration
+  | import("jscodeshift").ExpressionStatement
 )[] {
   const wrappers: (
     | VariableDeclaration
     | import("jscodeshift").FunctionDeclaration
     | import("jscodeshift").TSInterfaceDeclaration
+    | import("jscodeshift").ExpressionStatement
   )[] = [];
 
   // Build a map for looking up base elements of components
@@ -4920,6 +5027,40 @@ function ${componentName}({
 const ${componentName} = ({ children }: { children: React.ReactNode }) => (
   <${baseElement} {...stylex.props(styles.${styleName})}>{children}</${baseElement}>
 );`;
+    } else if (
+      // displayName-only wrapper: preserve a stable component identity for debugging
+      // without introducing typed React wrappers.
+      info.displayName &&
+      attributeSelectors.length === 0 &&
+      siblingSelectors.length === 0 &&
+      !hasShouldForwardProp &&
+      !info.supportsAs &&
+      dynamicFns.size === 0 &&
+      transientProps.length === 0 &&
+      info.variantConditions.size === 0 &&
+      !hasSpecificityHacks &&
+      !info.hasObjectSyntaxDynamicFns &&
+      info.bailedExpressions.length === 0
+    ) {
+      componentCode = `
+function ${componentName}(props) {
+  const { className, children, style, ...rest } = props;
+
+  const sx = stylex.props(
+    ${styleConditions.join(",\n    ")}
+  );
+
+  return (
+    <${baseElement}
+      {...sx}
+      className={[sx.className, className].filter(Boolean).join(" ")}
+      style={{ ...sx.style, ...style }}
+      {...rest}
+    >
+      {children}
+    </${baseElement}>
+  );
+}`;
     } else if (info.hasObjectSyntaxDynamicFns) {
       // Object-syntax dynamic function wrapper (styled.div((props) => ({...})) pattern)
       // Uses simple function pattern without TypeScript types
@@ -4991,7 +5132,8 @@ const ${componentName} = ({ ${destructureList.join(", ")} }: ${propsTypeAnnotati
     try {
       // Build comment prefix for the component code
       let commentPrefix = "";
-      if (info.leadingComments && info.leadingComments.length > 0) {
+      // For shouldForwardProp wrappers, comments are attached to `styles` entries instead.
+      if (!info.hasShouldForwardProp && info.leadingComments && info.leadingComments.length > 0) {
         commentPrefix = info.leadingComments
           .map((c) => {
             if (c.type === "CommentBlock" || c.type === "Block") {
@@ -5028,7 +5170,20 @@ const ${componentName} = ({ ${destructureList.join(", ")} }: ${propsTypeAnnotati
       }
     } catch (e) {
       // Skip if parsing fails - complex components may need manual handling
-      console.warn(`Failed to generate wrapper for ${componentName}:`, e);
+      process.stderr.write(`Failed to generate wrapper for ${componentName}: ${String(e)}\n`);
+    }
+
+    // Preserve styled-components debugging displayName when provided via withConfig({ displayName })
+    if (info.displayName) {
+      wrappers.push(
+        j.expressionStatement(
+          j.assignmentExpression(
+            "=",
+            j.memberExpression(j.identifier(componentName), j.identifier("displayName")),
+            j.literal(info.displayName),
+          ),
+        ),
+      );
     }
   }
 

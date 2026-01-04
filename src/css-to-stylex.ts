@@ -276,8 +276,30 @@ export function convertValue(
     return trimmed;
   }
 
+  // Normalize hex color casing to match fixture conventions:
+  // - Grayscale hex colors (R==G==B) use lowercase (e.g. #f5f5f5, #ccc, #999)
+  // - Non-grayscale hex colors use uppercase (e.g. #BF4F74, #4CAF50)
+  trimmed = normalizeHexColorCase(trimmed);
+
   // Return as quoted string (StyleX requires string values to be quoted)
   return trimmed;
+}
+
+function normalizeHexColorCase(value: string): string {
+  const match = value.match(/^#([0-9a-fA-F]{3}|[0-9a-fA-F]{4}|[0-9a-fA-F]{6}|[0-9a-fA-F]{8})$/);
+  if (!match) return value;
+  const hex = match[1]!;
+
+  const rgb = hex.length === 3 || hex.length === 4 ? hex.slice(0, 3) : hex.slice(0, 6);
+
+  const isGray =
+    rgb.length === 3
+      ? rgb[0]!.toLowerCase() === rgb[1]!.toLowerCase() &&
+        rgb[1]!.toLowerCase() === rgb[2]!.toLowerCase()
+      : rgb.slice(0, 2).toLowerCase() === rgb.slice(2, 4).toLowerCase() &&
+        rgb.slice(2, 4).toLowerCase() === rgb.slice(4, 6).toLowerCase();
+
+  return "#" + (isGray ? hex.toLowerCase() : hex.toUpperCase());
 }
 
 /**

@@ -1,6 +1,7 @@
 import * as stylex from "@stylexjs/stylex";
 
 const styles = stylex.create({
+  // Using shouldForwardProp to filter props (v5 pattern)
   button: {
     backgroundColor: "#BF4F74",
     padding: "8px 16px",
@@ -17,6 +18,8 @@ const styles = stylex.create({
   buttonBackgroundColor: (backgroundColor: string) => ({
     backgroundColor,
   }),
+
+  // Using isPropValid from @emotion
   link: {
     color: {
       default: "#333",
@@ -29,6 +32,8 @@ const styles = stylex.create({
     color: "#BF4F74",
     fontWeight: "bold",
   },
+
+  // Custom prop filtering logic (transient props pattern)
   box: {
     backgroundColor: "white",
     padding: "16px",
@@ -41,6 +46,8 @@ const styles = stylex.create({
   boxPadding: (padding: string) => ({
     padding,
   }),
+
+  // Filter multiple custom props
   card: {
     backgroundColor: "#4F74BF",
     borderRadius: "4px",
@@ -55,7 +62,6 @@ const styles = stylex.create({
   },
 });
 
-// Using shouldForwardProp to filter props (v5 pattern)
 function Button(props) {
   const { className, children, style, color, size, ...rest } = props;
 
@@ -77,7 +83,6 @@ function Button(props) {
   );
 }
 
-// Using isPropValid from @emotion
 function Link(props) {
   const { className, children, style, isActive, ...rest } = props;
 
@@ -95,7 +100,6 @@ function Link(props) {
   );
 }
 
-// Custom prop filtering logic (transient props pattern)
 function Box(props) {
   const { className, children, style, ...rest } = props;
 
@@ -121,7 +125,6 @@ function Box(props) {
   );
 }
 
-// Filter multiple custom props
 function Card(props) {
   const { className, children, style, variant, elevation: _elevation, rounded, ...rest } = props;
 

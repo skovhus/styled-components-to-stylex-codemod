@@ -1,3 +1,4 @@
+import "./css-variables.css";
 import styled from "styled-components";
 
 const Button = styled.button`

@@ -15,6 +15,8 @@ const styles = stylex.create({
     borderRadius: "8px",
     boxShadow: "0 2px 4px rgba(0, 0, 0, 0.1)",
   },
+
+  // Combining withConfig options
   input: {
     padding: "8px 12px",
     borderWidth: "2px",
@@ -50,7 +52,42 @@ const styles = stylex.create({
   },
 });
 
-// Combining withConfig options
+// withConfig for displayName (debugging)
+function Button(props) {
+  const { className, children, style, ...rest } = props;
+
+  const sx = stylex.props(styles.button);
+
+  return (
+    <button
+      {...sx}
+      className={[sx.className, className].filter(Boolean).join(" ")}
+      style={{ ...sx.style, ...style }}
+      {...rest}
+    >
+      {children}
+    </button>
+  );
+}
+Button.displayName = "PrimaryButton";
+// withConfig for componentId (stable class names)
+function Card(props) {
+  const { className, children, style, ...rest } = props;
+
+  const sx = stylex.props(styles.card);
+
+  return (
+    <div
+      {...sx}
+      className={[sx.className, className].filter(Boolean).join(" ")}
+      style={{ ...sx.style, ...style }}
+      {...rest}
+    >
+      {children}
+    </div>
+  );
+}
+Card.displayName = "Card";
 function Input(props) {
   const { className, style, hasError, ...rest } = props;
 
@@ -65,15 +102,33 @@ function Input(props) {
     />
   );
 }
+Input.displayName = "StyledInput";
+function ExtendedButton(props) {
+  const { className, children, style, ...rest } = props;
+
+  const sx = stylex.props(styles.baseButton, styles.extendedButton);
+
+  return (
+    <button
+      {...sx}
+      className={[sx.className, className].filter(Boolean).join(" ")}
+      style={{ ...sx.style, ...style }}
+      {...rest}
+    >
+      {children}
+    </button>
+  );
+}
+ExtendedButton.displayName = "ExtendedButton";
 
 export const App = () => (
   <div>
-    <button {...stylex.props(styles.button)}>Primary Button</button>
-    <div {...stylex.props(styles.card)}>
+    <Button>Primary Button</Button>
+    <Card>
       <p>Card content</p>
-    </div>
+    </Card>
     <Input placeholder="Normal input" />
     <Input hasError placeholder="Error input" />
-    <button {...stylex.props(styles.baseButton, styles.extendedButton)}>Extended Button</button>
+    <ExtendedButton>Extended Button</ExtendedButton>
   </div>
 );

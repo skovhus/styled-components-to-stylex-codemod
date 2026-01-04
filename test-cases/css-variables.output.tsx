@@ -1,4 +1,5 @@
 import * as stylex from "@stylexjs/stylex";
+import "./css-variables.css";
 import { vars, textVars } from "./css-variables.stylex";
 
 const styles = stylex.create({

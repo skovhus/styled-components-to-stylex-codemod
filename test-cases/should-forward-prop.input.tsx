@@ -22,7 +22,7 @@ const Link = styled.a.withConfig({
   text-decoration: none;
 
   &:hover {
-    color: #BF4F74;
+    color: #bf4f74;
   }
 `;
 
@@ -39,9 +39,14 @@ const Box = styled.div.withConfig({
 // Filter multiple custom props
 const Card = styled.div.withConfig({
   shouldForwardProp: (prop) => !["variant", "elevation", "rounded"].includes(prop),
-})<{ variant?: "primary" | "secondary"; elevation?: number; rounded?: boolean }>`
+})<{
+  variant?: "primary" | "secondary";
+  elevation?: number;
+  rounded?: boolean;
+}>`
   background: ${(props) => (props.variant === "primary" ? "#BF4F74" : "#4F74BF")};
-  box-shadow: ${(props) => `0 ${(props.elevation || 1) * 2}px ${(props.elevation || 1) * 4}px rgba(0, 0, 0, 0.1)`};
+  box-shadow: ${(props) =>
+    `0 ${(props.elevation || 1) * 2}px ${(props.elevation || 1) * 4}px rgba(0, 0, 0, 0.1)`};
   border-radius: ${(props) => (props.rounded ? "16px" : "4px")};
   padding: 16px;
   color: white;

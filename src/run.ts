@@ -99,7 +99,7 @@ export async function runTransform(options: RunTransformOptions): Promise<RunTra
   }
 
   if (filePaths.length === 0) {
-    console.warn("No files matched the provided glob pattern(s)");
+    process.stderr.write("No files matched the provided glob pattern(s)\n");
     return {
       errors: 0,
       unchanged: 0,
