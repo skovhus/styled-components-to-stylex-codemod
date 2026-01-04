@@ -35,7 +35,14 @@ function DynamicBox(props) {
   );
 
   return (
-    <div {...sx} className={[sx.className, className].filter(Boolean).join(" ")} style={style}>
+    <div
+      {...sx}
+      className={[sx.className, className].filter(Boolean).join(" ")}
+      style={{
+        ...sx.style,
+        ...style,
+      }}
+    >
       {children}
     </div>
   );
@@ -44,6 +51,6 @@ function DynamicBox(props) {
 export const App = () => (
   <div>
     <div {...stylex.props(styles.staticBox)} />
-    <DynamicBox $background="mediumseagreen" $size="100px" />
+    <DynamicBox $background="mediumseagreen" $size="100px" style={{ border: "1px solid red" }} />
   </div>
 );

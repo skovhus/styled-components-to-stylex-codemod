@@ -67,7 +67,10 @@ function Button(props) {
     <button
       {...sx}
       className={[sx.className, className].filter(Boolean).join(" ")}
-      style={style}
+      style={{
+        ...sx.style,
+        ...style,
+      }}
       {...rest}
     >
       {children}
@@ -86,7 +89,10 @@ function Card(props) {
     <div
       {...sx}
       className={[sx.className, className].filter(Boolean).join(" ")}
-      style={style}
+      style={{
+        ...sx.style,
+        ...style,
+      }}
       {...rest}
     >
       {children}
@@ -105,7 +111,10 @@ function Input(props) {
     <input
       {...sx}
       className={[sx.className, className].filter(Boolean).join(" ")}
-      style={style}
+      style={{
+        ...sx.style,
+        ...style,
+      }}
       {...rest}
     />
   );
@@ -122,7 +131,10 @@ function ExtendedButton(props) {
     <button
       {...sx}
       className={[sx.className, className].filter(Boolean).join(" ")}
-      style={style}
+      style={{
+        ...sx.style,
+        ...style,
+      }}
       {...rest}
     >
       {children}

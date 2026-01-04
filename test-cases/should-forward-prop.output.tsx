@@ -75,7 +75,10 @@ function Button(props) {
     <button
       {...sx}
       className={[sx.className, className].filter(Boolean).join(" ")}
-      style={style}
+      style={{
+        ...sx.style,
+        ...style,
+      }}
       {...rest}
     >
       {children}
@@ -92,7 +95,10 @@ function Link(props) {
     <a
       {...sx}
       className={[sx.className, className].filter(Boolean).join(" ")}
-      style={style}
+      style={{
+        ...sx.style,
+        ...style,
+      }}
       {...rest}
     >
       {children}
@@ -117,7 +123,10 @@ function Box(props) {
     <div
       {...sx}
       className={[sx.className, className].filter(Boolean).join(" ")}
-      style={style}
+      style={{
+        ...sx.style,
+        ...style,
+      }}
       {...rest}
     >
       {children}
@@ -139,6 +148,7 @@ function Card(props) {
       {...sx}
       className={[sx.className, className].filter(Boolean).join(" ")}
       style={{
+        ...sx.style,
         ...style,
         boxShadow: ((props) =>
           `0 ${(props.elevation || 1) * 2}px ${(props.elevation || 1) * 4}px rgba(0, 0, 0, 0.1)`)(

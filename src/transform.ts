@@ -3659,6 +3659,9 @@ export function transformWithWarnings(
                   j.jsxIdentifier("style"),
                   j.jsxExpressionContainer(
                     j.objectExpression([
+                      j.spreadElement(
+                        j.memberExpression(j.identifier("sx"), j.identifier("style")) as any,
+                      ),
                       j.spreadElement(styleId as any),
                       ...d.inlineStyleProps.map((p) =>
                         j.property("init", j.identifier(p.prop), p.expr as any),
@@ -3667,7 +3670,19 @@ export function transformWithWarnings(
                   ),
                 ),
               ]
-            : [j.jsxAttribute(j.jsxIdentifier("style"), j.jsxExpressionContainer(styleId))]),
+            : [
+                j.jsxAttribute(
+                  j.jsxIdentifier("style"),
+                  j.jsxExpressionContainer(
+                    j.objectExpression([
+                      j.spreadElement(
+                        j.memberExpression(j.identifier("sx"), j.identifier("style")) as any,
+                      ),
+                      j.spreadElement(styleId as any),
+                    ]) as any,
+                  ),
+                ),
+              ]),
           ...(omitRestSpreadForTransientProps ? [] : [j.jsxSpreadAttribute(restId)]),
         ],
         false,
@@ -3800,7 +3815,17 @@ export function transformWithWarnings(
         [
           j.jsxSpreadAttribute(j.identifier("sx")),
           j.jsxAttribute(j.jsxIdentifier("className"), j.jsxExpressionContainer(mergedClassName)),
-          j.jsxAttribute(j.jsxIdentifier("style"), j.jsxExpressionContainer(styleId)),
+          j.jsxAttribute(
+            j.jsxIdentifier("style"),
+            j.jsxExpressionContainer(
+              j.objectExpression([
+                j.spreadElement(
+                  j.memberExpression(j.identifier("sx"), j.identifier("style")) as any,
+                ),
+                j.spreadElement(styleId as any),
+              ]) as any,
+            ),
+          ),
           j.jsxSpreadAttribute(restId),
         ],
         false,
