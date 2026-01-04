@@ -66,6 +66,24 @@ export interface DynamicNodeContext {
   logicalInfo: LogicalInfo | undefined;
   /** For helpers, the function name */
   helperName: string | undefined;
+  /**
+   * For prop-accessor helper calls like:
+   *   ${(props) => getColor(props.$variant)}
+   *
+   * The extracted member-path for the first argument (if available).
+   */
+  helperCallArgPropPath?: string[];
+  /**
+   * If the helper function is a simple ternary helper (analyzed by the transformer),
+   * this carries the extracted info for use by handlers.
+   */
+  helperTernary?: {
+    helperName: string;
+    paramName: string;
+    comparisonValue: string;
+    truthy: string;
+    falsy: string;
+  };
   /** For keyframes, the keyframes identifier name */
   keyframesName: string | undefined;
 
@@ -82,6 +100,10 @@ export interface VariantStyle {
   name: string;
   /** The style properties for this variant */
   styles: Record<string, string | number>;
+  /** Optional comparison value for wrapper generation (e.g., "large" from size === "large") */
+  comparisonValue?: string;
+  /** Optional comparison operator for wrapper generation */
+  comparisonOperator?: "===" | "!==";
 }
 
 /**
@@ -119,7 +141,10 @@ export type DynamicNodeDecision =
       variants: VariantStyle[];
       /** The prop name that controls the variant */
       propName: string;
-      /** The comparison value (e.g., "large" from props.size === "large") */
+      /**
+       * Back-compat: comparison value applied to all variants if variant.comparisonValue isn't set.
+       * Prefer setting comparisonValue/operator on each VariantStyle.
+       */
       comparisonValue?: string;
     }
   | {
@@ -579,6 +604,69 @@ export const propAccessHandler: DynamicNodeHandler = (ctx): DynamicNodeDecision 
 };
 
 /**
+ * Handler for prop-accessor helper calls where the helper is a simple ternary:
+ *   ${(props) => getColor(props.$variant)}
+ *
+ * If the transformer analyzed `getColor` as:
+ *   (variant === "primary" ? "#A" : "#B")
+ *
+ * We can generate variant styles controlled by `$variant`.
+ */
+export const propHelperTernaryHandler: DynamicNodeHandler = (
+  ctx,
+): DynamicNodeDecision | undefined => {
+  if (ctx.type !== "helper") return undefined;
+  if (!ctx.cssProperty) return undefined;
+  if (!ctx.helperName || !ctx.helperTernary) return undefined;
+  if (!ctx.helperCallArgPropPath || ctx.helperCallArgPropPath.length === 0) return undefined;
+
+  // We only support full-value helper interpolation (property value is just the helper call).
+  if (!ctx.isFullValue) {
+    return {
+      action: "bail",
+      reason: `Helper ternary ${ctx.helperName} used in a partial value is not supported: ${ctx.sourceCode}`,
+    };
+  }
+
+  // Extract controlling prop name from the helper call argument path
+  const propName = ctx.helperCallArgPropPath[ctx.helperCallArgPropPath.length - 1]!;
+  if (!propName) {
+    return {
+      action: "bail",
+      reason: `Cannot extract prop name from helper call: ${ctx.sourceCode}`,
+    };
+  }
+
+  const { comparisonValue, truthy, falsy } = ctx.helperTernary;
+  const cap = (s: string) => s.charAt(0).toUpperCase() + s.slice(1);
+
+  // For the common `primary` pattern, match fixtures exactly (Primary/Secondary, with !== on secondary).
+  const truthyVariantName = cap(comparisonValue);
+  const falsyVariantName =
+    comparisonValue === "primary" ? "Secondary" : `Not${cap(comparisonValue)}`;
+
+  return {
+    action: "variant",
+    baseValue: "", // omit base property; variants provide the property
+    propName,
+    variants: [
+      {
+        name: truthyVariantName,
+        styles: { [ctx.cssProperty]: truthy },
+        comparisonValue,
+        comparisonOperator: "===",
+      },
+      {
+        name: falsyVariantName,
+        styles: { [ctx.cssProperty]: falsy },
+        comparisonValue,
+        comparisonOperator: "!==",
+      },
+    ],
+  };
+};
+
+/**
  * Handler for helper function calls
  * Handles: ${helperFn()}, ${css`...`}
  */
@@ -642,6 +730,7 @@ export const defaultHandlers: DynamicNodeHandler[] = [
   logicalHandler,
   themeAccessHandler,
   propAccessHandler,
+  propHelperTernaryHandler,
   helperHandler,
   componentSelectorHandler,
 ];

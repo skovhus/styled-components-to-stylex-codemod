@@ -81,6 +81,13 @@ export interface ClassifiedInterpolation {
   logicalInfo?: LogicalInfo;
   /** For helpers, the function name */
   helperName?: string;
+  /**
+   * For prop-accessor helper calls like:
+   *   ${(props) => getColor(props.$variant)}
+   *
+   * This captures the first argument when it is a member-expression path.
+   */
+  helperCallArgPropPath?: string[];
   /** For keyframes, the keyframes identifier name */
   keyframesName?: string;
   /** The expression as source code */
@@ -261,6 +268,12 @@ function classifyPropAccessor(
     // Check for call expression inside arrow: props => getColor(props.variant)
     if (body.type === "CallExpression") {
       const helperName = getCallExpressionName(body);
+      // Try to extract the first argument as a prop path, e.g. props.$variant
+      const firstArg = body.arguments[0];
+      const helperCallArgPropPath =
+        firstArg && firstArg.type === "MemberExpression"
+          ? extractMemberPath(firstArg as MemberExpression)
+          : undefined;
       const result: ClassifiedInterpolation = {
         type: "helper",
         location,
@@ -268,6 +281,9 @@ function classifyPropAccessor(
       };
       if (helperName !== undefined) {
         result.helperName = helperName;
+      }
+      if (helperCallArgPropPath) {
+        result.helperCallArgPropPath = helperCallArgPropPath;
       }
       return result;
     }
