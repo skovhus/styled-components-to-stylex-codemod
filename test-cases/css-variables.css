@@ -1,0 +1,13 @@
+:root {
+  --color-primary: #bf4f74;
+  --color-secondary: #4f74bf;
+  --spacing-sm: 8px;
+  --spacing-md: 16px;
+  --spacing-lg: 24px;
+  --border-radius: 4px;
+
+  /* Explicitly set the "fallback" vars too so the fixture looks consistent in Storybook */
+  --text-color: #333;
+  --font-size: 16px;
+  --line-height: 1.5;
+}

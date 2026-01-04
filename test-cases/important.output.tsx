@@ -3,38 +3,38 @@ import * as stylex from "@stylexjs/stylex";
 const styles = stylex.create({
   // Using !important to override inline styles or third-party CSS
   overrideButton: {
-    backgroundColor: "#BF4F74",
-    color: "white",
-    borderWidth: 0,
-    borderStyle: "none",
+    backgroundColor: "#BF4F74 !important",
+    color: "white !important",
+    borderWidth: "0 !important",
+    borderStyle: "none !important",
     padding: "8px 16px",
     borderRadius: "4px",
   },
 
   // Overriding specific properties
   forceWidth: {
-    width: "100%",
-    maxWidth: "500px",
+    width: "100% !important",
+    maxWidth: "500px !important",
     margin: "0 auto",
   },
 
   // Mixed important and normal
   mixedStyles: {
     fontSize: "16px",
-    color: "#333",
+    color: "#333 !important",
     lineHeight: 1.5,
-    margin: 0,
+    margin: "0 !important",
   },
 
   // Important in pseudo-selectors
   importantHover: {
     color: {
       default: "#BF4F74",
-      ":hover": "#4F74BF",
+      ":hover": "#4F74BF !important",
     },
     textDecoration: {
       default: "none",
-      ":hover": "underline",
+      ":hover": "underline !important",
     },
   },
 });

@@ -497,7 +497,7 @@ export function transformWithWarnings(
           // Only accept static decls in helpers for now.
           if (d.value.kind !== "static") return;
           for (const out of cssDeclarationToStylexDeclarations(d)) {
-            helperObj[out.prop] = cssValueToJs(out.value);
+            helperObj[out.prop] = cssValueToJs(out.value, d.important);
           }
         }
 
@@ -781,9 +781,6 @@ export function transformWithWarnings(
     attrWrapper?: {
       kind: "input" | "link";
       // Base style key is `styleKey`; other keys are optional.
-      placeholderKey?: string;
-      disabledKey?: string;
-      readonlyKey?: string;
       checkboxKey?: string;
       radioKey?: string;
       externalKey?: string;
@@ -1773,7 +1770,7 @@ export function transformWithWarnings(
           if (d.value.kind !== "static") continue;
           for (const out of cssDeclarationToStylexDeclarations(d)) {
             if (out.value.kind !== "static") continue;
-            const value = cssValueToJs(out.value);
+            const value = cssValueToJs(out.value, d.important);
             // Only hoist known-inheritable properties. Others would be incorrect.
             if (out.prop !== "color") continue;
             perPropPseudo[out.prop] ??= {};
@@ -1797,7 +1794,7 @@ export function transformWithWarnings(
           if (d.value.kind !== "static") continue;
           for (const out of cssDeclarationToStylexDeclarations(d)) {
             if (out.value.kind !== "static") continue;
-            obj[out.prop] = cssValueToJs(out.value);
+            obj[out.prop] = cssValueToJs(out.value, d.important);
           }
         }
         resolvedStyleObjects.set(decl.siblingWrapper.adjacentKey, obj);
@@ -1821,7 +1818,7 @@ export function transformWithWarnings(
           if (d.value.kind !== "static") continue;
           for (const out of cssDeclarationToStylexDeclarations(d)) {
             if (out.value.kind !== "static") continue;
-            obj[out.prop] = cssValueToJs(out.value);
+            obj[out.prop] = cssValueToJs(out.value, d.important);
           }
         }
         resolvedStyleObjects.set(decl.siblingWrapper.afterKey, obj);
@@ -1838,7 +1835,7 @@ export function transformWithWarnings(
           if (d.value.kind !== "static") continue;
           for (const out of cssDeclarationToStylexDeclarations(d)) {
             if (out.value.kind !== "static") continue;
-            (directChildBaseObj as any)[out.prop] = cssValueToJs(out.value);
+            (directChildBaseObj as any)[out.prop] = cssValueToJs(out.value, d.important);
           }
         }
         continue;
@@ -1849,7 +1846,7 @@ export function transformWithWarnings(
           if (d.value.kind !== "static") continue;
           for (const out of cssDeclarationToStylexDeclarations(d)) {
             if (out.value.kind !== "static") continue;
-            (directChildNotFirstObj as any)[out.prop] = cssValueToJs(out.value);
+            (directChildNotFirstObj as any)[out.prop] = cssValueToJs(out.value, d.important);
           }
         }
         continue;
@@ -1926,7 +1923,7 @@ export function transformWithWarnings(
               if (d.value.kind !== "static") continue;
               for (const out of cssDeclarationToStylexDeclarations(d)) {
                 if (out.value.kind !== "static") continue;
-                const v = cssValueToJs(out.value);
+                const v = cssValueToJs(out.value, d.important);
                 if (!isHover) (baseBucket as any)[out.prop] = v;
                 else (hoverBucket as any)[out.prop] = v;
               }
@@ -1939,14 +1936,17 @@ export function transformWithWarnings(
       // Media query at-rules: represent as prop maps `prop: { default, "@media ...": value }`
       const media = rule.atRuleStack.find((a) => a.startsWith("@media"));
 
-      // Simple pseudo rules: &:hover, &:focus
-      const pseudo = parseSimplePseudo(rule.selector);
+      const isInputIntrinsic = decl.base.kind === "intrinsic" && decl.base.tagName === "input";
+      const selector = normalizeSelectorForInputAttributePseudos(rule.selector, isInputIntrinsic);
+
+      // Simple pseudo rules: &:hover, &:focus, &:disabled, &:read-only
+      const pseudo = parseSimplePseudo(selector);
 
       // Pseudo element rules: &::before, &::placeholder
-      const pseudoElement = parsePseudoElement(rule.selector);
+      const pseudoElement = parsePseudoElement(selector);
 
-      // Attribute selector rules: &[disabled], &[type="checkbox"], &[href^="https"], etc.
-      const attrSel = parseAttributeSelector(rule.selector);
+      // Attribute selector rules: &[type="checkbox"], &[href^="https"], &[target="_blank"]::after, etc.
+      const attrSel = parseAttributeSelector(selector);
       const attrWrapperKind =
         decl.base.kind === "intrinsic" && decl.base.tagName === "input"
           ? "input"
@@ -1971,11 +1971,7 @@ export function transformWithWarnings(
 
         // Record keys for wrapper emission.
         if (attrWrapperKind === "input") {
-          if (attrSel!.kind === "disabled") {
-            decl.attrWrapper.disabledKey = attrTargetStyleKey;
-          } else if (attrSel!.kind === "readonly") {
-            decl.attrWrapper.readonlyKey = attrTargetStyleKey;
-          } else if (attrSel!.kind === "typeCheckbox") {
+          if (attrSel!.kind === "typeCheckbox") {
             decl.attrWrapper.checkboxKey = attrTargetStyleKey;
           } else if (attrSel!.kind === "typeRadio") {
             decl.attrWrapper.radioKey = attrTargetStyleKey;
@@ -2184,7 +2180,7 @@ export function transformWithWarnings(
         }
 
         for (const out of cssDeclarationToStylexDeclarations(d)) {
-          let value = cssValueToJs(out.value);
+          let value = cssValueToJs(out.value, d.important);
           // CSS `content` values must remain quoted. Fixtures expect `"..."` inside the string.
           if (out.prop === "content" && typeof value === "string") {
             const m = value.match(/^['"]([\s\S]*)['"]$/);
@@ -2233,24 +2229,6 @@ export function transformWithWarnings(
           }
 
           if (pseudoElement) {
-            // For attribute-selector fixtures, keep placeholder styles as a separate style object
-            // so wrappers can apply it consistently (matches our intended outputs).
-            if (
-              pseudoElement === "::placeholder" &&
-              decl.base.kind === "intrinsic" &&
-              decl.base.tagName === "input"
-            ) {
-              decl.needsWrapperComponent = true;
-              decl.attrWrapper ??= { kind: "input" };
-              const key = `${decl.styleKey}Placeholder`;
-              decl.attrWrapper.placeholderKey = key;
-              const bucket = attrBuckets.get(key) ?? {};
-              attrBuckets.set(key, bucket);
-              const nested = (bucket[pseudoElement] as any) ?? {};
-              nested[out.prop] = value;
-              bucket[pseudoElement] = nested;
-              continue;
-            }
             nestedSelectors[pseudoElement] ??= {};
             nestedSelectors[pseudoElement]![out.prop] = value;
             continue;
@@ -2395,29 +2373,6 @@ export function transformWithWarnings(
         delete (styleObj as any).opacity;
         delete (styleObj as any).transform;
       }
-    }
-
-    // If we only created an input placeholder bucket (no other attr-based variants),
-    // fold it back into the base style object so we don't require a wrapper component.
-    if (
-      decl.attrWrapper?.kind === "input" &&
-      decl.attrWrapper.placeholderKey &&
-      !decl.attrWrapper.disabledKey &&
-      !decl.attrWrapper.readonlyKey &&
-      !decl.attrWrapper.checkboxKey &&
-      !decl.attrWrapper.radioKey
-    ) {
-      const key = decl.attrWrapper.placeholderKey;
-      const bucket = attrBuckets.get(key);
-      const nested = bucket?.["::placeholder"];
-      if (nested && typeof nested === "object") {
-        styleObj["::placeholder"] = nested as any;
-      }
-      attrBuckets.delete(key);
-      delete decl.attrWrapper.placeholderKey;
-      // If nothing else requires the wrapper, drop it.
-      delete (decl as any).attrWrapper;
-      decl.needsWrapperComponent = false;
     }
 
     // Note: don't add/remove focus outlines or border widths via codemod heuristics.
@@ -3254,27 +3209,6 @@ export function transformWithWarnings(
         const aw = d.attrWrapper!;
         const styleArgs: any[] = [
           j.memberExpression(j.identifier("styles"), j.identifier(d.styleKey)),
-          ...(aw.placeholderKey
-            ? [j.memberExpression(j.identifier("styles"), j.identifier(aw.placeholderKey))]
-            : []),
-          ...(aw.disabledKey
-            ? [
-                j.logicalExpression(
-                  "&&",
-                  j.identifier("disabled"),
-                  j.memberExpression(j.identifier("styles"), j.identifier(aw.disabledKey)),
-                ),
-              ]
-            : []),
-          ...(aw.readonlyKey
-            ? [
-                j.logicalExpression(
-                  "&&",
-                  j.identifier("readOnly"),
-                  j.memberExpression(j.identifier("styles"), j.identifier(aw.readonlyKey)),
-                ),
-              ]
-            : []),
           ...(aw.checkboxKey
             ? [
                 j.logicalExpression(
@@ -3298,15 +3232,13 @@ export function transformWithWarnings(
         emitted.push(
           j.template.statement`
             function ${j.identifier(d.localName)}(props: InputProps) {
-              const { type, disabled, readOnly, className, ...rest } = props;
+              const { type, className, ...rest } = props;
               const sx = stylex.props(${styleArgs});
               return (
                 <input
                   {...sx}
                   className={[sx.className, className].filter(Boolean).join(" ")}
                   type={type}
-                  disabled={disabled}
-                  readOnly={readOnly}
                   {...rest}
                 />
               );
@@ -4319,12 +4251,17 @@ function isAstNode(v: unknown): v is { type: string } {
   return !!v && typeof v === "object" && typeof (v as any).type === "string";
 }
 
-function cssValueToJs(value: any): unknown {
+function cssValueToJs(value: any, important = false): unknown {
   if (value.kind === "static") {
-    // Try to return number if purely numeric and no unit.
-    if (/^-?\d+(\.\d+)?$/.test(value.value)) {
-      return Number(value.value);
+    // Preserve `!important` by emitting a string value that includes it.
+    // (StyleX supports `!important` in values and this is necessary to override inline styles.)
+    if (important) {
+      const raw = String(value.value);
+      return raw.includes("!important") ? raw : `${raw} !important`;
     }
+
+    // Try to return number if purely numeric and no unit.
+    if (/^-?\d+(\.\d+)?$/.test(value.value)) return Number(value.value);
     return value.value;
   }
   // interpolated values are handled earlier for now
@@ -4343,14 +4280,7 @@ function parsePseudoElement(selector: string): string | null {
 }
 
 function parseAttributeSelector(selector: string): {
-  kind:
-    | "disabled"
-    | "readonly"
-    | "typeCheckbox"
-    | "typeRadio"
-    | "hrefStartsHttps"
-    | "hrefEndsPdf"
-    | "targetBlankAfter";
+  kind: "typeCheckbox" | "typeRadio" | "hrefStartsHttps" | "hrefEndsPdf" | "targetBlankAfter";
   suffix: string;
   pseudoElement?: string | null;
 } | null {
@@ -4371,13 +4301,6 @@ function parseAttributeSelector(selector: string): {
   const m = selector.match(/^&\[(.+)\]$/) ?? selector.match(/^\[(.+)\]$/);
   if (!m) return null;
   const inside = m[1]!;
-
-  // disabled
-  if (inside === "disabled") return { kind: "disabled", suffix: "Disabled" };
-
-  // readonly
-  if (inside === "readonly" || inside === "readOnly")
-    return { kind: "readonly", suffix: "Readonly" };
 
   // type="checkbox" / type="radio"
   const typeEq = inside.match(/^type\s*=\s*"(checkbox|radio)"$/);
@@ -4417,6 +4340,22 @@ function parseAttributeSelector(selector: string): {
   }
 
   return null;
+}
+
+function normalizeSelectorForInputAttributePseudos(selector: string, isInput: boolean): string {
+  if (!isInput) return selector;
+
+  // Convert input attribute selectors into equivalent pseudo-classes so they can live
+  // in the base style object (no wrapper needed).
+  // - &[disabled]  -> &:disabled
+  // - &[readonly]  -> &:read-only
+  // - &[readOnly]  -> &:read-only (defensive)
+  const m = selector.match(/^&\[(.+)\]$/) ?? selector.match(/^\[(.+)\]$/);
+  if (!m) return selector;
+  const inside = m[1]!.replace(/\s+/g, "");
+  if (inside === "disabled") return "&:disabled";
+  if (inside === "readonly" || inside === "readOnly") return "&:read-only";
+  return selector;
 }
 
 function toSuffixFromProp(propName: string): string {
