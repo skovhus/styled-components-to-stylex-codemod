@@ -300,10 +300,8 @@ export const propHelperTernaryHandler: DynamicNodeHandler = (
   const { comparisonValue, truthy, falsy } = ctx.helperTernary;
   const cap = (s: string) => s.charAt(0).toUpperCase() + s.slice(1);
 
-  // For the common `primary` pattern, match fixtures exactly (Primary/Secondary, with !== on secondary).
   const truthyVariantName = cap(comparisonValue);
-  const falsyVariantName =
-    comparisonValue === "primary" ? "Secondary" : `Not${cap(comparisonValue)}`;
+  const falsyVariantName = `Not${cap(comparisonValue)}`;
 
   return {
     action: "variant",

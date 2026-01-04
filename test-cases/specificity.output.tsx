@@ -1,3 +1,4 @@
+// expected-warnings: specificity
 import React from "react";
 import * as stylex from "@stylexjs/stylex";
 

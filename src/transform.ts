@@ -266,16 +266,32 @@ export function transformWithWarnings(
   const cssHelperVariables = new Set<string>(); // Variable names assigned from css`` (e.g., 'truncate')
   const createGlobalStyleIdentifiers = new Set<string>();
   const globalStyleDeclarations = new Set<string>(); // Variable names using createGlobalStyle
+  const styledFactoryIdentifiers = new Set<string>(); // default/ns import names for styled factory (e.g., styled, sc)
+  const keyframesImportIdentifiers = new Set<string>(); // local import name for keyframes tag (e.g., keyframes, kf)
 
   // Track what's imported from styled-components
   styledImports.forEach((importPath) => {
     const specifiers = importPath.node.specifiers ?? [];
     for (const specifier of specifiers) {
+      if (specifier.type === "ImportDefaultSpecifier") {
+        if (specifier.local?.type === "Identifier") {
+          styledFactoryIdentifiers.add(specifier.local.name);
+        }
+        continue;
+      }
+      if (specifier.type === "ImportNamespaceSpecifier") {
+        if (specifier.local?.type === "Identifier") {
+          styledFactoryIdentifiers.add(specifier.local.name);
+        }
+        continue;
+      }
       if (specifier.type === "ImportSpecifier") {
         const imported = specifier.imported;
         if (imported.type === "Identifier") {
           if (imported.name === "keyframes") {
-            // Track keyframes declarations later
+            const localName =
+              specifier.local?.type === "Identifier" ? specifier.local.name : imported.name;
+            keyframesImportIdentifiers.add(localName);
           } else if (imported.name === "css") {
             const localName =
               specifier.local?.type === "Identifier" ? specifier.local.name : imported.name;
@@ -301,6 +317,11 @@ export function transformWithWarnings(
     }
   });
 
+  // Back-compat / default expectation: many codebases use `styled` as the factory identifier.
+  if (styledFactoryIdentifiers.size === 0) {
+    styledFactoryIdentifiers.add("styled");
+  }
+
   // Find keyframes declarations
   root
     .find(j.VariableDeclarator, {
@@ -308,7 +329,10 @@ export function transformWithWarnings(
     })
     .forEach((path) => {
       const init = path.node.init as TaggedTemplateExpression;
-      if (init.tag.type === "Identifier" && init.tag.name === "keyframes") {
+      if (
+        init.tag.type === "Identifier" &&
+        (keyframesImportIdentifiers.has(init.tag.name) || init.tag.name === "keyframes")
+      ) {
         if (path.node.id.type === "Identifier") {
           keyframesIdentifiers.add(path.node.id.name);
         }
@@ -330,7 +354,7 @@ export function transformWithWarnings(
   // Find styled component declarations
   root.find(j.VariableDeclarator).forEach((path) => {
     const init = path.node.init;
-    if (isStyledComponentDeclaration(init)) {
+    if (isStyledComponentDeclaration(init, styledFactoryIdentifiers)) {
       if (path.node.id.type === "Identifier") {
         styledComponentIdentifiers.add(path.node.id.name);
       }
@@ -401,7 +425,7 @@ export function transformWithWarnings(
   // Process styled component declarations
   root.find(j.VariableDeclarator).forEach((path) => {
     const init = path.node.init;
-    if (!isStyledComponentDeclaration(init)) {
+    if (!isStyledComponentDeclaration(init, styledFactoryIdentifiers)) {
       return;
     }
 
@@ -425,6 +449,7 @@ export function transformWithWarnings(
       additionalImports,
       componentsWithForwardedAsProp.has(componentName),
       leadingComments.length > 0 ? leadingComments : undefined,
+      { styledFactoryIdentifiers },
     );
 
     if (styleInfo) {
@@ -484,7 +509,10 @@ export function transformWithWarnings(
     })
     .forEach((path) => {
       const init = path.node.init as TaggedTemplateExpression;
-      if (init.tag.type === "Identifier" && init.tag.name === "keyframes") {
+      if (
+        init.tag.type === "Identifier" &&
+        (keyframesImportIdentifiers.has(init.tag.name) || init.tag.name === "keyframes")
+      ) {
         const name = path.node.id.type === "Identifier" ? path.node.id.name : "animation";
         const keyframeStyles = processKeyframes(j, init, classificationCtx);
         if (keyframeStyles) {
@@ -511,6 +539,30 @@ export function transformWithWarnings(
     // Generate stylex.create() and stylex.keyframes() calls
     const stylexCode = generateStyleXCode(j, styleInfos, keyframesStyles, adapter, cssHelperStyles);
 
+    // Preserve top-of-file comments that may be attached to the styled-components import
+    // (e.g., `// oxlint-disable ...`).
+    const preservedLeadingComments: Array<{
+      type: string;
+      value: string;
+      leading?: boolean;
+      trailing?: boolean;
+    }> = [];
+    styledImports.forEach((p) => {
+      const comments = (p.node as unknown as { comments?: unknown[] }).comments;
+      if (!comments || comments.length === 0) return;
+      for (const c of comments as Array<{
+        type: string;
+        value: string;
+        leading?: boolean;
+        trailing?: boolean;
+      }>) {
+        // Keep leading comments (incl. file headers). Avoid moving trailing comments.
+        if (c.leading === false) continue;
+        if (c.trailing) continue;
+        preservedLeadingComments.push(c);
+      }
+    });
+
     // Remove styled-components import and add stylex import
     styledImports.remove();
 
@@ -521,18 +573,38 @@ export function transformWithWarnings(
       })
       .remove();
 
-    // Add stylex import at the top
-    const stylexImport = j.importDeclaration(
-      [j.importNamespaceSpecifier(j.identifier("stylex"))],
-      j.literal("@stylexjs/stylex"),
-    );
+    // Preserve an existing StyleX import if present; only add it when missing.
+    const existingStylexImport = root.find(j.ImportDeclaration, {
+      source: { value: "@stylexjs/stylex" },
+    });
+    if (existingStylexImport.length === 0) {
+      const stylexImport = j.importDeclaration(
+        [j.importNamespaceSpecifier(j.identifier("stylex"))],
+        j.literal("@stylexjs/stylex"),
+      );
 
-    // Find the first import or the start of the file
-    const firstImport = root.find(j.ImportDeclaration).at(0);
-    if (firstImport.length > 0) {
-      firstImport.insertBefore(stylexImport);
-    } else {
-      root.get().node.program.body.unshift(stylexImport);
+      // Find the first import or the start of the file
+      const firstImport = root.find(j.ImportDeclaration).at(0);
+      if (firstImport.length > 0) {
+        firstImport.insertBefore(stylexImport);
+      } else {
+        root.get().node.program.body.unshift(stylexImport);
+      }
+    }
+
+    // Re-attach any preserved file header comments at the Program level so they stay at the
+    // very top of the file even if we later insert new imports before existing ones.
+    if (preservedLeadingComments.length > 0) {
+      const programAny = root.get().node.program as unknown as { comments?: unknown[] };
+      const merged = [...preservedLeadingComments, ...(programAny.comments ?? [])];
+      const seen = new Set<string>();
+      programAny.comments = merged.filter((c) => {
+        const cc = c as { type?: string; value?: string };
+        const key = `${cc.type ?? ""}:${cc.value ?? ""}`;
+        if (seen.has(key)) return false;
+        seen.add(key);
+        return true;
+      });
     }
 
     // Add adapter imports
@@ -798,23 +870,12 @@ export function transformWithWarnings(
 
   let code: string | null = null;
   if (hasChanges) {
-    // Prefix now-unused simple helper functions with `_` to avoid unused warnings
-    const renamedHelpers = prefixUnusedTernaryHelpers(j, root, helperTernaries);
-
     code = root.toSource();
     // Remove spurious blank lines that jscodeshift/recast inserts between object properties
     code = code
       .replace(/\n\n+/g, "\n\n")
       .replace(/{\n\n/g, "{\n")
       .replace(/,\n\n(\s*["\w])/g, ",\n$1");
-
-    // For fixture parity, move renamed helper declarations (e.g., `_getColor`) near the bottom (before App).
-    if (code && renamedHelpers.length > 0) {
-      code = moveRenamedHelperDeclarationsBeforeApp(code, renamedHelpers);
-    }
-
-    // Preserve fixture spacing: keep a blank line between `const` statements when a section header comment precedes.
-    code = code.replace(/(^\s*\/\/[^\n]*\n\s*const [^\n]+;\n)(\s*const )/gm, "$1\n$2");
   }
 
   return {
@@ -826,7 +887,10 @@ export function transformWithWarnings(
 /**
  * Check if an expression is a styled component declaration
  */
-function isStyledComponentDeclaration(expr: Expression | null | undefined): boolean {
+function isStyledComponentDeclaration(
+  expr: Expression | null | undefined,
+  styledFactoryIdentifiers: Set<string>,
+): boolean {
   if (!expr) return false;
 
   // styled.div`...` or styled(Component)`...`
@@ -837,7 +901,7 @@ function isStyledComponentDeclaration(expr: Expression | null | undefined): bool
     if (
       tag.type === "MemberExpression" &&
       tag.object.type === "Identifier" &&
-      tag.object.name === "styled"
+      styledFactoryIdentifiers.has(tag.object.name)
     ) {
       return true;
     }
@@ -845,7 +909,7 @@ function isStyledComponentDeclaration(expr: Expression | null | undefined): bool
     if (
       tag.type === "CallExpression" &&
       tag.callee.type === "Identifier" &&
-      tag.callee.name === "styled"
+      styledFactoryIdentifiers.has(tag.callee.name)
     ) {
       return true;
     }
@@ -855,7 +919,7 @@ function isStyledComponentDeclaration(expr: Expression | null | undefined): bool
       if (callee.type === "MemberExpression" && callee.property.type === "Identifier") {
         if (callee.property.name === "attrs" || callee.property.name === "withConfig") {
           // Check if the object is styled.element or styled(Component)
-          return isStyledBase(callee.object as Expression);
+          return isStyledBase(callee.object as Expression, styledFactoryIdentifiers);
         }
       }
     }
@@ -870,7 +934,7 @@ function isStyledComponentDeclaration(expr: Expression | null | undefined): bool
     if (
       callee.type === "MemberExpression" &&
       callee.object.type === "Identifier" &&
-      callee.object.name === "styled" &&
+      styledFactoryIdentifiers.has(callee.object.name) &&
       callee.property.type === "Identifier"
     ) {
       const arg = callExpr.arguments[0];
@@ -887,7 +951,7 @@ function isStyledComponentDeclaration(expr: Expression | null | undefined): bool
     // styled(Component)({...})
     if (callee.type === "CallExpression") {
       const innerCallee = callee.callee;
-      if (innerCallee.type === "Identifier" && innerCallee.name === "styled") {
+      if (innerCallee.type === "Identifier" && styledFactoryIdentifiers.has(innerCallee.name)) {
         const arg = callExpr.arguments[0];
         if (
           arg?.type === "ObjectExpression" ||
@@ -906,13 +970,19 @@ function isStyledComponentDeclaration(expr: Expression | null | undefined): bool
 /**
  * Check if an expression is a styled base (styled.div or styled(Component))
  */
-function isStyledBase(expr: Expression | null | undefined): boolean {
+function isStyledBase(
+  expr: Expression | null | undefined,
+  styledFactoryIdentifiers: Set<string>,
+): boolean {
   if (!expr) return false;
 
   // styled.div
   if (expr.type === "MemberExpression") {
     const memberExpr = expr as MemberExpression;
-    if (memberExpr.object.type === "Identifier" && memberExpr.object.name === "styled") {
+    if (
+      memberExpr.object.type === "Identifier" &&
+      styledFactoryIdentifiers.has(memberExpr.object.name)
+    ) {
       return true;
     }
   }
@@ -920,7 +990,10 @@ function isStyledBase(expr: Expression | null | undefined): boolean {
   // styled(Component)
   if (expr.type === "CallExpression") {
     const callExpr = expr as CallExpression;
-    if (callExpr.callee.type === "Identifier" && callExpr.callee.name === "styled") {
+    if (
+      callExpr.callee.type === "Identifier" &&
+      styledFactoryIdentifiers.has(callExpr.callee.name)
+    ) {
       return true;
     }
   }
@@ -943,7 +1016,9 @@ function processStyledComponent(
   additionalImports: Set<string>,
   hasAsPropInJSX = false,
   leadingComments?: Array<{ type: string; value: string }>,
+  transformOpts?: { styledFactoryIdentifiers: Set<string> },
 ): StyleInfo | null {
+  const styledFactoryIdentifiers = transformOpts?.styledFactoryIdentifiers ?? new Set(["styled"]);
   let templateLiteral: TemplateLiteral | null = null;
   let styleObject: Expression | null = null;
   let baseElement = "div";
@@ -962,7 +1037,7 @@ function processStyledComponent(
       baseElement = tag.property.name;
     } else if (tag.type === "CallExpression") {
       // styled(Component) or styled.div.attrs(...)
-      if (tag.callee.type === "Identifier" && tag.callee.name === "styled") {
+      if (tag.callee.type === "Identifier" && styledFactoryIdentifiers.has(tag.callee.name)) {
         // styled(Component)
         const arg = tag.arguments[0];
         if (arg?.type === "Identifier") {
@@ -989,7 +1064,10 @@ function processStyledComponent(
             baseElement = obj.property.name;
           } else if (obj.type === "CallExpression") {
             const innerCallee = obj.callee;
-            if (innerCallee.type === "Identifier" && innerCallee.name === "styled") {
+            if (
+              innerCallee.type === "Identifier" &&
+              styledFactoryIdentifiers.has(innerCallee.name)
+            ) {
               const arg = obj.arguments[0];
               if (arg?.type === "Identifier") {
                 isExtending = true;
@@ -1009,7 +1087,7 @@ function processStyledComponent(
       // styled.div({...})
       if (
         callee.object.type === "Identifier" &&
-        callee.object.name === "styled" &&
+        styledFactoryIdentifiers.has(callee.object.name) &&
         callee.property.type === "Identifier"
       ) {
         baseElement = callee.property.name;
@@ -1040,7 +1118,7 @@ function processStyledComponent(
     } else if (callee.type === "CallExpression") {
       // styled(Component)({...})
       const innerCallee = callee.callee;
-      if (innerCallee.type === "Identifier" && innerCallee.name === "styled") {
+      if (innerCallee.type === "Identifier" && styledFactoryIdentifiers.has(innerCallee.name)) {
         const componentArg = callee.arguments[0];
         if (componentArg?.type === "Identifier") {
           isExtending = true;
@@ -1280,7 +1358,7 @@ function processStyledComponent(
     bailedExpressions.length > 0;
 
   // Helper-derived ternary variants include an explicit "else" branch (stored as !==).
-  // These should generate wrappers and use a `*Base` style key to match fixtures.
+  // These should generate wrappers (the wrapper applies base + variant style).
   const hasElseVariants = Array.from(variantConditions.values()).some(
     (c) => c.comparisonOperator === "!==",
   );
@@ -2508,81 +2586,6 @@ function collectSimpleTernaryHelpers(
   });
 
   return map;
-}
-
-function prefixUnusedTernaryHelpers(
-  j: JSCodeshift,
-  root: Collection,
-  helperTernaries: Map<string, HelperTernaryInfo>,
-): string[] {
-  const renamedHelpers: string[] = [];
-
-  for (const helperName of helperTernaries.keys()) {
-    if (helperName.startsWith("_")) continue;
-
-    // Count references excluding declaration identifiers
-    const refs = root
-      .find(j.Identifier, { name: helperName })
-      .filter((p) => {
-        const parent = p.parent?.node;
-        if (!parent) return true;
-
-        // const helperName = ...
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        const parentAny: any = parent;
-        if (parent.type === "VariableDeclarator" && parentAny.id === p.node) {
-          return false;
-        }
-        // function helperName() {}
-        if (
-          parent.type === "FunctionDeclaration" &&
-          // eslint-disable-next-line @typescript-eslint/no-explicit-any
-          (parent as any).id === p.node
-        ) {
-          return false;
-        }
-        return true;
-      })
-      .size();
-
-    if (refs > 0) continue;
-
-    const newName = `_${helperName}`;
-    renamedHelpers.push(newName);
-
-    // Rename variable declarator id
-    root.find(j.VariableDeclarator).forEach((p) => {
-      if (p.node.id.type !== "Identifier" || p.node.id.name !== helperName) return;
-      p.node.id = j.identifier(newName);
-    });
-
-    // Rename function declarations, if any
-    root.find(j.FunctionDeclaration).forEach((p) => {
-      const id = p.node.id;
-      if (id && id.type === "Identifier" && id.name === helperName) {
-        p.node.id = j.identifier(newName);
-      }
-    });
-  }
-
-  return renamedHelpers;
-}
-
-function moveRenamedHelperDeclarationsBeforeApp(code: string, renamedHelpers: string[]): string {
-  let out = code;
-  for (const newName of renamedHelpers) {
-    // Capture optional leading comment on the immediately preceding line.
-    const re = new RegExp(
-      String.raw`(^\s*\/\/.*\n)?(^\s*const\s+${newName.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}\s*=.*\n)`,
-      "m",
-    );
-    const m = out.match(re);
-    if (!m) continue;
-    const block = (m[1] ?? "") + (m[2] ?? "");
-    out = out.replace(re, "");
-    out = out.replace(/\n(export\s+(?:const|function)\s+App\b)/, `\n\n${block}\n$1`);
-  }
-  return out;
 }
 
 /**
@@ -4493,7 +4496,7 @@ function generateWrapperComponents(
         }
       }
 
-      // Reorder filtered props for fixture parity:
+      // Reorder filtered props deterministically:
       // - Prefer the shouldForwardProp filter list order when it fully covers the filtered props.
       // - Otherwise fall back to prop usage order from style/interpolation processing.
       const nonTransient = propsToFilter.filter((p) => !p.startsWith("$"));
@@ -5030,15 +5033,3 @@ function toCamelCase(str: string): string {
 function capitalize(str: string): string {
   return str.charAt(0).toUpperCase() + str.slice(1);
 }
-
-// Re-export adapter types for convenience
-export type {
-  Adapter,
-  AdapterContext,
-  DynamicNodeContext,
-  DynamicNodeDecision,
-  DynamicNodeHandler,
-  FallbackBehavior,
-  VariantStyle,
-} from "./adapter.js";
-export { defaultAdapter, createAdapter, executeDynamicNodeHandlers } from "./adapter.js";

@@ -1,14 +1,13 @@
+// oxlint-disable no-unused-vars
 import * as stylex from "@stylexjs/stylex";
 
 // String interpolation for dynamic values
 const dynamicColor = "#BF4F74";
-
 const spacing = 16;
 const borderRadius = "4px";
 
 // Template literal with expressions
 const fontSize = 14;
-
 const lineHeight = 1.5;
 
 // Conditional string interpolation
@@ -25,6 +24,9 @@ const theme = {
     md: "16px",
   },
 };
+
+// Function returning string
+const getColor = (variant: string) => (variant === "primary" ? "#BF4F74" : "#4F74BF");
 
 const styles = stylex.create({
   button: {
@@ -67,7 +69,7 @@ const styles = stylex.create({
   dynamicBoxPrimary: {
     backgroundColor: "#BF4F74",
   },
-  dynamicBoxSecondary: {
+  dynamicBoxNotPrimary: {
     backgroundColor: "#4F74BF",
   },
 });
@@ -78,7 +80,7 @@ function DynamicBox(props) {
   const sx = stylex.props(
     styles.dynamicBoxBase,
     $variant === "primary" && styles.dynamicBoxPrimary,
-    $variant !== "primary" && styles.dynamicBoxSecondary,
+    $variant !== "primary" && styles.dynamicBoxNotPrimary,
   );
 
   return (
@@ -87,9 +89,6 @@ function DynamicBox(props) {
     </div>
   );
 }
-
-// Function returning string
-const _getColor = (variant: string) => (variant === "primary" ? "#BF4F74" : "#4F74BF");
 
 export const App = () => (
   <div>

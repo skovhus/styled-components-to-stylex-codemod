@@ -172,7 +172,6 @@ export type DynamicNodeHandler = (context: DynamicNodeContext) => DynamicNodeDec
  */
 export type FallbackBehavior =
   | "bail" // Skip with warning (default)
-  | "inline-comment" // Insert TODO comment in output
   | "throw"; // Fail the transform
 
 /**
@@ -215,7 +214,6 @@ export interface Adapter {
   /**
    * What to do when no handler claims the node.
    * - 'bail': Skip with warning (default)
-   * - 'inline-comment': Insert TODO comment in output
    * - 'throw': Fail the transform
    */
   fallbackBehavior?: FallbackBehavior;
@@ -292,11 +290,6 @@ export function getFallbackDecision(
       return {
         action: "bail",
         reason: `No handler for ${context.type} interpolation: ${context.sourceCode}`,
-      };
-    case "inline-comment":
-      return {
-        action: "rewrite",
-        code: `/* TODO: Convert interpolation: ${context.sourceCode} */ null`,
       };
     case "throw":
       throw new Error(

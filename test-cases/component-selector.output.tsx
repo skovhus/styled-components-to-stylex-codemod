@@ -1,3 +1,4 @@
+// expected-warnings: component-selector
 import * as stylex from "@stylexjs/stylex";
 
 const styles = stylex.create({

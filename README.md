@@ -16,7 +16,10 @@ Create a transform script with a custom adapter to control how your styled-compo
 
 ```typescript
 // run-transform.ts
-import { runTransform, createAdapter } from "styled-components-to-stylex-codemod";
+import {
+  runTransform,
+  createAdapter,
+} from "styled-components-to-stylex-codemod";
 
 const adapter = createAdapter({
   transformValue({ path }) {
@@ -61,9 +64,9 @@ npx tsx run-transform.ts
 
 ```typescript
 interface RunTransformResult {
-  errors: number;      // Files that had errors
-  unchanged: number;   // Files that were unchanged
-  skipped: number;     // Files that were skipped
+  errors: number; // Files that had errors
+  unchanged: number; // Files that were unchanged
+  skipped: number; // Files that were skipped
   transformed: number; // Files that were transformed
   timeElapsed: number; // Total time in seconds
 }
@@ -78,7 +81,10 @@ The adapter controls how styled-components values are converted to StyleX. You s
 Use `createAdapter` to build an adapter with your project's conventions:
 
 ```typescript
-import { runTransform, createAdapter } from "styled-components-to-stylex-codemod";
+import {
+  runTransform,
+  createAdapter,
+} from "styled-components-to-stylex-codemod";
 
 const adapter = createAdapter({
   transformValue({ path, defaultValue, valueType }) {
@@ -140,7 +146,9 @@ interface Adapter {
    * Called for each ${...} expression in template literals.
    * Return undefined to delegate to the handlers array or use default handling.
    */
-  handleDynamicNode?(context: DynamicNodeContext): DynamicNodeDecision | undefined;
+  handleDynamicNode?(
+    context: DynamicNodeContext
+  ): DynamicNodeDecision | undefined;
 
   /**
    * Additional handlers to try after handleDynamicNode.
@@ -151,7 +159,6 @@ interface Adapter {
   /**
    * What to do when no handler claims the node.
    * - 'bail': Skip with warning (default)
-   * - 'inline-comment': Insert TODO comment in output
    * - 'throw': Fail the transform
    */
   fallbackBehavior?: FallbackBehavior;
@@ -171,7 +178,10 @@ interface Adapter {
    * Called when encountering var(--name) or var(--name, fallback) in CSS values.
    * Return undefined to keep the original var() syntax.
    */
-  resolveCssVariable?(name: string, fallback?: string): CssVariableResolution | undefined;
+  resolveCssVariable?(
+    name: string,
+    fallback?: string
+  ): CssVariableResolution | undefined;
 
   /**
    * Resolve a theme path to StyleX-compatible code.
@@ -227,8 +237,18 @@ type DynamicNodeDecision =
   | { action: "convert"; value: string | number; imports?: string[] }
   | { action: "rewrite"; code: string; imports?: string[] }
   | { action: "bail"; reason: string }
-  | { action: "variant"; baseValue: string | number; variants: VariantStyle[]; propName: string }
-  | { action: "dynamic-fn"; paramName: string; paramType?: string; valueExpression: string };
+  | {
+      action: "variant";
+      baseValue: string | number;
+      variants: VariantStyle[];
+      propName: string;
+    }
+  | {
+      action: "dynamic-fn";
+      paramName: string;
+      paramType?: string;
+      valueExpression: string;
+    };
 ```
 
 | Action       | Description                                           |
