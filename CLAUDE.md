@@ -99,10 +99,13 @@ import { runTransform } from "styled-components-to-stylex-codemod";
 import { defineAdapter } from "styled-components-to-stylex-codemod/adapter";
 
 const adapter = defineAdapter({
-  resolveValue({ path }) {
-    return `themeVars.${path.replace(/\./g, "_")}`;
+  resolveValue(ctx) {
+    if (ctx.kind !== "theme") return null;
+    return {
+      expr: `themeVars.${ctx.path.replace(/\./g, "_")}`,
+      imports: ["import { themeVars } from './theme.stylex';"],
+    };
   },
-  imports: ["import { themeVars } from './theme.stylex';"],
 });
 
 await runTransform({

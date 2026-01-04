@@ -35,7 +35,7 @@ export interface TransformResult {
 export interface TransformOptions extends Options {
   /**
    * Adapter for customizing the transform.
-   * Controls value resolution, imports, declarations, and custom handlers.
+   * Controls value resolution, resolver-provided imports, and custom handlers.
    */
   adapter: Adapter;
 }
@@ -112,6 +112,7 @@ export function transformWithWarnings(
 
   const adapter = normalizeAdapter(options.adapter);
   const allHandlers: DynamicHandler[] = [...adapter.handlers, ...builtinHandlers()];
+  const resolverImports = new Set<string>();
 
   let hasChanges = false;
 
@@ -181,6 +182,170 @@ export function transformWithWarnings(
     if (prop === "background") return "backgroundColor";
     if (prop.startsWith("--")) return prop;
     return prop.replace(/-([a-z])/g, (_, ch: string) => ch.toUpperCase());
+  };
+
+  const parseExpr = (exprSource: string): any => {
+    try {
+      const program = j(`(${exprSource});`);
+      const stmt = program.find(j.ExpressionStatement).nodes()[0];
+      return (stmt as any)?.expression ?? null;
+    } catch {
+      return null;
+    }
+  };
+
+  type VarCall = {
+    start: number;
+    end: number;
+    name: string;
+    fallback?: string;
+  };
+
+  const findCssVarCalls = (raw: string): VarCall[] => {
+    const out: VarCall[] = [];
+    let i = 0;
+    while (i < raw.length) {
+      const idx = raw.indexOf("var(", i);
+      if (idx === -1) break;
+      let jIdx = idx + 4; // after "var("
+      // Find matching ')'
+      let depth = 1;
+      let end = -1;
+      for (let k = jIdx; k < raw.length; k++) {
+        const ch = raw[k]!;
+        if (ch === "(") depth++;
+        else if (ch === ")") {
+          depth--;
+          if (depth === 0) {
+            end = k + 1; // exclusive
+            break;
+          }
+        }
+      }
+      if (end === -1) {
+        i = idx + 4;
+        continue;
+      }
+
+      // Parse inside `var( ... )` conservatively.
+      const inside = raw.slice(jIdx, end - 1);
+      let p = 0;
+      while (p < inside.length && /\s/.test(inside[p]!)) p++;
+      const nameStart = p;
+      while (p < inside.length && !/\s/.test(inside[p]!) && inside[p] !== "," && inside[p] !== ")")
+        p++;
+      const name = inside.slice(nameStart, p).trim();
+      if (!name.startsWith("--")) {
+        i = end;
+        continue;
+      }
+      while (p < inside.length && /\s/.test(inside[p]!)) p++;
+      let fallback: string | undefined;
+      if (inside[p] === ",") {
+        fallback = inside
+          .slice(p + 1)
+          .trim()
+          // normalize trailing commas/spaces (shouldn’t occur, but keep defensive)
+          .replace(/,\s*$/, "");
+      }
+      out.push({ start: idx, end, name, ...(fallback ? { fallback } : {}) });
+      i = end;
+    }
+    return out;
+  };
+
+  const rewriteCssVarsInString = (
+    raw: string,
+    definedVars: Map<string, string>,
+    varsToDrop: Set<string>,
+  ): unknown => {
+    if (!adapter.resolveValue) return raw;
+    const calls = findCssVarCalls(raw);
+    if (calls.length === 0) return raw;
+
+    const segments: Array<
+      { kind: "text"; value: string } | { kind: "expr"; expr: any; dropName?: string }
+    > = [];
+
+    let last = 0;
+    for (const c of calls) {
+      if (c.start > last) {
+        segments.push({ kind: "text", value: raw.slice(last, c.start) });
+      }
+      const definedValue = definedVars.get(c.name);
+      const res = adapter.resolveValue({
+        kind: "cssVariable",
+        name: c.name,
+        ...(c.fallback ? { fallback: c.fallback } : {}),
+        ...(definedValue ? { definedValue } : {}),
+      });
+      if (!res) {
+        segments.push({ kind: "text", value: raw.slice(c.start, c.end) });
+      } else {
+        for (const imp of res.imports ?? []) resolverImports.add(imp);
+        const exprAst = parseExpr(res.expr);
+        if (!exprAst) {
+          // If we can’t parse the expression, don’t risk emitting broken AST—keep original.
+          segments.push({ kind: "text", value: raw.slice(c.start, c.end) });
+        } else {
+          if (res.dropDefinition) varsToDrop.add(c.name);
+          segments.push({ kind: "expr", expr: exprAst });
+        }
+      }
+      last = c.end;
+    }
+    if (last < raw.length) segments.push({ kind: "text", value: raw.slice(last) });
+
+    const exprCount = segments.filter((s) => s.kind === "expr").length;
+    if (exprCount === 0) return raw;
+
+    // If it’s exactly one expression and the rest is empty text, return the expr AST directly.
+    if (segments.length === 1 && segments[0]!.kind === "expr" && (segments[0] as any).expr) {
+      return (segments[0] as any).expr;
+    }
+    if (
+      segments.length === 3 &&
+      segments[0]!.kind === "text" &&
+      segments[1]!.kind === "expr" &&
+      segments[2]!.kind === "text" &&
+      (segments[0] as any).value === "" &&
+      (segments[2] as any).value === ""
+    ) {
+      return (segments[1] as any).expr;
+    }
+
+    // Build a TemplateLiteral: `${expr} ...`
+    const exprs: any[] = [];
+    const quasis: any[] = [];
+    let q = "";
+    for (const seg of segments) {
+      if (seg.kind === "text") {
+        q += seg.value;
+      } else {
+        quasis.push(j.templateElement({ raw: q, cooked: q }, false));
+        exprs.push(seg.expr);
+        q = "";
+      }
+    }
+    quasis.push(j.templateElement({ raw: q, cooked: q }, true));
+    return j.templateLiteral(quasis, exprs);
+  };
+
+  const rewriteCssVarsInStyleObject = (
+    obj: Record<string, unknown>,
+    definedVars: Map<string, string>,
+    varsToDrop: Set<string>,
+  ): void => {
+    for (const [k, v] of Object.entries(obj)) {
+      if (v && typeof v === "object") {
+        if (isAstNode(v)) continue;
+        rewriteCssVarsInStyleObject(v as any, definedVars, varsToDrop);
+        continue;
+      }
+      if (typeof v === "string") {
+        (obj as any)[k] = rewriteCssVarsInString(v, definedVars, varsToDrop) as any;
+      }
+    }
   };
 
   const parseKeyframesTemplate = (
@@ -1165,7 +1330,6 @@ export function transformWithWarnings(
       childNotFirstObj: Record<string, unknown>;
     }
   >();
-  let needsCalcVarsImport = false;
   for (const decl of styledDecls) {
     if (decl.preResolvedStyle) {
       resolvedStyleObjects.set(decl.styleKey, decl.preResolvedStyle);
@@ -1919,9 +2083,19 @@ export function transformWithWarnings(
           );
 
           if (res.kind === "resolved" && res.result.type === "resolvedValue") {
+            for (const imp of res.result.imports ?? []) resolverImports.add(imp);
+            const exprAst = parseExpr(res.result.expr);
+            if (!exprAst) {
+              warnings.push({
+                type: "dynamic-node",
+                feature: "adapter-resolveValue",
+                message: `Adapter returned an unparseable expression for ${decl.localName}; dropping this declaration.`,
+              });
+              continue;
+            }
             // Treat as direct JS expression
             for (const out of cssDeclarationToStylexDeclarations(d)) {
-              styleObj[out.prop] = j.template.expression`${j.identifier(res.result.value)}` as any;
+              styleObj[out.prop] = exprAst as any;
             }
             continue;
           }
@@ -2008,6 +2182,11 @@ export function transformWithWarnings(
             continue;
           }
 
+          // Track local CSS custom property definitions for later `var(--x)` resolution.
+          if (out.prop && out.prop.startsWith("--") && typeof value === "string") {
+            localVarValues.set(out.prop, value);
+          }
+
           if (media) {
             perPropMedia[out.prop] ??= {};
             const existing = perPropMedia[out.prop]!;
@@ -2068,6 +2247,13 @@ export function transformWithWarnings(
       styleObj[sel] = obj;
     }
 
+    // Rewrite `var(--...)` usages into adapter-provided expressions.
+    const varsToDrop = new Set<string>();
+    rewriteCssVarsInStyleObject(styleObj, localVarValues, varsToDrop);
+    for (const name of varsToDrop) {
+      delete (styleObj as any)[name];
+    }
+
     // Decide how to handle `& > *` rules.
     // - If we also saw `& > *:not(:first-child)`, materialize child styles and apply them in JSX
     //   (needed for the `nesting` fixture).
@@ -2113,34 +2299,6 @@ export function transformWithWarnings(
       delete (styleObj as any).flex;
       delete (styleObj as any).marginLeft;
       decl.directChildStyles = { childKey, childNotFirstKey };
-    }
-
-    // css-calc fixture support: lift `--base-size` used in calc(var(--base-size) ...) into calcVars.
-    if (typeof (styleObj as any)["--base-size"] === "string") {
-      localVarValues.set("--base-size", String((styleObj as any)["--base-size"]));
-    }
-    const baseSize = localVarValues.get("--base-size");
-    if (baseSize && baseSize === "16px") {
-      const calcVarToken = "var(--base-size)";
-      const calcVarExpr = j.memberExpression(j.identifier("calcVars"), j.identifier("baseSize"));
-      const makeTpl = (raw: string) => {
-        const parts = raw.split(calcVarToken);
-        if (parts.length <= 1) return null;
-        const quasis = parts.map((p, idx) =>
-          j.templateElement({ raw: p, cooked: p }, idx === parts.length - 1),
-        );
-        const exprs = Array.from({ length: parts.length - 1 }, () => calcVarExpr);
-        return j.templateLiteral(quasis as any, exprs as any);
-      };
-      for (const [k, v] of Object.entries(styleObj)) {
-        if (typeof v !== "string") continue;
-        if (!v.includes(calcVarToken)) continue;
-        const tpl = makeTpl(v);
-        if (tpl) (styleObj as any)[k] = tpl as any;
-      }
-      // Remove the local CSS custom property and rely on imported calcVars instead.
-      delete (styleObj as any)["--base-size"];
-      needsCalcVarsImport = true;
     }
 
     // Raw-CSS fixup for descendant component selectors that Stylis sometimes flattens:
@@ -2333,25 +2491,55 @@ export function transformWithWarnings(
     }
   }
 
-  // Fixture support: css-calc expects importing pre-defined StyleX vars module for calc() + CSS variables.
-  if (needsCalcVarsImport) {
-    const hasCalcVarsImport =
-      root.find(j.ImportDeclaration, { source: { value: "./css-calc.stylex" } }).size() > 0;
-    if (!hasCalcVarsImport) {
-      const stylexImport = root
-        .find(j.ImportDeclaration, { source: { value: "@stylexjs/stylex" } })
-        .at(0);
-      const calcVarsImport = j.importDeclaration(
-        [j.importSpecifier(j.identifier("calcVars"))],
-        j.literal("./css-calc.stylex"),
-      );
-      if (stylexImport.size() > 0) {
-        stylexImport.insertAfter(calcVarsImport);
-      } else {
-        const firstImport = root.find(j.ImportDeclaration).at(0);
-        if (firstImport.size() > 0) firstImport.insertBefore(calcVarsImport);
-        else root.get().node.program.body.unshift(calcVarsImport);
+  // Inject resolver-provided imports (from adapter.resolveValue calls).
+  {
+    const importsToInject = new Set<string>(resolverImports);
+
+    const parseStatements = (src: string): any[] => {
+      try {
+        const program = j(src).get().node.program;
+        return Array.isArray((program as any).body) ? ((program as any).body as any[]) : [];
+      } catch {
+        return [];
       }
+    };
+
+    const existingImportSources = new Set(
+      root
+        .find(j.ImportDeclaration)
+        .nodes()
+        .map((n) => (n.source as any)?.value)
+        .filter((v): v is string => typeof v === "string"),
+    );
+
+    const importNodes: any[] = [];
+    for (const imp of importsToInject) {
+      for (const stmt of parseStatements(imp)) {
+        if (stmt?.type !== "ImportDeclaration") continue;
+        const src = (stmt.source as any)?.value;
+        if (typeof src === "string" && existingImportSources.has(src)) continue;
+        if (typeof src === "string") existingImportSources.add(src);
+        importNodes.push(stmt);
+      }
+    }
+
+    if (importNodes.length) {
+      const body = root.get().node.program.body as any[];
+      const stylexIdx = body.findIndex(
+        (s) => s?.type === "ImportDeclaration" && (s.source as any)?.value === "@stylexjs/stylex",
+      );
+      const lastImportIdx = (() => {
+        let last = -1;
+        for (let i = 0; i < body.length; i++) {
+          if (body[i]?.type === "ImportDeclaration") last = i;
+        }
+        return last;
+      })();
+
+      // Insert imports immediately after the stylex import (preferred) or after the last import.
+      const importInsertAt =
+        stylexIdx >= 0 ? stylexIdx + 1 : lastImportIdx >= 0 ? lastImportIdx + 1 : 0;
+      if (importNodes.length) body.splice(importInsertAt, 0, ...importNodes);
     }
   }
 
@@ -3974,20 +4162,14 @@ export function transformWithWarnings(
 // Re-export adapter types for convenience
 export type {
   Adapter,
-  ValueContext,
+  ResolveContext,
+  ResolveResult,
   DynamicHandler,
   DynamicNode,
   HandlerContext,
   HandlerResult,
 } from "./adapter.js";
-export {
-  defineAdapter,
-  builtinHandlers,
-  defaultAdapter,
-  defineVarsAdapter,
-  inlineValuesAdapter,
-  defaultResolveValue,
-} from "./adapter.js";
+export { defineAdapter, builtinHandlers } from "./adapter.js";
 
 function toStyleKey(name: string): string {
   return name.charAt(0).toLowerCase() + name.slice(1);

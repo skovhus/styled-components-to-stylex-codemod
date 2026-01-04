@@ -14,45 +14,31 @@ import { cssDeclarationToStylexDeclarations } from "./ir.js";
 // Value Resolution
 // ────────────────────────────────────────────────────────────────────────────
 
-export interface ValueContext {
-  /** The original value path, e.g., "colors.primary" or "spacing.md" */
-  path: string;
-  /** The default/fallback value if available */
-  defaultValue?: string;
-  /** The type of value being transformed */
-  valueType: "theme" | "helper" | "interpolation";
-}
+export type ResolveContext =
+  | { kind: "theme"; path: string }
+  | {
+      kind: "cssVariable";
+      name: string;
+      fallback?: string;
+      definedValue?: string;
+    };
 
-/**
- * Default resolver: Uses CSS custom properties with fallbacks.
- * Generates: `'var(--colors-primary, #BF4F74)'`
- */
-export function defaultResolveValue({ path, defaultValue }: ValueContext): string {
-  const varName = path.replace(/\./g, "-");
-  if (defaultValue) return `'var(--${varName}, ${defaultValue})'`;
-  return `'var(--${varName})'`;
-}
-
-/** Default adapter: CSS custom properties with fallbacks */
-export const defaultAdapter: Adapter = { resolveValue: defaultResolveValue };
-
-/** Adapter that references StyleX vars from a tokens module */
-export const defineVarsAdapter: Adapter = {
-  resolveValue({ path }: ValueContext) {
-    const parts = path.split(".");
-    const ident = parts
-      .map((part, i) => (i === 0 ? part : part.charAt(0).toUpperCase() + part.slice(1)))
-      .join("");
-    return `themeVars.${ident}`;
-  },
-  imports: ["import { themeVars } from './tokens.stylex';"],
-};
-
-/** Adapter that inlines literal values */
-export const inlineValuesAdapter: Adapter = {
-  resolveValue({ defaultValue }: ValueContext) {
-    return defaultValue ? `'${defaultValue}'` : "''";
-  },
+export type ResolveResult = {
+  /**
+   * JS expression string to inline into generated output.
+   * Example: `vars.spacingSm` or `calcVars.baseSize`
+   */
+  expr: string;
+  /**
+   * Import statements required by `expr`.
+   * Example: [`import { vars } from "./tokens.stylex";`]
+   */
+  imports: string[];
+  /**
+   * If true, the transformer should drop the corresponding `--name: ...` definition
+   * from the emitted style object (useful when replacing with StyleX vars).
+   */
+  dropDefinition?: boolean;
 };
 
 // ────────────────────────────────────────────────────────────────────────────
@@ -109,13 +95,13 @@ export type HandlerWarning = {
 export type HandlerContext = {
   api: API;
   filePath: string;
-  /** Resolve a theme/token path to StyleX-compatible value */
-  resolveValue: (context: ValueContext) => string;
+  /** Resolve theme paths / CSS variables into a JS expression + imports */
+  resolveValue: (context: ResolveContext) => ResolveResult | null;
   warn: (warning: HandlerWarning) => void;
 };
 
 export type HandlerResult =
-  | { type: "resolvedValue"; value: string }
+  | { type: "resolvedValue"; expr: string; imports: string[] }
   | { type: "emitInlineStyle"; style: string }
   | {
       type: "emitStyleFunction";
@@ -148,26 +134,8 @@ export type HandlerResolution =
 // ────────────────────────────────────────────────────────────────────────────
 
 export interface Adapter {
-  /**
-   * Transform a value reference to StyleX-compatible code.
-   * Called for theme accesses like `props.theme.colors.primary`.
-   *
-   * @param context - The context about the value being transformed
-   * @returns StyleX-compatible value (string literal, variable reference, or expression)
-   */
-  resolveValue: (context: ValueContext) => string;
-
-  /**
-   * Extra imports to inject into transformed files.
-   * Example: ["import { themeVars } from './tokens.stylex';"]
-   */
-  imports?: string[];
-
-  /**
-   * Extra module-level declarations to inject.
-   * Example: ["const themeVars = stylex.defineVars({...});"]
-   */
-  declarations?: string[];
+  /** Unified resolver for theme paths + CSS variables. Return null to leave unresolved. */
+  resolveValue: (context: ResolveContext) => ResolveResult | null;
 
   /**
    * Custom handlers for dynamic expressions.
@@ -176,6 +144,11 @@ export interface Adapter {
    */
   handlers?: DynamicHandler[];
 }
+
+export type NormalizedAdapter = {
+  resolveValue: (context: ResolveContext) => ResolveResult | null;
+  handlers: DynamicHandler[];
+};
 
 // ────────────────────────────────────────────────────────────────────────────
 // Built-in Handlers
@@ -195,10 +168,9 @@ export const themeAccessHandler: DynamicHandler = {
     const path = parts.slice(1).join(".");
     if (!path) return null;
 
-    return {
-      type: "resolvedValue",
-      value: ctx.resolveValue({ path, valueType: "theme" }),
-    };
+    const res = ctx.resolveValue({ kind: "theme", path });
+    if (!res) return null;
+    return { type: "resolvedValue", expr: res.expr, imports: res.imports };
   },
 };
 
@@ -383,11 +355,12 @@ export function runHandlers(
 /**
  * Normalize an adapter to ensure all fields are populated with defaults.
  */
-export function normalizeAdapter(adapter: Adapter): Required<Adapter> {
+export function normalizeAdapter(adapter: Adapter): NormalizedAdapter {
+  if (!adapter || typeof adapter.resolveValue !== "function") {
+    throw new Error("Adapter must provide resolveValue(ctx) => { expr, imports } | null");
+  }
   return {
-    resolveValue: adapter?.resolveValue ?? defaultResolveValue,
-    imports: adapter.imports ?? [],
-    declarations: adapter.declarations ?? [],
+    resolveValue: adapter.resolveValue,
     handlers: adapter.handlers ?? [],
   };
 }
@@ -411,10 +384,12 @@ export function isAdapter(x: unknown): x is Adapter {
  *
  * Usage:
  *   export default defineAdapter({
- *     resolveValue({ path }) {
- *       return `tokens.${path}`;
+ *     resolveValue(ctx) {
+ *       if (ctx.kind === "theme") {
+ *         return { expr: `tokens.${ctx.path}`, imports: ["import { tokens } from './tokens';"] };
+ *       }
+ *       return null;
  *     },
- *     imports: ["import { tokens } from './tokens';"],
  *   });
  */
 export function defineAdapter(adapter: Adapter): Adapter {

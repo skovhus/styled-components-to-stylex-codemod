@@ -6,7 +6,8 @@ export type { RunTransformOptions, RunTransformResult } from "./run.js";
 // Adapter exports (primary API)
 export type {
   Adapter,
-  ValueContext,
+  ResolveContext,
+  ResolveResult,
   DynamicHandler,
   DynamicNode,
   HandlerContext,

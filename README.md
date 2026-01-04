@@ -19,8 +19,12 @@ import { runTransform } from "styled-components-to-stylex-codemod";
 import { defineAdapter } from "styled-components-to-stylex-codemod/adapter";
 
 const adapter = defineAdapter({
-  resolveValue({ path }) {
-    return `tokens.${path.replace(/\./g, "_")}`;
+  resolveValue(ctx) {
+    if (ctx.kind !== "theme") return null;
+    return {
+      expr: `tokens.${ctx.path.replace(/\./g, "_")}`,
+      imports: ["import { tokens } from './design-system.stylex';"],
+    };
   },
 });
 
@@ -41,7 +45,7 @@ interface RunTransformOptions {
 
   /**
    * Adapter for customizing the transform.
-   * Controls value resolution, imports, declarations, and custom handlers.
+   * Controls value resolution (and resolver-provided imports) and custom handlers.
    */
   adapter: Adapter;
 
@@ -73,8 +77,8 @@ await runTransform({
 
 Adapters are the main extension point. They let you control:
 
-- how theme paths are turned into StyleX-compatible JS values (`resolveValue`)
-- what extra imports/declarations to inject into transformed files (`imports`, `declarations`)
+- how theme paths and CSS variables are turned into StyleX-compatible JS values (`resolveValue`)
+- what extra imports to inject into transformed files (returned from `resolveValue`)
 - how to handle dynamic interpolations inside template literals (`handlers`)
 
 #### `Adapter` interface (what you can customize)
@@ -82,25 +86,22 @@ Adapters are the main extension point. They let you control:
 ```ts
 export interface Adapter {
   /**
-   * Resolve a theme/token path to a StyleX-compatible value.
+   * Resolve theme paths and CSS variables to StyleX-compatible values.
    *
    * Called by built-in handlers for patterns like:
    *   ${(props) => props.theme.colors.primary}
    *
-   * `path` is the member path after `theme`, e.g. "colors.primary".
-   * Return a JS expression string, e.g. "themeVars.colorsPrimary" or "'var(--colors-primary)'".
+   * Also used for CSS `var(--...)` tokens inside static CSS values.
+   *
+   * Return an object containing:
+   * - `expr`: JS expression string to inline into output
+   * - `imports`: import statements required by `expr`
+   * - `dropDefinition?`: (CSS variables only) drop local `--x: ...` definitions when true
    */
-  resolveValue: (context: {
-    path: string;
-    defaultValue?: string;
-    valueType: "theme" | "helper" | "interpolation";
-  }) => string;
-
-  /** Extra imports to inject into transformed files */
-  imports?: string[];
-
-  /** Extra module-level declarations to inject into transformed files */
-  declarations?: string[];
+  resolveValue: (context:
+    | { kind: "theme"; path: string }
+    | { kind: "cssVariable"; name: string; fallback?: string; definedValue?: string }
+  ) => { expr: string; imports: string[]; dropDefinition?: boolean } | null;
 
   /**
    * Custom handlers for dynamic expressions (template interpolations).
@@ -135,13 +136,23 @@ import { runTransform } from "styled-components-to-stylex-codemod";
 import { defineAdapter } from "styled-components-to-stylex-codemod/adapter";
 
 const adapter = defineAdapter({
-  resolveValue({ path, defaultValue }) {
-    // Example: theme.colors.primary -> tokens.colors_primary
-    // NOTE: return a JS expression string.
-    const varName = path.replace(/\./g, "_");
-    return `tokens.${varName}`;
+  resolveValue(ctx) {
+    if (ctx.kind === "theme") {
+      // Example: theme.colors.primary -> tokens.colors_primary
+      const varName = ctx.path.replace(/\./g, "_");
+      return { expr: `tokens.${varName}`, imports: ["import { tokens } from './design-system.stylex';"] };
+    }
+    if (ctx.kind === "cssVariable") {
+      // Example: var(--spacing-sm) -> vars.spacingSm
+      if (ctx.name === "--spacing-sm") {
+        return {
+          expr: "vars.spacingSm",
+          imports: ['import { vars } from "./tokens.stylex";'],
+        };
+      }
+    }
+    return null;
   },
-  imports: ["import { tokens } from './design-system.stylex';"],
 });
 
 await runTransform({

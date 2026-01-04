@@ -17,7 +17,7 @@ export interface RunTransformOptions {
 
   /**
    * Adapter for customizing the transform.
-   * Controls value resolution, imports, declarations, and custom handlers.
+   * Controls value resolution and resolver-provided imports (and custom handlers).
    */
   adapter: Adapter;
 
@@ -62,10 +62,13 @@ export interface RunTransformResult {
  * import { defineAdapter } from 'styled-components-to-stylex-codemod/adapter';
  *
  * const adapter = defineAdapter({
- *   resolveValue({ path }) {
- *     return `themeVars.${path.replace(/\./g, '_')}`;
+ *   resolveValue(ctx) {
+ *     if (ctx.kind !== "theme") return null;
+ *     return {
+ *       expr: `themeVars.${ctx.path.replace(/\\./g, "_")}`,
+ *       imports: ["import { themeVars } from './theme.stylex';"],
+ *     };
  *   },
- *   imports: ["import { themeVars } from './theme.stylex';"],
  * });
  *
  * await runTransform({
