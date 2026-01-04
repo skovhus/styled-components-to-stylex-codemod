@@ -31,11 +31,14 @@ const scaleUp = stylex.keyframes({
 });
 
 const styles = stylex.create({
+  // Single animation
   fadeBox: {
     animationName: fadeIn,
     animationDuration: "0.5s",
     animationTimingFunction: "ease-in-out",
   },
+
+  // Multiple animations combined
   animatedCard: {
     animationName: `${fadeIn}, ${slideIn}`,
     animationDuration: "0.3s, 0.5s",
@@ -45,12 +48,16 @@ const styles = stylex.create({
     borderRadius: "8px",
     boxShadow: "0 2px 8px rgba(0, 0, 0, 0.1)",
   },
+
+  // Animation with multiple properties
   bounceIn: {
     animationName: scaleUp,
     animationDuration: "0.6s",
     animationTimingFunction: "cubic-bezier(0.68, -0.55, 0.265, 1.55)",
     animationFillMode: "both",
   },
+
+  // Chained animations with delay
   sequentialAnimation: {
     animationName: `${fadeIn}, ${slideIn}`,
     animationDuration: "0.3s, 0.5s",

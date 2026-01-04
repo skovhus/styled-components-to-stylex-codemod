@@ -1,6 +1,7 @@
 import * as stylex from "@stylexjs/stylex";
 
 const styles = stylex.create({
+  // Using !important to override inline styles or third-party CSS
   overrideButton: {
     backgroundColor: "#BF4F74",
     color: "white",
@@ -9,17 +10,23 @@ const styles = stylex.create({
     padding: "8px 16px",
     borderRadius: "4px",
   },
+
+  // Overriding specific properties
   forceWidth: {
     width: "100%",
     maxWidth: "500px",
     margin: "0 auto",
   },
+
+  // Mixed important and normal
   mixedStyles: {
     fontSize: "16px",
     color: "#333",
     lineHeight: 1.5,
     margin: 0,
   },
+
+  // Important in pseudo-selectors
   importantHover: {
     color: {
       default: "#BF4F74",

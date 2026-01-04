@@ -2,6 +2,7 @@ import React from "react";
 import * as stylex from "@stylexjs/stylex";
 
 const styles = stylex.create({
+  // withConfig for displayName (debugging)
   button: {
     backgroundColor: "#BF4F74",
     color: "white",
@@ -10,12 +11,16 @@ const styles = stylex.create({
     borderStyle: "none",
     borderRadius: "4px",
   },
+
+  // withConfig for componentId (stable class names)
   card: {
     padding: "16px",
     backgroundColor: "white",
     borderRadius: "8px",
     boxShadow: "0 2px 4px rgba(0, 0, 0, 0.1)",
   },
+
+  // Combining withConfig options
   input: {
     padding: "8px 12px",
     borderWidth: "2px",
@@ -37,6 +42,8 @@ const styles = stylex.create({
       ":focus": "red",
     },
   },
+
+  // withConfig on extended components
   baseButton: {
     fontSize: "14px",
     cursor: "pointer",

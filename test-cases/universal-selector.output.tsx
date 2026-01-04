@@ -1,26 +1,35 @@
 import * as stylex from "@stylexjs/stylex";
 
 const styles = stylex.create({
+  // Universal selector for all children
   resetBox: {
     boxSizing: "border-box",
     margin: 0,
     padding: 0,
   },
+
+  // Universal direct children
   container: {
     display: "flex",
     gap: "16px",
     flex: 1,
     minWidth: 0,
   },
+
+  // Universal with pseudo-class
   list: {
     listStyle: "none",
     padding: 0,
     marginBottom: "8px",
     fontWeight: "bold",
   },
+
+  // Universal in hover state
   hoverContainer: {
     color: "#BF4F74",
   },
+
+  // Nested universal selectors
   deepReset: {
     fontFamily: "inherit",
     fontSize: "inherit",
