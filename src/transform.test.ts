@@ -198,7 +198,7 @@ async function normalizeCode(code: string): Promise<string> {
   // and ensure consistent blank lines before function/variable declarations
   return formatted
     .replace(/\n{3,}/g, "\n\n") // Collapse 3+ newlines into 2
-    .replace(/}\n(\/\/|\/\*|function |const |export )/g, "}\n\n$1") // Ensure blank line after } before declarations
+    .replace(/}\n(\/\/|\/\*|function |const |export |interface |type |class |enum )/g, "}\n\n$1") // Ensure blank line after } before declarations
     .trim();
 }
 
@@ -402,6 +402,40 @@ const Button = styled.button\`
     );
 
     expect(result.warnings).toHaveLength(0);
+  });
+
+  it("should warn and skip when universal selectors are used", () => {
+    const source = `
+import styled from 'styled-components';
+
+const ResetBox = styled.div\`
+  & * {
+    box-sizing: border-box;
+  }
+\`;
+
+export const App = () => (
+  <ResetBox>
+    <span>Hi</span>
+  </ResetBox>
+);
+`;
+
+    const result = transformWithWarnings(
+      { source, path: "test.tsx" },
+      { jscodeshift, j: jscodeshift, stats: () => {}, report: () => {} },
+      { adapter: defaultAdapter },
+    );
+
+    expect(result.code).toBeNull();
+    expect(result.warnings).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          type: "unsupported-feature",
+          feature: "universal-selector",
+        }),
+      ]),
+    );
   });
 });
 

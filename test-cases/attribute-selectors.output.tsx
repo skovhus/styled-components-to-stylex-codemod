@@ -37,12 +37,12 @@ const styles = stylex.create({
       fontStyle: "italic",
     },
   },
-  inputCheckbox: {
+  inputTypeCheckbox: {
     width: "20px",
     height: "20px",
     padding: 0,
   },
-  inputRadio: {
+  inputTypeRadio: {
     width: "20px",
     height: "20px",
     padding: 0,
@@ -52,16 +52,16 @@ const styles = stylex.create({
     color: "#BF4F74",
     textDecoration: "none",
   },
-  linkExternal: {
+  linkTargetBlank: {
     "::after": {
       content: '" ↗"',
       fontSize: "0.8em",
     },
   },
-  linkHttps: {
+  linkHrefStartsWithHttps: {
     color: "#4CAF50",
   },
-  linkPdf: {
+  linkHrefEndsWithPdf: {
     color: "#F44336",
   },
 });
@@ -72,8 +72,8 @@ function Input(props: InputProps) {
   const { type, className, ...rest } = props;
   const sx = stylex.props(
     styles.input,
-    type === "checkbox" && styles.inputCheckbox,
-    type === "radio" && styles.inputRadio,
+    type === "checkbox" && styles.inputTypeCheckbox,
+    type === "radio" && styles.inputTypeRadio,
   );
   return (
     <input
@@ -89,23 +89,20 @@ interface LinkProps extends React.AnchorHTMLAttributes<HTMLAnchorElement> {
   children?: React.ReactNode;
 }
 
-function Link({ href, target, className, children, ...props }: LinkProps) {
-  const isHttps = href?.startsWith("https");
-  const isPdf = href?.endsWith(".pdf");
-  const isExternal = target === "_blank";
+function Link({ target, href, className, children, ...rest }: LinkProps) {
   const sx = stylex.props(
     styles.link,
-    isExternal && styles.linkExternal,
-    isHttps && styles.linkHttps,
-    isPdf && styles.linkPdf,
+    target === "_blank" && styles.linkTargetBlank,
+    href?.startsWith("https") && styles.linkHrefStartsWithHttps,
+    href?.endsWith(".pdf") && styles.linkHrefEndsWithPdf,
   );
   return (
     <a
       {...sx}
       className={[sx.className, className].filter(Boolean).join(" ")}
-      href={href}
       target={target}
-      {...props}
+      href={href}
+      {...rest}
     >
       {children}
     </a>

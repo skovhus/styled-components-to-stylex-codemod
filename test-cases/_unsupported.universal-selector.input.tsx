@@ -1,5 +1,7 @@
 import styled from "styled-components";
 
+// expected-warnings: universal-selector
+
 // Universal selector for all children
 const ResetBox = styled.div`
   & * {

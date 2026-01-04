@@ -164,19 +164,13 @@ interface StyleInfo {
   isExtending: boolean;
   extendsFrom: string | undefined;
   attrsConfig: AttrsConfig | undefined;
-  jsxRewriteRules: Array<
-    | { type: "direct-children"; styleNames: string[] }
-    | { type: "direct-children-except-first"; styleNames: string[] }
-    | { type: "direct-children-except-last"; styleNames: string[] }
-    | { type: "direct-children-first"; styleNames: string[] }
-    | {
-        type: "descendant-styled-component";
-        /** Styled-component identifier (e.g., Icon) to match in JSX */
-        targetComponentName: string;
-        /** Extra style entry to apply (e.g., iconInButton) */
-        styleName: string;
-      }
-  >;
+  jsxRewriteRules: Array<{
+    type: "descendant-styled-component";
+    /** Styled-component identifier (e.g., Icon) to match in JSX */
+    targetComponentName: string;
+    /** Extra style entry to apply (e.g., iconInButton) */
+    styleName: string;
+  }>;
   /** Transient props that need wrapper generation */
   transientProps: TransientPropInfo[];
   /** Whether this component needs a wrapper function */
@@ -365,6 +359,31 @@ export function transformWithWarnings(
 
   // Check for patterns that require warnings
   detectWarningPatterns(j, root, warnings);
+
+  // Universal selectors are currently unsupported. Detect them early and skip transforming the file.
+  const universal = detectUniversalSelectorUsageInFile(
+    j,
+    root,
+    styledFactoryIdentifiers,
+    cssHelperIdentifiers,
+    keyframesImportIdentifiers,
+    createGlobalStyleIdentifiers,
+  );
+  if (universal) {
+    const warning: TransformWarning = {
+      type: "unsupported-feature",
+      feature: "universal-selector",
+      message:
+        `Universal selectors (*) are currently unsupported. ` +
+        `Skipping transform for this file (found selector: "${universal.selector}").`,
+    };
+    if (universal.loc) {
+      warning.line = universal.loc.start.line;
+      warning.column = universal.loc.start.column;
+    }
+    warnings.push(warning);
+    return { code: null, warnings };
+  }
 
   // Create classification context
   const getSource = (node: Expression): string => {
@@ -1286,9 +1305,6 @@ function processStyledComponent(
     // First get the raw StyleX object (before property-level conditional conversion)
     const rawStyles = cssRuleToStyleX(mainRule, conversionCtx);
 
-    // Extract universal selectors BEFORE toPropertyLevelConditionals flattens them
-    extractUniversalSelectorStyles(rawStyles, extraStyles, jsxRewriteRules, componentName);
-
     // Extract descendant styled-component selectors (e.g. `${Icon}` and `&:hover ${Icon}`)
     // into extra style entries + JSX rewrite rules.
     needsDefaultMarker = extractStyledComponentDescendantSelectorStyles(
@@ -1523,6 +1539,40 @@ function extractAttributeSelectorStyles(
   const attributeSelectors: AttributeSelectorInfo[] = [];
   const baseName = toCamelCase(componentName);
 
+  const booleanAttrToPseudo = (attrName: string): ":disabled" | ":read-only" | null => {
+    // Prefer real pseudo-classes when they exist, so StyleX can represent them
+    // without requiring runtime prop checks / wrappers.
+    //
+    // - [disabled]  -> :disabled
+    // - [readonly]  -> :read-only
+    // (React prop is `readOnly`, but CSS attr selector is `readonly`.)
+    if (attrName === "disabled") return ":disabled";
+    if (attrName === "readonly") return ":read-only";
+    return null;
+  };
+
+  const styleSuffixForAttribute = (
+    attrName: string,
+    operator: AttributeSelectorInfo["operator"],
+    attrValue: string | undefined,
+  ): string => {
+    if (!attrValue) return capitalize(attrName);
+
+    const cleanValue = attrValue
+      .replace(/[^a-zA-Z0-9]/g, "")
+      .replace(/^(.)/, (m) => m.toUpperCase());
+    // Include operator in name to avoid collisions (e.g. href^= vs href$=).
+    const opSuffix =
+      operator === "^="
+        ? "StartsWith"
+        : operator === "$="
+          ? "EndsWith"
+          : operator === "*="
+            ? "Contains"
+            : "";
+    return capitalize(attrName) + opSuffix + cleanValue;
+  };
+
   // Collect keys to process (avoid mutation during iteration)
   const entries = Object.entries(styles);
 
@@ -1540,18 +1590,29 @@ function extractAttributeSelectorStyles(
     const [, attrName, operator, attrValue, pseudoElement] = attrMatch;
     if (!attrName) continue;
 
-    // Generate style name based on attribute
-    let styleSuffix: string;
-    if (attrValue) {
-      // e.g., inputCheckbox, linkHttps, linkPdf
-      const cleanValue = attrValue
-        .replace(/[^a-zA-Z0-9]/g, "")
-        .replace(/^(.)/, (m) => m.toUpperCase());
-      styleSuffix = capitalize(attrName) + cleanValue;
-    } else {
-      // Boolean attribute like [disabled], [readonly]
-      styleSuffix = capitalize(attrName);
+    // If this is a boolean attribute selector with an equivalent pseudo-class,
+    // keep it in the main StyleX object as a nested pseudo selector so it can
+    // be converted into property-level conditionals.
+    if (!attrValue && !pseudoElement) {
+      const pseudo = booleanAttrToPseudo(attrName);
+      if (pseudo) {
+        const existing = styles[pseudo];
+        if (typeof existing === "object" && existing !== null) {
+          Object.assign(existing as StyleXObject, value as StyleXObject);
+        } else {
+          styles[pseudo] = value as StyleXObject;
+        }
+        delete styles[selectorKey];
+        continue;
+      }
     }
+
+    // Generate style name based on attribute
+    const styleSuffix = styleSuffixForAttribute(
+      attrName,
+      operator as AttributeSelectorInfo["operator"],
+      attrValue,
+    );
 
     const styleName = baseName + styleSuffix;
 
@@ -1662,257 +1723,6 @@ function extractSpecificityHacks(styles: StyleXObject): boolean {
   }
 
   return hasHacks;
-}
-
-/**
- * Extract universal selector styles (e.g. `> *`, `& *`, `& > *:first-child`) into separate StyleX styles
- * and record JSX rewrite rules to apply them to JSX children.
- *
- * Handles patterns:
- * - `> *` or `& > *` - direct children
- * - `& *` - all descendants (extracted to child styles, needs manual JSX application)
- * - `& > *:not(:first-child)` - direct children except first
- * - `& > *:not(:last-child)` - direct children except last
- * - `& > *:first-child` - first direct child
- * - `&:hover *` - hover affecting descendants (uses CSS custom properties)
- *
- * NOTE: Stylis (the CSS parser) may hoist nested selectors to siblings.
- */
-function extractUniversalSelectorStyles(
-  styles: StyleXObject,
-  extraStyles: Map<string, StyleXObject>,
-  jsxRewriteRules: StyleInfo["jsxRewriteRules"],
-  componentName: string,
-): void {
-  // Handle & > * (direct children)
-  const directChildKeys = [">*", "> *", "&>*", "& > *", "&> *", "& >*"];
-  const directChildKey = directChildKeys.find(
-    (k) => typeof styles[k] === "object" && styles[k] !== null,
-  );
-
-  // Handle & * (all descendants)
-  const descendantKeys = ["& *", "&*"];
-  const descendantKey = descendantKeys.find(
-    (k) => typeof styles[k] === "object" && styles[k] !== null,
-  );
-
-  // Handle & > *:not(:first-child) - sibling selectors due to stylis hoisting
-  const notFirstChildKeys = [
-    "&>*:not(:first-child)",
-    "& > *:not(:first-child)",
-    ">*:not(:first-child)",
-    "> *:not(:first-child)",
-    ":not(:first-child)",
-    "&:not(:first-child)",
-  ];
-
-  // Handle & > *:not(:last-child)
-  const notLastChildKeys = [
-    "&>*:not(:last-child)",
-    "& > *:not(:last-child)",
-    ">*:not(:last-child)",
-    "> *:not(:last-child)",
-    ":not(:last-child)",
-    "&:not(:last-child)",
-  ];
-
-  // Handle & > *:first-child
-  const firstChildKeys = [
-    "&>*:first-child",
-    "& > *:first-child",
-    ">*:first-child",
-    "> *:first-child",
-    ":first-child",
-    "&:first-child",
-  ];
-
-  // Handle &:hover * (hover affecting descendants)
-  const hoverDescendantKeys = ["&:hover *", ":hover *", "&:hover*", ":hover*"];
-
-  // Handle & * * (deeply nested)
-  const deepDescendantKeys = ["& * *", "&* *", "& **"];
-
-  // Naming prefix based on component name
-  const baseName = componentName.charAt(0).toLowerCase() + componentName.slice(1);
-
-  // Process direct children (> *)
-  if (directChildKey) {
-    const childBlock = styles[directChildKey] as StyleXObject;
-    delete styles[directChildKey];
-
-    // Separate base child styles from pseudo-selectors
-    const childBase: StyleXObject = {};
-    let childNotFirst: StyleXObject | null = null;
-    let childNotLast: StyleXObject | null = null;
-    let childFirst: StyleXObject | null = null;
-
-    for (const [k, v] of Object.entries(childBlock)) {
-      if (k === ":not(:first-child)" || k === "&:not(:first-child)") {
-        childNotFirst = v as StyleXObject;
-      } else if (k === ":not(:last-child)" || k === "&:not(:last-child)") {
-        childNotLast = v as StyleXObject;
-      } else if (k === ":first-child" || k === "&:first-child") {
-        childFirst = v as StyleXObject;
-      } else if (!k.startsWith(":") && !k.startsWith("&:")) {
-        childBase[k] = v as StyleXObject[keyof StyleXObject];
-      }
-    }
-
-    // Add child base styles
-    if (Object.keys(childBase).length > 0) {
-      const styleName = `${baseName}Child`;
-      extraStyles.set(styleName, childBase);
-      jsxRewriteRules.push({
-        type: "direct-children",
-        styleNames: [styleName],
-      });
-    }
-
-    // Add :not(:first-child) styles
-    if (childNotFirst && Object.keys(childNotFirst).length > 0) {
-      const styleName = `${baseName}ChildNotFirst`;
-      extraStyles.set(styleName, childNotFirst);
-      jsxRewriteRules.push({
-        type: "direct-children-except-first",
-        styleNames: [styleName],
-      });
-    }
-
-    // Add :not(:last-child) styles
-    if (childNotLast && Object.keys(childNotLast).length > 0) {
-      const styleName = `${baseName}ChildNotLast`;
-      extraStyles.set(styleName, childNotLast);
-      jsxRewriteRules.push({
-        type: "direct-children-except-last" as const,
-        styleNames: [styleName],
-      });
-    }
-
-    // Add :first-child styles
-    if (childFirst && Object.keys(childFirst).length > 0) {
-      const styleName = `${baseName}ChildFirst`;
-      extraStyles.set(styleName, childFirst);
-      jsxRewriteRules.push({
-        type: "direct-children-first" as const,
-        styleNames: [styleName],
-      });
-    }
-  }
-
-  // Also check for pseudo-selectors as siblings (stylis hoisting)
-  for (const k of notFirstChildKeys) {
-    if (typeof styles[k] === "object" && styles[k] !== null) {
-      const styleName = `${baseName}ChildNotFirst`;
-      if (!extraStyles.has(styleName)) {
-        extraStyles.set(styleName, styles[k] as StyleXObject);
-        jsxRewriteRules.push({
-          type: "direct-children-except-first" as const,
-          styleNames: [styleName],
-        });
-      }
-      delete styles[k];
-    }
-  }
-
-  for (const k of notLastChildKeys) {
-    if (typeof styles[k] === "object" && styles[k] !== null) {
-      const styleName = `${baseName}ChildNotLast`;
-      if (!extraStyles.has(styleName)) {
-        extraStyles.set(styleName, styles[k] as StyleXObject);
-        jsxRewriteRules.push({
-          type: "direct-children-except-last" as const,
-          styleNames: [styleName],
-        });
-      }
-      delete styles[k];
-    }
-  }
-
-  for (const k of firstChildKeys) {
-    if (typeof styles[k] === "object" && styles[k] !== null) {
-      const styleName = `${baseName}ChildFirst`;
-      if (!extraStyles.has(styleName)) {
-        extraStyles.set(styleName, styles[k] as StyleXObject);
-        jsxRewriteRules.push({
-          type: "direct-children-first" as const,
-          styleNames: [styleName],
-        });
-      }
-      delete styles[k];
-    }
-  }
-
-  // Process & * (all descendants)
-  if (descendantKey) {
-    const descendantBlock = styles[descendantKey] as StyleXObject;
-    delete styles[descendantKey];
-
-    const styleName = `${baseName}Child`;
-    // Merge with existing child styles if any
-    const existing = extraStyles.get(styleName) || {};
-    extraStyles.set(styleName, { ...existing, ...descendantBlock });
-
-    // Only add rewrite rule if not already present
-    const hasRule = jsxRewriteRules.some(
-      (r) => "styleNames" in r && r.styleNames.includes(styleName),
-    );
-    if (!hasRule) {
-      jsxRewriteRules.push({
-        type: "direct-children",
-        styleNames: [styleName],
-      });
-    }
-  }
-
-  // Process &:hover * (hover affecting descendants) - use CSS custom properties
-  for (const hoverKey of hoverDescendantKeys) {
-    if (typeof styles[hoverKey] === "object" && styles[hoverKey] !== null) {
-      const hoverBlock = styles[hoverKey] as StyleXObject;
-      delete styles[hoverKey];
-
-      // Convert each property to a CSS custom property with hover variant
-      for (const [prop, value] of Object.entries(hoverBlock)) {
-        const varName = `--sc2sx-${baseName}-${prop}`;
-        // Add CSS custom property to parent styles
-        styles[varName] = {
-          default: "inherit",
-          ":hover": value as string | number,
-        };
-      }
-
-      // Create child style that uses the CSS variable
-      const childStyleName = `${baseName}Child`;
-      const childStyles = extraStyles.get(childStyleName) || {};
-      for (const prop of Object.keys(hoverBlock)) {
-        const varName = `--sc2sx-${baseName}-${prop}`;
-        (childStyles as Record<string, unknown>)[prop] = `var(${varName})`;
-      }
-      extraStyles.set(childStyleName, childStyles);
-
-      // Only add rewrite rule if not already present
-      const hasRule = jsxRewriteRules.some(
-        (r) => "styleNames" in r && r.styleNames.includes(childStyleName),
-      );
-      if (!hasRule) {
-        jsxRewriteRules.push({
-          type: "direct-children",
-          styleNames: [childStyleName],
-        });
-      }
-    }
-  }
-
-  // Process & * * (deeply nested) - just extract, manual JSX application required
-  for (const deepKey of deepDescendantKeys) {
-    if (typeof styles[deepKey] === "object" && styles[deepKey] !== null) {
-      const deepBlock = styles[deepKey] as StyleXObject;
-      delete styles[deepKey];
-
-      const styleName = `${baseName}Grandchild`;
-      extraStyles.set(styleName, deepBlock);
-      // Note: No JSX rewrite rule - requires manual application
-    }
-  }
 }
 
 /**
@@ -2031,6 +1841,72 @@ function extractStyledComponentDescendantSelectorStyles(
   }
 
   return needsMarker;
+}
+
+type UniversalSelectorDetection = {
+  selector: string;
+  loc?: { start: { line: number; column: number } };
+};
+
+function selectorHasUniversalSelector(selector: string): boolean {
+  // Remove attribute selectors so we don't confuse `[href*="..."]` with a universal selector.
+  const withoutAttr = selector.replace(/\[[^\]]*\]/g, "");
+  return withoutAttr.includes("*");
+}
+
+function rulesContainUniversalSelector(rules: import("./css-parser.js").CSSRule[]): string | null {
+  const stack: import("./css-parser.js").CSSRule[] = [...rules];
+  while (stack.length > 0) {
+    const r = stack.pop()!;
+    if (selectorHasUniversalSelector(r.selector)) return r.selector;
+    if (r.nestedRules?.length) stack.push(...r.nestedRules);
+  }
+  return null;
+}
+
+/**
+ * Detect usage of universal selectors (`*`) in any styled-components-related template literal in the file.
+ * If found, we treat the entire file as unsupported and skip transformation.
+ */
+function detectUniversalSelectorUsageInFile(
+  j: JSCodeshift,
+  root: Collection,
+  styledFactoryIdentifiers: Set<string>,
+  cssHelperIdentifiers: Set<string>,
+  keyframesImportIdentifiers: Set<string>,
+  createGlobalStyleIdentifiers: Set<string>,
+): UniversalSelectorDetection | null {
+  let found: UniversalSelectorDetection | null = null;
+
+  root.find(j.TaggedTemplateExpression).forEach((p) => {
+    if (found) return;
+    const t = p.node;
+    const tag = t.tag;
+
+    const isRelevant =
+      // styled.div`...`, styled(Component)`...`, and their `.attrs()` / `.withConfig()` variants
+      isStyledComponentDeclaration(t as unknown as Expression, styledFactoryIdentifiers) ||
+      // css`...` helper
+      (tag.type === "Identifier" && cssHelperIdentifiers.has(tag.name)) ||
+      // keyframes`...`
+      (tag.type === "Identifier" &&
+        (keyframesImportIdentifiers.has(tag.name) || tag.name === "keyframes")) ||
+      // createGlobalStyle`...`
+      (tag.type === "Identifier" && createGlobalStyleIdentifiers.has(tag.name));
+
+    if (!isRelevant) return;
+
+    const parsed = parseStyledCSS(t.quasi.quasis, t.quasi.expressions as Expression[]);
+    const rules = extractDeclarations(parsed.root);
+    const selector = rulesContainUniversalSelector(rules);
+    if (!selector) return;
+
+    found = t.loc
+      ? { selector, loc: { start: { line: t.loc.start.line, column: t.loc.start.column } } }
+      : { selector };
+  });
+
+  return found;
 }
 
 /**
@@ -4131,82 +4007,10 @@ function transformJSXUsage(
       }
     }
 
-    // Apply selector-lowered rules to JSX children (initial support: direct children)
-    if (info.jsxRewriteRules.length > 0) {
-      const children = path.node.children ?? [];
-      const directChildElements = children.filter(
-        (c): c is import("jscodeshift").JSXElement => c.type === "JSXElement",
-      );
-
-      // Apply `child` to all direct children, and `childNotFirst` to all except first
-      for (let i = 0; i < directChildElements.length; i++) {
-        const childEl = directChildElements[i]!;
-        const childOpening = childEl.openingElement;
-        if (!childOpening.attributes) childOpening.attributes = [];
-
-        // Determine styles to apply for this child index
-        const styleNames: string[] = [];
-        const isFirst = i === 0;
-        const isLast = i === directChildElements.length - 1;
-        for (const rule of info.jsxRewriteRules) {
-          if (rule.type === "direct-children") {
-            styleNames.push(...rule.styleNames);
-          } else if (rule.type === "direct-children-except-first" && !isFirst) {
-            styleNames.push(...rule.styleNames);
-          } else if (rule.type === "direct-children-except-last" && !isLast) {
-            styleNames.push(...rule.styleNames);
-          } else if (rule.type === "direct-children-first" && isFirst) {
-            styleNames.push(...rule.styleNames);
-          }
-        }
-
-        // De-dupe while preserving order
-        const uniqueStyleNames = [...new Set(styleNames)];
-        if (uniqueStyleNames.length === 0) continue;
-
-        // Try to merge into existing stylex.props(...) spread if present
-        const existingSpread = childOpening.attributes.find(
-          (a: (typeof childOpening.attributes)[number]) =>
-            a.type === "JSXSpreadAttribute" &&
-            a.argument.type === "CallExpression" &&
-            a.argument.callee.type === "MemberExpression" &&
-            a.argument.callee.object.type === "Identifier" &&
-            a.argument.callee.object.name === "stylex" &&
-            a.argument.callee.property.type === "Identifier" &&
-            a.argument.callee.property.name === "props",
-        );
-
-        const extraArgs = uniqueStyleNames.map((n) =>
-          j.memberExpression(j.identifier("styles"), j.identifier(n)),
-        ) as unknown as Expression[];
-
-        if (existingSpread && existingSpread.type === "JSXSpreadAttribute") {
-          const call = existingSpread.argument;
-          if (call.type === "CallExpression") {
-            call.arguments.push(
-              ...(extraArgs as unknown as Parameters<typeof j.callExpression>[1]),
-            );
-          }
-        } else {
-          const propsCall = j.callExpression(
-            j.memberExpression(j.identifier("stylex"), j.identifier("props")),
-            extraArgs as unknown as Parameters<typeof j.callExpression>[1],
-          );
-          childOpening.attributes.push(j.jsxSpreadAttribute(propsCall));
-        }
-      }
-    }
-
     // Apply descendant styled-component rewrite rules (e.g., `${Icon}` blocks inside `${Button}`).
-    const descendantRules = info.jsxRewriteRules.filter(
-      (r) => r.type === "descendant-styled-component",
-    ) as Array<
-      Extract<StyleInfo["jsxRewriteRules"][number], { type: "descendant-styled-component" }>
-    >;
-
-    if (descendantRules.length > 0) {
+    if (info.jsxRewriteRules.length > 0) {
       const seen = new Set<string>();
-      for (const rule of descendantRules) {
+      for (const rule of info.jsxRewriteRules) {
         const key = `${rule.targetComponentName}::${rule.styleName}`;
         if (seen.has(key)) continue;
         seen.add(key);

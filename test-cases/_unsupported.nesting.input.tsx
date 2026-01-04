@@ -1,5 +1,7 @@
 import styled from "styled-components";
 
+// expected-warnings: universal-selector
+
 const EqualDivider = styled.div`
   display: flex;
   margin: 0.5rem;
