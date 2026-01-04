@@ -37,7 +37,7 @@ const List = styled.ul`
 // Universal in hover state
 const HoverContainer = styled.div`
   &:hover * {
-    color: #BF4F74;
+    color: #bf4f74;
   }
 `;
 
