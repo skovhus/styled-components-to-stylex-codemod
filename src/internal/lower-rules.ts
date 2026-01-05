@@ -21,7 +21,13 @@ export function lowerRules(args: {
   j: any;
   filePath: string;
   resolveValue: (ctx: any) => any;
-  importMap: Map<string, { importedName?: string; fromFilePath?: string }>;
+  importMap: Map<
+    string,
+    {
+      importedName: string;
+      source: { kind: "filePath"; value: string } | { kind: "module"; value: string };
+    }
+  >;
   warnings: TransformWarning[];
   resolverImports: Set<string>;
   styledDecls: StyledDecl[];

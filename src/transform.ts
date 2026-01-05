@@ -29,7 +29,6 @@ import { compile } from "stylis";
 import { normalizeStylisAstToIR } from "./internal/css-ir.js";
 import { cssDeclarationToStylexDeclarations } from "./internal/css-prop-mapping.js";
 import { dirname, resolve as pathResolve } from "node:path";
-import { existsSync } from "node:fs";
 
 /**
  * Transform styled-components to StyleX
@@ -172,40 +171,32 @@ export function transformWithWarnings(
 
   /**
    * Build a per-file import map for named imports, supporting aliases.
-   * Maps local identifier -> { importedName, fromFilePath? }.
+   * Maps local identifier -> { importedName, source }.
    */
-  const importMap = new Map<string, { importedName?: string; fromFilePath?: string }>();
+  const importMap = new Map<
+    string,
+    {
+      importedName: string;
+      source: { kind: "filePath"; value: string } | { kind: "module"; value: string };
+    }
+  >();
   {
     const baseDir = dirname(file.path);
-    const resolveImportFile = (specifier: string): string | undefined => {
-      // Only resolve relative imports; package imports are intentionally left undefined.
-      if (!specifier.startsWith("./") && !specifier.startsWith("../")) {
-        return undefined;
-      }
-      const base = pathResolve(baseDir, specifier);
-      const hasExt = /\.[a-zA-Z0-9]+$/.test(specifier);
-      const exts = [".ts", ".tsx", ".js", ".jsx", ".mjs", ".cjs"];
-      const candidates: string[] = [];
-      if (hasExt) {
-        candidates.push(base);
-      } else {
-        for (const ext of exts) {
-          candidates.push(`${base}${ext}`);
-        }
-        for (const ext of exts) {
-          candidates.push(pathResolve(base, `index${ext}`));
-        }
-      }
-      for (const c of candidates) {
-        try {
-          if (existsSync(c)) {
-            return c;
-          }
-        } catch {
-          // ignore
-        }
-      }
-      return undefined;
+    const resolveImportSource = (
+      specifier: string,
+    ): { kind: "filePath"; value: string } | { kind: "module"; value: string } => {
+      // Deterministic resolution: for relative specifiers, just resolve against the current file’s folder.
+      // This intentionally does NOT probe extensions, consult tsconfig paths, or use Node resolution.
+      const isRelative =
+        specifier === "." ||
+        specifier === ".." ||
+        specifier.startsWith("./") ||
+        specifier.startsWith("../") ||
+        specifier.startsWith(".\\") ||
+        specifier.startsWith("..\\");
+      return isRelative
+        ? { kind: "filePath", value: pathResolve(baseDir, specifier) }
+        : { kind: "module", value: specifier };
     };
 
     root.find(j.ImportDeclaration).forEach((p: any) => {
@@ -213,7 +204,7 @@ export function transformWithWarnings(
       if (typeof source !== "string") {
         return;
       }
-      const fromFilePath = resolveImportFile(source);
+      const resolvedSource = resolveImportSource(source);
       const specs = p.node.specifiers ?? [];
       for (const s of specs) {
         if (!s) {
@@ -232,12 +223,12 @@ export function transformWithWarnings(
               : s.imported?.type === "Identifier"
                 ? s.imported.name
                 : undefined;
-          if (!localName) {
+          if (!localName || !importedName) {
             continue;
           }
           importMap.set(localName, {
-            ...(importedName ? { importedName } : {}),
-            ...(fromFilePath ? { fromFilePath } : {}),
+            importedName,
+            source: resolvedSource,
           });
         }
       }

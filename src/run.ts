@@ -86,6 +86,31 @@ export async function runTransform(options: RunTransformOptions): Promise<RunTra
     throw new Error("Adapter must provide resolveValue(ctx) => { expr, imports } | null");
   }
 
+  const adapterWithLogging: Adapter = {
+    resolveValue(ctx) {
+      try {
+        return adapter.resolveValue(ctx);
+      } catch (e: any) {
+        const kind = (ctx as any)?.kind;
+        const details =
+          kind === "theme"
+            ? `path=${String((ctx as any).path ?? "")}`
+            : kind === "cssVariable"
+              ? `name=${String((ctx as any).name ?? "")}`
+              : kind === "call"
+                ? `callee=${String((ctx as any).calleeImportedName ?? "")} source=${String(
+                    (ctx as any).calleeSource?.value ?? "",
+                  )} file=${String((ctx as any).callSiteFilePath ?? "")}`
+                : "";
+        const msg = `[styled-components-to-stylex] adapter.resolveValue threw${
+          kind ? ` (kind=${kind}${details ? ` ${details}` : ""})` : ""
+        }: ${(e as any)?.stack ?? String(e)}\n`;
+        process.stderr.write(msg);
+        throw e;
+      }
+    },
+  };
+
   // Resolve file paths from glob patterns
   const patterns = Array.isArray(files) ? files : [files];
   const filePaths: string[] = [];
@@ -136,7 +161,7 @@ export async function runTransform(options: RunTransformOptions): Promise<RunTra
     parser,
     dry: dryRun,
     print,
-    adapter,
+    adapter: adapterWithLogging,
     // Programmatic use passes an Adapter object (functions). That cannot be
     // serialized across process boundaries, so we must run in-band.
     runInBand: true,

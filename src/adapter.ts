@@ -22,20 +22,15 @@ export type ResolveContext =
        */
       callSiteFilePath: string;
       /**
-       * Callee identifier used at the call site (includes alias).
-       * Example: `ts("x")` -> "ts"
-       */
-      calleeLocalName: string;
-      /**
        * Imported name when the callee is a named import (including aliases).
        * Example: `import { transitionSpeed as ts } ...; ts("x")` -> "transitionSpeed"
        */
-      calleeImportedName?: string;
+      calleeImportedName: string;
       /**
-       * Best-effort resolved absolute path for the module that provides the imported symbol.
-       * Only set for resolvable relative imports.
+       * Import source for this call: either an absolute file path (relative imports)
+       * or the module specifier (package imports).
        */
-      calleeFromFilePath?: string;
+      calleeSource: { kind: "filePath"; value: string } | { kind: "module"; value: string };
       /**
        * Call arguments (only literals are surfaced precisely; everything else is `unknown`).
        */

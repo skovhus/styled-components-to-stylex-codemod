@@ -69,17 +69,17 @@ const adapter = defineAdapter({
 
     if (ctx.kind === "call") {
       // Called for template interpolations like: ${transitionSpeed("slowTransition")}
-      // `calleeLocalName` is the identifier at the call site (includes alias).
-      // `calleeImportedName` is the imported symbol name when known (e.g. aliasing).
-      // `calleeFromFilePath` is the best-effort resolved absolute path for the import source module.
+      // `calleeImportedName` is the imported symbol name (works even with aliasing).
+      // `calleeSource` tells you where it came from:
+      // - { kind: "filePath", value: "/abs/path" } for relative imports
+      // - { kind: "module", value: "some-package/foo" } for package imports
 
-      const callee = ctx.calleeImportedName ?? ctx.calleeLocalName;
-      if (callee !== "transitionSpeed") {
+      if (ctx.calleeImportedName !== "transitionSpeed") {
         return null;
       }
 
       // If you need to scope resolution to a particular module, you can use:
-      // - ctx.calleeFromFilePath (best-effort absolute path of the import source module)
+      // - ctx.calleeSource
 
       const arg0 = ctx.args[0];
       const key =
@@ -126,7 +126,7 @@ When the codemod encounters an interpolation inside a styled template literal, i
 
 - theme access (`props.theme...`) via `resolveValue({ kind: "theme", path })`
 - prop access (`props.foo`) and conditionals (`props.foo ? "a" : "b"`, `props.foo && "color: red;"`)
-- simple helper calls (`transitionSpeed("slowTransition")`) via `resolveValue({ kind: "call", calleeLocalName, calleeImportedName?, calleeFromFilePath?, args, ... })`
+- simple helper calls (`transitionSpeed("slowTransition")`) via `resolveValue({ kind: "call", calleeImportedName, calleeSource, args, ... })`
 
 If the pipeline can’t resolve an interpolation:
 

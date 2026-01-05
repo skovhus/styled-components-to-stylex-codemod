@@ -1,5 +1,4 @@
 import { defineAdapter } from "../adapter.js";
-import path from "node:path";
 
 // Test adapters - examples of custom adapter usage
 export const customAdapter = defineAdapter({
@@ -22,19 +21,19 @@ export const fixtureAdapter = defineAdapter({
     }
 
     if (ctx.kind === "call") {
-      const callee = ctx.calleeImportedName ?? ctx.calleeLocalName;
-      if (callee !== "transitionSpeed") {
+      if (ctx.calleeImportedName !== "transitionSpeed") {
         return null;
       }
 
-      const from = ctx.calleeFromFilePath;
-      if (!from) {
+      if (ctx.calleeSource.kind !== "filePath") {
         return null;
       }
 
-      // Fixture expects this helper to come from `test-cases/lib/helpers.ts`.
-      const norm = path.normalize(from).split(path.sep).join("/");
-      if (!norm.endsWith("/test-cases/lib/helpers.ts")) {
+      const src = ctx.calleeSource.value;
+      if (
+        !src.endsWith("/test-cases/lib/helpers.ts") &&
+        !src.endsWith("\\test-cases\\lib\\helpers.ts")
+      ) {
         return null;
       }
 

@@ -74,7 +74,10 @@ export type InternalHandlerContext = {
   api: API;
   filePath: string;
   resolveValue: (context: ResolveContext) => ResolveResult | null;
-  resolveImport: (localName: string) => { importedName?: string; fromFilePath?: string } | null;
+  resolveImport: (localName: string) => {
+    importedName: string;
+    source: { kind: "filePath"; value: string } | { kind: "module"; value: string };
+  } | null;
   warn: (warning: HandlerWarning) => void;
 };
 
@@ -127,14 +130,14 @@ function tryResolveCallExpression(
       reason: "Unsupported call expression callee (expected identifier)",
     };
   }
-  const calleeLocalName = expr.callee.name;
-  const imp = ctx.resolveImport(calleeLocalName);
+  const calleeIdent = expr.callee.name;
+  const imp = ctx.resolveImport(calleeIdent);
   const calleeImportedName = imp?.importedName;
-  const calleeFromFilePath = imp?.fromFilePath;
-  if (!calleeFromFilePath) {
+  const calleeSource = imp?.source;
+  if (!calleeImportedName || !calleeSource) {
     return {
       type: "keepOriginal",
-      reason: `Could not resolve import source file for call to ${calleeLocalName}`,
+      reason: "Could not resolve import source for helper call",
     };
   }
 
@@ -142,7 +145,7 @@ function tryResolveCallExpression(
   if (rawArgs.length !== 1) {
     return {
       type: "keepOriginal",
-      reason: `Unsupported call expression argument count for ${calleeLocalName} (expected 1)`,
+      reason: `Unsupported helper call argument count for ${calleeImportedName} (expected 1)`,
     };
   }
   const a = rawArgs[0];
@@ -161,7 +164,7 @@ function tryResolveCallExpression(
   if (!arg0) {
     return {
       type: "keepOriginal",
-      reason: `Unsupported call argument for ${calleeLocalName} (expected string literal)`,
+      reason: `Unsupported helper call argument for ${calleeImportedName} (expected string literal)`,
     };
   }
   const args: CallResolveContext["args"] = [arg0];
@@ -169,15 +172,14 @@ function tryResolveCallExpression(
   const res = ctx.resolveValue({
     kind: "call",
     callSiteFilePath: ctx.filePath,
-    calleeLocalName,
-    ...(calleeImportedName ? { calleeImportedName } : {}),
-    calleeFromFilePath,
+    calleeImportedName,
+    calleeSource,
     args,
   });
   if (!res) {
     return {
       type: "keepOriginal",
-      reason: `Unresolved helper call ${calleeLocalName}(...) (adapter did not resolve)`,
+      reason: `Unresolved helper call ${calleeImportedName}(...) (adapter did not resolve)`,
     };
   }
   return { type: "resolvedValue", expr: res.expr, imports: res.imports };
