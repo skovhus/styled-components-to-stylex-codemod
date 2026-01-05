@@ -64,6 +64,22 @@ export function transformWithWarnings(
   const root = j(file.source);
   const warnings: TransformWarning[] = [];
 
+  // Preserve existing `import React ... from "react"` (default or namespace import) even if it becomes "unused"
+  // after the transform. JSX runtime differences and local conventions can make this import intentionally present.
+  const preserveReactImport =
+    root
+      .find(j.ImportDeclaration)
+      .filter((p: any) => (p.node?.source as any)?.value === "react")
+      .filter((p: any) =>
+        (p.node.specifiers ?? []).some(
+          (s: any) =>
+            (s.type === "ImportDefaultSpecifier" || s.type === "ImportNamespaceSpecifier") &&
+            s.local?.type === "Identifier" &&
+            s.local.name === "React",
+        ),
+      )
+      .size() > 0;
+
   /**
    * Create an object-pattern property with shorthand enabled when possible.
    * This avoids lint issues like `no-useless-rename` from `{ foo: foo }`.
@@ -1096,6 +1112,7 @@ export function transformWithWarnings(
     j,
     descendantOverrides,
     ancestorSelectorParents,
+    preserveReactImport,
   });
   if (post.changed) {
     hasChanges = true;

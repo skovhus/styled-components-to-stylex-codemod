@@ -6,8 +6,9 @@ export function postProcessTransformedAst(args: {
   j: any;
   descendantOverrides: DescendantOverride[];
   ancestorSelectorParents: Set<string>;
+  preserveReactImport?: boolean;
 }): { changed: boolean; needsReactImport: boolean } {
-  const { root, j, descendantOverrides, ancestorSelectorParents } = args;
+  const { root, j, descendantOverrides, ancestorSelectorParents, preserveReactImport } = args;
   let changed = false;
 
   // Clean up empty variable declarations (e.g. `const X;`)
@@ -159,6 +160,21 @@ export function postProcessTransformedAst(args: {
   // Drop unused import specifiers (common after removing styled declarations).
   // Keep side-effect imports (no specifiers) as-is.
   root.find(j.ImportDeclaration).forEach((p: any) => {
+    // Some codebases intentionally keep `import React ... from "react"` even with automatic JSX runtimes,
+    // either for classic runtime compatibility, global React typing, or local conventions.
+    // Preserve existing `React` default/namespace imports when requested.
+    if (preserveReactImport && (p.node?.source as any)?.value === "react") {
+      const hasReactValueBinding = (p.node.specifiers ?? []).some(
+        (s: any) =>
+          (s.type === "ImportDefaultSpecifier" || s.type === "ImportNamespaceSpecifier") &&
+          s.local?.type === "Identifier" &&
+          s.local.name === "React",
+      );
+      if (hasReactValueBinding) {
+        return;
+      }
+    }
+
     const specs = (p.node.specifiers ?? []) as any[];
     if (specs.length === 0) {
       return;
