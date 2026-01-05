@@ -174,40 +174,62 @@ await runTransform({
 });
 ```
 
-#### Create a custom handler (advanced)
+#### Complete adapter example (handles every `ctx.kind`)
 
-Most projects won’t need custom handlers. If you do, handlers let you convert an interpolation into:
-
-- a resolved value (inline into the generated style object)
-- a style function (generated helper + call site wiring)
-- split variants (turn a conditional into base + conditional style keys)
-
-If you want to implement handlers, start by importing the types:
-
-```ts
-import type {
-  DynamicHandler,
-  DynamicNode,
-  HandlerContext,
-} from "styled-components-to-stylex-codemod";
-```
-
-Then add handlers to your adapter:
+This example shows how to handle **both** `ctx.kind` variants (`"theme"` and `"cssVariable"`), including `fallback`, `definedValue`, and `dropDefinition`. It’s intentionally similar to the adapters used in `src/__tests__/fixture-adapters.ts`.
 
 ```ts
 import { defineAdapter } from "styled-components-to-stylex-codemod";
 
-export default defineAdapter({
-  handlers: [
-    {
-      name: "my-handler",
-      handle(node: any, ctx: any) {
-        // Return null to let the next handler try.
-        // Return a handler result object to tell the transform what to emit.
-        return null;
-      },
-    },
-  ],
+export const adapter = defineAdapter({
+  resolveValue(ctx) {
+    if (ctx.kind === "theme") {
+      // Called for patterns like: ${(props) => props.theme.colors.primary}
+      // `ctx.path` is the dotted path after `theme.`
+      const varName = ctx.path.replace(/\./g, "_");
+      return {
+        expr: `tokens.${varName}`,
+        imports: ['import { tokens } from "./design-system.stylex";'],
+      };
+    }
+
+    if (ctx.kind === "cssVariable") {
+      // Called for CSS values containing `var(--...)`
+      // Note: `fallback` is the raw fallback string inside `var(--x, <fallback>)` (if present).
+      // Note: `definedValue` is populated when the transformer sees a local `--x: <value>` definition.
+      const { name, fallback, definedValue } = ctx;
+
+      // Example: lift `var(--base-size)` to StyleX vars, and optionally drop a matching local definition.
+      if (name === "--base-size") {
+        return {
+          expr: "calcVars.baseSize",
+          imports: ['import { calcVars } from "./css-calc.stylex";'],
+          ...(definedValue === "16px" ? { dropDefinition: true } : {}),
+        };
+      }
+
+      // Generic mapping: `--kebab-case` -> `vars.kebabCase`
+      // e.g. `--color-primary` -> `vars.colorPrimary`
+      const toCamelCase = (cssVarName: string) =>
+        cssVarName
+          .replace(/^--/, "")
+          .split("-")
+          .filter(Boolean)
+          .map((part, i) =>
+            i === 0 ? part : part[0]?.toUpperCase() + part.slice(1)
+          )
+          .join("");
+
+      // If you care about fallbacks, you can use `fallback` here to decide whether to resolve or not.
+      void fallback;
+      return {
+        expr: `vars.${toCamelCase(name)}`,
+        imports: ['import { vars } from "./css-variables.stylex";'],
+      };
+    }
+
+    return null;
+  },
 });
 ```
 
@@ -227,15 +249,6 @@ interface RunTransformResult {
   timeElapsed: number; // Total time in seconds
 }
 ```
-
-## Public API
-
-This package intentionally exposes a small public API:
-
-- **`defineAdapter`**: define how theme paths / CSS variables resolve, plus custom handlers
-- **`runTransform`**: run the codemod over a set of files (uses jscodeshift under the hood)
-
-The underlying jscodeshift transform function is considered **internal** and is not a supported public entrypoint.
 
 ## License
 
