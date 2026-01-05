@@ -68,6 +68,19 @@ export type HandlerResult =
         style: Record<string, unknown>;
       }>;
     }
+  | {
+      /**
+       * Like `splitVariants`, but each branch produces a JS expression string
+       * (which may come from adapter theme resolution) rather than a static literal.
+       */
+      type: "splitVariantsResolvedValue";
+      variants: Array<{
+        nameHint: string;
+        when: string;
+        expr: string;
+        imports: ImportSpec[];
+      }>;
+    }
   | { type: "keepOriginal"; reason: string };
 
 export type InternalHandlerContext = {
@@ -185,7 +198,10 @@ function tryResolveCallExpression(
   return { type: "resolvedValue", expr: res.expr, imports: res.imports };
 }
 
-function tryResolveConditionalValue(node: DynamicNode): HandlerResult | null {
+function tryResolveConditionalValue(
+  node: DynamicNode,
+  ctx: InternalHandlerContext,
+): HandlerResult | null {
   if (!node.css.property) {
     return null;
   }
@@ -203,9 +219,39 @@ function tryResolveConditionalValue(node: DynamicNode): HandlerResult | null {
   }
   const { test, consequent, alternate } = expr.body;
 
-  const cons = literalToStaticValue(consequent);
-  const alt = literalToStaticValue(alternate);
-  if (cons === null || alt === null) {
+  type Branch = { expr: string; imports: ImportSpec[] } | null;
+  const branchToExpr = (b: unknown): Branch => {
+    const v = literalToStaticValue(b);
+    if (v !== null) {
+      return {
+        expr: typeof v === "string" ? JSON.stringify(v) : String(v),
+        imports: [],
+      };
+    }
+    if (!b || typeof b !== "object") {
+      return null;
+    }
+    if ((b as any).type !== "MemberExpression") {
+      return null;
+    }
+    const parts = getMemberPathFromIdentifier(b as any, paramName);
+    if (!parts || parts[0] !== "theme") {
+      return null;
+    }
+    const path = parts.slice(1).join(".");
+    if (!path) {
+      return null;
+    }
+    const res = ctx.resolveValue({ kind: "theme", path });
+    if (!res) {
+      return null;
+    }
+    return { expr: res.expr, imports: res.imports };
+  };
+
+  const cons = branchToExpr(consequent);
+  const alt = branchToExpr(alternate);
+  if (!cons || !alt) {
     return null;
   }
 
@@ -215,17 +261,19 @@ function tryResolveConditionalValue(node: DynamicNode): HandlerResult | null {
   if (testPath && testPath.length === 1) {
     const whenExpr = testPath[0]!;
     return {
-      type: "splitVariants",
+      type: "splitVariantsResolvedValue",
       variants: [
         {
           nameHint: "truthy",
           when: whenExpr,
-          style: styleFromSingleDeclaration(node.css.property, cons),
+          expr: cons.expr,
+          imports: cons.imports,
         },
         {
           nameHint: "falsy",
           when: `!${whenExpr}`,
-          style: styleFromSingleDeclaration(node.css.property, alt),
+          expr: alt.expr,
+          imports: alt.imports,
         },
       ],
     };
@@ -250,17 +298,19 @@ function tryResolveConditionalValue(node: DynamicNode): HandlerResult | null {
     const cond = `${propName} ${test.operator} ${rhs}`;
 
     return {
-      type: "splitVariants",
+      type: "splitVariantsResolvedValue",
       variants: [
         {
           nameHint: "default",
           when: `!(${cond})`,
-          style: styleFromSingleDeclaration(node.css.property, alt),
+          expr: alt.expr,
+          imports: alt.imports,
         },
         {
           nameHint: "match",
           when: cond,
-          style: styleFromSingleDeclaration(node.css.property, cons),
+          expr: cons.expr,
+          imports: cons.imports,
         },
       ],
     };
@@ -353,7 +403,7 @@ export function resolveDynamicNode(
   return (
     tryResolveThemeAccess(node, ctx) ??
     tryResolveCallExpression(node, ctx) ??
-    tryResolveConditionalValue(node) ??
+    tryResolveConditionalValue(node, ctx) ??
     tryResolveConditionalCssBlock(node) ??
     tryResolvePropAccess(node)
   );

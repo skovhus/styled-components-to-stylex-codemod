@@ -22,7 +22,15 @@ export const customAdapter = defineAdapter({
 export const fixtureAdapter = defineAdapter({
   resolveValue(ctx) {
     if (ctx.kind === "theme") {
-      return { expr: `tokens.${ctx.path.replace(/\./g, "_")}`, imports: [] };
+      return {
+        expr: `themeVars.${ctx.path.replace(/\./g, "_")}`,
+        imports: [
+          {
+            from: { kind: "specifier", value: "./tokens.stylex" },
+            names: [{ imported: "themeVars" }],
+          },
+        ],
+      };
     }
 
     if (ctx.kind === "call") {

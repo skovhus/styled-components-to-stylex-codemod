@@ -88,6 +88,35 @@ export function lowerRules(args: {
   const descendantOverrideHover = new Map<string, Record<string, unknown>>();
   let bail = false;
 
+  const ensureShouldForwardPropDrop = (decl: StyledDecl, propName: string) => {
+    // Ensure we generate a wrapper so we can consume the styling prop without forwarding it to DOM.
+    decl.needsWrapperComponent = true;
+    const existing = decl.shouldForwardProp ?? { dropProps: [] as string[] };
+    const dropProps = new Set<string>(existing.dropProps ?? []);
+    dropProps.add(propName);
+    decl.shouldForwardProp = { ...existing, dropProps: [...dropProps] };
+  };
+
+  const literalToStaticValue = (node: any): string | number | null => {
+    if (!node || typeof node !== "object") {
+      return null;
+    }
+    if (node.type === "StringLiteral") {
+      return node.value;
+    }
+    if (node.type === "NumericLiteral") {
+      return node.value;
+    }
+    // Support recast "Literal" nodes when parser produces them.
+    if (
+      node.type === "Literal" &&
+      (typeof node.value === "string" || typeof node.value === "number")
+    ) {
+      return node.value;
+    }
+    return null;
+  };
+
   for (const decl of styledDecls) {
     if (decl.preResolvedStyle) {
       resolvedStyleObjects.set(decl.styleKey, decl.preResolvedStyle);
@@ -884,6 +913,151 @@ export function lowerRules(args: {
             continue;
           }
 
+          // Support enum-like block-body `if` chains that return static values.
+          // Example:
+          //   transform: ${(props) => { if (props.$state === "up") return "scaleY(3)"; return "scaleY(1)"; }};
+          {
+            const tryHandleEnumIfChainValue = (): boolean => {
+              if (d.value.kind !== "interpolated") {
+                return false;
+              }
+              if (!d.property) {
+                return false;
+              }
+              // Only apply to base declarations; variant expansion for pseudo/media/attr buckets is more complex.
+              if (pseudo || media || attrTarget) {
+                return false;
+              }
+              const parts = d.value.parts ?? [];
+              const slotPart = parts.find((p: any) => p.kind === "slot");
+              if (!slotPart || slotPart.kind !== "slot") {
+                return false;
+              }
+              const slotId = slotPart.slotId;
+              const expr = decl.templateExpressions[slotId] as any;
+              if (!expr || expr.type !== "ArrowFunctionExpression") {
+                return false;
+              }
+              const paramName =
+                expr.params?.[0]?.type === "Identifier" ? expr.params[0].name : null;
+              if (!paramName) {
+                return false;
+              }
+              if (expr.body?.type !== "BlockStatement") {
+                return false;
+              }
+
+              type Case = { when: string; value: string | number };
+              const cases: Case[] = [];
+              let defaultValue: string | number | null = null;
+              let propName: string | null = null;
+
+              const readIfReturnValue = (ifStmt: any): string | number | null => {
+                const cons = ifStmt.consequent;
+                if (!cons) {
+                  return null;
+                }
+                if (cons.type === "ReturnStatement") {
+                  return literalToStaticValue(cons.argument);
+                }
+                if (cons.type === "BlockStatement") {
+                  const ret = (cons.body ?? []).find((s: any) => s?.type === "ReturnStatement");
+                  return ret ? literalToStaticValue(ret.argument) : null;
+                }
+                return null;
+              };
+
+              const bodyStmts = expr.body.body ?? [];
+              for (const stmt of bodyStmts) {
+                if (!stmt) {
+                  continue;
+                }
+                if (stmt.type === "IfStatement") {
+                  // Only support `if (...) { return <literal>; }` with no else.
+                  if (stmt.alternate) {
+                    return false;
+                  }
+                  const test = stmt.test as any;
+                  if (
+                    !test ||
+                    test.type !== "BinaryExpression" ||
+                    test.operator !== "===" ||
+                    test.left?.type !== "MemberExpression"
+                  ) {
+                    return false;
+                  }
+                  const left = test.left as any;
+                  const leftPath = getMemberPathFromIdentifier(left, paramName);
+                  if (!leftPath || leftPath.length !== 1) {
+                    return false;
+                  }
+                  const p = leftPath[0]!;
+                  propName = propName ?? p;
+                  if (propName !== p) {
+                    return false;
+                  }
+                  const rhs = literalToStaticValue(test.right);
+                  if (rhs === null) {
+                    return false;
+                  }
+                  const retValue = readIfReturnValue(stmt);
+                  if (retValue === null) {
+                    return false;
+                  }
+                  const cond = `${propName} === ${JSON.stringify(rhs)}`;
+                  cases.push({ when: cond, value: retValue });
+                  continue;
+                }
+                if (stmt.type === "ReturnStatement") {
+                  defaultValue = literalToStaticValue(stmt.argument);
+                  continue;
+                }
+                // Any other statement shape => too risky.
+                return false;
+              }
+
+              if (!propName || defaultValue === null || cases.length === 0) {
+                return false;
+              }
+
+              ensureShouldForwardPropDrop(decl, propName);
+
+              const styleFromValue = (value: string | number): Record<string, unknown> => {
+                const valueRaw = typeof value === "number" ? String(value) : value;
+                const irDecl = {
+                  property: d.property,
+                  value: { kind: "static" as const, value: valueRaw },
+                  important: false,
+                  valueRaw,
+                };
+                const out: Record<string, unknown> = {};
+                for (const mapped of cssDeclarationToStylexDeclarations(irDecl as any)) {
+                  out[mapped.prop] =
+                    typeof value === "number" ? value : cssValueToJs(mapped.value, false);
+                }
+                return out;
+              };
+
+              // Default goes into base style.
+              Object.assign(styleObj, styleFromValue(defaultValue));
+
+              // Cases become variant buckets keyed by expression strings.
+              for (const c of cases) {
+                variantBuckets.set(c.when, {
+                  ...variantBuckets.get(c.when),
+                  ...styleFromValue(c.value),
+                });
+                variantStyleKeys[c.when] ??= `${decl.styleKey}${toSuffixFromProp(c.when)}`;
+              }
+
+              return true;
+            };
+
+            if (tryHandleEnumIfChainValue()) {
+              continue;
+            }
+          }
+
           if (pseudo && d.property) {
             const stylexProp = cssDeclarationToStylexDeclarations(d)[0]?.prop;
             const slotPart = d.value.parts.find((p: any) => p.kind === "slot");
@@ -998,6 +1172,48 @@ export function lowerRules(args: {
             if (pos) {
               const when = pos.when.replace(/^!/, "");
               variantBuckets.set(when, { ...variantBuckets.get(when), ...pos.style });
+              variantStyleKeys[when] ??= `${decl.styleKey}${toSuffixFromProp(when)}`;
+            }
+            continue;
+          }
+
+          if (res && res.type === "splitVariantsResolvedValue") {
+            const neg = res.variants.find((v: any) => v.when.startsWith("!"));
+            const pos = res.variants.find((v: any) => !v.when.startsWith("!"));
+
+            const applyResolved = (
+              target: Record<string, unknown>,
+              expr: string,
+              imports: any[],
+            ) => {
+              for (const imp of imports ?? []) {
+                resolverImports.set(JSON.stringify(imp), imp);
+              }
+              const exprAst = parseExpr(expr);
+              if (!exprAst) {
+                warnings.push({
+                  type: "dynamic-node",
+                  feature: "adapter-resolveValue",
+                  message: `Adapter returned an unparseable expression for ${decl.localName}; dropping this declaration.`,
+                });
+                return false;
+              }
+              const outs = cssDeclarationToStylexDeclarations(d);
+              for (let i = 0; i < outs.length; i++) {
+                const out = outs[i]!;
+                target[out.prop] = exprAst as any;
+              }
+              return true;
+            };
+
+            if (neg) {
+              applyResolved(styleObj as any, neg.expr, neg.imports);
+            }
+            if (pos) {
+              const when = pos.when.replace(/^!/, "");
+              const bucket = { ...variantBuckets.get(when) } as Record<string, unknown>;
+              applyResolved(bucket, pos.expr, pos.imports);
+              variantBuckets.set(when, bucket);
               variantStyleKeys[when] ??= `${decl.styleKey}${toSuffixFromProp(when)}`;
             }
             continue;
