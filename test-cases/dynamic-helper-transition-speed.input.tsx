@@ -3,11 +3,13 @@ import styled from "styled-components";
 import "./css-variables.css";
 import { transitionSpeed } from "./lib/helpers.ts";
 
-const AnimatedPath = styled.path`
+const AnimatedPath = styled.path.withConfig({
+  shouldForwardProp: (prop) => !prop.startsWith("$"),
+})<{ $width: number }>`
   transition-property: opacity;
   transition-duration: ${transitionSpeed("slowTransition")};
   stroke: #bf4f74;
-  stroke-width: 6px;
+  stroke-width: ${(props) => props.$width}px;
   fill: none;
 `;
 
@@ -31,7 +33,7 @@ export const App = () => {
           background: "white",
         }}
       >
-        <AnimatedPath d="M10 30 L130 30" style={{ opacity: on ? 1 : 0.2 }} />
+        <AnimatedPath d="M10 30 L130 30" style={{ opacity: on ? 1 : 0.2 }} $width={6} />
       </svg>
     </div>
   );

@@ -1181,14 +1181,12 @@ export function lowerRules(args: {
             const neg = res.variants.find((v: any) => v.when.startsWith("!"));
             const pos = res.variants.find((v: any) => !v.when.startsWith("!"));
 
-            const applyResolved = (
-              target: Record<string, unknown>,
+            const outs = cssDeclarationToStylexDeclarations(d);
+
+            const parseResolved = (
               expr: string,
               imports: any[],
-            ) => {
-              for (const imp of imports ?? []) {
-                resolverImports.set(JSON.stringify(imp), imp);
-              }
+            ): { exprAst: unknown; imports: any[] } | null => {
               const exprAst = parseExpr(expr);
               if (!exprAst) {
                 warnings.push({
@@ -1196,23 +1194,42 @@ export function lowerRules(args: {
                   feature: "adapter-resolveValue",
                   message: `Adapter returned an unparseable expression for ${decl.localName}; dropping this declaration.`,
                 });
-                return false;
+                return null;
               }
-              const outs = cssDeclarationToStylexDeclarations(d);
-              for (let i = 0; i < outs.length; i++) {
-                const out = outs[i]!;
-                target[out.prop] = exprAst as any;
-              }
-              return true;
+              return { exprAst, imports: imports ?? [] };
             };
 
-            if (neg) {
-              applyResolved(styleObj as any, neg.expr, neg.imports);
+            const applyParsed = (
+              target: Record<string, unknown>,
+              parsed: { exprAst: unknown; imports: any[] },
+            ): void => {
+              for (const imp of parsed.imports) {
+                resolverImports.set(JSON.stringify(imp), imp);
+              }
+              for (let i = 0; i < outs.length; i++) {
+                const out = outs[i]!;
+                target[out.prop] = parsed.exprAst as any;
+              }
+            };
+
+            // IMPORTANT: stage parsing first. If either branch fails to parse, skip this declaration entirely
+            // (mirrors the `resolvedValue` behavior) and avoid emitting empty variant buckets.
+            const negParsed = neg ? parseResolved(neg.expr, neg.imports) : null;
+            if (neg && !negParsed) {
+              continue;
             }
-            if (pos) {
+            const posParsed = pos ? parseResolved(pos.expr, pos.imports) : null;
+            if (pos && !posParsed) {
+              continue;
+            }
+
+            if (negParsed) {
+              applyParsed(styleObj as any, negParsed);
+            }
+            if (pos && posParsed) {
               const when = pos.when.replace(/^!/, "");
               const bucket = { ...variantBuckets.get(when) } as Record<string, unknown>;
-              applyResolved(bucket, pos.expr, pos.imports);
+              applyParsed(bucket, posParsed);
               variantBuckets.set(when, bucket);
               variantStyleKeys[when] ??= `${decl.styleKey}${toSuffixFromProp(when)}`;
             }
@@ -1229,14 +1246,63 @@ export function lowerRules(args: {
                 styleFnFromProps.push({ fnKey, jsxProp });
 
                 if (!styleFnDecls.has(fnKey)) {
+                  // IMPORTANT: don't reuse the same Identifier node for both the function param and
+                  // expression positions. If the param identifier has a TS annotation, reusing it
+                  // in expression positions causes printers to emit `value: any` inside templates.
                   const param = j.identifier(out.prop);
+                  const valueId = j.identifier(out.prop);
+                  // Be permissive: callers might pass numbers (e.g. `${props => props.$width}px`)
+                  // or strings (e.g. `${props => props.$color}`).
                   (param as any).typeAnnotation = j.tsTypeAnnotation(j.tsStringKeyword());
-                  const p = j.property(
-                    "init",
-                    j.identifier(out.prop),
-                    j.identifier(out.prop),
-                  ) as any;
-                  p.shorthand = true;
+
+                  // If this declaration is a simple interpolated string with a single slot and
+                  // surrounding static text, preserve it by building a TemplateLiteral around the
+                  // prop value, e.g. `${value}px`, `opacity ${value}ms`.
+                  const buildValueExpr = (): any => {
+                    const v: any = (d as any).value;
+                    if (!v || v.kind !== "interpolated") {
+                      return valueId;
+                    }
+                    const parts: any[] = v.parts ?? [];
+                    const slotParts = parts.filter((p: any) => p?.kind === "slot");
+                    if (slotParts.length !== 1) {
+                      return valueId;
+                    }
+                    const onlySlot = slotParts[0]!;
+                    if (onlySlot.slotId !== slotId) {
+                      return valueId;
+                    }
+
+                    // If it's just the slot, keep it as the raw value (number/string).
+                    const hasStatic = parts.some(
+                      (p: any) => p?.kind === "static" && p.value !== "",
+                    );
+                    if (!hasStatic) {
+                      return valueId;
+                    }
+
+                    const quasis: any[] = [];
+                    const exprs: any[] = [];
+                    let q = "";
+                    for (const part of parts) {
+                      if (part?.kind === "static") {
+                        q += String(part.value ?? "");
+                        continue;
+                      }
+                      if (part?.kind === "slot") {
+                        quasis.push(j.templateElement({ raw: q, cooked: q }, false));
+                        q = "";
+                        exprs.push(valueId);
+                        continue;
+                      }
+                    }
+                    quasis.push(j.templateElement({ raw: q, cooked: q }, true));
+                    return j.templateLiteral(quasis, exprs);
+                  };
+
+                  const valueExpr = buildValueExpr();
+                  const p = j.property("init", j.identifier(out.prop), valueExpr) as any;
+                  p.shorthand = valueExpr?.type === "Identifier" && valueExpr.name === out.prop;
                   const body = j.objectExpression([p]);
                   styleFnDecls.set(fnKey, j.arrowFunctionExpression([param], body));
                 }

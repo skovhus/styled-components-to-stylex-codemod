@@ -375,6 +375,54 @@ export const x = 1;
   });
 });
 
+describe("splitVariantsResolvedValue safety", () => {
+  it("should not emit empty variant styles when adapter returns an unparseable expression for one branch", () => {
+    const source = `
+import styled from "styled-components";
+
+const Box = styled.div\`
+  color: \${(props) =>
+    props.$on ? props.theme.colors.primary : props.theme.colors.secondary};
+\`;
+
+export const App = () => <Box $on />;
+`;
+
+    const adapterWithBadThemeExpr = {
+      resolveValue(ctx: any) {
+        if (ctx.kind !== "theme") {
+          return null;
+        }
+        if (ctx.path === "colors.primary") {
+          // Intentionally unparseable; lower-rules should warn and skip this declaration without emitting empty variants.
+          return { expr: ")", imports: [] };
+        }
+        if (ctx.path === "colors.secondary") {
+          return { expr: '"blue"', imports: [] };
+        }
+        return null;
+      },
+    } as any;
+
+    const result = transformWithWarnings(
+      { source, path: "split-variants-resolved-value-parse-failure.tsx" },
+      { jscodeshift: j, j, stats: () => {}, report: () => {} },
+      { adapter: adapterWithBadThemeExpr },
+    );
+
+    expect(result.code).not.toBeNull();
+    expect(
+      result.warnings.some(
+        (w) => w.type === "dynamic-node" && w.feature === "adapter-resolveValue",
+      ),
+    ).toBe(true);
+
+    // Prior to the fix, we'd often end up registering an empty `boxOn` variant style object.
+    expect(result.code).not.toMatch(/boxOn\s*:\s*\{\s*\}/);
+    expect(result.code).not.toMatch(/boxOn\s*:/);
+  });
+});
+
 describe("adapter-driven helper resolution", () => {
   it("should bail when a helper call cannot be resolved", () => {
     const source = `

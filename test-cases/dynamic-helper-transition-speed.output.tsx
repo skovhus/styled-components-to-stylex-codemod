@@ -8,10 +8,39 @@ const styles = stylex.create({
     transitionProperty: "opacity",
     transitionDuration: transitionSpeedVars.slowTransition,
     stroke: "#bf4f74",
-    strokeWidth: "6px",
     fill: "none",
   },
+  animatedPathStrokeWidth: (strokeWidth: string) => ({
+    strokeWidth: `${strokeWidth}px`,
+  }),
 });
+
+function AnimatedPath(props) {
+  const { className, children, style, ...rest } = props;
+
+  for (const k of Object.keys(rest)) {
+    if (k.startsWith("$")) delete rest[k];
+  }
+
+  const sx = stylex.props(
+    styles.animatedPath,
+    props["$width"] && styles.animatedPathStrokeWidth(props["$width"]),
+  );
+
+  return (
+    <path
+      {...sx}
+      className={[sx.className, className].filter(Boolean).join(" ")}
+      style={{
+        ...sx.style,
+        ...style,
+      }}
+      {...rest}
+    >
+      {children}
+    </path>
+  );
+}
 
 export const App = () => {
   const [on, setOn] = React.useState(false);
@@ -33,11 +62,7 @@ export const App = () => {
           background: "white",
         }}
       >
-        <path
-          style={{ opacity: on ? 1 : 0.2 }}
-          {...stylex.props(styles.animatedPath)}
-          d="M10 30 L130 30"
-        />
+        <AnimatedPath d="M10 30 L130 30" style={{ opacity: on ? 1 : 0.2 }} $width={6} />
       </svg>
     </div>
   );
