@@ -2,6 +2,7 @@ import { run as jscodeshiftRun } from "jscodeshift/src/Runner.js";
 import { fileURLToPath } from "node:url";
 import { dirname, join } from "node:path";
 import { glob } from "node:fs/promises";
+import { existsSync } from "node:fs";
 import type { Adapter } from "./adapter.js";
 import { defaultAdapter } from "./adapter.js";
 
@@ -109,13 +110,33 @@ export async function runTransform(options: RunTransformOptions): Promise<RunTra
     };
   }
 
-  // Path to the transform module
-  const transformPath = join(__dirname, "transform.mjs");
+  // Path to the transform module.
+  // - In published builds, `run` and `transform` live together in `dist/` (transform.mjs exists next to run.mjs)
+  // - In-repo tests/dev, `src/transform.mjs` doesn't exist, but `dist/transform.mjs` usually does
+  const transformPath = (() => {
+    const adjacent = join(__dirname, "transform.mjs");
+    if (existsSync(adjacent)) return adjacent;
+
+    const distSibling = join(__dirname, "..", "dist", "transform.mjs");
+    if (existsSync(distSibling)) return distSibling;
+
+    throw new Error(
+      [
+        "Could not locate transform module.",
+        `Tried: ${adjacent}`,
+        `       ${distSibling}`,
+        "Run `pnpm build` to generate dist artifacts.",
+      ].join("\n"),
+    );
+  })();
 
   const result = await jscodeshiftRun(transformPath, filePaths, {
     parser,
     dry: dryRun,
     print,
+    // Programmatic use passes an Adapter object (functions). That cannot be
+    // serialized across process boundaries, so we must run in-band.
+    runInBand: true,
     adapter,
   });
 
