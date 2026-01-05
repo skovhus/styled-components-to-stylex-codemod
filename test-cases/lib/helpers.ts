@@ -23,3 +23,12 @@ export const flexCenter = () => `
   align-items: center;
   justify-content: center;
 `;
+
+export const transitionSpeed = (
+  speed:
+    | "highlightFadeIn"
+    | "highlightFadeOut"
+    | "quickTransition"
+    | "regularTransition"
+    | "slowTransition",
+) => `var(--speed-${speed})`;

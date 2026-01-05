@@ -153,10 +153,14 @@ export function runHandlers(
   node: DynamicNode,
   ctx: HandlerContext,
 ): HandlerResolution {
-  if (!handlers || handlers.length === 0) return { kind: "unhandled" };
+  if (!handlers || handlers.length === 0) {
+    return { kind: "unhandled" };
+  }
   for (const handler of handlers) {
     const result = handler.handle(node, ctx);
-    if (result) return { kind: "resolved", handlerName: handler.name, result };
+    if (result) {
+      return { kind: "resolved", handlerName: handler.name, result };
+    }
   }
   return { kind: "unhandled" };
 }

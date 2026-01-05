@@ -106,7 +106,9 @@ function assertExportsApp(source: string, fileLabel: string): void {
         // export { App } (or export { App as Something })
         const specs = p.node.specifiers ?? [];
         return specs.some((s) => {
-          if (s.type !== "ExportSpecifier") return false;
+          if (s.type !== "ExportSpecifier") {
+            return false;
+          }
           const exported = s.exported;
           if (exported.type === "Identifier") {
             return exported.name === "App";
@@ -140,14 +142,20 @@ function readExpectedWarningsFromComments(source: string): ExpectedWarning[] | n
   for (let i = 0; i < maxLines; i++) {
     const line = lines[i]!;
     const match = line.match(/^\s*\/\/\s*expected-warnings\s*:\s*(.+?)\s*$/);
-    if (!match) continue;
+    if (!match) {
+      continue;
+    }
     const raw = match[1] ?? "";
     for (const part of raw.split(",")) {
       const feature = part.trim();
-      if (feature) features.add(feature);
+      if (feature) {
+        features.add(feature);
+      }
     }
   }
-  if (features.size === 0) return null;
+  if (features.size === 0) {
+    return null;
+  }
   return [...features].map((feature) => ({
     feature,
     type: "unsupported-feature",
@@ -313,6 +321,38 @@ export const App = () => <Box><span /></Box>;
         (w) => w.type === "unsupported-feature" && w.feature === "universal-selector",
       ),
     ).toBe(true);
+  });
+});
+
+describe("adapter-driven helper resolution", () => {
+  it("should skip when transitionSpeed helper is used without a handler", () => {
+    const source = `
+import styled from "styled-components";
+import { transitionSpeed } from "./lib/helpers.ts";
+
+const AnimatedPath = styled.path\`
+  transition-property: opacity;
+  transition-duration: \${transitionSpeed("slowTransition")};
+\`;
+
+export const App = () => (
+  <svg width="10" height="10">
+    <AnimatedPath d="M0 0L10 10" />
+  </svg>
+);
+`;
+
+    const adapterWithoutHandlers = {
+      resolveValue: fixtureAdapter.resolveValue,
+    } as any;
+
+    const result = transformWithWarnings(
+      { source, path: "test.tsx" },
+      { jscodeshift, j: jscodeshift, stats: () => {}, report: () => {} },
+      { adapter: adapterWithoutHandlers },
+    );
+
+    expect(result.code).toBeNull();
   });
 });
 

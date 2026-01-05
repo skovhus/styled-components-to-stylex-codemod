@@ -132,12 +132,16 @@ export function transformWithWarnings(
   ): void => {
     for (const [k, v] of Object.entries(obj)) {
       if (v && typeof v === "object") {
-        if (isAstNode(v)) continue;
+        if (isAstNode(v)) {
+          continue;
+        }
         rewriteCssVarsInStyleObject(v as any, definedVars, varsToDrop);
         continue;
       }
       if (typeof v === "string") {
-        if (!adapter.resolveValue) continue;
+        if (!adapter.resolveValue) {
+          continue;
+        }
         (obj as any)[k] = rewriteCssVarsInString({
           raw: v,
           definedVars,
@@ -159,7 +163,9 @@ export function transformWithWarnings(
       objectToAst,
     });
     keyframesNames = converted.keyframesNames;
-    if (converted.changed) hasChanges = true;
+    if (converted.changed) {
+      hasChanges = true;
+    }
   }
 
   // Convert `styled-components` css helper blocks (css`...`) into plain style objects.
@@ -186,23 +192,31 @@ export function transformWithWarnings(
         ) {
           return;
         }
-        if (p.node.id.type !== "Identifier") return;
+        if (p.node.id.type !== "Identifier") {
+          return;
+        }
         const localName = p.node.id.name;
 
         const template = init.quasi;
         // `css\`...\`` snippets are not attached to a selector; parse by wrapping in `& { ... }`.
-        if ((template.expressions?.length ?? 0) > 0) return;
+        if ((template.expressions?.length ?? 0) > 0) {
+          return;
+        }
         const rawCss = (template.quasis ?? []).map((q: any) => q.value?.raw ?? "").join("");
         const stylisAst = compile(`& { ${rawCss} }`);
         const rules = normalizeStylisAstToIR(stylisAst as any, []);
 
         const baseRule = rules.find((r) => r.selector === "&" && r.atRuleStack.length === 0);
-        if (!baseRule) return;
+        if (!baseRule) {
+          return;
+        }
 
         const helperObj: Record<string, unknown> = {};
         for (const d of baseRule.declarations) {
           // Only accept static decls in helpers for now.
-          if (d.value.kind !== "static") return;
+          if (d.value.kind !== "static") {
+            return;
+          }
           for (const out of cssDeclarationToStylexDeclarations(d)) {
             helperObj[out.prop] = cssValueToJs(out.value, d.important);
           }
@@ -219,13 +233,19 @@ export function transformWithWarnings(
     styledImports.forEach((imp) => {
       const specs = imp.node.specifiers ?? [];
       const next = specs.filter((s) => {
-        if (s.type !== "ImportSpecifier") return true;
-        if (s.imported.type !== "Identifier") return true;
+        if (s.type !== "ImportSpecifier") {
+          return true;
+        }
+        if (s.imported.type !== "Identifier") {
+          return true;
+        }
         return s.imported.name !== "css";
       });
       if (next.length !== specs.length) {
         imp.node.specifiers = next;
-        if (imp.node.specifiers.length === 0) j(imp).remove();
+        if (imp.node.specifiers.length === 0) {
+          j(imp).remove();
+        }
         hasChanges = true;
       }
     });
@@ -244,15 +264,23 @@ export function transformWithWarnings(
     }
   >();
   root.find(j.VariableDeclarator).forEach((p) => {
-    if (p.node.id.type !== "Identifier") return;
+    if (p.node.id.type !== "Identifier") {
+      return;
+    }
     const name = p.node.id.name;
     const init: any = p.node.init;
-    if (!init || init.type !== "ArrowFunctionExpression") return;
+    if (!init || init.type !== "ArrowFunctionExpression") {
+      return;
+    }
     const param0 = init.params?.[0];
-    if (!param0 || param0.type !== "Identifier") return;
+    if (!param0 || param0.type !== "Identifier") {
+      return;
+    }
     const paramName = param0.name;
     const body = init.body;
-    if (!body || body.type !== "ConditionalExpression") return;
+    if (!body || body.type !== "ConditionalExpression") {
+      return;
+    }
     const test: any = body.test;
     const cons: any = body.consequent;
     const alt: any = body.alternate;
@@ -376,8 +404,12 @@ export function transformWithWarnings(
     styledImports.forEach((imp) => {
       const specs = imp.node.specifiers ?? [];
       imp.node.specifiers = specs.filter((s) => {
-        if (s.type !== "ImportSpecifier") return true;
-        if (s.imported.type !== "Identifier") return true;
+        if (s.type !== "ImportSpecifier") {
+          return true;
+        }
+        if (s.imported.type !== "Identifier") {
+          return true;
+        }
         return s.imported.name !== "createGlobalStyle";
       });
       if ((imp.node.specifiers?.length ?? 0) === 0) {
@@ -414,9 +446,13 @@ export function transformWithWarnings(
       })
       .forEach((p) => {
         const init = p.node.init;
-        if (!init || init.type !== "CallExpression") return;
+        if (!init || init.type !== "CallExpression") {
+          return;
+        }
         const arg0 = init.arguments[0];
-        if (!arg0 || arg0.type !== "Identifier") return;
+        if (!arg0 || arg0.type !== "Identifier") {
+          return;
+        }
         p.node.init = arg0;
         hasChanges = true;
       });
@@ -447,10 +483,18 @@ export function transformWithWarnings(
     styledImports.forEach((imp) => {
       const specs = imp.node.specifiers ?? [];
       imp.node.specifiers = specs.filter((s) => {
-        if (s.type !== "ImportSpecifier") return true;
-        if (s.imported.type !== "Identifier") return true;
-        if (themeProviderLocal && s.imported.name === "ThemeProvider") return false;
-        if (withThemeLocal && s.imported.name === "withTheme") return false;
+        if (s.type !== "ImportSpecifier") {
+          return true;
+        }
+        if (s.imported.type !== "Identifier") {
+          return true;
+        }
+        if (themeProviderLocal && s.imported.name === "ThemeProvider") {
+          return false;
+        }
+        if (withThemeLocal && s.imported.name === "withTheme") {
+          return false;
+        }
         return true;
       });
       if ((imp.node.specifiers?.length ?? 0) === 0) {
@@ -516,6 +560,9 @@ export function transformWithWarnings(
   const resolvedStyleObjects = lowered.resolvedStyleObjects;
   const descendantOverrides = lowered.descendantOverrides;
   const ancestorSelectorParents = lowered.ancestorSelectorParents;
+  if (lowered.bail) {
+    return { code: null, warnings };
+  }
 
   emitStylesAndImports({
     root,
@@ -536,9 +583,13 @@ export function transformWithWarnings(
   const declByLocal = new Map(styledDecls.map((d) => [d.localName, d]));
   const extendedBy = new Map<string, string[]>();
   for (const decl of styledDecls) {
-    if (decl.base.kind !== "component") continue;
+    if (decl.base.kind !== "component") {
+      continue;
+    }
     const base = declByLocal.get(decl.base.ident);
-    if (!base) continue;
+    if (!base) {
+      continue;
+    }
     extendedBy.set(base.localName, [...(extendedBy.get(base.localName) ?? []), decl.localName]);
   }
 
@@ -561,7 +612,9 @@ export function transformWithWarnings(
     });
     if (hasPolymorphicUsage) {
       wrapperNames.add(baseName);
-      for (const c of children) wrapperNames.add(c);
+      for (const c of children) {
+        wrapperNames.add(c);
+      }
     }
   }
 
@@ -635,19 +688,28 @@ export function transformWithWarnings(
                 a.name?.type === "JSXIdentifier" &&
                 a.name.name === name,
             )
-          )
+          ) {
             return;
+          }
           opening.attributes = [...attrs, j.jsxAttribute(j.jsxIdentifier(name), null)];
         };
 
         const hasClass = (opening: any, cls: string): boolean => {
           const attrs = (opening.attributes ?? []) as any[];
           for (const a of attrs) {
-            if (a.type !== "JSXAttribute") continue;
-            if (a.name?.type !== "JSXIdentifier") continue;
-            if (a.name.name !== "className") continue;
+            if (a.type !== "JSXAttribute") {
+              continue;
+            }
+            if (a.name?.type !== "JSXIdentifier") {
+              continue;
+            }
+            if (a.name.name !== "className") {
+              continue;
+            }
             const v: any = a.value;
-            if (!v) continue;
+            if (!v) {
+              continue;
+            }
             if (v.type === "Literal" && typeof v.value === "string") {
               return v.value.split(/\s+/).includes(cls);
             }
@@ -659,15 +721,21 @@ export function transformWithWarnings(
         };
 
         const visitJsx = (node: any) => {
-          if (!node || typeof node !== "object") return;
+          if (!node || typeof node !== "object") {
+            return;
+          }
           if (node.type === "JSXElement") {
             const children: any[] = node.children ?? [];
             let seenPrevThing = false;
             let afterActive = false;
             for (const child of children) {
-              if (!child || child.type !== "JSXElement") continue;
+              if (!child || child.type !== "JSXElement") {
+                continue;
+              }
               const name = child.openingElement?.name;
-              if (name?.type !== "JSXIdentifier") continue;
+              if (name?.type !== "JSXIdentifier") {
+                continue;
+              }
               if (name.name === decl.localName) {
                 if (seenPrevThing) {
                   ensureBoolAttr(child.openingElement, sw.propAdjacent);
@@ -700,8 +768,12 @@ export function transformWithWarnings(
           const opening = p.node.openingElement;
           const attrs = opening.attributes ?? [];
           for (const attr of attrs) {
-            if (attr.type !== "JSXAttribute") continue;
-            if (attr.name.type !== "JSXIdentifier") continue;
+            if (attr.type !== "JSXAttribute") {
+              continue;
+            }
+            if (attr.name.type !== "JSXIdentifier") {
+              continue;
+            }
             if (attr.name.name === "forwardedAs") {
               attr.name.name = "as";
             }
@@ -725,10 +797,16 @@ export function transformWithWarnings(
         // Handle `as="tag"` (styled-components polymorphism) by rewriting the element.
         const attrs = opening.attributes ?? [];
         for (const attr of attrs) {
-          if (attr.type !== "JSXAttribute") continue;
-          if (attr.name.type !== "JSXIdentifier") continue;
+          if (attr.type !== "JSXAttribute") {
+            continue;
+          }
+          if (attr.name.type !== "JSXIdentifier") {
+            continue;
+          }
           const attrName = attr.name.name;
-          if (attrName !== "as" && attrName !== "forwardedAs") continue;
+          if (attrName !== "as" && attrName !== "forwardedAs") {
+            continue;
+          }
           const v = attr.value;
           const raw =
             v && v.type === "Literal" && typeof v.value === "string"
@@ -742,20 +820,29 @@ export function transformWithWarnings(
         }
 
         opening.name = j.jsxIdentifier(finalTag);
-        if (closing) closing.name = j.jsxIdentifier(finalTag);
+        if (closing) {
+          closing.name = j.jsxIdentifier(finalTag);
+        }
 
         const keptAttrs = (opening.attributes ?? []).filter((attr) => {
-          if (attr.type !== "JSXAttribute") return true;
-          if (attr.name.type !== "JSXIdentifier") return true;
+          if (attr.type !== "JSXAttribute") {
+            return true;
+          }
+          if (attr.name.type !== "JSXIdentifier") {
+            return true;
+          }
           // Honor shouldForwardProp by dropping filtered props from DOM output.
           if (decl.shouldForwardProp) {
             const n = attr.name.name;
-            if (decl.shouldForwardProp.dropProps.includes(n)) return false;
+            if (decl.shouldForwardProp.dropProps.includes(n)) {
+              return false;
+            }
             if (
               decl.shouldForwardProp.dropPrefix &&
               n.startsWith(decl.shouldForwardProp.dropPrefix)
-            )
+            ) {
               return false;
+            }
           }
           return attr.name.name !== "as" && attr.name.name !== "forwardedAs";
         });
@@ -796,7 +883,9 @@ export function transformWithWarnings(
 
           // Add static attrs (e.g. `type="text"`) if missing.
           for (const [k, v] of Object.entries(staticAttrs)) {
-            if (hasAttr(k)) continue;
+            if (hasAttr(k)) {
+              continue;
+            }
             const valNode =
               typeof v === "string"
                 ? j.literal(v)
@@ -939,7 +1028,9 @@ export function transformWithWarnings(
     descendantOverrides,
     ancestorSelectorParents,
   });
-  if (post.changed) hasChanges = true;
+  if (post.changed) {
+    hasChanges = true;
+  }
 
   // If the file references `React` (types or values) but doesn't import it, add `import React from "react";`
   if (post.needsReactImport) {
@@ -1015,7 +1106,9 @@ function objectToAst(j: API["jscodeshift"], obj: Record<string, unknown>): any {
   }
 
   for (const [key, value] of Object.entries(obj)) {
-    if (key === "__spreads") continue;
+    if (key === "__spreads") {
+      continue;
+    }
     const keyNode =
       /^[a-zA-Z_$][a-zA-Z0-9_$]*$/.test(key) &&
       !key.startsWith(":") &&
@@ -1037,15 +1130,33 @@ function objectToAst(j: API["jscodeshift"], obj: Record<string, unknown>): any {
 }
 
 function literalToAst(j: API["jscodeshift"], value: unknown): any {
-  if (isAstNode(value)) return value;
-  if (value === null) return j.literal(null);
-  if (typeof value === "string") return j.literal(value);
-  if (typeof value === "number") return j.literal(value);
-  if (typeof value === "boolean") return j.literal(value);
-  if (typeof value === "undefined") return j.identifier("undefined");
-  if (typeof value === "bigint") return j.literal(value.toString());
-  if (typeof value === "symbol") return j.literal(value.description ?? "");
-  if (typeof value === "function") return j.literal("[Function]");
+  if (isAstNode(value)) {
+    return value;
+  }
+  if (value === null) {
+    return j.literal(null);
+  }
+  if (typeof value === "string") {
+    return j.literal(value);
+  }
+  if (typeof value === "number") {
+    return j.literal(value);
+  }
+  if (typeof value === "boolean") {
+    return j.literal(value);
+  }
+  if (typeof value === "undefined") {
+    return j.identifier("undefined");
+  }
+  if (typeof value === "bigint") {
+    return j.literal(value.toString());
+  }
+  if (typeof value === "symbol") {
+    return j.literal(value.description ?? "");
+  }
+  if (typeof value === "function") {
+    return j.literal("[Function]");
+  }
   if (typeof value === "object") {
     try {
       return j.literal(JSON.stringify(value));
@@ -1071,7 +1182,9 @@ function cssValueToJs(value: any, important = false): unknown {
     }
 
     // Try to return number if purely numeric and no unit.
-    if (/^-?\d+(\.\d+)?$/.test(value.value)) return Number(value.value);
+    if (/^-?\d+(\.\d+)?$/.test(value.value)) {
+      return Number(value.value);
+    }
     return value.value;
   }
   // interpolated values are handled earlier for now
@@ -1081,7 +1194,9 @@ function cssValueToJs(value: any, important = false): unknown {
 function toSuffixFromProp(propName: string): string {
   // `$isActive` => `IsActive`, `primary` => `Primary`
   const raw = propName.startsWith("$") ? propName.slice(1) : propName;
-  if (!raw) return "Variant";
+  if (!raw) {
+    return "Variant";
+  }
 
   // Handle simple expression keys coming from dynamic handlers, e.g.:
   //   `size === "large"` -> `SizeLarge`

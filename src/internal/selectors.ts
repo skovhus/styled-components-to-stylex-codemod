@@ -29,7 +29,9 @@ export function parseAttributeSelector(selector: string): {
 
   // &[…]
   const m = selector.match(/^&\[(.+)\]$/) ?? selector.match(/^\[(.+)\]$/);
-  if (!m) return null;
+  if (!m) {
+    return null;
+  }
   const inside = m[1]!;
 
   // type="checkbox" / type="radio"
@@ -45,8 +47,12 @@ export function parseAttributeSelector(selector: string): {
   if (hrefOp) {
     const op = hrefOp[1];
     const val = hrefOp[2];
-    if (op === "^" && val === "https") return { kind: "hrefStartsHttps", suffix: "Https" };
-    if (op === "$" && val === ".pdf") return { kind: "hrefEndsPdf", suffix: "Pdf" };
+    if (op === "^" && val === "https") {
+      return { kind: "hrefStartsHttps", suffix: "Https" };
+    }
+    if (op === "$" && val === ".pdf") {
+      return { kind: "hrefEndsPdf", suffix: "Pdf" };
+    }
   }
 
   // target="_blank"]::after is encoded by stylis as selector '&[target="_blank"]::after' sometimes;
@@ -76,7 +82,9 @@ export function normalizeSelectorForInputAttributePseudos(
   selector: string,
   isInput: boolean,
 ): string {
-  if (!isInput) return selector;
+  if (!isInput) {
+    return selector;
+  }
 
   // Convert input attribute selectors into equivalent pseudo-classes so they can live
   // in the base style object (no wrapper needed).
@@ -84,9 +92,15 @@ export function normalizeSelectorForInputAttributePseudos(
   // - &[readonly]  -> &:read-only
   // - &[readOnly]  -> &:read-only (defensive)
   const m = selector.match(/^&\[(.+)\]$/) ?? selector.match(/^\[(.+)\]$/);
-  if (!m) return selector;
+  if (!m) {
+    return selector;
+  }
   const inside = m[1]!.replace(/\s+/g, "");
-  if (inside === "disabled") return "&:disabled";
-  if (inside === "readonly" || inside === "readOnly") return "&:read-only";
+  if (inside === "disabled") {
+    return "&:disabled";
+  }
+  if (inside === "readonly" || inside === "readOnly") {
+    return "&:read-only";
+  }
   return selector;
 }

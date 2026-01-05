@@ -5,11 +5,15 @@ export type StylexPropDecl = { prop: string; value: CssValue };
 export function cssDeclarationToStylexDeclarations(decl: CssDeclarationIR): StylexPropDecl[] {
   const prop = decl.property.trim();
 
-  if (prop === "background") return [{ prop: "backgroundColor", value: decl.value }];
+  if (prop === "background") {
+    return [{ prop: "backgroundColor", value: decl.value }];
+  }
 
   if (prop === "border") {
     const raw = decl.valueRaw.trim();
-    if (decl.value.kind === "interpolated") return [{ prop: "border", value: decl.value }];
+    if (decl.value.kind === "interpolated") {
+      return [{ prop: "border", value: decl.value }];
+    }
     return borderShorthandToStylex(raw);
   }
 
@@ -17,7 +21,9 @@ export function cssDeclarationToStylexDeclarations(decl: CssDeclarationIR): Styl
 }
 
 export function cssPropertyToStylexProp(prop: string): string {
-  if (prop.startsWith("--")) return prop;
+  if (prop.startsWith("--")) {
+    return prop;
+  }
   return prop.replace(/-([a-z])/g, (_, ch: string) => ch.toUpperCase());
 }
 
@@ -61,10 +67,18 @@ function borderShorthandToStylex(valueRaw: string): StylexPropDecl[] {
 
   const color = colorParts.join(" ").trim();
   const out: StylexPropDecl[] = [];
-  if (width) out.push({ prop: "borderWidth", value: { kind: "static", value: width } });
-  if (style) out.push({ prop: "borderStyle", value: { kind: "static", value: style } });
-  if (color) out.push({ prop: "borderColor", value: { kind: "static", value: color } });
-  if (out.length === 0) return [{ prop: "border", value: { kind: "static", value: v } }];
+  if (width) {
+    out.push({ prop: "borderWidth", value: { kind: "static", value: width } });
+  }
+  if (style) {
+    out.push({ prop: "borderStyle", value: { kind: "static", value: style } });
+  }
+  if (color) {
+    out.push({ prop: "borderColor", value: { kind: "static", value: color } });
+  }
+  if (out.length === 0) {
+    return [{ prop: "border", value: { kind: "static", value: v } }];
+  }
   return out;
 }
 

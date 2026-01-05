@@ -88,8 +88,9 @@ export async function runTransform(options: RunTransformOptions): Promise<RunTra
   const patterns = Array.isArray(files) ? files : [files];
   const filePaths: string[] = [];
 
+  const cwd = process.cwd();
   for (const pattern of patterns) {
-    for await (const file of glob(pattern)) {
+    for await (const file of glob(pattern, { cwd })) {
       filePaths.push(file);
     }
   }
@@ -110,10 +111,14 @@ export async function runTransform(options: RunTransformOptions): Promise<RunTra
   // - In-repo tests/dev, `src/transform.mjs` doesn't exist, but `dist/transform.mjs` usually does
   const transformPath = (() => {
     const adjacent = join(__dirname, "transform.mjs");
-    if (existsSync(adjacent)) return adjacent;
+    if (existsSync(adjacent)) {
+      return adjacent;
+    }
 
     const distSibling = join(__dirname, "..", "dist", "transform.mjs");
-    if (existsSync(distSibling)) return distSibling;
+    if (existsSync(distSibling)) {
+      return distSibling;
+    }
 
     throw new Error(
       [

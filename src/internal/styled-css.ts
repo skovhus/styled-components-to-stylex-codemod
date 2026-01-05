@@ -25,7 +25,9 @@ export function parseStyledTemplateLiteral(template: TemplateLiteral): ParsedSty
     parts.push(quasi.value.raw);
 
     const expr = template.expressions[i];
-    if (!expr) continue;
+    if (!expr) {
+      continue;
+    }
 
     const placeholder = makeInterpolationPlaceholder(i);
     const startOffset = parts.join("").length;

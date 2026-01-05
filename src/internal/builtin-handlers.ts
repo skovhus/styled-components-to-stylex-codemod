@@ -10,18 +10,30 @@ export const themeAccessHandler: DynamicHandler = {
   name: "theme-access",
   handle(node, ctx) {
     const expr = node.expr;
-    if (!isArrowFunctionExpression(expr)) return null;
+    if (!isArrowFunctionExpression(expr)) {
+      return null;
+    }
     const paramName = getArrowFnSingleParamName(expr);
-    if (!paramName) return null;
+    if (!paramName) {
+      return null;
+    }
     const body = expr.body;
-    if (body.type !== "MemberExpression") return null;
+    if (body.type !== "MemberExpression") {
+      return null;
+    }
     const parts = getMemberPathFromIdentifier(body, paramName);
-    if (!parts || parts[0] !== "theme") return null;
+    if (!parts || parts[0] !== "theme") {
+      return null;
+    }
     const path = parts.slice(1).join(".");
-    if (!path) return null;
+    if (!path) {
+      return null;
+    }
 
     const res = ctx.resolveValue({ kind: "theme", path });
-    if (!res) return null;
+    if (!res) {
+      return null;
+    }
     return { type: "resolvedValue", expr: res.expr, imports: res.imports };
   },
 };
@@ -29,18 +41,28 @@ export const themeAccessHandler: DynamicHandler = {
 export const conditionalValueHandler: DynamicHandler = {
   name: "conditional-value",
   handle(node) {
-    if (!node.css.property) return null;
+    if (!node.css.property) {
+      return null;
+    }
     const expr = node.expr;
-    if (!isArrowFunctionExpression(expr)) return null;
+    if (!isArrowFunctionExpression(expr)) {
+      return null;
+    }
     const paramName = getArrowFnSingleParamName(expr);
-    if (!paramName) return null;
+    if (!paramName) {
+      return null;
+    }
 
-    if (expr.body.type !== "ConditionalExpression") return null;
+    if (expr.body.type !== "ConditionalExpression") {
+      return null;
+    }
     const { test, consequent, alternate } = expr.body;
 
     const cons = literalToStaticValue(consequent);
     const alt = literalToStaticValue(alternate);
-    if (cons === null || alt === null) return null;
+    if (cons === null || alt === null) {
+      return null;
+    }
 
     // 1) props.foo ? a : b
     const testPath =
@@ -71,10 +93,14 @@ export const conditionalValueHandler: DynamicHandler = {
       test.left.type === "MemberExpression"
     ) {
       const leftPath = getMemberPathFromIdentifier(test.left, paramName);
-      if (!leftPath || leftPath.length !== 1) return null;
+      if (!leftPath || leftPath.length !== 1) {
+        return null;
+      }
       const propName = leftPath[0]!;
       const right = literalToStaticValue(test.right as any);
-      if (right === null) return null;
+      if (right === null) {
+        return null;
+      }
       const rhs = JSON.stringify(right);
       const cond = `${propName} ${test.operator} ${rhs}`;
 
@@ -119,9 +145,13 @@ export const conditionalCssBlockHandler: DynamicHandler = {
   name: "conditional-css-block",
   handle(node) {
     const expr = node.expr;
-    if (!isArrowFunctionExpression(expr)) return null;
+    if (!isArrowFunctionExpression(expr)) {
+      return null;
+    }
     const paramName = getArrowFnSingleParamName(expr);
-    if (!paramName) return null;
+    if (!paramName) {
+      return null;
+    }
 
     // Support patterns like:
     //   ${(props) => props.$upsideDown && "transform: rotate(180deg);"}
@@ -129,13 +159,19 @@ export const conditionalCssBlockHandler: DynamicHandler = {
       const { left, right } = expr.body;
       const testPath =
         left.type === "MemberExpression" ? getMemberPathFromIdentifier(left, paramName) : null;
-      if (!testPath || testPath.length !== 1) return null;
+      if (!testPath || testPath.length !== 1) {
+        return null;
+      }
 
       const cssText = literalToString(right);
-      if (cssText === null || cssText === undefined) return null;
+      if (cssText === null || cssText === undefined) {
+        return null;
+      }
 
       const style = parseCssDeclarationBlock(cssText);
-      if (!style) return null;
+      if (!style) {
+        return null;
+      }
 
       return {
         type: "splitVariants",
@@ -150,15 +186,25 @@ export const conditionalCssBlockHandler: DynamicHandler = {
 export const propAccessHandler: DynamicHandler = {
   name: "prop-access",
   handle(node) {
-    if (!node.css.property) return null;
+    if (!node.css.property) {
+      return null;
+    }
     const expr = node.expr;
-    if (!isArrowFunctionExpression(expr)) return null;
+    if (!isArrowFunctionExpression(expr)) {
+      return null;
+    }
     const paramName = getArrowFnSingleParamName(expr);
-    if (!paramName) return null;
-    if (expr.body.type !== "MemberExpression") return null;
+    if (!paramName) {
+      return null;
+    }
+    if (expr.body.type !== "MemberExpression") {
+      return null;
+    }
 
     const path = getMemberPathFromIdentifier(expr.body, paramName);
-    if (!path || path.length !== 1) return null;
+    if (!path || path.length !== 1) {
+      return null;
+    }
 
     const propName = path[0]!;
     const cssProp = node.css.property;
@@ -184,10 +230,16 @@ export function builtinHandlers(): DynamicHandler[] {
 }
 
 function literalToStaticValue(node: unknown): string | number | null {
-  if (!node || typeof node !== "object") return null;
+  if (!node || typeof node !== "object") {
+    return null;
+  }
   const type = (node as { type?: string }).type;
-  if (type === "StringLiteral") return (node as { value: string }).value;
-  if (type === "NumericLiteral") return (node as { value: number }).value;
+  if (type === "StringLiteral") {
+    return (node as { value: string }).value;
+  }
+  if (type === "NumericLiteral") {
+    return (node as { value: number }).value;
+  }
   return null;
 }
 
@@ -226,12 +278,16 @@ function parseCssDeclarationBlock(cssText: string): Record<string, unknown> | nu
     .split(";")
     .map((c) => c.trim())
     .filter(Boolean);
-  if (chunks.length === 0) return null;
+  if (chunks.length === 0) {
+    return null;
+  }
 
   const style: Record<string, unknown> = {};
   for (const chunk of chunks) {
     const m = chunk.match(/^([^:]+):([\s\S]+)$/);
-    if (!m) return null;
+    if (!m) {
+      return null;
+    }
     const property = m[1]!.trim();
     const valueRaw = m[2]!.trim();
     const decl = {
@@ -248,10 +304,14 @@ function parseCssDeclarationBlock(cssText: string): Record<string, unknown> | nu
 }
 
 function coerceStaticCss(value: unknown): unknown {
-  if (!value || typeof value !== "object") return value;
+  if (!value || typeof value !== "object") {
+    return value;
+  }
   const v = value as { kind?: string; value?: unknown };
   if (v.kind === "static" && typeof v.value === "string") {
-    if (/^-?\d+(\.\d+)?$/.test(v.value)) return Number(v.value);
+    if (/^-?\d+(\.\d+)?$/.test(v.value)) {
+      return Number(v.value);
+    }
     return v.value;
   }
   return value;

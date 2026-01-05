@@ -11,7 +11,9 @@ export function emitWrappers(args: {
   const { root, j, styledDecls, wrapperNames, patternProp } = args;
 
   const wrapperDecls = styledDecls.filter((d) => d.needsWrapperComponent);
-  if (wrapperDecls.length === 0) return;
+  if (wrapperDecls.length === 0) {
+    return;
+  }
 
   const inputWrapperDecls = wrapperDecls.filter(
     (d) =>
@@ -199,11 +201,15 @@ export function emitWrappers(args: {
   const enumVariantWrappers = wrapperDecls.filter((d) => d.enumVariant);
   if (enumVariantWrappers.length > 0) {
     for (const d of enumVariantWrappers) {
-      if (!d.enumVariant) continue;
+      if (!d.enumVariant) {
+        continue;
+      }
       const { propName, baseKey, cases } = d.enumVariant;
       const primary = cases[0];
       const secondary = cases[1];
-      if (!primary || !secondary) continue;
+      if (!primary || !secondary) {
+        continue;
+      }
       const propsId = j.identifier("props");
       const variantId = j.identifier(propName);
       const childrenId = j.identifier("children");
@@ -290,7 +296,9 @@ export function emitWrappers(args: {
 
   // Generic wrappers for `withConfig({ shouldForwardProp })` cases.
   for (const d of shouldForwardPropWrapperDecls) {
-    if (d.base.kind !== "intrinsic") continue;
+    if (d.base.kind !== "intrinsic") {
+      continue;
+    }
     const tagName = d.base.tagName;
 
     // Build style arguments: base + extends + dynamic variants (as conditional expressions).
@@ -365,7 +373,9 @@ export function emitWrappers(args: {
     const dropPrefix = d.shouldForwardProp?.dropPrefix;
 
     const destructureParts: string[] = [];
-    for (const p of dropProps) destructureParts.push(p);
+    for (const p of dropProps) {
+      destructureParts.push(p);
+    }
     if (dropPrefix) {
       // For prefix drops (e.g. "$"), we can't statically destructure all keys.
       // We'll remove them from rest via runtime loop in the wrapper.
@@ -492,7 +502,9 @@ export function emitWrappers(args: {
         ]);
 
     const fnBodyStmts: any[] = [declStmt];
-    if (cleanupPrefixStmt) fnBodyStmts.push(cleanupPrefixStmt);
+    if (cleanupPrefixStmt) {
+      fnBodyStmts.push(cleanupPrefixStmt);
+    }
     fnBodyStmts.push(sxDecl);
     fnBodyStmts.push(j.returnStatement(jsx as any));
 
@@ -517,22 +529,40 @@ export function emitWrappers(args: {
   // Simple wrappers for `withConfig({ displayName/componentId })` cases where we just want to
   // preserve a component boundary (and optionally set `.displayName`) without prop filtering.
   const simpleWithConfigWrappers = wrapperDecls.filter((d) => {
-    if (d.base.kind !== "intrinsic") return false;
+    if (d.base.kind !== "intrinsic") {
+      return false;
+    }
     const tagName = d.base.tagName;
-    if (!(d.withConfig?.displayName || d.withConfig?.componentId)) return false;
-    if (d.shouldForwardProp) return false;
-    if (d.enumVariant) return false;
-    if (d.siblingWrapper) return false;
-    if (d.attrWrapper) return false;
+    if (!(d.withConfig?.displayName || d.withConfig?.componentId)) {
+      return false;
+    }
+    if (d.shouldForwardProp) {
+      return false;
+    }
+    if (d.enumVariant) {
+      return false;
+    }
+    if (d.siblingWrapper) {
+      return false;
+    }
+    if (d.attrWrapper) {
+      return false;
+    }
     // Don't duplicate the polymorphic wrapper path.
-    if (tagName === "button" && wrapperNames.has(d.localName)) return false;
+    if (tagName === "button" && wrapperNames.has(d.localName)) {
+      return false;
+    }
     // Avoid duplicating other specialized wrappers.
-    if (tagName === "input" || tagName === "a") return false;
+    if (tagName === "input" || tagName === "a") {
+      return false;
+    }
     return true;
   });
 
   for (const d of simpleWithConfigWrappers) {
-    if (d.base.kind !== "intrinsic") continue;
+    if (d.base.kind !== "intrinsic") {
+      continue;
+    }
     const tagName = d.base.tagName;
     const displayName = d.withConfig?.displayName;
     const styleArgs: any[] = [
@@ -657,7 +687,9 @@ export function emitWrappers(args: {
   // Sibling selector wrappers (Thing + variants)
   const siblingWrappers = wrapperDecls.filter((d) => d.siblingWrapper);
   for (const d of siblingWrappers) {
-    if (d.base.kind !== "intrinsic" || d.base.tagName !== "div") continue;
+    if (d.base.kind !== "intrinsic" || d.base.tagName !== "div") {
+      continue;
+    }
     const sw = d.siblingWrapper!;
 
     const propsId = j.identifier("props");
@@ -794,10 +826,14 @@ export function emitWrappers(args: {
     const ordered: any[] = [];
     for (const d of wrapperDecls) {
       const chunk = groups.get(d.localName);
-      if (chunk?.length) ordered.push(...chunk);
+      if (chunk?.length) {
+        ordered.push(...chunk);
+      }
     }
     for (const [name, chunk] of groups.entries()) {
-      if (wrapperDecls.some((d) => d.localName === name)) continue;
+      if (wrapperDecls.some((d) => d.localName === name)) {
+        continue;
+      }
       ordered.push(...chunk);
     }
     ordered.push(...restNodes);

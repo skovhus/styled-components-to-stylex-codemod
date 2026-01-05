@@ -32,29 +32,39 @@ export function normalizeStylisAstToIR(
   const stripFormFeedInSelectors = options.stripFormFeedInSelectors ?? true;
 
   const slotByPlaceholder = new Map<string, number>();
-  for (const slot of slots) slotByPlaceholder.set(slot.placeholder, slot.index);
+  for (const slot of slots) {
+    slotByPlaceholder.set(slot.placeholder, slot.index);
+  }
 
   const rules: CssRuleIR[] = [];
   const atRuleStack: string[] = [];
 
   const ensureRule = (selector: string, stack: string[]): CssRuleIR => {
     const existing = rules.find((r) => r.selector === selector && sameArray(r.atRuleStack, stack));
-    if (existing) return existing;
+    if (existing) {
+      return existing;
+    }
     const created: CssRuleIR = { selector, atRuleStack: [...stack], declarations: [] };
     rules.push(created);
     return created;
   };
 
   const visit = (node: Element | Element[] | undefined): void => {
-    if (!node) return;
+    if (!node) {
+      return;
+    }
     if (Array.isArray(node)) {
-      for (const child of node) visit(child);
+      for (const child of node) {
+        visit(child);
+      }
       return;
     }
 
     if (node.type === "decl") {
       const decls = parseDeclarations(String(node.value ?? ""), slotByPlaceholder);
-      if (decls.length) ensureRule("&", atRuleStack).declarations.push(...decls);
+      if (decls.length) {
+        ensureRule("&", atRuleStack).declarations.push(...decls);
+      }
       return;
     }
 
@@ -70,7 +80,9 @@ export function normalizeStylisAstToIR(
           for (const child of children) {
             if (child?.type === "decl") {
               const decls = parseDeclarations(String(child.value ?? ""), slotByPlaceholder);
-              if (decls.length) rule.declarations.push(...decls);
+              if (decls.length) {
+                rule.declarations.push(...decls);
+              }
             } else {
               visit(child as Element);
             }
@@ -102,7 +114,9 @@ function parseDeclarations(
   slotByPlaceholder: Map<string, number>,
 ): CssDeclarationIR[] {
   const trimmed = declValue.trim();
-  if (!trimmed) return [];
+  if (!trimmed) {
+    return [];
+  }
 
   // Stylis can merge a standalone interpolation placeholder with the following declaration:
   //   __SC_EXPR_0__ text-align:center;
@@ -127,7 +141,9 @@ function parseDeclarations(
   }
 
   const match = trimmed.match(/^([^:]+):([\s\S]+?);?$/);
-  if (!match) return [];
+  if (!match) {
+    return [];
+  }
 
   const property = match[1]!.trim();
   let valueRaw = match[2]!.trim();
@@ -156,14 +172,20 @@ function parseCssValue(valueRaw: string, slotByPlaceholder: Map<string, number>)
   while ((match = placeholderPattern.exec(valueRaw))) {
     const start = match.index;
     const end = start + match[0].length;
-    if (start > lastIndex) parts.push({ kind: "static", value: valueRaw.slice(lastIndex, start) });
+    if (start > lastIndex) {
+      parts.push({ kind: "static", value: valueRaw.slice(lastIndex, start) });
+    }
     parts.push({ kind: "slot", slotId: Number(match[1]) });
     lastIndex = end;
   }
 
-  if (lastIndex < valueRaw.length) parts.push({ kind: "static", value: valueRaw.slice(lastIndex) });
+  if (lastIndex < valueRaw.length) {
+    parts.push({ kind: "static", value: valueRaw.slice(lastIndex) });
+  }
 
-  if (parts.length === 0) return { kind: "static", value: valueRaw };
+  if (parts.length === 0) {
+    return { kind: "static", value: valueRaw };
+  }
   if (parts.every((p) => p.kind === "static")) {
     return { kind: "static", value: parts.map((p) => p.value).join("") };
   }
@@ -185,9 +207,13 @@ function coalesceStaticParts(parts: CssValuePart[]): CssValuePart[] {
 }
 
 function sameArray(a: readonly string[], b: readonly string[]): boolean {
-  if (a.length !== b.length) return false;
+  if (a.length !== b.length) {
+    return false;
+  }
   for (let i = 0; i < a.length; i++) {
-    if (a[i] !== b[i]) return false;
+    if (a[i] !== b[i]) {
+      return false;
+    }
   }
   return true;
 }

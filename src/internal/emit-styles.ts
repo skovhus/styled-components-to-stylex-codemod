@@ -32,7 +32,9 @@ export function emitStylesAndImports(args: {
   // fixtures like string-interpolation).
   const preservedHeaderComments: any[] = [];
   const addHeaderComments = (comments: unknown) => {
-    if (!Array.isArray(comments)) return;
+    if (!Array.isArray(comments)) {
+      return;
+    }
     for (const c of comments as any[]) {
       const v = typeof c?.value === "string" ? String(c.value).trim() : "";
       const line = c?.loc?.start?.line;
@@ -82,7 +84,9 @@ export function emitStylesAndImports(args: {
       const seen = new Set<string>();
       const deduped = merged.filter((c) => {
         const key = `${(c as any)?.type ?? "Comment"}:${String((c as any)?.value ?? "").trim()}`;
-        if (seen.has(key)) return false;
+        if (seen.has(key)) {
+          return false;
+        }
         seen.add(key);
         return true;
       });
@@ -115,10 +119,16 @@ export function emitStylesAndImports(args: {
     const importNodes: any[] = [];
     for (const imp of importsToInject) {
       for (const stmt of parseStatements(imp)) {
-        if (stmt?.type !== "ImportDeclaration") continue;
+        if (stmt?.type !== "ImportDeclaration") {
+          continue;
+        }
         const src = (stmt.source as any)?.value;
-        if (typeof src === "string" && existingImportSources.has(src)) continue;
-        if (typeof src === "string") existingImportSources.add(src);
+        if (typeof src === "string" && existingImportSources.has(src)) {
+          continue;
+        }
+        if (typeof src === "string") {
+          existingImportSources.add(src);
+        }
         importNodes.push(stmt);
       }
     }
@@ -131,7 +141,9 @@ export function emitStylesAndImports(args: {
       const lastImportIdx = (() => {
         let last = -1;
         for (let i = 0; i < body.length; i++) {
-          if (body[i]?.type === "ImportDeclaration") last = i;
+          if (body[i]?.type === "ImportDeclaration") {
+            last = i;
+          }
         }
         return last;
       })();
@@ -139,7 +151,9 @@ export function emitStylesAndImports(args: {
       // Insert imports immediately after the stylex import (preferred) or after the last import.
       const importInsertAt =
         stylexIdx >= 0 ? stylexIdx + 1 : lastImportIdx >= 0 ? lastImportIdx + 1 : 0;
-      if (importNodes.length) body.splice(importInsertAt, 0, ...importNodes);
+      if (importNodes.length) {
+        body.splice(importInsertAt, 0, ...importNodes);
+      }
     }
   }
 
@@ -180,64 +194,43 @@ export function emitStylesAndImports(args: {
     ),
   ]);
 
-  const lastKeyframesOrHelperDecl = root
-    .find(j.VariableDeclaration)
-    .filter((p: any) =>
-      p.node.declarations.some((d: any) => {
-        const init: any = (d as any).init;
-        return (
-          init &&
-          init.type === "CallExpression" &&
-          init.callee?.type === "MemberExpression" &&
-          init.callee.object?.type === "Identifier" &&
-          init.callee.object.name === "stylex" &&
-          init.callee.property?.type === "Identifier" &&
-          init.callee.property.name === "keyframes"
-        );
-      }),
-    )
-    .at(-1);
-
-  const lastCssHelperDecl = root
-    .find(j.VariableDeclaration)
-    .filter((p: any) =>
-      p.node.declarations.some((d: any) => {
-        const id: any = (d as any).id;
-        return id?.type === "Identifier" && cssHelperNames.has(id.name);
-      }),
-    )
-    .at(-1);
-
-  const insertionAnchor = lastKeyframesOrHelperDecl.size()
-    ? lastKeyframesOrHelperDecl
-    : lastCssHelperDecl.size()
-      ? lastCssHelperDecl
-      : null;
-
   // If styles reference identifiers declared later in the file (e.g. string-interpolation fixture),
   // insert `styles` after the last such declaration to satisfy StyleX evaluation order.
   const referencedIdents = new Set<string>();
   {
     const seen = new WeakSet<object>();
     const visit = (cur: any) => {
-      if (!cur) return;
-      if (Array.isArray(cur)) {
-        for (const c of cur) visit(c);
+      if (!cur) {
         return;
       }
-      if (typeof cur !== "object") return;
-      if (seen.has(cur as object)) return;
+      if (Array.isArray(cur)) {
+        for (const c of cur) {
+          visit(c);
+        }
+        return;
+      }
+      if (typeof cur !== "object") {
+        return;
+      }
+      if (seen.has(cur as object)) {
+        return;
+      }
       seen.add(cur as object);
       if (cur.type === "Identifier" && typeof cur.name === "string") {
         referencedIdents.add(cur.name);
       }
       for (const v of Object.values(cur)) {
-        if (typeof v === "object") visit(v);
+        if (typeof v === "object") {
+          visit(v);
+        }
       }
     };
     for (const v of resolvedStyleObjects.values()) {
-      if (isAstNode(v)) visit(v);
-      else if (v && typeof v === "object") visit(objectToAst(j, v as any));
+      if (isAstNode(v)) {
+        visit(v);
+      } else if (v && typeof v === "object") {
+        visit(objectToAst(j, v as any));
+      }
     }
   }
 
@@ -246,30 +239,118 @@ export function emitStylesAndImports(args: {
     let last = -1;
     for (let i = 0; i < programBody.length; i++) {
       const stmt = programBody[i];
-      if (!stmt) continue;
+      if (!stmt) {
+        continue;
+      }
       if (stmt.type === "VariableDeclaration") {
         for (const d of stmt.declarations ?? []) {
           const id = d?.id;
-          if (id?.type === "Identifier" && referencedIdents.has(id.name)) last = i;
+          if (id?.type === "Identifier" && referencedIdents.has(id.name)) {
+            last = i;
+          }
         }
       } else if (stmt.type === "FunctionDeclaration") {
         const id = stmt.id;
-        if (id?.type === "Identifier" && referencedIdents.has(id.name)) last = i;
+        if (id?.type === "Identifier" && referencedIdents.has(id.name)) {
+          last = i;
+        }
       }
     }
     return last >= 0 ? last : null;
   })();
 
-  if (declsRefIdx !== null) {
-    programBody.splice(declsRefIdx + 1, 0, stylesDecl as any);
-  } else if (insertionAnchor) {
-    insertionAnchor.insertAfter(stylesDecl);
-  } else {
-    const lastImport = root.find(j.ImportDeclaration).at(-1);
-    if (lastImport.size() > 0) {
-      lastImport.insertAfter(stylesDecl);
-    } else {
-      root.get().node.program.body.unshift(stylesDecl);
+  // Try to place `styles` where the first styled component declaration used to be:
+  // insert right before the earliest styled decl statement (i.e. after the statement before it).
+  const firstStyledDeclInsertionAfterIdx = (() => {
+    if (!styledDecls.length) {
+      return null;
     }
+    const styledLocalNames = new Set(styledDecls.map((d) => d.localName));
+    let firstIdx: number | null = null;
+    for (let i = 0; i < programBody.length; i++) {
+      const stmt = programBody[i];
+      if (stmt?.type !== "VariableDeclaration") {
+        continue;
+      }
+      for (const d of stmt.declarations ?? []) {
+        const id = d?.id;
+        if (id?.type !== "Identifier") {
+          continue;
+        }
+        if (!styledLocalNames.has(id.name)) {
+          continue;
+        }
+        firstIdx = firstIdx === null ? i : Math.min(firstIdx, i);
+      }
+    }
+    return firstIdx === null ? null : firstIdx - 1;
+  })();
+
+  const lastImportIdx = (() => {
+    let last = -1;
+    for (let i = 0; i < programBody.length; i++) {
+      if (programBody[i]?.type === "ImportDeclaration") {
+        last = i;
+      }
+    }
+    return last;
+  })();
+
+  const lastKeyframesIdx = (() => {
+    let last = -1;
+    for (let i = 0; i < programBody.length; i++) {
+      const stmt = programBody[i];
+      if (stmt?.type !== "VariableDeclaration") {
+        continue;
+      }
+      for (const d of stmt.declarations ?? []) {
+        const init: any = d?.init;
+        if (
+          init &&
+          init.type === "CallExpression" &&
+          init.callee?.type === "MemberExpression" &&
+          init.callee.object?.type === "Identifier" &&
+          init.callee.object.name === "stylex" &&
+          init.callee.property?.type === "Identifier" &&
+          init.callee.property.name === "keyframes"
+        ) {
+          last = i;
+        }
+      }
+    }
+    return last;
+  })();
+
+  const lastCssHelperIdx = (() => {
+    let last = -1;
+    for (let i = 0; i < programBody.length; i++) {
+      const stmt = programBody[i];
+      if (stmt?.type !== "VariableDeclaration") {
+        continue;
+      }
+      for (const d of stmt.declarations ?? []) {
+        const id: any = d?.id;
+        if (id?.type === "Identifier" && cssHelperNames.has(id.name)) {
+          last = i;
+        }
+      }
+    }
+    return last;
+  })();
+
+  // Pick the latest safe insertion point: after imports, after any keyframes/css helpers,
+  // after any referenced identifier declarations, and after the original styled-decl anchor.
+  const insertAfterIdx = Math.max(
+    lastImportIdx,
+    lastKeyframesIdx,
+    lastCssHelperIdx,
+    declsRefIdx ?? -1,
+    firstStyledDeclInsertionAfterIdx ?? -1,
+  );
+
+  if (insertAfterIdx >= 0) {
+    programBody.splice(insertAfterIdx + 1, 0, stylesDecl as any);
+  } else {
+    programBody.unshift(stylesDecl as any);
   }
 }

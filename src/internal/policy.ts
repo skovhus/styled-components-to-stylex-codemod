@@ -19,7 +19,9 @@ export function shouldSkipForThemeProvider(args: {
       : themeProviderImportForSkip?.imported?.type === "Identifier"
         ? themeProviderImportForSkip.imported.name
         : undefined;
-  if (!themeProviderLocalForSkip) return false;
+  if (!themeProviderLocalForSkip) {
+    return false;
+  }
   return root.find(j.JSXIdentifier, { name: themeProviderLocalForSkip } as any).size() > 0;
 }
 

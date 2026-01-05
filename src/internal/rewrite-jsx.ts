@@ -37,8 +37,12 @@ export function postProcessTransformedAst(args: {
 
     const getStylexPropsCallFromAttrs = (attrs: any[]): any => {
       for (const a of attrs ?? []) {
-        if (a.type !== "JSXSpreadAttribute") continue;
-        if (isStylexPropsCall(a.argument)) return a.argument;
+        if (a.type !== "JSXSpreadAttribute") {
+          continue;
+        }
+        if (isStylexPropsCall(a.argument)) {
+          return a.argument;
+        }
       }
       return undefined;
     };
@@ -72,7 +76,9 @@ export function postProcessTransformedAst(args: {
     }
 
     const visit = (node: any, ancestors: any[]) => {
-      if (!node || node.type !== "JSXElement") return;
+      if (!node || node.type !== "JSXElement") {
+        return;
+      }
       const opening = node.openingElement;
       const attrs = (opening.attributes ?? []) as any[];
       const call = getStylexPropsCallFromAttrs(attrs);
@@ -88,13 +94,19 @@ export function postProcessTransformedAst(args: {
 
       if (call) {
         for (const [childKey, list] of overridesByChild.entries()) {
-          if (!hasStyleKeyArg(call, childKey)) continue;
+          if (!hasStyleKeyArg(call, childKey)) {
+            continue;
+          }
           for (const o of list) {
             const matched = ancestors.some(
               (a: any) => a?.call && hasStyleKeyArg(a.call, o.parentStyleKey),
             );
-            if (!matched) continue;
-            if (hasStyleKeyArg(call, o.overrideStyleKey)) continue;
+            if (!matched) {
+              continue;
+            }
+            if (hasStyleKeyArg(call, o.overrideStyleKey)) {
+              continue;
+            }
             const overrideArg = j.memberExpression(
               j.identifier("styles"),
               j.identifier(o.overrideStyleKey),
@@ -107,12 +119,16 @@ export function postProcessTransformedAst(args: {
 
       const nextAncestors = [...ancestors, { call }];
       for (const c of node.children ?? []) {
-        if (c?.type === "JSXElement") visit(c, nextAncestors);
+        if (c?.type === "JSXElement") {
+          visit(c, nextAncestors);
+        }
       }
     };
 
     root.find(j.JSXElement).forEach((p: any) => {
-      if (j(p).closest(j.JSXElement).size() > 1) return;
+      if (j(p).closest(j.JSXElement).size() > 1) {
+        return;
+      }
       visit(p.node, []);
     });
   }
@@ -123,7 +139,9 @@ export function postProcessTransformedAst(args: {
     .forEach((p: any) => {
       const spec = p.node.specifiers?.find((s: any) => s.type === "ImportDefaultSpecifier") as any;
       const local = spec?.local?.type === "Identifier" ? spec.local.name : null;
-      if (!local) return;
+      if (!local) {
+        return;
+      }
       const used =
         root
           .find(j.Identifier, { name: local } as any)
@@ -134,6 +152,74 @@ export function postProcessTransformedAst(args: {
         changed = true;
       }
     });
+
+  // Drop unused import specifiers (common after removing styled declarations).
+  // Keep side-effect imports (no specifiers) as-is.
+  root.find(j.ImportDeclaration).forEach((p: any) => {
+    const specs = (p.node.specifiers ?? []) as any[];
+    if (specs.length === 0) {
+      return;
+    }
+
+    const usedOutsideImports = (localName: string): boolean => {
+      return (
+        root
+          .find(j.Identifier, { name: localName } as any)
+          .filter((idPath: any) => {
+            if (j(idPath).closest(j.ImportDeclaration).size() > 0) {
+              return false;
+            }
+
+            const parent = idPath.parent?.node as any;
+            // Ignore identifiers used as non-computed member property keys: `obj.foo`
+            if (
+              parent &&
+              (parent.type === "MemberExpression" || parent.type === "OptionalMemberExpression") &&
+              parent.property === idPath.node &&
+              parent.computed === false
+            ) {
+              return false;
+            }
+            // Ignore identifiers used as object literal keys when not shorthand: `{ foo: 1 }`
+            if (
+              parent &&
+              parent.type === "Property" &&
+              parent.key === idPath.node &&
+              parent.shorthand !== true
+            ) {
+              return false;
+            }
+
+            return true;
+          })
+          .size() > 0
+      );
+    };
+
+    const nextSpecs = specs.filter((s: any) => {
+      const local =
+        s?.local?.type === "Identifier"
+          ? s.local.name
+          : s?.type === "ImportDefaultSpecifier" && s.local?.type === "Identifier"
+            ? s.local.name
+            : s?.type === "ImportNamespaceSpecifier" && s.local?.type === "Identifier"
+              ? s.local.name
+              : null;
+      if (!local) {
+        return true;
+      }
+      return usedOutsideImports(local);
+    });
+
+    if (nextSpecs.length !== specs.length) {
+      p.node.specifiers = nextSpecs;
+      changed = true;
+    }
+    if ((p.node.specifiers?.length ?? 0) === 0) {
+      j(p).remove();
+      changed = true;
+    }
+  });
 
   const hasReactImport =
     root

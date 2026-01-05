@@ -3,7 +3,9 @@ import { defineAdapter } from "../adapter.js";
 // Test adapters - examples of custom adapter usage
 export const customAdapter = defineAdapter({
   resolveValue(ctx) {
-    if (ctx.kind !== "theme") return null;
+    if (ctx.kind !== "theme") {
+      return null;
+    }
     return {
       expr: `customVar('${ctx.path}', '')`,
       imports: ["import { customVar } from './custom-theme';"],
@@ -18,7 +20,9 @@ export const fixtureAdapter = defineAdapter({
       return { expr: `tokens.${ctx.path.replace(/\./g, "_")}`, imports: [] };
     }
 
-    if (ctx.kind !== "cssVariable") return null;
+    if (ctx.kind !== "cssVariable") {
+      return null;
+    }
 
     const { name, definedValue } = ctx;
 
@@ -47,9 +51,50 @@ export const fixtureAdapter = defineAdapter({
       "--line-height": "lineHeight",
     };
     const v = varsMap[name];
-    if (v) return { expr: `vars.${v}`, imports: [combinedImport] };
+    if (v) {
+      return { expr: `vars.${v}`, imports: [combinedImport] };
+    }
     const t = textVarsMap[name];
-    if (t) return { expr: `textVars.${t}`, imports: [combinedImport] };
+    if (t) {
+      return { expr: `textVars.${t}`, imports: [combinedImport] };
+    }
     return null;
   },
+  handlers: [
+    {
+      name: "helpers-transitionSpeed",
+      handle(node) {
+        const expr: any = node.expr as any;
+        if (!expr || expr.type !== "CallExpression") {
+          return null;
+        }
+        if (expr.callee?.type !== "Identifier" || expr.callee.name !== "transitionSpeed") {
+          return null;
+        }
+        const arg0 = expr.arguments?.[0];
+        const key =
+          arg0?.type === "StringLiteral"
+            ? arg0.value
+            : arg0?.type === "Literal" && typeof arg0.value === "string"
+              ? arg0.value
+              : null;
+        if (
+          key !== "highlightFadeIn" &&
+          key !== "highlightFadeOut" &&
+          key !== "quickTransition" &&
+          key !== "regularTransition" &&
+          key !== "slowTransition"
+        ) {
+          return null;
+        }
+        return {
+          type: "resolvedValue",
+          expr: `transitionSpeedVars.${key}`,
+          imports: [
+            'import { transitionSpeed as transitionSpeedVars } from "./lib/helpers.stylex";',
+          ],
+        };
+      },
+    },
+  ],
 });
