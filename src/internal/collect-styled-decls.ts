@@ -387,7 +387,9 @@ export function collectStyledDecls(args: {
         const tagName = tag.property.name;
         const template = init.quasi;
         const parsed = parseStyledTemplateLiteral(template);
-        const rules = normalizeStylisAstToIR(parsed.stylisAst, parsed.slots);
+        const rules = normalizeStylisAstToIR(parsed.stylisAst, parsed.slots, {
+          rawCss: parsed.rawCss,
+        });
         if (hasUniversalSelectorInRules(rules)) {
           hasUniversalSelectors = true;
         }
@@ -420,7 +422,9 @@ export function collectStyledDecls(args: {
         const tagName = tag.callee.object.property.name;
         const template = init.quasi;
         const parsed = parseStyledTemplateLiteral(template);
-        const rules = normalizeStylisAstToIR(parsed.stylisAst, parsed.slots);
+        const rules = normalizeStylisAstToIR(parsed.stylisAst, parsed.slots, {
+          rawCss: parsed.rawCss,
+        });
         if (hasUniversalSelectorInRules(rules)) {
           hasUniversalSelectors = true;
         }
@@ -464,7 +468,9 @@ export function collectStyledDecls(args: {
         const styleKey = localName === `Styled${ident}` ? toStyleKey(ident) : toStyleKey(localName);
         const template = init.quasi;
         const parsed = parseStyledTemplateLiteral(template);
-        const rules = normalizeStylisAstToIR(parsed.stylisAst, parsed.slots);
+        const rules = normalizeStylisAstToIR(parsed.stylisAst, parsed.slots, {
+          rawCss: parsed.rawCss,
+        });
         if (hasUniversalSelectorInRules(rules)) {
           hasUniversalSelectors = true;
         }
@@ -497,7 +503,9 @@ export function collectStyledDecls(args: {
         const ident = tag.callee.object.arguments[0].name;
         const template = init.quasi;
         const parsed = parseStyledTemplateLiteral(template);
-        const rules = normalizeStylisAstToIR(parsed.stylisAst, parsed.slots);
+        const rules = normalizeStylisAstToIR(parsed.stylisAst, parsed.slots, {
+          rawCss: parsed.rawCss,
+        });
         if (hasUniversalSelectorInRules(rules)) {
           hasUniversalSelectors = true;
         }

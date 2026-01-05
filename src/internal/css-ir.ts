@@ -34,6 +34,11 @@ export type CssRuleIR = {
 
 export type NormalizeOptions = {
   stripFormFeedInSelectors?: boolean;
+  /**
+   * Raw CSS text as authored in the template literal (best-effort).
+   * Used only for comment placement heuristics.
+   */
+  rawCss?: string;
 };
 
 export function normalizeStylisAstToIR(
@@ -42,6 +47,8 @@ export function normalizeStylisAstToIR(
   options: NormalizeOptions = {},
 ): CssRuleIR[] {
   const stripFormFeedInSelectors = options.stripFormFeedInSelectors ?? true;
+  const rawCss = options.rawCss ?? null;
+  let rawCssCursor = 0;
 
   const slotByPlaceholder = new Map<string, number>();
   for (const slot of slots) {
@@ -69,9 +76,48 @@ export function normalizeStylisAstToIR(
     return t.startsWith("/*") && t.endsWith("*/") && !t.endsWith(" */");
   };
 
+  const isInlineTrailingBlockCommentInRawCss = (rawComment: string): boolean => {
+    if (!rawCss) {
+      return false;
+    }
+    const token = rawComment.trim();
+    if (!token) {
+      return false;
+    }
+    const idx = rawCss.indexOf(token, rawCssCursor);
+    if (idx === -1) {
+      return false;
+    }
+    rawCssCursor = idx + token.length;
+
+    // Walk backwards from the comment start:
+    // - skip spaces/tabs
+    // - if we hit a newline before a semicolon => not inline trailing
+    // - if we hit a semicolon before any newline => inline trailing
+    for (let i = idx - 1; i >= 0; i--) {
+      const ch = rawCss[i]!;
+      if (ch === " " || ch === "\t") {
+        continue;
+      }
+      if (ch === "\n" || ch === "\r") {
+        return false;
+      }
+      return ch === ";";
+    }
+    return false;
+  };
+
   const handleCommentNode = (raw: string): void => {
     const body = stripBlockComment(raw);
+    // Preserve actual `// ...` (stylis-converted) comments as trailing line comments.
     if (lastDecl && isStylisConvertedLineComment(raw)) {
+      lastDecl.trailingLineComment = body;
+      return;
+    }
+    // Preserve inline trailing block comments like:
+    //   prop: value; /* comment */
+    // as `// comment` after the StyleX property.
+    if (lastDecl && isInlineTrailingBlockCommentInRawCss(raw)) {
       lastDecl.trailingLineComment = body;
       return;
     }

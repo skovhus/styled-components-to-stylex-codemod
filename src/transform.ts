@@ -335,7 +335,7 @@ export function transformWithWarnings(
         }
         const rawCss = (template.quasis ?? []).map((q: any) => q.value?.raw ?? "").join("");
         const stylisAst = compile(`& { ${rawCss} }`);
-        const rules = normalizeStylisAstToIR(stylisAst as any, []);
+        const rules = normalizeStylisAstToIR(stylisAst as any, [], { rawCss });
 
         const baseRule = rules.find((r) => r.selector === "&" && r.atRuleStack.length === 0);
         if (!baseRule) {
