@@ -2,9 +2,11 @@ import * as stylex from "@stylexjs/stylex";
 
 const styles = stylex.create({
   thing: {
+    /* Triple ampersand for even higher specificity */
     color: "blue",
   },
   overrideStyles: {
+    /* Context-based specificity boost */
     backgroundColor: "papayawhip",
   },
 });

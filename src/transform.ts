@@ -1163,10 +1163,15 @@ function toStyleKey(name: string): string {
 
 function objectToAst(j: API["jscodeshift"], obj: Record<string, unknown>): any {
   const spreadsRaw = obj.__spreads;
+  const propCommentsRaw = (obj as any).__propComments;
   const spreads =
     Array.isArray(spreadsRaw) && spreadsRaw.every((s) => typeof s === "string")
       ? (spreadsRaw as string[])
       : [];
+  const propComments: Record<string, any> =
+    propCommentsRaw && typeof propCommentsRaw === "object" && !Array.isArray(propCommentsRaw)
+      ? (propCommentsRaw as Record<string, any>)
+      : {};
 
   const props: any[] = [];
 
@@ -1178,6 +1183,9 @@ function objectToAst(j: API["jscodeshift"], obj: Record<string, unknown>): any {
     if (key === "__spreads") {
       continue;
     }
+    if (key === "__propComments") {
+      continue;
+    }
     const keyNode =
       /^[a-zA-Z_$][a-zA-Z0-9_$]*$/.test(key) &&
       !key.startsWith(":") &&
@@ -1185,15 +1193,51 @@ function objectToAst(j: API["jscodeshift"], obj: Record<string, unknown>): any {
       !key.startsWith("::")
         ? j.identifier(key)
         : j.literal(key);
-    props.push(
-      j.property(
-        "init",
-        keyNode as any,
-        value && typeof value === "object" && !isAstNode(value)
-          ? objectToAst(j, value as Record<string, unknown>)
-          : literalToAst(j, value),
-      ),
+    const prop = j.property(
+      "init",
+      keyNode as any,
+      value && typeof value === "object" && !isAstNode(value)
+        ? objectToAst(j, value as Record<string, unknown>)
+        : literalToAst(j, value),
     );
+
+    const commentEntry = propComments[key];
+    const leading =
+      typeof commentEntry === "string"
+        ? commentEntry
+        : commentEntry && typeof commentEntry === "object"
+          ? (commentEntry.leading as unknown)
+          : null;
+    const trailingLine =
+      commentEntry && typeof commentEntry === "object"
+        ? (commentEntry.trailingLine as unknown)
+        : null;
+    const comments: any[] = [];
+    if (typeof leading === "string" && leading.trim()) {
+      const trimmed = leading.trim();
+      comments.push({
+        type: "CommentBlock",
+        value: ` ${trimmed} `,
+        leading: true,
+        trailing: false,
+      });
+    }
+    if (typeof trailingLine === "string" && trailingLine.trim()) {
+      const trimmed = trailingLine.trim();
+      // NOTE: Recast/oxfmt will often render this as a standalone comment line above the property.
+      // We normalize it back to an inline trailing comment in `formatOutput`.
+      comments.push({
+        type: "CommentLine",
+        value: ` ${trimmed}`,
+        leading: false,
+        trailing: true,
+      });
+    }
+    if (comments.length) {
+      (prop as any).comments = comments;
+    }
+
+    props.push(prop);
   }
   return j.objectExpression(props);
 }

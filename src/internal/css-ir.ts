@@ -12,6 +12,18 @@ export type CssDeclarationIR = {
   value: CssValue;
   important: boolean;
   valueRaw: string;
+  /**
+   * Leading CSS comment (from `/* ... *\/`) that immediately precedes this declaration in the
+   * original styled-components template literal.
+   *
+   * Stored as the comment body (without the surrounding block-comment markers).
+   */
+  leadingComment?: string;
+  /**
+   * Trailing comment that originated from an end-of-line `// ...` comment in the template literal.
+   * This is preserved as a JS line comment on the corresponding StyleX object property.
+   */
+  trailingLineComment?: string;
 };
 
 export type CssRuleIR = {
@@ -38,6 +50,33 @@ export function normalizeStylisAstToIR(
 
   const rules: CssRuleIR[] = [];
   const atRuleStack: string[] = [];
+  let pendingComment: string | null = null;
+  let lastDecl: CssDeclarationIR | null = null;
+
+  const stripBlockComment = (raw: string): string => {
+    const trimmed = raw.trim();
+    if (trimmed.startsWith("/*") && trimmed.endsWith("*/")) {
+      return trimmed.slice(2, -2).trim();
+    }
+    return trimmed;
+  };
+
+  // Stylis rewrites end-of-line `// comment` to a `comm` node whose `value` looks like `/* comment*/`
+  // (notably lacking the space before the closing `*/`). We treat those as "line comments" and
+  // attach them to the preceding declaration.
+  const isStylisConvertedLineComment = (raw: string): boolean => {
+    const t = raw.trim();
+    return t.startsWith("/*") && t.endsWith("*/") && !t.endsWith(" */");
+  };
+
+  const handleCommentNode = (raw: string): void => {
+    const body = stripBlockComment(raw);
+    if (lastDecl && isStylisConvertedLineComment(raw)) {
+      lastDecl.trailingLineComment = body;
+      return;
+    }
+    pendingComment = body;
+  };
 
   const ensureRule = (selector: string, stack: string[]): CssRuleIR => {
     const existing = rules.find((r) => r.selector === selector && sameArray(r.atRuleStack, stack));
@@ -60,15 +99,31 @@ export function normalizeStylisAstToIR(
       return;
     }
 
+    if (node.type === "comm") {
+      handleCommentNode(String(node.value ?? ""));
+      return;
+    }
+
     if (node.type === "decl") {
       const decls = parseDeclarations(String(node.value ?? ""), slotByPlaceholder);
       if (decls.length) {
+        if (pendingComment) {
+          decls[0]!.leadingComment = pendingComment;
+          pendingComment = null;
+        }
         ensureRule("&", atRuleStack).declarations.push(...decls);
+        lastDecl = decls[decls.length - 1]!;
       }
       return;
     }
 
     if (node.type === "rule") {
+      // Comments inside a rule should not leak out to following top-level nodes.
+      const prevPending = pendingComment;
+      const prevLastDecl = lastDecl;
+      pendingComment = null;
+      lastDecl = null;
+
       const selectorValue = String(node.value ?? "");
       const selector = stripFormFeedInSelectors
         ? selectorValue.replaceAll("\f", "")
@@ -81,8 +136,15 @@ export function normalizeStylisAstToIR(
             if (child?.type === "decl") {
               const decls = parseDeclarations(String(child.value ?? ""), slotByPlaceholder);
               if (decls.length) {
+                if (pendingComment) {
+                  decls[0]!.leadingComment = pendingComment;
+                  pendingComment = null;
+                }
                 rule.declarations.push(...decls);
+                lastDecl = decls[decls.length - 1]!;
               }
+            } else if (child?.type === "comm") {
+              handleCommentNode(String(child.value ?? ""));
             } else {
               visit(child as Element);
             }
@@ -91,6 +153,9 @@ export function normalizeStylisAstToIR(
           visit(children as unknown as Element);
         }
       }
+
+      pendingComment = prevPending;
+      lastDecl = prevLastDecl;
       return;
     }
 

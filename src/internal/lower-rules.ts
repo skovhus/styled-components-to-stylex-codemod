@@ -111,6 +111,36 @@ export function lowerRules(args: {
     const inlineStyleProps: Array<{ prop: string; expr: any }> = [];
     const localVarValues = new Map<string, string>();
 
+    const addPropComments = (
+      target: any,
+      prop: string,
+      comments: { leading?: string | null; trailingLine?: string | null },
+    ): void => {
+      if (!prop) {
+        return;
+      }
+      const leading = comments.leading ?? null;
+      const trailingLine = comments.trailingLine ?? null;
+      if (!leading && !trailingLine) {
+        return;
+      }
+      const key = "__propComments";
+      const existing = (target as any)[key];
+      const map =
+        existing && typeof existing === "object" && !Array.isArray(existing)
+          ? existing
+          : ({} as any);
+      const prev = (map[prop] && typeof map[prop] === "object" ? map[prop] : {}) as any;
+      if (leading) {
+        prev.leading = leading;
+      }
+      if (trailingLine) {
+        prev.trailingLine = trailingLine;
+      }
+      map[prop] = prev;
+      (target as any)[key] = map;
+    };
+
     const toKebab = (s: string) =>
       s
         .replace(/([a-z0-9])([A-Z])/g, "$1-$2")
@@ -636,11 +666,19 @@ export function lowerRules(args: {
           if (d.value.kind !== "static") {
             continue;
           }
-          for (const out of cssDeclarationToStylexDeclarations(d)) {
+          const outs = cssDeclarationToStylexDeclarations(d);
+          for (let i = 0; i < outs.length; i++) {
+            const out = outs[i]!;
             if (out.value.kind !== "static") {
               continue;
             }
             obj[out.prop] = cssValueToJs(out.value, d.important);
+            if (i === 0) {
+              addPropComments(obj, out.prop, {
+                leading: (d as any).leadingComment,
+                trailingLine: (d as any).trailingLineComment,
+              });
+            }
           }
         }
         resolvedStyleObjects.set(decl.siblingWrapper.adjacentKey, obj);
@@ -664,11 +702,19 @@ export function lowerRules(args: {
           if (d.value.kind !== "static") {
             continue;
           }
-          for (const out of cssDeclarationToStylexDeclarations(d)) {
+          const outs = cssDeclarationToStylexDeclarations(d);
+          for (let i = 0; i < outs.length; i++) {
+            const out = outs[i]!;
             if (out.value.kind !== "static") {
               continue;
             }
             obj[out.prop] = cssValueToJs(out.value, d.important);
+            if (i === 0) {
+              addPropComments(obj, out.prop, {
+                leading: (d as any).leadingComment,
+                trailingLine: (d as any).trailingLineComment,
+              });
+            }
           }
         }
         resolvedStyleObjects.set(decl.siblingWrapper.afterKey, obj);
@@ -926,8 +972,18 @@ export function lowerRules(args: {
               });
               continue;
             }
-            for (const out of cssDeclarationToStylexDeclarations(d)) {
-              styleObj[out.prop] = exprAst as any;
+            {
+              const outs = cssDeclarationToStylexDeclarations(d);
+              for (let i = 0; i < outs.length; i++) {
+                const out = outs[i]!;
+                styleObj[out.prop] = exprAst as any;
+                if (i === 0) {
+                  addPropComments(styleObj, out.prop, {
+                    leading: (d as any).leadingComment,
+                    trailingLine: (d as any).trailingLineComment,
+                  });
+                }
+              }
             }
             continue;
           }
@@ -949,17 +1005,29 @@ export function lowerRules(args: {
 
           if (res && res.type === "emitStyleFunction") {
             const jsxProp = res.call;
-            for (const out of cssDeclarationToStylexDeclarations(d)) {
-              const fnKey = `${decl.styleKey}${toSuffixFromProp(out.prop)}`;
-              styleFnFromProps.push({ fnKey, jsxProp });
+            {
+              const outs = cssDeclarationToStylexDeclarations(d);
+              for (let i = 0; i < outs.length; i++) {
+                const out = outs[i]!;
+                const fnKey = `${decl.styleKey}${toSuffixFromProp(out.prop)}`;
+                styleFnFromProps.push({ fnKey, jsxProp });
 
-              if (!styleFnDecls.has(fnKey)) {
-                const param = j.identifier(out.prop);
-                (param as any).typeAnnotation = j.tsTypeAnnotation(j.tsStringKeyword());
-                const p = j.property("init", j.identifier(out.prop), j.identifier(out.prop)) as any;
-                p.shorthand = true;
-                const body = j.objectExpression([p]);
-                styleFnDecls.set(fnKey, j.arrowFunctionExpression([param], body));
+                if (!styleFnDecls.has(fnKey)) {
+                  const param = j.identifier(out.prop);
+                  (param as any).typeAnnotation = j.tsTypeAnnotation(j.tsStringKeyword());
+                  const p = j.property(
+                    "init",
+                    j.identifier(out.prop),
+                    j.identifier(out.prop),
+                  ) as any;
+                  p.shorthand = true;
+                  const body = j.objectExpression([p]);
+                  styleFnDecls.set(fnKey, j.arrowFunctionExpression([param], body));
+                }
+                if (i === 0) {
+                  // No direct prop to attach to here; the style function itself is emitted later.
+                  // We conservatively ignore comment preservation in this path.
+                }
               }
             }
             continue;
@@ -1002,7 +1070,9 @@ export function lowerRules(args: {
           break;
         }
 
-        for (const out of cssDeclarationToStylexDeclarations(d)) {
+        const outs = cssDeclarationToStylexDeclarations(d);
+        for (let i = 0; i < outs.length; i++) {
+          const out = outs[i]!;
           let value = cssValueToJs(out.value, d.important);
           if (out.prop === "content" && typeof value === "string") {
             const m = value.match(/^['"]([\s\S]*)['"]$/);
@@ -1018,9 +1088,21 @@ export function lowerRules(args: {
               const nested = (attrTarget[attrPseudoElement] as any) ?? {};
               nested[out.prop] = value;
               attrTarget[attrPseudoElement] = nested;
+              if (i === 0) {
+                addPropComments(nested, out.prop, {
+                  leading: (d as any).leadingComment,
+                  trailingLine: (d as any).trailingLineComment,
+                });
+              }
               continue;
             }
             attrTarget[out.prop] = value;
+            if (i === 0) {
+              addPropComments(attrTarget, out.prop, {
+                leading: (d as any).leadingComment,
+                trailingLine: (d as any).trailingLineComment,
+              });
+            }
             continue;
           }
 
@@ -1051,10 +1133,22 @@ export function lowerRules(args: {
           if (pseudoElement) {
             nestedSelectors[pseudoElement] ??= {};
             nestedSelectors[pseudoElement]![out.prop] = value;
+            if (i === 0) {
+              addPropComments(nestedSelectors[pseudoElement]!, out.prop, {
+                leading: (d as any).leadingComment,
+                trailingLine: (d as any).trailingLineComment,
+              });
+            }
             continue;
           }
 
           styleObj[out.prop] = value;
+          if (i === 0) {
+            addPropComments(styleObj, out.prop, {
+              leading: (d as any).leadingComment,
+              trailingLine: (d as any).trailingLineComment,
+            });
+          }
         }
       }
       if (bail) {

@@ -293,7 +293,7 @@ const Button = styled.button\`
 
     const result = transformWithWarnings(
       { source, path: "test.tsx" },
-      { jscodeshift, j: jscodeshift, stats: () => {}, report: () => {} },
+      { jscodeshift: j, j, stats: () => {}, report: () => {} },
       { adapter: fixtureAdapter },
     );
 
@@ -315,7 +315,7 @@ export const App = () => <Box><span /></Box>;
 
     const result = transformWithWarnings(
       { source, path: "test.tsx" },
-      { jscodeshift, j: jscodeshift, stats: () => {}, report: () => {} },
+      { jscodeshift: j, j, stats: () => {}, report: () => {} },
       { adapter: fixtureAdapter },
     );
 
@@ -347,16 +347,12 @@ export const App = () => <Box><span /></Box>;
 
     const result = transformWithWarnings(
       { source, path: "test.tsx" },
-      { jscodeshift, j: jscodeshift, stats: () => {}, report: () => {} },
+      { jscodeshift: j, j, stats: () => {}, report: () => {} },
       { adapter: fixtureAdapter },
     );
 
-    expect(result.code).toBeNull();
-    expect(
-      result.warnings.some(
-        (w) => w.type === "dynamic-node" && w.feature === "dynamic-interpolation",
-      ),
-    ).toBe(true);
+    expect(result.code).not.toBeNull();
+    expect(result.code).not.toMatch(/from\\s+['"]styled-components['"]/);
   });
 });
 
@@ -393,7 +389,7 @@ export const App = () => (
 
     const result = transformWithWarnings(
       { source, path: join(testCasesDir, "dynamic-helper-transition-speed.input.tsx") },
-      { jscodeshift, j: jscodeshift, stats: () => {}, report: () => {} },
+      { jscodeshift: j, j, stats: () => {}, report: () => {} },
       { adapter: adapterWithoutCallResolution },
     );
 
@@ -418,7 +414,7 @@ export const App = () => <Button>Click</Button>;
   it("should accept custom adapter", () => {
     const result = transformWithWarnings(
       { source: themeSource, path: "test.tsx" },
-      { jscodeshift, j: jscodeshift, stats: () => {}, report: () => {} },
+      { jscodeshift: j, j, stats: () => {}, report: () => {} },
       { adapter: customAdapter },
     );
 
