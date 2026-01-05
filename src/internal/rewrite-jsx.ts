@@ -22,10 +22,13 @@ export function postProcessTransformedAst(args: {
   // - Add `stylex.defaultMarker()` to ancestor elements.
   // - Add override style keys to descendant elements' `stylex.props(...)` calls.
   if (descendantOverrides.length > 0) {
-    const defaultMarkerCall = j.callExpression(
-      j.memberExpression(j.identifier("stylex"), j.identifier("defaultMarker")),
-      [],
-    );
+    // IMPORTANT: Do not reuse the same AST node instance across multiple insertion points.
+    // Recast/jscodeshift expect a tree (no shared references); reuse can corrupt printing.
+    const makeDefaultMarkerCall = () =>
+      j.callExpression(
+        j.memberExpression(j.identifier("stylex"), j.identifier("defaultMarker")),
+        [],
+      );
 
     const isStylexPropsCall = (n: any): n is any =>
       n?.type === "CallExpression" &&
@@ -86,7 +89,7 @@ export function postProcessTransformedAst(args: {
       if (call) {
         for (const parentKey of ancestorSelectorParents) {
           if (hasStyleKeyArg(call, parentKey) && !hasDefaultMarker(call)) {
-            call.arguments = [...(call.arguments ?? []), defaultMarkerCall];
+            call.arguments = [...(call.arguments ?? []), makeDefaultMarkerCall()];
             changed = true;
           }
         }

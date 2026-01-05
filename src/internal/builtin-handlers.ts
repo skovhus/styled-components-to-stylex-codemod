@@ -123,21 +123,10 @@ export const conditionalValueHandler: DynamicHandler = {
       };
     }
 
-    return {
-      type: "splitVariants",
-      variants: [
-        {
-          nameHint: "truthy",
-          when: testPath?.[0] ?? "",
-          style: styleFromSingleDeclaration(node.css.property, cons),
-        },
-        {
-          nameHint: "falsy",
-          when: testPath?.[0] ? `!${testPath[0]}` : "",
-          style: styleFromSingleDeclaration(node.css.property, alt),
-        },
-      ],
-    };
+    // Fallback: do NOT attempt to emit variants for unsupported test expressions.
+    // Returning a malformed `when: ""` (or truncating nested member access like `props.foo.bar`)
+    // will crash downstream when we attempt to parse/emit the condition.
+    return null;
   },
 };
 

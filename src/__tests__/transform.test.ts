@@ -265,7 +265,7 @@ export const App = () => (
 
     const result = transformWithWarnings(
       { source, path: "test.tsx" },
-      { jscodeshift, j: jscodeshift, stats: () => {}, report: () => {} },
+      { jscodeshift: j, j, stats: () => {}, report: () => {} },
       { adapter: fixtureAdapter },
     );
 
@@ -319,6 +319,38 @@ export const App = () => <Box><span /></Box>;
     expect(
       result.warnings.some(
         (w) => w.type === "unsupported-feature" && w.feature === "universal-selector",
+      ),
+    ).toBe(true);
+  });
+
+  it("should bail (not crash) on unsupported conditional test expressions in shouldForwardProp wrappers", () => {
+    const source = [
+      'import styled from "styled-components";',
+      "",
+      "const Input = styled.input.withConfig({",
+      '  shouldForwardProp: (prop) => prop !== "hasError" && prop !== "other",',
+      "})`",
+      '  border-color: ${(props) => (props.hasError && props.other ? "red" : "#ccc")};',
+      "`;",
+      "",
+      "export const App = () => (",
+      "  <div>",
+      "    <Input hasError other />",
+      "  </div>",
+      ");",
+      "",
+    ].join("\n");
+
+    const result = transformWithWarnings(
+      { source, path: "test.tsx" },
+      { jscodeshift, j: jscodeshift, stats: () => {}, report: () => {} },
+      { adapter: fixtureAdapter },
+    );
+
+    expect(result.code).toBeNull();
+    expect(
+      result.warnings.some(
+        (w) => w.type === "dynamic-node" && w.feature === "dynamic-interpolation",
       ),
     ).toBe(true);
   });
