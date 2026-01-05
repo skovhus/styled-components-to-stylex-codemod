@@ -15,7 +15,7 @@ export const customAdapter = defineAdapter({
 export const fixtureAdapter = defineAdapter({
   resolveValue(ctx) {
     if (ctx.kind === "theme") {
-      return { expr: `tokens.${ctx.path.replace(/\\./g, "_")}`, imports: [] };
+      return { expr: `tokens.${ctx.path.replace(/\./g, "_")}`, imports: [] };
     }
 
     if (ctx.kind !== "cssVariable") return null;
