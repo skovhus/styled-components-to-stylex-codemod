@@ -54,6 +54,7 @@
     "@types/react-dom": "^19.2.3",
     "@types/stylis": "^4.2.5",
     "@vitejs/plugin-react": "^5.1.2",
+    "@vitest/coverage-v8": "^4.0.16",
     "lefthook": "^2.0.13",
     "oxfmt": "^0.20.0",
     "oxlint": "^1.35.0",

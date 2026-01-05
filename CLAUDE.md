@@ -36,7 +36,7 @@ pnpm storybook        # Start Storybook dev server (port 6006)
 src/
 ├── index.ts              # Main exports
 ├── transform.ts          # Transform implementation
-├── transform.test.ts     # Test runner (auto-discovers test cases)
+├── __tests__/transform.test.ts     # Test runner (auto-discovers test cases)
 ├── run.ts                # Programmatic runner (runTransform)
 └── adapter.ts            # Adapter API (value resolution + dynamic handlers)
 

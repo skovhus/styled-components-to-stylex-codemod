@@ -3,8 +3,8 @@ import {
   getArrowFnSingleParamName,
   getMemberPathFromIdentifier,
   isArrowFunctionExpression,
-} from "../utils.js";
-import { cssDeclarationToStylexDeclarations } from "../ir.js";
+} from "./jscodeshift-utils.js";
+import { cssDeclarationToStylexDeclarations } from "./css-prop-mapping.js";
 
 export const themeAccessHandler: DynamicHandler = {
   name: "theme-access",
