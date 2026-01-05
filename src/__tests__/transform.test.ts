@@ -356,6 +356,25 @@ export const App = () => <Box><span /></Box>;
   });
 });
 
+describe("import cleanup safety", () => {
+  it("should not remove `css` import when `css` is still referenced (even if no transforms apply)", () => {
+    const source = `
+import styled, { css } from "styled-components";
+
+export function helper() {
+  return css\`
+    color: red;
+  \`;
+}
+
+// No styled declarations we currently transform in this snippet.
+export const x = 1;
+`;
+    const result = runTransform(source, {}, "css-import-safety.tsx");
+    expect(result).toBe(source);
+  });
+});
+
 describe("adapter-driven helper resolution", () => {
   it("should bail when a helper call cannot be resolved", () => {
     const source = `

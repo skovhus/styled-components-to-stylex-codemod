@@ -253,14 +253,62 @@ export function transformWithWarnings(
 
   // Convert `styled-components` css helper blocks (css`...`) into plain style objects.
   // We keep them as `const x = { ... } as const;` and later spread into component styles.
-  const cssLocal = styledImports
+  const cssImport = styledImports
     .find(j.ImportSpecifier)
     .nodes()
-    .find((s) => s.imported.type === "Identifier" && s.imported.name === "css")?.local?.name;
+    .find((s) => s.imported.type === "Identifier" && s.imported.name === "css");
+  const cssLocal =
+    cssImport?.local?.type === "Identifier"
+      ? cssImport.local.name
+      : cssImport?.imported?.type === "Identifier"
+        ? cssImport.imported.name
+        : undefined;
 
   const cssHelperNames = new Set<string>();
 
   if (cssLocal) {
+    const isIdentifierReference = (p: any): boolean => {
+      const parent = p?.parent?.node;
+      if (!parent) {
+        return true;
+      }
+      // Import specifiers are not "uses".
+      if (
+        parent.type === "ImportSpecifier" ||
+        parent.type === "ImportDefaultSpecifier" ||
+        parent.type === "ImportNamespaceSpecifier"
+      ) {
+        return false;
+      }
+      // `foo.css` (non-computed) is a property name, not an identifier reference.
+      if (
+        (parent.type === "MemberExpression" || parent.type === "OptionalMemberExpression") &&
+        parent.property === p.node &&
+        parent.computed === false
+      ) {
+        return false;
+      }
+      // `{ css: 1 }` / `{ css }` key is not a reference when not computed.
+      if (
+        (parent.type === "Property" || parent.type === "ObjectProperty") &&
+        parent.key === p.node &&
+        parent.computed === false
+      ) {
+        return false;
+      }
+      // TS type keys are not runtime references.
+      if (parent.type === "TSPropertySignature" && parent.key === p.node) {
+        return false;
+      }
+      return true;
+    };
+
+    const isStillReferenced = (): boolean =>
+      root
+        .find(j.Identifier, { name: cssLocal })
+        .filter((p: any) => isIdentifierReference(p))
+        .size() > 0;
+
     root
       .find(j.VariableDeclarator, {
         init: { type: "TaggedTemplateExpression" },
@@ -312,26 +360,30 @@ export function transformWithWarnings(
         hasChanges = true;
       });
 
-    // Remove `css` import specifier from styled-components imports.
-    styledImports.forEach((imp) => {
-      const specs = imp.node.specifiers ?? [];
-      const next = specs.filter((s) => {
-        if (s.type !== "ImportSpecifier") {
-          return true;
+    // Remove `css` import specifier from styled-components imports ONLY if `css` is no longer referenced.
+    // This avoids producing "only-import-changes" outputs when we didn't actually transform `css` usage
+    // (e.g. `return css\`...\`` inside a function).
+    if (!isStillReferenced()) {
+      styledImports.forEach((imp) => {
+        const specs = imp.node.specifiers ?? [];
+        const next = specs.filter((s) => {
+          if (s.type !== "ImportSpecifier") {
+            return true;
+          }
+          if (s.imported.type !== "Identifier") {
+            return true;
+          }
+          return s.imported.name !== "css";
+        });
+        if (next.length !== specs.length) {
+          imp.node.specifiers = next;
+          if (imp.node.specifiers.length === 0) {
+            j(imp).remove();
+          }
+          hasChanges = true;
         }
-        if (s.imported.type !== "Identifier") {
-          return true;
-        }
-        return s.imported.name !== "css";
       });
-      if (next.length !== specs.length) {
-        imp.node.specifiers = next;
-        if (imp.node.specifiers.length === 0) {
-          j(imp).remove();
-        }
-        hasChanges = true;
-      }
-    });
+    }
   }
 
   // Detect “simple string-mapping” helpers like:
