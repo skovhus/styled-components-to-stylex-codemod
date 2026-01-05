@@ -7,6 +7,44 @@ import {
 } from "./jscodeshift-utils.js";
 import { cssDeclarationToStylexDeclarations } from "./css-prop-mapping.js";
 
+type ThemeParamInfo =
+  | { kind: "propsParam"; propsName: string }
+  | { kind: "themeBinding"; themeName: string };
+
+function getArrowFnThemeParamInfo(fn: any): ThemeParamInfo | null {
+  if (!fn || fn.params?.length !== 1) {
+    return null;
+  }
+  const p = fn.params[0];
+  if (p?.type === "Identifier" && typeof p.name === "string") {
+    return { kind: "propsParam", propsName: p.name };
+  }
+  if (p?.type !== "ObjectPattern" || !Array.isArray(p.properties)) {
+    return null;
+  }
+  for (const prop of p.properties) {
+    if (!prop || (prop.type !== "Property" && prop.type !== "ObjectProperty")) {
+      continue;
+    }
+    const key = prop.key;
+    if (!key || key.type !== "Identifier" || key.name !== "theme") {
+      continue;
+    }
+    const value = prop.value;
+    if (value?.type === "Identifier" && typeof value.name === "string") {
+      return { kind: "themeBinding", themeName: value.name };
+    }
+    if (
+      value?.type === "AssignmentPattern" &&
+      value.left?.type === "Identifier" &&
+      typeof value.left.name === "string"
+    ) {
+      return { kind: "themeBinding", themeName: value.left.name };
+    }
+  }
+  return null;
+}
+
 export type CssNodeKind = "declaration" | "selector" | "atRule" | "keyframes";
 
 export type DynamicNodeCssContext = {
@@ -102,19 +140,28 @@ function tryResolveThemeAccess(
   if (!isArrowFunctionExpression(expr)) {
     return null;
   }
-  const paramName = getArrowFnSingleParamName(expr);
-  if (!paramName) {
+  const info = getArrowFnThemeParamInfo(expr);
+  if (!info) {
     return null;
   }
   const body = expr.body;
   if (body.type !== "MemberExpression") {
     return null;
   }
-  const parts = getMemberPathFromIdentifier(body, paramName);
-  if (!parts || parts[0] !== "theme") {
-    return null;
-  }
-  const path = parts.slice(1).join(".");
+  const path = (() => {
+    if (info.kind === "propsParam") {
+      const parts = getMemberPathFromIdentifier(body, info.propsName);
+      if (!parts || parts[0] !== "theme") {
+        return null;
+      }
+      return parts.slice(1).join(".");
+    }
+    const parts = getMemberPathFromIdentifier(body, info.themeName);
+    if (!parts) {
+      return null;
+    }
+    return parts.join(".");
+  })();
   if (!path) {
     return null;
   }
@@ -209,10 +256,8 @@ function tryResolveConditionalValue(
   if (!isArrowFunctionExpression(expr)) {
     return null;
   }
-  const paramName = getArrowFnSingleParamName(expr);
-  if (!paramName) {
-    return null;
-  }
+  const info = getArrowFnThemeParamInfo(expr);
+  const paramName = info?.kind === "propsParam" ? info.propsName : null;
 
   if (expr.body.type !== "ConditionalExpression") {
     return null;
@@ -234,11 +279,23 @@ function tryResolveConditionalValue(
     if ((b as any).type !== "MemberExpression") {
       return null;
     }
-    const parts = getMemberPathFromIdentifier(b as any, paramName);
-    if (!parts || parts[0] !== "theme") {
+    const path = (() => {
+      if (info?.kind === "propsParam" && paramName) {
+        const parts = getMemberPathFromIdentifier(b as any, paramName);
+        if (!parts || parts[0] !== "theme") {
+          return null;
+        }
+        return parts.slice(1).join(".");
+      }
+      if (info?.kind === "themeBinding") {
+        const parts = getMemberPathFromIdentifier(b as any, info.themeName);
+        if (!parts) {
+          return null;
+        }
+        return parts.join(".");
+      }
       return null;
-    }
-    const path = parts.slice(1).join(".");
+    })();
     if (!path) {
       return null;
     }
@@ -257,7 +314,9 @@ function tryResolveConditionalValue(
 
   // 1) props.foo ? a : b
   const testPath =
-    test.type === "MemberExpression" ? getMemberPathFromIdentifier(test, paramName) : null;
+    paramName && test.type === "MemberExpression"
+      ? getMemberPathFromIdentifier(test, paramName)
+      : null;
   if (testPath && testPath.length === 1) {
     const whenExpr = testPath[0]!;
     return {
@@ -281,6 +340,7 @@ function tryResolveConditionalValue(
 
   // 2) props.foo === "bar" ? a : b
   if (
+    paramName &&
     test.type === "BinaryExpression" &&
     (test.operator === "===" || test.operator === "!==") &&
     test.left.type === "MemberExpression"
