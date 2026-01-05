@@ -1,6 +1,5 @@
-import styled from "styled-components";
-
 // expected-warnings: universal-selector
+import styled from "styled-components";
 
 const EqualDivider = styled.div`
   display: flex;
