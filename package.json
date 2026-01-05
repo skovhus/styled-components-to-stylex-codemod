@@ -16,21 +16,12 @@
     "dist"
   ],
   "type": "module",
-  "main": "./dist/index.mjs",
-  "types": "./dist/index.d.mts",
   "exports": {
     ".": {
       "types": "./dist/index.d.mts",
       "import": "./dist/index.mjs"
     },
-    "./transform": {
-      "types": "./dist/transform.d.mts",
-      "import": "./dist/transform.mjs"
-    },
-    "./run": {
-      "types": "./dist/run.d.mts",
-      "import": "./dist/run.mjs"
-    }
+    "./package.json": "./package.json"
   },
   "scripts": {
     "build": "tsdown",
@@ -38,15 +29,16 @@
     "test": "vitest",
     "test:run": "vitest run",
     "test:coverage": "vitest run --coverage",
-    "lint": "oxlint --ignore-pattern 'test-cases/**' --ignore-pattern 'storybook-static/**'",
-    "lint:fix": "oxfmt && oxlint --fix",
+    "lint": "oxlint --type-aware --deny-warnings",
+    "lint:fix": "oxfmt && pnpm lint --fix",
     "typecheck": "tsc --noEmit",
     "ci": "pnpm run lint && pnpm run typecheck && pnpm run test:run",
     "prepublishOnly": "pnpm run build",
     "storybook": "storybook dev -p 6006"
   },
   "dependencies": {
-    "jscodeshift": "^17.3.0"
+    "jscodeshift": "^17.3.0",
+    "stylis": "^4.3.2"
   },
   "devDependencies": {
     "@emotion/is-prop-valid": "^1.4.0",
@@ -60,10 +52,13 @@
     "@types/node": "^25.0.3",
     "@types/react": "^19.2.7",
     "@types/react-dom": "^19.2.3",
+    "@types/stylis": "^4.2.5",
     "@vitejs/plugin-react": "^5.1.2",
+    "@vitest/coverage-v8": "^4.0.16",
     "lefthook": "^2.0.13",
     "oxfmt": "^0.20.0",
     "oxlint": "^1.35.0",
+    "oxlint-tsgolint": "^0.10.1",
     "react": "^19.2.3",
     "react-dom": "^19.2.3",
     "storybook": "^10.1.10",

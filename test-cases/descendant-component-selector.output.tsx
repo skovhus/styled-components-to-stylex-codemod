@@ -1,4 +1,3 @@
-import React from "react";
 import * as stylex from "@stylexjs/stylex";
 
 const styles = stylex.create({
@@ -8,15 +7,6 @@ const styles = stylex.create({
     height: "16px",
     backgroundColor: "currentColor",
     maskSize: "contain",
-  },
-  iconInButton: {
-    width: "20px",
-    height: "20px",
-    opacity: 0.8,
-  },
-  iconInButtonHover: {
-    opacity: 1,
-    transform: "scale(1.1)",
   },
   button: {
     display: "inline-flex",
@@ -29,23 +19,25 @@ const styles = stylex.create({
     borderStyle: "none",
     borderRadius: "4px",
   },
+  iconInButton: {
+    width: "20px",
+    height: "20px",
+    opacity: {
+      default: 0.8,
+      [stylex.when.ancestor(":hover")]: 1,
+    },
+    transform: {
+      default: null,
+      [stylex.when.ancestor(":hover")]: "scale(1.1)",
+    },
+  },
 });
 
-export const App = () => {
-  const [isHovered, setIsHovered] = React.useState(false);
-
-  return (
-    <div>
-      <button
-        {...stylex.props(styles.button)}
-        onMouseEnter={() => setIsHovered(true)}
-        onMouseLeave={() => setIsHovered(false)}
-      >
-        <span
-          {...stylex.props(styles.icon, styles.iconInButton, isHovered && styles.iconInButtonHover)}
-        />
-        Click me
-      </button>
-    </div>
-  );
-};
+export const App = () => (
+  <div>
+    <button {...stylex.props(styles.button, stylex.defaultMarker())}>
+      <span {...stylex.props(styles.icon, styles.iconInButton)} />
+      Click me
+    </button>
+  </div>
+);

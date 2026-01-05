@@ -1,55 +1,55 @@
-import React from "react";
 import * as stylex from "@stylexjs/stylex";
 
 const styles = stylex.create({
+  // Using !important to override inline styles or third-party CSS
   overrideButton: {
-    backgroundColor: "#BF4F74",
-    color: "white",
-    borderWidth: 0,
-    borderStyle: "none",
+    backgroundColor: "#BF4F74 !important",
+    color: "white !important",
+    borderWidth: "0 !important",
+    borderStyle: "none !important",
     padding: "8px 16px",
     borderRadius: "4px",
   },
+
+  // Overriding specific properties
   forceWidth: {
-    width: "100%",
-    maxWidth: "500px",
-    marginTop: 0,
-    marginRight: "auto",
-    marginBottom: 0,
-    marginLeft: "auto",
+    width: "100% !important",
+    maxWidth: "500px !important",
+    margin: "0 auto",
   },
+
+  // Mixed important and normal
   mixedStyles: {
     fontSize: "16px",
-    color: "#333",
+    color: "#333 !important",
     lineHeight: 1.5,
-    margin: 0,
+    margin: "0 !important",
   },
+
+  // Important in pseudo-selectors
   importantHover: {
-    color: "#BF4F74",
-    textDecoration: "none",
-  },
-  importantHoverHover: {
-    color: "#4F74BF",
-    textDecoration: "underline",
+    color: {
+      default: "#BF4F74",
+      ":hover": "#4F74BF !important",
+    },
+    textDecoration: {
+      default: "none",
+      ":hover": "underline !important",
+    },
   },
 });
 
-export const App = () => {
-  const [isHovered, setIsHovered] = React.useState(false);
-
-  return (
-    <div>
-      <button {...stylex.props(styles.overrideButton)}>Should be pink despite inline style</button>
-      <div {...stylex.props(styles.forceWidth)}>Full width content</div>
-      <p {...stylex.props(styles.mixedStyles)}>Color and margin should be overridden</p>
-      <a
-        href="#"
-        {...stylex.props(styles.importantHover, isHovered && styles.importantHoverHover)}
-        onMouseEnter={() => setIsHovered(true)}
-        onMouseLeave={() => setIsHovered(false)}
-      >
-        Hover me
-      </a>
-    </div>
-  );
-};
+export const App = () => (
+  <div>
+    <button style={{ background: "blue" }} {...stylex.props(styles.overrideButton)}>
+      Should be pink despite inline style
+    </button>
+    <div {...stylex.props(styles.forceWidth)}>Full width content</div>
+    <p style={{ color: "red", margin: "20px" }} {...stylex.props(styles.mixedStyles)}>
+      Color and margin should be overridden
+    </p>
+    <a href="#" {...stylex.props(styles.importantHover)}>
+      Hover me
+    </a>
+  </div>
+);

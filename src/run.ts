@@ -1,9 +1,10 @@
 import { run as jscodeshiftRun } from "jscodeshift/src/Runner.js";
 import { fileURLToPath } from "node:url";
 import { dirname, join } from "node:path";
+import { existsSync } from "node:fs";
 import { glob } from "node:fs/promises";
 import type { Adapter } from "./adapter.js";
-import { defaultAdapter } from "./adapter.js";
+import { normalizeAdapter } from "./adapter.js";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
@@ -16,10 +17,10 @@ export interface RunTransformOptions {
   files: string | string[];
 
   /**
-   * Adapter for transforming theme values
-   * @default defaultAdapter (CSS variables)
+   * Adapter for customizing the transform.
+   * Controls value resolution and resolver-provided imports (and custom handlers).
    */
-  adapter?: Adapter;
+  adapter: Adapter;
 
   /**
    * Dry run - don't write changes to files
@@ -59,34 +60,29 @@ export interface RunTransformResult {
  * @example
  * ```ts
  * import { runTransform } from 'styled-components-to-stylex-codemod';
+ * import { defineAdapter } from 'styled-components-to-stylex-codemod';
  *
- * const myAdapter = {
- *   transformValue({ path, defaultValue }) {
- *     return `themeVars.${path.replace(/\./g, '_')}`;
+ * const adapter = defineAdapter({
+ *   resolveValue(ctx) {
+ *     if (ctx.kind !== "theme") return null;
+ *     return {
+ *       expr: `themeVars.${ctx.path.replace(/\\./g, "_")}`,
+ *       imports: ["import { themeVars } from './theme.stylex';"],
+ *     };
  *   },
- *   getImports() {
- *     return ["import { themeVars } from './theme.stylex';"];
- *   },
- *   getDeclarations() {
- *     return [];
- *   },
- * };
+ * });
  *
  * await runTransform({
  *   files: 'src/**\/*.tsx',
- *   adapter: myAdapter,
+ *   adapter,
  *   dryRun: true,
  * });
  * ```
  */
 export async function runTransform(options: RunTransformOptions): Promise<RunTransformResult> {
-  const {
-    files,
-    adapter = defaultAdapter,
-    dryRun = false,
-    print = false,
-    parser = "tsx",
-  } = options;
+  const { files, dryRun = false, print = false, parser = "tsx" } = options;
+
+  const adapter = normalizeAdapter(options.adapter);
 
   // Resolve file paths from glob patterns
   const patterns = Array.isArray(files) ? files : [files];
@@ -99,7 +95,7 @@ export async function runTransform(options: RunTransformOptions): Promise<RunTra
   }
 
   if (filePaths.length === 0) {
-    console.warn("No files matched the provided glob pattern(s)");
+    process.stderr.write("No files matched the provided glob pattern(s)\n");
     return {
       errors: 0,
       unchanged: 0,
@@ -109,14 +105,34 @@ export async function runTransform(options: RunTransformOptions): Promise<RunTra
     };
   }
 
-  // Path to the transform module
-  const transformPath = join(__dirname, "transform.mjs");
+  // Path to the transform module.
+  // - In published builds, `dist/index.mjs` and `dist/transform.mjs` live together.
+  // - In-repo tests/dev, `src/transform.mjs` doesn't exist, but `dist/transform.mjs` usually does
+  const transformPath = (() => {
+    const adjacent = join(__dirname, "transform.mjs");
+    if (existsSync(adjacent)) return adjacent;
+
+    const distSibling = join(__dirname, "..", "dist", "transform.mjs");
+    if (existsSync(distSibling)) return distSibling;
+
+    throw new Error(
+      [
+        "Could not locate transform module.",
+        `Tried: ${adjacent}`,
+        `       ${distSibling}`,
+        "Run `pnpm build` to generate dist artifacts.",
+      ].join("\n"),
+    );
+  })();
 
   const result = await jscodeshiftRun(transformPath, filePaths, {
     parser,
     dry: dryRun,
     print,
     adapter,
+    // Programmatic use passes an Adapter object (functions). That cannot be
+    // serialized across process boundaries, so we must run in-band.
+    runInBand: true,
   });
 
   return {

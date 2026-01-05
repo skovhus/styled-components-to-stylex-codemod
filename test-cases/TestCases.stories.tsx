@@ -21,7 +21,11 @@ const testCaseNames = [
     ...Object.keys(inputModules).map(getTestCaseName),
     ...Object.keys(outputModules).map(getTestCaseName),
   ]),
-].sort();
+]
+  // Exclude `_unsupported.*` fixtures from Storybook comparisons.
+  // (We keep these in-repo to document unsupported behavior, but don't render them side-by-side.)
+  .filter((name) => !name.startsWith("_unsupported."))
+  .sort();
 
 // Comparison component that renders input and output side by side
 interface ComparisonProps {

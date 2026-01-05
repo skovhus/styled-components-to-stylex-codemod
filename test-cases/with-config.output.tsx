@@ -2,6 +2,7 @@ import React from "react";
 import * as stylex from "@stylexjs/stylex";
 
 const styles = stylex.create({
+  // withConfig for displayName (debugging)
   button: {
     backgroundColor: "#BF4F74",
     color: "white",
@@ -10,33 +11,39 @@ const styles = stylex.create({
     borderStyle: "none",
     borderRadius: "4px",
   },
+
+  // withConfig for componentId (stable class names)
   card: {
     padding: "16px",
     backgroundColor: "white",
     borderRadius: "8px",
     boxShadow: "0 2px 4px rgba(0, 0, 0, 0.1)",
   },
-  inputBase: {
+
+  // Combining withConfig options
+  input: {
     padding: "8px 12px",
     borderWidth: "2px",
     borderStyle: "solid",
+    borderColor: {
+      default: "#ccc",
+      ":focus": "#BF4F74",
+    },
     borderRadius: "4px",
     fontSize: "14px",
+    outline: {
+      default: null,
+      ":focus": "none",
+    },
   },
-  inputNormal: {
-    borderColor: "#ccc",
+  inputHasError: {
+    borderColor: {
+      default: "red",
+      ":focus": "red",
+    },
   },
-  inputError: {
-    borderColor: "red",
-  },
-  inputFocusNormal: {
-    borderColor: "#BF4F74",
-    outline: "none",
-  },
-  inputFocusError: {
-    borderColor: "red",
-    outline: "none",
-  },
+
+  // withConfig on extended components
   baseButton: {
     fontSize: "14px",
     cursor: "pointer",
@@ -51,59 +58,90 @@ const styles = stylex.create({
   },
 });
 
-function Button({ children, ...props }: React.ButtonHTMLAttributes<HTMLButtonElement>) {
+function Button(props) {
+  const { className, children, style, ...rest } = props;
+
+  const sx = stylex.props(styles.button);
+
   return (
-    <button {...stylex.props(styles.button)} {...props}>
+    <button
+      {...sx}
+      className={[sx.className, className].filter(Boolean).join(" ")}
+      style={{
+        ...sx.style,
+        ...style,
+      }}
+      {...rest}
+    >
       {children}
     </button>
   );
 }
+
 Button.displayName = "PrimaryButton";
 
-function Card({ children, ...props }: React.HTMLAttributes<HTMLDivElement>) {
+function Card(props) {
+  const { className, children, style, ...rest } = props;
+
+  const sx = stylex.props(styles.card);
+
   return (
-    <div {...stylex.props(styles.card)} {...props}>
+    <div
+      {...sx}
+      className={[sx.className, className].filter(Boolean).join(" ")}
+      style={{
+        ...sx.style,
+        ...style,
+      }}
+      {...rest}
+    >
       {children}
     </div>
   );
 }
+
 Card.displayName = "Card";
 
-interface InputProps extends Omit<React.InputHTMLAttributes<HTMLInputElement>, "style"> {
-  hasError?: boolean;
-}
+function Input(props) {
+  const { className, style, hasError, ...rest } = props;
 
-function Input({ hasError, ...props }: InputProps) {
-  const [isFocused, setIsFocused] = React.useState(false);
+  const sx = stylex.props(styles.input, hasError && styles.inputHasError);
 
   return (
     <input
-      {...stylex.props(
-        styles.inputBase,
-        hasError ? styles.inputError : styles.inputNormal,
-        isFocused && (hasError ? styles.inputFocusError : styles.inputFocusNormal),
-      )}
-      onFocus={(e) => {
-        setIsFocused(true);
-        props.onFocus?.(e);
+      {...sx}
+      className={[sx.className, className].filter(Boolean).join(" ")}
+      style={{
+        ...sx.style,
+        ...style,
       }}
-      onBlur={(e) => {
-        setIsFocused(false);
-        props.onBlur?.(e);
-      }}
-      {...props}
+      {...rest}
     />
   );
 }
+
 Input.displayName = "StyledInput";
 
-function ExtendedButton({ children, ...props }: React.ButtonHTMLAttributes<HTMLButtonElement>) {
+function ExtendedButton(props) {
+  const { className, children, style, ...rest } = props;
+
+  const sx = stylex.props(styles.baseButton, styles.extendedButton);
+
   return (
-    <button {...stylex.props(styles.baseButton, styles.extendedButton)} {...props}>
+    <button
+      {...sx}
+      className={[sx.className, className].filter(Boolean).join(" ")}
+      style={{
+        ...sx.style,
+        ...style,
+      }}
+      {...rest}
+    >
       {children}
     </button>
   );
 }
+
 ExtendedButton.displayName = "ExtendedButton";
 
 export const App = () => (

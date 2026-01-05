@@ -8,32 +8,49 @@ const styles = stylex.create({
     borderRadius: "4px",
   },
   dynamicBox: {
+    backgroundColor: "#BF4F74",
+    height: "50px",
+    width: "50px",
     borderRadius: "4px",
   },
+  dynamicBoxBackgroundColor: (backgroundColor: string) => ({
+    backgroundColor,
+  }),
+  dynamicBoxHeight: (height: string) => ({
+    height,
+  }),
+  dynamicBoxWidth: (width: string) => ({
+    width,
+  }),
 });
 
-function StaticBox() {
-  return <div {...stylex.props(styles.staticBox)} />;
-}
+function DynamicBox(props) {
+  const { className, children, style, $background, $size } = props;
 
-function DynamicBox({
-  $background = "#BF4F74",
-  $size = "50px",
-}: {
-  $background?: string;
-  $size?: string;
-}) {
+  const sx = stylex.props(
+    styles.dynamicBox,
+    $background && styles.dynamicBoxBackgroundColor($background),
+    $size && styles.dynamicBoxHeight($size),
+    $size && styles.dynamicBoxWidth($size),
+  );
+
   return (
     <div
-      {...stylex.props(styles.dynamicBox)}
-      style={{ backgroundColor: $background, height: $size, width: $size }}
-    />
+      {...sx}
+      className={[sx.className, className].filter(Boolean).join(" ")}
+      style={{
+        ...sx.style,
+        ...style,
+      }}
+    >
+      {children}
+    </div>
   );
 }
 
 export const App = () => (
   <div>
-    <StaticBox />
-    <DynamicBox $background="mediumseagreen" $size="100px" />
+    <div {...stylex.props(styles.staticBox)} />
+    <DynamicBox $background="mediumseagreen" $size="100px" style={{ border: "1px solid red" }} />
   </div>
 );

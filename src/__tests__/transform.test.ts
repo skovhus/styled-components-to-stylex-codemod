@@ -1,50 +1,31 @@
 import { describe, it, expect } from "vitest";
 import { applyTransform } from "jscodeshift/src/testUtils.js";
 import jscodeshift from "jscodeshift";
-import { readdirSync, readFileSync, existsSync, writeFileSync, unlinkSync } from "node:fs";
+import { readdirSync, readFileSync, existsSync } from "node:fs";
 import { join, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
-import { execSync } from "node:child_process";
-import transform, { transformWithWarnings, defaultAdapter } from "./transform.js";
-import type { Adapter, TransformOptions } from "./transform.js";
+import { format } from "oxfmt";
+import transform, { transformWithWarnings } from "../transform.js";
+import type { TransformOptions } from "../transform.js";
+import { customAdapter, fixtureAdapter } from "./fixture-adapters.js";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
-// Test adapters - these are examples of custom adapters
-const defineVarsAdapter: Adapter = {
-  transformValue({ path }) {
-    const varName = path
-      .split(".")
-      .map((part, i) => (i === 0 ? part : part.charAt(0).toUpperCase() + part.slice(1)))
-      .join("");
-    return `themeVars.${varName}`;
-  },
-  getImports() {
-    return ["import { themeVars } from './tokens.stylex';"];
-  },
-  getDeclarations() {
-    return [];
-  },
-};
-
-const inlineValuesAdapter: Adapter = {
-  transformValue({ defaultValue }) {
-    return defaultValue ? `'${defaultValue}'` : "''";
-  },
-  getImports() {
-    return [];
-  },
-  getDeclarations() {
-    return [];
-  },
-};
-const testCasesDir = join(__dirname, "..", "test-cases");
+const testCasesDir = join(__dirname, "..", "..", "test-cases");
 const j = jscodeshift.withParser("tsx");
 
 function getTestCases(): string[] {
   const files = readdirSync(testCasesDir);
-  const inputFiles = files.filter((f) => f.endsWith(".input.tsx"));
-  const outputFiles = files.filter((f) => f.endsWith(".output.tsx"));
+  // Exclude unsupported fixtures from main test cases
+  // Convention: `_unsupported.<case>.input.tsx` has NO output file.
+  const inputFiles = files.filter(
+    (f) =>
+      f.endsWith(".input.tsx") && !f.startsWith("_unsupported.") && !f.startsWith("unsupported-"),
+  );
+  const outputFiles = files.filter(
+    (f) =>
+      f.endsWith(".output.tsx") && !f.startsWith("_unsupported.") && !f.startsWith("unsupported-"),
+  );
 
   const inputNames = new Set(inputFiles.map((f) => f.replace(".input.tsx", "")));
   const outputNames = new Set(outputFiles.map((f) => f.replace(".output.tsx", "")));
@@ -85,26 +66,26 @@ function readTestCase(name: string): {
   return { input, output, inputPath, outputPath };
 }
 
-function runTransform(source: string, options: TransformOptions = {}): string {
-  const opts = { adapter: defaultAdapter, ...options };
+type TestTransformOptions = Partial<Omit<TransformOptions, "adapter">> & {
+  adapter?: TransformOptions["adapter"];
+};
+
+function runTransform(source: string, options: TestTransformOptions = {}): string {
+  const opts: TransformOptions = {
+    adapter: fixtureAdapter,
+    ...(options as any),
+  };
   const result = applyTransform(transform, opts, { source, path: "test.tsx" }, { parser: "tsx" });
   // applyTransform returns empty string when no changes, return original source
   return result || source;
 }
 
-function lintCode(code: string, name: string): void {
-  const tempFile = join(testCasesDir, `_temp_${name}.tsx`);
-  try {
-    writeFileSync(tempFile, code);
-    execSync(`pnpm oxlint "${tempFile}"`, { encoding: "utf-8", stdio: "pipe" });
-  } catch (error) {
-    const err = error as { stdout?: string; stderr?: string };
-    throw new Error(`Lint errors in transformed output:\n${err.stdout ?? err.stderr ?? ""}`);
-  } finally {
-    if (existsSync(tempFile)) {
-      unlinkSync(tempFile);
-    }
-  }
+/**
+ * Normalize code for comparison using oxfmt formatter
+ */
+async function normalizeCode(code: string): Promise<string> {
+  const { code: formatted } = await format("test.tsx", code);
+  return formatted;
 }
 
 function assertExportsApp(source: string, fileLabel: string): void {
@@ -201,16 +182,6 @@ describe("output invariants", () => {
   });
 });
 
-describe("output file linting", () => {
-  const testCases = getTestCases();
-
-  it.each(testCases)("%s output should pass linting", (name) => {
-    const { output } = readTestCase(name);
-    // Output fixtures are `.ts` but contain JSX; lint via a `.tsx` temp file.
-    lintCode(output, `${name}_output`);
-  });
-});
-
 describe("fixture warning expectations", () => {
   const testCases = getTestCases();
 
@@ -221,10 +192,16 @@ describe("fixture warning expectations", () => {
     const result = transformWithWarnings(
       { source: input, path: `${name}.input.tsx` },
       { jscodeshift: j, j, stats: () => {}, report: () => {} },
-      { adapter: defaultAdapter },
+      { adapter: fixtureAdapter },
     );
 
-    const actualFeatures = result.warnings.map((w) => w.feature).sort();
+    // Fixture expectations only cover stable `unsupported-feature` warnings.
+    // Dynamic-node warnings are runtime/bail diagnostics and are not asserted via fixtures.
+    const actualFeatures = [
+      ...new Set(
+        result.warnings.filter((w) => w.type === "unsupported-feature").map((w) => w.feature),
+      ),
+    ].sort();
 
     if (!expected) {
       expect(actualFeatures).toEqual([]);
@@ -236,17 +213,25 @@ describe("fixture warning expectations", () => {
   });
 });
 
-// TODO: Enable these tests once the transform is fully implemented.
-// These tests verify that the transform converts styled-components to StyleX.
-// Currently the transform is a stub that only adds TODO comments.
-describe.skip("transform (pending implementation)", () => {
+// All test cases must be fully transformed:
+// - Transform must produce a change (no bail/unchanged allowed)
+// - Result must not import styled-components
+// - Result must match the expected output fixture
+describe("transform", () => {
   const testCases = getTestCases();
 
-  it.each(testCases)("%s", (name) => {
+  it.each(testCases)("%s", async (name) => {
     const { input, output } = readTestCase(name);
     const result = runTransform(input);
-    expect(result).toBe(output);
-    lintCode(result, name);
+
+    // Transform must produce a change - no bailing allowed
+    expect(await normalizeCode(result)).not.toEqual(await normalizeCode(input));
+
+    // Result must not import styled-components
+    expect(result).not.toMatch(/from\s+['"]styled-components['"]/);
+
+    // Compare against expected output fixture
+    expect(await normalizeCode(result)).toEqual(await normalizeCode(output));
   });
 });
 
@@ -273,7 +258,7 @@ export const App = () => (
     const result = transformWithWarnings(
       { source, path: "test.tsx" },
       { jscodeshift, j: jscodeshift, stats: () => {}, report: () => {} },
-      { adapter: defaultAdapter },
+      { adapter: fixtureAdapter },
     );
 
     expect(result.warnings).toHaveLength(1);
@@ -297,10 +282,37 @@ const Button = styled.button\`
     const result = transformWithWarnings(
       { source, path: "test.tsx" },
       { jscodeshift, j: jscodeshift, stats: () => {}, report: () => {} },
-      { adapter: defaultAdapter },
+      { adapter: fixtureAdapter },
     );
 
     expect(result.warnings).toHaveLength(0);
+  });
+
+  it("should warn and skip when universal selectors are used", () => {
+    const source = `
+import styled from 'styled-components';
+
+const Box = styled.div\`
+  & * {
+    box-sizing: border-box;
+  }
+\`;
+
+export const App = () => <Box><span /></Box>;
+`;
+
+    const result = transformWithWarnings(
+      { source, path: "test.tsx" },
+      { jscodeshift, j: jscodeshift, stats: () => {}, report: () => {} },
+      { adapter: fixtureAdapter },
+    );
+
+    expect(result.code).toBeNull();
+    expect(
+      result.warnings.some(
+        (w) => w.type === "unsupported-feature" && w.feature === "universal-selector",
+      ),
+    ).toBe(true);
   });
 });
 
@@ -315,75 +327,11 @@ const Button = styled.button\`
 export const App = () => <Button>Click</Button>;
 `;
 
-  it("should accept defaultAdapter", () => {
-    const result = transformWithWarnings(
-      { source: themeSource, path: "test.tsx" },
-      { jscodeshift, j: jscodeshift, stats: () => {}, report: () => {} },
-      { adapter: defaultAdapter },
-    );
-
-    // Transform runs without error
-    expect(result.warnings).toHaveLength(0);
-  });
-
-  it("should accept defineVarsAdapter", () => {
-    const result = transformWithWarnings(
-      { source: themeSource, path: "test.tsx" },
-      { jscodeshift, j: jscodeshift, stats: () => {}, report: () => {} },
-      { adapter: defineVarsAdapter },
-    );
-
-    expect(result.warnings).toHaveLength(0);
-  });
-
-  it("should accept inlineValuesAdapter", () => {
-    const result = transformWithWarnings(
-      { source: themeSource, path: "test.tsx" },
-      { jscodeshift, j: jscodeshift, stats: () => {}, report: () => {} },
-      { adapter: inlineValuesAdapter },
-    );
-
-    expect(result.warnings).toHaveLength(0);
-  });
-
   it("should accept custom adapter", () => {
-    const customAdapter: Adapter = {
-      transformValue({ path, defaultValue }) {
-        return `customVar('${path}', '${defaultValue ?? ""}')`;
-      },
-      getImports() {
-        return ["import { customVar } from './custom-theme';"];
-      },
-      getDeclarations() {
-        return [];
-      },
-    };
-
     const result = transformWithWarnings(
       { source: themeSource, path: "test.tsx" },
       { jscodeshift, j: jscodeshift, stats: () => {}, report: () => {} },
       { adapter: customAdapter },
-    );
-
-    expect(result.warnings).toHaveLength(0);
-  });
-
-  it("should use defaultAdapter when no adapter specified", () => {
-    const result = transformWithWarnings(
-      { source: themeSource, path: "test.tsx" },
-      { jscodeshift, j: jscodeshift, stats: () => {}, report: () => {} },
-      {},
-    );
-
-    // Should run without error using default adapter
-    expect(result.warnings).toHaveLength(0);
-  });
-
-  it("should accept defineVarsAdapter", () => {
-    const result = transformWithWarnings(
-      { source: themeSource, path: "test.tsx" },
-      { jscodeshift, j: jscodeshift, stats: () => {}, report: () => {} },
-      { adapter: defineVarsAdapter },
     );
 
     expect(result.warnings).toHaveLength(0);

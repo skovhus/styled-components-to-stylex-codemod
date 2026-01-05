@@ -1,13 +1,21 @@
-import React from "react";
+// oxlint-disable no-unused-vars
 import * as stylex from "@stylexjs/stylex";
 
+// String interpolation for dynamic values
 const dynamicColor = "#BF4F74";
+
 const spacing = 16;
 const borderRadius = "4px";
+
+// Template literal with expressions
 const fontSize = 14;
+
 const lineHeight = 1.5;
+
+// Conditional string interpolation
 const isPrimary = true;
 
+// Array/object property interpolation
 const theme = {
   colors: {
     primary: "#BF4F74",
@@ -65,24 +73,24 @@ const styles = stylex.create({
   },
 });
 
-interface DynamicBoxProps {
-  variant: "primary" | "secondary";
-  children?: React.ReactNode;
-}
+function DynamicBox(props) {
+  const { $variant, children, className, ...rest } = props;
 
-function DynamicBox({ variant, children }: DynamicBoxProps) {
+  const sx = stylex.props(
+    styles.dynamicBoxBase,
+    $variant === "primary" && styles.dynamicBoxPrimary,
+    $variant !== "primary" && styles.dynamicBoxSecondary,
+  );
+
   return (
-    <div
-      {...stylex.props(
-        styles.dynamicBoxBase,
-        variant === "primary" && styles.dynamicBoxPrimary,
-        variant === "secondary" && styles.dynamicBoxSecondary,
-      )}
-    >
+    <div {...sx} className={[sx.className, className].filter(Boolean).join(" ")} {...rest}>
       {children}
     </div>
   );
 }
+
+// Function returning string
+const getColor = (variant: string) => (variant === "primary" ? "#BF4F74" : "#4F74BF");
 
 export const App = () => (
   <div>
@@ -90,7 +98,7 @@ export const App = () => (
     <p {...stylex.props(styles.text)}>Some text</p>
     <button {...stylex.props(styles.conditionalButton)}>Conditional</button>
     <div {...stylex.props(styles.themedCard)}>Themed Card</div>
-    <DynamicBox variant="primary">Primary</DynamicBox>
-    <DynamicBox variant="secondary">Secondary</DynamicBox>
+    <DynamicBox $variant="primary">Primary</DynamicBox>
+    <DynamicBox $variant="secondary">Secondary</DynamicBox>
   </div>
 );

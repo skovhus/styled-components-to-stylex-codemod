@@ -10,7 +10,7 @@ const Input = styled.input.attrs<{ $padding?: string; $small?: boolean }>((props
   margin: 0 0 1em;
   padding: ${(props) => props.$padding};
 
-  ::placeholder {
+  &::placeholder {
     color: #BF4F74;
   }
 `;

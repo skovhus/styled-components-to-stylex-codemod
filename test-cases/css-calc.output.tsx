@@ -5,10 +5,7 @@ const styles = stylex.create({
   container: {
     width: "calc(100% - 40px)",
     maxWidth: "calc(1200px - 2rem)",
-    marginTop: 0,
-    marginRight: "auto",
-    marginBottom: 0,
-    marginLeft: "auto",
+    margin: "0 auto",
     padding: "calc(16px + 1vw)",
   },
   sidebar: {
@@ -26,10 +23,14 @@ const styles = stylex.create({
     flex: "0 0 calc(50% - 1rem)",
     padding: "calc(1rem / 2)",
   },
+
+  // Nested calc
   complexCalc: {
     width: "calc(100% - calc(20px + 2rem))",
     margin: "calc(10px + calc(5px * 2))",
   },
+
+  // Calc with CSS variables
   withVariables: {
     width: `calc(${calcVars.baseSize} * 10)`,
     padding: `calc(${calcVars.baseSize} / 2)`,

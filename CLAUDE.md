@@ -36,9 +36,9 @@ pnpm storybook        # Start Storybook dev server (port 6006)
 src/
 ├── index.ts              # Main exports
 ├── transform.ts          # Transform implementation
-├── transform.test.ts     # Test runner (auto-discovers test cases)
+├── __tests__/transform.test.ts     # Test runner (auto-discovers test cases)
 ├── run.ts                # Programmatic runner (runTransform)
-└── adapter.ts            # Adapter interface and default adapter
+└── adapter.ts            # Adapter API (value resolution + dynamic handlers)
 
 test-cases/
 ├── *.input.tsx           # Input files (styled-components)
@@ -60,13 +60,13 @@ test-cases/
 
 Create matching `.input.tsx` and `.output.tsx` files in `test-cases/`. Tests auto-discover all pairs and fail if any file is missing its counterpart.
 
+Unsupported fixtures can be named `_unsupported.<case>.input.tsx` and should NOT have an output file.
+
 **Test categories:**
 
 - **File pairing**: Verifies all test cases have matching input/output files
 - **Output linting**: Runs oxlint on all output files to ensure valid code
-- **Transform tests** (skipped): Will verify transform produces expected output once implemented
-
-**Note**: The transform is currently a stub that adds TODO comments. The transform tests are skipped until implementation is complete. Output files represent the expected transformation results.
+- **Transform tests**: Verifies transform produces expected output fixtures for supported cases
 
 ## Storybook Visual Testing
 
@@ -88,50 +88,32 @@ Use the Playwright MCP to inspect test case rendering:
 
 The "All" story shows every test case side-by-side, making it easy to compare styled-components input with StyleX output.
 
-## Adapter System
+## Adapter API
 
-The codemod uses an adapter system for value transformations, allowing customization of how styled-components values are converted to StyleX.
+The codemod exposes an adapter-based API for customization (value resolution + dynamic interpolation handling).
 
 ### Programmatic Usage
 
-Create a script to run the transform with a custom adapter:
-
-```typescript
-// run-transform.ts
+```ts
 import { runTransform } from "styled-components-to-stylex-codemod";
-import type { Adapter } from "styled-components-to-stylex-codemod";
+import { defineAdapter } from "styled-components-to-stylex-codemod";
 
-const myAdapter: Adapter = {
-  transformValue({ path, defaultValue, valueType }) {
-    // Return StyleX-compatible value
-    // valueType is 'theme' | 'helper' | 'interpolation'
-    return `themeVars.${path.replace(/\./g, "_")}`;
+const adapter = defineAdapter({
+  resolveValue(ctx) {
+    if (ctx.kind !== "theme") return null;
+    return {
+      expr: `themeVars.${ctx.path.replace(/\./g, "_")}`,
+      imports: ["import { themeVars } from './theme.stylex';"],
+    };
   },
-  getImports() {
-    return ["import { themeVars } from './theme.stylex';"];
-  },
-  getDeclarations() {
-    return [];
-  },
-};
+});
 
 await runTransform({
   files: "src/**/*.tsx",
-  adapter: myAdapter,
+  adapter,
   dryRun: true, // Set to false to write changes
   parser: "tsx",
 });
-```
-
-Run with: `npx tsx run-transform.ts`
-
-### Default Adapter
-
-The default adapter converts theme values to CSS custom properties:
-
-```typescript
-// Input: props.theme.colors.primary
-// Output: 'var(--colors-primary, #defaultValue)'
 ```
 
 ## StyleX Requirements

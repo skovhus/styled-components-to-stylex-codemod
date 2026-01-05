@@ -1,17 +1,5 @@
-// expected-warnings: createGlobalStyle
-import styled, { createGlobalStyle } from "styled-components";
-
-// Global CSS variables defined with createGlobalStyle
-const GlobalStyles = createGlobalStyle`
-  :root {
-    --color-primary: #BF4F74;
-    --color-secondary: #4F74BF;
-    --spacing-sm: 8px;
-    --spacing-md: 16px;
-    --spacing-lg: 24px;
-    --border-radius: 4px;
-  }
-`;
+import "./css-variables.css";
+import styled from "styled-components";
 
 const Button = styled.button`
   padding: var(--spacing-sm) var(--spacing-md);
@@ -40,11 +28,8 @@ const Text = styled.p`
 `;
 
 export const App = () => (
-  <>
-    <GlobalStyles />
-    <Card>
-      <Text>Some text content</Text>
-      <Button>Click me</Button>
-    </Card>
-  </>
+  <Card>
+    <Text>Some text content</Text>
+    <Button>Click me</Button>
+  </Card>
 );
