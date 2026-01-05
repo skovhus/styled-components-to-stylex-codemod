@@ -70,12 +70,16 @@ type TestTransformOptions = Partial<Omit<TransformOptions, "adapter">> & {
   adapter?: TransformOptions["adapter"];
 };
 
-function runTransform(source: string, options: TestTransformOptions = {}): string {
+function runTransform(
+  source: string,
+  options: TestTransformOptions = {},
+  filePath: string = "test.tsx",
+): string {
   const opts: TransformOptions = {
     adapter: fixtureAdapter,
     ...(options as any),
   };
-  const result = applyTransform(transform, opts, { source, path: "test.tsx" }, { parser: "tsx" });
+  const result = applyTransform(transform, opts, { source, path: filePath }, { parser: "tsx" });
   // applyTransform returns empty string when no changes, return original source
   return result || source;
 }
@@ -229,8 +233,8 @@ describe("transform", () => {
   const testCases = getTestCases();
 
   it.each(testCases)("%s", async (name) => {
-    const { input, output } = readTestCase(name);
-    const result = runTransform(input);
+    const { input, output, inputPath } = readTestCase(name);
+    const result = runTransform(input, {}, inputPath);
 
     // Transform must produce a change - no bailing allowed
     expect(await normalizeCode(result)).not.toEqual(await normalizeCode(input));
@@ -357,7 +361,7 @@ export const App = () => <Box><span /></Box>;
 });
 
 describe("adapter-driven helper resolution", () => {
-  it("should skip when transitionSpeed helper is used without a handler", () => {
+  it("should bail when a helper call cannot be resolved", () => {
     const source = `
 import styled from "styled-components";
 import { transitionSpeed } from "./lib/helpers.ts";
@@ -374,17 +378,29 @@ export const App = () => (
 );
 `;
 
-    const adapterWithoutHandlers = {
-      resolveValue: fixtureAdapter.resolveValue,
+    const adapterWithoutCallResolution = {
+      resolveValue(ctx: any) {
+        // Intentionally do not resolve any calls.
+        if (ctx.kind === "theme" || ctx.kind === "cssVariable") {
+          return null;
+        }
+        if (ctx.kind === "call") {
+          return null;
+        }
+        return null;
+      },
     } as any;
 
     const result = transformWithWarnings(
-      { source, path: "test.tsx" },
+      { source, path: join(testCasesDir, "dynamic-helper-transition-speed.input.tsx") },
       { jscodeshift, j: jscodeshift, stats: () => {}, report: () => {} },
-      { adapter: adapterWithoutHandlers },
+      { adapter: adapterWithoutCallResolution },
     );
 
     expect(result.code).toBeNull();
+    expect(
+      result.warnings.some((w) => w.type === "dynamic-node" && w.feature === "dynamic-call"),
+    ).toBe(true);
   });
 });
 

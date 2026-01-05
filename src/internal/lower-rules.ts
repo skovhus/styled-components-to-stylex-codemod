@@ -1,6 +1,5 @@
 import type { API } from "jscodeshift";
-import type { DynamicHandler } from "../adapter.js";
-import { runHandlers } from "../adapter.js";
+import { resolveDynamicNode } from "./builtin-handlers.js";
 import { cssDeclarationToStylexDeclarations } from "./css-prop-mapping.js";
 import { getMemberPathFromIdentifier, getNodeLocStart } from "./jscodeshift-utils.js";
 import {
@@ -22,7 +21,7 @@ export function lowerRules(args: {
   j: any;
   filePath: string;
   resolveValue: (ctx: any) => any;
-  allHandlers: DynamicHandler[];
+  importMap: Map<string, { importedName?: string; fromFilePath?: string }>;
   warnings: TransformWarning[];
   resolverImports: Set<string>;
   styledDecls: StyledDecl[];
@@ -59,7 +58,7 @@ export function lowerRules(args: {
     j,
     filePath,
     resolveValue,
-    allHandlers,
+    importMap,
     warnings,
     resolverImports,
     styledDecls,
@@ -355,7 +354,7 @@ export function lowerRules(args: {
         if (!expr || expr.type === "ArrowFunctionExpression") {
           return false;
         }
-        // Give adapter handlers a chance to resolve call-expressions (e.g. helper lookups).
+        // Give the dynamic resolution pipeline a chance to resolve call-expressions (e.g. helper lookups).
         if (expr.type === "CallExpression") {
           return false;
         }
@@ -868,8 +867,7 @@ export function lowerRules(args: {
           const slotId = slotPart && slotPart.kind === "slot" ? slotPart.slotId : 0;
           const loc = getNodeLocStart(decl.templateExpressions[slotId] as any);
 
-          const res = runHandlers(
-            allHandlers,
+          const res = resolveDynamicNode(
             {
               slotId,
               expr: decl.templateExpressions[slotId],
@@ -891,6 +889,10 @@ export function lowerRules(args: {
               api,
               filePath,
               resolveValue,
+              resolveImport: (localName: string) => {
+                const v = importMap.get(localName);
+                return v ? v : null;
+              },
               warn: (w: any) => {
                 const loc = w.loc;
                 warnings.push({
@@ -904,11 +906,11 @@ export function lowerRules(args: {
             } as any,
           );
 
-          if (res.kind === "resolved" && res.result.type === "resolvedValue") {
-            for (const imp of res.result.imports ?? []) {
+          if (res && res.type === "resolvedValue") {
+            for (const imp of res.imports ?? []) {
               resolverImports.add(imp);
             }
-            const exprAst = parseExpr(res.result.expr);
+            const exprAst = parseExpr(res.expr);
             if (!exprAst) {
               warnings.push({
                 type: "dynamic-node",
@@ -923,9 +925,9 @@ export function lowerRules(args: {
             continue;
           }
 
-          if (res.kind === "resolved" && res.result.type === "splitVariants") {
-            const neg = res.result.variants.find((v: any) => v.when.startsWith("!"));
-            const pos = res.result.variants.find((v: any) => !v.when.startsWith("!"));
+          if (res && res.type === "splitVariants") {
+            const neg = res.variants.find((v: any) => v.when.startsWith("!"));
+            const pos = res.variants.find((v: any) => !v.when.startsWith("!"));
 
             if (neg) {
               Object.assign(styleObj, neg.style);
@@ -938,8 +940,8 @@ export function lowerRules(args: {
             continue;
           }
 
-          if (res.kind === "resolved" && res.result.type === "emitStyleFunction") {
-            const jsxProp = res.result.call;
+          if (res && res.type === "emitStyleFunction") {
+            const jsxProp = res.call;
             for (const out of cssDeclarationToStylexDeclarations(d)) {
               const fnKey = `${decl.styleKey}${toSuffixFromProp(out.prop)}`;
               styleFnFromProps.push({ fnKey, jsxProp });
@@ -954,6 +956,18 @@ export function lowerRules(args: {
               }
             }
             continue;
+          }
+
+          if (res && res.type === "keepOriginal") {
+            warnings.push({
+              type: "dynamic-node",
+              feature: "dynamic-call",
+              message: res.reason,
+              ...(loc?.line !== undefined ? { line: loc.line } : {}),
+              ...(loc?.column !== undefined ? { column: loc.column } : {}),
+            });
+            bail = true;
+            break;
           }
 
           if (decl.shouldForwardProp) {

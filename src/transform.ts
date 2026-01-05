@@ -1,7 +1,5 @@
 import type { API, FileInfo, Options } from "jscodeshift";
-import type { DynamicHandler } from "./adapter.js";
-import { normalizeAdapter } from "./adapter.js";
-import { builtinHandlers } from "./internal/builtin-handlers.js";
+import type { Adapter } from "./adapter.js";
 import { assertNoNullNodesInArrays } from "./internal/ast-safety.js";
 import { collectStyledDecls } from "./internal/collect-styled-decls.js";
 import { rewriteCssVarsInString } from "./internal/css-vars.js";
@@ -30,6 +28,8 @@ export type {
 import { compile } from "stylis";
 import { normalizeStylisAstToIR } from "./internal/css-ir.js";
 import { cssDeclarationToStylexDeclarations } from "./internal/css-prop-mapping.js";
+import { dirname, resolve as pathResolve } from "node:path";
+import { existsSync } from "node:fs";
 
 /**
  * Transform styled-components to StyleX
@@ -77,8 +77,10 @@ export function transformWithWarnings(
     return p;
   };
 
-  const adapter = normalizeAdapter(options.adapter);
-  const allHandlers: DynamicHandler[] = [...adapter.handlers, ...builtinHandlers()];
+  const adapter = options.adapter as Adapter;
+  if (!adapter || typeof adapter.resolveValue !== "function") {
+    throw new Error("Adapter must provide resolveValue(ctx) => { expr, imports } | null");
+  }
   const resolverImports = new Set<string>();
 
   let hasChanges = false;
@@ -166,6 +168,80 @@ export function transformWithWarnings(
     if (converted.changed) {
       hasChanges = true;
     }
+  }
+
+  /**
+   * Build a per-file import map for named imports, supporting aliases.
+   * Maps local identifier -> { importedName, fromFilePath? }.
+   */
+  const importMap = new Map<string, { importedName?: string; fromFilePath?: string }>();
+  {
+    const baseDir = dirname(file.path);
+    const resolveImportFile = (specifier: string): string | undefined => {
+      // Only resolve relative imports; package imports are intentionally left undefined.
+      if (!specifier.startsWith("./") && !specifier.startsWith("../")) {
+        return undefined;
+      }
+      const base = pathResolve(baseDir, specifier);
+      const hasExt = /\.[a-zA-Z0-9]+$/.test(specifier);
+      const exts = [".ts", ".tsx", ".js", ".jsx", ".mjs", ".cjs"];
+      const candidates: string[] = [];
+      if (hasExt) {
+        candidates.push(base);
+      } else {
+        for (const ext of exts) {
+          candidates.push(`${base}${ext}`);
+        }
+        for (const ext of exts) {
+          candidates.push(pathResolve(base, `index${ext}`));
+        }
+      }
+      for (const c of candidates) {
+        try {
+          if (existsSync(c)) {
+            return c;
+          }
+        } catch {
+          // ignore
+        }
+      }
+      return undefined;
+    };
+
+    root.find(j.ImportDeclaration).forEach((p: any) => {
+      const source = p.node.source?.value;
+      if (typeof source !== "string") {
+        return;
+      }
+      const fromFilePath = resolveImportFile(source);
+      const specs = p.node.specifiers ?? [];
+      for (const s of specs) {
+        if (!s) {
+          continue;
+        }
+        if (s.type === "ImportSpecifier") {
+          const importedName =
+            s.imported?.type === "Identifier"
+              ? s.imported.name
+              : s.imported?.type === "Literal" && typeof s.imported.value === "string"
+                ? s.imported.value
+                : undefined;
+          const localName =
+            s.local?.type === "Identifier"
+              ? s.local.name
+              : s.imported?.type === "Identifier"
+                ? s.imported.name
+                : undefined;
+          if (!localName) {
+            continue;
+          }
+          importMap.set(localName, {
+            ...(importedName ? { importedName } : {}),
+            ...(fromFilePath ? { fromFilePath } : {}),
+          });
+        }
+      }
+    });
   }
 
   // Convert `styled-components` css helper blocks (css`...`) into plain style objects.
@@ -543,7 +619,7 @@ export function transformWithWarnings(
     j,
     filePath: file.path,
     resolveValue: adapter.resolveValue,
-    allHandlers,
+    importMap,
     warnings,
     resolverImports,
     styledDecls,
@@ -1198,7 +1274,7 @@ function toSuffixFromProp(propName: string): string {
     return "Variant";
   }
 
-  // Handle simple expression keys coming from dynamic handlers, e.g.:
+  // Handle simple expression keys coming from the dynamic resolution pipeline, e.g.:
   //   `size === "large"` -> `SizeLarge`
   //   `variant === "primary"` -> `VariantPrimary`
   //   `!isActive` -> `NotActive`

@@ -2,8 +2,6 @@
  * Adapter - Single user entry point for customizing the codemod.
  */
 
-import type { API } from "jscodeshift";
-
 // ────────────────────────────────────────────────────────────────────────────
 // Value Resolution
 // ────────────────────────────────────────────────────────────────────────────
@@ -15,6 +13,35 @@ export type ResolveContext =
       name: string;
       fallback?: string;
       definedValue?: string;
+    }
+  | {
+      kind: "call";
+      /**
+       * Absolute path of the file currently being transformed.
+       * Useful for adapter logic that wants to branch by caller file.
+       */
+      callSiteFilePath: string;
+      /**
+       * Callee identifier used at the call site (includes alias).
+       * Example: `ts("x")` -> "ts"
+       */
+      calleeLocalName: string;
+      /**
+       * Imported name when the callee is a named import (including aliases).
+       * Example: `import { transitionSpeed as ts } ...; ts("x")` -> "transitionSpeed"
+       */
+      calleeImportedName?: string;
+      /**
+       * Best-effort resolved absolute path for the module that provides the imported symbol.
+       * Only set for resolvable relative imports.
+       */
+      calleeFromFilePath?: string;
+      /**
+       * Call arguments (only literals are surfaced precisely; everything else is `unknown`).
+       */
+      args: Array<
+        { kind: "literal"; value: string | number | boolean | null } | { kind: "unknown" }
+      >;
     };
 
 export type ResolveResult = {
@@ -36,150 +63,12 @@ export type ResolveResult = {
 };
 
 // ────────────────────────────────────────────────────────────────────────────
-// Dynamic Node Types
-// ────────────────────────────────────────────────────────────────────────────
-
-export type CssNodeKind = "declaration" | "selector" | "atRule" | "keyframes";
-
-export type DynamicNodeCssContext = {
-  kind: CssNodeKind;
-  selector: string;
-  atRuleStack: string[];
-  property?: string;
-  valueRaw?: string;
-};
-
-export type DynamicNodeComponentContext = {
-  localName: string;
-  base: "intrinsic" | "component";
-  tagOrIdent: string;
-  withConfig?: Record<string, unknown>;
-  attrs?: Record<string, unknown>;
-};
-
-export type DynamicNodeUsageContext = {
-  jsxUsages: number;
-  hasPropsSpread: boolean;
-};
-
-export type DynamicNodeLoc = {
-  line?: number;
-  column?: number;
-};
-
-export type DynamicNode = {
-  slotId: number;
-  expr: unknown;
-  css: DynamicNodeCssContext;
-  component: DynamicNodeComponentContext;
-  usage: DynamicNodeUsageContext;
-  loc?: DynamicNodeLoc;
-};
-
-// ────────────────────────────────────────────────────────────────────────────
-// Handler Types
-// ────────────────────────────────────────────────────────────────────────────
-
-export type HandlerWarning = {
-  feature: string;
-  message: string;
-  loc?: DynamicNodeLoc;
-};
-
-export type HandlerContext = {
-  api: API;
-  filePath: string;
-  /** Resolve theme paths / CSS variables into a JS expression + imports */
-  resolveValue: (context: ResolveContext) => ResolveResult | null;
-  warn: (warning: HandlerWarning) => void;
-};
-
-export type HandlerResult =
-  | { type: "resolvedValue"; expr: string; imports: string[] }
-  | { type: "emitInlineStyle"; style: string }
-  | {
-      type: "emitStyleFunction";
-      nameHint: string;
-      params: string;
-      body: string;
-      call: string;
-    }
-  | {
-      type: "splitVariants";
-      variants: Array<{
-        nameHint: string;
-        when: string;
-        style: Record<string, unknown>;
-      }>;
-    }
-  | { type: "keepOriginal"; reason: string };
-
-export type DynamicHandler = {
-  name: string;
-  handle: (node: DynamicNode, ctx: HandlerContext) => HandlerResult | null;
-};
-
-export type HandlerResolution =
-  | { kind: "resolved"; handlerName: string; result: HandlerResult }
-  | { kind: "unhandled" };
-
-// ────────────────────────────────────────────────────────────────────────────
 // Adapter Interface
 // ────────────────────────────────────────────────────────────────────────────
 
 export interface Adapter {
   /** Unified resolver for theme paths + CSS variables. Return null to leave unresolved. */
   resolveValue: (context: ResolveContext) => ResolveResult | null;
-
-  /**
-   * Custom handlers for dynamic expressions.
-   * These run BEFORE built-in handlers. Return null to pass to next handler.
-   * Most users won't need this - the built-in handlers cover common patterns.
-   */
-  handlers?: DynamicHandler[];
-}
-
-export type NormalizedAdapter = {
-  resolveValue: (context: ResolveContext) => ResolveResult | null;
-  handlers: DynamicHandler[];
-};
-
-// ────────────────────────────────────────────────────────────────────────────
-// Runtime
-// ────────────────────────────────────────────────────────────────────────────
-
-export function runHandlers(
-  handlers: DynamicHandler[] | undefined,
-  node: DynamicNode,
-  ctx: HandlerContext,
-): HandlerResolution {
-  if (!handlers || handlers.length === 0) {
-    return { kind: "unhandled" };
-  }
-  for (const handler of handlers) {
-    const result = handler.handle(node, ctx);
-    if (result) {
-      return { kind: "resolved", handlerName: handler.name, result };
-    }
-  }
-  return { kind: "unhandled" };
-}
-
-// ────────────────────────────────────────────────────────────────────────────
-// Adapter Normalization
-// ────────────────────────────────────────────────────────────────────────────
-
-/**
- * Normalize an adapter to ensure all fields are populated with defaults.
- */
-export function normalizeAdapter(adapter: Adapter): NormalizedAdapter {
-  if (!adapter || typeof adapter.resolveValue !== "function") {
-    throw new Error("Adapter must provide resolveValue(ctx) => { expr, imports } | null");
-  }
-  return {
-    resolveValue: adapter.resolveValue,
-    handlers: adapter.handlers ?? [],
-  };
 }
 
 // ────────────────────────────────────────────────────────────────────────────

@@ -124,7 +124,7 @@ function parseDeclarations(
   //   1) a synthetic "dynamic block" decl that points at the slot
   //   2) the real declaration (text-align:center)
   //
-  // This enables handlers like `props => props.$x && "transform: ...;"` to be processed.
+  // This enables the dynamic resolution pipeline (e.g. `props => props.$x && "transform: ...;"`) to be processed.
   const leadingSlot = trimmed.match(/^(__SC_EXPR_(\d+)__)\s+([\s\S]+)$/);
   if (leadingSlot) {
     const slotId = Number(leadingSlot[2]);

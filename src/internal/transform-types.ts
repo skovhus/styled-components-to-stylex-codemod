@@ -27,7 +27,7 @@ export interface TransformResult {
 export interface TransformOptions extends Options {
   /**
    * Adapter for customizing the transform.
-   * Controls value resolution, resolver-provided imports, and custom handlers.
+   * Controls value resolution and resolver-provided imports.
    */
   adapter: Adapter;
 }

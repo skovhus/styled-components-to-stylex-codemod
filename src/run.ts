@@ -4,7 +4,6 @@ import { dirname, join } from "node:path";
 import { existsSync } from "node:fs";
 import { glob } from "node:fs/promises";
 import type { Adapter } from "./adapter.js";
-import { normalizeAdapter } from "./adapter.js";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
@@ -18,7 +17,7 @@ export interface RunTransformOptions {
 
   /**
    * Adapter for customizing the transform.
-   * Controls value resolution and resolver-provided imports (and custom handlers).
+   * Controls value resolution and resolver-provided imports.
    */
   adapter: Adapter;
 
@@ -82,7 +81,10 @@ export interface RunTransformResult {
 export async function runTransform(options: RunTransformOptions): Promise<RunTransformResult> {
   const { files, dryRun = false, print = false, parser = "tsx" } = options;
 
-  const adapter = normalizeAdapter(options.adapter);
+  const adapter = options.adapter;
+  if (!adapter || typeof adapter.resolveValue !== "function") {
+    throw new Error("Adapter must provide resolveValue(ctx) => { expr, imports } | null");
+  }
 
   // Resolve file paths from glob patterns
   const patterns = Array.isArray(files) ? files : [files];
