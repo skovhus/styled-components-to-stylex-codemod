@@ -181,7 +181,15 @@ export function postProcessTransformedAst(args: {
     }
 
     const usedOutsideImports = (localName: string): boolean => {
-      return (
+      const isProbablyJsxBindingName = (name: string): boolean => {
+        // In JSX, lowercase tag names like `<div />` are treated as intrinsic elements, not scope bindings.
+        // We only treat JSX identifiers as usage of an import when they look like component names.
+        // (Uppercase is the conventional signal, and matches React/TSX binding semantics.)
+        const first = name[0] ?? "";
+        return first.toUpperCase() === first && first.toLowerCase() !== first;
+      };
+
+      const usedByIdentifier =
         root
           .find(j.Identifier, { name: localName } as any)
           .filter((idPath: any) => {
@@ -211,8 +219,24 @@ export function postProcessTransformedAst(args: {
 
             return true;
           })
-          .size() > 0
-      );
+          .size() > 0;
+
+      // JSX element names are `JSXIdentifier`, not `Identifier`, so include those too:
+      // - `styled(ExternalComponent)` becomes `<ExternalComponent ... />`
+      const usedByJsxIdentifier =
+        isProbablyJsxBindingName(localName) &&
+        root
+          .find(j.JSXIdentifier, { name: localName } as any)
+          .filter((jsxPath: any) => {
+            // No need for ImportDeclaration guard (JSXIdentifier doesn't appear in imports), but keep it symmetric.
+            if (j(jsxPath).closest(j.ImportDeclaration).size() > 0) {
+              return false;
+            }
+            return true;
+          })
+          .size() > 0;
+
+      return usedByIdentifier || usedByJsxIdentifier;
     };
 
     const nextSpecs = specs.filter((s: any) => {
