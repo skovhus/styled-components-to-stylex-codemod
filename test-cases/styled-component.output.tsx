@@ -1,17 +1,6 @@
 import React from "react";
 import * as stylex from "@stylexjs/stylex";
 
-const styles = stylex.create({
-  link: {
-    color: "#BF4F74",
-    fontWeight: "bold",
-    textDecoration: {
-      default: "none",
-      ":hover": "underline",
-    },
-  },
-});
-
 const Link = ({
   className,
   children,
@@ -25,6 +14,17 @@ const Link = ({
     {children}
   </a>
 );
+
+const styles = stylex.create({
+  link: {
+    color: "#BF4F74",
+    fontWeight: "bold",
+    textDecoration: {
+      default: "none",
+      ":hover": "underline",
+    },
+  },
+});
 
 export const App = () => (
   <Link href="https://example.com" {...stylex.props(styles.link)}>

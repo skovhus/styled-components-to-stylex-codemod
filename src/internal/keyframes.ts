@@ -5,17 +5,25 @@ export function parseKeyframesTemplate(args: {
   template: any;
 }): Record<string, Record<string, unknown>> | null {
   const { template } = args;
-  if (!template || template.type !== "TemplateLiteral") return null;
-  if ((template.expressions?.length ?? 0) > 0) return null;
+  if (!template || template.type !== "TemplateLiteral") {
+    return null;
+  }
+  if ((template.expressions?.length ?? 0) > 0) {
+    return null;
+  }
   const rawCss = (template.quasis ?? []).map((q: any) => q.value?.raw ?? "").join("");
   const wrapped = `@keyframes __SC_KEYFRAMES__ { ${rawCss} }`;
   const ast = compile(wrapped) as any[];
 
   const frames: Record<string, Record<string, unknown>> = {};
   const visit = (node: any): void => {
-    if (!node) return;
+    if (!node) {
+      return;
+    }
     if (Array.isArray(node)) {
-      for (const c of node) visit(c);
+      for (const c of node) {
+        visit(c);
+      }
       return;
     }
     if (typeof node.type === "string" && node.type === "@keyframes") {
@@ -32,7 +40,9 @@ export function parseKeyframesTemplate(args: {
           : [];
 
       for (const c of children) {
-        if (!c || c.type !== "decl") continue;
+        if (!c || c.type !== "decl") {
+          continue;
+        }
         // Stylis keyframes decl nodes use:
         // - `props`: property name (string)
         // - `children`: value (string)
@@ -49,7 +59,9 @@ export function parseKeyframesTemplate(args: {
             : typeof c.value === "string" && c.value.includes(":")
               ? c.value.split(":").slice(1).join(":").replace(/;$/, "").trim()
               : "";
-        if (!propRaw) continue;
+        if (!propRaw) {
+          continue;
+        }
         const raw = propRaw.trim();
         const prop = raw === "background" ? "backgroundColor" : cssPropertyToStylexProp(raw);
         styleObj[prop] = /^-?\d+(\.\d+)?$/.test(valueRaw) ? Number(valueRaw) : valueRaw;
@@ -90,11 +102,15 @@ export function convertStyledKeyframes(args: {
       ) {
         return;
       }
-      if (p.node.id.type !== "Identifier") return;
+      if (p.node.id.type !== "Identifier") {
+        return;
+      }
       const localName = p.node.id.name;
       const template = init?.quasi;
       const frames = parseKeyframesTemplate({ template });
-      if (!frames) return;
+      if (!frames) {
+        return;
+      }
 
       p.node.init = j.callExpression(
         j.memberExpression(j.identifier("stylex"), j.identifier("keyframes")),
@@ -108,13 +124,19 @@ export function convertStyledKeyframes(args: {
   styledImports.forEach((imp: any) => {
     const specs = imp.node.specifiers ?? [];
     const next = specs.filter((s: any) => {
-      if (s.type !== "ImportSpecifier") return true;
-      if (s.imported.type !== "Identifier") return true;
+      if (s.type !== "ImportSpecifier") {
+        return true;
+      }
+      if (s.imported.type !== "Identifier") {
+        return true;
+      }
       return s.imported.name !== "keyframes";
     });
     if (next.length !== specs.length) {
       imp.node.specifiers = next;
-      if (imp.node.specifiers.length === 0) j(imp).remove();
+      if (imp.node.specifiers.length === 0) {
+        j(imp).remove();
+      }
       changed = true;
     }
   });

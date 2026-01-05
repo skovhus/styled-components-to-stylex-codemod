@@ -4,7 +4,6 @@ import { dirname, join } from "node:path";
 import { existsSync } from "node:fs";
 import { glob } from "node:fs/promises";
 import type { Adapter } from "./adapter.js";
-import { normalizeAdapter } from "./adapter.js";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
@@ -18,7 +17,7 @@ export interface RunTransformOptions {
 
   /**
    * Adapter for customizing the transform.
-   * Controls value resolution and resolver-provided imports (and custom handlers).
+   * Controls value resolution and resolver-provided imports.
    */
   adapter: Adapter;
 
@@ -67,7 +66,7 @@ export interface RunTransformResult {
  *     if (ctx.kind !== "theme") return null;
  *     return {
  *       expr: `themeVars.${ctx.path.replace(/\\./g, "_")}`,
- *       imports: ["import { themeVars } from './theme.stylex';"],
+ *       imports: [{ from: { kind: "specifier", value: "./theme.stylex" }, names: [{ imported: "themeVars" }] }],
  *     };
  *   },
  * });
@@ -82,14 +81,43 @@ export interface RunTransformResult {
 export async function runTransform(options: RunTransformOptions): Promise<RunTransformResult> {
   const { files, dryRun = false, print = false, parser = "tsx" } = options;
 
-  const adapter = normalizeAdapter(options.adapter);
+  const adapter = options.adapter;
+  if (!adapter || typeof adapter.resolveValue !== "function") {
+    throw new Error("Adapter must provide resolveValue(ctx) => { expr, imports } | null");
+  }
+
+  const adapterWithLogging: Adapter = {
+    resolveValue(ctx) {
+      try {
+        return adapter.resolveValue(ctx);
+      } catch (e: any) {
+        const kind = (ctx as any)?.kind;
+        const details =
+          kind === "theme"
+            ? `path=${String((ctx as any).path ?? "")}`
+            : kind === "cssVariable"
+              ? `name=${String((ctx as any).name ?? "")}`
+              : kind === "call"
+                ? `callee=${String((ctx as any).calleeImportedName ?? "")} source=${String(
+                    (ctx as any).calleeSource?.value ?? "",
+                  )} file=${String((ctx as any).callSiteFilePath ?? "")}`
+                : "";
+        const msg = `[styled-components-to-stylex] adapter.resolveValue threw${
+          kind ? ` (kind=${kind}${details ? ` ${details}` : ""})` : ""
+        }: ${(e as any)?.stack ?? String(e)}\n`;
+        process.stderr.write(msg);
+        throw e;
+      }
+    },
+  };
 
   // Resolve file paths from glob patterns
   const patterns = Array.isArray(files) ? files : [files];
   const filePaths: string[] = [];
 
+  const cwd = process.cwd();
   for (const pattern of patterns) {
-    for await (const file of glob(pattern)) {
+    for await (const file of glob(pattern, { cwd })) {
       filePaths.push(file);
     }
   }
@@ -110,10 +138,14 @@ export async function runTransform(options: RunTransformOptions): Promise<RunTra
   // - In-repo tests/dev, `src/transform.mjs` doesn't exist, but `dist/transform.mjs` usually does
   const transformPath = (() => {
     const adjacent = join(__dirname, "transform.mjs");
-    if (existsSync(adjacent)) return adjacent;
+    if (existsSync(adjacent)) {
+      return adjacent;
+    }
 
     const distSibling = join(__dirname, "..", "dist", "transform.mjs");
-    if (existsSync(distSibling)) return distSibling;
+    if (existsSync(distSibling)) {
+      return distSibling;
+    }
 
     throw new Error(
       [
@@ -129,7 +161,7 @@ export async function runTransform(options: RunTransformOptions): Promise<RunTra
     parser,
     dry: dryRun,
     print,
-    adapter,
+    adapter: adapterWithLogging,
     // Programmatic use passes an Adapter object (functions). That cannot be
     // serialized across process boundaries, so we must run in-band.
     runInBand: true,

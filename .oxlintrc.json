@@ -3,7 +3,8 @@
   "rules": {
     "no-unused-vars": "error",
     "no-console": "error",
-    "eqeqeq": "error"
+    "eqeqeq": "error",
+    "curly": "error"
   },
   "ignorePatterns": [
     "dist/**",

@@ -13,3 +13,11 @@ export const helpers = stylex.create({
     justifyContent: "center",
   },
 });
+
+export const transitionSpeed = stylex.defineVars({
+  highlightFadeIn: "0s",
+  highlightFadeOut: "0.15s",
+  quickTransition: "0.1s",
+  regularTransition: "0.25s",
+  slowTransition: "0.35s",
+});

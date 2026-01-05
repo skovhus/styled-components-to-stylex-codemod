@@ -28,7 +28,12 @@ const adapter = defineAdapter({
       const varName = ctx.path.replace(/\./g, "_");
       return {
         expr: `tokens.${varName}`,
-        imports: ['import { tokens } from "./design-system.stylex";'],
+        imports: [
+          {
+            from: { kind: "specifier", value: "./design-system.stylex" },
+            names: [{ imported: "tokens" }],
+          },
+        ],
       };
     }
 
@@ -42,7 +47,12 @@ const adapter = defineAdapter({
       if (name === "--base-size") {
         return {
           expr: "calcVars.baseSize",
-          imports: ['import { calcVars } from "./css-calc.stylex";'],
+          imports: [
+            {
+              from: { kind: "specifier", value: "./css-calc.stylex" },
+              names: [{ imported: "calcVars" }],
+            },
+          ],
           ...(definedValue === "16px" ? { dropDefinition: true } : {}),
         };
       }
@@ -63,7 +73,48 @@ const adapter = defineAdapter({
       void fallback;
       return {
         expr: `vars.${toCamelCase(name)}`,
-        imports: ['import { vars } from "./css-variables.stylex";'],
+        imports: [
+          {
+            from: { kind: "specifier", value: "./css-variables.stylex" },
+            names: [{ imported: "vars" }],
+          },
+        ],
+      };
+    }
+
+    if (ctx.kind === "call") {
+      // Called for template interpolations like: ${transitionSpeed("slowTransition")}
+      // `calleeImportedName` is the imported symbol name (works even with aliasing).
+      // `calleeSource` tells you where it came from:
+      // - { kind: "absolutePath", value: "/abs/path" } for relative imports
+      // - { kind: "specifier", value: "some-package/foo" } for package imports
+
+      if (ctx.calleeImportedName !== "transitionSpeed") {
+        return null;
+      }
+
+      // If you need to scope resolution to a particular module, you can use:
+      // - ctx.calleeSource
+
+      const arg0 = ctx.args[0];
+      const key =
+        arg0?.kind === "literal" && typeof arg0.value === "string"
+          ? arg0.value
+          : null;
+      if (!key) {
+        return null;
+      }
+
+      return {
+        expr: `transitionSpeedVars.${key}`,
+        imports: [
+          {
+            from: { kind: "specifier", value: "./lib/helpers.stylex" },
+            names: [
+              { imported: "transitionSpeed", local: "transitionSpeedVars" },
+            ],
+          },
+        ],
       };
     }
 
@@ -87,19 +138,17 @@ Adapters are the main extension point. They let you control:
 
 - how theme paths and CSS variables are turned into StyleX-compatible JS values (`resolveValue`)
 - what extra imports to inject into transformed files (returned from `resolveValue`)
-- how to handle dynamic interpolations inside template literals (`handlers`)
+- how helper calls are resolved (via `resolveValue({ kind: "call", ... })`)
 
-#### How handler ordering works
+#### Dynamic interpolations
 
-When the codemod encounters an interpolation inside a styled template literal, it tries handlers in this order:
+When the codemod encounters an interpolation inside a styled template literal, it runs an internal dynamic resolution pipeline which covers common cases like:
 
-- `adapter.handlers` (your custom handlers, in array order)
-- internal built-in handlers (always enabled), which cover common cases like:
-  - theme access (`props.theme...`)
-  - prop access (`props.foo`)
-  - conditionals (`props.foo ? "a" : "b"`, `props.foo && "color: red;"`)
+- theme access (`props.theme...`) via `resolveValue({ kind: "theme", path })`
+- prop access (`props.foo`) and conditionals (`props.foo ? "a" : "b"`, `props.foo && "color: red;"`)
+- simple helper calls (`transitionSpeed("slowTransition")`) via `resolveValue({ kind: "call", calleeImportedName, calleeSource, args, ... })`
 
-If no handler can resolve an interpolation:
+If the pipeline can’t resolve an interpolation:
 
 - for `withConfig({ shouldForwardProp })` wrappers, the transform preserves the value as an inline style so output keeps visual parity
 - otherwise, the declaration containing that interpolation is **dropped** and a warning is produced (manual follow-up required)

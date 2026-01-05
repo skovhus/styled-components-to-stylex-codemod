@@ -1,5 +1,7 @@
 import type { Meta, StoryObj } from "@storybook/react";
 import React from "react";
+import { ThemeProvider } from "styled-components";
+import { testCaseTheme } from "./tokens.stylex";
 
 // Auto-discover all test case modules using Vite's glob import
 const inputModules = import.meta.glob<{ App: React.ComponentType }>("./*.input.tsx", {
@@ -52,7 +54,9 @@ const Comparison: React.FC<ComparisonProps> = ({ testCase }) => {
           }}
         >
           {InputComponent ? (
-            <InputComponent />
+            <ThemeProvider theme={testCaseTheme}>
+              <InputComponent />
+            </ThemeProvider>
           ) : (
             <div style={{ color: "#999" }}>No input file found</div>
           )}

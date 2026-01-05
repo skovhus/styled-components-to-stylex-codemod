@@ -70,12 +70,16 @@ type TestTransformOptions = Partial<Omit<TransformOptions, "adapter">> & {
   adapter?: TransformOptions["adapter"];
 };
 
-function runTransform(source: string, options: TestTransformOptions = {}): string {
+function runTransform(
+  source: string,
+  options: TestTransformOptions = {},
+  filePath: string = "test.tsx",
+): string {
   const opts: TransformOptions = {
     adapter: fixtureAdapter,
     ...(options as any),
   };
-  const result = applyTransform(transform, opts, { source, path: "test.tsx" }, { parser: "tsx" });
+  const result = applyTransform(transform, opts, { source, path: filePath }, { parser: "tsx" });
   // applyTransform returns empty string when no changes, return original source
   return result || source;
 }
@@ -106,7 +110,9 @@ function assertExportsApp(source: string, fileLabel: string): void {
         // export { App } (or export { App as Something })
         const specs = p.node.specifiers ?? [];
         return specs.some((s) => {
-          if (s.type !== "ExportSpecifier") return false;
+          if (s.type !== "ExportSpecifier") {
+            return false;
+          }
           const exported = s.exported;
           if (exported.type === "Identifier") {
             return exported.name === "App";
@@ -140,14 +146,20 @@ function readExpectedWarningsFromComments(source: string): ExpectedWarning[] | n
   for (let i = 0; i < maxLines; i++) {
     const line = lines[i]!;
     const match = line.match(/^\s*\/\/\s*expected-warnings\s*:\s*(.+?)\s*$/);
-    if (!match) continue;
+    if (!match) {
+      continue;
+    }
     const raw = match[1] ?? "";
     for (const part of raw.split(",")) {
       const feature = part.trim();
-      if (feature) features.add(feature);
+      if (feature) {
+        features.add(feature);
+      }
     }
   }
-  if (features.size === 0) return null;
+  if (features.size === 0) {
+    return null;
+  }
   return [...features].map((feature) => ({
     feature,
     type: "unsupported-feature",
@@ -221,8 +233,8 @@ describe("transform", () => {
   const testCases = getTestCases();
 
   it.each(testCases)("%s", async (name) => {
-    const { input, output } = readTestCase(name);
-    const result = runTransform(input);
+    const { input, output, inputPath } = readTestCase(name);
+    const result = runTransform(input, {}, inputPath);
 
     // Transform must produce a change - no bailing allowed
     expect(await normalizeCode(result)).not.toEqual(await normalizeCode(input));
@@ -257,7 +269,7 @@ export const App = () => (
 
     const result = transformWithWarnings(
       { source, path: "test.tsx" },
-      { jscodeshift, j: jscodeshift, stats: () => {}, report: () => {} },
+      { jscodeshift: j, j, stats: () => {}, report: () => {} },
       { adapter: fixtureAdapter },
     );
 
@@ -281,7 +293,7 @@ const Button = styled.button\`
 
     const result = transformWithWarnings(
       { source, path: "test.tsx" },
-      { jscodeshift, j: jscodeshift, stats: () => {}, report: () => {} },
+      { jscodeshift: j, j, stats: () => {}, report: () => {} },
       { adapter: fixtureAdapter },
     );
 
@@ -303,7 +315,7 @@ export const App = () => <Box><span /></Box>;
 
     const result = transformWithWarnings(
       { source, path: "test.tsx" },
-      { jscodeshift, j: jscodeshift, stats: () => {}, report: () => {} },
+      { jscodeshift: j, j, stats: () => {}, report: () => {} },
       { adapter: fixtureAdapter },
     );
 
@@ -312,6 +324,145 @@ export const App = () => <Box><span /></Box>;
       result.warnings.some(
         (w) => w.type === "unsupported-feature" && w.feature === "universal-selector",
       ),
+    ).toBe(true);
+  });
+
+  it("should bail (not crash) on unsupported conditional test expressions in shouldForwardProp wrappers", () => {
+    const source = [
+      'import styled from "styled-components";',
+      "",
+      "const Input = styled.input.withConfig({",
+      '  shouldForwardProp: (prop) => prop !== "hasError" && prop !== "other",',
+      "})`",
+      '  border-color: ${(props) => (props.hasError && props.other ? "red" : "#ccc")};',
+      "`;",
+      "",
+      "export const App = () => (",
+      "  <div>",
+      "    <Input hasError other />",
+      "  </div>",
+      ");",
+      "",
+    ].join("\n");
+
+    const result = transformWithWarnings(
+      { source, path: "test.tsx" },
+      { jscodeshift: j, j, stats: () => {}, report: () => {} },
+      { adapter: fixtureAdapter },
+    );
+
+    expect(result.code).not.toBeNull();
+    expect(result.code).not.toMatch(/from\\s+['"]styled-components['"]/);
+  });
+});
+
+describe("import cleanup safety", () => {
+  it("should not remove `css` import when `css` is still referenced (even if no transforms apply)", () => {
+    const source = `
+import styled, { css } from "styled-components";
+
+export function helper() {
+  return css\`
+    color: red;
+  \`;
+}
+
+// No styled declarations we currently transform in this snippet.
+export const x = 1;
+`;
+    const result = runTransform(source, {}, "css-import-safety.tsx");
+    expect(result).toBe(source);
+  });
+});
+
+describe("splitVariantsResolvedValue safety", () => {
+  it("should not emit empty variant styles when adapter returns an unparseable expression for one branch", () => {
+    const source = `
+import styled from "styled-components";
+
+const Box = styled.div\`
+  color: \${(props) =>
+    props.$on ? props.theme.colors.primary : props.theme.colors.secondary};
+\`;
+
+export const App = () => <Box $on />;
+`;
+
+    const adapterWithBadThemeExpr = {
+      resolveValue(ctx: any) {
+        if (ctx.kind !== "theme") {
+          return null;
+        }
+        if (ctx.path === "colors.primary") {
+          // Intentionally unparseable; lower-rules should warn and skip this declaration without emitting empty variants.
+          return { expr: ")", imports: [] };
+        }
+        if (ctx.path === "colors.secondary") {
+          return { expr: '"blue"', imports: [] };
+        }
+        return null;
+      },
+    } as any;
+
+    const result = transformWithWarnings(
+      { source, path: "split-variants-resolved-value-parse-failure.tsx" },
+      { jscodeshift: j, j, stats: () => {}, report: () => {} },
+      { adapter: adapterWithBadThemeExpr },
+    );
+
+    expect(result.code).not.toBeNull();
+    expect(
+      result.warnings.some(
+        (w) => w.type === "dynamic-node" && w.feature === "adapter-resolveValue",
+      ),
+    ).toBe(true);
+
+    // Prior to the fix, we'd often end up registering an empty `boxOn` variant style object.
+    expect(result.code).not.toMatch(/boxOn\s*:\s*\{\s*\}/);
+    expect(result.code).not.toMatch(/boxOn\s*:/);
+  });
+});
+
+describe("adapter-driven helper resolution", () => {
+  it("should bail when a helper call cannot be resolved", () => {
+    const source = `
+import styled from "styled-components";
+import { transitionSpeed } from "./lib/helpers.ts";
+
+const AnimatedPath = styled.path\`
+  transition-property: opacity;
+  transition-duration: \${transitionSpeed("slowTransition")};
+\`;
+
+export const App = () => (
+  <svg width="10" height="10">
+    <AnimatedPath d="M0 0L10 10" />
+  </svg>
+);
+`;
+
+    const adapterWithoutCallResolution = {
+      resolveValue(ctx: any) {
+        // Intentionally do not resolve any calls.
+        if (ctx.kind === "theme" || ctx.kind === "cssVariable") {
+          return null;
+        }
+        if (ctx.kind === "call") {
+          return null;
+        }
+        return null;
+      },
+    } as any;
+
+    const result = transformWithWarnings(
+      { source, path: join(testCasesDir, "dynamic-helper-transition-speed.input.tsx") },
+      { jscodeshift: j, j, stats: () => {}, report: () => {} },
+      { adapter: adapterWithoutCallResolution },
+    );
+
+    expect(result.code).toBeNull();
+    expect(
+      result.warnings.some((w) => w.type === "dynamic-node" && w.feature === "dynamic-call"),
     ).toBe(true);
   });
 });
@@ -330,7 +481,7 @@ export const App = () => <Button>Click</Button>;
   it("should accept custom adapter", () => {
     const result = transformWithWarnings(
       { source: themeSource, path: "test.tsx" },
-      { jscodeshift, j: jscodeshift, stats: () => {}, report: () => {} },
+      { jscodeshift: j, j, stats: () => {}, report: () => {} },
       { adapter: customAdapter },
     );
 

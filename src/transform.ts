@@ -1,7 +1,6 @@
 import type { API, FileInfo, Options } from "jscodeshift";
-import type { DynamicHandler } from "./adapter.js";
-import { normalizeAdapter } from "./adapter.js";
-import { builtinHandlers } from "./internal/builtin-handlers.js";
+import type { Adapter } from "./adapter.js";
+import type { ImportSource } from "./adapter.js";
 import { assertNoNullNodesInArrays } from "./internal/ast-safety.js";
 import { collectStyledDecls } from "./internal/collect-styled-decls.js";
 import { rewriteCssVarsInString } from "./internal/css-vars.js";
@@ -13,6 +12,7 @@ import { emitWrappers } from "./internal/emit-wrappers.js";
 import { postProcessTransformedAst } from "./internal/rewrite-jsx.js";
 import {
   collectCreateGlobalStyleWarnings,
+  collectThemeProviderSkipWarnings,
   shouldSkipForCreateGlobalStyle,
   shouldSkipForThemeProvider,
   universalSelectorUnsupportedWarning,
@@ -30,6 +30,7 @@ export type {
 import { compile } from "stylis";
 import { normalizeStylisAstToIR } from "./internal/css-ir.js";
 import { cssDeclarationToStylexDeclarations } from "./internal/css-prop-mapping.js";
+import { dirname, resolve as pathResolve } from "node:path";
 
 /**
  * Transform styled-components to StyleX
@@ -63,6 +64,22 @@ export function transformWithWarnings(
   const root = j(file.source);
   const warnings: TransformWarning[] = [];
 
+  // Preserve existing `import React ... from "react"` (default or namespace import) even if it becomes "unused"
+  // after the transform. JSX runtime differences and local conventions can make this import intentionally present.
+  const preserveReactImport =
+    root
+      .find(j.ImportDeclaration)
+      .filter((p: any) => (p.node?.source as any)?.value === "react")
+      .filter((p: any) =>
+        (p.node.specifiers ?? []).some(
+          (s: any) =>
+            (s.type === "ImportDefaultSpecifier" || s.type === "ImportNamespaceSpecifier") &&
+            s.local?.type === "Identifier" &&
+            s.local.name === "React",
+        ),
+      )
+      .size() > 0;
+
   /**
    * Create an object-pattern property with shorthand enabled when possible.
    * This avoids lint issues like `no-useless-rename` from `{ foo: foo }`.
@@ -77,9 +94,11 @@ export function transformWithWarnings(
     return p;
   };
 
-  const adapter = normalizeAdapter(options.adapter);
-  const allHandlers: DynamicHandler[] = [...adapter.handlers, ...builtinHandlers()];
-  const resolverImports = new Set<string>();
+  const adapter = options.adapter as Adapter;
+  if (!adapter || typeof adapter.resolveValue !== "function") {
+    throw new Error("Adapter must provide resolveValue(ctx) => { expr, imports } | null");
+  }
+  const resolverImports = new Map<string, any>();
 
   let hasChanges = false;
 
@@ -94,7 +113,7 @@ export function transformWithWarnings(
 
   // Policy: ThemeProvider usage is project-specific. If the file uses ThemeProvider, skip entirely.
   if (shouldSkipForThemeProvider({ root, j, styledImports })) {
-    return { code: null, warnings: [] };
+    return { code: null, warnings: collectThemeProviderSkipWarnings({ root, j, styledImports }) };
   }
 
   // Policy: createGlobalStyle is unsupported in StyleX; emit a warning when imported.
@@ -132,18 +151,22 @@ export function transformWithWarnings(
   ): void => {
     for (const [k, v] of Object.entries(obj)) {
       if (v && typeof v === "object") {
-        if (isAstNode(v)) continue;
+        if (isAstNode(v)) {
+          continue;
+        }
         rewriteCssVarsInStyleObject(v as any, definedVars, varsToDrop);
         continue;
       }
       if (typeof v === "string") {
-        if (!adapter.resolveValue) continue;
+        if (!adapter.resolveValue) {
+          continue;
+        }
         (obj as any)[k] = rewriteCssVarsInString({
           raw: v,
           definedVars,
           varsToDrop,
           resolveValue: adapter.resolveValue,
-          addImport: (imp) => resolverImports.add(imp),
+          addImport: (imp) => resolverImports.set(JSON.stringify(imp), imp),
           parseExpr,
           j,
         }) as any;
@@ -159,19 +182,133 @@ export function transformWithWarnings(
       objectToAst,
     });
     keyframesNames = converted.keyframesNames;
-    if (converted.changed) hasChanges = true;
+    if (converted.changed) {
+      hasChanges = true;
+    }
+  }
+
+  /**
+   * Build a per-file import map for named imports, supporting aliases.
+   * Maps local identifier -> { importedName, source }.
+   */
+  const importMap = new Map<
+    string,
+    {
+      importedName: string;
+      source: ImportSource;
+    }
+  >();
+  {
+    const baseDir = dirname(file.path);
+    const resolveImportSource = (specifier: string): ImportSource => {
+      // Deterministic resolution: for relative specifiers, just resolve against the current file’s folder.
+      // This intentionally does NOT probe extensions, consult tsconfig paths, or use Node resolution.
+      const isRelative =
+        specifier === "." ||
+        specifier === ".." ||
+        specifier.startsWith("./") ||
+        specifier.startsWith("../") ||
+        specifier.startsWith(".\\") ||
+        specifier.startsWith("..\\");
+      return isRelative
+        ? { kind: "absolutePath", value: pathResolve(baseDir, specifier) }
+        : { kind: "specifier", value: specifier };
+    };
+
+    root.find(j.ImportDeclaration).forEach((p: any) => {
+      const source = p.node.source?.value;
+      if (typeof source !== "string") {
+        return;
+      }
+      const resolvedSource = resolveImportSource(source);
+      const specs = p.node.specifiers ?? [];
+      for (const s of specs) {
+        if (!s) {
+          continue;
+        }
+        if (s.type === "ImportSpecifier") {
+          const importedName =
+            s.imported?.type === "Identifier"
+              ? s.imported.name
+              : s.imported?.type === "Literal" && typeof s.imported.value === "string"
+                ? s.imported.value
+                : undefined;
+          const localName =
+            s.local?.type === "Identifier"
+              ? s.local.name
+              : s.imported?.type === "Identifier"
+                ? s.imported.name
+                : undefined;
+          if (!localName || !importedName) {
+            continue;
+          }
+          importMap.set(localName, {
+            importedName,
+            source: resolvedSource,
+          });
+        }
+      }
+    });
   }
 
   // Convert `styled-components` css helper blocks (css`...`) into plain style objects.
   // We keep them as `const x = { ... } as const;` and later spread into component styles.
-  const cssLocal = styledImports
+  const cssImport = styledImports
     .find(j.ImportSpecifier)
     .nodes()
-    .find((s) => s.imported.type === "Identifier" && s.imported.name === "css")?.local?.name;
+    .find((s) => s.imported.type === "Identifier" && s.imported.name === "css");
+  const cssLocal =
+    cssImport?.local?.type === "Identifier"
+      ? cssImport.local.name
+      : cssImport?.imported?.type === "Identifier"
+        ? cssImport.imported.name
+        : undefined;
 
   const cssHelperNames = new Set<string>();
 
   if (cssLocal) {
+    const isIdentifierReference = (p: any): boolean => {
+      const parent = p?.parent?.node;
+      if (!parent) {
+        return true;
+      }
+      // Import specifiers are not "uses".
+      if (
+        parent.type === "ImportSpecifier" ||
+        parent.type === "ImportDefaultSpecifier" ||
+        parent.type === "ImportNamespaceSpecifier"
+      ) {
+        return false;
+      }
+      // `foo.css` (non-computed) is a property name, not an identifier reference.
+      if (
+        (parent.type === "MemberExpression" || parent.type === "OptionalMemberExpression") &&
+        parent.property === p.node &&
+        parent.computed === false
+      ) {
+        return false;
+      }
+      // `{ css: 1 }` / `{ css }` key is not a reference when not computed.
+      if (
+        (parent.type === "Property" || parent.type === "ObjectProperty") &&
+        parent.key === p.node &&
+        parent.computed === false
+      ) {
+        return false;
+      }
+      // TS type keys are not runtime references.
+      if (parent.type === "TSPropertySignature" && parent.key === p.node) {
+        return false;
+      }
+      return true;
+    };
+
+    const isStillReferenced = (): boolean =>
+      root
+        .find(j.Identifier, { name: cssLocal })
+        .filter((p: any) => isIdentifierReference(p))
+        .size() > 0;
+
     root
       .find(j.VariableDeclarator, {
         init: { type: "TaggedTemplateExpression" },
@@ -186,23 +323,31 @@ export function transformWithWarnings(
         ) {
           return;
         }
-        if (p.node.id.type !== "Identifier") return;
+        if (p.node.id.type !== "Identifier") {
+          return;
+        }
         const localName = p.node.id.name;
 
         const template = init.quasi;
         // `css\`...\`` snippets are not attached to a selector; parse by wrapping in `& { ... }`.
-        if ((template.expressions?.length ?? 0) > 0) return;
+        if ((template.expressions?.length ?? 0) > 0) {
+          return;
+        }
         const rawCss = (template.quasis ?? []).map((q: any) => q.value?.raw ?? "").join("");
         const stylisAst = compile(`& { ${rawCss} }`);
-        const rules = normalizeStylisAstToIR(stylisAst as any, []);
+        const rules = normalizeStylisAstToIR(stylisAst as any, [], { rawCss });
 
         const baseRule = rules.find((r) => r.selector === "&" && r.atRuleStack.length === 0);
-        if (!baseRule) return;
+        if (!baseRule) {
+          return;
+        }
 
         const helperObj: Record<string, unknown> = {};
         for (const d of baseRule.declarations) {
           // Only accept static decls in helpers for now.
-          if (d.value.kind !== "static") return;
+          if (d.value.kind !== "static") {
+            return;
+          }
           for (const out of cssDeclarationToStylexDeclarations(d)) {
             helperObj[out.prop] = cssValueToJs(out.value, d.important);
           }
@@ -215,20 +360,30 @@ export function transformWithWarnings(
         hasChanges = true;
       });
 
-    // Remove `css` import specifier from styled-components imports.
-    styledImports.forEach((imp) => {
-      const specs = imp.node.specifiers ?? [];
-      const next = specs.filter((s) => {
-        if (s.type !== "ImportSpecifier") return true;
-        if (s.imported.type !== "Identifier") return true;
-        return s.imported.name !== "css";
+    // Remove `css` import specifier from styled-components imports ONLY if `css` is no longer referenced.
+    // This avoids producing "only-import-changes" outputs when we didn't actually transform `css` usage
+    // (e.g. `return css\`...\`` inside a function).
+    if (!isStillReferenced()) {
+      styledImports.forEach((imp) => {
+        const specs = imp.node.specifiers ?? [];
+        const next = specs.filter((s) => {
+          if (s.type !== "ImportSpecifier") {
+            return true;
+          }
+          if (s.imported.type !== "Identifier") {
+            return true;
+          }
+          return s.imported.name !== "css";
+        });
+        if (next.length !== specs.length) {
+          imp.node.specifiers = next;
+          if (imp.node.specifiers.length === 0) {
+            j(imp).remove();
+          }
+          hasChanges = true;
+        }
       });
-      if (next.length !== specs.length) {
-        imp.node.specifiers = next;
-        if (imp.node.specifiers.length === 0) j(imp).remove();
-        hasChanges = true;
-      }
-    });
+    }
   }
 
   // Detect “simple string-mapping” helpers like:
@@ -244,15 +399,23 @@ export function transformWithWarnings(
     }
   >();
   root.find(j.VariableDeclarator).forEach((p) => {
-    if (p.node.id.type !== "Identifier") return;
+    if (p.node.id.type !== "Identifier") {
+      return;
+    }
     const name = p.node.id.name;
     const init: any = p.node.init;
-    if (!init || init.type !== "ArrowFunctionExpression") return;
+    if (!init || init.type !== "ArrowFunctionExpression") {
+      return;
+    }
     const param0 = init.params?.[0];
-    if (!param0 || param0.type !== "Identifier") return;
+    if (!param0 || param0.type !== "Identifier") {
+      return;
+    }
     const paramName = param0.name;
     const body = init.body;
-    if (!body || body.type !== "ConditionalExpression") return;
+    if (!body || body.type !== "ConditionalExpression") {
+      return;
+    }
     const test: any = body.test;
     const cons: any = body.consequent;
     const alt: any = body.alternate;
@@ -376,8 +539,12 @@ export function transformWithWarnings(
     styledImports.forEach((imp) => {
       const specs = imp.node.specifiers ?? [];
       imp.node.specifiers = specs.filter((s) => {
-        if (s.type !== "ImportSpecifier") return true;
-        if (s.imported.type !== "Identifier") return true;
+        if (s.type !== "ImportSpecifier") {
+          return true;
+        }
+        if (s.imported.type !== "Identifier") {
+          return true;
+        }
         return s.imported.name !== "createGlobalStyle";
       });
       if ((imp.node.specifiers?.length ?? 0) === 0) {
@@ -414,9 +581,13 @@ export function transformWithWarnings(
       })
       .forEach((p) => {
         const init = p.node.init;
-        if (!init || init.type !== "CallExpression") return;
+        if (!init || init.type !== "CallExpression") {
+          return;
+        }
         const arg0 = init.arguments[0];
-        if (!arg0 || arg0.type !== "Identifier") return;
+        if (!arg0 || arg0.type !== "Identifier") {
+          return;
+        }
         p.node.init = arg0;
         hasChanges = true;
       });
@@ -447,10 +618,18 @@ export function transformWithWarnings(
     styledImports.forEach((imp) => {
       const specs = imp.node.specifiers ?? [];
       imp.node.specifiers = specs.filter((s) => {
-        if (s.type !== "ImportSpecifier") return true;
-        if (s.imported.type !== "Identifier") return true;
-        if (themeProviderLocal && s.imported.name === "ThemeProvider") return false;
-        if (withThemeLocal && s.imported.name === "withTheme") return false;
+        if (s.type !== "ImportSpecifier") {
+          return true;
+        }
+        if (s.imported.type !== "Identifier") {
+          return true;
+        }
+        if (themeProviderLocal && s.imported.name === "ThemeProvider") {
+          return false;
+        }
+        if (withThemeLocal && s.imported.name === "withTheme") {
+          return false;
+        }
         return true;
       });
       if ((imp.node.specifiers?.length ?? 0) === 0) {
@@ -499,7 +678,7 @@ export function transformWithWarnings(
     j,
     filePath: file.path,
     resolveValue: adapter.resolveValue,
-    allHandlers,
+    importMap,
     warnings,
     resolverImports,
     styledDecls,
@@ -516,10 +695,14 @@ export function transformWithWarnings(
   const resolvedStyleObjects = lowered.resolvedStyleObjects;
   const descendantOverrides = lowered.descendantOverrides;
   const ancestorSelectorParents = lowered.ancestorSelectorParents;
+  if (lowered.bail) {
+    return { code: null, warnings };
+  }
 
   emitStylesAndImports({
     root,
     j,
+    filePath: file.path,
     styledImports,
     resolverImports,
     resolvedStyleObjects,
@@ -536,9 +719,13 @@ export function transformWithWarnings(
   const declByLocal = new Map(styledDecls.map((d) => [d.localName, d]));
   const extendedBy = new Map<string, string[]>();
   for (const decl of styledDecls) {
-    if (decl.base.kind !== "component") continue;
+    if (decl.base.kind !== "component") {
+      continue;
+    }
     const base = declByLocal.get(decl.base.ident);
-    if (!base) continue;
+    if (!base) {
+      continue;
+    }
     extendedBy.set(base.localName, [...(extendedBy.get(base.localName) ?? []), decl.localName]);
   }
 
@@ -561,7 +748,9 @@ export function transformWithWarnings(
     });
     if (hasPolymorphicUsage) {
       wrapperNames.add(baseName);
-      for (const c of children) wrapperNames.add(c);
+      for (const c of children) {
+        wrapperNames.add(c);
+      }
     }
   }
 
@@ -635,19 +824,28 @@ export function transformWithWarnings(
                 a.name?.type === "JSXIdentifier" &&
                 a.name.name === name,
             )
-          )
+          ) {
             return;
+          }
           opening.attributes = [...attrs, j.jsxAttribute(j.jsxIdentifier(name), null)];
         };
 
         const hasClass = (opening: any, cls: string): boolean => {
           const attrs = (opening.attributes ?? []) as any[];
           for (const a of attrs) {
-            if (a.type !== "JSXAttribute") continue;
-            if (a.name?.type !== "JSXIdentifier") continue;
-            if (a.name.name !== "className") continue;
+            if (a.type !== "JSXAttribute") {
+              continue;
+            }
+            if (a.name?.type !== "JSXIdentifier") {
+              continue;
+            }
+            if (a.name.name !== "className") {
+              continue;
+            }
             const v: any = a.value;
-            if (!v) continue;
+            if (!v) {
+              continue;
+            }
             if (v.type === "Literal" && typeof v.value === "string") {
               return v.value.split(/\s+/).includes(cls);
             }
@@ -659,15 +857,21 @@ export function transformWithWarnings(
         };
 
         const visitJsx = (node: any) => {
-          if (!node || typeof node !== "object") return;
+          if (!node || typeof node !== "object") {
+            return;
+          }
           if (node.type === "JSXElement") {
             const children: any[] = node.children ?? [];
             let seenPrevThing = false;
             let afterActive = false;
             for (const child of children) {
-              if (!child || child.type !== "JSXElement") continue;
+              if (!child || child.type !== "JSXElement") {
+                continue;
+              }
               const name = child.openingElement?.name;
-              if (name?.type !== "JSXIdentifier") continue;
+              if (name?.type !== "JSXIdentifier") {
+                continue;
+              }
               if (name.name === decl.localName) {
                 if (seenPrevThing) {
                   ensureBoolAttr(child.openingElement, sw.propAdjacent);
@@ -700,8 +904,12 @@ export function transformWithWarnings(
           const opening = p.node.openingElement;
           const attrs = opening.attributes ?? [];
           for (const attr of attrs) {
-            if (attr.type !== "JSXAttribute") continue;
-            if (attr.name.type !== "JSXIdentifier") continue;
+            if (attr.type !== "JSXAttribute") {
+              continue;
+            }
+            if (attr.name.type !== "JSXIdentifier") {
+              continue;
+            }
             if (attr.name.name === "forwardedAs") {
               attr.name.name = "as";
             }
@@ -725,10 +933,16 @@ export function transformWithWarnings(
         // Handle `as="tag"` (styled-components polymorphism) by rewriting the element.
         const attrs = opening.attributes ?? [];
         for (const attr of attrs) {
-          if (attr.type !== "JSXAttribute") continue;
-          if (attr.name.type !== "JSXIdentifier") continue;
+          if (attr.type !== "JSXAttribute") {
+            continue;
+          }
+          if (attr.name.type !== "JSXIdentifier") {
+            continue;
+          }
           const attrName = attr.name.name;
-          if (attrName !== "as" && attrName !== "forwardedAs") continue;
+          if (attrName !== "as" && attrName !== "forwardedAs") {
+            continue;
+          }
           const v = attr.value;
           const raw =
             v && v.type === "Literal" && typeof v.value === "string"
@@ -742,20 +956,29 @@ export function transformWithWarnings(
         }
 
         opening.name = j.jsxIdentifier(finalTag);
-        if (closing) closing.name = j.jsxIdentifier(finalTag);
+        if (closing) {
+          closing.name = j.jsxIdentifier(finalTag);
+        }
 
         const keptAttrs = (opening.attributes ?? []).filter((attr) => {
-          if (attr.type !== "JSXAttribute") return true;
-          if (attr.name.type !== "JSXIdentifier") return true;
+          if (attr.type !== "JSXAttribute") {
+            return true;
+          }
+          if (attr.name.type !== "JSXIdentifier") {
+            return true;
+          }
           // Honor shouldForwardProp by dropping filtered props from DOM output.
           if (decl.shouldForwardProp) {
             const n = attr.name.name;
-            if (decl.shouldForwardProp.dropProps.includes(n)) return false;
+            if (decl.shouldForwardProp.dropProps.includes(n)) {
+              return false;
+            }
             if (
               decl.shouldForwardProp.dropPrefix &&
               n.startsWith(decl.shouldForwardProp.dropPrefix)
-            )
+            ) {
               return false;
+            }
           }
           return attr.name.name !== "as" && attr.name.name !== "forwardedAs";
         });
@@ -796,7 +1019,9 @@ export function transformWithWarnings(
 
           // Add static attrs (e.g. `type="text"`) if missing.
           for (const [k, v] of Object.entries(staticAttrs)) {
-            if (hasAttr(k)) continue;
+            if (hasAttr(k)) {
+              continue;
+            }
             const valNode =
               typeof v === "string"
                 ? j.literal(v)
@@ -815,6 +1040,7 @@ export function transformWithWarnings(
           "name",
           "value",
           "size",
+          "tabIndex",
           "disabled",
           "readOnly",
           "ref",
@@ -938,8 +1164,11 @@ export function transformWithWarnings(
     j,
     descendantOverrides,
     ancestorSelectorParents,
+    preserveReactImport,
   });
-  if (post.changed) hasChanges = true;
+  if (post.changed) {
+    hasChanges = true;
+  }
 
   // If the file references `React` (types or values) but doesn't import it, add `import React from "react";`
   if (post.needsReactImport) {
@@ -1003,10 +1232,15 @@ function toStyleKey(name: string): string {
 
 function objectToAst(j: API["jscodeshift"], obj: Record<string, unknown>): any {
   const spreadsRaw = obj.__spreads;
+  const propCommentsRaw = (obj as any).__propComments;
   const spreads =
     Array.isArray(spreadsRaw) && spreadsRaw.every((s) => typeof s === "string")
       ? (spreadsRaw as string[])
       : [];
+  const propComments: Record<string, any> =
+    propCommentsRaw && typeof propCommentsRaw === "object" && !Array.isArray(propCommentsRaw)
+      ? (propCommentsRaw as Record<string, any>)
+      : {};
 
   const props: any[] = [];
 
@@ -1015,7 +1249,12 @@ function objectToAst(j: API["jscodeshift"], obj: Record<string, unknown>): any {
   }
 
   for (const [key, value] of Object.entries(obj)) {
-    if (key === "__spreads") continue;
+    if (key === "__spreads") {
+      continue;
+    }
+    if (key === "__propComments") {
+      continue;
+    }
     const keyNode =
       /^[a-zA-Z_$][a-zA-Z0-9_$]*$/.test(key) &&
       !key.startsWith(":") &&
@@ -1023,29 +1262,83 @@ function objectToAst(j: API["jscodeshift"], obj: Record<string, unknown>): any {
       !key.startsWith("::")
         ? j.identifier(key)
         : j.literal(key);
-    props.push(
-      j.property(
-        "init",
-        keyNode as any,
-        value && typeof value === "object" && !isAstNode(value)
-          ? objectToAst(j, value as Record<string, unknown>)
-          : literalToAst(j, value),
-      ),
+    const prop = j.property(
+      "init",
+      keyNode as any,
+      value && typeof value === "object" && !isAstNode(value)
+        ? objectToAst(j, value as Record<string, unknown>)
+        : literalToAst(j, value),
     );
+
+    const commentEntry = propComments[key];
+    const leading =
+      typeof commentEntry === "string"
+        ? commentEntry
+        : commentEntry && typeof commentEntry === "object"
+          ? (commentEntry.leading as unknown)
+          : null;
+    const trailingLine =
+      commentEntry && typeof commentEntry === "object"
+        ? (commentEntry.trailingLine as unknown)
+        : null;
+    const comments: any[] = [];
+    if (typeof leading === "string" && leading.trim()) {
+      const trimmed = leading.trim();
+      comments.push({
+        type: "CommentBlock",
+        value: ` ${trimmed} `,
+        leading: true,
+        trailing: false,
+      });
+    }
+    if (typeof trailingLine === "string" && trailingLine.trim()) {
+      const trimmed = trailingLine.trim();
+      // NOTE: Recast/oxfmt will often render this as a standalone comment line above the property.
+      // We normalize it back to an inline trailing comment in `formatOutput`.
+      comments.push({
+        type: "CommentLine",
+        value: ` ${trimmed}`,
+        leading: false,
+        trailing: true,
+      });
+    }
+    if (comments.length) {
+      (prop as any).comments = comments;
+    }
+
+    props.push(prop);
   }
   return j.objectExpression(props);
 }
 
 function literalToAst(j: API["jscodeshift"], value: unknown): any {
-  if (isAstNode(value)) return value;
-  if (value === null) return j.literal(null);
-  if (typeof value === "string") return j.literal(value);
-  if (typeof value === "number") return j.literal(value);
-  if (typeof value === "boolean") return j.literal(value);
-  if (typeof value === "undefined") return j.identifier("undefined");
-  if (typeof value === "bigint") return j.literal(value.toString());
-  if (typeof value === "symbol") return j.literal(value.description ?? "");
-  if (typeof value === "function") return j.literal("[Function]");
+  if (isAstNode(value)) {
+    return value;
+  }
+  if (value === null) {
+    return j.literal(null);
+  }
+  if (typeof value === "string") {
+    return j.literal(value);
+  }
+  if (typeof value === "number") {
+    return j.literal(value);
+  }
+  if (typeof value === "boolean") {
+    return j.literal(value);
+  }
+  if (typeof value === "undefined") {
+    return j.identifier("undefined");
+  }
+  if (typeof value === "bigint") {
+    return j.literal(value.toString());
+  }
+  if (typeof value === "symbol") {
+    return j.literal(value.description ?? "");
+  }
+  if (typeof value === "function") {
+    return j.literal("[Function]");
+  }
   if (typeof value === "object") {
     try {
       return j.literal(JSON.stringify(value));
@@ -1071,7 +1364,9 @@ function cssValueToJs(value: any, important = false): unknown {
     }
 
     // Try to return number if purely numeric and no unit.
-    if (/^-?\d+(\.\d+)?$/.test(value.value)) return Number(value.value);
+    if (/^-?\d+(\.\d+)?$/.test(value.value)) {
+      return Number(value.value);
+    }
     return value.value;
   }
   // interpolated values are handled earlier for now
@@ -1081,9 +1376,11 @@ function cssValueToJs(value: any, important = false): unknown {
 function toSuffixFromProp(propName: string): string {
   // `$isActive` => `IsActive`, `primary` => `Primary`
   const raw = propName.startsWith("$") ? propName.slice(1) : propName;
-  if (!raw) return "Variant";
+  if (!raw) {
+    return "Variant";
+  }
 
-  // Handle simple expression keys coming from dynamic handlers, e.g.:
+  // Handle simple expression keys coming from the dynamic resolution pipeline, e.g.:
   //   `size === "large"` -> `SizeLarge`
   //   `variant === "primary"` -> `VariantPrimary`
   //   `!isActive` -> `NotActive`

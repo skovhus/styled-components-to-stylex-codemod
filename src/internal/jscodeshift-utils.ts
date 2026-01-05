@@ -41,19 +41,27 @@ export function getMemberPathFromIdentifier(
   let cur: unknown = expr;
 
   while (isMemberExpression(cur)) {
-    if (cur.computed) return null;
+    if (cur.computed) {
+      return null;
+    }
     const prop = cur.property;
-    if (!isIdentifier(prop)) return null;
+    if (!isIdentifier(prop)) {
+      return null;
+    }
     parts.unshift(prop.name);
     cur = cur.object;
   }
 
-  if (!isIdentifier(cur, rootIdentName)) return null;
+  if (!isIdentifier(cur, rootIdentName)) {
+    return null;
+  }
   return parts;
 }
 
 export function getArrowFnSingleParamName(fn: ArrowFunctionExpression): string | null {
-  if (fn.params.length !== 1) return null;
+  if (fn.params.length !== 1) {
+    return null;
+  }
   const p = fn.params[0];
   return isIdentifier(p) ? p.name : null;
 }
@@ -62,6 +70,8 @@ export function getNodeLocStart(
   node: Node | null | undefined,
 ): { line: number; column: number } | null {
   const loc = node?.loc?.start;
-  if (!loc) return null;
+  if (!loc) {
+    return null;
+  }
   return { line: loc.line, column: loc.column };
 }

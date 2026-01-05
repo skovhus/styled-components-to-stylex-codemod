@@ -27,12 +27,24 @@ export interface TransformResult {
 export interface TransformOptions extends Options {
   /**
    * Adapter for customizing the transform.
-   * Controls value resolution, resolver-provided imports, and custom handlers.
+   * Controls value resolution and resolver-provided imports.
    */
   adapter: Adapter;
 }
 
 export type StyledDecl = {
+  /**
+   * Index of the parent top-level statement (VariableDeclaration) within Program.body at
+   * collection time. Used to approximate original ordering for emit-time insertion.
+   */
+  declIndex?: number;
+
+  /**
+   * Best-effort anchor for placing emitted `stylex.create` close to the original styled decl.
+   * Represents the name of the *preceding* top-level declaration (var or function) when present.
+   */
+  insertAfterName?: string;
+
   localName: string;
   base: { kind: "intrinsic"; tagName: string } | { kind: "component"; ident: string };
   styleKey: string;

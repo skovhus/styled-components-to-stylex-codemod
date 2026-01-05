@@ -12,15 +12,18 @@ export function findCssVarCalls(raw: string): VarCall[] {
   let i = 0;
   while (i < raw.length) {
     const idx = raw.indexOf("var(", i);
-    if (idx === -1) break;
+    if (idx === -1) {
+      break;
+    }
     const jIdx = idx + 4; // after "var("
     // Find matching ')'
     let depth = 1;
     let end = -1;
     for (let k = jIdx; k < raw.length; k++) {
       const ch = raw[k]!;
-      if (ch === "(") depth++;
-      else if (ch === ")") {
+      if (ch === "(") {
+        depth++;
+      } else if (ch === ")") {
         depth--;
         if (depth === 0) {
           end = k + 1; // exclusive
@@ -36,16 +39,21 @@ export function findCssVarCalls(raw: string): VarCall[] {
     // Parse inside `var( ... )` conservatively.
     const inside = raw.slice(jIdx, end - 1);
     let p = 0;
-    while (p < inside.length && /\s/.test(inside[p]!)) p++;
-    const nameStart = p;
-    while (p < inside.length && !/\s/.test(inside[p]!) && inside[p] !== "," && inside[p] !== ")")
+    while (p < inside.length && /\s/.test(inside[p]!)) {
       p++;
+    }
+    const nameStart = p;
+    while (p < inside.length && !/\s/.test(inside[p]!) && inside[p] !== "," && inside[p] !== ")") {
+      p++;
+    }
     const name = inside.slice(nameStart, p).trim();
     if (!name.startsWith("--")) {
       i = end;
       continue;
     }
-    while (p < inside.length && /\s/.test(inside[p]!)) p++;
+    while (p < inside.length && /\s/.test(inside[p]!)) {
+      p++;
+    }
     let fallback: string | undefined;
     if (inside[p] === ",") {
       fallback = inside
@@ -65,14 +73,16 @@ export function rewriteCssVarsInString(args: {
   definedVars: Map<string, string>;
   varsToDrop: Set<string>;
   resolveValue: (context: ResolveContext) => ResolveResult | null;
-  addImport: (imp: string) => void;
+  addImport: (imp: any) => void;
   parseExpr: (exprSource: string) => unknown;
   j: any;
 }): unknown {
   const { raw, definedVars, varsToDrop, resolveValue, addImport, parseExpr, j } = args;
 
   const calls = findCssVarCalls(raw);
-  if (calls.length === 0) return raw;
+  if (calls.length === 0) {
+    return raw;
+  }
 
   const segments: Array<{ kind: "text"; value: string } | { kind: "expr"; expr: any }> = [];
 
@@ -91,22 +101,30 @@ export function rewriteCssVarsInString(args: {
     if (!res) {
       segments.push({ kind: "text", value: raw.slice(c.start, c.end) });
     } else {
-      for (const imp of res.imports ?? []) addImport(imp);
+      for (const imp of res.imports ?? []) {
+        addImport(imp);
+      }
       const exprAst = parseExpr(res.expr);
       if (!exprAst) {
         // If we can’t parse the expression, don’t risk emitting broken AST—keep original.
         segments.push({ kind: "text", value: raw.slice(c.start, c.end) });
       } else {
-        if (res.dropDefinition) varsToDrop.add(c.name);
+        if (res.dropDefinition) {
+          varsToDrop.add(c.name);
+        }
         segments.push({ kind: "expr", expr: exprAst });
       }
     }
     last = c.end;
   }
-  if (last < raw.length) segments.push({ kind: "text", value: raw.slice(last) });
+  if (last < raw.length) {
+    segments.push({ kind: "text", value: raw.slice(last) });
+  }
 
   const exprCount = segments.filter((s) => s.kind === "expr").length;
-  if (exprCount === 0) return raw;
+  if (exprCount === 0) {
+    return raw;
+  }
 
   // If it’s exactly one expression and the rest is empty text, return the expr AST directly.
   if (segments.length === 1 && segments[0]!.kind === "expr" && (segments[0] as any).expr) {

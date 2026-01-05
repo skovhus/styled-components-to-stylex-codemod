@@ -1,11 +1,14 @@
 import type { Collection } from "jscodeshift";
 import type { StyledDecl } from "./transform-types.js";
+import path from "node:path";
+import type { ImportSource, ImportSpec } from "../adapter.js";
 
 export function emitStylesAndImports(args: {
   root: Collection<any>;
   j: any;
+  filePath: string;
   styledImports: Collection<any>;
-  resolverImports: Set<string>;
+  resolverImports: Map<string, any>;
   resolvedStyleObjects: Map<string, any>;
   styledDecls: StyledDecl[];
   cssHelperNames: Set<string>;
@@ -16,6 +19,7 @@ export function emitStylesAndImports(args: {
   const {
     root,
     j,
+    filePath,
     styledImports,
     resolverImports,
     resolvedStyleObjects,
@@ -32,7 +36,9 @@ export function emitStylesAndImports(args: {
   // fixtures like string-interpolation).
   const preservedHeaderComments: any[] = [];
   const addHeaderComments = (comments: unknown) => {
-    if (!Array.isArray(comments)) return;
+    if (!Array.isArray(comments)) {
+      return;
+    }
     for (const c of comments as any[]) {
       const v = typeof c?.value === "string" ? String(c.value).trim() : "";
       const line = c?.loc?.start?.line;
@@ -82,7 +88,9 @@ export function emitStylesAndImports(args: {
       const seen = new Set<string>();
       const deduped = merged.filter((c) => {
         const key = `${(c as any)?.type ?? "Comment"}:${String((c as any)?.value ?? "").trim()}`;
-        if (seen.has(key)) return false;
+        if (seen.has(key)) {
+          return false;
+        }
         seen.add(key);
         return true;
       });
@@ -93,37 +101,42 @@ export function emitStylesAndImports(args: {
 
   // Inject resolver-provided imports (from adapter.resolveValue calls).
   {
-    const importsToInject = new Set<string>(resolverImports);
-
-    const parseStatements = (src: string): any[] => {
-      try {
-        const program = j(src).get().node.program;
-        return Array.isArray((program as any).body) ? ((program as any).body as any[]) : [];
-      } catch {
-        return [];
+    const toModuleSpecifier = (from: ImportSource): string => {
+      if (from.kind === "specifier") {
+        if (typeof from.value !== "string" || from.value.trim() === "") {
+          throw new Error(
+            `[styled-components-to-stylex] Invalid import specifier: expected non-empty string, got ${JSON.stringify(
+              from.value,
+            )}`,
+          );
+        }
+        return from.value;
       }
+      // Absolute file path -> relative module specifier from current file
+      if (typeof from.value !== "string" || from.value.trim() === "") {
+        throw new Error(
+          `[styled-components-to-stylex] Invalid import absolutePath: expected non-empty string, got ${JSON.stringify(
+            from.value,
+          )}`,
+        );
+      }
+      if (!path.isAbsolute(from.value)) {
+        throw new Error(
+          `[styled-components-to-stylex] Invalid import absolutePath: expected absolute path, got ${JSON.stringify(
+            from.value,
+          )}`,
+        );
+      }
+      const baseDir = path.dirname(String(filePath));
+      let rel = path.relative(baseDir, from.value);
+      rel = rel.split(path.sep).join("/");
+      if (!rel.startsWith(".")) {
+        rel = `./${rel}`;
+      }
+      return rel;
     };
 
-    const existingImportSources = new Set(
-      root
-        .find(j.ImportDeclaration)
-        .nodes()
-        .map((n: any) => (n.source as any)?.value)
-        .filter((v: any): v is string => typeof v === "string"),
-    );
-
-    const importNodes: any[] = [];
-    for (const imp of importsToInject) {
-      for (const stmt of parseStatements(imp)) {
-        if (stmt?.type !== "ImportDeclaration") continue;
-        const src = (stmt.source as any)?.value;
-        if (typeof src === "string" && existingImportSources.has(src)) continue;
-        if (typeof src === "string") existingImportSources.add(src);
-        importNodes.push(stmt);
-      }
-    }
-
-    if (importNodes.length) {
+    const insertImportDecl = (decl: any): void => {
       const body = root.get().node.program.body as any[];
       const stylexIdx = body.findIndex(
         (s) => s?.type === "ImportDeclaration" && (s.source as any)?.value === "@stylexjs/stylex",
@@ -131,15 +144,69 @@ export function emitStylesAndImports(args: {
       const lastImportIdx = (() => {
         let last = -1;
         for (let i = 0; i < body.length; i++) {
-          if (body[i]?.type === "ImportDeclaration") last = i;
+          if (body[i]?.type === "ImportDeclaration") {
+            last = i;
+          }
         }
         return last;
       })();
-
-      // Insert imports immediately after the stylex import (preferred) or after the last import.
       const importInsertAt =
         stylexIdx >= 0 ? stylexIdx + 1 : lastImportIdx >= 0 ? lastImportIdx + 1 : 0;
-      if (importNodes.length) body.splice(importInsertAt, 0, ...importNodes);
+      body.splice(importInsertAt, 0, decl);
+    };
+
+    const ensureImportDecl = (spec: ImportSpec): void => {
+      const moduleSpecifier = toModuleSpecifier(spec.from);
+      const existing = root.find(j.ImportDeclaration, {
+        source: { value: moduleSpecifier },
+      } as any);
+
+      const toImportSpecifier = (imported: string, local?: string) => {
+        const impId = j.identifier(imported);
+        if (local && local !== imported) {
+          return j.importSpecifier(impId, j.identifier(local));
+        }
+        return j.importSpecifier(impId);
+      };
+
+      if (existing.size() > 0) {
+        // Merge into the first matching import.
+        const p: any = existing.at(0).get();
+        const decl: any = p.node;
+        const specs = (decl.specifiers ?? []) as any[];
+        const existingKeys = new Set(
+          specs
+            .filter((s) => s.type === "ImportSpecifier")
+            .map((s) => {
+              const imported = s.imported?.name ?? s.imported?.value ?? "";
+              const local = s.local?.name ?? imported;
+              return `${imported} as ${local}`;
+            }),
+        );
+        for (const n of spec.names) {
+          const imported = n.imported;
+          const local = n.local ?? imported;
+          const key = `${imported} as ${local}`;
+          if (!existingKeys.has(key)) {
+            specs.push(toImportSpecifier(imported, n.local));
+            existingKeys.add(key);
+          }
+        }
+
+        decl.specifiers = specs;
+        return;
+      }
+
+      // No existing import: insert a new one.
+      const decl = j.importDeclaration(
+        spec.names.map((n) => toImportSpecifier(n.imported, n.local)),
+        j.literal(moduleSpecifier),
+      );
+      insertImportDecl(decl);
+    };
+
+    for (const spec of resolverImports.values() as Iterable<ImportSpec>) {
+      ensureImportDecl(spec);
     }
   }
 
@@ -180,64 +247,43 @@ export function emitStylesAndImports(args: {
     ),
   ]);
 
-  const lastKeyframesOrHelperDecl = root
-    .find(j.VariableDeclaration)
-    .filter((p: any) =>
-      p.node.declarations.some((d: any) => {
-        const init: any = (d as any).init;
-        return (
-          init &&
-          init.type === "CallExpression" &&
-          init.callee?.type === "MemberExpression" &&
-          init.callee.object?.type === "Identifier" &&
-          init.callee.object.name === "stylex" &&
-          init.callee.property?.type === "Identifier" &&
-          init.callee.property.name === "keyframes"
-        );
-      }),
-    )
-    .at(-1);
-
-  const lastCssHelperDecl = root
-    .find(j.VariableDeclaration)
-    .filter((p: any) =>
-      p.node.declarations.some((d: any) => {
-        const id: any = (d as any).id;
-        return id?.type === "Identifier" && cssHelperNames.has(id.name);
-      }),
-    )
-    .at(-1);
-
-  const insertionAnchor = lastKeyframesOrHelperDecl.size()
-    ? lastKeyframesOrHelperDecl
-    : lastCssHelperDecl.size()
-      ? lastCssHelperDecl
-      : null;
-
   // If styles reference identifiers declared later in the file (e.g. string-interpolation fixture),
   // insert `styles` after the last such declaration to satisfy StyleX evaluation order.
   const referencedIdents = new Set<string>();
   {
     const seen = new WeakSet<object>();
     const visit = (cur: any) => {
-      if (!cur) return;
-      if (Array.isArray(cur)) {
-        for (const c of cur) visit(c);
+      if (!cur) {
         return;
       }
-      if (typeof cur !== "object") return;
-      if (seen.has(cur as object)) return;
+      if (Array.isArray(cur)) {
+        for (const c of cur) {
+          visit(c);
+        }
+        return;
+      }
+      if (typeof cur !== "object") {
+        return;
+      }
+      if (seen.has(cur as object)) {
+        return;
+      }
       seen.add(cur as object);
       if (cur.type === "Identifier" && typeof cur.name === "string") {
         referencedIdents.add(cur.name);
       }
       for (const v of Object.values(cur)) {
-        if (typeof v === "object") visit(v);
+        if (typeof v === "object") {
+          visit(v);
+        }
       }
     };
     for (const v of resolvedStyleObjects.values()) {
-      if (isAstNode(v)) visit(v);
-      else if (v && typeof v === "object") visit(objectToAst(j, v as any));
+      if (isAstNode(v)) {
+        visit(v);
+      } else if (v && typeof v === "object") {
+        visit(objectToAst(j, v as any));
+      }
     }
   }
 
@@ -246,30 +292,118 @@ export function emitStylesAndImports(args: {
     let last = -1;
     for (let i = 0; i < programBody.length; i++) {
       const stmt = programBody[i];
-      if (!stmt) continue;
+      if (!stmt) {
+        continue;
+      }
       if (stmt.type === "VariableDeclaration") {
         for (const d of stmt.declarations ?? []) {
           const id = d?.id;
-          if (id?.type === "Identifier" && referencedIdents.has(id.name)) last = i;
+          if (id?.type === "Identifier" && referencedIdents.has(id.name)) {
+            last = i;
+          }
         }
       } else if (stmt.type === "FunctionDeclaration") {
         const id = stmt.id;
-        if (id?.type === "Identifier" && referencedIdents.has(id.name)) last = i;
+        if (id?.type === "Identifier" && referencedIdents.has(id.name)) {
+          last = i;
+        }
       }
     }
     return last >= 0 ? last : null;
   })();
 
-  if (declsRefIdx !== null) {
-    programBody.splice(declsRefIdx + 1, 0, stylesDecl as any);
-  } else if (insertionAnchor) {
-    insertionAnchor.insertAfter(stylesDecl);
-  } else {
-    const lastImport = root.find(j.ImportDeclaration).at(-1);
-    if (lastImport.size() > 0) {
-      lastImport.insertAfter(stylesDecl);
-    } else {
-      root.get().node.program.body.unshift(stylesDecl);
+  // Try to place `styles` where the first styled component declaration used to be:
+  // insert right before the earliest styled decl statement (i.e. after the statement before it).
+  const firstStyledDeclInsertionAfterIdx = (() => {
+    if (!styledDecls.length) {
+      return null;
     }
+    const styledLocalNames = new Set(styledDecls.map((d) => d.localName));
+    let firstIdx: number | null = null;
+    for (let i = 0; i < programBody.length; i++) {
+      const stmt = programBody[i];
+      if (stmt?.type !== "VariableDeclaration") {
+        continue;
+      }
+      for (const d of stmt.declarations ?? []) {
+        const id = d?.id;
+        if (id?.type !== "Identifier") {
+          continue;
+        }
+        if (!styledLocalNames.has(id.name)) {
+          continue;
+        }
+        firstIdx = firstIdx === null ? i : Math.min(firstIdx, i);
+      }
+    }
+    return firstIdx === null ? null : firstIdx - 1;
+  })();
+
+  const lastImportIdx = (() => {
+    let last = -1;
+    for (let i = 0; i < programBody.length; i++) {
+      if (programBody[i]?.type === "ImportDeclaration") {
+        last = i;
+      }
+    }
+    return last;
+  })();
+
+  const lastKeyframesIdx = (() => {
+    let last = -1;
+    for (let i = 0; i < programBody.length; i++) {
+      const stmt = programBody[i];
+      if (stmt?.type !== "VariableDeclaration") {
+        continue;
+      }
+      for (const d of stmt.declarations ?? []) {
+        const init: any = d?.init;
+        if (
+          init &&
+          init.type === "CallExpression" &&
+          init.callee?.type === "MemberExpression" &&
+          init.callee.object?.type === "Identifier" &&
+          init.callee.object.name === "stylex" &&
+          init.callee.property?.type === "Identifier" &&
+          init.callee.property.name === "keyframes"
+        ) {
+          last = i;
+        }
+      }
+    }
+    return last;
+  })();
+
+  const lastCssHelperIdx = (() => {
+    let last = -1;
+    for (let i = 0; i < programBody.length; i++) {
+      const stmt = programBody[i];
+      if (stmt?.type !== "VariableDeclaration") {
+        continue;
+      }
+      for (const d of stmt.declarations ?? []) {
+        const id: any = d?.id;
+        if (id?.type === "Identifier" && cssHelperNames.has(id.name)) {
+          last = i;
+        }
+      }
+    }
+    return last;
+  })();
+
+  // Pick the latest safe insertion point: after imports, after any keyframes/css helpers,
+  // after any referenced identifier declarations, and after the original styled-decl anchor.
+  const insertAfterIdx = Math.max(
+    lastImportIdx,
+    lastKeyframesIdx,
+    lastCssHelperIdx,
+    declsRefIdx ?? -1,
+    firstStyledDeclInsertionAfterIdx ?? -1,
+  );
+
+  if (insertAfterIdx >= 0) {
+    programBody.splice(insertAfterIdx + 1, 0, stylesDecl as any);
+  } else {
+    programBody.unshift(stylesDecl as any);
   }
 }
