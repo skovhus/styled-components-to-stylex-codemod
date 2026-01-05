@@ -3,7 +3,6 @@ import { mkdtemp, copyFile, mkdir, readFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
-import { existsSync } from "node:fs";
 import { execFileSync } from "node:child_process";
 import { format } from "oxfmt";
 import { runTransform } from "../run.js";
@@ -19,12 +18,9 @@ async function normalizeCode(code: string): Promise<string> {
 
 describe("runTransform (e2e)", () => {
   it("transforms a fixture in a temp folder and matches the .output.tsx file", async () => {
-    // Ensure the dist runner exists; `runTransform` requires built artifacts when running from `src/`.
+    // Ensure the dist runner is up-to-date; `runTransform` requires built artifacts when running from `src/`.
     const repoRoot = join(__dirname, "..", "..");
-    const distTransform = join(repoRoot, "dist", "transform.mjs");
-    if (!existsSync(distTransform)) {
-      execFileSync("pnpm", ["build"], { cwd: repoRoot, stdio: "inherit" });
-    }
+    execFileSync("pnpm", ["build"], { cwd: repoRoot, stdio: "inherit" });
 
     const fixtureName = "css-variables";
 

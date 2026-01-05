@@ -28,7 +28,12 @@ const adapter = defineAdapter({
       const varName = ctx.path.replace(/\./g, "_");
       return {
         expr: `tokens.${varName}`,
-        imports: ['import { tokens } from "./design-system.stylex";'],
+        imports: [
+          {
+            from: { kind: "specifier", value: "./design-system.stylex" },
+            names: [{ imported: "tokens" }],
+          },
+        ],
       };
     }
 
@@ -42,7 +47,12 @@ const adapter = defineAdapter({
       if (name === "--base-size") {
         return {
           expr: "calcVars.baseSize",
-          imports: ['import { calcVars } from "./css-calc.stylex";'],
+          imports: [
+            {
+              from: { kind: "specifier", value: "./css-calc.stylex" },
+              names: [{ imported: "calcVars" }],
+            },
+          ],
           ...(definedValue === "16px" ? { dropDefinition: true } : {}),
         };
       }
@@ -63,7 +73,12 @@ const adapter = defineAdapter({
       void fallback;
       return {
         expr: `vars.${toCamelCase(name)}`,
-        imports: ['import { vars } from "./css-variables.stylex";'],
+        imports: [
+          {
+            from: { kind: "specifier", value: "./css-variables.stylex" },
+            names: [{ imported: "vars" }],
+          },
+        ],
       };
     }
 
@@ -71,8 +86,8 @@ const adapter = defineAdapter({
       // Called for template interpolations like: ${transitionSpeed("slowTransition")}
       // `calleeImportedName` is the imported symbol name (works even with aliasing).
       // `calleeSource` tells you where it came from:
-      // - { kind: "filePath", value: "/abs/path" } for relative imports
-      // - { kind: "module", value: "some-package/foo" } for package imports
+      // - { kind: "absolutePath", value: "/abs/path" } for relative imports
+      // - { kind: "specifier", value: "some-package/foo" } for package imports
 
       if (ctx.calleeImportedName !== "transitionSpeed") {
         return null;
@@ -93,7 +108,12 @@ const adapter = defineAdapter({
       return {
         expr: `transitionSpeedVars.${key}`,
         imports: [
-          'import { transitionSpeed as transitionSpeedVars } from "./lib/helpers.stylex";',
+          {
+            from: { kind: "specifier", value: "./lib/helpers.stylex" },
+            names: [
+              { imported: "transitionSpeed", local: "transitionSpeedVars" },
+            ],
+          },
         ],
       };
     }

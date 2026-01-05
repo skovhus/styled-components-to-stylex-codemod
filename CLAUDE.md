@@ -88,34 +88,6 @@ Use the Playwright MCP to inspect test case rendering:
 
 The "All" story shows every test case side-by-side, making it easy to compare styled-components input with StyleX output.
 
-## Adapter API
-
-The codemod exposes an adapter-based API for customization (value resolution + dynamic interpolation handling).
-
-### Programmatic Usage
-
-```ts
-import { runTransform } from "styled-components-to-stylex-codemod";
-import { defineAdapter } from "styled-components-to-stylex-codemod";
-
-const adapter = defineAdapter({
-  resolveValue(ctx) {
-    if (ctx.kind !== "theme") return null;
-    return {
-      expr: `themeVars.${ctx.path.replace(/\./g, "_")}`,
-      imports: ["import { themeVars } from './theme.stylex';"],
-    };
-  },
-});
-
-await runTransform({
-  files: "src/**/*.tsx",
-  adapter,
-  dryRun: true, // Set to false to write changes
-  parser: "tsx",
-});
-```
-
 ## StyleX Requirements
 
 Output files must use valid StyleX syntax:

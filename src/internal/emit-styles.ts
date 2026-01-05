@@ -1,11 +1,14 @@
 import type { Collection } from "jscodeshift";
 import type { StyledDecl } from "./transform-types.js";
+import path from "node:path";
+import type { ImportSource, ImportSpec } from "../adapter.js";
 
 export function emitStylesAndImports(args: {
   root: Collection<any>;
   j: any;
+  filePath: string;
   styledImports: Collection<any>;
-  resolverImports: Set<string>;
+  resolverImports: Map<string, any>;
   resolvedStyleObjects: Map<string, any>;
   styledDecls: StyledDecl[];
   cssHelperNames: Set<string>;
@@ -16,6 +19,7 @@ export function emitStylesAndImports(args: {
   const {
     root,
     j,
+    filePath,
     styledImports,
     resolverImports,
     resolvedStyleObjects,
@@ -97,43 +101,42 @@ export function emitStylesAndImports(args: {
 
   // Inject resolver-provided imports (from adapter.resolveValue calls).
   {
-    const importsToInject = new Set<string>(resolverImports);
-
-    const parseStatements = (src: string): any[] => {
-      try {
-        const program = j(src).get().node.program;
-        return Array.isArray((program as any).body) ? ((program as any).body as any[]) : [];
-      } catch {
-        return [];
+    const toModuleSpecifier = (from: ImportSource): string => {
+      if (from.kind === "specifier") {
+        if (typeof from.value !== "string" || from.value.trim() === "") {
+          throw new Error(
+            `[styled-components-to-stylex] Invalid import specifier: expected non-empty string, got ${JSON.stringify(
+              from.value,
+            )}`,
+          );
+        }
+        return from.value;
       }
+      // Absolute file path -> relative module specifier from current file
+      if (typeof from.value !== "string" || from.value.trim() === "") {
+        throw new Error(
+          `[styled-components-to-stylex] Invalid import absolutePath: expected non-empty string, got ${JSON.stringify(
+            from.value,
+          )}`,
+        );
+      }
+      if (!path.isAbsolute(from.value)) {
+        throw new Error(
+          `[styled-components-to-stylex] Invalid import absolutePath: expected absolute path, got ${JSON.stringify(
+            from.value,
+          )}`,
+        );
+      }
+      const baseDir = path.dirname(String(filePath));
+      let rel = path.relative(baseDir, from.value);
+      rel = rel.split(path.sep).join("/");
+      if (!rel.startsWith(".")) {
+        rel = `./${rel}`;
+      }
+      return rel;
     };
 
-    const existingImportSources = new Set(
-      root
-        .find(j.ImportDeclaration)
-        .nodes()
-        .map((n: any) => (n.source as any)?.value)
-        .filter((v: any): v is string => typeof v === "string"),
-    );
-
-    const importNodes: any[] = [];
-    for (const imp of importsToInject) {
-      for (const stmt of parseStatements(imp)) {
-        if (stmt?.type !== "ImportDeclaration") {
-          continue;
-        }
-        const src = (stmt.source as any)?.value;
-        if (typeof src === "string" && existingImportSources.has(src)) {
-          continue;
-        }
-        if (typeof src === "string") {
-          existingImportSources.add(src);
-        }
-        importNodes.push(stmt);
-      }
-    }
-
-    if (importNodes.length) {
+    const insertImportDecl = (decl: any): void => {
       const body = root.get().node.program.body as any[];
       const stylexIdx = body.findIndex(
         (s) => s?.type === "ImportDeclaration" && (s.source as any)?.value === "@stylexjs/stylex",
@@ -147,13 +150,63 @@ export function emitStylesAndImports(args: {
         }
         return last;
       })();
-
-      // Insert imports immediately after the stylex import (preferred) or after the last import.
       const importInsertAt =
         stylexIdx >= 0 ? stylexIdx + 1 : lastImportIdx >= 0 ? lastImportIdx + 1 : 0;
-      if (importNodes.length) {
-        body.splice(importInsertAt, 0, ...importNodes);
+      body.splice(importInsertAt, 0, decl);
+    };
+
+    const ensureImportDecl = (spec: ImportSpec): void => {
+      const moduleSpecifier = toModuleSpecifier(spec.from);
+      const existing = root.find(j.ImportDeclaration, {
+        source: { value: moduleSpecifier },
+      } as any);
+
+      const toImportSpecifier = (imported: string, local?: string) => {
+        const impId = j.identifier(imported);
+        if (local && local !== imported) {
+          return j.importSpecifier(impId, j.identifier(local));
+        }
+        return j.importSpecifier(impId);
+      };
+
+      if (existing.size() > 0) {
+        // Merge into the first matching import.
+        const p: any = existing.at(0).get();
+        const decl: any = p.node;
+        const specs = (decl.specifiers ?? []) as any[];
+        const existingKeys = new Set(
+          specs
+            .filter((s) => s.type === "ImportSpecifier")
+            .map((s) => {
+              const imported = s.imported?.name ?? s.imported?.value ?? "";
+              const local = s.local?.name ?? imported;
+              return `${imported} as ${local}`;
+            }),
+        );
+        for (const n of spec.names) {
+          const imported = n.imported;
+          const local = n.local ?? imported;
+          const key = `${imported} as ${local}`;
+          if (!existingKeys.has(key)) {
+            specs.push(toImportSpecifier(imported, n.local));
+            existingKeys.add(key);
+          }
+        }
+
+        decl.specifiers = specs;
+        return;
       }
+
+      // No existing import: insert a new one.
+      const decl = j.importDeclaration(
+        spec.names.map((n) => toImportSpecifier(n.imported, n.local)),
+        j.literal(moduleSpecifier),
+      );
+      insertImportDecl(decl);
+    };
+
+    for (const spec of resolverImports.values() as Iterable<ImportSpec>) {
+      ensureImportDecl(spec);
     }
   }
 

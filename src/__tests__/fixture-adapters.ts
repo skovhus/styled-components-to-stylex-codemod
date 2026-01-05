@@ -8,7 +8,12 @@ export const customAdapter = defineAdapter({
     }
     return {
       expr: `customVar('${ctx.path}', '')`,
-      imports: ["import { customVar } from './custom-theme';"],
+      imports: [
+        {
+          from: { kind: "specifier", value: "./custom-theme" },
+          names: [{ imported: "customVar" }],
+        },
+      ],
     };
   },
 });
@@ -25,7 +30,7 @@ export const fixtureAdapter = defineAdapter({
         return null;
       }
 
-      if (ctx.calleeSource.kind !== "filePath") {
+      if (ctx.calleeSource.kind !== "absolutePath") {
         return null;
       }
 
@@ -51,7 +56,12 @@ export const fixtureAdapter = defineAdapter({
 
       return {
         expr: `transitionSpeedVars.${key}`,
-        imports: ['import { transitionSpeed as transitionSpeedVars } from "./lib/helpers.stylex";'],
+        imports: [
+          {
+            from: { kind: "specifier", value: "./lib/helpers.stylex" },
+            names: [{ imported: "transitionSpeed", local: "transitionSpeedVars" }],
+          },
+        ],
       };
     }
 
@@ -62,13 +72,21 @@ export const fixtureAdapter = defineAdapter({
       if (name === "--base-size") {
         return {
           expr: "calcVars.baseSize",
-          imports: ['import { calcVars } from "./css-calc.stylex";'],
+          imports: [
+            {
+              from: { kind: "specifier", value: "./css-calc.stylex" },
+              names: [{ imported: "calcVars" }],
+            },
+          ],
           ...(definedValue === "16px" ? { dropDefinition: true } : {}),
         };
       }
 
       // css-variables fixture: map known vars to `vars.*` and `textVars.*`
-      const combinedImport = 'import { vars, textVars } from "./css-variables.stylex";';
+      const combinedImport = {
+        from: { kind: "specifier" as const, value: "./css-variables.stylex" },
+        names: [{ imported: "vars" }, { imported: "textVars" }],
+      };
       const varsMap: Record<string, string> = {
         "--color-primary": "colorPrimary",
         "--color-secondary": "colorSecondary",

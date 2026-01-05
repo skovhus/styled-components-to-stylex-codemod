@@ -853,7 +853,14 @@ export function emitWrappers(args: {
     const hasReactImport =
       root
         .find(j.ImportDeclaration, { source: { value: "react" } } as any)
-        .find(j.ImportDefaultSpecifier)
+        .filter((p: any) =>
+          (p.node.specifiers ?? []).some(
+            (s: any) =>
+              (s.type === "ImportDefaultSpecifier" || s.type === "ImportNamespaceSpecifier") &&
+              s.local?.type === "Identifier" &&
+              s.local.name === "React",
+          ),
+        )
         .size() > 0;
     if (!hasReactImport) {
       const firstImport = root.find(j.ImportDeclaration).at(0);

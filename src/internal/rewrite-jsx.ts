@@ -224,10 +224,22 @@ export function postProcessTransformedAst(args: {
     }
   });
 
+  // If we already have a value binding named `React` in scope, don't auto-insert `import React from "react";`.
+  //
+  // NOTE: Avoid relying on a strict matcher like `{ source: { value: "react" } }` here; different printers/parsers
+  // can represent the module specifier slightly differently, but the `source.value` string remains stable.
   const hasReactImport =
     root
-      .find(j.ImportDeclaration, { source: { value: "react" } } as any)
-      .find(j.ImportDefaultSpecifier)
+      .find(j.ImportDeclaration)
+      .filter((p: any) => (p.node?.source as any)?.value === "react")
+      .filter((p: any) =>
+        (p.node.specifiers ?? []).some(
+          (s: any) =>
+            (s.type === "ImportDefaultSpecifier" || s.type === "ImportNamespaceSpecifier") &&
+            s.local?.type === "Identifier" &&
+            s.local.name === "React",
+        ),
+      )
       .size() > 0;
   const usesReactIdent = root.find(j.Identifier, { name: "React" } as any).size() > 0;
 

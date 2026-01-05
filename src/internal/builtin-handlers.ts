@@ -1,5 +1,5 @@
 import type { API } from "jscodeshift";
-import type { ResolveContext, ResolveResult } from "../adapter.js";
+import type { ImportSource, ImportSpec, ResolveContext, ResolveResult } from "../adapter.js";
 import {
   getArrowFnSingleParamName,
   getMemberPathFromIdentifier,
@@ -51,7 +51,7 @@ export type HandlerWarning = {
 };
 
 export type HandlerResult =
-  | { type: "resolvedValue"; expr: string; imports: string[] }
+  | { type: "resolvedValue"; expr: string; imports: ImportSpec[] }
   | { type: "emitInlineStyle"; style: string }
   | {
       type: "emitStyleFunction";
@@ -76,7 +76,7 @@ export type InternalHandlerContext = {
   resolveValue: (context: ResolveContext) => ResolveResult | null;
   resolveImport: (localName: string) => {
     importedName: string;
-    source: { kind: "filePath"; value: string } | { kind: "module"; value: string };
+    source: ImportSource;
   } | null;
   warn: (warning: HandlerWarning) => void;
 };

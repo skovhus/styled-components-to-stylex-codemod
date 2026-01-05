@@ -30,7 +30,7 @@ export type ResolveContext =
        * Import source for this call: either an absolute file path (relative imports)
        * or the module specifier (package imports).
        */
-      calleeSource: { kind: "filePath"; value: string } | { kind: "module"; value: string };
+      calleeSource: { kind: "absolutePath"; value: string } | { kind: "specifier"; value: string };
       /**
        * Call arguments (only literals are surfaced precisely; everything else is `unknown`).
        */
@@ -47,15 +47,21 @@ export type ResolveResult = {
   expr: string;
   /**
    * Import statements required by `expr`.
-   * Example: [`import { vars } from "./tokens.stylex";`]
+   * These are rendered and merged into the file by the codemod.
    */
-  imports: string[];
+  imports: ImportSpec[];
   /**
    * If true, the transformer should drop the corresponding `--name: ...` definition
    * from the emitted style object (useful when replacing with StyleX vars).
    */
   dropDefinition?: boolean;
 };
+
+export type ImportSource =
+  | { kind: "absolutePath"; value: string }
+  | { kind: "specifier"; value: string };
+
+export type ImportSpec = { from: ImportSource; names: Array<{ imported: string; local?: string }> };
 
 // ────────────────────────────────────────────────────────────────────────────
 // Adapter Interface
@@ -77,7 +83,12 @@ export interface Adapter {
  *   export default defineAdapter({
  *     resolveValue(ctx) {
  *       if (ctx.kind === "theme") {
- *         return { expr: `tokens.${ctx.path}`, imports: ["import { tokens } from './tokens';"] };
+ *         return {
+ *           expr: `tokens.${ctx.path}`,
+ *           imports: [
+ *             { from: { kind: "specifier", value: "./tokens" }, names: [{ imported: "tokens" }] },
+ *           ],
+ *         };
  *       }
  *       return null;
  *     },

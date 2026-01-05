@@ -66,7 +66,7 @@ export interface RunTransformResult {
  *     if (ctx.kind !== "theme") return null;
  *     return {
  *       expr: `themeVars.${ctx.path.replace(/\\./g, "_")}`,
- *       imports: ["import { themeVars } from './theme.stylex';"],
+ *       imports: [{ from: { kind: "specifier", value: "./theme.stylex" }, names: [{ imported: "themeVars" }] }],
  *     };
  *   },
  * });

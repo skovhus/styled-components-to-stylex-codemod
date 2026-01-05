@@ -73,7 +73,7 @@ export function rewriteCssVarsInString(args: {
   definedVars: Map<string, string>;
   varsToDrop: Set<string>;
   resolveValue: (context: ResolveContext) => ResolveResult | null;
-  addImport: (imp: string) => void;
+  addImport: (imp: any) => void;
   parseExpr: (exprSource: string) => unknown;
   j: any;
 }): unknown {

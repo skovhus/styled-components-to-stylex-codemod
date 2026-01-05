@@ -1,5 +1,6 @@
 import type { API, FileInfo, Options } from "jscodeshift";
 import type { Adapter } from "./adapter.js";
+import type { ImportSource } from "./adapter.js";
 import { assertNoNullNodesInArrays } from "./internal/ast-safety.js";
 import { collectStyledDecls } from "./internal/collect-styled-decls.js";
 import { rewriteCssVarsInString } from "./internal/css-vars.js";
@@ -11,6 +12,7 @@ import { emitWrappers } from "./internal/emit-wrappers.js";
 import { postProcessTransformedAst } from "./internal/rewrite-jsx.js";
 import {
   collectCreateGlobalStyleWarnings,
+  collectThemeProviderSkipWarnings,
   shouldSkipForCreateGlobalStyle,
   shouldSkipForThemeProvider,
   universalSelectorUnsupportedWarning,
@@ -80,7 +82,7 @@ export function transformWithWarnings(
   if (!adapter || typeof adapter.resolveValue !== "function") {
     throw new Error("Adapter must provide resolveValue(ctx) => { expr, imports } | null");
   }
-  const resolverImports = new Set<string>();
+  const resolverImports = new Map<string, any>();
 
   let hasChanges = false;
 
@@ -95,7 +97,7 @@ export function transformWithWarnings(
 
   // Policy: ThemeProvider usage is project-specific. If the file uses ThemeProvider, skip entirely.
   if (shouldSkipForThemeProvider({ root, j, styledImports })) {
-    return { code: null, warnings: [] };
+    return { code: null, warnings: collectThemeProviderSkipWarnings({ root, j, styledImports }) };
   }
 
   // Policy: createGlobalStyle is unsupported in StyleX; emit a warning when imported.
@@ -148,7 +150,7 @@ export function transformWithWarnings(
           definedVars,
           varsToDrop,
           resolveValue: adapter.resolveValue,
-          addImport: (imp) => resolverImports.add(imp),
+          addImport: (imp) => resolverImports.set(JSON.stringify(imp), imp),
           parseExpr,
           j,
         }) as any;
@@ -177,14 +179,12 @@ export function transformWithWarnings(
     string,
     {
       importedName: string;
-      source: { kind: "filePath"; value: string } | { kind: "module"; value: string };
+      source: ImportSource;
     }
   >();
   {
     const baseDir = dirname(file.path);
-    const resolveImportSource = (
-      specifier: string,
-    ): { kind: "filePath"; value: string } | { kind: "module"; value: string } => {
+    const resolveImportSource = (specifier: string): ImportSource => {
       // Deterministic resolution: for relative specifiers, just resolve against the current file’s folder.
       // This intentionally does NOT probe extensions, consult tsconfig paths, or use Node resolution.
       const isRelative =
@@ -195,8 +195,8 @@ export function transformWithWarnings(
         specifier.startsWith(".\\") ||
         specifier.startsWith("..\\");
       return isRelative
-        ? { kind: "filePath", value: pathResolve(baseDir, specifier) }
-        : { kind: "module", value: specifier };
+        ? { kind: "absolutePath", value: pathResolve(baseDir, specifier) }
+        : { kind: "specifier", value: specifier };
     };
 
     root.find(j.ImportDeclaration).forEach((p: any) => {
@@ -634,6 +634,7 @@ export function transformWithWarnings(
   emitStylesAndImports({
     root,
     j,
+    filePath: file.path,
     styledImports,
     resolverImports,
     resolvedStyleObjects,
@@ -971,6 +972,7 @@ export function transformWithWarnings(
           "name",
           "value",
           "size",
+          "tabIndex",
           "disabled",
           "readOnly",
           "ref",

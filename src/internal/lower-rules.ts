@@ -2,6 +2,7 @@ import type { API } from "jscodeshift";
 import { resolveDynamicNode } from "./builtin-handlers.js";
 import { cssDeclarationToStylexDeclarations } from "./css-prop-mapping.js";
 import { getMemberPathFromIdentifier, getNodeLocStart } from "./jscodeshift-utils.js";
+import type { ImportSource } from "../adapter.js";
 import {
   normalizeSelectorForInputAttributePseudos,
   parseAttributeSelector,
@@ -25,11 +26,11 @@ export function lowerRules(args: {
     string,
     {
       importedName: string;
-      source: { kind: "filePath"; value: string } | { kind: "module"; value: string };
+      source: ImportSource;
     }
   >;
   warnings: TransformWarning[];
-  resolverImports: Set<string>;
+  resolverImports: Map<string, any>;
   styledDecls: StyledDecl[];
   keyframesNames: Set<string>;
   cssHelperNames: Set<string>;
@@ -914,7 +915,7 @@ export function lowerRules(args: {
 
           if (res && res.type === "resolvedValue") {
             for (const imp of res.imports ?? []) {
-              resolverImports.add(imp);
+              resolverImports.set(JSON.stringify(imp), imp);
             }
             const exprAst = parseExpr(res.expr);
             if (!exprAst) {
