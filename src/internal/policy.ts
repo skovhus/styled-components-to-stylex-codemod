@@ -73,8 +73,10 @@ export function collectThemeProviderSkipWarnings(args: {
       "ThemeProvider usage is project-specific; skipping this file (manual follow-up required).",
   };
   if (themeProviderImportForSkip?.loc) {
-    warning.line = themeProviderImportForSkip.loc.start.line;
-    warning.column = themeProviderImportForSkip.loc.start.column;
+    warning.loc = {
+      line: themeProviderImportForSkip.loc.start.line,
+      column: themeProviderImportForSkip.loc.start.column ?? 0,
+    };
   }
   warnings.push(warning);
   return warnings;
@@ -100,8 +102,10 @@ export function collectCreateGlobalStyleWarnings(
             "createGlobalStyle is not supported in StyleX. Global styles should be handled separately (e.g., in a CSS file or using CSS reset libraries).",
         };
         if (specifier.loc) {
-          warning.line = specifier.loc.start.line;
-          warning.column = specifier.loc.start.column;
+          warning.loc = {
+            line: specifier.loc.start.line,
+            column: specifier.loc.start.column ?? 0,
+          };
         }
         warnings.push(warning);
       }
@@ -133,11 +137,14 @@ export function shouldSkipForStyledCssImport(args: {
   });
 }
 
-export function universalSelectorUnsupportedWarning(): TransformWarning {
+export function universalSelectorUnsupportedWarning(
+  loc?: { line: number; column: number } | null,
+): TransformWarning {
   return {
     type: "unsupported-feature",
     feature: "universal-selector",
     message:
       "Universal selectors (`*`) are currently unsupported; skipping this file (manual follow-up required).",
+    ...(loc ? { loc } : {}),
   };
 }

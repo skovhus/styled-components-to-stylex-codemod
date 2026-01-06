@@ -9,8 +9,7 @@ export interface TransformWarning {
   type: "unsupported-feature" | "dynamic-node";
   feature: string;
   message: string;
-  line?: number;
-  column?: number;
+  loc?: { line: number; column: number };
 }
 
 /**

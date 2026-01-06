@@ -23,11 +23,27 @@ export function collectStyledDecls(args: {
   styledDefaultImport: string | undefined;
   toStyleKey: (localName: string) => string;
   toSuffixFromProp: (propName: string) => string;
-}): { styledDecls: StyledDecl[]; hasUniversalSelectors: boolean } {
+}): {
+  styledDecls: StyledDecl[];
+  hasUniversalSelectors: boolean;
+  universalSelectorLoc: { line: number; column: number } | null;
+} {
   const { root, j, styledDefaultImport, toStyleKey, toSuffixFromProp } = args;
 
   const styledDecls: StyledDecl[] = [];
   let hasUniversalSelectors = false;
+  let universalSelectorLoc: { line: number; column: number } | null = null;
+
+  const noteUniversalSelector = (template: any): void => {
+    hasUniversalSelectors = true;
+    if (universalSelectorLoc) {
+      return;
+    }
+    const start = template?.loc?.start;
+    if (start?.line !== undefined) {
+      universalSelectorLoc = { line: start.line, column: start.column ?? 0 };
+    }
+  };
 
   const parseAttrsArg = (arg0: any): StyledDecl["attrsInfo"] | undefined => {
     if (!arg0) {
@@ -391,7 +407,7 @@ export function collectStyledDecls(args: {
           rawCss: parsed.rawCss,
         });
         if (hasUniversalSelectorInRules(rules)) {
-          hasUniversalSelectors = true;
+          noteUniversalSelector(template);
         }
 
         styledDecls.push({
@@ -426,7 +442,7 @@ export function collectStyledDecls(args: {
           rawCss: parsed.rawCss,
         });
         if (hasUniversalSelectorInRules(rules)) {
-          hasUniversalSelectors = true;
+          noteUniversalSelector(template);
         }
         const attrsInfo =
           tag.callee.property.name === "attrs" ? parseAttrsArg(tag.arguments[0]) : undefined;
@@ -472,7 +488,7 @@ export function collectStyledDecls(args: {
           rawCss: parsed.rawCss,
         });
         if (hasUniversalSelectorInRules(rules)) {
-          hasUniversalSelectors = true;
+          noteUniversalSelector(template);
         }
 
         styledDecls.push({
@@ -507,7 +523,7 @@ export function collectStyledDecls(args: {
           rawCss: parsed.rawCss,
         });
         if (hasUniversalSelectorInRules(rules)) {
-          hasUniversalSelectors = true;
+          noteUniversalSelector(template);
         }
         const shouldForwardProp = parseShouldForwardProp(tag.arguments[0]);
         const withConfigMeta = parseWithConfigMeta(tag.arguments[0]);
@@ -671,5 +687,5 @@ export function collectStyledDecls(args: {
       });
     });
 
-  return { styledDecls, hasUniversalSelectors };
+  return { styledDecls, hasUniversalSelectors, universalSelectorLoc };
 }

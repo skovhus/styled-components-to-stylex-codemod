@@ -43,8 +43,8 @@ export default function transform(file: FileInfo, api: API, options: Options): s
 
   // Log warnings to stderr
   for (const warning of result.warnings) {
-    const location = warning.line
-      ? ` (${file.path}:${warning.line}:${warning.column ?? 0})`
+    const location = warning.loc
+      ? ` (${file.path}:${warning.loc.line}:${warning.loc.column})`
       : ` (${file.path})`;
     process.stderr.write(`[styled-components-to-stylex] Warning${location}: ${warning.message}\n`);
   }
@@ -451,6 +451,8 @@ export function transformWithWarnings(
   // These warnings are used for per-fixture expectations and help guide manual follow-ups.
   let hasComponentSelector = false;
   let hasSpecificityHack = false;
+  let componentSelectorLoc: { line: number; column: number } | null = null;
+  let specificityHackLoc: { line: number; column: number } | null = null;
 
   root.find(j.TemplateLiteral).forEach((p) => {
     const tl = p.node;
@@ -459,6 +461,12 @@ export function transformWithWarnings(
     for (const quasi of tl.quasis) {
       if (quasi.value.raw.includes("&&")) {
         hasSpecificityHack = true;
+        if (!specificityHackLoc && quasi.loc?.start?.line !== undefined) {
+          specificityHackLoc = {
+            line: quasi.loc.start.line,
+            column: quasi.loc.start.column ?? 0,
+          };
+        }
       }
     }
 
@@ -468,26 +476,45 @@ export function transformWithWarnings(
       const after = tl.quasis[i + 1]?.value.raw ?? "";
       if (expr?.type === "Identifier" && after.includes(":hover &")) {
         hasComponentSelector = true;
+        if (!componentSelectorLoc) {
+          const loc = (expr as any).loc ?? tl.loc;
+          if (loc?.start?.line !== undefined) {
+            componentSelectorLoc = {
+              line: loc.start.line,
+              column: loc.start.column ?? 0,
+            };
+          }
+        }
       }
     }
   });
 
   if (hasComponentSelector) {
-    warnings.push({
-      type: "unsupported-feature",
+    const warning = {
+      type: "unsupported-feature" as const,
       feature: "component-selector",
       message:
         "Component selectors like `${OtherComponent}:hover &` are not directly representable in StyleX. Manual refactor is required to preserve relationship/hover semantics.",
-    });
+    };
+    if (componentSelectorLoc) {
+      warnings.push({ ...warning, loc: componentSelectorLoc });
+    } else {
+      warnings.push(warning);
+    }
   }
 
   if (hasSpecificityHack) {
-    warnings.push({
-      type: "unsupported-feature",
+    const warning = {
+      type: "unsupported-feature" as const,
       feature: "specificity",
       message:
         "Styled-components specificity hacks like `&&` / `&&&` are not representable in StyleX. The output may not preserve selector specificity and may require manual adjustments.",
-    });
+    };
+    if (specificityHackLoc) {
+      warnings.push({ ...warning, loc: specificityHackLoc });
+    } else {
+      warnings.push(warning);
+    }
   }
 
   // --- Core transform ---
@@ -639,7 +666,7 @@ export function transformWithWarnings(
     hasChanges = true;
   }
 
-  const { styledDecls, hasUniversalSelectors } = collectStyledDecls({
+  const { styledDecls, hasUniversalSelectors, universalSelectorLoc } = collectStyledDecls({
     root,
     j,
     styledDefaultImport,
@@ -668,7 +695,7 @@ export function transformWithWarnings(
   // Universal selectors (`*`) are currently unsupported (too many edge cases to map to StyleX safely).
   // Skip transforming the entire file to avoid producing incorrect output.
   if (hasUniversalSelectors) {
-    warnings.push(universalSelectorUnsupportedWarning());
+    warnings.push(universalSelectorUnsupportedWarning(universalSelectorLoc));
     return { code: null, warnings };
   }
 

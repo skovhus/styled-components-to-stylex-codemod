@@ -1126,8 +1126,7 @@ export function lowerRules(args: {
                   type: "dynamic-node",
                   feature: w.feature,
                   message: w.message,
-                  ...(loc?.line !== undefined ? { line: loc.line } : {}),
-                  ...(loc?.column !== undefined ? { column: loc.column } : {}),
+                  ...(loc ? { loc } : {}),
                 });
               },
             } as any,
@@ -1143,6 +1142,7 @@ export function lowerRules(args: {
                 type: "dynamic-node",
                 feature: "adapter-resolveValue",
                 message: `Adapter returned an unparseable expression for ${decl.localName}; dropping this declaration.`,
+                ...(loc ? { loc } : {}),
               });
               continue;
             }
@@ -1193,6 +1193,7 @@ export function lowerRules(args: {
                   type: "dynamic-node",
                   feature: "adapter-resolveValue",
                   message: `Adapter returned an unparseable expression for ${decl.localName}; dropping this declaration.`,
+                  ...(loc ? { loc } : {}),
                 });
                 return null;
               }
@@ -1320,8 +1321,7 @@ export function lowerRules(args: {
               type: "dynamic-node",
               feature: "dynamic-call",
               message: res.reason,
-              ...(loc?.line !== undefined ? { line: loc.line } : {}),
-              ...(loc?.column !== undefined ? { column: loc.column } : {}),
+              ...(loc ? { loc } : {}),
             });
             bail = true;
             break;
@@ -1347,6 +1347,7 @@ export function lowerRules(args: {
             type: "dynamic-node",
             feature: "dynamic-interpolation",
             message: `Unresolved interpolation for ${decl.localName}; skipping file (manual follow-up required).`,
+            ...(loc ? { loc } : {}),
           });
           bail = true;
           break;
