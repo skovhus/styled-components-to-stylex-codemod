@@ -5,19 +5,28 @@ type Color = "labelBase" | "labelMuted";
 
 const styles = stylex.create({
   box: {
-    width: "100%",
+    width: "42px",
     height: "100%",
     padding: "16px",
   },
+  boxBackgroundColorHover: (hoverColor: string) => ({
+    ":hover": {
+      backgroundColor: themeVars[hoverColor],
+    },
+  }),
   boxBackgroundColor: (bg: string) => ({
     backgroundColor: themeVars[bg],
   }),
 });
 
 function Box(props) {
-  const { className, children, style, bg, ...rest } = props;
+  const { className, children, style, hoverColor, bg, ...rest } = props;
 
-  const sx = stylex.props(styles.box, bg && styles.boxBackgroundColor(bg));
+  const sx = stylex.props(
+    styles.box,
+    hoverColor && styles.boxBackgroundColorHover(hoverColor),
+    bg && styles.boxBackgroundColor(bg),
+  );
 
   return (
     <div
@@ -34,4 +43,9 @@ function Box(props) {
   );
 }
 
-export const App = () => <Box bg="labelBase" />;
+export const App = () => (
+  <>
+    <Box bg="labelBase" hoverColor="labelMuted" />
+    <Box bg="labelMuted" hoverColor="labelBase" />
+  </>
+);
