@@ -17,8 +17,8 @@ export function SomeComponent() {
 
 const styles = stylex.create({
   wrapper: {
-    /* A height of 0 */
-    height: 0,
+    /* A height of 10 */
+    height: "10px",
     /* Fixed width */
     width: "50px",
     overflowY: "scroll", // This is important
