@@ -1090,6 +1090,162 @@ export function lowerRules(args: {
             }
           }
 
+          // Handle computed theme object access keyed by a prop:
+          //   background-color: ${(props) => props.theme.color[props.bg]}
+          //
+          // If the adapter can resolve `theme.color` as an object expression, we can emit a StyleX
+          // dynamic style function that indexes into that resolved object at runtime:
+          //   boxBackgroundColor: (bg) => ({ backgroundColor: (resolved as any)[bg] })
+          //
+          // This requires a wrapper to consume `bg` without forwarding it to DOM.
+          const tryHandleThemeIndexedLookup = (): boolean => {
+            if (d.value.kind !== "interpolated") {
+              return false;
+            }
+            if (!d.property) {
+              return false;
+            }
+            // Skip media/attr buckets for now; these require more complex wiring.
+            if (media || attrTarget) {
+              return false;
+            }
+            const parts = d.value.parts ?? [];
+            const slotPart = parts.find((p: any) => p.kind === "slot");
+            if (!slotPart || slotPart.kind !== "slot") {
+              return false;
+            }
+            const slotId = slotPart.slotId;
+            const expr = decl.templateExpressions[slotId] as any;
+            if (!expr || expr.type !== "ArrowFunctionExpression") {
+              return false;
+            }
+            const paramName =
+              expr.params?.[0]?.type === "Identifier" ? (expr.params[0].name as string) : null;
+            if (!paramName) {
+              return false;
+            }
+            const body = expr.body as any;
+            if (!body || body.type !== "MemberExpression" || body.computed !== true) {
+              return false;
+            }
+
+            const indexPropName = (() => {
+              const p = body.property as any;
+              if (!p || typeof p !== "object") {
+                return null;
+              }
+              if (p.type === "Identifier" && typeof p.name === "string") {
+                return p.name as string;
+              }
+              if (p.type === "MemberExpression") {
+                const path = getMemberPathFromIdentifier(p as any, paramName);
+                if (!path || path.length !== 1) {
+                  return null;
+                }
+                return path[0]!;
+              }
+              return null;
+            })();
+            if (!indexPropName) {
+              return false;
+            }
+
+            const themeObjectPath = (() => {
+              const obj = body.object as any;
+              if (!obj || obj.type !== "MemberExpression") {
+                return null;
+              }
+              const parts = getMemberPathFromIdentifier(obj as any, paramName);
+              if (!parts || parts.length < 2) {
+                return null;
+              }
+              if (parts[0] !== "theme") {
+                return null;
+              }
+              return parts.slice(1).join(".");
+            })();
+            if (!themeObjectPath) {
+              return false;
+            }
+
+            const resolved = resolveValue({ kind: "theme", path: themeObjectPath });
+            if (!resolved) {
+              return false;
+            }
+
+            for (const imp of resolved.imports ?? []) {
+              resolverImports.set(JSON.stringify(imp), imp);
+            }
+
+            // Ensure we generate a wrapper so we can consume the prop without forwarding it to DOM.
+            ensureShouldForwardPropDrop(decl, indexPropName);
+
+            const outs = cssDeclarationToStylexDeclarations(d);
+            for (const out of outs) {
+              if (!out.prop) {
+                continue;
+              }
+              const pseudoSuffix = (p: string): string => {
+                // `:hover` -> `Hover`, `:focus-visible` -> `FocusVisible`
+                const raw = p.trim().replace(/^:+/, "");
+                const cleaned = raw
+                  .split(/[^a-zA-Z0-9]+/g)
+                  .filter(Boolean)
+                  .map((seg) => seg.charAt(0).toUpperCase() + seg.slice(1))
+                  .join("");
+                return cleaned || "Pseudo";
+              };
+
+              const fnKey = pseudo
+                ? `${decl.styleKey}${toSuffixFromProp(out.prop)}${pseudoSuffix(pseudo)}`
+                : `${decl.styleKey}${toSuffixFromProp(out.prop)}`;
+              styleFnFromProps.push({ fnKey, jsxProp: indexPropName });
+
+              if (!styleFnDecls.has(fnKey)) {
+                // Build expression: (resolvedExpr)[indexPropName]
+                const indexedExprAst = parseExpr(`(${resolved.expr})[${indexPropName}]`);
+                if (!indexedExprAst) {
+                  warnings.push({
+                    type: "dynamic-node",
+                    feature: "adapter-resolveValue",
+                    message: `Adapter returned an unparseable expression for ${decl.localName}; dropping this declaration.`,
+                  });
+                  continue;
+                }
+
+                const param = j.identifier(indexPropName);
+                (param as any).typeAnnotation = j.tsTypeAnnotation(j.tsStringKeyword());
+                if (pseudo) {
+                  // For `&:hover` etc, emit nested selector styles so we don't have to guess defaults.
+                  const nested = j.objectExpression([
+                    j.property("init", j.identifier(out.prop), indexedExprAst as any) as any,
+                  ]);
+                  const p = j.property("init", j.literal(pseudo), nested) as any;
+                  styleFnDecls.set(
+                    fnKey,
+                    j.arrowFunctionExpression([param], j.objectExpression([p])),
+                  );
+                } else {
+                  const p = j.property(
+                    "init",
+                    j.identifier(out.prop),
+                    indexedExprAst as any,
+                  ) as any;
+                  styleFnDecls.set(
+                    fnKey,
+                    j.arrowFunctionExpression([param], j.objectExpression([p])),
+                  );
+                }
+              }
+            }
+
+            return true;
+          };
+
+          if (tryHandleThemeIndexedLookup()) {
+            continue;
+          }
+
           const slotPart = d.value.parts.find((p: any) => p.kind === "slot");
           const slotId = slotPart && slotPart.kind === "slot" ? slotPart.slotId : 0;
           const loc = getNodeLocStart(decl.templateExpressions[slotId] as any);

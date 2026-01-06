@@ -13,7 +13,7 @@ const styles = stylex.create({
     ...rowBase,
     position: "sticky",
     zIndex: 3, // above regular rows
-    backgroundColor: themeVars.color_labelBase,
+    backgroundColor: themeVars.labelBase,
   },
 });
 

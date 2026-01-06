@@ -5,9 +5,8 @@ export const themeVars = stylex.defineVars({
   main: "#BF4F74",
   primaryColor: "#BF4F74",
   secondaryColor: "#4F74BF",
-  // Used by theme-conditional fixture
-  color_labelBase: "#111827",
-  color_labelMuted: "#6B7280",
+  labelBase: "#111827",
+  labelMuted: "#6B7280",
 });
 
 /**

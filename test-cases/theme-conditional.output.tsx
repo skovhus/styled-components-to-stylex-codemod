@@ -8,11 +8,11 @@ const styles = stylex.create({
     gap: "4px",
     alignItems: "center",
     fontSize: "11px",
-    color: themeVars.color_labelBase,
+    color: themeVars.labelBase,
     cursor: "pointer",
   },
   optionLabelDisabled: {
-    color: themeVars.color_labelMuted,
+    color: themeVars.labelMuted,
     cursor: "not-allowed",
   },
 });

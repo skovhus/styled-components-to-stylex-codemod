@@ -22,8 +22,26 @@ export const customAdapter = defineAdapter({
 export const fixtureAdapter = defineAdapter({
   resolveValue(ctx) {
     if (ctx.kind === "theme") {
+      // Test fixtures use a small ThemeProvider theme shape:
+      //   props.theme.color.labelBase  -> themeVars.labelBase
+      //   props.theme.color[bg]        -> themeVars[bg]
+      //
+      // `ctx.path` is the dot-path on the theme object (no bracket/index parts).
+      if (ctx.path === "color") {
+        return {
+          expr: "themeVars",
+          imports: [
+            {
+              from: { kind: "specifier", value: "./tokens.stylex" },
+              names: [{ imported: "themeVars" }],
+            },
+          ],
+        };
+      }
+
+      const lastSegment = ctx.path.split(".").pop();
       return {
-        expr: `themeVars.${ctx.path.replace(/\./g, "_")}`,
+        expr: `themeVars.${lastSegment}`,
         imports: [
           {
             from: { kind: "specifier", value: "./tokens.stylex" },

@@ -14,6 +14,14 @@ const __dirname = dirname(fileURLToPath(import.meta.url));
 const testCasesDir = join(__dirname, "..", "..", "test-cases");
 const j = jscodeshift.withParser("tsx");
 
+type FixtureCase = {
+  name: string;
+  inputPath: string;
+  outputPath: string;
+  inputFile: string;
+  outputFile: string;
+};
+
 function getTestCases(): string[] {
   const files = readdirSync(testCasesDir);
   // Exclude unsupported fixtures from main test cases
@@ -44,6 +52,14 @@ function getTestCases(): string[] {
 
   return [...inputNames];
 }
+
+const fixtureCases: FixtureCase[] = getTestCases().map((name) => ({
+  name,
+  inputPath: join(testCasesDir, `${name}.input.tsx`),
+  outputPath: join(testCasesDir, `${name}.output.tsx`),
+  inputFile: `${name}.input.tsx`,
+  outputFile: `${name}.output.tsx`,
+}));
 
 function readTestCase(name: string): {
   input: string;
@@ -170,15 +186,12 @@ describe("test case file pairing", () => {
   it("should have matching input/output files for all test cases", () => {
     // This test verifies the test case structure is valid
     // getTestCases() throws if there are mismatched files
-    const testCases = getTestCases();
-    expect(testCases.length).toBeGreaterThan(0);
+    expect(fixtureCases.length).toBeGreaterThan(0);
   });
 });
 
 describe("test case exports", () => {
-  const testCases = getTestCases();
-
-  it.each(testCases)("%s should export App in both input and output", (name) => {
+  it.each(fixtureCases)("$outputFile should export App in both input and output", ({ name }) => {
     const { input, output } = readTestCase(name);
     assertExportsApp(input, `${name}.input.tsx`);
     assertExportsApp(output, `${name}.output.tsx`);
@@ -186,43 +199,42 @@ describe("test case exports", () => {
 });
 
 describe("output invariants", () => {
-  const testCases = getTestCases();
-
-  it.each(testCases)("%s output should not import styled-components", (name) => {
+  it.each(fixtureCases)("$outputFile should not import styled-components", ({ name }) => {
     const { output } = readTestCase(name);
     expect(output).not.toMatch(/from\s+['"]styled-components['"]/);
   });
 });
 
 describe("fixture warning expectations", () => {
-  const testCases = getTestCases();
+  it.each(fixtureCases)(
+    "$outputFile warnings should match expectations (if provided)",
+    ({ name, inputPath }) => {
+      const { input } = readTestCase(name);
+      const expected = readExpectedWarningsFromComments(input);
 
-  it.each(testCases)("%s warnings should match expectations (if provided)", (name) => {
-    const { input } = readTestCase(name);
-    const expected = readExpectedWarningsFromComments(input);
+      const result = transformWithWarnings(
+        { source: input, path: inputPath },
+        { jscodeshift: j, j, stats: () => {}, report: () => {} },
+        { adapter: fixtureAdapter },
+      );
 
-    const result = transformWithWarnings(
-      { source: input, path: `${name}.input.tsx` },
-      { jscodeshift: j, j, stats: () => {}, report: () => {} },
-      { adapter: fixtureAdapter },
-    );
+      // Fixture expectations only cover stable `unsupported-feature` warnings.
+      // Dynamic-node warnings are runtime/bail diagnostics and are not asserted via fixtures.
+      const actualFeatures = [
+        ...new Set(
+          result.warnings.filter((w) => w.type === "unsupported-feature").map((w) => w.feature),
+        ),
+      ].sort();
 
-    // Fixture expectations only cover stable `unsupported-feature` warnings.
-    // Dynamic-node warnings are runtime/bail diagnostics and are not asserted via fixtures.
-    const actualFeatures = [
-      ...new Set(
-        result.warnings.filter((w) => w.type === "unsupported-feature").map((w) => w.feature),
-      ),
-    ].sort();
+      if (!expected) {
+        expect(actualFeatures).toEqual([]);
+        return;
+      }
 
-    if (!expected) {
-      expect(actualFeatures).toEqual([]);
-      return;
-    }
-
-    const expectedFeatures = expected.map((w) => w.feature).sort();
-    expect(actualFeatures).toEqual(expectedFeatures);
-  });
+      const expectedFeatures = expected.map((w) => w.feature).sort();
+      expect(actualFeatures).toEqual(expectedFeatures);
+    },
+  );
 });
 
 // All test cases must be fully transformed:
@@ -230,10 +242,8 @@ describe("fixture warning expectations", () => {
 // - Result must not import styled-components
 // - Result must match the expected output fixture
 describe("transform", () => {
-  const testCases = getTestCases();
-
-  it.each(testCases)("%s", async (name) => {
-    const { input, output, inputPath } = readTestCase(name);
+  it.each(fixtureCases)("$outputFile", async ({ name, inputPath }) => {
+    const { input, output } = readTestCase(name);
     const result = runTransform(input, {}, inputPath);
 
     // Transform must produce a change - no bailing allowed
@@ -243,7 +253,9 @@ describe("transform", () => {
     expect(result).not.toMatch(/from\s+['"]styled-components['"]/);
 
     // Compare against expected output fixture
-    expect(await normalizeCode(result)).toEqual(await normalizeCode(output));
+    const normalizedResult = await normalizeCode(result);
+    const normalizedExpected = await normalizeCode(output);
+    expect(normalizedResult).toEqual(normalizedExpected);
   });
 });
 
