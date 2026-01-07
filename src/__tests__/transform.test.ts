@@ -1,4 +1,4 @@
-import { describe, it, expect } from "vitest";
+import { describe, it, expect, vi } from "vitest";
 import { applyTransform } from "jscodeshift/src/testUtils.js";
 import jscodeshift from "jscodeshift";
 import { readdirSync, readFileSync, existsSync } from "node:fs";
@@ -8,6 +8,13 @@ import { format } from "oxfmt";
 import transform, { transformWithWarnings } from "../transform.js";
 import type { TransformOptions } from "../transform.js";
 import { customAdapter, fixtureAdapter } from "./fixture-adapters.js";
+
+// Suppress codemod warnings in tests
+vi.mock("../internal/logger.js", () => ({
+  logWarning: vi.fn(),
+  logWarnings: vi.fn(),
+  flushWarnings: vi.fn(() => []),
+}));
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 

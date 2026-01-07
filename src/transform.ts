@@ -17,6 +17,7 @@ import {
   shouldSkipForThemeProvider,
   universalSelectorUnsupportedWarning,
 } from "./internal/policy.js";
+import { logWarnings } from "./internal/logger.js";
 import type {
   TransformOptions,
   TransformResult,
@@ -40,15 +41,7 @@ import { dirname, resolve as pathResolve } from "node:path";
  */
 export default function transform(file: FileInfo, api: API, options: Options): string | null {
   const result = transformWithWarnings(file, api, options as TransformOptions);
-
-  // Log warnings to stderr
-  for (const warning of result.warnings) {
-    const location = warning.loc
-      ? ` (${file.path}:${warning.loc.line}:${warning.loc.column})`
-      : ` (${file.path})`;
-    process.stderr.write(`[styled-components-to-stylex] Warning${location}: ${warning.message}\n`);
-  }
-
+  logWarnings(result.warnings, file.path);
   return result.code;
 }
 
