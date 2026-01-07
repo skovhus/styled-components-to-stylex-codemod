@@ -20,7 +20,7 @@ describe("runTransform (e2e)", () => {
   it("transforms a fixture in a temp folder and matches the .output.tsx file", async () => {
     // Ensure the dist runner is up-to-date; `runTransform` requires built artifacts when running from `src/`.
     const repoRoot = join(__dirname, "..", "..");
-    execFileSync("pnpm", ["build"], { cwd: repoRoot, stdio: "inherit" });
+    execFileSync("pnpm", ["build"], { cwd: repoRoot, stdio: "pipe" });
 
     const fixtureName = "css-variables";
 
