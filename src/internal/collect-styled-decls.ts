@@ -541,6 +541,48 @@ export function collectStyledDecls(args: {
           ...(leadingComments ? { leadingComments } : {}),
         });
       }
+
+      // styled("div").withConfig(...)`...` - intrinsic element with string argument
+      if (
+        tag.type === "CallExpression" &&
+        tag.callee.type === "MemberExpression" &&
+        tag.callee.property.type === "Identifier" &&
+        tag.callee.property.name === "withConfig" &&
+        tag.callee.object.type === "CallExpression" &&
+        tag.callee.object.callee.type === "Identifier" &&
+        tag.callee.object.callee.name === styledDefaultImport &&
+        tag.callee.object.arguments.length === 1 &&
+        (tag.callee.object.arguments[0]?.type === "StringLiteral" ||
+          (tag.callee.object.arguments[0]?.type === "Literal" &&
+            typeof (tag.callee.object.arguments[0] as any).value === "string"))
+      ) {
+        const localName = id.name;
+        const arg0 = tag.callee.object.arguments[0] as any;
+        const tagName = arg0.type === "StringLiteral" ? arg0.value : arg0.value;
+        const template = init.quasi;
+        const parsed = parseStyledTemplateLiteral(template);
+        const rules = normalizeStylisAstToIR(parsed.stylisAst, parsed.slots, {
+          rawCss: parsed.rawCss,
+        });
+        if (hasUniversalSelectorInRules(rules)) {
+          noteUniversalSelector(template);
+        }
+        const shouldForwardProp = parseShouldForwardProp(tag.arguments[0]);
+        const withConfigMeta = parseWithConfigMeta(tag.arguments[0]);
+
+        styledDecls.push({
+          ...placementHints,
+          localName,
+          base: { kind: "intrinsic", tagName },
+          styleKey: toStyleKey(localName),
+          rules,
+          templateExpressions: parsed.slots.map((s) => s.expression),
+          rawCss: parsed.rawCss,
+          ...(shouldForwardProp ? { shouldForwardProp } : {}),
+          ...(withConfigMeta ? { withConfig: withConfigMeta } : {}),
+          ...(leadingComments ? { leadingComments } : {}),
+        });
+      }
     });
 
   // Collect: const X = styled.div({ ... }) / styled.div((props) => ({ ... }))

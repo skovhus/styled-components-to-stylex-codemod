@@ -54,8 +54,59 @@ export function emitStylesAndImports(args: {
     addHeaderComments((n as any)?.comments);
   }
 
-  // Remove styled-components import(s)
+  // Remove styled-components import(s), but preserve any named imports that are still referenced
+  // (e.g. useTheme, withTheme, ThemeProvider if they're still used in the code)
+  const preservedSpecifiers: string[] = [];
+  for (const importNode of styledImports.nodes()) {
+    const specifiers = (importNode as any).specifiers ?? [];
+    for (const spec of specifiers) {
+      // Skip default import (styled) and namespace imports
+      if (spec.type !== "ImportSpecifier") {
+        continue;
+      }
+      const localName = spec.local?.name ?? spec.imported?.name;
+      if (!localName) {
+        continue;
+      }
+      // Check if this import is still referenced elsewhere in the code
+      // Skip common styled-components exports that are being transformed away
+      const transformedAway = ["styled", "css", "keyframes", "createGlobalStyle"];
+      if (transformedAway.includes(localName)) {
+        continue;
+      }
+      // Check if the identifier is used anywhere in the code
+      const usages = root.find(j.Identifier, { name: localName });
+      // Filter out usages that are just the import specifier itself
+      const realUsages = usages.filter((p: any) => {
+        const parent = p.parent?.node;
+        return !(parent?.type === "ImportSpecifier");
+      });
+      if (realUsages.size() > 0) {
+        preservedSpecifiers.push(localName);
+      }
+    }
+  }
+
+  // Remove styled-components imports
   styledImports.remove();
+
+  // Re-add preserved imports from styled-components if any
+  if (preservedSpecifiers.length > 0) {
+    const preservedImport = j.importDeclaration(
+      preservedSpecifiers.map((name) => j.importSpecifier(j.identifier(name))),
+      j.literal("styled-components"),
+    );
+    // Insert after stylex import
+    const body = root.get().node.program.body as any[];
+    const stylexIdx = body.findIndex(
+      (s) => s?.type === "ImportDeclaration" && (s.source as any)?.value === "@stylexjs/stylex",
+    );
+    if (stylexIdx >= 0) {
+      body.splice(stylexIdx + 1, 0, preservedImport);
+    } else {
+      body.unshift(preservedImport);
+    }
+  }
 
   // Insert stylex import at top (after existing imports, before code)
   const hasStylexImport =

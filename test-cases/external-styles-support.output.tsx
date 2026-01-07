@@ -1,9 +1,5 @@
 import * as stylex from "@stylexjs/stylex";
 
-// This component is exported and will use shouldSupportExternalStyles to enable
-// className/style/rest merging for external style extension support.
-export {};
-
 const styles = stylex.create({
   exportedButton: {
     backgroundColor: "#bf4f74",
@@ -21,7 +17,7 @@ const styles = stylex.create({
   },
 });
 
-function ExportedButton(props) {
+export function ExportedButton(props) {
   const { className, children, style, ...rest } = props;
 
   const sx = stylex.props(styles.exportedButton);

@@ -878,6 +878,12 @@ export function transformWithWarnings(
       decl.needsWrapperComponent = true;
     }
 
+    // Exported styled components need wrapper components to maintain the export.
+    // Without this, removing the styled declaration would leave an empty `export {}`.
+    if (exportedComponents.has(decl.localName)) {
+      decl.needsWrapperComponent = true;
+    }
+
     // Remove variable declarator for styled component
     root
       .find(j.VariableDeclaration)
@@ -891,7 +897,14 @@ export function transformWithWarnings(
       )
       .forEach((p) => {
         if (p.node.declarations.length === 1) {
-          j(p).remove();
+          // Check if this is inside an ExportNamedDeclaration
+          const parent = p.parentPath;
+          if (parent && parent.node?.type === "ExportNamedDeclaration") {
+            // Remove the entire export declaration
+            j(parent).remove();
+          } else {
+            j(p).remove();
+          }
           return;
         }
         p.node.declarations = p.node.declarations.filter(
@@ -1252,6 +1265,7 @@ export function transformWithWarnings(
     styledDecls,
     wrapperNames,
     patternProp,
+    exportedComponents,
   });
 
   const post = postProcessTransformedAst({

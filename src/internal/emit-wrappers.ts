@@ -95,14 +95,17 @@ function emitMinimalWrapper(args: {
   return result;
 }
 
+type ExportInfo = { exportName: string; isDefault: boolean };
+
 export function emitWrappers(args: {
   root: Collection<any>;
   j: any;
   styledDecls: StyledDecl[];
   wrapperNames: Set<string>;
   patternProp: (keyName: string, valueId?: any) => any;
+  exportedComponents: Map<string, ExportInfo>;
 }): void {
-  const { root, j, styledDecls, wrapperNames, patternProp } = args;
+  const { root, j, styledDecls, wrapperNames, patternProp, exportedComponents } = args;
 
   const wrapperDecls = styledDecls.filter((d) => d.needsWrapperComponent);
   if (wrapperDecls.length === 0) {
@@ -886,6 +889,105 @@ export function emitWrappers(args: {
     );
   }
 
+  // Simple exported styled components (styled.div without special features)
+  // These are exported components that need wrapper generation to maintain exports.
+  const simpleExportedIntrinsicWrappers = wrapperDecls.filter((d) => {
+    if (d.base.kind !== "intrinsic") {
+      return false;
+    }
+    // Skip if already handled by other wrapper categories
+    if (d.withConfig?.displayName || d.withConfig?.componentId) {
+      return false;
+    }
+    if (d.shouldForwardProp) {
+      return false;
+    }
+    if (d.enumVariant) {
+      return false;
+    }
+    if (d.siblingWrapper) {
+      return false;
+    }
+    if (d.attrWrapper) {
+      return false;
+    }
+    const tagName = d.base.tagName;
+    // Skip specialized wrapper categories
+    if (tagName === "button" && wrapperNames.has(d.localName)) {
+      return false;
+    }
+    if (tagName === "input" || tagName === "a") {
+      return false;
+    }
+    return true;
+  });
+
+  for (const d of simpleExportedIntrinsicWrappers) {
+    if (d.base.kind !== "intrinsic") {
+      continue;
+    }
+    const tagName = d.base.tagName;
+    const styleArgs: any[] = [
+      ...(d.extendsStyleKey
+        ? [j.memberExpression(j.identifier("styles"), j.identifier(d.extendsStyleKey))]
+        : []),
+      j.memberExpression(j.identifier("styles"), j.identifier(d.styleKey)),
+    ];
+
+    emitted.push(
+      ...emitMinimalWrapper({
+        j,
+        localName: d.localName,
+        tagName,
+        styleArgs,
+        destructureProps: [],
+        displayName: undefined,
+        patternProp,
+      }),
+    );
+  }
+
+  // Component wrappers (styled(Component)) - these wrap another component
+  const componentWrappers = wrapperDecls.filter((d) => d.base.kind === "component");
+
+  for (const d of componentWrappers) {
+    if (d.base.kind !== "component") {
+      continue;
+    }
+    const wrappedComponent = d.base.ident;
+    const styleArgs: any[] = [
+      ...(d.extendsStyleKey
+        ? [j.memberExpression(j.identifier("styles"), j.identifier(d.extendsStyleKey))]
+        : []),
+      j.memberExpression(j.identifier("styles"), j.identifier(d.styleKey)),
+    ];
+
+    const propsId = j.identifier("props");
+    const stylexPropsCall = j.callExpression(
+      j.memberExpression(j.identifier("stylex"), j.identifier("props")),
+      styleArgs,
+    );
+
+    // Create: <WrappedComponent {...props} {...stylex.props(styles.key)} />
+    const jsx = j.jsxElement(
+      j.jsxOpeningElement(
+        j.jsxIdentifier(wrappedComponent),
+        [j.jsxSpreadAttribute(propsId), j.jsxSpreadAttribute(stylexPropsCall)],
+        true,
+      ),
+      null,
+      [],
+    );
+
+    emitted.push(
+      j.functionDeclaration(
+        j.identifier(d.localName),
+        [propsId],
+        j.blockStatement([j.returnStatement(jsx as any)]),
+      ),
+    );
+  }
+
   if (emitted.length > 0) {
     // Re-order emitted wrapper nodes to match `wrapperDecls` source order.
     const groups = new Map<string, any[]>();
@@ -950,6 +1052,27 @@ export function emitWrappers(args: {
     }
     ordered.push(...restNodes);
 
+    // Wrap function declarations in export statements for exported components
+    const wrappedOrdered = ordered.map((node) => {
+      if (node?.type !== "FunctionDeclaration") {
+        return node;
+      }
+      const fnName = node.id?.name;
+      if (!fnName) {
+        return node;
+      }
+      const exportInfo = exportedComponents.get(fnName);
+      if (!exportInfo) {
+        return node;
+      }
+      if (exportInfo.isDefault) {
+        // Create: export default function X(...) { ... }
+        return j.exportDefaultDeclaration(node);
+      }
+      // Create: export function X(...) { ... }
+      return j.exportNamedDeclaration(node, [], null);
+    });
+
     root
       .find(j.VariableDeclaration)
       .filter((p: any) =>
@@ -958,7 +1081,7 @@ export function emitWrappers(args: {
         ),
       )
       .at(0)
-      .insertAfter(ordered);
+      .insertAfter(wrappedOrdered);
   }
 
   if (forceReactImport) {

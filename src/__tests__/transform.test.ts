@@ -206,10 +206,29 @@ describe("test case exports", () => {
 });
 
 describe("output invariants", () => {
-  it.each(fixtureCases)("$outputFile should not import styled-components", ({ name }) => {
-    const { output } = readTestCase(name);
-    expect(output).not.toMatch(/from\s+['"]styled-components['"]/);
-  });
+  it.each(fixtureCases)(
+    "$outputFile should not import styled/css/keyframes from styled-components",
+    ({ name }) => {
+      const { output } = readTestCase(name);
+      // Allow imports of useTheme, withTheme, ThemeProvider etc. that aren't transformed
+      // But disallow imports of styled, css, keyframes, createGlobalStyle
+      const disallowedImports = ["styled", "css", "keyframes", "createGlobalStyle"];
+      const importMatch = output.match(
+        /import\s+(?:{([^}]+)}|(\w+))\s+from\s+['"]styled-components['"]/,
+      );
+      if (importMatch) {
+        const namedImports = importMatch[1] || "";
+        const defaultImport = importMatch[2] || "";
+        const importedNames = [
+          defaultImport,
+          ...namedImports.split(",").map((s) => s.trim().split(/\s+as\s+/)[0]),
+        ].filter(Boolean);
+        for (const imp of importedNames) {
+          expect(disallowedImports).not.toContain(imp);
+        }
+      }
+    },
+  );
 });
 
 describe("fixture warning expectations", () => {
