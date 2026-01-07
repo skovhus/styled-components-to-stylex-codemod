@@ -64,12 +64,34 @@ export type ImportSource =
 export type ImportSpec = { from: ImportSource; names: Array<{ imported: string; local?: string }> };
 
 // ────────────────────────────────────────────────────────────────────────────
+// External Styles Context
+// ────────────────────────────────────────────────────────────────────────────
+
+export interface ExternalStylesContext {
+  /** Absolute path of the file being transformed */
+  filePath: string;
+  /** Local name of the styled component */
+  componentName: string;
+  /** The export name (may differ from componentName for renamed exports) */
+  exportName: string;
+  /** Whether it's a default export */
+  isDefaultExport: boolean;
+}
+
+// ────────────────────────────────────────────────────────────────────────────
 // Adapter Interface
 // ────────────────────────────────────────────────────────────────────────────
 
 export interface Adapter {
   /** Unified resolver for theme paths + CSS variables. Return null to leave unresolved. */
   resolveValue: (context: ResolveContext) => ResolveResult | null;
+
+  /**
+   * Called for exported styled components to determine if they should support
+   * external className/style extension. Return true to generate wrapper with
+   * className/style/rest merging. Default: false.
+   */
+  shouldSupportExternalStyles?: (context: ExternalStylesContext) => boolean;
 }
 
 // ────────────────────────────────────────────────────────────────────────────
@@ -91,6 +113,12 @@ export interface Adapter {
  *         };
  *       }
  *       return null;
+ *     },
+ *
+ *     // Optional: Enable className/style/rest support for exported components
+ *     shouldSupportExternalStyles(ctx) {
+ *       // Example: Enable for all exported components in a shared components folder
+ *       return ctx.filePath.includes("/shared/components/");
  *     },
  *   });
  */

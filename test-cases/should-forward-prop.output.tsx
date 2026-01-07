@@ -63,101 +63,53 @@ const styles = stylex.create({
 });
 
 function Button(props) {
-  const { className, children, style, color, size, ...rest } = props;
-
-  const sx = stylex.props(
-    styles.button,
-    size === "large" && styles.buttonSizeLarge,
-    color && styles.buttonBackgroundColor(color),
-  );
+  const { color, size } = props;
 
   return (
     <button
-      {...sx}
-      className={[sx.className, className].filter(Boolean).join(" ")}
-      style={{
-        ...sx.style,
-        ...style,
-      }}
-      {...rest}
+      {...stylex.props(
+        styles.button,
+        size === "large" && styles.buttonSizeLarge,
+        color && styles.buttonBackgroundColor(color),
+      )}
     >
-      {children}
+      {props.children}
     </button>
   );
 }
 
 function Link(props) {
-  const { className, children, style, isActive, ...rest } = props;
+  const { isActive } = props;
 
-  const sx = stylex.props(styles.link, isActive && styles.linkActive);
-
-  return (
-    <a
-      {...sx}
-      className={[sx.className, className].filter(Boolean).join(" ")}
-      style={{
-        ...sx.style,
-        ...style,
-      }}
-      {...rest}
-    >
-      {children}
-    </a>
-  );
+  return <a {...stylex.props(styles.link, isActive && styles.linkActive)}>{props.children}</a>;
 }
 
 function Box(props) {
-  const { className, children, style, ...rest } = props;
-
-  for (const k of Object.keys(rest)) {
-    if (k.startsWith("$")) delete rest[k];
-  }
-
-  const sx = stylex.props(
-    styles.box,
-    props["$background"] && styles.boxBackgroundColor(props["$background"]),
-    props["$padding"] && styles.boxPadding(props["$padding"]),
-  );
-
   return (
     <div
-      {...sx}
-      className={[sx.className, className].filter(Boolean).join(" ")}
-      style={{
-        ...sx.style,
-        ...style,
-      }}
-      {...rest}
+      {...stylex.props(
+        styles.box,
+        props["$background"] && styles.boxBackgroundColor(props["$background"]),
+        props["$padding"] && styles.boxPadding(props["$padding"]),
+      )}
     >
-      {children}
+      {props.children}
     </div>
   );
 }
 
 function Card(props) {
-  const { className, children, style, variant, elevation, rounded, ...rest } = props;
-
-  const sx = stylex.props(
-    styles.card,
-    variant === "primary" && styles.cardVariantPrimary,
-    rounded && styles.cardRounded,
-  );
+  const { variant, elevation, rounded } = props;
 
   return (
     <div
-      {...sx}
-      className={[sx.className, className].filter(Boolean).join(" ")}
-      style={{
-        ...sx.style,
-        ...style,
-        boxShadow: ((props) =>
-          `0 ${(props.elevation || 1) * 2}px ${(props.elevation || 1) * 4}px rgba(0, 0, 0, 0.1)`)(
-          props,
-        ),
-      }}
-      {...rest}
+      {...stylex.props(
+        styles.card,
+        variant === "primary" && styles.cardVariantPrimary,
+        rounded && styles.cardRounded,
+      )}
     >
-      {children}
+      {props.children}
     </div>
   );
 }

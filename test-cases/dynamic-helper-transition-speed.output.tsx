@@ -16,28 +16,14 @@ const styles = stylex.create({
 });
 
 function AnimatedPath(props) {
-  const { className, children, style, ...rest } = props;
-
-  for (const k of Object.keys(rest)) {
-    if (k.startsWith("$")) delete rest[k];
-  }
-
-  const sx = stylex.props(
-    styles.animatedPath,
-    props["$width"] && styles.animatedPathStrokeWidth(props["$width"]),
-  );
-
   return (
     <path
-      {...sx}
-      className={[sx.className, className].filter(Boolean).join(" ")}
-      style={{
-        ...sx.style,
-        ...style,
-      }}
-      {...rest}
+      {...stylex.props(
+        styles.animatedPath,
+        props["$width"] && styles.animatedPathStrokeWidth(props["$width"]),
+      )}
     >
-      {children}
+      {props.children}
     </path>
   );
 }

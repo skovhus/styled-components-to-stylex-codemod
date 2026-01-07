@@ -756,6 +756,81 @@ export function transformWithWarnings(
     extendedBy.set(base.localName, [...(extendedBy.get(base.localName) ?? []), decl.localName]);
   }
 
+  // Track which styled components are exported (named or default)
+  // Helper to safely extract identifier name from AST node
+  const getIdentifierName = (node: unknown): string | null => {
+    const n = node as { type?: string; name?: string } | null | undefined;
+    return n?.type === "Identifier" && n.name ? n.name : null;
+  };
+
+  type ExportInfo = { exportName: string; isDefault: boolean };
+  const exportedComponents = new Map<string, ExportInfo>();
+
+  // Named exports: export const Foo = styled.div`...` or export { Foo, Bar as Baz }
+  root.find(j.ExportNamedDeclaration).forEach((p) => {
+    const decl = p.node.declaration;
+    // Handle: export const Foo = styled.div`...`
+    if (decl?.type === "VariableDeclaration") {
+      for (const d of decl.declarations) {
+        if (d.type !== "VariableDeclarator") {
+          continue;
+        }
+        const name = getIdentifierName(d.id);
+        if (name && declByLocal.has(name)) {
+          exportedComponents.set(name, { exportName: name, isDefault: false });
+        }
+      }
+    }
+    // Handle: export { Foo, Bar as Baz }
+    for (const spec of p.node.specifiers ?? []) {
+      if (spec.type !== "ExportSpecifier") {
+        continue;
+      }
+      const localName = getIdentifierName(spec.local);
+      if (localName && declByLocal.has(localName)) {
+        const exportName = getIdentifierName(spec.exported) ?? localName;
+        exportedComponents.set(localName, { exportName, isDefault: false });
+      }
+    }
+  });
+
+  // Default exports: export default Foo
+  root.find(j.ExportDefaultDeclaration).forEach((p) => {
+    const name = getIdentifierName(p.node.declaration);
+    if (name && declByLocal.has(name)) {
+      exportedComponents.set(name, { exportName: "default", isDefault: true });
+    }
+  });
+
+  // Determine supportsExternalStyles for each decl
+  for (const decl of styledDecls) {
+    // 1. If extended by another styled component in this file -> YES
+    if (extendedBy.has(decl.localName)) {
+      decl.supportsExternalStyles = true;
+      continue;
+    }
+
+    // 2. If NOT exported -> NO
+    const exportInfo = exportedComponents.get(decl.localName);
+    if (!exportInfo) {
+      decl.supportsExternalStyles = false;
+      continue;
+    }
+
+    // 3. If exported, ask adapter (default: false)
+    if (!adapter.shouldSupportExternalStyles) {
+      decl.supportsExternalStyles = false;
+      continue;
+    }
+
+    decl.supportsExternalStyles = adapter.shouldSupportExternalStyles({
+      filePath: file.path,
+      componentName: decl.localName,
+      exportName: exportInfo.exportName,
+      isDefaultExport: exportInfo.isDefault,
+    });
+  }
+
   const wrapperNames = new Set<string>();
   for (const [baseName, children] of extendedBy.entries()) {
     const names = [baseName, ...children];

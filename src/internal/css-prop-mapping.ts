@@ -2,6 +2,18 @@ import type { CssDeclarationIR, CssValue } from "./css-ir.js";
 
 export type StylexPropDecl = { prop: string; value: CssValue };
 
+const BORDER_STYLES = new Set([
+  "none",
+  "solid",
+  "dashed",
+  "dotted",
+  "double",
+  "groove",
+  "ridge",
+  "inset",
+  "outset",
+]);
+
 export function cssDeclarationToStylexDeclarations(decl: CssDeclarationIR): StylexPropDecl[] {
   const prop = decl.property.trim();
 
@@ -37,17 +49,6 @@ function borderShorthandToStylex(valueRaw: string): StylexPropDecl[] {
   }
 
   const tokens = v.split(/\s+/);
-  const borderStyles = new Set([
-    "none",
-    "solid",
-    "dashed",
-    "dotted",
-    "double",
-    "groove",
-    "ridge",
-    "inset",
-    "outset",
-  ]);
 
   let width: string | undefined;
   let style: string | undefined;
@@ -58,7 +59,7 @@ function borderShorthandToStylex(valueRaw: string): StylexPropDecl[] {
       width = token;
       continue;
     }
-    if (!style && borderStyles.has(token)) {
+    if (!style && BORDER_STYLES.has(token)) {
       style = token;
       continue;
     }
@@ -83,5 +84,5 @@ function borderShorthandToStylex(valueRaw: string): StylexPropDecl[] {
 }
 
 function looksLikeLength(token: string): boolean {
-  return /^-?\d*\.?\d+(px|rem|em|vh|vw|vmin|vmax|%)?$/.test(token);
+  return /^-?\d*\.?\d+(px|rem|em|vh|vw|vmin|vmax|ch|ex|lh|svh|svw|dvh|dvw|cqw|cqh|%)?$/.test(token);
 }

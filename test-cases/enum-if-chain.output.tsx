@@ -18,24 +18,17 @@ const styles = stylex.create({
 });
 
 function TopArrowStem(props) {
-  const { className, children, style, $state } = props;
-
-  const sx = stylex.props(
-    styles.topArrowStem,
-    $state === "down" && styles.topArrowStemStateDown,
-    $state === "up" && styles.topArrowStemStateUp,
-  );
+  const { $state } = props;
 
   return (
     <g
-      {...sx}
-      className={[sx.className, className].filter(Boolean).join(" ")}
-      style={{
-        ...sx.style,
-        ...style,
-      }}
+      {...stylex.props(
+        styles.topArrowStem,
+        $state === "down" && styles.topArrowStemStateDown,
+        $state === "up" && styles.topArrowStemStateUp,
+      )}
     >
-      {children}
+      {props.children}
     </g>
   );
 }

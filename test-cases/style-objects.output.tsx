@@ -25,25 +25,18 @@ const styles = stylex.create({
 });
 
 function DynamicBox(props) {
-  const { className, children, style, $background, $size } = props;
-
-  const sx = stylex.props(
-    styles.dynamicBox,
-    $background && styles.dynamicBoxBackgroundColor($background),
-    $size && styles.dynamicBoxHeight($size),
-    $size && styles.dynamicBoxWidth($size),
-  );
+  const { $background, $size } = props;
 
   return (
     <div
-      {...sx}
-      className={[sx.className, className].filter(Boolean).join(" ")}
-      style={{
-        ...sx.style,
-        ...style,
-      }}
+      {...stylex.props(
+        styles.dynamicBox,
+        $background && styles.dynamicBoxBackgroundColor($background),
+        $size && styles.dynamicBoxHeight($size),
+        $size && styles.dynamicBoxWidth($size),
+      )}
     >
-      {children}
+      {props.children}
     </div>
   );
 }

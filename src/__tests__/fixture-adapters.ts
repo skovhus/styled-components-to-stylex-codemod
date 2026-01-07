@@ -20,6 +20,13 @@ export const customAdapter = defineAdapter({
 
 // Fixtures don't use theme resolution, but the transformer requires an adapter.
 export const fixtureAdapter = defineAdapter({
+  // Enable external styles for exported components in external-styles-support test case
+  shouldSupportExternalStyles(ctx) {
+    return (
+      ctx.filePath.includes("external-styles-support") && ctx.componentName === "ExportedButton"
+    );
+  },
+
   resolveValue(ctx) {
     if (ctx.kind === "theme") {
       // Test fixtures use a small ThemeProvider theme shape:

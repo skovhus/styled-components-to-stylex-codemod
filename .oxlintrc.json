@@ -4,7 +4,19 @@
     "no-unused-vars": "error",
     "no-console": "error",
     "eqeqeq": "error",
-    "curly": "error"
+    "curly": "error",
+    "no-constant-condition": "error",
+    "no-debugger": "error",
+    "no-duplicate-case": "error",
+    "no-empty": "error",
+    "no-ex-assign": "error",
+    "no-extra-boolean-cast": "error",
+    "no-irregular-whitespace": "error",
+    "no-sparse-arrays": "error",
+    "use-isnan": "error",
+    "valid-typeof": "error",
+    "array-callback-return": "error",
+    "no-self-compare": "error"
   },
   "ignorePatterns": [
     "dist/**",

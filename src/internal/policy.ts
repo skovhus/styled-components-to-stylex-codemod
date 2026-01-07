@@ -126,17 +126,6 @@ export function shouldSkipForCreateGlobalStyle(args: {
   });
 }
 
-export function shouldSkipForStyledCssImport(args: {
-  styledImports: Collection<any>;
-  j: any;
-}): boolean {
-  return !!findStyledComponentsNamedImport({
-    styledImports: args.styledImports,
-    j: args.j,
-    importedName: "css",
-  });
-}
-
 export function universalSelectorUnsupportedWarning(
   loc?: { line: number; column: number } | null,
 ): TransformWarning {

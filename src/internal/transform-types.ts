@@ -50,6 +50,11 @@ export type StyledDecl = {
   extendsStyleKey?: string;
   variantStyleKeys?: Record<string, string>; // conditionProp -> styleKey
   needsWrapperComponent?: boolean;
+  /**
+   * Whether this component should support external className/style extension.
+   * True if: (1) extended by another styled component, or (2) exported and adapter opts-in.
+   */
+  supportsExternalStyles?: boolean;
   styleFnFromProps?: Array<{ fnKey: string; jsxProp: string }>;
   shouldForwardProp?: { dropProps: string[]; dropPrefix?: string };
   withConfig?: { displayName?: string; componentId?: string };

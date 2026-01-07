@@ -20,25 +20,17 @@ const styles = stylex.create({
 });
 
 function Box(props) {
-  const { className, children, style, hoverColor, bg, ...rest } = props;
-
-  const sx = stylex.props(
-    styles.box,
-    hoverColor && styles.boxBackgroundColorHover(hoverColor),
-    bg && styles.boxBackgroundColor(bg),
-  );
+  const { hoverColor, bg } = props;
 
   return (
     <div
-      {...sx}
-      className={[sx.className, className].filter(Boolean).join(" ")}
-      style={{
-        ...sx.style,
-        ...style,
-      }}
-      {...rest}
+      {...stylex.props(
+        styles.box,
+        hoverColor && styles.boxBackgroundColorHover(hoverColor),
+        bg && styles.boxBackgroundColor(bg),
+      )}
     >
-      {children}
+      {props.children}
     </div>
   );
 }

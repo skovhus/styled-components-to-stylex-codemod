@@ -1,6 +1,100 @@
 import type { Collection } from "jscodeshift";
 import type { StyledDecl } from "./transform-types.js";
 
+// Void HTML tags that don't have children
+const VOID_TAGS = new Set([
+  "area",
+  "base",
+  "br",
+  "col",
+  "embed",
+  "hr",
+  "img",
+  "input",
+  "link",
+  "meta",
+  "param",
+  "source",
+  "track",
+  "wbr",
+]);
+
+/**
+ * Generates a minimal wrapper component that only destructures the necessary props
+ * and applies stylex.props() directly without className/style/rest merging.
+ * Uses props.children directly instead of destructuring it.
+ */
+function emitMinimalWrapper(args: {
+  j: any;
+  localName: string;
+  tagName: string;
+  styleArgs: any[];
+  destructureProps: string[];
+  displayName: string | undefined;
+  patternProp: (keyName: string, valueId?: any) => any;
+}): any[] {
+  const { j, localName, tagName, styleArgs, destructureProps, displayName, patternProp } = args;
+  const isVoidTag = VOID_TAGS.has(tagName);
+  const propsId = j.identifier("props");
+
+  // Build destructure pattern for dynamic props only (not children)
+  const patternProps: any[] = destructureProps.filter(Boolean).map((name) => patternProp(name));
+
+  const stylexPropsCall = j.callExpression(
+    j.memberExpression(j.identifier("stylex"), j.identifier("props")),
+    styleArgs,
+  );
+
+  const openingEl = j.jsxOpeningElement(
+    j.jsxIdentifier(tagName),
+    [j.jsxSpreadAttribute(stylexPropsCall)],
+    false,
+  );
+
+  // Use props.children directly
+  const propsChildren = j.memberExpression(propsId, j.identifier("children"));
+
+  const jsx = isVoidTag
+    ? ({
+        type: "JSXElement",
+        openingElement: { ...openingEl, selfClosing: true },
+        closingElement: null,
+        children: [],
+      } as any)
+    : j.jsxElement(openingEl, j.jsxClosingElement(j.jsxIdentifier(tagName)), [
+        j.jsxExpressionContainer(propsChildren),
+      ]);
+
+  // Only emit destructure statement if there are props to destructure
+  const bodyStmts: any[] = [];
+  if (patternProps.length > 0) {
+    bodyStmts.push(
+      j.variableDeclaration("const", [
+        j.variableDeclarator(j.objectPattern(patternProps as any), propsId),
+      ]),
+    );
+  }
+  bodyStmts.push(j.returnStatement(jsx as any));
+
+  const result: any[] = [
+    j.functionDeclaration(j.identifier(localName), [propsId], j.blockStatement(bodyStmts)),
+  ];
+
+  if (displayName) {
+    result.push(
+      j.expressionStatement(
+        j.assignmentExpression(
+          "=",
+          j.memberExpression(j.identifier(localName), j.identifier("displayName")),
+          j.literal(displayName),
+        ),
+      ),
+    );
+  }
+
+  return result;
+}
+
 export function emitWrappers(args: {
   root: Collection<any>;
   j: any;
@@ -300,6 +394,7 @@ export function emitWrappers(args: {
       continue;
     }
     const tagName = d.base.tagName;
+    const supportsExternalStyles = d.supportsExternalStyles ?? false;
 
     // Build style arguments: base + extends + dynamic variants (as conditional expressions).
     const styleArgs: any[] = [
@@ -391,6 +486,22 @@ export function emitWrappers(args: {
     const isVoidTag = tagName === "input";
     const omitRestSpreadForTransientProps =
       !dropPrefix && dropProps.length > 0 && dropProps.every((p) => p.startsWith("$"));
+
+    // When supportsExternalStyles is false, generate minimal wrapper without className/style/rest merging
+    if (!supportsExternalStyles) {
+      emitted.push(
+        ...emitMinimalWrapper({
+          j,
+          localName: d.localName,
+          tagName,
+          styleArgs,
+          destructureProps: destructureParts,
+          displayName: d.withConfig?.displayName,
+          patternProp,
+        }),
+      );
+      continue;
+    }
 
     const patternProps: any[] = [
       patternProp("className", classNameId),
@@ -565,6 +676,7 @@ export function emitWrappers(args: {
     }
     const tagName = d.base.tagName;
     const displayName = d.withConfig?.displayName;
+    const supportsExternalStyles = d.supportsExternalStyles ?? false;
     const styleArgs: any[] = [
       ...(d.extendsStyleKey
         ? [j.memberExpression(j.identifier("styles"), j.identifier(d.extendsStyleKey))]
@@ -578,23 +690,23 @@ export function emitWrappers(args: {
     const styleId = j.identifier("style");
     const restId = j.identifier("rest");
 
-    const voidTags = new Set([
-      "area",
-      "base",
-      "br",
-      "col",
-      "embed",
-      "hr",
-      "img",
-      "input",
-      "link",
-      "meta",
-      "param",
-      "source",
-      "track",
-      "wbr",
-    ]);
-    const isVoidTag = voidTags.has(tagName);
+    const isVoidTag = VOID_TAGS.has(tagName);
+
+    // When supportsExternalStyles is false, generate minimal wrapper
+    if (!supportsExternalStyles) {
+      emitted.push(
+        ...emitMinimalWrapper({
+          j,
+          localName: d.localName,
+          tagName,
+          styleArgs,
+          destructureProps: [],
+          displayName,
+          patternProp,
+        }),
+      );
+      continue;
+    }
 
     const patternProps: any[] = [
       patternProp("className", classNameId),

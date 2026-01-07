@@ -58,86 +58,28 @@ const styles = stylex.create({
 });
 
 function Button(props) {
-  const { className, children, style, ...rest } = props;
-
-  const sx = stylex.props(styles.button);
-
-  return (
-    <button
-      {...sx}
-      className={[sx.className, className].filter(Boolean).join(" ")}
-      style={{
-        ...sx.style,
-        ...style,
-      }}
-      {...rest}
-    >
-      {children}
-    </button>
-  );
+  return <button {...stylex.props(styles.button)}>{props.children}</button>;
 }
 
 Button.displayName = "PrimaryButton";
 
 function Card(props) {
-  const { className, children, style, ...rest } = props;
-
-  const sx = stylex.props(styles.card);
-
-  return (
-    <div
-      {...sx}
-      className={[sx.className, className].filter(Boolean).join(" ")}
-      style={{
-        ...sx.style,
-        ...style,
-      }}
-      {...rest}
-    >
-      {children}
-    </div>
-  );
+  return <div {...stylex.props(styles.card)}>{props.children}</div>;
 }
 
 Card.displayName = "Card";
 
 function Input(props) {
-  const { className, style, hasError, ...rest } = props;
+  const { hasError } = props;
 
-  const sx = stylex.props(styles.input, hasError && styles.inputHasError);
-
-  return (
-    <input
-      {...sx}
-      className={[sx.className, className].filter(Boolean).join(" ")}
-      style={{
-        ...sx.style,
-        ...style,
-      }}
-      {...rest}
-    />
-  );
+  return <input {...stylex.props(styles.input, hasError && styles.inputHasError)} />;
 }
 
 Input.displayName = "StyledInput";
 
 function ExtendedButton(props) {
-  const { className, children, style, ...rest } = props;
-
-  const sx = stylex.props(styles.baseButton, styles.extendedButton);
-
   return (
-    <button
-      {...sx}
-      className={[sx.className, className].filter(Boolean).join(" ")}
-      style={{
-        ...sx.style,
-        ...style,
-      }}
-      {...rest}
-    >
-      {children}
-    </button>
+    <button {...stylex.props(styles.baseButton, styles.extendedButton)}>{props.children}</button>
   );
 }
 
