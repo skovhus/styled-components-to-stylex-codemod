@@ -127,6 +127,7 @@ const result = await runTransform({
   adapter,
   dryRun: false,
   parser: "tsx", // "babel" | "babylon" | "flow" | "ts" | "tsx"
+  formatterCommand: "pnpm run prettier --write", // optional: format transformed files
 });
 
 console.log(result);

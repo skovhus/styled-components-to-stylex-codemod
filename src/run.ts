@@ -3,6 +3,7 @@ import { fileURLToPath } from "node:url";
 import { dirname, join } from "node:path";
 import { existsSync } from "node:fs";
 import { glob } from "node:fs/promises";
+import { spawn } from "node:child_process";
 import type { Adapter } from "./adapter.js";
 
 const __filename = fileURLToPath(import.meta.url);
@@ -38,6 +39,13 @@ export interface RunTransformOptions {
    * @default "tsx"
    */
   parser?: "babel" | "babylon" | "flow" | "ts" | "tsx";
+
+  /**
+   * Command to run after transformation to format the output files.
+   * The transformed file paths will be appended as arguments.
+   * @example "pnpm run prettier --write"
+   */
+  formatterCommand?: string;
 }
 
 export interface RunTransformResult {
@@ -79,7 +87,7 @@ export interface RunTransformResult {
  * ```
  */
 export async function runTransform(options: RunTransformOptions): Promise<RunTransformResult> {
-  const { files, dryRun = false, print = false, parser = "tsx" } = options;
+  const { files, dryRun = false, print = false, parser = "tsx", formatterCommand } = options;
 
   const adapter = options.adapter;
   if (!adapter || typeof adapter.resolveValue !== "function") {
@@ -166,6 +174,33 @@ export async function runTransform(options: RunTransformOptions): Promise<RunTra
     // serialized across process boundaries, so we must run in-band.
     runInBand: true,
   });
+
+  // Run formatter if specified and files were transformed (not in dry run mode)
+  if (formatterCommand && result.ok > 0 && !dryRun) {
+    const [cmd, ...cmdArgs] = formatterCommand.split(/\s+/);
+    if (cmd) {
+      try {
+        await new Promise<void>((resolve, reject) => {
+          const proc = spawn(cmd, [...cmdArgs, ...filePaths], {
+            stdio: "inherit",
+            shell: true,
+          });
+          proc.on("close", (code) => {
+            if (code === 0) {
+              resolve();
+            } else {
+              reject(new Error(`Formatter command exited with code ${code}`));
+            }
+          });
+          proc.on("error", reject);
+        });
+      } catch (e) {
+        process.stderr.write(
+          `[styled-components-to-stylex] Formatter command failed: ${e instanceof Error ? e.message : String(e)}\n`,
+        );
+      }
+    }
+  }
 
   return {
     errors: result.error,
