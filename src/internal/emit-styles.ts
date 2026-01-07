@@ -75,7 +75,7 @@ export function emitStylesAndImports(args: {
         continue;
       }
       // Check if the identifier is used anywhere in the code
-      const usages = root.find(j.Identifier, { name: localName });
+      const usages = root.find(j.Identifier, { name: localName } as any);
       // Filter out usages that are just the import specifier itself
       const realUsages = usages.filter((p: any) => {
         const parent = p.parent?.node;

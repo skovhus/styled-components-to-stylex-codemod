@@ -298,7 +298,7 @@ export function transformWithWarnings(
 
     const isStillReferenced = (): boolean =>
       root
-        .find(j.Identifier, { name: cssLocal })
+        .find(j.Identifier, { name: cssLocal } as any)
         .filter((p: any) => isIdentifierReference(p))
         .size() > 0;
 
