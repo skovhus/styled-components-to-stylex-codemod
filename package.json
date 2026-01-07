@@ -1,6 +1,6 @@
 {
   "name": "styled-components-to-stylex-codemod",
-  "version": "0.0.0",
+  "version": "0.0.1",
   "description": "Codemod to transform styled-components to StyleX",
   "keywords": [
     "codemod",
@@ -11,7 +11,12 @@
     "transform"
   ],
   "license": "MIT",
-  "author": "",
+  "author": {
+    "name": "Kenneth Skovhus",
+    "email": "kenneth.skovhus@gmail.com",
+    "url": "https://github.com/skovhus"
+  },
+  "repository": "http://github.com/skovhus/styled-components-to-stylex-codemod",
   "files": [
     "dist"
   ],
