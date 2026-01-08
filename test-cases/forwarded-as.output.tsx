@@ -20,16 +20,10 @@ const styles = stylex.create({
   },
 });
 
-type ButtonProps = React.PropsWithChildren<
-  React.ButtonHTMLAttributes<HTMLButtonElement> & {
-    as?: React.ElementType;
-    forwardedAs?: React.ElementType;
-    href?: string;
-  }
->;
+type ButtonProps = React.ComponentProps<"button"> & { as?: React.ElementType; href?: string };
 
 function Button(props: ButtonProps) {
-  const { as: Component = "button", forwardedAs: _forwardedAs, children, ...rest } = props;
+  const { as: Component = "button", children, ...rest } = props;
   return (
     <Component {...stylex.props(styles.button)} {...rest}>
       {children}
@@ -37,16 +31,13 @@ function Button(props: ButtonProps) {
   );
 }
 
-type ButtonWrapperProps = React.PropsWithChildren<
-  React.ButtonHTMLAttributes<HTMLButtonElement> & {
-    as?: React.ElementType;
-    forwardedAs?: React.ElementType;
-    href?: string;
-  }
->;
+type ButtonWrapperProps = React.ComponentProps<"button"> & {
+  as?: React.ElementType;
+  href?: string;
+};
 
 function ButtonWrapper(props: ButtonWrapperProps) {
-  const { as: Component = "button", forwardedAs: _forwardedAs, children, ...rest } = props;
+  const { as: Component = "button", children, ...rest } = props;
   return (
     <Component {...stylex.props(styles.button, styles.buttonWrapper)} {...rest}>
       {children}
@@ -60,7 +51,7 @@ export const App = () => (
     <Button as="a" href="#">
       Button as Link
     </Button>
-    <ButtonWrapper forwardedAs="a" href="#">
+    <ButtonWrapper as="a" href="#">
       Wrapper forwards as Link
     </ButtonWrapper>
   </div>

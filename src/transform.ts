@@ -57,6 +57,13 @@ export function transformWithWarnings(
   const root = j(file.source);
   const warnings: TransformWarning[] = [];
 
+  // `forwardedAs` is styled-components-specific; in StyleX output we standardize on `as`.
+  root
+    .find(j.JSXAttribute, { name: { type: "JSXIdentifier", name: "forwardedAs" } } as any)
+    .forEach((p: any) => {
+      p.node.name.name = "as";
+    });
+
   // Preserve existing `import React ... from "react"` (default or namespace import) even if it becomes "unused"
   // after the transform. JSX runtime differences and local conventions can make this import intentionally present.
   const preserveReactImport =
@@ -999,9 +1006,6 @@ export function transformWithWarnings(
         root.find(j.JSXElement).forEach((p) => visitJsx(p.node));
       }
 
-      // NOTE: We intentionally do NOT rewrite `forwardedAs` to `as` for wrapper components.
-      // `forwardedAs` is a styled-components-specific escape hatch that does not always map cleanly
-      // to a polymorphic tag switch in output. We keep it as-is (and wrappers may strip it).
       continue;
     }
 

@@ -518,10 +518,7 @@ export function emitWrappers(args: {
       const explicit = stringifyTsType(d.propsType);
       emitNamedPropsType(
         d.localName,
-        explicit ??
-          withChildren(
-            "React.ButtonHTMLAttributes<HTMLButtonElement> & { as?: React.ElementType; forwardedAs?: React.ElementType; href?: string }",
-          ),
+        explicit ?? `React.ComponentProps<"button"> & { as?: React.ElementType; href?: string }`,
       );
       needsReactTypeImport = true;
 
@@ -540,8 +537,8 @@ export function emitWrappers(args: {
         emitTypes
           ? (j.template.statement`
               function ${j.identifier(d.localName)}(props: ${j.identifier(propsTypeNameFor(d.localName))}) {
-                const { as: Component = "button", forwardedAs: _forwardedAs, children, ...rest } = props;
-              return (
+                const { as: Component = "button", children, ...rest } = props;
+                return (
                   <Component {...${stylexPropsCall}} {...rest}>
                   {children}
                 </Component>
@@ -550,7 +547,7 @@ export function emitWrappers(args: {
             ` as any)
           : (j.template.statement`
               function ${j.identifier(d.localName)}(props) {
-                const { as: Component = "button", forwardedAs: _forwardedAs, children, ...rest } = props;
+                const { as: Component = "button", children, ...rest } = props;
                 return (
                   <Component {...${stylexPropsCall}} {...rest}>
                     {children}
