@@ -1,4 +1,6 @@
+import * as React from "react";
 import * as stylex from "@stylexjs/stylex";
+
 type Props = { state: "up" | "down" | "both" };
 
 const styles = stylex.create({
@@ -17,18 +19,28 @@ const styles = stylex.create({
   },
 });
 
-function TopArrowStem(props) {
-  const { $state } = props;
+type TopArrowStemProps = React.PropsWithChildren<{
+  $state: Props["state"];
+}>;
 
+function TopArrowStem(props: TopArrowStemProps) {
+  const { children, className, style, $state } = props;
+
+  const sx = stylex.props(
+    styles.topArrowStem,
+    $state === "down" && styles.topArrowStemStateDown,
+    $state === "up" && styles.topArrowStemStateUp,
+  );
   return (
     <g
-      {...stylex.props(
-        styles.topArrowStem,
-        $state === "down" && styles.topArrowStemStateDown,
-        $state === "up" && styles.topArrowStemStateUp,
-      )}
+      {...sx}
+      className={[sx.className, className].filter(Boolean).join(" ")}
+      style={{
+        ...sx.style,
+        ...style,
+      }}
     >
-      {props.children}
+      {children}
     </g>
   );
 }

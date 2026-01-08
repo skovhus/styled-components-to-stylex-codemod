@@ -56,7 +56,7 @@ export function collectStyledDecls(args: {
 
     const fillFromObject = (obj: any) => {
       for (const prop of obj.properties ?? []) {
-        if (!prop || prop.type !== "ObjectProperty") {
+        if (!prop || (prop.type !== "ObjectProperty" && prop.type !== "Property")) {
           continue;
         }
         const key =
@@ -131,7 +131,7 @@ export function collectStyledDecls(args: {
       return undefined;
     }
     const prop = (arg0.properties ?? []).find((p: any) => {
-      if (!p || p.type !== "ObjectProperty") {
+      if (!p || (p.type !== "ObjectProperty" && p.type !== "Property")) {
         return false;
       }
       if (p.key?.type === "Identifier") {
@@ -251,10 +251,9 @@ export function collectStyledDecls(args: {
     if (!arg0 || arg0.type !== "ObjectExpression") {
       return undefined;
     }
-    let displayName: string | undefined;
     let componentId: string | undefined;
     for (const p of arg0.properties ?? []) {
-      if (!p || p.type !== "ObjectProperty") {
+      if (!p || (p.type !== "ObjectProperty" && p.type !== "Property")) {
         continue;
       }
       const key =
@@ -276,20 +275,83 @@ export function collectStyledDecls(args: {
       if (!val) {
         continue;
       }
-      if (key === "displayName") {
-        displayName = val;
-      }
       if (key === "componentId") {
         componentId = val;
       }
     }
-    if (!displayName && !componentId) {
+    if (!componentId) {
       return undefined;
     }
-    return {
-      ...(displayName ? { displayName } : {}),
-      ...(componentId ? { componentId } : {}),
+    return { componentId };
+  };
+
+  /**
+   * Unwrap TS generic instantiation wrappers and capture the first type argument, e.g.:
+   * - styled.button<ButtonProps>`...`
+   * - styled(Component)<CardProps>`...`
+   *
+   * Babel/Recast may represent this as:
+   * - TSInstantiationExpression { expression, typeParameters }
+   * - or an expression node with `.typeParameters` / `.typeArguments`
+   */
+  const unwrapTypeInstantiation = (expr: any): { expr: any; propsType: any } => {
+    let cur = expr;
+    let propsType: any;
+
+    const readFirstTypeArg = (tp: any): any => {
+      if (!tp) {
+        return undefined;
+      }
+      const arr =
+        (Array.isArray(tp.params) ? tp.params : null) ??
+        (Array.isArray(tp.parameters) ? tp.parameters : null) ??
+        (Array.isArray(tp.typeParameters) ? tp.typeParameters : null);
+      return Array.isArray(arr) && arr.length > 0 ? arr[0] : undefined;
     };
+
+    // Prefer TSInstantiationExpression wrapper (Babel)
+    while (cur && cur.type === "TSInstantiationExpression") {
+      if (!propsType) {
+        propsType = readFirstTypeArg(cur.typeParameters);
+      }
+      cur = cur.expression;
+    }
+
+    // Some parsers attach type params directly to CallExpression/MemberExpression/etc.
+    if (!propsType) {
+      propsType =
+        readFirstTypeArg(cur?.typeParameters) ?? readFirstTypeArg(cur?.typeArguments) ?? undefined;
+    }
+
+    // If we consumed type params from a direct attachment, strip them from the expr so downstream
+    // tag/callee matching is stable.
+    if (cur && (cur.typeParameters || cur.typeArguments)) {
+      try {
+        delete cur.typeParameters;
+        delete cur.typeArguments;
+      } catch {
+        // ignore (non-extensible nodes)
+      }
+    }
+
+    return { expr: cur, propsType };
+  };
+
+  // Some parsers attach generic type args to the TaggedTemplateExpression itself.
+  // (e.g. `styled.div.withConfig(...)<Props>\`...\`` where `<Props>` ends up on the tag wrapper.)
+  const readFirstTypeArgFromNode = (node: any): any => {
+    if (!node) {
+      return undefined;
+    }
+    const tp = (node as any).typeParameters ?? (node as any).typeArguments ?? undefined;
+    if (!tp) {
+      return undefined;
+    }
+    const arr =
+      (Array.isArray(tp.params) ? tp.params : null) ??
+      (Array.isArray(tp.parameters) ? tp.parameters : null) ??
+      (Array.isArray(tp.typeParameters) ? tp.typeParameters : null);
+    return Array.isArray(arr) && arr.length > 0 ? arr[0] : undefined;
   };
 
   /**
@@ -391,7 +453,18 @@ export function collectStyledDecls(args: {
       const leadingComments = getLeadingComments(p);
       const placementHints = getPlacementHints(p);
 
-      const tag = init.tag;
+      let { expr: tag, propsType } = unwrapTypeInstantiation(init.tag);
+      if (!propsType) {
+        propsType = readFirstTypeArgFromNode(init);
+        if (propsType) {
+          try {
+            delete (init as any).typeParameters;
+            delete (init as any).typeArguments;
+          } catch {
+            // ignore
+          }
+        }
+      }
       // styled.h1
       if (
         tag.type === "MemberExpression" &&
@@ -418,6 +491,7 @@ export function collectStyledDecls(args: {
           rules,
           templateExpressions: parsed.slots.map((s) => s.expression),
           rawCss: parsed.rawCss,
+          ...(propsType ? { propsType } : {}),
           ...(leadingComments ? { leadingComments } : {}),
         });
         return;
@@ -466,6 +540,7 @@ export function collectStyledDecls(args: {
           ...(attrsInfo ? { attrsInfo } : {}),
           ...(shouldForwardProp ? { shouldForwardProp } : {}),
           ...(withConfigMeta ? { withConfig: withConfigMeta } : {}),
+          ...(propsType ? { propsType } : {}),
           ...(leadingComments ? { leadingComments } : {}),
         });
         return;
@@ -499,6 +574,7 @@ export function collectStyledDecls(args: {
           rules,
           templateExpressions: parsed.slots.map((s) => s.expression),
           rawCss: parsed.rawCss,
+          ...(propsType ? { propsType } : {}),
           ...(leadingComments ? { leadingComments } : {}),
         });
       }
@@ -538,6 +614,7 @@ export function collectStyledDecls(args: {
           rawCss: parsed.rawCss,
           ...(shouldForwardProp ? { shouldForwardProp } : {}),
           ...(withConfigMeta ? { withConfig: withConfigMeta } : {}),
+          ...(propsType ? { propsType } : {}),
           ...(leadingComments ? { leadingComments } : {}),
         });
       }
@@ -580,6 +657,7 @@ export function collectStyledDecls(args: {
           rawCss: parsed.rawCss,
           ...(shouldForwardProp ? { shouldForwardProp } : {}),
           ...(withConfigMeta ? { withConfig: withConfigMeta } : {}),
+          ...(propsType ? { propsType } : {}),
           ...(leadingComments ? { leadingComments } : {}),
         });
       }

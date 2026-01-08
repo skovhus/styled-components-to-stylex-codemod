@@ -413,6 +413,61 @@ export const x = 1;
   });
 });
 
+describe("JS/Flow transforms (no type emits)", () => {
+  it("should not emit TypeScript types/annotations when parsing Flow (.jsx)", () => {
+    const source = `
+// @flow
+import styled from "styled-components";
+
+const Button = styled.button.withConfig({
+  shouldForwardProp: (prop) => prop !== "foo",
+})\`
+  color: red;
+\`;
+
+export const App = () => <Button foo disabled>Click</Button>;
+`;
+    const out = applyTransform(
+      transform,
+      { adapter: fixtureAdapter },
+      { source, path: "plain-js-flow.jsx" },
+      { parser: "flow" },
+    );
+
+    expect(out).toContain("function Button(props)");
+    expect(out).not.toMatch(/\bimport\s+type\b/);
+    expect(out).not.toMatch(/\btype\s+ButtonProps\b/);
+    expect(out).not.toMatch(/props:\s*ButtonProps/);
+  });
+
+  it("should not emit TypeScript types/annotations when transforming plain JS (.js)", () => {
+    const source = `
+import styled from "styled-components";
+
+const Card = styled.div.withConfig({
+  shouldForwardProp: (prop) => prop !== "foo",
+})\`
+  padding: 16px;
+\`;
+
+export function App() {
+  return <Card foo>Hi</Card>;
+}
+`;
+    const out = applyTransform(
+      transform,
+      { adapter: fixtureAdapter },
+      { source, path: "plain-js.js" },
+      { parser: "babel" },
+    );
+
+    expect(out).toContain("function Card(props)");
+    expect(out).not.toMatch(/\bimport\s+type\b/);
+    expect(out).not.toMatch(/\btype\s+CardProps\b/);
+    expect(out).not.toMatch(/props:\s*CardProps/);
+  });
+});
+
 describe("splitVariantsResolvedValue safety", () => {
   it("should not emit empty variant styles when adapter returns an unparseable expression for one branch", () => {
     const source = `

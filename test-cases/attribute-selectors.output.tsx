@@ -1,4 +1,4 @@
-import React from "react";
+import * as React from "react";
 import * as stylex from "@stylexjs/stylex";
 
 const styles = stylex.create({
@@ -66,7 +66,7 @@ const styles = stylex.create({
   },
 });
 
-interface InputProps extends React.InputHTMLAttributes<HTMLInputElement> {}
+type InputProps = React.InputHTMLAttributes<HTMLInputElement>;
 
 function Input(props: InputProps) {
   const { type, className, ...rest } = props;
@@ -85,11 +85,10 @@ function Input(props: InputProps) {
   );
 }
 
-interface LinkProps extends React.AnchorHTMLAttributes<HTMLAnchorElement> {
-  children?: React.ReactNode;
-}
+type LinkProps = React.PropsWithChildren<React.AnchorHTMLAttributes<HTMLAnchorElement>>;
 
-function Link({ href, target, className, children, ...props }: LinkProps) {
+function Link(props: LinkProps) {
+  const { href, target, className, children, ...rest } = props;
   const isHttps = href?.startsWith("https");
   const isPdf = href?.endsWith(".pdf");
   const isExternal = target === "_blank";
@@ -105,7 +104,7 @@ function Link({ href, target, className, children, ...props }: LinkProps) {
       className={[sx.className, className].filter(Boolean).join(" ")}
       href={href}
       target={target}
-      {...props}
+      {...rest}
     >
       {children}
     </a>

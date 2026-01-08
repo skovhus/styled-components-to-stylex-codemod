@@ -1,3 +1,4 @@
+import * as React from "react";
 import * as stylex from "@stylexjs/stylex";
 
 const styles = stylex.create({
@@ -57,42 +58,41 @@ const styles = stylex.create({
   },
 });
 
-function Button(props) {
-  return <button {...stylex.props(styles.button)}>{props.children}</button>;
-}
+type CardProps = React.PropsWithChildren<{}>;
 
-Button.displayName = "PrimaryButton";
-
-function Card(props) {
+function Card(props: CardProps) {
   return <div {...stylex.props(styles.card)}>{props.children}</div>;
 }
 
-Card.displayName = "Card";
+type InputProps = React.ComponentProps<"input"> & {
+  hasError?: boolean;
+};
 
-function Input(props) {
-  const { hasError } = props;
+function Input(props: InputProps) {
+  const { className, style, hasError, ...rest } = props;
 
-  return <input {...stylex.props(styles.input, hasError && styles.inputHasError)} />;
-}
-
-Input.displayName = "StyledInput";
-
-function ExtendedButton(props) {
+  const sx = stylex.props(styles.input, hasError && styles.inputHasError);
   return (
-    <button {...stylex.props(styles.baseButton, styles.extendedButton)}>{props.children}</button>
+    <input
+      {...sx}
+      className={[sx.className, className].filter(Boolean).join(" ")}
+      style={{
+        ...sx.style,
+        ...style,
+      }}
+      {...rest}
+    />
   );
 }
 
-ExtendedButton.displayName = "ExtendedButton";
-
 export const App = () => (
   <div>
-    <Button>Primary Button</Button>
+    <button {...stylex.props(styles.button)}>Primary Button</button>
     <Card>
       <p>Card content</p>
     </Card>
     <Input placeholder="Normal input" />
     <Input hasError placeholder="Error input" />
-    <ExtendedButton>Extended Button</ExtendedButton>
+    <button {...stylex.props(styles.baseButton, styles.extendedButton)}>Extended Button</button>
   </div>
 );

@@ -1,3 +1,4 @@
+import * as React from "react";
 import * as stylex from "@stylexjs/stylex";
 
 const styles = stylex.create({
@@ -24,19 +25,31 @@ const styles = stylex.create({
   }),
 });
 
-function DynamicBox(props) {
-  const { $background, $size } = props;
+type DynamicBoxProps = React.ComponentProps<"div"> & {
+  $background?: any;
+  $size?: any;
+};
 
+function DynamicBox(props: DynamicBoxProps) {
+  const { children, className, style, $background, $size, ...rest } = props;
+
+  const sx = stylex.props(
+    styles.dynamicBox,
+    $background != null && styles.dynamicBoxBackgroundColor($background),
+    $size != null && styles.dynamicBoxHeight($size),
+    $size != null && styles.dynamicBoxWidth($size),
+  );
   return (
     <div
-      {...stylex.props(
-        styles.dynamicBox,
-        $background && styles.dynamicBoxBackgroundColor($background),
-        $size && styles.dynamicBoxHeight($size),
-        $size && styles.dynamicBoxWidth($size),
-      )}
+      {...sx}
+      className={[sx.className, className].filter(Boolean).join(" ")}
+      style={{
+        ...sx.style,
+        ...style,
+      }}
+      {...rest}
     >
-      {props.children}
+      {children}
     </div>
   );
 }

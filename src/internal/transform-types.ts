@@ -57,7 +57,16 @@ export type StyledDecl = {
   supportsExternalStyles?: boolean;
   styleFnFromProps?: Array<{ fnKey: string; jsxProp: string }>;
   shouldForwardProp?: { dropProps: string[]; dropPrefix?: string };
-  withConfig?: { displayName?: string; componentId?: string };
+  /**
+   * Optional TS props type captured from input declarations like:
+   *   styled.button<ButtonProps>`...`
+   *   styled(Component)<CardProps>`...`
+   *
+   * Stored as a TS type node (best-effort) so wrapper emission can reuse it.
+   */
+  propsType?: any;
+
+  withConfig?: { componentId?: string };
   attrsInfo?: {
     staticAttrs: Record<string, any>;
     conditionalAttrs: Array<{

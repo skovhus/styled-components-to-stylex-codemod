@@ -1,3 +1,4 @@
+import * as React from "react";
 import * as stylex from "@stylexjs/stylex";
 
 const styles = stylex.create({
@@ -17,11 +18,12 @@ const styles = stylex.create({
   },
 });
 
-export function ExportedButton(props) {
+type ExportedButtonProps = React.ComponentProps<"button">;
+
+export function ExportedButton(props: ExportedButtonProps) {
   const { className, children, style, ...rest } = props;
 
   const sx = stylex.props(styles.exportedButton);
-
   return (
     <button
       {...sx}
@@ -36,8 +38,6 @@ export function ExportedButton(props) {
     </button>
   );
 }
-
-ExportedButton.displayName = "ExportedButton";
 
 export const App = () => (
   <div>

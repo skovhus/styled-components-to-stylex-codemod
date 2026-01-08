@@ -869,12 +869,9 @@ export function transformWithWarnings(
       }
     }
 
-    // Preserve `withConfig({ displayName/componentId })` semantics by keeping a wrapper component.
-    // This ensures the component boundary remains (useful for debugging/devtools), even if the styles are static.
-    if (
-      decl.base.kind === "intrinsic" &&
-      (decl.withConfig?.displayName || decl.withConfig?.componentId)
-    ) {
+    // Preserve `withConfig({ componentId })` semantics by keeping a wrapper component.
+    // This ensures the component boundary remains, even if the styles are static.
+    if (decl.base.kind === "intrinsic" && decl.withConfig?.componentId) {
       decl.needsWrapperComponent = true;
     }
 
@@ -1002,27 +999,9 @@ export function transformWithWarnings(
         root.find(j.JSXElement).forEach((p) => visitJsx(p.node));
       }
 
-      root
-        .find(j.JSXElement, {
-          openingElement: {
-            name: { type: "JSXIdentifier", name: decl.localName },
-          },
-        })
-        .forEach((p) => {
-          const opening = p.node.openingElement;
-          const attrs = opening.attributes ?? [];
-          for (const attr of attrs) {
-            if (attr.type !== "JSXAttribute") {
-              continue;
-            }
-            if (attr.name.type !== "JSXIdentifier") {
-              continue;
-            }
-            if (attr.name.name === "forwardedAs") {
-              attr.name.name = "as";
-            }
-          }
-        });
+      // NOTE: We intentionally do NOT rewrite `forwardedAs` to `as` for wrapper components.
+      // `forwardedAs` is a styled-components-specific escape hatch that does not always map cleanly
+      // to a polymorphic tag switch in output. We keep it as-is (and wrappers may strip it).
       continue;
     }
 
@@ -1262,6 +1241,7 @@ export function transformWithWarnings(
   emitWrappers({
     root,
     j,
+    filePath: file.path,
     styledDecls,
     wrapperNames,
     patternProp,

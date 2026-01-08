@@ -1,4 +1,4 @@
-import React from "react";
+import * as React from "react";
 import * as stylex from "@stylexjs/stylex";
 
 const styles = stylex.create({
@@ -20,30 +20,35 @@ const styles = stylex.create({
   },
 });
 
-interface ButtonProps extends React.ButtonHTMLAttributes<HTMLButtonElement> {
-  as?: React.ElementType;
-  href?: string;
-}
+type ButtonProps = React.PropsWithChildren<
+  React.ButtonHTMLAttributes<HTMLButtonElement> & {
+    as?: React.ElementType;
+    forwardedAs?: React.ElementType;
+    href?: string;
+  }
+>;
 
-function Button({
-  as: Component = "button",
-  children,
-  ...props
-}: ButtonProps & { children?: React.ReactNode }) {
+function Button(props: ButtonProps) {
+  const { as: Component = "button", forwardedAs: _forwardedAs, children, ...rest } = props;
   return (
-    <Component {...stylex.props(styles.button)} {...props}>
+    <Component {...stylex.props(styles.button)} {...rest}>
       {children}
     </Component>
   );
 }
 
-function ButtonWrapper({
-  as: Component = "button",
-  children,
-  ...props
-}: ButtonProps & { children?: React.ReactNode }) {
+type ButtonWrapperProps = React.PropsWithChildren<
+  React.ButtonHTMLAttributes<HTMLButtonElement> & {
+    as?: React.ElementType;
+    forwardedAs?: React.ElementType;
+    href?: string;
+  }
+>;
+
+function ButtonWrapper(props: ButtonWrapperProps) {
+  const { as: Component = "button", forwardedAs: _forwardedAs, children, ...rest } = props;
   return (
-    <Component {...stylex.props(styles.button, styles.buttonWrapper)} {...props}>
+    <Component {...stylex.props(styles.button, styles.buttonWrapper)} {...rest}>
       {children}
     </Component>
   );
@@ -55,7 +60,7 @@ export const App = () => (
     <Button as="a" href="#">
       Button as Link
     </Button>
-    <ButtonWrapper as="a" href="#">
+    <ButtonWrapper forwardedAs="a" href="#">
       Wrapper forwards as Link
     </ButtonWrapper>
   </div>

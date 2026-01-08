@@ -10,20 +10,30 @@ const styles = stylex.create({
     stroke: "#bf4f74",
     fill: "none",
   },
-  animatedPathStrokeWidth: (strokeWidth: string) => ({
+  animatedPathStrokeWidth: (strokeWidth: number) => ({
     strokeWidth: `${strokeWidth}px`,
   }),
 });
 
-function AnimatedPath(props) {
+type AnimatedPathProps = React.ComponentProps<"path"> & {
+  $width: number;
+};
+
+function AnimatedPath(props: AnimatedPathProps) {
+  const { children, className, style, $width, ...rest } = props;
+
+  const sx = stylex.props(styles.animatedPath, styles.animatedPathStrokeWidth($width));
   return (
     <path
-      {...stylex.props(
-        styles.animatedPath,
-        props["$width"] && styles.animatedPathStrokeWidth(props["$width"]),
-      )}
+      {...sx}
+      className={[sx.className, className].filter(Boolean).join(" ")}
+      style={{
+        ...sx.style,
+        ...style,
+      }}
+      {...rest}
     >
-      {props.children}
+      {children}
     </path>
   );
 }
@@ -35,7 +45,6 @@ export const App = () => {
     const id = window.setInterval(() => setOn((v) => !v), 650);
     return () => window.clearInterval(id);
   }, []);
-
   return (
     <div style={{ fontFamily: "system-ui" }}>
       <svg

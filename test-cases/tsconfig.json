@@ -3,13 +3,19 @@
   "compilerOptions": {
     "noEmit": true,
     "rootDir": ".",
-    "strict": false,
-    "strictNullChecks": false,
-    "noImplicitAny": false,
+    "types": ["node", "vite/client", "react", "react-dom"],
+    "jsx": "react-jsx",
+
+    // Make fixture outputs surface missing/implicit types in editor + `tsc -p`.
+    // The key signal we want is e.g.:
+    //   Parameter 'props' implicitly has an 'any' type.
+    "strict": true,
+    "noImplicitAny": true,
+
+    // Keep these relaxed to reduce noise while focusing on emitted prop types.
     "noUnusedLocals": false,
-    "noUnusedParameters": false,
-    "exactOptionalPropertyTypes": false
+    "noUnusedParameters": false
   },
-  "include": ["./**/*.ts", "./**/*.tsx"],
-  "exclude": ["../node_modules", "../dist"]
+  "include": ["./**/*.output.ts", "./**/*.output.tsx", "./**/*.d.ts"],
+  "exclude": ["../node_modules", "../dist", "./_unsupported.*"]
 }

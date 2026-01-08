@@ -26,6 +26,56 @@ export function formatOutput(code: string): string {
   out = out.replace(/content:\s+"\\"([\s\S]*?)\\""/g, "content: '\"$1\"'");
   // Case 2: content: \"'X'\"   (double-quoted string that includes single quotes)
   out = out.replace(/content:\s+"'\s*([\s\S]*?)\s*'"/g, "content: '\"$1\"'");
+
+  // Avoid extra blank line before a return in tiny wrapper components:
+  //   const { ... } = props;
+  //
+  //   return (...)
+  // ->
+  //   const { ... } = props;
+  //   return (...)
+  out = out.replace(/\n(\s*(?:const|let|var)\s+[^\n]+;\n)\s*\n(\s*return\b)/g, "\n$1$2");
+  // More generally, if there's an empty line immediately before a `return`, remove it.
+  // This keeps wrapper components compact and matches our fixture formatting.
+  out = out.replace(/\n[ \t]*\n(\s*return\b)/g, "\n$1");
+
+  // Ensure there is a blank line after the final top-level import (when imports exist).
+  // Some of our fixtures assert this formatting (especially after `import * as stylex ...`).
+  out = (() => {
+    const lines = out.split("\n");
+    // Find the last consecutive import line at the top of the file (after optional leading comments).
+    let i = 0;
+    while (
+      i < lines.length &&
+      (lines[i]?.startsWith("//") || lines[i]?.startsWith("/*") || lines[i] === "")
+    ) {
+      // Stop on first non-comment/non-empty if we haven't started imports yet.
+      // (We only care about top-of-file import blocks.)
+      // If we see an import, we break out of this loop below.
+      if (lines[i]?.startsWith("import ")) {
+        break;
+      }
+      i++;
+    }
+    // Now consume consecutive import lines.
+    let lastImportIdx = -1;
+    for (; i < lines.length; i++) {
+      const line = lines[i] ?? "";
+      if (line.startsWith("import ")) {
+        lastImportIdx = i;
+        continue;
+      }
+      break;
+    }
+    if (lastImportIdx >= 0) {
+      const next = lines[lastImportIdx + 1];
+      if (next !== undefined && next.trim() !== "") {
+        lines.splice(lastImportIdx + 1, 0, "");
+      }
+    }
+    return lines.join("\n");
+  })();
+
   // Normalize EOF: trim all trailing whitespace, then ensure a single trailing newline.
   return out.trimEnd() + "\n";
 }
