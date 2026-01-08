@@ -57,6 +57,13 @@ export function transformWithWarnings(
   const root = j(file.source);
   const warnings: TransformWarning[] = [];
 
+  // `forwardedAs` is styled-components-specific; in StyleX output we standardize on `as`.
+  root
+    .find(j.JSXAttribute, { name: { type: "JSXIdentifier", name: "forwardedAs" } } as any)
+    .forEach((p: any) => {
+      p.node.name.name = "as";
+    });
+
   // Preserve existing `import React ... from "react"` (default or namespace import) even if it becomes "unused"
   // after the transform. JSX runtime differences and local conventions can make this import intentionally present.
   const preserveReactImport =
@@ -869,12 +876,9 @@ export function transformWithWarnings(
       }
     }
 
-    // Preserve `withConfig({ displayName/componentId })` semantics by keeping a wrapper component.
-    // This ensures the component boundary remains (useful for debugging/devtools), even if the styles are static.
-    if (
-      decl.base.kind === "intrinsic" &&
-      (decl.withConfig?.displayName || decl.withConfig?.componentId)
-    ) {
+    // Preserve `withConfig({ componentId })` semantics by keeping a wrapper component.
+    // This ensures the component boundary remains, even if the styles are static.
+    if (decl.base.kind === "intrinsic" && decl.withConfig?.componentId) {
       decl.needsWrapperComponent = true;
     }
 
@@ -1002,27 +1006,6 @@ export function transformWithWarnings(
         root.find(j.JSXElement).forEach((p) => visitJsx(p.node));
       }
 
-      root
-        .find(j.JSXElement, {
-          openingElement: {
-            name: { type: "JSXIdentifier", name: decl.localName },
-          },
-        })
-        .forEach((p) => {
-          const opening = p.node.openingElement;
-          const attrs = opening.attributes ?? [];
-          for (const attr of attrs) {
-            if (attr.type !== "JSXAttribute") {
-              continue;
-            }
-            if (attr.name.type !== "JSXIdentifier") {
-              continue;
-            }
-            if (attr.name.name === "forwardedAs") {
-              attr.name.name = "as";
-            }
-          }
-        });
       continue;
     }
 
@@ -1262,6 +1245,7 @@ export function transformWithWarnings(
   emitWrappers({
     root,
     j,
+    filePath: file.path,
     styledDecls,
     wrapperNames,
     patternProp,

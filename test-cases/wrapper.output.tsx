@@ -7,7 +7,6 @@ import * as React from "react";
 export function SomeComponent() {
   const outerRef = React.useRef<HTMLDivElement>(null);
   const innerRef = React.useRef<HTMLDivElement>(null);
-
   return (
     <div ref={outerRef} tabIndex={-1} {...stylex.props(styles.wrapper)}>
       <div ref={innerRef} />

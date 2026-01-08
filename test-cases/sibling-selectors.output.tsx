@@ -1,3 +1,4 @@
+import * as React from "react";
 import * as stylex from "@stylexjs/stylex";
 
 const styles = stylex.create({
@@ -13,7 +14,12 @@ const styles = stylex.create({
   },
 });
 
-function Thing(props) {
+type ThingProps = React.ComponentProps<"div"> & {
+  isAdjacentSibling?: boolean;
+  isSiblingAfterSomething?: boolean;
+};
+
+function Thing(props: ThingProps) {
   const { children, className, isAdjacentSibling, isSiblingAfterSomething, ...rest } = props;
 
   const sx = stylex.props(
@@ -21,7 +27,6 @@ function Thing(props) {
     isAdjacentSibling && styles.adjacentSibling,
     isSiblingAfterSomething && styles.siblingAfterSomething,
   );
-
   return (
     <div {...sx} className={[sx.className, className].filter(Boolean).join(" ")} {...rest}>
       {children}

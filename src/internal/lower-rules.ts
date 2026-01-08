@@ -140,6 +140,44 @@ export function lowerRules(args: {
     const inlineStyleProps: Array<{ prop: string; expr: any }> = [];
     const localVarValues = new Map<string, string>();
 
+    // Best-effort inference for prop types from an inline TS type literal, e.g.:
+    //   styled.div<{ $width: number; color?: string }>`
+    // We only need enough to choose a better param type for emitted style functions.
+    const findJsxPropTsType = (jsxProp: string): unknown => {
+      const pt: any = (decl as any).propsType;
+      if (!pt || pt.type !== "TSTypeLiteral") {
+        return null;
+      }
+      for (const m of pt.members ?? []) {
+        if (!m || m.type !== "TSPropertySignature") {
+          continue;
+        }
+        const k: any = m.key;
+        const name =
+          k?.type === "Identifier"
+            ? k.name
+            : k?.type === "StringLiteral"
+              ? k.value
+              : k?.type === "Literal" && typeof k.value === "string"
+                ? k.value
+                : null;
+        if (name !== jsxProp) {
+          continue;
+        }
+        return m.typeAnnotation?.typeAnnotation ?? null;
+      }
+      return null;
+    };
+    const annotateParamFromJsxProp = (paramId: any, jsxProp: string): void => {
+      const t = findJsxPropTsType(jsxProp);
+      // Only special-case numeric props for now (matches the `$width: number` ask).
+      if (t && typeof t === "object" && (t as any).type === "TSNumberKeyword") {
+        (paramId as any).typeAnnotation = j.tsTypeAnnotation(j.tsNumberKeyword());
+        return;
+      }
+      (paramId as any).typeAnnotation = j.tsTypeAnnotation(j.tsStringKeyword());
+    };
+
     const addPropComments = (
       target: any,
       prop: string,
@@ -573,7 +611,7 @@ export function lowerRules(args: {
         styleFnFromProps.push({ fnKey, jsxProp });
         if (!styleFnDecls.has(fnKey)) {
           const param = j.identifier(out.prop);
-          (param as any).typeAnnotation = j.tsTypeAnnotation(j.tsStringKeyword());
+          annotateParamFromJsxProp(param, jsxProp);
           const p = j.property("init", j.identifier(out.prop), j.identifier(out.prop)) as any;
           p.shorthand = true;
           styleFnDecls.set(fnKey, j.arrowFunctionExpression([param], j.objectExpression([p])));
@@ -1202,7 +1240,7 @@ export function lowerRules(args: {
               styleFnFromProps.push({ fnKey, jsxProp: indexPropName });
 
               if (!styleFnDecls.has(fnKey)) {
-                // Build expression: (resolvedExpr)[indexPropName]
+                // Build expression: resolvedExpr[indexPropName]
                 const indexedExprAst = parseExpr(`(${resolved.expr})[${indexPropName}]`);
                 if (!indexedExprAst) {
                   warnings.push({
@@ -1214,7 +1252,14 @@ export function lowerRules(args: {
                 }
 
                 const param = j.identifier(indexPropName);
-                (param as any).typeAnnotation = j.tsTypeAnnotation(j.tsStringKeyword());
+                // Prefer the prop's own type when available (e.g. `Color`) so we don't end up with
+                // `keyof typeof themeVars` in fixture outputs.
+                const propTsType = findJsxPropTsType(indexPropName);
+                (param as any).typeAnnotation = j.tsTypeAnnotation(
+                  (propTsType && typeof propTsType === "object" && (propTsType as any).type
+                    ? (propTsType as any)
+                    : j.tsStringKeyword()) as any,
+                );
                 if (pseudo) {
                   // For `&:hover` etc, emit nested selector styles so we don't have to guess defaults.
                   const nested = j.objectExpression([
@@ -1410,7 +1455,7 @@ export function lowerRules(args: {
                   const valueId = j.identifier(out.prop);
                   // Be permissive: callers might pass numbers (e.g. `${props => props.$width}px`)
                   // or strings (e.g. `${props => props.$color}`).
-                  (param as any).typeAnnotation = j.tsTypeAnnotation(j.tsStringKeyword());
+                  annotateParamFromJsxProp(param, jsxProp);
 
                   // If this declaration is a simple interpolated string with a single slot and
                   // surrounding static text, preserve it by building a TemplateLiteral around the
