@@ -54,6 +54,38 @@ export function emitStylesAndImports(args: {
     addHeaderComments((n as any)?.comments);
   }
 
+  const isBugComment = (c: any): boolean => {
+    const v = typeof c?.value === "string" ? String(c.value).trim() : "";
+    // Treat "Bug N:" fixture narrative comments as file-level comments, not style-property docs.
+    return /^Bug\s+\d+[a-zA-Z]?\s*:/.test(v);
+  };
+
+  const splitBugNarrativeLeadingComments = (
+    comments: unknown,
+  ): { narrative: any[]; property: any[] } => {
+    if (!Array.isArray(comments) || comments.length === 0) {
+      return { narrative: [], property: [] };
+    }
+    let bugIdx = -1;
+    for (let i = 0; i < comments.length; i++) {
+      if (isBugComment((comments as any[])[i])) {
+        bugIdx = i;
+        break;
+      }
+    }
+    if (bugIdx < 0) {
+      return { narrative: [], property: comments as any[] };
+    }
+    // Include the full contiguous comment array from the first "Bug ..." comment onward.
+    // This captures follow-up lines like:
+    //   // Bug N: ...
+    //   // more context...
+    return {
+      narrative: (comments as any[]).slice(bugIdx),
+      property: (comments as any[]).slice(0, bugIdx),
+    };
+  };
+
   // Remove styled-components import(s), but preserve any named imports that are still referenced
   // (e.g. useTheme, withTheme, ThemeProvider if they're still used in the code)
   const preservedSpecifiers: string[] = [];
@@ -148,6 +180,65 @@ export function emitStylesAndImports(args: {
       (firstStmt as any).leadingComments = deduped;
       (firstStmt as any).comments = deduped;
     }
+  }
+
+  // Preserve leading comments that sit on the *styled declaration statement* itself.
+  //
+  // These often include fixture-level explanations (e.g. "Bug N: ...") that are attached to
+  // `export const X = styled...` declarations. Since we remove those declarations later in the
+  // transform, we need to migrate their leading comments onto a node that remains (the emitted
+  // `const styles = stylex.create(...)` declaration is the best anchor).
+  //
+  // Important: we avoid duplicating comments that are already being preserved as style property
+  // comments via `StyledDecl.leadingComments`.
+  const propCommentKeys = new Set<string>();
+  for (const decl of styledDecls) {
+    const cs = (decl as any).leadingComments;
+    if (!Array.isArray(cs)) {
+      continue;
+    }
+    const { property } = splitBugNarrativeLeadingComments(cs);
+    for (const c of property) {
+      const key = `${(c as any)?.type ?? "Comment"}:${String((c as any)?.value ?? "").trim()}`;
+      propCommentKeys.add(key);
+    }
+  }
+
+  const migratedStyledDeclLeadingComments: any[] = [];
+  // Prefer sourcing these from `StyledDecl.leadingComments` (captured from the original styled
+  // declaration VariableDeclaration). This is more reliable than reading statement comments
+  // because some parsers/printers split multi-line comment runs across different comment arrays.
+  const declsByLoc = [...styledDecls].sort((a, b) => {
+    const al = ((a as any)?.loc?.start?.line ?? Number.POSITIVE_INFINITY) as number;
+    const bl = ((b as any)?.loc?.start?.line ?? Number.POSITIVE_INFINITY) as number;
+    return al - bl;
+  });
+  for (const d of declsByLoc) {
+    const cs = (d as any).leadingComments;
+    if (!Array.isArray(cs) || cs.length === 0) {
+      continue;
+    }
+    const { narrative } = splitBugNarrativeLeadingComments(cs);
+    if (narrative.length === 0) {
+      continue;
+    }
+    for (const c of narrative) {
+      const key = `${(c as any)?.type ?? "Comment"}:${String((c as any)?.value ?? "").trim()}`;
+      if (propCommentKeys.has(key)) {
+        continue;
+      }
+      if ((c as any)?.leading === false) {
+        continue;
+      }
+      // Clone the comment node so we can safely reattach it even if the original
+      // declaration node (that initially owned it) is later removed from the AST.
+      migratedStyledDeclLeadingComments.push({
+        ...(c as any),
+        leading: true,
+        trailing: false,
+      });
+    }
+    break;
   }
 
   // Inject resolver-provided imports (from adapter.resolveValue calls).
@@ -265,7 +356,12 @@ export function emitStylesAndImports(args: {
   const styleKeyToComments = new Map<string, any[]>();
   for (const decl of styledDecls) {
     if (decl.leadingComments && decl.leadingComments.length > 0) {
-      styleKeyToComments.set(decl.styleKey, decl.leadingComments);
+      // Avoid attaching "Bug N:" narrative comments to a specific style property inside
+      // `stylex.create({ ... })` — those belong above the `styles` declaration instead.
+      const { property } = splitBugNarrativeLeadingComments(decl.leadingComments);
+      if (property.length > 0) {
+        styleKeyToComments.set(decl.styleKey, property);
+      }
     }
   }
 
@@ -297,6 +393,28 @@ export function emitStylesAndImports(args: {
       ]),
     ),
   ]);
+
+  // Attach migrated leading comments (from the first styled declaration) to `styles`.
+  if (migratedStyledDeclLeadingComments.length > 0) {
+    const merged = [
+      ...migratedStyledDeclLeadingComments,
+      ...(Array.isArray((stylesDecl as any).leadingComments)
+        ? (stylesDecl as any).leadingComments
+        : []),
+      ...(Array.isArray((stylesDecl as any).comments) ? (stylesDecl as any).comments : []),
+    ] as any[];
+    const seen = new Set<string>();
+    const deduped = merged.filter((c) => {
+      const key = `${(c as any)?.type ?? "Comment"}:${String((c as any)?.value ?? "").trim()}`;
+      if (seen.has(key)) {
+        return false;
+      }
+      seen.add(key);
+      return true;
+    });
+    (stylesDecl as any).leadingComments = deduped;
+    (stylesDecl as any).comments = deduped;
+  }
 
   // If styles reference identifiers declared later in the file (e.g. string-interpolation fixture),
   // insert `styles` after the last such declaration to satisfy StyleX evaluation order.

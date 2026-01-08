@@ -1,0 +1,67 @@
+import * as stylex from "@stylexjs/stylex";
+import React from "react";
+
+// Bug 9: When a styled component is used as a value/reference
+// (e.g., passed to another component as a prop), the codemod must
+// create a wrapper function even if not exported.
+
+interface VirtualListProps {
+  outerElementType: React.ComponentType<React.HTMLAttributes<HTMLDivElement>>;
+  innerElementType: React.ComponentType<React.HTMLAttributes<HTMLDivElement>>;
+  children: React.ReactNode;
+}
+
+function VirtualList({
+  outerElementType: Outer,
+  innerElementType: Inner,
+  children,
+}: VirtualListProps) {
+  return (
+    <Outer>
+      <Inner>{children}</Inner>
+    </Outer>
+  );
+}
+
+const styles = stylex.create({
+  // These styled components are passed as values, not just rendered
+  outerWrapper: {
+    overflowY: "auto",
+    scrollbarWidth: "thin",
+  },
+  innerWrapper: {
+    position: "relative",
+  },
+});
+
+type OuterWrapperProps = React.ComponentProps<"div">;
+
+// These styled components are passed as values, not just rendered
+function OuterWrapper(props: OuterWrapperProps) {
+  const { children, style, ...rest } = props;
+  return (
+    <div {...rest} {...stylex.props(styles.outerWrapper)} style={style}>
+      {children}
+    </div>
+  );
+}
+
+type InnerWrapperProps = React.ComponentProps<"div">;
+
+function InnerWrapper(props: InnerWrapperProps) {
+  const { children, style, ...rest } = props;
+  return (
+    <div {...rest} {...stylex.props(styles.innerWrapper)} style={style}>
+      {children}
+    </div>
+  );
+}
+
+export function App() {
+  return (
+    <VirtualList outerElementType={OuterWrapper} innerElementType={InnerWrapper}>
+      <div>Item 1</div>
+      <div>Item 2</div>
+    </VirtualList>
+  );
+}

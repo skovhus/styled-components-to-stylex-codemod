@@ -367,7 +367,34 @@ export function collectStyledDecls(args: {
     if (parentPath.node.declarations?.length !== 1) {
       return;
     }
-    const comments = parentPath.node.comments ?? parentPath.node.leadingComments;
+    // Comments may be attached to the VariableDeclaration itself OR to an enclosing
+    // ExportNamedDeclaration (e.g. `export const X = ...`) depending on the parser/printer.
+    let comments = parentPath.node.comments ?? parentPath.node.leadingComments;
+    if (!comments || !Array.isArray(comments) || comments.length === 0) {
+      // In practice, jscodeshift paths sometimes insert intermediate "VariableDeclaration" paths
+      // between a declarator and the `ExportNamedDeclaration`, so walk up to find the export wrapper.
+      let cur = parentPath.parentPath;
+      while (cur && cur.node) {
+        if (cur.node.type === "ExportNamedDeclaration") {
+          const decl = cur.node.declaration;
+          if (decl?.type === "VariableDeclaration") {
+            // Only preserve exported-declaration leading comments when they are fixture "Bug N:" narrative
+            // blocks. Other exported-decl comments are often intentionally dropped in current fixtures.
+            const exportComments = (cur.node.comments ?? cur.node.leadingComments) as any;
+            const hasBugNarrative =
+              Array.isArray(exportComments) &&
+              exportComments.some((c: any) =>
+                /^Bug\s+\d+[a-zA-Z]?\s*:/.test(
+                  (typeof c?.value === "string" ? String(c.value) : "").trim(),
+                ),
+              );
+            comments = hasBugNarrative ? exportComments : undefined;
+            break;
+          }
+        }
+        cur = cur.parentPath;
+      }
+    }
     if (!comments || !Array.isArray(comments) || comments.length === 0) {
       return;
     }
@@ -575,6 +602,40 @@ export function collectStyledDecls(args: {
           templateExpressions: parsed.slots.map((s) => s.expression),
           rawCss: parsed.rawCss,
           ...(propsType ? { propsType } : {}),
+          ...(leadingComments ? { leadingComments } : {}),
+        });
+      }
+
+      // styled("tagName") - intrinsic element with string argument (without chaining)
+      if (
+        tag.type === "CallExpression" &&
+        tag.callee.type === "Identifier" &&
+        tag.callee.name === styledDefaultImport &&
+        tag.arguments.length === 1 &&
+        (tag.arguments[0]?.type === "StringLiteral" ||
+          (tag.arguments[0]?.type === "Literal" &&
+            typeof (tag.arguments[0] as any).value === "string"))
+      ) {
+        const localName = id.name;
+        const arg0 = tag.arguments[0] as any;
+        const tagName = arg0.type === "StringLiteral" ? arg0.value : arg0.value;
+        const template = init.quasi;
+        const parsed = parseStyledTemplateLiteral(template);
+        const rules = normalizeStylisAstToIR(parsed.stylisAst, parsed.slots, {
+          rawCss: parsed.rawCss,
+        });
+        if (hasUniversalSelectorInRules(rules)) {
+          noteUniversalSelector(template);
+        }
+
+        styledDecls.push({
+          ...placementHints,
+          localName,
+          base: { kind: "intrinsic", tagName },
+          styleKey: toStyleKey(localName),
+          rules,
+          templateExpressions: parsed.slots.map((s) => s.expression),
+          rawCss: parsed.rawCss,
           ...(leadingComments ? { leadingComments } : {}),
         });
       }

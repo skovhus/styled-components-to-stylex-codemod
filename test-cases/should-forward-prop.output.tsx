@@ -68,6 +68,7 @@ type ButtonProps = React.ComponentProps<"button"> & {
   size?: "small" | "large";
 };
 
+// Using shouldForwardProp to filter props (v5 pattern)
 function Button(props: ButtonProps) {
   const { children, className, style, color, size, ...rest } = props;
 
@@ -95,6 +96,7 @@ type LinkProps = React.ComponentProps<"a"> & {
   isActive?: boolean;
 };
 
+// Using isPropValid from @emotion
 function Link(props: LinkProps) {
   const { children, className, style, isActive, ...rest } = props;
 
@@ -119,6 +121,7 @@ type BoxProps = React.ComponentProps<"div"> & {
   $padding?: string;
 };
 
+// Custom prop filtering logic (transient props pattern)
 function Box(props: BoxProps) {
   const { children, className, style, $background, $padding, ...rest } = props;
 
@@ -148,6 +151,7 @@ type CardProps = React.ComponentProps<"div"> & {
   rounded?: boolean;
 };
 
+// Filter multiple custom props
 function Card(props: CardProps) {
   const { children, className, style, variant, elevation, rounded, ...rest } = props;
 
