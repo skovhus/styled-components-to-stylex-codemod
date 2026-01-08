@@ -63,10 +63,10 @@ const styles = stylex.create({
   },
 });
 
-type ButtonProps = React.PropsWithChildren<{
+type ButtonProps = React.ComponentProps<"button"> & {
   color?: string;
   size?: "small" | "large";
-}>;
+};
 
 function Button(props: ButtonProps) {
   const { children, className, style, color, size, ...rest } = props;
@@ -114,10 +114,10 @@ function Link(props: LinkProps) {
   );
 }
 
-type BoxProps = React.PropsWithChildren<{
+type BoxProps = React.ComponentProps<"div"> & {
   $background?: string;
   $padding?: string;
-}>;
+};
 
 function Box(props: BoxProps) {
   const { children, className, style, $background, $padding, ...rest } = props;
@@ -142,11 +142,11 @@ function Box(props: BoxProps) {
   );
 }
 
-type CardProps = React.PropsWithChildren<{
+type CardProps = React.ComponentProps<"div"> & {
   variant?: "primary" | "secondary";
   elevation?: number;
   rounded?: boolean;
-}>;
+};
 
 function Card(props: CardProps) {
   const { children, className, style, variant, elevation, rounded, ...rest } = props;

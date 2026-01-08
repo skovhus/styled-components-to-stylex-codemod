@@ -733,29 +733,9 @@ export function emitWrappers(args: {
       }
       return literal;
     })();
-    const shouldUseIntrinsicProps = (() => {
-      if (supportsExternalStyles) {
-        return true;
-      }
-      if (usedAttrs.has("*")) {
-        return true;
-      }
-      // If any non-transient attribute is passed at call-sites, prefer intrinsic props.
-      for (const n of usedAttrs) {
-        if (extraProps.has(n)) {
-          continue;
-        }
-        // `as` is only relevant for polymorphic wrappers (handled elsewhere).
-        if (n === "as" || n === "forwardedAs") {
-          continue;
-        }
-        return true;
-      }
-      return false;
-    })();
-    const rawBaseTypeText = shouldUseIntrinsicProps
-      ? `React.ComponentProps<${JSON.stringify(tagName)}>`
-      : "{}";
+    // For shouldForwardProp wrappers, we always forward standard element props (including `className`/`style`)
+    // via `...rest`, so the generated props type should always include intrinsic props.
+    const rawBaseTypeText = `React.ComponentProps<${JSON.stringify(tagName)}>`;
     const composedInner = joinIntersection(rawBaseTypeText, extrasTypeText);
     const finalTypeText = VOID_TAGS.has(tagName) ? composedInner : withChildren(composedInner);
 

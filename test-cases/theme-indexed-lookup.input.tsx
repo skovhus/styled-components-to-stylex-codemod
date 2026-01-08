@@ -3,7 +3,6 @@ import styled from "styled-components";
 
 type Color = "labelBase" | "labelMuted";
 
-// Use transient props so they don't get forwarded to the DOM in Storybook.
 const Box = styled.div<{ $bg: Color; $hoverColor: Color }>`
   &:hover {
     background-color: ${(p) => p.theme.color[p.$hoverColor]};

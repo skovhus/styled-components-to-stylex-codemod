@@ -1240,10 +1240,8 @@ export function lowerRules(args: {
               styleFnFromProps.push({ fnKey, jsxProp: indexPropName });
 
               if (!styleFnDecls.has(fnKey)) {
-                // Build expression: (resolvedExpr as any)[indexPropName]
-                // This keeps fixture outputs type-checkable even when the adapter returns a typed
-                // object without a string index signature (e.g. StyleX vars objects).
-                const indexedExprAst = parseExpr(`(${resolved.expr} as any)[${indexPropName}]`);
+                // Build expression: resolvedExpr[indexPropName]
+                const indexedExprAst = parseExpr(`(${resolved.expr})[${indexPropName}]`);
                 if (!indexedExprAst) {
                   warnings.push({
                     type: "dynamic-node",
@@ -1254,7 +1252,14 @@ export function lowerRules(args: {
                 }
 
                 const param = j.identifier(indexPropName);
-                (param as any).typeAnnotation = j.tsTypeAnnotation(j.tsStringKeyword());
+                // Prefer the prop's own type when available (e.g. `Color`) so we don't end up with
+                // `keyof typeof themeVars` in fixture outputs.
+                const propTsType = findJsxPropTsType(indexPropName);
+                (param as any).typeAnnotation = j.tsTypeAnnotation(
+                  (propTsType && typeof propTsType === "object" && (propTsType as any).type
+                    ? (propTsType as any)
+                    : j.tsStringKeyword()) as any,
+                );
                 if (pseudo) {
                   // For `&:hover` etc, emit nested selector styles so we don't have to guess defaults.
                   const nested = j.objectExpression([

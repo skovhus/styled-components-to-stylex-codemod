@@ -19,9 +19,9 @@ const styles = stylex.create({
   },
 });
 
-type TopArrowStemProps = React.PropsWithChildren<{
+type TopArrowStemProps = React.ComponentProps<"g"> & {
   $state: Props["state"];
-}>;
+};
 
 function TopArrowStem(props: TopArrowStemProps) {
   const { children, className, style, $state } = props;
