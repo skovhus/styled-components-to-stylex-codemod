@@ -14,12 +14,10 @@ const styles = stylex.create({
   },
 });
 
-type ThingProps = React.PropsWithChildren<
-  React.HTMLAttributes<HTMLDivElement> & {
-    isAdjacentSibling?: boolean;
-    isSiblingAfterSomething?: boolean;
-  }
->;
+type ThingProps = React.ComponentProps<"div"> & {
+  isAdjacentSibling?: boolean;
+  isSiblingAfterSomething?: boolean;
+};
 
 function Thing(props: ThingProps) {
   const { children, className, isAdjacentSibling, isSiblingAfterSomething, ...rest } = props;

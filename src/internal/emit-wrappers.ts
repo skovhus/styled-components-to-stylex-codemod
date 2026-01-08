@@ -1324,7 +1324,7 @@ export function emitWrappers(args: {
       const extraType = `{ ${extras.join(" ")} }`;
       emitNamedPropsType(
         d.localName,
-        explicit ?? withChildren(`React.HTMLAttributes<HTMLDivElement> & ${extraType}`),
+        explicit ?? joinIntersection(`React.ComponentProps<"div">`, extraType),
       );
       needsReactTypeImport = true;
     }
