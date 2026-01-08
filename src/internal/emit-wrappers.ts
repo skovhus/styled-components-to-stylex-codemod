@@ -452,6 +452,20 @@ export function emitWrappers(args: {
     return null;
   };
 
+  // Check if a type/interface with the given name already exists in the file
+  const typeExistsInFile = (typeName: string): boolean => {
+    const typeAliases = root.find(j.TSTypeAliasDeclaration, {
+      id: { type: "Identifier", name: typeName },
+    } as any);
+    if (typeAliases.size() > 0) {
+      return true;
+    }
+    const interfaces = root.find(j.TSInterfaceDeclaration, {
+      id: { type: "Identifier", name: typeName },
+    } as any);
+    return interfaces.size() > 0;
+  };
+
   /**
    * Emits a named props type alias and returns whether it was emitted.
    * Returns false if the type would shadow an existing type with the same name.
@@ -461,6 +475,10 @@ export function emitWrappers(args: {
       return false;
     }
     const typeName = propsTypeNameFor(localName);
+    // Skip if a type/interface with this name already exists in the file
+    if (typeExistsInFile(typeName)) {
+      return false;
+    }
     // Skip if the type expression is the same as the type name, or if it
     // contains a reference to the type name (which would create shadowing issues
     // if an interface/type with the same name already exists in the file).

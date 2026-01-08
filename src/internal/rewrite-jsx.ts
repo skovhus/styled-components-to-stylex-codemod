@@ -240,6 +240,11 @@ export function postProcessTransformedAst(args: {
     };
 
     const nextSpecs = specs.filter((s: any) => {
+      // Preserve type-only import specifiers - they're used for TypeScript types
+      // and may not be detectable via standard Identifier lookup
+      if (s?.importKind === "type") {
+        return true;
+      }
       const local =
         s?.local?.type === "Identifier"
           ? s.local.name

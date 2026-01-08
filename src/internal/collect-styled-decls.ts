@@ -628,6 +628,46 @@ export function collectStyledDecls(args: {
         return;
       }
 
+      // styled(Component).attrs(...)`...` - component with attrs
+      if (
+        tag.type === "CallExpression" &&
+        tag.callee.type === "MemberExpression" &&
+        tag.callee.property.type === "Identifier" &&
+        tag.callee.property.name === "attrs" &&
+        tag.callee.object.type === "CallExpression" &&
+        tag.callee.object.callee.type === "Identifier" &&
+        tag.callee.object.callee.name === styledDefaultImport &&
+        tag.callee.object.arguments.length === 1 &&
+        tag.callee.object.arguments[0]?.type === "Identifier"
+      ) {
+        const localName = id.name;
+        const ident = tag.callee.object.arguments[0].name;
+        const styleKey = localName === `Styled${ident}` ? toStyleKey(ident) : toStyleKey(localName);
+        const template = init.quasi;
+        const parsed = parseStyledTemplateLiteral(template);
+        const rules = normalizeStylisAstToIR(parsed.stylisAst, parsed.slots, {
+          rawCss: parsed.rawCss,
+        });
+        if (hasUniversalSelectorInRules(rules)) {
+          noteUniversalSelector(template);
+        }
+        const attrsInfo = parseAttrsArg(tag.arguments[0]);
+
+        styledDecls.push({
+          ...placementHints,
+          localName,
+          base: { kind: "component", ident },
+          styleKey,
+          rules,
+          templateExpressions: parsed.slots.map((s) => s.expression),
+          rawCss: parsed.rawCss,
+          ...(attrsInfo ? { attrsInfo } : {}),
+          ...(propsType ? { propsType } : {}),
+          ...(leadingComments ? { leadingComments } : {}),
+        });
+        return;
+      }
+
       // styled(Component) - where Component is an Identifier
       if (
         tag.type === "CallExpression" &&
