@@ -771,6 +771,7 @@ export function collectStyledDecls(args: {
           rules,
           templateExpressions: parsed.slots.map((s) => s.expression),
           rawCss: parsed.rawCss,
+          ...(propsType ? { propsType } : {}),
           ...(leadingComments ? { leadingComments } : {}),
         });
       }

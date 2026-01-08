@@ -147,3 +147,6 @@ playwright-report
 
 # Screenshots
 *.png
+
+# Test case actual outputs (generated)
+test-cases/*.actual.tsx

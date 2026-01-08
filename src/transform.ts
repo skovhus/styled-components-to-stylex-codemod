@@ -145,7 +145,17 @@ export function transformWithWarnings(
     try {
       const program = j(`(${exprSource});`);
       const stmt = program.find(j.ExpressionStatement).nodes()[0];
-      return (stmt as any)?.expression ?? null;
+      let expr = (stmt as any)?.expression ?? null;
+      // Unwrap ParenthesizedExpression to avoid extra parentheses in output
+      while (expr?.type === "ParenthesizedExpression") {
+        expr = expr.expression;
+      }
+      // Remove extra.parenthesized flag that causes recast to add parentheses
+      if (expr?.extra?.parenthesized) {
+        delete expr.extra.parenthesized;
+        delete expr.extra.parenStart;
+      }
+      return expr;
     } catch {
       return null;
     }

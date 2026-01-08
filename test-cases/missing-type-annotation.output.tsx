@@ -27,8 +27,8 @@ const styles = stylex.create({
 });
 
 // Component with props that affect styles
-export function Box(props: React.PropsWithChildren<BoxProps & { style?: React.CSSProperties }>) {
-  const { children, style, bordered, ...rest } = props;
+export function Box(props: BoxProps) {
+  const { children, style, bordered, bg, ...rest } = props;
   return (
     <div
       {...rest}
@@ -36,6 +36,7 @@ export function Box(props: React.PropsWithChildren<BoxProps & { style?: React.CS
         styles.box,
         !bordered && styles.boxNotBordered,
         bordered && styles.boxBordered,
+        bg != null && styles.boxBackgroundColor(bg),
       )}
       style={style}
     >
@@ -55,7 +56,7 @@ export function Input(props: InputProps) {
 // Bug 2: When codemod generates wrapper functions, it must include
 // proper type annotations for all parameters to avoid implicit 'any'.
 
-interface BoxProps {
+interface BoxProps extends React.ComponentProps<"div"> {
   /** Whether the box has a border */
   bordered?: boolean;
   /** Background color override */

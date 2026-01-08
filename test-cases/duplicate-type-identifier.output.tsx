@@ -23,7 +23,7 @@ const styles = stylex.create({
 });
 
 // The styled component uses the existing props interface
-export function Card(props: React.PropsWithChildren<CardProps & { style?: React.CSSProperties }>) {
+export function Card(props: CardProps) {
   const { children, style, highlighted, ...rest } = props;
   return (
     <div
@@ -51,7 +51,7 @@ export function IconButton(props: IconButtonProps) {
 /**
  * Card props
  */
-export interface CardProps {
+export interface CardProps extends React.ComponentProps<"div"> {
   /** Title of the card */
   title: string;
   /** Whether the card is highlighted */

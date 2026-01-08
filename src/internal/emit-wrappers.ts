@@ -467,6 +467,43 @@ export function emitWrappers(args: {
   };
 
   /**
+   * Extends an existing interface with a base type.
+   * Returns true if the interface was found and extended, false otherwise.
+   */
+  const extendExistingInterface = (typeName: string, baseTypeText: string): boolean => {
+    if (!emitTypes) {
+      return false;
+    }
+    const interfaces = root.find(j.TSInterfaceDeclaration, {
+      id: { type: "Identifier", name: typeName },
+    } as any);
+    if (interfaces.size() === 0) {
+      return false;
+    }
+    // Parse the base type into a TSExpressionWithTypeArguments node
+    const parsed = j(`interface X extends ${baseTypeText} {}`).get().node.program.body[0] as any;
+    const extendsClause = parsed?.extends?.[0];
+    if (!extendsClause) {
+      return false;
+    }
+    interfaces.forEach((path: any) => {
+      const iface = path.node;
+      // Don't add if already extends this type
+      const existingExtends = iface.extends ?? [];
+      const alreadyExtends = existingExtends.some((ext: any) => {
+        const extStr = j(ext).toSource();
+        return extStr === baseTypeText;
+      });
+      if (alreadyExtends) {
+        return;
+      }
+      // Add the extends clause
+      iface.extends = [...existingExtends, extendsClause];
+    });
+    return true;
+  };
+
+  /**
    * Emits a named props type alias and returns whether it was emitted.
    * Returns false if the type would shadow an existing type with the same name.
    */
@@ -1656,11 +1693,15 @@ export function emitWrappers(args: {
       // If there's an explicit type, extend it with base component props
       const typeText = explicit ? `${baseTypeText} & ${explicit}` : baseTypeText;
       const typeAliasEmitted = emitNamedPropsType(d.localName, typeText);
-      // If the type alias was not emitted (e.g., due to shadowing), store the type
-      // for inline annotation in the function parameter
+      // If the type alias was not emitted (e.g., due to shadowing), try to extend
+      // the existing interface with the base component props
       if (!typeAliasEmitted && explicit) {
-        // Use PropsWithChildren wrapper with style for inline annotation
-        inlineTypeText = `React.PropsWithChildren<${explicit} & { style?: React.CSSProperties }>`;
+        const propsTypeName = propsTypeNameFor(d.localName);
+        const extended = extendExistingInterface(propsTypeName, baseTypeText);
+        if (!extended) {
+          // Fallback: use inline type annotation
+          inlineTypeText = `React.PropsWithChildren<${explicit} & { style?: React.CSSProperties }>`;
+        }
       }
       needsReactTypeImport = true;
     }
@@ -1720,6 +1761,34 @@ export function emitWrappers(args: {
       }
     }
 
+    // Add style function calls for dynamic prop-based styles (e.g., color: ${props => props.color})
+    const styleFnPairs = d.styleFnFromProps ?? [];
+    for (const p of styleFnPairs) {
+      const propExpr = j.identifier(p.jsxProp);
+      const call = j.callExpression(
+        j.memberExpression(j.identifier("styles"), j.identifier(p.fnKey)),
+        [propExpr as any],
+      );
+      // Add prop to destructure list
+      if (!destructureProps.includes(p.jsxProp)) {
+        destructureProps.push(p.jsxProp);
+      }
+      // Check if prop is required in the props type
+      const required = isPropRequiredInPropsTypeLiteral(d.propsType, p.jsxProp);
+      if (required) {
+        styleArgs.push(call);
+      } else {
+        // Use `!= null` so `0` / empty strings still count as "provided".
+        styleArgs.push(
+          j.logicalExpression(
+            "&&",
+            j.binaryExpression("!=", propExpr as any, j.nullLiteral()),
+            call,
+          ),
+        );
+      }
+    }
+
     // When supportsExternalStyles is true, generate wrapper with className/style merging
     if (supportsExternalStyles) {
       const isVoidTag = VOID_TAGS.has(tagName);
@@ -1735,6 +1804,8 @@ export function emitWrappers(args: {
         patternProp("className", classNameId),
         ...(isVoidTag ? [] : [patternProp("children", childrenId)]),
         patternProp("style", styleId),
+        // Include variant props and style function props in destructuring
+        ...destructureProps.map((name) => patternProp(name)),
         j.restElement(restId),
       ];
       const declStmt = j.variableDeclaration("const", [
@@ -1839,10 +1910,14 @@ export function emitWrappers(args: {
     const wrappedComponent = d.base.ident;
     {
       const explicit = stringifyTsType(d.propsType);
-      emitNamedPropsType(
-        d.localName,
-        explicit ?? withChildren(`React.ComponentProps<typeof ${wrappedComponent}>`),
-      );
+      const baseTypeText = `React.ComponentProps<typeof ${wrappedComponent}>`;
+      const typeText = explicit ? `${baseTypeText} & ${explicit}` : withChildren(baseTypeText);
+      const typeAliasEmitted = emitNamedPropsType(d.localName, typeText);
+      // If the type alias was not emitted (e.g., due to shadowing), try to extend
+      // the existing interface with the base component props
+      if (!typeAliasEmitted && explicit) {
+        extendExistingInterface(propsTypeNameFor(d.localName), baseTypeText);
+      }
       needsReactTypeImport = true;
     }
     const styleArgs: any[] = [
@@ -1851,6 +1926,80 @@ export function emitWrappers(args: {
         : []),
       j.memberExpression(j.identifier("styles"), j.identifier(d.styleKey)),
     ];
+
+    // Track props that need to be destructured for conditional styles
+    const destructureProps: string[] = [];
+
+    // Add variant style arguments if this component has variants
+    if (d.variantStyleKeys) {
+      for (const [when, variantKey] of Object.entries(d.variantStyleKeys)) {
+        // Parse the supported expression subset into AST
+        let cond: any = null;
+        const trimmed = when.trim();
+        let propName = "";
+
+        if (trimmed.startsWith("!(") && trimmed.endsWith(")")) {
+          const inner = trimmed.slice(2, -1).trim();
+          cond = j.unaryExpression("!", j.identifier(inner));
+          propName = inner;
+        } else if (trimmed.startsWith("!")) {
+          propName = trimmed.slice(1);
+          cond = j.unaryExpression("!", j.identifier(propName));
+        } else if (trimmed.includes("===") || trimmed.includes("!==")) {
+          const op = trimmed.includes("!==") ? "!==" : "===";
+          const [lhs, rhsRaw0] = trimmed.split(op).map((s) => s.trim());
+          const rhsRaw = rhsRaw0 ?? "";
+          const rhs =
+            rhsRaw?.startsWith('"') || rhsRaw?.startsWith("'")
+              ? j.literal(JSON.parse(rhsRaw.replace(/^'/, '"').replace(/'$/, '"')))
+              : /^-?\d+(\.\d+)?$/.test(rhsRaw)
+                ? j.literal(Number(rhsRaw))
+                : j.identifier(rhsRaw);
+          propName = lhs ?? "";
+          cond = j.binaryExpression(op, j.identifier(propName), rhs);
+        } else {
+          propName = trimmed;
+          cond = j.identifier(trimmed);
+        }
+
+        if (propName && !destructureProps.includes(propName)) {
+          destructureProps.push(propName);
+        }
+
+        styleArgs.push(
+          j.logicalExpression(
+            "&&",
+            cond,
+            j.memberExpression(j.identifier("styles"), j.identifier(variantKey)),
+          ),
+        );
+      }
+    }
+
+    // Add style function calls for dynamic prop-based styles
+    const styleFnPairs = d.styleFnFromProps ?? [];
+    for (const p of styleFnPairs) {
+      const propExpr = j.identifier(p.jsxProp);
+      const call = j.callExpression(
+        j.memberExpression(j.identifier("styles"), j.identifier(p.fnKey)),
+        [propExpr as any],
+      );
+      if (!destructureProps.includes(p.jsxProp)) {
+        destructureProps.push(p.jsxProp);
+      }
+      const required = isPropRequiredInPropsTypeLiteral(d.propsType, p.jsxProp);
+      if (required) {
+        styleArgs.push(call);
+      } else {
+        styleArgs.push(
+          j.logicalExpression(
+            "&&",
+            j.binaryExpression("!=", propExpr as any, j.nullLiteral()),
+            call,
+          ),
+        );
+      }
+    }
 
     const propsParamId = j.identifier("props");
     annotatePropsParam(propsParamId, d.localName);
@@ -1861,6 +2010,9 @@ export function emitWrappers(args: {
     );
 
     // Create: <WrappedComponent {...props} {...stylex.props(styles.key)} />
+    // or with destructuring if we have conditional/dynamic props:
+    // const { prop, style, ...rest } = props;
+    // return <WrappedComponent {...rest} {...stylex.props(styles.key, prop && styles.keyProp)} style={style} />
     // Handle both simple identifiers (Button) and member expressions (animated.div)
     let jsxTagName: any;
     if (wrappedComponent.includes(".")) {
@@ -1872,23 +2024,60 @@ export function emitWrappers(args: {
     } else {
       jsxTagName = j.jsxIdentifier(wrappedComponent);
     }
-    const jsx = j.jsxElement(
-      j.jsxOpeningElement(
-        jsxTagName,
-        [j.jsxSpreadAttribute(propsId), j.jsxSpreadAttribute(stylexPropsCall)],
-        true,
-      ),
-      null,
-      [],
-    );
 
-    emitted.push(
-      j.functionDeclaration(
-        j.identifier(d.localName),
-        [propsParamId],
-        j.blockStatement([j.returnStatement(jsx as any)]),
-      ),
-    );
+    // If we have props to destructure, create a proper destructuring pattern
+    if (destructureProps.length > 0) {
+      const styleId = j.identifier("style");
+      const restId = j.identifier("rest");
+      const patternProps: any[] = destructureProps.map((name) => patternProp(name));
+      patternProps.push(patternProp("style", styleId));
+      patternProps.push(j.restElement(restId));
+
+      const declStmt = j.variableDeclaration("const", [
+        j.variableDeclarator(j.objectPattern(patternProps as any), propsId),
+      ]);
+
+      const jsx = j.jsxElement(
+        j.jsxOpeningElement(
+          jsxTagName,
+          [
+            j.jsxSpreadAttribute(restId),
+            j.jsxSpreadAttribute(stylexPropsCall),
+            j.jsxAttribute(j.jsxIdentifier("style"), j.jsxExpressionContainer(styleId)),
+          ],
+          true,
+        ),
+        null,
+        [],
+      );
+
+      emitted.push(
+        j.functionDeclaration(
+          j.identifier(d.localName),
+          [propsParamId],
+          j.blockStatement([declStmt, j.returnStatement(jsx as any)]),
+        ),
+      );
+    } else {
+      // Simple case: just spread props and stylex.props
+      const jsx = j.jsxElement(
+        j.jsxOpeningElement(
+          jsxTagName,
+          [j.jsxSpreadAttribute(propsId), j.jsxSpreadAttribute(stylexPropsCall)],
+          true,
+        ),
+        null,
+        [],
+      );
+
+      emitted.push(
+        j.functionDeclaration(
+          j.identifier(d.localName),
+          [propsParamId],
+          j.blockStatement([j.returnStatement(jsx as any)]),
+        ),
+      );
+    }
   }
 
   if (emitted.length > 0) {
