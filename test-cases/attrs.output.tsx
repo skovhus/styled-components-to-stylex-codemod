@@ -13,11 +13,11 @@ const styles = stylex.create({
     borderRadius: "3px",
     borderWidth: "1px",
     borderStyle: "solid",
-    borderColor: "#BF4F74",
+    borderColor: "#bf4f74",
     display: "block",
     margin: "0 0 1em",
     "::placeholder": {
-      color: "#BF4F74",
+      color: "#bf4f74",
     },
   },
   inputPadding: (padding: string) => ({
@@ -56,7 +56,7 @@ export interface TextInputProps {
   allowPMAutofill?: boolean;
 }
 
-// Pattern 3: styled(Component).attrs with object (from LinearLoading.tsx)
+// Pattern 3: styled(Component).attrs with object
 // This pattern passes static attrs as an object
 interface BackgroundProps {
   loaded: boolean;

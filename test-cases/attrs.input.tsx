@@ -13,13 +13,13 @@ const Input = styled.input.attrs<{ $padding?: string; $small?: boolean }>((props
   size: props.$small ? 5 : undefined,
 }))`
   border-radius: 3px;
-  border: 1px solid #BF4F74;
+  border: 1px solid #bf4f74;
   display: block;
   margin: 0 0 1em;
   padding: ${(props) => props.$padding};
 
   &::placeholder {
-    color: #BF4F74;
+    color: #bf4f74;
   }
 `;
 
@@ -36,7 +36,7 @@ export const TextInput = styled("input").attrs<TextInputProps>((props) => ({
   background: white;
 `;
 
-// Pattern 3: styled(Component).attrs with object (from LinearLoading.tsx)
+// Pattern 3: styled(Component).attrs with object
 // This pattern passes static attrs as an object
 interface BackgroundProps {
   loaded: boolean;
