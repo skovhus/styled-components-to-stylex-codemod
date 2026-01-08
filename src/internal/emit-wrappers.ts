@@ -24,14 +24,74 @@ const isBugNarrativeComment = (c: any): boolean => {
   return /^Bug\s+\d+[a-zA-Z]?\s*:/.test(v);
 };
 
+// Check if a comment looks like a section header (e.g., "Pattern 1:", "Case 2:", etc.)
+const isSectionHeaderComment = (c: any): boolean => {
+  const v = typeof c?.value === "string" ? String(c.value).trim() : "";
+  return /^(Pattern|Case|Example|Test|Step|Note)\s*\d*[a-zA-Z]?\s*:/.test(v);
+};
+
 const getWrapperLeadingComments = (d: StyledDecl): any[] | null => {
   const cs = (d as any).leadingComments;
   if (!Array.isArray(cs) || cs.length === 0) {
     return null;
   }
-  // Avoid duplicating "Bug N:" narrative comments that are migrated elsewhere (emit-styles).
-  const filtered = cs.filter((c: any) => !isBugNarrativeComment(c));
-  return filtered.length > 0 ? filtered : null;
+
+  // Find the Bug N: comment index
+  let bugIdx = -1;
+  for (let i = 0; i < cs.length; i++) {
+    if (isBugNarrativeComment(cs[i])) {
+      bugIdx = i;
+      break;
+    }
+  }
+
+  if (bugIdx < 0) {
+    // No Bug comment, return all comments
+    return cs;
+  }
+
+  // For "Bug N:" narrative comment runs we treat those as file-level (migrated near `const styles`)
+  // and avoid attaching any part of that narrative onto wrapper functions (to prevent duplication).
+  //
+  // However, if there are additional comments *after a gap* (blank line) following the Bug narrative,
+  // those are typically local section headers (e.g. "Pattern 1: ...") and are safe to attach.
+  // We only attach them if the first post-gap comment is a recognized section header.
+  let lastLine = cs[bugIdx]?.loc?.end?.line ?? cs[bugIdx]?.loc?.start?.line ?? -1;
+  let i = bugIdx + 1;
+  // Skip the contiguous Bug narrative block (no blank line gaps).
+  for (; i < cs.length; i++) {
+    const c = cs[i];
+    const startLine = c?.loc?.start?.line ?? -1;
+    if (lastLine >= 0 && startLine >= 0 && startLine > lastLine + 1) {
+      break;
+    }
+    lastLine = c?.loc?.end?.line ?? startLine;
+  }
+  if (i >= cs.length) {
+    return null;
+  }
+
+  // Only attach post-gap comments if the first one is a section header.
+  // This prevents attaching general explanatory text (like "When these are exported...")
+  // to wrapper functions.
+  if (!isSectionHeaderComment(cs[i])) {
+    return null;
+  }
+
+  // Collect the next contiguous comment block (until the next gap).
+  const result: any[] = [];
+  lastLine = cs[i]?.loc?.end?.line ?? cs[i]?.loc?.start?.line ?? -1;
+  for (; i < cs.length; i++) {
+    const c = cs[i];
+    const startLine = c?.loc?.start?.line ?? -1;
+    if (result.length > 0 && lastLine >= 0 && startLine >= 0 && startLine > lastLine + 1) {
+      break;
+    }
+    result.push(c);
+    lastLine = c?.loc?.end?.line ?? startLine;
+  }
+
+  return result.length > 0 ? result : null;
 };
 
 const withLeadingComments = (node: any, d: StyledDecl): any => {
@@ -40,8 +100,24 @@ const withLeadingComments = (node: any, d: StyledDecl): any => {
     return node;
   }
   const normalized = cs.map((c: any) => ({ ...c, leading: true, trailing: false }));
-  node.leadingComments = normalized;
-  node.comments = normalized;
+
+  // Merge (don't overwrite) to avoid clobbering comments that are already correctly attached by
+  // the parser/printer, and dedupe to prevent double-printing.
+  const existingLeading = Array.isArray(node.leadingComments) ? node.leadingComments : [];
+  const existingComments = Array.isArray(node.comments) ? node.comments : [];
+  const merged = [...existingLeading, ...existingComments, ...normalized] as any[];
+  const seen = new Set<string>();
+  const deduped = merged.filter((c: any) => {
+    const key = `${c?.type ?? "Comment"}:${String(c?.value ?? "").trim()}`;
+    if (seen.has(key)) {
+      return false;
+    }
+    seen.add(key);
+    return true;
+  });
+
+  node.leadingComments = deduped;
+  node.comments = deduped;
   return node;
 };
 
@@ -1745,9 +1821,20 @@ export function emitWrappers(args: {
     );
 
     // Create: <WrappedComponent {...props} {...stylex.props(styles.key)} />
+    // Handle both simple identifiers (Button) and member expressions (animated.div)
+    let jsxTagName: any;
+    if (wrappedComponent.includes(".")) {
+      const parts = wrappedComponent.split(".");
+      jsxTagName = j.jsxMemberExpression(
+        j.jsxIdentifier(parts[0]!),
+        j.jsxIdentifier(parts.slice(1).join(".")),
+      );
+    } else {
+      jsxTagName = j.jsxIdentifier(wrappedComponent);
+    }
     const jsx = j.jsxElement(
       j.jsxOpeningElement(
-        j.jsxIdentifier(wrappedComponent),
+        jsxTagName,
         [j.jsxSpreadAttribute(propsId), j.jsxSpreadAttribute(stylexPropsCall)],
         true,
       ),

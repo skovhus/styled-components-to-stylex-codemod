@@ -1,7 +1,9 @@
 import styled from "styled-components";
 
-// This component is exported and will use shouldSupportExternalStyles to enable
-// className/style/rest merging for external style extension support.
+/**
+ *  This component is exported and will use shouldSupportExternalStyles to enable
+ * className/style/rest merging for external style extension support.
+ **/
 export const ExportedButton = styled.button.withConfig({
   displayName: "ExportedButton",
 })`

@@ -52,6 +52,7 @@ export function collectStyledDecls(args: {
     const out: StyledDecl["attrsInfo"] = {
       staticAttrs: {},
       conditionalAttrs: [],
+      invertedBoolAttrs: [],
     };
 
     const fillFromObject = (obj: any) => {
@@ -99,6 +100,26 @@ export function collectStyledDecls(args: {
             });
             continue;
           }
+        }
+
+        // Support: "data-attr": props.propName !== true
+        // When prop is undefined/not passed, `undefined !== true` is `true`.
+        // When prop is true, `true !== true` is `false`.
+        if (
+          v.type === "BinaryExpression" &&
+          v.operator === "!==" &&
+          v.right?.type === "BooleanLiteral" &&
+          v.right.value === true &&
+          v.left?.type === "MemberExpression" &&
+          v.left.object?.type === "Identifier" &&
+          (v.left.object.name === "props" || v.left.object.name === "p") &&
+          v.left.property?.type === "Identifier"
+        ) {
+          out.invertedBoolAttrs!.push({
+            jsxProp: v.left.property.name,
+            attrName: key,
+          });
+          continue;
         }
       }
     };
@@ -378,17 +399,9 @@ export function collectStyledDecls(args: {
         if (cur.node.type === "ExportNamedDeclaration") {
           const decl = cur.node.declaration;
           if (decl?.type === "VariableDeclaration") {
-            // Only preserve exported-declaration leading comments when they are fixture "Bug N:" narrative
-            // blocks. Other exported-decl comments are often intentionally dropped in current fixtures.
+            // Preserve all leading comments from exported declarations.
             const exportComments = (cur.node.comments ?? cur.node.leadingComments) as any;
-            const hasBugNarrative =
-              Array.isArray(exportComments) &&
-              exportComments.some((c: any) =>
-                /^Bug\s+\d+[a-zA-Z]?\s*:/.test(
-                  (typeof c?.value === "string" ? String(c.value) : "").trim(),
-                ),
-              );
-            comments = hasBugNarrative ? exportComments : undefined;
+            comments = Array.isArray(exportComments) ? exportComments : undefined;
             break;
           }
         }
@@ -573,7 +586,49 @@ export function collectStyledDecls(args: {
         return;
       }
 
-      // styled(Component)
+      // styled("tagName").attrs(... )`...` - function call syntax with string argument + attrs
+      if (
+        tag.type === "CallExpression" &&
+        tag.callee.type === "MemberExpression" &&
+        tag.callee.property.type === "Identifier" &&
+        tag.callee.property.name === "attrs" &&
+        tag.callee.object.type === "CallExpression" &&
+        tag.callee.object.callee.type === "Identifier" &&
+        tag.callee.object.callee.name === styledDefaultImport &&
+        tag.callee.object.arguments.length === 1 &&
+        (tag.callee.object.arguments[0]?.type === "StringLiteral" ||
+          (tag.callee.object.arguments[0]?.type === "Literal" &&
+            typeof (tag.callee.object.arguments[0] as any).value === "string"))
+      ) {
+        const localName = id.name;
+        const arg0 = tag.callee.object.arguments[0] as any;
+        const tagName = arg0.type === "StringLiteral" ? arg0.value : arg0.value;
+        const template = init.quasi;
+        const parsed = parseStyledTemplateLiteral(template);
+        const rules = normalizeStylisAstToIR(parsed.stylisAst, parsed.slots, {
+          rawCss: parsed.rawCss,
+        });
+        if (hasUniversalSelectorInRules(rules)) {
+          noteUniversalSelector(template);
+        }
+        const attrsInfo = parseAttrsArg(tag.arguments[0]);
+
+        styledDecls.push({
+          ...placementHints,
+          localName,
+          base: { kind: "intrinsic", tagName },
+          styleKey: toStyleKey(localName),
+          rules,
+          templateExpressions: parsed.slots.map((s) => s.expression),
+          rawCss: parsed.rawCss,
+          ...(attrsInfo ? { attrsInfo } : {}),
+          ...(propsType ? { propsType } : {}),
+          ...(leadingComments ? { leadingComments } : {}),
+        });
+        return;
+      }
+
+      // styled(Component) - where Component is an Identifier
       if (
         tag.type === "CallExpression" &&
         tag.callee.type === "Identifier" &&
@@ -598,6 +653,46 @@ export function collectStyledDecls(args: {
           localName,
           base: { kind: "component", ident },
           styleKey,
+          rules,
+          templateExpressions: parsed.slots.map((s) => s.expression),
+          rawCss: parsed.rawCss,
+          ...(propsType ? { propsType } : {}),
+          ...(leadingComments ? { leadingComments } : {}),
+        });
+      }
+
+      // styled(Component.sub) - where Component is a MemberExpression (e.g., animated.div)
+      if (
+        tag.type === "CallExpression" &&
+        tag.callee.type === "Identifier" &&
+        tag.callee.name === styledDefaultImport &&
+        tag.arguments.length === 1 &&
+        tag.arguments[0]?.type === "MemberExpression"
+      ) {
+        const localName = id.name;
+        const memberExpr = tag.arguments[0] as any;
+        // Convert MemberExpression to string like "animated.div"
+        const ident =
+          memberExpr.object?.type === "Identifier" && memberExpr.property?.type === "Identifier"
+            ? `${memberExpr.object.name}.${memberExpr.property.name}`
+            : null;
+        if (!ident) {
+          return;
+        }
+        const template = init.quasi;
+        const parsed = parseStyledTemplateLiteral(template);
+        const rules = normalizeStylisAstToIR(parsed.stylisAst, parsed.slots, {
+          rawCss: parsed.rawCss,
+        });
+        if (hasUniversalSelectorInRules(rules)) {
+          noteUniversalSelector(template);
+        }
+
+        styledDecls.push({
+          ...placementHints,
+          localName,
+          base: { kind: "component", ident },
+          styleKey: toStyleKey(localName),
           rules,
           templateExpressions: parsed.slots.map((s) => s.expression),
           rawCss: parsed.rawCss,

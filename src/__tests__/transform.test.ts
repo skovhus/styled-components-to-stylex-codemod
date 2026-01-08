@@ -365,6 +365,33 @@ export const App = () => <Box><span /></Box>;
     ).toBe(true);
   });
 
+  it("should warn and skip when styled-components `css` helper is used", () => {
+    const source = `
+import styled, { css } from 'styled-components';
+
+const mixin = css\`
+  color: red;
+\`;
+
+const Box = styled.div\`
+  \${mixin}
+\`;
+
+export const App = () => <Box />;
+`;
+
+    const result = transformWithWarnings(
+      { source, path: "test.tsx" },
+      { jscodeshift: j, j, stats: () => {}, report: () => {} },
+      { adapter: fixtureAdapter },
+    );
+
+    expect(result.code).toBeNull();
+    expect(
+      result.warnings.some((w) => w.type === "unsupported-feature" && w.feature === "css-helper"),
+    ).toBe(true);
+  });
+
   it("should bail (not crash) on unsupported conditional test expressions in shouldForwardProp wrappers", () => {
     const source = [
       'import styled from "styled-components";',

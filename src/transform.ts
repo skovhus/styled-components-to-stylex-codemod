@@ -12,8 +12,10 @@ import { emitWrappers } from "./internal/emit-wrappers.js";
 import { postProcessTransformedAst } from "./internal/rewrite-jsx.js";
 import {
   collectCreateGlobalStyleWarnings,
+  collectCssHelperSkipWarnings,
   collectThemeProviderSkipWarnings,
   shouldSkipForCreateGlobalStyle,
+  shouldSkipForCssHelper,
   shouldSkipForThemeProvider,
   universalSelectorUnsupportedWarning,
 } from "./internal/policy.js";
@@ -114,6 +116,11 @@ export function transformWithWarnings(
   // Policy: ThemeProvider usage is project-specific. If the file uses ThemeProvider, skip entirely.
   if (shouldSkipForThemeProvider({ root, j, styledImports })) {
     return { code: null, warnings: collectThemeProviderSkipWarnings({ root, j, styledImports }) };
+  }
+
+  // Policy: styled-components `css` helper usage is project-specific. If the file uses `css`, skip entirely.
+  if (shouldSkipForCssHelper({ root, j, styledImports })) {
+    return { code: null, warnings: collectCssHelperSkipWarnings({ root, j, styledImports }) };
   }
 
   // Policy: createGlobalStyle is unsupported in StyleX; emit a warning when imported.
@@ -726,23 +733,8 @@ export function transformWithWarnings(
     return { code: null, warnings };
   }
 
-  emitStylesAndImports({
-    root,
-    j,
-    filePath: file.path,
-    styledImports,
-    resolverImports,
-    resolvedStyleObjects,
-    styledDecls,
-    cssHelperNames,
-    isAstNode,
-    objectToAst,
-    literalToAst,
-  });
-  hasChanges = true;
-
-  // Remove styled declarations and rewrite JSX usages
-  // Build a quick lookup for extension: if styled(BaseStyled) where BaseStyled is in decl map.
+  // Build lookup maps and set needsWrapperComponent BEFORE emitStylesAndImports
+  // so that comment placement can be determined correctly.
   const declByLocal = new Map(styledDecls.map((d) => [d.localName, d]));
   const extendedBy = new Map<string, string[]>();
   for (const decl of styledDecls) {
@@ -757,7 +749,6 @@ export function transformWithWarnings(
   }
 
   // Track which styled components are exported (named or default)
-  // Helper to safely extract identifier name from AST node
   const getIdentifierName = (node: unknown): string | null => {
     const n = node as { type?: string; name?: string } | null | undefined;
     return n?.type === "Identifier" && n.name ? n.name : null;
@@ -769,7 +760,6 @@ export function transformWithWarnings(
   // Named exports: export const Foo = styled.div`...` or export { Foo, Bar as Baz }
   root.find(j.ExportNamedDeclaration).forEach((p) => {
     const decl = p.node.declaration;
-    // Handle: export const Foo = styled.div`...`
     if (decl?.type === "VariableDeclaration") {
       for (const d of decl.declarations) {
         if (d.type !== "VariableDeclarator") {
@@ -781,7 +771,6 @@ export function transformWithWarnings(
         }
       }
     }
-    // Handle: export { Foo, Bar as Baz }
     for (const spec of p.node.specifiers ?? []) {
       if (spec.type !== "ExportSpecifier") {
         continue;
@@ -801,6 +790,74 @@ export function transformWithWarnings(
       exportedComponents.set(name, { exportName: "default", isDefault: true, isSpecifier: false });
     }
   });
+
+  // First, scan for static property assignments to identify which components have them
+  const componentsWithStaticProps = new Set<string>();
+  root.find(j.ExpressionStatement).forEach((p) => {
+    const expr = p.node.expression;
+    if (expr?.type !== "AssignmentExpression") {
+      return;
+    }
+    const left = expr.left;
+    if (left?.type !== "MemberExpression") {
+      return;
+    }
+    const obj = left.object;
+    if (obj?.type !== "Identifier") {
+      return;
+    }
+    const styledNames = new Set(styledDecls.map((d) => d.localName));
+    if (styledNames.has(obj.name)) {
+      componentsWithStaticProps.add(obj.name);
+    }
+  });
+
+  // Pre-pass: set needsWrapperComponent BEFORE emitStylesAndImports
+  // This allows comment placement logic to know which decls need wrappers.
+  for (const decl of styledDecls) {
+    // shouldForwardProp needs wrapper
+    if (decl.shouldForwardProp) {
+      decl.needsWrapperComponent = true;
+    }
+    // withConfig.componentId needs wrapper
+    if (decl.base.kind === "intrinsic" && decl.withConfig?.componentId) {
+      decl.needsWrapperComponent = true;
+    }
+    // Extended components with static properties need wrappers
+    // (to attach static properties and support className/style merging)
+    if (extendedBy.has(decl.localName) && componentsWithStaticProps.has(decl.localName)) {
+      decl.needsWrapperComponent = true;
+    }
+    // Exported components need wrappers (with exceptions)
+    const hasInlinableAttrs =
+      decl.attrsInfo &&
+      (Object.keys(decl.attrsInfo.staticAttrs).length > 0 ||
+        decl.attrsInfo.conditionalAttrs.length > 0 ||
+        (decl.attrsInfo.invertedBoolAttrs?.length ?? 0) > 0);
+    if (exportedComponents.has(decl.localName)) {
+      const canInline = decl.base.kind === "intrinsic" && hasInlinableAttrs;
+      if (!canInline) {
+        decl.needsWrapperComponent = true;
+      }
+    }
+  }
+
+  emitStylesAndImports({
+    root,
+    j,
+    filePath: file.path,
+    styledImports,
+    resolverImports,
+    resolvedStyleObjects,
+    styledDecls,
+    cssHelperNames,
+    isAstNode,
+    objectToAst,
+    literalToAst,
+  });
+  hasChanges = true;
+
+  // Remove styled declarations and rewrite JSX usages
 
   // Determine supportsExternalStyles for each decl
   for (const decl of styledDecls) {
@@ -868,6 +925,8 @@ export function transformWithWarnings(
     if (decl.base.kind === "component") {
       const baseDecl = declByLocal.get(decl.base.ident);
       if (baseDecl) {
+        // Save original base component name for static property inheritance
+        (decl as any).originalBaseIdent = decl.base.ident;
         decl.extendsStyleKey = baseDecl.styleKey;
         // If base is intrinsic, render as intrinsic tag (matches fixtures like extending-styles).
         if (baseDecl.base.kind === "intrinsic") {
@@ -884,8 +943,19 @@ export function transformWithWarnings(
 
     // Exported styled components need wrapper components to maintain the export.
     // Without this, removing the styled declaration would leave an empty `export {}`.
+    // Exception: intrinsic-based components with fully inlinable attrs can skip the wrapper
+    // since each usage site is independently transformed with the correct attrs.
+    const hasInlinableAttrs =
+      decl.attrsInfo &&
+      (Object.keys(decl.attrsInfo.staticAttrs).length > 0 ||
+        decl.attrsInfo.conditionalAttrs.length > 0 ||
+        (decl.attrsInfo.invertedBoolAttrs?.length ?? 0) > 0);
     if (exportedComponents.has(decl.localName)) {
-      decl.needsWrapperComponent = true;
+      // Allow inlining for intrinsic components with attrs (like TextInput)
+      const canInline = decl.base.kind === "intrinsic" && hasInlinableAttrs;
+      if (!canInline) {
+        decl.needsWrapperComponent = true;
+      }
     }
 
     // Styled components used as values (not just rendered in JSX) need wrapper components.
@@ -955,7 +1025,96 @@ export function transformWithWarnings(
     if (usedAsValue) {
       decl.needsWrapperComponent = true;
     }
+  }
 
+  // Collect static property assignments for styled components (e.g., ListItem.HEIGHT = 42)
+  // These need to be repositioned after the wrapper functions are emitted.
+  // For base components that are extended, we also generate inheritance assignments.
+  const staticPropertyAssignments = new Map<string, any[]>();
+  const staticPropertyNames = new Map<string, string[]>(); // componentName -> [propName, ...]
+  const styledNames = new Set(styledDecls.map((d) => d.localName));
+
+  root
+    .find(j.ExpressionStatement)
+    .filter((p) => {
+      const expr = p.node.expression;
+      if (expr?.type !== "AssignmentExpression") {
+        return false;
+      }
+      const left = expr.left;
+      if (left?.type !== "MemberExpression") {
+        return false;
+      }
+      const obj = left.object;
+      if (obj?.type !== "Identifier") {
+        return false;
+      }
+      return styledNames.has(obj.name);
+    })
+    .forEach((p) => {
+      const expr = p.node.expression as any;
+      const componentName = expr.left.object.name as string;
+      const propName = expr.left.property?.name ?? expr.left.property?.value;
+
+      // Track property names for inheritance generation
+      if (propName) {
+        const names = staticPropertyNames.get(componentName) ?? [];
+        names.push(propName);
+        staticPropertyNames.set(componentName, names);
+      }
+
+      // Only reposition static properties for exported components
+      // Non-exported base components will have their properties inherited by extended components
+      if (exportedComponents.has(componentName)) {
+        const existing = staticPropertyAssignments.get(componentName) ?? [];
+        existing.push(p.node);
+        staticPropertyAssignments.set(componentName, existing);
+      }
+
+      // Remove from current position
+      j(p).remove();
+    });
+
+  // Generate static property inheritance for extended components
+  // e.g., ExtendedButton.HEIGHT = BaseButton.HEIGHT
+  for (const decl of styledDecls) {
+    // Check for originalBaseIdent (set when base was a component that got converted to intrinsic)
+    const originalBaseIdent = (decl as any).originalBaseIdent as string | undefined;
+    const baseIdent =
+      originalBaseIdent ?? (decl.base.kind === "component" ? decl.base.ident : null);
+    if (!baseIdent) {
+      continue;
+    }
+    const baseDecl = declByLocal.get(baseIdent);
+    if (!baseDecl) {
+      continue;
+    }
+    const baseProps = staticPropertyNames.get(baseDecl.localName);
+    if (!baseProps || baseProps.length === 0) {
+      continue;
+    }
+
+    // Generate inheritance assignments for each static property
+    const inheritanceStatements: any[] = [];
+    for (const propName of baseProps) {
+      const stmt = j.expressionStatement(
+        j.assignmentExpression(
+          "=",
+          j.memberExpression(j.identifier(decl.localName), j.identifier(propName)),
+          j.memberExpression(j.identifier(baseDecl.localName), j.identifier(propName)),
+        ),
+      );
+      inheritanceStatements.push(stmt);
+    }
+
+    if (inheritanceStatements.length > 0) {
+      const existing = staticPropertyAssignments.get(decl.localName) ?? [];
+      existing.push(...inheritanceStatements);
+      staticPropertyAssignments.set(decl.localName, existing);
+    }
+  }
+
+  for (const decl of styledDecls) {
     // Remove variable declarator for styled component
     root
       .find(j.VariableDeclaration)
@@ -1114,9 +1273,20 @@ export function transformWithWarnings(
           }
         }
 
-        opening.name = j.jsxIdentifier(finalTag);
+        // Handle both simple identifiers (div) and member expressions (animated.div)
+        const createJsxName = (tag: string) => {
+          if (tag.includes(".")) {
+            const parts = tag.split(".");
+            return j.jsxMemberExpression(
+              j.jsxIdentifier(parts[0]!),
+              j.jsxIdentifier(parts.slice(1).join(".")),
+            );
+          }
+          return j.jsxIdentifier(tag);
+        };
+        opening.name = createJsxName(finalTag);
         if (closing) {
-          closing.name = j.jsxIdentifier(finalTag);
+          closing.name = createJsxName(finalTag);
         }
 
         const keptAttrs = (opening.attributes ?? []).filter((attr) => {
@@ -1144,7 +1314,7 @@ export function transformWithWarnings(
 
         // Apply `attrs(...)` derived attributes (static + simple prop-conditional).
         if (decl.attrsInfo) {
-          const { staticAttrs, conditionalAttrs } = decl.attrsInfo;
+          const { staticAttrs, conditionalAttrs, invertedBoolAttrs } = decl.attrsInfo;
 
           const hasAttr = (name: string) =>
             keptAttrs.some(
@@ -1170,6 +1340,49 @@ export function transformWithWarnings(
                   j.jsxAttribute(
                     j.jsxIdentifier(cond.attrName),
                     j.jsxExpressionContainer(j.literal(cond.value)),
+                  ),
+                );
+              }
+            }
+          }
+
+          // Handle inverted boolean attrs (e.g. `"data-attr": props.X !== true`).
+          // If the prop is not passed, the attr defaults to true.
+          // If the prop is passed as true, the attr becomes false.
+          for (const inv of invertedBoolAttrs ?? []) {
+            const idx = keptAttrs.findIndex(
+              (a) =>
+                a.type === "JSXAttribute" &&
+                a.name.type === "JSXIdentifier" &&
+                a.name.name === inv.jsxProp,
+            );
+            // Remove the source prop from attrs if present
+            if (idx !== -1) {
+              const propAttr = keptAttrs[idx] as any;
+              keptAttrs.splice(idx, 1);
+              // Check if prop was passed as true
+              const propVal = propAttr.value;
+              const isTrue =
+                propVal === null || // <Component propName /> is truthy
+                (propVal?.type === "JSXExpressionContainer" &&
+                  propVal.expression?.type === "BooleanLiteral" &&
+                  propVal.expression.value === true);
+              // props.X !== true → false when X is true
+              if (!hasAttr(inv.attrName)) {
+                keptAttrs.unshift(
+                  j.jsxAttribute(
+                    j.jsxIdentifier(inv.attrName),
+                    j.jsxExpressionContainer(j.literal(!isTrue)),
+                  ),
+                );
+              }
+            } else {
+              // Prop not passed → undefined !== true → true
+              if (!hasAttr(inv.attrName)) {
+                keptAttrs.unshift(
+                  j.jsxAttribute(
+                    j.jsxIdentifier(inv.attrName),
+                    j.jsxExpressionContainer(j.literal(true)),
                   ),
                 );
               }
@@ -1205,6 +1418,19 @@ export function transformWithWarnings(
           "ref",
           "style",
         ]);
+
+        // Add attrs from attrsInfo to leadingNames so they appear before stylex.props
+        if (decl.attrsInfo) {
+          for (const k of Object.keys(decl.attrsInfo.staticAttrs)) {
+            leadingNames.add(k);
+          }
+          for (const cond of decl.attrsInfo.conditionalAttrs) {
+            leadingNames.add(cond.attrName);
+          }
+          for (const inv of decl.attrsInfo.invertedBoolAttrs ?? []) {
+            leadingNames.add(inv.attrName);
+          }
+        }
         const leading: typeof keptAttrs = [];
         const rest: typeof keptAttrs = [];
         const hasRefAttr = keptAttrs.some(
@@ -1319,6 +1545,35 @@ export function transformWithWarnings(
     patternProp,
     exportedComponents,
   });
+
+  // Reinsert static property assignments after their corresponding wrapper functions.
+  // For each styled component that has static properties, find its wrapper function
+  // and insert the static property assignments immediately after it.
+  for (const [componentName, statements] of staticPropertyAssignments.entries()) {
+    if (statements.length === 0) {
+      continue;
+    }
+
+    // Find the wrapper function for this component
+    const wrapperFn = root.find(j.FunctionDeclaration, { id: { name: componentName } }).at(0);
+
+    if (wrapperFn.size() > 0) {
+      // Insert static property assignments after the function (handle export wrapper)
+      const fnPath = wrapperFn.get();
+      const parent = fnPath.parentPath;
+
+      if (
+        parent?.node?.type === "ExportNamedDeclaration" ||
+        parent?.node?.type === "ExportDefaultDeclaration"
+      ) {
+        // Function is wrapped in export, insert after the export
+        j(parent).insertAfter(statements);
+      } else {
+        // Function is standalone, insert after it
+        wrapperFn.insertAfter(statements);
+      }
+    }
+  }
 
   const post = postProcessTransformedAst({
     root,

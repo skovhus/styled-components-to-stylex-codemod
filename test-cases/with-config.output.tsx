@@ -11,8 +11,6 @@ const styles = stylex.create({
     borderStyle: "none",
     borderRadius: "4px",
   },
-
-  // withConfig for componentId (stable class names)
   card: {
     padding: "16px",
     backgroundColor: "white",

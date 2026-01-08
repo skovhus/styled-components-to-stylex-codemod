@@ -10,16 +10,19 @@ const styles = stylex.create({
     display: "flex",
     alignItems: "center",
   },
-  header: {
-    height: "64px",
-    backgroundColor: "white",
+  baseButton: {
+    padding: "8px 16px",
+    backgroundColor: "gray",
+  },
+  extendedButton: {
+    backgroundColor: "blue",
+    color: "white",
   },
 });
 
 type ListItemProps = React.ComponentProps<"div">;
 
-// they become wrapper functions. The codemod must preserve these.
-
+// Pattern 1: Static properties defined directly on styled component
 export function ListItem(props: ListItemProps) {
   const { children, style, ...rest } = props;
   return (
@@ -29,29 +32,52 @@ export function ListItem(props: ListItemProps) {
   );
 }
 
-type HeaderProps = React.ComponentProps<"header">;
+ListItem.HEIGHT = 42;
+ListItem.PADDING = 8;
+type BaseButtonProps = React.ComponentProps<"button">;
 
-export function Header(props: HeaderProps) {
-  const { children, style, ...rest } = props;
+// Pattern 2: styled(BaseComponent) should inherit static properties from BaseComponent
+function BaseButton(props: BaseButtonProps) {
+  const { className, children, style, ...rest } = props;
+
+  const sx = stylex.props(styles.baseButton);
   return (
-    <header {...rest} {...stylex.props(styles.header)} style={style}>
+    <button
+      {...sx}
+      className={[sx.className, className].filter(Boolean).join(" ")}
+      style={{
+        ...sx.style,
+        ...style,
+      }}
+      {...rest}
+    >
       {children}
-    </header>
+    </button>
   );
 }
 
-ListItem.HEIGHT = 42;
-ListItem.PADDING = 8;
-Header.HEIGHT = 64;
+type ExtendedButtonProps = React.ComponentProps<"button">;
+
+// ExtendedButton should have HEIGHT from BaseButton
+export function ExtendedButton(props: ExtendedButtonProps) {
+  const { children, style, ...rest } = props;
+  return (
+    <button {...rest} {...stylex.props(styles.baseButton, styles.extendedButton)} style={style}>
+      {children}
+    </button>
+  );
+}
+
+ExtendedButton.HEIGHT = BaseButton.HEIGHT;
 
 export function App() {
   const itemHeight = ListItem.HEIGHT;
-  const headerHeight = Header.HEIGHT;
+  // This should work - ExtendedButton.HEIGHT should be 36 from BaseButton
+  const buttonHeight = ExtendedButton.HEIGHT;
   return (
-    <div style={{ paddingTop: headerHeight }}>
-      <Header>Title</Header>
+    <div>
       <ListItem style={{ height: itemHeight }}>Item 1</ListItem>
-      <ListItem style={{ height: itemHeight }}>Item 2</ListItem>
+      <ExtendedButton style={{ height: buttonHeight }}>Click me</ExtendedButton>
     </div>
   );
 }

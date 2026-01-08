@@ -35,13 +35,6 @@ type BoxProps = React.ComponentProps<"div"> & {
   $size?: "small" | "large";
 };
 
-// styled-components automatically filters these out, but the generated
-// StyleX wrapper must also filter them.
-
-// When these are exported, they become wrapper functions that must:
-// 1. Accept the transient props for styling decisions
-// 2. NOT forward them to the underlying DOM element
-
 export function Box(props: BoxProps) {
   const { children, style, $size, $isActive, ...rest } = props;
   return (

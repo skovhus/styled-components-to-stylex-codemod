@@ -60,6 +60,13 @@ export function emitStylesAndImports(args: {
     return /^Bug\s+\d+[a-zA-Z]?\s*:/.test(v);
   };
 
+  // Check if a comment looks like a new section header (e.g., "Pattern 1:", "Case 2:")
+  const isNewSectionComment = (c: any): boolean => {
+    const v = typeof c?.value === "string" ? String(c.value).trim() : "";
+    // Pattern N: or similar section headers
+    return /^(Pattern|Case|Example|Test|Step|Note)\s*\d*[a-zA-Z]?\s*:/.test(v);
+  };
+
   const splitBugNarrativeLeadingComments = (
     comments: unknown,
   ): { narrative: any[]; property: any[] } => {
@@ -76,14 +83,45 @@ export function emitStylesAndImports(args: {
     if (bugIdx < 0) {
       return { narrative: [], property: comments as any[] };
     }
-    // Include the full contiguous comment array from the first "Bug ..." comment onward.
-    // This captures follow-up lines like:
-    //   // Bug N: ...
-    //   // more context...
-    return {
-      narrative: (comments as any[]).slice(bugIdx),
-      property: (comments as any[]).slice(0, bugIdx),
-    };
+    // Only include contiguous comments with the Bug N: comment.
+    // Stop when there's a gap AND a new section starts.
+    const narrative: any[] = [];
+    const property: any[] = [];
+    let lastLine = -1;
+    let inNarrative = false;
+    let hadGap = false;
+    for (let i = 0; i < comments.length; i++) {
+      const c = (comments as any[])[i];
+
+      if (i < bugIdx) {
+        property.push(c);
+      } else if (i === bugIdx) {
+        narrative.push(c);
+        lastLine = c?.loc?.end?.line ?? c?.loc?.start?.line ?? -1;
+        inNarrative = true;
+      } else if (inNarrative) {
+        const startLine = c?.loc?.start?.line ?? -1;
+        // Check for a gap (blank line between comments)
+        const hasGap = lastLine >= 0 && startLine >= 0 && startLine > lastLine + 1;
+
+        if (hasGap) {
+          hadGap = true;
+        }
+
+        // End narrative if: there was a gap AND this is a new section comment
+        if (hadGap && isNewSectionComment(c)) {
+          inNarrative = false;
+          property.push(c);
+        } else {
+          // Continue narrative
+          narrative.push(c);
+          lastLine = c?.loc?.end?.line ?? startLine;
+        }
+      } else {
+        property.push(c);
+      }
+    }
+    return { narrative, property };
   };
 
   // Remove styled-components import(s), but preserve any named imports that are still referenced
@@ -213,12 +251,23 @@ export function emitStylesAndImports(args: {
     const bl = ((b as any)?.loc?.start?.line ?? Number.POSITIVE_INFINITY) as number;
     return al - bl;
   });
+  const firstDeclLocalName = declsByLoc[0]?.localName;
   for (const d of declsByLoc) {
     const cs = (d as any).leadingComments;
     if (!Array.isArray(cs) || cs.length === 0) {
       continue;
     }
-    const { narrative } = splitBugNarrativeLeadingComments(cs);
+    // For wrapper components, include ALL comments as narrative since they
+    // should appear before `const styles`. The wrapper function will get its
+    // own subset of comments via getWrapperLeadingComments.
+    // For non-wrapper components, use the standard split to separate Bug narrative
+    // from property comments (which go inside stylex.create).
+    const narrative = d.needsWrapperComponent
+      ? cs.filter((c: any) => {
+          const key = `${(c as any)?.type ?? "Comment"}:${String((c as any)?.value ?? "").trim()}`;
+          return !propCommentKeys.has(key);
+        })
+      : splitBugNarrativeLeadingComments(cs).narrative;
     if (narrative.length === 0) {
       continue;
     }
@@ -239,6 +288,45 @@ export function emitStylesAndImports(args: {
       });
     }
     break;
+  }
+
+  // Prevent duplicate printing of migrated narrative comments:
+  // once we reattach them to the emitted `styles` declaration, we must remove them from the
+  // original first styled declaration statement (which will later be replaced by a wrapper).
+  if (migratedStyledDeclLeadingComments.length > 0 && firstDeclLocalName) {
+    const migratedKeys = new Set(
+      migratedStyledDeclLeadingComments.map(
+        (c: any) => `${(c as any)?.type ?? "Comment"}:${String((c as any)?.value ?? "").trim()}`,
+      ),
+    );
+    const stripMigrated = (node: any) => {
+      if (!node || typeof node !== "object") {
+        return;
+      }
+      const filter = (arr: any) =>
+        Array.isArray(arr)
+          ? arr.filter((c: any) => {
+              const key = `${(c as any)?.type ?? "Comment"}:${String((c as any)?.value ?? "").trim()}`;
+              return !migratedKeys.has(key);
+            })
+          : arr;
+      (node as any).leadingComments = filter((node as any).leadingComments);
+      (node as any).comments = filter((node as any).comments);
+    };
+
+    root
+      .find(j.VariableDeclarator, { id: { type: "Identifier", name: firstDeclLocalName } } as any)
+      .forEach((p: any) => {
+        stripMigrated(p.node);
+        const exp = j(p).closest(j.ExportNamedDeclaration);
+        if (exp.size() > 0) {
+          stripMigrated(exp.get().node);
+        }
+        const vd = j(p).closest(j.VariableDeclaration);
+        if (vd.size() > 0) {
+          stripMigrated(vd.get().node);
+        }
+      });
   }
 
   // Inject resolver-provided imports (from adapter.resolveValue calls).
@@ -352,9 +440,18 @@ export function emitStylesAndImports(args: {
     }
   }
 
-  // Build a map from styleKey to leadingComments for comment preservation
+  // Build a map from styleKey to leadingComments for comment preservation.
+  // For components that need wrappers BUT have shouldForwardProp, comments should
+  // appear in BOTH stylex.create AND on the wrapper function.
+  // For exported components WITHOUT shouldForwardProp, comments should only go on
+  // the wrapper function (to avoid duplication).
   const styleKeyToComments = new Map<string, any[]>();
   for (const decl of styledDecls) {
+    // Skip exported components that will have wrappers but don't use shouldForwardProp.
+    // Their comments should only appear on the wrapper function, not in stylex.create.
+    if (decl.needsWrapperComponent && !decl.shouldForwardProp) {
+      continue;
+    }
     if (decl.leadingComments && decl.leadingComments.length > 0) {
       // Avoid attaching "Bug N:" narrative comments to a specific style property inside
       // `stylex.create({ ... })` — those belong above the `styles` declaration instead.

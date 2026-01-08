@@ -20,6 +20,10 @@ const styles = stylex.create({
 
 type ExportedButtonProps = React.ComponentProps<"button">;
 
+/**
+ *  This component is exported and will use shouldSupportExternalStyles to enable
+ * className/style/rest merging for external style extension support.
+ **/
 export function ExportedButton(props: ExportedButtonProps) {
   const { className, children, style, ...rest } = props;
 

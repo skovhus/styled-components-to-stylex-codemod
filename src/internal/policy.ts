@@ -39,6 +39,41 @@ export function shouldSkipForThemeProvider(args: {
   return root.find(j.JSXIdentifier, { name: themeProviderLocalForSkip } as any).size() > 0;
 }
 
+export function shouldSkipForCssHelper(args: {
+  root: Collection<any>;
+  j: any;
+  styledImports: Collection<any>;
+}): boolean {
+  const { root, j, styledImports } = args;
+  const cssImportForSkip = findStyledComponentsNamedImport({
+    styledImports,
+    j,
+    importedName: "css",
+  }) as any;
+  const cssLocalForSkip =
+    cssImportForSkip?.local?.type === "Identifier"
+      ? cssImportForSkip.local.name
+      : cssImportForSkip?.imported?.type === "Identifier"
+        ? cssImportForSkip.imported.name
+        : undefined;
+  if (!cssLocalForSkip) {
+    return false;
+  }
+
+  const usedAsTaggedTemplate =
+    root
+      .find(j.TaggedTemplateExpression, {
+        tag: { type: "Identifier", name: cssLocalForSkip },
+      } as any)
+      .size() > 0;
+  const usedAsCall =
+    root
+      .find(j.CallExpression, { callee: { type: "Identifier", name: cssLocalForSkip } } as any)
+      .size() > 0;
+
+  return usedAsTaggedTemplate || usedAsCall;
+}
+
 export function collectThemeProviderSkipWarnings(args: {
   root: Collection<any>;
   j: any;
@@ -76,6 +111,58 @@ export function collectThemeProviderSkipWarnings(args: {
     warning.loc = {
       line: themeProviderImportForSkip.loc.start.line,
       column: themeProviderImportForSkip.loc.start.column ?? 0,
+    };
+  }
+  warnings.push(warning);
+  return warnings;
+}
+
+export function collectCssHelperSkipWarnings(args: {
+  root: Collection<any>;
+  j: any;
+  styledImports: Collection<any>;
+}): TransformWarning[] {
+  const { root, j, styledImports } = args;
+  const warnings: TransformWarning[] = [];
+
+  const cssImportForSkip = findStyledComponentsNamedImport({
+    styledImports,
+    j,
+    importedName: "css",
+  }) as any;
+  const cssLocalForSkip =
+    cssImportForSkip?.local?.type === "Identifier"
+      ? cssImportForSkip.local.name
+      : cssImportForSkip?.imported?.type === "Identifier"
+        ? cssImportForSkip.imported.name
+        : undefined;
+  if (!cssLocalForSkip) {
+    return warnings;
+  }
+
+  const isUsed =
+    root
+      .find(j.TaggedTemplateExpression, {
+        tag: { type: "Identifier", name: cssLocalForSkip },
+      } as any)
+      .size() > 0 ||
+    root
+      .find(j.CallExpression, { callee: { type: "Identifier", name: cssLocalForSkip } } as any)
+      .size() > 0;
+  if (!isUsed) {
+    return warnings;
+  }
+
+  const warning: TransformWarning = {
+    type: "unsupported-feature",
+    feature: "css-helper",
+    message:
+      "`css` helper usage from styled-components is project-specific and not safely transformable; skipping this file (manual follow-up required).",
+  };
+  if (cssImportForSkip?.loc) {
+    warning.loc = {
+      line: cssImportForSkip.loc.start.line,
+      column: cssImportForSkip.loc.start.column ?? 0,
     };
   }
   warnings.push(warning);

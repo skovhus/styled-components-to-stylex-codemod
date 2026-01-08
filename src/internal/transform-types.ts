@@ -74,6 +74,14 @@ export type StyledDecl = {
       attrName: string;
       value: any;
     }>;
+    /**
+     * Attrs that default to true when their associated prop is NOT passed (undefined).
+     * Pattern: `"attr": props.X !== true` → attr is true when X is undefined, false when X is true.
+     */
+    invertedBoolAttrs?: Array<{
+      jsxProp: string;
+      attrName: string;
+    }>;
   };
   attrWrapper?: {
     kind: "input" | "link";
