@@ -763,7 +763,7 @@ export function transformWithWarnings(
     return n?.type === "Identifier" && n.name ? n.name : null;
   };
 
-  type ExportInfo = { exportName: string; isDefault: boolean };
+  type ExportInfo = { exportName: string; isDefault: boolean; isSpecifier: boolean };
   const exportedComponents = new Map<string, ExportInfo>();
 
   // Named exports: export const Foo = styled.div`...` or export { Foo, Bar as Baz }
@@ -777,7 +777,7 @@ export function transformWithWarnings(
         }
         const name = getIdentifierName(d.id);
         if (name && declByLocal.has(name)) {
-          exportedComponents.set(name, { exportName: name, isDefault: false });
+          exportedComponents.set(name, { exportName: name, isDefault: false, isSpecifier: false });
         }
       }
     }
@@ -789,7 +789,7 @@ export function transformWithWarnings(
       const localName = getIdentifierName(spec.local);
       if (localName && declByLocal.has(localName)) {
         const exportName = getIdentifierName(spec.exported) ?? localName;
-        exportedComponents.set(localName, { exportName, isDefault: false });
+        exportedComponents.set(localName, { exportName, isDefault: false, isSpecifier: true });
       }
     }
   });
@@ -798,7 +798,7 @@ export function transformWithWarnings(
   root.find(j.ExportDefaultDeclaration).forEach((p) => {
     const name = getIdentifierName(p.node.declaration);
     if (name && declByLocal.has(name)) {
-      exportedComponents.set(name, { exportName: "default", isDefault: true });
+      exportedComponents.set(name, { exportName: "default", isDefault: true, isSpecifier: false });
     }
   });
 
@@ -885,6 +885,74 @@ export function transformWithWarnings(
     // Exported styled components need wrapper components to maintain the export.
     // Without this, removing the styled declaration would leave an empty `export {}`.
     if (exportedComponents.has(decl.localName)) {
+      decl.needsWrapperComponent = true;
+    }
+
+    // Styled components used as values (not just rendered in JSX) need wrapper components.
+    // For example: <Component elementType={StyledDiv} /> passes StyledDiv as a value.
+    // Without a wrapper, the identifier would be undefined after the styled declaration is removed.
+    const usedAsValue =
+      root
+        .find(j.Identifier, { name: decl.localName })
+        .filter((p) => {
+          // Skip the styled component declaration itself
+          if (p.parentPath?.node?.type === "VariableDeclarator") {
+            return false;
+          }
+          // Skip JSX element names (these are handled by inline substitution)
+          if (p.parentPath?.node?.type === "JSXOpeningElement") {
+            return false;
+          }
+          if (p.parentPath?.node?.type === "JSXClosingElement") {
+            return false;
+          }
+          // Skip JSX member expressions like <Styled.Component />
+          if (
+            p.parentPath?.node?.type === "JSXMemberExpression" &&
+            (p.parentPath.node as any).object === p.node
+          ) {
+            return false;
+          }
+          // Skip styled(Component) extensions - the Component being extended
+          // This checks if we're an argument to a CallExpression that is part of styled()
+          if (p.parentPath?.node?.type === "CallExpression") {
+            const callExpr = p.parentPath.node as any;
+            const callee = callExpr.callee;
+            // styled(Component) - callee is the styled identifier
+            if (callee?.type === "Identifier" && callee.name === styledDefaultImport) {
+              return false;
+            }
+            // styled(Component).withConfig() - callee is MemberExpression
+            if (
+              callee?.type === "MemberExpression" &&
+              callee.object?.type === "CallExpression" &&
+              callee.object.callee?.type === "Identifier" &&
+              callee.object.callee.name === styledDefaultImport
+            ) {
+              return false;
+            }
+          }
+          // Skip TaggedTemplateExpression tags - like styled(Component)`...`
+          if (p.parentPath?.node?.type === "TaggedTemplateExpression") {
+            return false;
+          }
+          // Skip if this is the argument to a styled(Component) call within a TaggedTemplateExpression
+          if (
+            p.parentPath?.node?.type === "CallExpression" &&
+            p.parentPath.parentPath?.node?.type === "TaggedTemplateExpression"
+          ) {
+            return false;
+          }
+          // Skip if this is inside a template literal (e.g., ${Link}:hover & pattern)
+          if (p.parentPath?.node?.type === "TemplateLiteral") {
+            return false;
+          }
+          // This is a value reference - could be passed as a prop, assigned, etc.
+          return true;
+        })
+        .size() > 0;
+
+    if (usedAsValue) {
       decl.needsWrapperComponent = true;
     }
 
