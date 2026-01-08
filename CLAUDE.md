@@ -56,6 +56,11 @@ test-cases/
 └── preview.ts            # Storybook preview config
 ```
 
+## Scripts
+
+- `scripts/debug-test.mjs` - Generates `.actual.tsx` files for failing test cases to compare against expected `.output.tsx` files. Run with `node scripts/debug-test.mjs` after `pnpm build`.
+- `scripts/update-fixtures.mjs` - Updates fixture files.
+
 ## Adding Test Cases
 
 Create matching `.input.tsx` and `.output.tsx` files in `test-cases/`. Tests auto-discover all pairs and fail if any file is missing its counterpart.
