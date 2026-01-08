@@ -1,6 +1,7 @@
 import styled from "styled-components";
 
 const Thing = styled.div`
+  border-right: 1px solid hotpink;
   color: blue;
 
   &:hover {
@@ -12,7 +13,7 @@ const Thing = styled.div`
   }
 
   &::before {
-    content: '🔥';
+    content: "🔥";
   }
 `;
 

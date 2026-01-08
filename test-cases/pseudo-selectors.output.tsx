@@ -2,6 +2,9 @@ import * as stylex from "@stylexjs/stylex";
 
 const styles = stylex.create({
   thing: {
+    borderRightWidth: "1px",
+    borderRightStyle: "solid",
+    borderRightColor: "hotpink",
     color: {
       default: "blue",
       ":hover": "red",
