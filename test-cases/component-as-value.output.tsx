@@ -23,17 +23,6 @@ function VirtualList({
   );
 }
 
-const styles = stylex.create({
-  // These styled components are passed as values, not just rendered
-  outerWrapper: {
-    overflowY: "auto",
-    scrollbarWidth: "thin",
-  },
-  innerWrapper: {
-    position: "relative",
-  },
-});
-
 type OuterWrapperProps = React.ComponentProps<"div">;
 
 // These styled components are passed as values, not just rendered
@@ -65,3 +54,14 @@ export function App() {
     </VirtualList>
   );
 }
+
+const styles = stylex.create({
+  // These styled components are passed as values, not just rendered
+  outerWrapper: {
+    overflowY: "auto",
+    scrollbarWidth: "thin",
+  },
+  innerWrapper: {
+    position: "relative",
+  },
+});

@@ -1,4 +1,4 @@
-import { defineAdapter } from "../adapter.js";
+import { defineAdapter } from "../adapter.ts";
 
 // Test adapters - examples of custom adapter usage
 export const customAdapter = defineAdapter({

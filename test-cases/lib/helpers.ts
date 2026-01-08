@@ -32,3 +32,6 @@ export const transitionSpeed = (
     | "regularTransition"
     | "slowTransition",
 ) => `var(--speed-${speed})`;
+
+// Type used in callbacks - should not be stripped from imports
+export type SelectionFunction = (options: { rowIndex: number }) => void;

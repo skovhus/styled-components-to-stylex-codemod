@@ -1,25 +1,6 @@
 import * as React from "react";
 import * as stylex from "@stylexjs/stylex";
 
-const styles = stylex.create({
-  button: {
-    display: "inline-block",
-    padding: "8px 16px",
-    backgroundColor: "#BF4F74",
-    color: "white",
-    borderWidth: 0,
-    borderStyle: "none",
-    borderRadius: "4px",
-    textDecoration: "none",
-    cursor: "pointer",
-  },
-
-  // Wrapper that always renders as a specific element but passes `as` through
-  buttonWrapper: {
-    boxShadow: "0 2px 4px rgba(0, 0, 0, 0.2)",
-  },
-});
-
 type ButtonProps = React.ComponentProps<"button"> & { as?: React.ElementType; href?: string };
 
 function Button(props: ButtonProps) {
@@ -56,3 +37,22 @@ export const App = () => (
     </ButtonWrapper>
   </div>
 );
+
+const styles = stylex.create({
+  button: {
+    display: "inline-block",
+    padding: "8px 16px",
+    backgroundColor: "#BF4F74",
+    color: "white",
+    borderWidth: 0,
+    borderStyle: "none",
+    borderRadius: "4px",
+    textDecoration: "none",
+    cursor: "pointer",
+  },
+
+  // Wrapper that always renders as a specific element but passes `as` through
+  buttonWrapper: {
+    boxShadow: "0 2px 4px rgba(0, 0, 0, 0.2)",
+  },
+});

@@ -27,6 +27,39 @@ const theme = {
   },
 };
 
+// Function returning string
+const getColor = (variant: string) => (variant === "primary" ? "#BF4F74" : "#4F74BF");
+
+type DynamicBoxProps = {
+  $variant: string;
+};
+
+function DynamicBox(props: DynamicBoxProps) {
+  const { $variant, children, className, ...rest } = props;
+
+  const sx = stylex.props(
+    styles.dynamicBoxBase,
+    $variant === "primary" && styles.dynamicBoxPrimary,
+    $variant !== "primary" && styles.dynamicBoxSecondary,
+  );
+  return (
+    <div {...sx} className={[sx.className, className].filter(Boolean).join(" ")} {...rest}>
+      {children}
+    </div>
+  );
+}
+
+export const App = () => (
+  <div>
+    <button {...stylex.props(styles.button)}>Button</button>
+    <p {...stylex.props(styles.text)}>Some text</p>
+    <button {...stylex.props(styles.conditionalButton)}>Conditional</button>
+    <div {...stylex.props(styles.themedCard)}>Themed Card</div>
+    <DynamicBox $variant="primary">Primary</DynamicBox>
+    <DynamicBox $variant="secondary">Secondary</DynamicBox>
+  </div>
+);
+
 const styles = stylex.create({
   button: {
     backgroundColor: dynamicColor,
@@ -72,36 +105,3 @@ const styles = stylex.create({
     backgroundColor: "#4F74BF",
   },
 });
-
-type DynamicBoxProps = {
-  $variant: string;
-};
-
-function DynamicBox(props: DynamicBoxProps) {
-  const { $variant, children, className, ...rest } = props;
-
-  const sx = stylex.props(
-    styles.dynamicBoxBase,
-    $variant === "primary" && styles.dynamicBoxPrimary,
-    $variant !== "primary" && styles.dynamicBoxSecondary,
-  );
-  return (
-    <div {...sx} className={[sx.className, className].filter(Boolean).join(" ")} {...rest}>
-      {children}
-    </div>
-  );
-}
-
-// Function returning string
-const getColor = (variant: string) => (variant === "primary" ? "#BF4F74" : "#4F74BF");
-
-export const App = () => (
-  <div>
-    <button {...stylex.props(styles.button)}>Button</button>
-    <p {...stylex.props(styles.text)}>Some text</p>
-    <button {...stylex.props(styles.conditionalButton)}>Conditional</button>
-    <div {...stylex.props(styles.themedCard)}>Themed Card</div>
-    <DynamicBox $variant="primary">Primary</DynamicBox>
-    <DynamicBox $variant="secondary">Secondary</DynamicBox>
-  </div>
-);

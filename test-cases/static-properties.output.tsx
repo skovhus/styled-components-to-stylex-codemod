@@ -11,26 +11,6 @@ const ActionMenuTextDivider = (props: React.ComponentProps<"div"> & { label: str
 };
 
 ActionMenuTextDivider.HEIGHT = 24;
-
-const styles = stylex.create({
-  listItem: {
-    padding: "8px 12px",
-    display: "flex",
-    alignItems: "center",
-  },
-  baseButton: {
-    padding: "8px 16px",
-    backgroundColor: "gray",
-  },
-  extendedButton: {
-    backgroundColor: "blue",
-    color: "white",
-  },
-  commandMenuTextDivider: {
-    paddingLeft: "20px",
-  },
-});
-
 type ListItemProps = React.ComponentProps<"div">;
 
 // Pattern 1: Static properties defined directly on styled component
@@ -100,3 +80,22 @@ export function App() {
     </div>
   );
 }
+
+const styles = stylex.create({
+  listItem: {
+    padding: "8px 12px",
+    display: "flex",
+    alignItems: "center",
+  },
+  baseButton: {
+    padding: "8px 16px",
+    backgroundColor: "gray",
+  },
+  extendedButton: {
+    backgroundColor: "blue",
+    color: "white",
+  },
+  commandMenuTextDivider: {
+    paddingLeft: "20px",
+  },
+});

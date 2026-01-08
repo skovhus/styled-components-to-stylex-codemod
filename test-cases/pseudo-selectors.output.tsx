@@ -1,5 +1,7 @@
 import * as stylex from "@stylexjs/stylex";
 
+export const App = () => <div {...stylex.props(styles.thing)}>Hover me!</div>;
+
 const styles = stylex.create({
   thing: {
     borderRightWidth: "1px",
@@ -18,5 +20,3 @@ const styles = stylex.create({
     },
   },
 });
-
-export const App = () => <div {...stylex.props(styles.thing)}>Hover me!</div>;

@@ -3,18 +3,6 @@ import { transitionSpeed as transitionSpeedVars } from "./lib/helpers.stylex";
 import React from "react";
 import "./css-variables.css";
 
-const styles = stylex.create({
-  animatedPath: {
-    transitionProperty: "opacity",
-    transitionDuration: transitionSpeedVars.slowTransition,
-    stroke: "#bf4f74",
-    fill: "none",
-  },
-  animatedPathStrokeWidth: (strokeWidth: number) => ({
-    strokeWidth: `${strokeWidth}px`,
-  }),
-});
-
 type AnimatedPathProps = React.ComponentProps<"path"> & {
   $width: number;
 };
@@ -62,3 +50,15 @@ export const App = () => {
     </div>
   );
 };
+
+const styles = stylex.create({
+  animatedPath: {
+    transitionProperty: "opacity",
+    transitionDuration: transitionSpeedVars.slowTransition,
+    stroke: "#bf4f74",
+    fill: "none",
+  },
+  animatedPathStrokeWidth: (strokeWidth: number) => ({
+    strokeWidth: `${strokeWidth}px`,
+  }),
+});

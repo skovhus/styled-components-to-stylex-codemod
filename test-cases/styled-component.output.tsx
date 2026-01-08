@@ -15,6 +15,12 @@ const Link = ({
   </a>
 );
 
+export const App = () => (
+  <Link href="https://example.com" {...stylex.props(styles.link)}>
+    Visit Example
+  </Link>
+);
+
 const styles = stylex.create({
   link: {
     color: "#BF4F74",
@@ -25,9 +31,3 @@ const styles = stylex.create({
     },
   },
 });
-
-export const App = () => (
-  <Link href="https://example.com" {...stylex.props(styles.link)}>
-    Visit Example
-  </Link>
-);

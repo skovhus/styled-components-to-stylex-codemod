@@ -7,6 +7,53 @@ const Flex = (props: React.ComponentProps<"div"> & { column?: boolean; center?: 
   return <div {...rest} />;
 };
 
+// Pattern 2: styled("input").attrs (function call + attrs)
+export interface TextInputProps {
+  allowPMAutofill?: boolean;
+}
+
+// Pattern 3: styled(Component).attrs with object
+// This pattern passes static attrs as an object
+interface BackgroundProps extends React.ComponentProps<typeof Flex> {
+  loaded: boolean;
+}
+
+export function Background(props: BackgroundProps) {
+  const { loaded, style, ...rest } = props;
+  return (
+    <Flex
+      {...rest}
+      {...stylex.props(styles.background, loaded && styles.backgroundLoaded)}
+      style={style}
+    />
+  );
+}
+
+// Pattern 4: styled(Component).attrs with function (from Scrollable.tsx)
+// This pattern computes attrs from props
+interface ScrollableProps extends React.ComponentProps<typeof Flex> {
+  gutter?: string;
+}
+
+export function Scrollable(props: ScrollableProps) {
+  return <Flex {...props} {...stylex.props(styles.scrollable)} />;
+}
+
+export const App = () => (
+  <>
+    <input type="text" size={5} {...stylex.props(styles.input)} placeholder="Small" />
+    <input type="text" {...stylex.props(styles.input)} placeholder="Normal" />
+    <input
+      type="text"
+      {...stylex.props(styles.input, styles.inputPadding("2em"))}
+      placeholder="Padded"
+    />
+    <input data-1p-ignore={true} {...stylex.props(styles.textInput)} placeholder="Text input" />
+    <Background loaded={false}>Content</Background>
+    <Scrollable>Scrollable content</Scrollable>
+  </>
+);
+
 const styles = stylex.create({
   // Pattern 1: styled.input.attrs (dot notation)
   input: {
@@ -42,50 +89,3 @@ const styles = stylex.create({
     position: "relative",
   },
 });
-
-export function Background(props: BackgroundProps) {
-  const { loaded, style, ...rest } = props;
-  return (
-    <Flex
-      {...rest}
-      {...stylex.props(styles.background, loaded && styles.backgroundLoaded)}
-      style={style}
-    />
-  );
-}
-
-export function Scrollable(props: ScrollableProps) {
-  return <Flex {...props} {...stylex.props(styles.scrollable)} />;
-}
-
-// Pattern 2: styled("input").attrs (function call + attrs)
-export interface TextInputProps {
-  allowPMAutofill?: boolean;
-}
-
-// Pattern 3: styled(Component).attrs with object
-// This pattern passes static attrs as an object
-interface BackgroundProps extends React.ComponentProps<typeof Flex> {
-  loaded: boolean;
-}
-
-// Pattern 4: styled(Component).attrs with function (from Scrollable.tsx)
-// This pattern computes attrs from props
-interface ScrollableProps extends React.ComponentProps<typeof Flex> {
-  gutter?: string;
-}
-
-export const App = () => (
-  <>
-    <input type="text" size={5} {...stylex.props(styles.input)} placeholder="Small" />
-    <input type="text" {...stylex.props(styles.input)} placeholder="Normal" />
-    <input
-      type="text"
-      {...stylex.props(styles.input, styles.inputPadding("2em"))}
-      placeholder="Padded"
-    />
-    <input data-1p-ignore={true} {...stylex.props(styles.textInput)} placeholder="Text input" />
-    <Background loaded={false}>Content</Background>
-    <Scrollable>Scrollable content</Scrollable>
-  </>
-);

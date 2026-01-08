@@ -9,6 +9,8 @@ const rotate = stylex.keyframes({
   },
 });
 
+export const App = () => <div {...stylex.props(styles.rotate)}>💅</div>;
+
 const styles = stylex.create({
   rotate: {
     display: "inline-block",
@@ -20,5 +22,3 @@ const styles = stylex.create({
     fontSize: "1.2rem",
   },
 });
-
-export const App = () => <div {...stylex.props(styles.rotate)}>💅</div>;

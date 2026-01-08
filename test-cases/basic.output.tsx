@@ -1,5 +1,11 @@
 import * as stylex from "@stylexjs/stylex";
 
+export const App = () => (
+  <section {...stylex.props(styles.wrapper)}>
+    <h1 {...stylex.props(styles.title)}>Hello World!</h1>
+  </section>
+);
+
 const styles = stylex.create({
   /**
    * Page title with brand color styling.
@@ -16,9 +22,3 @@ const styles = stylex.create({
     backgroundColor: "papayawhip",
   },
 });
-
-export const App = () => (
-  <section {...stylex.props(styles.wrapper)}>
-    <h1 {...stylex.props(styles.title)}>Hello World!</h1>
-  </section>
-);

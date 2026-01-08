@@ -1,23 +1,6 @@
 import * as React from "react";
 import * as stylex from "@stylexjs/stylex";
 
-const styles = stylex.create({
-  exportedButton: {
-    backgroundColor: "#bf4f74",
-    color: "white",
-    padding: "8px 16px",
-    borderWidth: 0,
-    borderStyle: "none",
-    borderRadius: "4px",
-  },
-
-  // This is also exported but won't use shouldSupportExternalStyles (for comparison)
-  internalBox: {
-    backgroundColor: "#f0f0f0",
-    padding: "16px",
-  },
-});
-
 type ExportedButtonProps = React.ComponentProps<"button">;
 
 /**
@@ -49,3 +32,20 @@ export const App = () => (
     <div {...stylex.props(styles.internalBox)}>Internal Box</div>
   </div>
 );
+
+const styles = stylex.create({
+  exportedButton: {
+    backgroundColor: "#bf4f74",
+    color: "white",
+    padding: "8px 16px",
+    borderWidth: 0,
+    borderStyle: "none",
+    borderRadius: "4px",
+  },
+
+  // This is also exported but won't use shouldSupportExternalStyles (for comparison)
+  internalBox: {
+    backgroundColor: "#f0f0f0",
+    padding: "16px",
+  },
+});

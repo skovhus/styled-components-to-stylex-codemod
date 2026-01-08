@@ -11,7 +11,6 @@ export function emitStylesAndImports(args: {
   resolverImports: Map<string, any>;
   resolvedStyleObjects: Map<string, any>;
   styledDecls: StyledDecl[];
-  cssHelperNames: Set<string>;
   isAstNode: (v: unknown) => boolean;
   objectToAst: (j: any, v: Record<string, unknown>) => any;
   literalToAst: (j: any, v: unknown) => any;
@@ -24,7 +23,6 @@ export function emitStylesAndImports(args: {
     resolverImports,
     resolvedStyleObjects,
     styledDecls,
-    cssHelperNames,
     isAstNode,
     objectToAst,
     literalToAst,
@@ -513,163 +511,8 @@ export function emitStylesAndImports(args: {
     (stylesDecl as any).comments = deduped;
   }
 
-  // If styles reference identifiers declared later in the file (e.g. string-interpolation fixture),
-  // insert `styles` after the last such declaration to satisfy StyleX evaluation order.
-  const referencedIdents = new Set<string>();
-  {
-    const seen = new WeakSet<object>();
-    const visit = (cur: any) => {
-      if (!cur) {
-        return;
-      }
-      if (Array.isArray(cur)) {
-        for (const c of cur) {
-          visit(c);
-        }
-        return;
-      }
-      if (typeof cur !== "object") {
-        return;
-      }
-      if (seen.has(cur as object)) {
-        return;
-      }
-      seen.add(cur as object);
-      if (cur.type === "Identifier" && typeof cur.name === "string") {
-        referencedIdents.add(cur.name);
-      }
-      for (const v of Object.values(cur)) {
-        if (typeof v === "object") {
-          visit(v);
-        }
-      }
-    };
-    for (const v of resolvedStyleObjects.values()) {
-      if (isAstNode(v)) {
-        visit(v);
-      } else if (v && typeof v === "object") {
-        visit(objectToAst(j, v as any));
-      }
-    }
-  }
-
+  // Place `styles` at the very end of the file.
+  // This keeps component logic first, styles last for better readability.
   const programBody = root.get().node.program.body as any[];
-  const declsRefIdx = (() => {
-    let last = -1;
-    for (let i = 0; i < programBody.length; i++) {
-      const stmt = programBody[i];
-      if (!stmt) {
-        continue;
-      }
-      if (stmt.type === "VariableDeclaration") {
-        for (const d of stmt.declarations ?? []) {
-          const id = d?.id;
-          if (id?.type === "Identifier" && referencedIdents.has(id.name)) {
-            last = i;
-          }
-        }
-      } else if (stmt.type === "FunctionDeclaration") {
-        const id = stmt.id;
-        if (id?.type === "Identifier" && referencedIdents.has(id.name)) {
-          last = i;
-        }
-      }
-    }
-    return last >= 0 ? last : null;
-  })();
-
-  // Try to place `styles` where the first styled component declaration used to be:
-  // insert right before the earliest styled decl statement (i.e. after the statement before it).
-  const firstStyledDeclInsertionAfterIdx = (() => {
-    if (!styledDecls.length) {
-      return null;
-    }
-    const styledLocalNames = new Set(styledDecls.map((d) => d.localName));
-    let firstIdx: number | null = null;
-    for (let i = 0; i < programBody.length; i++) {
-      const stmt = programBody[i];
-      if (stmt?.type !== "VariableDeclaration") {
-        continue;
-      }
-      for (const d of stmt.declarations ?? []) {
-        const id = d?.id;
-        if (id?.type !== "Identifier") {
-          continue;
-        }
-        if (!styledLocalNames.has(id.name)) {
-          continue;
-        }
-        firstIdx = firstIdx === null ? i : Math.min(firstIdx, i);
-      }
-    }
-    return firstIdx === null ? null : firstIdx - 1;
-  })();
-
-  const lastImportIdx = (() => {
-    let last = -1;
-    for (let i = 0; i < programBody.length; i++) {
-      if (programBody[i]?.type === "ImportDeclaration") {
-        last = i;
-      }
-    }
-    return last;
-  })();
-
-  const lastKeyframesIdx = (() => {
-    let last = -1;
-    for (let i = 0; i < programBody.length; i++) {
-      const stmt = programBody[i];
-      if (stmt?.type !== "VariableDeclaration") {
-        continue;
-      }
-      for (const d of stmt.declarations ?? []) {
-        const init: any = d?.init;
-        if (
-          init &&
-          init.type === "CallExpression" &&
-          init.callee?.type === "MemberExpression" &&
-          init.callee.object?.type === "Identifier" &&
-          init.callee.object.name === "stylex" &&
-          init.callee.property?.type === "Identifier" &&
-          init.callee.property.name === "keyframes"
-        ) {
-          last = i;
-        }
-      }
-    }
-    return last;
-  })();
-
-  const lastCssHelperIdx = (() => {
-    let last = -1;
-    for (let i = 0; i < programBody.length; i++) {
-      const stmt = programBody[i];
-      if (stmt?.type !== "VariableDeclaration") {
-        continue;
-      }
-      for (const d of stmt.declarations ?? []) {
-        const id: any = d?.id;
-        if (id?.type === "Identifier" && cssHelperNames.has(id.name)) {
-          last = i;
-        }
-      }
-    }
-    return last;
-  })();
-
-  // Pick the latest safe insertion point: after imports, after any keyframes/css helpers,
-  // after any referenced identifier declarations, and after the original styled-decl anchor.
-  const insertAfterIdx = Math.max(
-    lastImportIdx,
-    lastKeyframesIdx,
-    lastCssHelperIdx,
-    declsRefIdx ?? -1,
-    firstStyledDeclInsertionAfterIdx ?? -1,
-  );
-
-  if (insertAfterIdx >= 0) {
-    programBody.splice(insertAfterIdx + 1, 0, stylesDecl as any);
-  } else {
-    programBody.unshift(stylesDecl as any);
-  }
+  programBody.push(stylesDecl as any);
 }

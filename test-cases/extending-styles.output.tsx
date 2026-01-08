@@ -1,5 +1,12 @@
 import * as stylex from "@stylexjs/stylex";
 
+export const App = () => (
+  <div>
+    <button {...stylex.props(styles.button)}>Normal Button</button>
+    <button {...stylex.props(styles.button, styles.tomatoButton)}>Tomato Button</button>
+  </div>
+);
+
 const styles = stylex.create({
   button: {
     color: "#BF4F74",
@@ -16,10 +23,3 @@ const styles = stylex.create({
     borderColor: "tomato",
   },
 });
-
-export const App = () => (
-  <div>
-    <button {...stylex.props(styles.button)}>Normal Button</button>
-    <button {...stylex.props(styles.button, styles.tomatoButton)}>Tomato Button</button>
-  </div>
-);

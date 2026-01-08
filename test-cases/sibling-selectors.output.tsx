@@ -1,19 +1,6 @@
 import * as React from "react";
 import * as stylex from "@stylexjs/stylex";
 
-const styles = stylex.create({
-  adjacentSibling: {
-    color: "red",
-    backgroundColor: "lime",
-  },
-  siblingAfterSomething: {
-    backgroundColor: "yellow",
-  },
-  thing: {
-    color: "blue",
-  },
-});
-
 type ThingProps = React.ComponentProps<"div"> & {
   isAdjacentSibling?: boolean;
   isSiblingAfterSomething?: boolean;
@@ -49,3 +36,16 @@ export const App = () => (
     </Thing>
   </div>
 );
+
+const styles = stylex.create({
+  adjacentSibling: {
+    color: "red",
+    backgroundColor: "lime",
+  },
+  siblingAfterSomething: {
+    backgroundColor: "yellow",
+  },
+  thing: {
+    color: "blue",
+  },
+});

@@ -14,6 +14,8 @@ export function SomeComponent() {
   );
 }
 
+export const App = () => <SomeComponent />;
+
 const styles = stylex.create({
   wrapper: {
     /* A height of 10 */
@@ -23,5 +25,3 @@ const styles = stylex.create({
     overflowY: "scroll", // This is important
   },
 });
-
-export const App = () => <SomeComponent />;

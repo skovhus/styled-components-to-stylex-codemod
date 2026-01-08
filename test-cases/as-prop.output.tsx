@@ -1,5 +1,14 @@
 import * as stylex from "@stylexjs/stylex";
 
+export const App = () => (
+  <div>
+    <button {...stylex.props(styles.button)}>Normal Button</button>
+    <a href="#" {...stylex.props(styles.button)}>
+      Link with Button styles
+    </a>
+  </div>
+);
+
 const styles = stylex.create({
   button: {
     display: "inline-block",
@@ -13,12 +22,3 @@ const styles = stylex.create({
     borderRadius: "3px",
   },
 });
-
-export const App = () => (
-  <div>
-    <button {...stylex.props(styles.button)}>Normal Button</button>
-    <a href="#" {...stylex.props(styles.button)}>
-      Link with Button styles
-    </a>
-  </div>
-);

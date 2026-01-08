@@ -875,7 +875,6 @@ export function transformWithWarnings(
     resolverImports,
     resolvedStyleObjects,
     styledDecls,
-    cssHelperNames,
     isAstNode,
     objectToAst,
     literalToAst,
@@ -1156,38 +1155,44 @@ export function transformWithWarnings(
   }
 
   for (const decl of styledDecls) {
-    // Remove variable declarator for styled component
-    root
-      .find(j.VariableDeclaration)
-      .filter((p) =>
-        p.node.declarations.some(
-          (d) =>
-            d.type === "VariableDeclarator" &&
-            d.id.type === "Identifier" &&
-            d.id.name === decl.localName,
-        ),
-      )
-      .forEach((p) => {
-        if (p.node.declarations.length === 1) {
-          // Check if this is inside an ExportNamedDeclaration
-          const parent = p.parentPath;
-          if (parent && parent.node?.type === "ExportNamedDeclaration") {
-            // Remove the entire export declaration
-            j(parent).remove();
-          } else {
-            j(p).remove();
-          }
-          return;
-        }
-        p.node.declarations = p.node.declarations.filter(
-          (d) =>
-            !(
+    // Skip removal for declarations with wrappers - they're already replaced in-place by emitWrappers
+    if (decl.needsWrapperComponent) {
+      // The styled declaration has been replaced with the wrapper function in emitWrappers
+      // Continue to the next section which handles wrapper-specific logic
+    } else {
+      // Remove variable declarator for styled component (non-wrapper case)
+      root
+        .find(j.VariableDeclaration)
+        .filter((p) =>
+          p.node.declarations.some(
+            (d) =>
               d.type === "VariableDeclarator" &&
               d.id.type === "Identifier" &&
-              d.id.name === decl.localName
-            ),
-        );
-      });
+              d.id.name === decl.localName,
+          ),
+        )
+        .forEach((p) => {
+          if (p.node.declarations.length === 1) {
+            // Check if this is inside an ExportNamedDeclaration
+            const parent = p.parentPath;
+            if (parent && parent.node?.type === "ExportNamedDeclaration") {
+              // Remove the entire export declaration
+              j(parent).remove();
+            } else {
+              j(p).remove();
+            }
+            return;
+          }
+          p.node.declarations = p.node.declarations.filter(
+            (d) =>
+              !(
+                d.type === "VariableDeclarator" &&
+                d.id.type === "Identifier" &&
+                d.id.name === decl.localName
+              ),
+          );
+        });
+    }
 
     // Preserve as a wrapper component for polymorphic/forwarded-as cases.
     if (decl.needsWrapperComponent) {

@@ -1,30 +1,6 @@
 import * as React from "react";
 import * as stylex from "@stylexjs/stylex";
 
-const styles = stylex.create({
-  staticBox: {
-    backgroundColor: "#BF4F74",
-    height: "50px",
-    width: "50px",
-    borderRadius: "4px",
-  },
-  dynamicBox: {
-    backgroundColor: "#BF4F74",
-    height: "50px",
-    width: "50px",
-    borderRadius: "4px",
-  },
-  dynamicBoxBackgroundColor: (backgroundColor: string) => ({
-    backgroundColor,
-  }),
-  dynamicBoxHeight: (height: string) => ({
-    height,
-  }),
-  dynamicBoxWidth: (width: string) => ({
-    width,
-  }),
-});
-
 type DynamicBoxProps = React.ComponentProps<"div"> & {
   $background?: any;
   $size?: any;
@@ -60,3 +36,27 @@ export const App = () => (
     <DynamicBox $background="mediumseagreen" $size="100px" style={{ border: "1px solid red" }} />
   </div>
 );
+
+const styles = stylex.create({
+  staticBox: {
+    backgroundColor: "#BF4F74",
+    height: "50px",
+    width: "50px",
+    borderRadius: "4px",
+  },
+  dynamicBox: {
+    backgroundColor: "#BF4F74",
+    height: "50px",
+    width: "50px",
+    borderRadius: "4px",
+  },
+  dynamicBoxBackgroundColor: (backgroundColor: string) => ({
+    backgroundColor,
+  }),
+  dynamicBoxHeight: (height: string) => ({
+    height,
+  }),
+  dynamicBoxWidth: (width: string) => ({
+    width,
+  }),
+});

@@ -2,6 +2,13 @@ import * as stylex from "@stylexjs/stylex";
 import { vars, textVars } from "./css-variables.stylex";
 import "./css-variables.css";
 
+export const App = () => (
+  <div {...stylex.props(styles.card)}>
+    <p {...stylex.props(styles.text)}>Some text content</p>
+    <button {...stylex.props(styles.button)}>Click me</button>
+  </div>
+);
+
 const styles = stylex.create({
   button: {
     padding: `${vars.spacingSm} ${vars.spacingMd}`,
@@ -31,10 +38,3 @@ const styles = stylex.create({
     lineHeight: textVars.lineHeight,
   },
 });
-
-export const App = () => (
-  <div {...stylex.props(styles.card)}>
-    <p {...stylex.props(styles.text)}>Some text content</p>
-    <button {...stylex.props(styles.button)}>Click me</button>
-  </div>
-);

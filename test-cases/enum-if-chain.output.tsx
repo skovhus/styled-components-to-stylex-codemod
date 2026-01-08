@@ -3,22 +3,6 @@ import * as stylex from "@stylexjs/stylex";
 
 type Props = { state: "up" | "down" | "both" };
 
-const styles = stylex.create({
-  topArrowStem: {
-    opacity: 1,
-    transformOrigin: "8px 4.5px", // Top of stem - where it connects to arrow head
-    transition: "opacity 150ms ease,transform 150ms ease",
-    transform: "scaleY(1)",
-  },
-  topArrowStemStateDown: {
-    opacity: 0,
-    transform: "scaleY(0)",
-  },
-  topArrowStemStateUp: {
-    transform: "scaleY(3.27)",
-  },
-});
-
 type TopArrowStemProps = React.ComponentProps<"g"> & {
   $state: Props["state"];
 };
@@ -59,3 +43,19 @@ export const App = () => (
     </TopArrowStem>
   </svg>
 );
+
+const styles = stylex.create({
+  topArrowStem: {
+    opacity: 1,
+    transformOrigin: "8px 4.5px", // Top of stem - where it connects to arrow head
+    transition: "opacity 150ms ease,transform 150ms ease",
+    transform: "scaleY(1)",
+  },
+  topArrowStemStateDown: {
+    opacity: 0,
+    transform: "scaleY(0)",
+  },
+  topArrowStemStateUp: {
+    transform: "scaleY(3.27)",
+  },
+});

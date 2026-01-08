@@ -1,5 +1,14 @@
 import * as stylex from "@stylexjs/stylex";
 
+export const App = () => (
+  <div>
+    <button {...stylex.props(styles.button, stylex.defaultMarker())}>
+      <span {...stylex.props(styles.icon, styles.iconInButton)} />
+      Click me
+    </button>
+  </div>
+);
+
 const styles = stylex.create({
   icon: {
     display: "inline-block",
@@ -32,12 +41,3 @@ const styles = stylex.create({
     },
   },
 });
-
-export const App = () => (
-  <div>
-    <button {...stylex.props(styles.button, stylex.defaultMarker())}>
-      <span {...stylex.props(styles.icon, styles.iconInButton)} />
-      Click me
-    </button>
-  </div>
-);

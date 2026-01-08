@@ -1,5 +1,20 @@
 import * as stylex from "@stylexjs/stylex";
 
+export const App = () => (
+  <div>
+    <button style={{ background: "blue" }} {...stylex.props(styles.overrideButton)}>
+      Should be pink despite inline style
+    </button>
+    <div {...stylex.props(styles.forceWidth)}>Full width content</div>
+    <p style={{ color: "red", margin: "20px" }} {...stylex.props(styles.mixedStyles)}>
+      Color and margin should be overridden
+    </p>
+    <a href="#" {...stylex.props(styles.importantHover)}>
+      Hover me
+    </a>
+  </div>
+);
+
 const styles = stylex.create({
   // Using !important to override inline styles or third-party CSS
   overrideButton: {
@@ -38,18 +53,3 @@ const styles = stylex.create({
     },
   },
 });
-
-export const App = () => (
-  <div>
-    <button style={{ background: "blue" }} {...stylex.props(styles.overrideButton)}>
-      Should be pink despite inline style
-    </button>
-    <div {...stylex.props(styles.forceWidth)}>Full width content</div>
-    <p style={{ color: "red", margin: "20px" }} {...stylex.props(styles.mixedStyles)}>
-      Color and margin should be overridden
-    </p>
-    <a href="#" {...stylex.props(styles.importantHover)}>
-      Hover me
-    </a>
-  </div>
-);

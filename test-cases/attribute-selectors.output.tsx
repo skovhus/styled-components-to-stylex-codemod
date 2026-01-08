@@ -1,6 +1,67 @@
 import * as React from "react";
 import * as stylex from "@stylexjs/stylex";
 
+type InputProps = React.InputHTMLAttributes<HTMLInputElement>;
+
+function Input(props: InputProps) {
+  const { type, className, ...rest } = props;
+  const sx = stylex.props(
+    styles.input,
+    type === "checkbox" && styles.inputCheckbox,
+    type === "radio" && styles.inputRadio,
+  );
+  return (
+    <input
+      {...sx}
+      className={[sx.className, className].filter(Boolean).join(" ")}
+      type={type}
+      {...rest}
+    />
+  );
+}
+
+type LinkProps = React.PropsWithChildren<React.AnchorHTMLAttributes<HTMLAnchorElement>>;
+
+function Link(props: LinkProps) {
+  const { href, target, className, children, ...rest } = props;
+  const isHttps = href?.startsWith("https");
+  const isPdf = href?.endsWith(".pdf");
+  const isExternal = target === "_blank";
+  const sx = stylex.props(
+    styles.link,
+    isExternal && styles.linkExternal,
+    isHttps && styles.linkHttps,
+    isPdf && styles.linkPdf,
+  );
+  return (
+    <a
+      {...sx}
+      className={[sx.className, className].filter(Boolean).join(" ")}
+      href={href}
+      target={target}
+      {...rest}
+    >
+      {children}
+    </a>
+  );
+}
+
+export const App = () => (
+  <div>
+    <Input type="text" placeholder="Enter text..." />
+    <Input type="text" disabled placeholder="Disabled" />
+    <Input type="checkbox" />
+    <Input type="radio" name="option" />
+    <Input type="text" readOnly value="Read only" />
+    <br />
+    <Link href="/page">Internal Link</Link>
+    <Link href="https://example.com" target="_blank">
+      External HTTPS Link
+    </Link>
+    <Link href="/document.pdf">PDF Link</Link>
+  </div>
+);
+
 const styles = stylex.create({
   input: {
     padding: "8px 12px",
@@ -65,64 +126,3 @@ const styles = stylex.create({
     color: "#F44336",
   },
 });
-
-type InputProps = React.InputHTMLAttributes<HTMLInputElement>;
-
-function Input(props: InputProps) {
-  const { type, className, ...rest } = props;
-  const sx = stylex.props(
-    styles.input,
-    type === "checkbox" && styles.inputCheckbox,
-    type === "radio" && styles.inputRadio,
-  );
-  return (
-    <input
-      {...sx}
-      className={[sx.className, className].filter(Boolean).join(" ")}
-      type={type}
-      {...rest}
-    />
-  );
-}
-
-type LinkProps = React.PropsWithChildren<React.AnchorHTMLAttributes<HTMLAnchorElement>>;
-
-function Link(props: LinkProps) {
-  const { href, target, className, children, ...rest } = props;
-  const isHttps = href?.startsWith("https");
-  const isPdf = href?.endsWith(".pdf");
-  const isExternal = target === "_blank";
-  const sx = stylex.props(
-    styles.link,
-    isExternal && styles.linkExternal,
-    isHttps && styles.linkHttps,
-    isPdf && styles.linkPdf,
-  );
-  return (
-    <a
-      {...sx}
-      className={[sx.className, className].filter(Boolean).join(" ")}
-      href={href}
-      target={target}
-      {...rest}
-    >
-      {children}
-    </a>
-  );
-}
-
-export const App = () => (
-  <div>
-    <Input type="text" placeholder="Enter text..." />
-    <Input type="text" disabled placeholder="Disabled" />
-    <Input type="checkbox" />
-    <Input type="radio" name="option" />
-    <Input type="text" readOnly value="Read only" />
-    <br />
-    <Link href="/page">Internal Link</Link>
-    <Link href="https://example.com" target="_blank">
-      External HTTPS Link
-    </Link>
-    <Link href="/document.pdf">PDF Link</Link>
-  </div>
-);

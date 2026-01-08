@@ -1,6 +1,10 @@
 import * as React from "react";
 import styled from "styled-components";
 import { type FocusTrap as OriginalFocusTrap, createFocusTrap } from "./lib/focus-trap";
+import type { SelectionFunction } from "./lib/helpers";
+
+// Pattern 3: Type import used elsewhere in the file (not in styled component)
+// The codemod must NOT strip this import even though it's not used in styled components
 
 /**
  * A range input component.
@@ -35,6 +39,17 @@ export function useFocusTrap() {
   }, []);
 
   return focusTrap;
+}
+
+// This callback type must be preserved
+export function useSelection(onSelect: SelectionFunction) {
+  const handleSelect = React.useCallback<SelectionFunction>(
+    (options) => {
+      onSelect(options);
+    },
+    [onSelect],
+  );
+  return handleSelect;
 }
 
 export function App() {

@@ -1,6 +1,18 @@
 import * as stylex from "@stylexjs/stylex";
 import { calcVars } from "./css-calc.stylex";
 
+export const App = () => (
+  <div {...stylex.props(styles.container)}>
+    <div {...stylex.props(styles.grid)}>
+      <div {...stylex.props(styles.flexItem)}>Item 1</div>
+      <div {...stylex.props(styles.flexItem)}>Item 2</div>
+    </div>
+    <aside {...stylex.props(styles.sidebar)}>Sidebar content</aside>
+    <div {...stylex.props(styles.complexCalc)}>Complex calc</div>
+    <div {...stylex.props(styles.withVariables)}>With variables</div>
+  </div>
+);
+
 const styles = stylex.create({
   container: {
     width: "calc(100% - 40px)",
@@ -36,15 +48,3 @@ const styles = stylex.create({
     padding: `calc(${calcVars.baseSize} / 2)`,
   },
 });
-
-export const App = () => (
-  <div {...stylex.props(styles.container)}>
-    <div {...stylex.props(styles.grid)}>
-      <div {...stylex.props(styles.flexItem)}>Item 1</div>
-      <div {...stylex.props(styles.flexItem)}>Item 2</div>
-    </div>
-    <aside {...stylex.props(styles.sidebar)}>Sidebar content</aside>
-    <div {...stylex.props(styles.complexCalc)}>Complex calc</div>
-    <div {...stylex.props(styles.withVariables)}>With variables</div>
-  </div>
-);

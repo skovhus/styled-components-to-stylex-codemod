@@ -1,5 +1,7 @@
 import * as stylex from "@stylexjs/stylex";
 
+export const App = () => <div {...stylex.props(styles.container)}>Responsive container</div>;
+
 const styles = stylex.create({
   container: {
     width: {
@@ -18,5 +20,3 @@ const styles = stylex.create({
     },
   },
 });
-
-export const App = () => <div {...stylex.props(styles.container)}>Responsive container</div>;

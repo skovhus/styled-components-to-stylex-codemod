@@ -2,6 +2,13 @@ import * as stylex from "@stylexjs/stylex";
 import { themeVars } from "./tokens.stylex";
 import * as React from "react";
 
+export const App = () => (
+  <div>
+    <label {...stylex.props(styles.optionLabel)}>Enabled</label>
+    <label {...stylex.props(styles.optionLabel, styles.optionLabelDisabled)}>Disabled</label>
+  </div>
+);
+
 const styles = stylex.create({
   optionLabel: {
     display: "flex",
@@ -16,10 +23,3 @@ const styles = stylex.create({
     cursor: "not-allowed",
   },
 });
-
-export const App = () => (
-  <div>
-    <label {...stylex.props(styles.optionLabel)}>Enabled</label>
-    <label {...stylex.props(styles.optionLabel, styles.optionLabelDisabled)}>Disabled</label>
-  </div>
-);

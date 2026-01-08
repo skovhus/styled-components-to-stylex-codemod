@@ -1,6 +1,52 @@
 import * as React from "react";
 import * as stylex from "@stylexjs/stylex";
 
+type CardProps = React.PropsWithChildren<{}>;
+
+// withConfig for componentId (stable class names)
+function Card(props: CardProps) {
+  const { children, style, ...rest } = props;
+  return (
+    <div {...rest} {...stylex.props(styles.card)} style={style}>
+      {children}
+    </div>
+  );
+}
+
+type InputProps = React.ComponentProps<"input"> & {
+  hasError?: boolean;
+};
+
+// Combining withConfig options
+function Input(props: InputProps) {
+  const { className, style, hasError, ...rest } = props;
+
+  const sx = stylex.props(styles.input, hasError && styles.inputHasError);
+  return (
+    <input
+      {...sx}
+      className={[sx.className, className].filter(Boolean).join(" ")}
+      style={{
+        ...sx.style,
+        ...style,
+      }}
+      {...rest}
+    />
+  );
+}
+
+export const App = () => (
+  <div>
+    <button {...stylex.props(styles.button)}>Primary Button</button>
+    <Card>
+      <p>Card content</p>
+    </Card>
+    <Input placeholder="Normal input" />
+    <Input hasError placeholder="Error input" />
+    <button {...stylex.props(styles.baseButton, styles.extendedButton)}>Extended Button</button>
+  </div>
+);
+
 const styles = stylex.create({
   // withConfig for displayName (debugging)
   button: {
@@ -55,49 +101,3 @@ const styles = stylex.create({
     borderRadius: "4px",
   },
 });
-
-type CardProps = React.PropsWithChildren<{}>;
-
-// withConfig for componentId (stable class names)
-function Card(props: CardProps) {
-  const { children, style, ...rest } = props;
-  return (
-    <div {...rest} {...stylex.props(styles.card)} style={style}>
-      {children}
-    </div>
-  );
-}
-
-type InputProps = React.ComponentProps<"input"> & {
-  hasError?: boolean;
-};
-
-// Combining withConfig options
-function Input(props: InputProps) {
-  const { className, style, hasError, ...rest } = props;
-
-  const sx = stylex.props(styles.input, hasError && styles.inputHasError);
-  return (
-    <input
-      {...sx}
-      className={[sx.className, className].filter(Boolean).join(" ")}
-      style={{
-        ...sx.style,
-        ...style,
-      }}
-      {...rest}
-    />
-  );
-}
-
-export const App = () => (
-  <div>
-    <button {...stylex.props(styles.button)}>Primary Button</button>
-    <Card>
-      <p>Card content</p>
-    </Card>
-    <Input placeholder="Normal input" />
-    <Input hasError placeholder="Error input" />
-    <button {...stylex.props(styles.baseButton, styles.extendedButton)}>Extended Button</button>
-  </div>
-);

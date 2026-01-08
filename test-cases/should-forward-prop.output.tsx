@@ -1,68 +1,6 @@
 import * as React from "react";
 import * as stylex from "@stylexjs/stylex";
 
-const styles = stylex.create({
-  // Using shouldForwardProp to filter props (v5 pattern)
-  button: {
-    backgroundColor: "#BF4F74",
-    padding: "8px 16px",
-    fontSize: "14px",
-    color: "white",
-    borderWidth: 0,
-    borderStyle: "none",
-    borderRadius: "4px",
-  },
-  buttonSizeLarge: {
-    padding: "12px 24px",
-    fontSize: "18px",
-  },
-  buttonBackgroundColor: (backgroundColor: string) => ({
-    backgroundColor,
-  }),
-
-  // Using isPropValid from @emotion
-  link: {
-    color: {
-      default: "#333",
-      ":hover": "#BF4F74",
-    },
-    fontWeight: "normal",
-    textDecoration: "none",
-  },
-  linkActive: {
-    color: "#BF4F74",
-    fontWeight: "bold",
-  },
-
-  // Custom prop filtering logic (transient props pattern)
-  box: {
-    backgroundColor: "white",
-    padding: "16px",
-    borderRadius: "8px",
-    boxShadow: "0 2px 4px rgba(0, 0, 0, 0.1)",
-  },
-  boxBackgroundColor: (backgroundColor: string) => ({
-    backgroundColor,
-  }),
-  boxPadding: (padding: string) => ({
-    padding,
-  }),
-
-  // Filter multiple custom props
-  card: {
-    backgroundColor: "#4F74BF",
-    borderRadius: "4px",
-    padding: "16px",
-    color: "white",
-  },
-  cardVariantPrimary: {
-    backgroundColor: "#BF4F74",
-  },
-  cardRounded: {
-    borderRadius: "16px",
-  },
-});
-
 type ButtonProps = React.ComponentProps<"button"> & {
   color?: string;
   size?: "small" | "large";
@@ -199,3 +137,65 @@ export const App = () => (
     </Card>
   </div>
 );
+
+const styles = stylex.create({
+  // Using shouldForwardProp to filter props (v5 pattern)
+  button: {
+    backgroundColor: "#BF4F74",
+    padding: "8px 16px",
+    fontSize: "14px",
+    color: "white",
+    borderWidth: 0,
+    borderStyle: "none",
+    borderRadius: "4px",
+  },
+  buttonSizeLarge: {
+    padding: "12px 24px",
+    fontSize: "18px",
+  },
+  buttonBackgroundColor: (backgroundColor: string) => ({
+    backgroundColor,
+  }),
+
+  // Using isPropValid from @emotion
+  link: {
+    color: {
+      default: "#333",
+      ":hover": "#BF4F74",
+    },
+    fontWeight: "normal",
+    textDecoration: "none",
+  },
+  linkActive: {
+    color: "#BF4F74",
+    fontWeight: "bold",
+  },
+
+  // Custom prop filtering logic (transient props pattern)
+  box: {
+    backgroundColor: "white",
+    padding: "16px",
+    borderRadius: "8px",
+    boxShadow: "0 2px 4px rgba(0, 0, 0, 0.1)",
+  },
+  boxBackgroundColor: (backgroundColor: string) => ({
+    backgroundColor,
+  }),
+  boxPadding: (padding: string) => ({
+    padding,
+  }),
+
+  // Filter multiple custom props
+  card: {
+    backgroundColor: "#4F74BF",
+    borderRadius: "4px",
+    padding: "16px",
+    color: "white",
+  },
+  cardVariantPrimary: {
+    backgroundColor: "#BF4F74",
+  },
+  cardRounded: {
+    borderRadius: "16px",
+  },
+});

@@ -1,18 +1,15 @@
 import * as stylex from "@stylexjs/stylex";
 import * as React from "react";
 
-const styles = stylex.create({
-  textColor: {},
-  textColorColor: (color: string) => ({
-    color,
-  }),
-  highlight: {
-    backgroundColor: "transparent",
-  },
-  highlightHighlighted: {
-    backgroundColor: "yellow",
-  },
-});
+// Bug 12: When codemod generates wrapper function, the props type must include
+// standard HTML attributes (className, children, style) that the wrapper uses.
+// Otherwise: "Property 'className' does not exist on type 'MyProps'"
+
+// Pattern 1: styled("span") with custom props - wrapper needs span attributes
+interface TextColorProps extends React.ComponentProps<"span"> {
+  /** Custom color prop */
+  color: string;
+}
 
 export function TextColor(props: TextColorProps) {
   const { children, style, color, ...rest } = props;
@@ -27,6 +24,14 @@ export function TextColor(props: TextColorProps) {
   );
 }
 
+// Pattern 2: styled(Component) - wrapper needs component's props + HTML attributes
+const BaseText = (props: React.ComponentProps<"span">) => <span {...props} />;
+
+interface HighlightProps extends React.ComponentProps<typeof BaseText> {
+  /** Whether to highlight */
+  highlighted?: boolean;
+}
+
 export function Highlight(props: HighlightProps) {
   const { highlighted, style, ...rest } = props;
   return (
@@ -36,24 +41,6 @@ export function Highlight(props: HighlightProps) {
       style={style}
     />
   );
-}
-
-// Bug 12: When codemod generates wrapper function, the props type must include
-// standard HTML attributes (className, children, style) that the wrapper uses.
-// Otherwise: "Property 'className' does not exist on type 'MyProps'"
-
-// Pattern 1: styled("span") with custom props - wrapper needs span attributes
-interface TextColorProps extends React.ComponentProps<"span"> {
-  /** Custom color prop */
-  color: string;
-}
-
-// Pattern 2: styled(Component) - wrapper needs component's props + HTML attributes
-const BaseText = (props: React.ComponentProps<"span">) => <span {...props} />;
-
-interface HighlightProps extends React.ComponentProps<typeof BaseText> {
-  /** Whether to highlight */
-  highlighted?: boolean;
 }
 
 export function App() {
@@ -68,3 +55,16 @@ export function App() {
     </>
   );
 }
+
+const styles = stylex.create({
+  textColor: {},
+  textColorColor: (color: string) => ({
+    color,
+  }),
+  highlight: {
+    backgroundColor: "transparent",
+  },
+  highlightHighlighted: {
+    backgroundColor: "yellow",
+  },
+});

@@ -3,6 +3,15 @@ import { themeVars } from "./tokens.stylex";
 import React from "react";
 import { animated } from "./lib/react-spring";
 
+export function App() {
+  return (
+    <div>
+      <input {...stylex.props(styles.input)} placeholder="Type here" />
+      <animated.div {...stylex.props(styles.animatedBox)}>Animated content</animated.div>
+    </div>
+  );
+}
+
 // Bug 3a: styled(Component) function call syntax should transform properly.
 // This includes both styled("tagName") and styled(ImportedComponent).
 
@@ -27,12 +36,3 @@ const styles = stylex.create({
     borderColor: themeVars.primaryColor,
   },
 });
-
-export function App() {
-  return (
-    <div>
-      <input {...stylex.props(styles.input)} placeholder="Type here" />
-      <animated.div {...stylex.props(styles.animatedBox)}>Animated content</animated.div>
-    </div>
-  );
-}

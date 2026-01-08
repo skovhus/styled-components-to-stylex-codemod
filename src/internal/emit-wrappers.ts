@@ -2168,15 +2168,85 @@ export function emitWrappers(args: {
       return exportNode;
     });
 
-    root
-      .find(j.VariableDeclaration)
-      .filter((p: any) =>
-        p.node.declarations.some(
-          (dcl: any) => dcl.type === "VariableDeclarator" && (dcl.id as any)?.name === "styles",
-        ),
-      )
-      .at(0)
-      .insertAfter(wrappedOrdered);
+    // Replace each styled declaration in-place with its wrapper function.
+    // This preserves the original position of components in the file.
+    for (const d of wrapperDecls) {
+      const wrapperNodes = wrappedOrdered.filter((node: any) => {
+        if (node?.type === "FunctionDeclaration") {
+          return node.id?.name === d.localName;
+        }
+        if (node?.type === "ExportNamedDeclaration" || node?.type === "ExportDefaultDeclaration") {
+          const decl = node.declaration;
+          return decl?.type === "FunctionDeclaration" && decl.id?.name === d.localName;
+        }
+        if (node?.type === "TSTypeAliasDeclaration") {
+          const name = node.id?.name;
+          return name === `${d.localName}Props`;
+        }
+        return false;
+      });
+
+      if (wrapperNodes.length === 0) {
+        continue;
+      }
+
+      // Find the original styled declaration
+      const styledDecl = root
+        .find(j.VariableDeclaration)
+        .filter((p: any) =>
+          p.node.declarations.some(
+            (dcl: any) =>
+              dcl.type === "VariableDeclarator" &&
+              dcl.id?.type === "Identifier" &&
+              dcl.id.name === d.localName,
+          ),
+        );
+
+      if (styledDecl.size() > 0) {
+        // Check if it's inside an export declaration
+        const firstPath = styledDecl.paths()[0];
+        const parent = firstPath?.parentPath;
+        if (parent && parent.node?.type === "ExportNamedDeclaration") {
+          // Replace the export declaration
+          j(parent).replaceWith(wrapperNodes);
+        } else {
+          // Replace the variable declaration
+          styledDecl.at(0).replaceWith(wrapperNodes);
+        }
+      }
+    }
+
+    // Insert any remaining nodes (types not associated with a specific wrapper) before styles
+    const insertedNames = new Set(wrapperDecls.map((d) => d.localName));
+    const remainingNodes = wrappedOrdered.filter((node: any) => {
+      if (node?.type === "FunctionDeclaration") {
+        return !insertedNames.has(node.id?.name);
+      }
+      if (node?.type === "ExportNamedDeclaration" || node?.type === "ExportDefaultDeclaration") {
+        const decl = node.declaration;
+        return !(decl?.type === "FunctionDeclaration" && insertedNames.has(decl.id?.name));
+      }
+      if (node?.type === "TSTypeAliasDeclaration") {
+        const name = node.id?.name;
+        if (name?.endsWith("Props")) {
+          const base = name.slice(0, -5);
+          return !insertedNames.has(base);
+        }
+      }
+      return true;
+    });
+
+    if (remainingNodes.length > 0) {
+      root
+        .find(j.VariableDeclaration)
+        .filter((p: any) =>
+          p.node.declarations.some(
+            (dcl: any) => dcl.type === "VariableDeclarator" && (dcl.id as any)?.name === "styles",
+          ),
+        )
+        .at(0)
+        .insertBefore(remainingNodes);
+    }
   }
 
   if (emitTypes && needsReactTypeImport) {

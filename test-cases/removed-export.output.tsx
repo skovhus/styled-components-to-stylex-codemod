@@ -1,24 +1,12 @@
 import * as stylex from "@stylexjs/stylex";
 import * as React from "react";
 import { type FocusTrap as OriginalFocusTrap, createFocusTrap } from "./lib/focus-trap";
-
-const styles = stylex.create({
-  rangeInput: {
-    display: "block",
-    width: "300px",
-    height: "6px",
-    appearance: "none",
-    backgroundColor: "gray",
-  },
-  focusTrapSuspenseFallback: {
-    opacity: 0,
-    width: 0,
-    height: 0,
-    position: "fixed",
-  },
-});
+import type { SelectionFunction } from "./lib/helpers";
 
 type RangeInputProps = React.ComponentProps<"input">;
+
+// Pattern 3: Type import used elsewhere in the file (not in styled component)
+// The codemod must NOT strip this import even though it's not used in styled components
 
 /**
  * A range input component.
@@ -59,6 +47,33 @@ export function useFocusTrap() {
   return focusTrap;
 }
 
+// This callback type must be preserved
+export function useSelection(onSelect: SelectionFunction) {
+  const handleSelect = React.useCallback<SelectionFunction>(
+    (options) => {
+      onSelect(options);
+    },
+    [onSelect],
+  );
+  return handleSelect;
+}
+
 export function App() {
   return null;
 }
+
+const styles = stylex.create({
+  rangeInput: {
+    display: "block",
+    width: "300px",
+    height: "6px",
+    appearance: "none",
+    backgroundColor: "gray",
+  },
+  focusTrapSuspenseFallback: {
+    opacity: 0,
+    width: 0,
+    height: 0,
+    position: "fixed",
+  },
+});

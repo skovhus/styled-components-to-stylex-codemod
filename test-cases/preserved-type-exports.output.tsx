@@ -11,20 +11,6 @@ export interface ButtonProps extends React.ComponentProps<"button"> {
 
 export type ButtonVariant = ButtonProps["variant"];
 
-const styles = stylex.create({
-  button: {
-    padding: "8px 16px",
-    backgroundColor: "gray",
-    color: "white",
-  },
-  buttonSizeLarge: {
-    padding: "12px 24px",
-  },
-  buttonVariantPrimary: {
-    backgroundColor: "blue",
-  },
-});
-
 function Button(props: ButtonProps) {
   const { children, style, size, variant, ...rest } = props;
   return (
@@ -57,3 +43,17 @@ export function App() {
     </Button>
   );
 }
+
+const styles = stylex.create({
+  button: {
+    padding: "8px 16px",
+    backgroundColor: "gray",
+    color: "white",
+  },
+  buttonSizeLarge: {
+    padding: "12px 24px",
+  },
+  buttonVariantPrimary: {
+    backgroundColor: "blue",
+  },
+});

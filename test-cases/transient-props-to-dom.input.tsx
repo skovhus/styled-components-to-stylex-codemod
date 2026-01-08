@@ -5,7 +5,7 @@ import styled from "styled-components";
 // styled-components automatically filters these out, but the generated
 // StyleX wrapper must also filter them.
 
-// When these are exported, they become wrapper functions that must:
+// Pattern 1: Exported components - become wrapper functions that must:
 // 1. Accept the transient props for styling decisions
 // 2. NOT forward them to the underlying DOM element
 
@@ -23,7 +23,23 @@ export const Image = styled.img<{ $isInactive?: boolean }>`
   border-radius: 50%;
 `;
 
+// Pattern 2: Non-exported internal components with transient props
+// These are used inline but still must NOT pass $-prefixed props to DOM
+// (from ColorPicker.tsx - Point component with $pickerHeight)
+const Point = styled.div<{ $pickerHeight?: number }>`
+  position: absolute;
+  left: -3px;
+  width: 12px;
+  height: 4px;
+`;
+
+const Slider = styled.div<{ $height: number }>`
+  position: relative;
+  height: ${(props) => props.$height}px;
+`;
+
 export function App() {
+  const pickerHeight = 200;
   return (
     <div>
       <Box $isActive $size="large">
@@ -31,6 +47,9 @@ export function App() {
       </Box>
       <Box $size="small">Small inactive box</Box>
       <Image $isInactive src="/avatar.png" alt="Avatar" />
+      {/* Internal components with transient props */}
+      <Point $pickerHeight={pickerHeight} />
+      <Slider $height={pickerHeight}>Slider content</Slider>
     </div>
   );
 }

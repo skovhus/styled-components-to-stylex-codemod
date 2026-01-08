@@ -30,6 +30,15 @@ const scaleUp = stylex.keyframes({
   },
 });
 
+export const App = () => (
+  <div>
+    <div {...stylex.props(styles.fadeBox)}>Fade in</div>
+    <div {...stylex.props(styles.animatedCard)}>Animated Card</div>
+    <div {...stylex.props(styles.bounceIn)}>Bounce In</div>
+    <div {...stylex.props(styles.sequentialAnimation)}>Sequential</div>
+  </div>
+);
+
 const styles = stylex.create({
   // Single animation
   fadeBox: {
@@ -65,12 +74,3 @@ const styles = stylex.create({
     animationDelay: "0s, 0.3s",
   },
 });
-
-export const App = () => (
-  <div>
-    <div {...stylex.props(styles.fadeBox)}>Fade in</div>
-    <div {...stylex.props(styles.animatedCard)}>Animated Card</div>
-    <div {...stylex.props(styles.bounceIn)}>Bounce In</div>
-    <div {...stylex.props(styles.sequentialAnimation)}>Sequential</div>
-  </div>
-);

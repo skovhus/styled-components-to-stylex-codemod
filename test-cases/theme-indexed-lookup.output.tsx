@@ -4,22 +4,6 @@ import * as React from "react";
 
 type Color = "labelBase" | "labelMuted";
 
-const styles = stylex.create({
-  box: {
-    width: "42px",
-    height: "100%",
-    padding: "16px",
-  },
-  boxBackgroundColorHover: ($hoverColor: Color) => ({
-    ":hover": {
-      backgroundColor: themeVars[$hoverColor],
-    },
-  }),
-  boxBackgroundColor: ($bg: Color) => ({
-    backgroundColor: themeVars[$bg],
-  }),
-});
-
 type BoxProps = React.ComponentProps<"div"> & {
   $bg: Color;
   $hoverColor: Color;
@@ -53,3 +37,19 @@ export const App = () => (
     <Box $bg="labelMuted" $hoverColor="labelBase" />
   </>
 );
+
+const styles = stylex.create({
+  box: {
+    width: "42px",
+    height: "100%",
+    padding: "16px",
+  },
+  boxBackgroundColorHover: ($hoverColor: Color) => ({
+    ":hover": {
+      backgroundColor: themeVars[$hoverColor],
+    },
+  }),
+  boxBackgroundColor: ($bg: Color) => ({
+    backgroundColor: themeVars[$bg],
+  }),
+});
