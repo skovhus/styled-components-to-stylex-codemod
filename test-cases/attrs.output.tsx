@@ -44,7 +44,14 @@ const styles = stylex.create({
 });
 
 export function Background(props: BackgroundProps) {
-  return <Flex {...props} {...stylex.props(styles.background)} />;
+  const { loaded, style, ...rest } = props;
+  return (
+    <Flex
+      {...rest}
+      {...stylex.props(styles.background, loaded && styles.backgroundLoaded)}
+      style={style}
+    />
+  );
 }
 
 export function Scrollable(props: ScrollableProps) {
@@ -58,13 +65,13 @@ export interface TextInputProps {
 
 // Pattern 3: styled(Component).attrs with object
 // This pattern passes static attrs as an object
-interface BackgroundProps {
+interface BackgroundProps extends React.ComponentProps<typeof Flex> {
   loaded: boolean;
 }
 
 // Pattern 4: styled(Component).attrs with function (from Scrollable.tsx)
 // This pattern computes attrs from props
-interface ScrollableProps {
+interface ScrollableProps extends React.ComponentProps<typeof Flex> {
   gutter?: string;
 }
 
