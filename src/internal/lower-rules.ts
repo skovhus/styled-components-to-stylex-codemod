@@ -1,6 +1,6 @@
 import type { API } from "jscodeshift";
 import { resolveDynamicNode } from "./builtin-handlers.js";
-import { cssDeclarationToStylexDeclarations } from "./css-prop-mapping.js";
+import { cssDeclarationToStylexDeclarations, cssPropertyToStylexProp } from "./css-prop-mapping.js";
 import { getMemberPathFromIdentifier, getNodeLocStart } from "./jscodeshift-utils.js";
 import type { ImportSource } from "../adapter.js";
 import {
@@ -674,6 +674,54 @@ export function lowerRules(args: {
 
       // Now treat the interpolated portion as `borderColor`.
       const expr = decl.templateExpressions[slotId] as any;
+
+      // Helper to parse a border shorthand string and return expanded properties
+      const parseBorderShorthand = (
+        value: string,
+      ): { borderWidth?: string; borderStyle?: string; borderColor?: string } | null => {
+        const tokens = value.trim().split(/\s+/);
+        const borderStylesSet = new Set([
+          "none",
+          "solid",
+          "dashed",
+          "dotted",
+          "double",
+          "groove",
+          "ridge",
+          "inset",
+          "outset",
+        ]);
+        const looksLikeLengthLocal = (t: string) =>
+          /^-?\d*\.?\d+(px|rem|em|vh|vw|vmin|vmax|%)?$/.test(t);
+
+        let bWidth: string | undefined;
+        let bStyle: string | undefined;
+        const colorParts: string[] = [];
+        for (const token of tokens) {
+          if (!bWidth && looksLikeLengthLocal(token)) {
+            bWidth = token;
+          } else if (!bStyle && borderStylesSet.has(token)) {
+            bStyle = token;
+          } else {
+            colorParts.push(token);
+          }
+        }
+        const bColor = colorParts.join(" ").trim();
+        // If we found at least width or style, this is a border shorthand
+        if (bWidth || bStyle) {
+          return {
+            ...(bWidth ? { borderWidth: bWidth } : {}),
+            ...(bStyle ? { borderStyle: bStyle } : {}),
+            ...(bColor ? { borderColor: bColor } : {}),
+          };
+        }
+        // Just a color value
+        if (bColor) {
+          return { borderColor: bColor };
+        }
+        return null;
+      };
+
       if (expr?.type === "ArrowFunctionExpression" && expr.body?.type === "ConditionalExpression") {
         const test = expr.body.test as any;
         const cons = expr.body.consequent as any;
@@ -684,14 +732,45 @@ export function lowerRules(args: {
           cons?.type === "StringLiteral" &&
           alt?.type === "StringLiteral"
         ) {
-          // Default to alternate; conditionally apply consequent.
-          styleObj.borderColor = alt.value;
+          const altParsed = parseBorderShorthand(alt.value);
+          const consParsed = parseBorderShorthand(cons.value);
           const when = test.property.name;
-          variantBuckets.set(when, {
-            ...variantBuckets.get(when),
-            borderColor: cons.value,
-          });
-          variantStyleKeys[when] ??= `${decl.styleKey}${toSuffixFromProp(when)}`;
+          const notWhen = `!${when}`;
+
+          // Check if either value is a full border shorthand (has width or style)
+          const isFullShorthand =
+            (altParsed && (altParsed.borderWidth || altParsed.borderStyle)) ||
+            (consParsed && (consParsed.borderWidth || consParsed.borderStyle));
+
+          if (isFullShorthand) {
+            // Both branches should become variants (neither goes to base style)
+            if (altParsed) {
+              variantBuckets.set(notWhen, {
+                ...variantBuckets.get(notWhen),
+                ...altParsed,
+              });
+              variantStyleKeys[notWhen] ??= `${decl.styleKey}${toSuffixFromProp(notWhen)}`;
+            }
+            if (consParsed) {
+              variantBuckets.set(when, {
+                ...variantBuckets.get(when),
+                ...consParsed,
+              });
+              variantStyleKeys[when] ??= `${decl.styleKey}${toSuffixFromProp(when)}`;
+            }
+          } else {
+            // Original behavior: default to alternate, conditionally apply consequent
+            if (altParsed?.borderColor) {
+              styleObj.borderColor = altParsed.borderColor;
+            }
+            if (consParsed?.borderColor) {
+              variantBuckets.set(when, {
+                ...variantBuckets.get(when),
+                borderColor: consParsed.borderColor,
+              });
+              variantStyleKeys[when] ??= `${decl.styleKey}${toSuffixFromProp(when)}`;
+            }
+          }
           return true;
         }
       }
@@ -700,6 +779,20 @@ export function lowerRules(args: {
       if (expr && expr.type !== "ArrowFunctionExpression") {
         styleObj.borderColor = expr as any;
         return true;
+      }
+
+      // Handle arrow functions that are simple member expressions (like theme access):
+      //   border: 1px solid ${(props) => props.theme.colors.primary}
+      // In this case, we modify the declaration's property to be "borderColor" so that
+      // the generic dynamic handler (resolveDynamicNode) outputs borderColor instead of border.
+      if (expr?.type === "ArrowFunctionExpression") {
+        const body = expr.body as any;
+        // Simple arrow function returning a member expression: (p) => p.theme.colors.X
+        if (body?.type === "MemberExpression") {
+          // Mutate the declaration's property so fallback handlers use borderColor
+          d.property = "border-color";
+          return false; // Let the generic handler resolve the theme value
+        }
       }
 
       // fallback to inline style via wrapper
@@ -1129,7 +1222,7 @@ export function lowerRules(args: {
           }
 
           // Handle computed theme object access keyed by a prop:
-          //   background-color: ${(props) => props.theme.color[props.bg]}
+          //   background-color: ${(props) => props.theme.colors[props.bg]}
           //
           // If the adapter can resolve `theme.color` as an object expression, we can emit a StyleX
           // dynamic style function that indexes into that resolved object at runtime:
@@ -1382,7 +1475,10 @@ export function lowerRules(args: {
             const neg = res.variants.find((v: any) => v.when.startsWith("!"));
             const pos = res.variants.find((v: any) => !v.when.startsWith("!"));
 
-            const outs = cssDeclarationToStylexDeclarations(d);
+            const cssProp = (d.property ?? "").trim();
+            // Map CSS property to StyleX property (handle special cases like background → backgroundColor)
+            const stylexProp =
+              cssProp === "background" ? "backgroundColor" : cssPropertyToStylexProp(cssProp);
 
             const parseResolved = (
               expr: string,
@@ -1401,6 +1497,68 @@ export function lowerRules(args: {
               return { exprAst, imports: imports ?? [] };
             };
 
+            // Helper to expand border shorthand from a string literal like "2px solid blue"
+            const expandBorderShorthand = (
+              target: Record<string, unknown>,
+              exprAst: any,
+            ): boolean => {
+              // Handle various AST wrapper structures
+              let node = exprAst;
+              // Unwrap ExpressionStatement if present
+              if (node?.type === "ExpressionStatement") {
+                node = node.expression;
+              }
+              // Only expand if it's a string literal
+              if (node?.type !== "StringLiteral" && node?.type !== "Literal") {
+                return false;
+              }
+              const value = node.value;
+              if (typeof value !== "string") {
+                return false;
+              }
+              const tokens = value.trim().split(/\s+/);
+              const BORDER_STYLES = new Set([
+                "none",
+                "solid",
+                "dashed",
+                "dotted",
+                "double",
+                "groove",
+                "ridge",
+                "inset",
+                "outset",
+              ]);
+              const looksLikeLength = (t: string) =>
+                /^-?\d*\.?\d+(px|rem|em|vh|vw|vmin|vmax|ch|ex|lh|%)?$/.test(t);
+
+              let width: string | undefined;
+              let style: string | undefined;
+              const colorParts: string[] = [];
+              for (const token of tokens) {
+                if (!width && looksLikeLength(token)) {
+                  width = token;
+                } else if (!style && BORDER_STYLES.has(token)) {
+                  style = token;
+                } else {
+                  colorParts.push(token);
+                }
+              }
+              const color = colorParts.join(" ").trim();
+              if (!width && !style && !color) {
+                return false;
+              }
+              if (width) {
+                target["borderWidth"] = j.literal(width);
+              }
+              if (style) {
+                target["borderStyle"] = j.literal(style);
+              }
+              if (color) {
+                target["borderColor"] = j.literal(color);
+              }
+              return true;
+            };
+
             const applyParsed = (
               target: Record<string, unknown>,
               parsed: { exprAst: unknown; imports: any[] },
@@ -1408,10 +1566,12 @@ export function lowerRules(args: {
               for (const imp of parsed.imports) {
                 resolverImports.set(JSON.stringify(imp), imp);
               }
-              for (let i = 0; i < outs.length; i++) {
-                const out = outs[i]!;
-                target[out.prop] = parsed.exprAst as any;
+              // Special handling for border shorthand with string literal values
+              if (cssProp === "border" && expandBorderShorthand(target, parsed.exprAst)) {
+                return;
               }
+              // Default: use the property from cssDeclarationToStylexDeclarations
+              target[stylexProp] = parsed.exprAst as any;
             };
 
             // IMPORTANT: stage parsing first. If either branch fails to parse, skip this declaration entirely

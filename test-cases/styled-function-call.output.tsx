@@ -1,4 +1,5 @@
 import * as stylex from "@stylexjs/stylex";
+import { themeVars } from "./tokens.stylex";
 import React from "react";
 import { animated } from "./lib/react-spring";
 
@@ -21,6 +22,9 @@ const styles = stylex.create({
     padding: "16px",
     backgroundColor: "blue",
     color: "white",
+    borderWidth: "1px",
+    borderStyle: "solid",
+    borderColor: themeVars.primaryColor,
   },
 });
 

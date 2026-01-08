@@ -30,11 +30,11 @@ export const fixtureAdapter = defineAdapter({
   resolveValue(ctx) {
     if (ctx.kind === "theme") {
       // Test fixtures use a small ThemeProvider theme shape:
-      //   props.theme.color.labelBase  -> themeVars.labelBase
-      //   props.theme.color[bg]        -> themeVars[bg]
+      //   props.theme.colors.labelBase  -> themeVars.labelBase
+      //   props.theme.colors[bg]        -> themeVars[bg]
       //
       // `ctx.path` is the dot-path on the theme object (no bracket/index parts).
-      if (ctx.path === "color") {
+      if (ctx.path === "colors") {
         return {
           expr: "themeVars",
           imports: [

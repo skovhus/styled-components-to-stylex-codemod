@@ -18,6 +18,7 @@ const AnimatedBox = styled(animated.div)`
   padding: 16px;
   background: blue;
   color: white;
+  border: 1px solid ${(props) => props.theme.colors.primaryColor};
 `;
 
 export function App() {

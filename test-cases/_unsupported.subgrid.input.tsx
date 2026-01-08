@@ -11,7 +11,7 @@ const GroupHeaderRow = styled.div`
   ${rowBase}
   position: sticky;
   z-index: 3; /* above regular rows */
-  background: ${({ theme }: any) => theme.color.labelBase};
+  background: ${({ theme }: any) => theme.colors.labelBase};
 `;
 
 export const App = () => (

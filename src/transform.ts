@@ -838,6 +838,21 @@ export function transformWithWarnings(
       const canInline = decl.base.kind === "intrinsic" && hasInlinableAttrs;
       if (!canInline) {
         decl.needsWrapperComponent = true;
+      } else {
+        // Even if canInline is true, we need a wrapper if the component has no JSX usages.
+        // Without usages, there's nothing to inline into and the export would be lost.
+        const hasJsxUsages =
+          root
+            .find(j.JSXElement, {
+              openingElement: { name: { type: "JSXIdentifier", name: decl.localName } },
+            })
+            .size() > 0 ||
+          root
+            .find(j.JSXOpeningElement, { name: { type: "JSXIdentifier", name: decl.localName } })
+            .size() > 0;
+        if (!hasJsxUsages) {
+          decl.needsWrapperComponent = true;
+        }
       }
     }
   }
@@ -874,9 +889,10 @@ export function transformWithWarnings(
       continue;
     }
 
-    // 3. If exported, ask adapter (default: false)
+    // 3. If exported, ask adapter (default: true for exported components)
     if (!adapter.shouldSupportExternalStyles) {
-      decl.supportsExternalStyles = false;
+      // Default to true for exported components - they may be used with external className/style
+      decl.supportsExternalStyles = true;
       continue;
     }
 
@@ -955,6 +971,21 @@ export function transformWithWarnings(
       const canInline = decl.base.kind === "intrinsic" && hasInlinableAttrs;
       if (!canInline) {
         decl.needsWrapperComponent = true;
+      } else {
+        // Even if canInline is true, we need a wrapper if the component has no JSX usages.
+        // Without usages, there's nothing to inline into and the export would be lost.
+        const hasJsxUsages =
+          root
+            .find(j.JSXElement, {
+              openingElement: { name: { type: "JSXIdentifier", name: decl.localName } },
+            })
+            .size() > 0 ||
+          root
+            .find(j.JSXOpeningElement, { name: { type: "JSXIdentifier", name: decl.localName } })
+            .size() > 0;
+        if (!hasJsxUsages) {
+          decl.needsWrapperComponent = true;
+        }
       }
     }
 

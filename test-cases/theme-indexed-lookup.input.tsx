@@ -5,9 +5,9 @@ type Color = "labelBase" | "labelMuted";
 
 const Box = styled.div<{ $bg: Color; $hoverColor: Color }>`
   &:hover {
-    background-color: ${(p) => p.theme.color[p.$hoverColor]};
+    background-color: ${(p) => p.theme.colors[p.$hoverColor]};
   }
-  background-color: ${(props) => props.theme.color[props.$bg]};
+  background-color: ${(props) => props.theme.colors[props.$bg]};
   width: 42px;
   height: 100%;
   padding: 16px;

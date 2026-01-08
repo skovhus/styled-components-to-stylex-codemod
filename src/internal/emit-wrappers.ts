@@ -151,6 +151,7 @@ function emitMinimalWrapper(args: {
   destructureProps: string[];
   displayName?: string;
   patternProp: (keyName: string, valueId?: any) => any;
+  staticAttrs?: Record<string, any>;
 }): any[] {
   const {
     j,
@@ -162,6 +163,7 @@ function emitMinimalWrapper(args: {
     styleArgs,
     destructureProps,
     patternProp,
+    staticAttrs = {},
   } = args;
   const isVoidTag = VOID_TAGS.has(tagName);
   const propsParamId = j.identifier("props");
@@ -207,12 +209,32 @@ function emitMinimalWrapper(args: {
     styleArgs,
   );
 
-  // Build JSX attributes: {...rest} {...stylex.props(...)} style={style}
-  const jsxAttrs: any[] = [
+  // Build JSX attributes: static attrs, {...rest} {...stylex.props(...)} style={style}
+  const jsxAttrs: any[] = [];
+
+  // Add static attrs from .attrs() (e.g., type="range") first
+  for (const [key, value] of Object.entries(staticAttrs)) {
+    if (typeof value === "string") {
+      jsxAttrs.push(j.jsxAttribute(j.jsxIdentifier(key), j.literal(value)));
+    } else if (typeof value === "boolean") {
+      jsxAttrs.push(
+        j.jsxAttribute(
+          j.jsxIdentifier(key),
+          value ? null : j.jsxExpressionContainer(j.literal(false)),
+        ),
+      );
+    } else if (typeof value === "number") {
+      jsxAttrs.push(
+        j.jsxAttribute(j.jsxIdentifier(key), j.jsxExpressionContainer(j.literal(value))),
+      );
+    }
+  }
+
+  jsxAttrs.push(
     j.jsxSpreadAttribute(restId),
     j.jsxSpreadAttribute(stylexPropsCall),
     j.jsxAttribute(j.jsxIdentifier("style"), j.jsxExpressionContainer(j.identifier("style"))),
-  ];
+  );
 
   const openingEl = j.jsxOpeningElement(j.jsxIdentifier(tagName), jsxAttrs, isVoidTag);
 
@@ -1596,9 +1618,8 @@ export function emitWrappers(args: {
     if (tagName === "button" && wrapperNames.has(d.localName)) {
       return false;
     }
-    if (tagName === "input" || tagName === "a") {
-      return false;
-    }
+    // Note: input/a tags without attrWrapper (e.g., simple .attrs() cases) are now
+    // handled here. The attrWrapper case is already excluded above at line 1591.
     return true;
   });
 
@@ -1783,6 +1804,7 @@ export function emitWrappers(args: {
           styleArgs,
           destructureProps,
           patternProp,
+          ...(d.attrsInfo?.staticAttrs ? { staticAttrs: d.attrsInfo.staticAttrs } : {}),
         }),
         d,
       ),
