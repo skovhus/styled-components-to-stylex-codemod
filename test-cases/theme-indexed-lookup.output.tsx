@@ -5,33 +5,34 @@ import * as React from "react";
 type Color = "labelBase" | "labelMuted";
 
 const styles = stylex.create({
+  // Use transient props so they don't get forwarded to the DOM in Storybook.
   box: {
     width: "42px",
     height: "100%",
     padding: "16px",
   },
-  boxBackgroundColorHover: (hoverColor: string) => ({
+  boxBackgroundColorHover: ($hoverColor: string) => ({
     ":hover": {
-      backgroundColor: (themeVars as any)[hoverColor],
+      backgroundColor: (themeVars as any)[$hoverColor],
     },
   }),
-  boxBackgroundColor: (bg: string) => ({
-    backgroundColor: (themeVars as any)[bg],
+  boxBackgroundColor: ($bg: string) => ({
+    backgroundColor: (themeVars as any)[$bg],
   }),
 });
 
 type BoxProps = React.PropsWithChildren<{
-  bg: Color;
-  hoverColor: Color;
+  $bg: Color;
+  $hoverColor: Color;
 }>;
 
 function Box(props: BoxProps) {
-  const { children, className, style, hoverColor, bg, ...rest } = props;
+  const { children, className, style, $hoverColor, $bg } = props;
 
   const sx = stylex.props(
     styles.box,
-    styles.boxBackgroundColorHover(hoverColor),
-    styles.boxBackgroundColor(bg),
+    styles.boxBackgroundColorHover($hoverColor),
+    styles.boxBackgroundColor($bg),
   );
   return (
     <div
@@ -41,7 +42,6 @@ function Box(props: BoxProps) {
         ...sx.style,
         ...style,
       }}
-      {...rest}
     >
       {children}
     </div>
@@ -50,7 +50,7 @@ function Box(props: BoxProps) {
 
 export const App = () => (
   <>
-    <Box bg="labelBase" hoverColor="labelMuted" />
-    <Box bg="labelMuted" hoverColor="labelBase" />
+    <Box $bg="labelBase" $hoverColor="labelMuted" />
+    <Box $bg="labelMuted" $hoverColor="labelBase" />
   </>
 );
