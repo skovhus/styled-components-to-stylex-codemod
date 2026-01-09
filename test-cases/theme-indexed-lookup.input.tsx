@@ -19,3 +19,16 @@ export const App = () => (
     <Box $bg="labelMuted" $hoverColor="labelBase" />
   </>
 );
+
+// Pattern 2: Type imported from another file (like TextColor.tsx in a design system)
+// The codemod should preserve the imported type, not convert to `string`
+import type { Colors } from "./lib/colors";
+
+interface TextColorProps {
+  /** The color from the theme */
+  color: Colors;
+}
+
+export const TextColor = styled.span<TextColorProps>`
+  color: ${(props) => props.theme.colors[props.color]};
+`;

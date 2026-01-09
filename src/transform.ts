@@ -720,6 +720,7 @@ export function transformWithWarnings(
   const lowered = lowerRules({
     api,
     j,
+    root,
     filePath: file.path,
     resolveValue: adapter.resolveValue,
     importMap,
@@ -893,6 +894,26 @@ export function transformWithWarnings(
         const shouldDelegate = baseUsedInJsx && decl.needsWrapperComponent;
         if (shouldDelegate) {
           baseDecl.needsWrapperComponent = true;
+        }
+      }
+    }
+  }
+
+  // Styled components wrapping IMPORTED (non-styled) components that are used in JSX need wrappers.
+  // This preserves the component boundary so that:
+  // 1. Props like `variant`, `color` from the imported component are preserved
+  // 2. The `as` prop can be properly handled
+  // 3. The component can be referenced in `typeof` expressions
+  // Note: Local components (defined in the same file) can be inlined safely.
+  for (const decl of styledDecls) {
+    if (decl.base.kind === "component") {
+      const baseDecl = declByLocal.get(decl.base.ident);
+      // Check if the base is an IMPORTED component (not a styled or local component)
+      const isImportedComponent = importMap.has(decl.base.ident);
+      if (!baseDecl && isImportedComponent) {
+        const isUsedInJsxElement = isUsedInJsx(decl.localName);
+        if (isUsedInJsxElement) {
+          decl.needsWrapperComponent = true;
         }
       }
     }
@@ -1121,6 +1142,17 @@ export function transformWithWarnings(
   const staticPropertyNames = new Map<string, string[]>(); // componentName -> [propName, ...]
   const styledNames = new Set(styledDecls.map((d) => d.localName));
 
+  // Also track base components of styled components (they may have static properties to inherit)
+  const baseComponentNames = new Set<string>();
+  for (const decl of styledDecls) {
+    const originalBaseIdent = (decl as any).originalBaseIdent as string | undefined;
+    const baseIdent =
+      originalBaseIdent ?? (decl.base.kind === "component" ? decl.base.ident : null);
+    if (baseIdent && !styledNames.has(baseIdent)) {
+      baseComponentNames.add(baseIdent);
+    }
+  }
+
   root
     .find(j.ExpressionStatement)
     .filter((p) => {
@@ -1136,7 +1168,8 @@ export function transformWithWarnings(
       if (obj?.type !== "Identifier") {
         return false;
       }
-      return styledNames.has(obj.name);
+      // Track static properties on styled components AND their base components
+      return styledNames.has(obj.name) || baseComponentNames.has(obj.name);
     })
     .forEach((p) => {
       const expr = p.node.expression as any;
@@ -1148,6 +1181,11 @@ export function transformWithWarnings(
         const names = staticPropertyNames.get(componentName) ?? [];
         names.push(propName);
         staticPropertyNames.set(componentName, names);
+      }
+
+      // For non-styled base components, only track properties for inheritance (don't remove or reposition)
+      if (baseComponentNames.has(componentName)) {
+        return;
       }
 
       // Only reposition static properties for exported components
@@ -1164,6 +1202,7 @@ export function transformWithWarnings(
 
   // Generate static property inheritance for extended components
   // e.g., ExtendedButton.HEIGHT = BaseButton.HEIGHT
+  // This works for both styled base components AND regular React components with static props
   for (const decl of styledDecls) {
     // Check for originalBaseIdent (set when base was a component that got converted to intrinsic)
     const originalBaseIdent = (decl as any).originalBaseIdent as string | undefined;
@@ -1172,11 +1211,13 @@ export function transformWithWarnings(
     if (!baseIdent) {
       continue;
     }
+
+    // Check for static properties on the base component
+    // The base can be either a styled component (in declByLocal) or a regular React component
     const baseDecl = declByLocal.get(baseIdent);
-    if (!baseDecl) {
-      continue;
-    }
-    const baseProps = staticPropertyNames.get(baseDecl.localName);
+    // Use baseDecl.localName if available, otherwise use baseIdent directly
+    const baseComponentName = baseDecl?.localName ?? baseIdent;
+    const baseProps = staticPropertyNames.get(baseComponentName);
     if (!baseProps || baseProps.length === 0) {
       continue;
     }
@@ -1188,7 +1229,72 @@ export function transformWithWarnings(
         j.assignmentExpression(
           "=",
           j.memberExpression(j.identifier(decl.localName), j.identifier(propName)),
-          j.memberExpression(j.identifier(baseDecl.localName), j.identifier(propName)),
+          j.memberExpression(j.identifier(baseComponentName), j.identifier(propName)),
+        ),
+      );
+      inheritanceStatements.push(stmt);
+    }
+
+    if (inheritanceStatements.length > 0) {
+      const existing = staticPropertyAssignments.get(decl.localName) ?? [];
+      existing.push(...inheritanceStatements);
+      staticPropertyAssignments.set(decl.localName, existing);
+    }
+  }
+
+  // Generate static property inheritance for styled components wrapping IMPORTED components
+  // e.g., CommandMenuTextDivider.HEIGHT = ActionMenuTextDivider.HEIGHT
+  // We detect these by finding property accesses on styled components that wrap imports
+  for (const decl of styledDecls) {
+    const originalBaseIdent = (decl as any).originalBaseIdent as string | undefined;
+    const baseIdent =
+      originalBaseIdent ?? (decl.base.kind === "component" ? decl.base.ident : null);
+    if (!baseIdent) {
+      continue;
+    }
+
+    // Skip if base is a styled component in this file (handled above)
+    if (declByLocal.has(baseIdent)) {
+      continue;
+    }
+
+    // Skip if base is a local non-styled component (handled above via staticPropertyNames)
+    if (staticPropertyNames.has(baseIdent)) {
+      continue;
+    }
+
+    // Check if this is an imported component
+    if (!importMap.has(baseIdent)) {
+      continue;
+    }
+
+    // Find all property accesses on this styled component (e.g., CommandMenuTextDivider.HEIGHT)
+    const accessedProps = new Set<string>();
+    root
+      .find(j.MemberExpression, {
+        object: { type: "Identifier", name: decl.localName },
+        property: { type: "Identifier" },
+      } as any)
+      .forEach((p) => {
+        const propName = (p.node.property as any).name;
+        // Skip common built-in properties
+        if (propName && !["prototype", "name", "length", "displayName"].includes(propName)) {
+          accessedProps.add(propName);
+        }
+      });
+
+    if (accessedProps.size === 0) {
+      continue;
+    }
+
+    // Generate inheritance statements for each accessed property
+    const inheritanceStatements: any[] = [];
+    for (const propName of accessedProps) {
+      const stmt = j.expressionStatement(
+        j.assignmentExpression(
+          "=",
+          j.memberExpression(j.identifier(decl.localName), j.identifier(propName)),
+          j.memberExpression(j.identifier(baseIdent), j.identifier(propName)),
         ),
       );
       inheritanceStatements.push(stmt);

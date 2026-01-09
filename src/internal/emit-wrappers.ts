@@ -504,6 +504,53 @@ export function emitWrappers(args: {
   };
 
   /**
+   * Extends an existing type alias with a base type via intersection.
+   * Converts `type Foo = { ... }` to `type Foo = BaseType & { ... }`.
+   * Returns true if the type alias was found and extended, false otherwise.
+   */
+  const extendExistingTypeAlias = (typeName: string, baseTypeText: string): boolean => {
+    if (!emitTypes) {
+      return false;
+    }
+    const typeAliases = root.find(j.TSTypeAliasDeclaration, {
+      id: { type: "Identifier", name: typeName },
+    } as any);
+    if (typeAliases.size() === 0) {
+      return false;
+    }
+    // Parse the base type into a TSType node
+    const parsed = j(`type X = ${baseTypeText};`).get().node.program.body[0] as any;
+    const baseTypeNode = parsed?.typeAnnotation;
+    if (!baseTypeNode) {
+      return false;
+    }
+    typeAliases.forEach((path: any) => {
+      const alias = path.node;
+      const existingType = alias.typeAnnotation;
+      if (!existingType) {
+        return;
+      }
+      // Check if already includes this base type to avoid duplicates
+      if (existingType.type === "TSIntersectionType") {
+        const types = existingType.types ?? [];
+        const alreadyIncludes = types.some((t: any) => {
+          const tStr = j(t).toSource();
+          return tStr === baseTypeText;
+        });
+        if (alreadyIncludes) {
+          return;
+        }
+        // Add to existing intersection
+        existingType.types = [baseTypeNode, ...types];
+      } else {
+        // Convert to intersection type: BaseType & ExistingType
+        alias.typeAnnotation = j.tsIntersectionType([baseTypeNode, existingType]);
+      }
+    });
+    return true;
+  };
+
+  /**
    * Emits a named props type alias and returns whether it was emitted.
    * Returns false if the type would shadow an existing type with the same name.
    */
@@ -980,7 +1027,16 @@ export function emitWrappers(args: {
     const composedInner = joinIntersection(rawBaseTypeText, extrasTypeText);
     const finalTypeText = VOID_TAGS.has(tagName) ? composedInner : withChildren(composedInner);
 
-    emitNamedPropsType(d.localName, finalTypeText);
+    const typeAliasEmitted = emitNamedPropsType(d.localName, finalTypeText);
+    // If the type alias was not emitted (e.g., due to shadowing), try to extend
+    // the existing interface/type alias with the base component props
+    if (!typeAliasEmitted && explicit) {
+      const propsTypeName = propsTypeNameFor(d.localName);
+      const interfaceExtended = extendExistingInterface(propsTypeName, rawBaseTypeText);
+      if (!interfaceExtended) {
+        extendExistingTypeAlias(propsTypeName, rawBaseTypeText);
+      }
+    }
     needsReactTypeImport = true;
 
     // Build style arguments: base + extends + dynamic variants (as conditional expressions).
@@ -1694,13 +1750,16 @@ export function emitWrappers(args: {
       const typeText = explicit ? `${baseTypeText} & ${explicit}` : baseTypeText;
       const typeAliasEmitted = emitNamedPropsType(d.localName, typeText);
       // If the type alias was not emitted (e.g., due to shadowing), try to extend
-      // the existing interface with the base component props
+      // the existing interface/type alias with the base component props
       if (!typeAliasEmitted && explicit) {
         const propsTypeName = propsTypeNameFor(d.localName);
-        const extended = extendExistingInterface(propsTypeName, baseTypeText);
-        if (!extended) {
-          // Fallback: use inline type annotation
-          inlineTypeText = `React.PropsWithChildren<${explicit} & { style?: React.CSSProperties }>`;
+        const interfaceExtended = extendExistingInterface(propsTypeName, baseTypeText);
+        if (!interfaceExtended) {
+          const typeAliasExtended = extendExistingTypeAlias(propsTypeName, baseTypeText);
+          if (!typeAliasExtended) {
+            // Fallback: use inline type annotation
+            inlineTypeText = `React.PropsWithChildren<${explicit} & { style?: React.CSSProperties }>`;
+          }
         }
       }
       needsReactTypeImport = true;
@@ -1908,15 +1967,40 @@ export function emitWrappers(args: {
       continue;
     }
     const wrappedComponent = d.base.ident;
+    // Track which type name to use for the function parameter
+    let functionParamTypeName: string | null = null;
     {
       const explicit = stringifyTsType(d.propsType);
       const baseTypeText = `React.ComponentProps<typeof ${wrappedComponent}>`;
-      const typeText = explicit ? `${baseTypeText} & ${explicit}` : withChildren(baseTypeText);
-      const typeAliasEmitted = emitNamedPropsType(d.localName, typeText);
-      // If the type alias was not emitted (e.g., due to shadowing), try to extend
-      // the existing interface with the base component props
-      if (!typeAliasEmitted && explicit) {
-        extendExistingInterface(propsTypeNameFor(d.localName), baseTypeText);
+
+      // Check if explicit type is a simple type reference (e.g., `TypeAliasProps`)
+      // that exists in the file - if so, extend it directly instead of creating a new type
+      const isSimpleTypeRef =
+        d.propsType?.type === "TSTypeReference" && d.propsType?.typeName?.type === "Identifier";
+      const explicitTypeName = isSimpleTypeRef ? d.propsType?.typeName?.name : null;
+      const explicitTypeExists = explicitTypeName && typeExistsInFile(explicitTypeName);
+
+      if (explicitTypeExists && explicit) {
+        // Extend the existing type directly with base component props
+        const interfaceExtended = extendExistingInterface(explicitTypeName, baseTypeText);
+        if (!interfaceExtended) {
+          extendExistingTypeAlias(explicitTypeName, baseTypeText);
+        }
+        // Use the extended type name for the function parameter
+        functionParamTypeName = explicitTypeName;
+      } else {
+        // Create a new wrapper type
+        const typeText = explicit ? `${baseTypeText} & ${explicit}` : withChildren(baseTypeText);
+        const typeAliasEmitted = emitNamedPropsType(d.localName, typeText);
+        // If the type alias was not emitted (e.g., due to shadowing), try to extend
+        // the existing interface/type alias with the base component props
+        if (!typeAliasEmitted && explicit) {
+          const propsTypeName = propsTypeNameFor(d.localName);
+          const interfaceExtended = extendExistingInterface(propsTypeName, baseTypeText);
+          if (!interfaceExtended) {
+            extendExistingTypeAlias(propsTypeName, baseTypeText);
+          }
+        }
       }
       needsReactTypeImport = true;
     }
@@ -1999,7 +2083,14 @@ export function emitWrappers(args: {
     }
 
     const propsParamId = j.identifier("props");
-    annotatePropsParam(propsParamId, d.localName);
+    // If we extended an existing type directly, use that type name for the parameter
+    if (functionParamTypeName && emitTypes) {
+      propsParamId.typeAnnotation = j.tsTypeAnnotation(
+        j.tsTypeReference(j.identifier(functionParamTypeName)),
+      );
+    } else {
+      annotatePropsParam(propsParamId, d.localName);
+    }
     const propsId = j.identifier("props");
     const stylexPropsCall = j.callExpression(
       j.memberExpression(j.identifier("stylex"), j.identifier("props")),
@@ -2034,10 +2125,39 @@ export function emitWrappers(args: {
         j.variableDeclarator(j.objectPattern(patternProps as any), propsId),
       ]);
 
+      // For component wrappers with transient props ($-prefixed), we need to pass them
+      // back explicitly since styled-components normally filters them. Only pass back
+      // transient props that are likely required by the base component's props type.
+      // Heuristic: if the base component has an explicit interface (not inline), analyze its props.
+      const propsToPassExplicitly = destructureProps.filter((name) => {
+        // Only consider transient props for explicit pass-through
+        if (!name.startsWith("$")) {
+          return false;
+        }
+        // Check if base component's props type includes this prop by searching for interface/type
+        const basePropsTypeDecl = root.find(j.TSInterfaceDeclaration).filter((p: any) => {
+          // Look for interfaces that might be part of the base component's props
+          // by checking if they contain this property
+          const body = p.node.body?.body ?? [];
+          return body.some(
+            (member: any) =>
+              member.type === "TSPropertySignature" &&
+              member.key?.type === "Identifier" &&
+              member.key.name === name,
+          );
+        });
+        return basePropsTypeDecl.size() > 0;
+      });
+
+      const explicitPropAttrs = propsToPassExplicitly.map((name) =>
+        j.jsxAttribute(j.jsxIdentifier(name), j.jsxExpressionContainer(j.identifier(name))),
+      );
+
       const jsx = j.jsxElement(
         j.jsxOpeningElement(
           jsxTagName,
           [
+            ...explicitPropAttrs,
             j.jsxSpreadAttribute(restId),
             j.jsxSpreadAttribute(stylexPropsCall),
             j.jsxAttribute(j.jsxIdentifier("style"), j.jsxExpressionContainer(styleId)),

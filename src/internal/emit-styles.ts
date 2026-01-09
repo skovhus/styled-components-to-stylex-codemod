@@ -176,20 +176,18 @@ export function emitStylesAndImports(args: {
     }
   }
 
-  // Insert stylex import at top (after existing imports, before code)
+  // Insert stylex import at the very top of the file
+  // We use unshift instead of inserting before first import because:
+  // 1. The styled-components import might be removed, leaving mid-file imports as "first"
+  // 2. Mid-file imports (like `import React` after declarations) should stay where they are
   const hasStylexImport =
     root.find(j.ImportDeclaration, { source: { value: "@stylexjs/stylex" } } as any).size() > 0;
   if (!hasStylexImport) {
-    const firstImport = root.find(j.ImportDeclaration).at(0);
     const stylexImport = j.importDeclaration(
       [j.importNamespaceSpecifier(j.identifier("stylex"))],
       j.literal("@stylexjs/stylex"),
     );
-    if (firstImport.size() > 0) {
-      firstImport.insertBefore(stylexImport);
-    } else {
-      root.get().node.program.body.unshift(stylexImport);
-    }
+    root.get().node.program.body.unshift(stylexImport);
   }
 
   // Re-attach preserved header comments to the first statement (preferably the stylex import).

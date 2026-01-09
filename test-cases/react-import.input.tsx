@@ -18,6 +18,16 @@ export const Button = styled.button`
   color: white;
 `;
 
+// Pattern 2: Component with theme access (like TextColor.tsx in a design system)
+// Uses props.theme.colors which the adapter resolves to themeVars
+interface ThemeSpanProps {
+  variant: string;
+}
+
+export const ThemeSpan = styled.span<ThemeSpanProps>`
+  color: ${(props) => props.theme.colors[props.variant]};
+`;
+
 export function App() {
   return null;
 }

@@ -1,5 +1,8 @@
+import * as React from "react";
 import styled from "styled-components";
+import { Text } from "./lib/text";
 
+// Pattern 1: styled.element with as prop at call site
 const Button = styled.button`
   display: inline-block;
   color: #BF4F74;
@@ -10,11 +13,26 @@ const Button = styled.button`
   border-radius: 3px;
 `;
 
+// Pattern 2: styled(Component) where Component has custom props (like variant)
+// When used with as="label", the component's props must be preserved
+// Bug: Codemod converts <StyledText variant="small" as="label"> to <label variant="small">
+//      but <label> doesn't accept variant - should keep using Text with as="label"
+const StyledText = styled(Text)`
+  margin-top: 4px;
+`;
+
 export const App = () => (
   <div>
     <Button>Normal Button</Button>
     <Button as="a" href="#">
       Link with Button styles
     </Button>
+    {/* Pattern 2: styled(Component) with as prop - must preserve component's props */}
+    <StyledText variant="small" color="muted">
+      Normal styled text
+    </StyledText>
+    <StyledText variant="mini" as="label">
+      Label using Text styles
+    </StyledText>
   </div>
 );

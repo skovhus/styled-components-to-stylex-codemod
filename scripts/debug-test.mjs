@@ -19,6 +19,7 @@ const fixtureAdapter = {
 // Get test case names from command line or use defaults
 const defaultTestCases = [
   "attrs",
+  "as-prop",
   "duplicate-type-identifier",
   "removed-export",
   "static-properties",

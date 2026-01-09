@@ -6,6 +6,43 @@ const Link = ({ className, text, ...props }: { className?: string; text: string 
   </a>
 );
 
+// Pattern 4: styled(Component) where base component REQUIRES the transient prop
+// The transient prop is used for styling AND needed by the base component
+// CollapseArrowIcon pattern - ArrowIcon needs $isOpen, and styled uses it too
+import * as React from "react";
+
+import { Icon, type IconProps } from "./lib/icon";
+
+/** Props for the ArrowIcon component. */
+interface ArrowIconProps {
+  /** Whether the arrow represents an open state */
+  $isOpen: boolean;
+}
+
+function ArrowIcon(props: IconProps & ArrowIconProps) {
+  return (
+    <Icon {...props}>
+      <svg viewBox="0 0 16 16">
+        <path d="M7 10.6L10.8 7.6L7 5.4V10.6Z" />
+      </svg>
+    </Icon>
+  );
+}
+
+type CollapseArrowIconProps = React.ComponentProps<typeof ArrowIcon>;
+
+export function CollapseArrowIcon(props: CollapseArrowIconProps) {
+  const { $isOpen, style, ...rest } = props;
+  return (
+    <ArrowIcon
+      $isOpen={$isOpen}
+      {...rest}
+      {...stylex.props(styles.collapseArrowIcon, $isOpen && styles.collapseArrowIconOpen)}
+      style={style}
+    />
+  );
+}
+
 export const App = () => (
   <div>
     <div {...stylex.props(styles.comp, styles.compDraggable)}>Draggable</div>
@@ -13,6 +50,8 @@ export const App = () => (
     <Link {...stylex.props(styles.link, styles.linkRed)} text="Click" />
     <Link {...stylex.props(styles.link)} text="Click" />
     <div {...stylex.props(styles.point)} style={{ top: "10px" }} />
+    <CollapseArrowIcon $isOpen />
+    <CollapseArrowIcon $isOpen={false} />
   </div>
 );
 
@@ -38,5 +77,12 @@ const styles = stylex.create({
     width: "12px",
     height: "8px",
     backgroundColor: "white",
+  },
+  collapseArrowIcon: {
+    transform: "rotate(0deg)",
+    transition: "transform 0.2s",
+  },
+  collapseArrowIconOpen: {
+    transform: "rotate(90deg)",
   },
 });

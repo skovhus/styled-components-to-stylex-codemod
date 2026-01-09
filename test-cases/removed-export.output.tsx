@@ -98,6 +98,66 @@ export function FormLabel({ optional }: { optional?: boolean }) {
   );
 }
 
+// Pattern 5: Type-only import with MULTIPLE types where some are used in styled component props
+// and others are ONLY used in React.useRef<T> (generic type parameter)
+// The codemod must NOT strip TriggerHandlers even though it's not used in styled component props
+import type { TooltipBaseProps, TriggerHandlers } from "./lib/helpers";
+
+interface TooltipWrapperProps extends TooltipBaseProps {
+  children: React.ReactNode;
+}
+
+export function Tooltip(props: TooltipWrapperProps) {
+  // TriggerHandlers is ONLY used here in React.useRef - it must NOT be removed from import
+  const handlersRef = React.useRef<TriggerHandlers>(undefined);
+  return (
+    <div {...stylex.props(styles.tooltipWrapper)} title={props.title} position={props.position}>
+      {props.children}
+    </div>
+  );
+}
+
+// Pattern 6: Internal styled component wrapping IMPORTED component (like FormLabel.tsx)
+// When: const StyledText = styled(Text) (internal) + export const HelpText = styled(StyledText)
+// Bug: StyledText gets removed but HelpText still references it via:
+//   - type HelpTextProps = React.ComponentProps<typeof StyledText>
+//   - <StyledText {...props} .../>
+import { Text } from "./lib/text";
+
+type StyledTextProps = React.ComponentProps<typeof Text>;
+
+function StyledText(props: StyledTextProps) {
+  return <Text {...props} {...stylex.props(styles.text)} />;
+}
+
+type HelpTextProps = React.ComponentProps<typeof StyledText>;
+
+export function HelpText(props: HelpTextProps) {
+  return <StyledText {...props} {...stylex.props(styles.helpText)} />;
+}
+
+export function FormLabelWithText({
+  optional,
+  children,
+}: {
+  optional?: boolean;
+  children: React.ReactNode;
+}) {
+  return (
+    <label>
+      {children}
+      {optional && (
+        <StyledText variant="small" color="muted">
+          (optional)
+        </StyledText>
+      )}
+      <HelpText variant="mini" color="muted">
+        Help text
+      </HelpText>
+    </label>
+  );
+}
+
 export function App() {
   return null;
 }
@@ -120,6 +180,17 @@ const styles = stylex.create({
     marginLeft: "8px",
   },
   helpLabel: {
+    marginTop: "4px",
+    display: "block",
+  },
+  tooltipWrapper: {
+    position: "relative",
+    display: "inline-block",
+  },
+  text: {
+    marginLeft: "8px",
+  },
+  helpText: {
     marginTop: "4px",
     display: "block",
   },

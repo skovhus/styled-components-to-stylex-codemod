@@ -239,6 +239,12 @@ export function postProcessTransformedAst(args: {
       return usedByIdentifier || usedByJsxIdentifier;
     };
 
+    // Preserve entire type-only import declarations
+    // `import type { ... }` has importKind on the declaration, not the specifiers
+    if ((p.node as any).importKind === "type") {
+      return;
+    }
+
     const nextSpecs = specs.filter((s: any) => {
       // Preserve type-only import specifiers - they're used for TypeScript types
       // and may not be detectable via standard Identifier lookup
