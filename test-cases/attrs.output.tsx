@@ -39,6 +39,20 @@ export function Scrollable(props: ScrollableProps) {
   return <Flex {...props} {...stylex.props(styles.scrollable)} />;
 }
 
+// Pattern 5: styled(Component).attrs with TYPE ALIAS (not interface)
+// Bug: type aliases might not get `extends React.ComponentProps<...>` added
+// This is the exact pattern from a design system's Scrollable.tsx
+type TypeAliasProps = React.ComponentProps<typeof Flex> & {
+  /** Whether scrollbar gutter should be stable */
+  gutter?: "auto" | "stable" | string;
+  /** Whether to apply background color */
+  $applyBackground?: boolean;
+};
+
+export function ScrollableWithType(props: TypeAliasProps) {
+  return <Flex {...props} {...stylex.props(styles.scrollableWithType)} />;
+}
+
 export const App = () => (
   <>
     <input type="text" size={5} {...stylex.props(styles.input)} placeholder="Small" />
@@ -51,6 +65,7 @@ export const App = () => (
     <input data-1p-ignore={true} {...stylex.props(styles.textInput)} placeholder="Text input" />
     <Background loaded={false}>Content</Background>
     <Scrollable>Scrollable content</Scrollable>
+    <ScrollableWithType gutter="stable">Type alias scrollable</ScrollableWithType>
   </>
 );
 
@@ -87,5 +102,10 @@ const styles = stylex.create({
   scrollable: {
     overflowY: "auto",
     position: "relative",
+  },
+  scrollableWithType: {
+    overflowY: "auto",
+    position: "relative",
+    flexGrow: 1,
   },
 });

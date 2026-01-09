@@ -35,3 +35,18 @@ export const transitionSpeed = (
 
 // Type used in callbacks - should not be stripped from imports
 export type SelectionFunction = (options: { rowIndex: number }) => void;
+
+// Pattern 5: Types imported together where some are used in styled component props
+// and others are ONLY used in generic parameters like React.useRef<T>
+
+/** Props used in styled component */
+export interface TooltipBaseProps {
+  title?: string;
+  position?: "top" | "bottom" | "left" | "right";
+}
+
+/** Type ONLY used in React.useRef<T> - must NOT be stripped */
+export type TriggerHandlers = {
+  handleFocus?: (event: FocusEvent) => void;
+  handleClick?: (event: MouseEvent) => void;
+};

@@ -39,3 +39,15 @@ export function App() {
     </>
   );
 }
+
+// Pattern 3: styled("span") with NO local usage - wrapper props should still be extended
+// This matches TextColor.tsx in a design system which doesn't use the component in the same file
+interface ThemeTextProps {
+  /** Theme color name */
+  themeColor: string;
+}
+
+/** A text span that gets color from theme */
+export const ThemeText = styled("span")<ThemeTextProps>`
+  color: ${(props) => props.theme.colors[props.themeColor]};
+`;

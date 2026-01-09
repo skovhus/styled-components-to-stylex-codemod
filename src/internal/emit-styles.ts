@@ -14,6 +14,7 @@ export function emitStylesAndImports(args: {
   isAstNode: (v: unknown) => boolean;
   objectToAst: (j: any, v: Record<string, unknown>) => any;
   literalToAst: (j: any, v: unknown) => any;
+  stylesIdentifier: string;
 }): void {
   const {
     root,
@@ -26,6 +27,7 @@ export function emitStylesAndImports(args: {
     isAstNode,
     objectToAst,
     literalToAst,
+    stylesIdentifier,
   } = args;
 
   // Preserve file header directives (e.g. `// oxlint-disable ...`). Depending on the parser/printer,
@@ -176,20 +178,18 @@ export function emitStylesAndImports(args: {
     }
   }
 
-  // Insert stylex import at top (after existing imports, before code)
+  // Insert stylex import at the very top of the file
+  // We use unshift instead of inserting before first import because:
+  // 1. The styled-components import might be removed, leaving mid-file imports as "first"
+  // 2. Mid-file imports (like `import React` after declarations) should stay where they are
   const hasStylexImport =
     root.find(j.ImportDeclaration, { source: { value: "@stylexjs/stylex" } } as any).size() > 0;
   if (!hasStylexImport) {
-    const firstImport = root.find(j.ImportDeclaration).at(0);
     const stylexImport = j.importDeclaration(
       [j.importNamespaceSpecifier(j.identifier("stylex"))],
       j.literal("@stylexjs/stylex"),
     );
-    if (firstImport.size() > 0) {
-      firstImport.insertBefore(stylexImport);
-    } else {
-      root.get().node.program.body.unshift(stylexImport);
-    }
+    root.get().node.program.body.unshift(stylexImport);
   }
 
   // Re-attach preserved header comments to the first statement (preferably the stylex import).
@@ -460,10 +460,10 @@ export function emitStylesAndImports(args: {
     }
   }
 
-  // Insert `const styles = stylex.create(...)` near top (after imports)
+  // Insert `const styles = stylex.create(...)` (or stylexStyles if styles is already used) near top (after imports)
   const stylesDecl = j.variableDeclaration("const", [
     j.variableDeclarator(
-      j.identifier("styles"),
+      j.identifier(stylesIdentifier),
       j.callExpression(j.memberExpression(j.identifier("stylex"), j.identifier("create")), [
         j.objectExpression(
           [...resolvedStyleObjects.entries()].map(([k, v]) => {

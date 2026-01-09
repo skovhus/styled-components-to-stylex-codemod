@@ -20,6 +20,7 @@ export type DescendantOverride = {
 export function lowerRules(args: {
   api: API;
   j: any;
+  root: any;
   filePath: string;
   resolveValue: (ctx: any) => any;
   importMap: Map<
@@ -63,6 +64,7 @@ export function lowerRules(args: {
   const {
     api,
     j,
+    root,
     filePath,
     resolveValue,
     importMap,
@@ -140,40 +142,81 @@ export function lowerRules(args: {
     const inlineStyleProps: Array<{ prop: string; expr: any }> = [];
     const localVarValues = new Map<string, string>();
 
-    // Best-effort inference for prop types from an inline TS type literal, e.g.:
-    //   styled.div<{ $width: number; color?: string }>`
+    // Best-effort inference for prop types from TS type annotations, supporting:
+    //   1. Inline type literals: styled.div<{ $width: number; color?: string }>
+    //   2. Type references: styled.span<TextColorProps> (looks up the interface)
     // We only need enough to choose a better param type for emitted style functions.
     const findJsxPropTsType = (jsxProp: string): unknown => {
       const pt: any = (decl as any).propsType;
-      if (!pt || pt.type !== "TSTypeLiteral") {
+      if (!pt) {
         return null;
       }
-      for (const m of pt.members ?? []) {
-        if (!m || m.type !== "TSPropertySignature") {
-          continue;
-        }
-        const k: any = m.key;
-        const name =
-          k?.type === "Identifier"
-            ? k.name
-            : k?.type === "StringLiteral"
-              ? k.value
-              : k?.type === "Literal" && typeof k.value === "string"
+
+      // Helper to find prop type in a type literal (interface body)
+      const findInTypeLiteral = (typeLiteral: any): unknown => {
+        for (const m of typeLiteral.members ?? typeLiteral.body ?? []) {
+          if (!m || m.type !== "TSPropertySignature") {
+            continue;
+          }
+          const k: any = m.key;
+          const name =
+            k?.type === "Identifier"
+              ? k.name
+              : k?.type === "StringLiteral"
                 ? k.value
-                : null;
-        if (name !== jsxProp) {
-          continue;
+                : k?.type === "Literal" && typeof k.value === "string"
+                  ? k.value
+                  : null;
+          if (name !== jsxProp) {
+            continue;
+          }
+          return m.typeAnnotation?.typeAnnotation ?? null;
         }
-        return m.typeAnnotation?.typeAnnotation ?? null;
+        return null;
+      };
+
+      // Case 1: Inline type literal - styled.div<{ color: string }>
+      if (pt.type === "TSTypeLiteral") {
+        return findInTypeLiteral(pt);
       }
+
+      // Case 2: Type reference - styled.span<TextColorProps>
+      // Look up the interface definition in the file
+      if (pt.type === "TSTypeReference") {
+        const typeName = pt.typeName?.name;
+        if (typeName && typeof typeName === "string") {
+          // Find the interface with this name
+          const interfaces = root.find(j.TSInterfaceDeclaration, {
+            id: { type: "Identifier", name: typeName },
+          } as any);
+          if (interfaces.size() > 0) {
+            const iface = interfaces.get(0).node;
+            return findInTypeLiteral(iface.body);
+          }
+        }
+      }
+
       return null;
     };
     const annotateParamFromJsxProp = (paramId: any, jsxProp: string): void => {
       const t = findJsxPropTsType(jsxProp);
-      // Only special-case numeric props for now (matches the `$width: number` ask).
-      if (t && typeof t === "object" && (t as any).type === "TSNumberKeyword") {
-        (paramId as any).typeAnnotation = j.tsTypeAnnotation(j.tsNumberKeyword());
-        return;
+      if (t && typeof t === "object") {
+        const typeType = (t as any).type;
+        // Special-case numeric props (matches the `$width: number` ask).
+        if (typeType === "TSNumberKeyword") {
+          (paramId as any).typeAnnotation = j.tsTypeAnnotation(j.tsNumberKeyword());
+          return;
+        }
+        // Preserve type references (e.g., `Colors` from `color: Colors`)
+        // This ensures imported types are preserved in the style function signature
+        if (
+          typeType === "TSTypeReference" ||
+          typeType === "TSUnionType" ||
+          typeType === "TSLiteralType"
+        ) {
+          (paramId as any).typeAnnotation = j.tsTypeAnnotation(t);
+          return;
+        }
       }
       (paramId as any).typeAnnotation = j.tsTypeAnnotation(j.tsStringKeyword());
     };
@@ -1500,11 +1543,58 @@ export function lowerRules(args: {
             const stylexProp =
               cssProp === "background" ? "backgroundColor" : cssPropertyToStylexProp(cssProp);
 
+            // Extract static prefix/suffix from CSS value for wrapping resolved values
+            // e.g., `rotate(${...})` should wrap the resolved value with `rotate(...)`.
+            const getStaticPrefixSuffix = (): { prefix: string; suffix: string } => {
+              const v = d.value as any;
+              if (!v || v.kind !== "interpolated") {
+                return { prefix: "", suffix: "" };
+              }
+              const parts: any[] = v.parts ?? [];
+              const slotParts = parts.filter((p: any) => p?.kind === "slot");
+              if (slotParts.length !== 1) {
+                return { prefix: "", suffix: "" };
+              }
+              let prefix = "";
+              let suffix = "";
+              let foundSlot = false;
+              for (const part of parts) {
+                if (part?.kind === "slot") {
+                  foundSlot = true;
+                  continue;
+                }
+                if (part?.kind === "static") {
+                  if (foundSlot) {
+                    suffix += part.value ?? "";
+                  } else {
+                    prefix += part.value ?? "";
+                  }
+                }
+              }
+              return { prefix, suffix };
+            };
+            const { prefix: staticPrefix, suffix: staticSuffix } = getStaticPrefixSuffix();
+
             const parseResolved = (
               expr: string,
               imports: any[],
             ): { exprAst: unknown; imports: any[] } | null => {
-              const exprAst = parseExpr(expr);
+              // If there's static prefix/suffix, wrap the expression
+              // For simple string literals like `"90deg"`, produce a combined string literal like `"rotate(90deg)"`
+              // instead of a template literal like `\`rotate(${"90deg"})\``
+              let wrappedExpr = expr;
+              if (staticPrefix || staticSuffix) {
+                // Check if expr is a string literal (matches "..." or '...')
+                const stringMatch = expr.match(/^["'](.*)["']$/);
+                if (stringMatch) {
+                  // Combine into a single string literal
+                  wrappedExpr = JSON.stringify(staticPrefix + stringMatch[1] + staticSuffix);
+                } else {
+                  // Use template literal for non-literal expressions
+                  wrappedExpr = `\`${staticPrefix}\${${expr}}${staticSuffix}\``;
+                }
+              }
+              const exprAst = parseExpr(wrappedExpr);
               if (!exprAst) {
                 warnings.push({
                   type: "dynamic-node",

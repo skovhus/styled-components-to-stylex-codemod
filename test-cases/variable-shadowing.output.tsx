@@ -1,0 +1,39 @@
+import * as stylex from "@stylexjs/stylex";
+import * as React from "react";
+
+interface Props {
+  containerStyles?: React.CSSProperties;
+  align?: "top" | "center" | "bottom";
+  children: React.ReactNode;
+}
+
+export function CollapsingContainer(props: Props) {
+  const { containerStyles, align = "top", children } = props;
+
+  // Local variable named "styles" - common pattern in animation components
+  const styles = containerStyles
+    ? {
+        overflow: "hidden",
+        ...containerStyles,
+      }
+    : { overflow: "hidden" };
+  return (
+    <div {...stylex.props(stylexStyles.container)} align={align} style={styles}>
+      {children}
+    </div>
+  );
+}
+
+export const App = () => (
+  <CollapsingContainer containerStyles={{ padding: 10 }}>Content</CollapsingContainer>
+);
+
+const stylexStyles = stylex.create({
+  // When a local variable named `styles` exists, the generated stylex constant
+  // should use a different name to avoid shadowing.
+
+  container: {
+    position: "relative",
+    flexShrink: 0,
+  },
+});

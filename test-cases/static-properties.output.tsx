@@ -1,17 +1,11 @@
 import * as stylex from "@stylexjs/stylex";
 import * as React from "react";
+import { ActionMenuTextDivider, ActionMenuGroupHeader } from "./lib/action-menu-divider";
 
-// Bug 8: Static properties on styled components are lost when
-// they become wrapper functions. The codemod must preserve these.
-
-// Simulated base component with static property (like ActionMenuTextDivider)
-const ActionMenuTextDivider = (props: React.ComponentProps<"div"> & { label: string }) => {
-  const { label, ...rest } = props;
-  return <div {...rest}>{label}</div>;
-};
-
-ActionMenuTextDivider.HEIGHT = 24;
 type ListItemProps = React.ComponentProps<"div">;
+
+// Static properties on styled components should be preserved when
+// they become wrapper functions.
 
 // Pattern 1: Static properties defined directly on styled component
 export function ListItem(props: ListItemProps) {
@@ -27,7 +21,7 @@ ListItem.HEIGHT = 42;
 ListItem.PADDING = 8;
 type BaseButtonProps = React.ComponentProps<"button">;
 
-// Pattern 2: styled(BaseComponent) should inherit static properties from BaseComponent
+// Pattern 2: styled(BaseComponent) with static props defined in same file
 function BaseButton(props: BaseButtonProps) {
   const { className, children, style, ...rest } = props;
 
@@ -66,17 +60,24 @@ export function CommandMenuTextDivider(props: CommandMenuTextDividerProps) {
   return <ActionMenuTextDivider {...props} {...stylex.props(styles.commandMenuTextDivider)} />;
 }
 
+CommandMenuTextDivider.HEIGHT = ActionMenuTextDivider.HEIGHT;
+type CommandMenuGroupHeaderProps = React.ComponentProps<typeof ActionMenuGroupHeader>;
+
+export function CommandMenuGroupHeader(props: CommandMenuGroupHeaderProps) {
+  return <ActionMenuGroupHeader {...props} {...stylex.props(styles.commandMenuGroupHeader)} />;
+}
+
+CommandMenuGroupHeader.HEIGHT = ActionMenuGroupHeader.HEIGHT;
+
 export function App() {
   const itemHeight = ListItem.HEIGHT;
-  // This should work - ExtendedButton.HEIGHT should be 36 from BaseButton
   const buttonHeight = ExtendedButton.HEIGHT;
-  // This should work - CommandMenuTextDivider.HEIGHT should be 24 from ActionMenuTextDivider
-  const dividerHeight = CommandMenuTextDivider.HEIGHT;
   return (
     <div>
       <ListItem style={{ height: itemHeight }}>Item 1</ListItem>
       <ExtendedButton style={{ height: buttonHeight }}>Click me</ExtendedButton>
-      <CommandMenuTextDivider style={{ height: dividerHeight }} label="Divider" />
+      <CommandMenuTextDivider text="Divider" />
+      <CommandMenuGroupHeader title="Header" />
     </div>
   );
 }
@@ -97,5 +98,8 @@ const styles = stylex.create({
   },
   commandMenuTextDivider: {
     paddingLeft: "20px",
+  },
+  commandMenuGroupHeader: {
+    paddingInline: "14px",
   },
 });

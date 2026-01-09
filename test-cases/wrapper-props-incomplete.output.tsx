@@ -1,4 +1,5 @@
 import * as stylex from "@stylexjs/stylex";
+import { themeVars } from "./tokens.stylex";
 import * as React from "react";
 
 // Bug 12: When codemod generates wrapper function, the props type must include
@@ -56,6 +57,36 @@ export function App() {
   );
 }
 
+// Pattern 3: styled("span") with NO local usage - wrapper props should still be extended
+// This matches TextColor.tsx in a design system which doesn't use the component in the same file
+interface ThemeTextProps extends React.ComponentProps<"span"> {
+  /** Theme color name */
+  themeColor: string;
+}
+
+/** A text span that gets color from theme */
+export function ThemeText(props: ThemeTextProps) {
+  const { children, className, style, themeColor, ...rest } = props;
+
+  const sx = stylex.props(
+    styles.themeText,
+    themeColor != null && styles.themeTextColor(themeColor),
+  );
+  return (
+    <span
+      {...sx}
+      className={[sx.className, className].filter(Boolean).join(" ")}
+      style={{
+        ...sx.style,
+        ...style,
+      }}
+      {...rest}
+    >
+      {children}
+    </span>
+  );
+}
+
 const styles = stylex.create({
   textColor: {},
   textColorColor: (color: string) => ({
@@ -67,4 +98,9 @@ const styles = stylex.create({
   highlightHighlighted: {
     backgroundColor: "yellow",
   },
+  /** A text span that gets color from theme */
+  themeText: {},
+  themeTextColor: (themeColor: string) => ({
+    color: themeVars[themeColor],
+  }),
 });
