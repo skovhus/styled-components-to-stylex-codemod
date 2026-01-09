@@ -58,6 +58,46 @@ export function useSelection(onSelect: SelectionFunction) {
   return handleSelect;
 }
 
+type StyledLabelProps = React.ComponentProps<"span">;
+
+// Pattern 4: Internal styled component used by another styled component AND in JSX
+// The codemod must NOT remove StyledText since it's used both:
+// 1. As a base for HelpText: styled(StyledText)
+// 2. Directly in JSX: <StyledText>
+function StyledLabel(props: StyledLabelProps) {
+  const { className, children, style, ...rest } = props;
+
+  const sx = stylex.props(styles.styledLabel);
+  return (
+    <span
+      {...sx}
+      className={[sx.className, className].filter(Boolean).join(" ")}
+      style={{
+        ...sx.style,
+        ...style,
+      }}
+      {...rest}
+    >
+      {children}
+    </span>
+  );
+}
+
+type HelpLabelProps = React.ComponentProps<typeof StyledLabel>;
+
+export function HelpLabel(props: HelpLabelProps) {
+  return <StyledLabel {...props} {...stylex.props(styles.helpLabel)} />;
+}
+
+export function FormLabel({ optional }: { optional?: boolean }) {
+  return (
+    <label>
+      {optional && <StyledLabel>(optional)</StyledLabel>}
+      <HelpLabel>Help text</HelpLabel>
+    </label>
+  );
+}
+
 export function App() {
   return null;
 }
@@ -75,5 +115,12 @@ const styles = stylex.create({
     width: 0,
     height: 0,
     position: "fixed",
+  },
+  styledLabel: {
+    marginLeft: "8px",
+  },
+  helpLabel: {
+    marginTop: "4px",
+    display: "block",
   },
 });

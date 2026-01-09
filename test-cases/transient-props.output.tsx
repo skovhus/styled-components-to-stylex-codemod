@@ -12,6 +12,7 @@ export const App = () => (
     <div {...stylex.props(styles.comp)}>Not Draggable</div>
     <Link {...stylex.props(styles.link, styles.linkRed)} text="Click" />
     <Link {...stylex.props(styles.link)} text="Click" />
+    <div {...stylex.props(styles.point)} style={{ top: "10px" }} />
   </div>
 );
 
@@ -28,5 +29,14 @@ const styles = stylex.create({
   },
   linkRed: {
     color: "red",
+  },
+
+  // Pattern 3: Transient prop with dynamic value passed to inlined component
+  // The prop is declared in type but not used in styles - must be stripped when inlined
+  point: {
+    position: "absolute",
+    width: "12px",
+    height: "8px",
+    backgroundColor: "white",
   },
 });

@@ -12,18 +12,10 @@ function Button(props: ButtonProps) {
   );
 }
 
-type ButtonWrapperProps = React.ComponentProps<"button"> & {
-  as?: React.ElementType;
-  href?: string;
-};
+type ButtonWrapperProps = React.ComponentProps<typeof Button>;
 
 function ButtonWrapper(props: ButtonWrapperProps) {
-  const { as: Component = "button", children, ...rest } = props;
-  return (
-    <Component {...stylex.props(styles.button, styles.buttonWrapper)} {...rest}>
-      {children}
-    </Component>
-  );
+  return <Button {...props} {...stylex.props(styles.buttonWrapper)} />;
 }
 
 export const App = () => (

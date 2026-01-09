@@ -52,6 +52,28 @@ export function useSelection(onSelect: SelectionFunction) {
   return handleSelect;
 }
 
+// Pattern 4: Internal styled component used by another styled component AND in JSX
+// The codemod must NOT remove StyledText since it's used both:
+// 1. As a base for HelpText: styled(StyledText)
+// 2. Directly in JSX: <StyledText>
+const StyledLabel = styled.span`
+  margin-left: 8px;
+`;
+
+export const HelpLabel = styled(StyledLabel)`
+  margin-top: 4px;
+  display: block;
+`;
+
+export function FormLabel({ optional }: { optional?: boolean }) {
+  return (
+    <label>
+      {optional && <StyledLabel>(optional)</StyledLabel>}
+      <HelpLabel>Help text</HelpLabel>
+    </label>
+  );
+}
+
 export function App() {
   return null;
 }

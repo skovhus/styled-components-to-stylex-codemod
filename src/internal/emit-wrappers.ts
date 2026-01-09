@@ -1920,12 +1920,9 @@ export function emitWrappers(args: {
       }
       needsReactTypeImport = true;
     }
-    const styleArgs: any[] = [
-      ...(d.extendsStyleKey
-        ? [j.memberExpression(j.identifier("styles"), j.identifier(d.extendsStyleKey))]
-        : []),
-      j.memberExpression(j.identifier("styles"), j.identifier(d.styleKey)),
-    ];
+    // For component wrappers, don't include extendsStyleKey because
+    // the wrapped component already applies its own styles.
+    const styleArgs: any[] = [j.memberExpression(j.identifier("styles"), j.identifier(d.styleKey))];
 
     // Track props that need to be destructured for conditional styles
     const destructureProps: string[] = [];

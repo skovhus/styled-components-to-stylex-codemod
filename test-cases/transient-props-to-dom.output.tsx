@@ -52,7 +52,7 @@ export function App() {
       <Box $size="small">Small inactive box</Box>
       <Image $isInactive src="/avatar.png" alt="Avatar" />
       {/* Internal components with transient props */}
-      <div {...stylex.props(styles.point)} $pickerHeight={pickerHeight} />
+      <div {...stylex.props(styles.point)} />
       <div {...stylex.props(styles.slider, styles.sliderHeight(pickerHeight))}>Slider content</div>
     </div>
   );

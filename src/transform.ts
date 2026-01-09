@@ -833,8 +833,8 @@ export function transformWithWarnings(
     if (decl.base.kind === "intrinsic" && decl.withConfig?.componentId) {
       decl.needsWrapperComponent = true;
     }
-    // Extended components with static properties need wrappers
-    // (to attach static properties and support className/style merging)
+    // Components with static properties that are extended need wrappers
+    // (for static property inheritance). Delegation case is handled later.
     if (extendedBy.has(decl.localName) && componentsWithStaticProps.has(decl.localName)) {
       decl.needsWrapperComponent = true;
     }
@@ -862,6 +862,37 @@ export function transformWithWarnings(
             .size() > 0;
         if (!hasJsxUsages) {
           decl.needsWrapperComponent = true;
+        }
+      }
+    }
+  }
+
+  // Helper to check if a component is used in JSX
+  const isUsedInJsx = (name: string): boolean => {
+    return (
+      root
+        .find(j.JSXElement, {
+          openingElement: { name: { type: "JSXIdentifier", name } },
+        })
+        .size() > 0 ||
+      root.find(j.JSXOpeningElement, { name: { type: "JSXIdentifier", name } }).size() > 0
+    );
+  };
+
+  // Pre-pass: set needsWrapperComponent for base components used in JSX and extended.
+  // This must happen BEFORE emitStylesAndImports so comment placement is correct.
+  // NOTE: We only set needsWrapperComponent here, NOT flatten decl.base to intrinsic.
+  // Base flattening happens later after extendsStyleKey is set.
+  for (const decl of styledDecls) {
+    if (decl.base.kind === "component") {
+      const baseDecl = declByLocal.get(decl.base.ident);
+      if (baseDecl?.base.kind === "intrinsic") {
+        // If the base component is used in JSX AND this component needs a wrapper,
+        // the base component also needs a wrapper for delegation to work.
+        const baseUsedInJsx = isUsedInJsx(decl.base.ident);
+        const shouldDelegate = baseUsedInJsx && decl.needsWrapperComponent;
+        if (shouldDelegate) {
+          baseDecl.needsWrapperComponent = true;
         }
       }
     }
@@ -953,10 +984,7 @@ export function transformWithWarnings(
         // Save original base component name for static property inheritance
         (decl as any).originalBaseIdent = decl.base.ident;
         decl.extendsStyleKey = baseDecl.styleKey;
-        // If base is intrinsic, render as intrinsic tag (matches fixtures like extending-styles).
-        if (baseDecl.base.kind === "intrinsic") {
-          decl.base = { kind: "intrinsic", tagName: baseDecl.base.tagName };
-        }
+        // Defer base flattening decision until after all needsWrapperComponent flags are set
       }
     }
 
@@ -1064,6 +1092,25 @@ export function transformWithWarnings(
 
     if (usedAsValue) {
       decl.needsWrapperComponent = true;
+    }
+  }
+
+  // Now that all needsWrapperComponent flags are set, flatten base components where appropriate.
+  // This must happen AFTER extendsStyleKey is set (line 986) and AFTER all wrapper flags are set.
+  for (const decl of styledDecls) {
+    if (decl.base.kind === "component") {
+      const baseDecl = declByLocal.get(decl.base.ident);
+      if (baseDecl?.base.kind === "intrinsic") {
+        // If the base component is used in JSX AND this component needs a wrapper,
+        // keep as component reference so the wrapper can delegate to the base wrapper.
+        // Otherwise flatten to intrinsic tag for inline style merging.
+        const baseUsedInJsx = isUsedInJsx(decl.base.ident);
+        const shouldDelegate = baseUsedInJsx && decl.needsWrapperComponent;
+        if (!shouldDelegate) {
+          // Flatten to intrinsic tag for inline style merging
+          decl.base = { kind: "intrinsic", tagName: baseDecl.base.tagName };
+        }
+      }
     }
   }
 
@@ -1462,7 +1509,7 @@ export function transformWithWarnings(
           "disabled",
           "readOnly",
           "ref",
-          "style",
+          // Note: `style` is NOT in leadingNames - it should come after stylex.props
         ]);
 
         // Add attrs from attrsInfo to leadingNames so they appear before stylex.props
@@ -1544,6 +1591,11 @@ export function transformWithWarnings(
           }
 
           if (!variantProps.has(n)) {
+            // Strip transient props (starting with $) that aren't used in styles.
+            // These are styled-components conventions that shouldn't reach the DOM.
+            if (n.startsWith("$")) {
+              continue;
+            }
             keptAfterVariants.push(attr);
             continue;
           }
