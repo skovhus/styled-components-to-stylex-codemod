@@ -35,6 +35,7 @@ import { normalizeStylisAstToIR } from "./internal/css-ir.js";
 import { cssDeclarationToStylexDeclarations } from "./internal/css-prop-mapping.js";
 import { dirname, resolve as pathResolve } from "node:path";
 import { readFileSync, existsSync } from "node:fs";
+import { assertValidAdapter } from "./internal/public-api-validation.js";
 
 /**
  * Transform styled-components to StyleX
@@ -161,9 +162,10 @@ export function transformWithWarnings(
   };
 
   const adapter = options.adapter as Adapter;
-  if (!adapter || typeof adapter.resolveValue !== "function") {
-    throw new Error("Adapter must provide resolveValue(ctx) => { expr, imports } | null");
-  }
+  assertValidAdapter(
+    adapter,
+    "transform(options) - missing `adapter` (if you run the jscodeshift transform directly, pass options.adapter)",
+  );
   const resolverImports = new Map<string, any>();
 
   let hasChanges = false;

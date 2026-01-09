@@ -2,6 +2,8 @@
  * Adapter - Single user entry point for customizing the codemod.
  */
 
+import { assertValidAdapter } from "./internal/public-api-validation.js";
+
 // ────────────────────────────────────────────────────────────────────────────
 // Value Resolution
 // ────────────────────────────────────────────────────────────────────────────
@@ -123,5 +125,8 @@ export interface Adapter {
  *   });
  */
 export function defineAdapter(adapter: Adapter): Adapter {
+  // Runtime guard for JS users (no TypeScript help at call sites).
+  // Keep this lightweight and dependency-free.
+  assertValidAdapter(adapter, "defineAdapter(adapter)");
   return adapter;
 }
