@@ -2,23 +2,38 @@ import * as stylex from "@stylexjs/stylex";
 import * as React from "react";
 import { Text } from "./lib/text";
 
-type StyledTextProps = React.ComponentProps<typeof Text> & { as?: React.ElementType };
+type ButtonProps = React.ComponentProps<"button"> & { as?: React.ElementType; href?: string };
 
-function StyledText(props: StyledTextProps) {
+function Button(props: ButtonProps) {
+  const { as: Component = "button", children, style, ...rest } = props;
+  return (
+    <Component {...rest} {...stylex.props(styles.button)} style={style}>
+      {children}
+    </Component>
+  );
+}
+
+type StyledTextProps<C extends React.ElementType = typeof Text> = React.ComponentProps<
+  typeof Text
+> &
+  Omit<React.ComponentPropsWithoutRef<C>, keyof React.ComponentProps<typeof Text>> & { as?: C };
+
+function StyledText<C extends React.ElementType = typeof Text>(props: StyledTextProps<C>) {
   return <Text {...props} {...stylex.props(styles.text)} />;
 }
 
 export const App = () => (
   <div>
-    <button {...stylex.props(styles.button)}>Normal Button</button>
-    <a href="#" {...stylex.props(styles.button)}>
+    <Button>Normal Button</Button>
+    <Button as="a" href="#">
       Link with Button styles
-    </a>
-    {/* Pattern 2: styled(Component) with as prop - must preserve component's props */}
+    </Button>
+    {/* Pattern 2: styled(Component) with as prop */}
     <StyledText variant="small" color="muted">
       Normal styled text
     </StyledText>
-    <StyledText variant="mini" as="label">
+    {/* Pattern 3: as="label" with label-specific props like htmlFor */}
+    <StyledText variant="mini" as="label" htmlFor="my-input">
       Label using Text styles
     </StyledText>
   </div>

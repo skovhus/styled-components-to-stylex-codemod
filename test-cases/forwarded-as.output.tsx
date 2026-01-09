@@ -4,9 +4,9 @@ import * as stylex from "@stylexjs/stylex";
 type ButtonProps = React.ComponentProps<"button"> & { as?: React.ElementType; href?: string };
 
 function Button(props: ButtonProps) {
-  const { as: Component = "button", children, ...rest } = props;
+  const { as: Component = "button", children, style, ...rest } = props;
   return (
-    <Component {...stylex.props(styles.button)} {...rest}>
+    <Component {...rest} {...stylex.props(styles.button)} style={style}>
       {children}
     </Component>
   );
