@@ -34,6 +34,7 @@ import { compile } from "stylis";
 import { normalizeStylisAstToIR } from "./internal/css-ir.js";
 import { cssDeclarationToStylexDeclarations } from "./internal/css-prop-mapping.js";
 import { dirname, resolve as pathResolve } from "node:path";
+import { readFileSync, existsSync } from "node:fs";
 
 /**
  * Transform styled-components to StyleX
@@ -94,6 +95,69 @@ export function transformWithWarnings(
       p.shorthand = true;
     }
     return p;
+  };
+
+  /**
+   * Detect static property names assigned to a component in an imported file.
+   * e.g., `ComponentName.HEIGHT = 42;` -> returns ["HEIGHT"]
+   */
+  const getStaticPropertiesFromImport = (source: ImportSource, componentName: string): string[] => {
+    // Only handle relative imports with resolved paths
+    if (source.kind !== "absolutePath") {
+      return [];
+    }
+
+    // Try common extensions
+    const extensions = [".tsx", ".ts", ".jsx", ".js"];
+    let filePath: string | null = null;
+
+    for (const ext of extensions) {
+      const candidate = source.value + ext;
+      if (existsSync(candidate)) {
+        filePath = candidate;
+        break;
+      }
+    }
+
+    // Also try if the path itself exists (might already have extension)
+    if (!filePath && existsSync(source.value)) {
+      filePath = source.value;
+    }
+
+    if (!filePath) {
+      return [];
+    }
+
+    try {
+      const content = readFileSync(filePath, "utf-8");
+      const importedRoot = j(content);
+      const staticProps: string[] = [];
+
+      // Find patterns like: ComponentName.PROP = value;
+      importedRoot
+        .find(j.ExpressionStatement, {
+          expression: {
+            type: "AssignmentExpression",
+            operator: "=",
+            left: {
+              type: "MemberExpression",
+              object: { type: "Identifier", name: componentName },
+              property: { type: "Identifier" },
+            },
+          },
+        } as any)
+        .forEach((p) => {
+          const propName = ((p.node.expression as any).left.property as any).name;
+          if (propName) {
+            staticProps.push(propName);
+          }
+        });
+
+      return staticProps;
+    } catch {
+      // If we can't read/parse the file, return empty
+      return [];
+    }
   };
 
   const adapter = options.adapter as Adapter;
@@ -744,6 +808,18 @@ export function transformWithWarnings(
     return { code: null, warnings };
   }
 
+  // Detect if there's a local variable named `styles` in the file (not part of styled-components code)
+  // If so, we'll use `stylexStyles` as the StyleX constant name to avoid shadowing.
+  const styledDeclNames = new Set(styledDecls.map((d) => d.localName));
+  let hasStylesVariable = false;
+  root.find(j.VariableDeclarator).forEach((path) => {
+    const id = path.node.id;
+    if (id.type === "Identifier" && id.name === "styles" && !styledDeclNames.has("styles")) {
+      hasStylesVariable = true;
+    }
+  });
+  const stylesIdentifier = hasStylesVariable ? "stylexStyles" : "styles";
+
   // Build lookup maps and set needsWrapperComponent BEFORE emitStylesAndImports
   // so that comment placement can be determined correctly.
   const declByLocal = new Map(styledDecls.map((d) => [d.localName, d]));
@@ -930,6 +1006,7 @@ export function transformWithWarnings(
     isAstNode,
     objectToAst,
     literalToAst,
+    stylesIdentifier,
   });
   hasChanges = true;
 
@@ -986,6 +1063,27 @@ export function transformWithWarnings(
       wrapperNames.add(baseName);
       for (const c of children) {
         wrapperNames.add(c);
+      }
+    }
+  }
+
+  // Also check for `as` usage on styled components that wrap external components
+  // (not in extendedBy because they don't extend other styled components)
+  for (const decl of styledDecls) {
+    if (decl.base.kind === "component" && !declByLocal.has(decl.base.ident)) {
+      const el = root.find(j.JSXElement, {
+        openingElement: { name: { type: "JSXIdentifier", name: decl.localName } },
+      });
+      const hasAs =
+        el.find(j.JSXAttribute, { name: { type: "JSXIdentifier", name: "as" } }).size() > 0;
+      const hasForwardedAs =
+        el
+          .find(j.JSXAttribute, {
+            name: { type: "JSXIdentifier", name: "forwardedAs" },
+          })
+          .size() > 0;
+      if (hasAs || hasForwardedAs) {
+        wrapperNames.add(decl.localName);
       }
     }
   }
@@ -1244,7 +1342,9 @@ export function transformWithWarnings(
 
   // Generate static property inheritance for styled components wrapping IMPORTED components
   // e.g., CommandMenuTextDivider.HEIGHT = ActionMenuTextDivider.HEIGHT
-  // We detect these by finding property accesses on styled components that wrap imports
+  // We detect these by:
+  // 1. Finding property accesses on styled components that wrap imports (same-file usage)
+  // 2. OR by analyzing the imported file to find static property assignments (cross-file)
   for (const decl of styledDecls) {
     const originalBaseIdent = (decl as any).originalBaseIdent as string | undefined;
     const baseIdent =
@@ -1264,7 +1364,8 @@ export function transformWithWarnings(
     }
 
     // Check if this is an imported component
-    if (!importMap.has(baseIdent)) {
+    const importInfo = importMap.get(baseIdent);
+    if (!importInfo) {
       continue;
     }
 
@@ -1282,6 +1383,17 @@ export function transformWithWarnings(
           accessedProps.add(propName);
         }
       });
+
+    // If no same-file property accesses, try to detect from the imported file
+    if (accessedProps.size === 0) {
+      const propsFromImport = getStaticPropertiesFromImport(
+        importInfo.source,
+        importInfo.importedName,
+      );
+      for (const propName of propsFromImport) {
+        accessedProps.add(propName);
+      }
+    }
 
     if (accessedProps.size === 0) {
       continue;
@@ -1654,9 +1766,14 @@ export function transformWithWarnings(
         // Insert {...stylex.props(styles.key)} after structural attrs like href/type/size (matches fixtures).
         const styleArgs: any[] = [
           ...(decl.extendsStyleKey
-            ? [j.memberExpression(j.identifier("styles"), j.identifier(decl.extendsStyleKey))]
+            ? [
+                j.memberExpression(
+                  j.identifier(stylesIdentifier),
+                  j.identifier(decl.extendsStyleKey),
+                ),
+              ]
             : []),
-          j.memberExpression(j.identifier("styles"), j.identifier(decl.styleKey)),
+          j.memberExpression(j.identifier(stylesIdentifier), j.identifier(decl.styleKey)),
         ];
 
         const variantKeys = decl.variantStyleKeys ?? {};
@@ -1687,7 +1804,7 @@ export function transformWithWarnings(
               for (const p of pairs) {
                 styleArgs.push(
                   j.callExpression(
-                    j.memberExpression(j.identifier("styles"), j.identifier(p.fnKey)),
+                    j.memberExpression(j.identifier(stylesIdentifier), j.identifier(p.fnKey)),
                     [valueExpr],
                   ),
                 );
@@ -1710,7 +1827,7 @@ export function transformWithWarnings(
           if (!attr.value) {
             // <X $prop>
             styleArgs.push(
-              j.memberExpression(j.identifier("styles"), j.identifier(variantStyleKey)),
+              j.memberExpression(j.identifier(stylesIdentifier), j.identifier(variantStyleKey)),
             );
             continue;
           }
@@ -1720,7 +1837,7 @@ export function transformWithWarnings(
               j.logicalExpression(
                 "&&",
                 attr.value.expression as any,
-                j.memberExpression(j.identifier("styles"), j.identifier(variantStyleKey)),
+                j.memberExpression(j.identifier(stylesIdentifier), j.identifier(variantStyleKey)),
               ),
             );
             continue;
@@ -1748,6 +1865,7 @@ export function transformWithWarnings(
     wrapperNames,
     patternProp,
     exportedComponents,
+    stylesIdentifier,
   });
 
   // Reinsert static property assignments after their corresponding wrapper functions.

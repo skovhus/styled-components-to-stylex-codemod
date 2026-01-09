@@ -2,7 +2,7 @@ import * as stylex from "@stylexjs/stylex";
 import * as React from "react";
 import { Text } from "./lib/text";
 
-type StyledTextProps = React.ComponentProps<typeof Text>;
+type StyledTextProps = React.ComponentProps<typeof Text> & { as?: React.ElementType };
 
 function StyledText(props: StyledTextProps) {
   return <Text {...props} {...stylex.props(styles.text)} />;

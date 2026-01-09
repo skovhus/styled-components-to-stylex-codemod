@@ -274,8 +274,18 @@ export function emitWrappers(args: {
   wrapperNames: Set<string>;
   patternProp: (keyName: string, valueId?: any) => any;
   exportedComponents: Map<string, ExportInfo>;
+  stylesIdentifier: string;
 }): void {
-  const { root, j, filePath, styledDecls, wrapperNames, patternProp, exportedComponents } = args;
+  const {
+    root,
+    j,
+    filePath,
+    styledDecls,
+    wrapperNames,
+    patternProp,
+    exportedComponents,
+    stylesIdentifier,
+  } = args;
 
   // For plain JS/JSX and Flow transforms, skip emitting TS syntax entirely for now.
   const emitTypes = filePath.endsWith(".ts") || filePath.endsWith(".tsx");
@@ -658,13 +668,13 @@ export function emitWrappers(args: {
 
       const aw = d.attrWrapper!;
       const styleArgs: any[] = [
-        j.memberExpression(j.identifier("styles"), j.identifier(d.styleKey)),
+        j.memberExpression(j.identifier(stylesIdentifier), j.identifier(d.styleKey)),
         ...(aw.checkboxKey
           ? [
               j.logicalExpression(
                 "&&",
                 j.binaryExpression("===", j.identifier("type"), j.literal("checkbox")),
-                j.memberExpression(j.identifier("styles"), j.identifier(aw.checkboxKey)),
+                j.memberExpression(j.identifier(stylesIdentifier), j.identifier(aw.checkboxKey)),
               ),
             ]
           : []),
@@ -673,7 +683,7 @@ export function emitWrappers(args: {
               j.logicalExpression(
                 "&&",
                 j.binaryExpression("===", j.identifier("type"), j.literal("radio")),
-                j.memberExpression(j.identifier("styles"), j.identifier(aw.radioKey)),
+                j.memberExpression(j.identifier(stylesIdentifier), j.identifier(aw.radioKey)),
               ),
             ]
           : []),
@@ -723,7 +733,7 @@ export function emitWrappers(args: {
       needsReactTypeImport = true;
 
       const aw = d.attrWrapper!;
-      const base = j.memberExpression(j.identifier("styles"), j.identifier(d.styleKey));
+      const base = j.memberExpression(j.identifier(stylesIdentifier), j.identifier(d.styleKey));
       const styleArgs: any[] = [
         base,
         ...(aw.externalKey
@@ -731,7 +741,7 @@ export function emitWrappers(args: {
               j.logicalExpression(
                 "&&",
                 j.identifier("isExternal"),
-                j.memberExpression(j.identifier("styles"), j.identifier(aw.externalKey)),
+                j.memberExpression(j.identifier(stylesIdentifier), j.identifier(aw.externalKey)),
               ),
             ]
           : []),
@@ -740,7 +750,7 @@ export function emitWrappers(args: {
               j.logicalExpression(
                 "&&",
                 j.identifier("isHttps"),
-                j.memberExpression(j.identifier("styles"), j.identifier(aw.httpsKey)),
+                j.memberExpression(j.identifier(stylesIdentifier), j.identifier(aw.httpsKey)),
               ),
             ]
           : []),
@@ -749,7 +759,7 @@ export function emitWrappers(args: {
               j.logicalExpression(
                 "&&",
                 j.identifier("isPdf"),
-                j.memberExpression(j.identifier("styles"), j.identifier(aw.pdfKey)),
+                j.memberExpression(j.identifier(stylesIdentifier), j.identifier(aw.pdfKey)),
               ),
             ]
           : []),
@@ -812,9 +822,9 @@ export function emitWrappers(args: {
 
       const styleArgs: any[] = [
         ...(d.extendsStyleKey
-          ? [j.memberExpression(j.identifier("styles"), j.identifier(d.extendsStyleKey))]
+          ? [j.memberExpression(j.identifier(stylesIdentifier), j.identifier(d.extendsStyleKey))]
           : []),
-        j.memberExpression(j.identifier("styles"), j.identifier(d.styleKey)),
+        j.memberExpression(j.identifier(stylesIdentifier), j.identifier(d.styleKey)),
       ];
       const stylexPropsCall = j.callExpression(
         j.memberExpression(j.identifier("stylex"), j.identifier("props")),
@@ -899,7 +909,7 @@ export function emitWrappers(args: {
         ),
       ]);
 
-      const base = j.memberExpression(j.identifier("styles"), j.identifier(baseKey));
+      const base = j.memberExpression(j.identifier(stylesIdentifier), j.identifier(baseKey));
       const condPrimary = j.binaryExpression("===", variantId, j.literal(primary.whenValue));
       const condSecondary =
         secondary.kind === "neq"
@@ -914,12 +924,12 @@ export function emitWrappers(args: {
             j.logicalExpression(
               "&&",
               condPrimary as any,
-              j.memberExpression(j.identifier("styles"), j.identifier(primary.styleKey)),
+              j.memberExpression(j.identifier(stylesIdentifier), j.identifier(primary.styleKey)),
             ),
             j.logicalExpression(
               "&&",
               condSecondary as any,
-              j.memberExpression(j.identifier("styles"), j.identifier(secondary.styleKey)),
+              j.memberExpression(j.identifier(stylesIdentifier), j.identifier(secondary.styleKey)),
             ),
           ]),
         ),
@@ -1042,9 +1052,9 @@ export function emitWrappers(args: {
     // Build style arguments: base + extends + dynamic variants (as conditional expressions).
     const styleArgs: any[] = [
       ...(d.extendsStyleKey
-        ? [j.memberExpression(j.identifier("styles"), j.identifier(d.extendsStyleKey))]
+        ? [j.memberExpression(j.identifier(stylesIdentifier), j.identifier(d.extendsStyleKey))]
         : []),
-      j.memberExpression(j.identifier("styles"), j.identifier(d.styleKey)),
+      j.memberExpression(j.identifier(stylesIdentifier), j.identifier(d.styleKey)),
     ];
 
     // Variant buckets are keyed by expression strings (e.g. `size === \"large\"`).
@@ -1079,7 +1089,7 @@ export function emitWrappers(args: {
           j.logicalExpression(
             "&&",
             cond,
-            j.memberExpression(j.identifier("styles"), j.identifier(variantKey)),
+            j.memberExpression(j.identifier(stylesIdentifier), j.identifier(variantKey)),
           ),
         );
       }
@@ -1098,7 +1108,7 @@ export function emitWrappers(args: {
           : j.memberExpression(j.identifier("props"), j.literal(p.jsxProp), true)
         : j.identifier(p.jsxProp);
       const call = j.callExpression(
-        j.memberExpression(j.identifier("styles"), j.identifier(p.fnKey)),
+        j.memberExpression(j.identifier(stylesIdentifier), j.identifier(p.fnKey)),
         [propExpr as any],
       );
       const required = isPropRequiredInPropsTypeLiteral(d.propsType, p.jsxProp);
@@ -1481,9 +1491,9 @@ export function emitWrappers(args: {
     }
     const styleArgs: any[] = [
       ...(d.extendsStyleKey
-        ? [j.memberExpression(j.identifier("styles"), j.identifier(d.extendsStyleKey))]
+        ? [j.memberExpression(j.identifier(stylesIdentifier), j.identifier(d.extendsStyleKey))]
         : []),
-      j.memberExpression(j.identifier("styles"), j.identifier(d.styleKey)),
+      j.memberExpression(j.identifier(stylesIdentifier), j.identifier(d.styleKey)),
     ];
 
     const propsParamId = j.identifier("props");
@@ -1644,18 +1654,18 @@ export function emitWrappers(args: {
       j.variableDeclarator(
         j.identifier("sx"),
         j.callExpression(j.memberExpression(j.identifier("stylex"), j.identifier("props")), [
-          j.memberExpression(j.identifier("styles"), j.identifier(d.styleKey)),
+          j.memberExpression(j.identifier(stylesIdentifier), j.identifier(d.styleKey)),
           j.logicalExpression(
             "&&",
             adjId as any,
-            j.memberExpression(j.identifier("styles"), j.identifier(sw.adjacentKey)),
+            j.memberExpression(j.identifier(stylesIdentifier), j.identifier(sw.adjacentKey)),
           ),
           ...(sw.afterKey && sw.propAfter
             ? [
                 j.logicalExpression(
                   "&&",
                   afterId as any,
-                  j.memberExpression(j.identifier("styles"), j.identifier(sw.afterKey)),
+                  j.memberExpression(j.identifier(stylesIdentifier), j.identifier(sw.afterKey)),
                 ),
               ]
             : []),
@@ -1766,9 +1776,9 @@ export function emitWrappers(args: {
     }
     const styleArgs: any[] = [
       ...(d.extendsStyleKey
-        ? [j.memberExpression(j.identifier("styles"), j.identifier(d.extendsStyleKey))]
+        ? [j.memberExpression(j.identifier(stylesIdentifier), j.identifier(d.extendsStyleKey))]
         : []),
-      j.memberExpression(j.identifier("styles"), j.identifier(d.styleKey)),
+      j.memberExpression(j.identifier(stylesIdentifier), j.identifier(d.styleKey)),
     ];
 
     // Add variant style arguments if this component has variants
@@ -1814,7 +1824,7 @@ export function emitWrappers(args: {
           j.logicalExpression(
             "&&",
             cond,
-            j.memberExpression(j.identifier("styles"), j.identifier(variantKey)),
+            j.memberExpression(j.identifier(stylesIdentifier), j.identifier(variantKey)),
           ),
         );
       }
@@ -1825,7 +1835,7 @@ export function emitWrappers(args: {
     for (const p of styleFnPairs) {
       const propExpr = j.identifier(p.jsxProp);
       const call = j.callExpression(
-        j.memberExpression(j.identifier("styles"), j.identifier(p.fnKey)),
+        j.memberExpression(j.identifier(stylesIdentifier), j.identifier(p.fnKey)),
         [propExpr as any],
       );
       // Add prop to destructure list
@@ -1990,7 +2000,19 @@ export function emitWrappers(args: {
         functionParamTypeName = explicitTypeName;
       } else {
         // Create a new wrapper type
-        const typeText = explicit ? `${baseTypeText} & ${explicit}` : withChildren(baseTypeText);
+        // Only include `as?: React.ElementType` if:
+        // 1. This component is used with `as` prop (in wrapperNames)
+        // 2. AND the wrapped component doesn't already have polymorphic support (not in wrapperNames)
+        const wrappedComponentHasAs = wrapperNames.has(wrappedComponent);
+        const needsAsType = wrapperNames.has(d.localName) && !wrappedComponentHasAs;
+        const asTypeText = needsAsType ? "{ as?: React.ElementType }" : null;
+        const typeText = explicit
+          ? asTypeText
+            ? `${baseTypeText} & ${asTypeText} & ${explicit}`
+            : `${baseTypeText} & ${explicit}`
+          : asTypeText
+            ? `${baseTypeText} & ${asTypeText}`
+            : baseTypeText;
         const typeAliasEmitted = emitNamedPropsType(d.localName, typeText);
         // If the type alias was not emitted (e.g., due to shadowing), try to extend
         // the existing interface/type alias with the base component props
@@ -2006,7 +2028,9 @@ export function emitWrappers(args: {
     }
     // For component wrappers, don't include extendsStyleKey because
     // the wrapped component already applies its own styles.
-    const styleArgs: any[] = [j.memberExpression(j.identifier("styles"), j.identifier(d.styleKey))];
+    const styleArgs: any[] = [
+      j.memberExpression(j.identifier(stylesIdentifier), j.identifier(d.styleKey)),
+    ];
 
     // Track props that need to be destructured for conditional styles
     const destructureProps: string[] = [];
@@ -2051,7 +2075,7 @@ export function emitWrappers(args: {
           j.logicalExpression(
             "&&",
             cond,
-            j.memberExpression(j.identifier("styles"), j.identifier(variantKey)),
+            j.memberExpression(j.identifier(stylesIdentifier), j.identifier(variantKey)),
           ),
         );
       }
@@ -2062,7 +2086,7 @@ export function emitWrappers(args: {
     for (const p of styleFnPairs) {
       const propExpr = j.identifier(p.jsxProp);
       const call = j.callExpression(
-        j.memberExpression(j.identifier("styles"), j.identifier(p.fnKey)),
+        j.memberExpression(j.identifier(stylesIdentifier), j.identifier(p.fnKey)),
         [propExpr as any],
       );
       if (!destructureProps.includes(p.jsxProp)) {

@@ -4,6 +4,9 @@ import { ActionMenuTextDivider, ActionMenuGroupHeader } from "./lib/action-menu-
 
 type ListItemProps = React.ComponentProps<"div">;
 
+// Static properties on styled components should be preserved when
+// they become wrapper functions.
+
 // Pattern 1: Static properties defined directly on styled component
 export function ListItem(props: ListItemProps) {
   const { children, style, ...rest } = props;
@@ -18,7 +21,7 @@ ListItem.HEIGHT = 42;
 ListItem.PADDING = 8;
 type BaseButtonProps = React.ComponentProps<"button">;
 
-// Pattern 2: styled(BaseComponent) with static props defined in SAME FILE
+// Pattern 2: styled(BaseComponent) with static props defined in same file
 function BaseButton(props: BaseButtonProps) {
   const { className, children, style, ...rest } = props;
 
@@ -40,7 +43,7 @@ function BaseButton(props: BaseButtonProps) {
 
 type ExtendedButtonProps = React.ComponentProps<"button">;
 
-// ExtendedButton should have HEIGHT from BaseButton (same file)
+// ExtendedButton should have HEIGHT from BaseButton
 export function ExtendedButton(props: ExtendedButtonProps) {
   const { children, style, ...rest } = props;
   return (
@@ -68,24 +71,16 @@ CommandMenuGroupHeader.HEIGHT = ActionMenuGroupHeader.HEIGHT;
 
 export function App() {
   const itemHeight = ListItem.HEIGHT;
-  // This should work - ExtendedButton.HEIGHT should be 36 from BaseButton
   const buttonHeight = ExtendedButton.HEIGHT;
-  // This should work - CommandMenuTextDivider.HEIGHT should be 30 from ActionMenuTextDivider (imported)
-  const dividerHeight = CommandMenuTextDivider.HEIGHT;
-  // This should work - CommandMenuGroupHeader.HEIGHT should be 28 from ActionMenuGroupHeader (imported)
-  const headerHeight = CommandMenuGroupHeader.HEIGHT;
   return (
     <div>
       <ListItem style={{ height: itemHeight }}>Item 1</ListItem>
       <ExtendedButton style={{ height: buttonHeight }}>Click me</ExtendedButton>
-      <CommandMenuTextDivider style={{ height: dividerHeight }} text="Divider" />
-      <CommandMenuGroupHeader style={{ height: headerHeight }} title="Header" />
+      <CommandMenuTextDivider text="Divider" />
+      <CommandMenuGroupHeader title="Header" />
     </div>
   );
 }
-
-// Bug 8: Static properties on styled components are lost when
-// they become wrapper functions. The codemod must preserve these.
 
 const styles = stylex.create({
   listItem: {

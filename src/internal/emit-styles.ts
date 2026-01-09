@@ -14,6 +14,7 @@ export function emitStylesAndImports(args: {
   isAstNode: (v: unknown) => boolean;
   objectToAst: (j: any, v: Record<string, unknown>) => any;
   literalToAst: (j: any, v: unknown) => any;
+  stylesIdentifier: string;
 }): void {
   const {
     root,
@@ -26,6 +27,7 @@ export function emitStylesAndImports(args: {
     isAstNode,
     objectToAst,
     literalToAst,
+    stylesIdentifier,
   } = args;
 
   // Preserve file header directives (e.g. `// oxlint-disable ...`). Depending on the parser/printer,
@@ -458,10 +460,10 @@ export function emitStylesAndImports(args: {
     }
   }
 
-  // Insert `const styles = stylex.create(...)` near top (after imports)
+  // Insert `const styles = stylex.create(...)` (or stylexStyles if styles is already used) near top (after imports)
   const stylesDecl = j.variableDeclaration("const", [
     j.variableDeclarator(
-      j.identifier("styles"),
+      j.identifier(stylesIdentifier),
       j.callExpression(j.memberExpression(j.identifier("stylex"), j.identifier("create")), [
         j.objectExpression(
           [...resolvedStyleObjects.entries()].map(([k, v]) => {
