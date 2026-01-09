@@ -15,8 +15,6 @@ const Button = styled.button`
 
 // Pattern 2: styled(Component) where Component has custom props (like variant)
 // When used with as="label", the component's props must be preserved
-// Bug: Codemod converts <StyledText variant="small" as="label"> to <label variant="small">
-//      but <label> doesn't accept variant - should keep using Text with as="label"
 const StyledText = styled(Text)`
   margin-top: 4px;
 `;
@@ -27,11 +25,12 @@ export const App = () => (
     <Button as="a" href="#">
       Link with Button styles
     </Button>
-    {/* Pattern 2: styled(Component) with as prop - must preserve component's props */}
+    {/* Pattern 2: styled(Component) with as prop */}
     <StyledText variant="small" color="muted">
       Normal styled text
     </StyledText>
-    <StyledText variant="mini" as="label">
+    {/* Pattern 3: as="label" with label-specific props like htmlFor */}
+    <StyledText variant="mini" as="label" htmlFor="my-input">
       Label using Text styles
     </StyledText>
   </div>

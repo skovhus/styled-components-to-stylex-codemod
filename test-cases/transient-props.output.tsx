@@ -6,9 +6,9 @@ const Link = ({ className, text, ...props }: { className?: string; text: string 
   </a>
 );
 
-// Pattern 4: styled(Component) where base component REQUIRES the transient prop
-// The transient prop is used for styling AND needed by the base component
-// CollapseArrowIcon pattern - ArrowIcon needs $isOpen, and styled uses it too
+// Pattern 4: styled(Component) where base component declares the transient prop
+// The transient prop is used for styling by the wrapper
+// CollapseArrowIcon pattern - ArrowIcon declares $isOpen in props, wrapper uses it for styling
 import * as React from "react";
 
 import { Icon, type IconProps } from "./lib/icon";
@@ -20,8 +20,9 @@ interface ArrowIconProps {
 }
 
 function ArrowIcon(props: IconProps & ArrowIconProps) {
+  const { $isOpen, ...rest } = props;
   return (
-    <Icon {...props}>
+    <Icon {...rest}>
       <svg viewBox="0 0 16 16">
         <path d="M7 10.6L10.8 7.6L7 5.4V10.6Z" />
       </svg>

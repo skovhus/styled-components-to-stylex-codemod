@@ -1043,6 +1043,10 @@ export function transformWithWarnings(
   }
 
   const wrapperNames = new Set<string>();
+  // Track wrappers that have expression `as` values (not just string literals)
+  // These need generic polymorphic types to accept component-specific props
+  const expressionAsWrapperNames = new Set<string>();
+
   for (const [baseName, children] of extendedBy.entries()) {
     const names = [baseName, ...children];
     const hasPolymorphicUsage = names.some((nm) => {
@@ -1084,6 +1088,38 @@ export function transformWithWarnings(
           .size() > 0;
       if (hasAs || hasForwardedAs) {
         wrapperNames.add(decl.localName);
+      }
+    }
+  }
+
+  // Also check for `as` usage on intrinsic styled components
+  // (e.g., styled.span with as={animated.span})
+  for (const decl of styledDecls) {
+    if (decl.base.kind === "intrinsic" && !wrapperNames.has(decl.localName)) {
+      const el = root.find(j.JSXElement, {
+        openingElement: { name: { type: "JSXIdentifier", name: decl.localName } },
+      });
+      const asAttrs = el.find(j.JSXAttribute, { name: { type: "JSXIdentifier", name: "as" } });
+      const hasAs = asAttrs.size() > 0;
+      const hasForwardedAs =
+        el
+          .find(j.JSXAttribute, {
+            name: { type: "JSXIdentifier", name: "forwardedAs" },
+          })
+          .size() > 0;
+      if (hasAs || hasForwardedAs) {
+        wrapperNames.add(decl.localName);
+        // Check if any `as` value is an expression (not a string literal)
+        // e.g., as={animated.span} vs as="a"
+        const hasExpressionAs = asAttrs.some((path) => {
+          const value = path.node.value;
+          // JSXExpressionContainer means it's an expression like {animated.span}
+          // StringLiteral/Literal means it's a string like "a"
+          return value?.type === "JSXExpressionContainer";
+        });
+        if (hasExpressionAs) {
+          expressionAsWrapperNames.add(decl.localName);
+        }
       }
     }
   }
@@ -1863,6 +1899,7 @@ export function transformWithWarnings(
     filePath: file.path,
     styledDecls,
     wrapperNames,
+    expressionAsWrapperNames,
     patternProp,
     exportedComponents,
     stylesIdentifier,
