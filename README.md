@@ -1,6 +1,10 @@
 # styled-components-to-stylex-codemod
 
-Transform styled-components to StyleX.
+Transform styled-components to StyleX. 
+
+> [!WARNING]
+>
+> **Very much under construction (alpha):** this codemod is still early in development — expect rough edges! 🚧
 
 ## Installation
 
