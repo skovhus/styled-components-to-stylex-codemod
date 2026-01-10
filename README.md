@@ -2,6 +2,8 @@
 
 Transform styled-components to StyleX.
 
+**[Try it in the online playground](https://skovhus.github.io/styled-components-to-stylex-codemod/)** — experiment with the transform in your browser.
+
 > [!WARNING]
 >
 > **Very much under construction (alpha):** this codemod is still early in development — expect rough edges! 🚧
