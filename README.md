@@ -144,6 +144,42 @@ Adapters are the main extension point. They let you control:
 - how theme paths and CSS variables are turned into StyleX-compatible JS values (`resolveValue`)
 - what extra imports to inject into transformed files (returned from `resolveValue`)
 - how helper calls are resolved (via `resolveValue({ kind: "call", ... })`)
+- which exported components should support external className/style extension (`shouldSupportExternalStyles`)
+
+#### External Styles Support
+
+By default, transformed components are "closed" — they don't accept external `className` or `style` props. If you have components that need to be styled externally (e.g., shared UI components), use `shouldSupportExternalStyles`:
+
+```ts
+const adapter = defineAdapter({
+  resolveValue(ctx) {
+    // ... value resolution logic
+    return null;
+  },
+
+  shouldSupportExternalStyles(ctx) {
+    // ctx: { filePath, componentName, exportName, isDefaultExport }
+
+    // Example: Enable for all exports in shared components folder
+    if (ctx.filePath.includes("/shared/components/")) {
+      return true;
+    }
+
+    // Example: Enable for specific component names
+    if (ctx.componentName === "Button" || ctx.componentName === "Card") {
+      return true;
+    }
+
+    return false;
+  },
+});
+```
+
+When `shouldSupportExternalStyles` returns `true`, the generated component will:
+
+- Accept `className` and `style` props
+- Merge them with the StyleX-generated styles
+- Forward remaining props via `...rest`
 
 #### Dynamic interpolations
 
