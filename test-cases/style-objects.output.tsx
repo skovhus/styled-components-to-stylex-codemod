@@ -7,7 +7,7 @@ type DynamicBoxProps = React.ComponentProps<"div"> & {
 };
 
 function DynamicBox(props: DynamicBoxProps) {
-  const { children, className, style, $background, $size, ...rest } = props;
+  const { className, children, style, $background, $size, ...rest } = props;
 
   const sx = stylex.props(
     styles.dynamicBox,

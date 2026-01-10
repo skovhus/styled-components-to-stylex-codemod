@@ -2,24 +2,24 @@ import * as React from "react";
 import * as stylex from "@stylexjs/stylex";
 import { themeVars } from "./tokens.stylex";
 
-type CardProps = React.ComponentProps<"div">;
+type CardProps = Omit<React.ComponentProps<"div">, "className" | "style">;
 
 export function Card(props: CardProps) {
-  const { children, style, ...rest } = props;
+  const { children, ...rest } = props;
   return (
-    <div {...rest} {...stylex.props(styles.card)} style={style}>
+    <div {...rest} {...stylex.props(styles.card)}>
       {children}
     </div>
   );
 }
 
-type ButtonProps = React.ComponentProps<"button">;
+type ButtonProps = Omit<React.ComponentProps<"button">, "className" | "style">;
 
 // Another component to ensure multiple components work
 export function Button(props: ButtonProps) {
-  const { children, style, ...rest } = props;
+  const { children, ...rest } = props;
   return (
-    <button {...rest} {...stylex.props(styles.button)} style={style}>
+    <button {...rest} {...stylex.props(styles.button)}>
       {children}
     </button>
   );
@@ -27,24 +27,16 @@ export function Button(props: ButtonProps) {
 
 // Pattern 2: Component with theme access (like TextColor.tsx in a design system)
 // Uses props.theme.colors which the adapter resolves to themeVars
-interface ThemeSpanProps extends React.ComponentProps<"span"> {
+interface ThemeSpanProps extends Omit<React.ComponentProps<"span">, "className" | "style"> {
   variant: string;
 }
 
 export function ThemeSpan(props: ThemeSpanProps) {
-  const { children, className, style, variant, ...rest } = props;
+  const { children, variant, ...rest } = props;
 
   const sx = stylex.props(styles.themeSpan, variant != null && styles.themeSpanColor(variant));
   return (
-    <span
-      {...sx}
-      className={[sx.className, className].filter(Boolean).join(" ")}
-      style={{
-        ...sx.style,
-        ...style,
-      }}
-      {...rest}
-    >
+    <span {...rest} {...sx}>
       {children}
     </span>
   );

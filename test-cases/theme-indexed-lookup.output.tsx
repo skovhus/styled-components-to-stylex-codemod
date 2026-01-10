@@ -4,31 +4,22 @@ import * as React from "react";
 
 type Color = "labelBase" | "labelMuted";
 
-type BoxProps = React.ComponentProps<"div"> & {
-  $bg: Color;
-  $hoverColor: Color;
-};
+type BoxProps = React.PropsWithChildren<
+  Omit<React.ComponentProps<"div">, "className" | "style"> & {
+    $bg: Color;
+    $hoverColor: Color;
+  }
+>;
 
 function Box(props: BoxProps) {
-  const { children, className, style, $hoverColor, $bg } = props;
+  const { children, $hoverColor, $bg } = props;
 
   const sx = stylex.props(
     styles.box,
     styles.boxBackgroundColorHover($hoverColor),
     styles.boxBackgroundColor($bg),
   );
-  return (
-    <div
-      {...sx}
-      className={[sx.className, className].filter(Boolean).join(" ")}
-      style={{
-        ...sx.style,
-        ...style,
-      }}
-    >
-      {children}
-    </div>
-  );
+  return <div {...sx}>{children}</div>;
 }
 
 export const App = () => (
@@ -42,25 +33,17 @@ export const App = () => (
 // The codemod should preserve the imported type, not convert to `string`
 import type { Colors } from "./lib/colors";
 
-interface TextColorProps extends React.ComponentProps<"span"> {
+interface TextColorProps extends Omit<React.ComponentProps<"span">, "className" | "style"> {
   /** The color from the theme */
   color: Colors;
 }
 
 export function TextColor(props: TextColorProps) {
-  const { children, className, style, color, ...rest } = props;
+  const { children, color, ...rest } = props;
 
   const sx = stylex.props(styles.textColor, color != null && styles.textColorColor(color));
   return (
-    <span
-      {...sx}
-      className={[sx.className, className].filter(Boolean).join(" ")}
-      style={{
-        ...sx.style,
-        ...style,
-      }}
-      {...rest}
-    >
+    <span {...rest} {...sx}>
       {children}
     </span>
   );

@@ -2,16 +2,16 @@ import * as stylex from "@stylexjs/stylex";
 import * as React from "react";
 import { ActionMenuTextDivider, ActionMenuGroupHeader } from "./lib/action-menu-divider";
 
-type ListItemProps = React.ComponentProps<"div">;
+type ListItemProps = Omit<React.ComponentProps<"div">, "className" | "style">;
 
 // Static properties on styled components should be preserved when
 // they become wrapper functions.
 
 // Pattern 1: Static properties defined directly on styled component
 export function ListItem(props: ListItemProps) {
-  const { children, style, ...rest } = props;
+  const { children, ...rest } = props;
   return (
-    <div {...rest} {...stylex.props(styles.listItem)} style={style}>
+    <div {...rest} {...stylex.props(styles.listItem)}>
       {children}
     </div>
   );
@@ -41,16 +41,10 @@ function BaseButton(props: BaseButtonProps) {
   );
 }
 
-type ExtendedButtonProps = React.ComponentProps<"button">;
+type ExtendedButtonProps = React.ComponentProps<typeof BaseButton>;
 
-// ExtendedButton should have HEIGHT from BaseButton
 export function ExtendedButton(props: ExtendedButtonProps) {
-  const { children, style, ...rest } = props;
-  return (
-    <button {...rest} {...stylex.props(styles.baseButton, styles.extendedButton)} style={style}>
-      {children}
-    </button>
-  );
+  return <BaseButton {...props} {...stylex.props(styles.extendedButton)} />;
 }
 
 ExtendedButton.HEIGHT = BaseButton.HEIGHT;

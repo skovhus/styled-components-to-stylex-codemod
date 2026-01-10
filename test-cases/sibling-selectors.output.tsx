@@ -15,7 +15,7 @@ function Thing(props: ThingProps) {
     isSiblingAfterSomething && styles.siblingAfterSomething,
   );
   return (
-    <div {...sx} className={[sx.className, className].filter(Boolean).join(" ")} {...rest}>
+    <div {...rest} {...sx} className={[sx.className, className].filter(Boolean).join(" ")}>
       {children}
     </div>
   );

@@ -8,7 +8,7 @@ import * as React from "react";
 /**
  * Card props
  */
-export interface CardProps extends React.ComponentProps<"div"> {
+export interface CardProps extends Omit<React.ComponentProps<"div">, "className" | "style"> {
   /** Title of the card */
   title: string;
   /** Whether the card is highlighted */
@@ -17,7 +17,7 @@ export interface CardProps extends React.ComponentProps<"div"> {
 
 // The styled component uses the existing props interface
 export function Card(props: CardProps) {
-  const { children, style, highlighted, ...rest } = props;
+  const { children, highlighted, ...rest } = props;
   return (
     <div
       {...rest}
@@ -26,7 +26,6 @@ export function Card(props: CardProps) {
         !highlighted && styles.cardNotHighlighted,
         highlighted && styles.cardHighlighted,
       )}
-      style={style}
     >
       {children}
     </div>

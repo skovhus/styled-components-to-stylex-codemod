@@ -18,7 +18,10 @@ const fixtureAdapter = defineAdapter({
   },
   resolveValue(ctx) {
     if (ctx.kind === "theme") {
-      if (ctx.path === "color") {
+      // Align with src/__tests__/fixture-adapters.ts:
+      // - `props.theme.colors.labelBase` -> ctx.path === "colors.labelBase" => themeVars.labelBase
+      // - `props.theme.colors[bg]`       -> ctx.path === "colors"           => themeVars[bg]
+      if (ctx.path === "colors") {
         return {
           expr: "themeVars",
           imports: [

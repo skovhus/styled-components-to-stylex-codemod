@@ -35,7 +35,7 @@ type DynamicBoxProps = {
 };
 
 function DynamicBox(props: DynamicBoxProps) {
-  const { $variant, children, className, ...rest } = props;
+  const { $variant, children, ...rest } = props;
 
   const sx = stylex.props(
     styles.dynamicBoxBase,
@@ -43,7 +43,7 @@ function DynamicBox(props: DynamicBoxProps) {
     $variant !== "primary" && styles.dynamicBoxSecondary,
   );
   return (
-    <div {...sx} className={[sx.className, className].filter(Boolean).join(" ")} {...rest}>
+    <div {...rest} {...sx}>
       {children}
     </div>
   );

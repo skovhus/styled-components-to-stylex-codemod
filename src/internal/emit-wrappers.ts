@@ -136,9 +136,9 @@ const withLeadingCommentsOnFirstFunction = (nodes: any[], d: StyledDecl): any[] 
 };
 
 /**
- * Generates a minimal wrapper component that only destructures the necessary props
- * and applies stylex.props() directly without className/style/rest merging.
- * Uses props.children directly instead of destructuring it.
+ * Generates a minimal wrapper component that does not support external className/style.
+ * It forwards all non-style props via `...rest`, and applies `stylex.props()` for the StyleX output.
+ * If inline style props are present, it merges them on top of `sx.style`.
  */
 function emitMinimalWrapper(args: {
   j: any;
@@ -152,6 +152,7 @@ function emitMinimalWrapper(args: {
   displayName?: string;
   patternProp: (keyName: string, valueId?: any) => any;
   staticAttrs?: Record<string, any>;
+  inlineStyleProps?: Array<{ prop: string; expr: any }>;
 }): any[] {
   const {
     j,
@@ -164,6 +165,7 @@ function emitMinimalWrapper(args: {
     destructureProps,
     patternProp,
     staticAttrs = {},
+    inlineStyleProps = [],
   } = args;
   const isVoidTag = VOID_TAGS.has(tagName);
   const propsParamId = j.identifier("props");
@@ -181,21 +183,18 @@ function emitMinimalWrapper(args: {
   }
   const propsId = j.identifier("props");
 
-  // Build destructure pattern: { children, style, ...dynamicProps, ...rest }
-  // We destructure children, style, and any dynamic props, and spread the rest
+  // Build destructure pattern: { children?, ...dynamicProps, ...rest }
+  // We destructure children (for non-void tags) and any dynamic props, and spread the rest.
   const patternProps: any[] = [];
 
-  // Always destructure children (for non-void tags)
+  // Destructure children (for non-void tags)
   if (!isVoidTag) {
     patternProps.push(patternProp("children"));
   }
 
-  // Always destructure style so we can apply it last for overrides
-  patternProps.push(patternProp("style"));
-
   // Add dynamic props (for variant conditions)
   for (const name of destructureProps.filter(Boolean)) {
-    if (name !== "children" && name !== "style") {
+    if (name !== "children") {
       patternProps.push(patternProp(name));
     }
   }
@@ -204,12 +203,14 @@ function emitMinimalWrapper(args: {
   const restId = j.identifier("rest");
   patternProps.push(j.restElement(restId));
 
+  const needsSxBinding = inlineStyleProps.length > 0;
   const stylexPropsCall = j.callExpression(
     j.memberExpression(j.identifier("stylex"), j.identifier("props")),
     styleArgs,
   );
+  const sxId = j.identifier("sx");
 
-  // Build JSX attributes: static attrs, {...rest} {...stylex.props(...)} style={style}
+  // Build JSX attributes: static attrs, {...rest} {...sx|stylex.props(...)} (and optional merged style)
   const jsxAttrs: any[] = [];
 
   // Add static attrs from .attrs() (e.g., type="range") first
@@ -232,9 +233,22 @@ function emitMinimalWrapper(args: {
 
   jsxAttrs.push(
     j.jsxSpreadAttribute(restId),
-    j.jsxSpreadAttribute(stylexPropsCall),
-    j.jsxAttribute(j.jsxIdentifier("style"), j.jsxExpressionContainer(j.identifier("style"))),
+    j.jsxSpreadAttribute(needsSxBinding ? sxId : stylexPropsCall),
   );
+
+  if (inlineStyleProps.length > 0) {
+    jsxAttrs.push(
+      j.jsxAttribute(
+        j.jsxIdentifier("style"),
+        j.jsxExpressionContainer(
+          j.objectExpression([
+            j.spreadElement(j.memberExpression(sxId, j.identifier("style")) as any),
+            ...inlineStyleProps.map((p) => j.property("init", j.identifier(p.prop), p.expr as any)),
+          ]) as any,
+        ),
+      ),
+    );
+  }
 
   const openingEl = j.jsxOpeningElement(j.jsxIdentifier(tagName), jsxAttrs, isVoidTag);
 
@@ -249,13 +263,16 @@ function emitMinimalWrapper(args: {
         j.jsxExpressionContainer(j.identifier("children")),
       ]);
 
-  // Always emit destructure statement since we always destructure style and rest
-  const bodyStmts: any[] = [
+  const bodyStmts: any[] = [];
+  bodyStmts.push(
     j.variableDeclaration("const", [
       j.variableDeclarator(j.objectPattern(patternProps as any), propsId),
     ]),
-    j.returnStatement(jsx as any),
-  ];
+  );
+  if (needsSxBinding) {
+    bodyStmts.push(j.variableDeclaration("const", [j.variableDeclarator(sxId, stylexPropsCall)]));
+  }
+  bodyStmts.push(j.returnStatement(jsx as any));
 
   const result: any[] = [
     j.functionDeclaration(j.identifier(localName), [propsParamId], j.blockStatement(bodyStmts)),
@@ -969,6 +986,7 @@ export function emitWrappers(args: {
       if (!primary || !secondary) {
         continue;
       }
+      const supportsExternalStyles = d.supportsExternalStyles ?? false;
       const explicit = stringifyTsType(d.propsType);
       if (explicit) {
         emitNamedPropsType(d.localName, explicit);
@@ -982,9 +1000,13 @@ export function emitWrappers(args: {
           : values.length > 0
             ? values.map((v) => JSON.stringify(v)).join(" | ")
             : "string";
+        const intrinsic = "React.HTMLAttributes<HTMLDivElement>";
+        const baseAttrsType = supportsExternalStyles
+          ? intrinsic
+          : `Omit<${intrinsic}, "className" | "style">`;
         emitNamedPropsType(
           d.localName,
-          withChildren(`React.HTMLAttributes<HTMLDivElement> & { ${propName}?: ${union} }`),
+          withChildren(`${baseAttrsType} & { ${propName}?: ${union} }`),
         );
         needsReactTypeImport = true;
       }
@@ -1001,7 +1023,7 @@ export function emitWrappers(args: {
           j.objectPattern([
             patternProp(propName, variantId),
             patternProp("children", childrenId),
-            patternProp("className", classNameId),
+            ...(supportsExternalStyles ? [patternProp("className", classNameId)] : []),
             j.restElement(restId),
           ] as any),
           propsId,
@@ -1034,29 +1056,36 @@ export function emitWrappers(args: {
         ),
       ]);
 
-      const mergedClassName = j.callExpression(
-        j.memberExpression(
-          j.callExpression(
-            j.memberExpression(
-              j.arrayExpression([
-                j.memberExpression(j.identifier("sx"), j.identifier("className")),
-                classNameId,
-              ]),
-              j.identifier("filter"),
-            ),
-            [j.identifier("Boolean")],
-          ),
-          j.identifier("join"),
-        ),
-        [j.literal(" ")],
-      );
-
       const openingEl = j.jsxOpeningElement(
         j.jsxIdentifier("div"),
         [
-          j.jsxSpreadAttribute(j.identifier("sx")),
-          j.jsxAttribute(j.jsxIdentifier("className"), j.jsxExpressionContainer(mergedClassName)),
           j.jsxSpreadAttribute(restId),
+          j.jsxSpreadAttribute(j.identifier("sx")),
+          ...(supportsExternalStyles
+            ? [
+                j.jsxAttribute(
+                  j.jsxIdentifier("className"),
+                  j.jsxExpressionContainer(
+                    j.callExpression(
+                      j.memberExpression(
+                        j.callExpression(
+                          j.memberExpression(
+                            j.arrayExpression([
+                              j.memberExpression(j.identifier("sx"), j.identifier("className")),
+                              classNameId,
+                            ]),
+                            j.identifier("filter"),
+                          ),
+                          [j.identifier("Boolean")],
+                        ),
+                        j.identifier("join"),
+                      ),
+                      [j.literal(" ")],
+                    ),
+                  ),
+                ),
+              ]
+            : []),
         ],
         false,
       );
@@ -1130,20 +1159,22 @@ export function emitWrappers(args: {
       }
       return literal;
     })();
-    // For shouldForwardProp wrappers, we always forward standard element props (including `className`/`style`)
-    // via `...rest`, so the generated props type should always include intrinsic props.
     const rawBaseTypeText = `React.ComponentProps<${JSON.stringify(tagName)}>`;
-    const composedInner = joinIntersection(rawBaseTypeText, extrasTypeText);
+    // For local-only wrappers without external style support, omit `className`/`style` from the public surface.
+    const baseTypeText = supportsExternalStyles
+      ? rawBaseTypeText
+      : `Omit<${rawBaseTypeText}, "className" | "style">`;
+    const composedInner = joinIntersection(baseTypeText, extrasTypeText);
     const finalTypeText = VOID_TAGS.has(tagName) ? composedInner : withChildren(composedInner);
 
     const typeAliasEmitted = emitNamedPropsType(d.localName, finalTypeText);
     // If the type alias was not emitted (e.g., due to shadowing), try to extend
-    // the existing interface/type alias with the base component props
+    // the existing interface/type alias with the base component props (respecting external-style support).
     if (!typeAliasEmitted && explicit) {
       const propsTypeName = propsTypeNameFor(d.localName);
-      const interfaceExtended = extendExistingInterface(propsTypeName, rawBaseTypeText);
+      const interfaceExtended = extendExistingInterface(propsTypeName, baseTypeText);
       if (!interfaceExtended) {
-        extendExistingTypeAlias(propsTypeName, rawBaseTypeText);
+        extendExistingTypeAlias(propsTypeName, baseTypeText);
       }
     }
     needsReactTypeImport = true;
@@ -1264,10 +1295,6 @@ export function emitWrappers(args: {
       const isVoid = VOID_TAGS.has(tagName);
       const patternProps: any[] = [
         ...(isVoid ? [] : [patternProp("children", childrenId)]),
-        // Pull out `className` so it doesn't override StyleX's `className` string.
-        patternProp("className", classNameId),
-        // Pull out `style` so it doesn't override StyleX's `style` object.
-        patternProp("style", styleId),
         ...destructureParts.filter(Boolean).map((name) => patternProp(name)),
         ...(shouldOmitRestSpread ? [] : [j.restElement(restId)]),
       ];
@@ -1305,33 +1332,15 @@ export function emitWrappers(args: {
         j.memberExpression(j.identifier("stylex"), j.identifier("props")),
         styleArgs,
       );
-
       const sxDecl = j.variableDeclaration("const", [
         j.variableDeclarator(j.identifier("sx"), stylexPropsCall),
       ]);
 
-      const mergedClassName = j.callExpression(
-        j.memberExpression(
-          j.callExpression(
-            j.memberExpression(
-              j.arrayExpression([
-                j.memberExpression(j.identifier("sx"), j.identifier("className")),
-                classNameId,
-              ]),
-              j.identifier("filter"),
-            ),
-            [j.identifier("Boolean")],
-          ),
-          j.identifier("join"),
-        ),
-        [j.literal(" ")],
-      );
-
       const openingEl = j.jsxOpeningElement(
         j.jsxIdentifier(tagName),
         [
+          ...(shouldOmitRestSpread ? [] : [j.jsxSpreadAttribute(restId)]),
           j.jsxSpreadAttribute(j.identifier("sx")),
-          j.jsxAttribute(j.jsxIdentifier("className"), j.jsxExpressionContainer(mergedClassName)),
           ...(d.inlineStyleProps && d.inlineStyleProps.length
             ? [
                 j.jsxAttribute(
@@ -1341,7 +1350,6 @@ export function emitWrappers(args: {
                       j.spreadElement(
                         j.memberExpression(j.identifier("sx"), j.identifier("style")) as any,
                       ),
-                      j.spreadElement(styleId as any),
                       ...d.inlineStyleProps.map((p) =>
                         j.property("init", j.identifier(p.prop), p.expr as any),
                       ),
@@ -1349,20 +1357,7 @@ export function emitWrappers(args: {
                   ),
                 ),
               ]
-            : [
-                j.jsxAttribute(
-                  j.jsxIdentifier("style"),
-                  j.jsxExpressionContainer(
-                    j.objectExpression([
-                      j.spreadElement(
-                        j.memberExpression(j.identifier("sx"), j.identifier("style")) as any,
-                      ),
-                      j.spreadElement(styleId as any),
-                    ]) as any,
-                  ),
-                ),
-              ]),
-          ...(shouldOmitRestSpread ? [] : [j.jsxSpreadAttribute(restId)]),
+            : []),
         ],
         false,
       );
@@ -1579,8 +1574,11 @@ export function emitWrappers(args: {
         // If any attribute is passed, prefer intrinsic props.
         return used.size > 0;
       })();
+      const intrinsicTypeText = `React.ComponentProps<${JSON.stringify(tagName)}>`;
       const baseTypeText = shouldUseIntrinsicProps
-        ? `React.ComponentProps<${JSON.stringify(tagName)}>`
+        ? supportsExternalStyles
+          ? intrinsicTypeText
+          : `Omit<${intrinsicTypeText}, "className" | "style">`
         : "{}";
       emitNamedPropsType(
         d.localName,
@@ -1618,6 +1616,7 @@ export function emitWrappers(args: {
             styleArgs,
             destructureProps: [],
             patternProp,
+            inlineStyleProps: d.inlineStyleProps ?? [],
           }),
           d,
         ),
@@ -1711,6 +1710,7 @@ export function emitWrappers(args: {
       continue;
     }
     const sw = d.siblingWrapper!;
+    const supportsExternalStyles = d.supportsExternalStyles ?? false;
 
     {
       const explicit = stringifyTsType(d.propsType);
@@ -1720,10 +1720,11 @@ export function emitWrappers(args: {
         extras.push(`${sw.propAfter}?: boolean;`);
       }
       const extraType = `{ ${extras.join(" ")} }`;
-      emitNamedPropsType(
-        d.localName,
-        explicit ?? joinIntersection(`React.ComponentProps<"div">`, extraType),
-      );
+      const rawBaseTypeText = `React.ComponentProps<"div">`;
+      const baseTypeText = supportsExternalStyles
+        ? rawBaseTypeText
+        : `Omit<${rawBaseTypeText}, "className" | "style">`;
+      emitNamedPropsType(d.localName, explicit ?? joinIntersection(baseTypeText, extraType));
       needsReactTypeImport = true;
     }
 
@@ -1740,7 +1741,7 @@ export function emitWrappers(args: {
       j.variableDeclarator(
         j.objectPattern([
           patternProp("children", childrenId),
-          patternProp("className", classNameId),
+          ...(supportsExternalStyles ? [patternProp("className", classNameId)] : []),
           patternProp(sw.propAdjacent, adjId),
           patternProp(afterId.name, afterId),
           j.restElement(restId),
@@ -1772,29 +1773,36 @@ export function emitWrappers(args: {
       ),
     ]);
 
-    const mergedClassName = j.callExpression(
-      j.memberExpression(
-        j.callExpression(
-          j.memberExpression(
-            j.arrayExpression([
-              j.memberExpression(j.identifier("sx"), j.identifier("className")),
-              classNameId,
-            ]),
-            j.identifier("filter"),
-          ),
-          [j.identifier("Boolean")],
-        ),
-        j.identifier("join"),
-      ),
-      [j.literal(" ")],
-    );
-
     const openingEl = j.jsxOpeningElement(
       j.jsxIdentifier("div"),
       [
-        j.jsxSpreadAttribute(j.identifier("sx")),
-        j.jsxAttribute(j.jsxIdentifier("className"), j.jsxExpressionContainer(mergedClassName)),
         j.jsxSpreadAttribute(restId),
+        j.jsxSpreadAttribute(j.identifier("sx")),
+        ...(supportsExternalStyles
+          ? [
+              j.jsxAttribute(
+                j.jsxIdentifier("className"),
+                j.jsxExpressionContainer(
+                  j.callExpression(
+                    j.memberExpression(
+                      j.callExpression(
+                        j.memberExpression(
+                          j.arrayExpression([
+                            j.memberExpression(j.identifier("sx"), j.identifier("className")),
+                            classNameId,
+                          ]),
+                          j.identifier("filter"),
+                        ),
+                        [j.identifier("Boolean")],
+                      ),
+                      j.identifier("join"),
+                    ),
+                    [j.literal(" ")],
+                  ),
+                ),
+              ),
+            ]
+          : []),
       ],
       false,
     );
@@ -1851,9 +1859,10 @@ export function emitWrappers(args: {
     let inlineTypeText: string | undefined;
     {
       const explicit = stringifyTsType(d.propsType);
-      // Always use React.ComponentProps<tagName> because the minimal wrapper
-      // destructures `style` and spreads `...rest`, so it needs full intrinsic props.
-      const baseTypeText = `React.ComponentProps<${JSON.stringify(tagName)}>`;
+      const rawBaseTypeText = `React.ComponentProps<${JSON.stringify(tagName)}>`;
+      const baseTypeText = supportsExternalStyles
+        ? rawBaseTypeText
+        : `Omit<${rawBaseTypeText}, "className" | "style">`;
       // If there's an explicit type, extend it with base component props
       const typeText = explicit ? `${baseTypeText} & ${explicit}` : baseTypeText;
       const typeAliasEmitted = emitNamedPropsType(d.localName, typeText);
@@ -1866,7 +1875,9 @@ export function emitWrappers(args: {
           const typeAliasExtended = extendExistingTypeAlias(propsTypeName, baseTypeText);
           if (!typeAliasExtended) {
             // Fallback: use inline type annotation
-            inlineTypeText = `React.PropsWithChildren<${explicit} & { style?: React.CSSProperties }>`;
+            inlineTypeText = supportsExternalStyles
+              ? `React.PropsWithChildren<${explicit} & { style?: React.CSSProperties }>`
+              : `React.PropsWithChildren<${explicit}>`;
           }
         }
       }
@@ -2061,6 +2072,7 @@ export function emitWrappers(args: {
           destructureProps,
           patternProp,
           ...(d.attrsInfo?.staticAttrs ? { staticAttrs: d.attrsInfo.staticAttrs } : {}),
+          inlineStyleProps: d.inlineStyleProps ?? [],
         }),
         d,
       ),

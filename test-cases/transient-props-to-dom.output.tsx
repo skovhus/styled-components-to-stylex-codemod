@@ -1,7 +1,7 @@
 import * as stylex from "@stylexjs/stylex";
 import React from "react";
 
-type BoxProps = React.ComponentProps<"div"> & {
+type BoxProps = Omit<React.ComponentProps<"div">, "className" | "style"> & {
   $isActive?: boolean;
   $size?: "small" | "large";
 };
@@ -11,7 +11,7 @@ type BoxProps = React.ComponentProps<"div"> & {
 // 2. NOT forward them to the underlying DOM element
 
 export function Box(props: BoxProps) {
-  const { children, style, $size, $isActive, ...rest } = props;
+  const { children, $size, $isActive, ...rest } = props;
   return (
     <div
       {...rest}
@@ -20,26 +20,19 @@ export function Box(props: BoxProps) {
         $size === "large" && styles.boxSizeLarge,
         $isActive && styles.boxActive,
       )}
-      style={style}
     >
       {children}
     </div>
   );
 }
 
-type ImageProps = React.ComponentProps<"img"> & {
+type ImageProps = Omit<React.ComponentProps<"img">, "className" | "style"> & {
   $isInactive?: boolean;
 };
 
 export function Image(props: ImageProps) {
-  const { style, $isInactive, ...rest } = props;
-  return (
-    <img
-      {...rest}
-      {...stylex.props(styles.image, $isInactive && styles.imageInactive)}
-      style={style}
-    />
-  );
+  const { $isInactive, ...rest } = props;
+  return <img {...rest} {...stylex.props(styles.image, $isInactive && styles.imageInactive)} />;
 }
 
 export function App() {

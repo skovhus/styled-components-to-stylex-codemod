@@ -4,7 +4,7 @@ import React from "react";
 // Bug 7: When styled components are transformed, related type exports
 // and component exports should be preserved properly.
 
-export interface ButtonProps extends React.ComponentProps<"button"> {
+export interface ButtonProps extends Omit<React.ComponentProps<"button">, "className" | "style"> {
   variant?: "primary" | "secondary";
   size?: "small" | "large";
 }
@@ -12,7 +12,7 @@ export interface ButtonProps extends React.ComponentProps<"button"> {
 export type ButtonVariant = ButtonProps["variant"];
 
 function Button(props: ButtonProps) {
-  const { children, style, size, variant, ...rest } = props;
+  const { children, size, variant, ...rest } = props;
   return (
     <button
       {...rest}
@@ -21,7 +21,6 @@ function Button(props: ButtonProps) {
         size === "large" && styles.buttonSizeLarge,
         variant === "primary" && styles.buttonVariantPrimary,
       )}
-      style={style}
     >
       {children}
     </button>

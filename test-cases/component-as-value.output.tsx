@@ -23,24 +23,24 @@ function VirtualList({
   );
 }
 
-type OuterWrapperProps = React.ComponentProps<"div">;
+type OuterWrapperProps = Omit<React.ComponentProps<"div">, "className" | "style">;
 
 // These styled components are passed as values, not just rendered
 function OuterWrapper(props: OuterWrapperProps) {
-  const { children, style, ...rest } = props;
+  const { children, ...rest } = props;
   return (
-    <div {...rest} {...stylex.props(styles.outerWrapper)} style={style}>
+    <div {...rest} {...stylex.props(styles.outerWrapper)}>
       {children}
     </div>
   );
 }
 
-type InnerWrapperProps = React.ComponentProps<"div">;
+type InnerWrapperProps = Omit<React.ComponentProps<"div">, "className" | "style">;
 
 function InnerWrapper(props: InnerWrapperProps) {
-  const { children, style, ...rest } = props;
+  const { children, ...rest } = props;
   return (
-    <div {...rest} {...stylex.props(styles.innerWrapper)} style={style}>
+    <div {...rest} {...stylex.props(styles.innerWrapper)}>
       {children}
     </div>
   );

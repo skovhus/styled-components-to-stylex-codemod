@@ -3,7 +3,7 @@ import * as React from "react";
 import { type FocusTrap as OriginalFocusTrap, createFocusTrap } from "./lib/focus-trap";
 import type { SelectionFunction } from "./lib/helpers";
 
-type RangeInputProps = React.ComponentProps<"input">;
+type RangeInputProps = Omit<React.ComponentProps<"input">, "className" | "style">;
 
 // Pattern 3: Type import used elsewhere in the file (not in styled component)
 // The codemod must NOT strip this import even though it's not used in styled components
@@ -12,25 +12,19 @@ type RangeInputProps = React.ComponentProps<"input">;
  * A range input component.
  */
 export function RangeInput(props: RangeInputProps) {
-  const { style, ...rest } = props;
-  return <input type="range" {...rest} {...stylex.props(styles.rangeInput)} style={style} />;
+  const { ...rest } = props;
+  return <input type="range" {...rest} {...stylex.props(styles.rangeInput)} />;
 }
 
-type FocusTrapSuspenseFallbackProps = React.ComponentProps<"input">;
+type FocusTrapSuspenseFallbackProps = Omit<React.ComponentProps<"input">, "className" | "style">;
 
 /**
  * Component to render as suspense fallback if your focus trap will suspend.
  */
 export function FocusTrapSuspenseFallback(props: FocusTrapSuspenseFallbackProps) {
-  const { style, ...rest } = props;
+  const { ...rest } = props;
   return (
-    <input
-      type="button"
-      value=""
-      {...rest}
-      {...stylex.props(styles.focusTrapSuspenseFallback)}
-      style={style}
-    />
+    <input type="button" value="" {...rest} {...stylex.props(styles.focusTrapSuspenseFallback)} />
   );
 }
 
@@ -58,41 +52,21 @@ export function useSelection(onSelect: SelectionFunction) {
   return handleSelect;
 }
 
-type StyledLabelProps = React.ComponentProps<"span">;
+type HelpLabelProps = Omit<React.ComponentProps<"span">, "className" | "style">;
 
-// Pattern 4: Internal styled component used by another styled component AND in JSX
-// The codemod must NOT remove StyledText since it's used both:
-// 1. As a base for HelpText: styled(StyledText)
-// 2. Directly in JSX: <StyledText>
-function StyledLabel(props: StyledLabelProps) {
-  const { className, children, style, ...rest } = props;
-
-  const sx = stylex.props(styles.styledLabel);
+export function HelpLabel(props: HelpLabelProps) {
+  const { children, ...rest } = props;
   return (
-    <span
-      {...sx}
-      className={[sx.className, className].filter(Boolean).join(" ")}
-      style={{
-        ...sx.style,
-        ...style,
-      }}
-      {...rest}
-    >
+    <span {...rest} {...stylex.props(styles.styledLabel, styles.helpLabel)}>
       {children}
     </span>
   );
 }
 
-type HelpLabelProps = React.ComponentProps<typeof StyledLabel>;
-
-export function HelpLabel(props: HelpLabelProps) {
-  return <StyledLabel {...props} {...stylex.props(styles.helpLabel)} />;
-}
-
 export function FormLabel({ optional }: { optional?: boolean }) {
   return (
     <label>
-      {optional && <StyledLabel>(optional)</StyledLabel>}
+      {optional && <span {...stylex.props(styles.styledLabel)}>(optional)</span>}
       <HelpLabel>Help text</HelpLabel>
     </label>
   );
@@ -176,6 +150,11 @@ const styles = stylex.create({
     height: 0,
     position: "fixed",
   },
+
+  // Pattern 4: Internal styled component used by another styled component AND in JSX
+  // The codemod must NOT remove StyledText since it's used both:
+  // 1. As a base for HelpText: styled(StyledText)
+  // 2. Directly in JSX: <StyledText>
   styledLabel: {
     marginLeft: "8px",
   },

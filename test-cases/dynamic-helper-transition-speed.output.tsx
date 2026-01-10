@@ -8,7 +8,7 @@ type AnimatedPathProps = React.ComponentProps<"path"> & {
 };
 
 function AnimatedPath(props: AnimatedPathProps) {
-  const { children, className, style, $width, ...rest } = props;
+  const { className, children, style, $width, ...rest } = props;
 
   const sx = stylex.props(styles.animatedPath, styles.animatedPathStrokeWidth($width));
   return (

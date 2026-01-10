@@ -1019,24 +1019,35 @@ export function transformWithWarnings(
     );
   };
 
-  // Pre-pass: set needsWrapperComponent for base components used in JSX and extended.
-  // This must happen BEFORE emitStylesAndImports so comment placement is correct.
-  // NOTE: We only set needsWrapperComponent here, NOT flatten decl.base to intrinsic.
-  // Base flattening happens later after extendsStyleKey is set.
-  for (const decl of styledDecls) {
-    if (decl.base.kind === "component") {
-      const baseDecl = declByLocal.get(decl.base.ident);
-      if (baseDecl?.base.kind === "intrinsic") {
-        // If the base component is used in JSX AND this component needs a wrapper,
-        // the base component also needs a wrapper for delegation to work.
-        const baseUsedInJsx = isUsedInJsx(decl.base.ident);
-        const shouldDelegate = baseUsedInJsx && decl.needsWrapperComponent;
-        if (shouldDelegate) {
-          baseDecl.needsWrapperComponent = true;
+  const getUsedJsxAttrs = (componentName: string): Set<string> => {
+    const attrs = new Set<string>();
+    const collectFromOpening = (opening: any) => {
+      for (const a of (opening?.attributes ?? []) as any[]) {
+        if (!a) {
+          continue;
+        }
+        if (a.type === "JSXSpreadAttribute") {
+          // Unknown props shape: assume it might include className/style
+          attrs.add("*");
+          continue;
+        }
+        if (a.type === "JSXAttribute" && a.name?.type === "JSXIdentifier") {
+          attrs.add(a.name.name);
         }
       }
-    }
-  }
+    };
+    root
+      .find(j.JSXElement, {
+        openingElement: { name: { type: "JSXIdentifier", name: componentName } },
+      } as any)
+      .forEach((p: any) => collectFromOpening(p.node.openingElement));
+    root
+      .find(j.JSXSelfClosingElement, {
+        name: { type: "JSXIdentifier", name: componentName },
+      } as any)
+      .forEach((p: any) => collectFromOpening(p.node));
+    return attrs;
+  };
 
   // Styled components wrapping IMPORTED (non-styled) components that are used in JSX need wrappers.
   // This preserves the component boundary so that:
@@ -1077,8 +1088,9 @@ export function transformWithWarnings(
 
   // Determine supportsExternalStyles for each decl
   for (const decl of styledDecls) {
-    // 1. If extended by another styled component in this file -> YES
-    if (extendedBy.has(decl.localName)) {
+    // 1. If this component will have a wrapper AND is extended by another styled component in this file -> YES
+    // (The extending wrapper composes via passing className/style through.)
+    if (decl.needsWrapperComponent && extendedBy.has(decl.localName)) {
       decl.supportsExternalStyles = true;
       continue;
     }
@@ -1086,7 +1098,10 @@ export function transformWithWarnings(
     // 2. If NOT exported -> NO
     const exportInfo = exportedComponents.get(decl.localName);
     if (!exportInfo) {
-      decl.supportsExternalStyles = false;
+      // For local-only components, only support external styles when they are actually used
+      // with className/style (or unknown spreads) within the file.
+      const used = getUsedJsxAttrs(decl.localName);
+      decl.supportsExternalStyles = used.has("*") || used.has("className") || used.has("style");
       continue;
     }
 
@@ -1319,11 +1334,10 @@ export function transformWithWarnings(
     if (decl.base.kind === "component") {
       const baseDecl = declByLocal.get(decl.base.ident);
       if (baseDecl?.base.kind === "intrinsic") {
-        // If the base component is used in JSX AND this component needs a wrapper,
-        // keep as component reference so the wrapper can delegate to the base wrapper.
-        // Otherwise flatten to intrinsic tag for inline style merging.
-        const baseUsedInJsx = isUsedInJsx(decl.base.ident);
-        const shouldDelegate = baseUsedInJsx && decl.needsWrapperComponent;
+        // Delegate only when the base component itself must remain a wrapper.
+        // If the base is local-only and does not need a wrapper, we can inline its JSX usages and
+        // flatten the child to an intrinsic tag for style merging.
+        const shouldDelegate = !!baseDecl.needsWrapperComponent && !!decl.needsWrapperComponent;
         if (!shouldDelegate) {
           // Flatten to intrinsic tag for inline style merging
           decl.base = { kind: "intrinsic", tagName: baseDecl.base.tagName };
