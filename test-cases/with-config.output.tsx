@@ -5,34 +5,24 @@ type CardProps = React.PropsWithChildren<{}>;
 
 // withConfig for componentId (stable class names)
 function Card(props: CardProps) {
-  const { children, style, ...rest } = props;
+  const { children, ...rest } = props;
   return (
-    <div {...rest} {...stylex.props(styles.card)} style={style}>
+    <div {...rest} {...stylex.props(styles.card)}>
       {children}
     </div>
   );
 }
 
-type InputProps = React.ComponentProps<"input"> & {
+type InputProps = Omit<React.ComponentProps<"input">, "className" | "style"> & {
   hasError?: boolean;
 };
 
 // Combining withConfig options
 function Input(props: InputProps) {
-  const { className, style, hasError, ...rest } = props;
+  const { hasError, ...rest } = props;
 
   const sx = stylex.props(styles.input, hasError && styles.inputHasError);
-  return (
-    <input
-      {...sx}
-      className={[sx.className, className].filter(Boolean).join(" ")}
-      style={{
-        ...sx.style,
-        ...style,
-      }}
-      {...rest}
-    />
-  );
+  return <input {...rest} {...sx} />;
 }
 
 export const App = () => (

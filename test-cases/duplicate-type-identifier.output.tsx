@@ -8,7 +8,7 @@ import * as React from "react";
 /**
  * Card props
  */
-export interface CardProps extends React.ComponentProps<"div"> {
+export interface CardProps extends Omit<React.ComponentProps<"div">, "style"> {
   /** Title of the card */
   title: string;
   /** Whether the card is highlighted */
@@ -17,17 +17,15 @@ export interface CardProps extends React.ComponentProps<"div"> {
 
 // The styled component uses the existing props interface
 export function Card(props: CardProps) {
-  const { children, style, highlighted, ...rest } = props;
+  const { className, children, highlighted, ...rest } = props;
+
+  const sx = stylex.props(
+    styles.card,
+    !highlighted && styles.cardNotHighlighted,
+    highlighted && styles.cardHighlighted,
+  );
   return (
-    <div
-      {...rest}
-      {...stylex.props(
-        styles.card,
-        !highlighted && styles.cardNotHighlighted,
-        highlighted && styles.cardHighlighted,
-      )}
-      style={style}
-    >
+    <div {...sx} className={[sx.className, className].filter(Boolean).join(" ")} {...rest}>
       {children}
     </div>
   );
@@ -51,8 +49,8 @@ const IconButtonInner = (props: IconButtonProps) => {
 };
 
 export function IconButton(props: IconButtonProps) {
-  const { $hoverStyles, style, ...rest } = props;
-  return <IconButtonInner {...rest} {...stylex.props(styles.iconButton)} style={style} />;
+  const { $hoverStyles, ...rest } = props;
+  return <IconButtonInner {...rest} {...stylex.props(styles.iconButton)} />;
 }
 
 // Usage shows both interface properties and HTML attributes are needed

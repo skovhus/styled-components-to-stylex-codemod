@@ -2,21 +2,28 @@ import * as stylex from "@stylexjs/stylex";
 import * as React from "react";
 import { Text } from "./lib/text";
 
-type ButtonProps = React.ComponentProps<"button"> & { as?: React.ElementType; href?: string };
+type ButtonProps = Omit<React.ComponentProps<"button">, "className" | "style"> & {
+  as?: React.ElementType;
+  href?: string;
+};
 
 function Button(props: ButtonProps) {
-  const { as: Component = "button", children, style, ...rest } = props;
+  const { as: Component = "button", children, ...rest } = props;
   return (
-    <Component {...rest} {...stylex.props(styles.button)} style={style}>
+    <Component {...rest} {...stylex.props(styles.button)}>
       {children}
     </Component>
   );
 }
 
-type StyledTextProps<C extends React.ElementType = typeof Text> = React.ComponentProps<
-  typeof Text
+type StyledTextProps<C extends React.ElementType = typeof Text> = Omit<
+  React.ComponentProps<typeof Text>,
+  "className" | "style"
 > &
-  Omit<React.ComponentPropsWithoutRef<C>, keyof React.ComponentProps<typeof Text>> & { as?: C };
+  Omit<
+    React.ComponentPropsWithoutRef<C>,
+    keyof Omit<React.ComponentProps<typeof Text>, "className" | "style">
+  > & { as?: C };
 
 function StyledText<C extends React.ElementType = typeof Text>(props: StyledTextProps<C>) {
   return <Text {...props} {...stylex.props(styles.text)} />;

@@ -1,29 +1,24 @@
 import * as React from "react";
 import * as stylex from "@stylexjs/stylex";
 
-type InputProps = React.InputHTMLAttributes<HTMLInputElement>;
+type InputProps = Omit<React.InputHTMLAttributes<HTMLInputElement>, "className" | "style">;
 
 function Input(props: InputProps) {
-  const { type, className, ...rest } = props;
+  const { type, ...rest } = props;
   const sx = stylex.props(
     styles.input,
     type === "checkbox" && styles.inputCheckbox,
     type === "radio" && styles.inputRadio,
   );
-  return (
-    <input
-      {...sx}
-      className={[sx.className, className].filter(Boolean).join(" ")}
-      type={type}
-      {...rest}
-    />
-  );
+  return <input type={type} {...rest} {...sx} />;
 }
 
-type LinkProps = React.PropsWithChildren<React.AnchorHTMLAttributes<HTMLAnchorElement>>;
+type LinkProps = React.PropsWithChildren<
+  Omit<React.AnchorHTMLAttributes<HTMLAnchorElement>, "className" | "style">
+>;
 
 function Link(props: LinkProps) {
-  const { href, target, className, children, ...rest } = props;
+  const { href, target, children, ...rest } = props;
   const isHttps = href?.startsWith("https");
   const isPdf = href?.endsWith(".pdf");
   const isExternal = target === "_blank";
@@ -34,13 +29,7 @@ function Link(props: LinkProps) {
     isPdf && styles.linkPdf,
   );
   return (
-    <a
-      {...sx}
-      className={[sx.className, className].filter(Boolean).join(" ")}
-      href={href}
-      target={target}
-      {...rest}
-    >
+    <a href={href} target={target} {...rest} {...sx}>
       {children}
     </a>
   );

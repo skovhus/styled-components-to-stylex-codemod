@@ -16,7 +16,10 @@ const animated = {
   )),
 };
 
-type AnimatedTextProps<C extends React.ElementType = "span"> = React.ComponentProps<C> & { as?: C };
+type AnimatedTextProps<C extends React.ElementType = "span"> = Omit<
+  React.ComponentProps<C>,
+  "className"
+> & { as?: C };
 
 function AnimatedText<C extends React.ElementType = "span">(props: AnimatedTextProps<C>) {
   const { as: Component = "span" as C, children, style, ...rest } = props;

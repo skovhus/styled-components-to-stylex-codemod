@@ -1309,6 +1309,7 @@ export function transformWithWarnings(
         .size() > 0;
 
     if (usedAsValue) {
+      decl.usedAsValue = true;
       decl.needsWrapperComponent = true;
     }
   }

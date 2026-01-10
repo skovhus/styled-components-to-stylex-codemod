@@ -12,7 +12,7 @@ function Button(props: ButtonProps) {
   );
 }
 
-type ButtonWrapperProps = React.ComponentProps<typeof Button>;
+type ButtonWrapperProps = Omit<React.ComponentProps<typeof Button>, "className" | "style">;
 
 function ButtonWrapper(props: ButtonWrapperProps) {
   return <Button {...props} {...stylex.props(styles.buttonWrapper)} />;

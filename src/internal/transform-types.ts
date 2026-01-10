@@ -55,6 +55,14 @@ export type StyledDecl = {
    * True if: (1) extended by another styled component, or (2) exported and adapter opts-in.
    */
   supportsExternalStyles?: boolean;
+  /**
+   * True when the styled component identifier is used as a value (not only rendered in JSX),
+   * e.g. passed as a prop: `<VirtualList outerElementType={StyledDiv} />`.
+   *
+   * In these cases, the component can be consumed by another component that may pass `className`
+   * and/or `style` even if there are no direct JSX callsites with those attributes in this file.
+   */
+  usedAsValue?: boolean;
   styleFnFromProps?: Array<{ fnKey: string; jsxProp: string }>;
   shouldForwardProp?: { dropProps: string[]; dropPrefix?: string };
   /**

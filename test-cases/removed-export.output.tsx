@@ -3,7 +3,7 @@ import * as React from "react";
 import { type FocusTrap as OriginalFocusTrap, createFocusTrap } from "./lib/focus-trap";
 import type { SelectionFunction } from "./lib/helpers";
 
-type RangeInputProps = React.ComponentProps<"input">;
+type RangeInputProps = Omit<React.ComponentProps<"input">, "className" | "style">;
 
 // Pattern 3: Type import used elsewhere in the file (not in styled component)
 // The codemod must NOT strip this import even though it's not used in styled components
@@ -12,25 +12,19 @@ type RangeInputProps = React.ComponentProps<"input">;
  * A range input component.
  */
 export function RangeInput(props: RangeInputProps) {
-  const { style, ...rest } = props;
-  return <input type="range" {...rest} {...stylex.props(styles.rangeInput)} style={style} />;
+  const { ...rest } = props;
+  return <input type="range" {...rest} {...stylex.props(styles.rangeInput)} />;
 }
 
-type FocusTrapSuspenseFallbackProps = React.ComponentProps<"input">;
+type FocusTrapSuspenseFallbackProps = Omit<React.ComponentProps<"input">, "className" | "style">;
 
 /**
  * Component to render as suspense fallback if your focus trap will suspend.
  */
 export function FocusTrapSuspenseFallback(props: FocusTrapSuspenseFallbackProps) {
-  const { style, ...rest } = props;
+  const { ...rest } = props;
   return (
-    <input
-      type="button"
-      value=""
-      {...rest}
-      {...stylex.props(styles.focusTrapSuspenseFallback)}
-      style={style}
-    />
+    <input type="button" value="" {...rest} {...stylex.props(styles.focusTrapSuspenseFallback)} />
   );
 }
 
@@ -83,7 +77,7 @@ function StyledLabel(props: StyledLabelProps) {
   );
 }
 
-type HelpLabelProps = React.ComponentProps<typeof StyledLabel>;
+type HelpLabelProps = Omit<React.ComponentProps<typeof StyledLabel>, "className" | "style">;
 
 export function HelpLabel(props: HelpLabelProps) {
   return <StyledLabel {...props} {...stylex.props(styles.helpLabel)} />;
@@ -130,7 +124,7 @@ function StyledText(props: StyledTextProps) {
   return <Text {...props} {...stylex.props(styles.text)} />;
 }
 
-type HelpTextProps = React.ComponentProps<typeof StyledText>;
+type HelpTextProps = Omit<React.ComponentProps<typeof StyledText>, "className" | "style">;
 
 export function HelpText(props: HelpTextProps) {
   return <StyledText {...props} {...stylex.props(styles.helpText)} />;

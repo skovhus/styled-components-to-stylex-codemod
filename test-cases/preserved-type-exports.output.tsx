@@ -12,16 +12,22 @@ export interface ButtonProps extends React.ComponentProps<"button"> {
 export type ButtonVariant = ButtonProps["variant"];
 
 function Button(props: ButtonProps) {
-  const { children, style, size, variant, ...rest } = props;
+  const { className, children, style, size, variant, ...rest } = props;
+
+  const sx = stylex.props(
+    styles.button,
+    size === "large" && styles.buttonSizeLarge,
+    variant === "primary" && styles.buttonVariantPrimary,
+  );
   return (
     <button
+      {...sx}
+      className={[sx.className, className].filter(Boolean).join(" ")}
+      style={{
+        ...sx.style,
+        ...style,
+      }}
       {...rest}
-      {...stylex.props(
-        styles.button,
-        size === "large" && styles.buttonSizeLarge,
-        variant === "primary" && styles.buttonVariantPrimary,
-      )}
-      style={style}
     >
       {children}
     </button>
