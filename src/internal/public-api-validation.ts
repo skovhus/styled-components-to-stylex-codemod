@@ -3,29 +3,6 @@ import type { Adapter } from "../adapter.js";
 const REPO_URL = "https://github.com/skovhus/styled-components-to-stylex-codemod";
 const ADAPTER_DOCS_URL = `${REPO_URL}#adapter`;
 
-function safeStringify(value: unknown): string {
-  try {
-    return JSON.stringify(
-      value,
-      (_k, v) => {
-        if (typeof v === "function") {
-          return "[Function]";
-        }
-        if (typeof v === "bigint") {
-          return v.toString();
-        }
-        if (typeof v === "symbol") {
-          return v.description ? `Symbol(${v.description})` : "Symbol()";
-        }
-        return v;
-      },
-      2,
-    );
-  } catch {
-    return "[Unserializable value]";
-  }
-}
-
 export function describeValue(value: unknown): string {
   if (value === null) {
     return "null";
@@ -34,10 +11,11 @@ export function describeValue(value: unknown): string {
     return "undefined";
   }
   if (Array.isArray(value)) {
-    return `Array(${value.length}) ${safeStringify(value)}`;
+    return `Array(${value.length})`;
   }
   if (typeof value === "string") {
-    return JSON.stringify(value);
+    // Keep strings readable while still showing quotes.
+    return `"${value}"`;
   }
   if (typeof value === "number" || typeof value === "boolean") {
     return String(value);
@@ -51,7 +29,19 @@ export function describeValue(value: unknown): string {
   if (typeof value === "function") {
     return "[Function]";
   }
-  return `${(value as any)?.constructor?.name ?? "Object"} ${safeStringify(value)}`;
+  if (typeof value === "object") {
+    const ctor = (value as any)?.constructor?.name ?? "Object";
+    let keys: string[] = [];
+    try {
+      keys = Object.keys(value as Record<string, unknown>);
+    } catch {
+      // ignore
+    }
+    const preview = keys.slice(0, 5).join(", ");
+    const suffix = keys.length > 5 ? ", ..." : "";
+    return keys.length ? `${ctor} { ${preview}${suffix} }` : ctor;
+  }
+  return "[Unknown]";
 }
 
 export function assertValidAdapter(
