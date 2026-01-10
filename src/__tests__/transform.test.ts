@@ -607,4 +607,32 @@ export const App = () => <Button>Click</Button>;
 
     expect(result.warnings).toHaveLength(0);
   });
+
+  it("should skip transforming the file when adapter.resolveValue returns undefined (and log context)", () => {
+    const adapterWithUndefined = {
+      resolveValue(ctx: any) {
+        if (ctx.kind === "theme") {
+          // Intentionally return undefined (e.g. missing return in user adapter)
+          return;
+        }
+        return null;
+      },
+    } as any;
+
+    const result = transformWithWarnings(
+      { source: themeSource, path: "adapter-undefined-return.tsx" },
+      { jscodeshift: j, j, stats: () => {}, report: () => {} },
+      { adapter: adapterWithUndefined },
+    );
+
+    expect(result.code).toBeNull();
+    const w = result.warnings.find(
+      (x) => x.type === "dynamic-node" && x.feature === "adapter-resolveValue",
+    );
+    expect(w).toBeTruthy();
+    expect(w!.message).toMatch(/returned undefined/i);
+    expect(w!.message).toMatch(/Skipping transformation/i);
+    expect(w!.message).toMatch(/kind=theme/i);
+    expect(w!.message).toMatch(/path=/i);
+  });
 });
