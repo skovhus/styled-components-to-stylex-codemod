@@ -6,6 +6,7 @@ import { glob } from "node:fs/promises";
 import { spawn } from "node:child_process";
 import type { Adapter } from "./adapter.js";
 import { flushWarnings, logWarning, type CollectedWarning } from "./internal/logger.js";
+import { assertValidAdapter, describeValue } from "./internal/public-api-validation.js";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
@@ -90,12 +91,64 @@ export interface RunTransformResult {
  * ```
  */
 export async function runTransform(options: RunTransformOptions): Promise<RunTransformResult> {
+  if (!options || typeof options !== "object") {
+    throw new Error(
+      [
+        "[styled-components-to-stylex] runTransform(options) was called with an invalid argument.",
+        "Expected: runTransform({ files: string | string[], adapter: Adapter, ... })",
+        `Received: ${describeValue(options)}`,
+        "",
+        "Example (plain JS):",
+        '  import { runTransform, defineAdapter } from "styled-components-to-stylex-codemod";',
+        "  const adapter = defineAdapter({ resolveValue() { return null; } });",
+        '  await runTransform({ files: "src/**/*.tsx", adapter });',
+      ].join("\n"),
+    );
+  }
+
+  // Validate early so JS users get actionable errors instead of destructuring crashes.
+  const filesValue = (options as any).files;
+  if (typeof filesValue !== "string" && !Array.isArray(filesValue)) {
+    throw new Error(
+      [
+        "[styled-components-to-stylex] runTransform(options): `files` is required.",
+        "Expected: files: string | string[]",
+        `Received: files=${describeValue(filesValue)}`,
+      ].join("\n"),
+    );
+  }
+  if (typeof filesValue === "string" && filesValue.trim() === "") {
+    throw new Error(
+      [
+        "[styled-components-to-stylex] runTransform(options): `files` must be a non-empty string.",
+        'Example: files: "src/**/*.tsx"',
+      ].join("\n"),
+    );
+  }
+  if (Array.isArray(filesValue)) {
+    if (filesValue.length === 0) {
+      throw new Error(
+        [
+          "[styled-components-to-stylex] runTransform(options): `files` must not be an empty array.",
+          'Example: files: ["src/**/*.ts", "src/**/*.tsx"]',
+        ].join("\n"),
+      );
+    }
+    const bad = filesValue.find((p) => typeof p !== "string" || p.trim() === "");
+    if (bad !== undefined) {
+      throw new Error(
+        [
+          "[styled-components-to-stylex] runTransform(options): `files` array must contain non-empty strings.",
+          `Received: files=${describeValue(filesValue)}`,
+        ].join("\n"),
+      );
+    }
+  }
+
   const { files, dryRun = false, print = false, parser = "tsx", formatterCommand } = options;
 
   const adapter = options.adapter;
-  if (!adapter || typeof adapter.resolveValue !== "function") {
-    throw new Error("Adapter must provide resolveValue(ctx) => { expr, imports } | null");
-  }
+  assertValidAdapter(adapter, "runTransform(options)");
 
   const adapterWithLogging: Adapter = {
     resolveValue(ctx) {
