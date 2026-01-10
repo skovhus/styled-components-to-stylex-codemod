@@ -1,6 +1,6 @@
 # styled-components-to-stylex-codemod
 
-Transform styled-components to StyleX. 
+Transform styled-components to StyleX.
 
 > [!WARNING]
 >
