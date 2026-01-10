@@ -150,3 +150,7 @@ playwright-report
 
 # Test case actual outputs (generated)
 test-cases/*.actual.tsx
+
+dist-playground/*
+TODO.md
+local-setup.sh

@@ -39,13 +39,16 @@
     "typecheck": "tsc --noEmit",
     "ci": "pnpm run lint && pnpm run typecheck && pnpm run test:run",
     "prepublishOnly": "pnpm run build",
-    "storybook": "storybook dev -p 6006"
+    "storybook": "storybook dev -p 6006",
+    "playground": "vite --config playground/vite.config.ts",
+    "build:playground": "vite build --config playground/vite.config.ts"
   },
   "dependencies": {
     "jscodeshift": "^17.3.0",
     "stylis": "^4.3.2"
   },
   "devDependencies": {
+    "@codemirror/lang-javascript": "^6.2.4",
     "@emotion/is-prop-valid": "^1.4.0",
     "@playwright/test": "^1.57.0",
     "@storybook/react": "^10.1.10",
@@ -58,6 +61,7 @@
     "@types/react": "^19.2.7",
     "@types/react-dom": "^19.2.3",
     "@types/stylis": "^4.2.5",
+    "@uiw/react-codemirror": "^4.25.4",
     "@vitejs/plugin-react": "^5.1.2",
     "@vitest/coverage-v8": "^4.0.16",
     "lefthook": "^2.0.13",
@@ -71,6 +75,7 @@
     "tsdown": "^0.18.3",
     "typescript": "^5.9.3",
     "vite": "^7.3.0",
+    "vite-plugin-node-polyfills": "^0.24.0",
     "vitest": "^4.0.16"
   },
   "engines": {
