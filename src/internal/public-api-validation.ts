@@ -1,5 +1,8 @@
 import type { Adapter } from "../adapter.js";
 
+const REPO_URL = "https://github.com/skovhus/styled-components-to-stylex-codemod";
+const ADAPTER_DOCS_URL = `${REPO_URL}#adapter`;
+
 function safeStringify(value: unknown): string {
   try {
     return JSON.stringify(
@@ -65,38 +68,16 @@ export function assertValidAdapter(
         `[styled-components-to-stylex] ${where}: expected an adapter object.`,
         `Received: ${describeValue(candidate)}`,
         "",
-        "Adapter shape:",
-        "  {",
-        "    resolveValue(context) { return { expr: string, imports: ImportSpec[] } | null }",
-        "  }",
+        "Adapter requirements:",
+        "  - adapter.resolveValue(context) is required",
+        "  - adapter.shouldSupportExternalStyles(context) is optional",
         "",
-        "Example (plain JS):",
-        '  import { defineAdapter } from "styled-components-to-stylex-codemod";',
-        "  const adapter = defineAdapter({",
-        "    resolveValue(ctx) {",
-        "      // ctx.kind can be:",
-        '      // - "theme":       { kind: "theme", path }',
-        '      // - "cssVariable": { kind: "cssVariable", name, fallback?, definedValue? }',
-        '      // - "call":        { kind: "call", callSiteFilePath, calleeImportedName, calleeSource, args }',
-        "      // Return:",
-        "      // - { expr, imports } to replace that value with a JS expression + any required imports",
-        "      // - null to leave the value as-is (unresolved)",
-        "      switch (ctx.kind) {",
-        '        case "theme": {',
-        "          // Example: map `props.theme.colors.primary` -> `themeVars.primary`",
-        "          return null;",
-        "        }",
-        '        case "cssVariable": {',
-        "          // Example: map `var(--color-primary)` -> `vars.colorPrimary`",
-        "          return null;",
-        "        }",
-        '        case "call": {',
-        '          // Example: map helper calls like `transitionSpeed("slowTransition")`',
-        "          return null;",
-        "        }",
-        "      }",
-        "    },",
-        "  });",
+        "resolveValue(context) is called with one of these shapes:",
+        '  - { kind: "theme", path }',
+        '  - { kind: "cssVariable", name, fallback?, definedValue? }',
+        '  - { kind: "call", callSiteFilePath, calleeImportedName, calleeSource, args }',
+        "",
+        `Docs/examples: ${ADAPTER_DOCS_URL}`,
       ].join("\n"),
     );
   }
@@ -111,6 +92,8 @@ export function assertValidAdapter(
         "  {",
         "    resolveValue(context) { return { expr: string, imports: ImportSpec[] } | null }",
         "  }",
+        "",
+        `Docs/examples: ${ADAPTER_DOCS_URL}`,
       ].join("\n"),
     );
   }
