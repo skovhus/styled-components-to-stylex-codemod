@@ -944,6 +944,44 @@ export function lowerRules(args: {
         continue;
       }
 
+      // --- Unsupported complex selector detection ---
+      // We bail out rather than emitting incorrect unconditional styles.
+      //
+      // Examples we currently cannot represent safely:
+      // - Grouped selectors: `&:hover, &:focus { ... }`
+      // - Compound class selectors: `&.card.highlighted { ... }`
+      // - Class-conditioned rules: `&.active { ... }` (requires runtime class/prop gating)
+      // - Descendant element selectors: `& a { ... }`, `& h1, & h2 { ... }`
+      // - Chained pseudos like `:not(...)`
+      //
+      // NOTE: descendant component selectors use `__SC_EXPR_` placeholders and are handled separately.
+      if (typeof rule.selector === "string") {
+        const s = rule.selector.trim();
+        const hasExprPlaceholder = s.includes("__SC_EXPR_");
+
+        if (s.includes(",")) {
+          bail = true;
+        } else if (s.includes(":not(")) {
+          bail = true;
+        } else if (!hasExprPlaceholder && /&\.[a-zA-Z0-9_-]+/.test(s)) {
+          // Any class selector on the same element (except the sibling patterns handled above).
+          bail = true;
+        } else if (!hasExprPlaceholder && /\s+[a-zA-Z]/.test(s)) {
+          // Descendant element selectors like `& a`, `& h1`, etc.
+          bail = true;
+        }
+
+        if (bail) {
+          warnings.push({
+            type: "unsupported-feature",
+            feature: "complex-selectors",
+            message:
+              "Complex selectors (grouped selectors, descendant element selectors, class-conditioned selectors, or :not() chains) are not currently supported; skipping this file.",
+          });
+          break;
+        }
+      }
+
       // Component selector emulation and other rule handling continues...
       // NOTE: This function intentionally mirrors existing logic from `transform.ts`.
 

@@ -641,6 +641,10 @@ export function transformWithWarnings(
     } else {
       warnings.push(warning);
     }
+
+    // Policy: component selectors like `${OtherComponent}:hover &` require a semantic refactor.
+    // Bail out to avoid producing incorrect output.
+    return { code: null, warnings };
   }
 
   if (hasSpecificityHack) {

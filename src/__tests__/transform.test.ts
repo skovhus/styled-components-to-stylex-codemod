@@ -197,6 +197,33 @@ describe("test case file pairing", () => {
   });
 });
 
+describe("_unsupported fixtures", () => {
+  it("should bail (return null code) for all _unsupported.* fixtures", () => {
+    const files = readdirSync(testCasesDir);
+    const unsupportedInputs = files
+      .filter((f) => f.startsWith("_unsupported.") && f.endsWith(".input.tsx"))
+      .sort();
+
+    expect(unsupportedInputs.length).toBeGreaterThan(0);
+
+    for (const inputFile of unsupportedInputs) {
+      const inputPath = join(testCasesDir, inputFile);
+      const input = readFileSync(inputPath, "utf-8");
+
+      // Sanity: these fixtures are specifically about styled-components -> StyleX limitations.
+      expect(input).toMatch(/from\s+['"]styled-components['"]/);
+
+      const result = transformWithWarnings(
+        { source: input, path: inputPath },
+        { jscodeshift: j, j, stats: () => {}, report: () => {} },
+        { adapter: fixtureAdapter },
+      );
+
+      expect(result.code).toBeNull();
+    }
+  });
+});
+
 describe("test case exports", () => {
   it.each(fixtureCases)("$outputFile should export App in both input and output", ({ name }) => {
     const { input, output } = readTestCase(name);
