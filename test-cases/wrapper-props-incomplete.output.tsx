@@ -7,14 +7,11 @@ import * as React from "react";
 // Otherwise: "Property 'className' does not exist on type 'MyProps'"
 
 // Pattern 1: styled("span") with custom props - wrapper needs span attributes
-interface TextColorProps extends React.PropsWithChildren<
-  {
-    color?: any;
-  } & {
-    className?: string;
-    style?: React.CSSProperties;
-  }
-> {
+interface TextColorProps extends React.PropsWithChildren<{
+  className?: string;
+  style?: React.CSSProperties;
+  color?: any;
+}> {
   /** Custom color prop */
   color: string;
 }

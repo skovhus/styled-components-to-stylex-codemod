@@ -3,14 +3,11 @@ import { transitionSpeed as transitionSpeedVars } from "./lib/helpers.stylex";
 import React from "react";
 import "./css-variables.css";
 
-type AnimatedPathProps = React.PropsWithChildren<
-  {
-    $width?: any;
-    d?: any;
-  } & {
-    style?: React.CSSProperties;
-  }
-> & {
+type AnimatedPathProps = React.PropsWithChildren<{
+  style?: React.CSSProperties;
+  $width?: any;
+  d?: any;
+}> & {
   $width: number;
 };
 

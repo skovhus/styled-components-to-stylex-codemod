@@ -8,15 +8,12 @@ import * as React from "react";
 /**
  * Card props
  */
-export interface CardProps extends React.PropsWithChildren<
-  {
-    highlighted?: any;
-    onClick?: any;
-    title?: any;
-  } & {
-    className?: string;
-  }
-> {
+export interface CardProps extends React.PropsWithChildren<{
+  className?: string;
+  highlighted?: any;
+  onClick?: any;
+  title?: any;
+}> {
   /** Title of the card */
   title: string;
   /** Whether the card is highlighted */

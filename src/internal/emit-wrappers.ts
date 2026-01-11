@@ -849,9 +849,23 @@ export function emitWrappers(args: {
     const { d, tagName, allowClassNameProp, allowStyleProp, includeAsProp = false } = args;
     const used = getUsedAttrs(d.localName);
 
+    // If we have spreads, or the component is used as a value, we must accept a broader set
+    // of attributes (otherwise spreads/React.ComponentType<...> constraints break).
+    const needsBroadAttrs = used.has("*") || !!(d as any).usedAsValue;
+
     const lines: string[] = [];
     if (includeAsProp) {
       lines.push(`  as?: React.ElementType;`);
+    }
+    // When we are NOT using a broad React.*HTMLAttributes base, explicitly include the
+    // wrapper-supported `className`/`style` keys in the literal to keep the type compact.
+    if (!needsBroadAttrs) {
+      if (allowClassNameProp) {
+        lines.push(`  className?: string;`);
+      }
+      if (allowStyleProp) {
+        lines.push(`  style?: React.CSSProperties;`);
+      }
     }
 
     for (const attr of [...used].sort()) {
@@ -870,20 +884,8 @@ export function emitWrappers(args: {
 
     const literal = lines.length > 0 ? `{\n${lines.join("\n")}\n}` : "{}";
 
-    // If we have spreads, or the component is used as a value, we must accept a broader set
-    // of attributes (otherwise spreads/React.ComponentType<...> constraints break).
-    const needsBroadAttrs = used.has("*") || !!(d as any).usedAsValue;
     if (!needsBroadAttrs) {
-      const extra: string[] = [];
-      if (allowClassNameProp) {
-        extra.push(`  className?: string;`);
-      }
-      if (allowStyleProp) {
-        extra.push(`  style?: React.CSSProperties;`);
-      }
-      const extraLiteral = extra.length > 0 ? `{\n${extra.join("\n")}\n}` : "{}";
-      const composed = joinIntersection(literal, extraLiteral);
-      return VOID_TAGS.has(tagName) ? composed : withChildren(composed);
+      return VOID_TAGS.has(tagName) ? literal : withChildren(literal);
     }
 
     const base = reactIntrinsicAttrsType(tagName);
