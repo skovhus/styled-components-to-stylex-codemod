@@ -76,4 +76,3 @@ for (const name of names) {
   }
   await updateFixture(name);
 }
-
