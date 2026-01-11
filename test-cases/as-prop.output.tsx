@@ -18,9 +18,6 @@ function Button(props: ButtonProps) {
 
 type StyledTextProps = Omit<React.ComponentProps<typeof Text>, "className" | "style"> & {
   as?: React.ElementType;
-  color?: any;
-  htmlFor?: any;
-  variant?: any;
 };
 
 function StyledText(props: StyledTextProps) {

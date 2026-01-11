@@ -1010,29 +1010,14 @@ export function emitWrappers(args: {
     includeAsProp?: boolean;
     skipProps?: Set<string>;
   }): string => {
-    const { d, allowClassNameProp, allowStyleProp, includeAsProp = false, skipProps } = args;
-    const used = getUsedAttrs(d.localName);
+    const { d, allowClassNameProp, allowStyleProp, includeAsProp = false } = args;
 
+    // For styled(Component) wrappers, we use React.ComponentProps<typeof Component>
+    // which already includes all the component's props. Don't add extra `prop?: any`
+    // entries that would override the actual types from the wrapped component.
     const lines: string[] = [];
     if (includeAsProp) {
       lines.push(`  as?: React.ElementType;`);
-    }
-
-    for (const attr of [...used].sort()) {
-      if (attr === "*" || attr === "children") {
-        continue;
-      }
-      if (attr === "as" || attr === "forwardedAs") {
-        continue;
-      }
-      if (attr === "className" || attr === "style") {
-        continue;
-      }
-      // Skip props that are already defined in the explicit type
-      if (skipProps?.has(attr)) {
-        continue;
-      }
-      lines.push(`  ${toTypeKey(attr)}?: any;`);
     }
 
     const literal = lines.length > 0 ? `{\n${lines.join("\n")}\n}` : "{}";
@@ -2984,6 +2969,9 @@ export function emitWrappers(args: {
     const defaultAttrs = d.attrsInfo?.defaultAttrs ?? [];
     const staticAttrs = d.attrsInfo?.staticAttrs ?? {};
     const needsSxVar = allowClassNameProp || allowStyleProp || !!d.inlineStyleProps?.length;
+    // Only destructure when we have specific reasons: variant props or className/style support
+    // Children flows through naturally via {...props} spread, no explicit handling needed
+    // Attrs are handled separately (added as JSX attributes before/after the props spread)
     const needsDestructure = destructureProps.length > 0 || needsSxVar;
 
     if (needsDestructure) {

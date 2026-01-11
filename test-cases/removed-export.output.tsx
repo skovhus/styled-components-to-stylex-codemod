@@ -118,10 +118,7 @@ export function Tooltip(props: TooltipWrapperProps) {
 //   - <StyledText {...props} .../>
 import { Text } from "./lib/text";
 
-type StyledTextProps = React.ComponentProps<typeof Text> & {
-  color?: any;
-  variant?: any;
-};
+type StyledTextProps = React.ComponentProps<typeof Text>;
 
 function StyledText(props: StyledTextProps) {
   const { className, children, style, ...rest } = props;
@@ -142,10 +139,7 @@ function StyledText(props: StyledTextProps) {
   );
 }
 
-type HelpTextProps = Omit<React.ComponentProps<typeof StyledText>, "className" | "style"> & {
-  color?: any;
-  variant?: any;
-};
+type HelpTextProps = Omit<React.ComponentProps<typeof StyledText>, "className" | "style">;
 
 export function HelpText(props: HelpTextProps) {
   return <StyledText {...props} {...stylex.props(styles.helpText)} />;
