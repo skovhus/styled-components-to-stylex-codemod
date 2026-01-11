@@ -1,7 +1,7 @@
 import * as React from "react";
 import * as stylex from "@stylexjs/stylex";
 
-type CardProps = {};
+type CardProps = React.PropsWithChildren<{}>;
 
 // withConfig for componentId (stable class names)
 function Card(props: CardProps) {

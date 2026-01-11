@@ -1676,13 +1676,15 @@ export function emitWrappers(args: {
         return withChildren(typeWithAttrs);
       }
       // No explicit type: use inferred props
-      return inferredIntrinsicPropsTypeText({
+      // For non-void tags, wrap in PropsWithChildren to include children prop
+      const inferred = inferredIntrinsicPropsTypeText({
         d,
         tagName,
         allowClassNameProp,
         allowStyleProp,
         skipProps: explicitPropNames,
       });
+      return VOID_TAGS.has(tagName) ? inferred : withChildren(inferred);
     })();
 
     const typeAliasEmitted = emitNamedPropsType(d.localName, finalTypeText);
@@ -2129,7 +2131,10 @@ export function emitWrappers(args: {
             allowStyleProp,
           })
         : "{}";
-      emitNamedPropsType(d.localName, explicit ?? baseTypeText);
+      // For non-void tags without explicit type, wrap in PropsWithChildren
+      const typeWithChildren =
+        !explicit && !VOID_TAGS.has(tagName) ? withChildren(baseTypeText) : baseTypeText;
+      emitNamedPropsType(d.localName, explicit ?? typeWithChildren);
       needsReactTypeImport = true;
     }
     const styleArgs: any[] = [
@@ -2835,6 +2840,9 @@ export function emitWrappers(args: {
     // We need to mimic this behavior by destructuring them out when not used for conditional styles.
     // Track which transient props are for filtering only (not used in styling) so we don't pass them back.
     const filterOnlyTransientProps: string[] = [];
+    // Track transient props that are defined in the WRAPPER's explicit type (not the base's).
+    // These should NOT be passed back to the base component because the base doesn't accept them.
+    const wrapperOnlyTransientProps: string[] = [];
     {
       // Helper to find transient props in a type name
       const findTransientPropsInTypeName = (typeName: string): string[] => {
@@ -2905,6 +2913,8 @@ export function emitWrappers(args: {
             member.key.name.startsWith("$")
           ) {
             transientProps.push(member.key.name);
+            // This is a wrapper-only transient prop (defined in wrapper's explicit type)
+            wrapperOnlyTransientProps.push(member.key.name);
           }
         }
       }
@@ -2912,6 +2922,8 @@ export function emitWrappers(args: {
       else if (explicit?.type === "TSTypeReference" && explicit.typeName?.type === "Identifier") {
         const typeName = explicit.typeName.name;
         transientProps = findTransientPropsInTypeName(typeName);
+        // These are also wrapper-only transient props
+        wrapperOnlyTransientProps.push(...transientProps);
       }
 
       // Also check the wrapped component's props type for transient props
@@ -3015,6 +3027,8 @@ export function emitWrappers(args: {
       }
 
       const openingAttrs: any[] = [];
+      // Add attrs in order: defaultAttrs, staticAttrs, then {...rest}
+      // This allows props passed to the component to override attrs (styled-components semantics)
       for (const a of defaultAttrs) {
         if (typeof a.value === "string") {
           openingAttrs.push(j.jsxAttribute(j.jsxIdentifier(a.attrName), j.literal(a.value)));
@@ -3034,20 +3048,7 @@ export function emitWrappers(args: {
           );
         }
       }
-      // Pass transient props used for styling back to the base component.
-      // These props were destructured for styling but the base component might also need them.
-      // Filter out props that are for filtering only (not used in styling).
-      for (const propName of destructureProps) {
-        if (propName.startsWith("$") && !filterOnlyTransientProps.includes(propName)) {
-          openingAttrs.push(
-            j.jsxAttribute(
-              j.jsxIdentifier(propName),
-              j.jsxExpressionContainer(j.identifier(propName)),
-            ),
-          );
-        }
-      }
-      openingAttrs.push(j.jsxSpreadAttribute(restId));
+      // Add staticAttrs from .attrs({...}) before {...rest} so they can be overridden
       for (const [key, value] of Object.entries(staticAttrs)) {
         if (typeof value === "string") {
           openingAttrs.push(j.jsxAttribute(j.jsxIdentifier(key), j.literal(value)));
@@ -3061,6 +3062,26 @@ export function emitWrappers(args: {
           );
         }
       }
+      // Pass transient props used for styling back to the base component.
+      // These props were destructured for styling but the base component might also need them.
+      // Filter out:
+      // 1. Props that are for filtering only (not used in styling)
+      // 2. Props defined in the wrapper's explicit type (base doesn't accept them)
+      for (const propName of destructureProps) {
+        if (
+          propName.startsWith("$") &&
+          !filterOnlyTransientProps.includes(propName) &&
+          !wrapperOnlyTransientProps.includes(propName)
+        ) {
+          openingAttrs.push(
+            j.jsxAttribute(
+              j.jsxIdentifier(propName),
+              j.jsxExpressionContainer(j.identifier(propName)),
+            ),
+          );
+        }
+      }
+      openingAttrs.push(j.jsxSpreadAttribute(restId));
       openingAttrs.push(j.jsxSpreadAttribute(needsSxVar ? sxId : stylexPropsCall));
 
       if (allowClassNameProp) {

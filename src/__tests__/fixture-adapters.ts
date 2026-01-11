@@ -43,6 +43,14 @@ export const fixtureAdapter = defineAdapter({
     if (ctx.filePath.includes("wrapper-props-incomplete")) {
       return ctx.componentName === "TextColor" || ctx.componentName === "ThemeText";
     }
+    // transient-prop-not-forwarded - Scrollable should support external styles
+    if (ctx.filePath.includes("transient-prop-not-forwarded")) {
+      return true;
+    }
+    // attrs-polymorphic-as - Label should support external styles
+    if (ctx.filePath.includes("attrs-polymorphic-as")) {
+      return true;
+    }
     return false;
   },
 
