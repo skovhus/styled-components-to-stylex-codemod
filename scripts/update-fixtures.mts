@@ -4,15 +4,12 @@ import { fileURLToPath } from "node:url";
 import { applyTransform } from "jscodeshift/src/testUtils.js";
 import { format } from "oxfmt";
 
-import transform from "../dist/transform.mjs";
-import { defineAdapter } from "../dist/index.mjs";
-import { fixtureAdapterConfig } from "../src/__tests__/fixture-adapter-config.ts";
+import transform from "../src/transform.ts";
+import { fixtureAdapter } from "../src/__tests__/fixture-adapters.ts";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const repoRoot = join(__dirname, "..");
 const testCasesDir = join(repoRoot, "test-cases");
-
-const fixtureAdapter = defineAdapter(fixtureAdapterConfig as any);
 
 async function normalizeCode(code: string) {
   const { code: formatted } = await format("test.tsx", code);
