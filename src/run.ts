@@ -151,6 +151,9 @@ export async function runTransform(options: RunTransformOptions): Promise<RunTra
   assertValidAdapter(adapter, "runTransform(options)");
 
   const adapterWithLogging: Adapter = {
+    shouldSupportExternalStyling(ctx) {
+      return adapter.shouldSupportExternalStyling(ctx);
+    },
     resolveValue(ctx) {
       try {
         return adapter.resolveValue(ctx);

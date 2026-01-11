@@ -1090,14 +1090,8 @@ export function transformWithWarnings(
       continue;
     }
 
-    // 3. If exported, ask adapter (default: true for exported components)
-    if (!adapter.shouldSupportExternalStyles) {
-      // Default to true for exported components - they may be used with external className/style
-      decl.supportsExternalStyles = true;
-      continue;
-    }
-
-    decl.supportsExternalStyles = adapter.shouldSupportExternalStyles({
+    // 3. If exported, ask adapter
+    decl.supportsExternalStyles = adapter.shouldSupportExternalStyling({
       filePath: file.path,
       componentName: decl.localName,
       exportName: exportInfo.exportName,

@@ -2,6 +2,9 @@ import { defineAdapter } from "../adapter.ts";
 
 // Test adapters - examples of custom adapter usage
 export const customAdapter = defineAdapter({
+  shouldSupportExternalStyling() {
+    return false;
+  },
   resolveValue(ctx) {
     if (ctx.kind !== "theme") {
       return null;
@@ -22,7 +25,7 @@ export const customAdapter = defineAdapter({
 export const fixtureAdapter = defineAdapter({
   // Enable external styles for exported components in specific test cases where the expected
   // output includes className/style prop support and HTMLAttributes extension.
-  shouldSupportExternalStyles(ctx) {
+  shouldSupportExternalStyling(ctx) {
     // external-styles-support test case - only ExportedButton supports external styles
     if (ctx.filePath.includes("external-styles-support")) {
       return ctx.componentName === "ExportedButton";

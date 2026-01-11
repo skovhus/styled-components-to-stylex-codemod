@@ -50,7 +50,7 @@ export function assertValidAdapter(
 ): asserts candidate is Adapter {
   const obj = candidate as any;
   const resolveValue = obj?.resolveValue;
-  const shouldSupportExternalStyles = obj?.shouldSupportExternalStyles;
+  const shouldSupportExternalStyling = obj?.shouldSupportExternalStyling;
 
   if (!candidate || typeof candidate !== "object") {
     throw new Error(
@@ -60,7 +60,7 @@ export function assertValidAdapter(
         "",
         "Adapter requirements:",
         "  - adapter.resolveValue(context) is required",
-        "  - adapter.shouldSupportExternalStyles(context) is optional",
+        "  - adapter.shouldSupportExternalStyling(context) is required",
         "",
         "resolveValue(context) is called with one of these shapes:",
         '  - { kind: "theme", path }',
@@ -88,14 +88,11 @@ export function assertValidAdapter(
     );
   }
 
-  if (
-    shouldSupportExternalStyles !== undefined &&
-    typeof shouldSupportExternalStyles !== "function"
-  ) {
+  if (typeof shouldSupportExternalStyling !== "function") {
     throw new Error(
       [
-        `[styled-components-to-stylex] ${where}: adapter.shouldSupportExternalStyles must be a function when provided.`,
-        `Received: shouldSupportExternalStyles=${describeValue(shouldSupportExternalStyles)}`,
+        `[styled-components-to-stylex] ${where}: adapter.shouldSupportExternalStyling must be a function.`,
+        `Received: shouldSupportExternalStyling=${describeValue(shouldSupportExternalStyling)}`,
       ].join("\n"),
     );
   }

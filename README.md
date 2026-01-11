@@ -146,11 +146,11 @@ Adapters are the main extension point. They let you control:
 - how theme paths and CSS variables are turned into StyleX-compatible JS values (`resolveValue`)
 - what extra imports to inject into transformed files (returned from `resolveValue`)
 - how helper calls are resolved (via `resolveValue({ kind: "call", ... })`)
-- which exported components should support external className/style extension (`shouldSupportExternalStyles`)
+- which exported components should support external className/style extension (`shouldSupportExternalStyling`)
 
 #### External Styles Support
 
-By default, transformed components are "closed" — they don't accept external `className` or `style` props. If you have components that need to be styled externally (e.g., shared UI components), use `shouldSupportExternalStyles`:
+Transformed components are "closed" by default — they don't accept external `className` or `style` props. Use `shouldSupportExternalStyling` to control which exported components should support external styling:
 
 ```ts
 const adapter = defineAdapter({
@@ -159,7 +159,7 @@ const adapter = defineAdapter({
     return null;
   },
 
-  shouldSupportExternalStyles(ctx) {
+  shouldSupportExternalStyling(ctx) {
     // ctx: { filePath, componentName, exportName, isDefaultExport }
 
     // Example: Enable for all exports in shared components folder
@@ -177,7 +177,7 @@ const adapter = defineAdapter({
 });
 ```
 
-When `shouldSupportExternalStyles` returns `true`, the generated component will:
+When `shouldSupportExternalStyling` returns `true`, the generated component will:
 
 - Accept `className` and `style` props
 - Merge them with the StyleX-generated styles

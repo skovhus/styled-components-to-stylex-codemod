@@ -1,7 +1,7 @@
 import styled from "styled-components";
 
 /**
- *  This component is exported and will use shouldSupportExternalStyles to enable
+ *  This component is exported and will use shouldSupportExternalStyling to enable
  * className/style/rest merging for external style extension support.
  **/
 export const ExportedButton = styled.button.withConfig({
@@ -14,7 +14,7 @@ export const ExportedButton = styled.button.withConfig({
   border-radius: 4px;
 `;
 
-// This is also exported but won't use shouldSupportExternalStyles (for comparison)
+// This is also exported but won't use shouldSupportExternalStyling (for comparison)
 const InternalBox = styled.div`
   background: #f0f0f0;
   padding: 16px;

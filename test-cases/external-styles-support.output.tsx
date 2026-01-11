@@ -7,7 +7,7 @@ type ExportedButtonProps = React.PropsWithChildren<{
 }>;
 
 /**
- *  This component is exported and will use shouldSupportExternalStyles to enable
+ *  This component is exported and will use shouldSupportExternalStyling to enable
  * className/style/rest merging for external style extension support.
  **/
 export function ExportedButton(props: ExportedButtonProps) {
@@ -45,7 +45,7 @@ const styles = stylex.create({
     borderRadius: "4px",
   },
 
-  // This is also exported but won't use shouldSupportExternalStyles (for comparison)
+  // This is also exported but won't use shouldSupportExternalStyling (for comparison)
   internalBox: {
     backgroundColor: "#f0f0f0",
     padding: "16px",

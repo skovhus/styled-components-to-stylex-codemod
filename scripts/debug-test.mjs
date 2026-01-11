@@ -3,10 +3,10 @@ import transform from "../dist/transform.mjs";
 import { readFileSync, writeFileSync } from "fs";
 import { join } from "path";
 
-// Minimal fixture adapter that returns false for shouldSupportExternalStyles
+// Minimal fixture adapter that returns false for shouldSupportExternalStyling
 // (matching the behavior of fixtureAdapter for most test cases)
 const fixtureAdapter = {
-  shouldSupportExternalStyles(ctx) {
+  shouldSupportExternalStyling(ctx) {
     return (
       ctx.filePath.includes("external-styles-support") && ctx.componentName === "ExportedButton"
     );
