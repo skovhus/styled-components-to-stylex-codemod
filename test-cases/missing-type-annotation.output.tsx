@@ -28,9 +28,7 @@ export function Box(props: BoxProps) {
   );
 }
 
-type InputProps = {
-  onChange?: any;
-};
+type InputProps = Omit<React.InputHTMLAttributes<HTMLInputElement>, "className" | "style">;
 
 // Component with callback that receives event
 export function Input(props: InputProps) {

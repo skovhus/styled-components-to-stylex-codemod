@@ -986,7 +986,22 @@ export function emitWrappers(args: {
     const literal = lines.length > 0 ? `{\n${lines.join("\n")}\n}` : "{}";
 
     if (!needsBroadAttrs) {
-      return VOID_TAGS.has(tagName) ? literal : withChildren(literal);
+      // For void tags (input, img, etc.), use the full HTML attributes type
+      // to ensure all valid HTML attributes are accepted (not just the ones used in the file).
+      // This allows exported components like styled("input") to accept any valid HTML input attribute.
+      if (VOID_TAGS.has(tagName)) {
+        const base = reactIntrinsicAttrsType(tagName);
+        // Keep className/style restrictive based on actual usage.
+        const omitted: string[] = [];
+        if (!allowClassNameProp) {
+          omitted.push('"className"');
+        }
+        if (!allowStyleProp) {
+          omitted.push('"style"');
+        }
+        return omitted.length ? `Omit<${base}, ${omitted.join(" | ")}>` : base;
+      }
+      return withChildren(literal);
     }
 
     const base = reactIntrinsicAttrsType(tagName);
@@ -3015,6 +3030,19 @@ export function emitWrappers(args: {
             j.jsxAttribute(
               j.jsxIdentifier(a.attrName),
               j.jsxExpressionContainer(j.booleanLiteral(a.value)),
+            ),
+          );
+        }
+      }
+      // Pass transient props used for styling back to the base component.
+      // These props were destructured for styling but the base component might also need them.
+      // Filter out props that are for filtering only (not used in styling).
+      for (const propName of destructureProps) {
+        if (propName.startsWith("$") && !filterOnlyTransientProps.includes(propName)) {
+          openingAttrs.push(
+            j.jsxAttribute(
+              j.jsxIdentifier(propName),
+              j.jsxExpressionContainer(j.identifier(propName)),
             ),
           );
         }

@@ -34,6 +34,10 @@ export const fixtureAdapter = defineAdapter({
     if (ctx.filePath.includes("styled-element-html-props")) {
       return true;
     }
+    // styled-input-html-props - exported RangeInput should extend InputHTMLAttributes
+    if (ctx.filePath.includes("styled-input-html-props")) {
+      return true;
+    }
     // wrapper-props-incomplete - TextColor and ThemeText should extend HTMLAttributes
     // Highlight wraps a component and shouldn't support external styles
     if (ctx.filePath.includes("wrapper-props-incomplete")) {

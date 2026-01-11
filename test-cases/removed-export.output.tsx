@@ -3,7 +3,7 @@ import * as React from "react";
 import { type FocusTrap as OriginalFocusTrap, createFocusTrap } from "./lib/focus-trap";
 import type { SelectionFunction } from "./lib/helpers";
 
-type RangeInputProps = {};
+type RangeInputProps = Omit<React.InputHTMLAttributes<HTMLInputElement>, "className" | "style">;
 
 // Pattern 3: Type import used elsewhere in the file (not in styled component)
 // The codemod must NOT strip this import even though it's not used in styled components
@@ -16,7 +16,10 @@ export function RangeInput(props: RangeInputProps) {
   return <input type="range" {...stylex.props(styles.rangeInput)} />;
 }
 
-type FocusTrapSuspenseFallbackProps = {};
+type FocusTrapSuspenseFallbackProps = Omit<
+  React.InputHTMLAttributes<HTMLInputElement>,
+  "className" | "style"
+>;
 
 /**
  * Component to render as suspense fallback if your focus trap will suspend.

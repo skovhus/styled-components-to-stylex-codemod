@@ -1415,6 +1415,14 @@ export function transformWithWarnings(
     }
 
     // Generate inheritance assignments for each static property
+    // Skip if the extended component already has existing static property assignments
+    // (they were collected earlier from the original code)
+    const existing = staticPropertyAssignments.get(decl.localName) ?? [];
+    if (existing.length > 0) {
+      // Already has inheritance statements from original code, don't duplicate
+      continue;
+    }
+
     const inheritanceStatements: any[] = [];
     for (const propName of baseProps) {
       const stmt = j.expressionStatement(
@@ -1428,9 +1436,7 @@ export function transformWithWarnings(
     }
 
     if (inheritanceStatements.length > 0) {
-      const existing = staticPropertyAssignments.get(decl.localName) ?? [];
-      existing.push(...inheritanceStatements);
-      staticPropertyAssignments.set(decl.localName, existing);
+      staticPropertyAssignments.set(decl.localName, inheritanceStatements);
     }
   }
 
