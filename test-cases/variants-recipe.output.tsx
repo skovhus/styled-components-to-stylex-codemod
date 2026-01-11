@@ -13,14 +13,17 @@ type Props = {
 type ButtonProps = React.PropsWithChildren<Props>;
 
 function Button(props: ButtonProps) {
-  const { children, color, size, ...rest } = props;
+  const { children, color, size, disabled } = props;
   return (
     <button
-      {...rest}
+      disabled={disabled}
       {...stylex.props(
         styles.button,
         color === "primary" && styles.buttonColorPrimary,
         size === "medium" && styles.buttonSizeMedium,
+        disabled && styles.buttonDisabled,
+        disabled && color === "primary" && styles.buttonDisabledColorPrimary,
+        disabled && color !== "primary" && styles.buttonDisabledColorNotPrimary,
       )}
     >
       {children}
@@ -46,16 +49,42 @@ const styles = stylex.create({
   button: {
     appearance: "none",
     borderWidth: 0,
-    backgroundColor: "gray",
+    backgroundColor: {
+      default: "gray",
+      ":hover": "darkgray",
+    },
     color: "white",
     fontSize: "1rem",
     padding: "4px 8px",
   },
   buttonColorPrimary: {
-    backgroundColor: "blue",
+    backgroundColor: {
+      default: "blue",
+      ":hover": "darkblue",
+    },
   },
   buttonSizeMedium: {
     fontSize: "1.2rem",
     padding: "8px 16px",
+  },
+  buttonDisabled: {
+    color: "rgb(204, 204, 204)",
+    cursor: "not-allowed",
+  },
+  buttonDisabledColorPrimary: {
+    color: "rgb(204, 204, 204)",
+    cursor: "not-allowed",
+    backgroundColor: {
+      default: "grey",
+      ":hover": "darkblue",
+    },
+  },
+  buttonDisabledColorNotPrimary: {
+    color: "rgb(204, 204, 204)",
+    cursor: "not-allowed",
+    backgroundColor: {
+      default: "grey",
+      ":hover": "darkgray",
+    },
   },
 });

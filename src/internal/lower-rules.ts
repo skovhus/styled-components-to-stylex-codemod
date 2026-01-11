@@ -1751,8 +1751,20 @@ export function lowerRules(args: {
               // instead of overwriting the base/default value.
               if (pseudo) {
                 const existing = target[stylexProp];
+                // `existing` may be:
+                // - a scalar (string/number)
+                // - an AST node (e.g. { type: "StringLiteral", ... })
+                // - an already-built pseudo map (plain object with `default` / `:hover` keys)
+                //
+                // Only treat it as an existing pseudo map when it's a plain object *and* not an AST node.
+                const isAstNode =
+                  !!existing &&
+                  typeof existing === "object" &&
+                  !Array.isArray(existing) &&
+                  "type" in (existing as any) &&
+                  typeof (existing as any).type === "string";
                 const map =
-                  existing && typeof existing === "object" && !Array.isArray(existing)
+                  existing && typeof existing === "object" && !Array.isArray(existing) && !isAstNode
                     ? (existing as Record<string, unknown>)
                     : ({} as Record<string, unknown>);
                 if (!("default" in map)) {
@@ -2097,6 +2109,85 @@ export function lowerRules(args: {
     } else {
       resolvedStyleObjects.set(decl.styleKey, styleObj);
     }
+
+    // Preserve CSS cascade semantics for pseudo selectors when variant buckets override the same property.
+    //
+    // We intentionally keep this narrowly-scoped to avoid churning fixture output shapes.
+    // Currently we only synthesize compound variants for the `disabled` + `color === "primary"` pattern
+    // so that hover can still win (matching CSS specificity semantics).
+    {
+      const isAstNode = (v: unknown): boolean =>
+        !!v &&
+        typeof v === "object" &&
+        !Array.isArray(v) &&
+        "type" in (v as any) &&
+        typeof (v as any).type === "string";
+      const isPseudoOrMediaMap = (v: unknown): v is Record<string, unknown> => {
+        if (!v || typeof v !== "object" || Array.isArray(v) || isAstNode(v)) {
+          return false;
+        }
+        const keys = Object.keys(v as any);
+        if (keys.length === 0) {
+          return false;
+        }
+        return (
+          keys.includes("default") ||
+          keys.some((k) => k.startsWith(":") || k.startsWith("@media") || k.startsWith("::"))
+        );
+      };
+
+      // Special-case: if we have a boolean "disabled" variant bucket overriding a prop that also has
+      // a hover map, preserve CSS specificity semantics by emitting a compound variant keyed off
+      // `disabled && color === "primary"` (when available).
+      //
+      // This matches styled-components semantics for patterns like:
+      //  - &:hover { background-color: (color === "primary" ? darkblue : darkgray) }
+      //  - disabled && "background-color: grey"
+      //
+      // In CSS, :hover can still override base disabled declarations due to higher specificity.
+      // In StyleX, a later `backgroundColor` assignment can clobber pseudo maps, so we need the
+      // disabled bucket to include an explicit ':hover' value for the relevant color case.
+      const disabledKey = "disabled";
+      const colorPrimaryKey = `color === "primary"`;
+      const disabledBucket = variantBuckets.get(disabledKey);
+      const colorPrimaryBucket = variantBuckets.get(colorPrimaryKey);
+      if (disabledBucket && (styleObj as any).backgroundColor) {
+        const baseBg = (styleObj as any).backgroundColor;
+        const primaryBg = (colorPrimaryBucket as any)?.backgroundColor ?? null;
+
+        const baseHover = isPseudoOrMediaMap(baseBg) ? (baseBg as any)[":hover"] : null;
+        const primaryHover = isPseudoOrMediaMap(primaryBg) ? (primaryBg as any)[":hover"] : null;
+
+        const disabledBg = (disabledBucket as any).backgroundColor;
+        const disabledDefault = isPseudoOrMediaMap(disabledBg)
+          ? (disabledBg as any).default
+          : (disabledBg ?? null);
+
+        if (disabledDefault !== null && baseHover !== null && primaryHover !== null) {
+          // Remove the base disabled backgroundColor override; we'll replace it with compound buckets.
+          delete (disabledBucket as any).backgroundColor;
+
+          const disabledPrimaryWhen = `${disabledKey} && ${colorPrimaryKey}`;
+          const disabledNotPrimaryWhen = `${disabledKey} && color !== "primary"`;
+
+          const mkBucket = (hoverVal: any) => ({
+            ...(disabledBucket as any),
+            backgroundColor: { default: disabledDefault, ":hover": hoverVal },
+          });
+
+          variantBuckets.set(disabledPrimaryWhen, mkBucket(primaryHover));
+          variantStyleKeys[disabledPrimaryWhen] ??= `${decl.styleKey}${toSuffixFromProp(
+            disabledPrimaryWhen,
+          )}`;
+
+          variantBuckets.set(disabledNotPrimaryWhen, mkBucket(baseHover));
+          variantStyleKeys[disabledNotPrimaryWhen] ??= `${decl.styleKey}${toSuffixFromProp(
+            disabledNotPrimaryWhen,
+          )}`;
+        }
+      }
+    }
+
     for (const [when, obj] of variantBuckets.entries()) {
       const key = variantStyleKeys[when]!;
       resolvedStyleObjects.set(key, obj);

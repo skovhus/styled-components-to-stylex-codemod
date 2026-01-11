@@ -258,6 +258,18 @@ function emitMinimalWrapper(args: {
     }
   }
 
+  // If we had to destructure an intrinsic prop to use it for conditional styling (variants),
+  // ensure we still forward it to the DOM element.
+  // (Example: `disabled` on <button> is a real DOM attribute and must not be swallowed.)
+  if (tagName === "button" && destructureProps.includes("disabled")) {
+    jsxAttrs.push(
+      j.jsxAttribute(
+        j.jsxIdentifier("disabled"),
+        j.jsxExpressionContainer(j.identifier("disabled")),
+      ),
+    );
+  }
+
   if (includeRest) {
     jsxAttrs.push(j.jsxSpreadAttribute(restId));
   }
@@ -336,6 +348,59 @@ function emitMinimalWrapper(args: {
   ];
 
   return result;
+}
+
+function parseVariantWhenToAst(j: any, when: string): { cond: any; props: string[] } {
+  const trimmed = String(when ?? "").trim();
+  if (!trimmed) {
+    return { cond: j.identifier("true"), props: [] };
+  }
+
+  // Support simple conjunctions produced by lower-rules (compound variants):
+  //   `disabled && color === "primary"`
+  //   `disabled && !(color === "primary")`
+  if (trimmed.includes("&&")) {
+    const parts = trimmed
+      .split("&&")
+      .map((s) => s.trim())
+      .filter(Boolean);
+    const parsed = parts.map((p) => parseVariantWhenToAst(j, p));
+    const cond = parsed
+      .slice(1)
+      .reduce((acc, cur) => j.logicalExpression("&&", acc, cur.cond), parsed[0]!.cond);
+    const props = [...new Set(parsed.flatMap((x) => x.props))];
+    return { cond, props };
+  }
+
+  if (trimmed.startsWith("!(") && trimmed.endsWith(")")) {
+    const inner = trimmed.slice(2, -1).trim();
+    const innerParsed = parseVariantWhenToAst(j, inner);
+    return { cond: j.unaryExpression("!", innerParsed.cond), props: innerParsed.props };
+  }
+  if (trimmed.startsWith("!")) {
+    const inner = trimmed.slice(1).trim();
+    const innerParsed = parseVariantWhenToAst(j, inner);
+    return { cond: j.unaryExpression("!", innerParsed.cond), props: innerParsed.props };
+  }
+
+  if (trimmed.includes("===") || trimmed.includes("!==")) {
+    const op = trimmed.includes("!==") ? "!==" : "===";
+    const [lhs, rhsRaw0] = trimmed.split(op).map((s) => s.trim());
+    const rhsRaw = rhsRaw0 ?? "";
+    const rhs =
+      rhsRaw?.startsWith('"') || rhsRaw?.startsWith("'")
+        ? j.literal(JSON.parse(rhsRaw.replace(/^'/, '"').replace(/'$/, '"')))
+        : /^-?\d+(\.\d+)?$/.test(rhsRaw)
+          ? j.literal(Number(rhsRaw))
+          : j.identifier(rhsRaw);
+    const propName = lhs ?? "";
+    return {
+      cond: j.binaryExpression(op, j.identifier(propName), rhs),
+      props: propName ? [propName] : [],
+    };
+  }
+
+  return { cond: j.identifier(trimmed), props: [trimmed] };
 }
 
 type ExportInfo = { exportName: string; isDefault: boolean; isSpecifier: boolean };
@@ -1650,21 +1715,11 @@ export function emitWrappers(args: {
       }
     }
     for (const when of Object.keys(d.variantStyleKeys ?? {})) {
-      const trimmed = String(when ?? "").trim();
-      let propName = "";
-      if (trimmed.startsWith("!(") && trimmed.endsWith(")")) {
-        propName = trimmed.slice(2, -1).trim();
-      } else if (trimmed.startsWith("!")) {
-        propName = trimmed.slice(1);
-      } else if (trimmed.includes("===") || trimmed.includes("!==")) {
-        const op = trimmed.includes("!==") ? "!==" : "===";
-        const [lhs] = trimmed.split(op).map((s) => s.trim());
-        propName = lhs ?? "";
-      } else {
-        propName = trimmed;
-      }
-      if (propName) {
-        extraProps.add(propName);
+      const { props } = parseVariantWhenToAst(j, when);
+      for (const p of props) {
+        if (p) {
+          extraProps.add(p);
+        }
       }
     }
     for (const p of d.styleFnFromProps ?? []) {
@@ -1799,31 +1854,7 @@ export function emitWrappers(args: {
     // Variant buckets are keyed by expression strings (e.g. `size === \"large\"`).
     if (d.variantStyleKeys) {
       for (const [when, variantKey] of Object.entries(d.variantStyleKeys)) {
-        // Parse the supported expression subset into AST:
-        // - "prop" / "!prop"
-        // - "prop === \"x\"" / "prop !== \"x\""
-        let cond: any = null;
-        const trimmed = when.trim();
-        if (trimmed.startsWith("!(") && trimmed.endsWith(")")) {
-          // Not expected here (neg variants are merged into base), but handle anyway.
-          const inner = trimmed.slice(2, -1).trim();
-          cond = j.unaryExpression("!", j.identifier(inner));
-        } else if (trimmed.startsWith("!")) {
-          cond = j.unaryExpression("!", j.identifier(trimmed.slice(1)));
-        } else if (trimmed.includes("===") || trimmed.includes("!==")) {
-          const op = trimmed.includes("!==") ? "!==" : "===";
-          const [lhs, rhsRaw0] = trimmed.split(op).map((s) => s.trim());
-          const rhsRaw = rhsRaw0 ?? "";
-          const rhs =
-            rhsRaw?.startsWith('"') || rhsRaw?.startsWith("'")
-              ? j.literal(JSON.parse(rhsRaw.replace(/^'/, '"').replace(/'$/, '"')))
-              : /^-?\d+(\.\d+)?$/.test(rhsRaw)
-                ? j.literal(Number(rhsRaw))
-                : j.identifier(rhsRaw);
-          cond = j.binaryExpression(op, j.identifier(lhs ?? ""), rhs);
-        } else {
-          cond = j.identifier(trimmed);
-        }
+        const { cond } = parseVariantWhenToAst(j, when);
         styleArgs.push(
           j.logicalExpression(
             "&&",
@@ -2546,39 +2577,11 @@ export function emitWrappers(args: {
     const destructureProps: string[] = [];
     if (d.variantStyleKeys) {
       for (const [when, variantKey] of Object.entries(d.variantStyleKeys)) {
-        // Parse the supported expression subset into AST:
-        // - "prop" / "!prop"
-        // - "prop === \"x\"" / "prop !== \"x\""
-        let cond: any = null;
-        const trimmed = when.trim();
-        let propName = "";
-
-        if (trimmed.startsWith("!(") && trimmed.endsWith(")")) {
-          const inner = trimmed.slice(2, -1).trim();
-          cond = j.unaryExpression("!", j.identifier(inner));
-          propName = inner;
-        } else if (trimmed.startsWith("!")) {
-          propName = trimmed.slice(1);
-          cond = j.unaryExpression("!", j.identifier(propName));
-        } else if (trimmed.includes("===") || trimmed.includes("!==")) {
-          const op = trimmed.includes("!==") ? "!==" : "===";
-          const [lhs, rhsRaw0] = trimmed.split(op).map((s) => s.trim());
-          const rhsRaw = rhsRaw0 ?? "";
-          const rhs =
-            rhsRaw?.startsWith('"') || rhsRaw?.startsWith("'")
-              ? j.literal(JSON.parse(rhsRaw.replace(/^'/, '"').replace(/'$/, '"')))
-              : /^-?\d+(\.\d+)?$/.test(rhsRaw)
-                ? j.literal(Number(rhsRaw))
-                : j.identifier(rhsRaw);
-          propName = lhs ?? "";
-          cond = j.binaryExpression(op, j.identifier(propName), rhs);
-        } else {
-          propName = trimmed;
-          cond = j.identifier(trimmed);
-        }
-
-        if (propName && !destructureProps.includes(propName)) {
-          destructureProps.push(propName);
+        const { cond, props } = parseVariantWhenToAst(j, when);
+        for (const p of props) {
+          if (p && !destructureProps.includes(p)) {
+            destructureProps.push(p);
+          }
         }
 
         styleArgs.push(
@@ -2872,37 +2875,11 @@ export function emitWrappers(args: {
     // Add variant style arguments if this component has variants
     if (d.variantStyleKeys) {
       for (const [when, variantKey] of Object.entries(d.variantStyleKeys)) {
-        // Parse the supported expression subset into AST
-        let cond: any = null;
-        const trimmed = when.trim();
-        let propName = "";
-
-        if (trimmed.startsWith("!(") && trimmed.endsWith(")")) {
-          const inner = trimmed.slice(2, -1).trim();
-          cond = j.unaryExpression("!", j.identifier(inner));
-          propName = inner;
-        } else if (trimmed.startsWith("!")) {
-          propName = trimmed.slice(1);
-          cond = j.unaryExpression("!", j.identifier(propName));
-        } else if (trimmed.includes("===") || trimmed.includes("!==")) {
-          const op = trimmed.includes("!==") ? "!==" : "===";
-          const [lhs, rhsRaw0] = trimmed.split(op).map((s) => s.trim());
-          const rhsRaw = rhsRaw0 ?? "";
-          const rhs =
-            rhsRaw?.startsWith('"') || rhsRaw?.startsWith("'")
-              ? j.literal(JSON.parse(rhsRaw.replace(/^'/, '"').replace(/'$/, '"')))
-              : /^-?\d+(\.\d+)?$/.test(rhsRaw)
-                ? j.literal(Number(rhsRaw))
-                : j.identifier(rhsRaw);
-          propName = lhs ?? "";
-          cond = j.binaryExpression(op, j.identifier(propName), rhs);
-        } else {
-          propName = trimmed;
-          cond = j.identifier(trimmed);
-        }
-
-        if (propName && !destructureProps.includes(propName)) {
-          destructureProps.push(propName);
+        const { cond, props } = parseVariantWhenToAst(j, when);
+        for (const p of props) {
+          if (p && !destructureProps.includes(p)) {
+            destructureProps.push(p);
+          }
         }
 
         styleArgs.push(

@@ -217,6 +217,62 @@ export function normalizeStylisAstToIR(
   };
 
   visit(stylisAst);
+
+  // Stylis can completely drop “standalone” placeholders that appear as their own statement,
+  // e.g. a template interpolation that returns a declaration block string:
+  //   ${(props) => props.disabled && "color: red;"}
+  //
+  // In these cases, the placeholder never appears in the compiled AST, so we must recover it
+  // from the raw template CSS and emit a synthetic dynamic-block declaration.
+  //
+  // We only recover placeholders at top-level (brace depth 0) to avoid accidentally pulling
+  // placeholders from nested selector blocks or at-rules.
+  if (rawCss) {
+    const placeholderLineRe = /^__SC_EXPR_(\d+)__$/;
+    let depth = 0;
+    let line = "";
+
+    const flushLine = () => {
+      const trimmed = line.trim();
+      if (depth === 0) {
+        const m = trimmed.match(placeholderLineRe);
+        if (m) {
+          const slotId = Number(m[1]);
+          const placeholder = `__SC_EXPR_${slotId}__`;
+          // Only emit if this placeholder corresponds to a known slot.
+          const mapped = slotByPlaceholder.get(placeholder);
+          if (mapped !== undefined) {
+            const decl: CssDeclarationIR = {
+              property: "",
+              value: { kind: "interpolated", parts: [{ kind: "slot", slotId: mapped }] },
+              important: false,
+              valueRaw: placeholder,
+            };
+            ensureRule("&", []).declarations.push(decl);
+            lastDecl = decl;
+          }
+        }
+      }
+      line = "";
+    };
+
+    for (let i = 0; i < rawCss.length; i++) {
+      const ch = rawCss[i]!;
+      if (ch === "{") {
+        depth++;
+      } else if (ch === "}") {
+        depth = Math.max(0, depth - 1);
+      }
+      if (ch === "\n") {
+        flushLine();
+        continue;
+      }
+      line += ch;
+    }
+    // Flush final line (if file doesn't end with newline).
+    flushLine();
+  }
+
   return rules;
 }
 
@@ -227,6 +283,23 @@ function parseDeclarations(
   const trimmed = declValue.trim();
   if (!trimmed) {
     return [];
+  }
+
+  // Standalone interpolation placeholder:
+  //   __SC_EXPR_0__
+  // Stylis can emit this when an interpolation appears as its own statement (not part of `prop: value`),
+  // e.g. `${(props) => props.disabled && "color: red;"}`
+  // Without handling this case, we would drop the interpolation entirely and lose conditional blocks.
+  const directSlot = slotByPlaceholder.get(trimmed);
+  if (directSlot !== undefined) {
+    return [
+      {
+        property: "",
+        value: { kind: "interpolated", parts: [{ kind: "slot", slotId: directSlot }] },
+        important: false,
+        valueRaw: trimmed,
+      },
+    ];
   }
 
   // Stylis can merge a standalone interpolation placeholder with the following declaration:

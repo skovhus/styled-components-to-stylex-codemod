@@ -2243,6 +2243,19 @@ function toSuffixFromProp(propName: string): string {
   //   `variant === "primary"` -> `VariantPrimary`
   //   `!isActive` -> `NotActive`
   const trimmed = raw.trim();
+
+  // Handle simple compound expressions (used for compound variant buckets), e.g.:
+  //   `disabled && color === "primary"` -> `DisabledColorPrimary`
+  if (trimmed.includes("&&")) {
+    const parts = trimmed
+      .split("&&")
+      .map((s) => s.trim())
+      .filter(Boolean);
+    if (parts.length) {
+      return parts.map((p) => toSuffixFromProp(p)).join("");
+    }
+  }
+
   if (trimmed.startsWith("!")) {
     const inner = trimmed
       .slice(1)
