@@ -1,11 +1,19 @@
 import { readdir, readFile, writeFile } from "node:fs/promises";
 import { join, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
+import { pathToFileURL } from "node:url";
+import { register } from "node:module";
 import { applyTransform } from "jscodeshift/src/testUtils.js";
 import { format } from "oxfmt";
 
-import transform from "../src/transform.ts";
-import { fixtureAdapter } from "../src/__tests__/fixture-adapters.ts";
+// Allow Node to run `src/*.ts` directly even though source uses `.js` specifiers.
+// We register a tiny resolver hook, then dynamically import the TS sources.
+register(new URL("./src-ts-specifier-loader.mjs", import.meta.url).href, pathToFileURL(".."));
+
+const [{ default: transform }, { fixtureAdapter }] = await Promise.all([
+  import("../src/transform.ts"),
+  import("../src/__tests__/fixture-adapters.ts"),
+]);
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const repoRoot = join(__dirname, "..");
