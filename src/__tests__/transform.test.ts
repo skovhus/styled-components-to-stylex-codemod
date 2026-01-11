@@ -27,66 +27,92 @@ type FixtureCase = {
   outputPath: string;
   inputFile: string;
   outputFile: string;
+  parser: "tsx" | "babel" | "flow";
 };
 
-function getTestCases(): string[] {
+// Supported file extensions and their parsers
+const FIXTURE_EXTENSIONS: {
+  inputSuffix: string;
+  outputSuffix: string;
+  parser: FixtureCase["parser"];
+}[] = [
+  { inputSuffix: ".input.tsx", outputSuffix: ".output.tsx", parser: "tsx" },
+  { inputSuffix: ".input.jsx", outputSuffix: ".output.jsx", parser: "babel" },
+  { inputSuffix: ".flow.input.jsx", outputSuffix: ".flow.output.jsx", parser: "flow" },
+];
+
+function getTestCases(): FixtureCase[] {
   const files = readdirSync(testCasesDir);
-  // Exclude unsupported fixtures from main test cases
-  // Convention: `_unsupported.<case>.input.tsx` has NO output file.
-  const inputFiles = files.filter(
-    (f) =>
-      f.endsWith(".input.tsx") && !f.startsWith("_unsupported.") && !f.startsWith("unsupported-"),
-  );
-  const outputFiles = files.filter(
-    (f) =>
-      f.endsWith(".output.tsx") && !f.startsWith("_unsupported.") && !f.startsWith("unsupported-"),
-  );
+  const cases: FixtureCase[] = [];
 
-  const inputNames = new Set(inputFiles.map((f) => f.replace(".input.tsx", "")));
-  const outputNames = new Set(outputFiles.map((f) => f.replace(".output.tsx", "")));
+  for (const { inputSuffix, outputSuffix, parser } of FIXTURE_EXTENSIONS) {
+    // Exclude unsupported fixtures from main test cases
+    // Convention: `_unsupported.<case>.input.*` has NO output file.
+    const inputFiles = files.filter(
+      (f) =>
+        f.endsWith(inputSuffix) && !f.startsWith("_unsupported.") && !f.startsWith("unsupported-"),
+    );
+    const outputFiles = files.filter(
+      (f) =>
+        f.endsWith(outputSuffix) && !f.startsWith("_unsupported.") && !f.startsWith("unsupported-"),
+    );
 
-  // Check for mismatched files
-  for (const name of inputNames) {
-    if (!outputNames.has(name)) {
-      throw new Error(`Missing output file for test case: ${name}`);
+    const inputNames = new Set(inputFiles.map((f) => f.replace(inputSuffix, "")));
+    const outputNames = new Set(outputFiles.map((f) => f.replace(outputSuffix, "")));
+
+    // Check for mismatched files
+    for (const name of inputNames) {
+      if (!outputNames.has(name)) {
+        throw new Error(`Missing output file for test case: ${name}${outputSuffix}`);
+      }
+    }
+    for (const name of outputNames) {
+      if (!inputNames.has(name)) {
+        throw new Error(`Missing input file for test case: ${name}${inputSuffix}`);
+      }
+    }
+
+    for (const name of inputNames) {
+      cases.push({
+        name,
+        inputPath: join(testCasesDir, `${name}${inputSuffix}`),
+        outputPath: join(testCasesDir, `${name}${outputSuffix}`),
+        inputFile: `${name}${inputSuffix}`,
+        outputFile: `${name}${outputSuffix}`,
+        parser,
+      });
     }
   }
-  for (const name of outputNames) {
-    if (!inputNames.has(name)) {
-      throw new Error(`Missing input file for test case: ${name}`);
-    }
-  }
 
-  return [...inputNames];
+  return cases;
 }
 
-const fixtureCases: FixtureCase[] = getTestCases().map((name) => ({
-  name,
-  inputPath: join(testCasesDir, `${name}.input.tsx`),
-  outputPath: join(testCasesDir, `${name}.output.tsx`),
-  inputFile: `${name}.input.tsx`,
-  outputFile: `${name}.output.tsx`,
-}));
+const fixtureCases: FixtureCase[] = getTestCases();
 
-function readTestCase(name: string): {
+function readTestCase(
+  name: string,
+  inputPath?: string,
+  outputPath?: string,
+): {
   input: string;
   output: string;
   inputPath: string;
   outputPath: string;
 } {
-  const inputPath = join(testCasesDir, `${name}.input.tsx`);
-  const outputPath = join(testCasesDir, `${name}.output.tsx`);
+  // Default to .tsx extension for backwards compatibility
+  const resolvedInputPath = inputPath ?? join(testCasesDir, `${name}.input.tsx`);
+  const resolvedOutputPath = outputPath ?? join(testCasesDir, `${name}.output.tsx`);
 
-  if (!existsSync(inputPath)) {
-    throw new Error(`Input file not found: ${inputPath}`);
+  if (!existsSync(resolvedInputPath)) {
+    throw new Error(`Input file not found: ${resolvedInputPath}`);
   }
-  if (!existsSync(outputPath)) {
-    throw new Error(`Output file not found: ${outputPath}`);
+  if (!existsSync(resolvedOutputPath)) {
+    throw new Error(`Output file not found: ${resolvedOutputPath}`);
   }
 
-  const input = readFileSync(inputPath, "utf-8");
-  const output = readFileSync(outputPath, "utf-8");
-  return { input, output, inputPath, outputPath };
+  const input = readFileSync(resolvedInputPath, "utf-8");
+  const output = readFileSync(resolvedOutputPath, "utf-8");
+  return { input, output, inputPath: resolvedInputPath, outputPath: resolvedOutputPath };
 }
 
 type TestTransformOptions = Partial<Omit<TransformOptions, "adapter">> & {
@@ -97,12 +123,13 @@ function runTransform(
   source: string,
   options: TestTransformOptions = {},
   filePath: string = "test.tsx",
+  parser: "tsx" | "babel" | "flow" = "tsx",
 ): string {
   const opts: TransformOptions = {
     adapter: fixtureAdapter,
     ...(options as any),
   };
-  const result = applyTransform(transform, opts, { source, path: filePath }, { parser: "tsx" });
+  const result = applyTransform(transform, opts, { source, path: filePath }, { parser });
   // applyTransform returns empty string when no changes, return original source
   return result || source;
 }
@@ -110,8 +137,8 @@ function runTransform(
 /**
  * Normalize code for comparison using oxfmt formatter
  */
-async function normalizeCode(code: string): Promise<string> {
-  const { code: formatted } = await format("test.tsx", code);
+async function normalizeCode(code: string, filePath: string = "test.tsx"): Promise<string> {
+  const { code: formatted } = await format(filePath, code);
   return formatted;
 }
 
@@ -225,18 +252,21 @@ describe("_unsupported fixtures", () => {
 });
 
 describe("test case exports", () => {
-  it.each(fixtureCases)("$outputFile should export App in both input and output", ({ name }) => {
-    const { input, output } = readTestCase(name);
-    assertExportsApp(input, `${name}.input.tsx`);
-    assertExportsApp(output, `${name}.output.tsx`);
-  });
+  it.each(fixtureCases)(
+    "$outputFile should export App in both input and output",
+    ({ inputPath, outputPath, inputFile, outputFile }) => {
+      const { input, output } = readTestCase("", inputPath, outputPath);
+      assertExportsApp(input, inputFile);
+      assertExportsApp(output, outputFile);
+    },
+  );
 });
 
 describe("output invariants", () => {
   it.each(fixtureCases)(
     "$outputFile should not import styled/css/keyframes from styled-components",
-    ({ name }) => {
-      const { output } = readTestCase(name);
+    ({ inputPath, outputPath }) => {
+      const { output } = readTestCase("", inputPath, outputPath);
       // Allow imports of useTheme, withTheme, ThemeProvider etc. that aren't transformed
       // But disallow imports of styled, css, keyframes, createGlobalStyle
       const disallowedImports = ["styled", "css", "keyframes", "createGlobalStyle"];
@@ -261,8 +291,8 @@ describe("output invariants", () => {
 describe("fixture warning expectations", () => {
   it.each(fixtureCases)(
     "$outputFile warnings should match expectations (if provided)",
-    ({ name, inputPath }) => {
-      const { input } = readTestCase(name);
+    ({ inputPath, outputPath }) => {
+      const { input } = readTestCase("", inputPath, outputPath);
       const expected = readExpectedWarningsFromComments(input);
 
       const result = transformWithWarnings(
@@ -295,19 +325,21 @@ describe("fixture warning expectations", () => {
 // - Result must not import styled-components
 // - Result must match the expected output fixture
 describe("transform", () => {
-  it.each(fixtureCases)("$outputFile", async ({ name, inputPath }) => {
-    const { input, output } = readTestCase(name);
-    const result = runTransform(input, {}, inputPath);
+  it.each(fixtureCases)("$outputFile", async ({ name, inputPath, outputPath, parser }) => {
+    const { input, output } = readTestCase(name, inputPath, outputPath);
+    const result = runTransform(input, {}, inputPath, parser);
 
     // Transform must produce a change - no bailing allowed
-    expect(await normalizeCode(result)).not.toEqual(await normalizeCode(input));
+    expect(await normalizeCode(result, outputPath)).not.toEqual(
+      await normalizeCode(input, inputPath),
+    );
 
     // Result must not import styled-components
     expect(result).not.toMatch(/from\s+['"]styled-components['"]/);
 
     // Compare against expected output fixture
-    const normalizedResult = await normalizeCode(result);
-    const normalizedExpected = await normalizeCode(output);
+    const normalizedResult = await normalizeCode(result, outputPath);
+    const normalizedExpected = await normalizeCode(output, outputPath);
     expect(normalizedResult).toEqual(normalizedExpected);
   });
 });

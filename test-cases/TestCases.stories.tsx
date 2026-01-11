@@ -86,16 +86,20 @@ const RenderDebugFrame: React.FC<{ children: React.ReactNode }> = ({ children })
 };
 
 // Auto-discover all test case modules using Vite's glob import
-const inputModules = import.meta.glob<{ App: React.ComponentType }>("./*.input.tsx", {
-  eager: true,
-});
-const outputModules = import.meta.glob<{ App: React.ComponentType }>("./*.output.tsx", {
-  eager: true,
-});
+// Supports .tsx, .jsx, and .flow.jsx extensions
+const inputModules = import.meta.glob<{ App: React.ComponentType }>(
+  ["./*.input.tsx", "./*.input.jsx", "./*.flow.input.jsx"],
+  { eager: true },
+);
+const outputModules = import.meta.glob<{ App: React.ComponentType }>(
+  ["./*.output.tsx", "./*.output.jsx", "./*.flow.output.jsx"],
+  { eager: true },
+);
 
 // Extract test case names from file paths
 function getTestCaseName(path: string): string {
-  const match = path.match(/\.\/(.+)\.(input|output)\.tsx$/);
+  // Handle: .input.tsx, .output.tsx, .input.jsx, .output.jsx, .flow.input.jsx, .flow.output.jsx
+  const match = path.match(/\.\/(.+?)(?:\.flow)?\.(input|output)\.(?:tsx|jsx)$/);
   return match?.[1] ?? path;
 }
 
@@ -116,12 +120,27 @@ interface ComparisonProps {
   testCase: string;
 }
 
-const Comparison: React.FC<ComparisonProps> = ({ testCase }) => {
-  const inputPath = `./${testCase}.input.tsx`;
-  const outputPath = `./${testCase}.output.tsx`;
+// Find the module for a test case, trying different extensions
+function findModule(
+  modules: Record<string, { App: React.ComponentType }>,
+  testCase: string,
+  type: "input" | "output",
+): { App: React.ComponentType } | undefined {
+  // Try extensions in order: .tsx, .jsx, .flow.jsx
+  const extensions = [
+    `./${testCase}.${type}.tsx`,
+    `./${testCase}.${type}.jsx`,
+    `./${testCase}.flow.${type}.jsx`,
+  ];
+  for (const path of extensions) {
+    if (modules[path]) return modules[path];
+  }
+  return undefined;
+}
 
-  const InputComponent = inputModules[inputPath]?.App;
-  const OutputComponent = outputModules[outputPath]?.App;
+const Comparison: React.FC<ComparisonProps> = ({ testCase }) => {
+  const InputComponent = findModule(inputModules, testCase, "input")?.App;
+  const OutputComponent = findModule(outputModules, testCase, "output")?.App;
 
   return (
     <div style={{ display: "flex", gap: "2rem", padding: "1rem" }}>
