@@ -2,7 +2,12 @@ import * as stylex from "@stylexjs/stylex";
 import * as React from "react";
 import { ActionMenuTextDivider, ActionMenuGroupHeader } from "./lib/action-menu-divider";
 
-type ListItemProps = React.ComponentProps<"div">;
+type ListItemProps = React.PropsWithChildren<
+  React.HTMLAttributes<HTMLElement> & {
+    className?: string;
+    style?: React.CSSProperties;
+  }
+>;
 
 // Static properties on styled components should be preserved when
 // they become wrapper functions.
@@ -29,7 +34,13 @@ export function ListItem(props: ListItemProps) {
 
 ListItem.HEIGHT = 42;
 ListItem.PADDING = 8;
-type BaseButtonProps = React.ComponentProps<"button">;
+
+type BaseButtonProps = React.PropsWithChildren<
+  React.ButtonHTMLAttributes<HTMLButtonElement> & {
+    className?: string;
+    style?: React.CSSProperties;
+  }
+>;
 
 // Pattern 2: styled(BaseComponent) with static props defined in same file
 function BaseButton(props: BaseButtonProps) {
@@ -51,7 +62,12 @@ function BaseButton(props: BaseButtonProps) {
   );
 }
 
-type ExtendedButtonProps = React.ComponentProps<"button">;
+type ExtendedButtonProps = React.PropsWithChildren<
+  React.ButtonHTMLAttributes<HTMLButtonElement> & {
+    className?: string;
+    style?: React.CSSProperties;
+  }
+>;
 
 // ExtendedButton should have HEIGHT from BaseButton
 export function ExtendedButton(props: ExtendedButtonProps) {
@@ -74,20 +90,20 @@ export function ExtendedButton(props: ExtendedButtonProps) {
 }
 
 ExtendedButton.HEIGHT = BaseButton.HEIGHT;
-type CommandMenuTextDividerProps = Omit<
-  React.ComponentProps<typeof ActionMenuTextDivider>,
-  "className" | "style"
->;
+
+type CommandMenuTextDividerProps = React.PropsWithChildren<{
+  text?: any;
+}>;
 
 export function CommandMenuTextDivider(props: CommandMenuTextDividerProps) {
   return <ActionMenuTextDivider {...props} {...stylex.props(styles.commandMenuTextDivider)} />;
 }
 
 CommandMenuTextDivider.HEIGHT = ActionMenuTextDivider.HEIGHT;
-type CommandMenuGroupHeaderProps = Omit<
-  React.ComponentProps<typeof ActionMenuGroupHeader>,
-  "className" | "style"
->;
+
+type CommandMenuGroupHeaderProps = React.PropsWithChildren<{
+  title?: any;
+}>;
 
 export function CommandMenuGroupHeader(props: CommandMenuGroupHeaderProps) {
   return <ActionMenuGroupHeader {...props} {...stylex.props(styles.commandMenuGroupHeader)} />;

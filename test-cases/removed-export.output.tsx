@@ -3,7 +3,7 @@ import * as React from "react";
 import { type FocusTrap as OriginalFocusTrap, createFocusTrap } from "./lib/focus-trap";
 import type { SelectionFunction } from "./lib/helpers";
 
-type RangeInputProps = Omit<React.ComponentProps<"input">, "className" | "style">;
+type RangeInputProps = {};
 
 // Pattern 3: Type import used elsewhere in the file (not in styled component)
 // The codemod must NOT strip this import even though it's not used in styled components
@@ -16,7 +16,7 @@ export function RangeInput(props: RangeInputProps) {
   return <input type="range" {...rest} {...stylex.props(styles.rangeInput)} />;
 }
 
-type FocusTrapSuspenseFallbackProps = Omit<React.ComponentProps<"input">, "className" | "style">;
+type FocusTrapSuspenseFallbackProps = {};
 
 /**
  * Component to render as suspense fallback if your focus trap will suspend.
@@ -52,7 +52,10 @@ export function useSelection(onSelect: SelectionFunction) {
   return handleSelect;
 }
 
-type StyledLabelProps = React.ComponentProps<"span">;
+type StyledLabelProps = React.PropsWithChildren<{
+  className?: string;
+  style?: React.CSSProperties;
+}>;
 
 // Pattern 4: Internal styled component used by another styled component AND in JSX
 // The codemod must NOT remove StyledText since it's used both:
@@ -77,7 +80,7 @@ function StyledLabel(props: StyledLabelProps) {
   );
 }
 
-type HelpLabelProps = Omit<React.ComponentProps<typeof StyledLabel>, "className" | "style">;
+type HelpLabelProps = React.PropsWithChildren<{}>;
 
 export function HelpLabel(props: HelpLabelProps) {
   return <StyledLabel {...props} {...stylex.props(styles.helpLabel)} />;
@@ -118,13 +121,21 @@ export function Tooltip(props: TooltipWrapperProps) {
 //   - <StyledText {...props} .../>
 import { Text } from "./lib/text";
 
-type StyledTextProps = React.ComponentProps<typeof Text>;
+type StyledTextProps = React.PropsWithChildren<{
+  className?: string;
+  style?: React.CSSProperties;
+  color?: any;
+  variant?: any;
+}>;
 
 function StyledText(props: StyledTextProps) {
   return <Text {...props} {...stylex.props(styles.text)} />;
 }
 
-type HelpTextProps = Omit<React.ComponentProps<typeof StyledText>, "className" | "style">;
+type HelpTextProps = React.PropsWithChildren<{
+  color?: any;
+  variant?: any;
+}>;
 
 export function HelpText(props: HelpTextProps) {
   return <StyledText {...props} {...stylex.props(styles.helpText)} />;

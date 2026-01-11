@@ -1963,7 +1963,6 @@ export function transformWithWarnings(
     filePath: file.path,
     styledDecls,
     wrapperNames,
-    expressionAsWrapperNames,
     patternProp,
     exportedComponents,
     stylesIdentifier,

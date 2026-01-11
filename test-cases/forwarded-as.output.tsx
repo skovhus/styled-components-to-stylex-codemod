@@ -1,7 +1,12 @@
 import * as React from "react";
 import * as stylex from "@stylexjs/stylex";
 
-type ButtonProps = React.ComponentProps<"button"> & { as?: React.ElementType; href?: string };
+type ButtonProps = React.PropsWithChildren<{
+  as?: React.ElementType;
+  className?: string;
+  style?: React.CSSProperties;
+  href?: any;
+}>;
 
 function Button(props: ButtonProps) {
   const { as: Component = "button", children, style, ...rest } = props;
@@ -12,7 +17,9 @@ function Button(props: ButtonProps) {
   );
 }
 
-type ButtonWrapperProps = Omit<React.ComponentProps<typeof Button>, "className" | "style">;
+type ButtonWrapperProps = React.PropsWithChildren<{
+  href?: any;
+}>;
 
 function ButtonWrapper(props: ButtonWrapperProps) {
   return <Button {...props} {...stylex.props(styles.buttonWrapper)} />;

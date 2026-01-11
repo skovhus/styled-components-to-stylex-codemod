@@ -2,10 +2,10 @@ import * as stylex from "@stylexjs/stylex";
 import * as React from "react";
 import { Text } from "./lib/text";
 
-type ButtonProps = Omit<React.ComponentProps<"button">, "className" | "style"> & {
+type ButtonProps = React.PropsWithChildren<{
   as?: React.ElementType;
-  href?: string;
-};
+  href?: any;
+}>;
 
 function Button(props: ButtonProps) {
   const { as: Component = "button", children, ...rest } = props;
@@ -16,16 +16,14 @@ function Button(props: ButtonProps) {
   );
 }
 
-type StyledTextProps<C extends React.ElementType = typeof Text> = Omit<
-  React.ComponentProps<typeof Text>,
-  "className" | "style"
-> &
-  Omit<
-    React.ComponentPropsWithoutRef<C>,
-    keyof Omit<React.ComponentProps<typeof Text>, "className" | "style">
-  > & { as?: C };
+type StyledTextProps = React.PropsWithChildren<{
+  as?: React.ElementType;
+  color?: any;
+  htmlFor?: any;
+  variant?: any;
+}>;
 
-function StyledText<C extends React.ElementType = typeof Text>(props: StyledTextProps<C>) {
+function StyledText(props: StyledTextProps) {
   return <Text {...props} {...stylex.props(styles.text)} />;
 }
 

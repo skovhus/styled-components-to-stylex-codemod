@@ -1,7 +1,6 @@
-import * as React from "react";
 import * as stylex from "@stylexjs/stylex";
 
-type CardProps = React.PropsWithChildren<{}>;
+type CardProps = {};
 
 // withConfig for componentId (stable class names)
 function Card(props: CardProps) {
@@ -13,7 +12,10 @@ function Card(props: CardProps) {
   );
 }
 
-type InputProps = Omit<React.ComponentProps<"input">, "className" | "style"> & {
+type InputProps = {
+  hasError?: any;
+  placeholder?: any;
+} & {
   hasError?: boolean;
 };
 

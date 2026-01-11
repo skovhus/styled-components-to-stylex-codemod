@@ -7,7 +7,11 @@ import * as React from "react";
 // Otherwise: "Property 'className' does not exist on type 'MyProps'"
 
 // Pattern 1: styled("span") with custom props - wrapper needs span attributes
-interface TextColorProps extends React.ComponentProps<"span"> {
+interface TextColorProps extends React.PropsWithChildren<{
+  className?: string;
+  style?: React.CSSProperties;
+  color?: any;
+}> {
   /** Custom color prop */
   color: string;
 }
@@ -34,7 +38,7 @@ export function TextColor(props: TextColorProps) {
 // Pattern 2: styled(Component) - wrapper needs component's props + HTML attributes
 const BaseText = (props: React.ComponentProps<"span">) => <span {...props} />;
 
-interface HighlightProps extends Omit<React.ComponentProps<typeof BaseText>, "style"> {
+interface HighlightProps {
   /** Whether to highlight */
   highlighted?: boolean;
 }
@@ -64,7 +68,7 @@ export function App() {
 
 // Pattern 3: styled("span") with NO local usage - wrapper props should still be extended
 // This matches TextColor.tsx in a design system which doesn't use the component in the same file
-interface ThemeTextProps extends Omit<React.ComponentProps<"span">, "className" | "style"> {
+interface ThemeTextProps {
   /** Theme color name */
   themeColor: string;
 }

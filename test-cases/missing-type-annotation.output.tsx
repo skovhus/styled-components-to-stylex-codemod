@@ -4,7 +4,10 @@ import * as React from "react";
 // Bug 2: When codemod generates wrapper functions, it must include
 // proper type annotations for all parameters to avoid implicit 'any'.
 
-interface BoxProps extends Omit<React.ComponentProps<"div">, "className" | "style"> {
+interface BoxProps extends React.PropsWithChildren<{
+  bg?: any;
+  bordered?: any;
+}> {
   /** Whether the box has a border */
   bordered?: boolean;
   /** Background color override */
@@ -29,7 +32,9 @@ export function Box(props: BoxProps) {
   );
 }
 
-type InputProps = Omit<React.ComponentProps<"input">, "className" | "style">;
+type InputProps = {
+  onChange?: any;
+};
 
 // Component with callback that receives event
 export function Input(props: InputProps) {

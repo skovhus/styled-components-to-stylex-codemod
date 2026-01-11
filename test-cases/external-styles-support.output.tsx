@@ -1,7 +1,10 @@
 import * as React from "react";
 import * as stylex from "@stylexjs/stylex";
 
-type ExportedButtonProps = React.ComponentProps<"button">;
+type ExportedButtonProps = React.PropsWithChildren<{
+  className?: string;
+  style?: React.CSSProperties;
+}>;
 
 /**
  *  This component is exported and will use shouldSupportExternalStyles to enable

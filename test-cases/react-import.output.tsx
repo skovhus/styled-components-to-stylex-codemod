@@ -2,7 +2,7 @@ import * as React from "react";
 import * as stylex from "@stylexjs/stylex";
 import { themeVars } from "./tokens.stylex";
 
-type CardProps = Omit<React.ComponentProps<"div">, "className" | "style">;
+type CardProps = React.PropsWithChildren<{}>;
 
 export function Card(props: CardProps) {
   const { children, ...rest } = props;
@@ -13,7 +13,7 @@ export function Card(props: CardProps) {
   );
 }
 
-type ButtonProps = Omit<React.ComponentProps<"button">, "className" | "style">;
+type ButtonProps = React.PropsWithChildren<{}>;
 
 // Another component to ensure multiple components work
 export function Button(props: ButtonProps) {
@@ -27,7 +27,7 @@ export function Button(props: ButtonProps) {
 
 // Pattern 2: Component with theme access (like TextColor.tsx in a design system)
 // Uses props.theme.colors which the adapter resolves to themeVars
-interface ThemeSpanProps extends Omit<React.ComponentProps<"span">, "className" | "style"> {
+interface ThemeSpanProps {
   variant: string;
 }
 
