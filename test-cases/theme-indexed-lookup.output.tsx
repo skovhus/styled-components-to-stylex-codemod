@@ -36,7 +36,7 @@ export const App = () => (
 // The codemod should preserve the imported type, not convert to `string`
 import type { Colors } from "./lib/colors";
 
-interface TextColorProps extends TextColorProps {
+interface TextColorProps {
   /** The color from the theme */
   color: Colors;
 }

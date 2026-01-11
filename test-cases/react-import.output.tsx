@@ -27,7 +27,7 @@ export function Button(props: ButtonProps) {
 
 // Pattern 2: Component with theme access (like TextColor.tsx in a design system)
 // Uses props.theme.colors which the adapter resolves to themeVars
-interface ThemeSpanProps extends ThemeSpanProps {
+interface ThemeSpanProps {
   variant: string;
 }
 

@@ -4,7 +4,7 @@ import * as React from "react";
 // Bug 2: When codemod generates wrapper functions, it must include
 // proper type annotations for all parameters to avoid implicit 'any'.
 
-interface BoxProps extends BoxProps {
+interface BoxProps {
   /** Whether the box has a border */
   bordered?: boolean;
   /** Background color override */

@@ -1,4 +1,21 @@
-import { defineAdapter } from "../adapter.ts";
+import type { Adapter } from "../adapter.ts";
+
+// `scripts/update-fixtures.mts` is executed directly by Node (via `--experimental-strip-types`),
+// which cannot resolve our TS source's `.js` extension imports (they exist for ESM output).
+//
+// To keep this file as the single source of truth *without* changing build config,
+// we dynamically load `defineAdapter`:
+// - Prefer the built runtime (`dist/index.mjs`) when present (fixture update script usage).
+// - Fall back to the TS source (`src/adapter.ts`) when running tests.
+const { defineAdapter } = (await (async () => {
+  try {
+    return (await import("../../dist/index.mjs")) as unknown as {
+      defineAdapter: (a: Adapter) => Adapter;
+    };
+  } catch {
+    return (await import("../adapter.ts")) as unknown as { defineAdapter: (a: Adapter) => Adapter };
+  }
+})()) as { defineAdapter: (a: Adapter) => Adapter };
 
 // Test adapters - examples of custom adapter usage
 export const customAdapter = defineAdapter({

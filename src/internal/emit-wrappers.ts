@@ -708,6 +708,24 @@ export function emitWrappers(args: {
     return xs.join(" & ");
   };
 
+  const isSelfNamedPropsType = (explicitTypeText: string | null, localName: string): boolean => {
+    if (!explicitTypeText) {
+      return false;
+    }
+    return explicitTypeText.trim() === propsTypeNameFor(localName);
+  };
+
+  const wrapperRequiredTypeAdditions = (args: {
+    tagName: string;
+    supportsExternalStyles: boolean;
+  }): string => {
+    const { tagName, supportsExternalStyles } = args;
+    return joinIntersection(
+      VOID_TAGS.has(tagName) ? "{}" : "React.PropsWithChildren<{}>",
+      supportsExternalStyles ? "{ className?: string; style?: React.CSSProperties }" : "{}",
+    );
+  };
+
   const isPropRequiredInPropsTypeLiteral = (propsType: any, propName: string): boolean => {
     if (!propsType || propsType.type !== "TSTypeLiteral") {
       return false;
@@ -1202,6 +1220,9 @@ export function emitWrappers(args: {
     })();
     const explicit = stringifyTsType(d.propsType);
     const baseTypeText = (() => {
+      if (isSelfNamedPropsType(explicit, d.localName)) {
+        return wrapperRequiredTypeAdditions({ tagName, supportsExternalStyles });
+      }
       if (explicit && explicit.trim()) {
         // Keep user-provided props type, but ensure wrapper-used external style props are typed.
         return supportsExternalStyles
@@ -1224,7 +1245,7 @@ export function emitWrappers(args: {
     const typeAliasEmitted = emitNamedPropsType(d.localName, finalTypeText);
     // If the type alias was not emitted (e.g., due to shadowing), try to extend
     // the existing interface/type alias with the base component props (respecting external-style support).
-    if (!typeAliasEmitted && explicit) {
+    if (!typeAliasEmitted && explicit && !isSelfNamedPropsType(explicit, d.localName)) {
       const propsTypeName = propsTypeNameFor(d.localName);
       const interfaceExtended = extendExistingInterface(propsTypeName, baseTypeText);
       if (!interfaceExtended) {
@@ -1620,6 +1641,9 @@ export function emitWrappers(args: {
       const used = getUsedAttrs(d.localName);
       const intrinsicTypeText = `React.ComponentProps<${JSON.stringify(tagName)}>`;
       const baseTypeText = (() => {
+        if (isSelfNamedPropsType(explicit, d.localName)) {
+          return wrapperRequiredTypeAdditions({ tagName, supportsExternalStyles });
+        }
         if (explicit && explicit.trim()) {
           return supportsExternalStyles
             ? joinIntersection(explicit, "{ className?: string; style?: React.CSSProperties }")
@@ -1633,10 +1657,15 @@ export function emitWrappers(args: {
           supportsExternalStyles,
         });
       })();
-      emitNamedPropsType(
-        d.localName,
-        VOID_TAGS.has(tagName) ? baseTypeText : withChildren(baseTypeText),
-      );
+      const typeText = VOID_TAGS.has(tagName) ? baseTypeText : withChildren(baseTypeText);
+      const typeAliasEmitted = emitNamedPropsType(d.localName, typeText);
+      if (!typeAliasEmitted && isSelfNamedPropsType(explicit, d.localName)) {
+        const propsTypeName = propsTypeNameFor(d.localName);
+        const interfaceExtended = extendExistingInterface(propsTypeName, baseTypeText);
+        if (!interfaceExtended) {
+          extendExistingTypeAlias(propsTypeName, baseTypeText);
+        }
+      }
       needsReactTypeImport = true;
     }
     const styleArgs: any[] = [
@@ -1921,6 +1950,9 @@ export function emitWrappers(args: {
       const used = getUsedAttrs(d.localName);
       const rawBaseTypeText = `React.ComponentProps<${JSON.stringify(tagName)}>`;
       const baseTypeText = (() => {
+        if (isSelfNamedPropsType(explicit, d.localName)) {
+          return wrapperRequiredTypeAdditions({ tagName, supportsExternalStyles });
+        }
         if (explicit && explicit.trim()) {
           return supportsExternalStyles
             ? joinIntersection(explicit, "{ className?: string; style?: React.CSSProperties }")
@@ -1938,7 +1970,7 @@ export function emitWrappers(args: {
       const typeAliasEmitted = emitNamedPropsType(d.localName, typeText);
       // If the type alias was not emitted (e.g., due to shadowing), try to extend
       // the existing interface/type alias with the base component props
-      if (!typeAliasEmitted && explicit) {
+      if (!typeAliasEmitted && explicit && !isSelfNamedPropsType(explicit, d.localName)) {
         const propsTypeName = propsTypeNameFor(d.localName);
         const interfaceExtended = extendExistingInterface(propsTypeName, baseTypeText);
         if (!interfaceExtended) {

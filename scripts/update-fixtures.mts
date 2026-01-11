@@ -4,7 +4,7 @@ import { fileURLToPath } from "node:url";
 import { applyTransform } from "jscodeshift/src/testUtils.js";
 import { format } from "oxfmt";
 import transform from "../dist/transform.mjs";
-import { fixtureAdapter } from "../dist/__tests__/fixture-adapters.mjs";
+import { fixtureAdapter } from "../src/__tests__/fixture-adapters.ts";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const repoRoot = join(__dirname, "..");
