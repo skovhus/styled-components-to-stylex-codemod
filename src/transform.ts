@@ -1105,10 +1105,12 @@ export function transformWithWarnings(
       continue;
     }
 
-    // 3. If exported, ask adapter (default: true for exported components)
+    // 3. If exported, ask adapter.
+    // Default behavior is intentionally restrictive: only enable external styles if they are
+    // actually used in this file (or the adapter opts-in).
     if (!adapter.shouldSupportExternalStyles) {
-      // Default to true for exported components - they may be used with external className/style
-      decl.supportsExternalStyles = true;
+      const used = getUsedJsxAttrs(decl.localName);
+      decl.supportsExternalStyles = used.has("*") || used.has("className") || used.has("style");
       continue;
     }
 
