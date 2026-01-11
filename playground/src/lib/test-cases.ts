@@ -11,12 +11,20 @@ export interface TestCase {
 }
 
 export const testCases: TestCase[] = Object.entries(inputs)
-  // Filter out unsupported test cases
-  .filter(([path]) => !path.includes("_unsupported"))
   // Extract name and content
   .map(([path, content]) => ({
     name: path.match(/\/([^/]+)\.input\.tsx$/)?.[1] ?? path,
     content,
   }))
-  // Sort alphabetically
-  .sort((a, b) => a.name.localeCompare(b.name));
+  // Sort alphabetically, but put _unsupported at the bottom
+  .sort((a, b) => {
+    const aUnsupported = a.name.startsWith("_unsupported");
+    const bUnsupported = b.name.startsWith("_unsupported");
+    if (aUnsupported && !bUnsupported) {
+      return 1;
+    }
+    if (!aUnsupported && bUnsupported) {
+      return -1;
+    }
+    return a.name.localeCompare(b.name);
+  });

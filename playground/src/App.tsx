@@ -64,6 +64,53 @@ function App() {
     }
   }, []);
 
+  // Navigate to previous test case
+  const navigatePrev = useCallback(() => {
+    const currentIndex = testCases.findIndex((t) => t.name === selectedTestCase);
+    if (currentIndex > 0) {
+      const prevTestCase = testCases[currentIndex - 1];
+      setSelectedTestCase(prevTestCase.name);
+      setInput(prevTestCase.content);
+    }
+  }, [selectedTestCase]);
+
+  // Navigate to next test case
+  const navigateNext = useCallback(() => {
+    const currentIndex = testCases.findIndex((t) => t.name === selectedTestCase);
+    if (currentIndex < testCases.length - 1) {
+      const nextTestCase = testCases[currentIndex + 1];
+      setSelectedTestCase(nextTestCase.name);
+      setInput(nextTestCase.content);
+    }
+  }, [selectedTestCase]);
+
+  // Handle J/K keyboard navigation
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      // Check if the active element is an editor input
+      const activeElement = document.activeElement;
+      const isEditorFocused =
+        activeElement?.closest(".cm-editor") !== null ||
+        activeElement?.tagName === "TEXTAREA" ||
+        activeElement?.tagName === "INPUT";
+
+      if (isEditorFocused) {
+        return;
+      }
+
+      if (e.key === "j" || e.key === "J") {
+        e.preventDefault();
+        navigateNext();
+      } else if (e.key === "k" || e.key === "K") {
+        e.preventDefault();
+        navigatePrev();
+      }
+    };
+
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [navigatePrev, navigateNext]);
+
   return (
     <div style={styles.container}>
       {/* Header */}
@@ -91,6 +138,30 @@ function App() {
               </option>
             ))}
           </select>
+          <div style={styles.navButtons}>
+            <button
+              onClick={navigatePrev}
+              style={styles.navButton}
+              title="Go to previous test case (K)"
+              disabled={testCases.findIndex((t) => t.name === selectedTestCase) === 0}
+            >
+              <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor">
+                <path d="M8 4L3 9h10L8 4z" />
+              </svg>
+            </button>
+            <button
+              onClick={navigateNext}
+              style={styles.navButton}
+              title="Go to next test case (J)"
+              disabled={
+                testCases.findIndex((t) => t.name === selectedTestCase) === testCases.length - 1
+              }
+            >
+              <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor">
+                <path d="M8 12L13 7H3l5 5z" />
+              </svg>
+            </button>
+          </div>
         </div>
         <button onClick={() => setShowConfig(!showConfig)} style={styles.button}>
           {showConfig ? "Hide" : "Show"} Configuration
@@ -140,6 +211,16 @@ function App() {
                   theme="light"
                 />
               )}
+            </div>
+            <div style={styles.issueBar}>
+              <a
+                href="https://github.com/skovhus/styled-components-to-stylex-codemod/issues/new"
+                target="_blank"
+                rel="noopener noreferrer"
+                style={styles.issueLink}
+              >
+                Suggest improvement
+              </a>
             </div>
             {(adapterError || warnings.length > 0) && (
               <div style={styles.warningsPanel}>
@@ -191,6 +272,19 @@ const styles: Record<string, React.CSSProperties> = {
     alignItems: "center",
     gap: "12px",
   },
+  issueBar: {
+    display: "flex",
+    justifyContent: "flex-end",
+    alignItems: "center",
+    padding: "8px 12px",
+    borderTop: "1px solid #e0e0e0",
+    backgroundColor: "#f8f9fa",
+  },
+  issueLink: {
+    fontSize: "12px",
+    color: "#666",
+    textDecoration: "none",
+  },
   githubLink: {
     display: "flex",
     alignItems: "center",
@@ -207,12 +301,17 @@ const styles: Record<string, React.CSSProperties> = {
     color: "#333",
   },
   select: {
-    padding: "8px 12px",
+    padding: "6px 12px",
+    paddingRight: "24px",
     fontSize: "14px",
     borderRadius: "6px",
     border: "1px solid #ccc",
     backgroundColor: "white",
     cursor: "pointer",
+    appearance: "none" as const,
+    backgroundImage: `url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12'%3E%3Cpath fill='%23333' d='M6 8L2 4h8L6 8z'/%3E%3C/svg%3E")`,
+    backgroundRepeat: "no-repeat",
+    backgroundPosition: "right 4px center",
   },
   button: {
     padding: "8px 16px",
@@ -221,6 +320,22 @@ const styles: Record<string, React.CSSProperties> = {
     border: "1px solid #ccc",
     backgroundColor: "white",
     cursor: "pointer",
+  },
+  navButtons: {
+    display: "flex",
+    gap: "4px",
+  },
+  navButton: {
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "center",
+    padding: "6px",
+    fontSize: "14px",
+    borderRadius: "6px",
+    border: "1px solid #ccc",
+    backgroundColor: "white",
+    cursor: "pointer",
+    color: "#333",
   },
   configPanel: {
     borderBottom: "1px solid #e0e0e0",
