@@ -536,6 +536,9 @@ export const App = () => <Box $on />;
 `;
 
     const adapterWithBadThemeExpr = {
+      shouldSupportExternalStyling() {
+        return false;
+      },
       resolveValue(ctx: any) {
         if (ctx.kind !== "theme") {
           return null;
@@ -589,6 +592,9 @@ export const App = () => (
 `;
 
     const adapterWithoutCallResolution = {
+      shouldSupportExternalStyling() {
+        return false;
+      },
       resolveValue(ctx: any) {
         // Intentionally do not resolve any calls.
         if (ctx.kind === "theme" || ctx.kind === "cssVariable") {
@@ -637,6 +643,9 @@ export const App = () => <Button>Click</Button>;
 
   it("should skip transforming the file when adapter.resolveValue returns undefined (and log context)", () => {
     const adapterWithUndefined = {
+      shouldSupportExternalStyling() {
+        return false;
+      },
       resolveValue(ctx: any) {
         if (ctx.kind === "theme") {
           // Intentionally return undefined (e.g. missing return in user adapter)

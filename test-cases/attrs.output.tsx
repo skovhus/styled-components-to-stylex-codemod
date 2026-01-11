@@ -14,35 +14,38 @@ export interface TextInputProps {
 
 // Pattern 3: styled(Component).attrs with object
 // This pattern passes static attrs as an object
-interface BackgroundProps extends React.ComponentProps<typeof Flex> {
+interface BackgroundProps extends Omit<React.ComponentProps<typeof Flex>, "className" | "style"> {
   loaded: boolean;
 }
 
 export function Background(props: BackgroundProps) {
-  const { loaded, style, ...rest } = props;
+  const { children, loaded, ...rest } = props;
   return (
     <Flex
+      column={true}
+      center={true}
       {...rest}
       {...stylex.props(styles.background, loaded && styles.backgroundLoaded)}
-      style={style}
-    />
+    >
+      {children}
+    </Flex>
   );
 }
 
 // Pattern 4: styled(Component).attrs with function (from Scrollable.tsx)
 // This pattern computes attrs from props
-interface ScrollableProps extends React.ComponentProps<typeof Flex> {
+interface ScrollableProps extends Omit<React.ComponentProps<typeof Flex>, "className" | "style"> {
   gutter?: string;
 }
 
 export function Scrollable(props: ScrollableProps) {
-  return <Flex {...props} {...stylex.props(styles.scrollable)} />;
+  return <Flex tabIndex={0} {...props} {...stylex.props(styles.scrollable)} />;
 }
 
 // Pattern 5: styled(Component).attrs with TYPE ALIAS (not interface)
 // Bug: type aliases might not get `extends React.ComponentProps<...>` added
 // This is the exact pattern from a design system's Scrollable.tsx
-type TypeAliasProps = React.ComponentProps<typeof Flex> & {
+type TypeAliasProps = Omit<React.ComponentProps<typeof Flex>, "className" | "style"> & {
   /** Whether scrollbar gutter should be stable */
   gutter?: "auto" | "stable" | string;
   /** Whether to apply background color */
@@ -50,7 +53,12 @@ type TypeAliasProps = React.ComponentProps<typeof Flex> & {
 };
 
 export function ScrollableWithType(props: TypeAliasProps) {
-  return <Flex {...props} {...stylex.props(styles.scrollableWithType)} />;
+  const { children, $applyBackground, ...rest } = props;
+  return (
+    <Flex tabIndex={0} {...rest} {...stylex.props(styles.scrollableWithType)}>
+      {children}
+    </Flex>
+  );
 }
 
 export const App = () => (

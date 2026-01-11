@@ -1,12 +1,22 @@
 import "styled-components";
 
 declare module "styled-components" {
-  // Fixtures use a variety of theme shapes; keep this permissive so we can still
-  // typecheck JSX/exports/imports without fighting DefaultTheme modeling.
+  // Theme shape used across test fixtures.
+  // See https://styled-components.com/docs/api#create-a-declarations-file
   export interface DefaultTheme {
-    // Common theme shapes used across fixtures/examples.
-    color?: any;
-    colors?: any;
-    [key: string]: any;
+    // Direct theme properties (used in theming/adhoc-theme fixtures)
+    main?: string;
+    secondary?: string;
+
+    // Colors object - index signature required for dynamic lookups like
+    // props.theme.colors[props.$bg] and props.theme.colors[props.variant]
+    colors?: Record<string, string>;
+
+    // Spacing object (used in function-theme fixture)
+    spacing?: {
+      small?: string;
+      medium?: string;
+      large?: string;
+    };
   }
 }

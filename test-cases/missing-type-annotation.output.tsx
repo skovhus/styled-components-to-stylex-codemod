@@ -4,7 +4,7 @@ import * as React from "react";
 // Bug 2: When codemod generates wrapper functions, it must include
 // proper type annotations for all parameters to avoid implicit 'any'.
 
-interface BoxProps extends React.ComponentProps<"div"> {
+interface BoxProps extends Omit<React.HTMLAttributes<HTMLDivElement>, "className" | "style"> {
   /** Whether the box has a border */
   bordered?: boolean;
   /** Background color override */
@@ -13,29 +13,27 @@ interface BoxProps extends React.ComponentProps<"div"> {
 
 // Component with props that affect styles
 export function Box(props: BoxProps) {
-  const { children, style, bordered, bg, ...rest } = props;
+  const { children, bordered, bg } = props;
   return (
     <div
-      {...rest}
       {...stylex.props(
         styles.box,
         !bordered && styles.boxNotBordered,
         bordered && styles.boxBordered,
         bg != null && styles.boxBackgroundColor(bg),
       )}
-      style={style}
     >
       {children}
     </div>
   );
 }
 
-type InputProps = React.ComponentProps<"input">;
+type InputProps = Omit<React.InputHTMLAttributes<HTMLInputElement>, "className" | "style">;
 
 // Component with callback that receives event
 export function Input(props: InputProps) {
-  const { style, ...rest } = props;
-  return <input {...rest} {...stylex.props(styles.input)} style={style} />;
+  const { ...rest } = props;
+  return <input {...rest} {...stylex.props(styles.input)} />;
 }
 
 export function Form() {

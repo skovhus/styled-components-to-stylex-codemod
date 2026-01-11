@@ -1,14 +1,17 @@
 import * as React from "react";
 import * as stylex from "@stylexjs/stylex";
 
-type ExportedButtonProps = React.ComponentProps<"button">;
+type ExportedButtonProps = React.PropsWithChildren<{
+  className?: string;
+  style?: React.CSSProperties;
+}>;
 
 /**
- *  This component is exported and will use shouldSupportExternalStyles to enable
+ *  This component is exported and will use shouldSupportExternalStyling to enable
  * className/style/rest merging for external style extension support.
  **/
 export function ExportedButton(props: ExportedButtonProps) {
-  const { className, children, style, ...rest } = props;
+  const { className, children, style } = props;
 
   const sx = stylex.props(styles.exportedButton);
   return (
@@ -19,7 +22,6 @@ export function ExportedButton(props: ExportedButtonProps) {
         ...sx.style,
         ...style,
       }}
-      {...rest}
     >
       {children}
     </button>
@@ -43,7 +45,7 @@ const styles = stylex.create({
     borderRadius: "4px",
   },
 
-  // This is also exported but won't use shouldSupportExternalStyles (for comparison)
+  // This is also exported but won't use shouldSupportExternalStyling (for comparison)
   internalBox: {
     backgroundColor: "#f0f0f0",
     padding: "16px",

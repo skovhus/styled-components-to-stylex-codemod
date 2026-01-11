@@ -51,6 +51,7 @@ export function collectStyledDecls(args: {
     }
     const out: StyledDecl["attrsInfo"] = {
       staticAttrs: {},
+      defaultAttrs: [],
       conditionalAttrs: [],
       invertedBoolAttrs: [],
     };
@@ -78,6 +79,32 @@ export function collectStyledDecls(args: {
         ) {
           out.staticAttrs[key] = v.value;
           continue;
+        }
+
+        // Support: tabIndex: props.tabIndex ?? 0
+        // This provides a default value that can be overridden by passed props.
+        if (
+          (v.type === "LogicalExpression" && v.operator === "??") ||
+          v.type === "TSNullishCoalescingExpression"
+        ) {
+          const left = v.left as any;
+          const right = v.right as any;
+          if (
+            left?.type === "MemberExpression" &&
+            left.object?.type === "Identifier" &&
+            (left.object.name === "props" || left.object.name === "p") &&
+            left.property?.type === "Identifier" &&
+            (right?.type === "StringLiteral" ||
+              right?.type === "NumericLiteral" ||
+              right?.type === "BooleanLiteral")
+          ) {
+            out.defaultAttrs!.push({
+              jsxProp: left.property.name,
+              attrName: key,
+              value: right.value,
+            });
+            continue;
+          }
         }
 
         // Support: size: props.$small ? 5 : undefined
@@ -579,6 +606,7 @@ export function collectStyledDecls(args: {
           rawCss: parsed.rawCss,
           ...(attrsInfo ? { attrsInfo } : {}),
           ...(shouldForwardProp ? { shouldForwardProp } : {}),
+          ...(shouldForwardProp ? { shouldForwardPropFromWithConfig: true } : {}),
           ...(withConfigMeta ? { withConfig: withConfigMeta } : {}),
           ...(propsType ? { propsType } : {}),
           ...(leadingComments ? { leadingComments } : {}),
@@ -810,6 +838,7 @@ export function collectStyledDecls(args: {
           templateExpressions: parsed.slots.map((s) => s.expression),
           rawCss: parsed.rawCss,
           ...(shouldForwardProp ? { shouldForwardProp } : {}),
+          ...(shouldForwardProp ? { shouldForwardPropFromWithConfig: true } : {}),
           ...(withConfigMeta ? { withConfig: withConfigMeta } : {}),
           ...(propsType ? { propsType } : {}),
           ...(leadingComments ? { leadingComments } : {}),
@@ -853,6 +882,7 @@ export function collectStyledDecls(args: {
           templateExpressions: parsed.slots.map((s) => s.expression),
           rawCss: parsed.rawCss,
           ...(shouldForwardProp ? { shouldForwardProp } : {}),
+          ...(shouldForwardProp ? { shouldForwardPropFromWithConfig: true } : {}),
           ...(withConfigMeta ? { withConfig: withConfigMeta } : {}),
           ...(propsType ? { propsType } : {}),
           ...(leadingComments ? { leadingComments } : {}),
@@ -893,6 +923,8 @@ export function collectStyledDecls(args: {
       }
 
       const tagName = init.callee.property.name;
+      // Extract type parameter: styled.div<{ ... }>(...) - may be on CallExpression or callee
+      const propsType = readFirstTypeArgFromNode(init) ?? readFirstTypeArgFromNode(init.callee);
       const arg0 = init.arguments[0];
       if (!arg0) {
         return;
@@ -989,6 +1021,7 @@ export function collectStyledDecls(args: {
         rules: [],
         templateExpressions: [],
         preResolvedStyle: styleObj,
+        ...(propsType ? { propsType } : {}),
         ...(Object.keys(preResolvedFnDecls).length ? { preResolvedFnDecls } : {}),
         ...(styleFnFromProps.length ? { styleFnFromProps } : {}),
         ...(wantsDollarStrip

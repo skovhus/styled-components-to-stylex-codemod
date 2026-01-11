@@ -91,9 +91,9 @@ export interface Adapter {
   /**
    * Called for exported styled components to determine if they should support
    * external className/style extension. Return true to generate wrapper with
-   * className/style/rest merging. Default: false.
+   * className/style/rest merging.
    */
-  shouldSupportExternalStyles?: (context: ExternalStylesContext) => boolean;
+  shouldSupportExternalStyling: (context: ExternalStylesContext) => boolean;
 }
 
 // ────────────────────────────────────────────────────────────────────────────
@@ -117,8 +117,8 @@ export interface Adapter {
  *       return null;
  *     },
  *
- *     // Optional: Enable className/style/rest support for exported components
- *     shouldSupportExternalStyles(ctx) {
+ *     // Enable className/style/rest support for exported components
+ *     shouldSupportExternalStyling(ctx) {
  *       // Example: Enable for all exported components in a shared components folder
  *       return ctx.filePath.includes("/shared/components/");
  *     },

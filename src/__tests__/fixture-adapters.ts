@@ -2,6 +2,9 @@ import { defineAdapter } from "../adapter.ts";
 
 // Test adapters - examples of custom adapter usage
 export const customAdapter = defineAdapter({
+  shouldSupportExternalStyling() {
+    return false;
+  },
   resolveValue(ctx) {
     if (ctx.kind !== "theme") {
       return null;
@@ -20,11 +23,35 @@ export const customAdapter = defineAdapter({
 
 // Fixtures don't use theme resolution, but the transformer requires an adapter.
 export const fixtureAdapter = defineAdapter({
-  // Enable external styles for exported components in external-styles-support test case
-  shouldSupportExternalStyles(ctx) {
-    return (
-      ctx.filePath.includes("external-styles-support") && ctx.componentName === "ExportedButton"
-    );
+  // Enable external styles for exported components in specific test cases where the expected
+  // output includes className/style prop support and HTMLAttributes extension.
+  shouldSupportExternalStyling(ctx) {
+    // external-styles-support test case - only ExportedButton supports external styles
+    if (ctx.filePath.includes("external-styles-support")) {
+      return ctx.componentName === "ExportedButton";
+    }
+    // styled-element-html-props - exported components should extend HTMLAttributes
+    if (ctx.filePath.includes("styled-element-html-props")) {
+      return true;
+    }
+    // styled-input-html-props - exported RangeInput should extend InputHTMLAttributes
+    if (ctx.filePath.includes("styled-input-html-props")) {
+      return true;
+    }
+    // wrapper-props-incomplete - TextColor and ThemeText should extend HTMLAttributes
+    // Highlight wraps a component and shouldn't support external styles
+    if (ctx.filePath.includes("wrapper-props-incomplete")) {
+      return ctx.componentName === "TextColor" || ctx.componentName === "ThemeText";
+    }
+    // transient-prop-not-forwarded - Scrollable should support external styles
+    if (ctx.filePath.includes("transient-prop-not-forwarded")) {
+      return true;
+    }
+    // attrs-polymorphic-as - Label should support external styles
+    if (ctx.filePath.includes("attrs-polymorphic-as")) {
+      return true;
+    }
+    return false;
   },
 
   resolveValue(ctx) {
@@ -133,6 +160,7 @@ export const fixtureAdapter = defineAdapter({
         "--font-size": "fontSize",
         "--line-height": "lineHeight",
       };
+
       const v = varsMap[name];
       if (v) {
         return { expr: `vars.${v}`, imports: [combinedImport] };

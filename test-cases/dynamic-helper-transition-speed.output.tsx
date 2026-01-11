@@ -3,18 +3,17 @@ import { transitionSpeed as transitionSpeedVars } from "./lib/helpers.stylex";
 import React from "react";
 import "./css-variables.css";
 
-type AnimatedPathProps = React.ComponentProps<"path"> & {
+type AnimatedPathProps = Omit<React.ComponentProps<"path">, "className"> & {
   $width: number;
 };
 
 function AnimatedPath(props: AnimatedPathProps) {
-  const { children, className, style, $width, ...rest } = props;
+  const { children, style, $width, ...rest } = props;
 
   const sx = stylex.props(styles.animatedPath, styles.animatedPathStrokeWidth($width));
   return (
     <path
       {...sx}
-      className={[sx.className, className].filter(Boolean).join(" ")}
       style={{
         ...sx.style,
         ...style,

@@ -1,89 +1,57 @@
 import * as React from "react";
 import * as stylex from "@stylexjs/stylex";
 
-type ButtonProps = React.ComponentProps<"button"> & {
+type ButtonProps = Omit<React.ComponentProps<"button">, "className" | "style"> & {
   color?: string;
   size?: "small" | "large";
 };
 
 // Using shouldForwardProp to filter props (v5 pattern)
 function Button(props: ButtonProps) {
-  const { children, className, style, color, size, ...rest } = props;
+  const { children, color, size } = props;
 
   const sx = stylex.props(
     styles.button,
     size === "large" && styles.buttonSizeLarge,
     color != null && styles.buttonBackgroundColor(color),
   );
-  return (
-    <button
-      {...sx}
-      className={[sx.className, className].filter(Boolean).join(" ")}
-      style={{
-        ...sx.style,
-        ...style,
-      }}
-      {...rest}
-    >
-      {children}
-    </button>
-  );
+  return <button {...sx}>{children}</button>;
 }
 
-type LinkProps = React.ComponentProps<"a"> & {
+type LinkProps = Omit<React.ComponentProps<"a">, "className" | "style"> & {
   isActive?: boolean;
 };
 
 // Using isPropValid from @emotion
 function Link(props: LinkProps) {
-  const { children, className, style, isActive, ...rest } = props;
+  const { children, isActive, ...rest } = props;
 
   const sx = stylex.props(styles.link, isActive && styles.linkActive);
   return (
-    <a
-      {...sx}
-      className={[sx.className, className].filter(Boolean).join(" ")}
-      style={{
-        ...sx.style,
-        ...style,
-      }}
-      {...rest}
-    >
+    <a {...rest} {...sx}>
       {children}
     </a>
   );
 }
 
-type BoxProps = React.ComponentProps<"div"> & {
+type BoxProps = Omit<React.ComponentProps<"div">, "className" | "style"> & {
   $background?: string;
   $padding?: string;
 };
 
 // Custom prop filtering logic (transient props pattern)
 function Box(props: BoxProps) {
-  const { children, className, style, $background, $padding, ...rest } = props;
+  const { children, $background, $padding } = props;
 
   const sx = stylex.props(
     styles.box,
     $background != null && styles.boxBackgroundColor($background),
     $padding != null && styles.boxPadding($padding),
   );
-  return (
-    <div
-      {...sx}
-      className={[sx.className, className].filter(Boolean).join(" ")}
-      style={{
-        ...sx.style,
-        ...style,
-      }}
-      {...rest}
-    >
-      {children}
-    </div>
-  );
+  return <div {...sx}>{children}</div>;
 }
 
-type CardProps = React.ComponentProps<"div"> & {
+type CardProps = Omit<React.ComponentProps<"div">, "className" | "style"> & {
   variant?: "primary" | "secondary";
   elevation?: number;
   rounded?: boolean;
@@ -91,7 +59,7 @@ type CardProps = React.ComponentProps<"div"> & {
 
 // Filter multiple custom props
 function Card(props: CardProps) {
-  const { children, className, style, variant, elevation, rounded, ...rest } = props;
+  const { children, variant, elevation, rounded } = props;
 
   const sx = stylex.props(
     styles.card,
@@ -101,16 +69,13 @@ function Card(props: CardProps) {
   return (
     <div
       {...sx}
-      className={[sx.className, className].filter(Boolean).join(" ")}
       style={{
         ...sx.style,
-        ...style,
         boxShadow: ((props) =>
           `0 ${(props.elevation || 1) * 2}px ${(props.elevation || 1) * 4}px rgba(0, 0, 0, 0.1)`)(
           props,
         ),
       }}
-      {...rest}
     >
       {children}
     </div>

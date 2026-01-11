@@ -16,10 +16,13 @@ const animated = {
   )),
 };
 
-type AnimatedTextProps<C extends React.ElementType = "span"> = React.ComponentProps<C> & { as?: C };
+type AnimatedTextProps<C extends React.ElementType = "span"> = Omit<
+  React.ComponentPropsWithoutRef<C>,
+  "className" | "style"
+> & { as?: C; style?: any };
 
 function AnimatedText<C extends React.ElementType = "span">(props: AnimatedTextProps<C>) {
-  const { as: Component = "span" as C, children, style, ...rest } = props;
+  const { as: Component = "span", children, style, ...rest } = props;
   return (
     <Component {...rest} {...stylex.props(styles.animatedText)} style={style}>
       {children}

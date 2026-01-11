@@ -55,8 +55,22 @@ export type StyledDecl = {
    * True if: (1) extended by another styled component, or (2) exported and adapter opts-in.
    */
   supportsExternalStyles?: boolean;
+  /**
+   * True when the styled component identifier is used as a value (not only rendered in JSX),
+   * e.g. passed as a prop: `<VirtualList outerElementType={StyledDiv} />`.
+   *
+   * In these cases, the component can be consumed by another component that may pass `className`
+   * and/or `style` even if there are no direct JSX callsites with those attributes in this file.
+   */
+  usedAsValue?: boolean;
   styleFnFromProps?: Array<{ fnKey: string; jsxProp: string }>;
   shouldForwardProp?: { dropProps: string[]; dropPrefix?: string };
+  /**
+   * True when `shouldForwardProp` came from `styled.*.withConfig({ shouldForwardProp })`.
+   * When false/undefined, `shouldForwardProp` may have been inferred internally (e.g. enum if-chain
+   * or theme-indexed lookup) just to prevent forwarding styling props to the DOM.
+   */
+  shouldForwardPropFromWithConfig?: boolean;
   /**
    * Optional TS props type captured from input declarations like:
    *   styled.button<ButtonProps>`...`
@@ -69,6 +83,17 @@ export type StyledDecl = {
   withConfig?: { componentId?: string };
   attrsInfo?: {
     staticAttrs: Record<string, any>;
+    /**
+     * Attrs that provide a default when a prop is nullish (undefined / null).
+     * Pattern: `attr: props.attr ?? <literal>`
+     *
+     * These should be emitted *before* `{...props}` spreads so passed props can override.
+     */
+    defaultAttrs?: Array<{
+      jsxProp: string;
+      attrName: string;
+      value: any;
+    }>;
     conditionalAttrs: Array<{
       jsxProp: string;
       attrName: string;

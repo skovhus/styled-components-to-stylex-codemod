@@ -13,10 +13,16 @@ describe("public API runtime validation (DX)", () => {
     expect(() => defineAdapter({ resolveValue: 123 } as any)).toThrowError(/must be a function/);
   });
 
-  it("defineAdapter: throws a helpful message when shouldSupportExternalStyles is not a function", () => {
+  it("defineAdapter: throws a helpful message when shouldSupportExternalStyling is missing", () => {
+    expect(() => defineAdapter({ resolveValue() {} } as any)).toThrowError(
+      /shouldSupportExternalStyling/,
+    );
+  });
+
+  it("defineAdapter: throws a helpful message when shouldSupportExternalStyling is not a function", () => {
     expect(() =>
-      defineAdapter({ resolveValue() {}, shouldSupportExternalStyles: "nope" } as any),
-    ).toThrowError(/shouldSupportExternalStyles/);
+      defineAdapter({ resolveValue() {}, shouldSupportExternalStyling: "nope" } as any),
+    ).toThrowError(/shouldSupportExternalStyling/);
   });
 
   it("runTransform: throws a helpful message when options is missing", async () => {

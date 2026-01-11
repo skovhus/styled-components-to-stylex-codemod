@@ -2,16 +2,25 @@ import * as stylex from "@stylexjs/stylex";
 import * as React from "react";
 import { ActionMenuTextDivider, ActionMenuGroupHeader } from "./lib/action-menu-divider";
 
-type ListItemProps = React.ComponentProps<"div">;
+type ListItemProps = React.HTMLAttributes<HTMLDivElement>;
 
 // Static properties on styled components should be preserved when
 // they become wrapper functions.
 
 // Pattern 1: Static properties defined directly on styled component
 export function ListItem(props: ListItemProps) {
-  const { children, style, ...rest } = props;
+  const { className, children, style } = props;
+
+  const sx = stylex.props(styles.listItem);
   return (
-    <div {...rest} {...stylex.props(styles.listItem)} style={style}>
+    <div
+      {...sx}
+      className={[sx.className, className].filter(Boolean).join(" ")}
+      style={{
+        ...sx.style,
+        ...style,
+      }}
+    >
       {children}
     </div>
   );
@@ -19,11 +28,11 @@ export function ListItem(props: ListItemProps) {
 
 ListItem.HEIGHT = 42;
 ListItem.PADDING = 8;
-type BaseButtonProps = React.ComponentProps<"button">;
+type BaseButtonProps = React.ButtonHTMLAttributes<HTMLButtonElement>;
 
 // Pattern 2: styled(BaseComponent) with static props defined in same file
 function BaseButton(props: BaseButtonProps) {
-  const { className, children, style, ...rest } = props;
+  const { className, children, style } = props;
 
   const sx = stylex.props(styles.baseButton);
   return (
@@ -34,34 +43,49 @@ function BaseButton(props: BaseButtonProps) {
         ...sx.style,
         ...style,
       }}
-      {...rest}
     >
       {children}
     </button>
   );
 }
 
-type ExtendedButtonProps = React.ComponentProps<"button">;
+BaseButton.HEIGHT = 36;
+type ExtendedButtonProps = React.ButtonHTMLAttributes<HTMLButtonElement>;
 
 // ExtendedButton should have HEIGHT from BaseButton
 export function ExtendedButton(props: ExtendedButtonProps) {
-  const { children, style, ...rest } = props;
+  const { className, children, style } = props;
+
+  const sx = stylex.props(styles.baseButton, styles.extendedButton);
   return (
-    <button {...rest} {...stylex.props(styles.baseButton, styles.extendedButton)} style={style}>
+    <button
+      {...sx}
+      className={[sx.className, className].filter(Boolean).join(" ")}
+      style={{
+        ...sx.style,
+        ...style,
+      }}
+    >
       {children}
     </button>
   );
 }
 
-ExtendedButton.HEIGHT = BaseButton.HEIGHT;
-type CommandMenuTextDividerProps = React.ComponentProps<typeof ActionMenuTextDivider>;
+ExtendedButton.HEIGHT = (BaseButton as any).HEIGHT;
+type CommandMenuTextDividerProps = Omit<
+  React.ComponentProps<typeof ActionMenuTextDivider>,
+  "children" | "className" | "style"
+>;
 
 export function CommandMenuTextDivider(props: CommandMenuTextDividerProps) {
   return <ActionMenuTextDivider {...props} {...stylex.props(styles.commandMenuTextDivider)} />;
 }
 
 CommandMenuTextDivider.HEIGHT = ActionMenuTextDivider.HEIGHT;
-type CommandMenuGroupHeaderProps = React.ComponentProps<typeof ActionMenuGroupHeader>;
+type CommandMenuGroupHeaderProps = Omit<
+  React.ComponentProps<typeof ActionMenuGroupHeader>,
+  "children" | "className" | "style"
+>;
 
 export function CommandMenuGroupHeader(props: CommandMenuGroupHeaderProps) {
   return <ActionMenuGroupHeader {...props} {...stylex.props(styles.commandMenuGroupHeader)} />;

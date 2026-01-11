@@ -1,24 +1,30 @@
 import * as stylex from "@stylexjs/stylex";
 import { themeVars } from "./tokens.stylex";
 import * as React from "react";
+import type { Colors } from "./lib/colors";
 
 // Bug 12: When codemod generates wrapper function, the props type must include
 // standard HTML attributes (className, children, style) that the wrapper uses.
 // Otherwise: "Property 'className' does not exist on type 'MyProps'"
 
 // Pattern 1: styled("span") with custom props - wrapper needs span attributes
-interface TextColorProps extends React.ComponentProps<"span"> {
+interface TextColorProps extends React.HTMLAttributes<HTMLSpanElement> {
   /** Custom color prop */
   color: string;
 }
 
 export function TextColor(props: TextColorProps) {
-  const { children, style, color, ...rest } = props;
+  const { className, children, style, color } = props;
+
+  const sx = stylex.props(styles.textColor, styles.textColorColor(color));
   return (
     <span
-      {...rest}
-      {...stylex.props(styles.textColor, color != null && styles.textColorColor(color))}
-      style={style}
+      {...sx}
+      className={[sx.className, className].filter(Boolean).join(" ")}
+      style={{
+        ...sx.style,
+        ...style,
+      }}
     >
       {children}
     </span>
@@ -28,19 +34,19 @@ export function TextColor(props: TextColorProps) {
 // Pattern 2: styled(Component) - wrapper needs component's props + HTML attributes
 const BaseText = (props: React.ComponentProps<"span">) => <span {...props} />;
 
-interface HighlightProps extends React.ComponentProps<typeof BaseText> {
+interface HighlightProps extends Omit<React.ComponentProps<typeof BaseText>, "style"> {
   /** Whether to highlight */
   highlighted?: boolean;
 }
 
 export function Highlight(props: HighlightProps) {
-  const { highlighted, style, ...rest } = props;
+  const { className, children, highlighted, ...rest } = props;
+
+  const sx = stylex.props(styles.highlight, highlighted && styles.highlightHighlighted);
   return (
-    <BaseText
-      {...rest}
-      {...stylex.props(styles.highlight, highlighted && styles.highlightHighlighted)}
-      style={style}
-    />
+    <BaseText {...rest} {...sx} className={[sx.className, className].filter(Boolean).join(" ")}>
+      {children}
+    </BaseText>
   );
 }
 
@@ -59,19 +65,16 @@ export function App() {
 
 // Pattern 3: styled("span") with NO local usage - wrapper props should still be extended
 // This matches TextColor.tsx in a design system which doesn't use the component in the same file
-interface ThemeTextProps extends React.ComponentProps<"span"> {
+interface ThemeTextProps extends React.HTMLAttributes<HTMLSpanElement> {
   /** Theme color name */
-  themeColor: string;
+  themeColor: Colors;
 }
 
 /** A text span that gets color from theme */
 export function ThemeText(props: ThemeTextProps) {
-  const { children, className, style, themeColor, ...rest } = props;
+  const { className, children, style, themeColor } = props;
 
-  const sx = stylex.props(
-    styles.themeText,
-    themeColor != null && styles.themeTextColor(themeColor),
-  );
+  const sx = stylex.props(styles.themeText, styles.themeTextColor(themeColor));
   return (
     <span
       {...sx}
@@ -80,7 +83,6 @@ export function ThemeText(props: ThemeTextProps) {
         ...sx.style,
         ...style,
       }}
-      {...rest}
     >
       {children}
     </span>
@@ -100,7 +102,7 @@ const styles = stylex.create({
   },
   /** A text span that gets color from theme */
   themeText: {},
-  themeTextColor: (themeColor: string) => ({
+  themeTextColor: (themeColor: Colors) => ({
     color: themeVars[themeColor],
   }),
 });

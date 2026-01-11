@@ -36,6 +36,7 @@ import { cssDeclarationToStylexDeclarations } from "./internal/css-prop-mapping.
 import { dirname, resolve as pathResolve } from "node:path";
 import { readFileSync, existsSync } from "node:fs";
 import { assertValidAdapter } from "./internal/public-api-validation.js";
+import { isLikelyValidDomAttr } from "./internal/dom-attrs.js";
 
 /**
  * Transform styled-components to StyleX
@@ -269,8 +270,11 @@ export function transformWithWarnings(
 
   const parseExpr = (exprSource: string): any => {
     try {
-      const program = j(`(${exprSource});`);
-      const stmt = program.find(j.ExpressionStatement).nodes()[0];
+      // Always parse expressions with TSX enabled so we can safely emit TS-only constructs
+      // like `x as SomeType` inside generated outputs.
+      const jParse = api.jscodeshift.withParser("tsx");
+      const program = jParse(`(${exprSource});`);
+      const stmt = program.find(jParse.ExpressionStatement).nodes()[0];
       let expr = (stmt as any)?.expression ?? null;
       // Unwrap ParenthesizedExpression to avoid extra parentheses in output
       while (expr?.type === "ParenthesizedExpression") {
@@ -1090,14 +1094,8 @@ export function transformWithWarnings(
       continue;
     }
 
-    // 3. If exported, ask adapter (default: true for exported components)
-    if (!adapter.shouldSupportExternalStyles) {
-      // Default to true for exported components - they may be used with external className/style
-      decl.supportsExternalStyles = true;
-      continue;
-    }
-
-    decl.supportsExternalStyles = adapter.shouldSupportExternalStyles({
+    // 3. If exported, ask adapter
+    decl.supportsExternalStyles = adapter.shouldSupportExternalStyling({
       filePath: file.path,
       componentName: decl.localName,
       exportName: exportInfo.exportName,
@@ -1309,6 +1307,7 @@ export function transformWithWarnings(
         .size() > 0;
 
     if (usedAsValue) {
+      decl.usedAsValue = true;
       decl.needsWrapperComponent = true;
     }
   }
@@ -1387,7 +1386,9 @@ export function transformWithWarnings(
 
       // Only reposition static properties for exported components
       // Non-exported base components will have their properties inherited by extended components
-      if (exportedComponents.has(componentName)) {
+      // Also reposition static properties for non-exported components that are extended by another
+      // styled component (so the base value exists at runtime for inheritance assignments).
+      if (exportedComponents.has(componentName) || extendedBy.has(componentName)) {
         const existing = staticPropertyAssignments.get(componentName) ?? [];
         existing.push(p.node);
         staticPropertyAssignments.set(componentName, existing);
@@ -1420,22 +1421,33 @@ export function transformWithWarnings(
     }
 
     // Generate inheritance assignments for each static property
+    // Skip if the extended component already has existing static property assignments
+    // (they were collected earlier from the original code)
+    const existing = staticPropertyAssignments.get(decl.localName) ?? [];
+    if (existing.length > 0) {
+      // Already has inheritance statements from original code, don't duplicate
+      continue;
+    }
+
     const inheritanceStatements: any[] = [];
     for (const propName of baseProps) {
+      // Accessing arbitrary static properties on a function component is legal at runtime,
+      // but TypeScript doesn't know about ad-hoc statics. Cast the base to `any` to keep
+      // generated outputs typecheck-friendly.
+      const rhs = j(`const __x = (${baseComponentName} as any).${propName};`).get().node.program
+        .body[0].declarations[0].init;
       const stmt = j.expressionStatement(
         j.assignmentExpression(
           "=",
           j.memberExpression(j.identifier(decl.localName), j.identifier(propName)),
-          j.memberExpression(j.identifier(baseComponentName), j.identifier(propName)),
+          rhs as any,
         ),
       );
       inheritanceStatements.push(stmt);
     }
 
     if (inheritanceStatements.length > 0) {
-      const existing = staticPropertyAssignments.get(decl.localName) ?? [];
-      existing.push(...inheritanceStatements);
-      staticPropertyAssignments.set(decl.localName, existing);
+      staticPropertyAssignments.set(decl.localName, inheritanceStatements);
     }
   }
 
@@ -1918,6 +1930,15 @@ export function transformWithWarnings(
             if (n.startsWith("$")) {
               continue;
             }
+            // For intrinsic elements, avoid forwarding unknown/custom props to the DOM.
+            // (For styled-components this is often "fine", but once we inline to a DOM element
+            // it becomes a React/TS/DOM attribute problem. Props that are used for styling are
+            // already handled above via styleFnProps/variantProps.)
+            if (decl.base.kind === "intrinsic") {
+              if (!isLikelyValidDomAttr(n)) {
+                continue;
+              }
+            }
             keptAfterVariants.push(attr);
             continue;
           }
@@ -1962,7 +1983,6 @@ export function transformWithWarnings(
     filePath: file.path,
     styledDecls,
     wrapperNames,
-    expressionAsWrapperNames,
     patternProp,
     exportedComponents,
     stylesIdentifier,

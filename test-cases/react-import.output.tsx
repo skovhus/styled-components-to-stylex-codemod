@@ -2,52 +2,35 @@ import * as React from "react";
 import * as stylex from "@stylexjs/stylex";
 import { themeVars } from "./tokens.stylex";
 
-type CardProps = React.ComponentProps<"div">;
+type CardProps = React.PropsWithChildren<{}>;
 
 export function Card(props: CardProps) {
-  const { children, style, ...rest } = props;
-  return (
-    <div {...rest} {...stylex.props(styles.card)} style={style}>
-      {children}
-    </div>
-  );
+  const { children } = props;
+  return <div {...stylex.props(styles.card)}>{children}</div>;
 }
 
-type ButtonProps = React.ComponentProps<"button">;
+type ButtonProps = React.PropsWithChildren<{}>;
 
 // Another component to ensure multiple components work
 export function Button(props: ButtonProps) {
-  const { children, style, ...rest } = props;
-  return (
-    <button {...rest} {...stylex.props(styles.button)} style={style}>
-      {children}
-    </button>
-  );
+  const { children } = props;
+  return <button {...stylex.props(styles.button)}>{children}</button>;
 }
 
 // Pattern 2: Component with theme access (like TextColor.tsx in a design system)
 // Uses props.theme.colors which the adapter resolves to themeVars
-interface ThemeSpanProps extends React.ComponentProps<"span"> {
-  variant: string;
+interface ThemeSpanProps extends Omit<
+  React.HTMLAttributes<HTMLSpanElement>,
+  "className" | "style"
+> {
+  variant: "labelBase" | "labelMuted" | "labelTitle";
 }
 
 export function ThemeSpan(props: ThemeSpanProps) {
-  const { children, className, style, variant, ...rest } = props;
+  const { children, variant } = props;
 
-  const sx = stylex.props(styles.themeSpan, variant != null && styles.themeSpanColor(variant));
-  return (
-    <span
-      {...sx}
-      className={[sx.className, className].filter(Boolean).join(" ")}
-      style={{
-        ...sx.style,
-        ...style,
-      }}
-      {...rest}
-    >
-      {children}
-    </span>
-  );
+  const sx = stylex.props(styles.themeSpan, styles.themeSpanColor(variant));
+  return <span {...sx}>{children}</span>;
 }
 
 export function App() {
@@ -71,7 +54,7 @@ const styles = stylex.create({
     color: "white",
   },
   themeSpan: {},
-  themeSpanColor: (variant: string) => ({
+  themeSpanColor: (variant: "labelBase" | "labelMuted" | "labelTitle") => ({
     color: themeVars[variant],
   }),
 });

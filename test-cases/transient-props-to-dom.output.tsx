@@ -1,45 +1,37 @@
 import * as stylex from "@stylexjs/stylex";
 import React from "react";
 
-type BoxProps = React.ComponentProps<"div"> & {
+type BoxProps = React.PropsWithChildren<{
   $isActive?: boolean;
   $size?: "small" | "large";
-};
+}>;
 
 // Pattern 1: Exported components - become wrapper functions that must:
 // 1. Accept the transient props for styling decisions
 // 2. NOT forward them to the underlying DOM element
 
 export function Box(props: BoxProps) {
-  const { children, style, $size, $isActive, ...rest } = props;
+  const { children, $size, $isActive } = props;
   return (
     <div
-      {...rest}
       {...stylex.props(
         styles.box,
         $size === "large" && styles.boxSizeLarge,
         $isActive && styles.boxActive,
       )}
-      style={style}
     >
       {children}
     </div>
   );
 }
 
-type ImageProps = React.ComponentProps<"img"> & {
+type ImageProps = Omit<React.ImgHTMLAttributes<HTMLImageElement>, "className" | "style"> & {
   $isInactive?: boolean;
 };
 
 export function Image(props: ImageProps) {
-  const { style, $isInactive, ...rest } = props;
-  return (
-    <img
-      {...rest}
-      {...stylex.props(styles.image, $isInactive && styles.imageInactive)}
-      style={style}
-    />
-  );
+  const { $isInactive, ...rest } = props;
+  return <img {...rest} {...stylex.props(styles.image, $isInactive && styles.imageInactive)} />;
 }
 
 export function App() {

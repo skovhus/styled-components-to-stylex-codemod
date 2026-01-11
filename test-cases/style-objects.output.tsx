@@ -1,13 +1,17 @@
 import * as React from "react";
 import * as stylex from "@stylexjs/stylex";
 
-type DynamicBoxProps = React.ComponentProps<"div"> & {
-  $background?: any;
-  $size?: any;
-};
+type DynamicBoxProps = React.PropsWithChildren<
+  {
+    $background?: string;
+    $size?: string;
+  } & {
+    style?: React.CSSProperties;
+  }
+>;
 
 function DynamicBox(props: DynamicBoxProps) {
-  const { children, className, style, $background, $size, ...rest } = props;
+  const { children, style, $background, $size } = props;
 
   const sx = stylex.props(
     styles.dynamicBox,
@@ -18,12 +22,10 @@ function DynamicBox(props: DynamicBoxProps) {
   return (
     <div
       {...sx}
-      className={[sx.className, className].filter(Boolean).join(" ")}
       style={{
         ...sx.style,
         ...style,
       }}
-      {...rest}
     >
       {children}
     </div>

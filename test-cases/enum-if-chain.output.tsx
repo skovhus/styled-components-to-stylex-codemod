@@ -3,30 +3,19 @@ import * as stylex from "@stylexjs/stylex";
 
 type Props = { state: "up" | "down" | "both" };
 
-type TopArrowStemProps = React.ComponentProps<"g"> & {
+type TopArrowStemProps = React.PropsWithChildren<{
   $state: Props["state"];
-};
+}>;
 
 function TopArrowStem(props: TopArrowStemProps) {
-  const { children, className, style, $state } = props;
+  const { children, $state } = props;
 
   const sx = stylex.props(
     styles.topArrowStem,
     $state === "down" && styles.topArrowStemStateDown,
     $state === "up" && styles.topArrowStemStateUp,
   );
-  return (
-    <g
-      {...sx}
-      className={[sx.className, className].filter(Boolean).join(" ")}
-      style={{
-        ...sx.style,
-        ...style,
-      }}
-    >
-      {children}
-    </g>
-  );
+  return <g {...sx}>{children}</g>;
 }
 
 export const App = () => (

@@ -1,5 +1,6 @@
 import * as React from "react";
 import styled from "styled-components";
+import type { Colors } from "./lib/colors";
 
 // Bug 12: When codemod generates wrapper function, the props type must include
 // standard HTML attributes (className, children, style) that the wrapper uses.
@@ -44,7 +45,7 @@ export function App() {
 // This matches TextColor.tsx in a design system which doesn't use the component in the same file
 interface ThemeTextProps {
   /** Theme color name */
-  themeColor: string;
+  themeColor: Colors;
 }
 
 /** A text span that gets color from theme */
