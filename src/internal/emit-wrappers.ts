@@ -151,6 +151,7 @@ function emitMinimalWrapper(args: {
   destructureProps: string[];
   allowClassNameProp?: boolean;
   allowStyleProp?: boolean;
+  includeRest?: boolean;
   displayName?: string;
   patternProp: (keyName: string, valueId?: any) => any;
   staticAttrs?: Record<string, any>;
@@ -167,6 +168,7 @@ function emitMinimalWrapper(args: {
     destructureProps,
     allowClassNameProp = false,
     allowStyleProp = false,
+    includeRest = true,
     patternProp,
     staticAttrs = {},
     inlineStyleProps = [],
@@ -223,9 +225,11 @@ function emitMinimalWrapper(args: {
     }
   }
 
-  // Add rest spread to capture all other props
+  // Add rest spread to capture all other props (only when needed)
   const restId = j.identifier("rest");
-  patternProps.push(j.restElement(restId));
+  if (includeRest) {
+    patternProps.push(j.restElement(restId));
+  }
 
   const needsSxVar = allowClassNameProp || allowStyleProp || inlineStyleProps.length > 0;
   const stylexPropsCall = j.callExpression(
@@ -254,7 +258,9 @@ function emitMinimalWrapper(args: {
     }
   }
 
-  jsxAttrs.push(j.jsxSpreadAttribute(restId));
+  if (includeRest) {
+    jsxAttrs.push(j.jsxSpreadAttribute(restId));
+  }
 
   if (!needsSxVar) {
     jsxAttrs.push(j.jsxSpreadAttribute(stylexPropsCall));
@@ -395,6 +401,24 @@ export function emitWrappers(args: {
       .forEach((p: any) => collectFromOpening(p.node));
     usedAttrsCache.set(localName, attrs);
     return attrs;
+  };
+
+  const usedAsValueCache = new Map<string, boolean>();
+  const isUsedAsValueInFile = (localName: string): boolean => {
+    const cached = usedAsValueCache.get(localName);
+    if (cached !== undefined) {
+      return cached;
+    }
+    // Conservative: treat JSX expression usage as "used as value"
+    // e.g. outerElementType={OuterWrapper}
+    const inJsxExpr =
+      root
+        .find(j.JSXExpressionContainer, {
+          expression: { type: "Identifier", name: localName },
+        } as any)
+        .size() > 0;
+    usedAsValueCache.set(localName, inJsxExpr);
+    return inJsxExpr;
   };
 
   /**
@@ -1837,6 +1861,8 @@ export function emitWrappers(args: {
 
     // For local-only wrappers with no external `className`/`style` usage, keep the wrapper minimal.
     if (!allowClassNameProp && !allowStyleProp) {
+      const usedAttrs = getUsedAttrs(d.localName);
+      const includeRest = usedAttrs.has("*") || !!(d as any).usedAsValue || usedAttrs.size > 0;
       emitted.push(
         ...withLeadingCommentsOnFirstFunction(
           emitMinimalWrapper({
@@ -1849,6 +1875,7 @@ export function emitWrappers(args: {
             destructureProps: [],
             allowClassNameProp: false,
             allowStyleProp: false,
+            includeRest,
             patternProp,
             inlineStyleProps: d.inlineStyleProps ?? [],
           }),
@@ -2205,6 +2232,25 @@ export function emitWrappers(args: {
       }
     }
 
+    const usedAttrs = getUsedAttrs(d.localName);
+    const hasLocalUsage = usedAttrs.has("*") || usedAttrs.size > 0;
+    const shouldIncludeRest =
+      usedAttrs.has("*") ||
+      isUsedAsValueInFile(d.localName) ||
+      (hasLocalUsage &&
+        [...usedAttrs].some((n) => {
+          if (
+            n === "children" ||
+            n === "className" ||
+            n === "style" ||
+            n === "as" ||
+            n === "forwardedAs"
+          ) {
+            return false;
+          }
+          return !destructureProps.includes(n);
+        }));
+
     // When external `className` and/or `style` are allowed, generate wrapper with merging.
     if (allowClassNameProp || allowStyleProp) {
       const isVoidTag = VOID_TAGS.has(tagName);
@@ -2214,7 +2260,7 @@ export function emitWrappers(args: {
       const classNameId = j.identifier("className");
       const childrenId = j.identifier("children");
       const styleId = j.identifier("style");
-      const restId = j.identifier("rest");
+      const restId = shouldIncludeRest ? j.identifier("rest") : null;
 
       const patternProps: any[] = [
         ...(allowClassNameProp ? [patternProp("className", classNameId)] : []),
@@ -2222,7 +2268,7 @@ export function emitWrappers(args: {
         ...(allowStyleProp ? [patternProp("style", styleId)] : []),
         // Include variant props and style function props in destructuring
         ...destructureProps.map((name) => patternProp(name)),
-        j.restElement(restId),
+        ...(restId ? [j.restElement(restId)] : []),
       ];
       const declStmt = j.variableDeclaration("const", [
         j.variableDeclarator(j.objectPattern(patternProps as any), propsId),
@@ -2289,7 +2335,7 @@ export function emitWrappers(args: {
                 ),
               ]
             : []),
-          j.jsxSpreadAttribute(restId),
+          ...(restId ? [j.jsxSpreadAttribute(restId)] : []),
         ],
         false,
       );
@@ -2328,6 +2374,7 @@ export function emitWrappers(args: {
           destructureProps,
           allowClassNameProp: false,
           allowStyleProp: false,
+          includeRest: shouldIncludeRest,
           patternProp,
           ...(d.attrsInfo?.staticAttrs ? { staticAttrs: d.attrsInfo.staticAttrs } : {}),
           inlineStyleProps: d.inlineStyleProps ?? [],
@@ -2605,7 +2652,7 @@ export function emitWrappers(args: {
       const usedAttrs = getUsedAttrs(d.localName);
       const shouldIncludeRest =
         usedAttrs.has("*") ||
-        !!(d as any).usedAsValue ||
+        isUsedAsValueInFile(d.localName) ||
         [...usedAttrs].some((n) => {
           if (
             n === "children" ||
@@ -2694,7 +2741,7 @@ export function emitWrappers(args: {
       // Simple case: just spread props and stylex.props
       const usedAttrs = getUsedAttrs(d.localName);
       const shouldIncludePropsSpread =
-        usedAttrs.has("*") || !!(d as any).usedAsValue || usedAttrs.size > 0;
+        usedAttrs.has("*") || isUsedAsValueInFile(d.localName) || usedAttrs.size > 0;
       const jsx = j.jsxElement(
         j.jsxOpeningElement(
           jsxTagName,

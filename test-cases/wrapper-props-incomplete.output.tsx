@@ -17,7 +17,7 @@ interface TextColorProps extends React.PropsWithChildren<{
 }
 
 export function TextColor(props: TextColorProps) {
-  const { className, children, style, color, ...rest } = props;
+  const { className, children, style, color } = props;
 
   const sx = stylex.props(styles.textColor, color != null && styles.textColorColor(color));
   return (
@@ -28,7 +28,6 @@ export function TextColor(props: TextColorProps) {
         ...sx.style,
         ...style,
       }}
-      {...rest}
     >
       {children}
     </span>
