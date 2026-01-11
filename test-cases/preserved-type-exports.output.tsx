@@ -6,8 +6,6 @@ import React from "react";
 
 export interface ButtonProps extends React.PropsWithChildren<
   React.ButtonHTMLAttributes<HTMLButtonElement> & {
-    className?: string;
-    style?: React.CSSProperties;
     size?: any;
     variant?: any;
   }

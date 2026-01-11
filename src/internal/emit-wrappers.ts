@@ -819,6 +819,8 @@ export function emitWrappers(args: {
         return "React.AnchorHTMLAttributes<HTMLAnchorElement>";
       case "button":
         return "React.ButtonHTMLAttributes<HTMLButtonElement>";
+      case "div":
+        return "React.HTMLAttributes<HTMLDivElement>";
       case "input":
         return "React.InputHTMLAttributes<HTMLInputElement>";
       case "img":
@@ -827,6 +829,8 @@ export function emitWrappers(args: {
         return "React.LabelHTMLAttributes<HTMLLabelElement>";
       case "select":
         return "React.SelectHTMLAttributes<HTMLSelectElement>";
+      case "span":
+        return "React.HTMLAttributes<HTMLSpanElement>";
       case "textarea":
         return "React.TextareaHTMLAttributes<HTMLTextAreaElement>";
       default:
@@ -849,12 +853,6 @@ export function emitWrappers(args: {
     if (includeAsProp) {
       lines.push(`  as?: React.ElementType;`);
     }
-    if (allowClassNameProp) {
-      lines.push(`  className?: string;`);
-    }
-    if (allowStyleProp) {
-      lines.push(`  style?: React.CSSProperties;`);
-    }
 
     for (const attr of [...used].sort()) {
       if (attr === "*" || attr === "children") {
@@ -876,7 +874,16 @@ export function emitWrappers(args: {
     // of attributes (otherwise spreads/React.ComponentType<...> constraints break).
     const needsBroadAttrs = used.has("*") || !!(d as any).usedAsValue;
     if (!needsBroadAttrs) {
-      return VOID_TAGS.has(tagName) ? literal : withChildren(literal);
+      const extra: string[] = [];
+      if (allowClassNameProp) {
+        extra.push(`  className?: string;`);
+      }
+      if (allowStyleProp) {
+        extra.push(`  style?: React.CSSProperties;`);
+      }
+      const extraLiteral = extra.length > 0 ? `{\n${extra.join("\n")}\n}` : "{}";
+      const composed = joinIntersection(literal, extraLiteral);
+      return VOID_TAGS.has(tagName) ? composed : withChildren(composed);
     }
 
     const base = reactIntrinsicAttrsType(tagName);

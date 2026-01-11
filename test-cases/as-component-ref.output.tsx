@@ -16,10 +16,13 @@ const animated = {
   )),
 };
 
-type AnimatedTextProps = React.PropsWithChildren<{
-  as?: React.ElementType;
-  style?: React.CSSProperties;
-}>;
+type AnimatedTextProps = React.PropsWithChildren<
+  {
+    as?: React.ElementType;
+  } & {
+    style?: React.CSSProperties;
+  }
+>;
 
 function AnimatedText(props: AnimatedTextProps) {
   const { as: Component = "span", children, style, ...rest } = props;

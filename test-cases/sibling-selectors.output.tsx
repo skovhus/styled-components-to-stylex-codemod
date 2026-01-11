@@ -1,11 +1,14 @@
 import * as React from "react";
 import * as stylex from "@stylexjs/stylex";
 
-type ThingProps = React.PropsWithChildren<{
-  className?: string;
-  isAdjacentSibling?: any;
-  isSiblingAfterSomething?: any;
-}> & { isAdjacentSibling?: boolean; isSiblingAfterSomething?: boolean };
+type ThingProps = React.PropsWithChildren<
+  {
+    isAdjacentSibling?: any;
+    isSiblingAfterSomething?: any;
+  } & {
+    className?: string;
+  }
+> & { isAdjacentSibling?: boolean; isSiblingAfterSomething?: boolean };
 
 function Thing(props: ThingProps) {
   const { children, className, isAdjacentSibling, isSiblingAfterSomething, ...rest } = props;

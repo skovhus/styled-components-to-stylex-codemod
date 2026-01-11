@@ -23,12 +23,7 @@ function VirtualList({
   );
 }
 
-type OuterWrapperProps = React.PropsWithChildren<
-  React.HTMLAttributes<HTMLElement> & {
-    className?: string;
-    style?: React.CSSProperties;
-  }
->;
+type OuterWrapperProps = React.PropsWithChildren<React.HTMLAttributes<HTMLDivElement>>;
 
 // These styled components are passed as values, not just rendered
 function OuterWrapper(props: OuterWrapperProps) {
@@ -50,12 +45,7 @@ function OuterWrapper(props: OuterWrapperProps) {
   );
 }
 
-type InnerWrapperProps = React.PropsWithChildren<
-  React.HTMLAttributes<HTMLElement> & {
-    className?: string;
-    style?: React.CSSProperties;
-  }
->;
+type InnerWrapperProps = React.PropsWithChildren<React.HTMLAttributes<HTMLDivElement>>;
 
 function InnerWrapper(props: InnerWrapperProps) {
   const { className, children, style, ...rest } = props;
