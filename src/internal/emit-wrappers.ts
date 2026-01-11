@@ -788,8 +788,20 @@ export function emitWrappers(args: {
     if (
       t.startsWith("React.ComponentProps<") ||
       t.startsWith("React.ComponentPropsWithoutRef<") ||
+      t.startsWith("React.HTMLAttributes<") ||
+      t.startsWith("React.AnchorHTMLAttributes<") ||
+      t.startsWith("React.ButtonHTMLAttributes<") ||
+      t.startsWith("React.InputHTMLAttributes<") ||
+      t.startsWith("React.ImgHTMLAttributes<") ||
+      t.startsWith("React.LabelHTMLAttributes<") ||
+      t.startsWith("React.SelectHTMLAttributes<") ||
+      t.startsWith("React.TextareaHTMLAttributes<") ||
       // Derived-from-ComponentProps cases (common in our output): Omit/Pick/Partial/etc.
       /^(Omit|Pick|Partial|Required|Readonly|ReadonlyArray|NonNullable|Extract|Exclude)<\s*React\.ComponentProps(?:WithoutRef)?</.test(
+        t,
+      ) ||
+      // Derived-from-HTMLAttributes cases (common when we omit className/style)
+      /^(Omit|Pick|Partial|Required|Readonly|ReadonlyArray|NonNullable|Extract|Exclude)<\s*React\..*HTMLAttributes</.test(
         t,
       )
     ) {
@@ -2201,6 +2213,20 @@ export function emitWrappers(args: {
         allowClassNameProp,
         allowStyleProp,
       });
+      const extendBaseTypeText = (() => {
+        // When we can’t emit a new `${Component}Props` alias because one already exists,
+        // prefer extending it with real intrinsic element attribute types (instead of a loose
+        // inferred literal). This keeps exported interfaces like `CardProps` clean and accurate.
+        const base = reactIntrinsicAttrsType(tagName);
+        const omitted: string[] = [];
+        if (!allowClassNameProp) {
+          omitted.push('"className"');
+        }
+        if (!allowStyleProp) {
+          omitted.push('"style"');
+        }
+        return omitted.length ? `Omit<${base}, ${omitted.join(" | ")}>` : base;
+      })();
       // If there's an explicit type, keep it restrictive (only add children for non-void tags).
       const explicitWithChildren = explicit
         ? VOID_TAGS.has(tagName)
@@ -2215,9 +2241,9 @@ export function emitWrappers(args: {
       // the existing interface/type alias with the base component props
       if (!typeAliasEmitted && explicit) {
         const propsTypeName = propsTypeNameFor(d.localName);
-        const interfaceExtended = extendExistingInterface(propsTypeName, baseTypeText);
+        const interfaceExtended = extendExistingInterface(propsTypeName, extendBaseTypeText);
         if (!interfaceExtended) {
-          const typeAliasExtended = extendExistingTypeAlias(propsTypeName, baseTypeText);
+          const typeAliasExtended = extendExistingTypeAlias(propsTypeName, extendBaseTypeText);
           if (!typeAliasExtended) {
             // Fallback: use inline type annotation
             inlineTypeText = VOID_TAGS.has(tagName) ? explicit : withChildren(explicit);

@@ -13,9 +13,7 @@ function Input(props: InputProps) {
   return <input type={type} {...rest} {...sx} />;
 }
 
-type LinkProps = React.PropsWithChildren<
-  Omit<React.AnchorHTMLAttributes<HTMLAnchorElement>, "className" | "style">
->;
+type LinkProps = Omit<React.AnchorHTMLAttributes<HTMLAnchorElement>, "className" | "style">;
 
 function Link(props: LinkProps) {
   const { href, target, children, ...rest } = props;
