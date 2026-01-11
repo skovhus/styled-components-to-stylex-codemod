@@ -32,9 +32,7 @@ async function listFixtureNames() {
   const inputNames = files
     .filter(
       (f) =>
-        f.endsWith(".input.tsx") &&
-        !f.startsWith("_unsupported.") &&
-        !f.startsWith("unsupported-"),
+        f.endsWith(".input.tsx") && !f.startsWith("_unsupported.") && !f.startsWith("unsupported-"),
     )
     .map((f) => f.replace(".input.tsx", ""));
   return inputNames.sort();
@@ -81,4 +79,3 @@ for (const name of names) {
   }
   await updateFixture(name);
 }
-
