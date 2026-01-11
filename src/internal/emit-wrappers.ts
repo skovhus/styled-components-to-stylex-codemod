@@ -646,6 +646,52 @@ export function emitWrappers(args: {
     return `React.PropsWithChildren<${t}>`;
   };
 
+  // Prefer restrictive props types by default.
+  //
+  // - For most intrinsic elements (div/span/etc), we do NOT auto-widen to `React.ComponentProps<...>`.
+  // - We only include: locally-used JSX attrs (best-effort), styling props, and optional
+  //   `className`/`style` when external styles are supported.
+  // - Some tags (e.g. input) remain exceptions where `React.ComponentProps` is desirable.
+  const shouldUseComponentPropsForIntrinsic = (tagName: string): boolean => {
+    return tagName === "input";
+  };
+
+  const makeRestrictiveIntrinsicPropsLiteralText = (args: {
+    usedAttrs?: Set<string>;
+    supportsExternalStyles: boolean;
+    extraProps?: Array<{ name: string; typeText?: string }>;
+  }): string => {
+    const { usedAttrs, supportsExternalStyles, extraProps = [] } = args;
+    const lines: string[] = [];
+
+    // External style extension support
+    if (supportsExternalStyles) {
+      lines.push("  className?: string;");
+      lines.push("  style?: React.CSSProperties;");
+    }
+
+    // Locally-used JSX attrs (best-effort) — keep narrow and avoid intrinsic prop widening.
+    // Ignore children/className/style (handled separately).
+    for (const n of usedAttrs ?? []) {
+      if (!n || n === "*" || n === "children" || n === "className" || n === "style") {
+        continue;
+      }
+      lines.push(`  ${n}?: any;`);
+    }
+
+    for (const p of extraProps) {
+      if (!p?.name || p.name === "children" || p.name === "className" || p.name === "style") {
+        continue;
+      }
+      lines.push(`  ${p.name}?: ${p.typeText ?? "any"};`);
+    }
+
+    if (lines.length === 0) {
+      return "{}";
+    }
+    return `{\n${lines.join("\n")}\n}`;
+  };
+
   const joinIntersection = (...parts: Array<string | null | undefined>): string => {
     const xs = parts
       .map((p) => (p ?? "").trim())
@@ -989,7 +1035,10 @@ export function emitWrappers(args: {
       const supportsExternalStyles = d.supportsExternalStyles ?? false;
       const explicit = stringifyTsType(d.propsType);
       if (explicit) {
-        emitNamedPropsType(d.localName, explicit);
+        const base = supportsExternalStyles
+          ? joinIntersection(explicit, "{ className?: string; style?: React.CSSProperties }")
+          : explicit;
+        emitNamedPropsType(d.localName, withChildren(base));
         needsReactTypeImport = true;
       } else {
         // Best-effort: treat enum variant prop as a string-literal union.
@@ -1000,13 +1049,14 @@ export function emitWrappers(args: {
           : values.length > 0
             ? values.map((v) => JSON.stringify(v)).join(" | ")
             : "string";
-        const intrinsic = "React.HTMLAttributes<HTMLDivElement>";
-        const baseAttrsType = supportsExternalStyles
-          ? intrinsic
-          : `Omit<${intrinsic}, "className" | "style">`;
+        const used = getUsedAttrs(d.localName);
+        const baseLiteral = makeRestrictiveIntrinsicPropsLiteralText({
+          usedAttrs: used,
+          supportsExternalStyles,
+        });
         emitNamedPropsType(
           d.localName,
-          withChildren(`${baseAttrsType} & { ${propName}?: ${union} }`),
+          withChildren(joinIntersection(baseLiteral, `{ ${propName}?: ${union} }`)),
         );
         needsReactTypeImport = true;
       }
@@ -1137,16 +1187,7 @@ export function emitWrappers(args: {
       : [];
     const knownPrefixPropsSet = new Set(knownPrefixProps);
 
-    const explicit = stringifyTsType(d.propsType);
     const extrasTypeText = (() => {
-      // If input provided an explicit props type, prefer it and avoid emitting `any` overrides
-      // for the same keys (e.g. `color?: string` should not become `color?: any`).
-      if (explicit && explicit.trim()) {
-        // Only allow arbitrary `$...` transient props when we see unknown/spread attrs at call-sites.
-        return dropPrefixFromFilter === "$" && shouldAllowAnyPrefixProps
-          ? `${explicit} & { [K in \`$\${string}\`]?: any }`
-          : explicit;
-      }
       const lines: string[] = [];
       for (const p of extraProps) {
         // Only emit valid identifier keys (fixtures use simple identifiers like `hasError` / `$foo`).
@@ -1159,11 +1200,24 @@ export function emitWrappers(args: {
       }
       return literal;
     })();
-    const rawBaseTypeText = `React.ComponentProps<${JSON.stringify(tagName)}>`;
-    // For local-only wrappers without external style support, omit `className`/`style` from the public surface.
-    const baseTypeText = supportsExternalStyles
-      ? rawBaseTypeText
-      : `Omit<${rawBaseTypeText}, "className" | "style">`;
+    const explicit = stringifyTsType(d.propsType);
+    const baseTypeText = (() => {
+      if (explicit && explicit.trim()) {
+        // Keep user-provided props type, but ensure wrapper-used external style props are typed.
+        return supportsExternalStyles
+          ? joinIntersection(explicit, "{ className?: string; style?: React.CSSProperties }")
+          : explicit;
+      }
+      if (shouldUseComponentPropsForIntrinsic(tagName)) {
+        // Exception: allow wide intrinsic props for specific tags like input.
+        return `React.ComponentProps<${JSON.stringify(tagName)}>`;
+      }
+      return makeRestrictiveIntrinsicPropsLiteralText({
+        usedAttrs,
+        supportsExternalStyles,
+      });
+    })();
+
     const composedInner = joinIntersection(baseTypeText, extrasTypeText);
     const finalTypeText = VOID_TAGS.has(tagName) ? composedInner : withChildren(composedInner);
 
@@ -1563,26 +1617,25 @@ export function emitWrappers(args: {
     const supportsExternalStyles = d.supportsExternalStyles ?? false;
     {
       const explicit = stringifyTsType(d.propsType);
-      const shouldUseIntrinsicProps = (() => {
-        if (supportsExternalStyles) {
-          return true;
-        }
-        const used = getUsedAttrs(d.localName);
-        if (used.has("*")) {
-          return true;
-        }
-        // If any attribute is passed, prefer intrinsic props.
-        return used.size > 0;
-      })();
+      const used = getUsedAttrs(d.localName);
       const intrinsicTypeText = `React.ComponentProps<${JSON.stringify(tagName)}>`;
-      const baseTypeText = shouldUseIntrinsicProps
-        ? supportsExternalStyles
-          ? intrinsicTypeText
-          : `Omit<${intrinsicTypeText}, "className" | "style">`
-        : "{}";
+      const baseTypeText = (() => {
+        if (explicit && explicit.trim()) {
+          return supportsExternalStyles
+            ? joinIntersection(explicit, "{ className?: string; style?: React.CSSProperties }")
+            : explicit;
+        }
+        if (shouldUseComponentPropsForIntrinsic(tagName)) {
+          return intrinsicTypeText;
+        }
+        return makeRestrictiveIntrinsicPropsLiteralText({
+          usedAttrs: used,
+          supportsExternalStyles,
+        });
+      })();
       emitNamedPropsType(
         d.localName,
-        explicit ?? (VOID_TAGS.has(tagName) ? baseTypeText : withChildren(baseTypeText)),
+        VOID_TAGS.has(tagName) ? baseTypeText : withChildren(baseTypeText),
       );
       needsReactTypeImport = true;
     }
@@ -1720,11 +1773,17 @@ export function emitWrappers(args: {
         extras.push(`${sw.propAfter}?: boolean;`);
       }
       const extraType = `{ ${extras.join(" ")} }`;
-      const rawBaseTypeText = `React.ComponentProps<"div">`;
-      const baseTypeText = supportsExternalStyles
-        ? rawBaseTypeText
-        : `Omit<${rawBaseTypeText}, "className" | "style">`;
-      emitNamedPropsType(d.localName, explicit ?? joinIntersection(baseTypeText, extraType));
+      const used = getUsedAttrs(d.localName);
+      const baseTypeText = explicit
+        ? explicit
+        : makeRestrictiveIntrinsicPropsLiteralText({
+            usedAttrs: used,
+            supportsExternalStyles,
+          });
+      emitNamedPropsType(
+        d.localName,
+        withChildren(explicit ?? joinIntersection(baseTypeText, extraType)),
+      );
       needsReactTypeImport = true;
     }
 
@@ -1859,12 +1918,23 @@ export function emitWrappers(args: {
     let inlineTypeText: string | undefined;
     {
       const explicit = stringifyTsType(d.propsType);
+      const used = getUsedAttrs(d.localName);
       const rawBaseTypeText = `React.ComponentProps<${JSON.stringify(tagName)}>`;
-      const baseTypeText = supportsExternalStyles
-        ? rawBaseTypeText
-        : `Omit<${rawBaseTypeText}, "className" | "style">`;
-      // If there's an explicit type, extend it with base component props
-      const typeText = explicit ? `${baseTypeText} & ${explicit}` : baseTypeText;
+      const baseTypeText = (() => {
+        if (explicit && explicit.trim()) {
+          return supportsExternalStyles
+            ? joinIntersection(explicit, "{ className?: string; style?: React.CSSProperties }")
+            : explicit;
+        }
+        if (shouldUseComponentPropsForIntrinsic(tagName)) {
+          return rawBaseTypeText;
+        }
+        return makeRestrictiveIntrinsicPropsLiteralText({
+          usedAttrs: used,
+          supportsExternalStyles,
+        });
+      })();
+      const typeText = VOID_TAGS.has(tagName) ? baseTypeText : withChildren(baseTypeText);
       const typeAliasEmitted = emitNamedPropsType(d.localName, typeText);
       // If the type alias was not emitted (e.g., due to shadowing), try to extend
       // the existing interface/type alias with the base component props
@@ -1876,7 +1946,7 @@ export function emitWrappers(args: {
           if (!typeAliasExtended) {
             // Fallback: use inline type annotation
             inlineTypeText = supportsExternalStyles
-              ? `React.PropsWithChildren<${explicit} & { style?: React.CSSProperties }>`
+              ? `React.PropsWithChildren<${explicit} & { className?: string; style?: React.CSSProperties }>`
               : `React.PropsWithChildren<${explicit}>`;
           }
         }

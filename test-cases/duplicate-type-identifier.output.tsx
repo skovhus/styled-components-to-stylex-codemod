@@ -8,7 +8,7 @@ import * as React from "react";
 /**
  * Card props
  */
-export interface CardProps extends Omit<React.ComponentProps<"div">, "className" | "style"> {
+export interface CardProps extends CardProps {
   /** Title of the card */
   title: string;
   /** Whether the card is highlighted */

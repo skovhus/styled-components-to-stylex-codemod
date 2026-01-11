@@ -2,9 +2,12 @@ import * as React from "react";
 import * as stylex from "@stylexjs/stylex";
 
 type ButtonProps = React.PropsWithChildren<
-  Omit<React.ComponentProps<"button">, "className" | "style"> & {
+  {
     color?: string;
     size?: "small" | "large";
+  } & {
+    color?: any;
+    size?: any;
   }
 >;
 
@@ -25,8 +28,10 @@ function Button(props: ButtonProps) {
 }
 
 type LinkProps = React.PropsWithChildren<
-  Omit<React.ComponentProps<"a">, "className" | "style"> & {
+  {
     isActive?: boolean;
+  } & {
+    isActive?: any;
   }
 >;
 
@@ -43,10 +48,13 @@ function Link(props: LinkProps) {
 }
 
 type BoxProps = React.PropsWithChildren<
-  Omit<React.ComponentProps<"div">, "className" | "style"> & {
+  {
     $background?: string;
     $padding?: string;
-  }
+  } & {
+    $background?: any;
+    $padding?: any;
+  } & { [K in `$${string}`]?: any }
 >;
 
 // Custom prop filtering logic (transient props pattern)
@@ -66,10 +74,14 @@ function Box(props: BoxProps) {
 }
 
 type CardProps = React.PropsWithChildren<
-  Omit<React.ComponentProps<"div">, "className" | "style"> & {
+  {
     variant?: "primary" | "secondary";
     elevation?: number;
     rounded?: boolean;
+  } & {
+    variant?: any;
+    elevation?: any;
+    rounded?: any;
   }
 >;
 

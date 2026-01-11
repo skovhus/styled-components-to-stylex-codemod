@@ -59,7 +59,7 @@ test-cases/
 ## Scripts
 
 - `scripts/debug-test.mjs` - Generates `.actual.tsx` files for failing test cases to compare against expected `.output.tsx` files. Run with `node scripts/debug-test.mjs` after `pnpm build`.
-- `scripts/update-fixtures.mjs` - Updates fixture files.
+- `scripts/update-fixtures.mts` - Updates fixture files (run with `node --experimental-strip-types scripts/update-fixtures.mts`).
 
 ## Adding Test Cases
 

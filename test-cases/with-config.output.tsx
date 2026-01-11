@@ -13,8 +13,10 @@ function Card(props: CardProps) {
   );
 }
 
-type InputProps = Omit<React.ComponentProps<"input">, "className" | "style"> & {
+type InputProps = {
   hasError?: boolean;
+} & {
+  hasError?: any;
 };
 
 // Combining withConfig options

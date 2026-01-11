@@ -5,9 +5,12 @@ import * as React from "react";
 type Color = "labelBase" | "labelMuted";
 
 type BoxProps = React.PropsWithChildren<
-  Omit<React.ComponentProps<"div">, "className" | "style"> & {
+  {
     $bg: Color;
     $hoverColor: Color;
+  } & {
+    $hoverColor?: any;
+    $bg?: any;
   }
 >;
 
@@ -33,7 +36,7 @@ export const App = () => (
 // The codemod should preserve the imported type, not convert to `string`
 import type { Colors } from "./lib/colors";
 
-interface TextColorProps extends Omit<React.ComponentProps<"span">, "className" | "style"> {
+interface TextColorProps extends TextColorProps {
   /** The color from the theme */
   color: Colors;
 }

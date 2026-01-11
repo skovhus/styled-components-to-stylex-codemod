@@ -1,10 +1,10 @@
 import * as stylex from "@stylexjs/stylex";
 import React from "react";
 
-type BoxProps = Omit<React.ComponentProps<"div">, "className" | "style"> & {
+type BoxProps = React.PropsWithChildren<{
   $isActive?: boolean;
   $size?: "small" | "large";
-};
+}>;
 
 // Pattern 1: Exported components - become wrapper functions that must:
 // 1. Accept the transient props for styling decisions
@@ -26,7 +26,7 @@ export function Box(props: BoxProps) {
   );
 }
 
-type ImageProps = Omit<React.ComponentProps<"img">, "className" | "style"> & {
+type ImageProps = {
   $isInactive?: boolean;
 };
 

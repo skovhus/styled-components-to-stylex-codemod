@@ -1,10 +1,17 @@
 import * as React from "react";
 import * as stylex from "@stylexjs/stylex";
 
-type DynamicBoxProps = React.ComponentProps<"div"> & {
-  $background?: any;
-  $size?: any;
-};
+type DynamicBoxProps = React.PropsWithChildren<
+  {
+    className?: string;
+    style?: React.CSSProperties;
+    $background?: any;
+    $size?: any;
+  } & {
+    $background?: any;
+    $size?: any;
+  }
+>;
 
 function DynamicBox(props: DynamicBoxProps) {
   const { className, children, style, $background, $size, ...rest } = props;

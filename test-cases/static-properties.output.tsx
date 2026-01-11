@@ -2,7 +2,7 @@ import * as stylex from "@stylexjs/stylex";
 import * as React from "react";
 import { ActionMenuTextDivider, ActionMenuGroupHeader } from "./lib/action-menu-divider";
 
-type ListItemProps = Omit<React.ComponentProps<"div">, "className" | "style">;
+type ListItemProps = React.PropsWithChildren<{}>;
 
 // Static properties on styled components should be preserved when
 // they become wrapper functions.
@@ -19,7 +19,11 @@ export function ListItem(props: ListItemProps) {
 
 ListItem.HEIGHT = 42;
 ListItem.PADDING = 8;
-type BaseButtonProps = React.ComponentProps<"button">;
+
+type BaseButtonProps = React.PropsWithChildren<{
+  className?: string;
+  style?: React.CSSProperties;
+}>;
 
 // Pattern 2: styled(BaseComponent) with static props defined in same file
 function BaseButton(props: BaseButtonProps) {

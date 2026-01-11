@@ -4,8 +4,10 @@ import * as stylex from "@stylexjs/stylex";
 type Props = { state: "up" | "down" | "both" };
 
 type TopArrowStemProps = React.PropsWithChildren<
-  Omit<React.ComponentProps<"g">, "className" | "style"> & {
+  {
     $state: Props["state"];
+  } & {
+    $state?: any;
   }
 >;
 

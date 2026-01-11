@@ -1,3 +1,5 @@
+import * as React from "react";
+
 // oxlint-disable no-unused-vars
 import * as stylex from "@stylexjs/stylex";
 
@@ -30,9 +32,9 @@ const theme = {
 // Function returning string
 const getColor = (variant: string) => (variant === "primary" ? "#BF4F74" : "#4F74BF");
 
-type DynamicBoxProps = {
+type DynamicBoxProps = React.PropsWithChildren<{
   $variant: string;
-};
+}>;
 
 function DynamicBox(props: DynamicBoxProps) {
   const { $variant, children, ...rest } = props;

@@ -4,7 +4,7 @@ import React from "react";
 // Bug 7: When styled components are transformed, related type exports
 // and component exports should be preserved properly.
 
-export interface ButtonProps extends Omit<React.ComponentProps<"button">, "className" | "style"> {
+export interface ButtonProps extends ButtonProps {
   variant?: "primary" | "secondary";
   size?: "small" | "large";
 }
