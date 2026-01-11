@@ -36,6 +36,7 @@ import { cssDeclarationToStylexDeclarations } from "./internal/css-prop-mapping.
 import { dirname, resolve as pathResolve } from "node:path";
 import { readFileSync, existsSync } from "node:fs";
 import { assertValidAdapter } from "./internal/public-api-validation.js";
+import { isLikelyValidDomAttr } from "./internal/dom-attrs.js";
 
 /**
  * Transform styled-components to StyleX
@@ -1934,50 +1935,7 @@ export function transformWithWarnings(
             // it becomes a React/TS/DOM attribute problem. Props that are used for styling are
             // already handled above via styleFnProps/variantProps.)
             if (decl.base.kind === "intrinsic") {
-              const isLikelyValidDomAttr = (() => {
-                if (n === "className" || n === "style" || n === "ref" || n === "key") {
-                  return true;
-                }
-                if (n.startsWith("data-") || n.startsWith("aria-")) {
-                  return true;
-                }
-                // Event handlers: onClick, onChange, onMouseEnter, etc.
-                if (/^on[A-Z]/.test(n)) {
-                  return true;
-                }
-                // Common HTML/SVG attributes used throughout fixtures
-                if (
-                  n === "id" ||
-                  n === "title" ||
-                  n === "role" ||
-                  n === "tabIndex" ||
-                  n === "href" ||
-                  n === "target" ||
-                  n === "rel" ||
-                  n === "type" ||
-                  n === "name" ||
-                  n === "value" ||
-                  n === "placeholder" ||
-                  n === "disabled" ||
-                  n === "readOnly" ||
-                  n === "htmlFor" ||
-                  n === "src" ||
-                  n === "alt" ||
-                  n === "width" ||
-                  n === "height" ||
-                  n === "viewBox" ||
-                  n === "d" ||
-                  n === "x" ||
-                  n === "y" ||
-                  n === "rx" ||
-                  n === "ry" ||
-                  n === "fill"
-                ) {
-                  return true;
-                }
-                return false;
-              })();
-              if (!isLikelyValidDomAttr) {
+              if (!isLikelyValidDomAttr(n)) {
                 continue;
               }
             }
