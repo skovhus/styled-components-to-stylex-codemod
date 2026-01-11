@@ -21,10 +21,10 @@ function TextDivider(props: TextDividerProps) {
 }
 
 TextDivider.HEIGHT = 30;
-type StyledTextDividerProps = React.ComponentProps<typeof TextDivider>;
+type StyledTextDividerProps = Omit<React.ComponentProps<typeof TextDivider>, "children">;
 
 export function StyledTextDivider(props: StyledTextDividerProps) {
-  const { className, children, style, ...rest } = props;
+  const { className, style, ...rest } = props;
 
   const sx = stylex.props(styles.textDivider);
   return (
@@ -36,9 +36,7 @@ export function StyledTextDivider(props: StyledTextDividerProps) {
         ...sx.style,
         ...style,
       }}
-    >
-      {children}
-    </TextDivider>
+    />
   );
 }
 

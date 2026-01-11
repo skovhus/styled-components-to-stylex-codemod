@@ -1,6 +1,7 @@
 import * as stylex from "@stylexjs/stylex";
 import { themeVars } from "./tokens.stylex";
 import * as React from "react";
+import type { Colors } from "./lib/colors";
 
 // Bug 12: When codemod generates wrapper function, the props type must include
 // standard HTML attributes (className, children, style) that the wrapper uses.
@@ -66,7 +67,7 @@ export function App() {
 // This matches TextColor.tsx in a design system which doesn't use the component in the same file
 interface ThemeTextProps extends React.HTMLAttributes<HTMLSpanElement> {
   /** Theme color name */
-  themeColor: string;
+  themeColor: Colors;
 }
 
 /** A text span that gets color from theme */
@@ -101,7 +102,7 @@ const styles = stylex.create({
   },
   /** A text span that gets color from theme */
   themeText: {},
-  themeTextColor: (themeColor: string) => ({
+  themeTextColor: (themeColor: Colors) => ({
     color: themeVars[themeColor],
   }),
 });

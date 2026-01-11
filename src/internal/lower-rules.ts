@@ -93,6 +93,8 @@ export function lowerRules(args: {
   const ensureShouldForwardPropDrop = (decl: StyledDecl, propName: string) => {
     // Ensure we generate a wrapper so we can consume the styling prop without forwarding it to DOM.
     decl.needsWrapperComponent = true;
+    // This is an internally-inferred drop (not user-configured via withConfig).
+    decl.shouldForwardPropFromWithConfig = false;
     const existing = decl.shouldForwardProp ?? { dropProps: [] as string[] };
     const dropProps = new Set<string>(existing.dropProps ?? []);
     dropProps.add(propName);
@@ -1435,7 +1437,33 @@ export function lowerRules(args: {
 
               if (!styleFnDecls.has(fnKey)) {
                 // Build expression: resolvedExpr[indexPropName]
-                const indexedExprAst = parseExpr(`(${resolved.expr})[${indexPropName}]`);
+                // NOTE: This is TypeScript-only syntax (TSAsExpression + `keyof typeof`),
+                // so we parse it explicitly with a TSX parser here rather than relying on
+                // the generic `parseExpr` helper.
+                const indexedExprAst = (() => {
+                  // We intentionally do NOT add `as keyof typeof themeVars` fallbacks.
+                  // If a fixture uses a `string` key to index theme colors, it should be fixed at the
+                  // input/type level to use a proper key union (e.g. `Colors`), and the output should
+                  // reflect that contract.
+                  const exprSource = `(${resolved.expr})[${indexPropName}]`;
+                  try {
+                    const jParse = api.jscodeshift.withParser("tsx");
+                    const program = jParse(`(${exprSource});`);
+                    const stmt = program.find(jParse.ExpressionStatement).nodes()[0] as any;
+                    let expr = stmt?.expression ?? null;
+                    while (expr?.type === "ParenthesizedExpression") {
+                      expr = expr.expression;
+                    }
+                    // Remove extra.parenthesized flag that causes recast to add parentheses
+                    if (expr?.extra?.parenthesized) {
+                      delete expr.extra.parenthesized;
+                      delete expr.extra.parenStart;
+                    }
+                    return expr;
+                  } catch {
+                    return null;
+                  }
+                })();
                 if (!indexedExprAst) {
                   warnings.push({
                     type: "dynamic-node",
@@ -1446,7 +1474,7 @@ export function lowerRules(args: {
                 }
 
                 const param = j.identifier(indexPropName);
-                // Prefer the prop's own type when available (e.g. `Color`) so we don't end up with
+                // Prefer the prop's own type when available (e.g. `Color` / `Colors`) so we don't end up with
                 // `keyof typeof themeVars` in fixture outputs.
                 const propTsType = findJsxPropTsType(indexPropName);
                 (param as any).typeAnnotation = j.tsTypeAnnotation(

@@ -1,14 +1,12 @@
 import * as React from "react";
 import * as stylex from "@stylexjs/stylex";
 
-type ButtonProps = React.PropsWithChildren<{
-  as?: React.ElementType;
-  className?: string;
-  style?: React.CSSProperties;
-  href?: any;
-}>;
+type ButtonProps<C extends React.ElementType = "button"> = Omit<
+  React.ComponentPropsWithoutRef<C>,
+  "className" | "style"
+> & { as?: C };
 
-function Button(props: ButtonProps) {
+function Button<C extends React.ElementType = "button">(props: ButtonProps<C>) {
   const { as: Component = "button", children, style, ...rest } = props;
   return (
     <Component {...rest} {...stylex.props(styles.button)} style={style}>

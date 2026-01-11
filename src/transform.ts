@@ -269,8 +269,11 @@ export function transformWithWarnings(
 
   const parseExpr = (exprSource: string): any => {
     try {
-      const program = j(`(${exprSource});`);
-      const stmt = program.find(j.ExpressionStatement).nodes()[0];
+      // Always parse expressions with TSX enabled so we can safely emit TS-only constructs
+      // like `x as SomeType` inside generated outputs.
+      const jParse = api.jscodeshift.withParser("tsx");
+      const program = jParse(`(${exprSource});`);
+      const stmt = program.find(jParse.ExpressionStatement).nodes()[0];
       let expr = (stmt as any)?.expression ?? null;
       // Unwrap ParenthesizedExpression to avoid extra parentheses in output
       while (expr?.type === "ParenthesizedExpression") {
@@ -1382,7 +1385,9 @@ export function transformWithWarnings(
 
       // Only reposition static properties for exported components
       // Non-exported base components will have their properties inherited by extended components
-      if (exportedComponents.has(componentName)) {
+      // Also reposition static properties for non-exported components that are extended by another
+      // styled component (so the base value exists at runtime for inheritance assignments).
+      if (exportedComponents.has(componentName) || extendedBy.has(componentName)) {
         const existing = staticPropertyAssignments.get(componentName) ?? [];
         existing.push(p.node);
         staticPropertyAssignments.set(componentName, existing);
@@ -1425,11 +1430,16 @@ export function transformWithWarnings(
 
     const inheritanceStatements: any[] = [];
     for (const propName of baseProps) {
+      // Accessing arbitrary static properties on a function component is legal at runtime,
+      // but TypeScript doesn't know about ad-hoc statics. Cast the base to `any` to keep
+      // generated outputs typecheck-friendly.
+      const rhs = j(`const __x = (${baseComponentName} as any).${propName};`).get().node.program
+        .body[0].declarations[0].init;
       const stmt = j.expressionStatement(
         j.assignmentExpression(
           "=",
           j.memberExpression(j.identifier(decl.localName), j.identifier(propName)),
-          j.memberExpression(j.identifier(baseComponentName), j.identifier(propName)),
+          rhs as any,
         ),
       );
       inheritanceStatements.push(stmt);
@@ -1918,6 +1928,58 @@ export function transformWithWarnings(
             // These are styled-components conventions that shouldn't reach the DOM.
             if (n.startsWith("$")) {
               continue;
+            }
+            // For intrinsic elements, avoid forwarding unknown/custom props to the DOM.
+            // (For styled-components this is often "fine", but once we inline to a DOM element
+            // it becomes a React/TS/DOM attribute problem. Props that are used for styling are
+            // already handled above via styleFnProps/variantProps.)
+            if (decl.base.kind === "intrinsic") {
+              const isLikelyValidDomAttr = (() => {
+                if (n === "className" || n === "style" || n === "ref" || n === "key") {
+                  return true;
+                }
+                if (n.startsWith("data-") || n.startsWith("aria-")) {
+                  return true;
+                }
+                // Event handlers: onClick, onChange, onMouseEnter, etc.
+                if (/^on[A-Z]/.test(n)) {
+                  return true;
+                }
+                // Common HTML/SVG attributes used throughout fixtures
+                if (
+                  n === "id" ||
+                  n === "title" ||
+                  n === "role" ||
+                  n === "tabIndex" ||
+                  n === "href" ||
+                  n === "target" ||
+                  n === "rel" ||
+                  n === "type" ||
+                  n === "name" ||
+                  n === "value" ||
+                  n === "placeholder" ||
+                  n === "disabled" ||
+                  n === "readOnly" ||
+                  n === "htmlFor" ||
+                  n === "src" ||
+                  n === "alt" ||
+                  n === "width" ||
+                  n === "height" ||
+                  n === "viewBox" ||
+                  n === "d" ||
+                  n === "x" ||
+                  n === "y" ||
+                  n === "rx" ||
+                  n === "ry" ||
+                  n === "fill"
+                ) {
+                  return true;
+                }
+                return false;
+              })();
+              if (!isLikelyValidDomAttr) {
+                continue;
+              }
             }
             keptAfterVariants.push(attr);
             continue;

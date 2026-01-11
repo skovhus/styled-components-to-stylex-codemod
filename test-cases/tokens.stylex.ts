@@ -7,6 +7,11 @@ export const themeVars = stylex.defineVars({
   secondaryColor: "#4F74BF",
   labelBase: "#111827",
   labelMuted: "#6B7280",
+  labelTitle: "#111827",
+  bgBase: "#FFFFFF",
+  bgSub: "#F3F4F6",
+  textPrimary: "#111827",
+  textSecondary: "#6B7280",
 });
 
 /**
@@ -17,6 +22,11 @@ export const testCaseTheme = {
   colors: {
     labelBase: "#111827",
     labelMuted: "#6B7280",
+    labelTitle: "#111827",
+    bgBase: "#FFFFFF",
+    bgSub: "#F3F4F6",
+    textPrimary: "#111827",
+    textSecondary: "#6B7280",
     primaryColor: "#BF4F74",
   },
 } as const;

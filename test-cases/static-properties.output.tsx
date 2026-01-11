@@ -49,6 +49,7 @@ function BaseButton(props: BaseButtonProps) {
   );
 }
 
+BaseButton.HEIGHT = 36;
 type ExtendedButtonProps = React.ButtonHTMLAttributes<HTMLButtonElement>;
 
 // ExtendedButton should have HEIGHT from BaseButton
@@ -70,10 +71,10 @@ export function ExtendedButton(props: ExtendedButtonProps) {
   );
 }
 
-ExtendedButton.HEIGHT = BaseButton.HEIGHT;
+ExtendedButton.HEIGHT = (BaseButton as any).HEIGHT;
 type CommandMenuTextDividerProps = Omit<
   React.ComponentProps<typeof ActionMenuTextDivider>,
-  "className" | "style"
+  "children" | "className" | "style"
 >;
 
 export function CommandMenuTextDivider(props: CommandMenuTextDividerProps) {
@@ -83,7 +84,7 @@ export function CommandMenuTextDivider(props: CommandMenuTextDividerProps) {
 CommandMenuTextDivider.HEIGHT = ActionMenuTextDivider.HEIGHT;
 type CommandMenuGroupHeaderProps = Omit<
   React.ComponentProps<typeof ActionMenuGroupHeader>,
-  "className" | "style"
+  "children" | "className" | "style"
 >;
 
 export function CommandMenuGroupHeader(props: CommandMenuGroupHeaderProps) {

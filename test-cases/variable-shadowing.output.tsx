@@ -18,7 +18,7 @@ export function CollapsingContainer(props: Props) {
       }
     : { overflow: "hidden" };
   return (
-    <div {...stylex.props(stylexStyles.container)} align={align} style={styles}>
+    <div {...stylex.props(stylexStyles.container)} style={styles}>
       {children}
     </div>
   );

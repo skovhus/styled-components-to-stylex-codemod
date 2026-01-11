@@ -19,8 +19,11 @@ export function Button(props: ButtonProps) {
 
 // Pattern 2: Component with theme access (like TextColor.tsx in a design system)
 // Uses props.theme.colors which the adapter resolves to themeVars
-interface ThemeSpanProps {
-  variant: string;
+interface ThemeSpanProps extends Omit<
+  React.HTMLAttributes<HTMLSpanElement>,
+  "className" | "style"
+> {
+  variant: "labelBase" | "labelMuted" | "labelTitle";
 }
 
 export function ThemeSpan(props: ThemeSpanProps) {
@@ -51,7 +54,7 @@ const styles = stylex.create({
     color: "white",
   },
   themeSpan: {},
-  themeSpanColor: (variant: string) => ({
+  themeSpanColor: (variant: "labelBase" | "labelMuted" | "labelTitle") => ({
     color: themeVars[variant],
   }),
 });

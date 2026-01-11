@@ -66,6 +66,12 @@ export type StyledDecl = {
   styleFnFromProps?: Array<{ fnKey: string; jsxProp: string }>;
   shouldForwardProp?: { dropProps: string[]; dropPrefix?: string };
   /**
+   * True when `shouldForwardProp` came from `styled.*.withConfig({ shouldForwardProp })`.
+   * When false/undefined, `shouldForwardProp` may have been inferred internally (e.g. enum if-chain
+   * or theme-indexed lookup) just to prevent forwarding styling props to the DOM.
+   */
+  shouldForwardPropFromWithConfig?: boolean;
+  /**
    * Optional TS props type captured from input declarations like:
    *   styled.button<ButtonProps>`...`
    *   styled(Component)<CardProps>`...`
