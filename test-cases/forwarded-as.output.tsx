@@ -17,11 +17,9 @@ function Button(props: ButtonProps) {
   );
 }
 
-type ButtonWrapperProps = React.PropsWithChildren<
-  Omit<React.ComponentProps<typeof Button>, "className" | "style"> & {
-    href?: any;
-  }
->;
+type ButtonWrapperProps = Omit<React.ComponentProps<typeof Button>, "className" | "style"> & {
+  href?: any;
+};
 
 function ButtonWrapper(props: ButtonWrapperProps) {
   return <Button {...props} {...stylex.props(styles.buttonWrapper)} />;

@@ -77,9 +77,7 @@ function StyledLabel(props: StyledLabelProps) {
   );
 }
 
-type HelpLabelProps = React.PropsWithChildren<
-  Omit<React.ComponentProps<typeof StyledLabel>, "className" | "style">
->;
+type HelpLabelProps = Omit<React.ComponentProps<typeof StyledLabel>, "className" | "style">;
 
 export function HelpLabel(props: HelpLabelProps) {
   return <StyledLabel {...props} {...stylex.props(styles.helpLabel)} />;
@@ -144,12 +142,10 @@ function StyledText(props: StyledTextProps) {
   );
 }
 
-type HelpTextProps = React.PropsWithChildren<
-  Omit<React.ComponentProps<typeof StyledText>, "className" | "style"> & {
-    color?: any;
-    variant?: any;
-  }
->;
+type HelpTextProps = Omit<React.ComponentProps<typeof StyledText>, "className" | "style"> & {
+  color?: any;
+  variant?: any;
+};
 
 export function HelpText(props: HelpTextProps) {
   return <StyledText {...props} {...stylex.props(styles.helpText)} />;

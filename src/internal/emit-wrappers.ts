@@ -783,9 +783,16 @@ export function emitWrappers(args: {
     if (t.startsWith("React.PropsWithChildren<")) {
       return t;
     }
-    // `React.ComponentProps<...>` already includes `children`, so wrapping it is redundant.
+    // `React.ComponentProps*<...>` already includes `children`, so wrapping it is redundant.
     // Keep the type as-is to avoid noisy `PropsWithChildren<...>` wrappers.
-    if (t.startsWith("React.ComponentProps<") || t.startsWith("React.ComponentPropsWithoutRef<")) {
+    if (
+      t.startsWith("React.ComponentProps<") ||
+      t.startsWith("React.ComponentPropsWithoutRef<") ||
+      // Derived-from-ComponentProps cases (common in our output): Omit/Pick/Partial/etc.
+      /^(Omit|Pick|Partial|Required|Readonly|ReadonlyArray|NonNullable|Extract|Exclude)<\s*React\.ComponentProps(?:WithoutRef)?</.test(
+        t,
+      )
+    ) {
       return t;
     }
     return `React.PropsWithChildren<${t}>`;

@@ -16,14 +16,12 @@ function Button(props: ButtonProps) {
   );
 }
 
-type StyledTextProps = React.PropsWithChildren<
-  Omit<React.ComponentProps<typeof Text>, "className" | "style"> & {
-    as?: React.ElementType;
-    color?: any;
-    htmlFor?: any;
-    variant?: any;
-  }
->;
+type StyledTextProps = Omit<React.ComponentProps<typeof Text>, "className" | "style"> & {
+  as?: React.ElementType;
+  color?: any;
+  htmlFor?: any;
+  variant?: any;
+};
 
 function StyledText(props: StyledTextProps) {
   return <Text {...props} {...stylex.props(styles.text)} />;
