@@ -1,0 +1,130 @@
+import type { Adapter } from "../adapter.ts";
+
+/**
+ * Shared adapter config for fixtures:
+ * - Used by tests (via defineAdapter in `fixture-adapters.ts`)
+ * - Used by `scripts/update-fixtures.mts` (via dist defineAdapter)
+ */
+export const fixtureAdapterConfig: Adapter = {
+  // Enable external styles for exported components in external-styles-support test case
+  shouldSupportExternalStyles(ctx) {
+    return (
+      ctx.filePath.includes("external-styles-support") && ctx.componentName === "ExportedButton"
+    );
+  },
+
+  resolveValue(ctx) {
+    if (ctx.kind === "theme") {
+      // Test fixtures use a small ThemeProvider theme shape:
+      //   props.theme.colors.labelBase  -> themeVars.labelBase
+      //   props.theme.colors[bg]        -> themeVars[bg]
+      //
+      // `ctx.path` is the dot-path on the theme object (no bracket/index parts).
+      if (ctx.path === "colors") {
+        return {
+          expr: "themeVars",
+          imports: [
+            {
+              from: { kind: "specifier", value: "./tokens.stylex" },
+              names: [{ imported: "themeVars" }],
+            },
+          ],
+        };
+      }
+
+      const lastSegment = ctx.path.split(".").pop();
+      return {
+        expr: `themeVars.${lastSegment}`,
+        imports: [
+          {
+            from: { kind: "specifier", value: "./tokens.stylex" },
+            names: [{ imported: "themeVars" }],
+          },
+        ],
+      };
+    }
+
+    if (ctx.kind === "call") {
+      if (ctx.calleeImportedName !== "transitionSpeed") {
+        return null;
+      }
+      if (ctx.calleeSource.kind !== "absolutePath") {
+        return null;
+      }
+      const src = ctx.calleeSource.value;
+      if (
+        !src.endsWith("/test-cases/lib/helpers.ts") &&
+        !src.endsWith("\\test-cases\\lib\\helpers.ts")
+      ) {
+        return null;
+      }
+      const arg0 = ctx.args[0];
+      const key = arg0?.kind === "literal" && typeof arg0.value === "string" ? arg0.value : null;
+      if (
+        key !== "highlightFadeIn" &&
+        key !== "highlightFadeOut" &&
+        key !== "quickTransition" &&
+        key !== "regularTransition" &&
+        key !== "slowTransition"
+      ) {
+        return null;
+      }
+      return {
+        expr: `transitionSpeedVars.${key}`,
+        imports: [
+          {
+            from: { kind: "specifier", value: "./lib/helpers.stylex" },
+            names: [{ imported: "transitionSpeed", local: "transitionSpeedVars" }],
+          },
+        ],
+      };
+    }
+
+    if (ctx.kind === "cssVariable") {
+      const { name, definedValue } = ctx;
+      // css-calc fixture: lift `var(--base-size)` to StyleX vars, and drop local definition when it matches.
+      if (name === "--base-size") {
+        return {
+          expr: "calcVars.baseSize",
+          imports: [
+            {
+              from: { kind: "specifier", value: "./css-calc.stylex" },
+              names: [{ imported: "calcVars" }],
+            },
+          ],
+          ...(definedValue === "16px" ? { dropDefinition: true } : {}),
+        };
+      }
+
+      // css-variables fixture: map known vars to `vars.*` and `textVars.*`
+      const combinedImport = {
+        from: { kind: "specifier" as const, value: "./css-variables.stylex" },
+        names: [{ imported: "vars" }, { imported: "textVars" }],
+      };
+      const varsMap: Record<string, string> = {
+        "--color-primary": "colorPrimary",
+        "--color-secondary": "colorSecondary",
+        "--spacing-sm": "spacingSm",
+        "--spacing-md": "spacingMd",
+        "--spacing-lg": "spacingLg",
+        "--border-radius": "borderRadius",
+      };
+      const textVarsMap: Record<string, string> = {
+        "--text-color": "textColor",
+        "--font-size": "fontSize",
+        "--line-height": "lineHeight",
+      };
+
+      const v = varsMap[name];
+      if (v) {
+        return { expr: `vars.${v}`, imports: [combinedImport] };
+      }
+      const t = textVarsMap[name];
+      if (t) {
+        return { expr: `textVars.${t}`, imports: [combinedImport] };
+      }
+    }
+
+    return null;
+  },
+};
