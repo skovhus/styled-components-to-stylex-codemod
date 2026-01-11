@@ -20,11 +20,23 @@ export const customAdapter = defineAdapter({
 
 // Fixtures don't use theme resolution, but the transformer requires an adapter.
 export const fixtureAdapter = defineAdapter({
-  // Enable external styles for exported components in external-styles-support test case
+  // Enable external styles for exported components in specific test cases where the expected
+  // output includes className/style prop support and HTMLAttributes extension.
   shouldSupportExternalStyles(ctx) {
-    return (
-      ctx.filePath.includes("external-styles-support") && ctx.componentName === "ExportedButton"
-    );
+    // external-styles-support test case - only ExportedButton supports external styles
+    if (ctx.filePath.includes("external-styles-support")) {
+      return ctx.componentName === "ExportedButton";
+    }
+    // styled-element-html-props - exported components should extend HTMLAttributes
+    if (ctx.filePath.includes("styled-element-html-props")) {
+      return true;
+    }
+    // wrapper-props-incomplete - TextColor and ThemeText should extend HTMLAttributes
+    // Highlight wraps a component and shouldn't support external styles
+    if (ctx.filePath.includes("wrapper-props-incomplete")) {
+      return ctx.componentName === "TextColor" || ctx.componentName === "ThemeText";
+    }
+    return false;
   },
 
   resolveValue(ctx) {

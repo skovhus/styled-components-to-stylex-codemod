@@ -15,7 +15,7 @@ interface TextColorProps extends React.HTMLAttributes<HTMLSpanElement> {
 export function TextColor(props: TextColorProps) {
   const { className, children, style, color } = props;
 
-  const sx = stylex.props(styles.textColor, color != null && styles.textColorColor(color));
+  const sx = stylex.props(styles.textColor, styles.textColorColor(color));
   return (
     <span
       {...sx}
@@ -64,20 +64,28 @@ export function App() {
 
 // Pattern 3: styled("span") with NO local usage - wrapper props should still be extended
 // This matches TextColor.tsx in a design system which doesn't use the component in the same file
-interface ThemeTextProps {
+interface ThemeTextProps extends React.HTMLAttributes<HTMLSpanElement> {
   /** Theme color name */
   themeColor: string;
 }
 
 /** A text span that gets color from theme */
 export function ThemeText(props: ThemeTextProps) {
-  const { children, themeColor } = props;
+  const { className, children, style, themeColor } = props;
 
-  const sx = stylex.props(
-    styles.themeText,
-    themeColor != null && styles.themeTextColor(themeColor),
+  const sx = stylex.props(styles.themeText, styles.themeTextColor(themeColor));
+  return (
+    <span
+      {...sx}
+      className={[sx.className, className].filter(Boolean).join(" ")}
+      style={{
+        ...sx.style,
+        ...style,
+      }}
+    >
+      {children}
+    </span>
   );
-  return <span {...sx}>{children}</span>;
 }
 
 const styles = stylex.create({

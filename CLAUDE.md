@@ -23,12 +23,14 @@ Codemod to transform styled-components to StyleX using jscodeshift.
 pnpm install          # Install dependencies
 pnpm build            # Build with tsdown
 pnpm test             # Run tests (watch mode)
-pnpm test:run         # Run tests once
+pnpm test:run         # Run tests once (no rebuild needed - uses source directly)
 pnpm typecheck        # Type check with tsc
 pnpm lint             # Lint with oxlint
 pnpm run ci           # Run lint + typecheck + test
 pnpm storybook        # Start Storybook dev server (port 6006)
 ```
+
+**Note**: Tests run against source files directly (via vitest), so `pnpm test:run` does NOT require rebuilding. Only `node scripts/debug-test.mjs` requires a prior build.
 
 ## Project Structure
 

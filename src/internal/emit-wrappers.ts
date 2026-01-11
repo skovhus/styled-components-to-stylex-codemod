@@ -858,14 +858,92 @@ export function emitWrappers(args: {
     }
   };
 
+  // Helper to extract prop names from a propsType AST node (TSTypeLiteral, TSIntersectionType, etc.)
+  const getExplicitPropNames = (propsType: any): Set<string> => {
+    const names = new Set<string>();
+
+    const extractFromLiteral = (literal: any): void => {
+      if (!literal || literal.type !== "TSTypeLiteral") {
+        return;
+      }
+      for (const member of literal.members ?? []) {
+        if (member?.type !== "TSPropertySignature") {
+          continue;
+        }
+        const key: any = member.key;
+        const name =
+          key?.type === "Identifier"
+            ? key.name
+            : key?.type === "StringLiteral"
+              ? key.value
+              : key?.type === "Literal" && typeof key.value === "string"
+                ? key.value
+                : null;
+        if (name) {
+          names.add(name);
+        }
+      }
+    };
+
+    const extractFromType = (type: any): void => {
+      if (!type) {
+        return;
+      }
+      if (type.type === "TSTypeLiteral") {
+        extractFromLiteral(type);
+      } else if (type.type === "TSIntersectionType") {
+        for (const t of type.types ?? []) {
+          extractFromType(t);
+        }
+      } else if (type.type === "TSTypeReference" && type.typeName?.type === "Identifier") {
+        // Look up the interface or type alias
+        const typeName = type.typeName.name;
+        const interfaceDecl = root
+          .find(j.TSInterfaceDeclaration)
+          .filter((p) => (p.node as any).id?.name === typeName);
+        if (interfaceDecl.size() > 0) {
+          const body = interfaceDecl.get().node.body?.body ?? [];
+          for (const member of body) {
+            if (member?.type !== "TSPropertySignature") {
+              continue;
+            }
+            const key: any = member.key;
+            const name = key?.type === "Identifier" ? key.name : null;
+            if (name) {
+              names.add(name);
+            }
+          }
+        }
+        // Also check type aliases
+        const typeAlias = root
+          .find(j.TSTypeAliasDeclaration)
+          .filter((p) => (p.node as any).id?.name === typeName);
+        if (typeAlias.size() > 0) {
+          extractFromType(typeAlias.get().node.typeAnnotation);
+        }
+      }
+    };
+
+    extractFromType(propsType);
+    return names;
+  };
+
   const inferredIntrinsicPropsTypeText = (args: {
     d: StyledDecl;
     tagName: string;
     allowClassNameProp: boolean;
     allowStyleProp: boolean;
     includeAsProp?: boolean;
+    skipProps?: Set<string>;
   }): string => {
-    const { d, tagName, allowClassNameProp, allowStyleProp, includeAsProp = false } = args;
+    const {
+      d,
+      tagName,
+      allowClassNameProp,
+      allowStyleProp,
+      includeAsProp = false,
+      skipProps,
+    } = args;
     const used = getUsedAttrs(d.localName);
 
     // If we have spreads, or the component is used as a value, we must accept a broader set
@@ -898,6 +976,10 @@ export function emitWrappers(args: {
         // handled via allow* above
         continue;
       }
+      // Skip props that are already defined in the explicit type
+      if (skipProps?.has(attr)) {
+        continue;
+      }
       lines.push(`  ${toTypeKey(attr)}?: any;`);
     }
 
@@ -926,8 +1008,9 @@ export function emitWrappers(args: {
     allowClassNameProp: boolean;
     allowStyleProp: boolean;
     includeAsProp?: boolean;
+    skipProps?: Set<string>;
   }): string => {
-    const { d, allowClassNameProp, allowStyleProp, includeAsProp = false } = args;
+    const { d, allowClassNameProp, allowStyleProp, includeAsProp = false, skipProps } = args;
     const used = getUsedAttrs(d.localName);
 
     const lines: string[] = [];
@@ -943,6 +1026,10 @@ export function emitWrappers(args: {
         continue;
       }
       if (attr === "className" || attr === "style") {
+        continue;
+      }
+      // Skip props that are already defined in the explicit type
+      if (skipProps?.has(attr)) {
         continue;
       }
       lines.push(`  ${toTypeKey(attr)}?: any;`);
@@ -962,27 +1049,83 @@ export function emitWrappers(args: {
   };
 
   const isPropRequiredInPropsTypeLiteral = (propsType: any, propName: string): boolean => {
-    if (!propsType || propsType.type !== "TSTypeLiteral") {
-      return false;
-    }
-    for (const m of propsType.members ?? []) {
-      if (!m || m.type !== "TSPropertySignature") {
-        continue;
+    // Helper to check if a prop is required in a TSTypeLiteral
+    const checkInLiteral = (literal: any): boolean | null => {
+      if (!literal || literal.type !== "TSTypeLiteral") {
+        return null;
       }
-      const k: any = m.key;
-      const name =
-        k?.type === "Identifier"
-          ? k.name
-          : k?.type === "StringLiteral"
-            ? k.value
-            : k?.type === "Literal" && typeof k.value === "string"
+      for (const m of literal.members ?? []) {
+        if (!m || m.type !== "TSPropertySignature") {
+          continue;
+        }
+        const k: any = m.key;
+        const name =
+          k?.type === "Identifier"
+            ? k.name
+            : k?.type === "StringLiteral"
               ? k.value
-              : null;
-      if (name !== propName) {
-        continue;
+              : k?.type === "Literal" && typeof k.value === "string"
+                ? k.value
+                : null;
+        if (name !== propName) {
+          continue;
+        }
+        return m.optional !== true;
       }
-      return m.optional !== true;
+      return null;
+    };
+
+    // Helper to check if a prop is required in an interface body
+    const checkInInterfaceBody = (body: any[]): boolean | null => {
+      for (const member of body) {
+        if (member?.type !== "TSPropertySignature") {
+          continue;
+        }
+        const k: any = member.key;
+        const name = k?.type === "Identifier" ? k.name : null;
+        if (name !== propName) {
+          continue;
+        }
+        return member.optional !== true;
+      }
+      return null;
+    };
+
+    // Check if propsType is a TSTypeLiteral
+    if (propsType?.type === "TSTypeLiteral") {
+      const result = checkInLiteral(propsType);
+      return result === true;
     }
+
+    // Check if propsType is a TSTypeReference to an interface/type alias
+    if (propsType?.type === "TSTypeReference" && propsType.typeName?.type === "Identifier") {
+      const typeName = propsType.typeName.name;
+
+      // Look up the interface
+      const interfaceDecl = root
+        .find(j.TSInterfaceDeclaration)
+        .filter((p) => (p.node as any).id?.name === typeName);
+      if (interfaceDecl.size() > 0) {
+        const body = interfaceDecl.get().node.body?.body ?? [];
+        const result = checkInInterfaceBody(body);
+        if (result !== null) {
+          return result;
+        }
+      }
+
+      // Look up the type alias
+      const typeAlias = root
+        .find(j.TSTypeAliasDeclaration)
+        .filter((p) => (p.node as any).id?.name === typeName);
+      if (typeAlias.size() > 0) {
+        const typeAnnotation = typeAlias.get().node.typeAnnotation;
+        const result = checkInLiteral(typeAnnotation);
+        if (result !== null) {
+          return result;
+        }
+      }
+    }
+
     return false;
   };
 
@@ -1477,6 +1620,8 @@ export function emitWrappers(args: {
     const knownPrefixPropsSet = new Set(knownPrefixProps);
 
     const explicit = stringifyTsType(d.propsType);
+    // Extract prop names from explicit type to avoid duplicating them in inferred type
+    const explicitPropNames = d.propsType ? getExplicitPropNames(d.propsType) : new Set<string>();
     const extrasTypeText = (() => {
       // If input provided an explicit props type, prefer it and avoid emitting `any` overrides
       // for the same keys (e.g. `color?: string` should not become `color?: any`).
@@ -1498,15 +1643,70 @@ export function emitWrappers(args: {
       }
       return literal;
     })();
-    const inferred = inferredIntrinsicPropsTypeText({
-      d,
-      tagName,
-      allowClassNameProp,
-      allowStyleProp,
-    });
-    const finalTypeText = joinIntersection(inferred, extrasTypeText);
+    // For elements with explicit type, generate clean types:
+    // - Void tags (input, img): use Omit<React.*HTMLAttributes, ...> & explicit
+    // - Non-void tags (div, span): use React.PropsWithChildren<explicit>
+    // Without explicit type, infer from usage.
+    const finalTypeText = (() => {
+      if (explicit) {
+        if (VOID_TAGS.has(tagName)) {
+          const base = reactIntrinsicAttrsType(tagName);
+          const omitted: string[] = [];
+          if (!allowClassNameProp) {
+            omitted.push('"className"');
+          }
+          if (!allowStyleProp) {
+            omitted.push('"style"');
+          }
+          const baseWithOmit = omitted.length ? `Omit<${base}, ${omitted.join(" | ")}>` : base;
+          return joinIntersection(baseWithOmit, extrasTypeText);
+        }
+        // Non-void tags: wrap explicit in PropsWithChildren, add style/className if allowed
+        const extraAttrs: string[] = [];
+        if (allowStyleProp && !explicitPropNames.has("style")) {
+          extraAttrs.push("  style?: React.CSSProperties;");
+        }
+        if (allowClassNameProp && !explicitPropNames.has("className")) {
+          extraAttrs.push("  className?: string;");
+        }
+        const attrsAddendum = extraAttrs.length > 0 ? `{\n${extraAttrs.join("\n")}\n}` : null;
+        const typeWithAttrs = attrsAddendum
+          ? joinIntersection(extrasTypeText, attrsAddendum)
+          : extrasTypeText;
+        return withChildren(typeWithAttrs);
+      }
+      // No explicit type: use inferred props
+      return inferredIntrinsicPropsTypeText({
+        d,
+        tagName,
+        allowClassNameProp,
+        allowStyleProp,
+        skipProps: explicitPropNames,
+      });
+    })();
 
-    emitNamedPropsType(d.localName, finalTypeText);
+    const typeAliasEmitted = emitNamedPropsType(d.localName, finalTypeText);
+    // If the type alias was not emitted (e.g., due to shadowing), try to extend
+    // the existing interface/type alias with the base HTML attributes.
+    // Only extend when external styles are supported (at least one of className/style allowed).
+    if (!typeAliasEmitted && explicit && (allowClassNameProp || allowStyleProp)) {
+      const propsTypeName = propsTypeNameFor(d.localName);
+      const extendBaseTypeText = (() => {
+        const base = reactIntrinsicAttrsType(tagName);
+        const omitted: string[] = [];
+        if (!allowClassNameProp) {
+          omitted.push('"className"');
+        }
+        if (!allowStyleProp) {
+          omitted.push('"style"');
+        }
+        return omitted.length ? `Omit<${base}, ${omitted.join(" | ")}>` : base;
+      })();
+      const interfaceExtended = extendExistingInterface(propsTypeName, extendBaseTypeText);
+      if (!interfaceExtended) {
+        extendExistingTypeAlias(propsTypeName, extendBaseTypeText);
+      }
+    }
     needsReactTypeImport = true;
 
     // Build style arguments: base + extends + dynamic variants (as conditional expressions).
@@ -2196,7 +2396,6 @@ export function emitWrappers(args: {
     // handled here. The attrWrapper case is already excluded above at line 1591.
     return true;
   });
-
   for (const d of simpleExportedIntrinsicWrappers) {
     if (d.base.kind !== "intrinsic") {
       continue;
@@ -2207,14 +2406,17 @@ export function emitWrappers(args: {
     let inlineTypeText: string | undefined;
     {
       const explicit = stringifyTsType(d.propsType);
+      // Extract prop names from explicit type to avoid duplicating them in inferred type
+      const explicitPropNames = d.propsType ? getExplicitPropNames(d.propsType) : new Set<string>();
       const baseTypeText = inferredIntrinsicPropsTypeText({
         d,
         tagName,
         allowClassNameProp,
         allowStyleProp,
+        skipProps: explicitPropNames,
       });
       const extendBaseTypeText = (() => {
-        // When we can’t emit a new `${Component}Props` alias because one already exists,
+        // When we can't emit a new `${Component}Props` alias because one already exists,
         // prefer extending it with real intrinsic element attribute types (instead of a loose
         // inferred literal). This keeps exported interfaces like `CardProps` clean and accurate.
         const base = reactIntrinsicAttrsType(tagName);
@@ -2228,13 +2430,12 @@ export function emitWrappers(args: {
         return omitted.length ? `Omit<${base}, ${omitted.join(" | ")}>` : base;
       })();
       // If there's an explicit type, keep it restrictive (only add children for non-void tags).
-      const explicitWithChildren = explicit
+      // For void tags (img, input, etc.), use full element props (React.ComponentProps/HTMLAttributes)
+      // instead of inferring individual props, so consumers get proper typing for all element props.
+      const typeText = explicit
         ? VOID_TAGS.has(tagName)
-          ? explicit
-          : withChildren(explicit)
-        : null;
-      const typeText = explicitWithChildren
-        ? joinIntersection(explicitWithChildren, baseTypeText)
+          ? joinIntersection(extendBaseTypeText, explicit) // Omit<ComponentProps<tag>, ...> & explicit
+          : withChildren(explicit) // React.PropsWithChildren<explicit>
         : baseTypeText;
       const typeAliasEmitted = emitNamedPropsType(d.localName, typeText);
       // If the type alias was not emitted (e.g., due to shadowing), try to extend
@@ -2532,12 +2733,17 @@ export function emitWrappers(args: {
       } else {
         const wrappedComponentHasAs = wrapperNames.has(wrappedComponent);
         const includeAsProp = wrapperNames.has(d.localName) && !wrappedComponentHasAs;
+        // Extract prop names from explicit type to avoid duplicating them in inferred type
+        const explicitPropNames = d.propsType
+          ? getExplicitPropNames(d.propsType)
+          : new Set<string>();
 
         const inferred = inferredComponentWrapperPropsTypeText({
           d,
           allowClassNameProp,
           allowStyleProp,
           includeAsProp,
+          skipProps: explicitPropNames,
         });
         const explicitWithChildren = explicit ? withChildren(explicit) : null;
         const typeText = explicitWithChildren

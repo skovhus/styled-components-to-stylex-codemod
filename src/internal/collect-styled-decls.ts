@@ -920,6 +920,8 @@ export function collectStyledDecls(args: {
       }
 
       const tagName = init.callee.property.name;
+      // Extract type parameter: styled.div<{ ... }>(...) - may be on CallExpression or callee
+      const propsType = readFirstTypeArgFromNode(init) ?? readFirstTypeArgFromNode(init.callee);
       const arg0 = init.arguments[0];
       if (!arg0) {
         return;
@@ -1016,6 +1018,7 @@ export function collectStyledDecls(args: {
         rules: [],
         templateExpressions: [],
         preResolvedStyle: styleObj,
+        ...(propsType ? { propsType } : {}),
         ...(Object.keys(preResolvedFnDecls).length ? { preResolvedFnDecls } : {}),
         ...(styleFnFromProps.length ? { styleFnFromProps } : {}),
         ...(wantsDollarStrip

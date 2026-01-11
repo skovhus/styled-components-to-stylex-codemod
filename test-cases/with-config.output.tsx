@@ -1,3 +1,4 @@
+import * as React from "react";
 import * as stylex from "@stylexjs/stylex";
 
 type CardProps = {};
@@ -8,10 +9,7 @@ function Card(props: CardProps) {
   return <div {...stylex.props(styles.card)}>{children}</div>;
 }
 
-type InputProps = {
-  hasError?: any;
-  placeholder?: any;
-} & {
+type InputProps = Omit<React.InputHTMLAttributes<HTMLInputElement>, "className" | "style"> & {
   hasError?: boolean;
 };
 

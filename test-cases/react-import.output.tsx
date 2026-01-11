@@ -26,7 +26,7 @@ interface ThemeSpanProps {
 export function ThemeSpan(props: ThemeSpanProps) {
   const { children, variant } = props;
 
-  const sx = stylex.props(styles.themeSpan, variant != null && styles.themeSpanColor(variant));
+  const sx = stylex.props(styles.themeSpan, styles.themeSpanColor(variant));
   return <span {...sx}>{children}</span>;
 }
 

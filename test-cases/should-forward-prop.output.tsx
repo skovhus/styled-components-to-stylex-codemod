@@ -2,12 +2,9 @@ import * as React from "react";
 import * as stylex from "@stylexjs/stylex";
 
 type ButtonProps = React.PropsWithChildren<{
-  color?: any;
-  size?: any;
-}> & {
   color?: string;
   size?: "small" | "large";
-};
+}>;
 
 // Using shouldForwardProp to filter props (v5 pattern)
 function Button(props: ButtonProps) {
@@ -22,11 +19,8 @@ function Button(props: ButtonProps) {
 }
 
 type LinkProps = React.PropsWithChildren<{
-  href?: any;
-  isActive?: any;
-}> & {
   isActive?: boolean;
-};
+}>;
 
 // Using isPropValid from @emotion
 function Link(props: LinkProps) {
@@ -41,12 +35,9 @@ function Link(props: LinkProps) {
 }
 
 type BoxProps = React.PropsWithChildren<{
-  $background?: any;
-  $padding?: any;
-}> & {
   $background?: string;
   $padding?: string;
-};
+}>;
 
 // Custom prop filtering logic (transient props pattern)
 function Box(props: BoxProps) {
@@ -61,14 +52,10 @@ function Box(props: BoxProps) {
 }
 
 type CardProps = React.PropsWithChildren<{
-  elevation?: any;
-  rounded?: any;
-  variant?: any;
-}> & {
   variant?: "primary" | "secondary";
   elevation?: number;
   rounded?: boolean;
-};
+}>;
 
 // Filter multiple custom props
 function Card(props: CardProps) {

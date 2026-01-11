@@ -5,12 +5,9 @@ import * as React from "react";
 type Color = "labelBase" | "labelMuted";
 
 type BoxProps = React.PropsWithChildren<{
-  $bg?: any;
-  $hoverColor?: any;
-}> & {
   $bg: Color;
   $hoverColor: Color;
-};
+}>;
 
 function Box(props: BoxProps) {
   const { children, $hoverColor, $bg } = props;
@@ -42,7 +39,7 @@ interface TextColorProps {
 export function TextColor(props: TextColorProps) {
   const { children, color } = props;
 
-  const sx = stylex.props(styles.textColor, color != null && styles.textColorColor(color));
+  const sx = stylex.props(styles.textColor, styles.textColorColor(color));
   return <span {...sx}>{children}</span>;
 }
 
