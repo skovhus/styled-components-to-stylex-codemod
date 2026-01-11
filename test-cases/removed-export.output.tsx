@@ -83,7 +83,7 @@ function StyledLabel(props: StyledLabelProps) {
 type HelpLabelProps = React.PropsWithChildren<{}>;
 
 export function HelpLabel(props: HelpLabelProps) {
-  return <StyledLabel {...props} {...stylex.props(styles.helpLabel)} />;
+  return <StyledLabel {...stylex.props(styles.helpLabel)} />;
 }
 
 export function FormLabel({ optional }: { optional?: boolean }) {

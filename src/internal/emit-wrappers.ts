@@ -2602,12 +2602,33 @@ export function emitWrappers(args: {
     // If we have props to destructure, create a proper destructuring pattern
     if (destructureProps.length > 0) {
       const styleId = j.identifier("style");
+      const usedAttrs = getUsedAttrs(d.localName);
+      const shouldIncludeRest =
+        usedAttrs.has("*") ||
+        !!(d as any).usedAsValue ||
+        [...usedAttrs].some((n) => {
+          if (
+            n === "children" ||
+            n === "className" ||
+            n === "style" ||
+            n === "as" ||
+            n === "forwardedAs"
+          ) {
+            return false;
+          }
+          // If a callsite passes any attribute not part of our styling destructures,
+          // we need to keep forwarding the remainder.
+          return !destructureProps.includes(n);
+        });
+
       const restId = j.identifier("rest");
       const patternProps: any[] = destructureProps.map((name) => patternProp(name));
       if (allowStyleProp) {
         patternProps.push(patternProp("style", styleId));
       }
-      patternProps.push(j.restElement(restId));
+      if (shouldIncludeRest) {
+        patternProps.push(j.restElement(restId));
+      }
 
       const declStmt = j.variableDeclaration("const", [
         j.variableDeclarator(j.objectPattern(patternProps as any), propsId),
@@ -2651,7 +2672,7 @@ export function emitWrappers(args: {
           jsxTagName,
           [
             ...explicitPropAttrs,
-            j.jsxSpreadAttribute(restId),
+            ...(shouldIncludeRest ? [j.jsxSpreadAttribute(restId)] : []),
             j.jsxSpreadAttribute(stylexPropsCall),
             ...(allowStyleProp
               ? [j.jsxAttribute(j.jsxIdentifier("style"), j.jsxExpressionContainer(styleId))]
@@ -2671,10 +2692,16 @@ export function emitWrappers(args: {
       emitted.push(funcDecl);
     } else {
       // Simple case: just spread props and stylex.props
+      const usedAttrs = getUsedAttrs(d.localName);
+      const shouldIncludePropsSpread =
+        usedAttrs.has("*") || !!(d as any).usedAsValue || usedAttrs.size > 0;
       const jsx = j.jsxElement(
         j.jsxOpeningElement(
           jsxTagName,
-          [j.jsxSpreadAttribute(propsId), j.jsxSpreadAttribute(stylexPropsCall)],
+          [
+            ...(shouldIncludePropsSpread ? [j.jsxSpreadAttribute(propsId)] : []),
+            j.jsxSpreadAttribute(stylexPropsCall),
+          ],
           true,
         ),
         null,

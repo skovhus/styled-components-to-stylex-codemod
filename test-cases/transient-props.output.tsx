@@ -35,11 +35,10 @@ type CollapseArrowIconProps = React.PropsWithChildren<{
 }>;
 
 export function CollapseArrowIcon(props: CollapseArrowIconProps) {
-  const { $isOpen, ...rest } = props;
+  const { $isOpen } = props;
   return (
     <ArrowIcon
       $isOpen={$isOpen}
-      {...rest}
       {...stylex.props(styles.collapseArrowIcon, $isOpen && styles.collapseArrowIconOpen)}
     />
   );

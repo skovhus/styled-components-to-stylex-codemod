@@ -19,8 +19,8 @@ interface BackgroundProps {
 }
 
 export function Background(props: BackgroundProps) {
-  const { loaded, ...rest } = props;
-  return <Flex {...rest} {...stylex.props(styles.background, loaded && styles.backgroundLoaded)} />;
+  const { loaded } = props;
+  return <Flex {...stylex.props(styles.background, loaded && styles.backgroundLoaded)} />;
 }
 
 // Pattern 4: styled(Component).attrs with function (from Scrollable.tsx)
@@ -30,7 +30,7 @@ interface ScrollableProps {
 }
 
 export function Scrollable(props: ScrollableProps) {
-  return <Flex {...props} {...stylex.props(styles.scrollable)} />;
+  return <Flex {...stylex.props(styles.scrollable)} />;
 }
 
 // Pattern 5: styled(Component).attrs with TYPE ALIAS (not interface)

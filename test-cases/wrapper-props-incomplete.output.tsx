@@ -44,12 +44,9 @@ interface HighlightProps {
 }
 
 export function Highlight(props: HighlightProps) {
-  const { highlighted, ...rest } = props;
+  const { highlighted } = props;
   return (
-    <BaseText
-      {...rest}
-      {...stylex.props(styles.highlight, highlighted && styles.highlightHighlighted)}
-    />
+    <BaseText {...stylex.props(styles.highlight, highlighted && styles.highlightHighlighted)} />
   );
 }
 
