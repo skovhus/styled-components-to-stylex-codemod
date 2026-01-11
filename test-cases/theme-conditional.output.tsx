@@ -2,10 +2,23 @@ import * as stylex from "@stylexjs/stylex";
 import { themeVars } from "./tokens.stylex";
 import * as React from "react";
 
+type OptionLabelProps = React.PropsWithChildren<{
+  $disabled?: boolean;
+}>;
+
+function OptionLabel(props: OptionLabelProps) {
+  const { children, $disabled } = props;
+  return (
+    <label {...stylex.props(styles.optionLabel, $disabled && styles.optionLabelDisabled)}>
+      {children}
+    </label>
+  );
+}
+
 export const App = () => (
   <div>
-    <label {...stylex.props(styles.optionLabel)}>Enabled</label>
-    <label {...stylex.props(styles.optionLabel, styles.optionLabelDisabled)}>Disabled</label>
+    <OptionLabel>Enabled</OptionLabel>
+    <OptionLabel $disabled>Disabled</OptionLabel>
   </div>
 );
 

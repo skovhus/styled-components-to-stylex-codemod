@@ -1,9 +1,21 @@
+import * as React from "react";
 import * as stylex from "@stylexjs/stylex";
+
+type ButtonProps = React.PropsWithChildren<{
+  $primary?: boolean;
+}>;
+
+function Button(props: ButtonProps) {
+  const { children, $primary } = props;
+  return (
+    <button {...stylex.props(styles.button, $primary && styles.buttonPrimary)}>{children}</button>
+  );
+}
 
 export const App = () => (
   <div>
-    <button {...stylex.props(styles.button)}>Normal</button>
-    <button {...stylex.props(styles.button, styles.buttonPrimary)}>Primary</button>
+    <Button>Normal</Button>
+    <Button $primary>Primary</Button>
   </div>
 );
 

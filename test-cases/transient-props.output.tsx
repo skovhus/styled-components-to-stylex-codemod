@@ -1,10 +1,29 @@
 import * as stylex from "@stylexjs/stylex";
 
+type CompProps = React.PropsWithChildren<{
+  $draggable?: boolean;
+}>;
+
+function Comp(props: CompProps) {
+  const { children, $draggable } = props;
+  return <div {...stylex.props(styles.comp, $draggable && styles.compDraggable)}>{children}</div>;
+}
+
 const Link = ({ className, text, ...props }: { className?: string; text: string }) => (
   <a {...props} className={className}>
     {text}
   </a>
 );
+
+type StyledLinkProps = Omit<React.ComponentProps<typeof Link>, "children" | "className" | "style"> &
+  React.PropsWithChildren<{
+    $red?: boolean;
+  }>;
+
+function StyledLink(props: StyledLinkProps) {
+  const { $red, ...rest } = props;
+  return <Link {...rest} {...stylex.props(styles.link, $red && styles.linkRed)} />;
+}
 
 // Pattern 4: styled(Component) where base component declares the transient prop
 // The transient prop is used for styling by the wrapper
@@ -48,10 +67,10 @@ export function CollapseArrowIcon(props: CollapseArrowIconProps) {
 
 export const App = () => (
   <div>
-    <div {...stylex.props(styles.comp, styles.compDraggable)}>Draggable</div>
-    <div {...stylex.props(styles.comp)}>Not Draggable</div>
-    <Link {...stylex.props(styles.link, styles.linkRed)} text="Click" />
-    <Link {...stylex.props(styles.link)} text="Click" />
+    <Comp $draggable>Draggable</Comp>
+    <Comp>Not Draggable</Comp>
+    <StyledLink text="Click" $red />
+    <StyledLink text="Click" />
     <div {...stylex.props(styles.point)} style={{ top: "10px" }} />
     <CollapseArrowIcon $isOpen />
     <CollapseArrowIcon $isOpen={false} />

@@ -1746,7 +1746,23 @@ export function lowerRules(args: {
               if (cssProp === "border" && expandBorderShorthand(target, parsed.exprAst)) {
                 return;
               }
-              // Default: use the property from cssDeclarationToStylexDeclarations
+              // Default: use the property from cssDeclarationToStylexDeclarations.
+              // IMPORTANT: preserve selector pseudos (e.g. &:hover) by writing a per-prop pseudo map
+              // instead of overwriting the base/default value.
+              if (pseudo) {
+                const existing = target[stylexProp];
+                const map =
+                  existing && typeof existing === "object" && !Array.isArray(existing)
+                    ? (existing as Record<string, unknown>)
+                    : ({} as Record<string, unknown>);
+                if (!("default" in map)) {
+                  map.default = existing ?? null;
+                }
+                map[pseudo] = parsed.exprAst as any;
+                target[stylexProp] = map;
+                return;
+              }
+
               target[stylexProp] = parsed.exprAst as any;
             };
 
@@ -2090,6 +2106,10 @@ export function lowerRules(args: {
     }
     if (Object.keys(variantStyleKeys).length) {
       decl.variantStyleKeys = variantStyleKeys;
+      // If we have variant styles keyed off props (e.g. `color === "primary"`),
+      // we need a wrapper component to evaluate those conditions at runtime and
+      // avoid forwarding custom variant props to DOM nodes.
+      decl.needsWrapperComponent = true;
     }
     if (styleFnFromProps.length) {
       decl.styleFnFromProps = styleFnFromProps;

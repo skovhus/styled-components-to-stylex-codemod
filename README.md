@@ -196,22 +196,11 @@ If the pipeline can’t resolve an interpolation:
 - for `withConfig({ shouldForwardProp })` wrappers, the transform preserves the value as an inline style so output keeps visual parity
 - otherwise, the declaration containing that interpolation is **dropped** and a warning is produced (manual follow-up required)
 
-### Notes / Limitations
+### Limitations
 
+- **Flow** type generation is non-existing, works best with TypeScript or plain JS right now. Contributions more than welcome!
 - **ThemeProvider**: if a file imports and uses `ThemeProvider` from `styled-components`, the transform **skips the entire file** (theming strategy is project-specific).
 - **createGlobalStyle**: detected usage is reported as an **unsupported-feature** warning (StyleX does not support global styles in the same way).
-
-### Transform Result
-
-```ts
-interface RunTransformResult {
-  errors: number; // Files that had errors
-  unchanged: number; // Files that were unchanged
-  skipped: number; // Files that were skipped
-  transformed: number; // Files that were transformed
-  timeElapsed: number; // Total time in seconds
-}
-```
 
 ## License
 
