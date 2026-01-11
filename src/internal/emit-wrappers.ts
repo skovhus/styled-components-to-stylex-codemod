@@ -154,6 +154,9 @@ function emitMinimalWrapper(args: {
   includeRest?: boolean;
   displayName?: string;
   patternProp: (keyName: string, valueId?: any) => any;
+  defaultAttrs?: Array<{ jsxProp: string; attrName: string; value: any }>;
+  conditionalAttrs?: Array<{ jsxProp: string; attrName: string; value: any }>;
+  invertedBoolAttrs?: Array<{ jsxProp: string; attrName: string }>;
   staticAttrs?: Record<string, any>;
   inlineStyleProps?: Array<{ prop: string; expr: any }>;
 }): any[] {
@@ -170,6 +173,9 @@ function emitMinimalWrapper(args: {
     allowStyleProp = false,
     includeRest = true,
     patternProp,
+    defaultAttrs = [],
+    conditionalAttrs = [],
+    invertedBoolAttrs = [],
     staticAttrs = {},
     inlineStyleProps = [],
   } = args;
@@ -239,6 +245,57 @@ function emitMinimalWrapper(args: {
 
   // Build JSX attributes: static attrs, {...rest}, {...sx|stylex.props(...)}, optional className/style
   const jsxAttrs: any[] = [];
+
+  // Add default attrs (e.g. `tabIndex: props.tabIndex ?? 0`) first so passed props can override via {...rest}.
+  for (const a of defaultAttrs) {
+    const propExpr = j.memberExpression(propsId, j.identifier(a.jsxProp));
+    const fallback =
+      typeof a.value === "string"
+        ? j.literal(a.value)
+        : typeof a.value === "number"
+          ? j.literal(a.value)
+          : typeof a.value === "boolean"
+            ? j.booleanLiteral(a.value)
+            : j.literal(String(a.value));
+    jsxAttrs.push(
+      j.jsxAttribute(
+        j.jsxIdentifier(a.attrName),
+        j.jsxExpressionContainer(j.logicalExpression("??", propExpr as any, fallback as any)),
+      ),
+    );
+  }
+
+  // Add conditional attrs (e.g. `size: props.$small ? 5 : undefined`) derived from props.
+  for (const cond of conditionalAttrs) {
+    jsxAttrs.push(
+      j.jsxAttribute(
+        j.jsxIdentifier(cond.attrName),
+        j.jsxExpressionContainer(
+          j.conditionalExpression(
+            j.identifier(cond.jsxProp),
+            j.literal(cond.value),
+            j.identifier("undefined"),
+          ),
+        ),
+      ),
+    );
+  }
+
+  // Add inverted boolean attrs (e.g. `"data-1p-ignore": props.allowPMAutofill !== true`).
+  for (const inv of invertedBoolAttrs) {
+    jsxAttrs.push(
+      j.jsxAttribute(
+        j.jsxIdentifier(inv.attrName),
+        j.jsxExpressionContainer(
+          j.binaryExpression(
+            "!==",
+            j.identifier(inv.jsxProp) as any,
+            j.booleanLiteral(true) as any,
+          ),
+        ),
+      ),
+    );
+  }
 
   // Add static attrs from .attrs() (e.g., type="range") first
   for (const [key, value] of Object.entries(staticAttrs)) {
@@ -2622,6 +2679,23 @@ export function emitWrappers(args: {
       }
     }
 
+    // `.attrs(fn)`-derived conditional attrs (e.g. `$small`) should be consumed in the wrapper
+    // and NOT forwarded to the DOM element.
+    if (d.attrsInfo?.conditionalAttrs?.length) {
+      for (const c of d.attrsInfo.conditionalAttrs) {
+        if (c?.jsxProp && !destructureProps.includes(c.jsxProp)) {
+          destructureProps.push(c.jsxProp);
+        }
+      }
+    }
+    if (d.attrsInfo?.invertedBoolAttrs?.length) {
+      for (const inv of d.attrsInfo.invertedBoolAttrs) {
+        if (inv?.jsxProp && !destructureProps.includes(inv.jsxProp)) {
+          destructureProps.push(inv.jsxProp);
+        }
+      }
+    }
+
     const usedAttrs = getUsedAttrs(d.localName);
     const { hasAny: hasLocalUsage } = getJsxCallsites(d.localName);
     const shouldIncludeRest =
@@ -2766,6 +2840,13 @@ export function emitWrappers(args: {
           allowStyleProp: false,
           includeRest: shouldIncludeRest,
           patternProp,
+          ...(d.attrsInfo?.defaultAttrs ? { defaultAttrs: d.attrsInfo.defaultAttrs } : {}),
+          ...(d.attrsInfo?.conditionalAttrs
+            ? { conditionalAttrs: d.attrsInfo.conditionalAttrs }
+            : {}),
+          ...(d.attrsInfo?.invertedBoolAttrs
+            ? { invertedBoolAttrs: d.attrsInfo.invertedBoolAttrs }
+            : {}),
           ...(d.attrsInfo?.staticAttrs ? { staticAttrs: d.attrsInfo.staticAttrs } : {}),
           inlineStyleProps: d.inlineStyleProps ?? [],
         }),

@@ -969,6 +969,12 @@ export function transformWithWarnings(
   // Pre-pass: set needsWrapperComponent BEFORE emitStylesAndImports
   // This allows comment placement logic to know which decls need wrappers.
   for (const decl of styledDecls) {
+    // Intrinsic components with prop-conditional attrs (e.g. `size: props.$small ? 5 : undefined`)
+    // tend to produce very noisy inline substitutions when there are multiple callsite variations.
+    // Prefer emitting a wrapper function component in these cases.
+    if (decl.base.kind === "intrinsic" && (decl.attrsInfo?.conditionalAttrs?.length ?? 0) > 0) {
+      decl.needsWrapperComponent = true;
+    }
     // shouldForwardProp needs wrapper
     if (decl.shouldForwardProp) {
       decl.needsWrapperComponent = true;
