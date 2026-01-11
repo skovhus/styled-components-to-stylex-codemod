@@ -40,14 +40,10 @@ interface TextColorProps {
 }
 
 export function TextColor(props: TextColorProps) {
-  const { children, color, ...rest } = props;
+  const { children, color } = props;
 
   const sx = stylex.props(styles.textColor, color != null && styles.textColorColor(color));
-  return (
-    <span {...rest} {...sx}>
-      {children}
-    </span>
-  );
+  return <span {...sx}>{children}</span>;
 }
 
 const styles = stylex.create({

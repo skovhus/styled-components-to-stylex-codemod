@@ -30,17 +30,21 @@ function ArrowIcon(props: IconProps & ArrowIconProps) {
   );
 }
 
-type CollapseArrowIconProps = React.PropsWithChildren<{
-  $isOpen?: any;
-}>;
+type CollapseArrowIconProps = React.PropsWithChildren<
+  Omit<React.ComponentProps<typeof ArrowIcon>, "className" | "style"> & {
+    $isOpen?: any;
+  }
+>;
 
 export function CollapseArrowIcon(props: CollapseArrowIconProps) {
-  const { $isOpen } = props;
+  const { children, $isOpen, ...rest } = props;
   return (
     <ArrowIcon
-      $isOpen={$isOpen}
+      {...rest}
       {...stylex.props(styles.collapseArrowIcon, $isOpen && styles.collapseArrowIconOpen)}
-    />
+    >
+      {children}
+    </ArrowIcon>
   );
 }
 

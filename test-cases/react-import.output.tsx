@@ -5,24 +5,16 @@ import { themeVars } from "./tokens.stylex";
 type CardProps = React.PropsWithChildren<{}>;
 
 export function Card(props: CardProps) {
-  const { children, ...rest } = props;
-  return (
-    <div {...rest} {...stylex.props(styles.card)}>
-      {children}
-    </div>
-  );
+  const { children } = props;
+  return <div {...stylex.props(styles.card)}>{children}</div>;
 }
 
 type ButtonProps = React.PropsWithChildren<{}>;
 
 // Another component to ensure multiple components work
 export function Button(props: ButtonProps) {
-  const { children, ...rest } = props;
-  return (
-    <button {...rest} {...stylex.props(styles.button)}>
-      {children}
-    </button>
-  );
+  const { children } = props;
+  return <button {...stylex.props(styles.button)}>{children}</button>;
 }
 
 // Pattern 2: Component with theme access (like TextColor.tsx in a design system)
@@ -32,14 +24,10 @@ interface ThemeSpanProps {
 }
 
 export function ThemeSpan(props: ThemeSpanProps) {
-  const { children, variant, ...rest } = props;
+  const { children, variant } = props;
 
   const sx = stylex.props(styles.themeSpan, variant != null && styles.themeSpanColor(variant));
-  return (
-    <span {...rest} {...sx}>
-      {children}
-    </span>
-  );
+  return <span {...sx}>{children}</span>;
 }
 
 export function App() {

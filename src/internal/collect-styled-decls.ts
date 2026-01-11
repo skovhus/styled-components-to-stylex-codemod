@@ -51,6 +51,7 @@ export function collectStyledDecls(args: {
     }
     const out: StyledDecl["attrsInfo"] = {
       staticAttrs: {},
+      defaultAttrs: [],
       conditionalAttrs: [],
       invertedBoolAttrs: [],
     };
@@ -78,6 +79,32 @@ export function collectStyledDecls(args: {
         ) {
           out.staticAttrs[key] = v.value;
           continue;
+        }
+
+        // Support: tabIndex: props.tabIndex ?? 0
+        // This provides a default value that can be overridden by passed props.
+        if (
+          (v.type === "LogicalExpression" && v.operator === "??") ||
+          v.type === "TSNullishCoalescingExpression"
+        ) {
+          const left = v.left as any;
+          const right = v.right as any;
+          if (
+            left?.type === "MemberExpression" &&
+            left.object?.type === "Identifier" &&
+            (left.object.name === "props" || left.object.name === "p") &&
+            left.property?.type === "Identifier" &&
+            (right?.type === "StringLiteral" ||
+              right?.type === "NumericLiteral" ||
+              right?.type === "BooleanLiteral")
+          ) {
+            out.defaultAttrs!.push({
+              jsxProp: left.property.name,
+              attrName: key,
+              value: right.value,
+            });
+            continue;
+          }
         }
 
         // Support: size: props.$small ? 5 : undefined

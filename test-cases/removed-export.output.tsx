@@ -12,8 +12,8 @@ type RangeInputProps = {};
  * A range input component.
  */
 export function RangeInput(props: RangeInputProps) {
-  const { ...rest } = props;
-  return <input type="range" {...rest} {...stylex.props(styles.rangeInput)} />;
+  const {} = props;
+  return <input type="range" {...stylex.props(styles.rangeInput)} />;
 }
 
 type FocusTrapSuspenseFallbackProps = {};
@@ -22,10 +22,8 @@ type FocusTrapSuspenseFallbackProps = {};
  * Component to render as suspense fallback if your focus trap will suspend.
  */
 export function FocusTrapSuspenseFallback(props: FocusTrapSuspenseFallbackProps) {
-  const { ...rest } = props;
-  return (
-    <input type="button" value="" {...rest} {...stylex.props(styles.focusTrapSuspenseFallback)} />
-  );
+  const {} = props;
+  return <input type="button" value="" {...stylex.props(styles.focusTrapSuspenseFallback)} />;
 }
 
 // This function uses the renamed type import - it must NOT be removed
@@ -62,7 +60,7 @@ type StyledLabelProps = React.PropsWithChildren<{
 // 1. As a base for HelpText: styled(StyledText)
 // 2. Directly in JSX: <StyledText>
 function StyledLabel(props: StyledLabelProps) {
-  const { className, children, style, ...rest } = props;
+  const { className, children, style } = props;
 
   const sx = stylex.props(styles.styledLabel);
   return (
@@ -73,17 +71,18 @@ function StyledLabel(props: StyledLabelProps) {
         ...sx.style,
         ...style,
       }}
-      {...rest}
     >
       {children}
     </span>
   );
 }
 
-type HelpLabelProps = React.PropsWithChildren<{}>;
+type HelpLabelProps = React.PropsWithChildren<
+  Omit<React.ComponentProps<typeof StyledLabel>, "className" | "style">
+>;
 
 export function HelpLabel(props: HelpLabelProps) {
-  return <StyledLabel {...stylex.props(styles.helpLabel)} />;
+  return <StyledLabel {...props} {...stylex.props(styles.helpLabel)} />;
 }
 
 export function FormLabel({ optional }: { optional?: boolean }) {
@@ -121,21 +120,36 @@ export function Tooltip(props: TooltipWrapperProps) {
 //   - <StyledText {...props} .../>
 import { Text } from "./lib/text";
 
-type StyledTextProps = React.PropsWithChildren<{
-  className?: string;
-  style?: React.CSSProperties;
+type StyledTextProps = React.ComponentProps<typeof Text> & {
   color?: any;
   variant?: any;
-}>;
+};
 
 function StyledText(props: StyledTextProps) {
-  return <Text {...props} {...stylex.props(styles.text)} />;
+  const { className, children, style, ...rest } = props;
+
+  const sx = stylex.props(styles.text);
+  return (
+    <Text
+      {...rest}
+      {...sx}
+      className={[sx.className, className].filter(Boolean).join(" ")}
+      style={{
+        ...sx.style,
+        ...style,
+      }}
+    >
+      {children}
+    </Text>
+  );
 }
 
-type HelpTextProps = React.PropsWithChildren<{
-  color?: any;
-  variant?: any;
-}>;
+type HelpTextProps = React.PropsWithChildren<
+  Omit<React.ComponentProps<typeof StyledText>, "className" | "style"> & {
+    color?: any;
+    variant?: any;
+  }
+>;
 
 export function HelpText(props: HelpTextProps) {
   return <StyledText {...props} {...stylex.props(styles.helpText)} />;

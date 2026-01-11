@@ -11,7 +11,7 @@ type ExportedButtonProps = React.PropsWithChildren<{
  * className/style/rest merging for external style extension support.
  **/
 export function ExportedButton(props: ExportedButtonProps) {
-  const { className, children, style, ...rest } = props;
+  const { className, children, style } = props;
 
   const sx = stylex.props(styles.exportedButton);
   return (
@@ -22,7 +22,6 @@ export function ExportedButton(props: ExportedButtonProps) {
         ...sx.style,
         ...style,
       }}
-      {...rest}
     >
       {children}
     </button>

@@ -11,7 +11,7 @@ type DynamicBoxProps = React.PropsWithChildren<{
 };
 
 function DynamicBox(props: DynamicBoxProps) {
-  const { children, style, $background, $size, ...rest } = props;
+  const { children, style, $background, $size } = props;
 
   const sx = stylex.props(
     styles.dynamicBox,
@@ -26,7 +26,6 @@ function DynamicBox(props: DynamicBoxProps) {
         ...sx.style,
         ...style,
       }}
-      {...rest}
     >
       {children}
     </div>

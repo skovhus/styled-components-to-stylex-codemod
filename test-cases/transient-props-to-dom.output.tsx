@@ -15,10 +15,9 @@ type BoxProps = React.PropsWithChildren<{
 // 2. NOT forward them to the underlying DOM element
 
 export function Box(props: BoxProps) {
-  const { children, $size, $isActive, ...rest } = props;
+  const { children, $size, $isActive } = props;
   return (
     <div
-      {...rest}
       {...stylex.props(
         styles.box,
         $size === "large" && styles.boxSizeLarge,

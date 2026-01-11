@@ -77,6 +77,17 @@ export type StyledDecl = {
   withConfig?: { componentId?: string };
   attrsInfo?: {
     staticAttrs: Record<string, any>;
+    /**
+     * Attrs that provide a default when a prop is nullish (undefined / null).
+     * Pattern: `attr: props.attr ?? <literal>`
+     *
+     * These should be emitted *before* `{...props}` spreads so passed props can override.
+     */
+    defaultAttrs?: Array<{
+      jsxProp: string;
+      attrName: string;
+      value: any;
+    }>;
     conditionalAttrs: Array<{
       jsxProp: string;
       attrName: string;

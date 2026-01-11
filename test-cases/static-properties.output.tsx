@@ -14,7 +14,7 @@ type ListItemProps = React.PropsWithChildren<
 
 // Pattern 1: Static properties defined directly on styled component
 export function ListItem(props: ListItemProps) {
-  const { className, children, style, ...rest } = props;
+  const { className, children, style } = props;
 
   const sx = stylex.props(styles.listItem);
   return (
@@ -25,7 +25,6 @@ export function ListItem(props: ListItemProps) {
         ...sx.style,
         ...style,
       }}
-      {...rest}
     >
       {children}
     </div>
@@ -44,7 +43,7 @@ type BaseButtonProps = React.PropsWithChildren<
 
 // Pattern 2: styled(BaseComponent) with static props defined in same file
 function BaseButton(props: BaseButtonProps) {
-  const { className, children, style, ...rest } = props;
+  const { className, children, style } = props;
 
   const sx = stylex.props(styles.baseButton);
   return (
@@ -55,7 +54,6 @@ function BaseButton(props: BaseButtonProps) {
         ...sx.style,
         ...style,
       }}
-      {...rest}
     >
       {children}
     </button>
@@ -71,7 +69,7 @@ type ExtendedButtonProps = React.PropsWithChildren<
 
 // ExtendedButton should have HEIGHT from BaseButton
 export function ExtendedButton(props: ExtendedButtonProps) {
-  const { className, children, style, ...rest } = props;
+  const { className, children, style } = props;
 
   const sx = stylex.props(styles.baseButton, styles.extendedButton);
   return (
@@ -82,7 +80,6 @@ export function ExtendedButton(props: ExtendedButtonProps) {
         ...sx.style,
         ...style,
       }}
-      {...rest}
     >
       {children}
     </button>
@@ -91,9 +88,11 @@ export function ExtendedButton(props: ExtendedButtonProps) {
 
 ExtendedButton.HEIGHT = BaseButton.HEIGHT;
 
-type CommandMenuTextDividerProps = React.PropsWithChildren<{
-  text?: any;
-}>;
+type CommandMenuTextDividerProps = React.PropsWithChildren<
+  Omit<React.ComponentProps<typeof ActionMenuTextDivider>, "className" | "style"> & {
+    text?: any;
+  }
+>;
 
 export function CommandMenuTextDivider(props: CommandMenuTextDividerProps) {
   return <ActionMenuTextDivider {...props} {...stylex.props(styles.commandMenuTextDivider)} />;
@@ -101,9 +100,11 @@ export function CommandMenuTextDivider(props: CommandMenuTextDividerProps) {
 
 CommandMenuTextDivider.HEIGHT = ActionMenuTextDivider.HEIGHT;
 
-type CommandMenuGroupHeaderProps = React.PropsWithChildren<{
-  title?: any;
-}>;
+type CommandMenuGroupHeaderProps = React.PropsWithChildren<
+  Omit<React.ComponentProps<typeof ActionMenuGroupHeader>, "className" | "style"> & {
+    title?: any;
+  }
+>;
 
 export function CommandMenuGroupHeader(props: CommandMenuGroupHeaderProps) {
   return <ActionMenuGroupHeader {...props} {...stylex.props(styles.commandMenuGroupHeader)} />;

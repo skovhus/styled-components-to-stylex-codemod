@@ -54,8 +54,12 @@ const IconButtonInner = (props: IconButtonProps) => {
 };
 
 export function IconButton(props: IconButtonProps) {
-  const { $hoverStyles, ...rest } = props;
-  return <IconButtonInner {...rest} {...stylex.props(styles.iconButton)} />;
+  const { children, $hoverStyles, ...rest } = props;
+  return (
+    <IconButtonInner {...rest} {...stylex.props(styles.iconButton)}>
+      {children}
+    </IconButtonInner>
+  );
 }
 
 // Usage shows both interface properties and HTML attributes are needed

@@ -4,12 +4,8 @@ type CardProps = {};
 
 // withConfig for componentId (stable class names)
 function Card(props: CardProps) {
-  const { children, ...rest } = props;
-  return (
-    <div {...rest} {...stylex.props(styles.card)}>
-      {children}
-    </div>
-  );
+  const { children } = props;
+  return <div {...stylex.props(styles.card)}>{children}</div>;
 }
 
 type InputProps = {

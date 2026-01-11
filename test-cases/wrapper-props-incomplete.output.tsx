@@ -37,15 +37,19 @@ export function TextColor(props: TextColorProps) {
 // Pattern 2: styled(Component) - wrapper needs component's props + HTML attributes
 const BaseText = (props: React.ComponentProps<"span">) => <span {...props} />;
 
-interface HighlightProps {
+interface HighlightProps extends Omit<React.ComponentProps<typeof BaseText>, "style"> {
   /** Whether to highlight */
   highlighted?: boolean;
 }
 
 export function Highlight(props: HighlightProps) {
-  const { highlighted } = props;
+  const { className, children, highlighted, ...rest } = props;
+
+  const sx = stylex.props(styles.highlight, highlighted && styles.highlightHighlighted);
   return (
-    <BaseText {...stylex.props(styles.highlight, highlighted && styles.highlightHighlighted)} />
+    <BaseText {...rest} {...sx} className={[sx.className, className].filter(Boolean).join(" ")}>
+      {children}
+    </BaseText>
   );
 }
 
@@ -71,17 +75,13 @@ interface ThemeTextProps {
 
 /** A text span that gets color from theme */
 export function ThemeText(props: ThemeTextProps) {
-  const { children, themeColor, ...rest } = props;
+  const { children, themeColor } = props;
 
   const sx = stylex.props(
     styles.themeText,
     themeColor != null && styles.themeTextColor(themeColor),
   );
-  return (
-    <span {...rest} {...sx}>
-      {children}
-    </span>
-  );
+  return <span {...sx}>{children}</span>;
 }
 
 const styles = stylex.create({
