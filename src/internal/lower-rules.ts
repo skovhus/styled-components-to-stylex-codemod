@@ -2085,6 +2085,24 @@ export function lowerRules(args: {
             localVarValues.set(out.prop, value);
           }
 
+          // Handle nested pseudo + media: `&:hover { @media (...) { ... } }`
+          // This produces: { ":hover": { default: null, "@media (...)": value } }
+          if (media && pseudos?.length) {
+            perPropPseudo[out.prop] ??= {};
+            const existing = perPropPseudo[out.prop]!;
+            if (!("default" in existing)) {
+              existing.default = (styleObj as any)[out.prop] ?? null;
+            }
+            // For each pseudo, create/update a nested media map
+            for (const ps of pseudos) {
+              if (!existing[ps] || typeof existing[ps] !== "object") {
+                existing[ps] = { default: null };
+              }
+              (existing[ps] as Record<string, unknown>)[media] = value;
+            }
+            continue;
+          }
+
           if (media) {
             perPropMedia[out.prop] ??= {};
             const existing = perPropMedia[out.prop]!;
