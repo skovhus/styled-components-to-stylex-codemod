@@ -177,7 +177,9 @@ const Comparison: React.FC<ComparisonProps> = ({ testCase }) => {
         >
           {OutputComponent ? (
             <RenderDebugFrame>
-              <OutputComponent />
+              <ThemeProvider theme={testCaseTheme}>
+                <OutputComponent />
+              </ThemeProvider>
             </RenderDebugFrame>
           ) : (
             <div style={{ color: "#999" }}>No output file found</div>

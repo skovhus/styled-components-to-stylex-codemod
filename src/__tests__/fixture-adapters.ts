@@ -86,43 +86,68 @@ export const fixtureAdapter = defineAdapter({
     }
 
     if (ctx.kind === "call") {
-      if (ctx.calleeImportedName !== "transitionSpeed") {
-        return null;
-      }
-
       if (ctx.calleeSource.kind !== "absolutePath") {
         return null;
       }
 
       const src = ctx.calleeSource.value;
+      // Note: calleeSource.value may or may not include the extension
       if (
         !src.endsWith("/test-cases/lib/helpers.ts") &&
-        !src.endsWith("\\test-cases\\lib\\helpers.ts")
+        !src.endsWith("\\test-cases\\lib\\helpers.ts") &&
+        !src.endsWith("/test-cases/lib/helpers") &&
+        !src.endsWith("\\test-cases\\lib\\helpers")
       ) {
         return null;
       }
 
-      const arg0 = ctx.args[0];
-      const key = arg0?.kind === "literal" && typeof arg0.value === "string" ? arg0.value : null;
-      if (
-        key !== "highlightFadeIn" &&
-        key !== "highlightFadeOut" &&
-        key !== "quickTransition" &&
-        key !== "regularTransition" &&
-        key !== "slowTransition"
-      ) {
-        return null;
+      // Handle color() helper from ./lib/helpers.ts
+      // color("bgBase") -> themeVars.bgBase
+      if (ctx.calleeImportedName === "color") {
+        const arg0 = ctx.args[0];
+        const colorName =
+          arg0?.kind === "literal" && typeof arg0.value === "string" ? arg0.value : null;
+        if (!colorName) {
+          return null;
+        }
+
+        return {
+          expr: `themeVars.${colorName}`,
+          imports: [
+            {
+              from: { kind: "specifier", value: "./tokens.stylex" },
+              names: [{ imported: "themeVars" }],
+            },
+          ],
+        };
       }
 
-      return {
-        expr: `transitionSpeedVars.${key}`,
-        imports: [
-          {
-            from: { kind: "specifier", value: "./lib/helpers.stylex" },
-            names: [{ imported: "transitionSpeed", local: "transitionSpeedVars" }],
-          },
-        ],
-      };
+      // Handle transitionSpeed() helper from ./lib/helpers.ts
+      if (ctx.calleeImportedName === "transitionSpeed") {
+        const arg0 = ctx.args[0];
+        const key = arg0?.kind === "literal" && typeof arg0.value === "string" ? arg0.value : null;
+        if (
+          key !== "highlightFadeIn" &&
+          key !== "highlightFadeOut" &&
+          key !== "quickTransition" &&
+          key !== "regularTransition" &&
+          key !== "slowTransition"
+        ) {
+          return null;
+        }
+
+        return {
+          expr: `transitionSpeedVars.${key}`,
+          imports: [
+            {
+              from: { kind: "specifier", value: "./lib/helpers.stylex" },
+              names: [{ imported: "transitionSpeed", local: "transitionSpeedVars" }],
+            },
+          ],
+        };
+      }
+
+      return null;
     }
 
     if (ctx.kind === "cssVariable") {

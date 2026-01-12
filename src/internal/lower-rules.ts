@@ -91,6 +91,96 @@ export function lowerRules(args: {
   const descendantOverrideHover = new Map<string, Record<string, unknown>>();
   let bail = false;
 
+  // ─────────────────────────────────────────────────────────────────────────────
+  // Helper: Extract static prefix/suffix from interpolated CSS values
+  // ─────────────────────────────────────────────────────────────────────────────
+  // For CSS like `box-shadow: 0 2px 4px ${color}` or `transform: rotate(${deg})`
+  // we need to preserve the static parts when resolving the dynamic value.
+  //
+  // StyleX supports dynamic values via CSS variables, and template literals work
+  // well for combining static text with resolved expressions:
+  //   boxShadow: `0 2px 4px ${themeVars.primaryColor}`
+  //
+  // See: https://stylexjs.com/docs/learn/styling-ui/defining-styles/
+  // ─────────────────────────────────────────────────────────────────────────────
+
+  /**
+   * Extract static prefix and suffix from an interpolated CSS value.
+   * Returns empty strings if the value doesn't have exactly one interpolation slot.
+   *
+   * @param cssValue - The CSS value object with `kind: "interpolated"` and `parts` array
+   * @param options - Optional configuration
+   * @param options.skipForProperty - CSS property pattern to skip (e.g., /^border.*-color$/)
+   */
+  const extractStaticParts = (
+    cssValue: any,
+    options?: { skipForProperty?: RegExp; property?: string },
+  ): { prefix: string; suffix: string } => {
+    // Skip for specific properties (e.g., border-color where expansion already handled width/style)
+    if (options?.skipForProperty && options?.property) {
+      if (options.skipForProperty.test(options.property)) {
+        return { prefix: "", suffix: "" };
+      }
+    }
+
+    if (!cssValue || cssValue.kind !== "interpolated") {
+      return { prefix: "", suffix: "" };
+    }
+
+    const parts: any[] = cssValue.parts ?? [];
+    const slotParts = parts.filter((p: any) => p?.kind === "slot");
+
+    // Only handle single-slot interpolations
+    if (slotParts.length !== 1) {
+      return { prefix: "", suffix: "" };
+    }
+
+    let prefix = "";
+    let suffix = "";
+    let foundSlot = false;
+
+    for (const part of parts) {
+      if (part?.kind === "slot") {
+        foundSlot = true;
+        continue;
+      }
+      if (part?.kind === "static") {
+        if (foundSlot) {
+          suffix += part.value ?? "";
+        } else {
+          prefix += part.value ?? "";
+        }
+      }
+    }
+
+    return { prefix, suffix };
+  };
+
+  /**
+   * Wrap an expression string with static prefix/suffix.
+   * Optimizes for string literals by combining into a single string.
+   *
+   * @param expr - The expression string (e.g., "themeVars.color" or '"red"')
+   * @param prefix - Static prefix text
+   * @param suffix - Static suffix text
+   * @returns Wrapped expression string
+   */
+  const wrapExprWithStaticParts = (expr: string, prefix: string, suffix: string): string => {
+    if (!prefix && !suffix) {
+      return expr;
+    }
+
+    // Check if expr is a string literal (matches "..." or '...')
+    const stringMatch = expr.match(/^["'](.*)["']$/);
+    if (stringMatch) {
+      // Combine into a single string literal for cleaner output
+      return JSON.stringify(prefix + stringMatch[1] + suffix);
+    }
+
+    // Use template literal for non-literal expressions
+    return `\`${prefix}\${${expr}}${suffix}\``;
+  };
+
   const ensureShouldForwardPropDrop = (decl: StyledDecl, propName: string) => {
     // Ensure we generate a wrapper so we can consume the styling prop without forwarding it to DOM.
     decl.needsWrapperComponent = true;
@@ -839,10 +929,57 @@ export function lowerRules(args: {
         }
       }
 
-      // Simple color expression (identifier/member expression/template literal) → border color expr
-      if (expr && expr.type !== "ArrowFunctionExpression") {
-        styleObj[colorProp] = expr as any;
-        return true;
+      // Handle call expressions (like helper functions) by resolving via resolveDynamicNode:
+      //   border: 1px solid ${color("bgSub")}
+      if (expr?.type === "CallExpression") {
+        const loc = getNodeLocStart(expr);
+        const res = resolveDynamicNode(
+          {
+            slotId,
+            expr,
+            css: {
+              kind: "declaration",
+              selector: "&",
+              atRuleStack: [],
+              property: colorProp,
+              valueRaw: d.valueRaw,
+            },
+            component:
+              decl.base.kind === "intrinsic"
+                ? { localName: decl.localName, base: "intrinsic", tagOrIdent: decl.base.tagName }
+                : { localName: decl.localName, base: "component", tagOrIdent: decl.base.ident },
+            usage: { jsxUsages: 0, hasPropsSpread: false },
+            ...(loc ? { loc } : {}),
+          },
+          {
+            api,
+            filePath,
+            resolveValue,
+            resolveImport: (localName: string) => {
+              const v = importMap.get(localName);
+              return v ? v : null;
+            },
+            warn: (w: any) => {
+              warnings.push({
+                type: "dynamic-node",
+                feature: w.feature,
+                message: w.message,
+                ...(w.loc ? { loc: w.loc } : {}),
+              });
+            },
+          } as any,
+        );
+        if (res && res.type === "resolvedValue") {
+          for (const imp of res.imports ?? []) {
+            resolverImports.set(JSON.stringify(imp), imp);
+          }
+          const exprAst = parseExpr(res.expr);
+          if (exprAst) {
+            styleObj[colorProp] = exprAst as any;
+            return true;
+          }
+        }
+        // If resolution failed, fall through to other handlers
       }
 
       // Handle arrow functions that are simple member expressions (like theme access):
@@ -859,6 +996,12 @@ export function lowerRules(args: {
           d.property = direction ? `border-${direction.toLowerCase()}-color` : "border-color";
           return false; // Let the generic handler resolve the theme value
         }
+      }
+
+      // Simple color expression (identifier/template literal) → border color expr
+      if (expr && expr.type !== "ArrowFunctionExpression") {
+        styleObj[colorProp] = expr as any;
+        return true;
       }
 
       // fallback to inline style via wrapper
@@ -1573,7 +1716,16 @@ export function lowerRules(args: {
             for (const imp of res.imports ?? []) {
               resolverImports.set(JSON.stringify(imp), imp);
             }
-            const exprAst = parseExpr(res.expr);
+
+            // Extract and wrap static prefix/suffix (skip for border-color since expansion handled it)
+            const cssProp = (d.property ?? "").trim();
+            const { prefix, suffix } = extractStaticParts(d.value, {
+              skipForProperty: /^border(-top|-right|-bottom|-left)?-color$/,
+              property: cssProp,
+            });
+            const wrappedExpr = wrapExprWithStaticParts(res.expr, prefix, suffix);
+
+            const exprAst = parseExpr(wrappedExpr);
             if (!exprAst) {
               warnings.push({
                 type: "dynamic-node",
@@ -1625,55 +1777,13 @@ export function lowerRules(args: {
 
             // Extract static prefix/suffix from CSS value for wrapping resolved values
             // e.g., `rotate(${...})` should wrap the resolved value with `rotate(...)`.
-            const getStaticPrefixSuffix = (): { prefix: string; suffix: string } => {
-              const v = d.value as any;
-              if (!v || v.kind !== "interpolated") {
-                return { prefix: "", suffix: "" };
-              }
-              const parts: any[] = v.parts ?? [];
-              const slotParts = parts.filter((p: any) => p?.kind === "slot");
-              if (slotParts.length !== 1) {
-                return { prefix: "", suffix: "" };
-              }
-              let prefix = "";
-              let suffix = "";
-              let foundSlot = false;
-              for (const part of parts) {
-                if (part?.kind === "slot") {
-                  foundSlot = true;
-                  continue;
-                }
-                if (part?.kind === "static") {
-                  if (foundSlot) {
-                    suffix += part.value ?? "";
-                  } else {
-                    prefix += part.value ?? "";
-                  }
-                }
-              }
-              return { prefix, suffix };
-            };
-            const { prefix: staticPrefix, suffix: staticSuffix } = getStaticPrefixSuffix();
+            const { prefix: staticPrefix, suffix: staticSuffix } = extractStaticParts(d.value);
 
             const parseResolved = (
               expr: string,
               imports: any[],
             ): { exprAst: unknown; imports: any[] } | null => {
-              // If there's static prefix/suffix, wrap the expression
-              // For simple string literals like `"90deg"`, produce a combined string literal like `"rotate(90deg)"`
-              // instead of a template literal like `\`rotate(${"90deg"})\``
-              let wrappedExpr = expr;
-              if (staticPrefix || staticSuffix) {
-                // Check if expr is a string literal (matches "..." or '...')
-                const stringMatch = expr.match(/^["'](.*)["']$/);
-                if (stringMatch) {
-                  // Combine into a single string literal
-                  wrappedExpr = JSON.stringify(staticPrefix + stringMatch[1] + staticSuffix);
-                } else {
-                  // Use template literal for non-literal expressions
-                  wrappedExpr = `\`${staticPrefix}\${${expr}}${staticSuffix}\``;
-                }
-              }
+              const wrappedExpr = wrapExprWithStaticParts(expr, staticPrefix, staticSuffix);
               const exprAst = parseExpr(wrappedExpr);
               if (!exprAst) {
                 warnings.push({

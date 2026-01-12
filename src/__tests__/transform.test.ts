@@ -135,6 +135,29 @@ function runTransform(
 }
 
 /**
+ * Like runTransform, but returns warnings too for better error diagnosis.
+ * Use this when you need to debug why a transform failed.
+ */
+function runTransformWithDiagnostics(
+  source: string,
+  options: TestTransformOptions = {},
+  filePath: string = "test.tsx",
+  parser: "tsx" | "babel" | "flow" = "tsx",
+): { code: string | null; warnings: ReturnType<typeof transformWithWarnings>["warnings"] } {
+  const opts: TransformOptions = {
+    adapter: fixtureAdapter,
+    ...(options as any),
+  };
+  const jWithParser = jscodeshift.withParser(parser);
+  const result = transformWithWarnings(
+    { source, path: filePath },
+    { jscodeshift: jWithParser, j: jWithParser, stats: () => {}, report: () => {} },
+    opts,
+  );
+  return result;
+}
+
+/**
  * Normalize code for comparison using oxfmt formatter
  */
 async function normalizeCode(code: string, filePath: string = "test.tsx"): Promise<string> {
@@ -327,18 +350,41 @@ describe("fixture warning expectations", () => {
 describe("transform", () => {
   it.each(fixtureCases)("$outputFile", async ({ name, inputPath, outputPath, parser }) => {
     const { input, output } = readTestCase(name, inputPath, outputPath);
-    const result = runTransform(input, {}, inputPath, parser);
+    const diagnostics = runTransformWithDiagnostics(input, {}, inputPath, parser);
+    const result = diagnostics.code || input;
 
     // Transform must produce a change - no bailing allowed
-    expect(await normalizeCode(result, outputPath)).not.toEqual(
-      await normalizeCode(input, inputPath),
-    );
+    // If it fails, show any warnings to help diagnose the issue (e.g., adapter not resolving)
+    const normalizedResult = await normalizeCode(result, outputPath);
+    const normalizedInput = await normalizeCode(input, inputPath);
+    if (normalizedResult === normalizedInput) {
+      const warningsInfo = diagnostics.warnings.length
+        ? `\n\nTransform warnings that may explain the failure:\n${diagnostics.warnings.map((w) => `  - [${w.feature}] ${w.message}`).join("\n")}`
+        : "";
+      throw new Error(
+        `Transform produced no changes (bailed or returned unchanged code).${warningsInfo}`,
+      );
+    }
 
-    // Result must not import styled-components
-    expect(result).not.toMatch(/from\s+['"]styled-components['"]/);
+    // Result must not import styled/css/keyframes/createGlobalStyle from styled-components
+    // (but useTheme, withTheme, ThemeProvider etc. are allowed)
+    const disallowedImports = ["styled", "css", "keyframes", "createGlobalStyle"];
+    const importMatch = result.match(
+      /import\s+(?:{([^}]+)}|(\w+))\s+from\s+['"]styled-components['"]/,
+    );
+    if (importMatch) {
+      const namedImports = importMatch[1] || "";
+      const defaultImport = importMatch[2] || "";
+      const importedNames = [
+        defaultImport,
+        ...namedImports.split(",").map((s) => s.trim().split(/\s+as\s+/)[0]),
+      ].filter(Boolean);
+      for (const imp of importedNames) {
+        expect(disallowedImports).not.toContain(imp);
+      }
+    }
 
     // Compare against expected output fixture
-    const normalizedResult = await normalizeCode(result, outputPath);
     const normalizedExpected = await normalizeCode(output, outputPath);
     expect(normalizedResult).toEqual(normalizedExpected);
   });

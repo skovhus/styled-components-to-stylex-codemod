@@ -162,7 +162,7 @@ export function transformWithWarnings(
     }
   };
 
-  const adapter = options.adapter as Adapter;
+  const adapter = options.adapter;
   assertValidAdapter(
     adapter,
     "transform(options) - missing `adapter` (if you run the jscodeshift transform directly, pass options.adapter)",

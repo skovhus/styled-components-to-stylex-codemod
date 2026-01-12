@@ -10,7 +10,7 @@ declare module "styled-components" {
 
     // Colors object - index signature required for dynamic lookups like
     // props.theme.colors[props.$bg] and props.theme.colors[props.variant]
-    colors?: Record<string, string>;
+    colors: Record<string, string>;
 
     // Spacing object (used in function-theme fixture)
     spacing?: {
