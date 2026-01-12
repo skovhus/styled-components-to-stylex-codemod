@@ -66,10 +66,12 @@
     "@uiw/react-codemirror": "^4.25.4",
     "@vitejs/plugin-react": "^5.1.2",
     "@vitest/coverage-v8": "^4.0.16",
+    "assert": "^2.1.0",
     "lefthook": "^2.0.13",
     "oxfmt": "^0.20.0",
     "oxlint": "^1.35.0",
     "oxlint-tsgolint": "^0.10.1",
+    "path-browserify": "^1.0.1",
     "react": "^19.2.3",
     "react-dom": "^19.2.3",
     "storybook": "^10.1.10",
@@ -77,7 +79,6 @@
     "tsdown": "^0.18.3",
     "typescript": "^5.9.3",
     "vite": "^7.3.0",
-    "vite-plugin-node-polyfills": "^0.24.0",
     "vitest": "^4.0.16"
   },
   "engines": {

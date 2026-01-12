@@ -1,20 +1,20 @@
 import { defineConfig } from "vite";
 import react from "@vitejs/plugin-react";
-import { nodePolyfills } from "vite-plugin-node-polyfills";
 import path from "node:path";
 
 export default defineConfig({
   root: path.resolve(__dirname),
   base: "/styled-components-to-stylex-codemod/",
-  plugins: [
-    react(),
-    nodePolyfills({
-      include: ["path"],
-    }),
-  ],
+  plugins: [react()],
+  define: {
+    "process.env.NODE_DEBUG": "false",
+  },
   resolve: {
     alias: {
       "node:fs": path.resolve(__dirname, "src/lib/fs-stub.ts"),
+      "node:path": "path-browserify",
+      path: "path-browserify",
+      assert: "assert",
     },
   },
   build: {
