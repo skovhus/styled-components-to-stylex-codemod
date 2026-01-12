@@ -6,6 +6,7 @@ import type { ImportSource } from "../adapter.js";
 import {
   normalizeSelectorForInputAttributePseudos,
   parseAttributeSelector,
+  parseCommaSeparatedPseudos,
   parsePseudoElement,
   parseSimplePseudo,
 } from "./selectors.js";
@@ -961,7 +962,9 @@ export function lowerRules(args: {
         const s = rule.selector.trim();
         const hasExprPlaceholder = s.includes("__SC_EXPR_");
 
-        if (s.includes(",")) {
+        if (s.includes(",") && !parseCommaSeparatedPseudos(s)) {
+          // Bail on comma-separated selectors unless ALL parts are valid pseudo-selectors
+          // (e.g., "&:hover, &:focus" is OK, but "&:hover, & .child" is not)
           bail = true;
         } else if (s.includes(":not(")) {
           bail = true;
@@ -1072,7 +1075,10 @@ export function lowerRules(args: {
       const isInputIntrinsic = decl.base.kind === "intrinsic" && decl.base.tagName === "input";
       const selector = normalizeSelectorForInputAttributePseudos(rule.selector, isInputIntrinsic);
 
-      const pseudo = parseSimplePseudo(selector);
+      // Support comma-separated pseudo-selectors like "&:hover, &:focus"
+      const pseudos =
+        parseCommaSeparatedPseudos(selector) ??
+        (parseSimplePseudo(selector) ? [parseSimplePseudo(selector)!] : null);
       const pseudoElement = parsePseudoElement(selector);
 
       const attrSel = parseAttributeSelector(selector);
@@ -1159,7 +1165,7 @@ export function lowerRules(args: {
                 return false;
               }
               // Only apply to base declarations; variant expansion for pseudo/media/attr buckets is more complex.
-              if (pseudo || media || attrTarget) {
+              if (pseudos?.length || media || attrTarget) {
                 return false;
               }
               const parts = d.value.parts ?? [];
@@ -1292,7 +1298,7 @@ export function lowerRules(args: {
             }
           }
 
-          if (pseudo && d.property) {
+          if (pseudos?.length && d.property) {
             const stylexProp = cssDeclarationToStylexDeclarations(d)[0]?.prop;
             const slotPart = d.value.parts.find((p: any) => p.kind === "slot");
             const slotId = slotPart && slotPart.kind === "slot" ? slotPart.slotId : 0;
@@ -1313,10 +1319,15 @@ export function lowerRules(args: {
               ) {
                 const when = test.property.name;
                 const baseDefault = (styleObj as any)[stylexProp] ?? null;
-                (styleObj as any)[stylexProp] = { default: baseDefault, [pseudo]: alt.value };
+                // Apply to all pseudos (e.g., both :hover and :focus for "&:hover, &:focus")
+                const pseudoEntries = Object.fromEntries(pseudos.map((p) => [p, alt.value]));
+                (styleObj as any)[stylexProp] = { default: baseDefault, ...pseudoEntries };
+                const variantPseudoEntries = Object.fromEntries(
+                  pseudos.map((p) => [p, cons.value]),
+                );
                 variantBuckets.set(when, {
                   ...variantBuckets.get(when),
-                  [stylexProp]: { default: cons.value, [pseudo]: cons.value },
+                  [stylexProp]: { default: cons.value, ...variantPseudoEntries },
                 });
                 variantStyleKeys[when] ??= `${decl.styleKey}${toSuffixFromProp(when)}`;
                 continue;
@@ -1430,8 +1441,8 @@ export function lowerRules(args: {
                 return cleaned || "Pseudo";
               };
 
-              const fnKey = pseudo
-                ? `${decl.styleKey}${toSuffixFromProp(out.prop)}${pseudoSuffix(pseudo)}`
+              const fnKey = pseudos?.length
+                ? `${decl.styleKey}${toSuffixFromProp(out.prop)}${pseudoSuffix(pseudos[0]!)}`
                 : `${decl.styleKey}${toSuffixFromProp(out.prop)}`;
               styleFnFromProps.push({ fnKey, jsxProp: indexPropName });
 
@@ -1482,15 +1493,18 @@ export function lowerRules(args: {
                     ? (propTsType as any)
                     : j.tsStringKeyword()) as any,
                 );
-                if (pseudo) {
+                if (pseudos?.length) {
                   // For `&:hover` etc, emit nested selector styles so we don't have to guess defaults.
+                  // For comma-separated pseudos, emit all pseudo keys
                   const nested = j.objectExpression([
                     j.property("init", j.identifier(out.prop), indexedExprAst as any) as any,
                   ]);
-                  const p = j.property("init", j.literal(pseudo), nested) as any;
+                  const pseudoProps = pseudos.map(
+                    (ps) => j.property("init", j.literal(ps), nested) as any,
+                  );
                   styleFnDecls.set(
                     fnKey,
-                    j.arrowFunctionExpression([param], j.objectExpression([p])),
+                    j.arrowFunctionExpression([param], j.objectExpression(pseudoProps)),
                   );
                 } else {
                   const p = j.property(
@@ -1749,7 +1763,7 @@ export function lowerRules(args: {
               // Default: use the property from cssDeclarationToStylexDeclarations.
               // IMPORTANT: preserve selector pseudos (e.g. &:hover) by writing a per-prop pseudo map
               // instead of overwriting the base/default value.
-              if (pseudo) {
+              if (pseudos?.length) {
                 const existing = target[stylexProp];
                 // `existing` may be:
                 // - a scalar (string/number)
@@ -1770,7 +1784,10 @@ export function lowerRules(args: {
                 if (!("default" in map)) {
                   map.default = existing ?? null;
                 }
-                map[pseudo] = parsed.exprAst as any;
+                // Apply to all pseudos (e.g., both :hover and :focus for "&:hover, &:focus")
+                for (const ps of pseudos) {
+                  map[ps] = parsed.exprAst as any;
+                }
                 target[stylexProp] = map;
                 return;
               }
@@ -1968,13 +1985,16 @@ export function lowerRules(args: {
             continue;
           }
 
-          if (pseudo) {
+          if (pseudos?.length) {
             perPropPseudo[out.prop] ??= {};
             const existing = perPropPseudo[out.prop]!;
             if (!("default" in existing)) {
               existing.default = (styleObj as any)[out.prop] ?? null;
             }
-            existing[pseudo] = value;
+            // Apply to all pseudos (e.g., both :hover and :focus for "&:hover, &:focus")
+            for (const ps of pseudos) {
+              existing[ps] = value;
+            }
             continue;
           }
 

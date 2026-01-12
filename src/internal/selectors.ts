@@ -4,6 +4,23 @@ export function parseSimplePseudo(selector: string): string | null {
   return m ? m[1]! : null;
 }
 
+/**
+ * Parse comma-separated pseudo-selectors like "&:hover, &:focus" into an array [":hover", ":focus"].
+ * Returns null if any part is not a valid simple pseudo-selector.
+ */
+export function parseCommaSeparatedPseudos(selector: string): string[] | null {
+  const parts = selector.split(",").map((s) => s.trim());
+  const pseudos: string[] = [];
+  for (const part of parts) {
+    const pseudo = parseSimplePseudo(part);
+    if (!pseudo) {
+      return null;
+    }
+    pseudos.push(pseudo);
+  }
+  return pseudos.length > 0 ? pseudos : null;
+}
+
 export function parsePseudoElement(selector: string): string | null {
   const m = selector.match(/^&(::[a-zA-Z-]+)$/) ?? selector.match(/^(::[a-zA-Z-]+)$/);
   return m ? m[1]! : null;
