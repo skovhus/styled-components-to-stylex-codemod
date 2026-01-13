@@ -6,7 +6,11 @@ type SpringValue<T> = { get(): T };
 
 // AnimatedSpanProps accepts SpringValue for style properties (like react-spring)
 type AnimatedSpanProps = Omit<React.ComponentProps<"span">, "style"> & {
-  style?: React.CSSProperties & { width?: number | string | SpringValue<number> };
+  // Note: `React.CSSProperties & { width?: ... }` would INTERSECT `width` types and
+  // accidentally exclude SpringValue. Omit first to properly widen.
+  style?: Omit<React.CSSProperties, "width"> & {
+    width?: number | string | SpringValue<number>;
+  };
 };
 
 // Simulates react-spring's animated component which accepts SpringValue in styles
@@ -31,20 +35,27 @@ type Props = {
 
 export function AnimatedNumber(props: Props) {
   const { width, children } = props;
+  const spanRef = React.useRef<HTMLSpanElement>(null);
 
   // When width is a SpringValue, we need to use animated.span
   const isAnimated = typeof width !== "number";
 
   if (isAnimated) {
     // This should work: animated.span accepts SpringValue<number> for width
+    // The ref should also be accepted since animated.span forwards refs
     return (
-      <AnimatedText as={animated.span} style={{ width }}>
+      <AnimatedText as={animated.span} ref={spanRef} style={{ width }}>
         {children}
       </AnimatedText>
     );
   }
 
-  return <AnimatedText style={{ width }}>{children}</AnimatedText>;
+  // ref should work on the default span element too
+  return (
+    <AnimatedText ref={spanRef} style={{ width }}>
+      {children}
+    </AnimatedText>
+  );
 }
 
 export const App = () => <AnimatedNumber width={100}>42</AnimatedNumber>;

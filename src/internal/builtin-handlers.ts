@@ -262,7 +262,6 @@ function tryResolveConditionalValue(
   if (expr.body.type !== "ConditionalExpression") {
     return null;
   }
-  const { test, consequent, alternate } = expr.body;
 
   type Branch = { expr: string; imports: ImportSpec[] } | null;
   const branchToExpr = (b: unknown): Branch => {
@@ -306,18 +305,100 @@ function tryResolveConditionalValue(
     return { expr: res.expr, imports: res.imports };
   };
 
-  const cons = branchToExpr(consequent);
-  const alt = branchToExpr(alternate);
-  if (!cons || !alt) {
-    return null;
-  }
+  // Helper to extract condition info from a binary expression test
+  type CondInfo = { propName: string; rhsValue: string; rhsRaw: unknown; cond: string } | null;
+  const extractConditionInfo = (test: any): CondInfo => {
+    if (
+      !paramName ||
+      test.type !== "BinaryExpression" ||
+      (test.operator !== "===" && test.operator !== "!==") ||
+      test.left.type !== "MemberExpression"
+    ) {
+      return null;
+    }
+    const leftPath = getMemberPathFromIdentifier(test.left, paramName);
+    if (!leftPath || leftPath.length !== 1) {
+      return null;
+    }
+    const propName = leftPath[0]!;
+    const rhsRaw = literalToStaticValue(test.right as any);
+    if (rhsRaw === null) {
+      return null;
+    }
+    const rhsValue = JSON.stringify(rhsRaw);
+    const cond = `${propName} ${test.operator} ${rhsValue}`;
+    return { propName, rhsValue, rhsRaw, cond };
+  };
 
-  // 1) props.foo ? a : b
+  // Recursively extract variants from nested ternaries
+  // e.g., prop === "a" ? valA : prop === "b" ? valB : defaultVal
+  type Variant = { nameHint: string; when: string; expr: string; imports: ImportSpec[] };
+  const extractNestedTernaryVariants = (
+    condExpr: any,
+    expectedPropName?: string,
+  ): { variants: Variant[]; defaultBranch: NonNullable<Branch> } | null => {
+    if (condExpr.type !== "ConditionalExpression") {
+      // Base case: not a conditional, this is the default value
+      const branch = branchToExpr(condExpr);
+      if (!branch) {
+        return null;
+      }
+      return { variants: [], defaultBranch: branch };
+    }
+
+    const { test, consequent, alternate } = condExpr;
+    const condInfo = extractConditionInfo(test);
+    if (!condInfo) {
+      return null;
+    }
+
+    // Ensure all conditions test the same property
+    if (expectedPropName && condInfo.propName !== expectedPropName) {
+      return null;
+    }
+
+    const consExpr = branchToExpr(consequent);
+    if (!consExpr) {
+      return null;
+    }
+
+    // Extract the RHS value for nameHint (e.g., "large" from variant === "large")
+    const rhsNameHint =
+      typeof condInfo.rhsRaw === "string" ? condInfo.rhsRaw : String(condInfo.rhsRaw);
+
+    // Recursively process the alternate branch
+    const nested = extractNestedTernaryVariants(alternate, condInfo.propName);
+    if (!nested) {
+      return null;
+    }
+
+    // Add this condition's variant
+    const thisVariant: Variant = {
+      nameHint: rhsNameHint,
+      when: condInfo.cond,
+      expr: consExpr.expr,
+      imports: consExpr.imports,
+    };
+
+    return {
+      variants: [thisVariant, ...nested.variants],
+      defaultBranch: nested.defaultBranch,
+    };
+  };
+
+  const { test, consequent, alternate } = expr.body;
+
+  // 1) props.foo ? a : b (simple boolean test)
   const testPath =
     paramName && test.type === "MemberExpression"
       ? getMemberPathFromIdentifier(test, paramName)
       : null;
   if (testPath && testPath.length === 1) {
+    const cons = branchToExpr(consequent);
+    const alt = branchToExpr(alternate);
+    if (!cons || !alt) {
+      return null;
+    }
     const whenExpr = testPath[0]!;
     return {
       type: "splitVariantsResolvedValue",
@@ -338,42 +419,46 @@ function tryResolveConditionalValue(
     };
   }
 
-  // 2) props.foo === "bar" ? a : b
-  if (
-    paramName &&
-    test.type === "BinaryExpression" &&
-    (test.operator === "===" || test.operator === "!==") &&
-    test.left.type === "MemberExpression"
-  ) {
-    const leftPath = getMemberPathFromIdentifier(test.left, paramName);
-    if (!leftPath || leftPath.length !== 1) {
+  // 2) Handle nested ternaries: prop === "a" ? valA : prop === "b" ? valB : defaultVal
+  // This also handles the simple case: prop === "a" ? valA : defaultVal
+  const condInfo = extractConditionInfo(test);
+  if (condInfo) {
+    const consExpr = branchToExpr(consequent);
+    if (!consExpr) {
       return null;
     }
-    const propName = leftPath[0]!;
-    const right = literalToStaticValue(test.right as any);
-    if (right === null) {
-      return null;
-    }
-    const rhs = JSON.stringify(right);
-    const cond = `${propName} ${test.operator} ${rhs}`;
 
-    return {
-      type: "splitVariantsResolvedValue",
-      variants: [
-        {
-          nameHint: "default",
-          when: `!(${cond})`,
-          expr: alt.expr,
-          imports: alt.imports,
-        },
-        {
-          nameHint: "match",
-          when: cond,
-          expr: cons.expr,
-          imports: cons.imports,
-        },
-      ],
-    };
+    // Check if alternate is a nested ternary testing the same property
+    const nested = extractNestedTernaryVariants(alternate, condInfo.propName);
+    if (nested) {
+      const rhsNameHint =
+        typeof condInfo.rhsRaw === "string" ? condInfo.rhsRaw : String(condInfo.rhsRaw);
+
+      const thisVariant: Variant = {
+        nameHint: rhsNameHint,
+        when: condInfo.cond,
+        expr: consExpr.expr,
+        imports: consExpr.imports,
+      };
+
+      const allVariants = [thisVariant, ...nested.variants];
+
+      // Build the default condition: negation of all positive conditions
+      const allConditions = allVariants.map((v) => v.when).join(" || ");
+
+      return {
+        type: "splitVariantsResolvedValue",
+        variants: [
+          {
+            nameHint: "default",
+            when: `!(${allConditions})`,
+            expr: nested.defaultBranch.expr,
+            imports: nested.defaultBranch.imports,
+          },
+          ...allVariants,
+        ],
+      };
+    }
   }
 
   return null;

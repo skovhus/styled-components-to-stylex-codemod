@@ -16,6 +16,19 @@
     "noUnusedLocals": false,
     "noUnusedParameters": false
   },
-  "include": ["./**/*.output.ts", "./**/*.output.tsx", "./**/*.d.ts"],
-  "exclude": ["../node_modules", "../dist", "./_unsupported.*"]
+  "include": [
+    "./**/*.output.ts",
+    "./**/*.output.tsx",
+    "./**/*.input.ts",
+    "./**/*.input.tsx",
+    "./**/*.d.ts"
+  ],
+  "exclude": [
+    "../node_modules",
+    "../dist",
+    "./_unsupported.*",
+    // Static properties on styled-components are not typeable without workarounds
+    "./static-properties.input.tsx",
+    "./static-properties.output.tsx"
+  ]
 }

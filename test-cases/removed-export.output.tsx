@@ -108,7 +108,7 @@ export function Tooltip(props: TooltipWrapperProps) {
   // TriggerHandlers is ONLY used here in React.useRef - it must NOT be removed from import
   const handlersRef = React.useRef<TriggerHandlers>(undefined);
   return (
-    <div {...stylex.props(styles.tooltipWrapper)} title={props.title}>
+    <div title={props.title} {...stylex.props(styles.tooltipWrapper)}>
       {props.children}
     </div>
   );

@@ -6,7 +6,7 @@ export const App = () => (
     <a href="#" {...stylex.props(styles.link)}>
       Link
     </a>
-    <input {...stylex.props(styles.input)} placeholder="Type here..." />
+    <input placeholder="Type here..." {...stylex.props(styles.input)} />
   </div>
 );
 

@@ -22,10 +22,10 @@ function Text(props: TextProps & { as?: React.ElementType }) {
   );
 }
 
-type LabelProps = React.ComponentProps<typeof Text> &
-  React.PropsWithChildren<{
-    htmlFor?: string;
-  }>;
+type LabelProps = React.ComponentProps<typeof Text> & {
+  htmlFor?: string;
+  ref?: React.Ref<HTMLLabelElement>;
+};
 
 export function Label(props: LabelProps) {
   const { className, children, style, ...rest } = props;

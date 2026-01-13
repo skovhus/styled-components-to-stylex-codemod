@@ -8,7 +8,8 @@ interface ThemedStyledProps {
 export const color =
   (colorName: string) =>
   (props: ThemedStyledProps): string =>
-    props.theme.colors?.[colorName] ?? "";
+    // Theme colors in fixtures are a fixed-key object; allow dynamic access in helpers.
+    (props.theme.colors as Record<string, string> | undefined)?.[colorName] ?? "";
 
 // CSS snippet helper - returns a CSS string for text truncation
 export const truncate = () => `

@@ -1068,6 +1068,51 @@ export function transformWithWarnings(
     }
   }
 
+  // Helper to check if a styled component receives className in JSX usages.
+  // If className is passed, it needs to be a wrapper to merge with stylex className.
+  // Note: `style` can be kept as-is on inlined elements for intentional overrides.
+  const receivesClassNameInJsx = (name: string): boolean => {
+    let found = false;
+    const collectFromOpening = (opening: any) => {
+      if (found) {
+        return;
+      }
+      for (const a of (opening?.attributes ?? []) as any[]) {
+        if (!a) {
+          continue;
+        }
+        if (a.type === "JSXAttribute" && a.name?.type === "JSXIdentifier") {
+          if (a.name.name === "className") {
+            found = true;
+            return;
+          }
+        }
+      }
+    };
+    root
+      .find(j.JSXElement, {
+        openingElement: { name: { type: "JSXIdentifier", name } },
+      } as any)
+      .forEach((p: any) => collectFromOpening(p.node.openingElement));
+    if (!found) {
+      root
+        .find(j.JSXSelfClosingElement, { name: { type: "JSXIdentifier", name } } as any)
+        .forEach((p: any) => collectFromOpening(p.node));
+    }
+    return found;
+  };
+
+  // Styled components that receive className props in JSX need wrappers to merge them.
+  // Without a wrapper, passing `className` would replace the stylex className instead of merging.
+  for (const decl of styledDecls) {
+    if (decl.needsWrapperComponent) {
+      continue;
+    }
+    if (receivesClassNameInJsx(decl.localName)) {
+      decl.needsWrapperComponent = true;
+    }
+  }
+
   emitStylesAndImports({
     root,
     j,
@@ -1113,6 +1158,103 @@ export function transformWithWarnings(
   // Track wrappers that have expression `as` values (not just string literals)
   // These need generic polymorphic types to accept component-specific props
   const expressionAsWrapperNames = new Set<string>();
+
+  // Helper to check if a type member is `as?: React.ElementType`.
+  const isAsElementTypeMember = (member: any): boolean => {
+    if (
+      member.type !== "TSPropertySignature" ||
+      member.key?.type !== "Identifier" ||
+      member.key.name !== "as"
+    ) {
+      return false;
+    }
+    const memberType = member.typeAnnotation?.typeAnnotation;
+    if (memberType?.type === "TSTypeReference") {
+      const memberTypeName = memberType.typeName;
+      // Check for React.ElementType
+      if (
+        memberTypeName?.type === "TSQualifiedName" &&
+        memberTypeName.left?.name === "React" &&
+        memberTypeName.right?.name === "ElementType"
+      ) {
+        return true;
+      }
+      // Check for ElementType (without React. prefix)
+      if (memberTypeName?.type === "Identifier" && memberTypeName.name === "ElementType") {
+        return true;
+      }
+    }
+    return false;
+  };
+
+  // Helper to check if a type contains `as?: React.ElementType` property.
+  // This handles both inline type literals and type references.
+  const typeContainsAsElementType = (typeNode: any): boolean => {
+    if (!typeNode) {
+      return false;
+    }
+    // Handle intersection types: A & B & C
+    if (typeNode.type === "TSIntersectionType") {
+      return (typeNode.types ?? []).some((t: any) => typeContainsAsElementType(t));
+    }
+    // Handle parenthesized types: (A & B)
+    if (typeNode.type === "TSParenthesizedType") {
+      return typeContainsAsElementType(typeNode.typeAnnotation);
+    }
+    // Handle type references (e.g., TextProps, React.PropsWithChildren<{...}>)
+    if (typeNode.type === "TSTypeReference") {
+      // Check type parameters (e.g., React.PropsWithChildren<{ as?: ... }>)
+      const typeParams = typeNode.typeParameters?.params ?? [];
+      for (const tp of typeParams) {
+        if (typeContainsAsElementType(tp)) {
+          return true;
+        }
+      }
+      // If it's a simple identifier, look it up
+      if (typeNode.typeName?.type === "Identifier") {
+        const typeName = typeNode.typeName.name;
+        // Look up type alias
+        const typeAlias = root
+          .find(j.TSTypeAliasDeclaration)
+          .filter((p) => (p.node as any).id?.name === typeName);
+        if (typeAlias.size() > 0) {
+          return typeContainsAsElementType(typeAlias.get().node.typeAnnotation);
+        }
+        // Look up interface
+        const iface = root
+          .find(j.TSInterfaceDeclaration)
+          .filter((p) => (p.node as any).id?.name === typeName);
+        if (iface.size() > 0) {
+          const body = iface.get().node.body?.body ?? [];
+          for (const member of body) {
+            if (isAsElementTypeMember(member)) {
+              return true;
+            }
+          }
+        }
+      }
+      return false;
+    }
+    // Handle type literals: { as?: React.ElementType; ... }
+    if (typeNode.type === "TSTypeLiteral") {
+      for (const member of typeNode.members ?? []) {
+        if (isAsElementTypeMember(member)) {
+          return true;
+        }
+      }
+    }
+    return false;
+  };
+
+  // Detect styled components whose props type includes `as?: React.ElementType`.
+  // These need polymorphic wrapper generation.
+  // Note: Don't automatically add children - they may use .attrs({ as: "element" })
+  // to specify a fixed element type instead of inheriting polymorphism.
+  for (const decl of styledDecls) {
+    if (decl.propsType && typeContainsAsElementType(decl.propsType)) {
+      wrapperNames.add(decl.localName);
+    }
+  }
 
   for (const [baseName, children] of extendedBy.entries()) {
     const names = [baseName, ...children];
@@ -1316,6 +1458,16 @@ export function transformWithWarnings(
       decl.usedAsValue = true;
       decl.needsWrapperComponent = true;
     }
+
+    // Component wrappers with `.attrs({ as: "element" })` that specify a different element
+    // need wrappers to render the correct element type (not the base component's element).
+    if (
+      decl.base.kind === "component" &&
+      decl.attrsInfo?.staticAttrs?.as &&
+      typeof decl.attrsInfo.staticAttrs.as === "string"
+    ) {
+      decl.needsWrapperComponent = true;
+    }
   }
 
   // Now that all needsWrapperComponent flags are set, flatten base components where appropriate.
@@ -1329,7 +1481,11 @@ export function transformWithWarnings(
         // Otherwise flatten to intrinsic tag for inline style merging.
         const baseUsedInJsx = isUsedInJsx(decl.base.ident);
         const shouldDelegate = baseUsedInJsx && decl.needsWrapperComponent;
-        if (!shouldDelegate) {
+        // Don't flatten if this component has .attrs({ as: "element" }) that specifies
+        // a different element - it needs to render that element directly.
+        const hasAsAttr =
+          decl.attrsInfo?.staticAttrs?.as && typeof decl.attrsInfo.staticAttrs.as === "string";
+        if (!shouldDelegate && !hasAsAttr) {
           // Flatten to intrinsic tag for inline style merging
           decl.base = { kind: "intrinsic", tagName: baseDecl.base.tagName };
         }
@@ -1832,52 +1988,26 @@ export function transformWithWarnings(
           }
         }
 
-        const leadingNames = new Set([
-          "href",
-          "target",
-          "rel",
-          "type",
-          "name",
-          "value",
-          "size",
-          "tabIndex",
-          "disabled",
-          "readOnly",
-          "ref",
-          // Note: `style` is NOT in leadingNames - it should come after stylex.props
-        ]);
-
-        // Add attrs from attrsInfo to leadingNames so they appear before stylex.props
-        if (decl.attrsInfo) {
-          for (const k of Object.keys(decl.attrsInfo.staticAttrs)) {
-            leadingNames.add(k);
-          }
-          for (const cond of decl.attrsInfo.conditionalAttrs) {
-            leadingNames.add(cond.attrName);
-          }
-          for (const inv of decl.attrsInfo.invertedBoolAttrs ?? []) {
-            leadingNames.add(inv.attrName);
-          }
-        }
+        // Preserve original prop order: regular JSX attributes come first (in their original order),
+        // then stylex.props(), then `style` attribute (allowing inline overrides), then spread attributes.
+        // This prevents props like tabIndex from being reordered unexpectedly.
         const leading: typeof keptAttrs = [];
         const rest: typeof keptAttrs = [];
-        const hasRefAttr = keptAttrs.some(
-          (a) =>
-            a.type === "JSXAttribute" && a.name.type === "JSXIdentifier" && a.name.name === "ref",
-        );
         for (const attr of keptAttrs) {
-          if (attr.type === "JSXAttribute" && attr.name.type === "JSXIdentifier") {
-            // Keep `placeholder` before stylex spread only when there's a `ref` (matches `refs` fixture).
-            if (attr.name.name === "placeholder" && hasRefAttr) {
-              leading.push(attr);
-              continue;
-            }
-            if (leadingNames.has(attr.name.name)) {
-              leading.push(attr);
-              continue;
-            }
+          // Spread attributes go after stylex.props
+          if (attr.type === "JSXSpreadAttribute") {
+            rest.push(attr);
+          } else if (
+            attr.type === "JSXAttribute" &&
+            attr.name.type === "JSXIdentifier" &&
+            attr.name.name === "style"
+          ) {
+            // `style` attribute goes after stylex.props to allow inline overrides
+            rest.push(attr);
+          } else {
+            // All other JSX attributes preserve their original order before stylex.props
+            leading.push(attr);
           }
-          rest.push(attr);
         }
 
         // Insert {...stylex.props(styles.key)} after structural attrs like href/type/size (matches fixtures).
@@ -1895,12 +2025,13 @@ export function transformWithWarnings(
 
         const variantKeys = decl.variantStyleKeys ?? {};
         const variantProps = new Set(Object.keys(variantKeys));
-        const keptAfterVariants: typeof rest = [];
+        const keptLeadingAfterVariants: typeof leading = [];
         const styleFnPairs = decl.styleFnFromProps ?? [];
         const styleFnProps = new Set(styleFnPairs.map((p) => p.jsxProp));
-        for (const attr of rest) {
+        // Process variant props from leading attrs (regular JSX attributes)
+        for (const attr of leading) {
           if (attr.type !== "JSXAttribute" || attr.name.type !== "JSXIdentifier") {
-            keptAfterVariants.push(attr);
+            keptLeadingAfterVariants.push(attr);
             continue;
           }
           const n = attr.name.name;
@@ -1945,7 +2076,7 @@ export function transformWithWarnings(
                 continue;
               }
             }
-            keptAfterVariants.push(attr);
+            keptLeadingAfterVariants.push(attr);
             continue;
           }
 
@@ -1971,14 +2102,15 @@ export function transformWithWarnings(
           // Any other value shape: drop the prop without attempting to apply a variant.
         }
 
+        // Final order: regular attrs (filtered), then stylex.props(), then spread attrs
         opening.attributes = [
-          ...leading,
+          ...keptLeadingAfterVariants,
           j.jsxSpreadAttribute(
             j.callExpression(j.memberExpression(j.identifier("stylex"), j.identifier("props")), [
               ...styleArgs,
             ]),
           ),
-          ...keptAfterVariants,
+          ...rest,
         ];
       });
   }

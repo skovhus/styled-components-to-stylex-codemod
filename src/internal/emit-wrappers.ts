@@ -19,6 +19,59 @@ const VOID_TAGS = new Set([
   "wbr",
 ]);
 
+// Mapping from HTML tag names to their corresponding HTMLElement types
+// Used to generate correct ref types for .attrs({ as: "tag" }) patterns
+const TAG_TO_HTML_ELEMENT: Record<string, string> = {
+  a: "HTMLAnchorElement",
+  button: "HTMLButtonElement",
+  div: "HTMLDivElement",
+  form: "HTMLFormElement",
+  h1: "HTMLHeadingElement",
+  h2: "HTMLHeadingElement",
+  h3: "HTMLHeadingElement",
+  h4: "HTMLHeadingElement",
+  h5: "HTMLHeadingElement",
+  h6: "HTMLHeadingElement",
+  img: "HTMLImageElement",
+  input: "HTMLInputElement",
+  label: "HTMLLabelElement",
+  li: "HTMLLIElement",
+  nav: "HTMLElement",
+  ol: "HTMLOListElement",
+  p: "HTMLParagraphElement",
+  section: "HTMLElement",
+  select: "HTMLSelectElement",
+  span: "HTMLSpanElement",
+  table: "HTMLTableElement",
+  textarea: "HTMLTextAreaElement",
+  ul: "HTMLUListElement",
+};
+
+const getAttrsAsString = (d: any): string | null => {
+  const v = (d as any)?.attrsInfo?.staticAttrs?.as;
+  return typeof v === "string" ? v : null;
+};
+
+const injectRefPropIntoTypeLiteralString = (typeText: string, refElementType: string): string => {
+  // If it's already there, don't add it again.
+  if (/\bref\s*\?\s*:/.test(typeText)) {
+    return typeText;
+  }
+  const trimmed = typeText.trim();
+  // Best-effort: if this is a type literal (`{ ... }`), inject before the final `}`.
+  if (trimmed.startsWith("{") && trimmed.endsWith("}")) {
+    const indent = "\n  ";
+    const injection = `${indent}ref?: React.Ref<${refElementType}>;`;
+    // Keep the closing brace on its own line when multiline.
+    if (trimmed.includes("\n")) {
+      return typeText.replace(/\n\}$/, `${injection}\n}`);
+    }
+    return typeText.replace(/\}$/, `${injection} }`);
+  }
+  // Fallback: intersect with a minimal ref prop type.
+  return `${typeText} & { ref?: React.Ref<${refElementType}> }`;
+};
+
 const isBugNarrativeComment = (c: any): boolean => {
   const v = typeof c?.value === "string" ? String(c.value).trim() : "";
   return /^Bug\s+\d+[a-zA-Z]?\s*:/.test(v);
@@ -1176,16 +1229,9 @@ export function emitWrappers(args: {
     allowClassNameProp: boolean;
     allowStyleProp: boolean;
     includeAsProp?: boolean;
-    includeChildren?: boolean;
     skipProps?: Set<string>;
   }): string => {
-    const {
-      d,
-      allowClassNameProp,
-      allowStyleProp,
-      includeAsProp = false,
-      includeChildren = true,
-    } = args;
+    const { d, allowClassNameProp, allowStyleProp, includeAsProp = false } = args;
 
     // For styled(Component) wrappers, we use React.ComponentProps<typeof Component>
     // which already includes all the component's props. Don't add extra `prop?: any`
@@ -1198,9 +1244,9 @@ export function emitWrappers(args: {
     const literal = lines.length > 0 ? `{\n${lines.join("\n")}\n}` : "{}";
     const base = `React.ComponentProps<typeof ${(d.base as any).ident}>`;
     const omitted: string[] = [];
-    if (!includeChildren) {
-      omitted.push('"children"');
-    }
+    // Note: We do NOT omit "children" here because React.ComponentProps<typeof Component>
+    // already includes children from the wrapped component's props. If the wrapped component
+    // accepts children, the wrapper should too.
     if (!allowClassNameProp) {
       omitted.push('"className"');
     }
@@ -1208,9 +1254,7 @@ export function emitWrappers(args: {
       omitted.push('"style"');
     }
     const baseMaybeOmitted = omitted.length ? `Omit<${base}, ${omitted.join(" | ")}>` : base;
-    return includeChildren
-      ? withChildren(joinIntersection(baseMaybeOmitted, literal))
-      : baseMaybeOmitted;
+    return literal !== "{}" ? joinIntersection(baseMaybeOmitted, literal) : baseMaybeOmitted;
   };
 
   const isPropRequiredInPropsTypeLiteral = (propsType: any, propName: string): boolean => {
@@ -1531,55 +1575,35 @@ export function emitWrappers(args: {
       const allowStyleProp = shouldAllowStyleProp(d);
       const explicit = stringifyTsType(d.propsType);
 
+      // Check if the explicit props type is a simple (non-generic) type reference.
+      // If so, we should NOT make the wrapper function generic - just use the existing type directly.
+      const isExplicitNonGenericType =
+        explicit && d.propsType?.type === "TSTypeReference" && !d.propsType.typeParameters;
+
       // Polymorphic `as` wrappers: type the wrapper generically so the chosen `as` value
       // influences allowed props (e.g. htmlFor when as="label", react-spring style props when as={animated.span}).
+      // Exception: if the original props type is already defined and non-generic, use it directly.
       const typeText = (() => {
         if (explicit) {
           return explicit;
         }
-        const base = "React.ComponentPropsWithoutRef<C>";
-        // Closed-by-default: don't allow external className/style passthrough.
-        const baseMaybeOmitted = `Omit<${base}, "className" | "style">`;
-
         const used = getUsedAttrs(d.localName);
-        const hasAsExpression =
-          used.has("as") &&
-          (root
-            .find(j.JSXElement, {
-              openingElement: { name: { type: "JSXIdentifier", name: d.localName } },
-            } as any)
-            .filter((p: any) => {
-              const attrs = (p.node.openingElement?.attributes ?? []) as any[];
-              return attrs.some(
-                (a: any) =>
-                  a?.type === "JSXAttribute" &&
-                  a.name?.type === "JSXIdentifier" &&
-                  a.name.name === "as" &&
-                  a.value?.type === "JSXExpressionContainer",
-              );
-            })
-            .size() > 0 ||
-            root
-              .find(j.JSXSelfClosingElement, {
-                name: { type: "JSXIdentifier", name: d.localName },
-              } as any)
-              .filter((p: any) => {
-                const attrs = (p.node.attributes ?? []) as any[];
-                return attrs.some(
-                  (a: any) =>
-                    a?.type === "JSXAttribute" &&
-                    a.name?.type === "JSXIdentifier" &&
-                    a.name.name === "as" &&
-                    a.value?.type === "JSXExpressionContainer",
-                );
-              })
-              .size() > 0);
-
-        const extra = allowStyleProp && hasAsExpression ? "{ as?: C; style?: any }" : "{ as?: C }";
+        // Use ComponentPropsWithRef when ref is used on the component
+        const hasRef = used.has("ref");
+        const base = hasRef
+          ? "React.ComponentPropsWithRef<C>"
+          : "React.ComponentPropsWithoutRef<C>";
+        // Omit className always, omit style only if not used on the component
+        const hasStyle = used.has("style");
+        const omitList = hasStyle ? '"className"' : '"className" | "style"';
+        const baseMaybeOmitted = `Omit<${base}, ${omitList}>`;
+        const extra = "{ as?: C }";
         return joinIntersection(baseMaybeOmitted, extra);
       })();
 
-      emitNamedPropsType(d.localName, typeText, `C extends React.ElementType = "${tagName}"`);
+      if (!isExplicitNonGenericType) {
+        emitNamedPropsType(d.localName, typeText, `C extends React.ElementType = "${tagName}"`);
+      }
       needsReactTypeImport = true;
 
       const styleArgs: any[] = [
@@ -1588,6 +1612,29 @@ export function emitWrappers(args: {
           : []),
         j.memberExpression(j.identifier(stylesIdentifier), j.identifier(d.styleKey)),
       ];
+
+      // Track props that need to be destructured for variant styles
+      const destructureProps: string[] = [];
+
+      // Add variant style arguments if this component has variants
+      if (d.variantStyleKeys) {
+        for (const [when, variantKey] of Object.entries(d.variantStyleKeys)) {
+          const { cond, props } = parseVariantWhenToAst(j, when);
+          for (const p of props) {
+            if (p && !destructureProps.includes(p)) {
+              destructureProps.push(p);
+            }
+          }
+          styleArgs.push(
+            j.logicalExpression(
+              "&&",
+              cond,
+              j.memberExpression(j.identifier(stylesIdentifier), j.identifier(variantKey)),
+            ),
+          );
+        }
+      }
+
       const stylexPropsCall = j.callExpression(
         j.memberExpression(j.identifier("stylex"), j.identifier("props")),
         styleArgs,
@@ -1596,14 +1643,21 @@ export function emitWrappers(args: {
       const isVoidTag = VOID_TAGS.has(tagName);
       const propsParamId = j.identifier("props");
       if (emitTypes) {
-        // Make the wrapper function generic so `as` can influence props.
-        const tp = j(
-          `function _<C extends React.ElementType = "${tagName}">() { return null }`,
-        ).get().node.program.body[0].typeParameters;
-        (propsParamId as any).typeAnnotation = j(
-          `const x: ${propsTypeNameFor(d.localName)}<C> = null`,
-        ).get().node.program.body[0].declarations[0].id.typeAnnotation;
-        (propsParamId as any).typeParameters = tp;
+        if (isExplicitNonGenericType) {
+          // Use the existing non-generic type directly without making the function generic
+          (propsParamId as any).typeAnnotation = j(
+            `const x: ${explicit} = null`,
+          ).get().node.program.body[0].declarations[0].id.typeAnnotation;
+        } else {
+          // Make the wrapper function generic so `as` can influence props.
+          const tp = j(
+            `function _<C extends React.ElementType = "${tagName}">() { return null }`,
+          ).get().node.program.body[0].typeParameters;
+          (propsParamId as any).typeAnnotation = j(
+            `const x: ${propsTypeNameFor(d.localName)}<C> = null`,
+          ).get().node.program.body[0].declarations[0].id.typeAnnotation;
+          (propsParamId as any).typeParameters = tp;
+        }
       }
       const propsId = j.identifier("props");
       const childrenId = j.identifier("children");
@@ -1621,6 +1675,8 @@ export function emitWrappers(args: {
             }),
             ...(isVoidTag ? [] : [patternProp("children", childrenId)]),
             ...(allowStyleProp ? [patternProp("style", styleId)] : []),
+            // Add variant props to destructuring
+            ...destructureProps.filter(Boolean).map((name) => patternProp(name)),
             j.restElement(restId),
           ] as any),
           propsId,
@@ -2585,6 +2641,56 @@ export function emitWrappers(args: {
         allowStyleProp,
         skipProps: explicitPropNames,
       });
+
+      // Determine if the wrapper will spread ...rest to the element.
+      // This is needed to decide whether to extend intrinsic props.
+      const usedAttrsForType = getUsedAttrs(d.localName);
+      // Parse variant keys to extract prop names
+      // Handles: "color:primary" -> "color", "disabled" -> "disabled", "disabled&&color:primary" -> ["disabled", "color"]
+      const variantPropsForType = new Set(
+        Object.keys(d.variantStyleKeys ?? {}).flatMap((when) => {
+          // Split by && and extract prop names from each part
+          return when.split("&&").flatMap((part) => {
+            // Remove negation prefix if present (e.g., "!color:primary" -> "color")
+            const cleanPart = part.replace(/^!/, "");
+            // Extract prop name (before : or the whole thing for booleans)
+            const colonIdx = cleanPart.indexOf(":");
+            return colonIdx >= 0 ? [cleanPart.slice(0, colonIdx)] : [cleanPart];
+          });
+        }),
+      );
+      const styleFnPropsForType = new Set((d.styleFnFromProps ?? []).map((p) => p.jsxProp));
+      const conditionalPropsForType = new Set(
+        (d.attrsInfo?.conditionalAttrs ?? []).map((c) => c.jsxProp),
+      );
+      const invertedPropsForType = new Set(
+        (d.attrsInfo?.invertedBoolAttrs ?? []).map((inv) => inv.jsxProp),
+      );
+      const staticAttrNames = new Set(Object.keys(d.attrsInfo?.staticAttrs ?? {}));
+      const handledProps = new Set([
+        ...variantPropsForType,
+        ...styleFnPropsForType,
+        ...conditionalPropsForType,
+        ...invertedPropsForType,
+        ...staticAttrNames,
+      ]);
+      const needsRestForType =
+        !!(d as any).usedAsValue ||
+        usedAttrsForType.has("*") ||
+        [...usedAttrsForType].some((n) => {
+          if (
+            n === "children" ||
+            n === "className" ||
+            n === "style" ||
+            n === "as" ||
+            n === "forwardedAs" ||
+            n.startsWith("$") // Transient props should not be passed through
+          ) {
+            return false;
+          }
+          return !handledProps.has(n);
+        });
+
       const extendBaseTypeText = (() => {
         // When we can't emit a new `${Component}Props` alias because one already exists,
         // prefer extending it with real intrinsic element attribute types (instead of a loose
@@ -2599,14 +2705,38 @@ export function emitWrappers(args: {
         }
         return omitted.length ? `Omit<${base}, ${omitted.join(" | ")}>` : base;
       })();
-      // If there's an explicit type, keep it restrictive (only add children for non-void tags).
-      // For void tags (img, input, etc.), use full element props (React.ComponentProps/HTMLAttributes)
-      // instead of inferring individual props, so consumers get proper typing for all element props.
-      const typeText = explicit
-        ? VOID_TAGS.has(tagName)
-          ? joinIntersection(extendBaseTypeText, explicit) // Omit<ComponentProps<tag>, ...> & explicit
-          : withChildren(explicit) // React.PropsWithChildren<explicit>
-        : baseTypeText;
+
+      // Build the type text based on what features are needed:
+      // - If ...rest is spread to the element, extend intrinsic element props
+      // - If className/style are allowed, include them explicitly
+      // - Otherwise, just use PropsWithChildren
+      const typeText = (() => {
+        if (!explicit) {
+          return baseTypeText;
+        }
+        // For void tags, always extend intrinsic props
+        if (VOID_TAGS.has(tagName)) {
+          return joinIntersection(extendBaseTypeText, explicit);
+        }
+        // If ...rest is spread to the element, extend intrinsic props for type safety
+        if (needsRestForType) {
+          return joinIntersection(extendBaseTypeText, explicit);
+        }
+        // If className/style are allowed, include them in the type
+        if (allowClassNameProp || allowStyleProp) {
+          const extras: string[] = [];
+          if (allowClassNameProp) {
+            extras.push("className?: string");
+          }
+          if (allowStyleProp) {
+            extras.push("style?: React.CSSProperties");
+          }
+          extras.push("children?: React.ReactNode");
+          return joinIntersection(explicit, `{ ${extras.join("; ")} }`);
+        }
+        // Default: just wrap with PropsWithChildren
+        return withChildren(explicit);
+      })();
       const typeAliasEmitted = emitNamedPropsType(d.localName, typeText);
       // If the type alias was not emitted (e.g., due to shadowing), try to extend
       // the existing interface/type alias with the base component props
@@ -2698,8 +2828,26 @@ export function emitWrappers(args: {
 
     const usedAttrs = getUsedAttrs(d.localName);
     const { hasAny: hasLocalUsage } = getJsxCallsites(d.localName);
+    // Check if explicit props type has properties that should be passed through
+    const explicitPropsNames = d.propsType ? getExplicitPropNames(d.propsType) : new Set<string>();
+    const hasExplicitPropsToPassThrough =
+      explicitPropsNames.size > 0 &&
+      [...explicitPropsNames].some((n) => {
+        if (
+          n === "children" ||
+          n === "className" ||
+          n === "style" ||
+          n === "as" ||
+          n === "forwardedAs" ||
+          n.startsWith("$") // Transient props should not be passed through
+        ) {
+          return false;
+        }
+        return !destructureProps.includes(n);
+      });
     const shouldIncludeRest =
       isUsedAsValueInFile(d.localName) ||
+      hasExplicitPropsToPassThrough ||
       (hasLocalUsage && usedAttrs.has("*")) ||
       (hasLocalUsage &&
         [...usedAttrs].some((n) => {
@@ -2932,13 +3080,19 @@ export function emitWrappers(args: {
             allowClassNameProp,
             allowStyleProp,
             includeAsProp: false,
-            includeChildren: hasJsxChildrenUsage(d.localName),
             skipProps: explicitPropNames,
           });
-          const explicitWithChildren = explicit ? withChildren(explicit) : null;
-          const typeText = explicitWithChildren
-            ? joinIntersection(inferred, explicitWithChildren)
-            : inferred;
+          // Add ref support when .attrs({ as: "element" }) is used
+          const attrsAs = getAttrsAsString(d);
+          const refElementType = attrsAs ? TAG_TO_HTML_ELEMENT[attrsAs] : undefined;
+          const explicitWithRef =
+            refElementType && explicit
+              ? injectRefPropIntoTypeLiteralString(explicit, refElementType)
+              : (explicit ?? (refElementType ? `{ ref?: React.Ref<${refElementType}>; }` : null));
+          // NOTE: `inferred` already includes `React.ComponentProps<typeof WrappedComponent>`,
+          // which carries `children` when the wrapped component accepts them. Wrapping the
+          // explicit extra props in `PropsWithChildren` is redundant and can cause extra churn.
+          const typeText = explicitWithRef ? joinIntersection(inferred, explicitWithRef) : inferred;
           emitNamedPropsType(d.localName, typeText);
         }
       }
