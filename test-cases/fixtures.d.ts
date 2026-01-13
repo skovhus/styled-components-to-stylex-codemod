@@ -1,22 +1,18 @@
-import "styled-components";
+import type { TestCaseTheme } from "./tokens.stylex";
 
 declare module "styled-components" {
+  export { styled as default, styled } from "styled-components";
+
   // Theme shape used across test fixtures.
   // See https://styled-components.com/docs/api#create-a-declarations-file
-  export interface DefaultTheme {
-    // Direct theme properties (used in theming/adhoc-theme fixtures)
-    main?: string;
-    secondary?: string;
+  export interface DefaultTheme extends TestCaseTheme {}
 
-    // Colors object - index signature required for dynamic lookups like
-    // props.theme.colors[props.$bg] and props.theme.colors[props.variant]
-    colors: Record<string, string>;
-
-    // Spacing object (used in function-theme fixture)
-    spacing?: {
-      small?: string;
-      medium?: string;
-      large?: string;
-    };
-  }
+  /** override of the default styled component props */
+  export type ExecutionContext = CustomExecutionContext;
+  /** override of the default styled component props */
+  export type ThemedStyledProps<P = {}> = CustomExecutionContext & P;
+  /** override of the default styled component props */
+  export type StyledProps<P> = P & CustomExecutionContext;
+  /** override the useThemeType */
+  export function useTheme(): TestCaseTheme;
 }

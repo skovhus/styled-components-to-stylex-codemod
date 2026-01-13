@@ -25,6 +25,7 @@ function Text(props: TextProps & { as?: React.ElementType }) {
 type LabelProps = React.ComponentProps<typeof Text> &
   React.PropsWithChildren<{
     htmlFor?: string;
+    ref?: React.Ref<HTMLLabelElement>;
   }>;
 
 export function Label(props: LabelProps) {

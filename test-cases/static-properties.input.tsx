@@ -29,6 +29,8 @@ export const ExtendedButton = styled(BaseButton)`
   color: white;
 `;
 
+ExtendedButton.HEIGHT = (BaseButton as any).HEIGHT;
+
 // Pattern 3: styled(ImportedComponent) should inherit static properties
 // ActionMenuTextDivider.HEIGHT is defined in another file
 export const CommandMenuTextDivider = styled(ActionMenuTextDivider)`

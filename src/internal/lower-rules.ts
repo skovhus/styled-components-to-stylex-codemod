@@ -1768,7 +1768,8 @@ export function lowerRules(args: {
 
           if (res && res.type === "splitVariantsResolvedValue") {
             const neg = res.variants.find((v: any) => v.when.startsWith("!"));
-            const pos = res.variants.find((v: any) => !v.when.startsWith("!"));
+            // Get ALL positive variants (not just one) for nested ternaries
+            const allPos = res.variants.filter((v: any) => !v.when.startsWith("!"));
 
             const cssProp = (d.property ?? "").trim();
             // Map CSS property to StyleX property (handle special cases like background → backgroundColor)
@@ -1911,20 +1912,45 @@ export function lowerRules(args: {
             if (neg && !negParsed) {
               continue;
             }
-            const posParsed = pos ? parseResolved(pos.expr, pos.imports) : null;
-            if (pos && !posParsed) {
+            // Parse all positive variants - skip entire declaration if any fail
+            const allPosParsed: Array<{
+              when: string;
+              nameHint: string;
+              parsed: { exprAst: unknown; imports: any[] };
+            }> = [];
+            let anyPosFailed = false;
+            for (const posV of allPos) {
+              const parsed = parseResolved(posV.expr, posV.imports);
+              if (!parsed) {
+                anyPosFailed = true;
+                break;
+              }
+              allPosParsed.push({ when: posV.when, nameHint: posV.nameHint, parsed });
+            }
+            if (anyPosFailed) {
               continue;
             }
 
             if (negParsed) {
               applyParsed(styleObj as any, negParsed);
             }
-            if (pos && posParsed) {
-              const when = pos.when.replace(/^!/, "");
-              const bucket = { ...variantBuckets.get(when) } as Record<string, unknown>;
-              applyParsed(bucket, posParsed);
-              variantBuckets.set(when, bucket);
-              variantStyleKeys[when] ??= `${decl.styleKey}${toSuffixFromProp(when)}`;
+            // Apply all positive variants
+            // For nested ternaries (multiple variants), use simpler nameHint-based naming.
+            // For single-variant cases, use toSuffixFromProp which includes prop name (e.g., ColorPrimary).
+            const isNestedTernary = allPosParsed.length > 1;
+            for (const { when, nameHint, parsed } of allPosParsed) {
+              const whenClean = when.replace(/^!/, "");
+              const bucket = { ...variantBuckets.get(whenClean) } as Record<string, unknown>;
+              applyParsed(bucket, parsed);
+              variantBuckets.set(whenClean, bucket);
+              // Use nameHint only for nested ternaries and when it's meaningful.
+              // Generic hints like "truthy", "falsy", "default", "match" should fall back to toSuffixFromProp
+              const genericHints = new Set(["truthy", "falsy", "default", "match"]);
+              const useMeaningfulHint = isNestedTernary && nameHint && !genericHints.has(nameHint);
+              const suffix = useMeaningfulHint
+                ? nameHint.charAt(0).toUpperCase() + nameHint.slice(1)
+                : toSuffixFromProp(whenClean);
+              variantStyleKeys[whenClean] ??= `${decl.styleKey}${suffix}`;
             }
             continue;
           }

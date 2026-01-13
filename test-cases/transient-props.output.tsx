@@ -15,7 +15,7 @@ const Link = ({ className, text, ...props }: { className?: string; text: string 
   </a>
 );
 
-type StyledLinkProps = Omit<React.ComponentProps<typeof Link>, "children" | "className" | "style"> &
+type StyledLinkProps = Omit<React.ComponentProps<typeof Link>, "className" | "style"> &
   React.PropsWithChildren<{
     $red?: boolean;
   }>;
@@ -49,10 +49,7 @@ function ArrowIcon(props: IconProps & ArrowIconProps) {
   );
 }
 
-type CollapseArrowIconProps = Omit<
-  React.ComponentProps<typeof ArrowIcon>,
-  "children" | "className" | "style"
->;
+type CollapseArrowIconProps = Omit<React.ComponentProps<typeof ArrowIcon>, "className" | "style">;
 
 export function CollapseArrowIcon(props: CollapseArrowIconProps) {
   const { $isOpen, ...rest } = props;

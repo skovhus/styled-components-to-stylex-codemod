@@ -26,6 +26,8 @@ const Input = styled.input.attrs<{ $padding?: string; $small?: boolean }>((props
 // Pattern 2: styled("input").attrs (function call + attrs)
 export interface TextInputProps {
   allowPMAutofill?: boolean;
+  // Data attribute used by 1Password to control autofill behavior
+  "data-1p-ignore"?: boolean;
 }
 
 export const TextInput = styled("input").attrs<TextInputProps>((props) => ({
