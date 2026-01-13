@@ -17,11 +17,10 @@ function Text(props: TextProps) {
   );
 }
 
-type LabelProps = Omit<React.ComponentProps<typeof Text>, "className" | "style"> &
-  React.PropsWithChildren<{
-    htmlFor?: string;
-    ref?: React.Ref<HTMLLabelElement>;
-  }>;
+type LabelProps = Omit<React.ComponentProps<typeof Text>, "className" | "style"> & {
+  htmlFor?: string;
+  ref?: React.Ref<HTMLLabelElement>;
+};
 
 export function Label(props: LabelProps) {
   return <Text {...props} as="label" {...stylex.props(styles.label)} />;

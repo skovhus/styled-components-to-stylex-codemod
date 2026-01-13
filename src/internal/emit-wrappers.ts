@@ -47,6 +47,31 @@ const TAG_TO_HTML_ELEMENT: Record<string, string> = {
   ul: "HTMLUListElement",
 };
 
+const getAttrsAsString = (d: any): string | null => {
+  const v = (d as any)?.attrsInfo?.staticAttrs?.as;
+  return typeof v === "string" ? v : null;
+};
+
+const injectRefPropIntoTypeLiteralString = (typeText: string, refElementType: string): string => {
+  // If it's already there, don't add it again.
+  if (/\bref\s*\?\s*:/.test(typeText)) {
+    return typeText;
+  }
+  const trimmed = typeText.trim();
+  // Best-effort: if this is a type literal (`{ ... }`), inject before the final `}`.
+  if (trimmed.startsWith("{") && trimmed.endsWith("}")) {
+    const indent = "\n  ";
+    const injection = `${indent}ref?: React.Ref<${refElementType}>;`;
+    // Keep the closing brace on its own line when multiline.
+    if (trimmed.includes("\n")) {
+      return typeText.replace(/\n\}$/, `${injection}\n}`);
+    }
+    return typeText.replace(/\}$/, `${injection} }`);
+  }
+  // Fallback: intersect with a minimal ref prop type.
+  return `${typeText} & { ref?: React.Ref<${refElementType}> }`;
+};
+
 const isBugNarrativeComment = (c: any): boolean => {
   const v = typeof c?.value === "string" ? String(c.value).trim() : "";
   return /^Bug\s+\d+[a-zA-Z]?\s*:/.test(v);
@@ -3058,21 +3083,16 @@ export function emitWrappers(args: {
             skipProps: explicitPropNames,
           });
           // Add ref support when .attrs({ as: "element" }) is used
-          const attrsAs = d.attrsInfo?.staticAttrs?.as;
-          const refElementType =
-            typeof attrsAs === "string" ? TAG_TO_HTML_ELEMENT[attrsAs] : undefined;
-          // Insert ref prop inside the object literal if it ends with "}"
-          const explicitWithRef = explicit
-            ? refElementType && explicit.trim().endsWith("}")
-              ? explicit.replace(/\}$/, `ref?: React.Ref<${refElementType}>; }`)
-              : explicit
-            : refElementType
-              ? `{ ref?: React.Ref<${refElementType}>; }`
-              : null;
-          const explicitWithChildren = explicitWithRef ? withChildren(explicitWithRef) : null;
-          const typeText = explicitWithChildren
-            ? joinIntersection(inferred, explicitWithChildren)
-            : inferred;
+          const attrsAs = getAttrsAsString(d);
+          const refElementType = attrsAs ? TAG_TO_HTML_ELEMENT[attrsAs] : undefined;
+          const explicitWithRef =
+            refElementType && explicit
+              ? injectRefPropIntoTypeLiteralString(explicit, refElementType)
+              : (explicit ?? (refElementType ? `{ ref?: React.Ref<${refElementType}>; }` : null));
+          // NOTE: `inferred` already includes `React.ComponentProps<typeof WrappedComponent>`,
+          // which carries `children` when the wrapped component accepts them. Wrapping the
+          // explicit extra props in `PropsWithChildren` is redundant and can cause extra churn.
+          const typeText = explicitWithRef ? joinIntersection(inferred, explicitWithRef) : inferred;
           emitNamedPropsType(d.localName, typeText);
         }
       }

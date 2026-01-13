@@ -15,10 +15,9 @@ const Link = ({ className, text, ...props }: { className?: string; text: string 
   </a>
 );
 
-type StyledLinkProps = Omit<React.ComponentProps<typeof Link>, "className" | "style"> &
-  React.PropsWithChildren<{
-    $red?: boolean;
-  }>;
+type StyledLinkProps = Omit<React.ComponentProps<typeof Link>, "className" | "style"> & {
+  $red?: boolean;
+};
 
 function StyledLink(props: StyledLinkProps) {
   const { $red, ...rest } = props;
