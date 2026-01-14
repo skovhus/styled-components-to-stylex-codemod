@@ -2,6 +2,7 @@ import { defineAdapter } from "../adapter.ts";
 
 // Test adapters - examples of custom adapter usage
 export const customAdapter = defineAdapter({
+  styleMerger: null,
   shouldSupportExternalStyling() {
     return false;
   },
@@ -23,6 +24,13 @@ export const customAdapter = defineAdapter({
 
 // Fixtures don't use theme resolution, but the transformer requires an adapter.
 export const fixtureAdapter = defineAdapter({
+  // Use mergedSx merger function for cleaner className/style merging output
+  // See test-cases/lib/mergedSx.ts for the implementation
+  styleMerger: {
+    functionName: "mergedSx",
+    importSource: { kind: "specifier", value: "./lib/mergedSx" },
+  },
+
   // Enable external styles for exported components in specific test cases where the expected
   // output includes className/style prop support and HTMLAttributes extension.
   shouldSupportExternalStyling(ctx) {

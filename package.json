@@ -39,7 +39,7 @@
     "typecheck:src": "tsc --noEmit",
     "typecheck:fixtures": "tsc -p test-cases/tsconfig.json --noEmit",
     "typecheck": "pnpm run typecheck:src && pnpm run typecheck:fixtures",
-    "ci": "pnpm run lint && pnpm run typecheck && pnpm run test:run",
+    "ci": "pnpm run lint && pnpm run typecheck && pnpm run test:run && knip",
     "knip": "knip",
     "prepublishOnly": "pnpm run build",
     "storybook": "storybook dev -p 6006",

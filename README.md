@@ -147,6 +147,46 @@ Adapters are the main extension point. They let you control:
 - what extra imports to inject into transformed files (returned from `resolveValue`)
 - how helper calls are resolved (via `resolveValue({ kind: "call", ... })`)
 - which exported components should support external className/style extension (`shouldSupportExternalStyling`)
+- how className/style merging is handled for components accepting external styling (`styleMerger`)
+
+#### Style Merger
+
+When a component accepts external `className` and/or `style` props (e.g., via `shouldSupportExternalStyling`, or when wrapping a base component that already accepts these props), the generated code needs to merge StyleX styles with externally passed values.
+
+> **Note:** Allowing external className/style props is generally discouraged in StyleX as it bypasses the type-safe styling system. However, it can be useful during migration to maintain compatibility with existing code that passes these props.
+
+By default, this generates verbose inline merging code. You can provide a `styleMerger` to use a helper function instead for cleaner output:
+
+```ts
+const adapter = defineAdapter({
+  resolveValue(ctx) {
+    // ... value resolution logic
+    return null;
+  },
+
+  shouldSupportExternalStyling(ctx) {
+    return ctx.filePath.includes("/shared/components/");
+  },
+
+  // Use a custom merger function for cleaner output
+  styleMerger: {
+    functionName: "mergedSx",
+    importSource: { kind: "specifier", value: "./lib/mergedSx" },
+  },
+});
+```
+
+The merger function should have this signature:
+
+```ts
+function mergedSx(
+  styles: StyleXStyles,
+  className?: string,
+  style?: React.CSSProperties
+): ReturnType<typeof stylex.props>;
+```
+
+See [`test-cases/lib/mergedSx.ts`](./test-cases/lib/mergedSx.ts) for a reference implementation.
 
 #### External Styles Support
 

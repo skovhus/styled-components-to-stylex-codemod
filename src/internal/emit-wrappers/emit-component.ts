@@ -1,3 +1,5 @@
+import { emitStyleMerging, type StyleMergerConfig } from "./style-merger.js";
+
 export function emitComponentWrappers(ctx: any): { emitted: any[]; needsReactTypeImport: boolean } {
   const {
     root,
@@ -25,7 +27,8 @@ export function emitComponentWrappers(ctx: any): { emitted: any[]; needsReactTyp
     annotatePropsParam,
     patternProp,
     propsTypeNameFor,
-  } = ctx;
+    styleMerger,
+  } = ctx as { styleMerger: StyleMergerConfig | null } & Record<string, any>;
 
   const emitted: any[] = [];
   let needsReactTypeImport = false;
@@ -371,10 +374,21 @@ export function emitComponentWrappers(ctx: any): { emitted: any[]; needsReactTyp
         j.variableDeclarator(j.objectPattern(patternProps as any), propsId),
       ]);
 
+      // Use the style merger helper
+      const merging = emitStyleMerging({
+        j,
+        styleMerger,
+        styleArgs,
+        classNameId,
+        styleId,
+        allowClassNameProp,
+        allowStyleProp,
+        inlineStyleProps: d.inlineStyleProps ?? [],
+      });
+
       const stmts: any[] = [declStmt];
-      const sxId = j.identifier("sx");
-      if (needsSxVar) {
-        stmts.push(j.variableDeclaration("const", [j.variableDeclarator(sxId, stylexPropsCall)]));
+      if (merging.sxDecl) {
+        stmts.push(merging.sxDecl);
       }
 
       const openingAttrs: any[] = [];
@@ -433,46 +447,20 @@ export function emitComponentWrappers(ctx: any): { emitted: any[]; needsReactTyp
         }
       }
       openingAttrs.push(j.jsxSpreadAttribute(restId));
-      openingAttrs.push(j.jsxSpreadAttribute(needsSxVar ? sxId : stylexPropsCall));
+      openingAttrs.push(j.jsxSpreadAttribute(merging.jsxSpreadExpr));
 
-      if (allowClassNameProp) {
-        const mergedClassName = j.callExpression(
-          j.memberExpression(
-            j.callExpression(
-              j.memberExpression(
-                j.arrayExpression([
-                  j.memberExpression(sxId, j.identifier("className")),
-                  classNameId,
-                ]),
-                j.identifier("filter"),
-              ),
-              [j.identifier("Boolean")],
-            ),
-            j.identifier("join"),
-          ),
-          [j.literal(" ")],
-        );
+      if (merging.classNameAttr) {
         openingAttrs.push(
-          j.jsxAttribute(j.jsxIdentifier("className"), j.jsxExpressionContainer(mergedClassName)),
+          j.jsxAttribute(
+            j.jsxIdentifier("className"),
+            j.jsxExpressionContainer(merging.classNameAttr),
+          ),
         );
       }
 
-      if (allowStyleProp || (d.inlineStyleProps && d.inlineStyleProps.length)) {
+      if (merging.styleAttr) {
         openingAttrs.push(
-          j.jsxAttribute(
-            j.jsxIdentifier("style"),
-            j.jsxExpressionContainer(
-              j.objectExpression([
-                j.spreadElement(j.memberExpression(sxId, j.identifier("style")) as any),
-                ...(allowStyleProp ? [j.spreadElement(styleId as any)] : []),
-                ...(d.inlineStyleProps && d.inlineStyleProps.length
-                  ? d.inlineStyleProps.map((p: any) =>
-                      j.property("init", j.identifier(p.prop), p.expr as any),
-                    )
-                  : []),
-              ]) as any,
-            ),
-          ),
+          j.jsxAttribute(j.jsxIdentifier("style"), j.jsxExpressionContainer(merging.styleAttr)),
         );
       }
 

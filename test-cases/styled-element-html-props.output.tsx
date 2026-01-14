@@ -1,5 +1,6 @@
 import * as React from "react";
 import * as stylex from "@stylexjs/stylex";
+import { mergedSx } from "./lib/mergedSx";
 
 interface TextColorProps extends React.HTMLAttributes<HTMLSpanElement> {
   /** The color of the text. */
@@ -12,17 +13,8 @@ interface TextColorProps extends React.HTMLAttributes<HTMLSpanElement> {
  */
 export function TextColor(props: TextColorProps) {
   const { className, children, style, color } = props;
-
-  const sx = stylex.props(styles.textColor, styles.textColorColor(color));
   return (
-    <span
-      {...sx}
-      className={[sx.className, className].filter(Boolean).join(" ")}
-      style={{
-        ...sx.style,
-        ...style,
-      }}
-    >
+    <span {...mergedSx([styles.textColor, styles.textColorColor(color)], className, style)}>
       {children}
     </span>
   );

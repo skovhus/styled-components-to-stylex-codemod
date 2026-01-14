@@ -1,5 +1,6 @@
 import * as React from "react";
 import * as stylex from "@stylexjs/stylex";
+import { mergedSx } from "./lib/mergedSx";
 
 type RangeInputProps = React.InputHTMLAttributes<HTMLInputElement>;
 
@@ -12,19 +13,7 @@ type RangeInputProps = React.InputHTMLAttributes<HTMLInputElement>;
  */
 export function RangeInput(props: RangeInputProps) {
   const { className, style, ...rest } = props;
-
-  const sx = stylex.props(styles.rangeInput);
-  return (
-    <input
-      {...sx}
-      className={[sx.className, className].filter(Boolean).join(" ")}
-      style={{
-        ...sx.style,
-        ...style,
-      }}
-      {...rest}
-    />
-  );
+  return <input {...rest} {...mergedSx(styles.rangeInput, className, style)} />;
 }
 
 // Usage should work with HTML input attributes

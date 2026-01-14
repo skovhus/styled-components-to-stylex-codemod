@@ -1,5 +1,6 @@
 import type { Collection } from "jscodeshift";
 import type { StyledDecl } from "./transform-types.js";
+import type { StyleMergerConfig } from "../adapter.js";
 import { createWrapperUsageHelpers } from "./emit-wrappers/usage.js";
 import { insertEmittedWrappers } from "./emit-wrappers/insertion.js";
 import { emitIntrinsicWrappers } from "./emit-wrappers/emit-intrinsic.js";
@@ -11,6 +12,7 @@ import {
   getAttrsAsString,
   injectRefPropIntoTypeLiteralString,
 } from "./emit-wrappers/type-helpers.js";
+import { emitStyleMerging } from "./emit-wrappers/style-merger.js";
 
 export function emitWrappers(args: {
   root: Collection<any>;
@@ -21,6 +23,7 @@ export function emitWrappers(args: {
   patternProp: (keyName: string, valueId?: any) => any;
   exportedComponents: Map<string, ExportInfo>;
   stylesIdentifier: string;
+  styleMerger: StyleMergerConfig | null;
 }): void {
   return emitWrappersImpl(args);
 }
@@ -167,6 +170,7 @@ function emitMinimalWrapper(args: {
   invertedBoolAttrs?: Array<{ jsxProp: string; attrName: string }>;
   staticAttrs?: Record<string, any>;
   inlineStyleProps?: Array<{ prop: string; expr: any }>;
+  styleMerger: StyleMergerConfig | null;
 }): any[] {
   const {
     j,
@@ -186,6 +190,7 @@ function emitMinimalWrapper(args: {
     invertedBoolAttrs = [],
     staticAttrs = {},
     inlineStyleProps = [],
+    styleMerger,
   } = args;
   const isVoidTag = VOID_TAGS.has(tagName);
   const propsParamId = j.identifier("props");
@@ -245,11 +250,19 @@ function emitMinimalWrapper(args: {
     patternProps.push(j.restElement(restId));
   }
 
-  const needsSxVar = allowClassNameProp || allowStyleProp || inlineStyleProps.length > 0;
-  const stylexPropsCall = j.callExpression(
-    j.memberExpression(j.identifier("stylex"), j.identifier("props")),
+  // Use the style merger helper to generate the appropriate merging pattern
+  const classNameId = j.identifier("className");
+  const styleId = j.identifier("style");
+  const merging = emitStyleMerging({
+    j,
+    styleMerger,
     styleArgs,
-  );
+    classNameId,
+    styleId,
+    allowClassNameProp,
+    allowStyleProp,
+    inlineStyleProps,
+  });
 
   // Build JSX attributes: static attrs, {...rest}, {...sx|stylex.props(...)}, optional className/style
   const jsxAttrs: any[] = [];
@@ -339,46 +352,19 @@ function emitMinimalWrapper(args: {
     jsxAttrs.push(j.jsxSpreadAttribute(restId));
   }
 
-  if (!needsSxVar) {
-    jsxAttrs.push(j.jsxSpreadAttribute(stylexPropsCall));
-  } else {
-    jsxAttrs.push(j.jsxSpreadAttribute(j.identifier("sx")));
+  // Add the style merging spread and optional className/style attributes
+  jsxAttrs.push(j.jsxSpreadAttribute(merging.jsxSpreadExpr));
 
-    if (allowClassNameProp) {
-      const mergedClassName = j.callExpression(
-        j.memberExpression(
-          j.callExpression(
-            j.memberExpression(
-              j.arrayExpression([
-                j.memberExpression(j.identifier("sx"), j.identifier("className")),
-                j.identifier("className"),
-              ]),
-              j.identifier("filter"),
-            ),
-            [j.identifier("Boolean")],
-          ),
-          j.identifier("join"),
-        ),
-        [j.literal(" ")],
-      );
-      jsxAttrs.push(
-        j.jsxAttribute(j.jsxIdentifier("className"), j.jsxExpressionContainer(mergedClassName)),
-      );
-    }
+  if (merging.classNameAttr) {
+    jsxAttrs.push(
+      j.jsxAttribute(j.jsxIdentifier("className"), j.jsxExpressionContainer(merging.classNameAttr)),
+    );
+  }
 
-    if (allowStyleProp || inlineStyleProps.length > 0) {
-      const spreads: any[] = [
-        j.spreadElement(j.memberExpression(j.identifier("sx"), j.identifier("style")) as any),
-        ...(allowStyleProp ? [j.spreadElement(j.identifier("style") as any)] : []),
-        ...inlineStyleProps.map((p) => j.property("init", j.identifier(p.prop), p.expr as any)),
-      ];
-      jsxAttrs.push(
-        j.jsxAttribute(
-          j.jsxIdentifier("style"),
-          j.jsxExpressionContainer(j.objectExpression(spreads) as any),
-        ),
-      );
-    }
+  if (merging.styleAttr) {
+    jsxAttrs.push(
+      j.jsxAttribute(j.jsxIdentifier("style"), j.jsxExpressionContainer(merging.styleAttr)),
+    );
   }
 
   const openingEl = j.jsxOpeningElement(j.jsxIdentifier(tagName), jsxAttrs, isVoidTag);
@@ -401,10 +387,8 @@ function emitMinimalWrapper(args: {
       j.variableDeclarator(j.objectPattern(patternProps as any), propsId),
     ]),
   );
-  if (needsSxVar) {
-    bodyStmts.push(
-      j.variableDeclaration("const", [j.variableDeclarator(j.identifier("sx"), stylexPropsCall)]),
-    );
+  if (merging.sxDecl) {
+    bodyStmts.push(merging.sxDecl);
   }
   bodyStmts.push(j.returnStatement(jsx as any));
 
@@ -477,6 +461,7 @@ function emitWrappersImpl(args: {
   patternProp: (keyName: string, valueId?: any) => any;
   exportedComponents: Map<string, ExportInfo>;
   stylesIdentifier: string;
+  styleMerger: StyleMergerConfig | null;
 }): void {
   const {
     root,
@@ -487,6 +472,7 @@ function emitWrappersImpl(args: {
     patternProp,
     exportedComponents,
     stylesIdentifier,
+    styleMerger,
   } = args;
 
   // For plain JS/JSX and Flow transforms, skip emitting TS syntax entirely for now.
@@ -1182,6 +1168,7 @@ function emitWrappersImpl(args: {
       withLeadingComments,
       emitMinimalWrapper,
       withLeadingCommentsOnFirstFunction,
+      styleMerger,
     });
     emitted.push(...out.emitted);
     if (out.needsReactTypeImport) {
@@ -1219,6 +1206,7 @@ function emitWrappersImpl(args: {
       annotatePropsParam,
       patternProp,
       propsTypeNameFor,
+      styleMerger,
     });
     emitted.push(...out.emitted);
     if (out.needsReactTypeImport) {

@@ -1,5 +1,6 @@
 import * as React from "react";
 import * as stylex from "@stylexjs/stylex";
+import { mergedSx } from "./lib/mergedSx";
 
 // When styled("element")<Props> is used with shouldSupportExternalStyling,
 // the generated wrapper type should include className and style props
@@ -17,18 +18,8 @@ type ColorBadgeProps = React.HTMLAttributes<HTMLSpanElement> & Props;
 
 export function ColorBadge(props: ColorBadgeProps) {
   const { className, children, style, ...rest } = props;
-
-  const sx = stylex.props(styles.colorBadge);
   return (
-    <span
-      {...sx}
-      className={[sx.className, className].filter(Boolean).join(" ")}
-      style={{
-        ...sx.style,
-        ...style,
-      }}
-      {...rest}
-    >
+    <span {...rest} {...mergedSx(styles.colorBadge, className, style)}>
       {children}
     </span>
   );

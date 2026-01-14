@@ -1,5 +1,6 @@
 import * as React from "react";
 import * as stylex from "@stylexjs/stylex";
+import { mergedSx } from "./lib/mergedSx";
 
 // Bug 9: When generating wrapper function with props type,
 // codemod must not create duplicate type identifier if one already exists.
@@ -18,14 +19,18 @@ export interface CardProps extends Omit<React.HTMLAttributes<HTMLDivElement>, "s
 // The styled component uses the existing props interface
 export function Card(props: CardProps) {
   const { className, children, highlighted, ...rest } = props;
-
-  const sx = stylex.props(
-    styles.card,
-    !highlighted && styles.cardNotHighlighted,
-    highlighted && styles.cardHighlighted,
-  );
   return (
-    <div {...sx} className={[sx.className, className].filter(Boolean).join(" ")} {...rest}>
+    <div
+      {...rest}
+      {...mergedSx(
+        [
+          styles.card,
+          !highlighted && styles.cardNotHighlighted,
+          highlighted && styles.cardHighlighted,
+        ],
+        className,
+      )}
+    >
       {children}
     </div>
   );

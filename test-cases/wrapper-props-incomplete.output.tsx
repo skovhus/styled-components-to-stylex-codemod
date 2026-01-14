@@ -1,5 +1,6 @@
 import * as React from "react";
 import * as stylex from "@stylexjs/stylex";
+import { mergedSx } from "./lib/mergedSx";
 import { themeVars } from "./tokens.stylex";
 import type { Colors } from "./lib/colors";
 
@@ -15,17 +16,8 @@ interface TextColorProps extends React.HTMLAttributes<HTMLSpanElement> {
 
 export function TextColor(props: TextColorProps) {
   const { className, children, style, color } = props;
-
-  const sx = stylex.props(styles.textColor, styles.textColorColor(color));
   return (
-    <span
-      {...sx}
-      className={[sx.className, className].filter(Boolean).join(" ")}
-      style={{
-        ...sx.style,
-        ...style,
-      }}
-    >
+    <span {...mergedSx([styles.textColor, styles.textColorColor(color)], className, style)}>
       {children}
     </span>
   );
@@ -41,10 +33,11 @@ interface HighlightProps extends Omit<React.ComponentProps<typeof BaseText>, "st
 
 export function Highlight(props: HighlightProps) {
   const { className, children, highlighted, ...rest } = props;
-
-  const sx = stylex.props(styles.highlight, highlighted && styles.highlightHighlighted);
   return (
-    <BaseText {...rest} {...sx} className={[sx.className, className].filter(Boolean).join(" ")}>
+    <BaseText
+      {...rest}
+      {...mergedSx([styles.highlight, highlighted && styles.highlightHighlighted], className)}
+    >
       {children}
     </BaseText>
   );
@@ -73,17 +66,8 @@ interface ThemeTextProps extends React.HTMLAttributes<HTMLSpanElement> {
 /** A text span that gets color from theme */
 export function ThemeText(props: ThemeTextProps) {
   const { className, children, style, themeColor } = props;
-
-  const sx = stylex.props(styles.themeText, styles.themeTextColor(themeColor));
   return (
-    <span
-      {...sx}
-      className={[sx.className, className].filter(Boolean).join(" ")}
-      style={{
-        ...sx.style,
-        ...style,
-      }}
-    >
+    <span {...mergedSx([styles.themeText, styles.themeTextColor(themeColor)], className, style)}>
       {children}
     </span>
   );

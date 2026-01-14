@@ -1,5 +1,6 @@
 import * as React from "react";
 import * as stylex from "@stylexjs/stylex";
+import { mergedSx } from "./lib/mergedSx";
 import { ActionMenuTextDivider, ActionMenuGroupHeader } from "./lib/action-menu-divider";
 
 type ListItemProps = React.HTMLAttributes<HTMLDivElement>;
@@ -10,20 +11,7 @@ type ListItemProps = React.HTMLAttributes<HTMLDivElement>;
 // Pattern 1: Static properties defined directly on styled component
 export function ListItem(props: ListItemProps) {
   const { className, children, style } = props;
-
-  const sx = stylex.props(styles.listItem);
-  return (
-    <div
-      {...sx}
-      className={[sx.className, className].filter(Boolean).join(" ")}
-      style={{
-        ...sx.style,
-        ...style,
-      }}
-    >
-      {children}
-    </div>
-  );
+  return <div {...mergedSx(styles.listItem, className, style)}>{children}</div>;
 }
 
 ListItem.HEIGHT = 42;
@@ -33,20 +21,7 @@ type BaseButtonProps = React.ButtonHTMLAttributes<HTMLButtonElement>;
 // Pattern 2: styled(BaseComponent) with static props defined in same file
 function BaseButton(props: BaseButtonProps) {
   const { className, children, style } = props;
-
-  const sx = stylex.props(styles.baseButton);
-  return (
-    <button
-      {...sx}
-      className={[sx.className, className].filter(Boolean).join(" ")}
-      style={{
-        ...sx.style,
-        ...style,
-      }}
-    >
-      {children}
-    </button>
-  );
+  return <button {...mergedSx(styles.baseButton, className, style)}>{children}</button>;
 }
 
 BaseButton.HEIGHT = 36;
@@ -55,17 +30,8 @@ type ExtendedButtonProps = React.ButtonHTMLAttributes<HTMLButtonElement>;
 // ExtendedButton should have HEIGHT from BaseButton
 export function ExtendedButton(props: ExtendedButtonProps) {
   const { className, children, style } = props;
-
-  const sx = stylex.props(styles.baseButton, styles.extendedButton);
   return (
-    <button
-      {...sx}
-      className={[sx.className, className].filter(Boolean).join(" ")}
-      style={{
-        ...sx.style,
-        ...style,
-      }}
-    >
+    <button {...mergedSx([styles.baseButton, styles.extendedButton], className, style)}>
       {children}
     </button>
   );

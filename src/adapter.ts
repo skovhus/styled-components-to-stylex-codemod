@@ -81,6 +81,32 @@ export interface ExternalStylesContext {
 }
 
 // ────────────────────────────────────────────────────────────────────────────
+// Style Merger Configuration
+// ────────────────────────────────────────────────────────────────────────────
+
+/**
+ * Configuration for a custom style merger function that combines stylex.props()
+ * results with external className/style props.
+ *
+ * When configured, generates cleaner output:
+ *   `{...stylexProps(styles.foo, className, style)}`
+ * instead of the verbose pattern:
+ *   `{...sx} className={[sx.className, className].filter(Boolean).join(" ")} style={{...sx.style, ...style}}`
+ */
+export interface StyleMergerConfig {
+  /**
+   * Function name to use for merging (e.g., "stylexProps" or "mergeStylexProps").
+   */
+  functionName: string;
+
+  /**
+   * Import source for the merger function.
+   * Example: `{ kind: "specifier", value: "@company/ui-utils" }`
+   */
+  importSource: ImportSource;
+}
+
+// ────────────────────────────────────────────────────────────────────────────
 // Adapter Interface
 // ────────────────────────────────────────────────────────────────────────────
 
@@ -94,6 +120,23 @@ export interface Adapter {
    * className/style/rest merging.
    */
   shouldSupportExternalStyling: (context: ExternalStylesContext) => boolean;
+
+  /**
+   * Custom merger function for className/style combining.
+   * When provided, generates cleaner output using this function instead of
+   * the verbose className/style merging pattern.
+   * Set to `null` to use the verbose pattern (default).
+   *
+   * Expected merger function signature:
+   * ```typescript
+   * function merger(
+   *   styles: StyleXStyles | StyleXStyles[],
+   *   className?: string,
+   *   style?: React.CSSProperties
+   * ): { className?: string; style?: React.CSSProperties }
+   * ```
+   */
+  styleMerger: StyleMergerConfig | null;
 }
 
 // ────────────────────────────────────────────────────────────────────────────

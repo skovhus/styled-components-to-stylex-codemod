@@ -1,5 +1,6 @@
 import * as React from "react";
 import * as stylex from "@stylexjs/stylex";
+import { mergedSx } from "./lib/mergedSx";
 
 type ExportedButtonProps = React.PropsWithChildren<{
   className?: string;
@@ -12,20 +13,7 @@ type ExportedButtonProps = React.PropsWithChildren<{
  **/
 export function ExportedButton(props: ExportedButtonProps) {
   const { className, children, style } = props;
-
-  const sx = stylex.props(styles.exportedButton);
-  return (
-    <button
-      {...sx}
-      className={[sx.className, className].filter(Boolean).join(" ")}
-      style={{
-        ...sx.style,
-        ...style,
-      }}
-    >
-      {children}
-    </button>
-  );
+  return <button {...mergedSx(styles.exportedButton, className, style)}>{children}</button>;
 }
 
 export const App = () => (

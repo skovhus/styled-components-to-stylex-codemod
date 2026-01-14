@@ -1,5 +1,6 @@
 import React from "react";
 import * as stylex from "@stylexjs/stylex";
+import { mergedSx } from "./lib/mergedSx";
 import { transitionSpeed as transitionSpeedVars } from "./lib/helpers.stylex";
 import "./css-variables.css";
 
@@ -9,16 +10,10 @@ type AnimatedPathProps = Omit<React.ComponentProps<"path">, "className"> & {
 
 function AnimatedPath(props: AnimatedPathProps) {
   const { children, style, $width, ...rest } = props;
-
-  const sx = stylex.props(styles.animatedPath, styles.animatedPathStrokeWidth($width));
   return (
     <path
-      {...sx}
-      style={{
-        ...sx.style,
-        ...style,
-      }}
       {...rest}
+      {...mergedSx([styles.animatedPath, styles.animatedPathStrokeWidth($width)], undefined, style)}
     >
       {children}
     </path>

@@ -6,6 +6,7 @@ import { join } from "path";
 // Minimal fixture adapter that returns false for shouldSupportExternalStyling
 // (matching the behavior of fixtureAdapter for most test cases)
 const fixtureAdapter = {
+  styleMerger: null,
   shouldSupportExternalStyling(ctx) {
     return (
       ctx.filePath.includes("external-styles-support") && ctx.componentName === "ExportedButton"

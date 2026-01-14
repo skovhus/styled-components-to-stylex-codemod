@@ -1,5 +1,6 @@
 import * as React from "react";
 import * as stylex from "@stylexjs/stylex";
+import { mergedSx } from "./lib/mergedSx";
 
 type ThingProps = React.PropsWithChildren<{
   className?: string;
@@ -9,14 +10,18 @@ type ThingProps = React.PropsWithChildren<{
 
 function Thing(props: ThingProps) {
   const { children, className, isAdjacentSibling, isSiblingAfterSomething, ...rest } = props;
-
-  const sx = stylex.props(
-    styles.thing,
-    isAdjacentSibling && styles.adjacentSibling,
-    isSiblingAfterSomething && styles.siblingAfterSomething,
-  );
   return (
-    <div {...sx} className={[sx.className, className].filter(Boolean).join(" ")} {...rest}>
+    <div
+      {...rest}
+      {...mergedSx(
+        [
+          styles.thing,
+          isAdjacentSibling && styles.adjacentSibling,
+          isSiblingAfterSomething && styles.siblingAfterSomething,
+        ],
+        className,
+      )}
+    >
       {children}
     </div>
   );

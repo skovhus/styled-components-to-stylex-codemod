@@ -1,5 +1,6 @@
 import * as React from "react";
 import * as stylex from "@stylexjs/stylex";
+import { mergedSx } from "./lib/mergedSx";
 
 // Pattern: styled(Component) with transient prop used only for styling
 // The transient prop should NOT be forwarded to the wrapped component
@@ -38,17 +39,14 @@ interface ScrollableProps extends React.ComponentProps<typeof Flex> {
 
 export function Scrollable(props: ScrollableProps) {
   const { className, children, style, $applyBackground, ...rest } = props;
-
-  const sx = stylex.props(styles.scrollable, $applyBackground && styles.scrollableApplyBackground);
   return (
     <Flex
       {...rest}
-      {...sx}
-      className={[sx.className, className].filter(Boolean).join(" ")}
-      style={{
-        ...sx.style,
-        ...style,
-      }}
+      {...mergedSx(
+        [styles.scrollable, $applyBackground && styles.scrollableApplyBackground],
+        className,
+        style,
+      )}
     >
       {children}
     </Flex>

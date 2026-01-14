@@ -1,3 +1,5 @@
+import { emitStyleMerging, type StyleMergerConfig } from "./style-merger.js";
+
 export function emitIntrinsicWrappers(ctx: any): { emitted: any[]; needsReactTypeImport: boolean } {
   const {
     root,
@@ -30,7 +32,8 @@ export function emitIntrinsicWrappers(ctx: any): { emitted: any[]; needsReactTyp
     withLeadingComments,
     emitMinimalWrapper,
     withLeadingCommentsOnFirstFunction,
-  } = ctx;
+    styleMerger,
+  } = ctx as { styleMerger: StyleMergerConfig | null } & Record<string, any>;
 
   const emitted: any[] = [];
   let needsReactTypeImport = false;
@@ -890,61 +893,40 @@ export function emitIntrinsicWrappers(ctx: any): { emitted: any[]; needsReactTyp
           ) as any)
         : null;
 
-    const sxDecl = j.variableDeclaration("const", [
-      j.variableDeclarator(
-        j.identifier("sx"),
-        j.callExpression(
-          j.memberExpression(j.identifier("stylex"), j.identifier("props")),
-          styleArgs,
-        ),
-      ),
-    ]);
+    // Use the style merger helper
+    const merging = emitStyleMerging({
+      j,
+      styleMerger,
+      styleArgs,
+      classNameId,
+      styleId,
+      allowClassNameProp,
+      allowStyleProp,
+      inlineStyleProps: d.inlineStyleProps ?? [],
+    });
 
-    const openingAttrs: any[] = [j.jsxSpreadAttribute(j.identifier("sx"))];
-
-    if (allowClassNameProp) {
-      const mergedClassName = j.callExpression(
-        j.memberExpression(
-          j.callExpression(
-            j.memberExpression(
-              j.arrayExpression([
-                j.memberExpression(j.identifier("sx"), j.identifier("className")),
-                classNameId,
-              ]),
-              j.identifier("filter"),
-            ),
-            [j.identifier("Boolean")],
-          ),
-          j.identifier("join"),
-        ),
-        [j.literal(" ")],
-      );
-      openingAttrs.push(
-        j.jsxAttribute(j.jsxIdentifier("className"), j.jsxExpressionContainer(mergedClassName)),
-      );
-    }
-
-    if (allowStyleProp || (d.inlineStyleProps && d.inlineStyleProps.length)) {
-      openingAttrs.push(
-        j.jsxAttribute(
-          j.jsxIdentifier("style"),
-          j.jsxExpressionContainer(
-            j.objectExpression([
-              j.spreadElement(j.memberExpression(j.identifier("sx"), j.identifier("style")) as any),
-              ...(allowStyleProp ? [j.spreadElement(styleId as any)] : []),
-              ...(d.inlineStyleProps && d.inlineStyleProps.length
-                ? d.inlineStyleProps.map((p: any) =>
-                    j.property("init", j.identifier(p.prop), p.expr as any),
-                  )
-                : []),
-            ]) as any,
-          ),
-        ),
-      );
-    }
+    // Build attrs: {...rest} then {...mergedStylexProps(...)} so stylex styles override
+    const openingAttrs: any[] = [];
 
     if (includeRest) {
       openingAttrs.push(j.jsxSpreadAttribute(restId));
+    }
+
+    openingAttrs.push(j.jsxSpreadAttribute(merging.jsxSpreadExpr));
+
+    if (merging.classNameAttr) {
+      openingAttrs.push(
+        j.jsxAttribute(
+          j.jsxIdentifier("className"),
+          j.jsxExpressionContainer(merging.classNameAttr),
+        ),
+      );
+    }
+
+    if (merging.styleAttr) {
+      openingAttrs.push(
+        j.jsxAttribute(j.jsxIdentifier("style"), j.jsxExpressionContainer(merging.styleAttr)),
+      );
     }
 
     const openingEl = j.jsxOpeningElement(j.jsxIdentifier(tagName), openingAttrs, false);
@@ -963,7 +945,9 @@ export function emitIntrinsicWrappers(ctx: any): { emitted: any[]; needsReactTyp
     if (cleanupPrefixStmt) {
       fnBodyStmts.push(cleanupPrefixStmt);
     }
-    fnBodyStmts.push(sxDecl);
+    if (merging.sxDecl) {
+      fnBodyStmts.push(merging.sxDecl);
+    }
     fnBodyStmts.push(j.returnStatement(jsx as any));
 
     emitted.push(
@@ -1082,6 +1066,7 @@ export function emitIntrinsicWrappers(ctx: any): { emitted: any[]; needsReactTyp
             includeRest,
             patternProp,
             inlineStyleProps: d.inlineStyleProps ?? [],
+            styleMerger,
           }),
           d,
         ),
@@ -1099,51 +1084,38 @@ export function emitIntrinsicWrappers(ctx: any): { emitted: any[]; needsReactTyp
       j.variableDeclarator(j.objectPattern(patternProps as any), propsId),
     ]);
 
-    const sxDecl = j.variableDeclaration("const", [
-      j.variableDeclarator(
-        j.identifier("sx"),
-        j.callExpression(
-          j.memberExpression(j.identifier("stylex"), j.identifier("props")),
-          styleArgs,
-        ),
-      ),
-    ]);
+    // Use the style merger helper
+    const merging = emitStyleMerging({
+      j,
+      styleMerger,
+      styleArgs,
+      classNameId,
+      styleId,
+      allowClassNameProp,
+      allowStyleProp,
+      inlineStyleProps: [],
+    });
 
-    const mergedClassName = j.callExpression(
-      j.memberExpression(
-        j.callExpression(
-          j.memberExpression(
-            j.arrayExpression([
-              j.memberExpression(j.identifier("sx"), j.identifier("className")),
-              classNameId,
-            ]),
-            j.identifier("filter"),
-          ),
-          [j.identifier("Boolean")],
-        ),
-        j.identifier("join"),
-      ),
-      [j.literal(" ")],
-    );
-
-    const openingEl = j.jsxOpeningElement(
-      j.jsxIdentifier(tagName),
-      [
-        j.jsxSpreadAttribute(j.identifier("sx")),
-        j.jsxAttribute(j.jsxIdentifier("className"), j.jsxExpressionContainer(mergedClassName)),
+    // Build attrs: {...rest} then {...mergedStylexProps(...)} so stylex styles override
+    const openingAttrs: any[] = [
+      j.jsxSpreadAttribute(restId),
+      j.jsxSpreadAttribute(merging.jsxSpreadExpr),
+    ];
+    if (merging.classNameAttr) {
+      openingAttrs.push(
         j.jsxAttribute(
-          j.jsxIdentifier("style"),
-          j.jsxExpressionContainer(
-            j.objectExpression([
-              j.spreadElement(j.memberExpression(j.identifier("sx"), j.identifier("style")) as any),
-              j.spreadElement(styleId as any),
-            ]) as any,
-          ),
+          j.jsxIdentifier("className"),
+          j.jsxExpressionContainer(merging.classNameAttr),
         ),
-        j.jsxSpreadAttribute(restId),
-      ],
-      false,
-    );
+      );
+    }
+    if (merging.styleAttr) {
+      openingAttrs.push(
+        j.jsxAttribute(j.jsxIdentifier("style"), j.jsxExpressionContainer(merging.styleAttr)),
+      );
+    }
+
+    const openingEl = j.jsxOpeningElement(j.jsxIdentifier(tagName), openingAttrs, false);
 
     const jsx = isVoidTag
       ? ({
@@ -1156,12 +1128,18 @@ export function emitIntrinsicWrappers(ctx: any): { emitted: any[]; needsReactTyp
           j.jsxExpressionContainer(childrenId),
         ]);
 
+    const bodyStmts: any[] = [declStmt];
+    if (merging.sxDecl) {
+      bodyStmts.push(merging.sxDecl);
+    }
+    bodyStmts.push(j.returnStatement(jsx as any));
+
     emitted.push(
       withLeadingComments(
         j.functionDeclaration(
           j.identifier(d.localName),
           [propsParamId],
-          j.blockStatement([declStmt, sxDecl, j.returnStatement(jsx as any)]),
+          j.blockStatement(bodyStmts),
         ),
         d,
       ),
@@ -1218,65 +1196,72 @@ export function emitIntrinsicWrappers(ctx: any): { emitted: any[]; needsReactTyp
       ),
     ]);
 
-    const sxDecl = j.variableDeclaration("const", [
-      j.variableDeclarator(
-        j.identifier("sx"),
-        j.callExpression(j.memberExpression(j.identifier("stylex"), j.identifier("props")), [
-          j.memberExpression(j.identifier(stylesIdentifier), j.identifier(d.styleKey)),
-          j.logicalExpression(
-            "&&",
-            adjId as any,
-            j.memberExpression(j.identifier(stylesIdentifier), j.identifier(sw.adjacentKey)),
-          ),
-          ...(sw.afterKey && sw.propAfter
-            ? [
-                j.logicalExpression(
-                  "&&",
-                  afterId as any,
-                  j.memberExpression(j.identifier(stylesIdentifier), j.identifier(sw.afterKey)),
-                ),
-              ]
-            : []),
-        ]),
+    // Build styleArgs for sibling selectors
+    const styleArgs: any[] = [
+      j.memberExpression(j.identifier(stylesIdentifier), j.identifier(d.styleKey)),
+      j.logicalExpression(
+        "&&",
+        adjId as any,
+        j.memberExpression(j.identifier(stylesIdentifier), j.identifier(sw.adjacentKey)),
       ),
-    ]);
+      ...(sw.afterKey && sw.propAfter
+        ? [
+            j.logicalExpression(
+              "&&",
+              afterId as any,
+              j.memberExpression(j.identifier(stylesIdentifier), j.identifier(sw.afterKey)),
+            ),
+          ]
+        : []),
+    ];
 
-    const mergedClassName = j.callExpression(
-      j.memberExpression(
-        j.callExpression(
-          j.memberExpression(
-            j.arrayExpression([
-              j.memberExpression(j.identifier("sx"), j.identifier("className")),
-              classNameId,
-            ]),
-            j.identifier("filter"),
-          ),
-          [j.identifier("Boolean")],
+    const allowClassNameProp = shouldAllowClassNameProp(d);
+    const allowStyleProp = shouldAllowStyleProp(d);
+
+    // Use the style merger helper
+    const merging = emitStyleMerging({
+      j,
+      styleMerger,
+      styleArgs,
+      classNameId,
+      styleId: j.identifier("style"),
+      allowClassNameProp,
+      allowStyleProp,
+      inlineStyleProps: [],
+    });
+
+    // Build attrs: {...rest} then {...mergedStylexProps(...)} so stylex styles override
+    const openingAttrs: any[] = [
+      j.jsxSpreadAttribute(restId),
+      j.jsxSpreadAttribute(merging.jsxSpreadExpr),
+    ];
+    if (merging.classNameAttr) {
+      openingAttrs.push(
+        j.jsxAttribute(
+          j.jsxIdentifier("className"),
+          j.jsxExpressionContainer(merging.classNameAttr),
         ),
-        j.identifier("join"),
-      ),
-      [j.literal(" ")],
-    );
+      );
+    }
+    if (merging.styleAttr) {
+      openingAttrs.push(
+        j.jsxAttribute(j.jsxIdentifier("style"), j.jsxExpressionContainer(merging.styleAttr)),
+      );
+    }
 
-    const openingEl = j.jsxOpeningElement(
-      j.jsxIdentifier("div"),
-      [
-        j.jsxSpreadAttribute(j.identifier("sx")),
-        j.jsxAttribute(j.jsxIdentifier("className"), j.jsxExpressionContainer(mergedClassName)),
-        j.jsxSpreadAttribute(restId),
-      ],
-      false,
-    );
+    const openingEl = j.jsxOpeningElement(j.jsxIdentifier("div"), openingAttrs, false);
     const jsx = j.jsxElement(openingEl, j.jsxClosingElement(j.jsxIdentifier("div")), [
       j.jsxExpressionContainer(childrenId),
     ]);
 
+    const bodyStmts: any[] = [declStmt];
+    if (merging.sxDecl) {
+      bodyStmts.push(merging.sxDecl);
+    }
+    bodyStmts.push(j.returnStatement(jsx as any));
+
     emitted.push(
-      j.functionDeclaration(
-        j.identifier(d.localName),
-        [propsParamId],
-        j.blockStatement([declStmt, sxDecl, j.returnStatement(jsx as any)]),
-      ),
+      j.functionDeclaration(j.identifier(d.localName), [propsParamId], j.blockStatement(bodyStmts)),
     );
   }
 
@@ -1542,71 +1527,39 @@ export function emitIntrinsicWrappers(ctx: any): { emitted: any[]; needsReactTyp
         j.variableDeclarator(j.objectPattern(patternProps as any), propsId),
       ]);
 
-      const sxDecl = j.variableDeclaration("const", [
-        j.variableDeclarator(
-          j.identifier("sx"),
-          j.callExpression(
-            j.memberExpression(j.identifier("stylex"), j.identifier("props")),
-            styleArgs,
+      // Use the style merger helper
+      const merging = emitStyleMerging({
+        j,
+        styleMerger,
+        styleArgs,
+        classNameId,
+        styleId,
+        allowClassNameProp,
+        allowStyleProp,
+        inlineStyleProps: d.inlineStyleProps ?? [],
+      });
+
+      // Build attrs: {...rest} then {...mergedStylexProps(...)} so stylex styles override
+      const openingAttrs: any[] = [];
+      if (restId) {
+        openingAttrs.push(j.jsxSpreadAttribute(restId));
+      }
+      openingAttrs.push(j.jsxSpreadAttribute(merging.jsxSpreadExpr));
+      if (merging.classNameAttr) {
+        openingAttrs.push(
+          j.jsxAttribute(
+            j.jsxIdentifier("className"),
+            j.jsxExpressionContainer(merging.classNameAttr),
           ),
-        ),
-      ]);
+        );
+      }
+      if (merging.styleAttr) {
+        openingAttrs.push(
+          j.jsxAttribute(j.jsxIdentifier("style"), j.jsxExpressionContainer(merging.styleAttr)),
+        );
+      }
 
-      const mergedClassName = allowClassNameProp
-        ? j.callExpression(
-            j.memberExpression(
-              j.callExpression(
-                j.memberExpression(
-                  j.arrayExpression([
-                    j.memberExpression(j.identifier("sx"), j.identifier("className")),
-                    classNameId,
-                  ]),
-                  j.identifier("filter"),
-                ),
-                [j.identifier("Boolean")],
-              ),
-              j.identifier("join"),
-            ),
-            [j.literal(" ")],
-          )
-        : null;
-
-      const openingEl = j.jsxOpeningElement(
-        j.jsxIdentifier(tagName),
-        [
-          j.jsxSpreadAttribute(j.identifier("sx")),
-          ...(allowClassNameProp
-            ? [
-                j.jsxAttribute(
-                  j.jsxIdentifier("className"),
-                  j.jsxExpressionContainer(mergedClassName),
-                ),
-              ]
-            : []),
-          ...(allowStyleProp || (d.inlineStyleProps && d.inlineStyleProps.length)
-            ? [
-                j.jsxAttribute(
-                  j.jsxIdentifier("style"),
-                  j.jsxExpressionContainer(
-                    j.objectExpression([
-                      j.spreadElement(
-                        j.memberExpression(j.identifier("sx"), j.identifier("style")) as any,
-                      ),
-                      ...(allowStyleProp ? [j.spreadElement(styleId as any)] : []),
-                      ...(d.inlineStyleProps && d.inlineStyleProps.length
-                        ? d.inlineStyleProps.map((p: any) =>
-                            j.property("init", j.identifier(p.prop), p.expr as any),
-                          )
-                        : []),
-                    ]) as any,
-                  ),
-                ),
-              ]
-            : []),
-          ...(restId ? [j.jsxSpreadAttribute(restId)] : []),
-        ],
-        false,
-      );
+      const openingEl = j.jsxOpeningElement(j.jsxIdentifier(tagName), openingAttrs, false);
 
       const jsx = isVoidTag
         ? ({
@@ -1619,10 +1572,16 @@ export function emitIntrinsicWrappers(ctx: any): { emitted: any[]; needsReactTyp
             j.jsxExpressionContainer(childrenId),
           ]);
 
+      const bodyStmts: any[] = [declStmt];
+      if (merging.sxDecl) {
+        bodyStmts.push(merging.sxDecl);
+      }
+      bodyStmts.push(j.returnStatement(jsx as any));
+
       const fn = j.functionDeclaration(
         j.identifier(d.localName),
         [propsParamId],
-        j.blockStatement([declStmt, sxDecl, j.returnStatement(jsx as any)]),
+        j.blockStatement(bodyStmts),
       );
 
       emitted.push(...withLeadingCommentsOnFirstFunction([fn], d));
@@ -1653,6 +1612,7 @@ export function emitIntrinsicWrappers(ctx: any): { emitted: any[]; needsReactTyp
             : {}),
           ...(d.attrsInfo?.staticAttrs ? { staticAttrs: d.attrsInfo.staticAttrs } : {}),
           inlineStyleProps: d.inlineStyleProps ?? [],
+          styleMerger,
         }),
         d,
       ),
