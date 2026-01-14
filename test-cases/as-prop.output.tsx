@@ -1,5 +1,5 @@
-import * as stylex from "@stylexjs/stylex";
 import * as React from "react";
+import * as stylex from "@stylexjs/stylex";
 import { Text } from "./lib/text";
 
 type ButtonProps<C extends React.ElementType = "button"> = Omit<

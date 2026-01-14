@@ -1,6 +1,6 @@
+import { useTheme } from "styled-components";
 import * as stylex from "@stylexjs/stylex";
 import { themeVars } from "./tokens.stylex";
-import { useTheme } from "styled-components";
 import * as React from "react";
 
 type InputProps = {

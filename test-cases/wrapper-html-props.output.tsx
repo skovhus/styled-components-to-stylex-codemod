@@ -1,5 +1,5 @@
-import * as stylex from "@stylexjs/stylex";
 import * as React from "react";
+import * as stylex from "@stylexjs/stylex";
 
 type OptionLabelProps = Omit<React.LabelHTMLAttributes<HTMLLabelElement>, "className" | "style"> & {
   $disabled?: boolean;

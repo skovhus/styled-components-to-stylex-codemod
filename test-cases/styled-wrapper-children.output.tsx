@@ -1,5 +1,5 @@
-import * as stylex from "@stylexjs/stylex";
 import * as React from "react";
+import * as stylex from "@stylexjs/stylex";
 
 // Pattern: styled(Component) wrapping a component that accepts children
 // The wrapper must preserve the children prop from the wrapped component

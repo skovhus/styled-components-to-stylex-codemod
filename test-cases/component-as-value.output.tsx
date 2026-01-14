@@ -1,5 +1,5 @@
-import * as stylex from "@stylexjs/stylex";
 import React from "react";
+import * as stylex from "@stylexjs/stylex";
 
 // Bug 9: When a styled component is used as a value/reference
 // (e.g., passed to another component as a prop), the codemod must

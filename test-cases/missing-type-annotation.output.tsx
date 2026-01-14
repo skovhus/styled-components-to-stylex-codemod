@@ -1,5 +1,5 @@
-import * as stylex from "@stylexjs/stylex";
 import * as React from "react";
+import * as stylex from "@stylexjs/stylex";
 
 // Bug 2: When codemod generates wrapper functions, it must include
 // proper type annotations for all parameters to avoid implicit 'any'.

@@ -1,6 +1,6 @@
+import React from "react";
 import * as stylex from "@stylexjs/stylex";
 import { transitionSpeed as transitionSpeedVars } from "./lib/helpers.stylex";
-import React from "react";
 import "./css-variables.css";
 
 type AnimatedPathProps = Omit<React.ComponentProps<"path">, "className"> & {

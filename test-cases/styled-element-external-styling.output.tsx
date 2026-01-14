@@ -1,5 +1,5 @@
-import * as stylex from "@stylexjs/stylex";
 import * as React from "react";
+import * as stylex from "@stylexjs/stylex";
 
 // When styled("element")<Props> is used with shouldSupportExternalStyling,
 // the generated wrapper type should include className and style props

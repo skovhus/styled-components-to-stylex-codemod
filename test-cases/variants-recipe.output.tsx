@@ -1,5 +1,5 @@
-import * as stylex from "@stylexjs/stylex";
 import React from "react";
+import * as stylex from "@stylexjs/stylex";
 
 // Styled-components version of the StyleX "variants" recipe:
 // https://stylexjs.com/docs/learn/recipes/variants

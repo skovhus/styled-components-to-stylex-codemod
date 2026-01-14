@@ -1,5 +1,5 @@
-import * as stylex from "@stylexjs/stylex";
 import * as React from "react";
+import * as stylex from "@stylexjs/stylex";
 
 // A polymorphic Text component that defaults to span
 type TextProps = React.PropsWithChildren<{

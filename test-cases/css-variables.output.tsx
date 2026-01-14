@@ -1,6 +1,6 @@
+import "./css-variables.css";
 import * as stylex from "@stylexjs/stylex";
 import { vars, textVars } from "./css-variables.stylex";
-import "./css-variables.css";
 
 export const App = () => (
   <div {...stylex.props(styles.card)}>

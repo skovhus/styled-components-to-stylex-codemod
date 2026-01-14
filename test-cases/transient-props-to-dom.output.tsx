@@ -1,5 +1,5 @@
-import * as stylex from "@stylexjs/stylex";
 import React from "react";
+import * as stylex from "@stylexjs/stylex";
 
 type BoxProps = React.PropsWithChildren<{
   $isActive?: boolean;

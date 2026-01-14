@@ -1,6 +1,6 @@
+import * as React from "react";
 import * as stylex from "@stylexjs/stylex";
 import { themeVars } from "./tokens.stylex";
-import * as React from "react";
 
 type Color = "labelBase" | "labelMuted";
 

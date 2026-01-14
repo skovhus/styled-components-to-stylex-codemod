@@ -1,5 +1,5 @@
-import * as stylex from "@stylexjs/stylex";
 import * as React from "react";
+import * as stylex from "@stylexjs/stylex";
 
 // When a styled component is used as a base that accepts className and style,
 // the wrapper should preserve these props for external styling support

@@ -1,5 +1,5 @@
-import * as stylex from "@stylexjs/stylex";
 import * as React from "react";
+import * as stylex from "@stylexjs/stylex";
 
 // Simulated imported component
 const Flex = (props: React.ComponentProps<"div"> & { column?: boolean; center?: boolean }) => {

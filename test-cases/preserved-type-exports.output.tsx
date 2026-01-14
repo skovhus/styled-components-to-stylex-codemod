@@ -1,5 +1,5 @@
-import * as stylex from "@stylexjs/stylex";
 import React from "react";
+import * as stylex from "@stylexjs/stylex";
 
 // Bug 7: When styled components are transformed, related type exports
 // and component exports should be preserved properly.

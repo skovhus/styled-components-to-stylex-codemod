@@ -1,5 +1,5 @@
-import * as stylex from "@stylexjs/stylex";
 import * as React from "react";
+import * as stylex from "@stylexjs/stylex";
 import { type FocusTrap as OriginalFocusTrap, createFocusTrap } from "./lib/focus-trap";
 import type { SelectionFunction } from "./lib/helpers";
 

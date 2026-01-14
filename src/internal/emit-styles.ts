@@ -157,6 +157,22 @@ export function emitStylesAndImports(args: {
     }
   }
 
+  // We want to insert the StyleX import where the styled-components import used to be,
+  // rather than always hoisting to the top of the file (users can have imports anywhere).
+  //
+  // Note: we compute this before removing the styled-components import(s).
+  const programBodyBeforeRemove = root.get().node.program.body as any[];
+  const styledImportNodeSet = new Set<any>(styledImports.nodes() as any[]);
+  const firstStyledImportIdx = (() => {
+    for (let i = 0; i < programBodyBeforeRemove.length; i++) {
+      const s = programBodyBeforeRemove[i];
+      if (s?.type === "ImportDeclaration" && styledImportNodeSet.has(s)) {
+        return i;
+      }
+    }
+    return -1;
+  })();
+
   // Remove styled-components imports
   styledImports.remove();
 
@@ -178,10 +194,7 @@ export function emitStylesAndImports(args: {
     }
   }
 
-  // Insert stylex import at the very top of the file
-  // We use unshift instead of inserting before first import because:
-  // 1. The styled-components import might be removed, leaving mid-file imports as "first"
-  // 2. Mid-file imports (like `import React` after declarations) should stay where they are
+  // Insert stylex import, preferring the styled-components import position when present.
   const hasStylexImport =
     root.find(j.ImportDeclaration, { source: { value: "@stylexjs/stylex" } } as any).size() > 0;
   if (!hasStylexImport) {
@@ -189,7 +202,10 @@ export function emitStylesAndImports(args: {
       [j.importNamespaceSpecifier(j.identifier("stylex"))],
       j.literal("@stylexjs/stylex"),
     );
-    root.get().node.program.body.unshift(stylexImport);
+    const body = root.get().node.program.body as any[];
+    const insertAt =
+      firstStyledImportIdx >= 0 && firstStyledImportIdx <= body.length ? firstStyledImportIdx : 0;
+    body.splice(insertAt, 0, stylexImport);
   }
 
   // Re-attach preserved header comments to the first statement (preferably the stylex import).

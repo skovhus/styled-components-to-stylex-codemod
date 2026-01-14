@@ -1,5 +1,5 @@
-import * as stylex from "@stylexjs/stylex";
 import * as React from "react";
+import * as stylex from "@stylexjs/stylex";
 
 // SpringValue simulates react-spring's animated value type
 type SpringValue<T> = { get(): T };

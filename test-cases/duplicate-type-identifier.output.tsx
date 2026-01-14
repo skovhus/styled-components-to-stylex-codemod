@@ -1,5 +1,5 @@
-import * as stylex from "@stylexjs/stylex";
 import * as React from "react";
+import * as stylex from "@stylexjs/stylex";
 
 // Bug 9: When generating wrapper function with props type,
 // codemod must not create duplicate type identifier if one already exists.
