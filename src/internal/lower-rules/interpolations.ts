@@ -61,38 +61,6 @@ export function wrapExprWithStaticParts(expr: string, prefix: string, suffix: st
   return `\`${prefix}\${${expr}}${suffix}\``;
 }
 
-function buildInterpolatedTemplate(args: { j: any; decl: StyledDecl; cssValue: any }): unknown {
-  const { j, decl, cssValue } = args;
-  // Build a JS TemplateLiteral from CssValue parts when it’s basically string interpolation,
-  // e.g. `${spacing}px`, `${spacing / 2}px 0`, `1px solid ${theme.colors.secondary}` (handled elsewhere).
-  if (!cssValue || cssValue.kind !== "interpolated") {
-    return null;
-  }
-  const parts = cssValue.parts ?? [];
-  const exprs: any[] = [];
-  const quasis: any[] = [];
-  let q = "";
-  for (const part of parts) {
-    if (part.kind === "static") {
-      q += part.value;
-      continue;
-    }
-    if (part.kind === "slot") {
-      quasis.push(j.templateElement({ raw: q, cooked: q }, false));
-      q = "";
-      const expr = (decl as any).templateExpressions[part.slotId] as any;
-      // Only inline non-function expressions.
-      if (!expr || expr.type === "ArrowFunctionExpression") {
-        return null;
-      }
-      exprs.push(expr);
-      continue;
-    }
-  }
-  quasis.push(j.templateElement({ raw: q, cooked: q }, true));
-  return j.templateLiteral(quasis, exprs);
-}
-
 export function tryHandleInterpolatedStringValue(args: {
   j: any;
   decl: StyledDecl;
@@ -164,4 +132,36 @@ export function tryHandleInterpolatedStringValue(args: {
     (styleObj as any)[out.prop] = tl as any;
   }
   return true;
+}
+
+function buildInterpolatedTemplate(args: { j: any; decl: StyledDecl; cssValue: any }): unknown {
+  const { j, decl, cssValue } = args;
+  // Build a JS TemplateLiteral from CssValue parts when it’s basically string interpolation,
+  // e.g. `${spacing}px`, `${spacing / 2}px 0`, `1px solid ${theme.colors.secondary}` (handled elsewhere).
+  if (!cssValue || cssValue.kind !== "interpolated") {
+    return null;
+  }
+  const parts = cssValue.parts ?? [];
+  const exprs: any[] = [];
+  const quasis: any[] = [];
+  let q = "";
+  for (const part of parts) {
+    if (part.kind === "static") {
+      q += part.value;
+      continue;
+    }
+    if (part.kind === "slot") {
+      quasis.push(j.templateElement({ raw: q, cooked: q }, false));
+      q = "";
+      const expr = (decl as any).templateExpressions[part.slotId] as any;
+      // Only inline non-function expressions.
+      if (!expr || expr.type === "ArrowFunctionExpression") {
+        return null;
+      }
+      exprs.push(expr);
+      continue;
+    }
+  }
+  quasis.push(j.templateElement({ raw: q, cooked: q }, true));
+  return j.templateLiteral(quasis, exprs);
 }

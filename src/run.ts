@@ -8,9 +8,6 @@ import type { Adapter } from "./adapter.js";
 import { flushWarnings, logWarning, type CollectedWarning } from "./internal/logger.js";
 import { assertValidAdapter, describeValue } from "./internal/public-api-validation.js";
 
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = dirname(__filename);
-
 export interface RunTransformOptions {
   /**
    * Glob pattern(s) for files to transform
@@ -64,6 +61,9 @@ export interface RunTransformResult {
   /** Warnings emitted during transformation */
   warnings: CollectedWarning[];
 }
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = dirname(__filename);
 
 /**
  * Run the styled-components to StyleX transform on files matching the glob pattern.

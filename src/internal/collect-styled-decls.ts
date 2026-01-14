@@ -4,13 +4,6 @@ import { normalizeStylisAstToIR } from "./css-ir.js";
 import { parseStyledTemplateLiteral } from "./styled-css.js";
 import type { StyledDecl } from "./transform-types.js";
 
-function hasUniversalSelectorInRules(rules: CssRuleIR[]): boolean {
-  // Rule selectors come from Stylis output (not from JS), so a literal `*` here
-  // always indicates a CSS universal selector (descendant/direct-child/etc).
-  // We currently treat ANY universal selector usage as unsupported and skip the file.
-  return rules.some((r) => typeof r.selector === "string" && r.selector.includes("*"));
-}
-
 /**
  * Collect styled component declarations and pre-resolved object-style decls.
  *
@@ -18,6 +11,20 @@ function hasUniversalSelectorInRules(rules: CssRuleIR[]): boolean {
  * It does not emit styles or rewrite JSX.
  */
 export function collectStyledDecls(args: {
+  root: Collection<any>;
+  j: any;
+  styledDefaultImport: string | undefined;
+  toStyleKey: (localName: string) => string;
+  toSuffixFromProp: (propName: string) => string;
+}): {
+  styledDecls: StyledDecl[];
+  hasUniversalSelectors: boolean;
+  universalSelectorLoc: { line: number; column: number } | null;
+} {
+  return collectStyledDeclsImpl(args);
+}
+
+function collectStyledDeclsImpl(args: {
   root: Collection<any>;
   j: any;
   styledDefaultImport: string | undefined;
@@ -1038,4 +1045,11 @@ export function collectStyledDecls(args: {
     });
 
   return { styledDecls, hasUniversalSelectors, universalSelectorLoc };
+}
+
+function hasUniversalSelectorInRules(rules: CssRuleIR[]): boolean {
+  // Rule selectors come from Stylis output (not from JS), so a literal `*` here
+  // always indicates a CSS universal selector (descendant/direct-child/etc).
+  // We currently treat ANY universal selector usage as unsupported and skip the file.
+  return rules.some((r) => typeof r.selector === "string" && r.selector.includes("*"));
 }

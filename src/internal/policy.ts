@@ -1,20 +1,6 @@
 import type { Collection } from "jscodeshift";
 import type { TransformWarning } from "./transform-types.js";
 
-function findStyledComponentsNamedImport(args: {
-  styledImports: Collection<any>;
-  j: any;
-  importedName: string;
-}): object | null {
-  const { styledImports, j, importedName } = args;
-  const spec = styledImports
-    .find(j.ImportSpecifier, {
-      imported: { type: "Identifier", name: importedName },
-    } as any)
-    .nodes()[0];
-  return spec ?? null;
-}
-
 export function shouldSkipForThemeProvider(args: {
   root: Collection<any>;
   j: any;
@@ -223,4 +209,18 @@ export function universalSelectorUnsupportedWarning(
       "Universal selectors (`*`) are currently unsupported; skipping this file (manual follow-up required).",
     ...(loc ? { loc } : {}),
   };
+}
+
+function findStyledComponentsNamedImport(args: {
+  styledImports: Collection<any>;
+  j: any;
+  importedName: string;
+}): object | null {
+  const { styledImports, j, importedName } = args;
+  const spec = styledImports
+    .find(j.ImportSpecifier, {
+      imported: { type: "Identifier", name: importedName },
+    } as any)
+    .nodes()[0];
+  return spec ?? null;
 }

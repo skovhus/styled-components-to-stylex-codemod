@@ -1,6 +1,16 @@
 import { compile } from "stylis";
 import { cssPropertyToStylexProp } from "./css-prop-mapping.js";
 
+export function convertStyledKeyframes(args: {
+  root: any;
+  j: any;
+  styledImports: any;
+  keyframesLocal: string;
+  objectToAst: (j: any, value: any) => any;
+}): { keyframesNames: Set<string>; changed: boolean } {
+  return convertStyledKeyframesImpl(args);
+}
+
 function parseKeyframesTemplate(args: {
   template: any;
 }): Record<string, Record<string, unknown>> | null {
@@ -76,7 +86,7 @@ function parseKeyframesTemplate(args: {
   return Object.keys(frames).length ? frames : null;
 }
 
-export function convertStyledKeyframes(args: {
+function convertStyledKeyframesImpl(args: {
   root: any;
   j: any;
   styledImports: any;

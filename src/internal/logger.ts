@@ -4,8 +4,6 @@ export interface CollectedWarning extends TransformWarning {
   filePath: string;
 }
 
-let collected: CollectedWarning[] = [];
-
 /**
  * Clear collected warnings and return them.
  */
@@ -35,3 +33,5 @@ export function logWarnings(warnings: TransformWarning[], filePath: string): voi
     logWarning(`[styled-components-to-stylex] Warning${location}: ${warning.message}\n`);
   }
 }
+
+let collected: CollectedWarning[] = [];

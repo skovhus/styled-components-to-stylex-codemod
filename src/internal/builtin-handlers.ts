@@ -7,6 +7,59 @@ import {
 } from "./jscodeshift-utils.js";
 import { cssDeclarationToStylexDeclarations } from "./css-prop-mapping.js";
 
+export type DynamicNode = {
+  slotId: number;
+  expr: unknown;
+  css: DynamicNodeCssContext;
+  component: DynamicNodeComponentContext;
+  usage: DynamicNodeUsageContext;
+  loc?: DynamicNodeLoc;
+};
+
+export type HandlerResult =
+  | { type: "resolvedValue"; expr: string; imports: ImportSpec[] }
+  | { type: "emitInlineStyle"; style: string }
+  | {
+      type: "emitStyleFunction";
+      nameHint: string;
+      params: string;
+      body: string;
+      call: string;
+    }
+  | {
+      type: "splitVariants";
+      variants: Array<{
+        nameHint: string;
+        when: string;
+        style: Record<string, unknown>;
+      }>;
+    }
+  | {
+      /**
+       * Like `splitVariants`, but each branch produces a JS expression string
+       * (which may come from adapter theme resolution) rather than a static literal.
+       */
+      type: "splitVariantsResolvedValue";
+      variants: Array<{
+        nameHint: string;
+        when: string;
+        expr: string;
+        imports: ImportSpec[];
+      }>;
+    }
+  | { type: "keepOriginal"; reason: string };
+
+export type InternalHandlerContext = {
+  api: API;
+  filePath: string;
+  resolveValue: (context: ResolveContext) => ResolveResult | null;
+  resolveImport: (localName: string) => {
+    importedName: string;
+    source: ImportSource;
+  } | null;
+  warn: (warning: HandlerWarning) => void;
+};
+
 type ThemeParamInfo =
   | { kind: "propsParam"; propsName: string }
   | { kind: "themeBinding"; themeName: string };
@@ -73,63 +126,10 @@ type DynamicNodeLoc = {
   column?: number;
 };
 
-export type DynamicNode = {
-  slotId: number;
-  expr: unknown;
-  css: DynamicNodeCssContext;
-  component: DynamicNodeComponentContext;
-  usage: DynamicNodeUsageContext;
-  loc?: DynamicNodeLoc;
-};
-
 type HandlerWarning = {
   feature: string;
   message: string;
   loc?: DynamicNodeLoc;
-};
-
-export type HandlerResult =
-  | { type: "resolvedValue"; expr: string; imports: ImportSpec[] }
-  | { type: "emitInlineStyle"; style: string }
-  | {
-      type: "emitStyleFunction";
-      nameHint: string;
-      params: string;
-      body: string;
-      call: string;
-    }
-  | {
-      type: "splitVariants";
-      variants: Array<{
-        nameHint: string;
-        when: string;
-        style: Record<string, unknown>;
-      }>;
-    }
-  | {
-      /**
-       * Like `splitVariants`, but each branch produces a JS expression string
-       * (which may come from adapter theme resolution) rather than a static literal.
-       */
-      type: "splitVariantsResolvedValue";
-      variants: Array<{
-        nameHint: string;
-        when: string;
-        expr: string;
-        imports: ImportSpec[];
-      }>;
-    }
-  | { type: "keepOriginal"; reason: string };
-
-export type InternalHandlerContext = {
-  api: API;
-  filePath: string;
-  resolveValue: (context: ResolveContext) => ResolveResult | null;
-  resolveImport: (localName: string) => {
-    importedName: string;
-    source: ImportSource;
-  } | null;
-  warn: (warning: HandlerWarning) => void;
 };
 
 function tryResolveThemeAccess(
