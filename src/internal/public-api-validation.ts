@@ -1,8 +1,5 @@
 import type { Adapter } from "../adapter.js";
 
-const REPO_URL = "https://github.com/skovhus/styled-components-to-stylex-codemod";
-const ADAPTER_DOCS_URL = `${REPO_URL}#adapter`;
-
 export function describeValue(value: unknown): string {
   if (value === null) {
     return "null";
@@ -97,3 +94,6 @@ export function assertValidAdapter(
     );
   }
 }
+
+const REPO_URL = "https://github.com/skovhus/styled-components-to-stylex-codemod";
+const ADAPTER_DOCS_URL = `${REPO_URL}#adapter`;

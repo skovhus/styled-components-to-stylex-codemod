@@ -2,18 +2,6 @@ import type { CssDeclarationIR, CssValue } from "./css-ir.js";
 
 export type StylexPropDecl = { prop: string; value: CssValue };
 
-const BORDER_STYLES = new Set([
-  "none",
-  "solid",
-  "dashed",
-  "dotted",
-  "double",
-  "groove",
-  "ridge",
-  "inset",
-  "outset",
-]);
-
 export function cssDeclarationToStylexDeclarations(decl: CssDeclarationIR): StylexPropDecl[] {
   const prop = decl.property.trim();
 
@@ -50,6 +38,18 @@ export function cssPropertyToStylexProp(prop: string): string {
   }
   return prop.replace(/-([a-z])/g, (_, ch: string) => ch.toUpperCase());
 }
+
+const BORDER_STYLES = new Set([
+  "none",
+  "solid",
+  "dashed",
+  "dotted",
+  "double",
+  "groove",
+  "ridge",
+  "inset",
+  "outset",
+]);
 
 /**
  * Expands a border shorthand value into separate width/style/color properties.

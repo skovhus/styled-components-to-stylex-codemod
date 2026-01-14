@@ -5,7 +5,7 @@ const inputs = import.meta.glob<string>("../../../test-cases/*.input.tsx", {
   eager: true,
 });
 
-export interface TestCase {
+interface TestCase {
   name: string;
   content: string;
 }

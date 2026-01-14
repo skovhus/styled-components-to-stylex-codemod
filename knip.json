@@ -1,0 +1,25 @@
+{
+  "$schema": "https://unpkg.com/knip@5/schema.json",
+  "entry": [
+    "src/run.ts",
+    "scripts/**/*.{mjs,mts}",
+    "playground/src/main.tsx",
+    "src/__tests__/**/*.test.ts"
+  ],
+  "project": ["src/**/*.{ts,tsx}", "playground/**/*.{ts,tsx}", "scripts/**/*.{mjs,mts}"],
+  "ignoreDependencies": [
+    "@emotion/is-prop-valid",
+    "@stylexjs/babel-plugin",
+    "@stylexjs/stylex",
+    "assert",
+    "path-browserify"
+  ],
+  "ignore": [
+    "dist/**",
+    "dist-playground/**",
+    "coverage/**",
+    "test-cases/**",
+    "playground/src/lib/fs-stub.ts",
+    "node_modules/**"
+  ]
+}

@@ -6,21 +6,6 @@ import type {
   Node,
 } from "jscodeshift";
 
-export function isIdentifier(node: unknown, name?: string): node is Identifier {
-  return (
-    !!node &&
-    typeof node === "object" &&
-    (node as { type?: string }).type === "Identifier" &&
-    (name ? (node as Identifier).name === name : true)
-  );
-}
-
-export function isMemberExpression(node: unknown): node is MemberExpression {
-  return (
-    !!node && typeof node === "object" && (node as { type?: string }).type === "MemberExpression"
-  );
-}
-
 export function isArrowFunctionExpression(node: unknown): node is ArrowFunctionExpression {
   return (
     !!node &&
@@ -74,4 +59,19 @@ export function getNodeLocStart(
     return null;
   }
   return { line: loc.line, column: loc.column };
+}
+
+function isIdentifier(node: unknown, name?: string): node is Identifier {
+  return (
+    !!node &&
+    typeof node === "object" &&
+    (node as { type?: string }).type === "Identifier" &&
+    (name ? (node as Identifier).name === name : true)
+  );
+}
+
+function isMemberExpression(node: unknown): node is MemberExpression {
+  return (
+    !!node && typeof node === "object" && (node as { type?: string }).type === "MemberExpression"
+  );
 }

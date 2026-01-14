@@ -1,13 +1,25 @@
 import type { ResolveContext, ResolveResult } from "../adapter.js";
 
-export type VarCall = {
+export function rewriteCssVarsInString(args: {
+  raw: string;
+  definedVars: Map<string, string>;
+  varsToDrop: Set<string>;
+  resolveValue: (context: ResolveContext) => ResolveResult | null;
+  addImport: (imp: any) => void;
+  parseExpr: (exprSource: string) => unknown;
+  j: any;
+}): unknown {
+  return rewriteCssVarsInStringImpl(args);
+}
+
+type VarCall = {
   start: number;
   end: number;
   name: string;
   fallback?: string;
 };
 
-export function findCssVarCalls(raw: string): VarCall[] {
+function findCssVarCalls(raw: string): VarCall[] {
   const out: VarCall[] = [];
   let i = 0;
   while (i < raw.length) {
@@ -68,7 +80,7 @@ export function findCssVarCalls(raw: string): VarCall[] {
   return out;
 }
 
-export function rewriteCssVarsInString(args: {
+function rewriteCssVarsInStringImpl(args: {
   raw: string;
   definedVars: Map<string, string>;
   varsToDrop: Set<string>;

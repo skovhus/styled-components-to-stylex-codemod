@@ -7,84 +7,12 @@ import {
 } from "./jscodeshift-utils.js";
 import { cssDeclarationToStylexDeclarations } from "./css-prop-mapping.js";
 
-type ThemeParamInfo =
-  | { kind: "propsParam"; propsName: string }
-  | { kind: "themeBinding"; themeName: string };
-
-function getArrowFnThemeParamInfo(fn: any): ThemeParamInfo | null {
-  if (!fn || fn.params?.length !== 1) {
-    return null;
-  }
-  const p = fn.params[0];
-  if (p?.type === "Identifier" && typeof p.name === "string") {
-    return { kind: "propsParam", propsName: p.name };
-  }
-  if (p?.type !== "ObjectPattern" || !Array.isArray(p.properties)) {
-    return null;
-  }
-  for (const prop of p.properties) {
-    if (!prop || (prop.type !== "Property" && prop.type !== "ObjectProperty")) {
-      continue;
-    }
-    const key = prop.key;
-    if (!key || key.type !== "Identifier" || key.name !== "theme") {
-      continue;
-    }
-    const value = prop.value;
-    if (value?.type === "Identifier" && typeof value.name === "string") {
-      return { kind: "themeBinding", themeName: value.name };
-    }
-    if (
-      value?.type === "AssignmentPattern" &&
-      value.left?.type === "Identifier" &&
-      typeof value.left.name === "string"
-    ) {
-      return { kind: "themeBinding", themeName: value.left.name };
-    }
-  }
-  return null;
-}
-
-export type CssNodeKind = "declaration" | "selector" | "atRule" | "keyframes";
-
-export type DynamicNodeCssContext = {
-  kind: CssNodeKind;
-  selector: string;
-  atRuleStack: string[];
-  property?: string;
-  valueRaw?: string;
-};
-
-export type DynamicNodeComponentContext = {
-  localName: string;
-  base: "intrinsic" | "component";
-  tagOrIdent: string;
-  withConfig?: Record<string, unknown>;
-  attrs?: Record<string, unknown>;
-};
-
-export type DynamicNodeUsageContext = {
-  jsxUsages: number;
-  hasPropsSpread: boolean;
-};
-
-export type DynamicNodeLoc = {
-  line?: number;
-  column?: number;
-};
-
 export type DynamicNode = {
   slotId: number;
   expr: unknown;
   css: DynamicNodeCssContext;
   component: DynamicNodeComponentContext;
   usage: DynamicNodeUsageContext;
-  loc?: DynamicNodeLoc;
-};
-
-export type HandlerWarning = {
-  feature: string;
-  message: string;
   loc?: DynamicNodeLoc;
 };
 
@@ -130,6 +58,78 @@ export type InternalHandlerContext = {
     source: ImportSource;
   } | null;
   warn: (warning: HandlerWarning) => void;
+};
+
+type ThemeParamInfo =
+  | { kind: "propsParam"; propsName: string }
+  | { kind: "themeBinding"; themeName: string };
+
+function getArrowFnThemeParamInfo(fn: any): ThemeParamInfo | null {
+  if (!fn || fn.params?.length !== 1) {
+    return null;
+  }
+  const p = fn.params[0];
+  if (p?.type === "Identifier" && typeof p.name === "string") {
+    return { kind: "propsParam", propsName: p.name };
+  }
+  if (p?.type !== "ObjectPattern" || !Array.isArray(p.properties)) {
+    return null;
+  }
+  for (const prop of p.properties) {
+    if (!prop || (prop.type !== "Property" && prop.type !== "ObjectProperty")) {
+      continue;
+    }
+    const key = prop.key;
+    if (!key || key.type !== "Identifier" || key.name !== "theme") {
+      continue;
+    }
+    const value = prop.value;
+    if (value?.type === "Identifier" && typeof value.name === "string") {
+      return { kind: "themeBinding", themeName: value.name };
+    }
+    if (
+      value?.type === "AssignmentPattern" &&
+      value.left?.type === "Identifier" &&
+      typeof value.left.name === "string"
+    ) {
+      return { kind: "themeBinding", themeName: value.left.name };
+    }
+  }
+  return null;
+}
+
+type CssNodeKind = "declaration" | "selector" | "atRule" | "keyframes";
+
+type DynamicNodeCssContext = {
+  kind: CssNodeKind;
+  selector: string;
+  atRuleStack: string[];
+  property?: string;
+  valueRaw?: string;
+};
+
+type DynamicNodeComponentContext = {
+  localName: string;
+  base: "intrinsic" | "component";
+  tagOrIdent: string;
+  withConfig?: Record<string, unknown>;
+  attrs?: Record<string, unknown>;
+};
+
+type DynamicNodeUsageContext = {
+  jsxUsages: number;
+  hasPropsSpread: boolean;
+};
+
+type DynamicNodeLoc = {
+  line?: number;
+  column?: number;
+};
+
+type HandlerWarning = {
+  feature: string;
+  message: string;
+  loc?: DynamicNodeLoc;
 };
 
 function tryResolveThemeAccess(

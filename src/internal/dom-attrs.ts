@@ -7,7 +7,21 @@
  * We keep a small allowlist here to avoid leaking obvious non-DOM props while preserving the props
  * commonly used in fixtures. This is intentionally conservative and centralized so it's easy to audit.
  */
-export const KNOWN_SAFE_DOM_ATTRS = new Set<string>([
+export function isLikelyValidDomAttr(name: string): boolean {
+  if (KNOWN_SAFE_DOM_ATTRS.has(name)) {
+    return true;
+  }
+  if (name.startsWith("data-") || name.startsWith("aria-")) {
+    return true;
+  }
+  // Event handlers: onClick, onChange, onMouseEnter, etc.
+  if (/^on[A-Z]/.test(name)) {
+    return true;
+  }
+  return false;
+}
+
+const KNOWN_SAFE_DOM_ATTRS = new Set<string>([
   // Core React props
   "className",
   "style",
@@ -41,17 +55,3 @@ export const KNOWN_SAFE_DOM_ATTRS = new Set<string>([
   "ry",
   "fill",
 ]);
-
-export function isLikelyValidDomAttr(name: string): boolean {
-  if (KNOWN_SAFE_DOM_ATTRS.has(name)) {
-    return true;
-  }
-  if (name.startsWith("data-") || name.startsWith("aria-")) {
-    return true;
-  }
-  // Event handlers: onClick, onChange, onMouseEnter, etc.
-  if (/^on[A-Z]/.test(name)) {
-    return true;
-  }
-  return false;
-}

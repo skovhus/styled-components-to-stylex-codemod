@@ -85,6 +85,29 @@ Storybook renders all test cases side-by-side (input with styled-components, out
 
 Run `pnpm storybook` to start the dev server and visually compare transformations.
 
+## File Organization Rule (Exports First)
+
+When editing this repo, **keep all exports at the top of each file** (after imports), and keep **non-exported helpers further down**.
+
+- **Allowed at top**: `import …`, then `export …` (types, consts, functions, classes).
+- **Not allowed**: introducing a new `export …` _after_ non-exported top-level declarations (e.g. `const …`, `function …`, `type …`).
+
+This keeps entrypoints easy to scan and makes refactors/splits predictable.
+
+Example (good):
+
+```ts
+import type { Foo } from "./foo.js";
+
+export function doThing(x: Foo) {
+  return helper(x);
+}
+
+function helper(x: Foo) {
+  return x;
+}
+```
+
 ## Visual Inspection with Playwright MCP
 
 Use the Playwright MCP to inspect test case rendering:

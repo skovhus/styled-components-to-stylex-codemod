@@ -1,9 +1,7 @@
 import type { API, FileInfo, Options } from "jscodeshift";
-import type { Adapter } from "./adapter.js";
 import type { ImportSource } from "./adapter.js";
 import { assertNoNullNodesInArrays } from "./internal/ast-safety.js";
 import { collectStyledDecls } from "./internal/collect-styled-decls.js";
-import { rewriteCssVarsInString } from "./internal/css-vars.js";
 import { formatOutput } from "./internal/format-output.js";
 import { convertStyledKeyframes } from "./internal/keyframes.js";
 import { lowerRules } from "./internal/lower-rules.js";
@@ -25,18 +23,25 @@ import type {
   TransformResult,
   TransformWarning,
 } from "./internal/transform-types.js";
+import { compile } from "stylis";
+import { normalizeStylisAstToIR } from "./internal/css-ir.js";
+import { cssDeclarationToStylexDeclarations } from "./internal/css-prop-mapping.js";
+import { assertValidAdapter } from "./internal/public-api-validation.js";
+import { isLikelyValidDomAttr } from "./internal/dom-attrs.js";
+import { buildImportMap } from "./internal/transform-import-map.js";
+import { parseExpr as parseExprImpl } from "./internal/transform-parse-expr.js";
+import { createResolveValueSafe } from "./internal/transform-resolve-value.js";
+import { rewriteCssVarsInStyleObject as rewriteCssVarsInStyleObjectImpl } from "./internal/transform-css-vars.js";
+import {
+  getStaticPropertiesFromImport as getStaticPropertiesFromImportImpl,
+  patternProp as patternPropImpl,
+} from "./internal/transform-utils.js";
+
 export type {
   TransformOptions,
   TransformResult,
   TransformWarning,
 } from "./internal/transform-types.js";
-import { compile } from "stylis";
-import { normalizeStylisAstToIR } from "./internal/css-ir.js";
-import { cssDeclarationToStylexDeclarations } from "./internal/css-prop-mapping.js";
-import { dirname, resolve as pathResolve } from "node:path";
-import { readFileSync, existsSync } from "node:fs";
-import { assertValidAdapter } from "./internal/public-api-validation.js";
-import { isLikelyValidDomAttr } from "./internal/dom-attrs.js";
 
 /**
  * Transform styled-components to StyleX
@@ -85,82 +90,9 @@ export function transformWithWarnings(
       )
       .size() > 0;
 
-  /**
-   * Create an object-pattern property with shorthand enabled when possible.
-   * This avoids lint issues like `no-useless-rename` from `{ foo: foo }`.
-   */
-  const patternProp = (keyName: string, valueId?: any) => {
-    const key = j.identifier(keyName);
-    const value = valueId ?? key;
-    const p = j.property("init", key, value) as any;
-    if (value?.type === "Identifier" && value.name === keyName) {
-      p.shorthand = true;
-    }
-    return p;
-  };
-
-  /**
-   * Detect static property names assigned to a component in an imported file.
-   * e.g., `ComponentName.HEIGHT = 42;` -> returns ["HEIGHT"]
-   */
-  const getStaticPropertiesFromImport = (source: ImportSource, componentName: string): string[] => {
-    // Only handle relative imports with resolved paths
-    if (source.kind !== "absolutePath") {
-      return [];
-    }
-
-    // Try common extensions
-    const extensions = [".tsx", ".ts", ".jsx", ".js"];
-    let filePath: string | null = null;
-
-    for (const ext of extensions) {
-      const candidate = source.value + ext;
-      if (existsSync(candidate)) {
-        filePath = candidate;
-        break;
-      }
-    }
-
-    // Also try if the path itself exists (might already have extension)
-    if (!filePath && existsSync(source.value)) {
-      filePath = source.value;
-    }
-
-    if (!filePath) {
-      return [];
-    }
-
-    try {
-      const content = readFileSync(filePath, "utf-8");
-      const importedRoot = j(content);
-      const staticProps: string[] = [];
-
-      // Find patterns like: ComponentName.PROP = value;
-      importedRoot
-        .find(j.ExpressionStatement, {
-          expression: {
-            type: "AssignmentExpression",
-            operator: "=",
-            left: {
-              type: "MemberExpression",
-              object: { type: "Identifier", name: componentName },
-              property: { type: "Identifier" },
-            },
-          },
-        } as any)
-        .forEach((p) => {
-          const propName = ((p.node.expression as any).left.property as any).name;
-          if (propName) {
-            staticProps.push(propName);
-          }
-        });
-
-      return staticProps;
-    } catch {
-      // If we can't read/parse the file, return empty
-      return [];
-    }
-  };
+  const patternProp = (keyName: string, valueId?: any) => patternPropImpl(j, keyName, valueId);
+  const getStaticPropertiesFromImport = (source: ImportSource, componentName: string): string[] =>
+    getStaticPropertiesFromImportImpl({ j, source, componentName });
 
   const adapter = options.adapter;
   assertValidAdapter(
@@ -170,66 +102,10 @@ export function transformWithWarnings(
   const resolverImports = new Map<string, any>();
 
   let hasChanges = false;
-  let bailDueToUndefinedResolveValue = false;
-
-  const formatResolveValueContext = (ctx: unknown): string => {
-    const c: any = ctx as any;
-    const kind = c?.kind;
-    if (kind === "theme") {
-      return `kind=theme path=${JSON.stringify(String(c?.path ?? ""))}`;
-    }
-    if (kind === "cssVariable") {
-      const parts: string[] = [`kind=cssVariable name=${JSON.stringify(String(c?.name ?? ""))}`];
-      if (typeof c?.fallback === "string") {
-        parts.push(`fallback=${JSON.stringify(c.fallback)}`);
-      }
-      if (typeof c?.definedValue === "string") {
-        parts.push(`definedValue=${JSON.stringify(c.definedValue)}`);
-      }
-      return parts.join(" ");
-    }
-    if (kind === "call") {
-      const args = Array.isArray(c?.args) ? c.args : [];
-      return [
-        "kind=call",
-        `calleeImportedName=${JSON.stringify(String(c?.calleeImportedName ?? ""))}`,
-        `calleeSource=${JSON.stringify(c?.calleeSource ?? null)}`,
-        `callSiteFilePath=${JSON.stringify(String(c?.callSiteFilePath ?? ""))}`,
-        `args=${JSON.stringify(args)}`,
-      ].join(" ");
-    }
-    try {
-      return `ctx=${JSON.stringify(ctx)}`;
-    } catch {
-      return `ctx=${String(ctx)}`;
-    }
-  };
-
-  // Runtime guard: adapter.resolveValue is typed to never return `undefined`,
-  // but user adapters can accidentally fall through without a return. When that happens,
-  // we skip transforming the file to avoid producing incorrect output.
-  const resolveValueSafe: Adapter["resolveValue"] = (ctx) => {
-    if (bailDueToUndefinedResolveValue) {
-      return null;
-    }
-    const res = (adapter.resolveValue as any)(ctx);
-    if (typeof res === "undefined") {
-      bailDueToUndefinedResolveValue = true;
-      // Emit a single warning with enough context for users to fix their adapter.
-      warnings.push({
-        type: "dynamic-node",
-        feature: "adapter-resolveValue",
-        message: [
-          "Adapter.resolveValue returned undefined. This usually means your adapter forgot to return a value.",
-          "Return null to leave a value unresolved, or return { expr, imports } to resolve it.",
-          `Skipping transformation for this file to avoid producing incorrect output.`,
-          `resolveValue was called with: ${formatResolveValueContext(ctx)}`,
-        ].join(" "),
-      });
-      return null;
-    }
-    return res as any;
-  };
+  const { resolveValueSafe, bailRef: resolveValueBailRef } = createResolveValueSafe({
+    adapter,
+    warnings,
+  });
 
   // Find styled-components imports
   const styledImports = root.find(j.ImportDeclaration, {
@@ -268,55 +144,23 @@ export function transformWithWarnings(
 
   let keyframesNames = new Set<string>();
 
-  const parseExpr = (exprSource: string): any => {
-    try {
-      // Always parse expressions with TSX enabled so we can safely emit TS-only constructs
-      // like `x as SomeType` inside generated outputs.
-      const jParse = api.jscodeshift.withParser("tsx");
-      const program = jParse(`(${exprSource});`);
-      const stmt = program.find(jParse.ExpressionStatement).nodes()[0];
-      let expr = (stmt as any)?.expression ?? null;
-      // Unwrap ParenthesizedExpression to avoid extra parentheses in output
-      while (expr?.type === "ParenthesizedExpression") {
-        expr = expr.expression;
-      }
-      // Remove extra.parenthesized flag that causes recast to add parentheses
-      if (expr?.extra?.parenthesized) {
-        delete expr.extra.parenthesized;
-        delete expr.extra.parenStart;
-      }
-      return expr;
-    } catch {
-      return null;
-    }
-  };
+  const parseExpr = (exprSource: string): any => parseExprImpl(api, exprSource);
 
   const rewriteCssVarsInStyleObject = (
     obj: Record<string, unknown>,
     definedVars: Map<string, string>,
     varsToDrop: Set<string>,
-  ): void => {
-    for (const [k, v] of Object.entries(obj)) {
-      if (v && typeof v === "object") {
-        if (isAstNode(v)) {
-          continue;
-        }
-        rewriteCssVarsInStyleObject(v as any, definedVars, varsToDrop);
-        continue;
-      }
-      if (typeof v === "string") {
-        (obj as any)[k] = rewriteCssVarsInString({
-          raw: v,
-          definedVars,
-          varsToDrop,
-          resolveValue: resolveValueSafe,
-          addImport: (imp) => resolverImports.set(JSON.stringify(imp), imp),
-          parseExpr,
-          j,
-        }) as any;
-      }
-    }
-  };
+  ): void =>
+    rewriteCssVarsInStyleObjectImpl({
+      obj,
+      definedVars,
+      varsToDrop,
+      isAstNode,
+      resolveValue: resolveValueSafe,
+      addImport: (imp) => resolverImports.set(JSON.stringify(imp), imp),
+      parseExpr,
+      j,
+    });
   if (keyframesLocal) {
     const converted = convertStyledKeyframes({
       root,
@@ -331,69 +175,7 @@ export function transformWithWarnings(
     }
   }
 
-  /**
-   * Build a per-file import map for named imports, supporting aliases.
-   * Maps local identifier -> { importedName, source }.
-   */
-  const importMap = new Map<
-    string,
-    {
-      importedName: string;
-      source: ImportSource;
-    }
-  >();
-  {
-    const baseDir = dirname(file.path);
-    const resolveImportSource = (specifier: string): ImportSource => {
-      // Deterministic resolution: for relative specifiers, just resolve against the current file’s folder.
-      // This intentionally does NOT probe extensions, consult tsconfig paths, or use Node resolution.
-      const isRelative =
-        specifier === "." ||
-        specifier === ".." ||
-        specifier.startsWith("./") ||
-        specifier.startsWith("../") ||
-        specifier.startsWith(".\\") ||
-        specifier.startsWith("..\\");
-      return isRelative
-        ? { kind: "absolutePath", value: pathResolve(baseDir, specifier) }
-        : { kind: "specifier", value: specifier };
-    };
-
-    root.find(j.ImportDeclaration).forEach((p: any) => {
-      const source = p.node.source?.value;
-      if (typeof source !== "string") {
-        return;
-      }
-      const resolvedSource = resolveImportSource(source);
-      const specs = p.node.specifiers ?? [];
-      for (const s of specs) {
-        if (!s) {
-          continue;
-        }
-        if (s.type === "ImportSpecifier") {
-          const importedName =
-            s.imported?.type === "Identifier"
-              ? s.imported.name
-              : s.imported?.type === "Literal" && typeof s.imported.value === "string"
-                ? s.imported.value
-                : undefined;
-          const localName =
-            s.local?.type === "Identifier"
-              ? s.local.name
-              : s.imported?.type === "Identifier"
-                ? s.imported.name
-                : undefined;
-          if (!localName || !importedName) {
-            continue;
-          }
-          importMap.set(localName, {
-            importedName,
-            source: resolvedSource,
-          });
-        }
-      }
-    });
-  }
+  const importMap = buildImportMap({ root, j, filePath: file.path });
 
   // Convert `styled-components` css helper blocks (css`...`) into plain style objects.
   // We keep them as `const x = { ... } as const;` and later spread into component styles.
@@ -871,7 +653,7 @@ export function transformWithWarnings(
   const resolvedStyleObjects = lowered.resolvedStyleObjects;
   const descendantOverrides = lowered.descendantOverrides;
   const ancestorSelectorParents = lowered.ancestorSelectorParents;
-  if (lowered.bail || bailDueToUndefinedResolveValue) {
+  if (lowered.bail || resolveValueBailRef.value) {
     return { code: null, warnings };
   }
 

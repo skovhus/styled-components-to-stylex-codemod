@@ -40,6 +40,7 @@
     "typecheck:fixtures": "tsc -p test-cases/tsconfig.json --noEmit",
     "typecheck": "pnpm run typecheck:src && pnpm run typecheck:fixtures",
     "ci": "pnpm run lint && pnpm run typecheck && pnpm run test:run",
+    "knip": "knip",
     "prepublishOnly": "pnpm run build",
     "storybook": "storybook dev -p 6006",
     "playground": "vite --config playground/vite.config.ts",
@@ -52,7 +53,6 @@
   "devDependencies": {
     "@codemirror/lang-javascript": "^6.2.4",
     "@emotion/is-prop-valid": "^1.4.0",
-    "@playwright/test": "^1.57.0",
     "@storybook/react": "^10.1.10",
     "@storybook/react-vite": "^10.1.10",
     "@stylexjs/babel-plugin": "^0.17.4",
@@ -67,6 +67,7 @@
     "@vitejs/plugin-react": "^5.1.2",
     "@vitest/coverage-v8": "^4.0.16",
     "assert": "^2.1.0",
+    "knip": "^5.81.0",
     "lefthook": "^2.0.13",
     "oxfmt": "^0.20.0",
     "oxlint": "^1.35.0",
