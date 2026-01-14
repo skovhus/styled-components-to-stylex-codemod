@@ -3,6 +3,18 @@ import { resolveDynamicNode } from "./builtin-handlers.js";
 import { cssDeclarationToStylexDeclarations, cssPropertyToStylexProp } from "./css-prop-mapping.js";
 import { getMemberPathFromIdentifier, getNodeLocStart } from "./jscodeshift-utils.js";
 import type { ImportSource } from "../adapter.js";
+import { tryHandleAnimation } from "./lower-rules/animation.js";
+import { tryHandleInterpolatedBorder } from "./lower-rules/borders.js";
+import {
+  extractStaticParts,
+  tryHandleInterpolatedStringValue,
+  wrapExprWithStaticParts,
+} from "./lower-rules/interpolations.js";
+import {
+  createTypeInferenceHelpers,
+  ensureShouldForwardPropDrop,
+  literalToStaticValue,
+} from "./lower-rules/types.js";
 import {
   normalizeSelectorForInputAttributePseudos,
   parseAttributeSelector,
@@ -104,113 +116,7 @@ export function lowerRules(args: {
   // See: https://stylexjs.com/docs/learn/styling-ui/defining-styles/
   // ─────────────────────────────────────────────────────────────────────────────
 
-  /**
-   * Extract static prefix and suffix from an interpolated CSS value.
-   * Returns empty strings if the value doesn't have exactly one interpolation slot.
-   *
-   * @param cssValue - The CSS value object with `kind: "interpolated"` and `parts` array
-   * @param options - Optional configuration
-   * @param options.skipForProperty - CSS property pattern to skip (e.g., /^border.*-color$/)
-   */
-  const extractStaticParts = (
-    cssValue: any,
-    options?: { skipForProperty?: RegExp; property?: string },
-  ): { prefix: string; suffix: string } => {
-    // Skip for specific properties (e.g., border-color where expansion already handled width/style)
-    if (options?.skipForProperty && options?.property) {
-      if (options.skipForProperty.test(options.property)) {
-        return { prefix: "", suffix: "" };
-      }
-    }
-
-    if (!cssValue || cssValue.kind !== "interpolated") {
-      return { prefix: "", suffix: "" };
-    }
-
-    const parts: any[] = cssValue.parts ?? [];
-    const slotParts = parts.filter((p: any) => p?.kind === "slot");
-
-    // Only handle single-slot interpolations
-    if (slotParts.length !== 1) {
-      return { prefix: "", suffix: "" };
-    }
-
-    let prefix = "";
-    let suffix = "";
-    let foundSlot = false;
-
-    for (const part of parts) {
-      if (part?.kind === "slot") {
-        foundSlot = true;
-        continue;
-      }
-      if (part?.kind === "static") {
-        if (foundSlot) {
-          suffix += part.value ?? "";
-        } else {
-          prefix += part.value ?? "";
-        }
-      }
-    }
-
-    return { prefix, suffix };
-  };
-
-  /**
-   * Wrap an expression string with static prefix/suffix.
-   * Optimizes for string literals by combining into a single string.
-   *
-   * @param expr - The expression string (e.g., "themeVars.color" or '"red"')
-   * @param prefix - Static prefix text
-   * @param suffix - Static suffix text
-   * @returns Wrapped expression string
-   */
-  const wrapExprWithStaticParts = (expr: string, prefix: string, suffix: string): string => {
-    if (!prefix && !suffix) {
-      return expr;
-    }
-
-    // Check if expr is a string literal (matches "..." or '...')
-    const stringMatch = expr.match(/^["'](.*)["']$/);
-    if (stringMatch) {
-      // Combine into a single string literal for cleaner output
-      return JSON.stringify(prefix + stringMatch[1] + suffix);
-    }
-
-    // Use template literal for non-literal expressions
-    return `\`${prefix}\${${expr}}${suffix}\``;
-  };
-
-  const ensureShouldForwardPropDrop = (decl: StyledDecl, propName: string) => {
-    // Ensure we generate a wrapper so we can consume the styling prop without forwarding it to DOM.
-    decl.needsWrapperComponent = true;
-    // This is an internally-inferred drop (not user-configured via withConfig).
-    decl.shouldForwardPropFromWithConfig = false;
-    const existing = decl.shouldForwardProp ?? { dropProps: [] as string[] };
-    const dropProps = new Set<string>(existing.dropProps ?? []);
-    dropProps.add(propName);
-    decl.shouldForwardProp = { ...existing, dropProps: [...dropProps] };
-  };
-
-  const literalToStaticValue = (node: any): string | number | null => {
-    if (!node || typeof node !== "object") {
-      return null;
-    }
-    if (node.type === "StringLiteral") {
-      return node.value;
-    }
-    if (node.type === "NumericLiteral") {
-      return node.value;
-    }
-    // Support recast "Literal" nodes when parser produces them.
-    if (
-      node.type === "Literal" &&
-      (typeof node.value === "string" || typeof node.value === "number")
-    ) {
-      return node.value;
-    }
-    return null;
-  };
+  // (helpers extracted to `./lower-rules/*` modules)
 
   for (const decl of styledDecls) {
     if (decl.preResolvedStyle) {
@@ -235,84 +141,11 @@ export function lowerRules(args: {
     const inlineStyleProps: Array<{ prop: string; expr: any }> = [];
     const localVarValues = new Map<string, string>();
 
-    // Best-effort inference for prop types from TS type annotations, supporting:
-    //   1. Inline type literals: styled.div<{ $width: number; color?: string }>
-    //   2. Type references: styled.span<TextColorProps> (looks up the interface)
-    // We only need enough to choose a better param type for emitted style functions.
-    const findJsxPropTsType = (jsxProp: string): unknown => {
-      const pt: any = (decl as any).propsType;
-      if (!pt) {
-        return null;
-      }
-
-      // Helper to find prop type in a type literal (interface body)
-      const findInTypeLiteral = (typeLiteral: any): unknown => {
-        for (const m of typeLiteral.members ?? typeLiteral.body ?? []) {
-          if (!m || m.type !== "TSPropertySignature") {
-            continue;
-          }
-          const k: any = m.key;
-          const name =
-            k?.type === "Identifier"
-              ? k.name
-              : k?.type === "StringLiteral"
-                ? k.value
-                : k?.type === "Literal" && typeof k.value === "string"
-                  ? k.value
-                  : null;
-          if (name !== jsxProp) {
-            continue;
-          }
-          return m.typeAnnotation?.typeAnnotation ?? null;
-        }
-        return null;
-      };
-
-      // Case 1: Inline type literal - styled.div<{ color: string }>
-      if (pt.type === "TSTypeLiteral") {
-        return findInTypeLiteral(pt);
-      }
-
-      // Case 2: Type reference - styled.span<TextColorProps>
-      // Look up the interface definition in the file
-      if (pt.type === "TSTypeReference") {
-        const typeName = pt.typeName?.name;
-        if (typeName && typeof typeName === "string") {
-          // Find the interface with this name
-          const interfaces = root.find(j.TSInterfaceDeclaration, {
-            id: { type: "Identifier", name: typeName },
-          } as any);
-          if (interfaces.size() > 0) {
-            const iface = interfaces.get(0).node;
-            return findInTypeLiteral(iface.body);
-          }
-        }
-      }
-
-      return null;
-    };
-    const annotateParamFromJsxProp = (paramId: any, jsxProp: string): void => {
-      const t = findJsxPropTsType(jsxProp);
-      if (t && typeof t === "object") {
-        const typeType = (t as any).type;
-        // Special-case numeric props (matches the `$width: number` ask).
-        if (typeType === "TSNumberKeyword") {
-          (paramId as any).typeAnnotation = j.tsTypeAnnotation(j.tsNumberKeyword());
-          return;
-        }
-        // Preserve type references (e.g., `Colors` from `color: Colors`)
-        // This ensures imported types are preserved in the style function signature
-        if (
-          typeType === "TSTypeReference" ||
-          typeType === "TSUnionType" ||
-          typeType === "TSLiteralType"
-        ) {
-          (paramId as any).typeAnnotation = j.tsTypeAnnotation(t);
-          return;
-        }
-      }
-      (paramId as any).typeAnnotation = j.tsTypeAnnotation(j.tsStringKeyword());
-    };
+    const { findJsxPropTsType, annotateParamFromJsxProp } = createTypeInferenceHelpers({
+      root,
+      j,
+      decl,
+    });
 
     const addPropComments = (
       target: any,
@@ -350,270 +183,7 @@ export function lowerRules(args: {
         .replace(/[^a-zA-Z0-9-]/g, "-")
         .toLowerCase();
 
-    const getKeyframeFromSlot = (slotId: number): string | null => {
-      const expr = decl.templateExpressions[slotId] as any;
-      if (expr?.type === "Identifier" && keyframesNames.has(expr.name)) {
-        return expr.name;
-      }
-      return null;
-    };
-
-    const splitTopLevelCommas = (s: string): string[] => {
-      const out: string[] = [];
-      let buf = "";
-      let depth = 0;
-      for (let i = 0; i < s.length; i++) {
-        const ch = s[i]!;
-        if (ch === "(") {
-          depth++;
-        }
-        if (ch === ")") {
-          depth = Math.max(0, depth - 1);
-        }
-        if (ch === "," && depth === 0) {
-          out.push(buf);
-          buf = "";
-          continue;
-        }
-        buf += ch;
-      }
-      out.push(buf);
-      return out.map((x) => x.trim()).filter(Boolean);
-    };
-
-    const buildCommaTemplate = (
-      names: Array<{ kind: "ident"; name: string } | { kind: "text"; value: string }>,
-    ) => {
-      // Prefer template literal for identifier keyframes: `${a}, ${b}`
-      const exprs: any[] = [];
-      const quasis: any[] = [];
-      let q = "";
-      for (let i = 0; i < names.length; i++) {
-        const n = names[i]!;
-        if (i > 0) {
-          q += ", ";
-        }
-        if (n.kind === "ident") {
-          quasis.push(j.templateElement({ raw: q, cooked: q }, false));
-          exprs.push(j.identifier(n.name));
-          q = "";
-        } else {
-          q += n.value;
-        }
-      }
-      quasis.push(j.templateElement({ raw: q, cooked: q }, true));
-      return j.templateLiteral(quasis, exprs);
-    };
-
-    const tryHandleAnimation = (d: any): boolean => {
-      // Handle keyframes-based animation declarations before handler pipeline.
-      if (!keyframesNames.size) {
-        return false;
-      }
-      const prop = (d.property ?? "").trim();
-      if (!prop) {
-        return false;
-      }
-
-      const stylexProp = cssDeclarationToStylexDeclarations(d)[0]?.prop;
-      if (!stylexProp) {
-        return false;
-      }
-
-      // animation-name: ${kf}
-      if (stylexProp === "animationName" && d.value.kind === "interpolated") {
-        const slot = d.value.parts.find((p: any) => p.kind === "slot");
-        if (!slot) {
-          return false;
-        }
-        const kf = getKeyframeFromSlot(slot.slotId);
-        if (!kf) {
-          return false;
-        }
-        styleObj.animationName = j.identifier(kf) as any;
-        return true;
-      }
-
-      // animation: ${kf} 2s linear infinite; or with commas
-      if (prop === "animation" && typeof d.valueRaw === "string") {
-        const segments = splitTopLevelCommas(d.valueRaw);
-        if (!segments.length) {
-          return false;
-        }
-
-        const animNames: Array<{ kind: "ident"; name: string } | { kind: "text"; value: string }> =
-          [];
-        const durations: string[] = [];
-        const timings: string[] = [];
-        const delays: string[] = [];
-        const iterations: string[] = [];
-
-        for (const seg of segments) {
-          const tokens = seg.split(/\s+/).filter(Boolean);
-          if (!tokens.length) {
-            return false;
-          }
-
-          const nameTok = tokens.shift()!;
-          const m = nameTok.match(/^__SC_EXPR_(\d+)__$/);
-          if (!m) {
-            return false;
-          }
-          const kf = getKeyframeFromSlot(Number(m[1]));
-          if (!kf) {
-            return false;
-          }
-          animNames.push({ kind: "ident", name: kf });
-
-          // Remaining tokens
-          const timeTokens = tokens.filter((t) => /^(?:\d+|\d*\.\d+)(ms|s)$/.test(t));
-          if (timeTokens[0]) {
-            durations.push(timeTokens[0]);
-          }
-          if (timeTokens[1]) {
-            delays.push(timeTokens[1]);
-          }
-
-          const timing = tokens.find(
-            (t) =>
-              t === "linear" ||
-              t === "ease" ||
-              t === "ease-in" ||
-              t === "ease-out" ||
-              t === "ease-in-out" ||
-              t.startsWith("cubic-bezier(") ||
-              t.startsWith("steps("),
-          );
-          if (timing) {
-            timings.push(timing);
-          }
-
-          const iter = tokens.find((t) => t === "infinite" || /^\d+$/.test(t));
-          if (iter) {
-            iterations.push(iter);
-          }
-        }
-
-        if (animNames.length === 1 && animNames[0]!.kind === "ident") {
-          styleObj.animationName = j.identifier(animNames[0]!.name) as any;
-        } else {
-          styleObj.animationName = buildCommaTemplate(animNames) as any;
-        }
-        if (durations.length) {
-          styleObj.animationDuration = durations.join(", ");
-        }
-        if (timings.length) {
-          styleObj.animationTimingFunction = timings.join(", ");
-        }
-        if (delays.length) {
-          styleObj.animationDelay = delays.join(", ");
-        }
-        if (iterations.length) {
-          styleObj.animationIterationCount = iterations.join(", ");
-        }
-        return true;
-      }
-
-      return false;
-    };
-
-    const buildInterpolatedTemplate = (cssValue: any): unknown => {
-      // Build a JS TemplateLiteral from CssValue parts when it’s basically string interpolation,
-      // e.g. `${spacing}px`, `${spacing / 2}px 0`, `1px solid ${theme.colors.secondary}` (handled elsewhere).
-      if (!cssValue || cssValue.kind !== "interpolated") {
-        return null;
-      }
-      const parts = cssValue.parts ?? [];
-      const exprs: any[] = [];
-      const quasis: any[] = [];
-      let q = "";
-      for (const part of parts) {
-        if (part.kind === "static") {
-          q += part.value;
-          continue;
-        }
-        if (part.kind === "slot") {
-          quasis.push(j.templateElement({ raw: q, cooked: q }, false));
-          q = "";
-          const expr = decl.templateExpressions[part.slotId] as any;
-          // Only inline non-function expressions.
-          if (!expr || expr.type === "ArrowFunctionExpression") {
-            return null;
-          }
-          exprs.push(expr);
-          continue;
-        }
-      }
-      quasis.push(j.templateElement({ raw: q, cooked: q }, true));
-      return j.templateLiteral(quasis, exprs);
-    };
-
-    const tryHandleInterpolatedStringValue = (d: any): boolean => {
-      // Handle common “string interpolation” cases:
-      //  - background: ${dynamicColor}
-      //  - padding: ${spacing}px
-      //  - font-size: ${fontSize}px
-      //  - line-height: ${lineHeight}
-      if (d.value.kind !== "interpolated") {
-        return false;
-      }
-      if (!d.property) {
-        return false;
-      }
-
-      // Special-case: margin shorthand `${expr}px 0` → marginTop/Right/Bottom/Left
-      if ((d.property ?? "").trim() === "margin" && typeof d.valueRaw === "string") {
-        const m = d.valueRaw.trim().match(/^__SC_EXPR_(\d+)__(px)?\s+0$/);
-        if (m) {
-          const slotId = Number(m[1]);
-          const expr = decl.templateExpressions[slotId] as any;
-          if (!expr || expr.type === "ArrowFunctionExpression") {
-            return false;
-          }
-          const unit = m[2] ?? "";
-          const tl = j.templateLiteral(
-            [
-              j.templateElement({ raw: "", cooked: "" }, false),
-              j.templateElement({ raw: `${unit}`, cooked: `${unit}` }, true),
-            ],
-            [expr],
-          );
-          styleObj.marginTop = tl as any;
-          styleObj.marginRight = 0;
-          styleObj.marginBottom = tl as any;
-          styleObj.marginLeft = 0;
-          return true;
-        }
-      }
-
-      // If it’s a single-slot (possibly with static around it), emit a TemplateLiteral.
-      // But if it's exactly one slot and no static, emit the expression directly (keeps numbers/conditionals as-is).
-      const partsOnly = d.value.parts ?? [];
-      if (partsOnly.length === 1 && partsOnly[0]?.kind === "slot") {
-        const expr = decl.templateExpressions[partsOnly[0].slotId] as any;
-        if (!expr || expr.type === "ArrowFunctionExpression") {
-          return false;
-        }
-        // Give the dynamic resolution pipeline a chance to resolve call-expressions (e.g. helper lookups).
-        if (expr.type === "CallExpression") {
-          return false;
-        }
-        for (const out of cssDeclarationToStylexDeclarations(d)) {
-          styleObj[out.prop] = expr as any;
-        }
-        return true;
-      }
-
-      const tl = buildInterpolatedTemplate(d.value);
-      if (!tl) {
-        return false;
-      }
-
-      for (const out of cssDeclarationToStylexDeclarations(d)) {
-        styleObj[out.prop] = tl as any;
-      }
-      return true;
-    };
+    // (animation + interpolated-string helpers extracted to `./lower-rules/*`)
 
     const tryHandleMappedFunctionColor = (d: any): boolean => {
       // Handle: background: ${(props) => getColor(props.variant)}
@@ -754,268 +324,6 @@ export function lowerRules(args: {
         }
       }
       return true;
-    };
-
-    const tryHandleInterpolatedBorder = (d: any): boolean => {
-      // Handle border shorthands with interpolated color:
-      //   border: 2px solid ${(p) => (p.hasError ? "red" : "#ccc")}
-      //   border-right: 1px solid ${(p) => p.theme.borderColor}
-      const prop = (d.property ?? "").trim();
-      const borderMatch = prop.match(/^border(-top|-right|-bottom|-left)?$/);
-      if (!borderMatch) {
-        return false;
-      }
-      // Extract direction suffix (e.g., "Right" from "border-right", or "" from "border")
-      const directionRaw = borderMatch[1] ?? "";
-      const direction = directionRaw
-        ? directionRaw.slice(1).charAt(0).toUpperCase() + directionRaw.slice(2)
-        : "";
-      const widthProp = `border${direction}Width`;
-      const styleProp = `border${direction}Style`;
-      const colorProp = `border${direction}Color`;
-      if (d.value.kind !== "interpolated") {
-        return false;
-      }
-      if (typeof d.valueRaw !== "string") {
-        return false;
-      }
-      const tokens = d.valueRaw.trim().split(/\s+/).filter(Boolean);
-      const slotTok = tokens.find((t: string) => /^__SC_EXPR_(\d+)__$/.test(t));
-      if (!slotTok) {
-        return false;
-      }
-      const slotId = Number(slotTok.match(/^__SC_EXPR_(\d+)__$/)![1]);
-
-      const borderStyles = new Set([
-        "none",
-        "solid",
-        "dashed",
-        "dotted",
-        "double",
-        "groove",
-        "ridge",
-        "inset",
-        "outset",
-      ]);
-      let width: string | undefined;
-      let style: string | undefined;
-      for (const t of tokens) {
-        if (/^__SC_EXPR_\d+__$/.test(t)) {
-          continue;
-        }
-        if (!width && /^-?\d*\.?\d+(px|rem|em|vh|vw|vmin|vmax|%)?$/.test(t)) {
-          width = t;
-          continue;
-        }
-        if (!style && borderStyles.has(t)) {
-          style = t;
-          continue;
-        }
-      }
-      if (width) {
-        styleObj[widthProp] = width;
-      }
-      if (style) {
-        styleObj[styleProp] = style;
-      }
-
-      // Now treat the interpolated portion as the border color.
-      const expr = decl.templateExpressions[slotId] as any;
-
-      // Helper to parse a border shorthand string and return expanded properties
-      // Uses direction-aware property names (widthProp, styleProp, colorProp)
-      const parseBorderShorthand = (value: string): Record<string, string> | null => {
-        const tokens = value.trim().split(/\s+/);
-        const borderStylesSet = new Set([
-          "none",
-          "solid",
-          "dashed",
-          "dotted",
-          "double",
-          "groove",
-          "ridge",
-          "inset",
-          "outset",
-        ]);
-        const looksLikeLengthLocal = (t: string) =>
-          /^-?\d*\.?\d+(px|rem|em|vh|vw|vmin|vmax|%)?$/.test(t);
-
-        let bWidth: string | undefined;
-        let bStyle: string | undefined;
-        const colorParts: string[] = [];
-        for (const token of tokens) {
-          if (!bWidth && looksLikeLengthLocal(token)) {
-            bWidth = token;
-          } else if (!bStyle && borderStylesSet.has(token)) {
-            bStyle = token;
-          } else {
-            colorParts.push(token);
-          }
-        }
-        const bColor = colorParts.join(" ").trim();
-        // If we found at least width or style, this is a border shorthand
-        if (bWidth || bStyle) {
-          const result: Record<string, string> = {};
-          if (bWidth) {
-            result[widthProp] = bWidth;
-          }
-          if (bStyle) {
-            result[styleProp] = bStyle;
-          }
-          if (bColor) {
-            result[colorProp] = bColor;
-          }
-          return result;
-        }
-        // Just a color value
-        if (bColor) {
-          return { [colorProp]: bColor };
-        }
-        return null;
-      };
-
-      // Helper to check if parsed result has width or style (is a full shorthand)
-      const isFullShorthand = (parsed: Record<string, string> | null): boolean =>
-        parsed !== null && (widthProp in parsed || styleProp in parsed);
-
-      if (expr?.type === "ArrowFunctionExpression" && expr.body?.type === "ConditionalExpression") {
-        const test = expr.body.test as any;
-        const cons = expr.body.consequent as any;
-        const alt = expr.body.alternate as any;
-        if (
-          test?.type === "MemberExpression" &&
-          test.property?.type === "Identifier" &&
-          cons?.type === "StringLiteral" &&
-          alt?.type === "StringLiteral"
-        ) {
-          const altParsed = parseBorderShorthand(alt.value);
-          const consParsed = parseBorderShorthand(cons.value);
-          const when = test.property.name;
-          const notWhen = `!${when}`;
-
-          // Check if either value is a full border shorthand (has width or style)
-          const hasFullShorthand = isFullShorthand(altParsed) || isFullShorthand(consParsed);
-
-          if (hasFullShorthand) {
-            // Both branches should become variants (neither goes to base style)
-            if (altParsed) {
-              variantBuckets.set(notWhen, {
-                ...variantBuckets.get(notWhen),
-                ...altParsed,
-              });
-              variantStyleKeys[notWhen] ??= `${decl.styleKey}${toSuffixFromProp(notWhen)}`;
-            }
-            if (consParsed) {
-              variantBuckets.set(when, {
-                ...variantBuckets.get(when),
-                ...consParsed,
-              });
-              variantStyleKeys[when] ??= `${decl.styleKey}${toSuffixFromProp(when)}`;
-            }
-          } else {
-            // Original behavior: default to alternate, conditionally apply consequent
-            if (altParsed?.[colorProp]) {
-              styleObj[colorProp] = altParsed[colorProp];
-            }
-            if (consParsed?.[colorProp]) {
-              variantBuckets.set(when, {
-                ...variantBuckets.get(when),
-                [colorProp]: consParsed[colorProp],
-              });
-              variantStyleKeys[when] ??= `${decl.styleKey}${toSuffixFromProp(when)}`;
-            }
-          }
-          return true;
-        }
-      }
-
-      // Handle call expressions (like helper functions) by resolving via resolveDynamicNode:
-      //   border: 1px solid ${color("bgSub")}
-      if (expr?.type === "CallExpression") {
-        const loc = getNodeLocStart(expr);
-        const res = resolveDynamicNode(
-          {
-            slotId,
-            expr,
-            css: {
-              kind: "declaration",
-              selector: "&",
-              atRuleStack: [],
-              property: colorProp,
-              valueRaw: d.valueRaw,
-            },
-            component:
-              decl.base.kind === "intrinsic"
-                ? { localName: decl.localName, base: "intrinsic", tagOrIdent: decl.base.tagName }
-                : { localName: decl.localName, base: "component", tagOrIdent: decl.base.ident },
-            usage: { jsxUsages: 0, hasPropsSpread: false },
-            ...(loc ? { loc } : {}),
-          },
-          {
-            api,
-            filePath,
-            resolveValue,
-            resolveImport: (localName: string) => {
-              const v = importMap.get(localName);
-              return v ? v : null;
-            },
-            warn: (w: any) => {
-              warnings.push({
-                type: "dynamic-node",
-                feature: w.feature,
-                message: w.message,
-                ...(w.loc ? { loc: w.loc } : {}),
-              });
-            },
-          } as any,
-        );
-        if (res && res.type === "resolvedValue") {
-          for (const imp of res.imports ?? []) {
-            resolverImports.set(JSON.stringify(imp), imp);
-          }
-          const exprAst = parseExpr(res.expr);
-          if (exprAst) {
-            styleObj[colorProp] = exprAst as any;
-            return true;
-          }
-        }
-        // If resolution failed, fall through to other handlers
-      }
-
-      // Handle arrow functions that are simple member expressions (like theme access):
-      //   border: 1px solid ${(props) => props.theme.colors.primary}
-      //   border-right: 1px solid ${(props) => props.theme.borderColor}
-      // In this case, we modify the declaration's property to be the color property so that
-      // the generic dynamic handler (resolveDynamicNode) outputs the correct property.
-      if (expr?.type === "ArrowFunctionExpression") {
-        const body = expr.body as any;
-        // Simple arrow function returning a member expression: (p) => p.theme.colors.X
-        if (body?.type === "MemberExpression") {
-          // Mutate the declaration's property so fallback handlers use the color property
-          // e.g., "border" → "border-color", "border-right" → "border-right-color"
-          d.property = direction ? `border-${direction.toLowerCase()}-color` : "border-color";
-          return false; // Let the generic handler resolve the theme value
-        }
-      }
-
-      // Simple color expression (identifier/template literal) → border color expr
-      if (expr && expr.type !== "ArrowFunctionExpression") {
-        styleObj[colorProp] = expr as any;
-        return true;
-      }
-
-      // fallback to inline style via wrapper
-      if (decl.shouldForwardProp) {
-        inlineStyleProps.push({
-          prop: colorProp,
-          expr:
-            expr?.type === "ArrowFunctionExpression"
-              ? j.callExpression(expr, [j.identifier("props")])
-              : expr,
-        });
-        return true;
-      }
-      return false;
     };
 
     for (const rule of decl.rules) {
@@ -1269,13 +577,31 @@ export function lowerRules(args: {
           if (tryHandleMappedFunctionColor(d)) {
             continue;
           }
-          if (tryHandleAnimation(d)) {
+          if (tryHandleAnimation({ j, decl, d, keyframesNames, styleObj })) {
             continue;
           }
-          if (tryHandleInterpolatedBorder(d)) {
+          if (
+            tryHandleInterpolatedBorder({
+              api,
+              j,
+              filePath,
+              decl,
+              d,
+              styleObj,
+              resolveValue,
+              importMap,
+              warnings,
+              resolverImports,
+              parseExpr,
+              toSuffixFromProp,
+              variantBuckets,
+              variantStyleKeys,
+              inlineStyleProps,
+            })
+          ) {
             continue;
           }
-          if (tryHandleInterpolatedStringValue(d)) {
+          if (tryHandleInterpolatedStringValue({ j, decl, d, styleObj })) {
             continue;
           }
 
