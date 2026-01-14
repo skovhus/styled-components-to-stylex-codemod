@@ -13,6 +13,18 @@
         padding: 0;
       }
     </style>
+    <script>
+      // Some browser-bundled deps (notably `path-browserify`) call `process.cwd()`.
+      // Ensure `process.cwd` exists and is a function before any module code runs.
+      (function () {
+        var p = globalThis.process || (globalThis.process = {});
+        if (typeof p.cwd !== "function")
+          p.cwd = function () {
+            return "/";
+          };
+        if (typeof p.env !== "object" || p.env === null) p.env = {};
+      })();
+    </script>
   </head>
   <body>
     <div id="root"></div>
