@@ -1,4 +1,5 @@
 import * as stylex from "@stylexjs/stylex";
+import { mergedSx } from "./lib/mergedSx";
 
 type CompProps = React.PropsWithChildren<{
   $draggable?: boolean;
@@ -22,6 +23,21 @@ type StyledLinkProps = Omit<React.ComponentProps<typeof Link>, "className" | "st
 function StyledLink(props: StyledLinkProps) {
   const { $red, ...rest } = props;
   return <Link {...rest} {...stylex.props(styles.link, $red && styles.linkRed)} />;
+}
+
+type PointProps = {
+  $size?: number;
+} & { style?: React.CSSProperties; children?: React.ReactNode };
+
+// Pattern 3: Transient prop with dynamic value passed to inlined component
+// The prop is declared in type but not used in styles - must be stripped when inlined
+function Point(props: PointProps) {
+  const { children, style, ...rest } = props;
+  return (
+    <div {...rest} {...mergedSx(styles.point, undefined, style)}>
+      {children}
+    </div>
+  );
 }
 
 // Pattern 4: styled(Component) where base component declares the transient prop
@@ -67,7 +83,7 @@ export const App = () => (
     <Comp>Not Draggable</Comp>
     <StyledLink text="Click" $red />
     <StyledLink text="Click" />
-    <div {...stylex.props(styles.point)} style={{ top: "10px" }} />
+    <Point $size={100} style={{ top: "10px" }} />
     <CollapseArrowIcon $isOpen />
     <CollapseArrowIcon $isOpen={false} />
   </div>
@@ -87,9 +103,6 @@ const styles = stylex.create({
   linkRed: {
     color: "red",
   },
-
-  // Pattern 3: Transient prop with dynamic value passed to inlined component
-  // The prop is declared in type but not used in styles - must be stripped when inlined
   point: {
     position: "absolute",
     width: "12px",

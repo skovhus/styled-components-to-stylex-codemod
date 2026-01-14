@@ -1,5 +1,6 @@
 import * as React from "react";
 import * as stylex from "@stylexjs/stylex";
+import { mergedSx } from "./lib/mergedSx";
 
 // When a styled component is used as a base that accepts className and style,
 // the wrapper should preserve these props for external styling support
@@ -20,18 +21,8 @@ type StyledBadgeProps = Props & {
 
 function StyledBadge(props: StyledBadgeProps) {
   const { className, children, style, ...rest } = props;
-
-  const sx = stylex.props(styles.styledBadge);
   return (
-    <span
-      {...sx}
-      className={[sx.className, className].filter(Boolean).join(" ")}
-      style={{
-        ...sx.style,
-        ...style,
-      }}
-      {...rest}
-    >
+    <span {...rest} {...mergedSx(styles.styledBadge, className, style)}>
       {children}
     </span>
   );

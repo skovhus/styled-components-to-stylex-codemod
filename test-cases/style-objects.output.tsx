@@ -1,5 +1,6 @@
 import * as React from "react";
 import * as stylex from "@stylexjs/stylex";
+import { mergedSx } from "./lib/mergedSx";
 
 type DynamicBoxProps = React.PropsWithChildren<
   {
@@ -12,20 +13,18 @@ type DynamicBoxProps = React.PropsWithChildren<
 
 function DynamicBox(props: DynamicBoxProps) {
   const { children, style, $background, $size } = props;
-
-  const sx = stylex.props(
-    styles.dynamicBox,
-    $background != null && styles.dynamicBoxBackgroundColor($background),
-    $size != null && styles.dynamicBoxHeight($size),
-    $size != null && styles.dynamicBoxWidth($size),
-  );
   return (
     <div
-      {...sx}
-      style={{
-        ...sx.style,
-        ...style,
-      }}
+      {...mergedSx(
+        [
+          styles.dynamicBox,
+          $background != null && styles.dynamicBoxBackgroundColor($background),
+          $size != null && styles.dynamicBoxHeight($size),
+          $size != null && styles.dynamicBoxWidth($size),
+        ],
+        undefined,
+        style,
+      )}
     >
       {children}
     </div>

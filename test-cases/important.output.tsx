@@ -1,14 +1,36 @@
+import * as React from "react";
 import * as stylex from "@stylexjs/stylex";
+import { mergedSx } from "./lib/mergedSx";
+
+type OverrideButtonProps = React.PropsWithChildren<{
+  style?: React.CSSProperties;
+}>;
+
+// Using !important to override inline styles or third-party CSS
+function OverrideButton(props: OverrideButtonProps) {
+  const { children, style } = props;
+  return <button {...mergedSx(styles.overrideButton, undefined, style)}>{children}</button>;
+}
+
+type MixedStylesProps = React.PropsWithChildren<{
+  style?: React.CSSProperties;
+}>;
+
+// Mixed important and normal
+function MixedStyles(props: MixedStylesProps) {
+  const { children, style } = props;
+  return <p {...mergedSx(styles.mixedStyles, undefined, style)}>{children}</p>;
+}
 
 export const App = () => (
   <div>
-    <button {...stylex.props(styles.overrideButton)} style={{ background: "blue" }}>
+    <OverrideButton style={{ background: "blue" }}>
       Should be pink despite inline style
-    </button>
+    </OverrideButton>
     <div {...stylex.props(styles.forceWidth)}>Full width content</div>
-    <p {...stylex.props(styles.mixedStyles)} style={{ color: "red", margin: "20px" }}>
+    <MixedStyles style={{ color: "red", margin: "20px" }}>
       Color and margin should be overridden
-    </p>
+    </MixedStyles>
     <a href="#" {...stylex.props(styles.importantHover)}>
       Hover me
     </a>
@@ -16,7 +38,6 @@ export const App = () => (
 );
 
 const styles = stylex.create({
-  // Using !important to override inline styles or third-party CSS
   overrideButton: {
     backgroundColor: "#BF4F74 !important",
     color: "white !important",
@@ -32,8 +53,6 @@ const styles = stylex.create({
     maxWidth: "500px !important",
     margin: "0 auto",
   },
-
-  // Mixed important and normal
   mixedStyles: {
     fontSize: "16px",
     color: "#333 !important",

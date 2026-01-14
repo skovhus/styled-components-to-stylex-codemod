@@ -1,5 +1,6 @@
 import { useTheme } from "styled-components";
 import * as stylex from "@stylexjs/stylex";
+import { mergedSx } from "./lib/mergedSx";
 import { themeVars } from "./tokens.stylex";
 import * as React from "react";
 
@@ -14,12 +15,16 @@ type InputProps = {
 export function Input(props: InputProps) {
   const theme = useTheme();
   const someCustomColor = theme.colors.bgBase;
-  return (
-    <div
-      {...stylex.props(styles.colorPickerWrapper)}
-      style={{ backgroundColor: someCustomColor }}
-    />
-  );
+  return <ColorPickerWrapper style={{ backgroundColor: someCustomColor }} />;
+}
+
+type ColorPickerWrapperProps = React.PropsWithChildren<{
+  style?: React.CSSProperties;
+}>;
+
+function ColorPickerWrapper(props: ColorPickerWrapperProps) {
+  const { children, style } = props;
+  return <div {...mergedSx(styles.colorPickerWrapper, undefined, style)}>{children}</div>;
 }
 
 export const App = () => <Input />;

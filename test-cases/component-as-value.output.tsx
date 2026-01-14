@@ -1,5 +1,6 @@
 import React from "react";
 import * as stylex from "@stylexjs/stylex";
+import { mergedSx } from "./lib/mergedSx";
 
 // Bug 9: When a styled component is used as a value/reference
 // (e.g., passed to another component as a prop), the codemod must
@@ -28,18 +29,8 @@ type OuterWrapperProps = React.HTMLAttributes<HTMLDivElement>;
 // These styled components are passed as values, not just rendered
 function OuterWrapper(props: OuterWrapperProps) {
   const { className, children, style, ...rest } = props;
-
-  const sx = stylex.props(styles.outerWrapper);
   return (
-    <div
-      {...sx}
-      className={[sx.className, className].filter(Boolean).join(" ")}
-      style={{
-        ...sx.style,
-        ...style,
-      }}
-      {...rest}
-    >
+    <div {...rest} {...mergedSx(styles.outerWrapper, className, style)}>
       {children}
     </div>
   );
@@ -49,18 +40,8 @@ type InnerWrapperProps = React.HTMLAttributes<HTMLDivElement>;
 
 function InnerWrapper(props: InnerWrapperProps) {
   const { className, children, style, ...rest } = props;
-
-  const sx = stylex.props(styles.innerWrapper);
   return (
-    <div
-      {...sx}
-      className={[sx.className, className].filter(Boolean).join(" ")}
-      style={{
-        ...sx.style,
-        ...style,
-      }}
-      {...rest}
-    >
+    <div {...rest} {...mergedSx(styles.innerWrapper, className, style)}>
       {children}
     </div>
   );
@@ -76,7 +57,6 @@ export function App() {
 }
 
 const styles = stylex.create({
-  // These styled components are passed as values, not just rendered
   outerWrapper: {
     overflowY: "auto",
     scrollbarWidth: "thin",

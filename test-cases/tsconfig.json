@@ -16,13 +16,7 @@
     "noUnusedLocals": false,
     "noUnusedParameters": false
   },
-  "include": [
-    "./**/*.output.ts",
-    "./**/*.output.tsx",
-    "./**/*.input.ts",
-    "./**/*.input.tsx",
-    "./**/*.d.ts"
-  ],
+  "include": ["./**/*.ts", "./**/*.d.ts"],
   "exclude": [
     "../node_modules",
     "../dist",

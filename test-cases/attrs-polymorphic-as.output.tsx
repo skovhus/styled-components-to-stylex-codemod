@@ -1,5 +1,6 @@
 import * as React from "react";
 import * as stylex from "@stylexjs/stylex";
+import { mergedSx } from "./lib/mergedSx";
 
 // Pattern: styled(Component).attrs({ as: "element" })
 // The "as" prop changes the underlying element type
@@ -29,19 +30,8 @@ type LabelProps = React.ComponentProps<typeof Text> & {
 
 export function Label(props: LabelProps) {
   const { className, children, style, ...rest } = props;
-
-  const sx = stylex.props(styles.label);
   return (
-    <Text
-      as="label"
-      {...rest}
-      {...sx}
-      className={[sx.className, className].filter(Boolean).join(" ")}
-      style={{
-        ...sx.style,
-        ...style,
-      }}
-    >
+    <Text as="label" {...rest} {...mergedSx(styles.label, className, style)}>
       {children}
     </Text>
   );

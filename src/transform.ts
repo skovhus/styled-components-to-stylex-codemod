@@ -852,11 +852,13 @@ export function transformWithWarnings(
 
   // Helper to check if a styled component receives className in JSX usages.
   // If className is passed, it needs to be a wrapper to merge with stylex className.
-  // Note: `style` can be kept as-is on inlined elements for intentional overrides.
-  const receivesClassNameInJsx = (name: string): boolean => {
-    let found = false;
+  // Check if a styled component receives className or style props in JSX callsites.
+  // These components need wrapper functions to merge external className/style with stylex output.
+  const receivesClassNameOrStyleInJsx = (name: string): { className: boolean; style: boolean } => {
+    let foundClassName = false;
+    let foundStyle = false;
     const collectFromOpening = (opening: any) => {
-      if (found) {
+      if (foundClassName && foundStyle) {
         return;
       }
       for (const a of (opening?.attributes ?? []) as any[]) {
@@ -865,8 +867,10 @@ export function transformWithWarnings(
         }
         if (a.type === "JSXAttribute" && a.name?.type === "JSXIdentifier") {
           if (a.name.name === "className") {
-            found = true;
-            return;
+            foundClassName = true;
+          }
+          if (a.name.name === "style") {
+            foundStyle = true;
           }
         }
       }
@@ -876,43 +880,26 @@ export function transformWithWarnings(
         openingElement: { name: { type: "JSXIdentifier", name } },
       } as any)
       .forEach((p: any) => collectFromOpening(p.node.openingElement));
-    if (!found) {
-      root
-        .find(j.JSXSelfClosingElement, { name: { type: "JSXIdentifier", name } } as any)
-        .forEach((p: any) => collectFromOpening(p.node));
-    }
-    return found;
+    root
+      .find(j.JSXSelfClosingElement, { name: { type: "JSXIdentifier", name } } as any)
+      .forEach((p: any) => collectFromOpening(p.node));
+    return { className: foundClassName, style: foundStyle };
   };
 
-  // Styled components that receive className props in JSX need wrappers to merge them.
+  // Styled components that receive className/style props in JSX need wrappers to merge them.
   // Without a wrapper, passing `className` would replace the stylex className instead of merging.
+  // Also track which components receive className/style in JSX for merger import determination.
   for (const decl of styledDecls) {
-    if (decl.needsWrapperComponent) {
-      continue;
-    }
-    if (receivesClassNameInJsx(decl.localName)) {
-      decl.needsWrapperComponent = true;
+    const { className, style } = receivesClassNameOrStyleInJsx(decl.localName);
+    if (className || style) {
+      (decl as any).receivesClassNameOrStyleInJsx = true;
+      if (!decl.needsWrapperComponent) {
+        decl.needsWrapperComponent = true;
+      }
     }
   }
 
-  emitStylesAndImports({
-    root,
-    j,
-    filePath: file.path,
-    styledImports,
-    resolverImports,
-    resolvedStyleObjects,
-    styledDecls,
-    isAstNode,
-    objectToAst,
-    literalToAst,
-    stylesIdentifier,
-  });
-  hasChanges = true;
-
-  // Remove styled declarations and rewrite JSX usages
-
-  // Determine supportsExternalStyles for each decl
+  // Determine supportsExternalStyles for each decl (before emitStylesAndImports for merger import)
   for (const decl of styledDecls) {
     // 1. If extended by another styled component in this file -> YES
     if (extendedBy.has(decl.localName)) {
@@ -935,6 +922,188 @@ export function transformWithWarnings(
       isDefaultExport: exportInfo.isDefault,
     });
   }
+
+  // Early detection of components used as values (before emitStylesAndImports for merger import)
+  // Components passed as props (e.g., <Component elementType={StyledDiv} />) need className/style merging
+  for (const decl of styledDecls) {
+    const usedAsValue =
+      root
+        .find(j.Identifier, { name: decl.localName })
+        .filter((p) => {
+          // Skip the styled component declaration itself
+          if (p.parentPath?.node?.type === "VariableDeclarator") {
+            return false;
+          }
+          // Skip JSX element names (these are handled by inline substitution)
+          if (
+            p.parentPath?.node?.type === "JSXOpeningElement" ||
+            p.parentPath?.node?.type === "JSXClosingElement"
+          ) {
+            return false;
+          }
+          // Skip JSX member expressions like <Styled.Component />
+          if (
+            p.parentPath?.node?.type === "JSXMemberExpression" &&
+            (p.parentPath.node as any).object === p.node
+          ) {
+            return false;
+          }
+          // Skip styled(Component) extensions
+          if (p.parentPath?.node?.type === "CallExpression") {
+            const callExpr = p.parentPath.node as any;
+            const callee = callExpr.callee;
+            if (callee?.type === "Identifier" && callee.name === styledDefaultImport) {
+              return false;
+            }
+            if (
+              callee?.type === "MemberExpression" &&
+              callee.object?.type === "CallExpression" &&
+              callee.object.callee?.type === "Identifier" &&
+              callee.object.callee.name === styledDefaultImport
+            ) {
+              return false;
+            }
+          }
+          // Skip TaggedTemplateExpression tags
+          if (p.parentPath?.node?.type === "TaggedTemplateExpression") {
+            return false;
+          }
+          // Skip styled(Component) call in TaggedTemplateExpression
+          if (
+            p.parentPath?.node?.type === "CallExpression" &&
+            p.parentPath.parentPath?.node?.type === "TaggedTemplateExpression"
+          ) {
+            return false;
+          }
+          // Skip template literal interpolations (e.g., ${Link}:hover &)
+          if (p.parentPath?.node?.type === "TemplateLiteral") {
+            return false;
+          }
+          return true;
+        })
+        .size() > 0;
+
+    if (usedAsValue) {
+      decl.usedAsValue = true;
+      decl.needsWrapperComponent = true;
+    }
+  }
+
+  // Helper to check if a type member is `as?: React.ElementType`.
+  const isAsElementTypeMemberEarly = (member: any): boolean => {
+    if (
+      member.type !== "TSPropertySignature" ||
+      member.key?.type !== "Identifier" ||
+      member.key.name !== "as"
+    ) {
+      return false;
+    }
+    const memberType = member.typeAnnotation?.typeAnnotation;
+    if (memberType?.type === "TSTypeReference") {
+      const memberTypeName = memberType.typeName;
+      if (
+        memberTypeName?.type === "TSQualifiedName" &&
+        memberTypeName.left?.name === "React" &&
+        memberTypeName.right?.name === "ElementType"
+      ) {
+        return true;
+      }
+      if (memberTypeName?.type === "Identifier" && memberTypeName.name === "ElementType") {
+        return true;
+      }
+    }
+    return false;
+  };
+
+  // Helper to check if a type contains `as?: React.ElementType` property (early version).
+  const typeContainsAsElementTypeEarly = (typeNode: any): boolean => {
+    if (!typeNode) {
+      return false;
+    }
+    if (typeNode.type === "TSIntersectionType") {
+      return (typeNode.types ?? []).some(typeContainsAsElementTypeEarly);
+    }
+    if (typeNode.type === "TSParenthesizedType") {
+      return typeContainsAsElementTypeEarly(typeNode.typeAnnotation);
+    }
+    if (typeNode.type === "TSTypeReference") {
+      const typeParams = typeNode.typeParameters?.params ?? [];
+      for (const tp of typeParams) {
+        if (typeContainsAsElementTypeEarly(tp)) {
+          return true;
+        }
+      }
+      if (typeNode.typeName?.type === "Identifier") {
+        const typeName = typeNode.typeName.name;
+        const typeAlias = root
+          .find(j.TSTypeAliasDeclaration)
+          .filter((p) => (p.node as any).id?.name === typeName);
+        if (typeAlias.size() > 0) {
+          return typeContainsAsElementTypeEarly(typeAlias.get().node.typeAnnotation);
+        }
+        const iface = root
+          .find(j.TSInterfaceDeclaration)
+          .filter((p) => (p.node as any).id?.name === typeName);
+        if (iface.size() > 0) {
+          const body = iface.get().node.body?.body ?? [];
+          for (const member of body) {
+            if (isAsElementTypeMemberEarly(member)) {
+              return true;
+            }
+          }
+        }
+      }
+      return false;
+    }
+    if (typeNode.type === "TSTypeLiteral") {
+      for (const member of typeNode.members ?? []) {
+        if (isAsElementTypeMemberEarly(member)) {
+          return true;
+        }
+      }
+    }
+    return false;
+  };
+
+  // Early detection of polymorphic intrinsic wrappers (before emitStylesAndImports for merger import)
+  // These are intrinsic styled components (styled.tag) used with as={} in JSX OR whose props type
+  // includes as?: React.ElementType. They pass style through directly instead of merging.
+  for (const decl of styledDecls) {
+    if (decl.base.kind === "intrinsic") {
+      // Check for as/forwardedAs usage in JSX
+      const el = root.find(j.JSXElement, {
+        openingElement: { name: { type: "JSXIdentifier", name: decl.localName } },
+      });
+      const hasAs =
+        el.find(j.JSXAttribute, { name: { type: "JSXIdentifier", name: "as" } }).size() > 0;
+      const hasForwardedAs =
+        el.find(j.JSXAttribute, { name: { type: "JSXIdentifier", name: "forwardedAs" } }).size() >
+        0;
+      // Also check if props type contains as?: React.ElementType
+      const propsTypeHasAs = decl.propsType && typeContainsAsElementTypeEarly(decl.propsType);
+      if (hasAs || hasForwardedAs || propsTypeHasAs) {
+        (decl as any).isPolymorphicIntrinsicWrapper = true;
+      }
+    }
+  }
+
+  emitStylesAndImports({
+    root,
+    j,
+    filePath: file.path,
+    styledImports,
+    resolverImports,
+    resolvedStyleObjects,
+    styledDecls,
+    isAstNode,
+    objectToAst,
+    literalToAst,
+    stylesIdentifier,
+    styleMerger: adapter.styleMerger,
+  });
+  hasChanges = true;
+
+  // Remove styled declarations and rewrite JSX usages
 
   const wrapperNames = new Set<string>();
   // Track wrappers that have expression `as` values (not just string literals)
@@ -1118,6 +1287,11 @@ export function transformWithWarnings(
   for (const decl of styledDecls) {
     if (wrapperNames.has(decl.localName)) {
       decl.needsWrapperComponent = true;
+      // Mark intrinsic components with polymorphic `as` usage - these pass style through
+      // directly instead of merging, so they don't need the merger import
+      if (decl.base.kind === "intrinsic") {
+        (decl as any).isPolymorphicIntrinsicWrapper = true;
+      }
     }
     // `withConfig({ shouldForwardProp })` cases need wrappers so we can consume
     // styling props without forwarding them to the DOM.
@@ -1906,6 +2080,7 @@ export function transformWithWarnings(
     patternProp,
     exportedComponents,
     stylesIdentifier,
+    styleMerger: adapter.styleMerger,
   });
 
   // Reinsert static property assignments after their corresponding wrapper functions.

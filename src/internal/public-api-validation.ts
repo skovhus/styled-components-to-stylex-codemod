@@ -93,6 +93,69 @@ export function assertValidAdapter(
       ].join("\n"),
     );
   }
+
+  // Validate styleMerger config (null or object with functionName/importSource)
+  const styleMerger = obj?.styleMerger;
+  if (styleMerger !== null && styleMerger !== undefined) {
+    if (typeof styleMerger !== "object") {
+      throw new Error(
+        [
+          `[styled-components-to-stylex] ${where}: adapter.styleMerger must be null or an object.`,
+          `Received: styleMerger=${describeValue(styleMerger)}`,
+          "",
+          "Expected shape:",
+          "  {",
+          '    functionName: "stylexProps",',
+          '    importSource: { kind: "specifier", value: "@company/ui-utils" }',
+          "  }",
+        ].join("\n"),
+      );
+    }
+
+    const { functionName, importSource } = styleMerger;
+
+    if (typeof functionName !== "string" || !functionName.trim()) {
+      throw new Error(
+        [
+          `[styled-components-to-stylex] ${where}: adapter.styleMerger.functionName must be a non-empty string.`,
+          `Received: functionName=${describeValue(functionName)}`,
+        ].join("\n"),
+      );
+    }
+
+    if (!importSource || typeof importSource !== "object") {
+      throw new Error(
+        [
+          `[styled-components-to-stylex] ${where}: adapter.styleMerger.importSource must be an object.`,
+          `Received: importSource=${describeValue(importSource)}`,
+          "",
+          "Expected shape:",
+          '  { kind: "specifier", value: "@company/ui-utils" }',
+          "  or",
+          '  { kind: "absolutePath", value: "/path/to/module.ts" }',
+        ].join("\n"),
+      );
+    }
+
+    const { kind, value } = importSource;
+    if (kind !== "specifier" && kind !== "absolutePath") {
+      throw new Error(
+        [
+          `[styled-components-to-stylex] ${where}: adapter.styleMerger.importSource.kind must be "specifier" or "absolutePath".`,
+          `Received: kind=${describeValue(kind)}`,
+        ].join("\n"),
+      );
+    }
+
+    if (typeof value !== "string" || !value.trim()) {
+      throw new Error(
+        [
+          `[styled-components-to-stylex] ${where}: adapter.styleMerger.importSource.value must be a non-empty string.`,
+          `Received: value=${describeValue(value)}`,
+        ].join("\n"),
+      );
+    }
+  }
 }
 
 const REPO_URL = "https://github.com/skovhus/styled-components-to-stylex-codemod";

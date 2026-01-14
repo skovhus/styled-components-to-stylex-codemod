@@ -750,3 +750,188 @@ export const App = () => <Button>Click</Button>;
     expect(w!.message).toMatch(/path=/i);
   });
 });
+
+describe("styleMerger configuration", () => {
+  const mergerAdapter = {
+    shouldSupportExternalStyling() {
+      return true;
+    },
+    resolveValue() {
+      return null;
+    },
+    styleMerger: {
+      functionName: "stylexProps",
+      importSource: { kind: "specifier" as const, value: "@company/ui-utils" },
+    },
+  };
+
+  it("should use merger function instead of verbose pattern when configured", async () => {
+    const source = `
+import styled from 'styled-components';
+
+export const Button = styled.button\`
+  color: blue;
+\`;
+
+export const App = () => <Button>Click</Button>;
+`;
+
+    const result = transformWithWarnings(
+      { source, path: "test.tsx" },
+      { jscodeshift: j, j, stats: () => {}, report: () => {} },
+      { adapter: mergerAdapter },
+    );
+
+    expect(result.code).not.toBeNull();
+    // Should use stylexProps merger function
+    expect(result.code).toContain("stylexProps");
+    // Should NOT have the verbose sx variable pattern
+    expect(result.code).not.toMatch(/const\s+sx\s*=\s*stylex\.props/);
+    // Should NOT have the verbose className merging
+    expect(result.code).not.toContain(".filter(Boolean).join");
+  });
+
+  it("should import the merger function from configured source", async () => {
+    const source = `
+import styled from 'styled-components';
+
+export const Button = styled.button\`
+  color: blue;
+\`;
+
+export const App = () => <Button>Click</Button>;
+`;
+
+    const result = transformWithWarnings(
+      { source, path: "test.tsx" },
+      { jscodeshift: j, j, stats: () => {}, report: () => {} },
+      { adapter: mergerAdapter },
+    );
+
+    expect(result.code).not.toBeNull();
+    // Should import stylexProps from @company/ui-utils
+    expect(result.code).toMatch(/import\s*{\s*stylexProps\s*}\s*from\s*["']@company\/ui-utils["']/);
+  });
+
+  it("should wrap multiple styles in array", async () => {
+    const source = `
+import styled from 'styled-components';
+
+const Base = styled.div\`
+  color: blue;
+\`;
+
+export const Extended = styled(Base)\`
+  background: red;
+\`;
+
+export const App = () => <Extended>Click</Extended>;
+`;
+
+    const result = transformWithWarnings(
+      { source, path: "test.tsx" },
+      { jscodeshift: j, j, stats: () => {}, report: () => {} },
+      { adapter: mergerAdapter },
+    );
+
+    expect(result.code).not.toBeNull();
+    // Should wrap multiple styles in array: stylexProps([styles.base, styles.extended], ...)
+    expect(result.code).toMatch(/stylexProps\s*\(\s*\[/);
+  });
+
+  it("should pass className and style arguments to merger", async () => {
+    const source = `
+import styled from 'styled-components';
+
+export const Button = styled.button\`
+  color: blue;
+\`;
+
+export const App = () => <Button>Click</Button>;
+`;
+
+    const result = transformWithWarnings(
+      { source, path: "test.tsx" },
+      { jscodeshift: j, j, stats: () => {}, report: () => {} },
+      { adapter: mergerAdapter },
+    );
+
+    expect(result.code).not.toBeNull();
+    // The merger should be called with styles, className, style
+    // Pattern: stylexProps(styles.button, className, style)
+    expect(result.code).toMatch(/stylexProps\s*\([^)]*className[^)]*style/);
+  });
+
+  it("should not use merger when external styles are disabled", async () => {
+    const adapterNoExternalStyles = {
+      shouldSupportExternalStyling() {
+        return false;
+      },
+      resolveValue() {
+        return null;
+      },
+      styleMerger: {
+        functionName: "stylexProps",
+        importSource: { kind: "specifier" as const, value: "@company/ui-utils" },
+      },
+    };
+
+    const source = `
+import styled from 'styled-components';
+
+export const Button = styled.button\`
+  color: blue;
+\`;
+
+export const App = () => <Button>Click</Button>;
+`;
+
+    const result = transformWithWarnings(
+      { source, path: "test.tsx" },
+      { jscodeshift: j, j, stats: () => {}, report: () => {} },
+      { adapter: adapterNoExternalStyles },
+    );
+
+    expect(result.code).not.toBeNull();
+    // Should NOT import the merger function (not needed without external styles)
+    expect(result.code).not.toContain("stylexProps");
+    // Should use plain stylex.props spread
+    expect(result.code).toContain("stylex.props");
+  });
+
+  it("should use verbose pattern when no merger is configured", async () => {
+    const adapterWithoutMerger = {
+      styleMerger: null,
+      shouldSupportExternalStyling() {
+        return true;
+      },
+      resolveValue() {
+        return null;
+      },
+    };
+
+    const source = `
+import styled from 'styled-components';
+
+export const Button = styled.button\`
+  color: blue;
+\`;
+
+export const App = () => <Button>Click</Button>;
+`;
+
+    const result = transformWithWarnings(
+      { source, path: "test.tsx" },
+      { jscodeshift: j, j, stats: () => {}, report: () => {} },
+      { adapter: adapterWithoutMerger },
+    );
+
+    expect(result.code).not.toBeNull();
+    // Should use the verbose sx variable pattern
+    expect(result.code).toMatch(/const\s+sx\s*=\s*stylex\.props/);
+    // Should have the verbose className merging
+    expect(result.code).toContain(".filter(Boolean).join");
+    // Should have style spread
+    expect(result.code).toContain("...sx.style");
+  });
+});

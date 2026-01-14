@@ -1,5 +1,6 @@
 import * as React from "react";
 import * as stylex from "@stylexjs/stylex";
+import { mergedSx } from "./lib/mergedSx";
 
 // Pattern: styled(Component) where the base component does NOT accept children
 // The wrapper should NOT try to pass children through
@@ -25,19 +26,7 @@ type StyledTextDividerProps = React.ComponentProps<typeof TextDivider>;
 
 export function StyledTextDivider(props: StyledTextDividerProps) {
   const { className, style, ...rest } = props;
-
-  const sx = stylex.props(styles.textDivider);
-  return (
-    <TextDivider
-      {...rest}
-      {...sx}
-      className={[sx.className, className].filter(Boolean).join(" ")}
-      style={{
-        ...sx.style,
-        ...style,
-      }}
-    />
-  );
+  return <TextDivider {...rest} {...mergedSx(styles.textDivider, className, style)} />;
 }
 
 StyledTextDivider.HEIGHT = TextDivider.HEIGHT;

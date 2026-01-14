@@ -87,12 +87,25 @@ const RenderDebugFrame: React.FC<{ children: React.ReactNode }> = ({ children })
 
 // Auto-discover all test case modules using Vite's glob import
 // Supports .tsx, .jsx, and .flow.jsx extensions
+// Excludes `_unsupported.*` and `unsupported-*` files to avoid import errors
 const inputModules = import.meta.glob<{ App: React.ComponentType }>(
-  ["./*.input.tsx", "./*.input.jsx", "./*.flow.input.jsx"],
+  [
+    "./*.input.tsx",
+    "./*.input.jsx",
+    "./*.flow.input.jsx",
+    "!./_unsupported.*.tsx",
+    "!./unsupported-*.tsx",
+  ],
   { eager: true },
 );
 const outputModules = import.meta.glob<{ App: React.ComponentType }>(
-  ["./*.output.tsx", "./*.output.jsx", "./*.flow.output.jsx"],
+  [
+    "./*.output.tsx",
+    "./*.output.jsx",
+    "./*.flow.output.jsx",
+    "!./_unsupported.*.tsx",
+    "!./unsupported-*.tsx",
+  ],
   { eager: true },
 );
 

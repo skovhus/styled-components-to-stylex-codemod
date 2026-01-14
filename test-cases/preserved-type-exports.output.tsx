@@ -1,5 +1,6 @@
 import React from "react";
 import * as stylex from "@stylexjs/stylex";
+import { mergedSx } from "./lib/mergedSx";
 
 // Bug 7: When styled components are transformed, related type exports
 // and component exports should be preserved properly.
@@ -13,21 +14,18 @@ export type ButtonVariant = ButtonProps["variant"];
 
 function Button(props: ButtonProps) {
   const { className, children, style, size, variant, ...rest } = props;
-
-  const sx = stylex.props(
-    styles.button,
-    size === "large" && styles.buttonSizeLarge,
-    variant === "primary" && styles.buttonVariantPrimary,
-  );
   return (
     <button
-      {...sx}
-      className={[sx.className, className].filter(Boolean).join(" ")}
-      style={{
-        ...sx.style,
-        ...style,
-      }}
       {...rest}
+      {...mergedSx(
+        [
+          styles.button,
+          size === "large" && styles.buttonSizeLarge,
+          variant === "primary" && styles.buttonVariantPrimary,
+        ],
+        className,
+        style,
+      )}
     >
       {children}
     </button>

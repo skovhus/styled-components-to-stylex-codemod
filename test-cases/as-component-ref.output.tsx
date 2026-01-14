@@ -67,8 +67,6 @@ export function AnimatedNumber(props: Props) {
 export const App = () => <AnimatedNumber width={100}>42</AnimatedNumber>;
 
 const styles = stylex.create({
-  // When as={animated.span} is used, the component should render as animated.span
-  // This pattern is common with animation libraries like react-spring
   animatedText: {
     fontVariantNumeric: "tabular-nums",
     overflow: "visible",

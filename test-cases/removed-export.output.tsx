@@ -1,5 +1,6 @@
 import * as React from "react";
 import * as stylex from "@stylexjs/stylex";
+import { mergedSx } from "./lib/mergedSx";
 import { type FocusTrap as OriginalFocusTrap, createFocusTrap } from "./lib/focus-trap";
 import type { SelectionFunction } from "./lib/helpers";
 
@@ -64,20 +65,7 @@ type StyledLabelProps = React.PropsWithChildren<{
 // 2. Directly in JSX: <StyledText>
 function StyledLabel(props: StyledLabelProps) {
   const { className, children, style } = props;
-
-  const sx = stylex.props(styles.styledLabel);
-  return (
-    <span
-      {...sx}
-      className={[sx.className, className].filter(Boolean).join(" ")}
-      style={{
-        ...sx.style,
-        ...style,
-      }}
-    >
-      {children}
-    </span>
-  );
+  return <span {...mergedSx(styles.styledLabel, className, style)}>{children}</span>;
 }
 
 type HelpLabelProps = Omit<React.ComponentProps<typeof StyledLabel>, "className" | "style">;
@@ -125,18 +113,8 @@ type StyledTextProps = React.ComponentProps<typeof Text>;
 
 function StyledText(props: StyledTextProps) {
   const { className, children, style, ...rest } = props;
-
-  const sx = stylex.props(styles.text);
   return (
-    <Text
-      {...rest}
-      {...sx}
-      className={[sx.className, className].filter(Boolean).join(" ")}
-      style={{
-        ...sx.style,
-        ...style,
-      }}
-    >
+    <Text {...rest} {...mergedSx(styles.text, className, style)}>
       {children}
     </Text>
   );
