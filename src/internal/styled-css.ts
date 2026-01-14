@@ -48,6 +48,6 @@ export function parseStyledTemplateLiteral(template: TemplateLiteral): ParsedSty
   return { rawCss, slots, stylisAst };
 }
 
-export function makeInterpolationPlaceholder(index: number): string {
+function makeInterpolationPlaceholder(index: number): string {
   return `__SC_EXPR_${index}__`;
 }

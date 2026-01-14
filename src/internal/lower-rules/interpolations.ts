@@ -61,11 +61,7 @@ export function wrapExprWithStaticParts(expr: string, prefix: string, suffix: st
   return `\`${prefix}\${${expr}}${suffix}\``;
 }
 
-export function buildInterpolatedTemplate(args: {
-  j: any;
-  decl: StyledDecl;
-  cssValue: any;
-}): unknown {
+function buildInterpolatedTemplate(args: { j: any; decl: StyledDecl; cssValue: any }): unknown {
   const { j, decl, cssValue } = args;
   // Build a JS TemplateLiteral from CssValue parts when it’s basically string interpolation,
   // e.g. `${spacing}px`, `${spacing / 2}px 0`, `1px solid ${theme.colors.secondary}` (handled elsewhere).

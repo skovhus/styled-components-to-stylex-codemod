@@ -1,7 +1,7 @@
 import { compile } from "stylis";
 import { cssPropertyToStylexProp } from "./css-prop-mapping.js";
 
-export function parseKeyframesTemplate(args: {
+function parseKeyframesTemplate(args: {
   template: any;
 }): Record<string, Record<string, unknown>> | null {
   const { template } = args;

@@ -7,7 +7,7 @@
  * We keep a small allowlist here to avoid leaking obvious non-DOM props while preserving the props
  * commonly used in fixtures. This is intentionally conservative and centralized so it's easy to audit.
  */
-export const KNOWN_SAFE_DOM_ATTRS = new Set<string>([
+const KNOWN_SAFE_DOM_ATTRS = new Set<string>([
   // Core React props
   "className",
   "style",

@@ -1,13 +1,13 @@
 import type { ResolveContext, ResolveResult } from "../adapter.js";
 
-export type VarCall = {
+type VarCall = {
   start: number;
   end: number;
   name: string;
   fallback?: string;
 };
 
-export function findCssVarCalls(raw: string): VarCall[] {
+function findCssVarCalls(raw: string): VarCall[] {
   const out: VarCall[] = [];
   let i = 0;
   while (i < raw.length) {
