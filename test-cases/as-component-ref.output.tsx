@@ -1,5 +1,6 @@
 import * as React from "react";
 import * as stylex from "@stylexjs/stylex";
+import { mergedSx } from "./lib/mergedSx";
 
 // SpringValue simulates react-spring's animated value type
 type SpringValue<T> = { get(): T };
@@ -28,7 +29,7 @@ type AnimatedTextProps<C extends React.ElementType = "span"> = Omit<
 function AnimatedText<C extends React.ElementType = "span">(props: AnimatedTextProps<C>) {
   const { as: Component = "span", children, style, ...rest } = props;
   return (
-    <Component {...rest} {...stylex.props(styles.animatedText)} style={style}>
+    <Component {...rest} {...mergedSx(styles.animatedText, undefined, style)}>
       {children}
     </Component>
   );

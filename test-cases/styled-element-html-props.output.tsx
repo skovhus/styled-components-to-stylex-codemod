@@ -5,6 +5,7 @@ import { mergedSx } from "./lib/mergedSx";
 interface TextColorProps extends React.ComponentProps<"span"> {
   /** The color of the text. */
   color: string;
+  as?: React.ElementType;
 }
 
 /**
@@ -12,11 +13,11 @@ interface TextColorProps extends React.ComponentProps<"span"> {
  * When exported, should include HTML span props (className, children, style).
  */
 export function TextColor(props: TextColorProps) {
-  const { className, children, style, color } = props;
+  const { as: Component = "span", className, children, style, color } = props;
   return (
-    <span {...mergedSx([styles.textColor, styles.textColorColor(color)], className, style)}>
+    <Component {...mergedSx([styles.textColor, styles.textColorColor(color)], className, style)}>
       {children}
-    </span>
+    </Component>
   );
 }
 

@@ -12,14 +12,15 @@ import type { Colors } from "./lib/colors";
 interface TextColorProps extends React.ComponentProps<"span"> {
   /** Custom color prop */
   color: string;
+  as?: React.ElementType;
 }
 
 export function TextColor(props: TextColorProps) {
-  const { className, children, style, color } = props;
+  const { as: Component = "span", className, children, style, color } = props;
   return (
-    <span {...mergedSx([styles.textColor, styles.textColorColor(color)], className, style)}>
+    <Component {...mergedSx([styles.textColor, styles.textColorColor(color)], className, style)}>
       {children}
-    </span>
+    </Component>
   );
 }
 

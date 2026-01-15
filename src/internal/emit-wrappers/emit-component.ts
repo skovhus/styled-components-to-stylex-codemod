@@ -94,11 +94,7 @@ export function emitComponentWrappers(ctx: any): { emitted: any[]; needsReactTyp
           const baseMaybeOmitted = omitted.length
             ? `Omit<${baseProps}, ${omitted.join(" | ")}>`
             : baseProps;
-          const typeText = joinIntersection(
-            baseMaybeOmitted,
-            "{ as?: C }",
-            `Omit<React.ComponentPropsWithoutRef<C>, keyof ${baseProps} | "as">`,
-          );
+          const typeText = joinIntersection(baseMaybeOmitted, "{ as?: C }");
           emitNamedPropsType(
             d.localName,
             typeText,

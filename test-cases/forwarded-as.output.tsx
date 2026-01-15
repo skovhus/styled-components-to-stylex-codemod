@@ -6,9 +6,9 @@ type ButtonProps<C extends React.ElementType = "button"> = React.ComponentPropsW
 };
 
 function Button<C extends React.ElementType = "button">(props: ButtonProps<C>) {
-  const { as: Component = "button", children, style, ...rest } = props;
+  const { as: Component = "button", className, children, style, ...rest } = props;
   return (
-    <Component {...rest} {...stylex.props(styles.button)} style={style}>
+    <Component {...rest} {...mergedSx(styles.button, className, style)}>
       {children}
     </Component>
   );

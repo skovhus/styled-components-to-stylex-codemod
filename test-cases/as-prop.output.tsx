@@ -19,10 +19,7 @@ function Button<C extends React.ElementType = "button">(props: ButtonProps<C>) {
 type StyledTextProps<C extends React.ElementType = typeof Text> = Omit<
   React.ComponentProps<typeof Text>,
   "className" | "style"
-> & { as?: C } & Omit<
-    React.ComponentPropsWithoutRef<C>,
-    keyof React.ComponentProps<typeof Text> | "as"
-  >;
+> & { as?: C };
 
 function StyledText<C extends React.ElementType = typeof Text>(props: StyledTextProps<C>) {
   return <Text {...props} {...stylex.props(styles.text)} />;

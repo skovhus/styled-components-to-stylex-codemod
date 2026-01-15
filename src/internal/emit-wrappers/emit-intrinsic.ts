@@ -38,6 +38,84 @@ export function emitIntrinsicWrappers(ctx: any): { emitted: any[]; needsReactTyp
   const emitted: any[] = [];
   let needsReactTypeImport = false;
 
+  const mergeAsIntoPropsWithChildren = (typeText: string): string | null => {
+    const prefix = "React.PropsWithChildren<";
+    if (!typeText.trim().startsWith(prefix) || !typeText.trim().endsWith(">")) {
+      return null;
+    }
+    const inner = typeText.trim().slice(prefix.length, -1).trim();
+    if (inner === "{}") {
+      return `${prefix}{ as?: React.ElementType }>`;
+    }
+    if (inner.startsWith("{") && inner.endsWith("}")) {
+      let body = inner.slice(1, -1).trim();
+      if (body.endsWith(";")) {
+        body = body.slice(0, -1).trim();
+      }
+      const withAs = body.length > 0 ? `${body}; as?: React.ElementType` : "as?: React.ElementType";
+      return `${prefix}{ ${withAs} }>`;
+    }
+    return null;
+  };
+
+  const addAsPropToExistingType = (typeName: string): boolean => {
+    if (!emitTypes) {
+      return false;
+    }
+    let didUpdate = false;
+    const interfaces = root.find(j.TSInterfaceDeclaration, {
+      id: { type: "Identifier", name: typeName },
+    } as any);
+    interfaces.forEach((path: any) => {
+      const iface = path.node;
+      const members = iface.body?.body ?? [];
+      const hasAs = members.some(
+        (m: any) =>
+          m.type === "TSPropertySignature" && m.key?.type === "Identifier" && m.key.name === "as",
+      );
+      if (hasAs) {
+        didUpdate = true;
+        return;
+      }
+      const parsed = j(`interface X { as?: React.ElementType }`).get().node.program.body[0] as any;
+      const prop = parsed.body?.body?.[0];
+      if (prop) {
+        members.push(prop);
+        didUpdate = true;
+      }
+    });
+    if (didUpdate) {
+      return true;
+    }
+    const typeAliases = root.find(j.TSTypeAliasDeclaration, {
+      id: { type: "Identifier", name: typeName },
+    } as any);
+    typeAliases.forEach((path: any) => {
+      const alias = path.node;
+      const existing = alias.typeAnnotation;
+      if (!existing) {
+        return;
+      }
+      const existingStr = j(existing).toSource();
+      if (existingStr.includes("as?:") || existingStr.includes("as :")) {
+        didUpdate = true;
+        return;
+      }
+      const parsed = j(`type X = { as?: React.ElementType };`).get().node.program.body[0] as any;
+      const asType = parsed.typeAnnotation;
+      if (!asType) {
+        return;
+      }
+      if (existing.type === "TSIntersectionType") {
+        existing.types = [...(existing.types ?? []), asType];
+      } else {
+        alias.typeAnnotation = j.tsIntersectionType([existing, asType]);
+      }
+      didUpdate = true;
+    });
+    return didUpdate;
+  };
+
   const inputWrapperDecls = wrapperDecls.filter(
     (d: any) =>
       d.base.kind === "intrinsic" && d.base.tagName === "input" && d.attrWrapper?.kind === "input",
@@ -291,6 +369,7 @@ export function emitIntrinsicWrappers(ctx: any): { emitted: any[]; needsReactTyp
       const tagName = d.base.tagName;
       const allowClassNameProp = shouldAllowClassNameProp(d);
       const allowStyleProp = shouldAllowStyleProp(d);
+      const allowAsProp = !VOID_TAGS.has(tagName);
       const explicit = stringifyTsType(d.propsType);
 
       // Check if the explicit props type is a simple (non-generic) type reference.
@@ -321,8 +400,10 @@ export function emitIntrinsicWrappers(ctx: any): { emitted: any[]; needsReactTyp
         }
         const baseMaybeOmitted =
           omitted.length > 0 ? `Omit<${base}, ${omitted.join(" | ")}>` : base;
-        const extra = "{ as?: C }";
-        return joinIntersection(baseMaybeOmitted, extra);
+        if (!allowAsProp) {
+          return baseMaybeOmitted;
+        }
+        return joinIntersection(baseMaybeOmitted, "{ as?: C }");
       })();
 
       if (!isExplicitNonGenericType) {
@@ -359,11 +440,6 @@ export function emitIntrinsicWrappers(ctx: any): { emitted: any[]; needsReactTyp
         }
       }
 
-      const stylexPropsCall = j.callExpression(
-        j.memberExpression(j.identifier("stylex"), j.identifier("props")),
-        styleArgs,
-      );
-
       const isVoidTag = VOID_TAGS.has(tagName);
       const propsParamId = j.identifier("props");
       if (emitTypes) {
@@ -386,17 +462,23 @@ export function emitIntrinsicWrappers(ctx: any): { emitted: any[]; needsReactTyp
       const propsId = j.identifier("props");
       const childrenId = j.identifier("children");
       const restId = j.identifier("rest");
+      const classNameId = j.identifier("className");
       const styleId = j.identifier("style");
 
       const declStmt = j.variableDeclaration("const", [
         j.variableDeclarator(
           j.objectPattern([
-            j.property.from({
-              kind: "init",
-              key: j.identifier("as"),
-              value: j.assignmentPattern(j.identifier("Component"), j.literal(tagName)),
-              shorthand: false,
-            }),
+            ...(allowAsProp
+              ? [
+                  j.property.from({
+                    kind: "init",
+                    key: j.identifier("as"),
+                    value: j.assignmentPattern(j.identifier("Component"), j.literal(tagName)),
+                    shorthand: false,
+                  }),
+                ]
+              : []),
+            ...(allowClassNameProp ? [patternProp("className", classNameId)] : []),
             ...(isVoidTag ? [] : [patternProp("children", childrenId)]),
             ...(allowStyleProp ? [patternProp("style", styleId)] : []),
             // Add variant props to destructuring
@@ -407,14 +489,39 @@ export function emitIntrinsicWrappers(ctx: any): { emitted: any[]; needsReactTyp
         ),
       ]);
 
+      const merging = emitStyleMerging({
+        j,
+        styleMerger,
+        styleArgs,
+        classNameId,
+        styleId,
+        allowClassNameProp,
+        allowStyleProp,
+        inlineStyleProps: [],
+      });
+
       const attrs: any[] = [
         j.jsxSpreadAttribute(restId),
-        j.jsxSpreadAttribute(stylexPropsCall),
-        ...(allowStyleProp
-          ? [j.jsxAttribute(j.jsxIdentifier("style"), j.jsxExpressionContainer(styleId))]
-          : []),
+        j.jsxSpreadAttribute(merging.jsxSpreadExpr),
       ];
-      const openingEl = j.jsxOpeningElement(j.jsxIdentifier("Component"), attrs, isVoidTag);
+      if (merging.classNameAttr) {
+        attrs.push(
+          j.jsxAttribute(
+            j.jsxIdentifier("className"),
+            j.jsxExpressionContainer(merging.classNameAttr),
+          ),
+        );
+      }
+      if (merging.styleAttr) {
+        attrs.push(
+          j.jsxAttribute(j.jsxIdentifier("style"), j.jsxExpressionContainer(merging.styleAttr)),
+        );
+      }
+      const openingEl = j.jsxOpeningElement(
+        j.jsxIdentifier(allowAsProp ? "Component" : tagName),
+        attrs,
+        isVoidTag,
+      );
       const jsx = isVoidTag
         ? ({
             type: "JSXElement",
@@ -422,14 +529,22 @@ export function emitIntrinsicWrappers(ctx: any): { emitted: any[]; needsReactTyp
             closingElement: null,
             children: [],
           } as any)
-        : j.jsxElement(openingEl, j.jsxClosingElement(j.jsxIdentifier("Component")), [
-            j.jsxExpressionContainer(childrenId),
-          ]);
+        : j.jsxElement(
+            openingEl,
+            j.jsxClosingElement(j.jsxIdentifier(allowAsProp ? "Component" : tagName)),
+            [j.jsxExpressionContainer(childrenId)],
+          );
+
+      const fnBodyStmts: any[] = [declStmt];
+      if (merging.sxDecl) {
+        fnBodyStmts.push(merging.sxDecl);
+      }
+      fnBodyStmts.push(j.returnStatement(jsx as any));
 
       const fn = j.functionDeclaration(
         j.identifier(d.localName),
         [propsParamId],
-        j.blockStatement([declStmt, j.returnStatement(jsx as any)]),
+        j.blockStatement(fnBodyStmts),
       );
       // Move the generic parameters from the param to the function node (parser puts it on FunctionDeclaration).
       if ((propsParamId as any).typeParameters) {
@@ -1311,6 +1426,12 @@ export function emitIntrinsicWrappers(ctx: any): { emitted: any[]; needsReactTyp
     const tagName = d.base.tagName;
     const allowClassNameProp = shouldAllowClassNameProp(d);
     const allowStyleProp = shouldAllowStyleProp(d);
+    const usedAttrsForType = getUsedAttrs(d.localName);
+    const allowAsProp =
+      !VOID_TAGS.has(tagName) &&
+      ((d.supportsExternalStyles ?? false) ||
+        usedAttrsForType.has("as") ||
+        usedAttrsForType.has("forwardedAs"));
     let inlineTypeText: string | undefined;
     {
       const explicit = stringifyTsType(d.propsType);
@@ -1323,7 +1444,6 @@ export function emitIntrinsicWrappers(ctx: any): { emitted: any[]; needsReactTyp
         skipProps: explicitPropNames,
       });
 
-      const usedAttrsForType = getUsedAttrs(d.localName);
       const variantPropsForType = new Set(
         Object.keys(d.variantStyleKeys ?? {}).flatMap((when: string) => {
           return when.split("&&").flatMap((part: string) => {
@@ -1446,7 +1566,14 @@ export function emitIntrinsicWrappers(ctx: any): { emitted: any[]; needsReactTyp
         }
         return withChildren(explicit);
       })();
-      const typeAliasEmitted = emitNamedPropsType(d.localName, typeText);
+      const asPropTypeText = allowAsProp ? "{ as?: React.ElementType }" : null;
+      const mergedPropsWithChildren = allowAsProp ? mergeAsIntoPropsWithChildren(typeText) : null;
+      const typeWithAs = mergedPropsWithChildren
+        ? mergedPropsWithChildren
+        : asPropTypeText
+          ? joinIntersection(typeText, asPropTypeText)
+          : typeText;
+      const typeAliasEmitted = emitNamedPropsType(d.localName, typeWithAs);
       if (!typeAliasEmitted && explicit) {
         const propsTypeName = propsTypeNameFor(d.localName);
         const interfaceExtended = extendExistingInterface(propsTypeName, extendBaseTypeText);
@@ -1454,8 +1581,14 @@ export function emitIntrinsicWrappers(ctx: any): { emitted: any[]; needsReactTyp
           const typeAliasExtended = extendExistingTypeAlias(propsTypeName, extendBaseTypeText);
           if (!typeAliasExtended) {
             inlineTypeText = VOID_TAGS.has(tagName) ? explicit : withChildren(explicit);
+            if (asPropTypeText) {
+              inlineTypeText = joinIntersection(inlineTypeText, asPropTypeText);
+            }
           }
         }
+      }
+      if (!typeAliasEmitted && asPropTypeText) {
+        addAsPropToExistingType(propsTypeNameFor(d.localName));
       }
       needsReactTypeImport = true;
     }
@@ -1561,17 +1694,28 @@ export function emitIntrinsicWrappers(ctx: any): { emitted: any[]; needsReactTyp
           return !destructureProps.includes(n);
         }));
 
-    if (allowClassNameProp || allowStyleProp) {
+    if (allowAsProp || allowClassNameProp || allowStyleProp) {
       const isVoidTag = VOID_TAGS.has(tagName);
       const propsParamId = j.identifier("props");
       annotatePropsParam(propsParamId, d.localName, inlineTypeText);
       const propsId = j.identifier("props");
+      const componentId = j.identifier("Component");
       const classNameId = j.identifier("className");
       const childrenId = j.identifier("children");
       const styleId = j.identifier("style");
       const restId = shouldIncludeRest ? j.identifier("rest") : null;
 
       const patternProps: any[] = [
+        ...(allowAsProp
+          ? [
+              j.property.from({
+                kind: "init",
+                key: j.identifier("as"),
+                value: j.assignmentPattern(componentId, j.literal(tagName)),
+                shorthand: false,
+              }),
+            ]
+          : []),
         ...(allowClassNameProp ? [patternProp("className", classNameId)] : []),
         ...(isVoidTag ? [] : [patternProp("children", childrenId)]),
         ...(allowStyleProp ? [patternProp("style", styleId)] : []),
@@ -1614,7 +1758,11 @@ export function emitIntrinsicWrappers(ctx: any): { emitted: any[]; needsReactTyp
         );
       }
 
-      const openingEl = j.jsxOpeningElement(j.jsxIdentifier(tagName), openingAttrs, false);
+      const openingEl = j.jsxOpeningElement(
+        j.jsxIdentifier(allowAsProp ? "Component" : tagName),
+        openingAttrs,
+        false,
+      );
 
       const jsx = isVoidTag
         ? ({
@@ -1623,9 +1771,11 @@ export function emitIntrinsicWrappers(ctx: any): { emitted: any[]; needsReactTyp
             closingElement: null,
             children: [],
           } as any)
-        : j.jsxElement(openingEl, j.jsxClosingElement(j.jsxIdentifier(tagName)), [
-            j.jsxExpressionContainer(childrenId),
-          ]);
+        : j.jsxElement(
+            openingEl,
+            j.jsxClosingElement(j.jsxIdentifier(allowAsProp ? "Component" : tagName)),
+            [j.jsxExpressionContainer(childrenId)],
+          );
 
       const bodyStmts: any[] = [declStmt];
       if (merging.sxDecl) {

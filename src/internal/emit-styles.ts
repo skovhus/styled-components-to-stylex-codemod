@@ -465,9 +465,11 @@ export function emitStylesAndImports(args: {
       if (!d.needsWrapperComponent) {
         return false;
       }
-      // Polymorphic intrinsic wrappers (styled.tag with as={} usage) pass style through directly
+      // Polymorphic intrinsic wrappers only need the merger when they support external styling.
       if ((d as any).isPolymorphicIntrinsicWrapper) {
-        return false;
+        return (
+          d.supportsExternalStyles || d.usedAsValue || (d as any).receivesClassNameOrStyleInJsx
+        );
       }
       // Component must support external styling to need the merger
       return d.supportsExternalStyles || d.usedAsValue || (d as any).receivesClassNameOrStyleInJsx;

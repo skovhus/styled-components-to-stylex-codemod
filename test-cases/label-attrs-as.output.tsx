@@ -9,9 +9,9 @@ type TextProps = React.PropsWithChildren<{
 }>;
 
 function Text(props: TextProps) {
-  const { as: Component = "span", children, style, ...rest } = props;
+  const { as: Component = "span", className, children, style, ...rest } = props;
   return (
-    <Component {...rest} {...stylex.props(styles.text)} style={style}>
+    <Component {...rest} {...mergedSx(styles.text, className, style)}>
       {children}
     </Component>
   );

@@ -1,5 +1,6 @@
 import * as React from "react";
 import * as stylex from "@stylexjs/stylex";
+import { mergedSx } from "./lib/mergedSx";
 
 // A polymorphic Text component that defaults to span
 type TextProps = React.PropsWithChildren<{
@@ -10,16 +11,19 @@ type TextProps = React.PropsWithChildren<{
 }>;
 
 function Text(props: TextProps) {
-  const { as: Component = "span", children, style, variant, ...rest } = props;
+  const { as: Component = "span", className, children, style, variant, ...rest } = props;
   return (
     <Component
       {...rest}
-      {...stylex.props(
-        styles.text,
-        variant === "large" && styles.textLarge,
-        variant === "small" && styles.textSmall,
+      {...mergedSx(
+        [
+          styles.text,
+          variant === "large" && styles.textLarge,
+          variant === "small" && styles.textSmall,
+        ],
+        className,
+        style,
       )}
-      style={style}
     >
       {children}
     </Component>

@@ -16,12 +16,12 @@ export function ListItem(props: ListItemProps) {
 
 ListItem.HEIGHT = 42;
 ListItem.PADDING = 8;
-type BaseButtonProps = React.ComponentProps<"button">;
+type BaseButtonProps = React.ComponentProps<"button"> & { as?: React.ElementType };
 
 // Pattern 2: styled(BaseComponent) with static props defined in same file
 function BaseButton(props: BaseButtonProps) {
-  const { className, children, style } = props;
-  return <button {...mergedSx(styles.baseButton, className, style)}>{children}</button>;
+  const { as: Component = "button", className, children, style } = props;
+  return <Component {...mergedSx(styles.baseButton, className, style)}>{children}</Component>;
 }
 
 BaseButton.HEIGHT = 36;

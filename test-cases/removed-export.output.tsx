@@ -57,6 +57,7 @@ export function useSelection(onSelect: SelectionFunction) {
 type StyledLabelProps = React.PropsWithChildren<{
   className?: string;
   style?: React.CSSProperties;
+  as?: React.ElementType;
 }>;
 
 // Pattern 4: Internal styled component used by another styled component AND in JSX
@@ -64,8 +65,8 @@ type StyledLabelProps = React.PropsWithChildren<{
 // 1. As a base for HelpText: styled(StyledText)
 // 2. Directly in JSX: <StyledText>
 function StyledLabel(props: StyledLabelProps) {
-  const { className, children, style } = props;
-  return <span {...mergedSx(styles.styledLabel, className, style)}>{children}</span>;
+  const { as: Component = "span", className, children, style } = props;
+  return <Component {...mergedSx(styles.styledLabel, className, style)}>{children}</Component>;
 }
 
 type HelpLabelProps = Omit<React.ComponentProps<typeof StyledLabel>, "className" | "style">;
