@@ -25,7 +25,7 @@ export function Box(props: BoxProps) {
   );
 }
 
-type ImageProps = Omit<React.ImgHTMLAttributes<HTMLImageElement>, "className" | "style"> & {
+type ImageProps = Omit<React.ComponentProps<"img">, "className" | "style"> & {
   $isInactive?: boolean;
 };
 

@@ -31,10 +31,7 @@ export const App = () => (
 // The codemod should preserve the imported type, not convert to `string`
 import type { Colors } from "./lib/colors";
 
-interface TextColorProps extends Omit<
-  React.HTMLAttributes<HTMLSpanElement>,
-  "className" | "style"
-> {
+interface TextColorProps extends Omit<React.ComponentProps<"span">, "className" | "style"> {
   /** The color from the theme */
   color: Colors;
 }

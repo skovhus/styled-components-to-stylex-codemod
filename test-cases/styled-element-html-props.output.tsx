@@ -2,7 +2,7 @@ import * as React from "react";
 import * as stylex from "@stylexjs/stylex";
 import { mergedSx } from "./lib/mergedSx";
 
-interface TextColorProps extends React.HTMLAttributes<HTMLSpanElement> {
+interface TextColorProps extends React.ComponentProps<"span"> {
   /** The color of the text. */
   color: string;
 }

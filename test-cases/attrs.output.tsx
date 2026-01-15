@@ -7,7 +7,7 @@ const Flex = (props: React.ComponentProps<"div"> & { column?: boolean; center?: 
   return <div {...rest} />;
 };
 
-type InputProps = Omit<React.InputHTMLAttributes<HTMLInputElement>, "className" | "style"> & {
+type InputProps = Omit<React.ComponentProps<"input">, "className" | "style"> & {
   $padding?: string;
   $small?: boolean;
 };

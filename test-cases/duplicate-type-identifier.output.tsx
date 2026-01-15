@@ -9,7 +9,7 @@ import { mergedSx } from "./lib/mergedSx";
 /**
  * Card props
  */
-export interface CardProps extends Omit<React.HTMLAttributes<HTMLDivElement>, "style"> {
+export interface CardProps extends Omit<React.ComponentProps<"div">, "style"> {
   /** Title of the card */
   title: string;
   /** Whether the card is highlighted */

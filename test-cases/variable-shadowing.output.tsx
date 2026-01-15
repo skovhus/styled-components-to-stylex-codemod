@@ -2,7 +2,7 @@ import * as React from "react";
 import * as stylex from "@stylexjs/stylex";
 import { mergedSx } from "./lib/mergedSx";
 
-type ContainerProps = Omit<React.HTMLAttributes<HTMLDivElement>, "className"> & {
+type ContainerProps = Omit<React.ComponentProps<"div">, "className"> & {
   align: string;
 };
 

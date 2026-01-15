@@ -2,7 +2,7 @@ import * as React from "react";
 import * as stylex from "@stylexjs/stylex";
 import { mergedSx } from "./lib/mergedSx";
 
-type RangeInputProps = React.InputHTMLAttributes<HTMLInputElement>;
+type RangeInputProps = React.ComponentProps<"input">;
 
 // Pattern: styled("input") needs HTML input attributes (max, min, type, etc.)
 // The generated type must extend React.InputHTMLAttributes<HTMLInputElement>

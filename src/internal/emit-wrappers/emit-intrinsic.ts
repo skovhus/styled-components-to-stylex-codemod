@@ -646,7 +646,9 @@ export function emitIntrinsicWrappers(ctx: any): { emitted: any[]; needsReactTyp
     if (!typeAliasEmitted && explicit) {
       const propsTypeName = propsTypeNameFor(d.localName);
       const extendBaseTypeText = (() => {
-        const base = reactIntrinsicAttrsType(tagName);
+        // Prefer ComponentProps for intrinsic wrappers so event handlers/attrs
+        // are typed like real JSX usage (and so we can reliably omit className/style).
+        const base = `React.ComponentProps<"${tagName}">`;
         const omitted: string[] = [];
         if (!allowClassNameProp) {
           omitted.push('"className"');
@@ -1357,7 +1359,9 @@ export function emitIntrinsicWrappers(ctx: any): { emitted: any[]; needsReactTyp
         });
 
       const extendBaseTypeText = (() => {
-        const base = reactIntrinsicAttrsType(tagName);
+        // Prefer ComponentProps for intrinsic wrappers so event handlers/attrs
+        // are typed like real JSX usage (and so we can reliably omit className/style).
+        const base = `React.ComponentProps<"${tagName}">`;
         const omitted: string[] = [];
         if (!allowClassNameProp) {
           omitted.push('"className"');
@@ -1368,9 +1372,53 @@ export function emitIntrinsicWrappers(ctx: any): { emitted: any[]; needsReactTyp
         return omitted.length ? `Omit<${base}, ${omitted.join(" | ")}>` : base;
       })();
 
+      const customStyleDrivingPropsTypeText = (() => {
+        // These are props that influence styles/attrs and are consumed by the wrapper.
+        // They are often not part of intrinsic element props (e.g. `hasError`, `$size`),
+        // so we keep them in the public props type even when we otherwise rely on
+        // React's intrinsic props typing for pass-through props.
+        const keys = new Set<string>();
+        const addIfString = (k: unknown) => {
+          if (typeof k === "string") {
+            keys.add(k);
+          }
+        };
+        for (const k of variantPropsForType as Set<unknown>) {
+          addIfString(k);
+        }
+        for (const k of styleFnPropsForType as Set<unknown>) {
+          addIfString(k);
+        }
+        for (const k of conditionalPropsForType as Set<unknown>) {
+          addIfString(k);
+        }
+        for (const k of invertedPropsForType as Set<unknown>) {
+          addIfString(k);
+        }
+        const filtered = [...keys].filter(
+          (k) =>
+            k &&
+            k !== "children" &&
+            k !== "className" &&
+            k !== "style" &&
+            k !== "as" &&
+            k !== "forwardedAs",
+        );
+        if (filtered.length === 0) {
+          return "{}";
+        }
+        const lines = filtered.map((k) => `  ${k}?: any;`);
+        return `{\n${lines.join("\n")}\n}`;
+      })();
+
       const typeText = (() => {
         if (!explicit) {
-          return baseTypeText;
+          // If we forward `...rest`, prefer full intrinsic props typing so common
+          // props (e.g. onChange) get correct types. Keep any style-driving custom
+          // props intersected in so the wrapper can consume them.
+          return needsRestForType
+            ? joinIntersection(extendBaseTypeText, customStyleDrivingPropsTypeText)
+            : baseTypeText;
         }
         if (VOID_TAGS.has(tagName)) {
           return joinIntersection(extendBaseTypeText, explicit);

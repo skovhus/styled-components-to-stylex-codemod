@@ -10,8 +10,7 @@ type Props = {
   disabled?: boolean;
 };
 
-type ButtonProps = Omit<React.ButtonHTMLAttributes<HTMLButtonElement>, "className" | "style"> &
-  Props;
+type ButtonProps = Omit<React.ComponentProps<"button">, "className" | "style"> & Props;
 
 function Button(props: ButtonProps) {
   const { children, color, size, disabled } = props;
