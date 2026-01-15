@@ -289,6 +289,7 @@ export function emitIntrinsicWrappers(ctx: any): { emitted: any[]; needsReactTyp
         continue;
       }
       const tagName = d.base.tagName;
+      const allowClassNameProp = shouldAllowClassNameProp(d);
       const allowStyleProp = shouldAllowStyleProp(d);
       const explicit = stringifyTsType(d.propsType);
 
@@ -310,10 +311,16 @@ export function emitIntrinsicWrappers(ctx: any): { emitted: any[]; needsReactTyp
         const base = hasRef
           ? "React.ComponentPropsWithRef<C>"
           : "React.ComponentPropsWithoutRef<C>";
-        // Omit className always, omit style only if not used on the component
-        const hasStyle = used.has("style");
-        const omitList = hasStyle ? '"className"' : '"className" | "style"';
-        const baseMaybeOmitted = `Omit<${base}, ${omitList}>`;
+        // Omit className/style only when we don't want to support them.
+        const omitted: string[] = [];
+        if (!allowClassNameProp) {
+          omitted.push('"className"');
+        }
+        if (!allowStyleProp) {
+          omitted.push('"style"');
+        }
+        const baseMaybeOmitted =
+          omitted.length > 0 ? `Omit<${base}, ${omitted.join(" | ")}>` : base;
         const extra = "{ as?: C }";
         return joinIntersection(baseMaybeOmitted, extra);
       })();

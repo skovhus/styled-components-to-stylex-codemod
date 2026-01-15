@@ -1,10 +1,9 @@
 import * as React from "react";
 import * as stylex from "@stylexjs/stylex";
 
-type ButtonProps<C extends React.ElementType = "button"> = Omit<
-  React.ComponentPropsWithoutRef<C>,
-  "className" | "style"
-> & { as?: C };
+type ButtonProps<C extends React.ElementType = "button"> = React.ComponentPropsWithoutRef<C> & {
+  as?: C;
+};
 
 function Button<C extends React.ElementType = "button">(props: ButtonProps<C>) {
   const { as: Component = "button", children, style, ...rest } = props;
