@@ -35,3 +35,57 @@ jobs:
 
       - name: Build
         run: pnpm run build
+
+  publish:
+    runs-on: ubuntu-latest
+    needs: verify
+    environment: deploy
+    if: |
+      github.event_name == 'push' &&
+      github.ref == 'refs/heads/main' &&
+      !contains(github.event.head_commit.message, '[skip ci]')
+
+    permissions:
+      id-token: write # Required for OIDC
+      contents: write
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+
+      - name: Setup node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: "pnpm"
+          registry-url: "https://registry.npmjs.org"
+
+      - name: Install dependencies
+        run: pnpm install
+
+      - name: Build
+        run: pnpm run build
+
+      - name: Bump version, commit, and tag (patch +1)
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          git config --local user.email "kenneth.skovhus@gmail.com"
+          git config --local user.name "skovhus"
+
+          pnpm version patch -m "chore(release): v%s [skip ci]"
+
+      - name: Push commit and tag
+        shell: bash
+        run: |
+          set -euo pipefail
+          git push origin HEAD:main --follow-tags
+
+      - name: Publish
+        run: pnpm publish --no-git-checks
