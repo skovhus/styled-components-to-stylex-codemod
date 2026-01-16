@@ -2,7 +2,8 @@ import type { API } from "jscodeshift";
 import type { ImportSource } from "../../adapter.js";
 import { resolveDynamicNode } from "../builtin-handlers.js";
 import { getNodeLocStart } from "../jscodeshift-utils.js";
-import type { StyledDecl, TransformWarning } from "../transform-types.js";
+import type { StyledDecl } from "../transform-types.js";
+import type { WarningLog } from "../logger.js";
 
 export function tryHandleInterpolatedBorder(args: {
   api: API;
@@ -19,7 +20,7 @@ export function tryHandleInterpolatedBorder(args: {
       source: ImportSource;
     }
   >;
-  warnings: TransformWarning[];
+  warnings: WarningLog[];
   resolverImports: Map<string, any>;
   parseExpr: (exprSource: string) => unknown;
   toSuffixFromProp: (propName: string) => string;
@@ -249,8 +250,8 @@ export function tryHandleInterpolatedBorder(args: {
         },
         warn: (w: any) => {
           warnings.push({
+            severity: "warning",
             type: "dynamic-node",
-            feature: w.feature,
             message: w.message,
             ...(w.loc ? { loc: w.loc } : {}),
           });

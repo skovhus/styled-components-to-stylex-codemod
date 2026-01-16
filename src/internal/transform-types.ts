@@ -1,23 +1,14 @@
 import type { Options } from "jscodeshift";
 import type { Adapter } from "../adapter.js";
 import type { CssRuleIR } from "./css-ir.js";
+import type { WarningLog } from "./logger.js";
 
 /**
- * Warning emitted during transformation for unsupported features
- */
-export interface TransformWarning {
-  type: "unsupported-feature" | "dynamic-node";
-  feature: string;
-  message: string;
-  loc?: { line: number; column: number };
-}
-
-/**
- * Result of the transform including any warnings
+ * Result of the transform including any log entries
  */
 export interface TransformResult {
   code: string | null;
-  warnings: TransformWarning[];
+  warnings: WarningLog[];
 }
 
 /**

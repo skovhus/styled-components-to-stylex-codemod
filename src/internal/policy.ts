@@ -1,5 +1,5 @@
 import type { Collection } from "jscodeshift";
-import type { TransformWarning } from "./transform-types.js";
+import type { WarningLog } from "./logger.js";
 
 export function shouldSkipForThemeProvider(args: {
   root: Collection<any>;
@@ -64,9 +64,9 @@ export function collectThemeProviderSkipWarnings(args: {
   root: Collection<any>;
   j: any;
   styledImports: Collection<any>;
-}): TransformWarning[] {
+}): WarningLog[] {
   const { root, j, styledImports } = args;
-  const warnings: TransformWarning[] = [];
+  const warnings: WarningLog[] = [];
 
   const themeProviderImportForSkip = findStyledComponentsNamedImport({
     styledImports,
@@ -87,11 +87,10 @@ export function collectThemeProviderSkipWarnings(args: {
     return warnings;
   }
 
-  const warning: TransformWarning = {
+  const warning: WarningLog = {
+    severity: "warning",
     type: "unsupported-feature",
-    feature: "ThemeProvider",
-    message:
-      "ThemeProvider usage is project-specific; skipping this file (manual follow-up required).",
+    message: "ThemeProvider usage is project-specific",
   };
   if (themeProviderImportForSkip?.loc) {
     warning.loc = {
@@ -107,9 +106,9 @@ export function collectCssHelperSkipWarnings(args: {
   root: Collection<any>;
   j: any;
   styledImports: Collection<any>;
-}): TransformWarning[] {
+}): WarningLog[] {
   const { root, j, styledImports } = args;
-  const warnings: TransformWarning[] = [];
+  const warnings: WarningLog[] = [];
 
   const cssImportForSkip = findStyledComponentsNamedImport({
     styledImports,
@@ -139,11 +138,10 @@ export function collectCssHelperSkipWarnings(args: {
     return warnings;
   }
 
-  const warning: TransformWarning = {
+  const warning: WarningLog = {
+    severity: "warning",
     type: "unsupported-feature",
-    feature: "css-helper",
-    message:
-      "`css` helper usage from styled-components is project-specific and not safely transformable; skipping this file (manual follow-up required).",
+    message: "`css` helper usage from styled-components is not supported",
   };
   if (cssImportForSkip?.loc) {
     warning.loc = {
@@ -155,10 +153,8 @@ export function collectCssHelperSkipWarnings(args: {
   return warnings;
 }
 
-export function collectCreateGlobalStyleWarnings(
-  styledImports: Collection<any>,
-): TransformWarning[] {
-  const warnings: TransformWarning[] = [];
+export function collectCreateGlobalStyleWarnings(styledImports: Collection<any>): WarningLog[] {
+  const warnings: WarningLog[] = [];
 
   styledImports.forEach((importPath: any) => {
     const specifiers = importPath.node.specifiers ?? [];
@@ -168,9 +164,9 @@ export function collectCreateGlobalStyleWarnings(
         specifier.imported.type === "Identifier" &&
         specifier.imported.name === "createGlobalStyle"
       ) {
-        const warning: TransformWarning = {
+        const warning: WarningLog = {
+          severity: "warning",
           type: "unsupported-feature",
-          feature: "createGlobalStyle",
           message:
             "createGlobalStyle is not supported in StyleX. Global styles should be handled separately (e.g., in a CSS file or using CSS reset libraries).",
         };
@@ -201,12 +197,11 @@ export function shouldSkipForCreateGlobalStyle(args: {
 
 export function universalSelectorUnsupportedWarning(
   loc?: { line: number; column: number } | null,
-): TransformWarning {
+): WarningLog {
   return {
+    severity: "warning",
     type: "unsupported-feature",
-    feature: "universal-selector",
-    message:
-      "Universal selectors (`*`) are currently unsupported; skipping this file (manual follow-up required).",
+    message: "Universal selectors (`*`) are currently unsupported",
     ...(loc ? { loc } : {}),
   };
 }
