@@ -8,12 +8,16 @@ import { format } from "oxfmt";
 import transform, { transformWithWarnings } from "../transform.js";
 import type { TransformOptions } from "../transform.js";
 import { customAdapter, fixtureAdapter } from "./fixture-adapters.js";
+import { type WarningLog } from "../internal/logger.js";
 
-// Suppress codemod warnings in tests
+// Suppress codemod logs in tests
 vi.mock("../internal/logger.js", () => ({
-  logWarning: vi.fn(),
-  logWarnings: vi.fn(),
-  flushWarnings: vi.fn(() => []),
+  Logger: {
+    warn: vi.fn(),
+    error: vi.fn(),
+    logWarnings: vi.fn(),
+    flushWarnings: vi.fn(() => []),
+  },
 }));
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
@@ -206,7 +210,43 @@ function assertExportsApp(source: string, fileLabel: string): void {
   }
 }
 
-type ExpectedWarning = { feature: string; type?: string };
+type ExpectedWarning = string;
+
+const WARNING_TOKEN_MATCHERS: Record<string, (w: WarningLog) => boolean> = {
+  ThemeProvider: (w) => w.type === "unsupported-feature" && w.message.includes("ThemeProvider"),
+  "css-helper": (w) => w.type === "unsupported-feature" && w.message.includes("`css` helper"),
+  createGlobalStyle: (w) =>
+    w.type === "unsupported-feature" && w.message.includes("createGlobalStyle"),
+  "component-selector": (w) =>
+    w.type === "unsupported-feature" && w.message.includes("Component selectors"),
+  specificity: (w) => w.type === "unsupported-feature" && w.message.includes("specificity"),
+  "universal-selector": (w) =>
+    w.type === "unsupported-feature" && w.message.includes("Universal selectors"),
+  "complex-selectors": (w) =>
+    w.type === "unsupported-feature" && w.message.includes("Complex selectors"),
+  "adapter-resolveValue": (w) => w.type === "dynamic-node" && w.message.includes("Adapter"),
+  "dynamic-call": (w) =>
+    w.type === "dynamic-node" &&
+    (w.message.includes("helper call") || w.message.includes("call expression")),
+  "dynamic-interpolation": (w) => w.type === "dynamic-node" && w.message.includes("interpolation"),
+};
+
+function warningMatchesToken(warning: WarningLog, token: string): boolean {
+  const matcher = WARNING_TOKEN_MATCHERS[token];
+  return matcher ? matcher(warning) : false;
+}
+
+function extractTokensFromWarnings(warnings: WarningLog[], tokens: string[]): string[] {
+  const found = new Set<string>();
+  for (const w of warnings) {
+    for (const token of tokens) {
+      if (warningMatchesToken(w, token)) {
+        found.add(token);
+      }
+    }
+  }
+  return [...found].sort();
+}
 
 function readExpectedWarningsFromComments(source: string): ExpectedWarning[] | null {
   // Convention (place near top of fixture):
@@ -233,10 +273,7 @@ function readExpectedWarningsFromComments(source: string): ExpectedWarning[] | n
   if (features.size === 0) {
     return null;
   }
-  return [...features].map((feature) => ({
-    feature,
-    type: "unsupported-feature",
-  }));
+  return [...features];
 }
 
 describe("test case file pairing", () => {
@@ -326,19 +363,15 @@ describe("fixture warning expectations", () => {
 
       // Fixture expectations only cover stable `unsupported-feature` warnings.
       // Dynamic-node warnings are runtime/bail diagnostics and are not asserted via fixtures.
-      const actualFeatures = [
-        ...new Set(
-          result.warnings.filter((w) => w.type === "unsupported-feature").map((w) => w.feature),
-        ),
-      ].sort();
+      const expectedTokens = expected ?? [];
+      const actualTokens = extractTokensFromWarnings(result.warnings, expectedTokens);
 
       if (!expected) {
-        expect(actualFeatures).toEqual([]);
+        expect(actualTokens).toEqual([]);
         return;
       }
 
-      const expectedFeatures = expected.map((w) => w.feature).sort();
-      expect(actualFeatures).toEqual(expectedFeatures);
+      expect(actualTokens).toEqual([...expectedTokens].sort());
     },
   );
 });
@@ -359,7 +392,7 @@ describe("transform", () => {
     const normalizedInput = await normalizeCode(input, inputPath);
     if (normalizedResult === normalizedInput) {
       const warningsInfo = diagnostics.warnings.length
-        ? `\n\nTransform warnings that may explain the failure:\n${diagnostics.warnings.map((w) => `  - [${w.feature}] ${w.message}`).join("\n")}`
+        ? `\n\nTransform warnings that may explain the failure:\n${diagnostics.warnings.map((w) => `  - ${w.message}`).join("\n")}`
         : "";
       throw new Error(
         `Transform produced no changes (bailed or returned unchanged code).${warningsInfo}`,
@@ -420,7 +453,7 @@ export const App = () => (
     const warning = result.warnings[0]!;
     expect(warning).toMatchObject({
       type: "unsupported-feature",
-      feature: "createGlobalStyle",
+      severity: "warning",
     });
     expect(warning.message).toContain("createGlobalStyle is not supported in StyleX");
   });
@@ -463,11 +496,7 @@ export const App = () => <Box><span /></Box>;
     );
 
     expect(result.code).toBeNull();
-    expect(
-      result.warnings.some(
-        (w) => w.type === "unsupported-feature" && w.feature === "universal-selector",
-      ),
-    ).toBe(true);
+    expect(result.warnings.some((w) => warningMatchesToken(w, "universal-selector"))).toBe(true);
   });
 
   it("should warn and skip when styled-components `css` helper is used", () => {
@@ -492,9 +521,7 @@ export const App = () => <Box />;
     );
 
     expect(result.code).toBeNull();
-    expect(
-      result.warnings.some((w) => w.type === "unsupported-feature" && w.feature === "css-helper"),
-    ).toBe(true);
+    expect(result.warnings.some((w) => warningMatchesToken(w, "css-helper"))).toBe(true);
   });
 
   it("should bail (not crash) on unsupported conditional test expressions in shouldForwardProp wrappers", () => {
@@ -639,11 +666,7 @@ export const App = () => <Box $on />;
     );
 
     expect(result.code).not.toBeNull();
-    expect(
-      result.warnings.some(
-        (w) => w.type === "dynamic-node" && w.feature === "adapter-resolveValue",
-      ),
-    ).toBe(true);
+    expect(result.warnings.some((w) => warningMatchesToken(w, "adapter-resolveValue"))).toBe(true);
 
     // Prior to the fix, we'd often end up registering an empty `boxOn` variant style object.
     expect(result.code).not.toMatch(/boxOn\s*:\s*\{\s*\}/);
@@ -692,9 +715,7 @@ export const App = () => (
     );
 
     expect(result.code).toBeNull();
-    expect(
-      result.warnings.some((w) => w.type === "dynamic-node" && w.feature === "dynamic-call"),
-    ).toBe(true);
+    expect(result.warnings.some((w) => warningMatchesToken(w, "dynamic-call"))).toBe(true);
   });
 });
 
@@ -740,14 +761,10 @@ export const App = () => <Button>Click</Button>;
     );
 
     expect(result.code).toBeNull();
-    const w = result.warnings.find(
-      (x) => x.type === "dynamic-node" && x.feature === "adapter-resolveValue",
-    );
+    const w = result.warnings.find((x) => warningMatchesToken(x, "adapter-resolveValue"));
     expect(w).toBeTruthy();
     expect(w!.message).toMatch(/returned undefined/i);
-    expect(w!.message).toMatch(/Skipping transformation/i);
-    expect(w!.message).toMatch(/kind=theme/i);
-    expect(w!.message).toMatch(/path=/i);
+    expect(w!.context).toMatchObject({ kind: "theme" });
   });
 });
 

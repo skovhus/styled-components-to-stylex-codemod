@@ -351,7 +351,7 @@ export function emitStylesAndImports(args: {
       if (from.kind === "specifier") {
         if (typeof from.value !== "string" || from.value.trim() === "") {
           throw new Error(
-            `[styled-components-to-stylex] Invalid import specifier: expected non-empty string, got ${JSON.stringify(
+            `Invalid import specifier: expected non-empty string, got ${JSON.stringify(
               from.value,
             )}`,
           );
@@ -361,16 +361,14 @@ export function emitStylesAndImports(args: {
       // Absolute file path -> relative module specifier from current file
       if (typeof from.value !== "string" || from.value.trim() === "") {
         throw new Error(
-          `[styled-components-to-stylex] Invalid import absolutePath: expected non-empty string, got ${JSON.stringify(
+          `Invalid import absolutePath: expected non-empty string, got ${JSON.stringify(
             from.value,
           )}`,
         );
       }
       if (!path.isAbsolute(from.value)) {
         throw new Error(
-          `[styled-components-to-stylex] Invalid import absolutePath: expected absolute path, got ${JSON.stringify(
-            from.value,
-          )}`,
+          `Invalid import absolutePath: expected absolute path, got ${JSON.stringify(from.value)}`,
         );
       }
       const baseDir = path.dirname(String(filePath));

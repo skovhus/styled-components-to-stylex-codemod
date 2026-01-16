@@ -52,7 +52,7 @@ export function assertValidAdapter(
   if (!candidate || typeof candidate !== "object") {
     throw new Error(
       [
-        `[styled-components-to-stylex] ${where}: expected an adapter object.`,
+        `${where}: expected an adapter object.`,
         `Received: ${describeValue(candidate)}`,
         "",
         "Adapter requirements:",
@@ -72,7 +72,7 @@ export function assertValidAdapter(
   if (typeof resolveValue !== "function") {
     throw new Error(
       [
-        `[styled-components-to-stylex] ${where}: adapter.resolveValue must be a function.`,
+        `${where}: adapter.resolveValue must be a function.`,
         `Received: resolveValue=${describeValue(resolveValue)}`,
         "",
         "Adapter shape:",
@@ -88,7 +88,7 @@ export function assertValidAdapter(
   if (typeof shouldSupportExternalStyling !== "function") {
     throw new Error(
       [
-        `[styled-components-to-stylex] ${where}: adapter.shouldSupportExternalStyling must be a function.`,
+        `${where}: adapter.shouldSupportExternalStyling must be a function.`,
         `Received: shouldSupportExternalStyling=${describeValue(shouldSupportExternalStyling)}`,
       ].join("\n"),
     );
@@ -100,7 +100,7 @@ export function assertValidAdapter(
     if (typeof styleMerger !== "object") {
       throw new Error(
         [
-          `[styled-components-to-stylex] ${where}: adapter.styleMerger must be null or an object.`,
+          `${where}: adapter.styleMerger must be null or an object.`,
           `Received: styleMerger=${describeValue(styleMerger)}`,
           "",
           "Expected shape:",
@@ -117,7 +117,7 @@ export function assertValidAdapter(
     if (typeof functionName !== "string" || !functionName.trim()) {
       throw new Error(
         [
-          `[styled-components-to-stylex] ${where}: adapter.styleMerger.functionName must be a non-empty string.`,
+          `${where}: adapter.styleMerger.functionName must be a non-empty string.`,
           `Received: functionName=${describeValue(functionName)}`,
         ].join("\n"),
       );
@@ -126,7 +126,7 @@ export function assertValidAdapter(
     if (!importSource || typeof importSource !== "object") {
       throw new Error(
         [
-          `[styled-components-to-stylex] ${where}: adapter.styleMerger.importSource must be an object.`,
+          `${where}: adapter.styleMerger.importSource must be an object.`,
           `Received: importSource=${describeValue(importSource)}`,
           "",
           "Expected shape:",
@@ -141,7 +141,7 @@ export function assertValidAdapter(
     if (kind !== "specifier" && kind !== "absolutePath") {
       throw new Error(
         [
-          `[styled-components-to-stylex] ${where}: adapter.styleMerger.importSource.kind must be "specifier" or "absolutePath".`,
+          `${where}: adapter.styleMerger.importSource.kind must be "specifier" or "absolutePath".`,
           `Received: kind=${describeValue(kind)}`,
         ].join("\n"),
       );
@@ -150,7 +150,7 @@ export function assertValidAdapter(
     if (typeof value !== "string" || !value.trim()) {
       throw new Error(
         [
-          `[styled-components-to-stylex] ${where}: adapter.styleMerger.importSource.value must be a non-empty string.`,
+          `${where}: adapter.styleMerger.importSource.value must be a non-empty string.`,
           `Received: value=${describeValue(value)}`,
         ].join("\n"),
       );

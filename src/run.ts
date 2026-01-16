@@ -4,8 +4,8 @@ import { dirname, join } from "node:path";
 import { existsSync } from "node:fs";
 import { glob } from "node:fs/promises";
 import { spawn } from "node:child_process";
-import type { Adapter } from "./adapter.js";
-import { flushWarnings, logWarning, type CollectedWarning } from "./internal/logger.js";
+import type { Adapter, ResolveContext } from "./adapter.js";
+import { Logger, type CollectedWarning } from "./internal/logger.js";
 import { assertValidAdapter, describeValue } from "./internal/public-api-validation.js";
 
 export interface RunTransformOptions {
@@ -94,7 +94,7 @@ export async function runTransform(options: RunTransformOptions): Promise<RunTra
   if (!options || typeof options !== "object") {
     throw new Error(
       [
-        "[styled-components-to-stylex] runTransform(options) was called with an invalid argument.",
+        "runTransform(options) was called with an invalid argument.",
         "Expected: runTransform({ files: string | string[], adapter: Adapter, ... })",
         `Received: ${describeValue(options)}`,
         "",
@@ -111,7 +111,7 @@ export async function runTransform(options: RunTransformOptions): Promise<RunTra
   if (typeof filesValue !== "string" && !Array.isArray(filesValue)) {
     throw new Error(
       [
-        "[styled-components-to-stylex] runTransform(options): `files` is required.",
+        "runTransform(options): `files` is required.",
         "Expected: files: string | string[]",
         `Received: files=${describeValue(filesValue)}`,
       ].join("\n"),
@@ -120,7 +120,7 @@ export async function runTransform(options: RunTransformOptions): Promise<RunTra
   if (typeof filesValue === "string" && filesValue.trim() === "") {
     throw new Error(
       [
-        "[styled-components-to-stylex] runTransform(options): `files` must be a non-empty string.",
+        "runTransform(options): `files` must be a non-empty string.",
         'Example: files: "src/**/*.tsx"',
       ].join("\n"),
     );
@@ -129,7 +129,7 @@ export async function runTransform(options: RunTransformOptions): Promise<RunTra
     if (filesValue.length === 0) {
       throw new Error(
         [
-          "[styled-components-to-stylex] runTransform(options): `files` must not be an empty array.",
+          "runTransform(options): `files` must not be an empty array.",
           'Example: files: ["src/**/*.ts", "src/**/*.tsx"]',
         ].join("\n"),
       );
@@ -138,7 +138,7 @@ export async function runTransform(options: RunTransformOptions): Promise<RunTra
     if (bad !== undefined) {
       throw new Error(
         [
-          "[styled-components-to-stylex] runTransform(options): `files` array must contain non-empty strings.",
+          "runTransform(options): `files` array must contain non-empty strings.",
           `Received: files=${describeValue(filesValue)}`,
         ].join("\n"),
       );
@@ -159,21 +159,10 @@ export async function runTransform(options: RunTransformOptions): Promise<RunTra
       try {
         return adapter.resolveValue(ctx);
       } catch (e: any) {
-        const kind = (ctx as any)?.kind;
-        const details =
-          kind === "theme"
-            ? `path=${String((ctx as any).path ?? "")}`
-            : kind === "cssVariable"
-              ? `name=${String((ctx as any).name ?? "")}`
-              : kind === "call"
-                ? `callee=${String((ctx as any).calleeImportedName ?? "")} source=${String(
-                    (ctx as any).calleeSource?.value ?? "",
-                  )} file=${String((ctx as any).callSiteFilePath ?? "")}`
-                : "";
-        const msg = `[styled-components-to-stylex] adapter.resolveValue threw${
-          kind ? ` (kind=${kind}${details ? ` ${details}` : ""})` : ""
-        }: ${(e as any)?.stack ?? String(e)}\n`;
-        logWarning(msg);
+        const msg = `adapter.resolveValue threw an error: ${
+          e instanceof Error ? e.message : String(e)
+        }`;
+        Logger.error(msg, ctx as ResolveContext);
         throw e;
       }
     },
@@ -191,7 +180,7 @@ export async function runTransform(options: RunTransformOptions): Promise<RunTra
   }
 
   if (filePaths.length === 0) {
-    logWarning("No files matched the provided glob pattern(s)\n");
+    Logger.warn("No files matched the provided glob pattern(s)");
     return {
       errors: 0,
       unchanged: 0,
@@ -256,9 +245,7 @@ export async function runTransform(options: RunTransformOptions): Promise<RunTra
           proc.on("error", reject);
         });
       } catch (e) {
-        logWarning(
-          `[styled-components-to-stylex] Formatter command failed: ${e instanceof Error ? e.message : String(e)}\n`,
-        );
+        Logger.warn(`Formatter command failed: ${e instanceof Error ? e.message : String(e)}`);
       }
     }
   }
@@ -269,6 +256,6 @@ export async function runTransform(options: RunTransformOptions): Promise<RunTra
     skipped: result.skip,
     transformed: result.ok,
     timeElapsed: parseFloat(result.timeElapsed) || 0,
-    warnings: flushWarnings(),
+    warnings: Logger.flushWarnings(),
   };
 }

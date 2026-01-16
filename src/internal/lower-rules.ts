@@ -22,7 +22,8 @@ import {
   parsePseudoElement,
   parseSimplePseudo,
 } from "./selectors.js";
-import type { StyledDecl, TransformWarning } from "./transform-types.js";
+import type { StyledDecl } from "./transform-types.js";
+import type { WarningLog } from "./logger.js";
 
 export type DescendantOverride = {
   parentStyleKey: string;
@@ -43,7 +44,7 @@ export function lowerRules(args: {
       source: ImportSource;
     }
   >;
-  warnings: TransformWarning[];
+  warnings: WarningLog[];
   resolverImports: Map<string, any>;
   styledDecls: StyledDecl[];
   keyframesNames: Set<string>;
@@ -429,10 +430,10 @@ export function lowerRules(args: {
 
         if (bail) {
           warnings.push({
+            severity: "warning",
             type: "unsupported-feature",
-            feature: "complex-selectors",
             message:
-              "Complex selectors (grouped selectors, descendant element selectors, class-conditioned selectors, or :not() chains) are not currently supported; skipping this file.",
+              "Complex selectors (grouped selectors, descendant element selectors, class-conditioned selectors, or :not() chains) are not currently supported",
           });
           break;
         }
@@ -946,10 +947,11 @@ export function lowerRules(args: {
                 })();
                 if (!indexedExprAst) {
                   warnings.push({
+                    severity: "error",
                     type: "dynamic-node",
-                    feature: "adapter-resolveValue",
                     message: `Adapter returned an unparseable expression for ${decl.localName}; dropping this declaration.`,
                   });
+                  bail = true;
                   continue;
                 }
 
@@ -1029,8 +1031,8 @@ export function lowerRules(args: {
               warn: (w: any) => {
                 const loc = w.loc;
                 warnings.push({
+                  severity: "warning",
                   type: "dynamic-node",
-                  feature: w.feature,
                   message: w.message,
                   ...(loc ? { loc } : {}),
                 });
@@ -1054,8 +1056,8 @@ export function lowerRules(args: {
             const exprAst = parseExpr(wrappedExpr);
             if (!exprAst) {
               warnings.push({
+                severity: "error",
                 type: "dynamic-node",
-                feature: "adapter-resolveValue",
                 message: `Adapter returned an unparseable expression for ${decl.localName}; dropping this declaration.`,
                 ...(loc ? { loc } : {}),
               });
@@ -1114,8 +1116,8 @@ export function lowerRules(args: {
               const exprAst = parseExpr(wrappedExpr);
               if (!exprAst) {
                 warnings.push({
+                  severity: "error",
                   type: "dynamic-node",
-                  feature: "adapter-resolveValue",
                   message: `Adapter returned an unparseable expression for ${decl.localName}; dropping this declaration.`,
                   ...(loc ? { loc } : {}),
                 });
@@ -1362,8 +1364,8 @@ export function lowerRules(args: {
 
           if (res && res.type === "keepOriginal") {
             warnings.push({
+              severity: "warning",
               type: "dynamic-node",
-              feature: "dynamic-call",
               message: res.reason,
               ...(loc ? { loc } : {}),
             });
@@ -1388,9 +1390,9 @@ export function lowerRules(args: {
             continue;
           }
           warnings.push({
+            severity: "warning",
             type: "dynamic-node",
-            feature: "dynamic-interpolation",
-            message: `Unresolved interpolation for ${decl.localName}; skipping file (manual follow-up required).`,
+            message: `Unsupported interpolation for ${decl.localName}.`,
             ...(loc ? { loc } : {}),
           });
           bail = true;

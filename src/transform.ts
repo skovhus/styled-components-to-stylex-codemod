@@ -17,12 +17,8 @@ import {
   shouldSkipForThemeProvider,
   universalSelectorUnsupportedWarning,
 } from "./internal/policy.js";
-import { logWarnings } from "./internal/logger.js";
-import type {
-  TransformOptions,
-  TransformResult,
-  TransformWarning,
-} from "./internal/transform-types.js";
+import { Logger, type WarningLog } from "./internal/logger.js";
+import type { TransformOptions, TransformResult } from "./internal/transform-types.js";
 import { compile } from "stylis";
 import { normalizeStylisAstToIR } from "./internal/css-ir.js";
 import { cssDeclarationToStylexDeclarations } from "./internal/css-prop-mapping.js";
@@ -37,11 +33,7 @@ import {
   patternProp as patternPropImpl,
 } from "./internal/transform-utils.js";
 
-export type {
-  TransformOptions,
-  TransformResult,
-  TransformWarning,
-} from "./internal/transform-types.js";
+export type { TransformOptions, TransformResult } from "./internal/transform-types.js";
 
 /**
  * Transform styled-components to StyleX
@@ -51,7 +43,7 @@ export type {
  */
 export default function transform(file: FileInfo, api: API, options: Options): string | null {
   const result = transformWithWarnings(file, api, options as TransformOptions);
-  logWarnings(result.warnings, file.path);
+  Logger.logWarnings(result.warnings, file.path);
   return result.code;
 }
 
@@ -65,7 +57,7 @@ export function transformWithWarnings(
 ): TransformResult {
   const j = api.jscodeshift;
   const root = j(file.source);
-  const warnings: TransformWarning[] = [];
+  const warnings: WarningLog[] = [];
 
   // `forwardedAs` is styled-components-specific; in StyleX output we standardize on `as`.
   root
@@ -118,7 +110,10 @@ export function transformWithWarnings(
 
   // Policy: ThemeProvider usage is project-specific. If the file uses ThemeProvider, skip entirely.
   if (shouldSkipForThemeProvider({ root, j, styledImports })) {
-    return { code: null, warnings: collectThemeProviderSkipWarnings({ root, j, styledImports }) };
+    return {
+      code: null,
+      warnings: collectThemeProviderSkipWarnings({ root, j, styledImports }),
+    };
   }
 
   // Policy: styled-components `css` helper usage is project-specific. If the file uses `css`, skip entirely.
@@ -417,8 +412,8 @@ export function transformWithWarnings(
 
   if (hasComponentSelector) {
     const warning = {
+      severity: "warning" as const,
       type: "unsupported-feature" as const,
-      feature: "component-selector",
       message:
         "Component selectors like `${OtherComponent}:hover &` are not directly representable in StyleX. Manual refactor is required to preserve relationship/hover semantics.",
     };
@@ -435,8 +430,8 @@ export function transformWithWarnings(
 
   if (hasSpecificityHack) {
     const warning = {
+      severity: "warning" as const,
       type: "unsupported-feature" as const,
-      feature: "specificity",
       message:
         "Styled-components specificity hacks like `&&` / `&&&` are not representable in StyleX. The output may not preserve selector specificity and may require manual adjustments.",
     };
