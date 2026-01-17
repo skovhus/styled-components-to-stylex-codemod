@@ -1,5 +1,7 @@
 import type { API } from "jscodeshift";
+import { compile } from "stylis";
 import { resolveDynamicNode } from "./builtin-handlers.js";
+import { normalizeStylisAstToIR } from "./css-ir.js";
 import { cssDeclarationToStylexDeclarations, cssPropertyToStylexProp } from "./css-prop-mapping.js";
 import { getMemberPathFromIdentifier, getNodeLocStart } from "./jscodeshift-utils.js";
 import type { ImportSource } from "../adapter.js";
@@ -10,6 +12,7 @@ import {
   tryHandleInterpolatedStringValue,
   wrapExprWithStaticParts,
 } from "./lower-rules/interpolations.js";
+import { parseStyledTemplateLiteral } from "./styled-css.js";
 import {
   createTypeInferenceHelpers,
   ensureShouldForwardPropDrop,
@@ -184,6 +187,179 @@ export function lowerRules(args: {
         .replace(/[^a-zA-Z0-9-]/g, "-")
         .toLowerCase();
 
+    const isAstNode = (v: unknown): v is { type: string } =>
+      !!v && typeof v === "object" && !Array.isArray(v) && typeof (v as any).type === "string";
+
+    const mergeStyleObjects = (
+      target: Record<string, unknown>,
+      source: Record<string, unknown>,
+    ) => {
+      for (const [key, value] of Object.entries(source)) {
+        const existing = (target as any)[key];
+        if (
+          existing &&
+          value &&
+          typeof existing === "object" &&
+          typeof value === "object" &&
+          !Array.isArray(existing) &&
+          !Array.isArray(value) &&
+          !isAstNode(existing) &&
+          !isAstNode(value)
+        ) {
+          mergeStyleObjects(existing as Record<string, unknown>, value as Record<string, unknown>);
+        } else {
+          (target as any)[key] = value as any;
+        }
+      }
+    };
+
+    const isCssHelperTaggedTemplate = (expr: any): expr is { quasi: any } => {
+      if (!expr || expr.type !== "TaggedTemplateExpression") {
+        return false;
+      }
+      if (expr.tag?.type !== "Identifier") {
+        return false;
+      }
+      const localName = expr.tag.name;
+      const imp = importMap.get(localName);
+      return (
+        !!imp &&
+        imp.importedName === "css" &&
+        imp.source?.kind === "specifier" &&
+        imp.source.value === "styled-components"
+      );
+    };
+
+    const resolveHelperExprToAst = (expr: any, paramName: string | null): any => {
+      if (!expr || typeof expr !== "object") {
+        return null;
+      }
+      if (
+        expr.type === "StringLiteral" ||
+        expr.type === "NumericLiteral" ||
+        expr.type === "Literal"
+      ) {
+        return expr;
+      }
+      const path =
+        paramName && (expr.type === "MemberExpression" || expr.type === "OptionalMemberExpression")
+          ? getMemberPathFromIdentifier(expr as any, paramName)
+          : null;
+      if (!path || path[0] !== "theme") {
+        return null;
+      }
+      const themePath = path.slice(1).join(".");
+      const res = resolveValue({
+        kind: "theme",
+        path: themePath,
+      });
+      if (!res) {
+        return null;
+      }
+      for (const imp of res.imports ?? []) {
+        resolverImports.set(JSON.stringify(imp), imp);
+      }
+      const exprAst = parseExpr(res.expr);
+      return exprAst ?? null;
+    };
+
+    const resolveCssHelperTemplate = (
+      template: any,
+      paramName: string | null,
+    ): Record<string, unknown> | null => {
+      const parsed = parseStyledTemplateLiteral(template);
+      const rawCss = parsed.rawCss;
+      const wrappedRawCss = `& { ${rawCss} }`;
+      const stylisAst = compile(wrappedRawCss);
+      const rules = normalizeStylisAstToIR(stylisAst as any, parsed.slots, {
+        rawCss: wrappedRawCss,
+      });
+      const slotExprById = new Map(parsed.slots.map((s) => [s.index, s.expression]));
+
+      const out: Record<string, unknown> = {};
+
+      const normalizePseudoElement = (pseudo: string | null): string | null => {
+        if (!pseudo) {
+          return null;
+        }
+        if (pseudo === ":before" || pseudo === ":after") {
+          return `::${pseudo.slice(1)}`;
+        }
+        return pseudo.startsWith("::") ? pseudo : null;
+      };
+
+      for (const rule of rules) {
+        if (rule.atRuleStack.length > 0) {
+          return null;
+        }
+        const selector = (rule.selector ?? "").trim();
+        let target = out;
+        if (selector !== "&") {
+          const pseudoElement = parsePseudoElement(selector);
+          const simplePseudo = parseSimplePseudo(selector);
+          const normalizedPseudoElement = normalizePseudoElement(
+            pseudoElement ??
+              (simplePseudo === ":before" || simplePseudo === ":after" ? simplePseudo : null),
+          );
+          if (normalizedPseudoElement) {
+            const nested = (out[normalizedPseudoElement] as any) ?? {};
+            out[normalizedPseudoElement] = nested;
+            target = nested;
+          } else if (simplePseudo) {
+            const nested = (out[simplePseudo] as any) ?? {};
+            out[simplePseudo] = nested;
+            target = nested;
+          } else {
+            return null;
+          }
+        }
+
+        for (const d of rule.declarations) {
+          if (!d.property) {
+            return null;
+          }
+          if (d.value.kind === "static") {
+            for (const mapped of cssDeclarationToStylexDeclarations(d)) {
+              let value = cssValueToJs(mapped.value, d.important);
+              if (mapped.prop === "content" && typeof value === "string") {
+                const m = value.match(/^['"]([\s\S]*)['"]$/);
+                if (m) {
+                  value = `"${m[1]}"`;
+                } else if (!value.startsWith('"') && !value.endsWith('"')) {
+                  value = `"${value}"`;
+                }
+              }
+              (target as any)[mapped.prop] = value as any;
+            }
+            continue;
+          }
+
+          if (d.important) {
+            return null;
+          }
+
+          const parts = d.value.parts ?? [];
+          if (parts.length !== 1 || parts[0]?.kind !== "slot") {
+            return null;
+          }
+          const slotId = parts[0].slotId;
+          const expr = slotExprById.get(slotId);
+          if (!expr) {
+            return null;
+          }
+          const exprAst = resolveHelperExprToAst(expr as any, paramName);
+          if (!exprAst) {
+            return null;
+          }
+          for (const mapped of cssDeclarationToStylexDeclarations(d)) {
+            (target as any)[mapped.prop] = exprAst as any;
+          }
+        }
+      }
+
+      return out;
+    };
+
     // (animation + interpolated-string helpers extracted to `./lower-rules/*`)
 
     const tryHandleMappedFunctionColor = (d: any): boolean => {
@@ -323,6 +499,97 @@ export function lowerRules(args: {
           p.shorthand = true;
           styleFnDecls.set(fnKey, j.arrowFunctionExpression([param], j.objectExpression([p])));
         }
+      }
+      return true;
+    };
+
+    const tryHandleCssHelperConditionalBlock = (d: any): boolean => {
+      if (d.value.kind !== "interpolated") {
+        return false;
+      }
+      if (d.property) {
+        return false;
+      }
+      const parts = d.value.parts ?? [];
+      if (parts.length !== 1 || parts[0]?.kind !== "slot") {
+        return false;
+      }
+      const slotId = parts[0].slotId;
+      const expr = decl.templateExpressions[slotId] as any;
+      if (!expr || expr.type !== "ArrowFunctionExpression") {
+        return false;
+      }
+      const paramName = expr.params?.[0]?.type === "Identifier" ? expr.params[0].name : null;
+      if (!paramName) {
+        return false;
+      }
+      if (expr.body?.type !== "ConditionalExpression") {
+        return false;
+      }
+
+      const readPropName = (node: any): string | null => {
+        const path = getMemberPathFromIdentifier(node as any, paramName);
+        if (!path || path.length !== 1) {
+          return null;
+        }
+        return path[0]!;
+      };
+
+      const testInfo = (() => {
+        const test = expr.body.test as any;
+        if (!test || typeof test !== "object") {
+          return null;
+        }
+        if (test.type === "MemberExpression" || test.type === "OptionalMemberExpression") {
+          const propName = readPropName(test);
+          return propName ? { when: propName, propName } : null;
+        }
+        if (test.type === "UnaryExpression" && test.operator === "!") {
+          const propName = readPropName(test.argument);
+          return propName ? { when: `!${propName}`, propName } : null;
+        }
+        if (
+          test.type === "BinaryExpression" &&
+          (test.operator === "===" || test.operator === "!==") &&
+          (test.left?.type === "MemberExpression" || test.left?.type === "OptionalMemberExpression")
+        ) {
+          const propName = readPropName(test.left);
+          const rhs = literalToStaticValue(test.right);
+          if (!propName || rhs === null) {
+            return null;
+          }
+          const rhsValue = JSON.stringify(rhs);
+          return { when: `${propName} ${test.operator} ${rhsValue}`, propName };
+        }
+        return null;
+      })();
+
+      if (!testInfo) {
+        return false;
+      }
+
+      const cons = expr.body.consequent as any;
+      const alt = expr.body.alternate as any;
+      if (!isCssHelperTaggedTemplate(cons) || !isCssHelperTaggedTemplate(alt)) {
+        return false;
+      }
+
+      const consStyle = resolveCssHelperTemplate(cons.quasi, paramName);
+      const altStyle = resolveCssHelperTemplate(alt.quasi, paramName);
+      if (!consStyle || !altStyle) {
+        return false;
+      }
+
+      mergeStyleObjects(styleObj, altStyle);
+
+      const when = testInfo.when;
+      const existingBucket = variantBuckets.get(when);
+      const nextBucket = existingBucket ? { ...existingBucket } : {};
+      mergeStyleObjects(nextBucket, consStyle);
+      variantBuckets.set(when, nextBucket);
+      variantStyleKeys[when] ??= `${decl.styleKey}${toSuffixFromProp(when)}`;
+      if (testInfo.propName && !testInfo.propName.startsWith("$")) {
+        ensureShouldForwardPropDrop(decl, testInfo.propName);
       }
       return true;
     };
@@ -618,6 +885,9 @@ export function lowerRules(args: {
                 continue;
               }
             }
+          }
+          if (tryHandleCssHelperConditionalBlock(d)) {
+            continue;
           }
           if (tryHandleLogicalOrDefault(d)) {
             continue;

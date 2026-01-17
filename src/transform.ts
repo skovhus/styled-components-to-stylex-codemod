@@ -13,7 +13,6 @@ import {
   collectCssHelperSkipWarnings,
   collectThemeProviderSkipWarnings,
   shouldSkipForCreateGlobalStyle,
-  shouldSkipForCssHelper,
   shouldSkipForThemeProvider,
   universalSelectorUnsupportedWarning,
 } from "./internal/policy.js";
@@ -116,11 +115,6 @@ export function transformWithWarnings(
     };
   }
 
-  // Policy: styled-components `css` helper usage is project-specific. If the file uses `css`, skip entirely.
-  if (shouldSkipForCssHelper({ root, j, styledImports })) {
-    return { code: null, warnings: collectCssHelperSkipWarnings({ root, j, styledImports }) };
-  }
-
   // Policy: createGlobalStyle is unsupported in StyleX; emit a warning when imported.
   warnings.push(...collectCreateGlobalStyleWarnings(styledImports));
 
@@ -185,45 +179,137 @@ export function transformWithWarnings(
         ? cssImport.imported.name
         : undefined;
 
+  const styledLocalNames = new Set<string>();
+  styledImports.forEach((imp) => {
+    const specs = imp.node.specifiers ?? [];
+    for (const spec of specs) {
+      if (spec.type === "ImportDefaultSpecifier" && spec.local?.type === "Identifier") {
+        styledLocalNames.add(spec.local.name);
+      }
+    }
+  });
+
+  const isStyledTag = (tag: any): boolean => {
+    if (!tag || typeof tag !== "object") {
+      return false;
+    }
+    if (tag.type === "Identifier") {
+      return styledLocalNames.has(tag.name);
+    }
+    if (tag.type === "MemberExpression" || tag.type === "OptionalMemberExpression") {
+      return isStyledTag(tag.object);
+    }
+    if (tag.type === "CallExpression") {
+      return isStyledTag(tag.callee);
+    }
+    return false;
+  };
+
+  const hasUnsupportedCssHelperUsage = (() => {
+    if (!cssLocal) {
+      return false;
+    }
+    const usedAsCall =
+      root
+        .find(j.CallExpression, { callee: { type: "Identifier", name: cssLocal } } as any)
+        .size() > 0;
+    if (usedAsCall) {
+      return true;
+    }
+    const cssTagged = root.find(j.TaggedTemplateExpression, {
+      tag: { type: "Identifier", name: cssLocal },
+    } as any);
+    let unsupported = false;
+    cssTagged.forEach((p: any) => {
+      if (unsupported) {
+        return;
+      }
+      const cssNode = p.node as any;
+      let cur: any = p;
+      let arrow: any = null;
+      while (cur && cur.parentPath) {
+        cur = cur.parentPath;
+        if (!cur?.node) {
+          break;
+        }
+        if (cur.node.type === "ArrowFunctionExpression") {
+          arrow = cur.node;
+          break;
+        }
+      }
+      if (!arrow) {
+        unsupported = true;
+        return;
+      }
+      if (arrow.body?.type !== "ConditionalExpression") {
+        unsupported = true;
+        return;
+      }
+      const cond = arrow.body;
+      if (cond.consequent !== cssNode && cond.alternate !== cssNode) {
+        unsupported = true;
+        return;
+      }
+      let hasStyledAncestor = false;
+      let anc: any = cur;
+      while (anc && anc.parentPath) {
+        anc = anc.parentPath;
+        if (anc?.node?.type === "TaggedTemplateExpression" && isStyledTag(anc.node.tag)) {
+          hasStyledAncestor = true;
+          break;
+        }
+      }
+      if (!hasStyledAncestor) {
+        unsupported = true;
+        return;
+      }
+    });
+    return unsupported;
+  })();
+
+  const isIdentifierReference = (p: any): boolean => {
+    const parent = p?.parent?.node;
+    if (!parent) {
+      return true;
+    }
+    // Import specifiers are not "uses".
+    if (
+      parent.type === "ImportSpecifier" ||
+      parent.type === "ImportDefaultSpecifier" ||
+      parent.type === "ImportNamespaceSpecifier"
+    ) {
+      return false;
+    }
+    // `foo.css` (non-computed) is a property name, not an identifier reference.
+    if (
+      (parent.type === "MemberExpression" || parent.type === "OptionalMemberExpression") &&
+      parent.property === p.node &&
+      parent.computed === false
+    ) {
+      return false;
+    }
+    // `{ css: 1 }` / `{ css }` key is not a reference when not computed.
+    if (
+      (parent.type === "Property" || parent.type === "ObjectProperty") &&
+      parent.key === p.node &&
+      parent.computed === false
+    ) {
+      return false;
+    }
+    // TS type keys are not runtime references.
+    if (parent.type === "TSPropertySignature" && parent.key === p.node) {
+      return false;
+    }
+    return true;
+  };
+
   const cssHelperNames = new Set<string>();
 
-  if (cssLocal) {
-    const isIdentifierReference = (p: any): boolean => {
-      const parent = p?.parent?.node;
-      if (!parent) {
-        return true;
-      }
-      // Import specifiers are not "uses".
-      if (
-        parent.type === "ImportSpecifier" ||
-        parent.type === "ImportDefaultSpecifier" ||
-        parent.type === "ImportNamespaceSpecifier"
-      ) {
-        return false;
-      }
-      // `foo.css` (non-computed) is a property name, not an identifier reference.
-      if (
-        (parent.type === "MemberExpression" || parent.type === "OptionalMemberExpression") &&
-        parent.property === p.node &&
-        parent.computed === false
-      ) {
-        return false;
-      }
-      // `{ css: 1 }` / `{ css }` key is not a reference when not computed.
-      if (
-        (parent.type === "Property" || parent.type === "ObjectProperty") &&
-        parent.key === p.node &&
-        parent.computed === false
-      ) {
-        return false;
-      }
-      // TS type keys are not runtime references.
-      if (parent.type === "TSPropertySignature" && parent.key === p.node) {
-        return false;
-      }
-      return true;
-    };
+  if (hasUnsupportedCssHelperUsage) {
+    return { code: null, warnings: collectCssHelperSkipWarnings({ root, j, styledImports }) };
+  }
 
+  if (cssLocal) {
     const isStillReferenced = (): boolean =>
       root
         .find(j.Identifier, { name: cssLocal } as any)
@@ -2078,6 +2164,52 @@ export function transformWithWarnings(
     styleMerger: adapter.styleMerger,
   });
 
+  // Ensure the style merger import is present whenever the merger function is referenced.
+  // This covers cases where wrapper emission uses the merger even when earlier heuristics
+  // didn't mark it as required.
+  if (adapter.styleMerger?.functionName && adapter.styleMerger.importSource) {
+    const mergerName = adapter.styleMerger.functionName;
+    const hasMergerUsage =
+      root
+        .find(j.Identifier, { name: mergerName } as any)
+        .filter((p: any) => isIdentifierReference(p))
+        .size() > 0;
+    const hasMergerImport =
+      root
+        .find(j.ImportSpecifier, {
+          imported: { type: "Identifier", name: mergerName },
+        } as any)
+        .size() > 0;
+    const hasLocalBinding =
+      root.find(j.FunctionDeclaration, { id: { name: mergerName } } as any).size() > 0 ||
+      root
+        .find(j.VariableDeclarator, { id: { type: "Identifier", name: mergerName } } as any)
+        .size() > 0;
+    if (hasMergerUsage && !hasMergerImport && !hasLocalBinding) {
+      const source = adapter.styleMerger.importSource;
+      if (source.kind === "specifier") {
+        const decl = j.importDeclaration(
+          [j.importSpecifier(j.identifier(mergerName))],
+          j.literal(source.value),
+        );
+        const stylexImport = root.find(j.ImportDeclaration, {
+          source: { value: "@stylexjs/stylex" },
+        } as any);
+        if (stylexImport.size() > 0) {
+          stylexImport.at(stylexImport.size() - 1).insertAfter(decl);
+        } else {
+          const firstImport = root.find(j.ImportDeclaration).at(0);
+          if (firstImport.size() > 0) {
+            firstImport.insertBefore(decl);
+          } else {
+            root.get().node.program.body.unshift(decl);
+          }
+        }
+        hasChanges = true;
+      }
+    }
+  }
+
   // Reinsert static property assignments after their corresponding wrapper functions.
   // For each styled component that has static properties, find its wrapper function
   // and insert the static property assignments immediately after it.
@@ -2116,6 +2248,38 @@ export function transformWithWarnings(
   });
   if (post.changed) {
     hasChanges = true;
+  }
+
+  // Re-check `css` helper usage after styled-components declarations are removed.
+  // This allows us to drop the import when all references were inside styled templates.
+  if (cssLocal) {
+    const isStillReferenced = (): boolean =>
+      root
+        .find(j.Identifier, { name: cssLocal } as any)
+        .filter((p: any) => isIdentifierReference(p))
+        .size() > 0;
+
+    if (!isStillReferenced()) {
+      styledImports.forEach((imp) => {
+        const specs = imp.node.specifiers ?? [];
+        const next = specs.filter((s) => {
+          if (s.type !== "ImportSpecifier") {
+            return true;
+          }
+          if (s.imported.type !== "Identifier") {
+            return true;
+          }
+          return s.imported.name !== "css";
+        });
+        if (next.length !== specs.length) {
+          imp.node.specifiers = next;
+          if (imp.node.specifiers.length === 0) {
+            j(imp).remove();
+          }
+          hasChanges = true;
+        }
+      });
+    }
   }
 
   // If the file references `React` (types or values) but doesn't import it, add `import React from "react";`

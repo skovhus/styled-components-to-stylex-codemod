@@ -25,41 +25,6 @@ export function shouldSkipForThemeProvider(args: {
   return root.find(j.JSXIdentifier, { name: themeProviderLocalForSkip } as any).size() > 0;
 }
 
-export function shouldSkipForCssHelper(args: {
-  root: Collection<any>;
-  j: any;
-  styledImports: Collection<any>;
-}): boolean {
-  const { root, j, styledImports } = args;
-  const cssImportForSkip = findStyledComponentsNamedImport({
-    styledImports,
-    j,
-    importedName: "css",
-  }) as any;
-  const cssLocalForSkip =
-    cssImportForSkip?.local?.type === "Identifier"
-      ? cssImportForSkip.local.name
-      : cssImportForSkip?.imported?.type === "Identifier"
-        ? cssImportForSkip.imported.name
-        : undefined;
-  if (!cssLocalForSkip) {
-    return false;
-  }
-
-  const usedAsTaggedTemplate =
-    root
-      .find(j.TaggedTemplateExpression, {
-        tag: { type: "Identifier", name: cssLocalForSkip },
-      } as any)
-      .size() > 0;
-  const usedAsCall =
-    root
-      .find(j.CallExpression, { callee: { type: "Identifier", name: cssLocalForSkip } } as any)
-      .size() > 0;
-
-  return usedAsTaggedTemplate || usedAsCall;
-}
-
 export function collectThemeProviderSkipWarnings(args: {
   root: Collection<any>;
   j: any;

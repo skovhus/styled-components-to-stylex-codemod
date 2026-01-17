@@ -499,7 +499,7 @@ export const App = () => <Box><span /></Box>;
     expect(result.warnings.some((w) => warningMatchesToken(w, "universal-selector"))).toBe(true);
   });
 
-  it("should warn and skip when styled-components `css` helper is used", () => {
+  it("should warn and skip when styled-components `css` helper mixins are used", () => {
     const source = `
 import styled, { css } from 'styled-components';
 

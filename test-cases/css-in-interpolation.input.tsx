@@ -14,9 +14,18 @@ export const Button = styled.button<{ $primary?: boolean }>`
       ? css`
           background: blue;
           color: white;
+
+          &:after {
+            content: "";
+            position: absolute;
+            inset: 0 4px;
+            background-color: hotpink;
+            z-index: -1;
+            border-radius: 6px;
+          }
         `
       : css`
-          background: gray;
+          background: ${props.theme.colors.bgBase};
           color: black;
         `}
 `;

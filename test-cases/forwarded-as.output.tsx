@@ -1,5 +1,6 @@
 import * as React from "react";
 import * as stylex from "@stylexjs/stylex";
+import { mergedSx } from "./lib/mergedSx";
 
 type ButtonProps<C extends React.ElementType = "button"> = React.ComponentPropsWithoutRef<C> & {
   as?: C;
