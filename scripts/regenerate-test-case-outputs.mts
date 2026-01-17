@@ -1,3 +1,16 @@
+/**
+ * Regenerates StyleX output fixtures from `test-cases/*.input.tsx`.
+ *
+ * Usage:
+ *   node scripts/regenerate-test-case-outputs.mts
+ *     Regenerates all supported fixtures (skips _unsupported.* and unsupported-*)
+ *
+ *   node scripts/regenerate-test-case-outputs.mts --only attrs
+ *     Regenerates a single fixture by name (no extension)
+ *
+ *   node scripts/regenerate-test-case-outputs.mts --only attrs,css-helper
+ *     Regenerates multiple fixtures by comma-separated names
+ */
 import { readdir, readFile, writeFile } from "node:fs/promises";
 import { join, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
