@@ -34,6 +34,17 @@ export function Image(props: ImageProps) {
   return <img {...rest} {...stylex.props(styles.image, $isInactive && styles.imageInactive)} />;
 }
 
+type SliderProps = Omit<React.ComponentProps<"div">, "className" | "style"> & {
+  $height: number;
+};
+
+function Slider(props: SliderProps) {
+  const { children, $height } = props;
+
+  const sx = stylex.props(styles.slider, styles.sliderHeight($height));
+  return <div {...sx}>{children}</div>;
+}
+
 export function App() {
   const pickerHeight = 200;
   return (
@@ -45,7 +56,7 @@ export function App() {
       <Image $isInactive src="/avatar.png" alt="Avatar" />
       {/* Internal components with transient props */}
       <div {...stylex.props(styles.point)} />
-      <div {...stylex.props(styles.slider, styles.sliderHeight(pickerHeight))}>Slider content</div>
+      <Slider $height={pickerHeight}>Slider content</Slider>
     </div>
   );
 }

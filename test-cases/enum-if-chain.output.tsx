@@ -3,9 +3,9 @@ import * as stylex from "@stylexjs/stylex";
 
 type Props = { state: "up" | "down" | "both" };
 
-type TopArrowStemProps = React.PropsWithChildren<{
+type TopArrowStemProps = Omit<React.ComponentProps<"g">, "className" | "style"> & {
   $state: Props["state"];
-}>;
+};
 
 function TopArrowStem(props: TopArrowStemProps) {
   const { children, $state } = props;

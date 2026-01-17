@@ -679,6 +679,21 @@ export function emitIntrinsicWrappers(ctx: any): { emitted: any[]; needsReactTyp
         extraProps.add(p.jsxProp);
       }
     }
+    for (const a of d.attrsInfo?.defaultAttrs ?? []) {
+      if (a?.jsxProp) {
+        extraProps.add(a.jsxProp);
+      }
+    }
+    for (const c of d.attrsInfo?.conditionalAttrs ?? []) {
+      if (c?.jsxProp) {
+        extraProps.add(c.jsxProp);
+      }
+    }
+    for (const inv of d.attrsInfo?.invertedBoolAttrs ?? []) {
+      if (inv?.jsxProp) {
+        extraProps.add(inv.jsxProp);
+      }
+    }
     const dropPrefixFromFilter = d.shouldForwardProp?.dropPrefix;
     const usedAttrs = getUsedAttrs(d.localName);
     const shouldAllowAnyPrefixProps =
@@ -730,18 +745,6 @@ export function emitIntrinsicWrappers(ctx: any): { emitted: any[]; needsReactTyp
           }
           const baseWithOmit = omitted.length ? `Omit<${base}, ${omitted.join(" | ")}>` : base;
           return joinIntersection(baseWithOmit, extrasTypeText);
-        }
-        if (!d.shouldForwardPropFromWithConfig) {
-          const supplementalLines: string[] = [];
-          if (allowClassNameProp) {
-            supplementalLines.push(`  className?: string;`);
-          }
-          if (allowStyleProp) {
-            supplementalLines.push(`  style?: React.CSSProperties;`);
-          }
-          const supplemental =
-            supplementalLines.length > 0 ? `{\n${supplementalLines.join("\n")}\n}` : "{}";
-          return withChildren(joinIntersection(extrasTypeText, supplemental));
         }
         const base = `React.ComponentProps<"${tagName}">`;
         const omitted: string[] = [];
@@ -847,6 +850,21 @@ export function emitIntrinsicWrappers(ctx: any): { emitted: any[]; needsReactTyp
         destructureParts.push(p);
       }
     }
+    for (const a of d.attrsInfo?.defaultAttrs ?? []) {
+      if (a?.jsxProp && !destructureParts.includes(a.jsxProp)) {
+        destructureParts.push(a.jsxProp);
+      }
+    }
+    for (const c of d.attrsInfo?.conditionalAttrs ?? []) {
+      if (c?.jsxProp && !destructureParts.includes(c.jsxProp)) {
+        destructureParts.push(c.jsxProp);
+      }
+    }
+    for (const inv of d.attrsInfo?.invertedBoolAttrs ?? []) {
+      if (inv?.jsxProp && !destructureParts.includes(inv.jsxProp)) {
+        destructureParts.push(inv.jsxProp);
+      }
+    }
 
     const propsParamId = j.identifier("props");
     annotatePropsParam(propsParamId, d.localName);
@@ -930,10 +948,72 @@ export function emitIntrinsicWrappers(ctx: any): { emitted: any[]; needsReactTyp
         ),
       ]);
 
-      const openingAttrs: any[] = [
-        ...(includeRest ? [j.jsxSpreadAttribute(restId)] : []),
-        j.jsxSpreadAttribute(j.identifier("sx")),
-      ];
+      const openingAttrs: any[] = [];
+      for (const a of d.attrsInfo?.defaultAttrs ?? []) {
+        const propExpr = j.identifier(a.jsxProp);
+        const fallback =
+          typeof a.value === "string"
+            ? j.literal(a.value)
+            : typeof a.value === "number"
+              ? j.literal(a.value)
+              : typeof a.value === "boolean"
+                ? j.booleanLiteral(a.value)
+                : j.literal(String(a.value));
+        openingAttrs.push(
+          j.jsxAttribute(
+            j.jsxIdentifier(a.attrName),
+            j.jsxExpressionContainer(j.logicalExpression("??", propExpr as any, fallback as any)),
+          ),
+        );
+      }
+      for (const cond of d.attrsInfo?.conditionalAttrs ?? []) {
+        openingAttrs.push(
+          j.jsxAttribute(
+            j.jsxIdentifier(cond.attrName),
+            j.jsxExpressionContainer(
+              j.conditionalExpression(
+                j.identifier(cond.jsxProp),
+                j.literal(cond.value),
+                j.identifier("undefined"),
+              ),
+            ),
+          ),
+        );
+      }
+      for (const inv of d.attrsInfo?.invertedBoolAttrs ?? []) {
+        openingAttrs.push(
+          j.jsxAttribute(
+            j.jsxIdentifier(inv.attrName),
+            j.jsxExpressionContainer(
+              j.binaryExpression(
+                "!==",
+                j.identifier(inv.jsxProp) as any,
+                j.booleanLiteral(true) as any,
+              ),
+            ),
+          ),
+        );
+      }
+      for (const [key, value] of Object.entries(d.attrsInfo?.staticAttrs ?? {})) {
+        if (typeof value === "string") {
+          openingAttrs.push(j.jsxAttribute(j.jsxIdentifier(key), j.literal(value)));
+        } else if (typeof value === "boolean") {
+          openingAttrs.push(
+            j.jsxAttribute(
+              j.jsxIdentifier(key),
+              value ? null : j.jsxExpressionContainer(j.literal(false)),
+            ),
+          );
+        } else if (typeof value === "number") {
+          openingAttrs.push(
+            j.jsxAttribute(j.jsxIdentifier(key), j.jsxExpressionContainer(j.literal(value))),
+          );
+        }
+      }
+      if (includeRest) {
+        openingAttrs.push(j.jsxSpreadAttribute(restId));
+      }
+      openingAttrs.push(j.jsxSpreadAttribute(j.identifier("sx")));
       if (d.inlineStyleProps && d.inlineStyleProps.length) {
         openingAttrs.push(
           j.jsxAttribute(
@@ -1175,6 +1255,12 @@ export function emitIntrinsicWrappers(ctx: any): { emitted: any[]; needsReactTyp
     if (!allowClassNameProp && !allowStyleProp) {
       const usedAttrs = getUsedAttrs(d.localName);
       const includeRest = usedAttrs.has("*") || !!(d as any).usedAsValue || usedAttrs.size > 0;
+      const destructureProps = [
+        ...new Set<string>([
+          ...(d.attrsInfo?.conditionalAttrs ?? []).map((c: any) => c.jsxProp).filter(Boolean),
+          ...(d.attrsInfo?.invertedBoolAttrs ?? []).map((inv: any) => inv.jsxProp).filter(Boolean),
+        ]),
+      ];
       emitted.push(
         ...withLeadingCommentsOnFirstFunction(
           emitMinimalWrapper({
@@ -1184,11 +1270,15 @@ export function emitIntrinsicWrappers(ctx: any): { emitted: any[]; needsReactTyp
             propsTypeName: propsTypeNameFor(d.localName),
             emitTypes,
             styleArgs,
-            destructureProps: [],
+            destructureProps,
             allowClassNameProp: false,
             allowStyleProp: false,
             includeRest,
             patternProp,
+            defaultAttrs: d.attrsInfo?.defaultAttrs ?? [],
+            conditionalAttrs: d.attrsInfo?.conditionalAttrs ?? [],
+            invertedBoolAttrs: d.attrsInfo?.invertedBoolAttrs ?? [],
+            staticAttrs: d.attrsInfo?.staticAttrs ?? {},
             inlineStyleProps: d.inlineStyleProps ?? [],
             styleMerger,
           }),
@@ -1808,14 +1898,10 @@ export function emitIntrinsicWrappers(ctx: any): { emitted: any[]; needsReactTyp
           allowStyleProp: false,
           includeRest: shouldIncludeRest,
           patternProp,
-          ...(d.attrsInfo?.defaultAttrs ? { defaultAttrs: d.attrsInfo.defaultAttrs } : {}),
-          ...(d.attrsInfo?.conditionalAttrs
-            ? { conditionalAttrs: d.attrsInfo.conditionalAttrs }
-            : {}),
-          ...(d.attrsInfo?.invertedBoolAttrs
-            ? { invertedBoolAttrs: d.attrsInfo.invertedBoolAttrs }
-            : {}),
-          ...(d.attrsInfo?.staticAttrs ? { staticAttrs: d.attrsInfo.staticAttrs } : {}),
+          defaultAttrs: d.attrsInfo?.defaultAttrs ?? [],
+          conditionalAttrs: d.attrsInfo?.conditionalAttrs ?? [],
+          invertedBoolAttrs: d.attrsInfo?.invertedBoolAttrs ?? [],
+          staticAttrs: d.attrsInfo?.staticAttrs ?? {},
           inlineStyleProps: d.inlineStyleProps ?? [],
           styleMerger,
         }),

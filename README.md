@@ -230,10 +230,12 @@ When the codemod encounters an interpolation inside a styled template literal, i
 - theme access (`props.theme...`) via `resolveValue({ kind: "theme", path })`
 - prop access (`props.foo`) and conditionals (`props.foo ? "a" : "b"`, `props.foo && "color: red;"`)
 - simple helper calls (`transitionSpeed("slowTransition")`) via `resolveValue({ kind: "call", calleeImportedName, calleeSource, args, ... })`
+- helper calls applied to prop values (e.g. `shadow(props.shadow)`) by emitting a StyleX style function that calls the helper at runtime
+- conditional CSS blocks via ternary (e.g. `props.$dim ? "opacity: 0.5;" : ""`)
 
 If the pipeline can’t resolve an interpolation:
 
-- for `withConfig({ shouldForwardProp })` wrappers, the transform preserves the value as an inline style so output keeps visual parity
+- for some dynamic value cases, the transform preserves the value as a wrapper inline style so output keeps visual parity (at the cost of using `style={...}` for that prop)
 - otherwise, the declaration containing that interpolation is **dropped** and a warning is produced (manual follow-up required)
 
 ### Limitations

@@ -15,14 +15,9 @@ type InputProps = Omit<React.ComponentProps<"input">, "className" | "style"> & {
 // Pattern 1: styled.input.attrs (dot notation)
 function Input(props: InputProps) {
   const { $padding, $small, ...rest } = props;
-  return (
-    <input
-      size={$small ? 5 : undefined}
-      type="text"
-      {...rest}
-      {...stylex.props(styles.input, $padding != null && styles.inputPadding($padding))}
-    />
-  );
+
+  const sx = stylex.props(styles.input, $padding != null && styles.inputPadding($padding));
+  return <input size={$small ? 5 : undefined} type="text" {...rest} {...sx} />;
 }
 
 // Pattern 2: styled("input").attrs (function call + attrs)
@@ -94,6 +89,7 @@ export const App = () => (
 );
 
 const styles = stylex.create({
+  // Pattern 1: styled.input.attrs (dot notation)
   input: {
     borderRadius: "3px",
     borderWidth: "1px",

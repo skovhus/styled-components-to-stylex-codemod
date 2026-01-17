@@ -181,6 +181,31 @@ function collectStyledDeclsImpl(args: {
     return out;
   };
 
+  const shouldForceWrapperForAttrs = (attrsInfo: StyledDecl["attrsInfo"] | undefined): boolean => {
+    if (!attrsInfo) {
+      return false;
+    }
+    const props = new Set<string>();
+    for (const c of attrsInfo.conditionalAttrs ?? []) {
+      if (typeof c?.jsxProp === "string") {
+        props.add(c.jsxProp);
+      }
+    }
+    for (const a of attrsInfo.defaultAttrs ?? []) {
+      if (typeof a?.jsxProp === "string") {
+        props.add(a.jsxProp);
+      }
+    }
+    for (const inv of attrsInfo.invertedBoolAttrs ?? []) {
+      if (typeof inv?.jsxProp === "string") {
+        props.add(inv.jsxProp);
+      }
+    }
+    // If attrs depend on transient props ($...), emit a wrapper so we can consume those props
+    // (and avoid forwarding them to the DOM) without trying to specialize per callsite.
+    return [...props].some((p) => p.startsWith("$"));
+  };
+
   const parseShouldForwardProp = (arg0: any): StyledDecl["shouldForwardProp"] | undefined => {
     if (!arg0 || arg0.type !== "ObjectExpression") {
       return undefined;
@@ -612,6 +637,7 @@ function collectStyledDeclsImpl(args: {
           templateExpressions: parsed.slots.map((s) => s.expression),
           rawCss: parsed.rawCss,
           ...(attrsInfo ? { attrsInfo } : {}),
+          ...(shouldForceWrapperForAttrs(attrsInfo) ? { needsWrapperComponent: true } : {}),
           ...(shouldForwardProp ? { shouldForwardProp } : {}),
           ...(shouldForwardProp ? { shouldForwardPropFromWithConfig: true } : {}),
           ...(withConfigMeta ? { withConfig: withConfigMeta } : {}),
@@ -657,6 +683,7 @@ function collectStyledDeclsImpl(args: {
           templateExpressions: parsed.slots.map((s) => s.expression),
           rawCss: parsed.rawCss,
           ...(attrsInfo ? { attrsInfo } : {}),
+          ...(shouldForceWrapperForAttrs(attrsInfo) ? { needsWrapperComponent: true } : {}),
           ...(propsType ? { propsType } : {}),
           ...(leadingComments ? { leadingComments } : {}),
         });
@@ -697,6 +724,7 @@ function collectStyledDeclsImpl(args: {
           templateExpressions: parsed.slots.map((s) => s.expression),
           rawCss: parsed.rawCss,
           ...(attrsInfo ? { attrsInfo } : {}),
+          ...(shouldForceWrapperForAttrs(attrsInfo) ? { needsWrapperComponent: true } : {}),
           ...(propsType ? { propsType } : {}),
           ...(leadingComments ? { leadingComments } : {}),
         });

@@ -844,7 +844,7 @@ function emitWrappersImpl(args: {
       case "div":
         return "React.HTMLAttributes<HTMLDivElement>";
       case "input":
-        return "React.InputHTMLAttributes<HTMLInputElement>";
+        return 'React.ComponentProps<"input">';
       case "img":
         return "React.ImgHTMLAttributes<HTMLImageElement>";
       case "label":

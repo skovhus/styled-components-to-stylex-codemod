@@ -17,16 +17,73 @@ export type DynamicNode = {
 };
 
 export type HandlerResult =
-  | { type: "resolvedValue"; expr: string; imports: ImportSpec[] }
-  | { type: "emitInlineStyle"; style: string }
   | {
+      /**
+       * The node was resolved to a JS expression string that can be directly inlined into
+       * generated output (typically for a single CSS property value).
+       *
+       * Example: `props.theme.colors.bgBase` -> `themeVars.bgBase`
+       *
+       * The caller is responsible for:
+       * - parsing `expr` into an AST
+       * - adding `imports`
+       */
+      type: "resolvedValue";
+      expr: string;
+      imports: ImportSpec[];
+    }
+  | {
+      /**
+       * Emit a wrapper inline style from a raw CSS string snippet.
+       *
+       * This is intentionally narrow and primarily used for keeping runtime parity
+       * when the codemod cannot safely lower to StyleX (e.g. complex dynamic blocks).
+       */
+      type: "emitInlineStyle";
+      style: string;
+    }
+  | {
+      /**
+       * Preserve the dynamic value by emitting a wrapper inline style:
+       *   style={{ ..., prop: expr(props) }}
+       *
+       * This is used for cases where we can't (or don't want to) lower into StyleX
+       * buckets, but can safely keep parity with styled-components at runtime.
+       */
+      type: "emitInlineStyleValueFromProps";
+    }
+  | {
+      /**
+       * Emit a StyleX style function keyed off a single JSX prop.
+       *
+       * The caller uses this to generate a helper like:
+       *   const styles = stylex.create({
+       *     boxShadowFromProp: (shadow) => ({ boxShadow: shadow })
+       *   })
+       *
+       * And apply it conditionally in the wrapper:
+       *   shadow != null && styles.boxShadowFromProp(shadow)
+       */
       type: "emitStyleFunction";
       nameHint: string;
       params: string;
       body: string;
       call: string;
+      /**
+       * Optional value transform to apply to the param before assigning to the style prop.
+       * This allows supporting patterns like:
+       *   box-shadow: ${(props) => shadow(props.shadow)};
+       * by emitting a style function that computes: `shadow(value)`.
+       */
+      valueTransform?: { kind: "call"; calleeIdent: string };
     }
   | {
+      /**
+       * Split a dynamic interpolation into one or more variant buckets.
+       *
+       * Each variant contains a static StyleX-style object. The caller is responsible for
+       * wiring these into `stylex.create(...)` keys and applying them under the `when` condition.
+       */
       type: "splitVariants";
       variants: Array<{
         nameHint: string;
@@ -47,7 +104,16 @@ export type HandlerResult =
         imports: ImportSpec[];
       }>;
     }
-  | { type: "keepOriginal"; reason: string };
+  | {
+      /**
+       * Signal that this handler does not know how to transform the node.
+       *
+       * The caller typically falls back to other strategies (or drops the declaration)
+       * and may surface `reason` as a warning.
+       */
+      type: "keepOriginal";
+      reason: string;
+    };
 
 export type InternalHandlerContext = {
   api: API;
@@ -503,6 +569,138 @@ function tryResolveConditionalCssBlock(node: DynamicNode): HandlerResult | null 
   return null;
 }
 
+function tryResolveConditionalCssBlockTernary(node: DynamicNode): HandlerResult | null {
+  const expr = node.expr;
+  if (!isArrowFunctionExpression(expr)) {
+    return null;
+  }
+  const paramName = getArrowFnSingleParamName(expr);
+  if (!paramName) {
+    return null;
+  }
+  if (expr.body.type !== "ConditionalExpression") {
+    return null;
+  }
+
+  // Support patterns like:
+  //   ${(props) => (props.$dim ? "opacity: 0.5;" : "")}
+  const test = expr.body.test as any;
+  if (!test || test.type !== "MemberExpression") {
+    return null;
+  }
+  const testPath = getMemberPathFromIdentifier(test, paramName);
+  if (!testPath || testPath.length !== 1) {
+    return null;
+  }
+  const when = testPath[0]!;
+
+  const consText = literalToString(expr.body.consequent);
+  const altText = literalToString(expr.body.alternate);
+  if (consText === null || altText === null) {
+    return null;
+  }
+
+  const consStyle = consText.trim() ? parseCssDeclarationBlock(consText) : null;
+  const altStyle = altText.trim() ? parseCssDeclarationBlock(altText) : null;
+  if (!consStyle && !altStyle) {
+    return null;
+  }
+
+  const variants: Array<{ nameHint: string; when: string; style: Record<string, unknown> }> = [];
+  if (altStyle) {
+    variants.push({ nameHint: "falsy", when: `!${when}`, style: altStyle });
+  }
+  if (consStyle) {
+    variants.push({ nameHint: "truthy", when, style: consStyle });
+  }
+  return { type: "splitVariants", variants };
+}
+
+function tryResolveArrowFnCallWithSinglePropArg(node: DynamicNode): HandlerResult | null {
+  if (!node.css.property) {
+    return null;
+  }
+  const expr = node.expr as any;
+  if (!isArrowFunctionExpression(expr)) {
+    return null;
+  }
+  const paramName = getArrowFnSingleParamName(expr);
+  if (!paramName) {
+    return null;
+  }
+  const body = expr.body as any;
+  if (!body || body.type !== "CallExpression") {
+    return null;
+  }
+  // Only support: helper(props.foo)
+  if (body.callee?.type !== "Identifier" || typeof body.callee.name !== "string") {
+    return null;
+  }
+  const calleeIdent = body.callee.name as string;
+  const args = body.arguments ?? [];
+  if (args.length !== 1) {
+    return null;
+  }
+  const arg0 = args[0] as any;
+  if (!arg0 || arg0.type !== "MemberExpression") {
+    return null;
+  }
+  const path = getMemberPathFromIdentifier(arg0, paramName);
+  if (!path || path.length !== 1) {
+    return null;
+  }
+  const propName = path[0]!;
+
+  return {
+    type: "emitStyleFunction",
+    nameHint: `${sanitizeIdentifier(node.css.property)}FromProp`,
+    params: "value: any",
+    body: `{ ${Object.keys(styleFromSingleDeclaration(node.css.property, "value"))[0]}: value }`,
+    call: propName,
+    valueTransform: { kind: "call", calleeIdent },
+  };
+}
+
+function tryResolveInlineStyleValueForConditionalExpression(
+  node: DynamicNode,
+): HandlerResult | null {
+  // Conservative fallback for value expressions we can't safely resolve into StyleX
+  // buckets/functions, but can preserve via a wrapper inline style.
+  if (!node.css.property) {
+    return null;
+  }
+  const expr: any = node.expr as any;
+  if (!isArrowFunctionExpression(expr)) {
+    return null;
+  }
+  if (expr.body?.type !== "ConditionalExpression") {
+    return null;
+  }
+  // IMPORTANT: do not attempt to preserve `props.theme.* ? ... : ...` via inline styles.
+  // StyleX output does not have `props.theme` at runtime (styled-components injects theme via context),
+  // so this would produce incorrect output unless a project-specific hook (e.g. useTheme()) is wired in.
+  //
+  // Treat these as unsupported so the caller can bail and surface a warning.
+  {
+    const paramName = getArrowFnSingleParamName(expr);
+    const test = expr.body.test as any;
+    const testPath =
+      paramName && test?.type === "MemberExpression"
+        ? getMemberPathFromIdentifier(test, paramName)
+        : null;
+    if (testPath && testPath[0] === "theme") {
+      return {
+        type: "keepOriginal",
+        reason:
+          "Theme-dependent conditional values require a project-specific theme source (e.g. useTheme()); cannot safely preserve.",
+      };
+    }
+  }
+  // Signal to the caller that we can preserve this declaration as an inline style
+  // by calling the function with `props`.
+  return { type: "emitInlineStyleValueFromProps" };
+}
+
 function tryResolvePropAccess(node: DynamicNode): HandlerResult | null {
   if (!node.css.property) {
     return null;
@@ -549,8 +747,11 @@ export function resolveDynamicNode(
     tryResolveThemeAccess(node, ctx) ??
     tryResolveCallExpression(node, ctx) ??
     tryResolveConditionalValue(node, ctx) ??
+    tryResolveConditionalCssBlockTernary(node) ??
     tryResolveConditionalCssBlock(node) ??
-    tryResolvePropAccess(node)
+    tryResolveArrowFnCallWithSinglePropArg(node) ??
+    tryResolvePropAccess(node) ??
+    tryResolveInlineStyleValueForConditionalExpression(node)
   );
 }
 

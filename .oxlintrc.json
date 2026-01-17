@@ -18,6 +18,11 @@
     "array-callback-return": "error",
     "no-self-compare": "error"
   },
+  "categories": {
+    "correctness": "error",
+    "suspicious": "off", // TODO: enable
+    "perf": "off"
+  },
   "ignorePatterns": [
     "dist/**",
     "node_modules/**",

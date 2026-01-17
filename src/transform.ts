@@ -1857,6 +1857,13 @@ export function transformWithWarnings(
       continue;
     }
 
+    // If we emitted a wrapper for this decl, keep JSX usage as `<Decl ... />`.
+    // Inline substitution (`<Decl>` -> `<tag>`) is only valid when the styled declaration
+    // is removed and there is no wrapper component boundary to preserve.
+    if (decl.needsWrapperComponent) {
+      continue;
+    }
+
     // Replace JSX elements <Decl> with intrinsic tag and stylex.props
     root
       .find(j.JSXElement, {

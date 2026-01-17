@@ -1553,6 +1553,26 @@ export function lowerRules(args: {
             continue;
           }
 
+          if (res && res.type === "emitInlineStyleValueFromProps") {
+            if (!d.property) {
+              // This handler is only intended for value interpolations on concrete properties.
+              // If the IR is missing a property, fall through to other handlers.
+            } else {
+              const e = decl.templateExpressions[slotId] as any;
+              if (e?.type === "ArrowFunctionExpression") {
+                decl.needsWrapperComponent = true;
+                const valueExpr = j.callExpression(e, [j.identifier("props")]);
+                for (const out of cssDeclarationToStylexDeclarations(d)) {
+                  if (!out.prop) {
+                    continue;
+                  }
+                  inlineStyleProps.push({ prop: out.prop, expr: valueExpr });
+                }
+                continue;
+              }
+            }
+          }
+
           if (res && res.type === "emitStyleFunction") {
             const jsxProp = res.call;
             {
@@ -1571,23 +1591,33 @@ export function lowerRules(args: {
                   // Be permissive: callers might pass numbers (e.g. `${props => props.$width}px`)
                   // or strings (e.g. `${props => props.$color}`).
                   annotateParamFromJsxProp(param, jsxProp);
+                  if (jsxProp?.startsWith?.("$")) {
+                    ensureShouldForwardPropDrop(decl, jsxProp);
+                  }
 
                   // If this declaration is a simple interpolated string with a single slot and
                   // surrounding static text, preserve it by building a TemplateLiteral around the
                   // prop value, e.g. `${value}px`, `opacity ${value}ms`.
                   const buildValueExpr = (): any => {
+                    const transformed = (() => {
+                      const vt: any = (res as any).valueTransform;
+                      if (vt?.kind === "call" && typeof vt.calleeIdent === "string") {
+                        return j.callExpression(j.identifier(vt.calleeIdent), [valueId]);
+                      }
+                      return valueId;
+                    })();
                     const v: any = (d as any).value;
                     if (!v || v.kind !== "interpolated") {
-                      return valueId;
+                      return transformed;
                     }
                     const parts: any[] = v.parts ?? [];
                     const slotParts = parts.filter((p: any) => p?.kind === "slot");
                     if (slotParts.length !== 1) {
-                      return valueId;
+                      return transformed;
                     }
                     const onlySlot = slotParts[0]!;
                     if (onlySlot.slotId !== slotId) {
-                      return valueId;
+                      return transformed;
                     }
 
                     // If it's just the slot, keep it as the raw value (number/string).
@@ -1595,7 +1625,7 @@ export function lowerRules(args: {
                       (p: any) => p?.kind === "static" && p.value !== "",
                     );
                     if (!hasStatic) {
-                      return valueId;
+                      return transformed;
                     }
 
                     const quasis: any[] = [];
@@ -1609,7 +1639,7 @@ export function lowerRules(args: {
                       if (part?.kind === "slot") {
                         quasis.push(j.templateElement({ raw: q, cooked: q }, false));
                         q = "";
-                        exprs.push(valueId);
+                        exprs.push(transformed);
                         continue;
                       }
                     }

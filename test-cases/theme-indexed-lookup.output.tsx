@@ -4,10 +4,10 @@ import { themeVars } from "./tokens.stylex";
 
 type Color = "labelBase" | "labelMuted";
 
-type BoxProps = React.PropsWithChildren<{
+type BoxProps = Omit<React.ComponentProps<"div">, "className" | "style"> & {
   $bg: Color;
   $hoverColor: Color;
-}>;
+};
 
 function Box(props: BoxProps) {
   const { children, $hoverColor, $bg } = props;
