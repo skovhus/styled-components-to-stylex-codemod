@@ -1,5 +1,6 @@
 import * as React from "react";
 import * as stylex from "@stylexjs/stylex";
+import { mergedSx } from "./lib/mergedSx";
 
 // Simplified Text component for test case
 type TextProps = React.PropsWithChildren<{
