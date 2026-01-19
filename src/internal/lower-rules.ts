@@ -268,6 +268,26 @@ export function lowerRules(args: {
     return props;
   };
 
+  const countConditionalExpressions = (node: any): number => {
+    if (!node || typeof node !== "object") {
+      return 0;
+    }
+    if (Array.isArray(node)) {
+      return node.reduce((sum, child) => sum + countConditionalExpressions(child), 0);
+    }
+    let count = node.type === "ConditionalExpression" ? 1 : 0;
+    for (const key of Object.keys(node)) {
+      if (key === "loc" || key === "comments") {
+        continue;
+      }
+      const child = node[key];
+      if (child && typeof child === "object") {
+        count += countConditionalExpressions(child);
+      }
+    }
+    return count;
+  };
+
   const hasLocalThemeBinding = (() => {
     let found = false;
     root.find(j.VariableDeclarator, { id: { type: "Identifier", name: "theme" } }).forEach(() => {
@@ -1900,6 +1920,20 @@ export function lowerRules(args: {
               const e = decl.templateExpressions[slotId] as any;
               if (e?.type === "ArrowFunctionExpression") {
                 if (pseudos?.length || media) {
+                  const bodyExpr =
+                    e.body?.type === "BlockStatement"
+                      ? e.body.body?.find((s: any) => s.type === "ReturnStatement")?.argument
+                      : e.body;
+                  if (countConditionalExpressions(bodyExpr) > 1) {
+                    warnings.push({
+                      severity: "warning",
+                      type: "dynamic-node",
+                      message: `Unsupported nested conditional interpolation for ${decl.localName}.`,
+                      ...(loc ? { loc } : {}),
+                    });
+                    bail = true;
+                    break;
+                  }
                   const propsParam = j.identifier("props");
                   const valueExprRaw = (() => {
                     const unwrapped = unwrapArrowFunctionToPropsExpr(e);
