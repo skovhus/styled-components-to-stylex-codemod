@@ -39,6 +39,8 @@ export const testCaseTheme = {
 
 export type TestCaseTheme = typeof testCaseTheme;
 
+export type ThemeColor = keyof typeof testCaseTheme.color;
+
 export const transitionSpeed = stylex.defineVars({
   slow: "1s",
   normal: "0.25s",

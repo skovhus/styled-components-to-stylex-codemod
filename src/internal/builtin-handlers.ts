@@ -305,7 +305,7 @@ function tryResolveCallExpression(
   if (!res) {
     return {
       type: "keepOriginal",
-      reason: `Unresolved helper call ${calleeImportedName}(...) (adapter did not resolve)`,
+      reason: `Unresolved helper call ${calleeImportedName}(...) (adapter resolveValue returned null)`,
     };
   }
   return { type: "resolvedValue", expr: res.expr, imports: res.imports };

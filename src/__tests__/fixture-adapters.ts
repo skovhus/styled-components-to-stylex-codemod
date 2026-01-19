@@ -94,22 +94,22 @@ export const fixtureAdapter = defineAdapter({
     if (ctx.kind === "call") {
       const src = ctx.calleeSource.value;
       // Note: calleeSource.value may or may not include the extension
-      if (!src.includes("lib/helpers") && !src.includes("lib\\helpers.ts")) {
+      if (!src.includes("lib/helpers") && !src.includes("lib\\helpers")) {
+        return null;
+      }
+
+      const arg0 = ctx.args[0];
+      const key = arg0?.kind === "literal" && typeof arg0.value === "string" ? arg0.value : null;
+
+      if (!key) {
         return null;
       }
 
       // Handle color() helper from ./lib/helpers.ts
       // color("bgBase") -> themeVars.bgBase
       if (ctx.calleeImportedName === "color") {
-        const arg0 = ctx.args[0];
-        const colorName =
-          arg0?.kind === "literal" && typeof arg0.value === "string" ? arg0.value : null;
-        if (!colorName) {
-          return null;
-        }
-
         return {
-          expr: `themeVars.${colorName}`,
+          expr: `themeVars.${key}`,
           imports: [
             {
               from: { kind: "specifier", value: "./tokens.stylex" },
@@ -122,11 +122,6 @@ export const fixtureAdapter = defineAdapter({
       // Handle fontWeight() helper from ./lib/helpers.ts
       // fontWeight("medium") -> fontWeightVars.medium
       if (ctx.calleeImportedName === "fontWeight") {
-        const arg0 = ctx.args[0];
-        const key = arg0?.kind === "literal" && typeof arg0.value === "string" ? arg0.value : null;
-        if (key !== "normal" && key !== "medium" && key !== "bold") {
-          return null;
-        }
         return {
           expr: `fontWeightVars.${key}`,
           imports: [
@@ -141,11 +136,6 @@ export const fixtureAdapter = defineAdapter({
       // Handle fontSize() helper from ./lib/helpers.ts
       // fontSize("medium") -> fontSizeVars.medium
       if (ctx.calleeImportedName === "fontSize") {
-        const arg0 = ctx.args[0];
-        const key = arg0?.kind === "literal" && typeof arg0.value === "string" ? arg0.value : null;
-        if (key !== "small" && key !== "medium" && key !== "large") {
-          return null;
-        }
         return {
           expr: `fontSizeVars.${key}`,
           imports: [
@@ -160,11 +150,6 @@ export const fixtureAdapter = defineAdapter({
       // Handle transitionSpeedMs() helper from ./lib/helpers.ts
       // transitionSpeedMs("fast") -> transitionSpeedMsVars.fast
       if (ctx.calleeImportedName === "transitionSpeed") {
-        const arg0 = ctx.args[0];
-        const key = arg0?.kind === "literal" && typeof arg0.value === "string" ? arg0.value : null;
-        if (key !== "fast" && key !== "normal" && key !== "slow") {
-          return null;
-        }
         return {
           expr: `transitionSpeed.${key}`,
           imports: [
