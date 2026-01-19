@@ -46,7 +46,7 @@ export const TAG_TO_HTML_ELEMENT: Record<string, string> = {
 };
 
 export function getAttrsAsString(d: StyledDecl): string | null {
-  const v = (d as any)?.attrsInfo?.staticAttrs?.as;
+  const v = d.attrsInfo?.staticAttrs?.as;
   return typeof v === "string" ? v : null;
 }
 

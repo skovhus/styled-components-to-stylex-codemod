@@ -1,3 +1,4 @@
+import type { Identifier, JSCodeshift } from "jscodeshift";
 import type { StyleMergerConfig } from "../../adapter.js";
 
 export type { StyleMergerConfig };
@@ -5,6 +6,9 @@ export type { StyleMergerConfig };
 /**
  * Result of emitting style merging logic.
  */
+type ExpressionKind = Parameters<JSCodeshift["expressionStatement"]>[0];
+type StatementKind = Parameters<JSCodeshift["blockStatement"]>[0][number];
+
 export interface StyleMergingResult {
   /**
    * Whether an `sx` variable is needed (verbose pattern only).
@@ -14,22 +18,22 @@ export interface StyleMergingResult {
   /**
    * The `const sx = stylex.props(...)` declaration, or null if using merger.
    */
-  sxDecl: any;
+  sxDecl: StatementKind | null;
 
   /**
    * The expression to spread in JSX (either `sx` or the merger call).
    */
-  jsxSpreadExpr: any;
+  jsxSpreadExpr: ExpressionKind;
 
   /**
    * The className attribute expression, or null if using merger.
    */
-  classNameAttr: any;
+  classNameAttr: ExpressionKind | null;
 
   /**
    * The style attribute expression, or null if using merger.
    */
-  styleAttr: any;
+  styleAttr: ExpressionKind | null;
 }
 
 /**
@@ -47,14 +51,14 @@ export interface StyleMergingResult {
  *   ```
  */
 export function emitStyleMerging(args: {
-  j: any;
+  j: JSCodeshift;
   styleMerger: StyleMergerConfig | null;
-  styleArgs: any[];
-  classNameId: any;
-  styleId: any;
+  styleArgs: ExpressionKind[];
+  classNameId: Identifier;
+  styleId: Identifier;
   allowClassNameProp: boolean;
   allowStyleProp: boolean;
-  inlineStyleProps?: Array<{ prop: string; expr: any }>;
+  inlineStyleProps?: Array<{ prop: string; expr: ExpressionKind }>;
 }): StyleMergingResult {
   const {
     j,
@@ -112,14 +116,14 @@ export function emitStyleMerging(args: {
  * Generates the merger function call pattern.
  */
 function emitWithMerger(args: {
-  j: any;
+  j: JSCodeshift;
   styleMerger: StyleMergerConfig;
-  styleArgs: any[];
-  classNameId: any;
-  styleId: any;
+  styleArgs: ExpressionKind[];
+  classNameId: Identifier;
+  styleId: Identifier;
   allowClassNameProp: boolean;
   allowStyleProp: boolean;
-  inlineStyleProps: Array<{ prop: string; expr: any }>;
+  inlineStyleProps: Array<{ prop: string; expr: ExpressionKind }>;
 }): StyleMergingResult {
   const {
     j,
@@ -135,11 +139,11 @@ function emitWithMerger(args: {
   // Build the styles argument
   // - Single style: pass directly
   // - Multiple styles: wrap in array
-  const stylesArg = styleArgs.length === 1 ? styleArgs[0] : j.arrayExpression(styleArgs);
+  const stylesArg = styleArgs.length === 1 ? styleArgs[0]! : j.arrayExpression(styleArgs);
 
   // Build the merger function call arguments
   // Signature: merger(styles, className?, style?)
-  const mergerArgs: any[] = [stylesArg];
+  const mergerArgs: ExpressionKind[] = [stylesArg];
 
   if (allowClassNameProp || allowStyleProp) {
     // Add className argument (or undefined if not needed but style is)

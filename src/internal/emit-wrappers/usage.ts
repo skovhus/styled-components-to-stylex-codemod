@@ -1,4 +1,11 @@
-import type { Collection } from "jscodeshift";
+import type {
+  ASTNode,
+  Collection,
+  JSCodeshift,
+  JSXAttribute,
+  JSXOpeningElement,
+  JSXSpreadAttribute,
+} from "jscodeshift";
 import type { StyledDecl } from "../transform-types.js";
 
 export type WrapperUsageHelpers = {
@@ -11,8 +18,8 @@ export type WrapperUsageHelpers = {
 };
 
 export function createWrapperUsageHelpers(args: {
-  root: Collection<any>;
-  j: any;
+  root: Collection<ASTNode>;
+  j: JSCodeshift;
 }): WrapperUsageHelpers {
   const { root, j } = args;
 
@@ -23,8 +30,14 @@ export function createWrapperUsageHelpers(args: {
       return cached;
     }
     const attrs = new Set<string>();
-    const collectFromOpening = (opening: any) => {
-      for (const a of (opening?.attributes ?? []) as any[]) {
+    const collectFromOpening = (
+      opening:
+        | JSXOpeningElement
+        | (ASTNode & { attributes?: Array<JSXAttribute | JSXSpreadAttribute> })
+        | null,
+    ) => {
+      const attrNodes = (opening?.attributes ?? []) as Array<JSXAttribute | JSXSpreadAttribute>;
+      for (const a of attrNodes) {
         if (!a) {
           continue;
         }

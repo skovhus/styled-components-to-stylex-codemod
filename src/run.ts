@@ -107,7 +107,7 @@ export async function runTransform(options: RunTransformOptions): Promise<RunTra
   }
 
   // Validate early so JS users get actionable errors instead of destructuring crashes.
-  const filesValue = (options as any).files;
+  const filesValue = (options as { files?: unknown }).files;
   if (typeof filesValue !== "string" && !Array.isArray(filesValue)) {
     throw new Error(
       [
@@ -158,7 +158,7 @@ export async function runTransform(options: RunTransformOptions): Promise<RunTra
     resolveValue(ctx) {
       try {
         return adapter.resolveValue(ctx);
-      } catch (e: any) {
+      } catch (e) {
         const msg = `adapter.resolveValue threw an error: ${
           e instanceof Error ? e.message : String(e)
         }`;

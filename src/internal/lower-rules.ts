@@ -1,10 +1,10 @@
-import type { API } from "jscodeshift";
+import type { API, ASTNode, Collection, JSCodeshift } from "jscodeshift";
 import { compile } from "stylis";
 import { resolveDynamicNode } from "./builtin-handlers.js";
 import { normalizeStylisAstToIR } from "./css-ir.js";
 import { cssDeclarationToStylexDeclarations, cssPropertyToStylexProp } from "./css-prop-mapping.js";
 import { getMemberPathFromIdentifier, getNodeLocStart } from "./jscodeshift-utils.js";
-import type { ImportSource } from "../adapter.js";
+import type { ImportSource, ImportSpec, ResolveContext, ResolveResult } from "../adapter.js";
 import { tryHandleAnimation } from "./lower-rules/animation.js";
 import { tryHandleInterpolatedBorder } from "./lower-rules/borders.js";
 import {
@@ -34,12 +34,14 @@ export type DescendantOverride = {
   overrideStyleKey: string;
 };
 
+type ExpressionKind = Parameters<JSCodeshift["expressionStatement"]>[0];
+
 export function lowerRules(args: {
   api: API;
-  j: any;
-  root: any;
+  j: JSCodeshift;
+  root: Collection<ASTNode>;
   filePath: string;
-  resolveValue: (ctx: any) => any;
+  resolveValue: (ctx: ResolveContext) => ResolveResult | null;
   importMap: Map<
     string,
     {
@@ -48,7 +50,7 @@ export function lowerRules(args: {
     }
   >;
   warnings: WarningLog[];
-  resolverImports: Map<string, any>;
+  resolverImports: Map<string, ImportSpec>;
   styledDecls: StyledDecl[];
   keyframesNames: Set<string>;
   cssHelperNames: Set<string>;
@@ -64,16 +66,16 @@ export function lowerRules(args: {
   >;
   toStyleKey: (name: string) => string;
   toSuffixFromProp: (propName: string) => string;
-  parseExpr: (exprSource: string) => unknown;
-  cssValueToJs: (value: any, important?: boolean) => unknown;
+  parseExpr: (exprSource: string) => ExpressionKind | null;
+  cssValueToJs: (value: unknown, important?: boolean) => unknown;
   rewriteCssVarsInStyleObject: (
     obj: Record<string, unknown>,
     definedVars: Map<string, string>,
     varsToDrop: Set<string>,
   ) => void;
-  literalToAst: (j: any, v: unknown) => any;
+  literalToAst: (j: JSCodeshift, v: unknown) => ExpressionKind;
 }): {
-  resolvedStyleObjects: Map<string, any>;
+  resolvedStyleObjects: Map<string, unknown>;
   descendantOverrides: DescendantOverride[];
   ancestorSelectorParents: Set<string>;
   bail: boolean;
@@ -99,7 +101,7 @@ export function lowerRules(args: {
     literalToAst,
   } = args;
 
-  const resolvedStyleObjects = new Map<string, any>();
+  const resolvedStyleObjects = new Map<string, unknown>();
   const declByLocalName = new Map(styledDecls.map((d) => [d.localName, d]));
   const descendantOverrides: DescendantOverride[] = [];
   const ancestorSelectorParents = new Set<string>();
@@ -124,7 +126,12 @@ export function lowerRules(args: {
 
   // Build a template literal with static prefix/suffix around a dynamic expression.
   // e.g., prefix="" suffix="ms" expr=<call> -> `${<call>}ms`
-  const buildTemplateWithStaticParts = (j: any, expr: any, prefix: string, suffix: string): any => {
+  const buildTemplateWithStaticParts = (
+    j: JSCodeshift,
+    expr: ExpressionKind,
+    prefix: string,
+    suffix: string,
+  ): ExpressionKind => {
     if (!prefix && !suffix) {
       return expr;
     }
@@ -234,7 +241,7 @@ export function lowerRules(args: {
     const styleFnFromProps: Array<{ fnKey: string; jsxProp: string }> = [];
     const styleFnDecls = new Map<string, any>();
     const attrBuckets = new Map<string, Record<string, unknown>>();
-    const inlineStyleProps: Array<{ prop: string; expr: any }> = [];
+    const inlineStyleProps: Array<{ prop: string; expr: ExpressionKind }> = [];
     const localVarValues = new Map<string, string>();
 
     const { findJsxPropTsType, annotateParamFromJsxProp } = createTypeInferenceHelpers({

@@ -1,8 +1,9 @@
-import type { ASTNode } from "jscodeshift";
+import type { ASTNode, JSCodeshift } from "jscodeshift";
 import type { StyledDecl } from "../transform-types.js";
 import { emitStyleMerging, type StyleMergerConfig } from "./style-merger.js";
 
-type InlineStyleProp = { prop: string; expr: ASTNode };
+type ExpressionKind = Parameters<JSCodeshift["expressionStatement"]>[0];
+type InlineStyleProp = { prop: string; expr: ExpressionKind };
 
 export function emitIntrinsicWrappers(ctx: any): {
   emitted: ASTNode[];
@@ -40,7 +41,10 @@ export function emitIntrinsicWrappers(ctx: any): {
     emitMinimalWrapper,
     withLeadingCommentsOnFirstFunction,
     styleMerger,
-  } = ctx as { styleMerger: StyleMergerConfig | null } & Record<string, any>;
+  } = ctx as { styleMerger: StyleMergerConfig | null; wrapperDecls: StyledDecl[] } & Record<
+    string,
+    any
+  >;
 
   const emitted: ASTNode[] = [];
   let needsReactTypeImport = false;
@@ -164,18 +168,18 @@ export function emitIntrinsicWrappers(ctx: any): {
   };
 
   const inputWrapperDecls = wrapperDecls.filter(
-    (d: any) =>
+    (d: StyledDecl) =>
       d.base.kind === "intrinsic" && d.base.tagName === "input" && d.attrWrapper?.kind === "input",
   );
   const linkWrapperDecls = wrapperDecls.filter(
-    (d: any) =>
+    (d: StyledDecl) =>
       d.base.kind === "intrinsic" && d.base.tagName === "a" && d.attrWrapper?.kind === "link",
   );
   const intrinsicPolymorphicWrapperDecls = wrapperDecls.filter(
-    (d: any) => d.base.kind === "intrinsic" && wrapperNames.has(d.localName),
+    (d: StyledDecl) => d.base.kind === "intrinsic" && wrapperNames.has(d.localName),
   );
   const shouldForwardPropWrapperDecls = wrapperDecls.filter(
-    (d: any) => d.shouldForwardProp && !d.enumVariant && d.base.kind === "intrinsic",
+    (d: StyledDecl) => d.shouldForwardProp && !d.enumVariant && d.base.kind === "intrinsic",
   );
 
   // --- BEGIN extracted blocks from `emit-wrappers.ts` (kept mechanically identical) ---
@@ -203,7 +207,7 @@ export function emitIntrinsicWrappers(ctx: any): {
       needsReactTypeImport = true;
 
       const aw = d.attrWrapper!;
-      const styleArgs: ASTNode[] = [
+      const styleArgs: ExpressionKind[] = [
         j.memberExpression(j.identifier(stylesIdentifier), j.identifier(d.styleKey)),
         ...(aw.checkboxKey
           ? [
@@ -301,7 +305,7 @@ export function emitIntrinsicWrappers(ctx: any): {
 
       const aw = d.attrWrapper!;
       const base = j.memberExpression(j.identifier(stylesIdentifier), j.identifier(d.styleKey));
-      const styleArgs: ASTNode[] = [
+      const styleArgs: ExpressionKind[] = [
         base,
         ...(aw.externalKey
           ? [
@@ -458,7 +462,7 @@ export function emitIntrinsicWrappers(ctx: any): {
       }
       needsReactTypeImport = true;
 
-      const styleArgs: ASTNode[] = [
+      const styleArgs: ExpressionKind[] = [
         ...(d.extendsStyleKey
           ? [j.memberExpression(j.identifier(stylesIdentifier), j.identifier(d.extendsStyleKey))]
           : []),
@@ -627,12 +631,12 @@ export function emitIntrinsicWrappers(ctx: any): {
         needsReactTypeImport = true;
       } else {
         // Best-effort: treat enum variant prop as a string-literal union.
-        const hasNeq = cases.some((c: any) => c.kind === "neq");
-        const values = [...new Set(cases.map((c: any) => c.whenValue))].filter(Boolean);
+        const hasNeq = cases.some((c) => c.kind === "neq");
+        const values = [...new Set(cases.map((c) => c.whenValue))].filter(Boolean);
         const union = hasNeq
           ? "string"
           : values.length > 0
-            ? values.map((v: any) => JSON.stringify(v)).join(" | ")
+            ? values.map((v) => JSON.stringify(v)).join(" | ")
             : "string";
         emitNamedPropsType(
           d.localName,
@@ -843,7 +847,7 @@ export function emitIntrinsicWrappers(ctx: any): {
     }
     needsReactTypeImport = true;
 
-    const styleArgs: ASTNode[] = [
+    const styleArgs: ExpressionKind[] = [
       ...(d.extendsStyleKey
         ? [j.memberExpression(j.identifier(stylesIdentifier), j.identifier(d.extendsStyleKey))]
         : []),
@@ -1151,7 +1155,7 @@ export function emitIntrinsicWrappers(ctx: any): {
       styleId,
       allowClassNameProp,
       allowStyleProp,
-      inlineStyleProps: d.inlineStyleProps ?? [],
+      inlineStyleProps: (d.inlineStyleProps ?? []) as InlineStyleProp[],
     });
 
     // Build attrs: {...rest} then {...mergedStylexProps(...)} so stylex styles override
@@ -1279,7 +1283,7 @@ export function emitIntrinsicWrappers(ctx: any): {
       emitNamedPropsType(d.localName, explicit ?? typeWithChildren);
       needsReactTypeImport = true;
     }
-    const styleArgs: ASTNode[] = [
+    const styleArgs: ExpressionKind[] = [
       ...(d.extendsStyleKey
         ? [j.memberExpression(j.identifier(stylesIdentifier), j.identifier(d.extendsStyleKey))]
         : []),
@@ -1327,7 +1331,7 @@ export function emitIntrinsicWrappers(ctx: any): {
             conditionalAttrs: d.attrsInfo?.conditionalAttrs ?? [],
             invertedBoolAttrs: d.attrsInfo?.invertedBoolAttrs ?? [],
             staticAttrs: d.attrsInfo?.staticAttrs ?? {},
-            inlineStyleProps: d.inlineStyleProps ?? [],
+            inlineStyleProps: (d.inlineStyleProps ?? []) as InlineStyleProp[],
             styleMerger,
           }),
           d,
@@ -1524,7 +1528,7 @@ export function emitIntrinsicWrappers(ctx: any): {
     ]);
 
     // Build styleArgs for sibling selectors
-    const styleArgs: ASTNode[] = [
+    const styleArgs: ExpressionKind[] = [
       j.memberExpression(j.identifier(stylesIdentifier), j.identifier(d.styleKey)),
       j.logicalExpression(
         "&&",
@@ -1795,7 +1799,7 @@ export function emitIntrinsicWrappers(ctx: any): {
       }
       needsReactTypeImport = true;
     }
-    const styleArgs: ASTNode[] = [
+    const styleArgs: ExpressionKind[] = [
       ...(d.extendsStyleKey
         ? [j.memberExpression(j.identifier(stylesIdentifier), j.identifier(d.extendsStyleKey))]
         : []),
@@ -1940,7 +1944,7 @@ export function emitIntrinsicWrappers(ctx: any): {
         styleId,
         allowClassNameProp,
         allowStyleProp,
-        inlineStyleProps: d.inlineStyleProps ?? [],
+        inlineStyleProps: (d.inlineStyleProps ?? []) as InlineStyleProp[],
       });
 
       // Build attrs: {...rest} then {...mergedStylexProps(...)} so stylex styles override
@@ -2017,7 +2021,7 @@ export function emitIntrinsicWrappers(ctx: any): {
           conditionalAttrs: d.attrsInfo?.conditionalAttrs ?? [],
           invertedBoolAttrs: d.attrsInfo?.invertedBoolAttrs ?? [],
           staticAttrs: d.attrsInfo?.staticAttrs ?? {},
-          inlineStyleProps: d.inlineStyleProps ?? [],
+          inlineStyleProps: (d.inlineStyleProps ?? []) as InlineStyleProp[],
           styleMerger,
         }),
         d,

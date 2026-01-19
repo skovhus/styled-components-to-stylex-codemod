@@ -174,7 +174,8 @@ const withLeadingCommentsOnFirstFunction = (nodes: ASTNode[], d: StyledDecl): AS
  * and applies stylex.props() directly without className/style/rest merging.
  * Uses props.children directly instead of destructuring it.
  */
-type InlineStyleProp = { prop: string; expr: ASTNode };
+type ExpressionKind = Parameters<JSCodeshift["expressionStatement"]>[0];
+type InlineStyleProp = { prop: string; expr: ExpressionKind };
 type TsTypeAnnotationInput = Parameters<JSCodeshift["tsTypeAnnotation"]>[0];
 type BlockStatementBody = Parameters<JSCodeshift["blockStatement"]>[0];
 type CommentableNode = ASTNode & { leadingComments?: Comment[]; comments?: Comment[] };
@@ -188,7 +189,7 @@ function emitMinimalWrapper(args: {
   propsTypeName?: string;
   inlineTypeText?: string;
   emitTypes?: boolean;
-  styleArgs: ASTNode[];
+  styleArgs: ExpressionKind[];
   destructureProps: string[];
   allowClassNameProp?: boolean;
   allowStyleProp?: boolean;

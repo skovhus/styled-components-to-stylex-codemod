@@ -27,7 +27,7 @@ export function describeValue(value: unknown): string {
     return "[Function]";
   }
   if (typeof value === "object") {
-    const ctor = (value as any)?.constructor?.name ?? "Object";
+    const ctor = (value as { constructor?: { name?: string } })?.constructor?.name ?? "Object";
     let keys: string[] = [];
     try {
       keys = Object.keys(value as Record<string, unknown>);
@@ -45,7 +45,7 @@ export function assertValidAdapter(
   candidate: unknown,
   where: string,
 ): asserts candidate is Adapter {
-  const obj = candidate as any;
+  const obj = candidate as Record<string, unknown>;
   const resolveValue = obj?.resolveValue;
   const shouldSupportExternalStyling = obj?.shouldSupportExternalStyling;
 
@@ -112,7 +112,10 @@ export function assertValidAdapter(
       );
     }
 
-    const { functionName, importSource } = styleMerger;
+    const { functionName, importSource } = styleMerger as {
+      functionName?: unknown;
+      importSource?: unknown;
+    };
 
     if (typeof functionName !== "string" || !functionName.trim()) {
       throw new Error(
@@ -137,7 +140,7 @@ export function assertValidAdapter(
       );
     }
 
-    const { kind, value } = importSource;
+    const { kind, value } = importSource as { kind?: unknown; value?: unknown };
     if (kind !== "specifier" && kind !== "absolutePath") {
       throw new Error(
         [

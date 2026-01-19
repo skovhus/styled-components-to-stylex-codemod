@@ -1,8 +1,9 @@
-import type { ASTNode, Property, RestElement } from "jscodeshift";
+import type { ASTNode, JSCodeshift, Property, RestElement } from "jscodeshift";
 import type { StyledDecl } from "../transform-types.js";
 import { emitStyleMerging, type StyleMergerConfig } from "./style-merger.js";
 
-type InlineStyleProp = { prop: string; expr: ASTNode };
+type ExpressionKind = Parameters<JSCodeshift["expressionStatement"]>[0];
+type InlineStyleProp = { prop: string; expr: ExpressionKind };
 
 export function emitComponentWrappers(ctx: any): {
   emitted: ASTNode[];
@@ -35,7 +36,10 @@ export function emitComponentWrappers(ctx: any): {
     patternProp,
     propsTypeNameFor,
     styleMerger,
-  } = ctx as { styleMerger: StyleMergerConfig | null } & Record<string, any>;
+  } = ctx as { styleMerger: StyleMergerConfig | null; wrapperDecls: StyledDecl[] } & Record<
+    string,
+    any
+  >;
 
   const emitted: ASTNode[] = [];
   let needsReactTypeImport = false;
@@ -100,9 +104,12 @@ export function emitComponentWrappers(ctx: any): {
 
       // Check if explicit type is a simple type reference (e.g., `TypeAliasProps`)
       // that exists in the file - if so, extend it directly instead of creating a new type
+      const propsType = d.propsType as
+        | (ASTNode & { type?: string; typeName?: { type?: string; name?: string } })
+        | undefined;
       const isSimpleTypeRef =
-        d.propsType?.type === "TSTypeReference" && d.propsType?.typeName?.type === "Identifier";
-      const explicitTypeName = isSimpleTypeRef ? d.propsType?.typeName?.name : null;
+        propsType?.type === "TSTypeReference" && propsType?.typeName?.type === "Identifier";
+      const explicitTypeName = isSimpleTypeRef ? (propsType?.typeName?.name ?? null) : null;
       const explicitTypeExists = explicitTypeName && typeExistsInFile(explicitTypeName);
 
       if (explicitTypeExists && explicit && explicitTypeName) {
@@ -173,7 +180,7 @@ export function emitComponentWrappers(ctx: any): {
     }
     // For component wrappers, don't include extendsStyleKey because
     // the wrapped component already applies its own styles.
-    const styleArgs: ASTNode[] = [
+    const styleArgs: ExpressionKind[] = [
       j.memberExpression(j.identifier(stylesIdentifier), j.identifier(d.styleKey)),
     ];
 
@@ -430,7 +437,7 @@ export function emitComponentWrappers(ctx: any): {
         styleId,
         allowClassNameProp,
         allowStyleProp,
-        inlineStyleProps: d.inlineStyleProps ?? [],
+        inlineStyleProps: (d.inlineStyleProps ?? []) as InlineStyleProp[],
       });
 
       const stmts: ASTNode[] = [declStmt];

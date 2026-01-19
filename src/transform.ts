@@ -2080,10 +2080,20 @@ export function transformWithWarnings(
             if (idx !== -1) {
               keptAttrs.splice(idx, 1);
               if (!hasAttr(cond.attrName)) {
+                const literalValue =
+                  typeof cond.value === "string" ||
+                  typeof cond.value === "number" ||
+                  typeof cond.value === "boolean"
+                    ? cond.value
+                    : String(cond.value);
                 keptAttrs.unshift(
                   j.jsxAttribute(
                     j.jsxIdentifier(cond.attrName),
-                    j.jsxExpressionContainer(j.literal(cond.value)),
+                    j.jsxExpressionContainer(
+                      typeof literalValue === "boolean"
+                        ? j.booleanLiteral(literalValue)
+                        : j.literal(literalValue),
+                    ),
                   ),
                 );
               }

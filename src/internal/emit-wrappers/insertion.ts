@@ -1,11 +1,11 @@
-import type { Collection } from "jscodeshift";
+import type { ASTNode, Collection, Comment, JSCodeshift } from "jscodeshift";
 import type { StyledDecl } from "../transform-types.js";
 import type { ExportInfo } from "./types.js";
 
 export function insertEmittedWrappers(args: {
-  root: Collection<any>;
-  j: any;
-  emitted: any[];
+  root: Collection<ASTNode>;
+  j: JSCodeshift;
+  emitted: ASTNode[];
   wrapperDecls: StyledDecl[];
   exportedComponents: Map<string, ExportInfo>;
   emitTypes: boolean;
@@ -16,10 +16,10 @@ export function insertEmittedWrappers(args: {
 
   if (emitted.length > 0) {
     // Re-order emitted wrapper nodes to match `wrapperDecls` source order.
-    const groups = new Map<string, any[]>();
-    const restNodes: any[] = [];
+    const groups = new Map<string, ASTNode[]>();
+    const restNodes: ASTNode[] = [];
 
-    const pushGroup = (name: string, node: any) => {
+    const pushGroup = (name: string, node: ASTNode) => {
       groups.set(name, [...(groups.get(name) ?? []), node]);
     };
 
@@ -43,7 +43,7 @@ export function insertEmittedWrappers(args: {
       restNodes.push(node);
     }
 
-    const ordered: any[] = [];
+    const ordered: ASTNode[] = [];
     for (const d of wrapperDecls) {
       const chunk = groups.get(d.localName);
       if (chunk?.length) {
@@ -63,7 +63,7 @@ export function insertEmittedWrappers(args: {
       if (node?.type !== "FunctionDeclaration") {
         return node;
       }
-      const fnName = node.id?.name;
+      const fnName = typeof node.id?.name === "string" ? node.id.name : null;
       if (!fnName) {
         return node;
       }
@@ -78,13 +78,14 @@ export function insertEmittedWrappers(args: {
       }
       // Move leading comments from the inner function to the outer export declaration
       // to avoid generating "export <comment> function X"
-      const leadingComments = (node as any).leadingComments ?? (node as any).comments;
+      const commentable = node as ASTNode & { leadingComments?: Comment[]; comments?: Comment[] };
+      const leadingComments = commentable.leadingComments ?? commentable.comments;
       if (leadingComments) {
-        (node as any).leadingComments = undefined;
-        (node as any).comments = undefined;
+        commentable.leadingComments = undefined;
+        commentable.comments = undefined;
       }
 
-      let exportNode: any;
+      let exportNode: ASTNode;
       if (exportInfo.isDefault) {
         // Create: export default function X(...) { ... }
         exportNode = j.exportDefaultDeclaration(node);
@@ -95,8 +96,12 @@ export function insertEmittedWrappers(args: {
 
       // Attach comments to the export declaration instead
       if (leadingComments) {
-        exportNode.leadingComments = leadingComments;
-        exportNode.comments = leadingComments;
+        const exportCommentable = exportNode as ASTNode & {
+          leadingComments?: Comment[];
+          comments?: Comment[];
+        };
+        exportCommentable.leadingComments = leadingComments;
+        exportCommentable.comments = leadingComments;
       }
 
       return exportNode;
@@ -105,7 +110,7 @@ export function insertEmittedWrappers(args: {
     // Replace each styled declaration in-place with its wrapper function.
     // This preserves the original position of components in the file.
     for (const d of wrapperDecls) {
-      const wrapperNodes = wrappedOrdered.filter((node: any) => {
+      const wrapperNodes = wrappedOrdered.filter((node: ASTNode) => {
         if (node?.type === "FunctionDeclaration") {
           return node.id?.name === d.localName;
         }

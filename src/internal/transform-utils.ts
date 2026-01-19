@@ -1,10 +1,12 @@
 import { existsSync, readFileSync } from "node:fs";
+import type { JSCodeshift, Property } from "jscodeshift";
+type ExpressionKind = Parameters<JSCodeshift["expressionStatement"]>[0];
 import type { ImportSource } from "../adapter.js";
 
-export function patternProp(j: any, keyName: string, valueId?: any): any {
+export function patternProp(j: JSCodeshift, keyName: string, valueId?: ExpressionKind): Property {
   const key = j.identifier(keyName);
   const value = valueId ?? key;
-  const p = j.property("init", key, value) as any;
+  const p = j.property("init", key, value) as Property;
   if (value?.type === "Identifier" && value.name === keyName) {
     p.shorthand = true;
   }
@@ -16,7 +18,7 @@ export function patternProp(j: any, keyName: string, valueId?: any): any {
  * e.g., `ComponentName.HEIGHT = 42;` -> returns ["HEIGHT"]
  */
 export function getStaticPropertiesFromImport(args: {
-  j: any;
+  j: JSCodeshift;
   source: ImportSource;
   componentName: string;
 }): string[] {
@@ -65,8 +67,8 @@ export function getStaticPropertiesFromImport(args: {
           },
         },
       } as any)
-      .forEach((p: any) => {
-        const propName = ((p.node.expression as any).left.property as any).name;
+      .forEach((p) => {
+        const propName = (p.node.expression as any).left.property?.name;
         if (propName) {
           staticProps.push(propName);
         }

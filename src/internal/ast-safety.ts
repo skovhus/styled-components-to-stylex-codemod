@@ -1,7 +1,7 @@
-export function assertNoNullNodesInArrays(node: any): void {
+export function assertNoNullNodesInArrays(node: unknown): void {
   const seen = new WeakSet<object>();
-  const visit = (cur: any, path: string) => {
-    if (!cur) {
+  const visit = (cur: unknown, path: string) => {
+    if (cur === null || cur === undefined) {
       return;
     }
     if (Array.isArray(cur)) {
@@ -16,11 +16,12 @@ export function assertNoNullNodesInArrays(node: any): void {
     if (typeof cur !== "object") {
       return;
     }
-    if (seen.has(cur as object)) {
+    const curObj = cur as object;
+    if (seen.has(curObj)) {
       return;
     }
-    seen.add(cur as object);
-    for (const [k, v] of Object.entries(cur)) {
+    seen.add(curObj);
+    for (const [k, v] of Object.entries(cur as Record<string, unknown>)) {
       if (v === null) {
         continue;
       }

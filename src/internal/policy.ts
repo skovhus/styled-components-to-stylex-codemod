@@ -1,10 +1,16 @@
-import type { Collection } from "jscodeshift";
+import type {
+  ASTNode,
+  Collection,
+  ImportDeclaration,
+  ImportSpecifier,
+  JSCodeshift,
+} from "jscodeshift";
 import type { WarningLog } from "./logger.js";
 
 export function shouldSkipForThemeProvider(args: {
-  root: Collection<any>;
-  j: any;
-  styledImports: Collection<any>;
+  root: Collection<ASTNode>;
+  j: JSCodeshift;
+  styledImports: Collection<ImportDeclaration>;
 }): boolean {
   const { root, j, styledImports } = args;
 
@@ -26,9 +32,9 @@ export function shouldSkipForThemeProvider(args: {
 }
 
 export function collectThemeProviderSkipWarnings(args: {
-  root: Collection<any>;
-  j: any;
-  styledImports: Collection<any>;
+  root: Collection<ASTNode>;
+  j: JSCodeshift;
+  styledImports: Collection<ImportDeclaration>;
 }): WarningLog[] {
   const { root, j, styledImports } = args;
   const warnings: WarningLog[] = [];
@@ -68,9 +74,9 @@ export function collectThemeProviderSkipWarnings(args: {
 }
 
 export function collectCssHelperSkipWarnings(args: {
-  root: Collection<any>;
-  j: any;
-  styledImports: Collection<any>;
+  root: Collection<ASTNode>;
+  j: JSCodeshift;
+  styledImports: Collection<ImportDeclaration>;
 }): WarningLog[] {
   const { root, j, styledImports } = args;
   const warnings: WarningLog[] = [];
@@ -118,7 +124,9 @@ export function collectCssHelperSkipWarnings(args: {
   return warnings;
 }
 
-export function collectCreateGlobalStyleWarnings(styledImports: Collection<any>): WarningLog[] {
+export function collectCreateGlobalStyleWarnings(
+  styledImports: Collection<ImportDeclaration>,
+): WarningLog[] {
   const warnings: WarningLog[] = [];
 
   styledImports.forEach((importPath: any) => {
@@ -150,8 +158,8 @@ export function collectCreateGlobalStyleWarnings(styledImports: Collection<any>)
 }
 
 export function shouldSkipForCreateGlobalStyle(args: {
-  styledImports: Collection<any>;
-  j: any;
+  styledImports: Collection<ImportDeclaration>;
+  j: JSCodeshift;
 }): boolean {
   return !!findStyledComponentsNamedImport({
     styledImports: args.styledImports,
@@ -172,10 +180,10 @@ export function universalSelectorUnsupportedWarning(
 }
 
 function findStyledComponentsNamedImport(args: {
-  styledImports: Collection<any>;
-  j: any;
+  styledImports: Collection<ImportDeclaration>;
+  j: JSCodeshift;
   importedName: string;
-}): object | null {
+}): ImportSpecifier | null {
   const { styledImports, j, importedName } = args;
   const spec = styledImports
     .find(j.ImportSpecifier, {
