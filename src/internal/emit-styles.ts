@@ -178,7 +178,22 @@ export function emitStylesAndImports(args: {
   // Remove styled-components imports
   styledImports.remove();
 
-  // Re-add preserved imports from styled-components if any
+  // Insert stylex import FIRST, preferring the styled-components import position when present.
+  // This must happen before inserting preserved styled-components imports so those can be placed after stylex.
+  const hasStylexImport =
+    root.find(j.ImportDeclaration, { source: { value: "@stylexjs/stylex" } } as any).size() > 0;
+  if (!hasStylexImport) {
+    const stylexImport = j.importDeclaration(
+      [j.importNamespaceSpecifier(j.identifier("stylex"))],
+      j.literal("@stylexjs/stylex"),
+    );
+    const body = root.get().node.program.body as any[];
+    const insertAt =
+      firstStyledImportIdx >= 0 && firstStyledImportIdx <= body.length ? firstStyledImportIdx : 0;
+    body.splice(insertAt, 0, stylexImport);
+  }
+
+  // Re-add preserved imports from styled-components if any (AFTER stylex import)
   if (preservedSpecifiers.length > 0) {
     const preservedImport = j.importDeclaration(
       preservedSpecifiers.map((name) => j.importSpecifier(j.identifier(name))),
@@ -194,20 +209,6 @@ export function emitStylesAndImports(args: {
     } else {
       body.unshift(preservedImport);
     }
-  }
-
-  // Insert stylex import, preferring the styled-components import position when present.
-  const hasStylexImport =
-    root.find(j.ImportDeclaration, { source: { value: "@stylexjs/stylex" } } as any).size() > 0;
-  if (!hasStylexImport) {
-    const stylexImport = j.importDeclaration(
-      [j.importNamespaceSpecifier(j.identifier("stylex"))],
-      j.literal("@stylexjs/stylex"),
-    );
-    const body = root.get().node.program.body as any[];
-    const insertAt =
-      firstStyledImportIdx >= 0 && firstStyledImportIdx <= body.length ? firstStyledImportIdx : 0;
-    body.splice(insertAt, 0, stylexImport);
   }
 
   // Re-attach preserved header comments to the first statement (preferably the stylex import).

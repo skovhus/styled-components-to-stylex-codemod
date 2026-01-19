@@ -1,8 +1,8 @@
-import { useTheme } from "styled-components";
+import * as React from "react";
 import * as stylex from "@stylexjs/stylex";
 import { mergedSx } from "./lib/mergedSx";
 import { themeVars } from "./tokens.stylex";
-import * as React from "react";
+import { useTheme } from "styled-components";
 
 type InputProps = {
   /** id for accessibility focus from label */

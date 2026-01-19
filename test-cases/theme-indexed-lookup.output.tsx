@@ -11,13 +11,17 @@ type BoxProps = Omit<React.ComponentProps<"div">, "className" | "style"> & {
 
 function Box(props: BoxProps) {
   const { children, $hoverColor, $bg } = props;
-
-  const sx = stylex.props(
-    styles.box,
-    styles.boxBackgroundColorHover($hoverColor),
-    styles.boxBackgroundColor($bg),
+  return (
+    <div
+      {...stylex.props(
+        styles.box,
+        styles.boxBackgroundColorHover($hoverColor),
+        styles.boxBackgroundColor($bg),
+      )}
+    >
+      {children}
+    </div>
   );
-  return <div {...sx}>{children}</div>;
 }
 
 export const App = () => (
@@ -38,9 +42,7 @@ interface TextColorProps extends Omit<React.ComponentProps<"span">, "className" 
 
 export function TextColor(props: TextColorProps) {
   const { children, color } = props;
-
-  const sx = stylex.props(styles.textColor, styles.textColorColor(color));
-  return <span {...sx}>{children}</span>;
+  return <span {...stylex.props(styles.textColor, styles.textColorColor(color))}>{children}</span>;
 }
 
 const styles = stylex.create({
