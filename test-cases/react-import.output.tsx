@@ -25,9 +25,9 @@ interface ThemeSpanProps extends Omit<React.ComponentProps<"span">, "className" 
 
 export function ThemeSpan(props: ThemeSpanProps) {
   const { children, variant } = props;
-
-  const sx = stylex.props(styles.themeSpan, styles.themeSpanColor(variant));
-  return <span {...sx}>{children}</span>;
+  return (
+    <span {...stylex.props(styles.themeSpan, styles.themeSpanColor(variant))}>{children}</span>
+  );
 }
 
 export function App() {

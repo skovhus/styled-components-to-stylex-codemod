@@ -40,9 +40,7 @@ type SliderProps = Omit<React.ComponentProps<"div">, "className" | "style"> & {
 
 function Slider(props: SliderProps) {
   const { children, $height } = props;
-
-  const sx = stylex.props(styles.slider, styles.sliderHeight($height));
-  return <div {...sx}>{children}</div>;
+  return <div {...stylex.props(styles.slider, styles.sliderHeight($height))}>{children}</div>;
 }
 
 export function App() {

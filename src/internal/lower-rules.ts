@@ -2419,6 +2419,7 @@ export function lowerRules(args: {
               }
               const e = decl.templateExpressions[slotId] as any;
               let baseExpr = e;
+              let propsParam = j.identifier("props");
               if (e?.type === "ArrowFunctionExpression") {
                 if (hasUnsupportedConditionalTest(e)) {
                   warnPropInlineStyle(
@@ -2440,6 +2441,13 @@ export function lowerRules(args: {
                   bail = true;
                   break;
                 }
+                const propsUsed = collectPropsFromArrowFn(e);
+                for (const propName of propsUsed) {
+                  ensureShouldForwardPropDrop(decl, propName);
+                }
+                if (e.params?.[0]?.type === "Identifier") {
+                  propsParam = j.identifier(e.params[0].name);
+                }
                 const unwrapped = unwrapArrowFunctionToPropsExpr(e);
                 const inlineExpr = unwrapped?.expr ?? inlineArrowFunctionBody(e);
                 if (!inlineExpr) {
@@ -2455,7 +2463,48 @@ export function lowerRules(args: {
                 prefix || suffix
                   ? buildTemplateWithStaticParts(j, baseExpr, prefix, suffix)
                   : baseExpr;
-              inlineStyleProps.push({ prop: out.prop, expr });
+              const buildPropValue = (): ExpressionKind => {
+                if (media && pseudos?.length) {
+                  const pseudoProps = pseudos.map((ps) =>
+                    j.property(
+                      "init",
+                      j.literal(ps),
+                      j.objectExpression([
+                        j.property("init", j.identifier("default"), j.literal(null)),
+                        j.property("init", j.literal(media), expr),
+                      ]),
+                    ),
+                  );
+                  return j.objectExpression([
+                    j.property("init", j.identifier("default"), j.literal(null)),
+                    ...pseudoProps,
+                  ]);
+                }
+                if (media) {
+                  return j.objectExpression([
+                    j.property("init", j.identifier("default"), j.literal(null)),
+                    j.property("init", j.literal(media), expr),
+                  ]);
+                }
+                if (pseudos?.length) {
+                  const pseudoProps = pseudos.map((ps) => j.property("init", j.literal(ps), expr));
+                  return j.objectExpression([
+                    j.property("init", j.identifier("default"), j.literal(null)),
+                    ...pseudoProps,
+                  ]);
+                }
+                return expr;
+              };
+              const fnKey = `${decl.styleKey}${toSuffixFromProp(out.prop)}`;
+              if (!styleFnDecls.has(fnKey)) {
+                const body = j.objectExpression([
+                  j.property("init", j.identifier(out.prop), buildPropValue()),
+                ]);
+                styleFnDecls.set(fnKey, j.arrowFunctionExpression([propsParam], body));
+              }
+              if (!styleFnFromProps.some((p) => p.fnKey === fnKey)) {
+                styleFnFromProps.push({ fnKey, jsxProp: "__props" });
+              }
             }
             if (bail) {
               break;

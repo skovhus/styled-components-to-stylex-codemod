@@ -997,15 +997,16 @@ export function emitIntrinsicWrappers(ctx: any): {
             ) as any)
           : null;
 
-      const sxDecl = j.variableDeclaration("const", [
-        j.variableDeclarator(
-          j.identifier("sx"),
-          j.callExpression(
-            j.memberExpression(j.identifier("stylex"), j.identifier("props")),
-            styleArgs,
-          ),
-        ),
-      ]);
+      const merging = emitStyleMerging({
+        j,
+        styleMerger,
+        styleArgs,
+        classNameId,
+        styleId,
+        allowClassNameProp,
+        allowStyleProp,
+        inlineStyleProps: (d.inlineStyleProps ?? []) as InlineStyleProp[],
+      });
 
       const openingAttrs: ASTNode[] = [];
       for (const a of d.attrsInfo?.defaultAttrs ?? []) {
@@ -1068,22 +1069,18 @@ export function emitIntrinsicWrappers(ctx: any): {
       if (includeRest) {
         openingAttrs.push(j.jsxSpreadAttribute(restId));
       }
-      openingAttrs.push(j.jsxSpreadAttribute(j.identifier("sx")));
-      if (d.inlineStyleProps && d.inlineStyleProps.length) {
+      openingAttrs.push(j.jsxSpreadAttribute(merging.jsxSpreadExpr));
+      if (merging.classNameAttr) {
         openingAttrs.push(
           j.jsxAttribute(
-            j.jsxIdentifier("style"),
-            j.jsxExpressionContainer(
-              j.objectExpression([
-                j.spreadElement(
-                  j.memberExpression(j.identifier("sx"), j.identifier("style")) as any,
-                ),
-                ...d.inlineStyleProps.map((p: any) =>
-                  j.property("init", j.identifier(p.prop), p.expr as any),
-                ),
-              ]) as any,
-            ),
+            j.jsxIdentifier("className"),
+            j.jsxExpressionContainer(merging.classNameAttr),
           ),
+        );
+      }
+      if (merging.styleAttr) {
+        openingAttrs.push(
+          j.jsxAttribute(j.jsxIdentifier("style"), j.jsxExpressionContainer(merging.styleAttr)),
         );
       }
 
@@ -1103,7 +1100,9 @@ export function emitIntrinsicWrappers(ctx: any): {
       if (cleanupPrefixStmt) {
         fnBodyStmts.push(cleanupPrefixStmt);
       }
-      fnBodyStmts.push(sxDecl);
+      if (merging.sxDecl) {
+        fnBodyStmts.push(merging.sxDecl);
+      }
       fnBodyStmts.push(j.returnStatement(jsx as any));
 
       emitted.push(

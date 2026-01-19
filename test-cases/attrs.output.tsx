@@ -15,9 +15,14 @@ type InputProps = Omit<React.ComponentProps<"input">, "className" | "style"> & {
 // Pattern 1: styled.input.attrs (dot notation)
 function Input(props: InputProps) {
   const { $padding, $small, ...rest } = props;
-
-  const sx = stylex.props(styles.input, $padding != null && styles.inputPadding($padding));
-  return <input size={$small ? 5 : undefined} type="text" {...rest} {...sx} />;
+  return (
+    <input
+      size={$small ? 5 : undefined}
+      type="text"
+      {...rest}
+      {...stylex.props(styles.input, $padding != null && styles.inputPadding($padding))}
+    />
+  );
 }
 
 // Pattern 2: styled("input").attrs (function call + attrs)
