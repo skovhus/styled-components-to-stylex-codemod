@@ -1225,7 +1225,7 @@ export function lowerRules(args: {
           }
 
           // Handle computed theme object access keyed by a prop:
-          //   background-color: ${(props) => props.theme.colors[props.bg]}
+          //   background-color: ${(props) => props.theme.color[props.bg]}
           //
           // If the adapter can resolve `theme.color` as an object expression, we can emit a StyleX
           // dynamic style function that indexes into that resolved object at runtime:

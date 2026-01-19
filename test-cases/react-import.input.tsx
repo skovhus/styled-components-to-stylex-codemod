@@ -19,13 +19,13 @@ export const Button = styled.button`
 `;
 
 // Pattern 2: Component with theme access (like TextColor.tsx in a design system)
-// Uses props.theme.colors which the adapter resolves to themeVars
+// Uses props.theme.color which the adapter resolves to themeVars
 interface ThemeSpanProps {
   variant: "labelBase" | "labelMuted" | "labelTitle";
 }
 
 export const ThemeSpan = styled.span<ThemeSpanProps>`
-  color: ${(props) => props.theme.colors[props.variant]};
+  color: ${(props) => props.theme.color[props.variant]};
 `;
 
 export function App() {

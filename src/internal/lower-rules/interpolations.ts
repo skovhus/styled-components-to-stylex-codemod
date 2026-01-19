@@ -145,7 +145,7 @@ function buildInterpolatedTemplate(args: {
 }): unknown {
   const { j, decl, cssValue, resolveCallExpr, addImport } = args;
   // Build a JS TemplateLiteral from CssValue parts when it's basically string interpolation,
-  // e.g. `${spacing}px`, `${spacing / 2}px 0`, `1px solid ${theme.colors.secondary}` (handled elsewhere).
+  // e.g. `${spacing}px`, `${spacing / 2}px 0`, `1px solid ${theme.color.secondary}` (handled elsewhere).
   if (!cssValue || cssValue.kind !== "interpolated") {
     return null;
   }

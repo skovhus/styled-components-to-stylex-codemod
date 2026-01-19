@@ -724,7 +724,7 @@ describe("adapter configuration", () => {
 import styled from 'styled-components';
 
 const Button = styled.button\`
-  color: \${props => props.theme.colors.primary};
+  color: \${props => props.theme.color.primary};
 \`;
 
 export const App = () => <Button>Click</Button>;

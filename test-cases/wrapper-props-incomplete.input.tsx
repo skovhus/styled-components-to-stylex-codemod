@@ -50,5 +50,5 @@ interface ThemeTextProps {
 
 /** A text span that gets color from theme */
 export const ThemeText = styled("span")<ThemeTextProps>`
-  color: ${(props) => props.theme.colors[props.themeColor]};
+  color: ${(props) => props.theme.color[props.themeColor]};
 `;

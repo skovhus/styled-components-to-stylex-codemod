@@ -272,13 +272,13 @@ export function tryHandleInterpolatedBorder(args: {
   }
 
   // Handle arrow functions that are simple member expressions (like theme access):
-  //   border: 1px solid ${(props) => props.theme.colors.primary}
+  //   border: 1px solid ${(props) => props.theme.color.primary}
   //   border-right: 1px solid ${(props) => props.theme.borderColor}
   // In this case, we modify the declaration's property to be the color property so that
   // the generic dynamic handler (resolveDynamicNode) outputs the correct property.
   if (expr?.type === "ArrowFunctionExpression") {
     const body = expr.body as any;
-    // Simple arrow function returning a member expression: (p) => p.theme.colors.X
+    // Simple arrow function returning a member expression: (p) => p.theme.color.X
     if (body?.type === "MemberExpression") {
       // Mutate the declaration's property so fallback handlers use the color property
       // e.g., "border" → "border-color", "border-right" → "border-right-color"

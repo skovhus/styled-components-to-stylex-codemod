@@ -84,10 +84,10 @@ const styles = stylex.create({
     borderRadius: "4px",
   },
   themedCard: {
-    backgroundColor: theme.colors.primary,
+    backgroundColor: theme.color.primary,
     borderWidth: "1px",
     borderStyle: "solid",
-    borderColor: theme.colors.secondary,
+    borderColor: theme.color.secondary,
     padding: theme.spacing.md,
     borderRadius: "8px",
   },

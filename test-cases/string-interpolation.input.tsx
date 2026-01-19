@@ -47,8 +47,8 @@ const theme = {
 };
 
 const ThemedCard = styled.div`
-  background: ${theme.colors.primary};
-  border: 1px solid ${theme.colors.secondary};
+  background: ${theme.color.primary};
+  border: 1px solid ${theme.color.secondary};
   padding: ${theme.spacing.md};
   border-radius: 8px;
 `;

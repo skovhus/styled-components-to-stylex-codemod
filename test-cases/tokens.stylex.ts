@@ -19,7 +19,7 @@ export const themeVars = stylex.defineVars({
  * Keep this as the source of truth for ThemeProvider values.
  */
 export const testCaseTheme = {
-  colors: {
+  color: {
     labelBase: "#111827",
     labelMuted: "#6B7280",
     labelTitle: "#111827",

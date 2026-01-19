@@ -16,7 +16,7 @@ export function isArrowFunctionExpression(node: unknown): node is ArrowFunctionE
 
 /**
  * If `expr` is a simple member chain off an identifier, returns the path segments.
- * Example: `props.theme.colors.primary` -> ["theme","colors","primary"] (when rootIdentName="props")
+ * Example: `props.theme.color.primary` -> ["theme","colors","primary"] (when rootIdentName="props")
  */
 export function getMemberPathFromIdentifier(
   expr: Expression,

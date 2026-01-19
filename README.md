@@ -29,7 +29,7 @@ import {
 const adapter = defineAdapter({
   resolveValue(ctx) {
     if (ctx.kind === "theme") {
-      // Called for patterns like: ${(props) => props.theme.colors.primary}
+      // Called for patterns like: ${(props) => props.theme.color.primary}
       // `ctx.path` is the dotted path after `theme.`
       const varName = ctx.path.replace(/\./g, "_");
       return {

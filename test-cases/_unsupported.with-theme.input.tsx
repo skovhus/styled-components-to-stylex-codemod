@@ -13,7 +13,7 @@ interface ThemeProps {
 
 class MyComponent extends React.Component<ThemeProps> {
   render() {
-    return <div style={{ color: this.props.theme.colors.primary }}>Themed Component</div>;
+    return <div style={{ color: this.props.theme.color.primary }}>Themed Component</div>;
   }
 }
 

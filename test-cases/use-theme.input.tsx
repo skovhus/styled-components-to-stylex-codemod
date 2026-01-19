@@ -12,7 +12,7 @@ type InputProps = {
  */
 export function Input(props: InputProps) {
   const theme = useTheme();
-  const someCustomColor = theme.colors.bgBase;
+  const someCustomColor = theme.color.bgBase;
 
   return <ColorPickerWrapper style={{ backgroundColor: someCustomColor }} />;
 }
@@ -21,7 +21,7 @@ const ColorPickerWrapper = styled.div`
   width: auto;
   height: 10px;
   background: ${color("bgBase")};
-  box-shadow: 0 2px 4px ${(props) => props.theme.colors.primaryColor};
+  box-shadow: 0 2px 4px ${(props) => props.theme.color.primaryColor};
   border-radius: 8px;
   display: flex;
   border: 1px solid ${color("bgSub")};

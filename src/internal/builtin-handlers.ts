@@ -22,7 +22,7 @@ export type HandlerResult =
        * The node was resolved to a JS expression string that can be directly inlined into
        * generated output (typically for a single CSS property value).
        *
-       * Example: `props.theme.colors.bgBase` -> `themeVars.bgBase`
+       * Example: `props.theme.color.bgBase` -> `themeVars.bgBase`
        *
        * The caller is responsible for:
        * - parsing `expr` into an AST
