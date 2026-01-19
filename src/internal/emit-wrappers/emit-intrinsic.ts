@@ -1864,15 +1864,16 @@ export function emitIntrinsicWrappers(ctx: any): {
 
     const styleFnPairs = d.styleFnFromProps ?? [];
     for (const p of styleFnPairs) {
-      const propExpr = j.identifier(p.jsxProp);
+      const propExpr = p.jsxProp === "__props" ? j.identifier("props") : j.identifier(p.jsxProp);
       const call = j.callExpression(
         j.memberExpression(j.identifier(stylesIdentifier), j.identifier(p.fnKey)),
         [propExpr],
       );
-      if (!destructureProps.includes(p.jsxProp)) {
+      if (p.jsxProp !== "__props" && !destructureProps.includes(p.jsxProp)) {
         destructureProps.push(p.jsxProp);
       }
-      const required = isPropRequiredInPropsTypeLiteral(d.propsType, p.jsxProp);
+      const required =
+        p.jsxProp === "__props" || isPropRequiredInPropsTypeLiteral(d.propsType, p.jsxProp);
       if (required) {
         styleArgs.push(call);
       } else {
