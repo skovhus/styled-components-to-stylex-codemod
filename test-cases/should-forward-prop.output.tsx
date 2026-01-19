@@ -71,10 +71,7 @@ function Card(props: CardProps) {
       {...sx}
       style={{
         ...sx.style,
-        boxShadow: ((props) =>
-          `0 ${(props.elevation || 1) * 2}px ${(props.elevation || 1) * 4}px rgba(0, 0, 0, 0.1)`)(
-          props,
-        ),
+        boxShadow: `0 ${(props.elevation || 1) * 2}px ${(props.elevation || 1) * 4}px rgba(0, 0, 0, 0.1)`,
       }}
     >
       {children}

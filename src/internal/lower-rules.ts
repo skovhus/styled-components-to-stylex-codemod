@@ -288,6 +288,170 @@ export function lowerRules(args: {
     return count;
   };
 
+  const hasThemeAccessInArrowFn = (expr: any): boolean => {
+    if (!expr || expr.type !== "ArrowFunctionExpression") {
+      return false;
+    }
+    if (expr.params?.length !== 1 || expr.params[0]?.type !== "Identifier") {
+      return false;
+    }
+    const paramName = expr.params[0].name;
+    const bodyExpr =
+      expr.body?.type === "BlockStatement"
+        ? expr.body.body?.find((s: any) => s.type === "ReturnStatement")?.argument
+        : expr.body;
+    if (!bodyExpr) {
+      return false;
+    }
+    let found = false;
+    const visit = (node: any): void => {
+      if (!node || typeof node !== "object" || found) {
+        return;
+      }
+      if (Array.isArray(node)) {
+        for (const child of node) {
+          visit(child);
+        }
+        return;
+      }
+      if (
+        (node.type === "MemberExpression" || node.type === "OptionalMemberExpression") &&
+        node.object?.type === "Identifier" &&
+        node.object.name === paramName &&
+        node.property?.type === "Identifier" &&
+        node.property.name === "theme" &&
+        node.computed === false
+      ) {
+        found = true;
+        return;
+      }
+      for (const key of Object.keys(node)) {
+        if (key === "loc" || key === "comments") {
+          continue;
+        }
+        const child = (node as any)[key];
+        if (child && typeof child === "object") {
+          visit(child);
+        }
+      }
+    };
+    visit(bodyExpr);
+    return found;
+  };
+
+  const inlineArrowFunctionBody = (expr: any): ExpressionKind | null => {
+    if (!expr || expr.type !== "ArrowFunctionExpression") {
+      return null;
+    }
+    if (expr.params?.length !== 1 || expr.params[0]?.type !== "Identifier") {
+      return null;
+    }
+    const paramName = expr.params[0].name;
+    const bodyExpr =
+      expr.body?.type === "BlockStatement"
+        ? expr.body.body?.find((s: any) => s.type === "ReturnStatement")?.argument
+        : expr.body;
+    if (!bodyExpr) {
+      return null;
+    }
+    const cloneNode = (node: any): any => {
+      if (!node || typeof node !== "object") {
+        return node;
+      }
+      if (Array.isArray(node)) {
+        return node.map(cloneNode);
+      }
+      const out: any = {};
+      for (const key of Object.keys(node)) {
+        if (key === "loc" || key === "comments" || key === "tokens") {
+          continue;
+        }
+        out[key] = cloneNode((node as any)[key]);
+      }
+      return out;
+    };
+    const replace = (node: any): any => {
+      if (!node || typeof node !== "object") {
+        return node;
+      }
+      if (Array.isArray(node)) {
+        return node.map(replace);
+      }
+      if (node.type === "Identifier" && node.name === paramName) {
+        return j.identifier("props");
+      }
+      if (node.type === "MemberExpression" || node.type === "OptionalMemberExpression") {
+        node.object = replace(node.object);
+        if (node.computed) {
+          node.property = replace(node.property);
+        }
+        return node;
+      }
+      if (node.type === "Property") {
+        if (node.computed) {
+          node.key = replace(node.key);
+        }
+        node.value = replace(node.value);
+        return node;
+      }
+      for (const key of Object.keys(node)) {
+        if (key === "loc" || key === "comments") {
+          continue;
+        }
+        const child = (node as any)[key];
+        if (child && typeof child === "object") {
+          (node as any)[key] = replace(child);
+        }
+      }
+      return node;
+    };
+    const cloned = cloneNode(bodyExpr);
+    return replace(cloned);
+  };
+
+  const hasUnsupportedConditionalTest = (expr: any): boolean => {
+    if (!expr || expr.type !== "ArrowFunctionExpression") {
+      return false;
+    }
+    const bodyExpr =
+      expr.body?.type === "BlockStatement"
+        ? expr.body.body?.find((s: any) => s.type === "ReturnStatement")?.argument
+        : expr.body;
+    if (!bodyExpr) {
+      return false;
+    }
+    let found = false;
+    const visit = (node: any): void => {
+      if (!node || typeof node !== "object" || found) {
+        return;
+      }
+      if (Array.isArray(node)) {
+        for (const child of node) {
+          visit(child);
+        }
+        return;
+      }
+      if (
+        node.type === "ConditionalExpression" &&
+        (node.test?.type === "LogicalExpression" || node.test?.type === "ConditionalExpression")
+      ) {
+        found = true;
+        return;
+      }
+      for (const key of Object.keys(node)) {
+        if (key === "loc" || key === "comments") {
+          continue;
+        }
+        const child = (node as any)[key];
+        if (child && typeof child === "object") {
+          visit(child);
+        }
+      }
+    };
+    visit(bodyExpr);
+    return found;
+  };
+
   const hasLocalThemeBinding = (() => {
     let found = false;
     root.find(j.VariableDeclarator, { id: { type: "Identifier", name: "theme" } }).forEach(() => {
@@ -1937,13 +2101,38 @@ export function lowerRules(args: {
                   const propsParam = j.identifier("props");
                   const valueExprRaw = (() => {
                     const unwrapped = unwrapArrowFunctionToPropsExpr(e);
-                    const baseExpr =
-                      unwrapped?.expr ?? j.callExpression(e, [j.identifier("props")]);
+                    if (hasThemeAccessInArrowFn(e)) {
+                      const propLabel = d.property ?? "unknown";
+                      warnings.push({
+                        severity: "warning",
+                        type: "dynamic-node",
+                        message: `Unsupported prop-based theme access for ${decl.localName} (${propLabel}).`,
+                        ...(loc ? { loc } : {}),
+                      });
+                      bail = true;
+                      return null;
+                    }
+                    const inlineExpr = unwrapped?.expr ?? inlineArrowFunctionBody(e);
+                    if (!inlineExpr) {
+                      const propLabel = d.property ?? "unknown";
+                      warnings.push({
+                        severity: "warning",
+                        type: "dynamic-node",
+                        message: `Unsupported prop-based inline style for ${decl.localName} (${propLabel}).`,
+                        ...(loc ? { loc } : {}),
+                      });
+                      bail = true;
+                      return null;
+                    }
+                    const baseExpr = inlineExpr;
                     const { prefix, suffix } = extractStaticParts(d.value);
                     return prefix || suffix
                       ? buildTemplateWithStaticParts(j, baseExpr, prefix, suffix)
                       : baseExpr;
                   })();
+                  if (bail || !valueExprRaw) {
+                    break;
+                  }
                   for (const out of cssDeclarationToStylexDeclarations(d)) {
                     const wrapValue = (expr: ExpressionKind): ExpressionKind => {
                       const needsString =
@@ -2005,12 +2194,46 @@ export function lowerRules(args: {
                   }
                   continue;
                 }
-                for (const propName of collectPropsFromArrowFn(e)) {
+                if (decl.shouldForwardProp && hasUnsupportedConditionalTest(e)) {
+                  warnings.push({
+                    severity: "warning",
+                    type: "dynamic-node",
+                    message: `Unsupported conditional test in shouldForwardProp for ${decl.localName}.`,
+                    ...(loc ? { loc } : {}),
+                  });
+                  bail = true;
+                  break;
+                }
+                const propsUsed = collectPropsFromArrowFn(e);
+                for (const propName of propsUsed) {
                   ensureShouldForwardPropDrop(decl, propName);
                 }
-                decl.needsWrapperComponent = true;
+                if (hasThemeAccessInArrowFn(e)) {
+                  const propLabel = d.property ?? "unknown";
+                  warnings.push({
+                    severity: "warning",
+                    type: "dynamic-node",
+                    message: `Unsupported prop-based theme access for ${decl.localName} (${propLabel}).`,
+                    ...(loc ? { loc } : {}),
+                  });
+                  bail = true;
+                  break;
+                }
                 const unwrapped = unwrapArrowFunctionToPropsExpr(e);
-                const baseExpr = unwrapped?.expr ?? j.callExpression(e, [j.identifier("props")]);
+                const inlineExpr = unwrapped?.expr ?? inlineArrowFunctionBody(e);
+                if (!inlineExpr) {
+                  const propLabel = d.property ?? "unknown";
+                  warnings.push({
+                    severity: "warning",
+                    type: "dynamic-node",
+                    message: `Unsupported prop-based inline style for ${decl.localName} (${propLabel}).`,
+                    ...(loc ? { loc } : {}),
+                  });
+                  bail = true;
+                  break;
+                }
+                decl.needsWrapperComponent = true;
+                const baseExpr = inlineExpr;
                 // Build template literal when there's static prefix/suffix (e.g., `${...}ms`)
                 const { prefix, suffix } = extractStaticParts(d.value);
                 const valueExpr =
@@ -2189,11 +2412,45 @@ export function lowerRules(args: {
                 continue;
               }
               const e = decl.templateExpressions[slotId] as any;
-              const baseExpr =
-                e?.type === "ArrowFunctionExpression"
-                  ? (unwrapArrowFunctionToPropsExpr(e)?.expr ??
-                    j.callExpression(e, [j.identifier("props")]))
-                  : e;
+              let baseExpr = e;
+              if (e?.type === "ArrowFunctionExpression") {
+                if (hasUnsupportedConditionalTest(e)) {
+                  const propLabel = d.property ?? "unknown";
+                  warnings.push({
+                    severity: "warning",
+                    type: "dynamic-node",
+                    message: `Unsupported conditional test in shouldForwardProp for ${decl.localName} (${propLabel}).`,
+                    ...(loc ? { loc } : {}),
+                  });
+                  bail = true;
+                  break;
+                }
+                if (hasThemeAccessInArrowFn(e)) {
+                  const propLabel = d.property ?? "unknown";
+                  warnings.push({
+                    severity: "warning",
+                    type: "dynamic-node",
+                    message: `Unsupported prop-based theme access for ${decl.localName} (${propLabel}).`,
+                    ...(loc ? { loc } : {}),
+                  });
+                  bail = true;
+                  break;
+                }
+                const unwrapped = unwrapArrowFunctionToPropsExpr(e);
+                const inlineExpr = unwrapped?.expr ?? inlineArrowFunctionBody(e);
+                if (!inlineExpr) {
+                  const propLabel = d.property ?? "unknown";
+                  warnings.push({
+                    severity: "warning",
+                    type: "dynamic-node",
+                    message: `Unsupported prop-based inline style for ${decl.localName} (${propLabel}).`,
+                    ...(loc ? { loc } : {}),
+                  });
+                  bail = true;
+                  break;
+                }
+                baseExpr = inlineExpr;
+              }
               // Build template literal when there's static prefix/suffix (e.g., `${...}ms`)
               const { prefix, suffix } = extractStaticParts(d.value);
               const expr =
@@ -2201,6 +2458,9 @@ export function lowerRules(args: {
                   ? buildTemplateWithStaticParts(j, baseExpr, prefix, suffix)
                   : baseExpr;
               inlineStyleProps.push({ prop: out.prop, expr });
+            }
+            if (bail) {
+              break;
             }
             continue;
           }

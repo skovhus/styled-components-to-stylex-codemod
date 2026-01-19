@@ -6,10 +6,7 @@ const CardContainer = styled.label<{ checked: boolean; disabled?: boolean }>`
   display: flex;
   align-items: flex-start;
   padding: 16px;
-  border: 1px solid ${(props) => (props.checked ? props.theme.color.bgSub : props.theme.color.bgBase)};
   border-radius: 6px;
-  background-color: ${(props) =>
-    props.checked ? ColorConverter.cssWithAlpha(props.theme.color.bgSub, 0.8) : "transparent"};
   opacity: ${(props) => (props.disabled ? 0.5 : 1)};
   position: relative;
 
