@@ -1,6 +1,13 @@
+import type { ASTNode, Property, RestElement } from "jscodeshift";
+import type { StyledDecl } from "../transform-types.js";
 import { emitStyleMerging, type StyleMergerConfig } from "./style-merger.js";
 
-export function emitComponentWrappers(ctx: any): { emitted: any[]; needsReactTypeImport: boolean } {
+type InlineStyleProp = { prop: string; expr: ASTNode };
+
+export function emitComponentWrappers(ctx: any): {
+  emitted: ASTNode[];
+  needsReactTypeImport: boolean;
+} {
   const {
     root,
     j,
@@ -30,14 +37,12 @@ export function emitComponentWrappers(ctx: any): { emitted: any[]; needsReactTyp
     styleMerger,
   } = ctx as { styleMerger: StyleMergerConfig | null } & Record<string, any>;
 
-  const emitted: any[] = [];
+  const emitted: ASTNode[] = [];
   let needsReactTypeImport = false;
 
-  const collectInlineStylePropNames = (
-    inlineStyleProps: Array<{ prop: string; expr: any }>,
-  ): string[] => {
+  const collectInlineStylePropNames = (inlineStyleProps: InlineStyleProp[]): string[] => {
     const names = new Set<string>();
-    const visit = (node: any, parent: any): void => {
+    const visit = (node: ASTNode | null | undefined, parent: ASTNode | undefined): void => {
       if (!node || typeof node !== "object") {
         return;
       }
@@ -63,9 +68,9 @@ export function emitComponentWrappers(ctx: any): { emitted: any[]; needsReactTyp
         if (key === "loc" || key === "comments") {
           continue;
         }
-        const child = (node as any)[key];
+        const child = (node as unknown as Record<string, unknown>)[key];
         if (child && typeof child === "object") {
-          visit(child, node);
+          visit(child as ASTNode, node);
         }
       }
     };
@@ -76,7 +81,7 @@ export function emitComponentWrappers(ctx: any): { emitted: any[]; needsReactTyp
   };
 
   // Component wrappers (styled(Component)) - these wrap another component
-  const componentWrappers = wrapperDecls.filter((d: any) => d.base.kind === "component");
+  const componentWrappers = wrapperDecls.filter((d: StyledDecl) => d.base.kind === "component");
 
   for (const d of componentWrappers) {
     if (d.base.kind !== "component") {
@@ -168,7 +173,7 @@ export function emitComponentWrappers(ctx: any): { emitted: any[]; needsReactTyp
     }
     // For component wrappers, don't include extendsStyleKey because
     // the wrapped component already applies its own styles.
-    const styleArgs: any[] = [
+    const styleArgs: ASTNode[] = [
       j.memberExpression(j.identifier(stylesIdentifier), j.identifier(d.styleKey)),
     ];
 
@@ -207,18 +212,14 @@ export function emitComponentWrappers(ctx: any): { emitted: any[]; needsReactTyp
       const propExpr = j.memberExpression(propsIdForExpr, j.identifier(p.jsxProp));
       const call = j.callExpression(
         j.memberExpression(j.identifier(stylesIdentifier), j.identifier(p.fnKey)),
-        [propExpr as any],
+        [propExpr],
       );
       const required = isPropRequiredInPropsTypeLiteral(d.propsType, p.jsxProp);
       if (required) {
         styleArgs.push(call);
       } else {
         styleArgs.push(
-          j.logicalExpression(
-            "&&",
-            j.binaryExpression("!=", propExpr as any, j.nullLiteral()),
-            call,
-          ),
+          j.logicalExpression("&&", j.binaryExpression("!=", propExpr, j.nullLiteral()), call),
         );
       }
     }
@@ -405,17 +406,19 @@ export function emitComponentWrappers(ctx: any): { emitted: any[]; needsReactTyp
       const styleId = j.identifier("style");
       const restId = j.identifier("rest");
 
-      const patternProps: any[] = [
+      const patternProps: Array<Property | RestElement> = [
         ...(allowClassNameProp ? [patternProp("className", classNameId)] : []),
         ...(includeChildren ? [patternProp("children", childrenId)] : []),
         ...(allowStyleProp ? [patternProp("style", styleId)] : []),
         // Strip transient props ($-prefixed) from the pass-through spread (styled-components behavior)
-        ...destructureProps.filter(Boolean).map((name: any) => patternProp(name)),
+        ...destructureProps
+          .filter((name): name is string => Boolean(name))
+          .map((name) => patternProp(name)),
         j.restElement(restId),
       ];
 
       const declStmt = j.variableDeclaration("const", [
-        j.variableDeclarator(j.objectPattern(patternProps as any), propsId),
+        j.variableDeclarator(j.objectPattern(patternProps), propsId),
       ]);
 
       // Use the style merger helper
@@ -430,12 +433,12 @@ export function emitComponentWrappers(ctx: any): { emitted: any[]; needsReactTyp
         inlineStyleProps: d.inlineStyleProps ?? [],
       });
 
-      const stmts: any[] = [declStmt];
+      const stmts: ASTNode[] = [declStmt];
       if (merging.sxDecl) {
         stmts.push(merging.sxDecl);
       }
 
-      const openingAttrs: any[] = [];
+      const openingAttrs: ASTNode[] = [];
       // Add attrs in order: defaultAttrs, staticAttrs, then {...rest}
       // This allows props passed to the component to override attrs (styled-components semantics)
       for (const a of defaultAttrs) {
@@ -532,7 +535,7 @@ export function emitComponentWrappers(ctx: any): { emitted: any[]; needsReactTyp
       emitted.push(fn);
     } else {
       // Simple case: always forward props + styles.
-      const openingAttrs: any[] = [];
+      const openingAttrs: ASTNode[] = [];
       for (const a of defaultAttrs) {
         if (typeof a.value === "string") {
           openingAttrs.push(j.jsxAttribute(j.jsxIdentifier(a.attrName), j.literal(a.value)));
