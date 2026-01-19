@@ -128,26 +128,58 @@ export const fixtureAdapter = defineAdapter({
         };
       }
 
-      // Handle transitionSpeed() helper from ./lib/helpers.ts
+      // Handle fontWeight() helper from ./lib/helpers.ts
+      // fontWeight("medium") -> fontWeightVars.medium
+      if (ctx.calleeImportedName === "fontWeight") {
+        const arg0 = ctx.args[0];
+        const key = arg0?.kind === "literal" && typeof arg0.value === "string" ? arg0.value : null;
+        if (key !== "normal" && key !== "medium" && key !== "bold") {
+          return null;
+        }
+        return {
+          expr: `fontWeightVars.${key}`,
+          imports: [
+            {
+              from: { kind: "specifier", value: "./tokens.stylex" },
+              names: [{ imported: "fontWeightVars" }],
+            },
+          ],
+        };
+      }
+
+      // Handle fontSize() helper from ./lib/helpers.ts
+      // fontSize("medium") -> fontSizeVars.medium
+      if (ctx.calleeImportedName === "fontSize") {
+        const arg0 = ctx.args[0];
+        const key = arg0?.kind === "literal" && typeof arg0.value === "string" ? arg0.value : null;
+        if (key !== "small" && key !== "medium" && key !== "large") {
+          return null;
+        }
+        return {
+          expr: `fontSizeVars.${key}`,
+          imports: [
+            {
+              from: { kind: "specifier", value: "./tokens.stylex" },
+              names: [{ imported: "fontSizeVars" }],
+            },
+          ],
+        };
+      }
+
+      // Handle transitionSpeedMs() helper from ./lib/helpers.ts
+      // transitionSpeedMs("fast") -> transitionSpeedMsVars.fast
       if (ctx.calleeImportedName === "transitionSpeed") {
         const arg0 = ctx.args[0];
         const key = arg0?.kind === "literal" && typeof arg0.value === "string" ? arg0.value : null;
-        if (
-          key !== "highlightFadeIn" &&
-          key !== "highlightFadeOut" &&
-          key !== "quickTransition" &&
-          key !== "regularTransition" &&
-          key !== "slowTransition"
-        ) {
+        if (key !== "fast" && key !== "normal" && key !== "slow") {
           return null;
         }
-
         return {
-          expr: `transitionSpeedVars.${key}`,
+          expr: `transitionSpeed.${key}`,
           imports: [
             {
-              from: { kind: "specifier", value: "./lib/helpers.stylex" },
-              names: [{ imported: "transitionSpeed", local: "transitionSpeedVars" }],
+              from: { kind: "specifier", value: "./tokens.stylex" },
+              names: [{ imported: "transitionSpeed" }],
             },
           ],
         };

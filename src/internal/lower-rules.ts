@@ -122,6 +122,98 @@ export function lowerRules(args: {
 
   // (helpers extracted to `./lower-rules/*` modules)
 
+  // Build a template literal with static prefix/suffix around a dynamic expression.
+  // e.g., prefix="" suffix="ms" expr=<call> -> `${<call>}ms`
+  const buildTemplateWithStaticParts = (j: any, expr: any, prefix: string, suffix: string): any => {
+    if (!prefix && !suffix) {
+      return expr;
+    }
+    return j.templateLiteral(
+      [
+        j.templateElement({ raw: prefix, cooked: prefix }, false),
+        j.templateElement({ raw: suffix, cooked: suffix }, true),
+      ],
+      [expr],
+    );
+  };
+
+  const unwrapArrowFunctionToPropsExpr = (
+    expr: any,
+  ): { expr: any; propsUsed: Set<string> } | null => {
+    if (!expr || expr.type !== "ArrowFunctionExpression") {
+      return null;
+    }
+    if (expr.params?.length !== 1 || expr.params[0]?.type !== "Identifier") {
+      return null;
+    }
+    const paramName = expr.params[0].name;
+    const bodyExpr =
+      expr.body?.type === "BlockStatement"
+        ? expr.body.body?.find((s: any) => s.type === "ReturnStatement")?.argument
+        : expr.body;
+    if (!bodyExpr) {
+      return null;
+    }
+
+    const propsUsed = new Set<string>();
+    let safeToInline = true;
+    const cloneNode = (node: any): any => {
+      if (!node || typeof node !== "object") {
+        return node;
+      }
+      if (Array.isArray(node)) {
+        return node.map(cloneNode);
+      }
+      const out: any = {};
+      for (const key of Object.keys(node)) {
+        if (key === "loc" || key === "comments" || key === "tokens") {
+          continue;
+        }
+        out[key] = cloneNode((node as any)[key]);
+      }
+      return out;
+    };
+    const clone = cloneNode(bodyExpr);
+    const replace = (node: any): any => {
+      if (!node || typeof node !== "object") {
+        return node;
+      }
+      if (Array.isArray(node)) {
+        return node.map(replace);
+      }
+      if (
+        (node.type === "MemberExpression" || node.type === "OptionalMemberExpression") &&
+        node.object?.type === "Identifier" &&
+        node.object.name === paramName &&
+        node.property?.type === "Identifier" &&
+        node.computed === false
+      ) {
+        const propName = node.property.name;
+        if (!propName.startsWith("$")) {
+          safeToInline = false;
+          return node;
+        }
+        propsUsed.add(propName);
+        return j.identifier(propName);
+      }
+      for (const key of Object.keys(node)) {
+        if (key === "loc" || key === "comments") {
+          continue;
+        }
+        const child = (node as any)[key];
+        if (child && typeof child === "object") {
+          (node as any)[key] = replace(child);
+        }
+      }
+      return node;
+    };
+    const replaced = replace(clone);
+    if (!safeToInline || propsUsed.size === 0) {
+      return null;
+    }
+    return { expr: replaced, propsUsed };
+  };
+
   for (const decl of styledDecls) {
     if (decl.preResolvedStyle) {
       resolvedStyleObjects.set(decl.styleKey, decl.preResolvedStyle);
@@ -869,7 +961,57 @@ export function lowerRules(args: {
           ) {
             continue;
           }
-          if (tryHandleInterpolatedStringValue({ j, decl, d, styleObj })) {
+          // Create a resolver for embedded call expressions in compound CSS values
+          const resolveCallExpr = (expr: any): { resolved: any; imports?: any[] } | null => {
+            if (expr?.type !== "CallExpression") {
+              return null;
+            }
+            const res = resolveDynamicNode(
+              {
+                slotId: 0,
+                expr,
+                css: {
+                  kind: "declaration",
+                  selector: rule.selector,
+                  atRuleStack: rule.atRuleStack,
+                  ...(d.property ? { property: d.property } : {}),
+                  valueRaw: d.valueRaw,
+                },
+                component:
+                  decl.base.kind === "intrinsic"
+                    ? {
+                        localName: decl.localName,
+                        base: "intrinsic",
+                        tagOrIdent: decl.base.tagName,
+                      }
+                    : { localName: decl.localName, base: "component", tagOrIdent: decl.base.ident },
+                usage: { jsxUsages: 0, hasPropsSpread: false },
+              },
+              {
+                api,
+                filePath,
+                resolveValue,
+                resolveImport: (localName: string) => {
+                  const v = importMap.get(localName);
+                  return v ? v : null;
+                },
+                warn: () => {},
+              } as any,
+            );
+            if (res && res.type === "resolvedValue") {
+              const exprAst = parseExpr(res.expr);
+              if (exprAst) {
+                return { resolved: exprAst, imports: res.imports };
+              }
+            }
+            return null;
+          };
+          const addImport = (imp: any) => {
+            resolverImports.set(JSON.stringify(imp), imp);
+          };
+          if (
+            tryHandleInterpolatedStringValue({ j, decl, d, styleObj, resolveCallExpr, addImport })
+          ) {
             continue;
           }
 
@@ -1561,7 +1703,14 @@ export function lowerRules(args: {
               const e = decl.templateExpressions[slotId] as any;
               if (e?.type === "ArrowFunctionExpression") {
                 decl.needsWrapperComponent = true;
-                const valueExpr = j.callExpression(e, [j.identifier("props")]);
+                const unwrapped = unwrapArrowFunctionToPropsExpr(e);
+                const baseExpr = unwrapped?.expr ?? j.callExpression(e, [j.identifier("props")]);
+                // Build template literal when there's static prefix/suffix (e.g., `${...}ms`)
+                const { prefix, suffix } = extractStaticParts(d.value);
+                const valueExpr =
+                  prefix || suffix
+                    ? buildTemplateWithStaticParts(j, baseExpr, prefix, suffix)
+                    : baseExpr;
                 for (const out of cssDeclarationToStylexDeclarations(d)) {
                   if (!out.prop) {
                     continue;
@@ -1679,13 +1828,18 @@ export function lowerRules(args: {
                 continue;
               }
               const e = decl.templateExpressions[slotId] as any;
-              inlineStyleProps.push({
-                prop: out.prop,
-                expr:
-                  e?.type === "ArrowFunctionExpression"
-                    ? j.callExpression(e, [j.identifier("props")])
-                    : e,
-              });
+              const baseExpr =
+                e?.type === "ArrowFunctionExpression"
+                  ? (unwrapArrowFunctionToPropsExpr(e)?.expr ??
+                    j.callExpression(e, [j.identifier("props")]))
+                  : e;
+              // Build template literal when there's static prefix/suffix (e.g., `${...}ms`)
+              const { prefix, suffix } = extractStaticParts(d.value);
+              const expr =
+                prefix || suffix
+                  ? buildTemplateWithStaticParts(j, baseExpr, prefix, suffix)
+                  : baseExpr;
+              inlineStyleProps.push({ prop: out.prop, expr });
             }
             continue;
           }

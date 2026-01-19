@@ -1,4 +1,5 @@
 import type { API, FileInfo, Options } from "jscodeshift";
+import path from "node:path";
 import type { ImportSource } from "./adapter.js";
 import { assertNoNullNodesInArrays } from "./internal/ast-safety.js";
 import { collectStyledDecls } from "./internal/collect-styled-decls.js";
@@ -808,6 +809,10 @@ export function transformWithWarnings(
     }
   });
 
+  for (const decl of styledDecls) {
+    (decl as any).isExported = exportedComponents.has(decl.localName);
+  }
+
   // First, scan for static property assignments to identify which components have them
   const componentsWithStaticProps = new Set<string>();
   root.find(j.ExpressionStatement).forEach((p) => {
@@ -851,32 +856,9 @@ export function transformWithWarnings(
     if (extendedBy.has(decl.localName) && componentsWithStaticProps.has(decl.localName)) {
       decl.needsWrapperComponent = true;
     }
-    // Exported components need wrappers (with exceptions)
-    const hasInlinableAttrs =
-      decl.attrsInfo &&
-      (Object.keys(decl.attrsInfo.staticAttrs).length > 0 ||
-        decl.attrsInfo.conditionalAttrs.length > 0 ||
-        (decl.attrsInfo.invertedBoolAttrs?.length ?? 0) > 0);
+    // Exported components must keep a wrapper to preserve the module's public API.
     if (exportedComponents.has(decl.localName)) {
-      const canInline = decl.base.kind === "intrinsic" && hasInlinableAttrs;
-      if (!canInline) {
-        decl.needsWrapperComponent = true;
-      } else {
-        // Even if canInline is true, we need a wrapper if the component has no JSX usages.
-        // Without usages, there's nothing to inline into and the export would be lost.
-        const hasJsxUsages =
-          root
-            .find(j.JSXElement, {
-              openingElement: { name: { type: "JSXIdentifier", name: decl.localName } },
-            })
-            .size() > 0 ||
-          root
-            .find(j.JSXOpeningElement, { name: { type: "JSXIdentifier", name: decl.localName } })
-            .size() > 0;
-        if (!hasJsxUsages) {
-          decl.needsWrapperComponent = true;
-        }
-      }
+      decl.needsWrapperComponent = true;
     }
   }
 
@@ -1168,6 +1150,75 @@ export function transformWithWarnings(
     }
   }
 
+  // If adapter imports collide with existing local bindings, alias the adapter imports
+  // and rewrite references inside stylex.create objects to use the alias.
+  const isUsedOutsideStyledTemplates = (localName: string): boolean =>
+    root
+      .find(j.Identifier, { name: localName } as any)
+      .filter((p: any) => {
+        if (j(p).closest(j.ImportDeclaration).size() > 0) {
+          return false;
+        }
+        const tagged = j(p)
+          .closest(j.TaggedTemplateExpression)
+          .filter((tp: any) => isStyledTag(tp.node.tag));
+        if (tagged.size() > 0) {
+          return false;
+        }
+        return true;
+      })
+      .size() > 0;
+
+  const existingImportLocals = new Set<string>();
+  root.find(j.ImportDeclaration).forEach((p: any) => {
+    const specs = (p.node.specifiers ?? []) as any[];
+    for (const s of specs) {
+      if (s?.importKind === "type") {
+        continue;
+      }
+      const local =
+        s?.local?.type === "Identifier"
+          ? s.local.name
+          : s?.type === "ImportDefaultSpecifier" && s.local?.type === "Identifier"
+            ? s.local.name
+            : s?.type === "ImportNamespaceSpecifier" && s.local?.type === "Identifier"
+              ? s.local.name
+              : null;
+      if (local && isUsedOutsideStyledTemplates(local)) {
+        existingImportLocals.add(local);
+      }
+    }
+  });
+
+  const resolverImportAliases = new Map<string, string>();
+  const usedLocals = new Set(existingImportLocals);
+  const makeUniqueLocal = (base: string): string => {
+    let candidate = base;
+    let i = 1;
+    while (usedLocals.has(candidate)) {
+      candidate = `${base}${i}`;
+      i += 1;
+    }
+    usedLocals.add(candidate);
+    return candidate;
+  };
+
+  for (const imp of resolverImports.values()) {
+    for (const n of imp.names ?? []) {
+      const desired = n.local ?? n.imported;
+      if (!desired) {
+        continue;
+      }
+      if (existingImportLocals.has(desired)) {
+        const alias = makeUniqueLocal(`${desired}Vars`);
+        resolverImportAliases.set(desired, alias);
+        n.local = alias;
+      } else {
+        usedLocals.add(desired);
+      }
+    }
+  }
+
   emitStylesAndImports({
     root,
     j,
@@ -1183,6 +1234,71 @@ export function transformWithWarnings(
     styleMerger: adapter.styleMerger,
   });
   hasChanges = true;
+
+  if (resolverImportAliases.size > 0) {
+    const renameIdentifier = (node: any, parent: any): void => {
+      if (!node || typeof node !== "object") {
+        return;
+      }
+      if (Array.isArray(node)) {
+        for (const child of node) {
+          renameIdentifier(child, parent);
+        }
+        return;
+      }
+
+      if (node.type === "Identifier") {
+        const alias = resolverImportAliases.get(node.name);
+        if (alias) {
+          const parentNode = parent ?? null;
+          const isMemberProp =
+            parentNode &&
+            (parentNode.type === "MemberExpression" ||
+              parentNode.type === "OptionalMemberExpression") &&
+            parentNode.property === node &&
+            parentNode.computed === false;
+          const isObjectKey =
+            parentNode &&
+            parentNode.type === "Property" &&
+            parentNode.key === node &&
+            parentNode.shorthand !== true;
+          const isImport =
+            parentNode &&
+            (parentNode.type === "ImportSpecifier" ||
+              parentNode.type === "ImportDefaultSpecifier" ||
+              parentNode.type === "ImportNamespaceSpecifier");
+          if (!isMemberProp && !isObjectKey && !isImport) {
+            node.name = alias;
+          }
+        }
+      }
+
+      for (const key of Object.keys(node)) {
+        if (key === "loc" || key === "comments") {
+          continue;
+        }
+        const child = (node as any)[key];
+        if (child && typeof child === "object") {
+          renameIdentifier(child, node);
+        }
+      }
+    };
+
+    root
+      .find(j.CallExpression, {
+        callee: {
+          type: "MemberExpression",
+          object: { type: "Identifier", name: "stylex" },
+          property: { type: "Identifier", name: "create" },
+        },
+      } as any)
+      .forEach((p: any) => {
+        const args = p.node.arguments ?? [];
+        if (args[0]) {
+          renameIdentifier(args[0], null);
+        }
+      });
+  }
 
   // Remove styled declarations and rewrite JSX usages
 
@@ -2246,12 +2362,45 @@ export function transformWithWarnings(
     }
   }
 
+  // Extract local names of identifiers added as new imports by the adapter.
+  // These should shadow old imports with the same name (e.g., when adapter replaces
+  // `transitionSpeed` from `./lib/helpers` with `transitionSpeed` from `./tokens.stylex`).
+  const toModuleSpecifier = (from: ImportSource): string => {
+    if (from.kind === "specifier") {
+      return from.value;
+    }
+    const baseDir = path.dirname(String(file.path));
+    let rel = path.relative(baseDir, from.value);
+    rel = rel.split(path.sep).join("/");
+    if (!rel.startsWith(".")) {
+      rel = `./${rel}`;
+    }
+    return rel;
+  };
+
+  const newImportLocalNames = new Set<string>();
+  const newImportSourcesByLocal = new Map<string, Set<string>>();
+  for (const imp of resolverImports.values()) {
+    const source = toModuleSpecifier(imp.from);
+    for (const n of imp.names ?? []) {
+      const local = n.local ?? n.imported;
+      if (local) {
+        newImportLocalNames.add(local);
+        const sources = newImportSourcesByLocal.get(local) ?? new Set<string>();
+        sources.add(source);
+        newImportSourcesByLocal.set(local, sources);
+      }
+    }
+  }
+
   const post = postProcessTransformedAst({
     root,
     j,
     descendantOverrides,
     ancestorSelectorParents,
     preserveReactImport,
+    newImportLocalNames,
+    newImportSourcesByLocal,
   });
   if (post.changed) {
     hasChanges = true;

@@ -32,8 +32,7 @@ type InputProps = Omit<React.ComponentProps<"input">, "className" | "style">;
 
 // Component with callback that receives event
 export function Input(props: InputProps) {
-  const { ...rest } = props;
-  return <input {...rest} {...stylex.props(styles.input)} />;
+  return <input {...props} {...stylex.props(styles.input)} />;
 }
 
 export function Form() {

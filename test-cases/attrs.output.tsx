@@ -21,10 +21,21 @@ function Input(props: InputProps) {
 }
 
 // Pattern 2: styled("input").attrs (function call + attrs)
-export interface TextInputProps {
+export interface TextInputProps extends Omit<React.ComponentProps<"input">, "className" | "style"> {
   allowPMAutofill?: boolean;
   // Data attribute used by 1Password to control autofill behavior
   "data-1p-ignore"?: boolean;
+}
+
+export function TextInput(props: TextInputProps) {
+  const { allowPMAutofill, ...rest } = props;
+  return (
+    <input
+      data-1p-ignore={allowPMAutofill !== true}
+      {...rest}
+      {...stylex.props(styles.textInput)}
+    />
+  );
 }
 
 // Pattern 3: styled(Component).attrs with object
@@ -81,7 +92,7 @@ export const App = () => (
     <Input $small placeholder="Small" />
     <Input placeholder="Normal" />
     <Input $padding="2em" placeholder="Padded" />
-    <input data-1p-ignore={true} placeholder="Text input" {...stylex.props(styles.textInput)} />
+    <TextInput placeholder="Text input" />
     <Background loaded={false}>Content</Background>
     <Scrollable>Scrollable content</Scrollable>
     <ScrollableWithType gutter="stable">Type alias scrollable</ScrollableWithType>

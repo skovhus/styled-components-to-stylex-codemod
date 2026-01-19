@@ -1,5 +1,6 @@
 import React from "react";
 import * as stylex from "@stylexjs/stylex";
+import { mergedSx } from "./lib/mergedSx";
 
 type ContainerProps = React.ComponentProps<"div"> & {
   $open?: boolean;
@@ -12,15 +13,14 @@ type ContainerProps = React.ComponentProps<"div"> & {
  * The codemod should convert number 0 to "0ms" string for CSS properties.
  */
 function Container(props: ContainerProps) {
-   const { className, children, style, $delay, $open, ...rest } = props;
+  const { className, children, style, $open, $delay, ...rest } = props;
   return (
     <div
       {...rest}
-      {...stylex.props(styles.container)}
-      style={{
-        opacity: $open ? 1 : 0,
+      {...mergedSx([styles.container, $open && styles.containerOpen], className, {
+        ...style,
         transitionDelay: `${$open ? $delay : 0}ms`,
-      }}
+      })}
     >
       {children}
     </div>
@@ -40,6 +40,10 @@ export const App = () => (
 
 const styles = stylex.create({
   container: {
+    opacity: 0,
     transition: "opacity 200ms ease-out",
+  },
+  containerOpen: {
+    opacity: 1,
   },
 });

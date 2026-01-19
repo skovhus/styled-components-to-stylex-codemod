@@ -13,18 +13,13 @@ type RangeInputProps = Omit<React.ComponentProps<"input">, "className" | "style"
  * A range input component.
  */
 export function RangeInput(props: RangeInputProps) {
-  const {} = props;
-  return <input type="range" {...stylex.props(styles.rangeInput)} />;
+  return <input {...props} type="range" {...stylex.props(styles.rangeInput)} />;
 }
 
-type FocusTrapSuspenseFallbackProps = Omit<React.ComponentProps<"input">, "className" | "style">;
+type InputWithForcedValueProps = Omit<React.ComponentProps<"input">, "className" | "style">;
 
-/**
- * Component to render as suspense fallback if your focus trap will suspend.
- */
-export function FocusTrapSuspenseFallback(props: FocusTrapSuspenseFallbackProps) {
-  const {} = props;
-  return <input type="button" value="" {...stylex.props(styles.focusTrapSuspenseFallback)} />;
+export function InputWithForcedValue(props: InputWithForcedValueProps) {
+  return <input {...props} type="button" value="" {...stylex.props(styles.inputWithForcedValue)} />;
 }
 
 // This function uses the renamed type import - it must NOT be removed
@@ -147,7 +142,19 @@ export function FormLabelWithText({
 }
 
 export function App() {
-  return null;
+  return (
+    <>
+      <RangeInput value="10" />
+      <InputWithForcedValue value="test" />
+      <FormLabel optional />
+      <Tooltip title="Tooltip" position="top">
+        <Text>Hello</Text>
+      </Tooltip>
+      <FormLabelWithText>
+        <Text>Hello</Text>
+      </FormLabelWithText>
+    </>
+  );
 }
 
 const styles = stylex.create({
@@ -158,11 +165,8 @@ const styles = stylex.create({
     appearance: "none",
     backgroundColor: "gray",
   },
-  focusTrapSuspenseFallback: {
-    opacity: 0,
-    width: 0,
-    height: 0,
-    position: "fixed",
+  inputWithForcedValue: {
+    margin: "10px",
   },
   styledLabel: {
     marginLeft: "8px",

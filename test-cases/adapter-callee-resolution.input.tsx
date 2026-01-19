@@ -1,32 +1,10 @@
 import React from "react";
 import styled from "styled-components";
-
-// Mock helper functions that would come from project mixins
-// These are the callees that need adapter resolution:
-// - fontWeight (from styles/mixins)
-// - fontSize (from styles/mixins)
-// - transitionSpeed (from styles/styled)
-// - textSize (from components/Text)
-// - thinBorderThemed (from styles/mixins)
-
-const fontWeight = (weight: "normal" | "medium" | "bold") => {
-  const weights = { normal: 400, medium: 500, bold: 600 };
-  return weights[weight];
-};
-
-const fontSize = (size: "small" | "medium" | "large") => {
-  const sizes = { small: "12px", medium: "14px", large: "16px" };
-  return sizes[size];
-};
-
-const transitionSpeed = (type: "fast" | "normal" | "slow") => {
-  const speeds = { fast: "100ms", normal: "200ms", slow: "300ms" };
-  return speeds[type];
-};
+import { fontWeight, fontSize, transitionSpeed } from "./lib/helpers";
 
 /**
  * Test case for adapter callee resolution.
- * The adapter should resolve these helper function calls.
+ * The adapter should resolve these helper function calls to StyleX variables.
  */
 const StyledText = styled.span`
   font-weight: ${fontWeight("medium")};

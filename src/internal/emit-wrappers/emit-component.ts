@@ -33,6 +33,48 @@ export function emitComponentWrappers(ctx: any): { emitted: any[]; needsReactTyp
   const emitted: any[] = [];
   let needsReactTypeImport = false;
 
+  const collectInlineStylePropNames = (
+    inlineStyleProps: Array<{ prop: string; expr: any }>,
+  ): string[] => {
+    const names = new Set<string>();
+    const visit = (node: any, parent: any): void => {
+      if (!node || typeof node !== "object") {
+        return;
+      }
+      if (Array.isArray(node)) {
+        for (const child of node) {
+          visit(child, parent);
+        }
+        return;
+      }
+      if (node.type === "Identifier") {
+        const isMemberProp =
+          parent &&
+          (parent.type === "MemberExpression" || parent.type === "OptionalMemberExpression") &&
+          parent.property === node &&
+          parent.computed === false;
+        const isObjectKey =
+          parent && parent.type === "Property" && parent.key === node && parent.shorthand !== true;
+        if (!isMemberProp && !isObjectKey && node.name?.startsWith("$")) {
+          names.add(node.name);
+        }
+      }
+      for (const key of Object.keys(node)) {
+        if (key === "loc" || key === "comments") {
+          continue;
+        }
+        const child = (node as any)[key];
+        if (child && typeof child === "object") {
+          visit(child, node);
+        }
+      }
+    };
+    for (const p of inlineStyleProps) {
+      visit(p.expr, undefined);
+    }
+    return [...names];
+  };
+
   // Component wrappers (styled(Component)) - these wrap another component
   const componentWrappers = wrapperDecls.filter((d: any) => d.base.kind === "component");
 
@@ -150,6 +192,12 @@ export function emitComponentWrappers(ctx: any): { emitted: any[]; needsReactTyp
             j.memberExpression(j.identifier(stylesIdentifier), j.identifier(variantKey)),
           ),
         );
+      }
+    }
+
+    for (const prop of collectInlineStylePropNames(d.inlineStyleProps ?? [])) {
+      if (!destructureProps.includes(prop)) {
+        destructureProps.push(prop);
       }
     }
 

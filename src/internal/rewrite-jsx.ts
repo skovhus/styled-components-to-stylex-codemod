@@ -7,8 +7,20 @@ export function postProcessTransformedAst(args: {
   descendantOverrides: DescendantOverride[];
   ancestorSelectorParents: Set<string>;
   preserveReactImport?: boolean;
+  /** Local names of identifiers added as new imports (should shadow old imports with same name) */
+  newImportLocalNames?: Set<string>;
+  /** Map of local import names to the module specifiers they were added from */
+  newImportSourcesByLocal?: Map<string, Set<string>>;
 }): { changed: boolean; needsReactImport: boolean } {
-  const { root, j, descendantOverrides, ancestorSelectorParents, preserveReactImport } = args;
+  const {
+    root,
+    j,
+    descendantOverrides,
+    ancestorSelectorParents,
+    preserveReactImport,
+    newImportLocalNames,
+    newImportSourcesByLocal,
+  } = args;
   let changed = false;
 
   // Clean up empty variable declarations (e.g. `const X;`)
@@ -261,6 +273,15 @@ export function postProcessTransformedAst(args: {
               : null;
       if (!local) {
         return true;
+      }
+      // If this identifier is being shadowed by a new import (added by the adapter),
+      // only drop it when the import source does NOT match the adapter's source for that local.
+      if (newImportLocalNames?.has(local)) {
+        const sourceValue = (p.node?.source as any)?.value;
+        const allowedSources = newImportSourcesByLocal?.get(local);
+        if (!allowedSources || !allowedSources.has(sourceValue)) {
+          return false;
+        }
       }
       return usedOutsideImports(local);
     });

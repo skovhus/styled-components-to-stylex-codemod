@@ -38,3 +38,23 @@ export const testCaseTheme = {
 } as const;
 
 export type TestCaseTheme = typeof testCaseTheme;
+
+export const transitionSpeed = stylex.defineVars({
+  slow: "1s",
+  normal: "0.25s",
+  fast: "0.1s",
+});
+
+// Font weight variables
+export const fontWeightVars = stylex.defineVars({
+  normal: "400",
+  medium: "500",
+  bold: "600",
+});
+
+// Font size variables
+export const fontSizeVars = stylex.defineVars({
+  small: "12px",
+  medium: "14px",
+  large: "16px",
+});

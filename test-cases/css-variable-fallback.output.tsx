@@ -1,16 +1,8 @@
 import React from "react";
 import * as stylex from "@stylexjs/stylex";
 
-/**
- * Test case for CSS variable with fallback value.
- * The codemod should handle: var(--scrollbar-width, 12px)
- */
-function ScrollContainer({ children }: { children: React.ReactNode }) {
-  return <div {...stylex.props(styles.scrollContainer)}>{children}</div>;
-}
-
 export function ScrollableArea({ children }: { children: React.ReactNode }) {
-  return <ScrollContainer>{children}</ScrollContainer>;
+  return <div {...stylex.props(styles.scrollContainer)}>{children}</div>;
 }
 
 export const App = () => (
@@ -20,6 +12,10 @@ export const App = () => (
 );
 
 const styles = stylex.create({
+  /**
+   * Test case for CSS variable with fallback value.
+   * The codemod should handle: var(--scrollbar-width, 12px)
+   */
   scrollContainer: {
     width: "100%",
     paddingRight: "var(--scrollbar-width, 12px)",

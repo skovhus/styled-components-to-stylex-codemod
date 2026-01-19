@@ -245,9 +245,14 @@ function emitMinimalWrapper(args: {
   }
 
   // Add rest spread to capture all other props (only when needed)
-  const restId = j.identifier("rest");
+  let restId = includeRest ? j.identifier("rest") : null;
   if (includeRest) {
     patternProps.push(j.restElement(restId));
+  }
+  const usePropsDirectlyForRest =
+    includeRest && patternProps.length === 1 && patternProps[0]?.type === "RestElement";
+  if (usePropsDirectlyForRest) {
+    restId = propsId;
   }
 
   // Use the style merger helper to generate the appropriate merging pattern
@@ -267,7 +272,7 @@ function emitMinimalWrapper(args: {
   // Build JSX attributes: static attrs, {...rest}, {...sx|stylex.props(...)}, optional className/style
   const jsxAttrs: any[] = [];
 
-  // Add default attrs (e.g. `tabIndex: props.tabIndex ?? 0`) first so passed props can override via {...rest}.
+  // Add default attrs (e.g. `tabIndex: props.tabIndex ?? 0`)
   for (const a of defaultAttrs) {
     const propExpr = j.memberExpression(propsId, j.identifier(a.jsxProp));
     const fallback =
@@ -318,7 +323,11 @@ function emitMinimalWrapper(args: {
     );
   }
 
-  // Add static attrs from .attrs() (e.g., type="range") first
+  if (includeRest && restId) {
+    jsxAttrs.push(j.jsxSpreadAttribute(restId));
+  }
+
+  // Add static attrs from .attrs() (e.g., type="range")
   for (const [key, value] of Object.entries(staticAttrs)) {
     if (typeof value === "string") {
       jsxAttrs.push(j.jsxAttribute(j.jsxIdentifier(key), j.literal(value)));
@@ -346,10 +355,6 @@ function emitMinimalWrapper(args: {
         j.jsxExpressionContainer(j.identifier("disabled")),
       ),
     );
-  }
-
-  if (includeRest) {
-    jsxAttrs.push(j.jsxSpreadAttribute(restId));
   }
 
   // Add the style merging spread and optional className/style attributes
@@ -380,13 +385,14 @@ function emitMinimalWrapper(args: {
         j.jsxExpressionContainer(j.identifier("children")),
       ]);
 
-  // Always emit destructure statement since we always destructure style and rest
   const bodyStmts: any[] = [];
-  bodyStmts.push(
-    j.variableDeclaration("const", [
-      j.variableDeclarator(j.objectPattern(patternProps as any), propsId),
-    ]),
-  );
+  if (!usePropsDirectlyForRest) {
+    bodyStmts.push(
+      j.variableDeclaration("const", [
+        j.variableDeclarator(j.objectPattern(patternProps as any), propsId),
+      ]),
+    );
+  }
   if (merging.sxDecl) {
     bodyStmts.push(merging.sxDecl);
   }

@@ -38,6 +38,48 @@ export function emitIntrinsicWrappers(ctx: any): { emitted: any[]; needsReactTyp
   const emitted: any[] = [];
   let needsReactTypeImport = false;
 
+  const collectInlineStylePropNames = (
+    inlineStyleProps: Array<{ prop: string; expr: any }>,
+  ): string[] => {
+    const names = new Set<string>();
+    const visit = (node: any, parent: any): void => {
+      if (!node || typeof node !== "object") {
+        return;
+      }
+      if (Array.isArray(node)) {
+        for (const child of node) {
+          visit(child, parent);
+        }
+        return;
+      }
+      if (node.type === "Identifier") {
+        const isMemberProp =
+          parent &&
+          (parent.type === "MemberExpression" || parent.type === "OptionalMemberExpression") &&
+          parent.property === node &&
+          parent.computed === false;
+        const isObjectKey =
+          parent && parent.type === "Property" && parent.key === node && parent.shorthand !== true;
+        if (!isMemberProp && !isObjectKey && node.name?.startsWith("$")) {
+          names.add(node.name);
+        }
+      }
+      for (const key of Object.keys(node)) {
+        if (key === "loc" || key === "comments") {
+          continue;
+        }
+        const child = (node as any)[key];
+        if (child && typeof child === "object") {
+          visit(child, node);
+        }
+      }
+    };
+    for (const p of inlineStyleProps) {
+      visit(p.expr, undefined);
+    }
+    return [...names];
+  };
+
   const mergeAsIntoPropsWithChildren = (typeText: string): string | null => {
     const prefix = "React.PropsWithChildren<";
     if (!typeText.trim().startsWith(prefix) || !typeText.trim().endsWith(">")) {
@@ -437,6 +479,12 @@ export function emitIntrinsicWrappers(ctx: any): { emitted: any[]; needsReactTyp
               j.memberExpression(j.identifier(stylesIdentifier), j.identifier(variantKey)),
             ),
           );
+        }
+      }
+
+      for (const prop of collectInlineStylePropNames(d.inlineStyleProps ?? [])) {
+        if (!destructureProps.includes(prop)) {
+          destructureProps.push(prop);
         }
       }
 
@@ -1254,7 +1302,10 @@ export function emitIntrinsicWrappers(ctx: any): { emitted: any[]; needsReactTyp
     // For local-only wrappers with no external `className`/`style` usage, keep the wrapper minimal.
     if (!allowClassNameProp && !allowStyleProp) {
       const usedAttrs = getUsedAttrs(d.localName);
-      const includeRest = usedAttrs.has("*") || !!(d as any).usedAsValue || usedAttrs.size > 0;
+      const includeRest =
+        usedAttrs.has("*") ||
+        !!(d as any).usedAsValue ||
+        (!((d as any).isExported ?? false) && usedAttrs.size > 0);
       const destructureProps = [
         ...new Set<string>([
           ...(d.attrsInfo?.conditionalAttrs ?? []).map((c: any) => c.jsxProp).filter(Boolean),
@@ -1310,11 +1361,80 @@ export function emitIntrinsicWrappers(ctx: any): { emitted: any[]; needsReactTyp
       inlineStyleProps: [],
     });
 
-    // Build attrs: {...rest} then {...mergedStylexProps(...)} so stylex styles override
-    const openingAttrs: any[] = [
-      j.jsxSpreadAttribute(restId),
-      j.jsxSpreadAttribute(merging.jsxSpreadExpr),
-    ];
+    const openingAttrs: any[] = [];
+
+    // Default attrs (props defaulting)
+    for (const a of d.attrsInfo?.defaultAttrs ?? []) {
+      const propExpr = j.identifier(a.jsxProp);
+      const fallback =
+        typeof a.value === "string"
+          ? j.literal(a.value)
+          : typeof a.value === "number"
+            ? j.literal(a.value)
+            : typeof a.value === "boolean"
+              ? j.booleanLiteral(a.value)
+              : j.literal(a.value);
+      openingAttrs.push(
+        j.jsxAttribute(
+          j.jsxIdentifier(a.attrName),
+          j.jsxExpressionContainer(j.logicalExpression("??", propExpr as any, fallback as any)),
+        ),
+      );
+    }
+
+    // Conditional attrs
+    for (const cond of d.attrsInfo?.conditionalAttrs ?? []) {
+      openingAttrs.push(
+        j.jsxAttribute(
+          j.jsxIdentifier(cond.attrName),
+          j.jsxExpressionContainer(
+            j.conditionalExpression(
+              j.identifier(cond.jsxProp),
+              j.literal(cond.value),
+              j.identifier("undefined"),
+            ),
+          ),
+        ),
+      );
+    }
+
+    // Inverted boolean attrs
+    for (const inv of d.attrsInfo?.invertedBoolAttrs ?? []) {
+      openingAttrs.push(
+        j.jsxAttribute(
+          j.jsxIdentifier(inv.attrName),
+          j.jsxExpressionContainer(
+            j.binaryExpression(
+              "!==",
+              j.identifier(inv.jsxProp) as any,
+              j.booleanLiteral(true) as any,
+            ),
+          ),
+        ),
+      );
+    }
+
+    openingAttrs.push(j.jsxSpreadAttribute(restId));
+
+    // Static attrs from .attrs()
+    for (const [key, value] of Object.entries(d.attrsInfo?.staticAttrs ?? {})) {
+      if (typeof value === "string") {
+        openingAttrs.push(j.jsxAttribute(j.jsxIdentifier(key), j.literal(value)));
+      } else if (typeof value === "boolean") {
+        openingAttrs.push(
+          j.jsxAttribute(
+            j.jsxIdentifier(key),
+            value ? null : j.jsxExpressionContainer(j.literal(false)),
+          ),
+        );
+      } else if (typeof value === "number") {
+        openingAttrs.push(
+          j.jsxAttribute(j.jsxIdentifier(key), j.jsxExpressionContainer(j.literal(value))),
+        );
+      }
+    }
+
+    openingAttrs.push(j.jsxSpreadAttribute(merging.jsxSpreadExpr));
     if (merging.classNameAttr) {
       openingAttrs.push(
         j.jsxAttribute(
@@ -1706,6 +1826,12 @@ export function emitIntrinsicWrappers(ctx: any): { emitted: any[]; needsReactTyp
             j.memberExpression(j.identifier(stylesIdentifier), j.identifier(variantKey)),
           ),
         );
+      }
+    }
+
+    for (const prop of collectInlineStylePropNames(d.inlineStyleProps ?? [])) {
+      if (!destructureProps.includes(prop)) {
+        destructureProps.push(prop);
       }
     }
 

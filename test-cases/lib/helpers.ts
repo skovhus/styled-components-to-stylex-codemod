@@ -25,14 +25,21 @@ export const flexCenter = () => `
   justify-content: center;
 `;
 
-export const transitionSpeed = (
-  speed:
-    | "highlightFadeIn"
-    | "highlightFadeOut"
-    | "quickTransition"
-    | "regularTransition"
-    | "slowTransition",
-) => `var(--speed-${speed})`;
+type Speed = "normal" | "slow" | "fast";
+
+export const transitionSpeed = (speed: Speed) => `var(--speed-${speed})`;
+
+// Font weight helper - returns numeric font weights
+export const fontWeight = (weight: "normal" | "medium" | "bold") => {
+  const weights = { normal: 400, medium: 500, bold: 600 };
+  return weights[weight];
+};
+
+// Font size helper - returns size strings
+export const fontSize = (size: "small" | "medium" | "large") => {
+  const sizes = { small: "12px", medium: "14px", large: "16px" };
+  return sizes[size];
+};
 
 // Type used in callbacks - should not be stripped from imports
 export type SelectionFunction = (options: { rowIndex: number }) => void;
