@@ -409,6 +409,21 @@ export function lowerRules(args: {
     return replace(cloned);
   };
 
+  const warnPropInlineStyle = (
+    decl: StyledDecl,
+    propName: string | null | undefined,
+    reason: string,
+    loc: { line: number; column: number } | null | undefined,
+  ): void => {
+    const propLabel = propName ?? "unknown";
+    warnings.push({
+      severity: "warning",
+      type: "dynamic-node",
+      message: `Unsupported prop-based inline style for ${decl.localName} (${propLabel}): ${reason}.`,
+      ...(loc ? { loc } : {}),
+    });
+  };
+
   const hasUnsupportedConditionalTest = (expr: any): boolean => {
     if (!expr || expr.type !== "ArrowFunctionExpression") {
       return false;
@@ -2102,25 +2117,23 @@ export function lowerRules(args: {
                   const valueExprRaw = (() => {
                     const unwrapped = unwrapArrowFunctionToPropsExpr(e);
                     if (hasThemeAccessInArrowFn(e)) {
-                      const propLabel = d.property ?? "unknown";
-                      warnings.push({
-                        severity: "warning",
-                        type: "dynamic-node",
-                        message: `Unsupported prop-based theme access for ${decl.localName} (${propLabel}).`,
-                        ...(loc ? { loc } : {}),
-                      });
+                      warnPropInlineStyle(
+                        decl,
+                        d.property,
+                        "props.theme access is not supported in inline styles",
+                        loc,
+                      );
                       bail = true;
                       return null;
                     }
                     const inlineExpr = unwrapped?.expr ?? inlineArrowFunctionBody(e);
                     if (!inlineExpr) {
-                      const propLabel = d.property ?? "unknown";
-                      warnings.push({
-                        severity: "warning",
-                        type: "dynamic-node",
-                        message: `Unsupported prop-based inline style for ${decl.localName} (${propLabel}).`,
-                        ...(loc ? { loc } : {}),
-                      });
+                      warnPropInlineStyle(
+                        decl,
+                        d.property,
+                        "expression cannot be safely inlined",
+                        loc,
+                      );
                       bail = true;
                       return null;
                     }
@@ -2209,26 +2222,19 @@ export function lowerRules(args: {
                   ensureShouldForwardPropDrop(decl, propName);
                 }
                 if (hasThemeAccessInArrowFn(e)) {
-                  const propLabel = d.property ?? "unknown";
-                  warnings.push({
-                    severity: "warning",
-                    type: "dynamic-node",
-                    message: `Unsupported prop-based theme access for ${decl.localName} (${propLabel}).`,
-                    ...(loc ? { loc } : {}),
-                  });
+                  warnPropInlineStyle(
+                    decl,
+                    d.property,
+                    "props.theme access is not supported in inline styles",
+                    loc,
+                  );
                   bail = true;
                   break;
                 }
                 const unwrapped = unwrapArrowFunctionToPropsExpr(e);
                 const inlineExpr = unwrapped?.expr ?? inlineArrowFunctionBody(e);
                 if (!inlineExpr) {
-                  const propLabel = d.property ?? "unknown";
-                  warnings.push({
-                    severity: "warning",
-                    type: "dynamic-node",
-                    message: `Unsupported prop-based inline style for ${decl.localName} (${propLabel}).`,
-                    ...(loc ? { loc } : {}),
-                  });
+                  warnPropInlineStyle(decl, d.property, "expression cannot be safely inlined", loc);
                   bail = true;
                   break;
                 }
@@ -2415,37 +2421,29 @@ export function lowerRules(args: {
               let baseExpr = e;
               if (e?.type === "ArrowFunctionExpression") {
                 if (hasUnsupportedConditionalTest(e)) {
-                  const propLabel = d.property ?? "unknown";
-                  warnings.push({
-                    severity: "warning",
-                    type: "dynamic-node",
-                    message: `Unsupported conditional test in shouldForwardProp for ${decl.localName} (${propLabel}).`,
-                    ...(loc ? { loc } : {}),
-                  });
+                  warnPropInlineStyle(
+                    decl,
+                    d.property,
+                    "unsupported conditional test in shouldForwardProp",
+                    loc,
+                  );
                   bail = true;
                   break;
                 }
                 if (hasThemeAccessInArrowFn(e)) {
-                  const propLabel = d.property ?? "unknown";
-                  warnings.push({
-                    severity: "warning",
-                    type: "dynamic-node",
-                    message: `Unsupported prop-based theme access for ${decl.localName} (${propLabel}).`,
-                    ...(loc ? { loc } : {}),
-                  });
+                  warnPropInlineStyle(
+                    decl,
+                    d.property,
+                    "props.theme access is not supported in inline styles",
+                    loc,
+                  );
                   bail = true;
                   break;
                 }
                 const unwrapped = unwrapArrowFunctionToPropsExpr(e);
                 const inlineExpr = unwrapped?.expr ?? inlineArrowFunctionBody(e);
                 if (!inlineExpr) {
-                  const propLabel = d.property ?? "unknown";
-                  warnings.push({
-                    severity: "warning",
-                    type: "dynamic-node",
-                    message: `Unsupported prop-based inline style for ${decl.localName} (${propLabel}).`,
-                    ...(loc ? { loc } : {}),
-                  });
+                  warnPropInlineStyle(decl, d.property, "expression cannot be safely inlined", loc);
                   bail = true;
                   break;
                 }
