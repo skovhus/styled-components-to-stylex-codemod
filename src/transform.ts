@@ -23,7 +23,6 @@ import { compile } from "stylis";
 import { normalizeStylisAstToIR } from "./internal/css-ir.js";
 import { cssDeclarationToStylexDeclarations } from "./internal/css-prop-mapping.js";
 import { assertValidAdapter } from "./internal/public-api-validation.js";
-import { isLikelyValidDomAttr } from "./internal/dom-attrs.js";
 import { buildImportMap } from "./internal/transform-import-map.js";
 import { parseExpr as parseExprImpl } from "./internal/transform-parse-expr.js";
 import { createResolveValueSafe } from "./internal/transform-resolve-value.js";
@@ -2236,15 +2235,6 @@ export function transformWithWarnings(
             // These are styled-components conventions that shouldn't reach the DOM.
             if (n.startsWith("$")) {
               continue;
-            }
-            // For intrinsic elements, avoid forwarding unknown/custom props to the DOM.
-            // (For styled-components this is often "fine", but once we inline to a DOM element
-            // it becomes a React/TS/DOM attribute problem. Props that are used for styling are
-            // already handled above via styleFnProps/variantProps.)
-            if (decl.base.kind === "intrinsic") {
-              if (!isLikelyValidDomAttr(n)) {
-                continue;
-              }
             }
             keptLeadingAfterVariants.push(attr);
             continue;
