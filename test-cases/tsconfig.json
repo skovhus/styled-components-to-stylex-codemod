@@ -16,7 +16,7 @@
     "noUnusedLocals": false,
     "noUnusedParameters": false
   },
-  "include": ["./**/*.ts", "./**/*.d.ts"],
+  "include": ["./fixtures.d.ts", "./**/*.ts", "./**/*.tsx", "./**/*.d.ts"],
   "exclude": [
     "../node_modules",
     "../dist",
