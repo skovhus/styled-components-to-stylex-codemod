@@ -107,7 +107,10 @@ const styles = stylex.create({
     borderStyle: "solid",
     borderColor: "#bf4f74",
     display: "block",
-    margin: "0 0 1em",
+    marginTop: "0",
+    marginRight: "0",
+    marginBottom: "1em",
+    marginLeft: "0",
     "::placeholder": {
       color: "#bf4f74",
     },

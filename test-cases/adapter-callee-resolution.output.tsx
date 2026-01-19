@@ -31,6 +31,7 @@ const styles = stylex.create({
     fontWeight: fontWeightVars.bold,
     fontSize: fontSizeVars.small,
     transition: `background ${transitionSpeed.normal}`,
-    padding: "8px 16px",
+    paddingBlock: "8px",
+    paddingInline: "16px",
   },
 });

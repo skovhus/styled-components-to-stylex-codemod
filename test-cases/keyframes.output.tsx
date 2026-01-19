@@ -18,7 +18,8 @@ const styles = stylex.create({
     animationDuration: "2s",
     animationTimingFunction: "linear",
     animationIterationCount: "infinite",
-    padding: "2rem 1rem",
+    paddingBlock: "2rem",
+    paddingInline: "1rem",
     fontSize: "1.2rem",
   },
 });

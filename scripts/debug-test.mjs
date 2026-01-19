@@ -41,6 +41,7 @@ for (const name of testCases) {
     { parser: "tsx" },
   );
   writeFileSync(join(testCasesDir, `${name}.actual.tsx`), result);
-  // eslint-disable-next-line no-console
+
+  // oxlint-disable-next-line no-console
   console.log(`Wrote ${name}.actual.tsx`);
 }

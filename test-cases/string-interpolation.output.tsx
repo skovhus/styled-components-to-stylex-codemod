@@ -78,7 +78,8 @@ const styles = stylex.create({
   conditionalButton: {
     backgroundColor: isPrimary ? "#BF4F74" : "#ccc",
     color: isPrimary ? "white" : "#333",
-    padding: "8px 16px",
+    paddingBlock: "8px",
+    paddingInline: "16px",
     borderWidth: 0,
     borderStyle: "none",
     borderRadius: "4px",

@@ -46,7 +46,8 @@ const styles = stylex.create({
     backgroundColor: "white",
   },
   button: {
-    padding: "8px 16px",
+    paddingBlock: "8px",
+    paddingInline: "16px",
     backgroundColor: "blue",
     color: "white",
   },

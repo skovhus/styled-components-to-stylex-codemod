@@ -51,7 +51,8 @@ export const App = () => (
 
 const styles = stylex.create({
   input: {
-    padding: "8px 12px",
+    paddingBlock: "8px",
+    paddingInline: "12px",
     borderWidth: "2px",
     borderStyle: {
       default: "solid",

@@ -27,7 +27,8 @@ const styles = stylex.create({
   button: {
     display: "block",
     marginTop: "1rem",
-    padding: "12px 24px",
+    paddingBlock: "12px",
+    paddingInline: "24px",
     backgroundColor: "royalblue",
     borderWidth: 0,
     borderRadius: "8px",

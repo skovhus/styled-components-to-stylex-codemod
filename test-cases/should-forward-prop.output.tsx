@@ -107,7 +107,8 @@ const styles = stylex.create({
   // Using shouldForwardProp to filter props (v5 pattern)
   button: {
     backgroundColor: "#BF4F74",
-    padding: "8px 16px",
+    paddingBlock: "8px",
+    paddingInline: "16px",
     fontSize: "14px",
     color: "white",
     borderWidth: 0,
@@ -115,7 +116,8 @@ const styles = stylex.create({
     borderRadius: "4px",
   },
   buttonSizeLarge: {
-    padding: "12px 24px",
+    paddingBlock: "12px",
+    paddingInline: "24px",
     fontSize: "18px",
   },
   buttonBackgroundColor: (backgroundColor: string) => ({
