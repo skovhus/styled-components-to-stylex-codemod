@@ -15,11 +15,16 @@ function stripTypeScript(code: string): string {
 
 // Extract just the fixtureAdapter object from the source (without imports and customAdapter)
 function extractFixtureAdapter(source: string): string {
+  const externalPathsMatch = source.match(/const\s+externalStylingFilePaths\s*=\s*\[[\s\S]*?\n\];/);
+  const externalPathsCode = externalPathsMatch?.[0]
+    ? stripTypeScript(externalPathsMatch[0])
+    : "const externalStylingFilePaths = [];";
+
   // Find the fixtureAdapter definition and extract the object inside defineAdapter({...})
   const match = source.match(/export const fixtureAdapter = defineAdapter\((\{[\s\S]*?\n\})\);/);
   if (match?.[1]) {
     const jsCode = stripTypeScript(match[1]);
-    return `// Edit to customize\n${jsCode}`;
+    return `// Edit to customize\n(() => {\n  ${externalPathsCode}\n  return ${jsCode};\n})()`;
   }
   return "// Could not extract fixtureAdapter\n{}";
 }

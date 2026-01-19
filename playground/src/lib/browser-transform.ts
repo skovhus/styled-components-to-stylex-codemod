@@ -1,13 +1,13 @@
 import jscodeshift from "jscodeshift";
 import { transformWithWarnings } from "../../../src/transform";
 import type { Adapter } from "../../../src/adapter";
-import type { TransformWarning } from "../../../src/transform";
+import type { WarningLog } from "../../../src/internal/logger";
 
-export type { TransformWarning };
+export type { WarningLog };
 
 export interface TransformResult {
   code: string | null;
-  warnings: TransformWarning[];
+  warnings: WarningLog[];
 }
 
 /**

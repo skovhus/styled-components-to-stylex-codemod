@@ -92,18 +92,9 @@ export const fixtureAdapter = defineAdapter({
     }
 
     if (ctx.kind === "call") {
-      if (ctx.calleeSource.kind !== "absolutePath") {
-        return null;
-      }
-
       const src = ctx.calleeSource.value;
       // Note: calleeSource.value may or may not include the extension
-      if (
-        !src.endsWith("/test-cases/lib/helpers.ts") &&
-        !src.endsWith("\\test-cases\\lib\\helpers.ts") &&
-        !src.endsWith("/test-cases/lib/helpers") &&
-        !src.endsWith("\\test-cases\\lib\\helpers")
-      ) {
+      if (!src.includes("lib/helpers") && !src.includes("lib\\helpers.ts")) {
         return null;
       }
 
