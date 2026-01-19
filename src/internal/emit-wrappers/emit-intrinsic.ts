@@ -1897,6 +1897,22 @@ export function emitIntrinsicWrappers(ctx: any): {
       }
     }
 
+    // Extract transient props (starting with $) from the explicit type and add to destructureProps
+    // so they get stripped from the rest spread (styled-components transient props should never reach DOM)
+    const explicit = d.propsType;
+    if (explicit?.type === "TSTypeLiteral" && explicit.members) {
+      for (const member of explicit.members as any[]) {
+        if (
+          member.type === "TSPropertySignature" &&
+          member.key?.type === "Identifier" &&
+          member.key.name.startsWith("$") &&
+          !destructureProps.includes(member.key.name)
+        ) {
+          destructureProps.push(member.key.name);
+        }
+      }
+    }
+
     const usedAttrs = getUsedAttrs(d.localName);
     const { hasAny: hasLocalUsage } = getJsxCallsites(d.localName);
     const explicitPropsNames = d.propsType ? getExplicitPropNames(d.propsType) : new Set<string>();
