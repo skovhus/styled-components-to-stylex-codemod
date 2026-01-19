@@ -161,6 +161,19 @@ export const fixtureAdapter = defineAdapter({
         };
       }
 
+      // Handle themedBorder() helper from ./lib/helpers.ts
+      if (ctx.calleeImportedName === "themedBorder") {
+        return {
+          expr: `borders.${key}`,
+          imports: [
+            {
+              from: { kind: "specifier", value: "./helpers.stylex" },
+              names: [{ imported: "borders" }],
+            },
+          ],
+        };
+      }
+
       return null;
     }
 
