@@ -5,7 +5,7 @@ import * as stylex from "@stylexjs/stylex";
 //   box-shadow: ${(props) => shadow(props.shadow)};
 
 export function shadow(value: string): string {
-  return `0 0 0 ${value}`;
+  return `10px 10px 10px ${value}`;
 }
 
 type BoxProps = React.PropsWithChildren<{
@@ -20,8 +20,11 @@ export function Box(props: BoxProps) {
 export const App = () => <Box shadow="rgba(0,0,0,0.2)" />;
 
 const styles = stylex.create({
-  box: {},
+  box: {
+    height: "50px",
+    width: "50px",
+  },
   boxBoxShadow: (boxShadow: string) => ({
-    boxShadow: shadow(boxShadow),
+    boxShadow: `${shadow(boxShadow)}`,
   }),
 });

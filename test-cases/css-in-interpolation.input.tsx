@@ -25,7 +25,7 @@ export const Button = styled.button<{ $primary?: boolean }>`
           }
         `
       : css`
-          background: ${props.theme.colors.bgBase};
+          background: ${props.theme.color.bgBase};
           color: black;
         `}
 `;

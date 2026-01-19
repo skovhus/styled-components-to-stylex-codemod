@@ -1,4 +1,4 @@
-import type { Options } from "jscodeshift";
+import type { ASTNode, Comment, JSCodeshift, Options } from "jscodeshift";
 import type { Adapter } from "../adapter.js";
 import type { CssRuleIR } from "./css-ir.js";
 import type { WarningLog } from "./logger.js";
@@ -21,6 +21,8 @@ export interface TransformOptions extends Options {
    */
   adapter: Adapter;
 }
+
+type ExpressionKind = Parameters<JSCodeshift["expressionStatement"]>[0];
 
 export type StyledDecl = {
   /**
@@ -69,11 +71,11 @@ export type StyledDecl = {
    *
    * Stored as a TS type node (best-effort) so wrapper emission can reuse it.
    */
-  propsType?: any;
+  propsType?: ASTNode;
 
   withConfig?: { componentId?: string };
   attrsInfo?: {
-    staticAttrs: Record<string, any>;
+    staticAttrs: Record<string, unknown>;
     /**
      * Attrs that provide a default when a prop is nullish (undefined / null).
      * Pattern: `attr: props.attr ?? <literal>`
@@ -83,12 +85,12 @@ export type StyledDecl = {
     defaultAttrs?: Array<{
       jsxProp: string;
       attrName: string;
-      value: any;
+      value: unknown;
     }>;
     conditionalAttrs: Array<{
       jsxProp: string;
       attrName: string;
-      value: any;
+      value: unknown;
     }>;
     /**
      * Attrs that default to true when their associated prop is NOT passed (undefined).
@@ -112,8 +114,8 @@ export type StyledDecl = {
   templateExpressions: unknown[];
   rawCss?: string;
   preResolvedStyle?: Record<string, unknown>;
-  preResolvedFnDecls?: Record<string, any>;
-  inlineStyleProps?: Array<{ prop: string; expr: any }>;
+  preResolvedFnDecls?: Record<string, unknown>;
+  inlineStyleProps?: Array<{ prop: string; expr: ExpressionKind }>;
   enumVariant?: {
     propName: string;
     baseKey: string;
@@ -132,5 +134,5 @@ export type StyledDecl = {
     propAfter?: string;
   };
   // Leading comments (JSDoc, line comments) from the original styled component declaration
-  leadingComments?: any[];
+  leadingComments?: Comment[];
 };

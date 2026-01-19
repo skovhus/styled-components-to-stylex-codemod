@@ -14,7 +14,7 @@ type InputProps = {
  */
 export function Input(props: InputProps) {
   const theme = useTheme();
-  const someCustomColor = theme.colors.bgBase;
+  const someCustomColor = theme.color.bgBase;
   return <ColorPickerWrapper style={{ backgroundColor: someCustomColor }} />;
 }
 

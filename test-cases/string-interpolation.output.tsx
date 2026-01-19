@@ -19,7 +19,7 @@ const isPrimary = true;
 
 // Array/object property interpolation
 const theme = {
-  colors: {
+  color: {
     primary: "#BF4F74",
     secondary: "#4F74BF",
   },
@@ -70,25 +70,24 @@ const styles = stylex.create({
   text: {
     fontSize: `${fontSize}px`,
     lineHeight: lineHeight,
-    marginTop: `${spacing / 2}px`,
-    marginRight: 0,
-    marginBottom: `${spacing / 2}px`,
-    marginLeft: 0,
+    marginBlock: `${spacing / 2}px`,
+    marginInline: 0,
   },
   conditionalButton: {
     backgroundColor: isPrimary ? "#BF4F74" : "#ccc",
     color: isPrimary ? "white" : "#333",
-    padding: "8px 16px",
+    paddingBlock: "8px",
+    paddingInline: "16px",
     borderWidth: 0,
     borderStyle: "none",
     borderRadius: "4px",
   },
   themedCard: {
-    backgroundColor: theme.colors.primary,
+    backgroundColor: `${theme.color.primary}`,
     borderWidth: "1px",
     borderStyle: "solid",
-    borderColor: theme.colors.secondary,
-    padding: theme.spacing.md,
+    borderColor: `${theme.color.secondary}`,
+    padding: `${theme.spacing.md}`,
     borderRadius: "8px",
   },
   dynamicBoxBase: {

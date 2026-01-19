@@ -9,8 +9,8 @@ export const Chip = styled.div`
   background-color: ${(props: any) =>
     props.theme.isDark
       ? // Using double `highlightVariant` is an exception and not recommended in general.
-        props.theme.highlightVariant(props.theme.highlightVariant(props.theme.colors.bgFocus))
-      : props.theme.colors.bgFocus};
+        props.theme.highlightVariant(props.theme.highlightVariant(props.theme.color.bgFocus))
+      : props.theme.color.bgFocus};
 `;
 
 export const App = () => <Chip />;

@@ -524,14 +524,14 @@ export const App = () => <Box />;
     expect(result.warnings.some((w) => warningMatchesToken(w, "css-helper"))).toBe(true);
   });
 
-  it("should bail (not crash) on unsupported conditional test expressions in shouldForwardProp wrappers", () => {
+  it("should bail on unsupported conditional with theme access in test expressions in shouldForwardProp wrappers", () => {
     const source = [
       'import styled from "styled-components";',
       "",
       "const Input = styled.input.withConfig({",
       '  shouldForwardProp: (prop) => prop !== "hasError" && prop !== "other",',
       "})`",
-      '  border-color: ${(props) => (props.hasError && props.other ? "red" : "#ccc")};',
+      '  border-color: ${(p) => (p.theme.isDark && p.other ? "red" : "#ccc")};',
       "`;",
       "",
       "export const App = () => (",
@@ -548,8 +548,12 @@ export const App = () => <Box />;
       { adapter: fixtureAdapter },
     );
 
-    expect(result.code).not.toBeNull();
-    expect(result.code).not.toMatch(/from\\s+['"]styled-components['"]/);
+    expect(result.code).toBeNull();
+    expect(result.warnings.length).toBeGreaterThan(0);
+    const warning = result.warnings[0]!;
+    expect(warning.loc).toBeDefined();
+    expect(typeof warning.loc?.line).toBe("number");
+    expect(typeof warning.loc?.column).toBe("number");
   });
 });
 
@@ -724,7 +728,7 @@ describe("adapter configuration", () => {
 import styled from 'styled-components';
 
 const Button = styled.button\`
-  color: \${props => props.theme.colors.primary};
+  color: \${props => props.theme.color.primary};
 \`;
 
 export const App = () => <Button>Click</Button>;

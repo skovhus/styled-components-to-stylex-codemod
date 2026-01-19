@@ -1,5 +1,7 @@
 import type { StyledDecl } from "../transform-types.js";
 import { cssDeclarationToStylexDeclarations } from "../css-prop-mapping.js";
+import { getMemberPathFromIdentifier } from "../jscodeshift-utils.js";
+import { splitDirectionalProperty } from "../stylex-shorthands.js";
 
 export function extractStaticParts(
   cssValue: any,
@@ -66,8 +68,11 @@ export function tryHandleInterpolatedStringValue(args: {
   decl: StyledDecl;
   d: any;
   styleObj: Record<string, unknown>;
+  resolveCallExpr?: (expr: any) => { resolved: any; imports?: any[] } | null;
+  addImport?: (imp: any) => void;
+  resolveThemeValue?: (expr: any) => unknown;
 }): boolean {
-  const { j, decl, d, styleObj } = args;
+  const { j, decl, d, styleObj, resolveCallExpr, addImport } = args;
   // Handle common “string interpolation” cases:
   //  - background: ${dynamicColor}
   //  - padding: ${spacing}px
@@ -80,7 +85,7 @@ export function tryHandleInterpolatedStringValue(args: {
     return false;
   }
 
-  // Special-case: margin shorthand `${expr}px 0` → marginTop/Right/Bottom/Left
+  // Special-case: margin shorthand `${expr}px 0` → split to directional props (StyleX rules)
   if ((d.property ?? "").trim() === "margin" && typeof d.valueRaw === "string") {
     const m = d.valueRaw.trim().match(/^__SC_EXPR_(\d+)__(px)?\s+0$/);
     if (m) {
@@ -97,10 +102,18 @@ export function tryHandleInterpolatedStringValue(args: {
         ],
         [expr],
       );
-      (styleObj as any).marginTop = tl as any;
-      (styleObj as any).marginRight = 0;
-      (styleObj as any).marginBottom = tl as any;
-      (styleObj as any).marginLeft = 0;
+      const entries = splitDirectionalProperty({
+        prop: "margin",
+        rawValue: d.valueRaw.trim(),
+        important: d.important,
+      });
+      if (!entries.length) {
+        return false;
+      }
+      for (const entry of entries) {
+        const usesExpr = entry.value.includes(`__SC_EXPR_${slotId}__`);
+        (styleObj as any)[entry.prop] = usesExpr ? (tl as any) : 0;
+      }
       return true;
     }
   }
@@ -117,13 +130,27 @@ export function tryHandleInterpolatedStringValue(args: {
     if (expr.type === "CallExpression") {
       return false;
     }
+    const themeResolved = args.resolveThemeValue?.(expr);
+    const shouldWrapThemeExpr =
+      !themeResolved &&
+      expr?.type === "MemberExpression" &&
+      !!getMemberPathFromIdentifier(expr as any, "theme");
+    const wrappedExpr = shouldWrapThemeExpr
+      ? (j.templateLiteral(
+          [
+            j.templateElement({ raw: "", cooked: "" }, false),
+            j.templateElement({ raw: "", cooked: "" }, true),
+          ],
+          [expr as any],
+        ) as any)
+      : (expr as any);
     for (const out of cssDeclarationToStylexDeclarations(d)) {
-      (styleObj as any)[out.prop] = expr as any;
+      (styleObj as any)[out.prop] = themeResolved ?? wrappedExpr;
     }
     return true;
   }
 
-  const tl = buildInterpolatedTemplate({ j, decl, cssValue: d.value });
+  const tl = buildInterpolatedTemplate({ j, decl, cssValue: d.value, resolveCallExpr, addImport });
   if (!tl) {
     return false;
   }
@@ -134,33 +161,76 @@ export function tryHandleInterpolatedStringValue(args: {
   return true;
 }
 
-function buildInterpolatedTemplate(args: { j: any; decl: StyledDecl; cssValue: any }): unknown {
-  const { j, decl, cssValue } = args;
-  // Build a JS TemplateLiteral from CssValue parts when it’s basically string interpolation,
-  // e.g. `${spacing}px`, `${spacing / 2}px 0`, `1px solid ${theme.colors.secondary}` (handled elsewhere).
+function buildInterpolatedTemplate(args: {
+  j: any;
+  decl: StyledDecl;
+  cssValue: any;
+  resolveCallExpr?: (expr: any) => { resolved: any; imports?: any[] } | null;
+  addImport?: (imp: any) => void;
+}): unknown {
+  const { j, decl, cssValue, resolveCallExpr, addImport } = args;
+  // Build a JS TemplateLiteral from CssValue parts when it's basically string interpolation,
+  // e.g. `${spacing}px`, `${spacing / 2}px 0`, `1px solid ${theme.color.secondary}` (handled elsewhere).
   if (!cssValue || cssValue.kind !== "interpolated") {
     return null;
   }
   const parts = cssValue.parts ?? [];
   const exprs: any[] = [];
+  let fullStaticValue = "";
+  let allStatic = true;
   const quasis: any[] = [];
   let q = "";
   for (const part of parts) {
     if (part.kind === "static") {
       q += part.value;
+      fullStaticValue += part.value;
       continue;
     }
     if (part.kind === "slot") {
-      quasis.push(j.templateElement({ raw: q, cooked: q }, false));
-      q = "";
       const expr = (decl as any).templateExpressions[part.slotId] as any;
       // Only inline non-function expressions.
       if (!expr || expr.type === "ArrowFunctionExpression") {
         return null;
       }
+      // Try to resolve CallExpressions through the adapter (e.g., helper function lookups)
+      if (expr.type === "CallExpression" && resolveCallExpr) {
+        const resolved = resolveCallExpr(expr);
+        if (resolved) {
+          // If resolved to a string literal, inline it directly into the static text
+          if (
+            resolved.resolved?.type === "StringLiteral" ||
+            (resolved.resolved?.type === "Literal" && typeof resolved.resolved.value === "string")
+          ) {
+            const strValue = resolved.resolved.value;
+            q += strValue;
+            fullStaticValue += strValue;
+            // Add any required imports
+            for (const imp of resolved.imports ?? []) {
+              addImport?.(imp);
+            }
+            continue;
+          }
+          // Otherwise, use the resolved expression AST
+          quasis.push(j.templateElement({ raw: q, cooked: q }, false));
+          q = "";
+          allStatic = false;
+          for (const imp of resolved.imports ?? []) {
+            addImport?.(imp);
+          }
+          exprs.push(resolved.resolved);
+          continue;
+        }
+      }
+      quasis.push(j.templateElement({ raw: q, cooked: q }, false));
+      q = "";
+      allStatic = false;
       exprs.push(expr);
       continue;
     }
+  }
+  // If all expressions were resolved to static strings, return a plain string instead of template literal
+  if (allStatic) {
+    return fullStaticValue;
   }
   quasis.push(j.templateElement({ raw: q, cooked: q }, true));
   return j.templateLiteral(quasis, exprs);

@@ -1,7 +1,12 @@
 import { dirname, resolve as pathResolve } from "node:path";
+import type { ASTNode, Collection, JSCodeshift } from "jscodeshift";
 import type { ImportSource } from "../adapter.js";
 
-export function buildImportMap(args: { root: any; j: any; filePath: string }): Map<
+export function buildImportMap(args: {
+  root: Collection<ASTNode>;
+  j: JSCodeshift;
+  filePath: string;
+}): Map<
   string,
   {
     importedName: string;
@@ -33,7 +38,7 @@ export function buildImportMap(args: { root: any; j: any; filePath: string }): M
       : { kind: "specifier", value: specifier };
   };
 
-  root.find(j.ImportDeclaration).forEach((p: any) => {
+  root.find(j.ImportDeclaration).forEach((p) => {
     const source = p.node.source?.value;
     if (typeof source !== "string") {
       return;
@@ -45,11 +50,13 @@ export function buildImportMap(args: { root: any; j: any; filePath: string }): M
         continue;
       }
       if (s.type === "ImportSpecifier") {
+        const importedNode = s.imported as { type?: string; name?: string; value?: unknown };
         const importedName =
-          s.imported?.type === "Identifier"
-            ? s.imported.name
-            : s.imported?.type === "Literal" && typeof s.imported.value === "string"
-              ? s.imported.value
+          importedNode.type === "Identifier"
+            ? importedNode.name
+            : (importedNode.type === "StringLiteral" || importedNode.type === "Literal") &&
+                typeof importedNode.value === "string"
+              ? importedNode.value
               : undefined;
         const localName =
           s.local?.type === "Identifier"

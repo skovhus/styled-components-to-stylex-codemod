@@ -42,8 +42,9 @@ const styles = stylex.create({
     backgroundColor: "#BF4F74 !important",
     color: "white !important",
     borderWidth: "0 !important",
-    borderStyle: "none !important",
-    padding: "8px 16px",
+    borderStyle: "none",
+    paddingBlock: "8px",
+    paddingInline: "16px",
     borderRadius: "4px",
   },
 
@@ -51,13 +52,17 @@ const styles = stylex.create({
   forceWidth: {
     width: "100% !important",
     maxWidth: "500px !important",
-    margin: "0 auto",
+    marginBlock: 0,
+    marginInline: "auto",
   },
   mixedStyles: {
     fontSize: "16px",
     color: "#333 !important",
     lineHeight: 1.5,
-    margin: "0 !important",
+    marginTop: "0 !important",
+    marginRight: "0 !important",
+    marginBottom: "0 !important",
+    marginLeft: "0 !important",
   },
 
   // Important in pseudo-selectors

@@ -11,7 +11,7 @@ const Button = styled.button`
 `;
 
 const Card = styled.div`
-  padding: 16px;
+  padding: 16px 12px;
   background: white;
   border-radius: 8px;
 `;

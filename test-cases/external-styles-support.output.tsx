@@ -28,7 +28,8 @@ const styles = stylex.create({
   exportedButton: {
     backgroundColor: "#bf4f74",
     color: "white",
-    padding: "8px 16px",
+    paddingBlock: "8px",
+    paddingInline: "16px",
     borderWidth: 0,
     borderStyle: "none",
     borderRadius: "4px",

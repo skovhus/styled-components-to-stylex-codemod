@@ -2,7 +2,7 @@ import { useState, useEffect, useCallback, useRef } from "react";
 import CodeMirror from "@uiw/react-codemirror";
 import { javascript } from "@codemirror/lang-javascript";
 import { testCases } from "./lib/test-cases";
-import { runTransform, type TransformWarning } from "./lib/browser-transform";
+import { runTransform, type WarningLog } from "./lib/browser-transform";
 import { DEFAULT_ADAPTER_CODE } from "./lib/default-adapter";
 import { evalAdapter } from "./lib/eval-adapter";
 import type { Adapter } from "../../src/adapter";
@@ -16,10 +16,11 @@ function App() {
   const [adapterCode, setAdapterCode] = useState(DEFAULT_ADAPTER_CODE);
   const [showConfig, setShowConfig] = useState(false);
   const [output, setOutput] = useState("");
-  const [warnings, setWarnings] = useState<TransformWarning[]>([]);
+  const [warnings, setWarnings] = useState<WarningLog[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [adapterError, setAdapterError] = useState<string | null>(null);
   const lastValidAdapterRef = useRef<Adapter>(fixtureAdapter);
+  const isUsingDefaultAdapter = adapterCode === DEFAULT_ADAPTER_CODE;
 
   // Parse adapter whenever adapterCode changes
   useEffect(() => {
@@ -52,7 +53,7 @@ function App() {
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e));
     }
-  }, [input, adapterError]);
+  }, [input, adapterError, adapterCode]);
 
   // Handle test case selection
   const handleTestCaseChange = useCallback((e: React.ChangeEvent<HTMLSelectElement>) => {
@@ -69,6 +70,9 @@ function App() {
     const currentIndex = testCases.findIndex((t) => t.name === selectedTestCase);
     if (currentIndex > 0) {
       const prevTestCase = testCases[currentIndex - 1];
+      if (!prevTestCase) {
+        return;
+      }
       setSelectedTestCase(prevTestCase.name);
       setInput(prevTestCase.content);
     }
@@ -79,6 +83,9 @@ function App() {
     const currentIndex = testCases.findIndex((t) => t.name === selectedTestCase);
     if (currentIndex < testCases.length - 1) {
       const nextTestCase = testCases[currentIndex + 1];
+      if (!nextTestCase) {
+        return;
+      }
       setSelectedTestCase(nextTestCase.name);
       setInput(nextTestCase.content);
     }
@@ -172,6 +179,13 @@ function App() {
       {showConfig && (
         <div style={styles.configPanel}>
           <div style={styles.panelHeader}>Adapter configuration</div>
+          <div style={styles.adapterStatus}>
+            {adapterError
+              ? "Adapter error: using last valid adapter"
+              : isUsingDefaultAdapter
+                ? "Using default fixture adapter"
+                : "Using custom adapter"}
+          </div>
           <CodeMirror
             value={adapterCode}
             onChange={setAdapterCode}
@@ -236,7 +250,7 @@ function App() {
                   )}
                   {warnings.map((w, i) => (
                     <li key={i} style={styles.warningItem}>
-                      <span style={styles.warningFeature}>{w.feature}</span>
+                      <span style={styles.warningFeature}>{w.type}</span>
                       <span style={styles.warningMessage}>{w.message}</span>
                       {w.loc && <span style={styles.warningLoc}>line {w.loc.line}</span>}
                     </li>
@@ -373,6 +387,11 @@ const styles: Record<string, React.CSSProperties> = {
     flex: 1,
     overflow: "auto",
     minHeight: 0,
+  },
+  adapterStatus: {
+    fontSize: "12px",
+    color: "#666",
+    margin: "8px 12px",
   },
   error: {
     color: "#c00",

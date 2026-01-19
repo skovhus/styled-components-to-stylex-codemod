@@ -7,7 +7,7 @@ const OptionLabel = styled.label<{ $disabled?: boolean }>`
   align-items: center;
   font-size: 11px;
   color: ${(props: any) =>
-    props.$disabled ? props.theme.colors.labelMuted : props.theme.colors.labelBase};
+    props.$disabled ? props.theme.color.labelMuted : props.theme.color.labelBase};
   cursor: ${(props: any) => (props.$disabled ? "not-allowed" : "pointer")};
 `;
 

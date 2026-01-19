@@ -1,10 +1,10 @@
-import type { API } from "jscodeshift";
+import type { API, ASTNode, Collection, JSCodeshift } from "jscodeshift";
 import { compile } from "stylis";
 import { resolveDynamicNode } from "./builtin-handlers.js";
 import { normalizeStylisAstToIR } from "./css-ir.js";
 import { cssDeclarationToStylexDeclarations, cssPropertyToStylexProp } from "./css-prop-mapping.js";
 import { getMemberPathFromIdentifier, getNodeLocStart } from "./jscodeshift-utils.js";
-import type { ImportSource } from "../adapter.js";
+import type { ImportSource, ImportSpec, ResolveContext, ResolveResult } from "../adapter.js";
 import { tryHandleAnimation } from "./lower-rules/animation.js";
 import { tryHandleInterpolatedBorder } from "./lower-rules/borders.js";
 import {
@@ -12,6 +12,7 @@ import {
   tryHandleInterpolatedStringValue,
   wrapExprWithStaticParts,
 } from "./lower-rules/interpolations.js";
+import { splitDirectionalProperty } from "./stylex-shorthands.js";
 import { parseStyledTemplateLiteral } from "./styled-css.js";
 import {
   createTypeInferenceHelpers,
@@ -34,12 +35,14 @@ export type DescendantOverride = {
   overrideStyleKey: string;
 };
 
+type ExpressionKind = Parameters<JSCodeshift["expressionStatement"]>[0];
+
 export function lowerRules(args: {
   api: API;
-  j: any;
-  root: any;
+  j: JSCodeshift;
+  root: Collection<ASTNode>;
   filePath: string;
-  resolveValue: (ctx: any) => any;
+  resolveValue: (ctx: ResolveContext) => ResolveResult | null;
   importMap: Map<
     string,
     {
@@ -48,7 +51,7 @@ export function lowerRules(args: {
     }
   >;
   warnings: WarningLog[];
-  resolverImports: Map<string, any>;
+  resolverImports: Map<string, ImportSpec>;
   styledDecls: StyledDecl[];
   keyframesNames: Set<string>;
   cssHelperNames: Set<string>;
@@ -64,16 +67,16 @@ export function lowerRules(args: {
   >;
   toStyleKey: (name: string) => string;
   toSuffixFromProp: (propName: string) => string;
-  parseExpr: (exprSource: string) => unknown;
-  cssValueToJs: (value: any, important?: boolean) => unknown;
+  parseExpr: (exprSource: string) => ExpressionKind | null;
+  cssValueToJs: (value: unknown, important?: boolean, propName?: string) => unknown;
   rewriteCssVarsInStyleObject: (
     obj: Record<string, unknown>,
     definedVars: Map<string, string>,
     varsToDrop: Set<string>,
   ) => void;
-  literalToAst: (j: any, v: unknown) => any;
+  literalToAst: (j: JSCodeshift, v: unknown) => ExpressionKind;
 }): {
-  resolvedStyleObjects: Map<string, any>;
+  resolvedStyleObjects: Map<string, unknown>;
   descendantOverrides: DescendantOverride[];
   ancestorSelectorParents: Set<string>;
   bail: boolean;
@@ -99,7 +102,7 @@ export function lowerRules(args: {
     literalToAst,
   } = args;
 
-  const resolvedStyleObjects = new Map<string, any>();
+  const resolvedStyleObjects = new Map<string, unknown>();
   const declByLocalName = new Map(styledDecls.map((d) => [d.localName, d]));
   const descendantOverrides: DescendantOverride[] = [];
   const ancestorSelectorParents = new Set<string>();
@@ -122,6 +125,407 @@ export function lowerRules(args: {
 
   // (helpers extracted to `./lower-rules/*` modules)
 
+  // Build a template literal with static prefix/suffix around a dynamic expression.
+  // e.g., prefix="" suffix="ms" expr=<call> -> `${<call>}ms`
+  const buildTemplateWithStaticParts = (
+    j: JSCodeshift,
+    expr: ExpressionKind,
+    prefix: string,
+    suffix: string,
+  ): ExpressionKind => {
+    if (!prefix && !suffix) {
+      return expr;
+    }
+    return j.templateLiteral(
+      [
+        j.templateElement({ raw: prefix, cooked: prefix }, false),
+        j.templateElement({ raw: suffix, cooked: suffix }, true),
+      ],
+      [expr],
+    );
+  };
+
+  const unwrapArrowFunctionToPropsExpr = (
+    expr: any,
+  ): { expr: any; propsUsed: Set<string> } | null => {
+    if (!expr || expr.type !== "ArrowFunctionExpression") {
+      return null;
+    }
+    if (expr.params?.length !== 1 || expr.params[0]?.type !== "Identifier") {
+      return null;
+    }
+    const paramName = expr.params[0].name;
+    const bodyExpr =
+      expr.body?.type === "BlockStatement"
+        ? expr.body.body?.find((s: any) => s.type === "ReturnStatement")?.argument
+        : expr.body;
+    if (!bodyExpr) {
+      return null;
+    }
+
+    const propsUsed = new Set<string>();
+    let safeToInline = true;
+    const cloneNode = (node: any): any => {
+      if (!node || typeof node !== "object") {
+        return node;
+      }
+      if (Array.isArray(node)) {
+        return node.map(cloneNode);
+      }
+      const out: any = {};
+      for (const key of Object.keys(node)) {
+        if (key === "loc" || key === "comments" || key === "tokens") {
+          continue;
+        }
+        out[key] = cloneNode((node as any)[key]);
+      }
+      return out;
+    };
+    const clone = cloneNode(bodyExpr);
+    const replace = (node: any): any => {
+      if (!node || typeof node !== "object") {
+        return node;
+      }
+      if (Array.isArray(node)) {
+        return node.map(replace);
+      }
+      if (
+        (node.type === "MemberExpression" || node.type === "OptionalMemberExpression") &&
+        node.object?.type === "Identifier" &&
+        node.object.name === paramName &&
+        node.property?.type === "Identifier" &&
+        node.computed === false
+      ) {
+        const propName = node.property.name;
+        if (!propName.startsWith("$")) {
+          safeToInline = false;
+          return node;
+        }
+        propsUsed.add(propName);
+        return j.identifier(propName);
+      }
+      for (const key of Object.keys(node)) {
+        if (key === "loc" || key === "comments") {
+          continue;
+        }
+        const child = (node as any)[key];
+        if (child && typeof child === "object") {
+          (node as any)[key] = replace(child);
+        }
+      }
+      return node;
+    };
+    const replaced = replace(clone);
+    if (!safeToInline || propsUsed.size === 0) {
+      return null;
+    }
+    return { expr: replaced, propsUsed };
+  };
+
+  const collectPropsFromArrowFn = (expr: any): Set<string> => {
+    const props = new Set<string>();
+    if (!expr || expr.type !== "ArrowFunctionExpression") {
+      return props;
+    }
+    const paramName = expr.params?.[0]?.type === "Identifier" ? expr.params[0].name : null;
+    if (!paramName) {
+      return props;
+    }
+    const visit = (node: any): void => {
+      if (!node || typeof node !== "object") {
+        return;
+      }
+      if (Array.isArray(node)) {
+        for (const child of node) {
+          visit(child);
+        }
+        return;
+      }
+      if (
+        (node.type === "MemberExpression" || node.type === "OptionalMemberExpression") &&
+        node.object?.type === "Identifier" &&
+        node.object.name === paramName &&
+        node.property?.type === "Identifier" &&
+        node.computed === false
+      ) {
+        props.add(node.property.name);
+      }
+      for (const key of Object.keys(node)) {
+        if (key === "loc" || key === "comments") {
+          continue;
+        }
+        const child = (node as any)[key];
+        if (child && typeof child === "object") {
+          visit(child);
+        }
+      }
+    };
+    const bodyExpr =
+      expr.body?.type === "BlockStatement"
+        ? expr.body.body?.find((s: any) => s.type === "ReturnStatement")?.argument
+        : expr.body;
+    visit(bodyExpr);
+    return props;
+  };
+
+  const countConditionalExpressions = (node: any): number => {
+    if (!node || typeof node !== "object") {
+      return 0;
+    }
+    if (Array.isArray(node)) {
+      return node.reduce((sum, child) => sum + countConditionalExpressions(child), 0);
+    }
+    let count = node.type === "ConditionalExpression" ? 1 : 0;
+    for (const key of Object.keys(node)) {
+      if (key === "loc" || key === "comments") {
+        continue;
+      }
+      const child = node[key];
+      if (child && typeof child === "object") {
+        count += countConditionalExpressions(child);
+      }
+    }
+    return count;
+  };
+
+  const hasThemeAccessInArrowFn = (expr: any): boolean => {
+    if (!expr || expr.type !== "ArrowFunctionExpression") {
+      return false;
+    }
+    if (expr.params?.length !== 1 || expr.params[0]?.type !== "Identifier") {
+      return false;
+    }
+    const paramName = expr.params[0].name;
+    const bodyExpr =
+      expr.body?.type === "BlockStatement"
+        ? expr.body.body?.find((s: any) => s.type === "ReturnStatement")?.argument
+        : expr.body;
+    if (!bodyExpr) {
+      return false;
+    }
+    let found = false;
+    const visit = (node: any): void => {
+      if (!node || typeof node !== "object" || found) {
+        return;
+      }
+      if (Array.isArray(node)) {
+        for (const child of node) {
+          visit(child);
+        }
+        return;
+      }
+      if (
+        (node.type === "MemberExpression" || node.type === "OptionalMemberExpression") &&
+        node.object?.type === "Identifier" &&
+        node.object.name === paramName &&
+        node.property?.type === "Identifier" &&
+        node.property.name === "theme" &&
+        node.computed === false
+      ) {
+        found = true;
+        return;
+      }
+      for (const key of Object.keys(node)) {
+        if (key === "loc" || key === "comments") {
+          continue;
+        }
+        const child = (node as any)[key];
+        if (child && typeof child === "object") {
+          visit(child);
+        }
+      }
+    };
+    visit(bodyExpr);
+    return found;
+  };
+
+  const inlineArrowFunctionBody = (expr: any): ExpressionKind | null => {
+    if (!expr || expr.type !== "ArrowFunctionExpression") {
+      return null;
+    }
+    if (expr.params?.length !== 1 || expr.params[0]?.type !== "Identifier") {
+      return null;
+    }
+    const paramName = expr.params[0].name;
+    const bodyExpr =
+      expr.body?.type === "BlockStatement"
+        ? expr.body.body?.find((s: any) => s.type === "ReturnStatement")?.argument
+        : expr.body;
+    if (!bodyExpr) {
+      return null;
+    }
+    const cloneNode = (node: any): any => {
+      if (!node || typeof node !== "object") {
+        return node;
+      }
+      if (Array.isArray(node)) {
+        return node.map(cloneNode);
+      }
+      const out: any = {};
+      for (const key of Object.keys(node)) {
+        if (key === "loc" || key === "comments" || key === "tokens") {
+          continue;
+        }
+        out[key] = cloneNode((node as any)[key]);
+      }
+      return out;
+    };
+    const replace = (node: any): any => {
+      if (!node || typeof node !== "object") {
+        return node;
+      }
+      if (Array.isArray(node)) {
+        return node.map(replace);
+      }
+      if (node.type === "Identifier" && node.name === paramName) {
+        return j.identifier("props");
+      }
+      if (node.type === "MemberExpression" || node.type === "OptionalMemberExpression") {
+        node.object = replace(node.object);
+        if (node.computed) {
+          node.property = replace(node.property);
+        }
+        return node;
+      }
+      if (node.type === "Property") {
+        if (node.computed) {
+          node.key = replace(node.key);
+        }
+        node.value = replace(node.value);
+        return node;
+      }
+      for (const key of Object.keys(node)) {
+        if (key === "loc" || key === "comments") {
+          continue;
+        }
+        const child = (node as any)[key];
+        if (child && typeof child === "object") {
+          (node as any)[key] = replace(child);
+        }
+      }
+      return node;
+    };
+    const cloned = cloneNode(bodyExpr);
+    return replace(cloned);
+  };
+
+  const warnPropInlineStyle = (
+    decl: StyledDecl,
+    propName: string | null | undefined,
+    reason: string,
+    loc: { line: number; column: number } | null | undefined,
+  ): void => {
+    const propLabel = propName ?? "unknown";
+    warnings.push({
+      severity: "warning",
+      type: "dynamic-node",
+      message: `Unsupported prop-based inline style for ${decl.localName} (${propLabel}): ${reason}.`,
+      ...(loc ? { loc } : {}),
+    });
+  };
+
+  const hasUnsupportedConditionalTest = (expr: any): boolean => {
+    if (!expr || expr.type !== "ArrowFunctionExpression") {
+      return false;
+    }
+    const bodyExpr =
+      expr.body?.type === "BlockStatement"
+        ? expr.body.body?.find((s: any) => s.type === "ReturnStatement")?.argument
+        : expr.body;
+    if (!bodyExpr) {
+      return false;
+    }
+    let found = false;
+    const visit = (node: any): void => {
+      if (!node || typeof node !== "object" || found) {
+        return;
+      }
+      if (Array.isArray(node)) {
+        for (const child of node) {
+          visit(child);
+        }
+        return;
+      }
+      if (
+        node.type === "ConditionalExpression" &&
+        (node.test?.type === "LogicalExpression" || node.test?.type === "ConditionalExpression")
+      ) {
+        found = true;
+        return;
+      }
+      for (const key of Object.keys(node)) {
+        if (key === "loc" || key === "comments") {
+          continue;
+        }
+        const child = (node as any)[key];
+        if (child && typeof child === "object") {
+          visit(child);
+        }
+      }
+    };
+    visit(bodyExpr);
+    return found;
+  };
+
+  const hasLocalThemeBinding = (() => {
+    let found = false;
+    root.find(j.VariableDeclarator, { id: { type: "Identifier", name: "theme" } }).forEach(() => {
+      found = true;
+    });
+    root.find(j.FunctionDeclaration, { id: { type: "Identifier", name: "theme" } }).forEach(() => {
+      found = true;
+    });
+    root.find(j.ImportSpecifier, { local: { name: "theme" } } as any).forEach(() => {
+      found = true;
+    });
+    root.find(j.ImportDefaultSpecifier, { local: { name: "theme" } } as any).forEach(() => {
+      found = true;
+    });
+    root.find(j.ImportNamespaceSpecifier, { local: { name: "theme" } } as any).forEach(() => {
+      found = true;
+    });
+    return found;
+  })();
+
+  const resolveThemeValue = (expr: any): unknown => {
+    if (hasLocalThemeBinding) {
+      return null;
+    }
+    if (!expr || typeof expr !== "object") {
+      return null;
+    }
+    const getPathFromThemeRoot = (node: any): string[] | null => {
+      const parts: string[] = [];
+      let cur: any = node;
+      while (cur && (cur.type === "MemberExpression" || cur.type === "OptionalMemberExpression")) {
+        if (cur.computed) {
+          return null;
+        }
+        if (cur.property?.type !== "Identifier") {
+          return null;
+        }
+        parts.unshift(cur.property.name);
+        cur = cur.object;
+      }
+      if (!cur || cur.type !== "Identifier" || cur.name !== "theme") {
+        return null;
+      }
+      return parts;
+    };
+    const parts = getPathFromThemeRoot(expr);
+    if (!parts || !parts.length) {
+      return null;
+    }
+    const resolved = resolveValue({ kind: "theme", path: parts.join(".") });
+    if (!resolved) {
+      return null;
+    }
+    for (const imp of resolved.imports ?? []) {
+      resolverImports.set(JSON.stringify(imp), imp);
+    }
+    return parseExpr(resolved.expr);
+  };
+
   for (const decl of styledDecls) {
     if (decl.preResolvedStyle) {
       resolvedStyleObjects.set(decl.styleKey, decl.preResolvedStyle);
@@ -142,7 +546,7 @@ export function lowerRules(args: {
     const styleFnFromProps: Array<{ fnKey: string; jsxProp: string }> = [];
     const styleFnDecls = new Map<string, any>();
     const attrBuckets = new Map<string, Record<string, unknown>>();
-    const inlineStyleProps: Array<{ prop: string; expr: any }> = [];
+    const inlineStyleProps: Array<{ prop: string; expr: ExpressionKind }> = [];
     const localVarValues = new Map<string, string>();
 
     const { findJsxPropTsType, annotateParamFromJsxProp } = createTypeInferenceHelpers({
@@ -320,7 +724,7 @@ export function lowerRules(args: {
           }
           if (d.value.kind === "static") {
             for (const mapped of cssDeclarationToStylexDeclarations(d)) {
-              let value = cssValueToJs(mapped.value, d.important);
+              let value = cssValueToJs(mapped.value, d.important, mapped.prop);
               if (mapped.prop === "content" && typeof value === "string") {
                 const m = value.match(/^['"]([\s\S]*)['"]$/);
                 if (m) {
@@ -617,7 +1021,7 @@ export function lowerRules(args: {
             if (out.value.kind !== "static") {
               continue;
             }
-            obj[out.prop] = cssValueToJs(out.value, d.important);
+            obj[out.prop] = cssValueToJs(out.value, d.important, out.prop);
             if (i === 0) {
               addPropComments(obj, out.prop, {
                 leading: (d as any).leadingComment,
@@ -653,7 +1057,7 @@ export function lowerRules(args: {
             if (out.value.kind !== "static") {
               continue;
             }
-            obj[out.prop] = cssValueToJs(out.value, d.important);
+            obj[out.prop] = cssValueToJs(out.value, d.important, out.prop);
             if (i === 0) {
               addPropComments(obj, out.prop, {
                 leading: (d as any).leadingComment,
@@ -776,7 +1180,7 @@ export function lowerRules(args: {
                 if (out.value.kind !== "static") {
                   continue;
                 }
-                const v = cssValueToJs(out.value, d.important);
+                const v = cssValueToJs(out.value, d.important, out.prop);
                 if (!isHover) {
                   (baseBucket as any)[out.prop] = v;
                 } else {
@@ -789,10 +1193,14 @@ export function lowerRules(args: {
         }
       }
 
-      const media = rule.atRuleStack.find((a) => a.startsWith("@media"));
+      let media = rule.atRuleStack.find((a) => a.startsWith("@media"));
 
       const isInputIntrinsic = decl.base.kind === "intrinsic" && decl.base.tagName === "input";
-      const selector = normalizeSelectorForInputAttributePseudos(rule.selector, isInputIntrinsic);
+      let selector = normalizeSelectorForInputAttributePseudos(rule.selector, isInputIntrinsic);
+      if (!media && selector.trim().startsWith("@media")) {
+        media = selector.trim();
+        selector = "&";
+      }
 
       // Support comma-separated pseudo-selectors like "&:hover, &:focus"
       const pseudos =
@@ -856,6 +1264,7 @@ export function lowerRules(args: {
               decl,
               d,
               styleObj,
+              hasLocalThemeBinding,
               resolveValue,
               importMap,
               warnings,
@@ -869,7 +1278,65 @@ export function lowerRules(args: {
           ) {
             continue;
           }
-          if (tryHandleInterpolatedStringValue({ j, decl, d, styleObj })) {
+          // Create a resolver for embedded call expressions in compound CSS values
+          const resolveCallExpr = (expr: any): { resolved: any; imports?: any[] } | null => {
+            if (expr?.type !== "CallExpression") {
+              return null;
+            }
+            const res = resolveDynamicNode(
+              {
+                slotId: 0,
+                expr,
+                css: {
+                  kind: "declaration",
+                  selector: rule.selector,
+                  atRuleStack: rule.atRuleStack,
+                  ...(d.property ? { property: d.property } : {}),
+                  valueRaw: d.valueRaw,
+                },
+                component:
+                  decl.base.kind === "intrinsic"
+                    ? {
+                        localName: decl.localName,
+                        base: "intrinsic",
+                        tagOrIdent: decl.base.tagName,
+                      }
+                    : { localName: decl.localName, base: "component", tagOrIdent: decl.base.ident },
+                usage: { jsxUsages: 0, hasPropsSpread: false },
+              },
+              {
+                api,
+                filePath,
+                resolveValue,
+                resolveImport: (localName: string) => {
+                  const v = importMap.get(localName);
+                  return v ? v : null;
+                },
+                warn: () => {},
+              } as any,
+            );
+            if (res && res.type === "resolvedValue") {
+              const exprAst = parseExpr(res.expr);
+              if (exprAst) {
+                return { resolved: exprAst, imports: res.imports };
+              }
+            }
+            return null;
+          };
+          const addImport = (imp: any) => {
+            resolverImports.set(JSON.stringify(imp), imp);
+          };
+          if (
+            tryHandleInterpolatedStringValue({
+              j,
+              decl,
+              d,
+              styleObj,
+              resolveCallExpr,
+              addImport,
+              resolveThemeValue,
+            })
+          ) {
             continue;
           }
 
@@ -1013,7 +1480,9 @@ export function lowerRules(args: {
                 const out: Record<string, unknown> = {};
                 for (const mapped of cssDeclarationToStylexDeclarations(irDecl as any)) {
                   out[mapped.prop] =
-                    typeof value === "number" ? value : cssValueToJs(mapped.value, false);
+                    typeof value === "number"
+                      ? value
+                      : cssValueToJs(mapped.value, false, mapped.prop);
                 }
                 return out;
               };
@@ -1076,7 +1545,7 @@ export function lowerRules(args: {
           }
 
           // Handle computed theme object access keyed by a prop:
-          //   background-color: ${(props) => props.theme.colors[props.bg]}
+          //   background-color: ${(props) => props.theme.color[props.bg]}
           //
           // If the adapter can resolve `theme.color` as an object expression, we can emit a StyleX
           // dynamic style function that indexes into that resolved object at runtime:
@@ -1235,17 +1704,21 @@ export function lowerRules(args: {
                     : j.tsStringKeyword()) as any,
                 );
                 if (pseudos?.length) {
-                  // For `&:hover` etc, emit nested selector styles so we don't have to guess defaults.
-                  // For comma-separated pseudos, emit all pseudo keys
-                  const nested = j.objectExpression([
-                    j.property("init", j.identifier(out.prop), indexedExprAst as any) as any,
-                  ]);
-                  const pseudoProps = pseudos.map(
-                    (ps) => j.property("init", j.literal(ps), nested) as any,
-                  );
+                  const pseudoEntries = [
+                    j.property("init", j.identifier("default"), j.literal(null)),
+                    ...pseudos.map((ps) =>
+                      j.property("init", j.literal(ps), indexedExprAst as any),
+                    ),
+                  ];
+                  const propValue = j.objectExpression(pseudoEntries);
                   styleFnDecls.set(
                     fnKey,
-                    j.arrowFunctionExpression([param], j.objectExpression(pseudoProps)),
+                    j.arrowFunctionExpression(
+                      [param],
+                      j.objectExpression([
+                        j.property("init", j.identifier(out.prop), propValue) as any,
+                      ]),
+                    ),
                   );
                 } else {
                   const p = j.property(
@@ -1376,7 +1849,10 @@ export function lowerRules(args: {
 
             // Extract static prefix/suffix from CSS value for wrapping resolved values
             // e.g., `rotate(${...})` should wrap the resolved value with `rotate(...)`.
-            const { prefix: staticPrefix, suffix: staticSuffix } = extractStaticParts(d.value);
+            const { prefix: staticPrefix, suffix: staticSuffix } = extractStaticParts(d.value, {
+              skipForProperty: /^border(-top|-right|-bottom|-left)?-color$/,
+              property: cssProp,
+            });
 
             const parseResolved = (
               expr: string,
@@ -1458,6 +1934,43 @@ export function lowerRules(args: {
               return true;
             };
 
+            const expandBoxShorthand = (
+              target: Record<string, unknown>,
+              exprAst: unknown,
+              propName: "padding" | "margin",
+            ): boolean => {
+              const unwrapNode = (
+                value: unknown,
+              ): { type?: string; value?: unknown; expression?: unknown } | null => {
+                return value && typeof value === "object"
+                  ? (value as { type?: string; value?: unknown; expression?: unknown })
+                  : null;
+              };
+              let node = unwrapNode(exprAst);
+              if (node?.type === "ExpressionStatement") {
+                node = unwrapNode(node.expression);
+              }
+              if (node?.type !== "StringLiteral" && node?.type !== "Literal") {
+                return false;
+              }
+              const rawValue = node.value;
+              if (typeof rawValue !== "string") {
+                return false;
+              }
+              const entries = splitDirectionalProperty({
+                prop: propName,
+                rawValue,
+                important: d.important,
+              });
+              if (!entries.length) {
+                return false;
+              }
+              for (const entry of entries) {
+                target[entry.prop] = j.literal(entry.value);
+              }
+              return true;
+            };
+
             const applyParsed = (
               target: Record<string, unknown>,
               parsed: { exprAst: unknown; imports: any[] },
@@ -1469,9 +1982,34 @@ export function lowerRules(args: {
               if (cssProp === "border" && expandBorderShorthand(target, parsed.exprAst)) {
                 return;
               }
+              if (
+                (cssProp === "padding" || cssProp === "margin") &&
+                expandBoxShorthand(target, parsed.exprAst, cssProp)
+              ) {
+                return;
+              }
               // Default: use the property from cssDeclarationToStylexDeclarations.
-              // IMPORTANT: preserve selector pseudos (e.g. &:hover) by writing a per-prop pseudo map
-              // instead of overwriting the base/default value.
+              // Preserve media/pseudo selectors by writing a per-prop map instead of
+              // overwriting the base/default value.
+              if (media) {
+                const existing = target[stylexProp];
+                const isAstNode =
+                  !!existing &&
+                  typeof existing === "object" &&
+                  !Array.isArray(existing) &&
+                  "type" in (existing as any) &&
+                  typeof (existing as any).type === "string";
+                const map =
+                  existing && typeof existing === "object" && !Array.isArray(existing) && !isAstNode
+                    ? (existing as Record<string, unknown>)
+                    : ({} as Record<string, unknown>);
+                if (!("default" in map)) {
+                  map.default = existing ?? null;
+                }
+                map[media] = parsed.exprAst as any;
+                target[stylexProp] = map;
+                return;
+              }
               if (pseudos?.length) {
                 const existing = target[stylexProp];
                 // `existing` may be:
@@ -1560,8 +2098,154 @@ export function lowerRules(args: {
             } else {
               const e = decl.templateExpressions[slotId] as any;
               if (e?.type === "ArrowFunctionExpression") {
+                if (pseudos?.length || media) {
+                  const bodyExpr =
+                    e.body?.type === "BlockStatement"
+                      ? e.body.body?.find((s: any) => s.type === "ReturnStatement")?.argument
+                      : e.body;
+                  if (countConditionalExpressions(bodyExpr) > 1) {
+                    warnings.push({
+                      severity: "warning",
+                      type: "dynamic-node",
+                      message: `Unsupported nested conditional interpolation for ${decl.localName}.`,
+                      ...(loc ? { loc } : {}),
+                    });
+                    bail = true;
+                    break;
+                  }
+                  const propsParam = j.identifier("props");
+                  const valueExprRaw = (() => {
+                    const unwrapped = unwrapArrowFunctionToPropsExpr(e);
+                    if (hasThemeAccessInArrowFn(e)) {
+                      warnPropInlineStyle(
+                        decl,
+                        d.property,
+                        "props.theme access is not supported in inline styles",
+                        loc,
+                      );
+                      bail = true;
+                      return null;
+                    }
+                    const inlineExpr = unwrapped?.expr ?? inlineArrowFunctionBody(e);
+                    if (!inlineExpr) {
+                      warnPropInlineStyle(
+                        decl,
+                        d.property,
+                        "expression cannot be safely inlined",
+                        loc,
+                      );
+                      bail = true;
+                      return null;
+                    }
+                    const baseExpr = inlineExpr;
+                    const { prefix, suffix } = extractStaticParts(d.value);
+                    return prefix || suffix
+                      ? buildTemplateWithStaticParts(j, baseExpr, prefix, suffix)
+                      : baseExpr;
+                  })();
+                  if (bail || !valueExprRaw) {
+                    break;
+                  }
+                  for (const out of cssDeclarationToStylexDeclarations(d)) {
+                    const wrapValue = (expr: ExpressionKind): ExpressionKind => {
+                      const needsString =
+                        out.prop === "boxShadow" ||
+                        out.prop === "backgroundColor" ||
+                        out.prop.toLowerCase().endsWith("color");
+                      if (!needsString) {
+                        return expr;
+                      }
+                      return j.templateLiteral(
+                        [
+                          j.templateElement({ raw: "", cooked: "" }, false),
+                          j.templateElement({ raw: "", cooked: "" }, true),
+                        ],
+                        [expr],
+                      );
+                    };
+                    const valueExpr = wrapValue(valueExprRaw);
+                    const buildPropValue = (): ExpressionKind => {
+                      if (media && pseudos?.length) {
+                        const pseudoProps = pseudos.map((ps) =>
+                          j.property(
+                            "init",
+                            j.literal(ps),
+                            j.objectExpression([
+                              j.property("init", j.identifier("default"), j.literal(null)),
+                              j.property("init", j.literal(media), valueExpr),
+                            ]),
+                          ),
+                        );
+                        return j.objectExpression([
+                          j.property("init", j.identifier("default"), j.literal(null)),
+                          ...pseudoProps,
+                        ]);
+                      }
+                      if (media) {
+                        return j.objectExpression([
+                          j.property("init", j.identifier("default"), j.literal(null)),
+                          j.property("init", j.literal(media), valueExpr),
+                        ]);
+                      }
+                      const pseudoProps = pseudos?.map((ps) =>
+                        j.property("init", j.literal(ps), valueExpr),
+                      );
+                      return j.objectExpression([
+                        j.property("init", j.identifier("default"), j.literal(null)),
+                        ...(pseudoProps ?? []),
+                      ]);
+                    };
+                    const fnKey = `${decl.styleKey}${toSuffixFromProp(out.prop)}FromProps`;
+                    if (!styleFnDecls.has(fnKey)) {
+                      const p = j.property("init", j.identifier(out.prop), buildPropValue()) as any;
+                      const body = j.objectExpression([p]);
+                      styleFnDecls.set(fnKey, j.arrowFunctionExpression([propsParam], body));
+                    }
+                    if (!styleFnFromProps.some((p) => p.fnKey === fnKey)) {
+                      styleFnFromProps.push({ fnKey, jsxProp: "__props" });
+                    }
+                  }
+                  continue;
+                }
+                if (decl.shouldForwardProp && hasUnsupportedConditionalTest(e)) {
+                  warnings.push({
+                    severity: "warning",
+                    type: "dynamic-node",
+                    message: `Unsupported conditional test in shouldForwardProp for ${decl.localName}.`,
+                    ...(loc ? { loc } : {}),
+                  });
+                  bail = true;
+                  break;
+                }
+                const propsUsed = collectPropsFromArrowFn(e);
+                for (const propName of propsUsed) {
+                  ensureShouldForwardPropDrop(decl, propName);
+                }
+                if (hasThemeAccessInArrowFn(e)) {
+                  warnPropInlineStyle(
+                    decl,
+                    d.property,
+                    "props.theme access is not supported in inline styles",
+                    loc,
+                  );
+                  bail = true;
+                  break;
+                }
+                const unwrapped = unwrapArrowFunctionToPropsExpr(e);
+                const inlineExpr = unwrapped?.expr ?? inlineArrowFunctionBody(e);
+                if (!inlineExpr) {
+                  warnPropInlineStyle(decl, d.property, "expression cannot be safely inlined", loc);
+                  bail = true;
+                  break;
+                }
                 decl.needsWrapperComponent = true;
-                const valueExpr = j.callExpression(e, [j.identifier("props")]);
+                const baseExpr = inlineExpr;
+                // Build template literal when there's static prefix/suffix (e.g., `${...}ms`)
+                const { prefix, suffix } = extractStaticParts(d.value);
+                const valueExpr =
+                  prefix || suffix
+                    ? buildTemplateWithStaticParts(j, baseExpr, prefix, suffix)
+                    : baseExpr;
                 for (const out of cssDeclarationToStylexDeclarations(d)) {
                   if (!out.prop) {
                     continue;
@@ -1590,7 +2274,9 @@ export function lowerRules(args: {
                   const valueId = j.identifier(out.prop);
                   // Be permissive: callers might pass numbers (e.g. `${props => props.$width}px`)
                   // or strings (e.g. `${props => props.$color}`).
-                  annotateParamFromJsxProp(param, jsxProp);
+                  if (jsxProp !== "__props") {
+                    annotateParamFromJsxProp(param, jsxProp);
+                  }
                   if (jsxProp?.startsWith?.("$")) {
                     ensureShouldForwardPropDrop(decl, jsxProp);
                   }
@@ -1600,24 +2286,37 @@ export function lowerRules(args: {
                   // prop value, e.g. `${value}px`, `opacity ${value}ms`.
                   const buildValueExpr = (): any => {
                     const transformed = (() => {
-                      const vt: any = (res as any).valueTransform;
+                      const vt = (
+                        res as { valueTransform?: { kind: string; calleeIdent?: string } }
+                      ).valueTransform;
                       if (vt?.kind === "call" && typeof vt.calleeIdent === "string") {
                         return j.callExpression(j.identifier(vt.calleeIdent), [valueId]);
                       }
                       return valueId;
                     })();
+                    const wrapTemplate = !!(res as { wrapValueInTemplateLiteral?: boolean })
+                      .wrapValueInTemplateLiteral;
+                    const transformedValue = wrapTemplate
+                      ? j.templateLiteral(
+                          [
+                            j.templateElement({ raw: "", cooked: "" }, false),
+                            j.templateElement({ raw: "", cooked: "" }, true),
+                          ],
+                          [transformed],
+                        )
+                      : transformed;
                     const v: any = (d as any).value;
                     if (!v || v.kind !== "interpolated") {
-                      return transformed;
+                      return transformedValue;
                     }
                     const parts: any[] = v.parts ?? [];
                     const slotParts = parts.filter((p: any) => p?.kind === "slot");
                     if (slotParts.length !== 1) {
-                      return transformed;
+                      return transformedValue;
                     }
                     const onlySlot = slotParts[0]!;
                     if (onlySlot.slotId !== slotId) {
-                      return transformed;
+                      return transformedValue;
                     }
 
                     // If it's just the slot, keep it as the raw value (number/string).
@@ -1625,7 +2324,7 @@ export function lowerRules(args: {
                       (p: any) => p?.kind === "static" && p.value !== "",
                     );
                     if (!hasStatic) {
-                      return transformed;
+                      return transformedValue;
                     }
 
                     const quasis: any[] = [];
@@ -1648,7 +2347,47 @@ export function lowerRules(args: {
                   };
 
                   const valueExpr = buildValueExpr();
-                  const p = j.property("init", j.identifier(out.prop), valueExpr) as any;
+                  const getPropValue = (): ExpressionKind => {
+                    if (!media) {
+                      return valueExpr;
+                    }
+                    const existingFn = styleFnDecls.get(fnKey);
+                    let existingValue: ExpressionKind | null = null;
+                    if (existingFn?.type === "ArrowFunctionExpression") {
+                      const body = existingFn.body;
+                      if (body?.type === "ObjectExpression") {
+                        const prop = body.properties.find((propNode: unknown) => {
+                          if (!propNode || typeof propNode !== "object") {
+                            return false;
+                          }
+                          if ((propNode as { type?: string }).type !== "Property") {
+                            return false;
+                          }
+                          const key = (propNode as { key?: unknown }).key;
+                          if (!key || typeof key !== "object") {
+                            return false;
+                          }
+                          const keyType = (key as { type?: string }).type;
+                          if (keyType === "Identifier") {
+                            return (key as { name?: string }).name === out.prop;
+                          }
+                          if (keyType === "Literal") {
+                            return (key as { value?: unknown }).value === out.prop;
+                          }
+                          return false;
+                        });
+                        if (prop && prop.type === "Property") {
+                          existingValue = prop.value as ExpressionKind;
+                        }
+                      }
+                    }
+                    const defaultValue = existingValue ?? j.literal(null);
+                    return j.objectExpression([
+                      j.property("init", j.identifier("default"), defaultValue),
+                      j.property("init", j.literal(media), valueExpr),
+                    ]);
+                  };
+                  const p = j.property("init", j.identifier(out.prop), getPropValue()) as any;
                   p.shorthand = valueExpr?.type === "Identifier" && valueExpr.name === out.prop;
                   const body = j.objectExpression([p]);
                   styleFnDecls.set(fnKey, j.arrowFunctionExpression([param], body));
@@ -1679,13 +2418,47 @@ export function lowerRules(args: {
                 continue;
               }
               const e = decl.templateExpressions[slotId] as any;
-              inlineStyleProps.push({
-                prop: out.prop,
-                expr:
-                  e?.type === "ArrowFunctionExpression"
-                    ? j.callExpression(e, [j.identifier("props")])
-                    : e,
-              });
+              let baseExpr = e;
+              if (e?.type === "ArrowFunctionExpression") {
+                if (hasUnsupportedConditionalTest(e)) {
+                  warnPropInlineStyle(
+                    decl,
+                    d.property,
+                    "unsupported conditional test in shouldForwardProp",
+                    loc,
+                  );
+                  bail = true;
+                  break;
+                }
+                if (hasThemeAccessInArrowFn(e)) {
+                  warnPropInlineStyle(
+                    decl,
+                    d.property,
+                    "props.theme access is not supported in inline styles",
+                    loc,
+                  );
+                  bail = true;
+                  break;
+                }
+                const unwrapped = unwrapArrowFunctionToPropsExpr(e);
+                const inlineExpr = unwrapped?.expr ?? inlineArrowFunctionBody(e);
+                if (!inlineExpr) {
+                  warnPropInlineStyle(decl, d.property, "expression cannot be safely inlined", loc);
+                  bail = true;
+                  break;
+                }
+                baseExpr = inlineExpr;
+              }
+              // Build template literal when there's static prefix/suffix (e.g., `${...}ms`)
+              const { prefix, suffix } = extractStaticParts(d.value);
+              const expr =
+                prefix || suffix
+                  ? buildTemplateWithStaticParts(j, baseExpr, prefix, suffix)
+                  : baseExpr;
+              inlineStyleProps.push({ prop: out.prop, expr });
+            }
+            if (bail) {
+              break;
             }
             continue;
           }
@@ -1702,7 +2475,7 @@ export function lowerRules(args: {
         const outs = cssDeclarationToStylexDeclarations(d);
         for (let i = 0; i < outs.length; i++) {
           const out = outs[i]!;
-          let value = cssValueToJs(out.value, d.important);
+          let value = cssValueToJs(out.value, d.important, out.prop);
           if (out.prop === "content" && typeof value === "string") {
             const m = value.match(/^['"]([\s\S]*)['"]$/);
             if (m) {
@@ -1867,7 +2640,7 @@ export function lowerRules(args: {
           const value = m[2]!.trim();
           const outProp =
             prop === "background" ? "backgroundColor" : prop === "mask-size" ? "maskSize" : prop;
-          const jsVal = cssValueToJs({ kind: "static", value } as any);
+          const jsVal = cssValueToJs({ kind: "static", value } as any, false, outProp);
           if (!isHover) {
             (baseBucket as any)[outProp] = jsVal;
           } else {

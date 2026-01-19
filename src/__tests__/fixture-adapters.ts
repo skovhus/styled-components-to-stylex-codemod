@@ -63,11 +63,11 @@ export const fixtureAdapter = defineAdapter({
   resolveValue(ctx) {
     if (ctx.kind === "theme") {
       // Test fixtures use a small ThemeProvider theme shape:
-      //   props.theme.colors.labelBase  -> themeVars.labelBase
-      //   props.theme.colors[bg]        -> themeVars[bg]
+      //   props.theme.color.labelBase  -> themeVars.labelBase
+      //   props.theme.color[bg]        -> themeVars[bg]
       //
       // `ctx.path` is the dot-path on the theme object (no bracket/index parts).
-      if (ctx.path === "colors") {
+      if (ctx.path === "color") {
         return {
           expr: "themeVars",
           imports: [
@@ -92,33 +92,24 @@ export const fixtureAdapter = defineAdapter({
     }
 
     if (ctx.kind === "call") {
-      if (ctx.calleeSource.kind !== "absolutePath") {
+      const src = ctx.calleeSource.value;
+      // Note: calleeSource.value may or may not include the extension
+      if (!src.includes("lib/helpers") && !src.includes("lib\\helpers")) {
         return null;
       }
 
-      const src = ctx.calleeSource.value;
-      // Note: calleeSource.value may or may not include the extension
-      if (
-        !src.endsWith("/test-cases/lib/helpers.ts") &&
-        !src.endsWith("\\test-cases\\lib\\helpers.ts") &&
-        !src.endsWith("/test-cases/lib/helpers") &&
-        !src.endsWith("\\test-cases\\lib\\helpers")
-      ) {
+      const arg0 = ctx.args[0];
+      const key = arg0?.kind === "literal" && typeof arg0.value === "string" ? arg0.value : null;
+
+      if (!key) {
         return null;
       }
 
       // Handle color() helper from ./lib/helpers.ts
       // color("bgBase") -> themeVars.bgBase
       if (ctx.calleeImportedName === "color") {
-        const arg0 = ctx.args[0];
-        const colorName =
-          arg0?.kind === "literal" && typeof arg0.value === "string" ? arg0.value : null;
-        if (!colorName) {
-          return null;
-        }
-
         return {
-          expr: `themeVars.${colorName}`,
+          expr: `themeVars.${key}`,
           imports: [
             {
               from: { kind: "specifier", value: "./tokens.stylex" },
@@ -128,26 +119,43 @@ export const fixtureAdapter = defineAdapter({
         };
       }
 
-      // Handle transitionSpeed() helper from ./lib/helpers.ts
-      if (ctx.calleeImportedName === "transitionSpeed") {
-        const arg0 = ctx.args[0];
-        const key = arg0?.kind === "literal" && typeof arg0.value === "string" ? arg0.value : null;
-        if (
-          key !== "highlightFadeIn" &&
-          key !== "highlightFadeOut" &&
-          key !== "quickTransition" &&
-          key !== "regularTransition" &&
-          key !== "slowTransition"
-        ) {
-          return null;
-        }
-
+      // Handle fontWeight() helper from ./lib/helpers.ts
+      // fontWeight("medium") -> fontWeightVars.medium
+      if (ctx.calleeImportedName === "fontWeight") {
         return {
-          expr: `transitionSpeedVars.${key}`,
+          expr: `fontWeightVars.${key}`,
           imports: [
             {
-              from: { kind: "specifier", value: "./lib/helpers.stylex" },
-              names: [{ imported: "transitionSpeed", local: "transitionSpeedVars" }],
+              from: { kind: "specifier", value: "./tokens.stylex" },
+              names: [{ imported: "fontWeightVars" }],
+            },
+          ],
+        };
+      }
+
+      // Handle fontSize() helper from ./lib/helpers.ts
+      // fontSize("medium") -> fontSizeVars.medium
+      if (ctx.calleeImportedName === "fontSize") {
+        return {
+          expr: `fontSizeVars.${key}`,
+          imports: [
+            {
+              from: { kind: "specifier", value: "./tokens.stylex" },
+              names: [{ imported: "fontSizeVars" }],
+            },
+          ],
+        };
+      }
+
+      // Handle transitionSpeedMs() helper from ./lib/helpers.ts
+      // transitionSpeedMs("fast") -> transitionSpeedMsVars.fast
+      if (ctx.calleeImportedName === "transitionSpeed") {
+        return {
+          expr: `transitionSpeed.${key}`,
+          imports: [
+            {
+              from: { kind: "specifier", value: "./tokens.stylex" },
+              names: [{ imported: "transitionSpeed" }],
             },
           ],
         };

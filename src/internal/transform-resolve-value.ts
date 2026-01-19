@@ -15,7 +15,7 @@ export function createResolveValueSafe(args: { adapter: Adapter; warnings: Warni
     if (bailRef.value) {
       return null;
     }
-    const res = (adapter.resolveValue as any)(ctx);
+    const res = adapter.resolveValue(ctx);
     if (typeof res === "undefined") {
       bailRef.value = true;
       // Emit a single warning with enough context for users to fix their adapter.
@@ -31,7 +31,7 @@ export function createResolveValueSafe(args: { adapter: Adapter; warnings: Warni
       });
       return null;
     }
-    return res as any;
+    return res;
   };
 
   return { resolveValueSafe, bailRef };

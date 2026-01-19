@@ -1,6 +1,14 @@
+import type { ASTNode, JSCodeshift } from "jscodeshift";
+import type { StyledDecl } from "../transform-types.js";
 import { emitStyleMerging, type StyleMergerConfig } from "./style-merger.js";
 
-export function emitIntrinsicWrappers(ctx: any): { emitted: any[]; needsReactTypeImport: boolean } {
+type ExpressionKind = Parameters<JSCodeshift["expressionStatement"]>[0];
+type InlineStyleProp = { prop: string; expr: ExpressionKind };
+
+export function emitIntrinsicWrappers(ctx: any): {
+  emitted: ASTNode[];
+  needsReactTypeImport: boolean;
+} {
   const {
     root,
     j,
@@ -33,10 +41,53 @@ export function emitIntrinsicWrappers(ctx: any): { emitted: any[]; needsReactTyp
     emitMinimalWrapper,
     withLeadingCommentsOnFirstFunction,
     styleMerger,
-  } = ctx as { styleMerger: StyleMergerConfig | null } & Record<string, any>;
+  } = ctx as { styleMerger: StyleMergerConfig | null; wrapperDecls: StyledDecl[] } & Record<
+    string,
+    any
+  >;
 
-  const emitted: any[] = [];
+  const emitted: ASTNode[] = [];
   let needsReactTypeImport = false;
+
+  const collectInlineStylePropNames = (inlineStyleProps: InlineStyleProp[]): string[] => {
+    const names = new Set<string>();
+    const visit = (node: ASTNode | null | undefined, parent: ASTNode | undefined): void => {
+      if (!node || typeof node !== "object") {
+        return;
+      }
+      if (Array.isArray(node)) {
+        for (const child of node) {
+          visit(child, parent);
+        }
+        return;
+      }
+      if (node.type === "Identifier") {
+        const isMemberProp =
+          parent &&
+          (parent.type === "MemberExpression" || parent.type === "OptionalMemberExpression") &&
+          parent.property === node &&
+          parent.computed === false;
+        const isObjectKey =
+          parent && parent.type === "Property" && parent.key === node && parent.shorthand !== true;
+        if (!isMemberProp && !isObjectKey && node.name?.startsWith("$")) {
+          names.add(node.name);
+        }
+      }
+      for (const key of Object.keys(node)) {
+        if (key === "loc" || key === "comments") {
+          continue;
+        }
+        const child = (node as unknown as Record<string, unknown>)[key];
+        if (child && typeof child === "object") {
+          visit(child as ASTNode, node);
+        }
+      }
+    };
+    for (const p of inlineStyleProps) {
+      visit(p.expr, undefined);
+    }
+    return [...names];
+  };
 
   const mergeAsIntoPropsWithChildren = (typeText: string): string | null => {
     const prefix = "React.PropsWithChildren<";
@@ -117,18 +168,18 @@ export function emitIntrinsicWrappers(ctx: any): { emitted: any[]; needsReactTyp
   };
 
   const inputWrapperDecls = wrapperDecls.filter(
-    (d: any) =>
+    (d: StyledDecl) =>
       d.base.kind === "intrinsic" && d.base.tagName === "input" && d.attrWrapper?.kind === "input",
   );
   const linkWrapperDecls = wrapperDecls.filter(
-    (d: any) =>
+    (d: StyledDecl) =>
       d.base.kind === "intrinsic" && d.base.tagName === "a" && d.attrWrapper?.kind === "link",
   );
   const intrinsicPolymorphicWrapperDecls = wrapperDecls.filter(
-    (d: any) => d.base.kind === "intrinsic" && wrapperNames.has(d.localName),
+    (d: StyledDecl) => d.base.kind === "intrinsic" && wrapperNames.has(d.localName),
   );
   const shouldForwardPropWrapperDecls = wrapperDecls.filter(
-    (d: any) => d.shouldForwardProp && !d.enumVariant && d.base.kind === "intrinsic",
+    (d: StyledDecl) => d.shouldForwardProp && !d.enumVariant && d.base.kind === "intrinsic",
   );
 
   // --- BEGIN extracted blocks from `emit-wrappers.ts` (kept mechanically identical) ---
@@ -156,7 +207,7 @@ export function emitIntrinsicWrappers(ctx: any): { emitted: any[]; needsReactTyp
       needsReactTypeImport = true;
 
       const aw = d.attrWrapper!;
-      const styleArgs: any[] = [
+      const styleArgs: ExpressionKind[] = [
         j.memberExpression(j.identifier(stylesIdentifier), j.identifier(d.styleKey)),
         ...(aw.checkboxKey
           ? [
@@ -254,7 +305,7 @@ export function emitIntrinsicWrappers(ctx: any): { emitted: any[]; needsReactTyp
 
       const aw = d.attrWrapper!;
       const base = j.memberExpression(j.identifier(stylesIdentifier), j.identifier(d.styleKey));
-      const styleArgs: any[] = [
+      const styleArgs: ExpressionKind[] = [
         base,
         ...(aw.externalKey
           ? [
@@ -411,7 +462,7 @@ export function emitIntrinsicWrappers(ctx: any): { emitted: any[]; needsReactTyp
       }
       needsReactTypeImport = true;
 
-      const styleArgs: any[] = [
+      const styleArgs: ExpressionKind[] = [
         ...(d.extendsStyleKey
           ? [j.memberExpression(j.identifier(stylesIdentifier), j.identifier(d.extendsStyleKey))]
           : []),
@@ -437,6 +488,12 @@ export function emitIntrinsicWrappers(ctx: any): { emitted: any[]; needsReactTyp
               j.memberExpression(j.identifier(stylesIdentifier), j.identifier(variantKey)),
             ),
           );
+        }
+      }
+
+      for (const prop of collectInlineStylePropNames(d.inlineStyleProps ?? [])) {
+        if (!destructureProps.includes(prop)) {
+          destructureProps.push(prop);
         }
       }
 
@@ -500,7 +557,7 @@ export function emitIntrinsicWrappers(ctx: any): { emitted: any[]; needsReactTyp
         inlineStyleProps: [],
       });
 
-      const attrs: any[] = [
+      const attrs: ASTNode[] = [
         j.jsxSpreadAttribute(restId),
         j.jsxSpreadAttribute(merging.jsxSpreadExpr),
       ];
@@ -535,7 +592,7 @@ export function emitIntrinsicWrappers(ctx: any): { emitted: any[]; needsReactTyp
             [j.jsxExpressionContainer(childrenId)],
           );
 
-      const fnBodyStmts: any[] = [declStmt];
+      const fnBodyStmts: ASTNode[] = [declStmt];
       if (merging.sxDecl) {
         fnBodyStmts.push(merging.sxDecl);
       }
@@ -556,7 +613,7 @@ export function emitIntrinsicWrappers(ctx: any): { emitted: any[]; needsReactTyp
   }
 
   // Enum-variant wrappers (e.g. DynamicBox variant mapping from string-interpolation fixture).
-  const enumVariantWrappers = wrapperDecls.filter((d: any) => d.enumVariant);
+  const enumVariantWrappers = wrapperDecls.filter((d: StyledDecl) => d.enumVariant);
   if (enumVariantWrappers.length > 0) {
     for (const d of enumVariantWrappers) {
       if (!d.enumVariant) {
@@ -574,12 +631,12 @@ export function emitIntrinsicWrappers(ctx: any): { emitted: any[]; needsReactTyp
         needsReactTypeImport = true;
       } else {
         // Best-effort: treat enum variant prop as a string-literal union.
-        const hasNeq = cases.some((c: any) => c.kind === "neq");
-        const values = [...new Set(cases.map((c: any) => c.whenValue))].filter(Boolean);
+        const hasNeq = cases.some((c) => c.kind === "neq");
+        const values = [...new Set(cases.map((c) => c.whenValue))].filter(Boolean);
         const union = hasNeq
           ? "string"
           : values.length > 0
-            ? values.map((v: any) => JSON.stringify(v)).join(" | ")
+            ? values.map((v) => JSON.stringify(v)).join(" | ")
             : "string";
         emitNamedPropsType(
           d.localName,
@@ -675,7 +732,7 @@ export function emitIntrinsicWrappers(ctx: any): { emitted: any[]; needsReactTyp
       }
     }
     for (const p of d.styleFnFromProps ?? []) {
-      if (p?.jsxProp) {
+      if (p?.jsxProp && p.jsxProp !== "__props") {
         extraProps.add(p.jsxProp);
       }
     }
@@ -790,7 +847,7 @@ export function emitIntrinsicWrappers(ctx: any): { emitted: any[]; needsReactTyp
     }
     needsReactTypeImport = true;
 
-    const styleArgs: any[] = [
+    const styleArgs: ExpressionKind[] = [
       ...(d.extendsStyleKey
         ? [j.memberExpression(j.identifier(stylesIdentifier), j.identifier(d.extendsStyleKey))]
         : []),
@@ -814,26 +871,28 @@ export function emitIntrinsicWrappers(ctx: any): { emitted: any[]; needsReactTyp
     for (const p of styleFnPairs) {
       const prefix = d.shouldForwardProp?.dropPrefix;
       const isPrefixProp =
-        !!prefix && typeof p.jsxProp === "string" && p.jsxProp.startsWith(prefix);
+        !!prefix &&
+        typeof p.jsxProp === "string" &&
+        p.jsxProp !== "__props" &&
+        p.jsxProp.startsWith(prefix);
       const propExpr = isPrefixProp
         ? knownPrefixPropsSet.has(p.jsxProp)
           ? j.identifier(p.jsxProp)
           : j.memberExpression(j.identifier("props"), j.literal(p.jsxProp), true)
-        : j.identifier(p.jsxProp);
+        : p.jsxProp === "__props"
+          ? j.identifier("props")
+          : j.identifier(p.jsxProp);
       const call = j.callExpression(
         j.memberExpression(j.identifier(stylesIdentifier), j.identifier(p.fnKey)),
-        [propExpr as any],
+        [propExpr],
       );
-      const required = isPropRequiredInPropsTypeLiteral(d.propsType, p.jsxProp);
+      const required =
+        p.jsxProp === "__props" || isPropRequiredInPropsTypeLiteral(d.propsType, p.jsxProp);
       if (required) {
         styleArgs.push(call);
       } else {
         styleArgs.push(
-          j.logicalExpression(
-            "&&",
-            j.binaryExpression("!=", propExpr as any, j.nullLiteral()),
-            call,
-          ),
+          j.logicalExpression("&&", j.binaryExpression("!=", propExpr, j.nullLiteral()), call),
         );
       }
     }
@@ -903,7 +962,7 @@ export function emitIntrinsicWrappers(ctx: any): { emitted: any[]; needsReactTyp
 
     if (!allowClassNameProp && !allowStyleProp) {
       const isVoid = VOID_TAGS.has(tagName);
-      const patternProps: any[] = [
+      const patternProps: ASTNode[] = [
         ...(isVoid ? [] : [patternProp("children", childrenId)]),
         ...destructureParts.filter(Boolean).map((name) => patternProp(name)),
         ...(includeRest ? [j.restElement(restId)] : []),
@@ -948,7 +1007,7 @@ export function emitIntrinsicWrappers(ctx: any): { emitted: any[]; needsReactTyp
         ),
       ]);
 
-      const openingAttrs: any[] = [];
+      const openingAttrs: ASTNode[] = [];
       for (const a of d.attrsInfo?.defaultAttrs ?? []) {
         const propExpr = j.identifier(a.jsxProp);
         const fallback =
@@ -962,7 +1021,7 @@ export function emitIntrinsicWrappers(ctx: any): { emitted: any[]; needsReactTyp
         openingAttrs.push(
           j.jsxAttribute(
             j.jsxIdentifier(a.attrName),
-            j.jsxExpressionContainer(j.logicalExpression("??", propExpr as any, fallback as any)),
+            j.jsxExpressionContainer(j.logicalExpression("??", propExpr, fallback as any)),
           ),
         );
       }
@@ -985,11 +1044,7 @@ export function emitIntrinsicWrappers(ctx: any): { emitted: any[]; needsReactTyp
           j.jsxAttribute(
             j.jsxIdentifier(inv.attrName),
             j.jsxExpressionContainer(
-              j.binaryExpression(
-                "!==",
-                j.identifier(inv.jsxProp) as any,
-                j.booleanLiteral(true) as any,
-              ),
+              j.binaryExpression("!==", j.identifier(inv.jsxProp), j.booleanLiteral(true)),
             ),
           ),
         );
@@ -1044,7 +1099,7 @@ export function emitIntrinsicWrappers(ctx: any): { emitted: any[]; needsReactTyp
             j.jsxExpressionContainer(childrenId),
           ]);
 
-      const fnBodyStmts: any[] = [declStmt];
+      const fnBodyStmts: ASTNode[] = [declStmt];
       if (cleanupPrefixStmt) {
         fnBodyStmts.push(cleanupPrefixStmt);
       }
@@ -1064,7 +1119,7 @@ export function emitIntrinsicWrappers(ctx: any): { emitted: any[]; needsReactTyp
       continue;
     }
 
-    const patternProps: any[] = [
+    const patternProps: ASTNode[] = [
       ...(allowClassNameProp ? [patternProp("className", classNameId)] : []),
       ...(isVoidTag ? [] : [patternProp("children", childrenId)]),
       ...(allowStyleProp ? [patternProp("style", styleId)] : []),
@@ -1106,11 +1161,11 @@ export function emitIntrinsicWrappers(ctx: any): { emitted: any[]; needsReactTyp
       styleId,
       allowClassNameProp,
       allowStyleProp,
-      inlineStyleProps: d.inlineStyleProps ?? [],
+      inlineStyleProps: (d.inlineStyleProps ?? []) as InlineStyleProp[],
     });
 
     // Build attrs: {...rest} then {...mergedStylexProps(...)} so stylex styles override
-    const openingAttrs: any[] = [];
+    const openingAttrs: ASTNode[] = [];
 
     if (includeRest) {
       openingAttrs.push(j.jsxSpreadAttribute(restId));
@@ -1145,7 +1200,7 @@ export function emitIntrinsicWrappers(ctx: any): { emitted: any[]; needsReactTyp
           j.jsxExpressionContainer(childrenId),
         ]);
 
-    const fnBodyStmts: any[] = [declStmt];
+    const fnBodyStmts: ASTNode[] = [declStmt];
     if (cleanupPrefixStmt) {
       fnBodyStmts.push(cleanupPrefixStmt);
     }
@@ -1168,7 +1223,7 @@ export function emitIntrinsicWrappers(ctx: any): { emitted: any[]; needsReactTyp
 
   // Simple wrappers for `withConfig({ componentId })` cases where we just want to
   // preserve a component boundary without prop filtering.
-  const simpleWithConfigWrappers = wrapperDecls.filter((d: any) => {
+  const simpleWithConfigWrappers = wrapperDecls.filter((d: StyledDecl) => {
     if (d.base.kind !== "intrinsic") {
       return false;
     }
@@ -1234,7 +1289,7 @@ export function emitIntrinsicWrappers(ctx: any): { emitted: any[]; needsReactTyp
       emitNamedPropsType(d.localName, explicit ?? typeWithChildren);
       needsReactTypeImport = true;
     }
-    const styleArgs: any[] = [
+    const styleArgs: ExpressionKind[] = [
       ...(d.extendsStyleKey
         ? [j.memberExpression(j.identifier(stylesIdentifier), j.identifier(d.extendsStyleKey))]
         : []),
@@ -1254,9 +1309,32 @@ export function emitIntrinsicWrappers(ctx: any): { emitted: any[]; needsReactTyp
     // For local-only wrappers with no external `className`/`style` usage, keep the wrapper minimal.
     if (!allowClassNameProp && !allowStyleProp) {
       const usedAttrs = getUsedAttrs(d.localName);
-      const includeRest = usedAttrs.has("*") || !!(d as any).usedAsValue || usedAttrs.size > 0;
+      const includeRest =
+        usedAttrs.has("*") ||
+        !!(d as any).usedAsValue ||
+        (!((d as any).isExported ?? false) && usedAttrs.size > 0);
+      const variantProps = new Set<string>();
+      if (d.variantStyleKeys) {
+        for (const [when] of Object.entries(d.variantStyleKeys)) {
+          const { props } = parseVariantWhenToAst(j, when);
+          for (const p of props) {
+            if (p) {
+              variantProps.add(p);
+            }
+          }
+        }
+      }
+      const inlineProps = new Set(collectInlineStylePropNames(d.inlineStyleProps ?? []));
+      const styleFnProps = new Set(
+        (d.styleFnFromProps ?? [])
+          .map((p: any) => p.jsxProp)
+          .filter((name: string) => name && name !== "__props"),
+      );
       const destructureProps = [
         ...new Set<string>([
+          ...variantProps,
+          ...inlineProps,
+          ...styleFnProps,
           ...(d.attrsInfo?.conditionalAttrs ?? []).map((c: any) => c.jsxProp).filter(Boolean),
           ...(d.attrsInfo?.invertedBoolAttrs ?? []).map((inv: any) => inv.jsxProp).filter(Boolean),
         ]),
@@ -1279,7 +1357,7 @@ export function emitIntrinsicWrappers(ctx: any): { emitted: any[]; needsReactTyp
             conditionalAttrs: d.attrsInfo?.conditionalAttrs ?? [],
             invertedBoolAttrs: d.attrsInfo?.invertedBoolAttrs ?? [],
             staticAttrs: d.attrsInfo?.staticAttrs ?? {},
-            inlineStyleProps: d.inlineStyleProps ?? [],
+            inlineStyleProps: (d.inlineStyleProps ?? []) as InlineStyleProp[],
             styleMerger,
           }),
           d,
@@ -1288,7 +1366,7 @@ export function emitIntrinsicWrappers(ctx: any): { emitted: any[]; needsReactTyp
       continue;
     }
 
-    const patternProps: any[] = [
+    const patternProps: ASTNode[] = [
       patternProp("className", classNameId),
       ...(isVoidTag ? [] : [patternProp("children", childrenId)]),
       patternProp("style", styleId),
@@ -1310,11 +1388,76 @@ export function emitIntrinsicWrappers(ctx: any): { emitted: any[]; needsReactTyp
       inlineStyleProps: [],
     });
 
-    // Build attrs: {...rest} then {...mergedStylexProps(...)} so stylex styles override
-    const openingAttrs: any[] = [
-      j.jsxSpreadAttribute(restId),
-      j.jsxSpreadAttribute(merging.jsxSpreadExpr),
-    ];
+    const openingAttrs: ASTNode[] = [];
+
+    // Default attrs (props defaulting)
+    for (const a of d.attrsInfo?.defaultAttrs ?? []) {
+      const propExpr = j.identifier(a.jsxProp);
+      const fallback =
+        typeof a.value === "string"
+          ? j.literal(a.value)
+          : typeof a.value === "number"
+            ? j.literal(a.value)
+            : typeof a.value === "boolean"
+              ? j.booleanLiteral(a.value)
+              : j.literal(a.value);
+      openingAttrs.push(
+        j.jsxAttribute(
+          j.jsxIdentifier(a.attrName),
+          j.jsxExpressionContainer(j.logicalExpression("??", propExpr, fallback as any)),
+        ),
+      );
+    }
+
+    // Conditional attrs
+    for (const cond of d.attrsInfo?.conditionalAttrs ?? []) {
+      openingAttrs.push(
+        j.jsxAttribute(
+          j.jsxIdentifier(cond.attrName),
+          j.jsxExpressionContainer(
+            j.conditionalExpression(
+              j.identifier(cond.jsxProp),
+              j.literal(cond.value),
+              j.identifier("undefined"),
+            ),
+          ),
+        ),
+      );
+    }
+
+    // Inverted boolean attrs
+    for (const inv of d.attrsInfo?.invertedBoolAttrs ?? []) {
+      openingAttrs.push(
+        j.jsxAttribute(
+          j.jsxIdentifier(inv.attrName),
+          j.jsxExpressionContainer(
+            j.binaryExpression("!==", j.identifier(inv.jsxProp), j.booleanLiteral(true)),
+          ),
+        ),
+      );
+    }
+
+    openingAttrs.push(j.jsxSpreadAttribute(restId));
+
+    // Static attrs from .attrs()
+    for (const [key, value] of Object.entries(d.attrsInfo?.staticAttrs ?? {})) {
+      if (typeof value === "string") {
+        openingAttrs.push(j.jsxAttribute(j.jsxIdentifier(key), j.literal(value)));
+      } else if (typeof value === "boolean") {
+        openingAttrs.push(
+          j.jsxAttribute(
+            j.jsxIdentifier(key),
+            value ? null : j.jsxExpressionContainer(j.literal(false)),
+          ),
+        );
+      } else if (typeof value === "number") {
+        openingAttrs.push(
+          j.jsxAttribute(j.jsxIdentifier(key), j.jsxExpressionContainer(j.literal(value))),
+        );
+      }
+    }
+
+    openingAttrs.push(j.jsxSpreadAttribute(merging.jsxSpreadExpr));
     if (merging.classNameAttr) {
       openingAttrs.push(
         j.jsxAttribute(
@@ -1342,7 +1485,7 @@ export function emitIntrinsicWrappers(ctx: any): { emitted: any[]; needsReactTyp
           j.jsxExpressionContainer(childrenId),
         ]);
 
-    const bodyStmts: any[] = [declStmt];
+    const bodyStmts: ASTNode[] = [declStmt];
     if (merging.sxDecl) {
       bodyStmts.push(merging.sxDecl);
     }
@@ -1361,7 +1504,7 @@ export function emitIntrinsicWrappers(ctx: any): { emitted: any[]; needsReactTyp
   }
 
   // Sibling selector wrappers (Thing + variants)
-  const siblingWrappers = wrapperDecls.filter((d: any) => d.siblingWrapper);
+  const siblingWrappers = wrapperDecls.filter((d: StyledDecl) => d.siblingWrapper);
   for (const d of siblingWrappers) {
     if (d.base.kind !== "intrinsic" || d.base.tagName !== "div") {
       continue;
@@ -1411,7 +1554,7 @@ export function emitIntrinsicWrappers(ctx: any): { emitted: any[]; needsReactTyp
     ]);
 
     // Build styleArgs for sibling selectors
-    const styleArgs: any[] = [
+    const styleArgs: ExpressionKind[] = [
       j.memberExpression(j.identifier(stylesIdentifier), j.identifier(d.styleKey)),
       j.logicalExpression(
         "&&",
@@ -1445,7 +1588,7 @@ export function emitIntrinsicWrappers(ctx: any): { emitted: any[]; needsReactTyp
     });
 
     // Build attrs: {...rest} then {...mergedStylexProps(...)} so stylex styles override
-    const openingAttrs: any[] = [
+    const openingAttrs: ASTNode[] = [
       j.jsxSpreadAttribute(restId),
       j.jsxSpreadAttribute(merging.jsxSpreadExpr),
     ];
@@ -1468,7 +1611,7 @@ export function emitIntrinsicWrappers(ctx: any): { emitted: any[]; needsReactTyp
       j.jsxExpressionContainer(childrenId),
     ]);
 
-    const bodyStmts: any[] = [declStmt];
+    const bodyStmts: ASTNode[] = [declStmt];
     if (merging.sxDecl) {
       bodyStmts.push(merging.sxDecl);
     }
@@ -1481,7 +1624,7 @@ export function emitIntrinsicWrappers(ctx: any): { emitted: any[]; needsReactTyp
 
   // Simple exported styled components (styled.div without special features)
   // These are exported components that need wrapper generation to maintain exports.
-  const simpleExportedIntrinsicWrappers = wrapperDecls.filter((d: any) => {
+  const simpleExportedIntrinsicWrappers = wrapperDecls.filter((d: StyledDecl) => {
     if (d.base.kind !== "intrinsic") {
       return false;
     }
@@ -1543,7 +1686,11 @@ export function emitIntrinsicWrappers(ctx: any): { emitted: any[]; needsReactTyp
           });
         }),
       );
-      const styleFnPropsForType = new Set((d.styleFnFromProps ?? []).map((p: any) => p.jsxProp));
+      const styleFnPropsForType = new Set(
+        (d.styleFnFromProps ?? [])
+          .map((p: any) => p.jsxProp)
+          .filter((name: string) => name !== "__props"),
+      );
       const conditionalPropsForType = new Set(
         (d.attrsInfo?.conditionalAttrs ?? []).map((c: any) => c.jsxProp),
       );
@@ -1682,7 +1829,7 @@ export function emitIntrinsicWrappers(ctx: any): { emitted: any[]; needsReactTyp
       }
       needsReactTypeImport = true;
     }
-    const styleArgs: any[] = [
+    const styleArgs: ExpressionKind[] = [
       ...(d.extendsStyleKey
         ? [j.memberExpression(j.identifier(stylesIdentifier), j.identifier(d.extendsStyleKey))]
         : []),
@@ -1709,26 +1856,29 @@ export function emitIntrinsicWrappers(ctx: any): { emitted: any[]; needsReactTyp
       }
     }
 
+    for (const prop of collectInlineStylePropNames(d.inlineStyleProps ?? [])) {
+      if (!destructureProps.includes(prop)) {
+        destructureProps.push(prop);
+      }
+    }
+
     const styleFnPairs = d.styleFnFromProps ?? [];
     for (const p of styleFnPairs) {
-      const propExpr = j.identifier(p.jsxProp);
+      const propExpr = p.jsxProp === "__props" ? j.identifier("props") : j.identifier(p.jsxProp);
       const call = j.callExpression(
         j.memberExpression(j.identifier(stylesIdentifier), j.identifier(p.fnKey)),
-        [propExpr as any],
+        [propExpr],
       );
-      if (!destructureProps.includes(p.jsxProp)) {
+      if (p.jsxProp !== "__props" && !destructureProps.includes(p.jsxProp)) {
         destructureProps.push(p.jsxProp);
       }
-      const required = isPropRequiredInPropsTypeLiteral(d.propsType, p.jsxProp);
+      const required =
+        p.jsxProp === "__props" || isPropRequiredInPropsTypeLiteral(d.propsType, p.jsxProp);
       if (required) {
         styleArgs.push(call);
       } else {
         styleArgs.push(
-          j.logicalExpression(
-            "&&",
-            j.binaryExpression("!=", propExpr as any, j.nullLiteral()),
-            call,
-          ),
+          j.logicalExpression("&&", j.binaryExpression("!=", propExpr, j.nullLiteral()), call),
         );
       }
     }
@@ -1795,7 +1945,7 @@ export function emitIntrinsicWrappers(ctx: any): { emitted: any[]; needsReactTyp
       const styleId = j.identifier("style");
       const restId = shouldIncludeRest ? j.identifier("rest") : null;
 
-      const patternProps: any[] = [
+      const patternProps: ASTNode[] = [
         ...(allowAsProp
           ? [
               j.property.from({
@@ -1825,11 +1975,11 @@ export function emitIntrinsicWrappers(ctx: any): { emitted: any[]; needsReactTyp
         styleId,
         allowClassNameProp,
         allowStyleProp,
-        inlineStyleProps: d.inlineStyleProps ?? [],
+        inlineStyleProps: (d.inlineStyleProps ?? []) as InlineStyleProp[],
       });
 
       // Build attrs: {...rest} then {...mergedStylexProps(...)} so stylex styles override
-      const openingAttrs: any[] = [];
+      const openingAttrs: ASTNode[] = [];
       if (restId) {
         openingAttrs.push(j.jsxSpreadAttribute(restId));
       }
@@ -1867,7 +2017,7 @@ export function emitIntrinsicWrappers(ctx: any): { emitted: any[]; needsReactTyp
             [j.jsxExpressionContainer(childrenId)],
           );
 
-      const bodyStmts: any[] = [declStmt];
+      const bodyStmts: ASTNode[] = [declStmt];
       if (merging.sxDecl) {
         bodyStmts.push(merging.sxDecl);
       }
@@ -1902,7 +2052,7 @@ export function emitIntrinsicWrappers(ctx: any): { emitted: any[]; needsReactTyp
           conditionalAttrs: d.attrsInfo?.conditionalAttrs ?? [],
           invertedBoolAttrs: d.attrsInfo?.invertedBoolAttrs ?? [],
           staticAttrs: d.attrsInfo?.staticAttrs ?? {},
-          inlineStyleProps: d.inlineStyleProps ?? [],
+          inlineStyleProps: (d.inlineStyleProps ?? []) as InlineStyleProp[],
           styleMerger,
         }),
         d,

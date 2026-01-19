@@ -13,7 +13,7 @@ const baseTheme = {
 
 const Button = styled.button`
   padding: ${(props) => props.theme.spacing.medium};
-  background: ${(props) => props.theme.colors.primary};
+  background: ${(props) => props.theme.color.primary};
   color: white;
   border: none;
   border-radius: 4px;
@@ -21,7 +21,7 @@ const Button = styled.button`
 
 const Card = styled.div`
   padding: ${(props) => props.theme.spacing.medium};
-  border: 2px solid ${(props) => props.theme.colors.secondary};
+  border: 2px solid ${(props) => props.theme.color.secondary};
   border-radius: 8px;
 `;
 
@@ -35,7 +35,7 @@ export const App = () => (
       theme={(parentTheme) => ({
         ...parentTheme,
         colors: {
-          ...parentTheme.colors,
+          ...parenttheme.color,
           primary: "#4CAF50",
         },
       })}

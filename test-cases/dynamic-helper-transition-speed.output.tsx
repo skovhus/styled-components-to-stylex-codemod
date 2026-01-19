@@ -1,7 +1,7 @@
 import React from "react";
 import * as stylex from "@stylexjs/stylex";
 import { mergedSx } from "./lib/mergedSx";
-import { transitionSpeed as transitionSpeedVars } from "./lib/helpers.stylex";
+import { transitionSpeed } from "./tokens.stylex";
 import "./css-variables.css";
 
 type AnimatedPathProps = Omit<React.ComponentProps<"path">, "className"> & {
@@ -48,7 +48,7 @@ export const App = () => {
 const styles = stylex.create({
   animatedPath: {
     transitionProperty: "opacity",
-    transitionDuration: transitionSpeedVars.slowTransition,
+    transitionDuration: transitionSpeed.slow,
     stroke: "#bf4f74",
     fill: "none",
   },

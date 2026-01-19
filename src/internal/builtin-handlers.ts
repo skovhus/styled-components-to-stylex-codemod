@@ -22,7 +22,7 @@ export type HandlerResult =
        * The node was resolved to a JS expression string that can be directly inlined into
        * generated output (typically for a single CSS property value).
        *
-       * Example: `props.theme.colors.bgBase` -> `themeVars.bgBase`
+       * Example: `props.theme.color.bgBase` -> `themeVars.bgBase`
        *
        * The caller is responsible for:
        * - parsing `expr` into an AST
@@ -76,6 +76,11 @@ export type HandlerResult =
        * by emitting a style function that computes: `shadow(value)`.
        */
       valueTransform?: { kind: "call"; calleeIdent: string };
+      /**
+       * Wrap the computed value in a template literal (e.g. `${expr}`) to satisfy
+       * StyleX lint rules that require string literals.
+       */
+      wrapValueInTemplateLiteral?: boolean;
     }
   | {
       /**
@@ -305,7 +310,7 @@ function tryResolveCallExpression(
   if (!res) {
     return {
       type: "keepOriginal",
-      reason: `Unresolved helper call ${calleeImportedName}(...) (adapter did not resolve)`,
+      reason: `Unresolved helper call ${calleeImportedName}(...) (adapter resolveValue returned null)`,
     };
   }
   return { type: "resolvedValue", expr: res.expr, imports: res.imports };
@@ -340,6 +345,46 @@ function tryResolveConditionalValue(
     }
     if (!b || typeof b !== "object") {
       return null;
+    }
+    if ((b as { type?: string }).type === "CallExpression") {
+      const call = b as {
+        type: "CallExpression";
+        callee?: { type?: string; name?: string };
+        arguments?: unknown[];
+      };
+      const calleeIdent =
+        call.callee && call.callee.type === "Identifier" ? (call.callee.name ?? null) : null;
+      const arg0 = (() => {
+        const a = call.arguments?.[0] as { type?: string; value?: unknown } | undefined;
+        if (!a) {
+          return null;
+        }
+        if (a.type === "StringLiteral") {
+          return { kind: "literal" as const, value: a.value as string };
+        }
+        if (a.type === "Literal" && typeof a.value === "string") {
+          return { kind: "literal" as const, value: a.value };
+        }
+        return null;
+      })();
+      if (!calleeIdent || !arg0 || (call.arguments?.length ?? 0) !== 1) {
+        return null;
+      }
+      const imp = ctx.resolveImport(calleeIdent);
+      if (!imp?.importedName || !imp.source) {
+        return null;
+      }
+      const res = ctx.resolveValue({
+        kind: "call",
+        callSiteFilePath: ctx.filePath,
+        calleeImportedName: imp.importedName,
+        calleeSource: imp.source,
+        args: [arg0],
+      });
+      if (!res) {
+        return null;
+      }
+      return { expr: res.expr, imports: res.imports };
     }
     if ((b as any).type !== "MemberExpression") {
       return null;
@@ -658,6 +703,9 @@ function tryResolveArrowFnCallWithSinglePropArg(node: DynamicNode): HandlerResul
     body: `{ ${Object.keys(styleFromSingleDeclaration(node.css.property, "value"))[0]}: value }`,
     call: propName,
     valueTransform: { kind: "call", calleeIdent },
+    ...(node.css.property === "box-shadow" || node.css.property === "boxShadow"
+      ? { wrapValueInTemplateLiteral: true }
+      : {}),
   };
 }
 

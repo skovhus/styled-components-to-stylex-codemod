@@ -11,7 +11,8 @@ export const App = () => (
 
 const styles = stylex.create({
   button: {
-    padding: `${vars.spacingSm} ${vars.spacingMd}`,
+    paddingBlock: vars.spacingSm,
+    paddingInline: vars.spacingMd,
     backgroundColor: {
       default: vars.colorPrimary,
       ":hover": vars.colorSecondary,

@@ -1,14 +1,18 @@
+import type { JSCodeshift } from "jscodeshift";
+import type { ImportSpec, ResolveContext, ResolveResult } from "../adapter.js";
 import { rewriteCssVarsInString } from "./css-vars.js";
+
+type ExpressionKind = Parameters<JSCodeshift["expressionStatement"]>[0];
 
 export function rewriteCssVarsInStyleObject(args: {
   obj: Record<string, unknown>;
   definedVars: Map<string, string>;
   varsToDrop: Set<string>;
   isAstNode: (v: unknown) => boolean;
-  resolveValue: (ctx: any) => any;
-  addImport: (imp: any) => void;
-  parseExpr: (exprSource: string) => any;
-  j: any;
+  resolveValue: (ctx: ResolveContext) => ResolveResult | null;
+  addImport: (imp: ImportSpec) => void;
+  parseExpr: (exprSource: string) => ExpressionKind | null;
+  j: JSCodeshift;
 }): void {
   rewriteCssVarsInStyleObjectImpl(args);
 }
@@ -18,10 +22,10 @@ function rewriteCssVarsInStyleObjectImpl(args: {
   definedVars: Map<string, string>;
   varsToDrop: Set<string>;
   isAstNode: (v: unknown) => boolean;
-  resolveValue: (ctx: any) => any;
-  addImport: (imp: any) => void;
-  parseExpr: (exprSource: string) => any;
-  j: any;
+  resolveValue: (ctx: ResolveContext) => ResolveResult | null;
+  addImport: (imp: ImportSpec) => void;
+  parseExpr: (exprSource: string) => ExpressionKind | null;
+  j: JSCodeshift;
 }): void {
   const { obj, definedVars, varsToDrop, isAstNode, resolveValue, addImport, parseExpr, j } = args;
   for (const [k, v] of Object.entries(obj)) {
@@ -30,7 +34,7 @@ function rewriteCssVarsInStyleObjectImpl(args: {
         continue;
       }
       rewriteCssVarsInStyleObjectImpl({
-        obj: v as any,
+        obj: v as Record<string, unknown>,
         definedVars,
         varsToDrop,
         isAstNode,
@@ -42,7 +46,7 @@ function rewriteCssVarsInStyleObjectImpl(args: {
       continue;
     }
     if (typeof v === "string") {
-      (obj as any)[k] = rewriteCssVarsInString({
+      obj[k] = rewriteCssVarsInString({
         raw: v,
         definedVars,
         varsToDrop,
@@ -50,7 +54,7 @@ function rewriteCssVarsInStyleObjectImpl(args: {
         addImport,
         parseExpr,
         j,
-      }) as any;
+      });
     }
   }
 }

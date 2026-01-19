@@ -1,4 +1,14 @@
-import type { Collection } from "jscodeshift";
+import type {
+  ASTNode,
+  Collection,
+  Comment,
+  Identifier,
+  JSCodeshift,
+  JSXAttribute,
+  JSXSpreadAttribute,
+  Property,
+  RestElement,
+} from "jscodeshift";
 import type { StyledDecl } from "./transform-types.js";
 import type { StyleMergerConfig } from "../adapter.js";
 import { createWrapperUsageHelpers } from "./emit-wrappers/usage.js";
@@ -15,12 +25,12 @@ import {
 import { emitStyleMerging } from "./emit-wrappers/style-merger.js";
 
 export function emitWrappers(args: {
-  root: Collection<any>;
-  j: any;
+  root: Collection<ASTNode>;
+  j: JSCodeshift;
   filePath: string;
   styledDecls: StyledDecl[];
   wrapperNames: Set<string>;
-  patternProp: (keyName: string, valueId?: any) => any;
+  patternProp: (keyName: string, valueId?: ASTNode) => Property;
   exportedComponents: Map<string, ExportInfo>;
   stylesIdentifier: string;
   styleMerger: StyleMergerConfig | null;
@@ -30,19 +40,25 @@ export function emitWrappers(args: {
 
 // (VOID_TAGS, TAG_TO_HTML_ELEMENT, getAttrsAsString, injectRefPropIntoTypeLiteralString moved to `emit-wrappers/type-helpers`)
 
-const isBugNarrativeComment = (c: any): boolean => {
+const isBugNarrativeComment = (c: Comment | undefined): boolean => {
+  if (!c) {
+    return false;
+  }
   const v = typeof c?.value === "string" ? String(c.value).trim() : "";
   return /^Bug\s+\d+[a-zA-Z]?\s*:/.test(v);
 };
 
 // Check if a comment looks like a section header (e.g., "Pattern 1:", "Case 2:", etc.)
-const isSectionHeaderComment = (c: any): boolean => {
+const isSectionHeaderComment = (c: Comment | undefined): boolean => {
+  if (!c) {
+    return false;
+  }
   const v = typeof c?.value === "string" ? String(c.value).trim() : "";
   return /^(Pattern|Case|Example|Test|Step|Note)\s*\d*[a-zA-Z]?\s*:/.test(v);
 };
 
-const getWrapperLeadingComments = (d: StyledDecl): any[] | null => {
-  const cs = (d as any).leadingComments;
+const getWrapperLeadingComments = (d: StyledDecl): Comment[] | null => {
+  const cs = (d as { leadingComments?: Comment[] }).leadingComments;
   if (!Array.isArray(cs) || cs.length === 0) {
     return null;
   }
@@ -90,7 +106,7 @@ const getWrapperLeadingComments = (d: StyledDecl): any[] | null => {
   }
 
   // Collect the next contiguous comment block (until the next gap).
-  const result: any[] = [];
+  const result: Comment[] = [];
   lastLine = cs[i]?.loc?.end?.line ?? cs[i]?.loc?.start?.line ?? -1;
   for (; i < cs.length; i++) {
     const c = cs[i];
@@ -98,28 +114,35 @@ const getWrapperLeadingComments = (d: StyledDecl): any[] | null => {
     if (result.length > 0 && lastLine >= 0 && startLine >= 0 && startLine > lastLine + 1) {
       break;
     }
-    result.push(c);
+    if (c) {
+      result.push(c);
+    }
     lastLine = c?.loc?.end?.line ?? startLine;
   }
 
   return result.length > 0 ? result : null;
 };
 
-const withLeadingComments = (node: any, d: StyledDecl): any => {
+const withLeadingComments = (node: ASTNode, d: StyledDecl): ASTNode => {
   const cs = getWrapperLeadingComments(d);
   if (!cs) {
     return node;
   }
-  const normalized = cs.map((c: any) => ({ ...c, leading: true, trailing: false }));
+  const normalized = cs.map((c) => ({ ...c, leading: true, trailing: false }));
 
   // Merge (don't overwrite) to avoid clobbering comments that are already correctly attached by
   // the parser/printer, and dedupe to prevent double-printing.
-  const existingLeading = Array.isArray(node.leadingComments) ? node.leadingComments : [];
-  const existingComments = Array.isArray(node.comments) ? node.comments : [];
-  const merged = [...existingLeading, ...existingComments, ...normalized] as any[];
+  const commentable = node as CommentableNode;
+  const existingLeading = Array.isArray(commentable.leadingComments)
+    ? commentable.leadingComments
+    : [];
+  const existingComments = Array.isArray(commentable.comments) ? commentable.comments : [];
+  const merged = [...existingLeading, ...existingComments, ...normalized] as Comment[];
   const seen = new Set<string>();
-  const deduped = merged.filter((c: any) => {
-    const key = `${c?.type ?? "Comment"}:${String(c?.value ?? "").trim()}`;
+  const deduped = merged.filter((c) => {
+    const key = `${(c as { type?: string })?.type ?? "Comment"}:${String(
+      (c as { value?: string })?.value ?? "",
+    ).trim()}`;
     if (seen.has(key)) {
       return false;
     }
@@ -127,12 +150,12 @@ const withLeadingComments = (node: any, d: StyledDecl): any => {
     return true;
   });
 
-  node.leadingComments = deduped;
-  node.comments = deduped;
+  commentable.leadingComments = deduped;
+  commentable.comments = deduped;
   return node;
 };
 
-const withLeadingCommentsOnFirstFunction = (nodes: any[], d: StyledDecl): any[] => {
+const withLeadingCommentsOnFirstFunction = (nodes: ASTNode[], d: StyledDecl): ASTNode[] => {
   let done = false;
   return nodes.map((n) => {
     if (done) {
@@ -151,27 +174,35 @@ const withLeadingCommentsOnFirstFunction = (nodes: any[], d: StyledDecl): any[] 
  * and applies stylex.props() directly without className/style/rest merging.
  * Uses props.children directly instead of destructuring it.
  */
+type ExpressionKind = Parameters<JSCodeshift["expressionStatement"]>[0];
+type InlineStyleProp = { prop: string; expr: ExpressionKind };
+type TsTypeAnnotationInput = Parameters<JSCodeshift["tsTypeAnnotation"]>[0];
+type BlockStatementBody = Parameters<JSCodeshift["blockStatement"]>[0];
+type CommentableNode = ASTNode & { leadingComments?: Comment[]; comments?: Comment[] };
+type LogicalExpressionOperand = Parameters<JSCodeshift["logicalExpression"]>[1];
+type AstNodeOrNull = ASTNode | null | undefined;
+
 function emitMinimalWrapper(args: {
-  j: any;
+  j: JSCodeshift;
   localName: string;
   tagName: string;
   propsTypeName?: string;
   inlineTypeText?: string;
   emitTypes?: boolean;
-  styleArgs: any[];
+  styleArgs: ExpressionKind[];
   destructureProps: string[];
   allowClassNameProp?: boolean;
   allowStyleProp?: boolean;
   includeRest?: boolean;
   displayName?: string;
-  patternProp: (keyName: string, valueId?: any) => any;
-  defaultAttrs?: Array<{ jsxProp: string; attrName: string; value: any }>;
-  conditionalAttrs?: Array<{ jsxProp: string; attrName: string; value: any }>;
+  patternProp: (keyName: string, valueId?: ASTNode) => Property;
+  defaultAttrs?: Array<{ jsxProp: string; attrName: string; value: unknown }>;
+  conditionalAttrs?: Array<{ jsxProp: string; attrName: string; value: unknown }>;
   invertedBoolAttrs?: Array<{ jsxProp: string; attrName: string }>;
-  staticAttrs?: Record<string, any>;
-  inlineStyleProps?: Array<{ prop: string; expr: any }>;
+  staticAttrs?: Record<string, unknown>;
+  inlineStyleProps?: InlineStyleProp[];
   styleMerger: StyleMergerConfig | null;
-}): any[] {
+}): ASTNode[] {
   const {
     j,
     localName,
@@ -192,12 +223,55 @@ function emitMinimalWrapper(args: {
     inlineStyleProps = [],
     styleMerger,
   } = args;
+  const expandedDestructureProps = new Set(destructureProps.filter(Boolean));
+  const collectCondIdentifiers = (node: ASTNode | null | undefined): void => {
+    if (!node) {
+      return;
+    }
+    if (node.type === "Identifier") {
+      expandedDestructureProps.add(node.name);
+      return;
+    }
+    if (
+      node.type === "MemberExpression" &&
+      !node.computed &&
+      node.object.type === "Identifier" &&
+      node.object.name === "props" &&
+      node.property.type === "Identifier"
+    ) {
+      expandedDestructureProps.add(node.property.name);
+      return;
+    }
+    if ("left" in node && node.left) {
+      collectCondIdentifiers(node.left as ASTNode);
+    }
+    if ("right" in node && node.right) {
+      collectCondIdentifiers(node.right as ASTNode);
+    }
+    if ("argument" in node && node.argument) {
+      collectCondIdentifiers(node.argument as ASTNode);
+    }
+    if ("test" in node && node.test) {
+      collectCondIdentifiers(node.test as ASTNode);
+    }
+    if ("consequent" in node && node.consequent) {
+      collectCondIdentifiers(node.consequent as ASTNode);
+    }
+    if ("alternate" in node && node.alternate) {
+      collectCondIdentifiers(node.alternate as ASTNode);
+    }
+  };
+  for (const arg of styleArgs) {
+    if (arg?.type === "LogicalExpression" && arg.operator === "&&") {
+      collectCondIdentifiers(arg.left as ASTNode);
+    }
+  }
   const isVoidTag = VOID_TAGS.has(tagName);
   const propsParamId = j.identifier("props");
   if (emitTypes) {
     if (inlineTypeText) {
       // Use inline type text when the type alias was not emitted (e.g., to avoid shadowing)
-      let typeNode: any;
+      let typeNode: TsTypeAnnotationInput | null = null;
       try {
         typeNode = j(`const x: ${inlineTypeText} = null`).get().node.program.body[0].declarations[0]
           .id.typeAnnotation.typeAnnotation;
@@ -210,8 +284,14 @@ function emitMinimalWrapper(args: {
           ].join("\n"),
         );
       }
+      if (!typeNode) {
+        throw new Error(`Failed to parse inline wrapper props type for ${localName} (${tagName}).`);
+      }
       (propsParamId as any).typeAnnotation = j.tsTypeAnnotation(typeNode);
     } else {
+      if (!propsTypeName) {
+        throw new Error(`Missing propsTypeName for ${localName} (${tagName}).`);
+      }
       (propsParamId as any).typeAnnotation = j.tsTypeAnnotation(
         j.tsTypeReference(j.identifier(propsTypeName)),
       );
@@ -221,7 +301,7 @@ function emitMinimalWrapper(args: {
 
   // Build destructure pattern: { children, style, ...dynamicProps, ...rest }
   // We destructure children, optional className/style, and any dynamic props, and spread the rest.
-  const patternProps: any[] = [];
+  const patternProps: Array<Property | RestElement> = [];
 
   // Always destructure children (for non-void tags)
   if (!isVoidTag) {
@@ -238,16 +318,21 @@ function emitMinimalWrapper(args: {
   }
 
   // Add dynamic props (for variant conditions)
-  for (const name of destructureProps.filter(Boolean)) {
+  for (const name of expandedDestructureProps) {
     if (name !== "children" && name !== "style" && name !== "className") {
       patternProps.push(patternProp(name));
     }
   }
 
   // Add rest spread to capture all other props (only when needed)
-  const restId = j.identifier("rest");
-  if (includeRest) {
+  let restId: Identifier | null = includeRest ? j.identifier("rest") : null;
+  if (includeRest && restId) {
     patternProps.push(j.restElement(restId));
+  }
+  const usePropsDirectlyForRest =
+    includeRest && patternProps.length === 1 && patternProps[0]?.type === "RestElement";
+  if (usePropsDirectlyForRest) {
+    restId = propsId;
   }
 
   // Use the style merger helper to generate the appropriate merging pattern
@@ -265,9 +350,9 @@ function emitMinimalWrapper(args: {
   });
 
   // Build JSX attributes: static attrs, {...rest}, {...sx|stylex.props(...)}, optional className/style
-  const jsxAttrs: any[] = [];
+  const jsxAttrs: Array<JSXAttribute | JSXSpreadAttribute> = [];
 
-  // Add default attrs (e.g. `tabIndex: props.tabIndex ?? 0`) first so passed props can override via {...rest}.
+  // Add default attrs (e.g. `tabIndex: props.tabIndex ?? 0`)
   for (const a of defaultAttrs) {
     const propExpr = j.memberExpression(propsId, j.identifier(a.jsxProp));
     const fallback =
@@ -281,20 +366,28 @@ function emitMinimalWrapper(args: {
     jsxAttrs.push(
       j.jsxAttribute(
         j.jsxIdentifier(a.attrName),
-        j.jsxExpressionContainer(j.logicalExpression("??", propExpr as any, fallback as any)),
+        j.jsxExpressionContainer(j.logicalExpression("??", propExpr, fallback)),
       ),
     );
   }
 
   // Add conditional attrs (e.g. `size: props.$small ? 5 : undefined`) derived from props.
   for (const cond of conditionalAttrs) {
+    const literalValue =
+      typeof cond.value === "string" ||
+      typeof cond.value === "number" ||
+      typeof cond.value === "boolean"
+        ? cond.value
+        : String(cond.value);
     jsxAttrs.push(
       j.jsxAttribute(
         j.jsxIdentifier(cond.attrName),
         j.jsxExpressionContainer(
           j.conditionalExpression(
             j.identifier(cond.jsxProp),
-            j.literal(cond.value),
+            typeof literalValue === "boolean"
+              ? j.booleanLiteral(literalValue)
+              : j.literal(literalValue),
             j.identifier("undefined"),
           ),
         ),
@@ -308,17 +401,17 @@ function emitMinimalWrapper(args: {
       j.jsxAttribute(
         j.jsxIdentifier(inv.attrName),
         j.jsxExpressionContainer(
-          j.binaryExpression(
-            "!==",
-            j.identifier(inv.jsxProp) as any,
-            j.booleanLiteral(true) as any,
-          ),
+          j.binaryExpression("!==", j.identifier(inv.jsxProp), j.booleanLiteral(true)),
         ),
       ),
     );
   }
 
-  // Add static attrs from .attrs() (e.g., type="range") first
+  if (includeRest && restId) {
+    jsxAttrs.push(j.jsxSpreadAttribute(restId));
+  }
+
+  // Add static attrs from .attrs() (e.g., type="range")
   for (const [key, value] of Object.entries(staticAttrs)) {
     if (typeof value === "string") {
       jsxAttrs.push(j.jsxAttribute(j.jsxIdentifier(key), j.literal(value)));
@@ -348,10 +441,6 @@ function emitMinimalWrapper(args: {
     );
   }
 
-  if (includeRest) {
-    jsxAttrs.push(j.jsxSpreadAttribute(restId));
-  }
-
   // Add the style merging spread and optional className/style attributes
   jsxAttrs.push(j.jsxSpreadAttribute(merging.jsxSpreadExpr));
 
@@ -369,37 +458,36 @@ function emitMinimalWrapper(args: {
 
   const openingEl = j.jsxOpeningElement(j.jsxIdentifier(tagName), jsxAttrs, isVoidTag);
 
-  const jsx = isVoidTag
-    ? ({
-        type: "JSXElement",
-        openingElement: openingEl,
-        closingElement: null,
-        children: [],
-      } as any)
-    : j.jsxElement(openingEl, j.jsxClosingElement(j.jsxIdentifier(tagName)), [
-        j.jsxExpressionContainer(j.identifier("children")),
-      ]);
-
-  // Always emit destructure statement since we always destructure style and rest
-  const bodyStmts: any[] = [];
-  bodyStmts.push(
-    j.variableDeclaration("const", [
-      j.variableDeclarator(j.objectPattern(patternProps as any), propsId),
-    ]),
+  const jsx = j.jsxElement(
+    openingEl,
+    isVoidTag ? null : j.jsxClosingElement(j.jsxIdentifier(tagName)),
+    isVoidTag ? [] : [j.jsxExpressionContainer(j.identifier("children"))],
   );
+
+  const bodyStmts: BlockStatementBody = [];
+  if (!usePropsDirectlyForRest) {
+    bodyStmts.push(
+      j.variableDeclaration("const", [
+        j.variableDeclarator(j.objectPattern(patternProps), propsId),
+      ]),
+    );
+  }
   if (merging.sxDecl) {
     bodyStmts.push(merging.sxDecl);
   }
-  bodyStmts.push(j.returnStatement(jsx as any));
+  bodyStmts.push(j.returnStatement(jsx));
 
-  const result: any[] = [
+  const result: ASTNode[] = [
     j.functionDeclaration(j.identifier(localName), [propsParamId], j.blockStatement(bodyStmts)),
   ];
 
   return result;
 }
 
-function parseVariantWhenToAst(j: any, when: string): { cond: any; props: string[] } {
+function parseVariantWhenToAst(
+  j: JSCodeshift,
+  when: string,
+): { cond: LogicalExpressionOperand; props: string[] } {
   const trimmed = String(when ?? "").trim();
   if (!trimmed) {
     return { cond: j.identifier("true"), props: [] };
@@ -453,12 +541,12 @@ function parseVariantWhenToAst(j: any, when: string): { cond: any; props: string
 }
 
 function emitWrappersImpl(args: {
-  root: Collection<any>;
-  j: any;
+  root: Collection<ASTNode>;
+  j: JSCodeshift;
   filePath: string;
   styledDecls: StyledDecl[];
   wrapperNames: Set<string>;
-  patternProp: (keyName: string, valueId?: any) => any;
+  patternProp: (keyName: string, valueId?: ASTNode) => Property;
   exportedComponents: Map<string, ExportInfo>;
   stylesIdentifier: string;
   styleMerger: StyleMergerConfig | null;
@@ -492,12 +580,12 @@ function emitWrappersImpl(args: {
     shouldAllowStyleProp,
   } = createWrapperUsageHelpers({ root, j });
 
-  const emitted: any[] = [];
+  const emitted: ASTNode[] = [];
   let needsReactTypeImport = false;
 
   const propsTypeNameFor = (localName: string): string => `${localName}Props`;
 
-  const stringifyTsTypeName = (n: any): string | null => {
+  const stringifyTsTypeName = (n: AstNodeOrNull): string | null => {
     if (!n) {
       return null;
     }
@@ -512,7 +600,7 @@ function emitWrappersImpl(args: {
     return null;
   };
 
-  const stringifyTsType = (t: any): string | null => {
+  const stringifyTsType = (t: AstNodeOrNull): string | null => {
     if (!t) {
       return null;
     }
@@ -590,6 +678,15 @@ function emitWrappersImpl(args: {
       const obj = stringifyTsType(t.objectType);
       const idx = stringifyTsType(t.indexType);
       return obj && idx ? `${obj}[${idx}]` : null;
+    }
+    const maybeKeyof = t as { type?: string; typeAnnotation?: AstNodeOrNull };
+    if (maybeKeyof.type === "TSKeyofType") {
+      const ref = stringifyTsType(maybeKeyof.typeAnnotation);
+      return ref ? `keyof ${ref}` : null;
+    }
+    if (t.type === "TSTypeOperator" && t.operator === "keyof") {
+      const ref = stringifyTsType(t.typeAnnotation);
+      return ref ? `keyof ${ref}` : null;
     }
     if (t.type === "TSStringKeyword") {
       return "string";
@@ -733,7 +830,7 @@ function emitWrappersImpl(args: {
       return false;
     }
     const typeNameWithParams = genericParams ? `${typeName}<${genericParams}>` : typeName;
-    let stmt: any;
+    let stmt: ASTNode;
     try {
       stmt = j(`${`type ${typeNameWithParams} = ${typeExprText};`}`).get().node.program.body[0];
     } catch (e) {
@@ -754,13 +851,17 @@ function emitWrappersImpl(args: {
    * Annotates a props parameter with a type. If inlineTypeText is provided,
    * uses that as an inline type annotation instead of the generated type name.
    */
-  const annotatePropsParam = (propsId: any, localName: string, inlineTypeText?: string): void => {
+  const annotatePropsParam = (
+    propsId: Identifier,
+    localName: string,
+    inlineTypeText?: string,
+  ): void => {
     if (!emitTypes) {
       return;
     }
     if (inlineTypeText) {
       // Parse and use inline type
-      let typeNode: any;
+      let typeNode: TsTypeAnnotationInput | null = null;
       try {
         typeNode = j(`const x: ${inlineTypeText} = null`).get().node.program.body[0].declarations[0]
           .id.typeAnnotation.typeAnnotation;
@@ -772,6 +873,9 @@ function emitWrappersImpl(args: {
             `Error: ${(e as any)?.message ?? String(e)}`,
           ].join("\n"),
         );
+      }
+      if (!typeNode) {
+        throw new Error(`Failed to parse inline props param type for ${localName} (${filePath}).`);
       }
       (propsId as any).typeAnnotation = j.tsTypeAnnotation(typeNode);
     } else {
@@ -862,10 +966,10 @@ function emitWrappersImpl(args: {
   };
 
   // Helper to extract prop names from a propsType AST node (TSTypeLiteral, TSIntersectionType, etc.)
-  const getExplicitPropNames = (propsType: any): Set<string> => {
+  const getExplicitPropNames = (propsType: AstNodeOrNull): Set<string> => {
     const names = new Set<string>();
 
-    const extractFromLiteral = (literal: any): void => {
+    const extractFromLiteral = (literal: AstNodeOrNull): void => {
       if (!literal || literal.type !== "TSTypeLiteral") {
         return;
       }
@@ -873,7 +977,7 @@ function emitWrappersImpl(args: {
         if (member?.type !== "TSPropertySignature") {
           continue;
         }
-        const key: any = member.key;
+        const key = member.key;
         const name =
           key?.type === "Identifier"
             ? key.name
@@ -888,7 +992,7 @@ function emitWrappersImpl(args: {
       }
     };
 
-    const extractFromType = (type: any): void => {
+    const extractFromType = (type: AstNodeOrNull): void => {
       if (!type) {
         return;
       }
@@ -910,7 +1014,7 @@ function emitWrappersImpl(args: {
             if (member?.type !== "TSPropertySignature") {
               continue;
             }
-            const key: any = member.key;
+            const key = member.key;
             const name = key?.type === "Identifier" ? key.name : null;
             if (name) {
               names.add(name);

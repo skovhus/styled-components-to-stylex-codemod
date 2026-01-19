@@ -6,10 +6,12 @@
   --spacing-lg: 24px;
   --border-radius: 4px;
 
-  /* Explicitly set the "fallback" vars too so the fixture looks consistent in Storybook */
   --text-color: #333;
   --font-size: 16px;
   --line-height: 1.5;
 
-  --speed-slowTransition: 0.35s;
+  /* Used in lib/helpers.ts */
+  --speed-slow: 1s;
+  --speed-normal: 0.25s;
+  --speed-fast: 0.1s;
 }

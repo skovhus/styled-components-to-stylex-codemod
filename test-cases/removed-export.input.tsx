@@ -17,14 +17,8 @@ export const RangeInput = styled.input.attrs({ type: "range" })`
   background-color: gray;
 `;
 
-/**
- * Component to render as suspense fallback if your focus trap will suspend.
- */
-export const FocusTrapSuspenseFallback = styled("input").attrs({ type: "button", value: "" })`
-  opacity: 0;
-  width: 0;
-  height: 0;
-  position: fixed;
+export const InputWithForcedValue = styled("input").attrs({ type: "button", value: "" })`
+  margin: 10px;
 `;
 
 // This function uses the renamed type import - it must NOT be removed
@@ -138,5 +132,17 @@ export function FormLabelWithText({
 }
 
 export function App() {
-  return null;
+  return (
+    <>
+      <RangeInput value="10" />
+      <InputWithForcedValue value="test" />
+      <FormLabel optional />
+      <Tooltip title="Tooltip" position="top">
+        <Text>Hello</Text>
+      </Tooltip>
+      <FormLabelWithText>
+        <Text>Hello</Text>
+      </FormLabelWithText>
+    </>
+  );
 }

@@ -13,7 +13,8 @@ export const App = () => (
 const styles = stylex.create({
   // Comma-separated pseudo-class selectors
   button: {
-    padding: "8px 16px",
+    paddingBlock: "8px",
+    paddingInline: "16px",
     backgroundColor: {
       default: "white",
       ":hover": "#BF4F74",
@@ -63,7 +64,8 @@ const styles = stylex.create({
 
   // Mixed with regular styles
   input: {
-    padding: "8px 12px",
+    paddingBlock: "8px",
+    paddingInline: "12px",
     borderWidth: "1px",
     borderStyle: "solid",
     borderColor: {

@@ -1,13 +1,14 @@
-import type { ResolveContext, ResolveResult } from "../adapter.js";
+import type { JSCodeshift } from "jscodeshift";
+import type { ImportSpec, ResolveContext, ResolveResult } from "../adapter.js";
 
 export function rewriteCssVarsInString(args: {
   raw: string;
   definedVars: Map<string, string>;
   varsToDrop: Set<string>;
   resolveValue: (context: ResolveContext) => ResolveResult | null;
-  addImport: (imp: any) => void;
-  parseExpr: (exprSource: string) => unknown;
-  j: any;
+  addImport: (imp: ImportSpec) => void;
+  parseExpr: (exprSource: string) => ExpressionKind | null;
+  j: JSCodeshift;
 }): unknown {
   return rewriteCssVarsInStringImpl(args);
 }
@@ -85,9 +86,9 @@ function rewriteCssVarsInStringImpl(args: {
   definedVars: Map<string, string>;
   varsToDrop: Set<string>;
   resolveValue: (context: ResolveContext) => ResolveResult | null;
-  addImport: (imp: any) => void;
-  parseExpr: (exprSource: string) => unknown;
-  j: any;
+  addImport: (imp: ImportSpec) => void;
+  parseExpr: (exprSource: string) => ExpressionKind | null;
+  j: JSCodeshift;
 }): unknown {
   const { raw, definedVars, varsToDrop, resolveValue, addImport, parseExpr, j } = args;
 
@@ -96,7 +97,8 @@ function rewriteCssVarsInStringImpl(args: {
     return raw;
   }
 
-  const segments: Array<{ kind: "text"; value: string } | { kind: "expr"; expr: any }> = [];
+  const segments: Array<{ kind: "text"; value: string } | { kind: "expr"; expr: ExpressionKind }> =
+    [];
 
   let last = 0;
   for (const c of calls) {
@@ -139,23 +141,24 @@ function rewriteCssVarsInStringImpl(args: {
   }
 
   // If it’s exactly one expression and the rest is empty text, return the expr AST directly.
-  if (segments.length === 1 && segments[0]!.kind === "expr" && (segments[0] as any).expr) {
-    return (segments[0] as any).expr;
+  const [s0, s1, s2] = segments;
+  if (segments.length === 1 && s0?.kind === "expr") {
+    return s0.expr;
   }
   if (
     segments.length === 3 &&
-    segments[0]!.kind === "text" &&
-    segments[1]!.kind === "expr" &&
-    segments[2]!.kind === "text" &&
-    (segments[0] as any).value === "" &&
-    (segments[2] as any).value === ""
+    s0?.kind === "text" &&
+    s1?.kind === "expr" &&
+    s2?.kind === "text" &&
+    s0.value === "" &&
+    s2.value === ""
   ) {
-    return (segments[1] as any).expr;
+    return s1.expr;
   }
 
   // Build a TemplateLiteral: `${expr} ...`
-  const exprs: any[] = [];
-  const quasis: any[] = [];
+  const exprs: ExpressionKind[] = [];
+  const quasis: Array<ReturnType<JSCodeshift["templateElement"]>> = [];
   let q = "";
   for (const seg of segments) {
     if (seg.kind === "text") {
@@ -169,3 +172,5 @@ function rewriteCssVarsInStringImpl(args: {
   quasis.push(j.templateElement({ raw: q, cooked: q }, true));
   return j.templateLiteral(quasis, exprs);
 }
+
+type ExpressionKind = Parameters<JSCodeshift["expressionStatement"]>[0];

@@ -18,7 +18,7 @@ export function Button(props: ButtonProps) {
 }
 
 // Pattern 2: Component with theme access (like TextColor.tsx in a design system)
-// Uses props.theme.colors which the adapter resolves to themeVars
+// Uses props.theme.color which the adapter resolves to themeVars
 interface ThemeSpanProps extends Omit<React.ComponentProps<"span">, "className" | "style"> {
   variant: "labelBase" | "labelMuted" | "labelTitle";
 }
@@ -46,7 +46,8 @@ const styles = stylex.create({
     backgroundColor: "white",
   },
   button: {
-    padding: "8px 16px",
+    paddingBlock: "8px",
+    paddingInline: "16px",
     backgroundColor: "blue",
     color: "white",
   },

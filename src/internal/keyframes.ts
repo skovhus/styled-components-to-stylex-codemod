@@ -1,18 +1,19 @@
+import type { ASTNode, Collection, ImportDeclaration, JSCodeshift } from "jscodeshift";
 import { compile } from "stylis";
 import { cssPropertyToStylexProp } from "./css-prop-mapping.js";
 
 export function convertStyledKeyframes(args: {
-  root: any;
-  j: any;
-  styledImports: any;
+  root: Collection<ASTNode>;
+  j: JSCodeshift;
+  styledImports: Collection<ImportDeclaration>;
   keyframesLocal: string;
-  objectToAst: (j: any, value: any) => any;
+  objectToAst: (j: JSCodeshift, value: Record<string, unknown>) => ExpressionKind;
 }): { keyframesNames: Set<string>; changed: boolean } {
   return convertStyledKeyframesImpl(args);
 }
 
 function parseKeyframesTemplate(args: {
-  template: any;
+  template: ASTNode | null | undefined;
 }): Record<string, Record<string, unknown>> | null {
   const { template } = args;
   if (!template || template.type !== "TemplateLiteral") {
@@ -87,11 +88,11 @@ function parseKeyframesTemplate(args: {
 }
 
 function convertStyledKeyframesImpl(args: {
-  root: any;
-  j: any;
-  styledImports: any;
+  root: Collection<ASTNode>;
+  j: JSCodeshift;
+  styledImports: Collection<ImportDeclaration>;
   keyframesLocal: string;
-  objectToAst: (j: any, value: any) => any;
+  objectToAst: (j: JSCodeshift, value: Record<string, unknown>) => ExpressionKind;
 }): { keyframesNames: Set<string>; changed: boolean } {
   const { root, j, styledImports, keyframesLocal, objectToAst } = args;
 
@@ -102,8 +103,8 @@ function convertStyledKeyframesImpl(args: {
     .find(j.VariableDeclarator, {
       init: { type: "TaggedTemplateExpression" },
     })
-    .forEach((p: any) => {
-      const init = p.node.init as any;
+    .forEach((p) => {
+      const init = p.node.init as ASTNode | null | undefined;
       if (
         !init ||
         init.type !== "TaggedTemplateExpression" ||
@@ -131,9 +132,9 @@ function convertStyledKeyframesImpl(args: {
     });
 
   // Remove `keyframes` import specifier (now handled by stylex).
-  styledImports.forEach((imp: any) => {
+  styledImports.forEach((imp) => {
     const specs = imp.node.specifiers ?? [];
-    const next = specs.filter((s: any) => {
+    const next = specs.filter((s) => {
       if (s.type !== "ImportSpecifier") {
         return true;
       }
@@ -153,3 +154,5 @@ function convertStyledKeyframesImpl(args: {
 
   return { keyframesNames, changed };
 }
+
+type ExpressionKind = Parameters<JSCodeshift["expressionStatement"]>[0];

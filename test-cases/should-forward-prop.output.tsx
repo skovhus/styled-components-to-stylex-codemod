@@ -71,10 +71,7 @@ function Card(props: CardProps) {
       {...sx}
       style={{
         ...sx.style,
-        boxShadow: ((props) =>
-          `0 ${(props.elevation || 1) * 2}px ${(props.elevation || 1) * 4}px rgba(0, 0, 0, 0.1)`)(
-          props,
-        ),
+        boxShadow: `0 ${(props.elevation || 1) * 2}px ${(props.elevation || 1) * 4}px rgba(0, 0, 0, 0.1)`,
       }}
     >
       {children}
@@ -107,7 +104,8 @@ const styles = stylex.create({
   // Using shouldForwardProp to filter props (v5 pattern)
   button: {
     backgroundColor: "#BF4F74",
-    padding: "8px 16px",
+    paddingBlock: "8px",
+    paddingInline: "16px",
     fontSize: "14px",
     color: "white",
     borderWidth: 0,
@@ -115,7 +113,8 @@ const styles = stylex.create({
     borderRadius: "4px",
   },
   buttonSizeLarge: {
-    padding: "12px 24px",
+    paddingBlock: "12px",
+    paddingInline: "24px",
     fontSize: "18px",
   },
   buttonBackgroundColor: (backgroundColor: string) => ({

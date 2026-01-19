@@ -19,7 +19,7 @@ export const themeVars = stylex.defineVars({
  * Keep this as the source of truth for ThemeProvider values.
  */
 export const testCaseTheme = {
-  colors: {
+  color: {
     labelBase: "#111827",
     labelMuted: "#6B7280",
     labelTitle: "#111827",
@@ -38,3 +38,25 @@ export const testCaseTheme = {
 } as const;
 
 export type TestCaseTheme = typeof testCaseTheme;
+
+export type ThemeColor = keyof typeof testCaseTheme.color;
+
+export const transitionSpeed = stylex.defineVars({
+  slow: "1s",
+  normal: "0.25s",
+  fast: "0.1s",
+});
+
+// Font weight variables
+export const fontWeightVars = stylex.defineVars({
+  normal: "400",
+  medium: "500",
+  bold: "600",
+});
+
+// Font size variables
+export const fontSizeVars = stylex.defineVars({
+  small: "12px",
+  medium: "14px",
+  large: "16px",
+});

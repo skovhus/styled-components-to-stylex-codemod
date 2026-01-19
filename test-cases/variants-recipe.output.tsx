@@ -55,7 +55,8 @@ const styles = stylex.create({
     },
     color: "white",
     fontSize: "1rem",
-    padding: "4px 8px",
+    paddingBlock: "4px",
+    paddingInline: "8px",
   },
   buttonColorPrimary: {
     backgroundColor: {
@@ -65,7 +66,8 @@ const styles = stylex.create({
   },
   buttonSizeMedium: {
     fontSize: "1.2rem",
-    padding: "8px 16px",
+    paddingBlock: "8px",
+    paddingInline: "16px",
   },
   buttonDisabled: {
     color: "rgb(204, 204, 204)",

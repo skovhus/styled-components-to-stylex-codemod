@@ -28,7 +28,8 @@ export function App() {
 
 const styles = stylex.create({
   button: {
-    padding: "8px 16px",
+    paddingBlock: "8px",
+    paddingInline: "16px",
     borderRadius: "4px",
     backgroundColor: themeVars.bgBase,
     color: "black",

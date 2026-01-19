@@ -7,7 +7,7 @@ const AnimatedPath = styled.path.withConfig({
   shouldForwardProp: (prop) => !prop.startsWith("$"),
 })<{ $width: number }>`
   transition-property: opacity;
-  transition-duration: ${transitionSpeed("slowTransition")};
+  transition-duration: ${transitionSpeed("slow")};
   stroke: #bf4f74;
   stroke-width: ${(props) => props.$width}px;
   fill: none;

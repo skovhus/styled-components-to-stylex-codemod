@@ -1,4 +1,5 @@
 import type { DefaultTheme } from "styled-components";
+import type { ThemeColor } from "../tokens.stylex";
 
 interface ThemedStyledProps {
   theme: DefaultTheme;
@@ -6,10 +7,9 @@ interface ThemedStyledProps {
 
 // Theme accessor helper - returns a function that extracts a color from the theme
 export const color =
-  (colorName: string) =>
+  (colorName: ThemeColor) =>
   (props: ThemedStyledProps): string =>
-    // Theme colors in fixtures are a fixed-key object; allow dynamic access in helpers.
-    (props.theme.colors as Record<string, string> | undefined)?.[colorName] ?? "";
+    props.theme.color[colorName];
 
 // CSS snippet helper - returns a CSS string for text truncation
 export const truncate = () => `
@@ -25,14 +25,21 @@ export const flexCenter = () => `
   justify-content: center;
 `;
 
-export const transitionSpeed = (
-  speed:
-    | "highlightFadeIn"
-    | "highlightFadeOut"
-    | "quickTransition"
-    | "regularTransition"
-    | "slowTransition",
-) => `var(--speed-${speed})`;
+type Speed = "normal" | "slow" | "fast";
+
+export const transitionSpeed = (speed: Speed) => `var(--speed-${speed})`;
+
+// Font weight helper - returns numeric font weights
+export const fontWeight = (weight: "normal" | "medium" | "bold") => {
+  const weights = { normal: 400, medium: 500, bold: 600 };
+  return weights[weight];
+};
+
+// Font size helper - returns size strings
+export const fontSize = (size: "small" | "medium" | "large") => {
+  const sizes = { small: "12px", medium: "14px", large: "16px" };
+  return sizes[size];
+};
 
 // Type used in callbacks - should not be stripped from imports
 export type SelectionFunction = (options: { rowIndex: number }) => void;
@@ -50,4 +57,16 @@ export interface TooltipBaseProps {
 export type TriggerHandlers = {
   handleFocus?: (event: FocusEvent) => void;
   handleClick?: (event: MouseEvent) => void;
+};
+
+const maxWidthQuery = (maxWidth: number) => `@media (max-width: ${maxWidth}px)`;
+
+/**
+ * Media queries for different screens sizes.
+ */
+export const screenSize = {
+  /** Media query to target only phones-sized screens. */
+  phone: maxWidthQuery(640),
+  /** Media query to target only tablet-sized screens and lower. */
+  tablet: maxWidthQuery(768),
 };

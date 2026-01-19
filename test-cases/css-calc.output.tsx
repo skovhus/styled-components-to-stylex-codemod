@@ -17,7 +17,8 @@ const styles = stylex.create({
   container: {
     width: "calc(100% - 40px)",
     maxWidth: "calc(1200px - 2rem)",
-    margin: "0 auto",
+    marginBlock: 0,
+    marginInline: "auto",
     padding: "calc(16px + 1vw)",
   },
   sidebar: {

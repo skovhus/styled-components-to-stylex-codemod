@@ -38,7 +38,8 @@ const styles = stylex.create({
   button: {
     backgroundColor: "#BF4F74",
     color: "white",
-    padding: "8px 16px",
+    paddingBlock: "8px",
+    paddingInline: "16px",
     borderWidth: 0,
     borderStyle: "none",
     borderRadius: "4px",
@@ -52,7 +53,8 @@ const styles = stylex.create({
 
   // Combining withConfig options
   input: {
-    padding: "8px 12px",
+    paddingBlock: "8px",
+    paddingInline: "12px",
     borderWidth: "2px",
     borderStyle: "solid",
     borderColor: {
@@ -81,7 +83,8 @@ const styles = stylex.create({
   extendedButton: {
     backgroundColor: "#4F74BF",
     color: "white",
-    padding: "8px 16px",
+    paddingBlock: "8px",
+    paddingInline: "16px",
     borderWidth: 0,
     borderStyle: "none",
     borderRadius: "4px",
