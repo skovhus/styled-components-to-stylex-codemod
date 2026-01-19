@@ -145,10 +145,11 @@ export function emitComponentWrappers(ctx: any): {
           if (!allowStyleProp) {
             omitted.push('"style"');
           }
-          const baseMaybeOmitted = omitted.length
-            ? `Omit<${baseProps}, ${omitted.join(" | ")}>`
-            : baseProps;
-          const typeText = joinIntersection(baseMaybeOmitted, "{ as?: C }");
+          const typeText = [
+            baseProps,
+            `Omit<React.ComponentPropsWithoutRef<C>, keyof ${baseProps} | "className" | "style">`,
+            "{\n  as?: C;\n}",
+          ].join(" & ");
           emitNamedPropsType(
             d.localName,
             typeText,
@@ -390,9 +391,24 @@ export function emitComponentWrappers(ctx: any): {
       styleArgs,
     );
 
+    const buildWrappedComponentExpr = (): ExpressionKind => {
+      if (!wrappedComponent.includes(".")) {
+        return j.identifier(wrappedComponent);
+      }
+      const parts = wrappedComponent.split(".");
+      return parts
+        .slice(1)
+        .reduce<ExpressionKind>(
+          (expr, part) => j.memberExpression(expr, j.identifier(part)),
+          j.identifier(parts[0]!),
+        );
+    };
+
     // Handle both simple identifiers (Button) and member expressions (animated.div)
     let jsxTagName: any;
-    if (wrappedComponent.includes(".")) {
+    if (isPolymorphicComponentWrapper) {
+      jsxTagName = j.jsxIdentifier("Component");
+    } else if (wrappedComponent.includes(".")) {
       const parts = wrappedComponent.split(".");
       jsxTagName = j.jsxMemberExpression(
         j.jsxIdentifier(parts[0]!),
@@ -408,16 +424,28 @@ export function emitComponentWrappers(ctx: any): {
     // Only destructure when we have specific reasons: variant props or className/style support
     // Children flows through naturally via {...props} spread, no explicit handling needed
     // Attrs are handled separately (added as JSX attributes before/after the props spread)
-    const needsDestructure = destructureProps.length > 0 || needsSxVar;
-    const includeChildren = hasJsxChildrenUsage(d.localName);
+    const needsDestructure =
+      destructureProps.length > 0 || needsSxVar || isPolymorphicComponentWrapper;
+    const includeChildren = !isPolymorphicComponentWrapper && hasJsxChildrenUsage(d.localName);
 
     if (needsDestructure) {
       const childrenId = j.identifier("children");
       const classNameId = j.identifier("className");
       const styleId = j.identifier("style");
       const restId = j.identifier("rest");
+      const componentId = j.identifier("Component");
+      const wrappedComponentExpr = buildWrappedComponentExpr();
 
       const patternProps: Array<Property | RestElement> = [
+        ...(isPolymorphicComponentWrapper
+          ? [
+              j.property(
+                "init",
+                j.identifier("as"),
+                j.assignmentPattern(componentId, wrappedComponentExpr),
+              ) as Property,
+            ]
+          : []),
         ...(allowClassNameProp ? [patternProp("className", classNameId)] : []),
         ...(includeChildren ? [patternProp("children", childrenId)] : []),
         ...(allowStyleProp ? [patternProp("style", styleId)] : []),

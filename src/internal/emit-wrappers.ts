@@ -679,8 +679,9 @@ function emitWrappersImpl(args: {
       const idx = stringifyTsType(t.indexType);
       return obj && idx ? `${obj}[${idx}]` : null;
     }
-    if (t.type === "TSKeyofType") {
-      const ref = stringifyTsType(t.typeAnnotation);
+    const maybeKeyof = t as { type?: string; typeAnnotation?: AstNodeOrNull };
+    if (maybeKeyof.type === "TSKeyofType") {
+      const ref = stringifyTsType(maybeKeyof.typeAnnotation);
       return ref ? `keyof ${ref}` : null;
     }
     if (t.type === "TSTypeOperator" && t.operator === "keyof") {
