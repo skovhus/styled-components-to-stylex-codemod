@@ -50,8 +50,9 @@ const styles = stylex.create({
     padding: "16px",
   },
   boxBackgroundColorHover: ($hoverColor: Color) => ({
-    ":hover": {
-      backgroundColor: themeVars[$hoverColor],
+    backgroundColor: {
+      default: null,
+      ":hover": themeVars[$hoverColor],
     },
   }),
   boxBackgroundColor: ($bg: Color) => ({

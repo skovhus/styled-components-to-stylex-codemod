@@ -18,7 +18,8 @@ const styles = stylex.create({
     borderRadius: "4px",
   },
   card: {
-    padding: "16px",
+    paddingBlock: "16px",
+    paddingInline: "12px",
     backgroundColor: "white",
     borderRadius: "8px",
   },

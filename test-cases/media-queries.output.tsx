@@ -19,9 +19,13 @@ const styles = stylex.create({
       default: "papayawhip",
       "@media (min-width: 1024px)": "mediumseagreen",
     },
-    margin: {
+    marginBlock: {
       default: null,
-      "@media (min-width: 768px)": "0 auto",
+      "@media (min-width: 768px)": 0,
+    },
+    marginInline: {
+      default: null,
+      "@media (min-width: 768px)": "auto",
     },
   },
   button: {

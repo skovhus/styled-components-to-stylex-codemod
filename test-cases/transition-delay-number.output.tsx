@@ -39,6 +39,10 @@ export const App = () => (
 );
 
 const styles = stylex.create({
+  /**
+   * Test case for transitionDelay with number value.
+   * The codemod should convert number 0 to "0ms" string for CSS properties.
+   */
   container: {
     opacity: 0,
     transition: "opacity 200ms ease-out",

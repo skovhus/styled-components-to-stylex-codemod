@@ -17,7 +17,7 @@ const styles = stylex.create({
   container: {
     width: "calc(100% - 40px)",
     maxWidth: "calc(1200px - 2rem)",
-    marginBlock: "0",
+    marginBlock: 0,
     marginInline: "auto",
     padding: "calc(16px + 1vw)",
   },

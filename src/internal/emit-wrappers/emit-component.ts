@@ -216,12 +216,16 @@ export function emitComponentWrappers(ctx: any): {
     // Add style function calls for dynamic prop-based styles
     const styleFnPairs = d.styleFnFromProps ?? [];
     for (const p of styleFnPairs) {
-      const propExpr = j.memberExpression(propsIdForExpr, j.identifier(p.jsxProp));
+      const propExpr =
+        p.jsxProp === "__props"
+          ? propsIdForExpr
+          : j.memberExpression(propsIdForExpr, j.identifier(p.jsxProp));
       const call = j.callExpression(
         j.memberExpression(j.identifier(stylesIdentifier), j.identifier(p.fnKey)),
         [propExpr],
       );
-      const required = isPropRequiredInPropsTypeLiteral(d.propsType, p.jsxProp);
+      const required =
+        p.jsxProp === "__props" || isPropRequiredInPropsTypeLiteral(d.propsType, p.jsxProp);
       if (required) {
         styleArgs.push(call);
       } else {

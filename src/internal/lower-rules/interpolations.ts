@@ -1,5 +1,7 @@
 import type { StyledDecl } from "../transform-types.js";
 import { cssDeclarationToStylexDeclarations } from "../css-prop-mapping.js";
+import { getMemberPathFromIdentifier } from "../jscodeshift-utils.js";
+import { splitDirectionalProperty } from "../stylex-shorthands.js";
 
 export function extractStaticParts(
   cssValue: any,
@@ -68,6 +70,7 @@ export function tryHandleInterpolatedStringValue(args: {
   styleObj: Record<string, unknown>;
   resolveCallExpr?: (expr: any) => { resolved: any; imports?: any[] } | null;
   addImport?: (imp: any) => void;
+  resolveThemeValue?: (expr: any) => unknown;
 }): boolean {
   const { j, decl, d, styleObj, resolveCallExpr, addImport } = args;
   // Handle common “string interpolation” cases:
@@ -82,7 +85,7 @@ export function tryHandleInterpolatedStringValue(args: {
     return false;
   }
 
-  // Special-case: margin shorthand `${expr}px 0` → marginTop/Right/Bottom/Left
+  // Special-case: margin shorthand `${expr}px 0` → split to directional props (StyleX rules)
   if ((d.property ?? "").trim() === "margin" && typeof d.valueRaw === "string") {
     const m = d.valueRaw.trim().match(/^__SC_EXPR_(\d+)__(px)?\s+0$/);
     if (m) {
@@ -99,10 +102,18 @@ export function tryHandleInterpolatedStringValue(args: {
         ],
         [expr],
       );
-      (styleObj as any).marginTop = tl as any;
-      (styleObj as any).marginRight = 0;
-      (styleObj as any).marginBottom = tl as any;
-      (styleObj as any).marginLeft = 0;
+      const entries = splitDirectionalProperty({
+        prop: "margin",
+        rawValue: d.valueRaw.trim(),
+        important: d.important,
+      });
+      if (!entries.length) {
+        return false;
+      }
+      for (const entry of entries) {
+        const usesExpr = entry.value.includes(`__SC_EXPR_${slotId}__`);
+        (styleObj as any)[entry.prop] = usesExpr ? (tl as any) : 0;
+      }
       return true;
     }
   }
@@ -119,8 +130,22 @@ export function tryHandleInterpolatedStringValue(args: {
     if (expr.type === "CallExpression") {
       return false;
     }
+    const themeResolved = args.resolveThemeValue?.(expr);
+    const shouldWrapThemeExpr =
+      !themeResolved &&
+      expr?.type === "MemberExpression" &&
+      !!getMemberPathFromIdentifier(expr as any, "theme");
+    const wrappedExpr = shouldWrapThemeExpr
+      ? (j.templateLiteral(
+          [
+            j.templateElement({ raw: "", cooked: "" }, false),
+            j.templateElement({ raw: "", cooked: "" }, true),
+          ],
+          [expr as any],
+        ) as any)
+      : (expr as any);
     for (const out of cssDeclarationToStylexDeclarations(d)) {
-      (styleObj as any)[out.prop] = expr as any;
+      (styleObj as any)[out.prop] = themeResolved ?? wrappedExpr;
     }
     return true;
   }

@@ -732,7 +732,7 @@ export function emitIntrinsicWrappers(ctx: any): {
       }
     }
     for (const p of d.styleFnFromProps ?? []) {
-      if (p?.jsxProp) {
+      if (p?.jsxProp && p.jsxProp !== "__props") {
         extraProps.add(p.jsxProp);
       }
     }
@@ -871,17 +871,23 @@ export function emitIntrinsicWrappers(ctx: any): {
     for (const p of styleFnPairs) {
       const prefix = d.shouldForwardProp?.dropPrefix;
       const isPrefixProp =
-        !!prefix && typeof p.jsxProp === "string" && p.jsxProp.startsWith(prefix);
+        !!prefix &&
+        typeof p.jsxProp === "string" &&
+        p.jsxProp !== "__props" &&
+        p.jsxProp.startsWith(prefix);
       const propExpr = isPrefixProp
         ? knownPrefixPropsSet.has(p.jsxProp)
           ? j.identifier(p.jsxProp)
           : j.memberExpression(j.identifier("props"), j.literal(p.jsxProp), true)
-        : j.identifier(p.jsxProp);
+        : p.jsxProp === "__props"
+          ? j.identifier("props")
+          : j.identifier(p.jsxProp);
       const call = j.callExpression(
         j.memberExpression(j.identifier(stylesIdentifier), j.identifier(p.fnKey)),
         [propExpr],
       );
-      const required = isPropRequiredInPropsTypeLiteral(d.propsType, p.jsxProp);
+      const required =
+        p.jsxProp === "__props" || isPropRequiredInPropsTypeLiteral(d.propsType, p.jsxProp);
       if (required) {
         styleArgs.push(call);
       } else {
@@ -1307,8 +1313,28 @@ export function emitIntrinsicWrappers(ctx: any): {
         usedAttrs.has("*") ||
         !!(d as any).usedAsValue ||
         (!((d as any).isExported ?? false) && usedAttrs.size > 0);
+      const variantProps = new Set<string>();
+      if (d.variantStyleKeys) {
+        for (const [when] of Object.entries(d.variantStyleKeys)) {
+          const { props } = parseVariantWhenToAst(j, when);
+          for (const p of props) {
+            if (p) {
+              variantProps.add(p);
+            }
+          }
+        }
+      }
+      const inlineProps = new Set(collectInlineStylePropNames(d.inlineStyleProps ?? []));
+      const styleFnProps = new Set(
+        (d.styleFnFromProps ?? [])
+          .map((p: any) => p.jsxProp)
+          .filter((name: string) => name && name !== "__props"),
+      );
       const destructureProps = [
         ...new Set<string>([
+          ...variantProps,
+          ...inlineProps,
+          ...styleFnProps,
           ...(d.attrsInfo?.conditionalAttrs ?? []).map((c: any) => c.jsxProp).filter(Boolean),
           ...(d.attrsInfo?.invertedBoolAttrs ?? []).map((inv: any) => inv.jsxProp).filter(Boolean),
         ]),
@@ -1660,7 +1686,11 @@ export function emitIntrinsicWrappers(ctx: any): {
           });
         }),
       );
-      const styleFnPropsForType = new Set((d.styleFnFromProps ?? []).map((p: any) => p.jsxProp));
+      const styleFnPropsForType = new Set(
+        (d.styleFnFromProps ?? [])
+          .map((p: any) => p.jsxProp)
+          .filter((name: string) => name !== "__props"),
+      );
       const conditionalPropsForType = new Set(
         (d.attrsInfo?.conditionalAttrs ?? []).map((c: any) => c.jsxProp),
       );

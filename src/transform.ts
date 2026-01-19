@@ -357,7 +357,7 @@ export function transformWithWarnings(
             return;
           }
           for (const out of cssDeclarationToStylexDeclarations(d)) {
-            helperObj[out.prop] = cssValueToJs(out.value, d.important);
+            helperObj[out.prop] = cssValueToJs(out.value, d.important, out.prop);
           }
         }
 
@@ -2632,17 +2632,23 @@ function isAstNode(v: unknown): v is { type: string } {
   return !!v && typeof v === "object" && typeof (v as any).type === "string";
 }
 
-function cssValueToJs(value: any, important = false): unknown {
+function cssValueToJs(value: any, important = false, propName?: string): unknown {
   if (value.kind === "static") {
     // Preserve `!important` by emitting a string value that includes it.
     // (StyleX supports `!important` in values and this is necessary to override inline styles.)
     if (important) {
       const raw = String(value.value);
+      if (propName === "borderStyle") {
+        return raw;
+      }
       return raw.includes("!important") ? raw : `${raw} !important`;
     }
 
     // Try to return number if purely numeric and no unit.
     if (/^-?\d+(\.\d+)?$/.test(value.value)) {
+      if (propName === "flex") {
+        return value.value;
+      }
       return Number(value.value);
     }
     return value.value;

@@ -1,9 +1,24 @@
 import type { CssDeclarationIR, CssValue } from "./css-ir.js";
+import { splitDirectionalProperty } from "./stylex-shorthands.js";
 
 export type StylexPropDecl = { prop: string; value: CssValue };
 
 export function cssDeclarationToStylexDeclarations(decl: CssDeclarationIR): StylexPropDecl[] {
   const prop = decl.property.trim();
+
+  if ((prop === "padding" || prop === "margin") && decl.value.kind === "static") {
+    const entries = splitDirectionalProperty({
+      prop,
+      rawValue: decl.valueRaw.trim(),
+      important: decl.important,
+    });
+    if (entries.length > 0) {
+      return entries.map((entry) => ({
+        prop: entry.prop,
+        value: { kind: "static", value: entry.value },
+      }));
+    }
+  }
 
   if (prop === "background") {
     return [{ prop: "backgroundColor", value: decl.value }];

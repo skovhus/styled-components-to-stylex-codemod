@@ -36,7 +36,7 @@ const ConditionalButton = styled.button`
 
 // Array/object property interpolation
 const theme = {
-  colors: {
+  color: {
     primary: "#BF4F74",
     secondary: "#4F74BF",
   },

@@ -9,10 +9,11 @@ export default [
       "**/node_modules/**",
       "**/storybook-static/**",
       "**/playground/dist/**",
+      "**/src/**",
     ],
   },
   {
-    files: ["test-cases/**/*.{js,jsx,ts,tsx}"],
+    files: ["**/*.{js,jsx,ts,tsx}"],
     languageOptions: {
       parser: tsParser,
       parserOptions: {

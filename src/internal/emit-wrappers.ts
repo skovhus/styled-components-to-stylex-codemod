@@ -223,6 +223,49 @@ function emitMinimalWrapper(args: {
     inlineStyleProps = [],
     styleMerger,
   } = args;
+  const expandedDestructureProps = new Set(destructureProps.filter(Boolean));
+  const collectCondIdentifiers = (node: ASTNode | null | undefined): void => {
+    if (!node) {
+      return;
+    }
+    if (node.type === "Identifier") {
+      expandedDestructureProps.add(node.name);
+      return;
+    }
+    if (
+      node.type === "MemberExpression" &&
+      !node.computed &&
+      node.object.type === "Identifier" &&
+      node.object.name === "props" &&
+      node.property.type === "Identifier"
+    ) {
+      expandedDestructureProps.add(node.property.name);
+      return;
+    }
+    if ("left" in node && node.left) {
+      collectCondIdentifiers(node.left as ASTNode);
+    }
+    if ("right" in node && node.right) {
+      collectCondIdentifiers(node.right as ASTNode);
+    }
+    if ("argument" in node && node.argument) {
+      collectCondIdentifiers(node.argument as ASTNode);
+    }
+    if ("test" in node && node.test) {
+      collectCondIdentifiers(node.test as ASTNode);
+    }
+    if ("consequent" in node && node.consequent) {
+      collectCondIdentifiers(node.consequent as ASTNode);
+    }
+    if ("alternate" in node && node.alternate) {
+      collectCondIdentifiers(node.alternate as ASTNode);
+    }
+  };
+  for (const arg of styleArgs) {
+    if (arg?.type === "LogicalExpression" && arg.operator === "&&") {
+      collectCondIdentifiers(arg.left as ASTNode);
+    }
+  }
   const isVoidTag = VOID_TAGS.has(tagName);
   const propsParamId = j.identifier("props");
   if (emitTypes) {
@@ -275,7 +318,7 @@ function emitMinimalWrapper(args: {
   }
 
   // Add dynamic props (for variant conditions)
-  for (const name of destructureProps.filter((prop): prop is string => Boolean(prop))) {
+  for (const name of expandedDestructureProps) {
     if (name !== "children" && name !== "style" && name !== "className") {
       patternProps.push(patternProp(name));
     }

@@ -1,7 +1,7 @@
-import type { API } from "jscodeshift";
+import type { API, Expression } from "jscodeshift";
 import type { ImportSource } from "../../adapter.js";
 import { resolveDynamicNode } from "../builtin-handlers.js";
-import { getNodeLocStart } from "../jscodeshift-utils.js";
+import { getMemberPathFromIdentifier, getNodeLocStart } from "../jscodeshift-utils.js";
 import type { StyledDecl } from "../transform-types.js";
 import type { WarningLog } from "../logger.js";
 
@@ -12,6 +12,7 @@ export function tryHandleInterpolatedBorder(args: {
   decl: StyledDecl;
   d: any;
   styleObj: Record<string, unknown>;
+  hasLocalThemeBinding: boolean;
   resolveValue: (ctx: any) => any;
   importMap: Map<
     string,
@@ -45,6 +46,7 @@ export function tryHandleInterpolatedBorder(args: {
     variantStyleKeys,
     inlineStyleProps,
   } = args;
+  const { hasLocalThemeBinding } = args;
 
   // Handle border shorthands with interpolated color:
   //   border: 2px solid ${(p) => (p.hasError ? "red" : "#ccc")}
@@ -218,6 +220,18 @@ export function tryHandleInterpolatedBorder(args: {
     }
   }
 
+  if (expr?.type === "ArrowFunctionExpression" && expr.body?.type === "ConditionalExpression") {
+    const cons = expr.body.consequent as any;
+    const alt = expr.body.alternate as any;
+    const isMemberExpr = (n: any): boolean =>
+      n?.type === "MemberExpression" || n?.type === "OptionalMemberExpression";
+    if (isMemberExpr(cons) || isMemberExpr(alt)) {
+      // Defer to the dynamic resolver by treating this as a border-color interpolation.
+      d.property = direction ? `border-${direction.toLowerCase()}-color` : "border-color";
+      return false;
+    }
+  }
+
   // Handle call expressions (like helper functions) by resolving via resolveDynamicNode:
   //   border: 1px solid ${color("bgSub")}
   if (expr?.type === "CallExpression") {
@@ -289,6 +303,32 @@ export function tryHandleInterpolatedBorder(args: {
 
   // Simple color expression (identifier/template literal) → border color expr
   if (expr && expr.type !== "ArrowFunctionExpression") {
+    if (expr.type === "MemberExpression") {
+      if (hasLocalThemeBinding) {
+        (styleObj as any)[colorProp] = j.templateLiteral(
+          [
+            j.templateElement({ raw: "", cooked: "" }, false),
+            j.templateElement({ raw: "", cooked: "" }, true),
+          ],
+          [expr as any],
+        ) as any;
+        return true;
+      }
+      const parts = getMemberPathFromIdentifier(expr as Expression, "theme");
+      if (parts && parts.length > 0) {
+        const resolved = resolveValue({ kind: "theme", path: parts.join(".") });
+        if (resolved) {
+          for (const imp of resolved.imports ?? []) {
+            resolverImports.set(JSON.stringify(imp), imp);
+          }
+          const exprAst = parseExpr(resolved.expr);
+          if (exprAst) {
+            (styleObj as any)[colorProp] = exprAst as any;
+            return true;
+          }
+        }
+      }
+    }
     (styleObj as any)[colorProp] = expr as any;
     return true;
   }
