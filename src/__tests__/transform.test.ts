@@ -227,6 +227,12 @@ const WARNING_TOKEN_MATCHERS: Record<string, (w: WarningLog) => boolean> = {
     w.type === "unsupported-feature" && w.message.includes("Universal selectors"),
   "complex-selectors": (w) =>
     w.type === "unsupported-feature" && w.message.includes("Complex selectors"),
+  "vendor-prefixed-property": (w) =>
+    w.type === "unsupported-feature" && w.message.includes("Vendor-prefixed property"),
+  "vendor-prefixed-pseudo": (w) =>
+    w.type === "unsupported-feature" && w.message.includes("Vendor-prefixed pseudo-element"),
+  "unparseable-interpolation": (w) =>
+    w.type === "unsupported-feature" && w.message.includes("Unparseable resolved interpolation"),
   "adapter-resolveValue": (w) => w.type === "dynamic-node" && w.message.includes("Adapter"),
   "dynamic-call": (w) =>
     w.type === "dynamic-node" &&
@@ -636,12 +642,10 @@ export const App = () => <Box $on />;
       { adapter: adapterWithBadThemeExpr },
     );
 
-    expect(result.code).not.toBeNull();
-    expect(result.warnings.some((w) => warningMatchesToken(w, "adapter-resolveValue"))).toBe(true);
-
-    // Prior to the fix, we'd often end up registering an empty `boxOn` variant style object.
-    expect(result.code).not.toMatch(/boxOn\s*:\s*\{\s*\}/);
-    expect(result.code).not.toMatch(/boxOn\s*:/);
+    expect(result.code).toBeNull();
+    expect(result.warnings.some((w) => warningMatchesToken(w, "unparseable-interpolation"))).toBe(
+      true,
+    );
   });
 });
 

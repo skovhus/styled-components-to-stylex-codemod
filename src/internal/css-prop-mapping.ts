@@ -20,6 +20,30 @@ export function cssDeclarationToStylexDeclarations(decl: CssDeclarationIR): Styl
     }
   }
 
+  if (prop === "scroll-margin" && decl.value.kind === "static") {
+    const entries = splitDirectionalProperty({
+      prop: "scrollMargin",
+      rawValue: decl.valueRaw.trim(),
+      important: decl.important,
+      alwaysExpand: true,
+    });
+    if (entries.length > 0) {
+      const order = new Map([
+        ["scrollMarginLeft", 0],
+        ["scrollMarginTop", 1],
+        ["scrollMarginRight", 2],
+        ["scrollMarginBottom", 3],
+      ]);
+      return entries
+        .slice()
+        .sort((a, b) => (order.get(a.prop) ?? 99) - (order.get(b.prop) ?? 99))
+        .map((entry) => ({
+          prop: entry.prop,
+          value: { kind: "static", value: entry.value },
+        }));
+    }
+  }
+
   if (prop === "background") {
     return [{ prop: "backgroundColor", value: decl.value }];
   }

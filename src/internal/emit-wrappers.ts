@@ -566,7 +566,7 @@ function emitWrappersImpl(args: {
   // For plain JS/JSX and Flow transforms, skip emitting TS syntax entirely for now.
   const emitTypes = filePath.endsWith(".ts") || filePath.endsWith(".tsx");
 
-  const wrapperDecls = styledDecls.filter((d) => d.needsWrapperComponent);
+  const wrapperDecls = styledDecls.filter((d) => d.needsWrapperComponent && !d.isCssHelper);
   if (wrapperDecls.length === 0) {
     return;
   }

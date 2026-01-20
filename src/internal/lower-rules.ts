@@ -2,7 +2,7 @@ import type { API, ASTNode, Collection, JSCodeshift } from "jscodeshift";
 import { compile } from "stylis";
 import { resolveDynamicNode } from "./builtin-handlers.js";
 import type { InternalHandlerContext } from "./builtin-handlers.js";
-import { normalizeStylisAstToIR } from "./css-ir.js";
+import { normalizeStylisAstToIR, type CssDeclarationIR } from "./css-ir.js";
 import { cssDeclarationToStylexDeclarations, cssPropertyToStylexProp } from "./css-prop-mapping.js";
 import { getMemberPathFromIdentifier, getNodeLocStart } from "./jscodeshift-utils.js";
 import type { Adapter, ImportSource, ImportSpec } from "../adapter.js";
@@ -38,6 +38,43 @@ export type DescendantOverride = {
 };
 
 type ExpressionKind = Parameters<JSCodeshift["expressionStatement"]>[0];
+
+const VENDOR_PROPERTY_PREFIXES = ["-webkit-", "-moz-", "-ms-", "-o-"];
+const VENDOR_PSEUDO_PREFIXES = ["::-webkit-", "::-moz-", "::-ms-", "::-o-"];
+
+const getUnprefixedProperty = (prop: string): string | null => {
+  for (const prefix of VENDOR_PROPERTY_PREFIXES) {
+    if (prop.startsWith(prefix)) {
+      return prop.slice(prefix.length);
+    }
+  }
+  return null;
+};
+
+const getVendorPrefixedPropertiesToDrop = (decls: CssDeclarationIR[]): Set<string> => {
+  const props = new Set(
+    decls.map((d) => d.property?.trim()).filter((prop): prop is string => !!prop),
+  );
+  const drop = new Set<string>();
+  for (const prop of props) {
+    const unprefixed = getUnprefixedProperty(prop);
+    if (unprefixed) {
+      drop.add(prop);
+    }
+  }
+  return drop;
+};
+
+const shouldSkipVendorPrefixedProperty = (
+  decl: CssDeclarationIR,
+  dropVendorProps: Set<string>,
+): boolean => {
+  const prop = decl.property?.trim();
+  return !!prop && dropVendorProps.has(prop);
+};
+
+const isVendorPrefixedPseudoElement = (pseudo: string): boolean =>
+  VENDOR_PSEUDO_PREFIXES.some((prefix) => pseudo.startsWith(prefix));
 
 export function lowerRules(args: {
   api: API;
@@ -491,6 +528,15 @@ export function lowerRules(args: {
     return found;
   })();
 
+  const bailUnsupported = (message: string): void => {
+    warnings.push({
+      severity: "error",
+      type: "unsupported-feature",
+      message,
+    });
+    bail = true;
+  };
+
   const resolveThemeValue = (expr: any): unknown => {
     if (hasLocalThemeBinding) {
       return null;
@@ -521,6 +567,72 @@ export function lowerRules(args: {
       return null;
     }
     const resolved = resolveValue({ kind: "theme", path: parts.join(".") });
+    if (!resolved) {
+      return null;
+    }
+    for (const imp of resolved.imports ?? []) {
+      resolverImports.set(JSON.stringify(imp), imp);
+    }
+    return parseExpr(resolved.expr);
+  };
+
+  const resolveThemeValueFromFn = (expr: any): unknown => {
+    if (!expr || (expr.type !== "ArrowFunctionExpression" && expr.type !== "FunctionExpression")) {
+      return null;
+    }
+    const bodyExpr =
+      expr.body?.type === "BlockStatement"
+        ? expr.body.body?.find((s: any) => s.type === "ReturnStatement")?.argument
+        : expr.body;
+    if (!bodyExpr) {
+      return null;
+    }
+    const direct = resolveThemeValue(bodyExpr);
+    if (direct) {
+      return direct;
+    }
+    const paramName =
+      expr.params?.[0]?.type === "Identifier" ? (expr.params[0].name as string) : null;
+    const unwrap = (node: any): any => {
+      let cur = node;
+      while (cur) {
+        if (cur.type === "ParenthesizedExpression") {
+          cur = cur.expression;
+          continue;
+        }
+        if (cur.type === "TSAsExpression" || cur.type === "TSNonNullExpression") {
+          cur = cur.expression;
+          continue;
+        }
+        if (cur.type === "ChainExpression") {
+          cur = cur.expression;
+          continue;
+        }
+        break;
+      }
+      return cur;
+    };
+    const unwrapped = unwrap(bodyExpr);
+    if (
+      !unwrapped ||
+      (unwrapped.type !== "MemberExpression" && unwrapped.type !== "OptionalMemberExpression")
+    ) {
+      return null;
+    }
+    let themePath: string | null = null;
+    const directPath = getMemberPathFromIdentifier(unwrapped as any, "theme");
+    if (directPath && directPath.length > 0) {
+      themePath = directPath.join(".");
+    } else if (paramName) {
+      const paramPath = getMemberPathFromIdentifier(unwrapped as any, paramName);
+      if (paramPath && paramPath[0] === "theme") {
+        themePath = paramPath.slice(1).join(".");
+      }
+    }
+    if (!themePath) {
+      return null;
+    }
+    const resolved = resolveValue({ kind: "theme", path: themePath });
     if (!resolved) {
       return null;
     }
@@ -674,6 +786,7 @@ export function lowerRules(args: {
     const resolveCssHelperTemplate = (
       template: any,
       paramName: string | null,
+      ownerName: string,
     ): Record<string, unknown> | null => {
       const parsed = parseStyledTemplateLiteral(template);
       const rawCss = parsed.rawCss;
@@ -690,6 +803,12 @@ export function lowerRules(args: {
         if (!pseudo) {
           return null;
         }
+        if (isVendorPrefixedPseudoElement(pseudo)) {
+          bailUnsupported(
+            `Vendor-prefixed pseudo-element "${pseudo}" is not supported in ${ownerName}.`,
+          );
+          return null;
+        }
         if (pseudo === ":before" || pseudo === ":after") {
           return `::${pseudo.slice(1)}`;
         }
@@ -701,14 +820,24 @@ export function lowerRules(args: {
           return null;
         }
         const selector = (rule.selector ?? "").trim();
+        const dropVendorProps = getVendorPrefixedPropertiesToDrop(rule.declarations);
         let target = out;
         if (selector !== "&") {
           const pseudoElement = parsePseudoElement(selector);
+          if (pseudoElement && isVendorPrefixedPseudoElement(pseudoElement)) {
+            bailUnsupported(
+              `Vendor-prefixed pseudo-element "${pseudoElement}" is not supported in ${ownerName}.`,
+            );
+            return null;
+          }
           const simplePseudo = parseSimplePseudo(selector);
           const normalizedPseudoElement = normalizePseudoElement(
             pseudoElement ??
               (simplePseudo === ":before" || simplePseudo === ":after" ? simplePseudo : null),
           );
+          if (bail) {
+            return null;
+          }
           if (normalizedPseudoElement) {
             const nested = (out[normalizedPseudoElement] as any) ?? {};
             out[normalizedPseudoElement] = nested;
@@ -724,6 +853,12 @@ export function lowerRules(args: {
 
         for (const d of rule.declarations) {
           if (!d.property) {
+            return null;
+          }
+          if (shouldSkipVendorPrefixedProperty(d, dropVendorProps)) {
+            bailUnsupported(
+              `Vendor-prefixed property "${d.property.trim()}" is not supported in ${ownerName}.`,
+            );
             return null;
           }
           if (d.value.kind === "static") {
@@ -982,8 +1117,8 @@ export function lowerRules(args: {
         return false;
       }
 
-      const consStyle = resolveCssHelperTemplate(cons.quasi, paramName);
-      const altStyle = resolveCssHelperTemplate(alt.quasi, paramName);
+      const consStyle = resolveCssHelperTemplate(cons.quasi, paramName, decl.localName);
+      const altStyle = resolveCssHelperTemplate(alt.quasi, paramName, decl.localName);
       if (!consStyle || !altStyle) {
         return false;
       }
@@ -1003,6 +1138,8 @@ export function lowerRules(args: {
     };
 
     for (const rule of decl.rules) {
+      // (debug logging removed)
+      const dropVendorProps = getVendorPrefixedPropertiesToDrop(rule.declarations);
       // Sibling selectors:
       // - & + &  (adjacent sibling)
       // - &.something ~ & (general sibling after a class marker)
@@ -1016,6 +1153,12 @@ export function lowerRules(args: {
         };
         const obj: Record<string, unknown> = {};
         for (const d of rule.declarations) {
+          if (shouldSkipVendorPrefixedProperty(d, dropVendorProps)) {
+            bailUnsupported(
+              `Vendor-prefixed property "${d.property?.trim() ?? ""}" is not supported in ${decl.localName}.`,
+            );
+            break;
+          }
           if (d.value.kind !== "static") {
             continue;
           }
@@ -1052,6 +1195,12 @@ export function lowerRules(args: {
 
         const obj: Record<string, unknown> = {};
         for (const d of rule.declarations) {
+          if (shouldSkipVendorPrefixedProperty(d, dropVendorProps)) {
+            bailUnsupported(
+              `Vendor-prefixed property "${d.property?.trim() ?? ""}" is not supported in ${decl.localName}.`,
+            );
+            break;
+          }
           if (d.value.kind !== "static") {
             continue;
           }
@@ -1123,12 +1272,14 @@ export function lowerRules(args: {
         const slotId = slotMatch ? Number(slotMatch[1]) : null;
         const slotExpr = slotId !== null ? (decl.templateExpressions[slotId] as any) : null;
         const otherLocal = slotExpr?.type === "Identifier" ? (slotExpr.name as string) : null;
+        const isCssHelperPlaceholder = !!otherLocal && cssHelperNames.has(otherLocal);
 
         const selTrim2 = rule.selector.trim();
 
         // `${Other}:hover &` (Icon reacting to Link hover)
         if (
           otherLocal &&
+          !isCssHelperPlaceholder &&
           selTrim2.startsWith("__SC_EXPR_") &&
           rule.selector.includes(":hover") &&
           rule.selector.includes("&")
@@ -1137,6 +1288,12 @@ export function lowerRules(args: {
           const parentStyle = parentDecl && resolvedStyleObjects.get(parentDecl.styleKey);
           if (parentStyle) {
             for (const d of rule.declarations) {
+              if (shouldSkipVendorPrefixedProperty(d, dropVendorProps)) {
+                bailUnsupported(
+                  `Vendor-prefixed property "${d.property?.trim() ?? ""}" is not supported in ${decl.localName}.`,
+                );
+                break;
+              }
               if (d.value.kind !== "static") {
                 continue;
               }
@@ -1161,7 +1318,7 @@ export function lowerRules(args: {
         }
 
         // `${Child}` / `&:hover ${Child}` (Parent styling a descendant child)
-        if (otherLocal && selTrim2.startsWith("&")) {
+        if (otherLocal && !isCssHelperPlaceholder && selTrim2.startsWith("&")) {
           const childDecl = declByLocalName.get(otherLocal);
           const isHover = rule.selector.includes(":hover");
           if (childDecl) {
@@ -1178,6 +1335,12 @@ export function lowerRules(args: {
             descendantOverrideHover.set(overrideStyleKey, hoverBucket);
 
             for (const d of rule.declarations) {
+              if (shouldSkipVendorPrefixedProperty(d, dropVendorProps)) {
+                bailUnsupported(
+                  `Vendor-prefixed property "${d.property?.trim() ?? ""}" is not supported in ${decl.localName}.`,
+                );
+                break;
+              }
               if (d.value.kind !== "static") {
                 continue;
               }
@@ -1213,6 +1376,12 @@ export function lowerRules(args: {
         parseCommaSeparatedPseudos(selector) ??
         (parseSimplePseudo(selector) ? [parseSimplePseudo(selector)!] : null);
       const pseudoElement = parsePseudoElement(selector);
+      if (pseudoElement && isVendorPrefixedPseudoElement(pseudoElement)) {
+        bailUnsupported(
+          `Vendor-prefixed pseudo-element "${pseudoElement}" is not supported in ${decl.localName}.`,
+        );
+        break;
+      }
 
       const attrSel = parseAttributeSelector(selector);
       const attrWrapperKind =
@@ -1252,6 +1421,12 @@ export function lowerRules(args: {
       }
 
       for (const d of rule.declarations) {
+        if (shouldSkipVendorPrefixedProperty(d, dropVendorProps)) {
+          bailUnsupported(
+            `Vendor-prefixed property "${d.property?.trim() ?? ""}" is not supported in ${decl.localName}.`,
+          );
+          break;
+        }
         if (d.value.kind === "interpolated") {
           if (bail) {
             break;
@@ -1283,6 +1458,40 @@ export function lowerRules(args: {
               inlineStyleProps,
             })
           ) {
+            continue;
+          }
+          const tryHandleThemeValueInPseudo = (): boolean => {
+            if (!pseudos?.length || !d.property) {
+              return false;
+            }
+            const slotPart = (d.value as any).parts?.find((p: any) => p.kind === "slot");
+            if (!slotPart || slotPart.kind !== "slot") {
+              return false;
+            }
+            const expr = decl.templateExpressions[slotPart.slotId] as any;
+            if (!expr) {
+              return false;
+            }
+            const resolved =
+              (expr?.type === "ArrowFunctionExpression" || expr?.type === "FunctionExpression"
+                ? resolveThemeValueFromFn(expr)
+                : resolveThemeValue(expr)) ?? null;
+            if (!resolved) {
+              return false;
+            }
+            for (const out of cssDeclarationToStylexDeclarations(d)) {
+              perPropPseudo[out.prop] ??= {};
+              const existing = perPropPseudo[out.prop]!;
+              if (!("default" in existing)) {
+                existing.default = (styleObj as any)[out.prop] ?? null;
+              }
+              for (const ps of pseudos) {
+                existing[ps] = resolved;
+              }
+            }
+            return true;
+          };
+          if (tryHandleThemeValueInPseudo()) {
             continue;
           }
           // Create a resolver for embedded call expressions in compound CSS values
@@ -1524,26 +1733,6 @@ export function lowerRules(args: {
             const slotPart = d.value.parts.find((p: any) => p.kind === "slot");
             const slotId = slotPart && slotPart.kind === "slot" ? slotPart.slotId : 0;
             const expr = decl.templateExpressions[slotId] as any;
-            if (stylexProp && expr?.type === "ArrowFunctionExpression") {
-              const bodyExpr =
-                expr.body?.type === "BlockStatement"
-                  ? expr.body.body?.find((s: any) => s.type === "ReturnStatement")?.argument
-                  : expr.body;
-              const resolved = bodyExpr ? resolveThemeValue(bodyExpr) : null;
-              if (resolved) {
-                for (const out of cssDeclarationToStylexDeclarations(d)) {
-                  perPropPseudo[out.prop] ??= {};
-                  const existing = perPropPseudo[out.prop]!;
-                  if (!("default" in existing)) {
-                    existing.default = (styleObj as any)[out.prop] ?? null;
-                  }
-                  for (const ps of pseudos) {
-                    existing[ps] = resolved;
-                  }
-                }
-                continue;
-              }
-            }
             if (
               stylexProp &&
               expr?.type === "ArrowFunctionExpression" &&
@@ -2145,7 +2334,10 @@ export function lowerRules(args: {
             // (mirrors the `resolvedValue` behavior) and avoid emitting empty variant buckets.
             const negParsed = neg ? parseResolved(neg.expr, neg.imports) : null;
             if (neg && !negParsed) {
-              continue;
+              bailUnsupported(
+                `Unparseable resolved interpolation in ${decl.localName}; cannot safely emit styles.`,
+              );
+              break;
             }
             // Parse all positive variants - skip entire declaration if any fail
             const allPosParsed: Array<{
@@ -2163,7 +2355,10 @@ export function lowerRules(args: {
               allPosParsed.push({ when: posV.when, nameHint: posV.nameHint, parsed });
             }
             if (anyPosFailed) {
-              continue;
+              bailUnsupported(
+                `Unparseable resolved interpolation in ${decl.localName}; cannot safely emit styles.`,
+              );
+              break;
             }
 
             if (negParsed) {
