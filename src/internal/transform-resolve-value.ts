@@ -42,14 +42,14 @@ export function createResolveAdapterSafe(args: { adapter: Adapter; warnings: War
       return null;
     }
     const res = adapter.resolveCall(ctx);
-    if (typeof res === "undefined") {
+    if (res === null || typeof res === "undefined") {
       bailRef.value = true;
       warnings.push({
         severity: "error",
         type: "dynamic-node",
         message: [
-          "Adapter.resolveCall returned undefined. This usually means your adapter forgot to return a value.",
-          'Return null to leave the call unresolved, or return { kind: "value" | "styles", expr, imports } to resolve it.',
+          "Adapter.resolveCall returned null or undefined.",
+          'Return { kind: "value" | "styles", expr, imports } to resolve it.',
           "Skipping transformation for this file to avoid producing incorrect output.",
         ].join(" "),
         context: ctx,

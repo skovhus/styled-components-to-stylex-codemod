@@ -98,19 +98,12 @@ const adapter = defineAdapter({
     // - { kind: "absolutePath", value: "/abs/path" } for relative imports
     // - { kind: "specifier", value: "some-package/foo" } for package imports
 
-    if (ctx.calleeImportedName !== "transitionSpeed") {
-      return null;
-    }
-
-    // If you need to scope resolution to a particular module, you can use:
-    // - ctx.calleeSource
-
     const arg0 = ctx.args[0];
     const key =
       arg0?.kind === "literal" && typeof arg0.value === "string"
         ? arg0.value
         : null;
-    if (!key) {
+    if (ctx.calleeImportedName !== "transitionSpeed" || !key) {
       return null;
     }
 
@@ -148,7 +141,7 @@ Adapters are the main extension point. They let you control:
 
 - how theme paths and CSS variables are turned into StyleX-compatible JS values (`resolveValue`)
 - what extra imports to inject into transformed files (returned from `resolveValue`)
-- how helper calls are resolved (via `resolveCall({ ... })` returning `kind: "value" | "styles"`)
+- how helper calls are resolved (via `resolveCall({ ... })` returning `kind: "value" | "styles"`; `null`/`undefined` now bails)
 - which exported components should support external className/style extension (`shouldSupportExternalStyling`)
 - how className/style merging is handled for components accepting external styling (`styleMerger`)
 
@@ -234,6 +227,7 @@ When the codemod encounters an interpolation inside a styled template literal, i
 - prop access (`props.foo`) and conditionals (`props.foo ? "a" : "b"`, `props.foo && "color: red;"`)
 - simple helper calls (`transitionSpeed("slowTransition")`) via `resolveCall({ ... })` returning `kind: "value"`
 - style helper calls (returning StyleX styles) via `resolveCall({ ... })` returning `kind: "styles"`; these are emitted as extra `stylex.props(...)` args
+- if `resolveCall` returns `null` or `undefined`, the transform now **bails the file** and logs a warning
 - helper calls applied to prop values (e.g. `shadow(props.shadow)`) by emitting a StyleX style function that calls the helper at runtime
 - conditional CSS blocks via ternary (e.g. `props.$dim ? "opacity: 0.5;" : ""`)
 
