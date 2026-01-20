@@ -1,5 +1,6 @@
 import type { Element } from "stylis";
 import type { StyledInterpolationSlot } from "./styled-css.js";
+import { normalizeInterpolatedSelector } from "./selectors.js";
 
 export type CssValuePart = { kind: "static"; value: string } | { kind: "slot"; slotId: number };
 
@@ -171,9 +172,10 @@ export function normalizeStylisAstToIR(
       lastDecl = null;
 
       const selectorValue = String(node.value ?? "");
-      const selector = stripFormFeedInSelectors
+      const selectorRaw = stripFormFeedInSelectors
         ? selectorValue.replaceAll("\f", "")
         : selectorValue;
+      const selector = normalizeInterpolatedSelector(selectorRaw);
       const rule = ensureRule(selector, atRuleStack);
       const children = node.children;
       if (children) {

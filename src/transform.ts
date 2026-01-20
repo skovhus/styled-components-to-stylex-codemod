@@ -18,10 +18,10 @@ import {
   universalSelectorUnsupportedWarning,
 } from "./internal/policy.js";
 import { Logger, type WarningLog } from "./internal/logger.js";
-import type { TransformOptions, TransformResult } from "./internal/transform-types.js";
+import type { StyledDecl, TransformOptions, TransformResult } from "./internal/transform-types.js";
 import { compile } from "stylis";
 import { normalizeStylisAstToIR } from "./internal/css-ir.js";
-import { cssDeclarationToStylexDeclarations } from "./internal/css-prop-mapping.js";
+import { parseStyledTemplateLiteral } from "./internal/styled-css.js";
 import { assertValidAdapter } from "./internal/public-api-validation.js";
 import { buildImportMap } from "./internal/transform-import-map.js";
 import { parseExpr as parseExprImpl } from "./internal/transform-parse-expr.js";
@@ -229,6 +229,14 @@ export function transformWithWarnings(
         return;
       }
       const cssNode = p.node as any;
+      const parent = p.parentPath?.node;
+      if (
+        parent?.type === "VariableDeclarator" &&
+        parent.init === cssNode &&
+        parent.id?.type === "Identifier"
+      ) {
+        return;
+      }
       let cur: any = p;
       let arrow: any = null;
       while (cur && cur.parentPath) {
@@ -308,6 +316,70 @@ export function transformWithWarnings(
   };
 
   const cssHelperNames = new Set<string>();
+  const cssHelperDecls: StyledDecl[] = [];
+  let cssHelperHasUniversalSelectors = false;
+  let cssHelperUniversalSelectorLoc: { line: number; column: number } | null = null;
+  const getCssHelperPlacementHints = (
+    declaratorPath: any,
+  ): { declIndex?: number; insertAfterName?: string } => {
+    const varDeclPath = declaratorPath?.parentPath;
+    if (!varDeclPath || varDeclPath.node?.type !== "VariableDeclaration") {
+      return {};
+    }
+    const programBody = (root.get().node.program as any)?.body;
+    if (!Array.isArray(programBody)) {
+      return {};
+    }
+    const idx = (() => {
+      const direct = programBody.indexOf(varDeclPath.node);
+      if (direct >= 0) {
+        return direct;
+      }
+      const loc = (varDeclPath.node as any)?.loc?.start;
+      if (!loc) {
+        return -1;
+      }
+      return programBody.findIndex((s: any) => {
+        const sloc = s?.loc?.start;
+        return sloc && sloc.line === loc.line && sloc.column === loc.column;
+      });
+    })();
+    let insertAfterName: string | undefined = undefined;
+    if (idx > 0) {
+      for (let i = idx - 1; i >= 0; i--) {
+        const stmt = programBody[i];
+        if (stmt?.type === "VariableDeclaration") {
+          const decl = (stmt.declarations ?? [])[0];
+          if (decl?.id?.type === "Identifier") {
+            insertAfterName = decl.id.name;
+            break;
+          }
+        }
+        if (stmt?.type === "FunctionDeclaration" && stmt.id?.type === "Identifier") {
+          insertAfterName = stmt.id.name;
+          break;
+        }
+      }
+    }
+    return {
+      declIndex: idx >= 0 ? idx : undefined,
+      ...(insertAfterName ? { insertAfterName } : {}),
+    };
+  };
+  const getCssHelperTemplateLoc = (template: any): { line: number; column: number } | null => {
+    const start = template?.loc?.start;
+    if (start?.line === undefined) {
+      return null;
+    }
+    return { line: start.line, column: start.column ?? 0 };
+  };
+  const noteCssHelperUniversalSelector = (template: any): void => {
+    cssHelperHasUniversalSelectors = true;
+    if (cssHelperUniversalSelectorLoc) {
+      return;
+    }
+    cssHelperUniversalSelectorLoc = getCssHelperTemplateLoc(template);
+  };
 
   if (hasUnsupportedCssHelperUsage) {
     return { code: null, warnings: collectCssHelperSkipWarnings({ root, j, styledImports }) };
@@ -338,36 +410,41 @@ export function transformWithWarnings(
           return;
         }
         const localName = p.node.id.name;
+        const placementHints = getCssHelperPlacementHints(p);
 
         const template = init.quasi;
+        const parsed = parseStyledTemplateLiteral(template);
         // `css\`...\`` snippets are not attached to a selector; parse by wrapping in `& { ... }`.
-        if ((template.expressions?.length ?? 0) > 0) {
-          return;
-        }
-        const rawCss = (template.quasis ?? []).map((q: any) => q.value?.raw ?? "").join("");
-        const stylisAst = compile(`& { ${rawCss} }`);
-        const rules = normalizeStylisAstToIR(stylisAst as any, [], { rawCss });
-
-        const baseRule = rules.find((r) => r.selector === "&" && r.atRuleStack.length === 0);
-        if (!baseRule) {
-          return;
+        const rawCss = `& { ${parsed.rawCss} }`;
+        const stylisAst = compile(rawCss);
+        const rules = normalizeStylisAstToIR(stylisAst as any, parsed.slots, { rawCss });
+        if (rules.some((r) => typeof r.selector === "string" && r.selector.includes("*"))) {
+          noteCssHelperUniversalSelector(template);
         }
 
-        const helperObj: Record<string, unknown> = {};
-        for (const d of baseRule.declarations) {
-          // Only accept static decls in helpers for now.
-          if (d.value.kind !== "static") {
-            return;
-          }
-          for (const out of cssDeclarationToStylexDeclarations(d)) {
-            helperObj[out.prop] = cssValueToJs(out.value, d.important, out.prop);
-          }
-        }
+        cssHelperDecls.push({
+          ...placementHints,
+          localName,
+          base: { kind: "intrinsic", tagName: "div" },
+          styleKey: toStyleKey(localName),
+          rules,
+          templateExpressions: parsed.slots.map((s) => s.expression),
+          rawCss,
+        });
 
-        // Replace with `const x = { ... } as const;`
-        // (jscodeshift doesn't expose `tsConstKeyword()`, so parse via template instead.)
-        p.node.init = j.template.expression`${objectToAst(j, helperObj)} as const` as any;
         cssHelperNames.add(localName);
+        const decl = p.parentPath?.node;
+        if (decl?.type === "VariableDeclaration") {
+          decl.declarations = decl.declarations.filter((dcl: any) => dcl !== p.node);
+          if (decl.declarations.length === 0) {
+            const exportDecl = p.parentPath?.parentPath?.node;
+            if (exportDecl?.type === "ExportNamedDeclaration") {
+              j(p).closest(j.ExportNamedDeclaration).remove();
+            } else {
+              j(p).closest(j.VariableDeclaration).remove();
+            }
+          }
+        }
         hasChanges = true;
       });
 
@@ -681,13 +758,28 @@ export function transformWithWarnings(
     hasChanges = true;
   }
 
-  const { styledDecls, hasUniversalSelectors, universalSelectorLoc } = collectStyledDecls({
+  const collected = collectStyledDecls({
     root,
     j,
     styledDefaultImport,
     toStyleKey,
     toSuffixFromProp,
   });
+  const styledDecls = collected.styledDecls;
+  let hasUniversalSelectors = collected.hasUniversalSelectors;
+  let universalSelectorLoc = collected.universalSelectorLoc;
+
+  if (cssHelperDecls.length > 0) {
+    styledDecls.push(...cssHelperDecls);
+    styledDecls.sort((a, b) => {
+      const aIdx = a.declIndex ?? Number.POSITIVE_INFINITY;
+      const bIdx = b.declIndex ?? Number.POSITIVE_INFINITY;
+      if (aIdx !== bIdx) {
+        return aIdx - bIdx;
+      }
+      return 0;
+    });
+  }
 
   // If we didn't find any styled declarations but performed other edits (e.g. createGlobalStyle / ThemeProvider),
   // we'll still emit output without injecting StyleX styles.
@@ -705,6 +797,13 @@ export function transformWithWarnings(
         : null,
       warnings,
     };
+  }
+
+  if (cssHelperHasUniversalSelectors) {
+    hasUniversalSelectors = true;
+    if (!universalSelectorLoc) {
+      universalSelectorLoc = cssHelperUniversalSelectorLoc;
+    }
   }
 
   // Universal selectors (`*`) are currently unsupported (too many edge cases to map to StyleX safely).
@@ -2185,6 +2284,9 @@ export function transformWithWarnings(
         }
 
         // Insert {...stylex.props(styles.key)} after structural attrs like href/type/size (matches fixtures).
+        const extraStyleArgs = (decl.extraStyleKeys ?? []).map((key) =>
+          j.memberExpression(j.identifier(stylesIdentifier), j.identifier(key)),
+        );
         const styleArgs: any[] = [
           ...(decl.extendsStyleKey
             ? [
@@ -2194,6 +2296,7 @@ export function transformWithWarnings(
                 ),
               ]
             : []),
+          ...extraStyleArgs,
           j.memberExpression(j.identifier(stylesIdentifier), j.identifier(decl.styleKey)),
         ];
 

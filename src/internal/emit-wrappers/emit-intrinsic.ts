@@ -49,6 +49,11 @@ export function emitIntrinsicWrappers(ctx: any): {
   const emitted: ASTNode[] = [];
   let needsReactTypeImport = false;
 
+  const extraStyleArgsFor = (d: StyledDecl): ExpressionKind[] =>
+    (d.extraStyleKeys ?? []).map((key) =>
+      j.memberExpression(j.identifier(stylesIdentifier), j.identifier(key)),
+    );
+
   const collectInlineStylePropNames = (inlineStyleProps: InlineStyleProp[]): string[] => {
     const names = new Set<string>();
     const visit = (node: ASTNode | null | undefined, parent: ASTNode | undefined): void => {
@@ -208,6 +213,7 @@ export function emitIntrinsicWrappers(ctx: any): {
 
       const aw = d.attrWrapper!;
       const styleArgs: ExpressionKind[] = [
+        ...extraStyleArgsFor(d),
         j.memberExpression(j.identifier(stylesIdentifier), j.identifier(d.styleKey)),
         ...(aw.checkboxKey
           ? [
@@ -306,6 +312,7 @@ export function emitIntrinsicWrappers(ctx: any): {
       const aw = d.attrWrapper!;
       const base = j.memberExpression(j.identifier(stylesIdentifier), j.identifier(d.styleKey));
       const styleArgs: ExpressionKind[] = [
+        ...extraStyleArgsFor(d),
         base,
         ...(aw.externalKey
           ? [
@@ -466,6 +473,7 @@ export function emitIntrinsicWrappers(ctx: any): {
         ...(d.extendsStyleKey
           ? [j.memberExpression(j.identifier(stylesIdentifier), j.identifier(d.extendsStyleKey))]
           : []),
+        ...extraStyleArgsFor(d),
         j.memberExpression(j.identifier(stylesIdentifier), j.identifier(d.styleKey)),
       ];
 
@@ -868,6 +876,7 @@ export function emitIntrinsicWrappers(ctx: any): {
       ...(d.extendsStyleKey
         ? [j.memberExpression(j.identifier(stylesIdentifier), j.identifier(d.extendsStyleKey))]
         : []),
+      ...extraStyleArgsFor(d),
       j.memberExpression(j.identifier(stylesIdentifier), j.identifier(d.styleKey)),
     ];
 
@@ -1321,6 +1330,7 @@ export function emitIntrinsicWrappers(ctx: any): {
       ...(d.extendsStyleKey
         ? [j.memberExpression(j.identifier(stylesIdentifier), j.identifier(d.extendsStyleKey))]
         : []),
+      ...extraStyleArgsFor(d),
       j.memberExpression(j.identifier(stylesIdentifier), j.identifier(d.styleKey)),
     ];
 
@@ -1598,6 +1608,7 @@ export function emitIntrinsicWrappers(ctx: any): {
 
     // Build styleArgs for sibling selectors
     const styleArgs: ExpressionKind[] = [
+      ...extraStyleArgsFor(d),
       j.memberExpression(j.identifier(stylesIdentifier), j.identifier(d.styleKey)),
       j.logicalExpression(
         "&&",
@@ -1876,6 +1887,7 @@ export function emitIntrinsicWrappers(ctx: any): {
       ...(d.extendsStyleKey
         ? [j.memberExpression(j.identifier(stylesIdentifier), j.identifier(d.extendsStyleKey))]
         : []),
+      ...extraStyleArgsFor(d),
       j.memberExpression(j.identifier(stylesIdentifier), j.identifier(d.styleKey)),
     ];
 

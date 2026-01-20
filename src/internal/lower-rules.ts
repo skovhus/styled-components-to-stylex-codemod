@@ -22,6 +22,7 @@ import {
 } from "./lower-rules/types.js";
 import {
   normalizeSelectorForInputAttributePseudos,
+  normalizeInterpolatedSelector,
   parseAttributeSelector,
   parseCommaSeparatedPseudos,
   parsePseudoElement,
@@ -1108,6 +1109,7 @@ export function lowerRules(args: {
             type: "unsupported-feature",
             message:
               "Complex selectors (grouped selectors, descendant element selectors, class-conditioned selectors, or :not() chains) are not currently supported",
+            ...(decl.loc ? { loc: decl.loc } : {}),
           });
           break;
         }
@@ -1200,6 +1202,7 @@ export function lowerRules(args: {
 
       const isInputIntrinsic = decl.base.kind === "intrinsic" && decl.base.tagName === "input";
       let selector = normalizeSelectorForInputAttributePseudos(rule.selector, isInputIntrinsic);
+      selector = normalizeInterpolatedSelector(selector);
       if (!media && selector.trim().startsWith("@media")) {
         media = selector.trim();
         selector = "&";
@@ -1352,8 +1355,12 @@ export function lowerRules(args: {
             if (slot) {
               const expr = decl.templateExpressions[slot.slotId] as any;
               if (expr?.type === "Identifier" && cssHelperNames.has(expr.name)) {
-                const spreads = (styleObj.__spreads as any[]) ?? [];
-                styleObj.__spreads = [...spreads, expr.name] as any;
+                const helperKey = toStyleKey(expr.name);
+                const extras = decl.extraStyleKeys ?? [];
+                if (!extras.includes(helperKey)) {
+                  extras.push(helperKey);
+                }
+                decl.extraStyleKeys = extras;
                 continue;
               }
             }
@@ -1517,6 +1524,26 @@ export function lowerRules(args: {
             const slotPart = d.value.parts.find((p: any) => p.kind === "slot");
             const slotId = slotPart && slotPart.kind === "slot" ? slotPart.slotId : 0;
             const expr = decl.templateExpressions[slotId] as any;
+            if (stylexProp && expr?.type === "ArrowFunctionExpression") {
+              const bodyExpr =
+                expr.body?.type === "BlockStatement"
+                  ? expr.body.body?.find((s: any) => s.type === "ReturnStatement")?.argument
+                  : expr.body;
+              const resolved = bodyExpr ? resolveThemeValue(bodyExpr) : null;
+              if (resolved) {
+                for (const out of cssDeclarationToStylexDeclarations(d)) {
+                  perPropPseudo[out.prop] ??= {};
+                  const existing = perPropPseudo[out.prop]!;
+                  if (!("default" in existing)) {
+                    existing.default = (styleObj as any)[out.prop] ?? null;
+                  }
+                  for (const ps of pseudos) {
+                    existing[ps] = resolved;
+                  }
+                }
+                continue;
+              }
+            }
             if (
               stylexProp &&
               expr?.type === "ArrowFunctionExpression" &&

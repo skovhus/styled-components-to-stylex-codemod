@@ -95,6 +95,19 @@ export function parseAttributeSelector(selector: string): {
   return null;
 }
 
+export function normalizeInterpolatedSelector(selectorRaw: string): string {
+  if (!/__SC_EXPR_\d+__/.test(selectorRaw)) {
+    return selectorRaw;
+  }
+  return selectorRaw
+    .replace(/__SC_EXPR_\d+__/g, "&")
+    .replace(/\s+/g, " ")
+    .trim()
+    .replace(/&\s*&/g, "&")
+    .replace(/&\s*&:/g, "&:")
+    .replace(/&\s*:/g, "&:");
+}
+
 export function normalizeSelectorForInputAttributePseudos(
   selector: string,
   isInput: boolean,

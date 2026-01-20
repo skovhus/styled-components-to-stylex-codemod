@@ -41,15 +41,20 @@ function collectStyledDeclsImpl(args: {
   let hasUniversalSelectors = false;
   let universalSelectorLoc: { line: number; column: number } | null = null;
 
+  const getTemplateLoc = (template: any): { line: number; column: number } | null => {
+    const start = template?.loc?.start;
+    if (start?.line === undefined) {
+      return null;
+    }
+    return { line: start.line, column: start.column ?? 0 };
+  };
+
   const noteUniversalSelector = (template: any): void => {
     hasUniversalSelectors = true;
     if (universalSelectorLoc) {
       return;
     }
-    const start = template?.loc?.start;
-    if (start?.line !== undefined) {
-      universalSelectorLoc = { line: start.line, column: start.column ?? 0 };
-    }
+    universalSelectorLoc = getTemplateLoc(template);
   };
 
   const parseAttrsArg = (arg0: any): StyledDecl["attrsInfo"] | undefined => {
@@ -574,6 +579,7 @@ function collectStyledDeclsImpl(args: {
         const localName = id.name;
         const tagName = tag.property.name;
         const template = init.quasi;
+        const templateLoc = getTemplateLoc(template);
         const parsed = parseStyledTemplateLiteral(template);
         const rules = normalizeStylisAstToIR(parsed.stylisAst, parsed.slots, {
           rawCss: parsed.rawCss,
@@ -590,6 +596,7 @@ function collectStyledDeclsImpl(args: {
           rules,
           templateExpressions: parsed.slots.map((s) => s.expression),
           rawCss: parsed.rawCss,
+          ...(templateLoc ? { loc: templateLoc } : {}),
           ...(propsType ? { propsType } : {}),
           ...(leadingComments ? { leadingComments } : {}),
         });
@@ -610,6 +617,7 @@ function collectStyledDeclsImpl(args: {
         const localName = id.name;
         const tagName = tag.callee.object.property.name;
         const template = init.quasi;
+        const templateLoc = getTemplateLoc(template);
         const parsed = parseStyledTemplateLiteral(template);
         const rules = normalizeStylisAstToIR(parsed.stylisAst, parsed.slots, {
           rawCss: parsed.rawCss,
@@ -636,6 +644,7 @@ function collectStyledDeclsImpl(args: {
           rules,
           templateExpressions: parsed.slots.map((s) => s.expression),
           rawCss: parsed.rawCss,
+          ...(templateLoc ? { loc: templateLoc } : {}),
           ...(attrsInfo ? { attrsInfo } : {}),
           ...(shouldForceWrapperForAttrs(attrsInfo) ? { needsWrapperComponent: true } : {}),
           ...(shouldForwardProp ? { shouldForwardProp } : {}),
@@ -665,6 +674,7 @@ function collectStyledDeclsImpl(args: {
         const arg0 = tag.callee.object.arguments[0] as any;
         const tagName = arg0.type === "StringLiteral" ? arg0.value : arg0.value;
         const template = init.quasi;
+        const templateLoc = getTemplateLoc(template);
         const parsed = parseStyledTemplateLiteral(template);
         const rules = normalizeStylisAstToIR(parsed.stylisAst, parsed.slots, {
           rawCss: parsed.rawCss,
@@ -682,6 +692,7 @@ function collectStyledDeclsImpl(args: {
           rules,
           templateExpressions: parsed.slots.map((s) => s.expression),
           rawCss: parsed.rawCss,
+          ...(templateLoc ? { loc: templateLoc } : {}),
           ...(attrsInfo ? { attrsInfo } : {}),
           ...(shouldForceWrapperForAttrs(attrsInfo) ? { needsWrapperComponent: true } : {}),
           ...(propsType ? { propsType } : {}),
@@ -706,6 +717,7 @@ function collectStyledDeclsImpl(args: {
         const ident = tag.callee.object.arguments[0].name;
         const styleKey = localName === `Styled${ident}` ? toStyleKey(ident) : toStyleKey(localName);
         const template = init.quasi;
+        const templateLoc = getTemplateLoc(template);
         const parsed = parseStyledTemplateLiteral(template);
         const rules = normalizeStylisAstToIR(parsed.stylisAst, parsed.slots, {
           rawCss: parsed.rawCss,
@@ -723,6 +735,7 @@ function collectStyledDeclsImpl(args: {
           rules,
           templateExpressions: parsed.slots.map((s) => s.expression),
           rawCss: parsed.rawCss,
+          ...(templateLoc ? { loc: templateLoc } : {}),
           ...(attrsInfo ? { attrsInfo } : {}),
           ...(shouldForceWrapperForAttrs(attrsInfo) ? { needsWrapperComponent: true } : {}),
           ...(propsType ? { propsType } : {}),
@@ -743,6 +756,7 @@ function collectStyledDeclsImpl(args: {
         const ident = tag.arguments[0].name;
         const styleKey = localName === `Styled${ident}` ? toStyleKey(ident) : toStyleKey(localName);
         const template = init.quasi;
+        const templateLoc = getTemplateLoc(template);
         const parsed = parseStyledTemplateLiteral(template);
         const rules = normalizeStylisAstToIR(parsed.stylisAst, parsed.slots, {
           rawCss: parsed.rawCss,
@@ -759,6 +773,7 @@ function collectStyledDeclsImpl(args: {
           rules,
           templateExpressions: parsed.slots.map((s) => s.expression),
           rawCss: parsed.rawCss,
+          ...(templateLoc ? { loc: templateLoc } : {}),
           ...(propsType ? { propsType } : {}),
           ...(leadingComments ? { leadingComments } : {}),
         });
@@ -783,6 +798,7 @@ function collectStyledDeclsImpl(args: {
           return;
         }
         const template = init.quasi;
+        const templateLoc = getTemplateLoc(template);
         const parsed = parseStyledTemplateLiteral(template);
         const rules = normalizeStylisAstToIR(parsed.stylisAst, parsed.slots, {
           rawCss: parsed.rawCss,
@@ -799,6 +815,7 @@ function collectStyledDeclsImpl(args: {
           rules,
           templateExpressions: parsed.slots.map((s) => s.expression),
           rawCss: parsed.rawCss,
+          ...(templateLoc ? { loc: templateLoc } : {}),
           ...(propsType ? { propsType } : {}),
           ...(leadingComments ? { leadingComments } : {}),
         });
@@ -818,6 +835,7 @@ function collectStyledDeclsImpl(args: {
         const arg0 = tag.arguments[0] as any;
         const tagName = arg0.type === "StringLiteral" ? arg0.value : arg0.value;
         const template = init.quasi;
+        const templateLoc = getTemplateLoc(template);
         const parsed = parseStyledTemplateLiteral(template);
         const rules = normalizeStylisAstToIR(parsed.stylisAst, parsed.slots, {
           rawCss: parsed.rawCss,
@@ -834,6 +852,7 @@ function collectStyledDeclsImpl(args: {
           rules,
           templateExpressions: parsed.slots.map((s) => s.expression),
           rawCss: parsed.rawCss,
+          ...(templateLoc ? { loc: templateLoc } : {}),
           ...(propsType ? { propsType } : {}),
           ...(leadingComments ? { leadingComments } : {}),
         });
@@ -854,6 +873,7 @@ function collectStyledDeclsImpl(args: {
         const localName = id.name;
         const ident = tag.callee.object.arguments[0].name;
         const template = init.quasi;
+        const templateLoc = getTemplateLoc(template);
         const parsed = parseStyledTemplateLiteral(template);
         const rules = normalizeStylisAstToIR(parsed.stylisAst, parsed.slots, {
           rawCss: parsed.rawCss,
@@ -872,6 +892,7 @@ function collectStyledDeclsImpl(args: {
           rules,
           templateExpressions: parsed.slots.map((s) => s.expression),
           rawCss: parsed.rawCss,
+          ...(templateLoc ? { loc: templateLoc } : {}),
           ...(shouldForwardProp ? { shouldForwardProp } : {}),
           ...(shouldForwardProp ? { shouldForwardPropFromWithConfig: true } : {}),
           ...(withConfigMeta ? { withConfig: withConfigMeta } : {}),
@@ -898,6 +919,7 @@ function collectStyledDeclsImpl(args: {
         const arg0 = tag.callee.object.arguments[0] as any;
         const tagName = arg0.type === "StringLiteral" ? arg0.value : arg0.value;
         const template = init.quasi;
+        const templateLoc = getTemplateLoc(template);
         const parsed = parseStyledTemplateLiteral(template);
         const rules = normalizeStylisAstToIR(parsed.stylisAst, parsed.slots, {
           rawCss: parsed.rawCss,
@@ -916,6 +938,7 @@ function collectStyledDeclsImpl(args: {
           rules,
           templateExpressions: parsed.slots.map((s) => s.expression),
           rawCss: parsed.rawCss,
+          ...(templateLoc ? { loc: templateLoc } : {}),
           ...(shouldForwardProp ? { shouldForwardProp } : {}),
           ...(shouldForwardProp ? { shouldForwardPropFromWithConfig: true } : {}),
           ...(withConfigMeta ? { withConfig: withConfigMeta } : {}),

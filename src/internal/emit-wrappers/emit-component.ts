@@ -181,7 +181,11 @@ export function emitComponentWrappers(ctx: any): {
     }
     // For component wrappers, don't include extendsStyleKey because
     // the wrapped component already applies its own styles.
+    const extraStyleArgs = (d.extraStyleKeys ?? []).map((key) =>
+      j.memberExpression(j.identifier(stylesIdentifier), j.identifier(key)),
+    );
     const styleArgs: ExpressionKind[] = [
+      ...extraStyleArgs,
       j.memberExpression(j.identifier(stylesIdentifier), j.identifier(d.styleKey)),
     ];
 

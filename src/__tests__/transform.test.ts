@@ -92,6 +92,9 @@ function getTestCases(): FixtureCase[] {
 }
 
 const fixtureCases: FixtureCase[] = getTestCases();
+const unsupportedInputs = readdirSync(testCasesDir)
+  .filter((f) => f.startsWith("_unsupported.") && f.endsWith(".input.tsx"))
+  .sort();
 
 function readTestCase(
   name: string,
@@ -285,29 +288,15 @@ describe("test case file pairing", () => {
 });
 
 describe("_unsupported fixtures", () => {
-  it("should bail (return null code) for all _unsupported.* fixtures", () => {
-    const files = readdirSync(testCasesDir);
-    const unsupportedInputs = files
-      .filter((f) => f.startsWith("_unsupported.") && f.endsWith(".input.tsx"))
-      .sort();
-
-    expect(unsupportedInputs.length).toBeGreaterThan(0);
-
-    for (const inputFile of unsupportedInputs) {
-      const inputPath = join(testCasesDir, inputFile);
-      const input = readFileSync(inputPath, "utf-8");
-
-      // Sanity: these fixtures are specifically about styled-components -> StyleX limitations.
-      expect(input).toMatch(/from\s+['"]styled-components['"]/);
-
-      const result = transformWithWarnings(
-        { source: input, path: inputPath },
-        { jscodeshift: j, j, stats: () => {}, report: () => {} },
-        { adapter: fixtureAdapter },
-      );
-
-      expect(result.code).toBeNull();
-    }
+  it.each(unsupportedInputs)("%s should bail out", (unsupportedInput) => {
+    const inputPath = join(testCasesDir, unsupportedInput);
+    const input = readFileSync(inputPath, "utf-8");
+    const result = transformWithWarnings(
+      { source: input, path: inputPath },
+      { jscodeshift: j, j, stats: () => {}, report: () => {} },
+      { adapter: fixtureAdapter },
+    );
+    expect(result.code).toBeNull();
   });
 });
 
@@ -497,31 +486,6 @@ export const App = () => <Box><span /></Box>;
 
     expect(result.code).toBeNull();
     expect(result.warnings.some((w) => warningMatchesToken(w, "universal-selector"))).toBe(true);
-  });
-
-  it("should warn and skip when styled-components `css` helper mixins are used", () => {
-    const source = `
-import styled, { css } from 'styled-components';
-
-const mixin = css\`
-  color: red;
-\`;
-
-const Box = styled.div\`
-  \${mixin}
-\`;
-
-export const App = () => <Box />;
-`;
-
-    const result = transformWithWarnings(
-      { source, path: "test.tsx" },
-      { jscodeshift: j, j, stats: () => {}, report: () => {} },
-      { adapter: fixtureAdapter },
-    );
-
-    expect(result.code).toBeNull();
-    expect(result.warnings.some((w) => warningMatchesToken(w, "css-helper"))).toBe(true);
   });
 
   it("should bail on unsupported conditional with theme access in test expressions in shouldForwardProp wrappers", () => {
