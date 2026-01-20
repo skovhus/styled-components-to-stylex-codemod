@@ -36,6 +36,10 @@ export type StyledDecl = {
    * Represents the name of the *preceding* top-level declaration (var or function) when present.
    */
   insertAfterName?: string;
+  /**
+   * Best-effort source location for the start of the template literal.
+   */
+  loc?: { line: number; column: number };
 
   localName: string;
   base: { kind: "intrinsic"; tagName: string } | { kind: "component"; ident: string };
@@ -116,6 +120,11 @@ export type StyledDecl = {
   preResolvedStyle?: Record<string, unknown>;
   preResolvedFnDecls?: Record<string, unknown>;
   inlineStyleProps?: Array<{ prop: string; expr: ExpressionKind }>;
+  /**
+   * Additional style keys (from css`` helper blocks) that should be applied
+   * alongside this component's base style.
+   */
+  extraStyleKeys?: string[];
   /**
    * Additional `stylex.props(...)` arguments derived from resolved helper calls that
    * produce StyleX style objects (adapter resolveCall(...) -> { usage: "props", ... }).

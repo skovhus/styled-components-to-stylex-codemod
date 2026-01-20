@@ -9,6 +9,8 @@ export const themeVars = stylex.defineVars({
   labelMuted: "#6B7280",
   labelTitle: "#111827",
   bgBase: "#E0F2FE",
+  bgBaseHover: "#BAE6FD",
+  bgBorderFaint: "#7DD3FC",
   bgSub: "#0284C7",
   textPrimary: "#111827",
   textSecondary: "#6B7280",
@@ -24,6 +26,8 @@ export const testCaseTheme = {
     labelMuted: "#6B7280",
     labelTitle: "#111827",
     bgBase: "#E0F2FE",
+    bgBaseHover: "#BAE6FD",
+    bgBorderFaint: "#7DD3FC",
     bgSub: "#0284C7",
     textPrimary: "#111827",
     textSecondary: "#6B7280",
@@ -34,6 +38,11 @@ export const testCaseTheme = {
   spacing: {
     small: "8px",
     medium: "16px",
+  },
+  $someKey: {
+    anotherKey: {
+      background: "#E0F2FE",
+    },
   },
 } as const;
 
