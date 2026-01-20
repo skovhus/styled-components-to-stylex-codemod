@@ -1,9 +1,11 @@
 import * as React from "react";
 import * as stylex from "@stylexjs/stylex";
 
+type ButtonSize = keyof typeof styles.buttonSize;
+
 type ButtonProps = Omit<React.ComponentProps<"button">, "className" | "style"> & {
   color?: string;
-  size?: "small" | "large";
+  size?: ButtonSize;
 };
 
 // Using shouldForwardProp to filter props (v5 pattern)
@@ -13,7 +15,7 @@ function Button(props: ButtonProps) {
     <button
       {...stylex.props(
         styles.button,
-        size === "large" && styles.buttonSizeLarge,
+        size === "large" && styles.buttonSize.large,
         color != null && styles.buttonBackgroundColor(color),
       )}
     >
@@ -57,8 +59,10 @@ function Box(props: BoxProps) {
   );
 }
 
+type CardVariant = keyof typeof styles.cardVariant;
+
 type CardProps = Omit<React.ComponentProps<"div">, "className" | "style"> & {
-  variant?: "primary" | "secondary";
+  variant?: CardVariant;
   elevation?: number;
   rounded?: boolean;
 };
@@ -70,7 +74,7 @@ function Card(props: CardProps) {
     <div
       {...stylex.props(
         styles.card,
-        variant === "primary" && styles.cardVariantPrimary,
+        variant === "primary" && styles.cardVariant.primary,
         rounded && styles.cardRounded,
         styles.cardBoxShadow(props),
       )}
@@ -113,10 +117,13 @@ const styles = stylex.create({
     borderStyle: "none",
     borderRadius: "4px",
   },
-  buttonSizeLarge: {
-    paddingBlock: "12px",
-    paddingInline: "24px",
-    fontSize: "18px",
+  buttonSize: {
+    small: {},
+    large: {
+      paddingBlock: "12px",
+      paddingInline: "24px",
+      fontSize: "18px",
+    },
   },
   buttonBackgroundColor: (backgroundColor: string) => ({
     backgroundColor,
@@ -157,8 +164,11 @@ const styles = stylex.create({
     padding: "16px",
     color: "white",
   },
-  cardVariantPrimary: {
-    backgroundColor: "#BF4F74",
+  cardVariant: {
+    primary: {
+      backgroundColor: "#BF4F74",
+    },
+    secondary: {},
   },
   cardRounded: {
     borderRadius: "16px",

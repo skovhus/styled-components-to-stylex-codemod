@@ -46,6 +46,20 @@ export type StyledDecl = {
   styleKey: string;
   extendsStyleKey?: string;
   variantStyleKeys?: Record<string, string>; // conditionProp -> styleKey
+  variantStyleGroups?: Array<{
+    propName: string;
+    styleKey: string;
+    typeName: string;
+    values: Array<string | number>;
+    fromPropsType?: boolean;
+  }>;
+  variantGroupStyleKeys?: Record<
+    string,
+    {
+      groupKey: string;
+      value: string | number;
+    }
+  >;
   needsWrapperComponent?: boolean;
   /**
    * Whether this component should support external className/style extension.

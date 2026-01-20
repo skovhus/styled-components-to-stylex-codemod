@@ -1,4 +1,4 @@
-import type { API, FileInfo, Options } from "jscodeshift";
+import type { API, ASTNode, Collection, FileInfo, Options } from "jscodeshift";
 import path from "node:path";
 import type { ImportSource } from "./adapter.js";
 import { assertNoNullNodesInArrays } from "./internal/ast-safety.js";
@@ -1402,6 +1402,14 @@ export function transformWithWarnings(
         }
       });
   }
+
+  applyVariantTypeAliases({
+    root,
+    j,
+    styledDecls,
+    stylesIdentifier,
+    filePath: file.path,
+  });
 
   // Remove styled declarations and rewrite JSX usages
 
@@ -2818,4 +2826,215 @@ function isJsxSelfClosingNamed(name: string) {
     const n = p.node.name;
     return n && n.type === "JSXIdentifier" && n.name === name;
   };
+}
+
+function applyVariantTypeAliases(args: {
+  root: Collection<any>;
+  j: API["jscodeshift"];
+  styledDecls: StyledDecl[];
+  stylesIdentifier: string;
+  filePath: string;
+}): void {
+  const { root, j, styledDecls, stylesIdentifier, filePath } = args;
+  const emitTypes = filePath.endsWith(".ts") || filePath.endsWith(".tsx");
+  if (!emitTypes) {
+    return;
+  }
+
+  const typeExistsInFile = (name: string): boolean => {
+    if (!name) {
+      return false;
+    }
+    const aliases = root.find(j.TSTypeAliasDeclaration, {
+      id: { type: "Identifier", name },
+    } as any);
+    if (aliases.size() > 0) {
+      return true;
+    }
+    const interfaces = root.find(j.TSInterfaceDeclaration, {
+      id: { type: "Identifier", name },
+    } as any);
+    return interfaces.size() > 0;
+  };
+
+  const updateMembers = (members: any[], propTypes: Map<string, string>): void => {
+    for (const member of members ?? []) {
+      if (!member || member.type !== "TSPropertySignature") {
+        continue;
+      }
+      const key = member.key;
+      const propName =
+        key?.type === "Identifier"
+          ? key.name
+          : key?.type === "StringLiteral"
+            ? key.value
+            : key?.type === "Literal" && typeof key.value === "string"
+              ? key.value
+              : null;
+      if (!propName) {
+        continue;
+      }
+      const typeName = propTypes.get(propName);
+      if (!typeName) {
+        continue;
+      }
+      member.typeAnnotation = j.tsTypeAnnotation(j.tsTypeReference(j.identifier(typeName)));
+    }
+  };
+
+  const updatePropsTypeForDecl = (
+    decl: StyledDecl,
+    groups: Array<{ propName: string; typeName: string }>,
+  ): void => {
+    if (!groups.length) {
+      return;
+    }
+    const propTypes = new Map<string, string>(groups.map((g) => [g.propName, g.typeName]));
+    const propsType: any = decl.propsType as any;
+    if (!propsType || typeof propsType !== "object") {
+      return;
+    }
+    if (propsType.type === "TSTypeLiteral") {
+      updateMembers(propsType.members ?? [], propTypes);
+      return;
+    }
+    if (propsType.type === "TSTypeReference" && propsType.typeName?.type === "Identifier") {
+      const typeName = propsType.typeName.name;
+      if (!typeName) {
+        return;
+      }
+      root
+        .find(j.TSInterfaceDeclaration, {
+          id: { type: "Identifier", name: typeName },
+        } as any)
+        .forEach((path: any) => {
+          const body = path.node?.body?.body ?? [];
+          updateMembers(body, propTypes);
+        });
+      root
+        .find(j.TSTypeAliasDeclaration, {
+          id: { type: "Identifier", name: typeName },
+        } as any)
+        .forEach((path: any) => {
+          const typeAnnotation = path.node?.typeAnnotation;
+          if (!typeAnnotation) {
+            return;
+          }
+          if (typeAnnotation.type === "TSTypeLiteral") {
+            updateMembers(typeAnnotation.members ?? [], propTypes);
+            return;
+          }
+          if (typeAnnotation.type === "TSIntersectionType") {
+            for (const part of typeAnnotation.types ?? []) {
+              if (part?.type === "TSTypeLiteral") {
+                updateMembers(part.members ?? [], propTypes);
+              }
+            }
+          }
+        });
+    }
+  };
+
+  const findPropsTypeDeclPath = (decl: StyledDecl): any | null => {
+    const propsType: any = decl.propsType as any;
+    if (!propsType || typeof propsType !== "object") {
+      return null;
+    }
+    if (propsType.type === "TSTypeReference" && propsType.typeName?.type === "Identifier") {
+      const typeName = propsType.typeName.name;
+      if (!typeName) {
+        return null;
+      }
+      const alias = root.find(j.TSTypeAliasDeclaration, {
+        id: { type: "Identifier", name: typeName },
+      } as any);
+      if (alias.size() > 0) {
+        return alias.at(0);
+      }
+      const iface = root.find(j.TSInterfaceDeclaration, {
+        id: { type: "Identifier", name: typeName },
+      } as any);
+      if (iface.size() > 0) {
+        return iface.at(0);
+      }
+    }
+    return null;
+  };
+
+  const findStyledDeclPath = (decl: StyledDecl): any | null => {
+    const styledDecl = root.find(j.VariableDeclaration).filter((p: any) =>
+      p.node.declarations.some(
+        (dcl: any) =>
+          dcl.type === "VariableDeclarator" &&
+          dcl.id?.type === "Identifier" &&
+          dcl.id.name === decl.localName,
+      ),
+    );
+    return styledDecl.size() > 0 ? styledDecl.at(0) : null;
+  };
+
+  const buildVariantTypeAlias = (typeName: string, styleKey: string): ASTNode | null => {
+    try {
+      const stmt = j(
+        `type ${typeName} = keyof typeof ${stylesIdentifier}.${styleKey};`,
+      ).get().node.program.body[0];
+      return stmt as ASTNode;
+    } catch {
+      return null;
+    }
+  };
+
+  const insertedTypeNames = new Set<string>();
+  const queuedForStyles: ASTNode[] = [];
+
+  for (const decl of styledDecls) {
+    const groups = (decl.variantStyleGroups ?? []).filter((g) => g.fromPropsType !== false);
+    if (!groups.length) {
+      continue;
+    }
+    const groupsToEmit = groups.filter(
+      (g) => !typeExistsInFile(g.typeName) && !insertedTypeNames.has(g.typeName),
+    );
+    const nodes: ASTNode[] = [];
+    for (const group of groupsToEmit) {
+      const node = buildVariantTypeAlias(group.typeName, group.styleKey);
+      if (node) {
+        nodes.push(node);
+        insertedTypeNames.add(group.typeName);
+      }
+    }
+    if (nodes.length) {
+      const insertionPath = findPropsTypeDeclPath(decl) ?? findStyledDeclPath(decl);
+      if (insertionPath) {
+        insertionPath.insertBefore(nodes);
+      } else {
+        queuedForStyles.push(...nodes);
+      }
+    }
+
+    updatePropsTypeForDecl(
+      decl,
+      groupsToEmit.map((g) => ({ propName: g.propName, typeName: g.typeName })),
+    );
+  }
+
+  if (queuedForStyles.length) {
+    const stylesDecl = root
+      .find(j.VariableDeclaration)
+      .filter((p: any) =>
+        p.node.declarations.some(
+          (dcl: any) =>
+            dcl.type === "VariableDeclarator" &&
+            dcl.id?.type === "Identifier" &&
+            dcl.id.name === stylesIdentifier,
+        ),
+      )
+      .at(0);
+    if (stylesDecl.size() > 0) {
+      stylesDecl.insertBefore(queuedForStyles);
+    } else {
+      const programBody = root.get().node.program.body;
+      programBody.push(...queuedForStyles);
+    }
+  }
 }

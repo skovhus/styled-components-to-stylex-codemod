@@ -5,9 +5,11 @@ import { mergedSx } from "./lib/mergedSx";
 // Bug 7: When styled components are transformed, related type exports
 // and component exports should be preserved properly.
 
+type ButtonSize = keyof typeof styles.buttonSize;
+
 export interface ButtonProps extends React.ComponentProps<"button"> {
   variant?: "primary" | "secondary";
-  size?: "small" | "large";
+  size?: ButtonSize;
 }
 
 export type ButtonVariant = ButtonProps["variant"];
@@ -20,8 +22,8 @@ function Button(props: ButtonProps) {
       {...mergedSx(
         [
           styles.button,
-          size === "large" && styles.buttonSizeLarge,
-          variant === "primary" && styles.buttonVariantPrimary,
+          size === "large" && styles.buttonSize.large,
+          variant === "primary" && styles.buttonVariant.primary,
         ],
         className,
         style,
@@ -55,11 +57,17 @@ const styles = stylex.create({
     backgroundColor: "gray",
     color: "white",
   },
-  buttonSizeLarge: {
-    paddingBlock: "12px",
-    paddingInline: "24px",
+  buttonSize: {
+    small: {},
+    large: {
+      paddingBlock: "12px",
+      paddingInline: "24px",
+    },
   },
-  buttonVariantPrimary: {
-    backgroundColor: "blue",
+  buttonVariant: {
+    primary: {
+      backgroundColor: "blue",
+    },
+    secondary: {},
   },
 });

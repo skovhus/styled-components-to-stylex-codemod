@@ -44,6 +44,23 @@ export function emitComponentWrappers(ctx: any): {
   const emitted: ASTNode[] = [];
   let needsReactTypeImport = false;
 
+  const isValidIdentifier = (name: string): boolean => /^[$A-Z_][0-9A-Z_$]*$/i.test(name);
+  const variantStyleExpression = (
+    d: StyledDecl,
+    when: string,
+    variantKey: string,
+  ): ExpressionKind => {
+    const group = d.variantGroupStyleKeys?.[when];
+    if (group) {
+      const base = j.memberExpression(j.identifier(stylesIdentifier), j.identifier(group.groupKey));
+      if (typeof group.value === "string" && isValidIdentifier(group.value)) {
+        return j.memberExpression(base, j.identifier(group.value));
+      }
+      return j.memberExpression(base, j.literal(group.value), true);
+    }
+    return j.memberExpression(j.identifier(stylesIdentifier), j.identifier(variantKey));
+  };
+
   const collectInlineStylePropNames = (inlineStyleProps: InlineStyleProp[]): string[] => {
     const names = new Set<string>();
     const visit = (node: ASTNode | null | undefined, parent: ASTNode | undefined): void => {
@@ -206,7 +223,7 @@ export function emitComponentWrappers(ctx: any): {
           j.logicalExpression(
             "&&",
             cond,
-            j.memberExpression(j.identifier(stylesIdentifier), j.identifier(variantKey)),
+            variantStyleExpression(d, when, variantKey),
           ),
         );
       }

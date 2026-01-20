@@ -49,6 +49,23 @@ export function emitIntrinsicWrappers(ctx: any): {
   const emitted: ASTNode[] = [];
   let needsReactTypeImport = false;
 
+  const isValidIdentifier = (name: string): boolean => /^[$A-Z_][0-9A-Z_$]*$/i.test(name);
+  const variantStyleExpression = (
+    d: StyledDecl,
+    when: string,
+    variantKey: string,
+  ): ExpressionKind => {
+    const group = d.variantGroupStyleKeys?.[when];
+    if (group) {
+      const base = j.memberExpression(j.identifier(stylesIdentifier), j.identifier(group.groupKey));
+      if (typeof group.value === "string" && isValidIdentifier(group.value)) {
+        return j.memberExpression(base, j.identifier(group.value));
+      }
+      return j.memberExpression(base, j.literal(group.value), true);
+    }
+    return j.memberExpression(j.identifier(stylesIdentifier), j.identifier(variantKey));
+  };
+
   const extraStyleArgsFor = (d: StyledDecl): ExpressionKind[] =>
     (d.extraStyleKeys ?? []).map((key) =>
       j.memberExpression(j.identifier(stylesIdentifier), j.identifier(key)),
@@ -493,7 +510,7 @@ export function emitIntrinsicWrappers(ctx: any): {
             j.logicalExpression(
               "&&",
               cond,
-              j.memberExpression(j.identifier(stylesIdentifier), j.identifier(variantKey)),
+              variantStyleExpression(d, when, variantKey),
             ),
           );
         }
@@ -899,7 +916,7 @@ export function emitIntrinsicWrappers(ctx: any): {
           j.logicalExpression(
             "&&",
             cond,
-            j.memberExpression(j.identifier(stylesIdentifier), j.identifier(variantKey)),
+            variantStyleExpression(d, when, variantKey),
           ),
         );
       }
@@ -1922,7 +1939,7 @@ export function emitIntrinsicWrappers(ctx: any): {
           j.logicalExpression(
             "&&",
             cond,
-            j.memberExpression(j.identifier(stylesIdentifier), j.identifier(variantKey)),
+            variantStyleExpression(d, when, variantKey),
           ),
         );
       }

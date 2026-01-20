@@ -1,9 +1,11 @@
 import React from "react";
 import * as stylex from "@stylexjs/stylex";
 
+type BoxSize = keyof typeof styles.boxSize;
+
 type BoxProps = React.PropsWithChildren<{
   $isActive?: boolean;
-  $size?: "small" | "large";
+  $size?: BoxSize;
 }>;
 
 // Pattern 1: Exported components - become wrapper functions that must:
@@ -16,7 +18,7 @@ export function Box(props: BoxProps) {
     <div
       {...stylex.props(
         styles.box,
-        $size === "large" && styles.boxSizeLarge,
+        $size === "large" && styles.boxSize.large,
         $isActive && styles.boxActive,
       )}
     >
@@ -69,8 +71,11 @@ const styles = stylex.create({
     backgroundColor: "gray",
     color: "white",
   },
-  boxSizeLarge: {
-    padding: "16px",
+  boxSize: {
+    small: {},
+    large: {
+      padding: "16px",
+    },
   },
   boxActive: {
     backgroundColor: "blue",

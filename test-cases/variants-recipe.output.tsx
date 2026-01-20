@@ -4,9 +4,12 @@ import * as stylex from "@stylexjs/stylex";
 // Styled-components version of the StyleX "variants" recipe:
 // https://stylexjs.com/docs/learn/recipes/variants
 
+type ButtonColor = keyof typeof styles.buttonColor;
+type ButtonSize = keyof typeof styles.buttonSize;
+
 type Props = {
-  color?: "primary" | "secondary";
-  size?: "small" | "medium";
+  color?: ButtonColor;
+  size?: ButtonSize;
   disabled?: boolean;
 };
 
@@ -19,8 +22,8 @@ function Button(props: ButtonProps) {
       disabled={disabled}
       {...stylex.props(
         styles.button,
-        color === "primary" && styles.buttonColorPrimary,
-        size === "medium" && styles.buttonSizeMedium,
+        color === "primary" && styles.buttonColor.primary,
+        size === "medium" && styles.buttonSize.medium,
         disabled && styles.buttonDisabled,
         disabled && color === "primary" && styles.buttonDisabledColorPrimary,
         disabled && color !== "primary" && styles.buttonDisabledColorNotPrimary,
@@ -58,16 +61,22 @@ const styles = stylex.create({
     paddingBlock: "4px",
     paddingInline: "8px",
   },
-  buttonColorPrimary: {
-    backgroundColor: {
-      default: "blue",
-      ":hover": "darkblue",
+  buttonColor: {
+    primary: {
+      backgroundColor: {
+        default: "blue",
+        ":hover": "darkblue",
+      },
     },
+    secondary: {},
   },
-  buttonSizeMedium: {
-    fontSize: "1.2rem",
-    paddingBlock: "8px",
-    paddingInline: "16px",
+  buttonSize: {
+    small: {},
+    medium: {
+      fontSize: "1.2rem",
+      paddingBlock: "8px",
+      paddingInline: "16px",
+    },
   },
   buttonDisabled: {
     color: "rgb(204, 204, 204)",

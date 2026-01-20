@@ -106,6 +106,8 @@ export function lowerRules(args: {
     literalToAst,
   } = args;
 
+  const emitTypes = filePath.endsWith(".ts") || filePath.endsWith(".tsx");
+
   const resolvedStyleObjects = new Map<string, unknown>();
   const declByLocalName = new Map(styledDecls.map((d) => [d.localName, d]));
   const descendantOverrides: DescendantOverride[] = [];
@@ -597,6 +599,147 @@ export function lowerRules(args: {
 
     const isAstNode = (v: unknown): v is { type: string } =>
       !!v && typeof v === "object" && !Array.isArray(v) && typeof (v as any).type === "string";
+
+    const parseEnumVariantWhen = (
+      when: string,
+    ): { propName: string; value: string | number } | null => {
+      const trimmed = String(when ?? "").trim();
+      if (!trimmed) {
+        return null;
+      }
+      if (trimmed.includes("&&") || trimmed.includes("||")) {
+        return null;
+      }
+      if (trimmed.startsWith("!")) {
+        return null;
+      }
+      if (!trimmed.includes("===")) {
+        return null;
+      }
+      const [lhs0, rhs0] = trimmed.split("==="); // Only allow strict equality.
+      const lhs = (lhs0 ?? "").trim();
+      const rhsRaw = (rhs0 ?? "").trim();
+      if (!lhs || !/^[A-Za-z_$][A-Za-z0-9_$]*$/.test(lhs)) {
+        return null;
+      }
+      const rhs = rhsRaw.replace(/^\(|\)$/g, "").trim();
+      if (!rhs) {
+        return null;
+      }
+      if (
+        (rhs.startsWith('"') && rhs.endsWith('"')) ||
+        (rhs.startsWith("'") && rhs.endsWith("'"))
+      ) {
+        try {
+          const normalized = rhs.replace(/^'/, '"').replace(/'$/, '"');
+          return { propName: lhs, value: JSON.parse(normalized) };
+        } catch {
+          return null;
+        }
+      }
+      if (/^-?\d+(\.\d+)?$/.test(rhs)) {
+        return { propName: lhs, value: Number(rhs) };
+      }
+      return null;
+    };
+
+    const extractLiteralValue = (node: any): string | number | null => {
+      if (!node || typeof node !== "object") {
+        return null;
+      }
+      if (node.type === "StringLiteral") {
+        return node.value;
+      }
+      if (node.type === "NumericLiteral") {
+        return node.value;
+      }
+      if (
+        node.type === "Literal" &&
+        (typeof node.value === "string" || typeof node.value === "number")
+      ) {
+        return node.value;
+      }
+      return null;
+    };
+
+    const extractVariantUnionValues = (
+      node: any,
+      seen: Set<string> = new Set<string>(),
+    ): Array<string | number> | null => {
+      if (!node || typeof node !== "object") {
+        return null;
+      }
+      if (node.type === "TSParenthesizedType") {
+        return extractVariantUnionValues(node.typeAnnotation, seen);
+      }
+      if (node.type === "TSUnionType") {
+        const values: Array<string | number> = [];
+        for (const part of node.types ?? []) {
+          if (!part || typeof part !== "object") {
+            return null;
+          }
+          if (
+            part.type === "TSUndefinedKeyword" ||
+            part.type === "TSNullKeyword" ||
+            part.type === "TSVoidKeyword"
+          ) {
+            continue;
+          }
+          if (part.type === "TSLiteralType") {
+            const lit = extractLiteralValue(part.literal);
+            if (lit === null) {
+              return null;
+            }
+            values.push(lit);
+            continue;
+          }
+          const nested = extractVariantUnionValues(part, seen);
+          if (nested && nested.length) {
+            values.push(...nested);
+            continue;
+          }
+          return null;
+        }
+        return values.length ? values : null;
+      }
+      if (node.type === "TSLiteralType") {
+        const lit = extractLiteralValue(node.literal);
+        return lit === null ? null : [lit];
+      }
+      if (node.type === "TSTypeReference" && node.typeName?.type === "Identifier") {
+        const name = node.typeName.name;
+        if (!name || seen.has(name)) {
+          return null;
+        }
+        seen.add(name);
+        const aliasDecl = root.find(j.TSTypeAliasDeclaration, {
+          id: { type: "Identifier", name },
+        } as any);
+        if (aliasDecl.size() > 0) {
+          const aliasNode = aliasDecl.get().node.typeAnnotation;
+          return extractVariantUnionValues(aliasNode, seen);
+        }
+      }
+      return null;
+    };
+
+    const getVariantUnionValues = (propName: string): Array<string | number> | null => {
+      const propType = findJsxPropTsType(propName);
+      const values = extractVariantUnionValues(propType);
+      if (!values || values.length === 0) {
+        return null;
+      }
+      const deduped: Array<string | number> = [];
+      const seen = new Set<string>();
+      for (const v of values) {
+        const key = `${typeof v}:${String(v)}`;
+        if (!seen.has(key)) {
+          seen.add(key);
+          deduped.push(v);
+        }
+      }
+      return deduped;
+    };
 
     const mergeStyleObjects = (
       target: Record<string, unknown>,
@@ -2911,15 +3054,98 @@ export function lowerRules(args: {
       }
     }
 
+    const variantGroupStyleKeys: Record<string, { groupKey: string; value: string | number }> = {};
+    const variantStyleGroups: NonNullable<StyledDecl["variantStyleGroups"]> = [];
+    const enumVariantsByProp = new Map<
+      string,
+      Map<string | number, { when: string; style: Record<string, unknown> }>
+    >();
+
+    if (emitTypes && Object.keys(variantStyleKeys).length > 0) {
+      for (const [when] of Object.entries(variantStyleKeys)) {
+        const parsed = parseEnumVariantWhen(when);
+        if (!parsed) {
+          continue;
+        }
+        const bucket = variantBuckets.get(when);
+        if (!bucket) {
+          continue;
+        }
+        const { propName, value } = parsed;
+        if (!enumVariantsByProp.has(propName)) {
+          enumVariantsByProp.set(propName, new Map());
+        }
+        enumVariantsByProp.get(propName)!.set(value, { when, style: bucket });
+      }
+
+      for (const [propName, variants] of enumVariantsByProp.entries()) {
+        const unionValues = getVariantUnionValues(propName);
+        if (!unionValues || unionValues.length < 2) {
+          continue;
+        }
+        const variantValues = [...variants.keys()];
+        if (!variantValues.every((v) => unionValues.includes(v))) {
+          continue;
+        }
+        const styleKey = `${decl.styleKey}${toSuffixFromProp(propName)}`;
+        if (resolvedStyleObjects.has(styleKey)) {
+          continue;
+        }
+        const typeName = `${decl.localName}${toSuffixFromProp(propName)}`;
+        variantStyleGroups.push({
+          propName,
+          styleKey,
+          typeName,
+          values: unionValues,
+          fromPropsType: true,
+        });
+        for (const [value, entry] of variants.entries()) {
+          variantGroupStyleKeys[entry.when] = { groupKey: styleKey, value };
+        }
+      }
+    }
+
+    const groupObjects = new Map<string, Record<string, unknown>>();
+    for (const group of variantStyleGroups) {
+      const variants = enumVariantsByProp.get(group.propName);
+      const groupObj: Record<string, unknown> = {};
+      for (const value of group.values) {
+        const entry = variants?.get(value);
+        groupObj[String(value)] = entry ? entry.style : {};
+      }
+      groupObjects.set(group.styleKey, groupObj);
+    }
+
+    const emittedGroups = new Set<string>();
     for (const [when, obj] of variantBuckets.entries()) {
+      const groupInfo = variantGroupStyleKeys[when];
+      if (groupInfo) {
+        if (!emittedGroups.has(groupInfo.groupKey)) {
+          const groupObj = groupObjects.get(groupInfo.groupKey);
+          if (groupObj) {
+            resolvedStyleObjects.set(groupInfo.groupKey, groupObj);
+          }
+          emittedGroups.add(groupInfo.groupKey);
+        }
+        continue;
+      }
       const key = variantStyleKeys[when]!;
       resolvedStyleObjects.set(key, obj);
+    }
+    for (const [groupKey, groupObj] of groupObjects.entries()) {
+      if (!emittedGroups.has(groupKey)) {
+        resolvedStyleObjects.set(groupKey, groupObj);
+      }
     }
     for (const [k, v] of attrBuckets.entries()) {
       resolvedStyleObjects.set(k, v);
     }
     if (Object.keys(variantStyleKeys).length) {
       decl.variantStyleKeys = variantStyleKeys;
+      if (variantStyleGroups.length) {
+        decl.variantStyleGroups = variantStyleGroups;
+        decl.variantGroupStyleKeys = variantGroupStyleKeys;
+      }
       // If we have variant styles keyed off props (e.g. `color === "primary"`),
       // we need a wrapper component to evaluate those conditions at runtime and
       // avoid forwarding custom variant props to DOM nodes.

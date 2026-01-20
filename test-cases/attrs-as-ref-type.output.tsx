@@ -2,12 +2,14 @@ import * as React from "react";
 import * as stylex from "@stylexjs/stylex";
 import { mergedSx } from "./lib/mergedSx";
 
+type TextVariant = keyof typeof styles.textVariant;
+
 // A polymorphic Text component that defaults to span
 type TextProps = React.PropsWithChildren<{
   as?: React.ElementType;
   className?: string;
   style?: React.CSSProperties;
-  variant?: "small" | "regular" | "large";
+  variant?: TextVariant;
 }>;
 
 function Text(props: TextProps) {
@@ -18,8 +20,8 @@ function Text(props: TextProps) {
       {...mergedSx(
         [
           styles.text,
-          variant === "large" && styles.textLarge,
-          variant === "small" && styles.textSmall,
+          variant === "large" && styles.textVariant.large,
+          variant === "small" && styles.textVariant.small,
         ],
         className,
         style,
@@ -58,11 +60,14 @@ const styles = stylex.create({
   text: {
     fontSize: "14px",
   },
-  textLarge: {
-    fontSize: "18px",
-  },
-  textSmall: {
-    fontSize: "12px",
+  textVariant: {
+    small: {
+      fontSize: "12px",
+    },
+    regular: {},
+    large: {
+      fontSize: "18px",
+    },
   },
 
   // When .attrs({ as: "label" }) is used, the component should accept:
