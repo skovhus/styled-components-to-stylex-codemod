@@ -126,6 +126,8 @@ export function emitStylesAndImports(args: {
     return { narrative, property };
   };
 
+  const hasExportedCssHelper = styledDecls.some((d) => d.isCssHelper && d.isExported);
+
   // Remove styled-components import(s), but preserve any named imports that are still referenced
   // (e.g. useTheme, withTheme, ThemeProvider if they're still used in the code)
   const preservedSpecifiers: string[] = [];
@@ -142,7 +144,12 @@ export function emitStylesAndImports(args: {
       }
       // Check if this import is still referenced elsewhere in the code
       // Skip common styled-components exports that are being transformed away
-      const transformedAway = ["styled", "css", "keyframes", "createGlobalStyle"];
+      const transformedAway = [
+        "styled",
+        "keyframes",
+        "createGlobalStyle",
+        ...(hasExportedCssHelper ? [] : ["css"]),
+      ];
       if (transformedAway.includes(localName)) {
         continue;
       }

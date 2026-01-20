@@ -118,6 +118,8 @@ export type StyledDecl = {
   templateExpressions: unknown[];
   rawCss?: string;
   preResolvedStyle?: Record<string, unknown>;
+  isCssHelper?: boolean;
+  isExported?: boolean;
   preResolvedFnDecls?: Record<string, unknown>;
   inlineStyleProps?: Array<{ prop: string; expr: ExpressionKind }>;
   /**

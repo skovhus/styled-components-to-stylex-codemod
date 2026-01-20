@@ -315,6 +315,29 @@ export function transformWithWarnings(
     return true;
   };
 
+  const exportedLocalNames = new Set<string>();
+  root.find(j.ExportNamedDeclaration).forEach((p) => {
+    const decl = p.node.declaration;
+    if (decl?.type === "VariableDeclaration") {
+      for (const d of decl.declarations ?? []) {
+        if (d.type === "VariableDeclarator" && d.id.type === "Identifier") {
+          exportedLocalNames.add(d.id.name);
+        }
+      }
+    }
+    for (const spec of p.node.specifiers ?? []) {
+      if (spec.type === "ExportSpecifier" && spec.local?.type === "Identifier") {
+        exportedLocalNames.add(spec.local.name);
+      }
+    }
+  });
+  root.find(j.ExportDefaultDeclaration).forEach((p) => {
+    const decl = p.node.declaration;
+    if (decl?.type === "Identifier") {
+      exportedLocalNames.add(decl.name);
+    }
+  });
+
   const cssHelperNames = new Set<string>();
   const cssHelperDecls: StyledDecl[] = [];
   let cssHelperHasUniversalSelectors = false;
@@ -427,21 +450,25 @@ export function transformWithWarnings(
           localName,
           base: { kind: "intrinsic", tagName: "div" },
           styleKey: toStyleKey(localName),
+          isCssHelper: true,
           rules,
           templateExpressions: parsed.slots.map((s) => s.expression),
           rawCss,
         });
 
         cssHelperNames.add(localName);
-        const decl = p.parentPath?.node;
-        if (decl?.type === "VariableDeclaration") {
-          decl.declarations = decl.declarations.filter((dcl: any) => dcl !== p.node);
-          if (decl.declarations.length === 0) {
-            const exportDecl = p.parentPath?.parentPath?.node;
-            if (exportDecl?.type === "ExportNamedDeclaration") {
-              j(p).closest(j.ExportNamedDeclaration).remove();
-            } else {
-              j(p).closest(j.VariableDeclaration).remove();
+        const isExported = exportedLocalNames.has(localName);
+        if (!isExported) {
+          const decl = p.parentPath?.node;
+          if (decl?.type === "VariableDeclaration") {
+            decl.declarations = decl.declarations.filter((dcl: any) => dcl !== p.node);
+            if (decl.declarations.length === 0) {
+              const exportDecl = p.parentPath?.parentPath?.node;
+              if (exportDecl?.type === "ExportNamedDeclaration") {
+                j(p).closest(j.ExportNamedDeclaration).remove();
+              } else {
+                j(p).closest(j.VariableDeclaration).remove();
+              }
             }
           }
         }
@@ -913,7 +940,7 @@ export function transformWithWarnings(
   });
 
   for (const decl of styledDecls) {
-    (decl as any).isExported = exportedComponents.has(decl.localName);
+    decl.isExported = exportedComponents.has(decl.localName);
   }
 
   // First, scan for static property assignments to identify which components have them
@@ -940,6 +967,9 @@ export function transformWithWarnings(
   // Pre-pass: set needsWrapperComponent BEFORE emitStylesAndImports
   // This allows comment placement logic to know which decls need wrappers.
   for (const decl of styledDecls) {
+    if (decl.isCssHelper) {
+      continue;
+    }
     // Intrinsic components with prop-conditional attrs (e.g. `size: props.$small ? 5 : undefined`)
     // tend to produce very noisy inline substitutions when there are multiple callsite variations.
     // Prefer emitting a wrapper function component in these cases.
@@ -982,6 +1012,9 @@ export function transformWithWarnings(
   // NOTE: We only set needsWrapperComponent here, NOT flatten decl.base to intrinsic.
   // Base flattening happens later after extendsStyleKey is set.
   for (const decl of styledDecls) {
+    if (decl.isCssHelper) {
+      continue;
+    }
     if (decl.base.kind === "component") {
       const baseDecl = declByLocal.get(decl.base.ident);
       if (baseDecl?.base.kind === "intrinsic") {
@@ -1003,6 +1036,9 @@ export function transformWithWarnings(
   // 3. The component can be referenced in `typeof` expressions
   // Note: Local components (defined in the same file) can be inlined safely.
   for (const decl of styledDecls) {
+    if (decl.isCssHelper) {
+      continue;
+    }
     if (decl.base.kind === "component") {
       const baseDecl = declByLocal.get(decl.base.ident);
       // Check if the base is an IMPORTED component (not a styled or local component)
@@ -1949,6 +1985,9 @@ export function transformWithWarnings(
   }
 
   for (const decl of styledDecls) {
+    if (decl.isCssHelper && exportedComponents.has(decl.localName)) {
+      continue;
+    }
     // Skip removal for declarations with wrappers - they're already replaced in-place by emitWrappers
     if (decl.needsWrapperComponent) {
       // The styled declaration has been replaced with the wrapper function in emitWrappers
@@ -2732,10 +2771,10 @@ function isAstNode(v: unknown): v is { type: string } {
 
 function cssValueToJs(value: any, important = false, propName?: string): unknown {
   if (value.kind === "static") {
+    const raw = String(value.value);
     // Preserve `!important` by emitting a string value that includes it.
     // (StyleX supports `!important` in values and this is necessary to override inline styles.)
     if (important) {
-      const raw = String(value.value);
       if (propName === "borderStyle") {
         return raw;
       }
@@ -2743,13 +2782,13 @@ function cssValueToJs(value: any, important = false, propName?: string): unknown
     }
 
     // Try to return number if purely numeric and no unit.
-    if (/^-?\d+(\.\d+)?$/.test(value.value)) {
+    if (/^-?\d+(\.\d+)?$/.test(raw)) {
       if (propName === "flex") {
-        return value.value;
+        return raw;
       }
-      return Number(value.value);
+      return Number(raw);
     }
-    return value.value;
+    return raw;
   }
   // interpolated values are handled earlier for now
   return "";

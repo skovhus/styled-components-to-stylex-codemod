@@ -67,12 +67,13 @@ function splitDirectionalShorthands(rawValue: string | number, allowImportant = 
 }
 
 export function splitDirectionalProperty(args: {
-  prop: "padding" | "margin";
+  prop: "padding" | "margin" | "scrollMargin";
   rawValue: string | number;
   important?: boolean;
   preferInline?: boolean;
+  alwaysExpand?: boolean;
 }): DirectionalEntry[] {
-  const { prop, rawValue, important = false, preferInline = false } = args;
+  const { prop, rawValue, important = false, preferInline = false, alwaysExpand = false } = args;
   const values = splitDirectionalShorthands(rawValue, false);
   const top = values[0] ?? "";
   const right = values[1] ?? top;
@@ -80,7 +81,7 @@ export function splitDirectionalProperty(args: {
   const left = values[3] ?? right;
   const withImportant = (value: string): string => (important ? `${value} !important` : value);
 
-  if (values.length === 1 && !important) {
+  if (values.length === 1 && !important && !alwaysExpand) {
     return [{ prop, value: withImportant(top) }];
   }
 
