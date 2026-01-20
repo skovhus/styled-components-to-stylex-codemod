@@ -20,17 +20,13 @@ pnpm storybook        # Start Storybook dev server (port 6006)
 
 **Note**: Tests run against source files directly (via vitest), so `pnpm test:run` does NOT require rebuilding. Only `node scripts/debug-test.mjs` requires a prior build.
 
-## Transformation Goals
+## Rules
 
-The codemod should handle conversions like:
-
-- `styled.div` / `styled(Component)` → `stylex.create()` + `stylex.props()`
-- Template literal CSS → StyleX object syntax
-- Dynamic props/interpolations → StyleX variants or dynamic styles
-- `keyframes` → `stylex.keyframes()`
-- Theme values → CSS variables or `stylex.createTheme()`
-- `css` helper → Plain style objects
-- `.attrs()` → Inline props on element
+- **keep all exports at the top of each file** (after imports), and keep **non-exported helpers further down**
+- src folder code should never depend on test-cases or test-case logic
+- transformations should be safe, bail if we cannot preserve the semantics of the input
+- always run "pnpn run ci" to validate changes
+- transform should bail out if it cannot safely transform the input
 
 ## Scripts
 
@@ -65,9 +61,3 @@ Storybook renders all test cases side-by-side (input with styled-components, out
 Run `pnpm storybook` to start the dev server and visually compare transformations.
 
 Use the Playwright MCP to inspect test case rendering.
-
-## Rules
-
-- **keep all exports at the top of each file** (after imports), and keep **non-exported helpers further down**
-- src folder code should never depend on test-cases or test-case logic
-- transformations should be safe, bail if we cannot preserve the semantics of the input
