@@ -8,7 +8,9 @@ type BoxProps = Omit<React.ComponentProps<"div">, "className" | "style"> & {
 
 function Box(props: BoxProps) {
   const { children, position } = props;
-  return <div {...stylex.props(styles.box, position === "top" && borders.labelMuted)}>{children}</div>;
+  return (
+    <div {...stylex.props(styles.box, position === "top" && borders.labelMuted)}>{children}</div>
+  );
 }
 
 export const App = () => (

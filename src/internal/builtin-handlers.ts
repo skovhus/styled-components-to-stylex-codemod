@@ -1,5 +1,12 @@
 import type { API } from "jscodeshift";
-import type { ImportSource, ImportSpec, ResolveContext, ResolveResult } from "../adapter.js";
+import type {
+  CallResolveContext,
+  CallResolveResult,
+  ImportSource,
+  ImportSpec,
+  ResolveValueContext,
+  ResolveValueResult,
+} from "../adapter.js";
 import {
   getArrowFnSingleParamName,
   getMemberPathFromIdentifier,
@@ -29,6 +36,17 @@ export type HandlerResult =
        * - adding `imports`
        */
       type: "resolvedValue";
+      expr: string;
+      imports: ImportSpec[];
+    }
+  | {
+      /**
+       * The node was resolved to a StyleX style object expression suitable for passing to
+       * `stylex.props(...)` (NOT to be used as a single CSS property value).
+       *
+       * Example: `themedBorder("labelMuted")(props)` -> `borders.labelMuted`
+       */
+      type: "resolvedStyles";
       expr: string;
       imports: ImportSpec[];
     }
@@ -111,6 +129,19 @@ export type HandlerResult =
     }
   | {
       /**
+       * Like `splitVariantsResolvedValue`, but each branch yields a StyleX style object expression
+       * intended for `stylex.props(...)` arguments.
+       */
+      type: "splitVariantsResolvedStyles";
+      variants: Array<{
+        nameHint: string;
+        when: string;
+        expr: string;
+        imports: ImportSpec[];
+      }>;
+    }
+  | {
+      /**
        * Signal that this handler does not know how to transform the node.
        *
        * The caller typically falls back to other strategies (or drops the declaration)
@@ -123,7 +154,8 @@ export type HandlerResult =
 export type InternalHandlerContext = {
   api: API;
   filePath: string;
-  resolveValue: (context: ResolveContext) => ResolveResult | null;
+  resolveValue: (context: ResolveValueContext) => ResolveValueResult | null;
+  resolveCall: (context: CallResolveContext) => CallResolveResult | null;
   resolveImport: (localName: string) => {
     importedName: string;
     source: ImportSource;
@@ -248,72 +280,99 @@ function tryResolveCallExpression(
   node: DynamicNode,
   ctx: InternalHandlerContext,
 ): HandlerResult | null {
-  type CallResolveContext = Extract<ResolveContext, { kind: "call" }>;
   const expr: any = node.expr as any;
   if (!expr || typeof expr !== "object" || expr.type !== "CallExpression") {
     return null;
   }
-  // Only support the simplest call shape: `identifier("stringLiteral")` where identifier is a
-  // named import we can trace back to a concrete file. Anything else should bail.
-  if (expr.callee?.type !== "Identifier" || typeof expr.callee.name !== "string") {
-    return {
-      type: "keepOriginal",
-      reason: "Unsupported call expression callee (expected identifier)",
-    };
-  }
-  const calleeIdent = expr.callee.name;
-  const imp = ctx.resolveImport(calleeIdent);
-  const calleeImportedName = imp?.importedName;
-  const calleeSource = imp?.source;
-  if (!calleeImportedName || !calleeSource) {
-    return {
-      type: "keepOriginal",
-      reason: "Could not resolve import source for helper call",
-    };
-  }
 
-  const rawArgs = expr.arguments ?? [];
-  if (rawArgs.length !== 1) {
-    return {
-      type: "keepOriginal",
-      reason: `Unsupported helper call argument count for ${calleeImportedName} (expected 1)`,
-    };
-  }
-  const a = rawArgs[0];
-  const arg0 =
-    a && typeof a === "object" && a.type === "StringLiteral"
-      ? ({
-          kind: "literal" as const,
-          value: a.value as string,
-        } satisfies CallResolveContext["args"][number])
-      : a && typeof a === "object" && a.type === "Literal" && typeof (a as any).value === "string"
+  const resolveSimpleHelperCall = (
+    callExpr: any,
+  ): CallResolveResult | "keepOriginal" | "unresolved" => {
+    // Only support the simplest call shape: `identifier("stringLiteral")` where identifier is a
+    // named import we can trace back to a concrete file. Anything else should bail.
+    if (callExpr.callee?.type !== "Identifier" || typeof callExpr.callee.name !== "string") {
+      return "keepOriginal";
+    }
+    const calleeIdent = callExpr.callee.name;
+    const imp = ctx.resolveImport(calleeIdent);
+    const calleeImportedName = imp?.importedName;
+    const calleeSource = imp?.source;
+    if (!calleeImportedName || !calleeSource) {
+      return "keepOriginal";
+    }
+
+    const rawArgs = callExpr.arguments ?? [];
+    if (rawArgs.length !== 1) {
+      return "keepOriginal";
+    }
+    const a = rawArgs[0];
+    const arg0 =
+      a && typeof a === "object" && a.type === "StringLiteral"
         ? ({
             kind: "literal" as const,
-            value: (a as any).value as string,
+            value: a.value as string,
           } satisfies CallResolveContext["args"][number])
-        : null;
-  if (!arg0) {
-    return {
-      type: "keepOriginal",
-      reason: `Unsupported helper call argument for ${calleeImportedName} (expected string literal)`,
-    };
-  }
-  const args: CallResolveContext["args"] = [arg0];
+        : a && typeof a === "object" && a.type === "Literal" && typeof (a as any).value === "string"
+          ? ({
+              kind: "literal" as const,
+              value: (a as any).value as string,
+            } satisfies CallResolveContext["args"][number])
+          : null;
+    if (!arg0) {
+      return "keepOriginal";
+    }
+    const args: CallResolveContext["args"] = [arg0];
 
-  const res = ctx.resolveValue({
-    kind: "call",
-    callSiteFilePath: ctx.filePath,
-    calleeImportedName,
-    calleeSource,
-    args,
-  });
-  if (!res) {
+    const res = ctx.resolveCall({
+      kind: "call",
+      callSiteFilePath: ctx.filePath,
+      calleeImportedName,
+      calleeSource,
+      args,
+    });
+    return res ? (res as any) : "unresolved";
+  };
+
+  const simple = resolveSimpleHelperCall(expr);
+  if (simple !== "keepOriginal" && simple !== "unresolved") {
+    return simple.kind === "styles"
+      ? { type: "resolvedStyles", expr: simple.expr, imports: simple.imports }
+      : { type: "resolvedValue", expr: simple.expr, imports: simple.imports };
+  }
+
+  // Support helper calls that return a function which is immediately invoked with the props param:
+  //   helper("key")(props)
+  // We treat this as equivalent to `helper("key")` when the adapter returns kind:"styles".
+  //
+  // This is intentionally narrow and only used when the adapter explicitly opts in with kind:"styles".
+  if (expr.callee?.type === "CallExpression") {
+    const outerArgs = expr.arguments ?? [];
+    if (outerArgs.length === 1) {
+      const innerCall = expr.callee;
+      const innerRes = resolveSimpleHelperCall(innerCall);
+      if (innerRes !== "keepOriginal" && innerRes !== "unresolved" && innerRes.kind === "styles") {
+        return { type: "resolvedStyles", expr: innerRes.expr, imports: innerRes.imports };
+      }
+    }
+  }
+
+  if (simple === "unresolved") {
+    // This is a supported helper-call shape but the adapter chose not to resolve it.
+    // Treat as unsupported so the caller can bail and surface a warning.
+    const calleeIdent = expr.callee?.name;
+    const imp = typeof calleeIdent === "string" ? ctx.resolveImport(calleeIdent) : null;
+    const importedName = imp?.importedName ?? calleeIdent ?? "unknown";
     return {
       type: "keepOriginal",
-      reason: `Unresolved helper call ${calleeImportedName}(...) (adapter resolveValue returned null)`,
+      reason: `Unresolved helper call ${importedName}(...) (adapter resolveCall returned null)`,
     };
   }
-  return { type: "resolvedValue", expr: res.expr, imports: res.imports };
+
+  // If we got here, it’s a call expression we don’t understand.
+  return {
+    type: "keepOriginal",
+    reason: 'Unsupported call expression (expected helper("literal") or helper("literal")(...))',
+  };
 }
 
 function tryResolveConditionalValue(
@@ -334,11 +393,14 @@ function tryResolveConditionalValue(
     return null;
   }
 
-  type Branch = { expr: string; imports: ImportSpec[] } | null;
+  type BranchKind = "value" | "styles";
+  type Branch = { kind: BranchKind; expr: string; imports: ImportSpec[] } | null;
+
   const branchToExpr = (b: unknown): Branch => {
     const v = literalToStaticValue(b);
     if (v !== null) {
       return {
+        kind: "value",
         expr: typeof v === "string" ? JSON.stringify(v) : String(v),
         imports: [],
       };
@@ -352,39 +414,59 @@ function tryResolveConditionalValue(
         callee?: { type?: string; name?: string };
         arguments?: unknown[];
       };
-      const calleeIdent =
-        call.callee && call.callee.type === "Identifier" ? (call.callee.name ?? null) : null;
-      const arg0 = (() => {
-        const a = call.arguments?.[0] as { type?: string; value?: unknown } | undefined;
-        if (!a) {
+
+      const resolveSimpleCall = (c: any): CallResolveResult | null => {
+        const calleeIdent =
+          c.callee && c.callee.type === "Identifier" ? (c.callee.name ?? null) : null;
+        const arg0 = (() => {
+          const a = c.arguments?.[0] as { type?: string; value?: unknown } | undefined;
+          if (!a) {
+            return null;
+          }
+          if (a.type === "StringLiteral") {
+            return { kind: "literal" as const, value: a.value as string };
+          }
+          if (a.type === "Literal" && typeof a.value === "string") {
+            return { kind: "literal" as const, value: a.value };
+          }
+          return null;
+        })();
+        if (!calleeIdent || !arg0 || (c.arguments?.length ?? 0) !== 1) {
           return null;
         }
-        if (a.type === "StringLiteral") {
-          return { kind: "literal" as const, value: a.value as string };
+        const imp = ctx.resolveImport(calleeIdent);
+        if (!imp?.importedName || !imp.source) {
+          return null;
         }
-        if (a.type === "Literal" && typeof a.value === "string") {
-          return { kind: "literal" as const, value: a.value };
+        const res = ctx.resolveCall({
+          kind: "call",
+          callSiteFilePath: ctx.filePath,
+          calleeImportedName: imp.importedName,
+          calleeSource: imp.source,
+          args: [arg0],
+        });
+        return res as any;
+      };
+
+      // helper("key")
+      const simple = resolveSimpleCall(call as any);
+      if (simple) {
+        return { kind: simple.kind, expr: simple.expr, imports: simple.imports };
+      }
+
+      // helper("key")(propsParam)
+      if (call.callee && (call.callee as any).type === "CallExpression") {
+        const inner = call.callee as any;
+        const outerArgs = call.arguments ?? [];
+        if (outerArgs.length === 1 && outerArgs[0] && typeof outerArgs[0] === "object") {
+          const innerRes = resolveSimpleCall(inner);
+          if (innerRes && innerRes.kind === "styles") {
+            return { kind: "styles", expr: innerRes.expr, imports: innerRes.imports };
+          }
         }
-        return null;
-      })();
-      if (!calleeIdent || !arg0 || (call.arguments?.length ?? 0) !== 1) {
-        return null;
       }
-      const imp = ctx.resolveImport(calleeIdent);
-      if (!imp?.importedName || !imp.source) {
-        return null;
-      }
-      const res = ctx.resolveValue({
-        kind: "call",
-        callSiteFilePath: ctx.filePath,
-        calleeImportedName: imp.importedName,
-        calleeSource: imp.source,
-        args: [arg0],
-      });
-      if (!res) {
-        return null;
-      }
-      return { expr: res.expr, imports: res.imports };
+
+      return null;
     }
     if ((b as any).type !== "MemberExpression") {
       return null;
@@ -413,7 +495,7 @@ function tryResolveConditionalValue(
     if (!res) {
       return null;
     }
-    return { expr: res.expr, imports: res.imports };
+    return { kind: "value", expr: res.expr, imports: res.imports };
   };
 
   // Helper to extract condition info from a binary expression test
@@ -443,7 +525,13 @@ function tryResolveConditionalValue(
 
   // Recursively extract variants from nested ternaries
   // e.g., prop === "a" ? valA : prop === "b" ? valB : defaultVal
-  type Variant = { nameHint: string; when: string; expr: string; imports: ImportSpec[] };
+  type Variant = {
+    nameHint: string;
+    when: string;
+    kind: BranchKind;
+    expr: string;
+    imports: ImportSpec[];
+  };
   const extractNestedTernaryVariants = (
     condExpr: any,
     expectedPropName?: string,
@@ -487,6 +575,7 @@ function tryResolveConditionalValue(
     const thisVariant: Variant = {
       nameHint: rhsNameHint,
       when: condInfo.cond,
+      kind: consExpr.kind,
       expr: consExpr.expr,
       imports: consExpr.imports,
     };
@@ -511,23 +600,18 @@ function tryResolveConditionalValue(
       return null;
     }
     const whenExpr = testPath[0]!;
-    return {
-      type: "splitVariantsResolvedValue",
-      variants: [
-        {
-          nameHint: "truthy",
-          when: whenExpr,
-          expr: cons.expr,
-          imports: cons.imports,
-        },
-        {
-          nameHint: "falsy",
-          when: `!${whenExpr}`,
-          expr: alt.expr,
-          imports: alt.imports,
-        },
-      ],
-    };
+    const allKinds = new Set([cons.kind, alt.kind]);
+    if (allKinds.size !== 1) {
+      return null;
+    }
+    const kind = cons.kind;
+    const variants = [
+      { nameHint: "truthy", when: whenExpr, expr: cons.expr, imports: cons.imports },
+      { nameHint: "falsy", when: `!${whenExpr}`, expr: alt.expr, imports: alt.imports },
+    ];
+    return kind === "styles"
+      ? { type: "splitVariantsResolvedStyles", variants }
+      : { type: "splitVariantsResolvedValue", variants };
   }
 
   // 2) Handle nested ternaries: prop === "a" ? valA : prop === "b" ? valB : defaultVal
@@ -539,6 +623,26 @@ function tryResolveConditionalValue(
       return null;
     }
 
+    // If the consequent is styles and the alternate is a literal that effectively means "nothing",
+    // we can model this as a single variant in stylex.props.
+    const altLiteral = literalToString(alternate);
+    const altIsEmptyish =
+      altLiteral !== null && (altLiteral.trim() === "" || altLiteral === "none");
+    if (consExpr.kind === "styles" && altIsEmptyish) {
+      return {
+        type: "splitVariantsResolvedStyles",
+        variants: [
+          {
+            nameHint:
+              typeof condInfo.rhsRaw === "string" ? condInfo.rhsRaw : String(condInfo.rhsRaw),
+            when: condInfo.cond,
+            expr: consExpr.expr,
+            imports: consExpr.imports,
+          },
+        ],
+      };
+    }
+
     // Check if alternate is a nested ternary testing the same property
     const nested = extractNestedTernaryVariants(alternate, condInfo.propName);
     if (nested) {
@@ -548,6 +652,7 @@ function tryResolveConditionalValue(
       const thisVariant: Variant = {
         nameHint: rhsNameHint,
         when: condInfo.cond,
+        kind: consExpr.kind,
         expr: consExpr.expr,
         imports: consExpr.imports,
       };
@@ -557,6 +662,15 @@ function tryResolveConditionalValue(
       // Build the default condition: negation of all positive conditions
       const allConditions = allVariants.map((v) => v.when).join(" || ");
 
+      // For now, only support nested-ternary variant extraction for value results.
+      // (Styles results would need an explicit “no style” default semantics.)
+      const kindSet = new Set<BranchKind>([
+        nested.defaultBranch.kind,
+        ...allVariants.map((v) => v.kind),
+      ]);
+      if (kindSet.size !== 1 || kindSet.has("styles")) {
+        return null;
+      }
       return {
         type: "splitVariantsResolvedValue",
         variants: [
@@ -566,7 +680,12 @@ function tryResolveConditionalValue(
             expr: nested.defaultBranch.expr,
             imports: nested.defaultBranch.imports,
           },
-          ...allVariants,
+          ...allVariants.map((v) => ({
+            nameHint: v.nameHint,
+            when: v.when,
+            expr: v.expr,
+            imports: v.imports,
+          })),
         ],
       };
     }
@@ -810,6 +929,13 @@ function literalToStaticValue(node: unknown): string | number | null {
   const type = (node as { type?: string }).type;
   if (type === "StringLiteral") {
     return (node as { value: string }).value;
+  }
+  // Some parsers (or mixed ASTs) use estree-style `Literal`.
+  if (type === "Literal") {
+    const v = (node as { value?: unknown }).value;
+    if (typeof v === "string" || typeof v === "number") {
+      return v;
+    }
   }
   if (type === "NumericLiteral") {
     return (node as { value: number }).value;

@@ -47,6 +47,7 @@ export function assertValidAdapter(
 ): asserts candidate is Adapter {
   const obj = candidate as Record<string, unknown>;
   const resolveValue = obj?.resolveValue;
+  const resolveCall = obj?.resolveCall;
   const shouldSupportExternalStyling = obj?.shouldSupportExternalStyling;
 
   if (!candidate || typeof candidate !== "object") {
@@ -57,11 +58,14 @@ export function assertValidAdapter(
         "",
         "Adapter requirements:",
         "  - adapter.resolveValue(context) is required",
+        "  - adapter.resolveCall(context) is required",
         "  - adapter.shouldSupportExternalStyling(context) is required",
         "",
         "resolveValue(context) is called with one of these shapes:",
         '  - { kind: "theme", path }',
         '  - { kind: "cssVariable", name, fallback?, definedValue? }',
+        "",
+        "resolveCall(context) is called with:",
         '  - { kind: "call", callSiteFilePath, calleeImportedName, calleeSource, args }',
         "",
         `Docs/examples: ${ADAPTER_DOCS_URL}`,
@@ -77,7 +81,26 @@ export function assertValidAdapter(
         "",
         "Adapter shape:",
         "  {",
-        "    resolveValue(context) { return { expr: string, imports: ImportSpec[] } | null }",
+        "    resolveValue(context) {",
+        "      // theme/cssVariable -> { expr, imports, dropDefinition? } | null",
+        "    }",
+        '    resolveCall(context) { return { kind: "value" | "styles", expr, imports } | null }',
+        "  }",
+        "",
+        `Docs/examples: ${ADAPTER_DOCS_URL}`,
+      ].join("\n"),
+    );
+  }
+
+  if (typeof resolveCall !== "function") {
+    throw new Error(
+      [
+        `${where}: adapter.resolveCall must be a function.`,
+        `Received: resolveCall=${describeValue(resolveCall)}`,
+        "",
+        "Adapter shape:",
+        "  {",
+        '    resolveCall(context) { return { kind: "value" | "styles", expr: string, imports: ImportSpec[] } | null }',
         "  }",
         "",
         `Docs/examples: ${ADAPTER_DOCS_URL}`,

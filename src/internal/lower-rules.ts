@@ -1,10 +1,11 @@
 import type { API, ASTNode, Collection, JSCodeshift } from "jscodeshift";
 import { compile } from "stylis";
 import { resolveDynamicNode } from "./builtin-handlers.js";
+import type { InternalHandlerContext } from "./builtin-handlers.js";
 import { normalizeStylisAstToIR } from "./css-ir.js";
 import { cssDeclarationToStylexDeclarations, cssPropertyToStylexProp } from "./css-prop-mapping.js";
 import { getMemberPathFromIdentifier, getNodeLocStart } from "./jscodeshift-utils.js";
-import type { ImportSource, ImportSpec, ResolveContext, ResolveResult } from "../adapter.js";
+import type { Adapter, ImportSource, ImportSpec } from "../adapter.js";
 import { tryHandleAnimation } from "./lower-rules/animation.js";
 import { tryHandleInterpolatedBorder } from "./lower-rules/borders.js";
 import {
@@ -42,7 +43,8 @@ export function lowerRules(args: {
   j: JSCodeshift;
   root: Collection<ASTNode>;
   filePath: string;
-  resolveValue: (ctx: ResolveContext) => ResolveResult | null;
+  resolveValue: Adapter["resolveValue"];
+  resolveCall: Adapter["resolveCall"];
   importMap: Map<
     string,
     {
@@ -87,6 +89,7 @@ export function lowerRules(args: {
     root,
     filePath,
     resolveValue,
+    resolveCall,
     importMap,
     warnings,
     resolverImports,
@@ -1266,6 +1269,7 @@ export function lowerRules(args: {
               styleObj,
               hasLocalThemeBinding,
               resolveValue,
+              resolveCall,
               importMap,
               warnings,
               resolverImports,
@@ -1308,12 +1312,13 @@ export function lowerRules(args: {
                 api,
                 filePath,
                 resolveValue,
+                resolveCall,
                 resolveImport: (localName: string) => {
                   const v = importMap.get(localName);
                   return v ? v : null;
                 },
                 warn: () => {},
-              } as any,
+              } satisfies InternalHandlerContext,
             );
             if (res && res.type === "resolvedValue") {
               const exprAst = parseExpr(res.expr);
@@ -1767,6 +1772,7 @@ export function lowerRules(args: {
               api,
               filePath,
               resolveValue,
+              resolveCall,
               resolveImport: (localName: string) => {
                 const v = importMap.get(localName);
                 return v ? v : null;
@@ -1780,8 +1786,41 @@ export function lowerRules(args: {
                   ...(loc ? { loc } : {}),
                 });
               },
-            } as any,
+            } satisfies InternalHandlerContext,
           );
+
+          if (res && res.type === "resolvedStyles") {
+            // Adapter-resolved StyleX style objects are emitted as additional stylex.props args.
+            // This is only safe for base selector declarations.
+            if (rule.selector.trim() !== "&" || (rule.atRuleStack ?? []).length) {
+              warnings.push({
+                severity: "warning",
+                type: "dynamic-node",
+                message:
+                  "Resolved StyleX styles cannot be applied under nested selectors/at-rules; manual follow-up required.",
+                ...(loc ? { loc } : {}),
+              });
+              bail = true;
+              break;
+            }
+            for (const imp of res.imports ?? []) {
+              resolverImports.set(JSON.stringify(imp), imp);
+            }
+            const exprAst = parseExpr(res.expr);
+            if (!exprAst) {
+              warnings.push({
+                severity: "error",
+                type: "dynamic-node",
+                message: `Adapter returned an unparseable styles expression for ${decl.localName}; dropping this declaration.`,
+                ...(loc ? { loc } : {}),
+              });
+              continue;
+            }
+            decl.extraStylexPropsArgs ??= [];
+            decl.extraStylexPropsArgs.push({ expr: exprAst as any });
+            decl.needsWrapperComponent = true;
+            continue;
+          }
 
           if (res && res.type === "resolvedValue") {
             for (const imp of res.imports ?? []) {
@@ -1834,6 +1873,39 @@ export function lowerRules(args: {
               variantBuckets.set(when, { ...variantBuckets.get(when), ...pos.style });
               variantStyleKeys[when] ??= `${decl.styleKey}${toSuffixFromProp(when)}`;
             }
+            continue;
+          }
+
+          if (res && res.type === "splitVariantsResolvedStyles") {
+            if (rule.selector.trim() !== "&" || (rule.atRuleStack ?? []).length) {
+              warnings.push({
+                severity: "warning",
+                type: "dynamic-node",
+                message:
+                  "Resolved StyleX styles cannot be applied under nested selectors/at-rules; manual follow-up required.",
+                ...(loc ? { loc } : {}),
+              });
+              bail = true;
+              break;
+            }
+            for (const v of res.variants) {
+              for (const imp of v.imports ?? []) {
+                resolverImports.set(JSON.stringify(imp), imp);
+              }
+              const exprAst = parseExpr(v.expr);
+              if (!exprAst) {
+                warnings.push({
+                  severity: "error",
+                  type: "dynamic-node",
+                  message: `Adapter returned an unparseable styles expression for ${decl.localName}; dropping this declaration.`,
+                  ...(loc ? { loc } : {}),
+                });
+                continue;
+              }
+              decl.extraStylexPropsArgs ??= [];
+              decl.extraStylexPropsArgs.push({ when: v.when, expr: exprAst as any });
+            }
+            decl.needsWrapperComponent = true;
             continue;
           }
 

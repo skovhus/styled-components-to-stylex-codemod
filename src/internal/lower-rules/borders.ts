@@ -1,6 +1,6 @@
 import type { API, Expression } from "jscodeshift";
-import type { ImportSource } from "../../adapter.js";
-import { resolveDynamicNode } from "../builtin-handlers.js";
+import type { Adapter, ImportSource } from "../../adapter.js";
+import { resolveDynamicNode, type InternalHandlerContext } from "../builtin-handlers.js";
 import { getMemberPathFromIdentifier, getNodeLocStart } from "../jscodeshift-utils.js";
 import type { StyledDecl } from "../transform-types.js";
 import type { WarningLog } from "../logger.js";
@@ -13,7 +13,8 @@ export function tryHandleInterpolatedBorder(args: {
   d: any;
   styleObj: Record<string, unknown>;
   hasLocalThemeBinding: boolean;
-  resolveValue: (ctx: any) => any;
+  resolveValue: Adapter["resolveValue"];
+  resolveCall: Adapter["resolveCall"];
   importMap: Map<
     string,
     {
@@ -37,6 +38,7 @@ export function tryHandleInterpolatedBorder(args: {
     d,
     styleObj,
     resolveValue,
+    resolveCall,
     importMap,
     warnings,
     resolverImports,
@@ -258,6 +260,7 @@ export function tryHandleInterpolatedBorder(args: {
         api,
         filePath,
         resolveValue,
+        resolveCall,
         resolveImport: (localName: string) => {
           const v = importMap.get(localName);
           return v ? v : null;
@@ -270,7 +273,7 @@ export function tryHandleInterpolatedBorder(args: {
             ...(w.loc ? { loc: w.loc } : {}),
           });
         },
-      } as any,
+      } satisfies InternalHandlerContext,
     );
     if (res && res.type === "resolvedValue") {
       for (const imp of res.imports ?? []) {

@@ -88,43 +88,46 @@ const adapter = defineAdapter({
       };
     }
 
-    if (ctx.kind === "call") {
-      // Called for template interpolations like: ${transitionSpeed("slowTransition")}
-      // `calleeImportedName` is the imported symbol name (works even with aliasing).
-      // `calleeSource` tells you where it came from:
-      // - { kind: "absolutePath", value: "/abs/path" } for relative imports
-      // - { kind: "specifier", value: "some-package/foo" } for package imports
+    return null;
+  },
 
-      if (ctx.calleeImportedName !== "transitionSpeed") {
-        return null;
-      }
+  resolveCall(ctx) {
+    // Called for template interpolations like: ${transitionSpeed("slowTransition")}
+    // `calleeImportedName` is the imported symbol name (works even with aliasing).
+    // `calleeSource` tells you where it came from:
+    // - { kind: "absolutePath", value: "/abs/path" } for relative imports
+    // - { kind: "specifier", value: "some-package/foo" } for package imports
 
-      // If you need to scope resolution to a particular module, you can use:
-      // - ctx.calleeSource
-
-      const arg0 = ctx.args[0];
-      const key =
-        arg0?.kind === "literal" && typeof arg0.value === "string"
-          ? arg0.value
-          : null;
-      if (!key) {
-        return null;
-      }
-
-      return {
-        expr: `transitionSpeedVars.${key}`,
-        imports: [
-          {
-            from: { kind: "specifier", value: "./lib/helpers.stylex" },
-            names: [
-              { imported: "transitionSpeed", local: "transitionSpeedVars" },
-            ],
-          },
-        ],
-      };
+    if (ctx.calleeImportedName !== "transitionSpeed") {
+      return null;
     }
 
-    return null;
+    // If you need to scope resolution to a particular module, you can use:
+    // - ctx.calleeSource
+
+    const arg0 = ctx.args[0];
+    const key =
+      arg0?.kind === "literal" && typeof arg0.value === "string"
+        ? arg0.value
+        : null;
+    if (!key) {
+      return null;
+    }
+
+    return {
+      kind: "value",
+      expr: `transitionSpeedVars.${key}`,
+      imports: [
+        {
+          from: { kind: "specifier", value: "./lib/helpers.stylex" },
+          names: [{ imported: "transitionSpeed", local: "transitionSpeedVars" }],
+        },
+      ],
+    };
+  },
+
+  shouldSupportExternalStyling() {
+    return false;
   },
 });
 
@@ -145,7 +148,7 @@ Adapters are the main extension point. They let you control:
 
 - how theme paths and CSS variables are turned into StyleX-compatible JS values (`resolveValue`)
 - what extra imports to inject into transformed files (returned from `resolveValue`)
-- how helper calls are resolved (via `resolveValue({ kind: "call", ... })`)
+- how helper calls are resolved (via `resolveCall({ kind: "call", ... })` returning `kind: "value" | "styles"`)
 - which exported components should support external className/style extension (`shouldSupportExternalStyling`)
 - how className/style merging is handled for components accepting external styling (`styleMerger`)
 
@@ -229,7 +232,8 @@ When the codemod encounters an interpolation inside a styled template literal, i
 
 - theme access (`props.theme...`) via `resolveValue({ kind: "theme", path })`
 - prop access (`props.foo`) and conditionals (`props.foo ? "a" : "b"`, `props.foo && "color: red;"`)
-- simple helper calls (`transitionSpeed("slowTransition")`) via `resolveValue({ kind: "call", calleeImportedName, calleeSource, args, ... })`
+- simple helper calls (`transitionSpeed("slowTransition")`) via `resolveCall({ kind: "call", ... })` returning `kind: "value"`
+- style helper calls (returning StyleX styles) via `resolveCall({ kind: "call", ... })` returning `kind: "styles"`; these are emitted as extra `stylex.props(...)` args
 - helper calls applied to prop values (e.g. `shadow(props.shadow)`) by emitting a StyleX style function that calls the helper at runtime
 - conditional CSS blocks via ternary (e.g. `props.$dim ? "opacity: 0.5;" : ""`)
 

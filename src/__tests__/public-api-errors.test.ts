@@ -14,14 +14,24 @@ describe("public API runtime validation (DX)", () => {
   });
 
   it("defineAdapter: throws a helpful message when shouldSupportExternalStyling is missing", () => {
-    expect(() => defineAdapter({ resolveValue() {} } as any)).toThrowError(
+    expect(() => defineAdapter({ resolveValue() {}, resolveCall() {} } as any)).toThrowError(
       /shouldSupportExternalStyling/,
     );
   });
 
+  it("defineAdapter: throws a helpful message when resolveCall is missing", () => {
+    expect(() =>
+      defineAdapter({ resolveValue() {}, shouldSupportExternalStyling() {} } as any),
+    ).toThrowError(/resolveCall/);
+  });
+
   it("defineAdapter: throws a helpful message when shouldSupportExternalStyling is not a function", () => {
     expect(() =>
-      defineAdapter({ resolveValue() {}, shouldSupportExternalStyling: "nope" } as any),
+      defineAdapter({
+        resolveValue() {},
+        resolveCall() {},
+        shouldSupportExternalStyling: "nope",
+      } as any),
     ).toThrowError(/shouldSupportExternalStyling/);
   });
 

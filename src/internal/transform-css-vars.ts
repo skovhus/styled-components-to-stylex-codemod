@@ -1,5 +1,5 @@
 import type { JSCodeshift } from "jscodeshift";
-import type { ImportSpec, ResolveContext, ResolveResult } from "../adapter.js";
+import type { Adapter, ImportSpec } from "../adapter.js";
 import { rewriteCssVarsInString } from "./css-vars.js";
 
 type ExpressionKind = Parameters<JSCodeshift["expressionStatement"]>[0];
@@ -9,7 +9,7 @@ export function rewriteCssVarsInStyleObject(args: {
   definedVars: Map<string, string>;
   varsToDrop: Set<string>;
   isAstNode: (v: unknown) => boolean;
-  resolveValue: (ctx: ResolveContext) => ResolveResult | null;
+  resolveValue: Adapter["resolveValue"];
   addImport: (imp: ImportSpec) => void;
   parseExpr: (exprSource: string) => ExpressionKind | null;
   j: JSCodeshift;
@@ -22,7 +22,7 @@ function rewriteCssVarsInStyleObjectImpl(args: {
   definedVars: Map<string, string>;
   varsToDrop: Set<string>;
   isAstNode: (v: unknown) => boolean;
-  resolveValue: (ctx: ResolveContext) => ResolveResult | null;
+  resolveValue: Adapter["resolveValue"];
   addImport: (imp: ImportSpec) => void;
   parseExpr: (exprSource: string) => ExpressionKind | null;
   j: JSCodeshift;

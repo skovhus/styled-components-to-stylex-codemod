@@ -25,7 +25,7 @@ import { cssDeclarationToStylexDeclarations } from "./internal/css-prop-mapping.
 import { assertValidAdapter } from "./internal/public-api-validation.js";
 import { buildImportMap } from "./internal/transform-import-map.js";
 import { parseExpr as parseExprImpl } from "./internal/transform-parse-expr.js";
-import { createResolveValueSafe } from "./internal/transform-resolve-value.js";
+import { createResolveAdapterSafe } from "./internal/transform-resolve-value.js";
 import { rewriteCssVarsInStyleObject as rewriteCssVarsInStyleObjectImpl } from "./internal/transform-css-vars.js";
 import {
   getStaticPropertiesFromImport as getStaticPropertiesFromImportImpl,
@@ -93,7 +93,11 @@ export function transformWithWarnings(
   const resolverImports = new Map<string, any>();
 
   let hasChanges = false;
-  const { resolveValueSafe, bailRef: resolveValueBailRef } = createResolveValueSafe({
+  const {
+    resolveValueSafe,
+    resolveCallSafe,
+    bailRef: resolveValueBailRef,
+  } = createResolveAdapterSafe({
     adapter,
     warnings,
   });
@@ -717,6 +721,7 @@ export function transformWithWarnings(
     root,
     filePath: file.path,
     resolveValue: resolveValueSafe,
+    resolveCall: resolveCallSafe,
     importMap,
     warnings,
     resolverImports,
