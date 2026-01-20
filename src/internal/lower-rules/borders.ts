@@ -1,9 +1,11 @@
-import type { API, Expression } from "jscodeshift";
-import type { ImportSource } from "../../adapter.js";
-import { resolveDynamicNode } from "../builtin-handlers.js";
+import type { API, Expression, JSCodeshift } from "jscodeshift";
+import type { Adapter, ImportSource } from "../../adapter.js";
+import { resolveDynamicNode, type InternalHandlerContext } from "../builtin-handlers.js";
 import { getMemberPathFromIdentifier, getNodeLocStart } from "../jscodeshift-utils.js";
 import type { StyledDecl } from "../transform-types.js";
 import type { WarningLog } from "../logger.js";
+
+type ExpressionKind = Parameters<JSCodeshift["expressionStatement"]>[0];
 
 export function tryHandleInterpolatedBorder(args: {
   api: API;
@@ -13,7 +15,8 @@ export function tryHandleInterpolatedBorder(args: {
   d: any;
   styleObj: Record<string, unknown>;
   hasLocalThemeBinding: boolean;
-  resolveValue: (ctx: any) => any;
+  resolveValue: Adapter["resolveValue"];
+  resolveCall: Adapter["resolveCall"];
   importMap: Map<
     string,
     {
@@ -23,7 +26,7 @@ export function tryHandleInterpolatedBorder(args: {
   >;
   warnings: WarningLog[];
   resolverImports: Map<string, any>;
-  parseExpr: (exprSource: string) => unknown;
+  parseExpr: (exprSource: string) => ExpressionKind | null;
   toSuffixFromProp: (propName: string) => string;
   variantBuckets: Map<string, Record<string, unknown>>;
   variantStyleKeys: Record<string, string>;
@@ -37,6 +40,7 @@ export function tryHandleInterpolatedBorder(args: {
     d,
     styleObj,
     resolveValue,
+    resolveCall,
     importMap,
     warnings,
     resolverImports,
@@ -109,6 +113,7 @@ export function tryHandleInterpolatedBorder(args: {
   if (style) {
     (styleObj as any)[styleProp] = style;
   }
+  const hasStaticWidthOrStyle = Boolean(width || style);
 
   // Now treat the interpolated portion as the border color.
   const expr = (decl as any).templateExpressions[slotId] as any;
@@ -258,6 +263,7 @@ export function tryHandleInterpolatedBorder(args: {
         api,
         filePath,
         resolveValue,
+        resolveCall,
         resolveImport: (localName: string) => {
           const v = importMap.get(localName);
           return v ? v : null;
@@ -270,7 +276,7 @@ export function tryHandleInterpolatedBorder(args: {
             ...(w.loc ? { loc: w.loc } : {}),
           });
         },
-      } as any,
+      } satisfies InternalHandlerContext,
     );
     if (res && res.type === "resolvedValue") {
       for (const imp of res.imports ?? []) {
@@ -278,7 +284,23 @@ export function tryHandleInterpolatedBorder(args: {
       }
       const exprAst = parseExpr(res.expr);
       if (exprAst) {
-        (styleObj as any)[colorProp] = exprAst as any;
+        const exprNode = exprAst as { type?: string; value?: unknown };
+        if (exprNode.type === "StringLiteral" || exprNode.type === "Literal") {
+          const raw = typeof exprNode.value === "string" ? exprNode.value : null;
+          if (raw) {
+            const parsed = parseBorderShorthand(raw);
+            if (parsed) {
+              Object.assign(styleObj, parsed);
+              return true;
+            }
+          }
+        }
+        if (hasStaticWidthOrStyle) {
+          (styleObj as any)[colorProp] = exprAst as any;
+        } else {
+          const fullProp = direction ? `border${direction}` : "border";
+          (styleObj as any)[fullProp] = exprAst as any;
+        }
         return true;
       }
     }

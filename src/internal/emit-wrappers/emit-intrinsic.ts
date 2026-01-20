@@ -491,6 +491,23 @@ export function emitIntrinsicWrappers(ctx: any): {
         }
       }
 
+      // Add adapter-resolved StyleX styles (emitted directly into stylex.props args).
+      if (d.extraStylexPropsArgs) {
+        for (const extra of d.extraStylexPropsArgs) {
+          if (extra.when) {
+            const { cond, props } = parseVariantWhenToAst(j, extra.when);
+            for (const p of props) {
+              if (p && !destructureProps.includes(p)) {
+                destructureProps.push(p);
+              }
+            }
+            styleArgs.push(j.logicalExpression("&&", cond, extra.expr as any));
+          } else {
+            styleArgs.push(extra.expr as any);
+          }
+        }
+      }
+
       for (const prop of collectInlineStylePropNames(d.inlineStyleProps ?? [])) {
         if (!destructureProps.includes(prop)) {
           destructureProps.push(prop);
@@ -853,6 +870,18 @@ export function emitIntrinsicWrappers(ctx: any): {
         : []),
       j.memberExpression(j.identifier(stylesIdentifier), j.identifier(d.styleKey)),
     ];
+
+    // Add adapter-resolved StyleX styles (emitted directly into stylex.props args).
+    if (d.extraStylexPropsArgs) {
+      for (const extra of d.extraStylexPropsArgs) {
+        if (extra.when) {
+          const { cond } = parseVariantWhenToAst(j, extra.when);
+          styleArgs.push(j.logicalExpression("&&", cond, extra.expr as any));
+        } else {
+          styleArgs.push(extra.expr as any);
+        }
+      }
+    }
 
     if (d.variantStyleKeys) {
       for (const [when, variantKey] of Object.entries(d.variantStyleKeys)) {
@@ -1323,6 +1352,20 @@ export function emitIntrinsicWrappers(ctx: any): {
           }
         }
       }
+      const extraProps = new Set<string>();
+      if (d.extraStylexPropsArgs) {
+        for (const extra of d.extraStylexPropsArgs) {
+          if (!extra.when) {
+            continue;
+          }
+          const { props } = parseVariantWhenToAst(j, extra.when);
+          for (const p of props) {
+            if (p) {
+              extraProps.add(p);
+            }
+          }
+        }
+      }
       const inlineProps = new Set(collectInlineStylePropNames(d.inlineStyleProps ?? []));
       const styleFnProps = new Set(
         (d.styleFnFromProps ?? [])
@@ -1332,6 +1375,7 @@ export function emitIntrinsicWrappers(ctx: any): {
       const destructureProps = [
         ...new Set<string>([
           ...variantProps,
+          ...extraProps,
           ...inlineProps,
           ...styleFnProps,
           ...(d.attrsInfo?.conditionalAttrs ?? []).map((c: any) => c.jsxProp).filter(Boolean),
@@ -1836,6 +1880,23 @@ export function emitIntrinsicWrappers(ctx: any): {
     ];
 
     const destructureProps: string[] = [];
+
+    // Add adapter-resolved StyleX styles (emitted directly into stylex.props args).
+    if (d.extraStylexPropsArgs) {
+      for (const extra of d.extraStylexPropsArgs) {
+        if (extra.when) {
+          const { cond, props } = parseVariantWhenToAst(j, extra.when);
+          for (const p of props) {
+            if (p && !destructureProps.includes(p)) {
+              destructureProps.push(p);
+            }
+          }
+          styleArgs.push(j.logicalExpression("&&", cond, extra.expr as any));
+        } else {
+          styleArgs.push(extra.expr as any);
+        }
+      }
+    }
     if (d.variantStyleKeys) {
       for (const [when, variantKey] of Object.entries(d.variantStyleKeys)) {
         const { cond, props } = parseVariantWhenToAst(j, when);

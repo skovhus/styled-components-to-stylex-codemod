@@ -116,6 +116,14 @@ export type StyledDecl = {
   preResolvedStyle?: Record<string, unknown>;
   preResolvedFnDecls?: Record<string, unknown>;
   inlineStyleProps?: Array<{ prop: string; expr: ExpressionKind }>;
+  /**
+   * Additional `stylex.props(...)` arguments derived from resolved helper calls that
+   * produce StyleX style objects (adapter resolveCall(...) -> { usage: "props", ... }).
+   *
+   * These are emitted as extra args (optionally guarded by `when`) rather than being placed
+   * inside `stylex.create(...)`.
+   */
+  extraStylexPropsArgs?: Array<{ when?: string; expr: ExpressionKind }>;
   enumVariant?: {
     propName: string;
     baseKey: string;

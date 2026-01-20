@@ -4,7 +4,13 @@ import { dirname, join } from "node:path";
 import { existsSync } from "node:fs";
 import { glob } from "node:fs/promises";
 import { spawn } from "node:child_process";
-import type { Adapter, ResolveContext } from "./adapter.js";
+import type {
+  Adapter,
+  CallResolveContext,
+  CallResolveResult,
+  ResolveValueContext,
+  ResolveValueResult,
+} from "./adapter.js";
 import { Logger, type CollectedWarning } from "./internal/logger.js";
 import { assertValidAdapter, describeValue } from "./internal/public-api-validation.js";
 
@@ -150,22 +156,35 @@ export async function runTransform(options: RunTransformOptions): Promise<RunTra
   const adapter = options.adapter;
   assertValidAdapter(adapter, "runTransform(options)");
 
+  const resolveValueWithLogging = (ctx: ResolveValueContext): ResolveValueResult | null => {
+    try {
+      return adapter.resolveValue(ctx);
+    } catch (e) {
+      const msg = `adapter.resolveValue threw an error: ${
+        e instanceof Error ? e.message : String(e)
+      }`;
+      Logger.error(msg, ctx);
+      throw e;
+    }
+  };
+
+  const resolveCallWithLogging = (ctx: CallResolveContext): CallResolveResult | null => {
+    try {
+      return adapter.resolveCall(ctx);
+    } catch (e) {
+      const msg = `adapter.resolveCall threw an error: ${e instanceof Error ? e.message : String(e)}`;
+      Logger.error(msg, ctx);
+      throw e;
+    }
+  };
+
   const adapterWithLogging: Adapter = {
     styleMerger: adapter.styleMerger,
     shouldSupportExternalStyling(ctx) {
       return adapter.shouldSupportExternalStyling(ctx);
     },
-    resolveValue(ctx) {
-      try {
-        return adapter.resolveValue(ctx);
-      } catch (e) {
-        const msg = `adapter.resolveValue threw an error: ${
-          e instanceof Error ? e.message : String(e)
-        }`;
-        Logger.error(msg, ctx as ResolveContext);
-        throw e;
-      }
-    },
+    resolveValue: resolveValueWithLogging,
+    resolveCall: resolveCallWithLogging,
   };
 
   // Resolve file paths from glob patterns

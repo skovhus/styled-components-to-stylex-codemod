@@ -208,6 +208,23 @@ export function emitComponentWrappers(ctx: any): {
       }
     }
 
+    // Add adapter-resolved StyleX styles (emitted directly into stylex.props args).
+    if (d.extraStylexPropsArgs) {
+      for (const extra of d.extraStylexPropsArgs) {
+        if (extra.when) {
+          const { cond, props } = parseVariantWhenToAst(j, extra.when);
+          for (const p of props) {
+            if (p && !destructureProps.includes(p)) {
+              destructureProps.push(p);
+            }
+          }
+          styleArgs.push(j.logicalExpression("&&", cond, extra.expr as any));
+        } else {
+          styleArgs.push(extra.expr as any);
+        }
+      }
+    }
+
     for (const prop of collectInlineStylePropNames(d.inlineStyleProps ?? [])) {
       if (!destructureProps.includes(prop)) {
         destructureProps.push(prop);

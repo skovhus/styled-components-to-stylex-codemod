@@ -1,11 +1,11 @@
 import type { JSCodeshift } from "jscodeshift";
-import type { ImportSpec, ResolveContext, ResolveResult } from "../adapter.js";
+import type { Adapter, ImportSpec } from "../adapter.js";
 
 export function rewriteCssVarsInString(args: {
   raw: string;
   definedVars: Map<string, string>;
   varsToDrop: Set<string>;
-  resolveValue: (context: ResolveContext) => ResolveResult | null;
+  resolveValue: Adapter["resolveValue"];
   addImport: (imp: ImportSpec) => void;
   parseExpr: (exprSource: string) => ExpressionKind | null;
   j: JSCodeshift;
@@ -85,7 +85,7 @@ function rewriteCssVarsInStringImpl(args: {
   raw: string;
   definedVars: Map<string, string>;
   varsToDrop: Set<string>;
-  resolveValue: (context: ResolveContext) => ResolveResult | null;
+  resolveValue: Adapter["resolveValue"];
   addImport: (imp: ImportSpec) => void;
   parseExpr: (exprSource: string) => ExpressionKind | null;
   j: JSCodeshift;
@@ -123,7 +123,7 @@ function rewriteCssVarsInStringImpl(args: {
         // If we can’t parse the expression, don’t risk emitting broken AST—keep original.
         segments.push({ kind: "text", value: raw.slice(c.start, c.end) });
       } else {
-        if (res.dropDefinition) {
+        if ("dropDefinition" in res && res.dropDefinition) {
           varsToDrop.add(c.name);
         }
         segments.push({ kind: "expr", expr: exprAst });

@@ -1,26 +1,4 @@
-import { defineAdapter } from "../adapter.ts";
-
-// Test adapters - examples of custom adapter usage
-export const customAdapter = defineAdapter({
-  styleMerger: null,
-  shouldSupportExternalStyling() {
-    return false;
-  },
-  resolveValue(ctx) {
-    if (ctx.kind !== "theme") {
-      return null;
-    }
-    return {
-      expr: `customVar('${ctx.path}', '')`,
-      imports: [
-        {
-          from: { kind: "specifier", value: "./custom-theme" },
-          names: [{ imported: "customVar" }],
-        },
-      ],
-    };
-  },
-});
+import { defineAdapter, type ResolveValueContext, type ResolveValueResult } from "../adapter.ts";
 
 const externalStylingFilePaths = [
   "styled-element-html-props",
@@ -91,79 +69,6 @@ export const fixtureAdapter = defineAdapter({
       };
     }
 
-    if (ctx.kind === "call") {
-      const src = ctx.calleeSource.value;
-      // Note: calleeSource.value may or may not include the extension
-      if (!src.includes("lib/helpers") && !src.includes("lib\\helpers")) {
-        return null;
-      }
-
-      const arg0 = ctx.args[0];
-      const key = arg0?.kind === "literal" && typeof arg0.value === "string" ? arg0.value : null;
-
-      if (!key) {
-        return null;
-      }
-
-      // Handle color() helper from ./lib/helpers.ts
-      // color("bgBase") -> themeVars.bgBase
-      if (ctx.calleeImportedName === "color") {
-        return {
-          expr: `themeVars.${key}`,
-          imports: [
-            {
-              from: { kind: "specifier", value: "./tokens.stylex" },
-              names: [{ imported: "themeVars" }],
-            },
-          ],
-        };
-      }
-
-      // Handle fontWeight() helper from ./lib/helpers.ts
-      // fontWeight("medium") -> fontWeightVars.medium
-      if (ctx.calleeImportedName === "fontWeight") {
-        return {
-          expr: `fontWeightVars.${key}`,
-          imports: [
-            {
-              from: { kind: "specifier", value: "./tokens.stylex" },
-              names: [{ imported: "fontWeightVars" }],
-            },
-          ],
-        };
-      }
-
-      // Handle fontSize() helper from ./lib/helpers.ts
-      // fontSize("medium") -> fontSizeVars.medium
-      if (ctx.calleeImportedName === "fontSize") {
-        return {
-          expr: `fontSizeVars.${key}`,
-          imports: [
-            {
-              from: { kind: "specifier", value: "./tokens.stylex" },
-              names: [{ imported: "fontSizeVars" }],
-            },
-          ],
-        };
-      }
-
-      // Handle transitionSpeedMs() helper from ./lib/helpers.ts
-      // transitionSpeedMs("fast") -> transitionSpeedMsVars.fast
-      if (ctx.calleeImportedName === "transitionSpeed") {
-        return {
-          expr: `transitionSpeed.${key}`,
-          imports: [
-            {
-              from: { kind: "specifier", value: "./tokens.stylex" },
-              names: [{ imported: "transitionSpeed" }],
-            },
-          ],
-        };
-      }
-
-      return null;
-    }
-
     if (ctx.kind === "cssVariable") {
       const { name, definedValue } = ctx;
 
@@ -210,6 +115,121 @@ export const fixtureAdapter = defineAdapter({
       }
     }
 
+    return null;
+  },
+  resolveCall(ctx) {
+    const src = ctx.calleeSource.value;
+    // Note: calleeSource.value may or may not include the extension
+    if (!src.includes("lib/helpers") && !src.includes("lib\\helpers")) {
+      return null;
+    }
+
+    const arg0 = ctx.args[0];
+    const key = arg0?.kind === "literal" && typeof arg0.value === "string" ? arg0.value : null;
+    if (!key) {
+      return null;
+    }
+
+    // Handle color() helper from ./lib/helpers.ts
+    // color("bgBase") -> themeVars.bgBase
+    if (ctx.calleeImportedName === "color") {
+      return {
+        usage: "create",
+        expr: `themeVars.${key}`,
+        imports: [
+          {
+            from: { kind: "specifier", value: "./tokens.stylex" },
+            names: [{ imported: "themeVars" }],
+          },
+        ],
+      };
+    }
+
+    // Handle fontWeight() helper from ./lib/helpers.ts
+    // fontWeight("medium") -> fontWeightVars.medium
+    if (ctx.calleeImportedName === "fontWeight") {
+      return {
+        usage: "create",
+        expr: `fontWeightVars.${key}`,
+        imports: [
+          {
+            from: { kind: "specifier", value: "./tokens.stylex" },
+            names: [{ imported: "fontWeightVars" }],
+          },
+        ],
+      };
+    }
+
+    // Handle fontSize() helper from ./lib/helpers.ts
+    // fontSize("medium") -> fontSizeVars.medium
+    if (ctx.calleeImportedName === "fontSize") {
+      return {
+        usage: "create",
+        expr: `fontSizeVars.${key}`,
+        imports: [
+          {
+            from: { kind: "specifier", value: "./tokens.stylex" },
+            names: [{ imported: "fontSizeVars" }],
+          },
+        ],
+      };
+    }
+
+    // Handle transitionSpeed() helper from ./lib/helpers.ts
+    if (ctx.calleeImportedName === "transitionSpeed") {
+      return {
+        usage: "create",
+        expr: `transitionSpeed.${key}`,
+        imports: [
+          {
+            from: { kind: "specifier", value: "./tokens.stylex" },
+            names: [{ imported: "transitionSpeed" }],
+          },
+        ],
+      };
+    }
+
+    // Handle themedBorder() helper from ./lib/helpers.ts
+    if (ctx.calleeImportedName === "themedBorder") {
+      return {
+        usage: "props",
+        expr: `borders.${key}`,
+        imports: [
+          {
+            from: { kind: "specifier", value: "./lib/helpers.stylex" },
+            names: [{ imported: "borders" }],
+          },
+        ],
+      };
+    }
+
+    return null;
+  },
+});
+
+function customResolveValue(ctx: ResolveValueContext): ResolveValueResult | null {
+  if (ctx.kind !== "theme") {
+    return null;
+  }
+  return {
+    expr: `customVar('${ctx.path}', '')`,
+    imports: [
+      {
+        from: { kind: "specifier", value: "./custom-theme" },
+        names: [{ imported: "customVar" }],
+      },
+    ],
+  };
+}
+
+// Test adapters - examples of custom adapter usage
+export const customAdapter = defineAdapter({
+  styleMerger: null,
+  shouldSupportExternalStyling() {
+    return false;
+  },
+  resolveValue: customResolveValue,
+  resolveCall(_ctx) {
     return null;
   },
 });

@@ -661,6 +661,9 @@ export const App = () => <Box $on />;
         }
         return null;
       },
+      resolveCall() {
+        return null;
+      },
     } as any;
 
     const result = transformWithWarnings(
@@ -705,9 +708,9 @@ export const App = () => (
         if (ctx.kind === "theme" || ctx.kind === "cssVariable") {
           return null;
         }
-        if (ctx.kind === "call") {
-          return null;
-        }
+        return null;
+      },
+      resolveCall() {
         return null;
       },
     } as any;
@@ -756,6 +759,9 @@ export const App = () => <Button>Click</Button>;
         }
         return null;
       },
+      resolveCall() {
+        return null;
+      },
     } as any;
 
     const result = transformWithWarnings(
@@ -778,6 +784,9 @@ describe("styleMerger configuration", () => {
       return true;
     },
     resolveValue() {
+      return null;
+    },
+    resolveCall() {
       return null;
     },
     styleMerger: {
@@ -891,6 +900,9 @@ export const App = () => <Button>Click</Button>;
       resolveValue() {
         return null;
       },
+      resolveCall() {
+        return null;
+      },
       styleMerger: {
         functionName: "stylexProps",
         importSource: { kind: "specifier" as const, value: "@company/ui-utils" },
@@ -927,6 +939,9 @@ export const App = () => <Button>Click</Button>;
         return true;
       },
       resolveValue() {
+        return null;
+      },
+      resolveCall() {
         return null;
       },
     };

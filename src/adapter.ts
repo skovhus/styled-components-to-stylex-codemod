@@ -8,40 +8,48 @@ import { assertValidAdapter } from "./internal/public-api-validation.js";
 // Value Resolution
 // ────────────────────────────────────────────────────────────────────────────
 
-export type ResolveContext =
-  | { kind: "theme"; path: string }
-  | {
-      kind: "cssVariable";
-      name: string;
-      fallback?: string;
-      definedValue?: string;
-    }
-  | {
-      kind: "call";
-      /**
-       * Absolute path of the file currently being transformed.
-       * Useful for adapter logic that wants to branch by caller file.
-       */
-      callSiteFilePath: string;
-      /**
-       * Imported name when the callee is a named import (including aliases).
-       * Example: `import { transitionSpeed as ts } ...; ts("x")` -> "transitionSpeed"
-       */
-      calleeImportedName: string;
-      /**
-       * Import source for this call: either an absolute file path (relative imports)
-       * or the module specifier (package imports).
-       */
-      calleeSource: { kind: "absolutePath"; value: string } | { kind: "specifier"; value: string };
-      /**
-       * Call arguments (only literals are surfaced precisely; everything else is `unknown`).
-       */
-      args: Array<
-        { kind: "literal"; value: string | number | boolean | null } | { kind: "unknown" }
-      >;
-    };
+type ThemeResolveContext = { kind: "theme"; path: string };
 
-export type ResolveResult = {
+type CssVariableResolveContext = {
+  kind: "cssVariable";
+  name: string;
+  fallback?: string;
+  definedValue?: string;
+};
+
+export type CallResolveContext = {
+  /**
+   * Absolute path of the file currently being transformed.
+   * Useful for adapter logic that wants to branch by caller file.
+   */
+  callSiteFilePath: string;
+  /**
+   * Imported name when the callee is a named import (including aliases).
+   * Example: `import { transitionSpeed as ts } ...; ts("x")` -> "transitionSpeed"
+   */
+  calleeImportedName: string;
+  /**
+   * Import source for this call: either an absolute file path (relative imports)
+   * or the module specifier (package imports).
+   */
+  calleeSource: { kind: "absolutePath"; value: string } | { kind: "specifier"; value: string };
+  /**
+   * Call arguments (only literals are surfaced precisely; everything else is `unknown`).
+   */
+  args: Array<{ kind: "literal"; value: string | number | boolean | null } | { kind: "unknown" }>;
+};
+
+/**
+ * Context for `adapter.resolveValue(...)` (theme + css variables).
+ *
+ * Helper calls are handled separately via `adapter.resolveCall(...)`.
+ */
+export type ResolveValueContext = ThemeResolveContext | CssVariableResolveContext;
+
+/**
+ * Result for `adapter.resolveValue(...)` (theme + css variables).
+ */
+export type ResolveValueResult = {
   /**
    * JS expression string to inline into generated output.
    * Example: `vars.spacingSm` or `calcVars.baseSize`
@@ -55,9 +63,36 @@ export type ResolveResult = {
   /**
    * If true, the transformer should drop the corresponding `--name: ...` definition
    * from the emitted style object (useful when replacing with StyleX vars).
+   *
+   * Note: Only meaningful for `{ kind: "cssVariable" }`.
    */
   dropDefinition?: boolean;
 };
+
+export type CallResolveResult = {
+  /**
+   * Disambiguates how the resolved expression is used:
+   * - "props": a StyleX style object suitable for passing to `stylex.props(...)`.
+   * - "create": a value that can be used inside `stylex.create(...)` (e.g. tokens/vars).
+   */
+  usage: "props" | "create";
+  /**
+   * JS expression string to inline into generated output.
+   * Example (value): `vars.spacingSm`
+   * Example (styles): `borders.labelMuted`
+   */
+  expr: string;
+  /**
+   * Import statements required by `expr`.
+   * These are rendered and merged into the file by the codemod.
+   */
+  imports: ImportSpec[];
+};
+
+// Note: we intentionally do NOT expose “unified” ResolveContext/ResolveResult types anymore.
+// Consumers should use the specific contexts/results:
+// - ResolveValueContext / ResolveValueResult (theme + cssVariable)
+// - CallResolveContext / CallResolveResult (call)
 
 export type ImportSource =
   | { kind: "absolutePath"; value: string }
@@ -111,8 +146,27 @@ export interface StyleMergerConfig {
 // ────────────────────────────────────────────────────────────────────────────
 
 export interface Adapter {
-  /** Unified resolver for theme paths + CSS variables. Return null to leave unresolved. */
-  resolveValue: (context: ResolveContext) => ResolveResult | null;
+  /**
+   * Resolver for theme paths + CSS variables.
+   *
+   * Notes:
+   * - Return `{ expr, imports }` for both theme + css variables.
+   * - Optionally return `{ dropDefinition: true }` for css variables to remove the local `--x: ...` definition.
+   * - Return `null` to leave a value unresolved.
+   */
+  resolveValue: (context: ResolveValueContext) => ResolveValueResult | null;
+
+  /**
+   * Resolver for helper calls found inside template interpolations.
+   *
+   * Return:
+   * - `{ usage: "props", expr, imports }` when the call resolves to a StyleX style object
+   *   (usable as an argument to `stylex.props(...)`).
+   * - `{ usage: "create", expr, imports }` when the call resolves to a single CSS value
+   *   (usable inside `stylex.create(...)` declarations).
+   * - `null` to leave the call unresolved (the file may bail with a warning depending on context).
+   */
+  resolveCall: (context: CallResolveContext) => CallResolveResult | null;
 
   /**
    * Called for exported styled components to determine if they should support
@@ -146,6 +200,9 @@ export interface Adapter {
 /**
  * Helper for nicer user authoring + type inference.
  *
+ * `defineAdapter(...)` also performs runtime validation (helpful for JS consumers)
+ * and will throw a descriptive error message if the adapter shape is invalid.
+ *
  * Usage:
  *   export default defineAdapter({
  *     resolveValue(ctx) {
@@ -160,11 +217,24 @@ export interface Adapter {
  *       return null;
  *     },
  *
+ *     resolveCall(ctx) {
+ *       // Resolve helper calls inside template interpolations.
+ *       // Return:
+ *       // - { usage: "props", expr, imports } for StyleX styles (usable in stylex.props)
+ *       // - { usage: "create", expr, imports } for a single value (usable in stylex.create)
+ *       // - null to leave the call unresolved
+ *       void ctx;
+ *       return null;
+ *     },
+ *
  *     // Enable className/style/rest support for exported components
  *     shouldSupportExternalStyling(ctx) {
  *       // Example: Enable for all exported components in a shared components folder
  *       return ctx.filePath.includes("/shared/components/");
  *     },
+ *
+ *     // Optional: provide a custom merger, or use `null` for the default verbose merge output
+ *     styleMerger: null,
  *   });
  */
 export function defineAdapter(adapter: Adapter): Adapter {
