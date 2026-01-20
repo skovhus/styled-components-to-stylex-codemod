@@ -118,7 +118,7 @@ export type StyledDecl = {
   inlineStyleProps?: Array<{ prop: string; expr: ExpressionKind }>;
   /**
    * Additional `stylex.props(...)` arguments derived from resolved helper calls that
-   * produce StyleX style objects (adapter resolveValue(kind:"call") -> { kind: "styles", ... }).
+   * produce StyleX style objects (adapter resolveCall(...) -> { kind: "styles", ... }).
    *
    * These are emitted as extra args (optionally guarded by `when`) rather than being placed
    * inside `stylex.create(...)`.

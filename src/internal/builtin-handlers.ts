@@ -324,7 +324,6 @@ function tryResolveCallExpression(
     const args: CallResolveContext["args"] = [arg0];
 
     const res = ctx.resolveCall({
-      kind: "call",
       callSiteFilePath: ctx.filePath,
       calleeImportedName,
       calleeSource,
@@ -439,7 +438,6 @@ function tryResolveConditionalValue(
           return null;
         }
         const res = ctx.resolveCall({
-          kind: "call",
           callSiteFilePath: ctx.filePath,
           calleeImportedName: imp.importedName,
           calleeSource: imp.source,

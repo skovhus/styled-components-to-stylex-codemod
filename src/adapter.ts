@@ -18,7 +18,6 @@ type CssVariableResolveContext = {
 };
 
 export type CallResolveContext = {
-  kind: "call";
   /**
    * Absolute path of the file currently being transformed.
    * Useful for adapter logic that wants to branch by caller file.
@@ -201,6 +200,9 @@ export interface Adapter {
 /**
  * Helper for nicer user authoring + type inference.
  *
+ * `defineAdapter(...)` also performs runtime validation (helpful for JS consumers)
+ * and will throw a descriptive error message if the adapter shape is invalid.
+ *
  * Usage:
  *   export default defineAdapter({
  *     resolveValue(ctx) {
@@ -215,11 +217,24 @@ export interface Adapter {
  *       return null;
  *     },
  *
+ *     resolveCall(ctx) {
+ *       // Resolve helper calls inside template interpolations.
+ *       // Return:
+ *       // - { kind: "value", expr, imports } for a single value (usable in stylex.create)
+ *       // - { kind: "styles", expr, imports } for StyleX styles (usable in stylex.props)
+ *       // - null to leave the call unresolved
+ *       void ctx;
+ *       return null;
+ *     },
+ *
  *     // Enable className/style/rest support for exported components
  *     shouldSupportExternalStyling(ctx) {
  *       // Example: Enable for all exported components in a shared components folder
  *       return ctx.filePath.includes("/shared/components/");
  *     },
+ *
+ *     // Optional: provide a custom merger, or use `null` for the default verbose merge output
+ *     styleMerger: null,
  *   });
  */
 export function defineAdapter(adapter: Adapter): Adapter {

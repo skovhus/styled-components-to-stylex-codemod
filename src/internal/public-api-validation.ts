@@ -66,7 +66,7 @@ export function assertValidAdapter(
         '  - { kind: "cssVariable", name, fallback?, definedValue? }',
         "",
         "resolveCall(context) is called with:",
-        '  - { kind: "call", callSiteFilePath, calleeImportedName, calleeSource, args }',
+        "  - { callSiteFilePath, calleeImportedName, calleeSource, args }",
         "",
         `Docs/examples: ${ADAPTER_DOCS_URL}`,
       ].join("\n"),
