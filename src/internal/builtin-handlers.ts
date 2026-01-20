@@ -341,7 +341,7 @@ function tryResolveCallExpression(
 
   // Support helper calls that return a function which is immediately invoked with the props param:
   //   helper("key")(props)
-  // We treat this as equivalent to `helper("key")` when the adapter returns kind:"styles".
+  // We treat this as equivalent to `helper("key")` when the adapter returns kind:"styles" or "value".
   //
   // This is intentionally narrow and only used when the adapter explicitly opts in with kind:"styles".
   if (expr.callee?.type === "CallExpression") {
@@ -349,7 +349,17 @@ function tryResolveCallExpression(
     if (outerArgs.length === 1) {
       const innerCall = expr.callee;
       const innerRes = resolveSimpleHelperCall(innerCall);
-      if (innerRes !== "keepOriginal" && innerRes !== "unresolved" && innerRes.kind === "styles") {
+      if (innerRes !== "keepOriginal" && innerRes !== "unresolved") {
+        if (innerRes.kind === "value") {
+          return {
+            type: "keepOriginal",
+            reason: [
+              'Curried helper call resolved to kind "value".',
+              'Use kind "styles" when the helper returns a StyleX style object (for stylex.props).',
+              'kind "value" is only valid for single CSS property values (non-curried calls).',
+            ].join(" "),
+          };
+        }
         return { type: "resolvedStyles", expr: innerRes.expr, imports: innerRes.imports };
       }
     }
@@ -395,6 +405,7 @@ function tryResolveConditionalValue(
   type BranchKind = "value" | "styles";
   type Branch = { kind: BranchKind; expr: string; imports: ImportSpec[] } | null;
 
+  let invalidCurriedValue: string | null = null;
   const branchToExpr = (b: unknown): Branch => {
     const v = literalToStaticValue(b);
     if (v !== null) {
@@ -458,7 +469,15 @@ function tryResolveConditionalValue(
         const outerArgs = call.arguments ?? [];
         if (outerArgs.length === 1 && outerArgs[0] && typeof outerArgs[0] === "object") {
           const innerRes = resolveSimpleCall(inner);
-          if (innerRes && innerRes.kind === "styles") {
+          if (innerRes) {
+            if (innerRes.kind === "value") {
+              invalidCurriedValue = [
+                'Curried helper call resolved to kind "value".',
+                'Use kind "styles" when the helper returns a StyleX style object (for stylex.props).',
+                'kind "value" is only valid for single CSS property values (non-curried calls).',
+              ].join(" ");
+              return null;
+            }
             return { kind: "styles", expr: innerRes.expr, imports: innerRes.imports };
           }
         }
@@ -494,6 +513,14 @@ function tryResolveConditionalValue(
       return null;
     }
     return { kind: "value", expr: res.expr, imports: res.imports };
+  };
+
+  const getBranch = (value: unknown): Branch | "invalid" => {
+    const branch = branchToExpr(value);
+    if (invalidCurriedValue) {
+      return "invalid";
+    }
+    return branch;
   };
 
   // Helper to extract condition info from a binary expression test
@@ -536,7 +563,10 @@ function tryResolveConditionalValue(
   ): { variants: Variant[]; defaultBranch: NonNullable<Branch> } | null => {
     if (condExpr.type !== "ConditionalExpression") {
       // Base case: not a conditional, this is the default value
-      const branch = branchToExpr(condExpr);
+      const branch = getBranch(condExpr);
+      if (branch === "invalid") {
+        return null;
+      }
       if (!branch) {
         return null;
       }
@@ -554,7 +584,10 @@ function tryResolveConditionalValue(
       return null;
     }
 
-    const consExpr = branchToExpr(consequent);
+    const consExpr = getBranch(consequent);
+    if (consExpr === "invalid") {
+      return null;
+    }
     if (!consExpr) {
       return null;
     }
@@ -592,8 +625,14 @@ function tryResolveConditionalValue(
       ? getMemberPathFromIdentifier(test, paramName)
       : null;
   if (testPath && testPath.length === 1) {
-    const cons = branchToExpr(consequent);
-    const alt = branchToExpr(alternate);
+    const cons = getBranch(consequent);
+    if (cons === "invalid") {
+      return { type: "keepOriginal", reason: invalidCurriedValue! };
+    }
+    const alt = getBranch(alternate);
+    if (alt === "invalid") {
+      return { type: "keepOriginal", reason: invalidCurriedValue! };
+    }
     if (!cons || !alt) {
       return null;
     }
@@ -616,7 +655,10 @@ function tryResolveConditionalValue(
   // This also handles the simple case: prop === "a" ? valA : defaultVal
   const condInfo = extractConditionInfo(test);
   if (condInfo) {
-    const consExpr = branchToExpr(consequent);
+    const consExpr = getBranch(consequent);
+    if (consExpr === "invalid") {
+      return { type: "keepOriginal", reason: invalidCurriedValue! };
+    }
     if (!consExpr) {
       return null;
     }

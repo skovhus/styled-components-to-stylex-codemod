@@ -111,6 +111,7 @@ export function tryHandleInterpolatedBorder(args: {
   if (style) {
     (styleObj as any)[styleProp] = style;
   }
+  const hasStaticWidthOrStyle = Boolean(width || style);
 
   // Now treat the interpolated portion as the border color.
   const expr = (decl as any).templateExpressions[slotId] as any;
@@ -281,7 +282,27 @@ export function tryHandleInterpolatedBorder(args: {
       }
       const exprAst = parseExpr(res.expr);
       if (exprAst) {
-        (styleObj as any)[colorProp] = exprAst as any;
+        if (exprAst.type === "StringLiteral" || (exprAst as any).type === "Literal") {
+          const raw =
+            exprAst.type === "StringLiteral"
+              ? exprAst.value
+              : typeof (exprAst as any).value === "string"
+                ? ((exprAst as any).value as string)
+                : null;
+          if (raw) {
+            const parsed = parseBorderShorthand(raw);
+            if (parsed) {
+              Object.assign(styleObj, parsed);
+              return true;
+            }
+          }
+        }
+        if (hasStaticWidthOrStyle) {
+          (styleObj as any)[colorProp] = exprAst as any;
+        } else {
+          const fullProp = direction ? `border${direction}` : "border";
+          (styleObj as any)[fullProp] = exprAst as any;
+        }
         return true;
       }
     }
