@@ -1,4 +1,3 @@
-// expected-warnings: vendor-prefixed-pseudo
 import styled from "styled-components";
 
 const Slider = styled.input`

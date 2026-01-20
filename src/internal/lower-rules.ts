@@ -2,7 +2,7 @@ import type { API, ASTNode, Collection, JSCodeshift } from "jscodeshift";
 import { compile } from "stylis";
 import { resolveDynamicNode } from "./builtin-handlers.js";
 import type { InternalHandlerContext } from "./builtin-handlers.js";
-import { normalizeStylisAstToIR, type CssDeclarationIR } from "./css-ir.js";
+import { normalizeStylisAstToIR } from "./css-ir.js";
 import { cssDeclarationToStylexDeclarations, cssPropertyToStylexProp } from "./css-prop-mapping.js";
 import { getMemberPathFromIdentifier, getNodeLocStart } from "./jscodeshift-utils.js";
 import type { Adapter, ImportSource, ImportSpec } from "../adapter.js";
@@ -38,43 +38,6 @@ export type DescendantOverride = {
 };
 
 type ExpressionKind = Parameters<JSCodeshift["expressionStatement"]>[0];
-
-const VENDOR_PROPERTY_PREFIXES = ["-webkit-", "-moz-", "-ms-", "-o-"];
-const VENDOR_PSEUDO_PREFIXES = ["::-webkit-", "::-moz-", "::-ms-", "::-o-"];
-
-const getUnprefixedProperty = (prop: string): string | null => {
-  for (const prefix of VENDOR_PROPERTY_PREFIXES) {
-    if (prop.startsWith(prefix)) {
-      return prop.slice(prefix.length);
-    }
-  }
-  return null;
-};
-
-const getVendorPrefixedPropertiesToDrop = (decls: CssDeclarationIR[]): Set<string> => {
-  const props = new Set(
-    decls.map((d) => d.property?.trim()).filter((prop): prop is string => !!prop),
-  );
-  const drop = new Set<string>();
-  for (const prop of props) {
-    const unprefixed = getUnprefixedProperty(prop);
-    if (unprefixed) {
-      drop.add(prop);
-    }
-  }
-  return drop;
-};
-
-const shouldSkipVendorPrefixedProperty = (
-  decl: CssDeclarationIR,
-  dropVendorProps: Set<string>,
-): boolean => {
-  const prop = decl.property?.trim();
-  return !!prop && dropVendorProps.has(prop);
-};
-
-const isVendorPrefixedPseudoElement = (pseudo: string): boolean =>
-  VENDOR_PSEUDO_PREFIXES.some((prefix) => pseudo.startsWith(prefix));
 
 export function lowerRules(args: {
   api: API;
@@ -786,7 +749,7 @@ export function lowerRules(args: {
     const resolveCssHelperTemplate = (
       template: any,
       paramName: string | null,
-      ownerName: string,
+      _ownerName: string,
     ): Record<string, unknown> | null => {
       const parsed = parseStyledTemplateLiteral(template);
       const rawCss = parsed.rawCss;
@@ -803,12 +766,6 @@ export function lowerRules(args: {
         if (!pseudo) {
           return null;
         }
-        if (isVendorPrefixedPseudoElement(pseudo)) {
-          bailUnsupported(
-            `Vendor-prefixed pseudo-element "${pseudo}" is not supported in ${ownerName}.`,
-          );
-          return null;
-        }
         if (pseudo === ":before" || pseudo === ":after") {
           return `::${pseudo.slice(1)}`;
         }
@@ -820,16 +777,9 @@ export function lowerRules(args: {
           return null;
         }
         const selector = (rule.selector ?? "").trim();
-        const dropVendorProps = getVendorPrefixedPropertiesToDrop(rule.declarations);
         let target = out;
         if (selector !== "&") {
           const pseudoElement = parsePseudoElement(selector);
-          if (pseudoElement && isVendorPrefixedPseudoElement(pseudoElement)) {
-            bailUnsupported(
-              `Vendor-prefixed pseudo-element "${pseudoElement}" is not supported in ${ownerName}.`,
-            );
-            return null;
-          }
           const simplePseudo = parseSimplePseudo(selector);
           const normalizedPseudoElement = normalizePseudoElement(
             pseudoElement ??
@@ -853,12 +803,6 @@ export function lowerRules(args: {
 
         for (const d of rule.declarations) {
           if (!d.property) {
-            return null;
-          }
-          if (shouldSkipVendorPrefixedProperty(d, dropVendorProps)) {
-            bailUnsupported(
-              `Vendor-prefixed property "${d.property.trim()}" is not supported in ${ownerName}.`,
-            );
             return null;
           }
           if (d.value.kind === "static") {
@@ -1139,7 +1083,6 @@ export function lowerRules(args: {
 
     for (const rule of decl.rules) {
       // (debug logging removed)
-      const dropVendorProps = getVendorPrefixedPropertiesToDrop(rule.declarations);
       // Sibling selectors:
       // - & + &  (adjacent sibling)
       // - &.something ~ & (general sibling after a class marker)
@@ -1153,12 +1096,6 @@ export function lowerRules(args: {
         };
         const obj: Record<string, unknown> = {};
         for (const d of rule.declarations) {
-          if (shouldSkipVendorPrefixedProperty(d, dropVendorProps)) {
-            bailUnsupported(
-              `Vendor-prefixed property "${d.property?.trim() ?? ""}" is not supported in ${decl.localName}.`,
-            );
-            break;
-          }
           if (d.value.kind !== "static") {
             continue;
           }
@@ -1195,12 +1132,6 @@ export function lowerRules(args: {
 
         const obj: Record<string, unknown> = {};
         for (const d of rule.declarations) {
-          if (shouldSkipVendorPrefixedProperty(d, dropVendorProps)) {
-            bailUnsupported(
-              `Vendor-prefixed property "${d.property?.trim() ?? ""}" is not supported in ${decl.localName}.`,
-            );
-            break;
-          }
           if (d.value.kind !== "static") {
             continue;
           }
@@ -1288,12 +1219,6 @@ export function lowerRules(args: {
           const parentStyle = parentDecl && resolvedStyleObjects.get(parentDecl.styleKey);
           if (parentStyle) {
             for (const d of rule.declarations) {
-              if (shouldSkipVendorPrefixedProperty(d, dropVendorProps)) {
-                bailUnsupported(
-                  `Vendor-prefixed property "${d.property?.trim() ?? ""}" is not supported in ${decl.localName}.`,
-                );
-                break;
-              }
               if (d.value.kind !== "static") {
                 continue;
               }
@@ -1335,12 +1260,6 @@ export function lowerRules(args: {
             descendantOverrideHover.set(overrideStyleKey, hoverBucket);
 
             for (const d of rule.declarations) {
-              if (shouldSkipVendorPrefixedProperty(d, dropVendorProps)) {
-                bailUnsupported(
-                  `Vendor-prefixed property "${d.property?.trim() ?? ""}" is not supported in ${decl.localName}.`,
-                );
-                break;
-              }
               if (d.value.kind !== "static") {
                 continue;
               }
@@ -1376,12 +1295,6 @@ export function lowerRules(args: {
         parseCommaSeparatedPseudos(selector) ??
         (parseSimplePseudo(selector) ? [parseSimplePseudo(selector)!] : null);
       const pseudoElement = parsePseudoElement(selector);
-      if (pseudoElement && isVendorPrefixedPseudoElement(pseudoElement)) {
-        bailUnsupported(
-          `Vendor-prefixed pseudo-element "${pseudoElement}" is not supported in ${decl.localName}.`,
-        );
-        break;
-      }
 
       const attrSel = parseAttributeSelector(selector);
       const attrWrapperKind =
@@ -1421,12 +1334,6 @@ export function lowerRules(args: {
       }
 
       for (const d of rule.declarations) {
-        if (shouldSkipVendorPrefixedProperty(d, dropVendorProps)) {
-          bailUnsupported(
-            `Vendor-prefixed property "${d.property?.trim() ?? ""}" is not supported in ${decl.localName}.`,
-          );
-          break;
-        }
         if (d.value.kind === "interpolated") {
           if (bail) {
             break;
