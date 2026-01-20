@@ -39,7 +39,7 @@ export interface StyleMergingResult {
 /**
  * Generates either a merger function call or the verbose className/style pattern.
  *
- * When a merger is configured, generates:
+ * When a merger is configured and external className/style merging is needed, generates:
  *   `{...stylexProps([styles.a, styles.b], className, style)}`
  *
  * When no merger is configured (default), generates:
@@ -86,8 +86,8 @@ export function emitStyleMerging(args: {
     };
   }
 
-  // If a merger function is configured, use it
-  if (styleMerger) {
+  // If a merger function is configured and external className/style merging is needed, use it
+  if (styleMerger && (allowClassNameProp || allowStyleProp)) {
     return emitWithMerger({
       j,
       styleMerger,

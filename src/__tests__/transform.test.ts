@@ -758,6 +758,21 @@ describe("styleMerger configuration", () => {
       importSource: { kind: "specifier" as const, value: "@company/ui-utils" },
     },
   };
+  const noExternalMergerAdapter = {
+    shouldSupportExternalStyling() {
+      return false;
+    },
+    resolveValue() {
+      return null;
+    },
+    resolveCall() {
+      return null;
+    },
+    styleMerger: {
+      functionName: "stylexProps",
+      importSource: { kind: "specifier" as const, value: "@company/ui-utils" },
+    },
+  };
 
   it("should use merger function instead of verbose pattern when configured", async () => {
     const source = `
@@ -857,22 +872,6 @@ export const App = () => <Button>Click</Button>;
   });
 
   it("should not use merger when external styles are disabled", async () => {
-    const adapterNoExternalStyles = {
-      shouldSupportExternalStyling() {
-        return false;
-      },
-      resolveValue() {
-        return null;
-      },
-      resolveCall() {
-        return null;
-      },
-      styleMerger: {
-        functionName: "stylexProps",
-        importSource: { kind: "specifier" as const, value: "@company/ui-utils" },
-      },
-    };
-
     const source = `
 import styled from 'styled-components';
 
@@ -886,7 +885,7 @@ export const App = () => <Button>Click</Button>;
     const result = transformWithWarnings(
       { source, path: "test.tsx" },
       { jscodeshift: j, j, stats: () => {}, report: () => {} },
-      { adapter: adapterNoExternalStyles },
+      { adapter: noExternalMergerAdapter },
     );
 
     expect(result.code).not.toBeNull();
@@ -894,6 +893,33 @@ export const App = () => <Button>Click</Button>;
     expect(result.code).not.toContain("stylexProps");
     // Should use plain stylex.props spread
     expect(result.code).toContain("stylex.props");
+  });
+
+  it("should avoid merger when only inline styles are needed", async () => {
+    const source = `
+import styled from 'styled-components';
+
+type BoxProps = {
+  $delay: number;
+};
+
+const Box = styled.div<BoxProps>\`
+  transition-delay: \${(props) => props.$delay}ms;
+\`;
+
+export const App = () => <Box $delay={100} />;
+`;
+
+    const result = transformWithWarnings(
+      { source, path: "test.tsx" },
+      { jscodeshift: j, j, stats: () => {}, report: () => {} },
+      { adapter: noExternalMergerAdapter },
+    );
+
+    expect(result.code).not.toBeNull();
+    expect(result.code).not.toContain("stylexProps");
+    expect(result.code).toMatch(/const\s+sx\s*=\s*stylex\.props/);
+    expect(result.code).toContain("transitionDelay");
   });
 
   it("should use verbose pattern when no merger is configured", async () => {
