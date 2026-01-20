@@ -71,11 +71,11 @@ export type ResolveValueResult = {
 
 export type CallResolveResult = {
   /**
-   * Disambiguates what the resolved expression represents:
-   * - "value": a value that can be used inside `stylex.create(...)` (e.g. tokens/vars).
-   * - "styles": a StyleX style object suitable for passing to `stylex.props(...)`.
+   * Disambiguates how the resolved expression is used:
+   * - "props": a StyleX style object suitable for passing to `stylex.props(...)`.
+   * - "create": a value that can be used inside `stylex.create(...)` (e.g. tokens/vars).
    */
-  kind: "value" | "styles";
+  usage: "props" | "create";
   /**
    * JS expression string to inline into generated output.
    * Example (value): `vars.spacingSm`
@@ -160,10 +160,10 @@ export interface Adapter {
    * Resolver for helper calls found inside template interpolations.
    *
    * Return:
-   * - `{ kind: "value", expr, imports }` when the call resolves to a single CSS value
-   *   (usable inside `stylex.create(...)` declarations).
-   * - `{ kind: "styles", expr, imports }` when the call resolves to a StyleX style object
+   * - `{ usage: "props", expr, imports }` when the call resolves to a StyleX style object
    *   (usable as an argument to `stylex.props(...)`).
+   * - `{ usage: "create", expr, imports }` when the call resolves to a single CSS value
+   *   (usable inside `stylex.create(...)` declarations).
    * - `null` to leave the call unresolved (the file may bail with a warning depending on context).
    */
   resolveCall: (context: CallResolveContext) => CallResolveResult | null;
@@ -220,8 +220,8 @@ export interface Adapter {
  *     resolveCall(ctx) {
  *       // Resolve helper calls inside template interpolations.
  *       // Return:
- *       // - { kind: "value", expr, imports } for a single value (usable in stylex.create)
- *       // - { kind: "styles", expr, imports } for StyleX styles (usable in stylex.props)
+ *       // - { usage: "props", expr, imports } for StyleX styles (usable in stylex.props)
+ *       // - { usage: "create", expr, imports } for a single value (usable in stylex.create)
  *       // - null to leave the call unresolved
  *       void ctx;
  *       return null;

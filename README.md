@@ -108,7 +108,7 @@ const adapter = defineAdapter({
     }
 
     return {
-      kind: "value",
+      usage: "create",
       expr: `transitionSpeedVars.${key}`,
       imports: [
         {
@@ -141,7 +141,7 @@ Adapters are the main extension point. They let you control:
 
 - how theme paths and CSS variables are turned into StyleX-compatible JS values (`resolveValue`)
 - what extra imports to inject into transformed files (returned from `resolveValue`)
-- how helper calls are resolved (via `resolveCall({ ... })` returning `kind: "value" | "styles"`; `null`/`undefined` now bails)
+- how helper calls are resolved (via `resolveCall({ ... })` returning `usage: "props" | "create"`; `null`/`undefined` now bails)
 - which exported components should support external className/style extension (`shouldSupportExternalStyling`)
 - how className/style merging is handled for components accepting external styling (`styleMerger`)
 
@@ -225,8 +225,8 @@ When the codemod encounters an interpolation inside a styled template literal, i
 
 - theme access (`props.theme...`) via `resolveValue({ kind: "theme", path })`
 - prop access (`props.foo`) and conditionals (`props.foo ? "a" : "b"`, `props.foo && "color: red;"`)
-- simple helper calls (`transitionSpeed("slowTransition")`) via `resolveCall({ ... })` returning `kind: "value"`
-- style helper calls (returning StyleX styles) via `resolveCall({ ... })` returning `kind: "styles"`; these are emitted as extra `stylex.props(...)` args
+- simple helper calls (`transitionSpeed("slowTransition")`) via `resolveCall({ ... })` returning `usage: "create"`
+- style helper calls (returning StyleX styles) via `resolveCall({ ... })` returning `usage: "props"`; these are emitted as extra `stylex.props(...)` args
 - if `resolveCall` returns `null` or `undefined`, the transform now **bails the file** and logs a warning
 - helper calls applied to prop values (e.g. `shadow(props.shadow)`) by emitting a StyleX style function that calls the helper at runtime
 - conditional CSS blocks via ternary (e.g. `props.$dim ? "opacity: 0.5;" : ""`)

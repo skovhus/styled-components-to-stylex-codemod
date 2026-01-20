@@ -1,9 +1,11 @@
-import type { API, Expression } from "jscodeshift";
+import type { API, Expression, JSCodeshift } from "jscodeshift";
 import type { Adapter, ImportSource } from "../../adapter.js";
 import { resolveDynamicNode, type InternalHandlerContext } from "../builtin-handlers.js";
 import { getMemberPathFromIdentifier, getNodeLocStart } from "../jscodeshift-utils.js";
 import type { StyledDecl } from "../transform-types.js";
 import type { WarningLog } from "../logger.js";
+
+type ExpressionKind = Parameters<JSCodeshift["expressionStatement"]>[0];
 
 export function tryHandleInterpolatedBorder(args: {
   api: API;
@@ -24,7 +26,7 @@ export function tryHandleInterpolatedBorder(args: {
   >;
   warnings: WarningLog[];
   resolverImports: Map<string, any>;
-  parseExpr: (exprSource: string) => unknown;
+  parseExpr: (exprSource: string) => ExpressionKind | null;
   toSuffixFromProp: (propName: string) => string;
   variantBuckets: Map<string, Record<string, unknown>>;
   variantStyleKeys: Record<string, string>;
@@ -282,13 +284,9 @@ export function tryHandleInterpolatedBorder(args: {
       }
       const exprAst = parseExpr(res.expr);
       if (exprAst) {
-        if (exprAst.type === "StringLiteral" || (exprAst as any).type === "Literal") {
-          const raw =
-            exprAst.type === "StringLiteral"
-              ? exprAst.value
-              : typeof (exprAst as any).value === "string"
-                ? ((exprAst as any).value as string)
-                : null;
+        const exprNode = exprAst as { type?: string; value?: unknown };
+        if (exprNode.type === "StringLiteral" || exprNode.type === "Literal") {
+          const raw = typeof exprNode.value === "string" ? exprNode.value : null;
           if (raw) {
             const parsed = parseBorderShorthand(raw);
             if (parsed) {

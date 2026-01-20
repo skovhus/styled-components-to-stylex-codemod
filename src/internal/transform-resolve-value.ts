@@ -49,7 +49,7 @@ export function createResolveAdapterSafe(args: { adapter: Adapter; warnings: War
         type: "dynamic-node",
         message: [
           "Adapter.resolveCall returned null or undefined.",
-          'Return { kind: "value" | "styles", expr, imports } to resolve it.',
+          'Return { usage: "props" | "create", expr, imports } to resolve it.',
           "Skipping transformation for this file to avoid producing incorrect output.",
         ].join(" "),
         context: ctx,
@@ -57,14 +57,14 @@ export function createResolveAdapterSafe(args: { adapter: Adapter; warnings: War
       return null;
     }
     if (res && typeof res === "object") {
-      const k = (res as Partial<CallResolveResult>).kind;
-      if (k !== "value" && k !== "styles") {
+      const usage = (res as Partial<CallResolveResult>).usage;
+      if (usage !== "create" && usage !== "props") {
         bailRef.value = true;
         warnings.push({
           severity: "error",
           type: "dynamic-node",
           message: [
-            'Adapter.resolveCall must return { kind: "value" | "styles", expr, imports }.',
+            'Adapter.resolveCall must return { usage: "props" | "create", expr, imports }.',
             "Skipping transformation for this file to avoid producing incorrect output.",
           ].join(" "),
           context: ctx,

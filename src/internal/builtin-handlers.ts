@@ -334,29 +334,29 @@ function tryResolveCallExpression(
 
   const simple = resolveSimpleHelperCall(expr);
   if (simple !== "keepOriginal" && simple !== "unresolved") {
-    return simple.kind === "styles"
+    return simple.usage === "props"
       ? { type: "resolvedStyles", expr: simple.expr, imports: simple.imports }
       : { type: "resolvedValue", expr: simple.expr, imports: simple.imports };
   }
 
   // Support helper calls that return a function which is immediately invoked with the props param:
   //   helper("key")(props)
-  // We treat this as equivalent to `helper("key")` when the adapter returns kind:"styles" or "value".
+  // We treat this as equivalent to `helper("key")` when the adapter returns usage:"props" or "create".
   //
-  // This is intentionally narrow and only used when the adapter explicitly opts in with kind:"styles".
+  // This is intentionally narrow and only used when the adapter explicitly opts in with usage:"props".
   if (expr.callee?.type === "CallExpression") {
     const outerArgs = expr.arguments ?? [];
     if (outerArgs.length === 1) {
       const innerCall = expr.callee;
       const innerRes = resolveSimpleHelperCall(innerCall);
       if (innerRes !== "keepOriginal" && innerRes !== "unresolved") {
-        if (innerRes.kind === "value") {
+        if (innerRes.usage === "create") {
           return {
             type: "keepOriginal",
             reason: [
-              'Curried helper call resolved to kind "value".',
-              'Use kind "styles" when the helper returns a StyleX style object (for stylex.props).',
-              'kind "value" is only valid for single CSS property values (non-curried calls).',
+              'Curried helper call resolved to usage "create".',
+              'Use usage "props" when the helper returns a StyleX style object (for stylex.props).',
+              'usage "create" is only valid for single CSS property values (non-curried calls).',
             ].join(" "),
           };
         }
@@ -402,15 +402,15 @@ function tryResolveConditionalValue(
     return null;
   }
 
-  type BranchKind = "value" | "styles";
-  type Branch = { kind: BranchKind; expr: string; imports: ImportSpec[] } | null;
+  type BranchUsage = "props" | "create";
+  type Branch = { usage: BranchUsage; expr: string; imports: ImportSpec[] } | null;
 
   let invalidCurriedValue: string | null = null;
   const branchToExpr = (b: unknown): Branch => {
     const v = literalToStaticValue(b);
     if (v !== null) {
       return {
-        kind: "value",
+        usage: "create",
         expr: typeof v === "string" ? JSON.stringify(v) : String(v),
         imports: [],
       };
@@ -460,7 +460,7 @@ function tryResolveConditionalValue(
       // helper("key")
       const simple = resolveSimpleCall(call as any);
       if (simple) {
-        return { kind: simple.kind, expr: simple.expr, imports: simple.imports };
+        return { usage: simple.usage, expr: simple.expr, imports: simple.imports };
       }
 
       // helper("key")(propsParam)
@@ -470,15 +470,15 @@ function tryResolveConditionalValue(
         if (outerArgs.length === 1 && outerArgs[0] && typeof outerArgs[0] === "object") {
           const innerRes = resolveSimpleCall(inner);
           if (innerRes) {
-            if (innerRes.kind === "value") {
+            if (innerRes.usage === "create") {
               invalidCurriedValue = [
-                'Curried helper call resolved to kind "value".',
-                'Use kind "styles" when the helper returns a StyleX style object (for stylex.props).',
-                'kind "value" is only valid for single CSS property values (non-curried calls).',
+                'Curried helper call resolved to usage "create".',
+                'Use usage "props" when the helper returns a StyleX style object (for stylex.props).',
+                'usage "create" is only valid for single CSS property values (non-curried calls).',
               ].join(" ");
               return null;
             }
-            return { kind: "styles", expr: innerRes.expr, imports: innerRes.imports };
+            return { usage: "props", expr: innerRes.expr, imports: innerRes.imports };
           }
         }
       }
@@ -512,7 +512,7 @@ function tryResolveConditionalValue(
     if (!res) {
       return null;
     }
-    return { kind: "value", expr: res.expr, imports: res.imports };
+    return { usage: "create", expr: res.expr, imports: res.imports };
   };
 
   const getBranch = (value: unknown): Branch | "invalid" => {
@@ -553,7 +553,7 @@ function tryResolveConditionalValue(
   type Variant = {
     nameHint: string;
     when: string;
-    kind: BranchKind;
+    usage: BranchUsage;
     expr: string;
     imports: ImportSpec[];
   };
@@ -606,7 +606,7 @@ function tryResolveConditionalValue(
     const thisVariant: Variant = {
       nameHint: rhsNameHint,
       when: condInfo.cond,
-      kind: consExpr.kind,
+      usage: consExpr.usage,
       expr: consExpr.expr,
       imports: consExpr.imports,
     };
@@ -637,16 +637,16 @@ function tryResolveConditionalValue(
       return null;
     }
     const whenExpr = testPath[0]!;
-    const allKinds = new Set([cons.kind, alt.kind]);
-    if (allKinds.size !== 1) {
+    const allUsages = new Set([cons.usage, alt.usage]);
+    if (allUsages.size !== 1) {
       return null;
     }
-    const kind = cons.kind;
+    const usage = cons.usage;
     const variants = [
       { nameHint: "truthy", when: whenExpr, expr: cons.expr, imports: cons.imports },
       { nameHint: "falsy", when: `!${whenExpr}`, expr: alt.expr, imports: alt.imports },
     ];
-    return kind === "styles"
+    return usage === "props"
       ? { type: "splitVariantsResolvedStyles", variants }
       : { type: "splitVariantsResolvedValue", variants };
   }
@@ -668,7 +668,7 @@ function tryResolveConditionalValue(
     const altLiteral = literalToString(alternate);
     const altIsEmptyish =
       altLiteral !== null && (altLiteral.trim() === "" || altLiteral === "none");
-    if (consExpr.kind === "styles" && altIsEmptyish) {
+    if (consExpr.usage === "props" && altIsEmptyish) {
       return {
         type: "splitVariantsResolvedStyles",
         variants: [
@@ -692,7 +692,7 @@ function tryResolveConditionalValue(
       const thisVariant: Variant = {
         nameHint: rhsNameHint,
         when: condInfo.cond,
-        kind: consExpr.kind,
+        usage: consExpr.usage,
         expr: consExpr.expr,
         imports: consExpr.imports,
       };
@@ -704,11 +704,11 @@ function tryResolveConditionalValue(
 
       // For now, only support nested-ternary variant extraction for value results.
       // (Styles results would need an explicit “no style” default semantics.)
-      const kindSet = new Set<BranchKind>([
-        nested.defaultBranch.kind,
-        ...allVariants.map((v) => v.kind),
+      const usageSet = new Set<BranchUsage>([
+        nested.defaultBranch.usage,
+        ...allVariants.map((v) => v.usage),
       ]);
-      if (kindSet.size !== 1 || kindSet.has("styles")) {
+      if (usageSet.size !== 1 || usageSet.has("props")) {
         return null;
       }
       return {

@@ -134,7 +134,7 @@ export const fixtureAdapter = defineAdapter({
     // color("bgBase") -> themeVars.bgBase
     if (ctx.calleeImportedName === "color") {
       return {
-        kind: "value",
+        usage: "create",
         expr: `themeVars.${key}`,
         imports: [
           {
@@ -149,7 +149,7 @@ export const fixtureAdapter = defineAdapter({
     // fontWeight("medium") -> fontWeightVars.medium
     if (ctx.calleeImportedName === "fontWeight") {
       return {
-        kind: "value",
+        usage: "create",
         expr: `fontWeightVars.${key}`,
         imports: [
           {
@@ -164,7 +164,7 @@ export const fixtureAdapter = defineAdapter({
     // fontSize("medium") -> fontSizeVars.medium
     if (ctx.calleeImportedName === "fontSize") {
       return {
-        kind: "value",
+        usage: "create",
         expr: `fontSizeVars.${key}`,
         imports: [
           {
@@ -178,7 +178,7 @@ export const fixtureAdapter = defineAdapter({
     // Handle transitionSpeed() helper from ./lib/helpers.ts
     if (ctx.calleeImportedName === "transitionSpeed") {
       return {
-        kind: "value",
+        usage: "create",
         expr: `transitionSpeed.${key}`,
         imports: [
           {
@@ -192,7 +192,7 @@ export const fixtureAdapter = defineAdapter({
     // Handle themedBorder() helper from ./lib/helpers.ts
     if (ctx.calleeImportedName === "themedBorder") {
       return {
-        kind: "styles",
+        usage: "props",
         expr: `borders.${key}`,
         imports: [
           {
