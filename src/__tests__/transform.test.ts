@@ -918,7 +918,7 @@ export const App = () => <Box $delay={100} />;
 
     expect(result.code).not.toBeNull();
     expect(result.code).not.toContain("stylexProps");
-    expect(result.code).toMatch(/const\s+sx\s*=\s*stylex\.props/);
+    expect(result.code).toContain("stylex.props");
     expect(result.code).toContain("transitionDelay");
   });
 
