@@ -153,6 +153,89 @@ function findModule(
   return undefined;
 }
 
+const getHostWindow = (): Window => {
+  try {
+    if (window.parent && window.parent.location) {
+      return window.parent;
+    }
+  } catch {
+    // Cross-origin access or other restrictions; fall back to the iframe.
+  }
+  return window;
+};
+
+const ensureStoryMode = (url: URL) => {
+  if (!url.searchParams.get("viewMode")) {
+    url.searchParams.set("viewMode", "story");
+  }
+};
+
+const updateHostHash = (hostWindow: Window, id: string) => {
+  const url = new URL(hostWindow.location.href);
+  ensureStoryMode(url);
+  url.hash = id;
+  hostWindow.history.replaceState(null, "", url.toString());
+};
+
+const scrollToId = (id: string) => {
+  document.getElementById(id)?.scrollIntoView({ block: "start" });
+};
+
+const setupScrollPersistence = () => {
+  const storageKey = "storybook:testcase-scroll-y";
+  let ticking = false;
+  const getScroller = () => document.scrollingElement ?? document.documentElement;
+
+  const saveScroll = () => {
+    if (ticking) {
+      return;
+    }
+    ticking = true;
+    requestAnimationFrame(() => {
+      const scroller = getScroller();
+      sessionStorage.setItem(storageKey, String(scroller.scrollTop));
+      ticking = false;
+    });
+  };
+
+  const restoreScroll = () => {
+    const raw = sessionStorage.getItem(storageKey);
+    if (!raw) {
+      return;
+    }
+    const y = Number(raw);
+    if (!Number.isFinite(y)) {
+      return;
+    }
+
+    let attempts = 0;
+    const tryRestore = () => {
+      const scroller = getScroller();
+      scroller.scrollTop = y;
+      attempts += 1;
+      if (
+        attempts < 12 &&
+        Math.abs(scroller.scrollTop - y) > 1 &&
+        scroller.scrollHeight < y + scroller.clientHeight
+      ) {
+        requestAnimationFrame(tryRestore);
+      }
+    };
+
+    requestAnimationFrame(tryRestore);
+    setTimeout(tryRestore, 100);
+  };
+
+  window.addEventListener("scroll", saveScroll, { passive: true });
+  window.addEventListener("beforeunload", saveScroll);
+  restoreScroll();
+
+  return () => {
+    window.removeEventListener("scroll", saveScroll);
+    window.removeEventListener("beforeunload", saveScroll);
+  };
+};
+
 const Comparison: React.FC<ComparisonProps> = ({ testCase }) => {
   const InputComponent = findModule(inputModules, testCase, "input")?.App;
   const OutputComponent = findModule(outputModules, testCase, "output")?.App;
@@ -206,26 +289,55 @@ const Comparison: React.FC<ComparisonProps> = ({ testCase }) => {
 };
 
 // Component that renders all test cases
-const AllTestCases: React.FC = () => (
-  <div>
-    {testCaseNames.map((name) => (
-      <div key={name} id={`testcase-${name}`} style={{ marginBottom: "2rem" }}>
-        <h2
-          style={{
-            fontFamily: "system-ui",
-            padding: "0 1rem",
-            margin: "1rem 0",
-            borderBottom: "1px solid #e0e0e0",
-            paddingBottom: "0.5rem",
-          }}
-        >
-          {name}
-        </h2>
-        <Comparison testCase={name} />
-      </div>
-    ))}
-  </div>
-);
+const AllTestCases: React.FC = () => {
+  React.useEffect(() => {
+    const hostWindow = getHostWindow();
+
+    // Restore from hash on initial load.
+    if (hostWindow.location.hash) {
+      scrollToId(hostWindow.location.hash.slice(1));
+    }
+
+    return setupScrollPersistence();
+  }, []);
+
+  return (
+    <div>
+      {testCaseNames.map((name) => (
+        <div key={name} id={`testcase-${name}`} style={{ marginBottom: "2rem" }}>
+          <h2
+            style={{
+              fontFamily: "system-ui",
+              padding: "0 1rem",
+              margin: "1rem 0",
+              borderBottom: "1px solid #e0e0e0",
+              paddingBottom: "0.5rem",
+            }}
+          >
+            <a
+              href={`#testcase-${name}`}
+              onClick={(event) => {
+                event.preventDefault();
+                const id = `testcase-${name}`;
+                updateHostHash(getHostWindow(), id);
+                scrollToId(id);
+              }}
+              style={{
+                color: "inherit",
+                textDecoration: "none",
+                display: "inline-block",
+                width: "100%",
+              }}
+            >
+              {name}
+            </a>
+          </h2>
+          <Comparison testCase={name} />
+        </div>
+      ))}
+    </div>
+  );
+};
 
 const meta: Meta = {
   title: "Test Cases",
