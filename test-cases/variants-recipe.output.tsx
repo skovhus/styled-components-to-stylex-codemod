@@ -13,21 +13,40 @@ type Props = {
 type ButtonProps = Omit<React.ComponentProps<"button">, "className" | "style"> & Props;
 
 function Button(props: ButtonProps) {
-  const { children, color, size, disabled } = props;
+  const { children, size: size = "small", color: color = "secondary", disabled } = props;
   return (
     <button
       disabled={disabled}
       {...stylex.props(
         styles.button,
-        color === "primary" && styles.buttonColorPrimary,
-        size === "medium" && styles.buttonSizeMedium,
-        disabled && styles.buttonDisabled,
-        disabled && color === "primary" && styles.buttonDisabledColorPrimary,
-        disabled && color !== "primary" && styles.buttonDisabledColorNotPrimary,
+        sizeVariants[size],
+        disabled ? buttonColorDisabledVariants[color] : buttonColorEnabledVariants[color],
       )}
     >
       {children}
     </button>
+  );
+}
+
+// Second component with same "color" prop but different styles
+// This tests that conflicting variant names get per-component prefixes
+type LinkProps = Omit<React.ComponentProps<"a">, "className" | "style"> & {
+  color?: "primary" | "secondary";
+  disabled?: boolean;
+};
+
+function Link(props: LinkProps) {
+  const { children, color: color = "secondary", disabled, ...rest } = props;
+  return (
+    <a
+      {...rest}
+      {...stylex.props(
+        styles.link,
+        disabled ? linkColorDisabledVariants[color] : linkColorEnabledVariants[color],
+      )}
+    >
+      {children}
+    </a>
   );
 }
 
@@ -41,6 +60,12 @@ export function App() {
       <Button color="primary" size="medium" disabled>
         Disabled
       </Button>
+      <Link color="primary" href="#">
+        Primary Link
+      </Link>
+      <Link color="secondary" href="#">
+        Secondary Link
+      </Link>
     </div>
   );
 }
@@ -49,44 +74,94 @@ const styles = stylex.create({
   button: {
     appearance: "none",
     borderWidth: 0,
-    backgroundColor: {
-      default: "gray",
-      ":hover": "darkgray",
-    },
     color: "white",
     fontSize: "1rem",
     paddingBlock: "4px",
     paddingInline: "8px",
   },
-  buttonColorPrimary: {
+  link: {
+    textDecoration: {
+      default: "none",
+      ":hover": "underline",
+    },
+  },
+});
+
+const buttonColorEnabledVariants = stylex.create({
+  primary: {
     backgroundColor: {
       default: "blue",
       ":hover": "darkblue",
     },
   },
-  buttonSizeMedium: {
-    fontSize: "1.2rem",
-    paddingBlock: "8px",
-    paddingInline: "16px",
+  secondary: {
+    backgroundColor: {
+      default: "gray",
+      ":hover": "darkgray",
+    },
   },
-  buttonDisabled: {
-    color: "rgb(204, 204, 204)",
-    cursor: "not-allowed",
-  },
-  buttonDisabledColorPrimary: {
-    color: "rgb(204, 204, 204)",
-    cursor: "not-allowed",
+});
+
+const buttonColorDisabledVariants = stylex.create({
+  primary: {
     backgroundColor: {
       default: "grey",
       ":hover": "darkblue",
     },
-  },
-  buttonDisabledColorNotPrimary: {
     color: "rgb(204, 204, 204)",
     cursor: "not-allowed",
+  },
+  secondary: {
     backgroundColor: {
       default: "grey",
       ":hover": "darkgray",
     },
+    color: "rgb(204, 204, 204)",
+    cursor: "not-allowed",
+  },
+});
+
+const sizeVariants = stylex.create({
+  medium: {
+    fontSize: "1.2rem",
+    paddingBlock: "8px",
+    paddingInline: "16px",
+  },
+  small: {
+    fontSize: "1rem",
+    paddingBlock: "4px",
+    paddingInline: "8px",
+  },
+});
+
+const linkColorEnabledVariants = stylex.create({
+  primary: {
+    color: {
+      default: "red",
+      ":hover": "darkred",
+    },
+  },
+  secondary: {
+    color: {
+      default: "green",
+      ":hover": "darkgreen",
+    },
+  },
+});
+
+const linkColorDisabledVariants = stylex.create({
+  primary: {
+    color: {
+      default: "grey",
+      ":hover": "darkred",
+    },
+    cursor: "not-allowed",
+  },
+  secondary: {
+    color: {
+      default: "grey",
+      ":hover": "darkgreen",
+    },
+    cursor: "not-allowed",
   },
 });

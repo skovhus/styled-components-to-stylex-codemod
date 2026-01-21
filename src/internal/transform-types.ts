@@ -24,6 +24,32 @@ export interface TransformOptions extends Options {
 
 type ExpressionKind = Parameters<JSCodeshift["expressionStatement"]>[0];
 
+/**
+ * Represents a dimension for variant-based styling (e.g., "color", "size").
+ * Used to generate separate `stylex.create` calls per dimension, enabling:
+ *   - Object lookup: `colorVariants[color]`
+ *   - Type extraction: `keyof typeof colorVariants`
+ */
+export type VariantDimension = {
+  /** The prop name this dimension is based on (e.g., "color", "size") */
+  propName: string;
+  /** Name for the generated stylex.create object (e.g., "colorVariants") */
+  variantObjectName: string;
+  /** Maps variant values to their style objects (e.g., { primary: {...}, secondary: {...} }) */
+  variants: Record<string, Record<string, unknown>>;
+  /** Which variant value is the default (for nullish coalescing in usage) */
+  defaultValue?: string;
+  /**
+   * For namespace dimensions: the boolean prop that controls which namespace to use.
+   * When set, this dimension is part of a ternary pattern: `boolProp ? disabledDim[prop] : enabledDim[prop]`
+   */
+  namespaceBooleanProp?: string;
+  /** Whether this is the "disabled" namespace (true) or "enabled" namespace (false/undefined) */
+  isDisabledNamespace?: boolean;
+  /** Whether the prop is optional (has ? in its type annotation) - used for emitting destructuring defaults */
+  isOptional?: boolean;
+};
+
 export type StyledDecl = {
   /**
    * Index of the parent top-level statement (VariableDeclaration) within Program.body at
@@ -46,6 +72,12 @@ export type StyledDecl = {
   styleKey: string;
   extendsStyleKey?: string;
   variantStyleKeys?: Record<string, string>; // conditionProp -> styleKey
+  /**
+   * Variant dimensions for StyleX variants recipe pattern.
+   * When present, generates separate `stylex.create` calls per dimension
+   * and uses object lookup (`variants[prop]`) instead of conditionals.
+   */
+  variantDimensions?: VariantDimension[];
   needsWrapperComponent?: boolean;
   /**
    * Whether this component should support external className/style extension.

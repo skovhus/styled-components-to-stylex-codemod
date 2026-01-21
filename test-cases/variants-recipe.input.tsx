@@ -28,6 +28,25 @@ const Button = styled.button<Props>`
     props.disabled && "background-color: grey; color: rgb(204, 204, 204); cursor: not-allowed;"}
 `;
 
+// Second component with same "color" prop but different styles
+// This tests that conflicting variant names get per-component prefixes
+type LinkProps = {
+  color?: "primary" | "secondary";
+  disabled?: boolean;
+};
+
+const Link = styled.a<LinkProps>`
+  text-decoration: none;
+  color: ${(props) => (props.color === "primary" ? "red" : "green")};
+
+  &:hover {
+    text-decoration: underline;
+    color: ${(props) => (props.color === "primary" ? "darkred" : "darkgreen")};
+  }
+
+  ${(props) => props.disabled && "color: grey; cursor: not-allowed;"}
+`;
+
 export function App() {
   return (
     <div>
@@ -38,6 +57,12 @@ export function App() {
       <Button color="primary" size="medium" disabled>
         Disabled
       </Button>
+      <Link color="primary" href="#">
+        Primary Link
+      </Link>
+      <Link color="secondary" href="#">
+        Secondary Link
+      </Link>
     </div>
   );
 }

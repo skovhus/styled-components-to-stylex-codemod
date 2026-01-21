@@ -191,6 +191,7 @@ function emitMinimalWrapper(args: {
   emitTypes?: boolean;
   styleArgs: ExpressionKind[];
   destructureProps: string[];
+  propDefaults?: Map<string, string>;
   allowClassNameProp?: boolean;
   allowStyleProp?: boolean;
   includeRest?: boolean;
@@ -212,6 +213,7 @@ function emitMinimalWrapper(args: {
     emitTypes = false,
     styleArgs,
     destructureProps,
+    propDefaults,
     allowClassNameProp = false,
     allowStyleProp = false,
     includeRest = true,
@@ -317,10 +319,23 @@ function emitMinimalWrapper(args: {
     patternProps.push(patternProp("style"));
   }
 
-  // Add dynamic props (for variant conditions)
+  // Add dynamic props (for variant conditions) with optional defaults
   for (const name of expandedDestructureProps) {
     if (name !== "children" && name !== "style" && name !== "className") {
-      patternProps.push(patternProp(name));
+      const defaultVal = propDefaults?.get(name);
+      if (defaultVal) {
+        // Create property with default: { name = "defaultValue" }
+        patternProps.push(
+          j.property.from({
+            kind: "init",
+            key: j.identifier(name),
+            value: j.assignmentPattern(j.identifier(name), j.literal(defaultVal)),
+            shorthand: false,
+          }) as Property,
+        );
+      } else {
+        patternProps.push(patternProp(name));
+      }
     }
   }
 

@@ -1,5 +1,5 @@
 import type { Collection } from "jscodeshift";
-import type { StyledDecl } from "./transform-types.js";
+import type { StyledDecl, VariantDimension } from "./transform-types.js";
 import path from "node:path";
 import type { ImportSource, ImportSpec, StyleMergerConfig } from "../adapter.js";
 
@@ -565,4 +565,108 @@ export function emitStylesAndImports(args: {
   // This keeps component logic first, styles last for better readability.
   const programBody = root.get().node.program.body as any[];
   programBody.push(stylesDecl as any);
+
+  // Emit separate stylex.create declarations for variant dimensions
+  // This implements the StyleX "variants recipe" pattern where each variant
+  // dimension (e.g., color, size) gets its own stylex.create call.
+  //
+  // First pass: detect name conflicts (same variantObjectName with different content)
+  // If two components have the same prop name but different styles, we need unique names
+  const dimensionsByName = new Map<
+    string,
+    Array<{ dimension: VariantDimension; componentName: string; contentKey: string }>
+  >();
+
+  for (const decl of styledDecls) {
+    if (!decl.variantDimensions) {
+      continue;
+    }
+    for (const dimension of decl.variantDimensions) {
+      const name = dimension.variantObjectName;
+      const contentKey = JSON.stringify(dimension.variants);
+      const entries = dimensionsByName.get(name) ?? [];
+      entries.push({ dimension, componentName: decl.localName, contentKey });
+      dimensionsByName.set(name, entries);
+    }
+  }
+
+  // Second pass: rename conflicting dimensions to include component prefix
+  const lowerFirst = (s: string) => s.charAt(0).toLowerCase() + s.slice(1);
+  for (const [name, entries] of dimensionsByName) {
+    // Check if all entries have the same content (can share the same declaration)
+    const uniqueContents = new Set(entries.map((e) => e.contentKey));
+    if (uniqueContents.size > 1) {
+      // Conflict: same name but different content - rename each to include component prefix
+      for (const entry of entries) {
+        const prefix = lowerFirst(entry.componentName);
+        // Extract the base name (e.g., "colorVariants" → "Color", "variants" → "")
+        const baseName = name.endsWith("Variants") ? name.slice(0, -8) : name;
+        const capitalBase = baseName.charAt(0).toUpperCase() + baseName.slice(1);
+        entry.dimension.variantObjectName = capitalBase
+          ? `${prefix}${capitalBase}Variants`
+          : `${prefix}Variants`;
+      }
+    }
+  }
+
+  // Third pass: emit declarations (dedupe by final name and content)
+  const emittedDimensions = new Map<string, string>(); // name → contentKey
+  for (const decl of styledDecls) {
+    if (!decl.variantDimensions) {
+      continue;
+    }
+
+    for (const dimension of decl.variantDimensions) {
+      const name = dimension.variantObjectName;
+      const contentKey = JSON.stringify(dimension.variants);
+
+      // Skip if already emitted with same content
+      if (emittedDimensions.get(name) === contentKey) {
+        continue;
+      }
+      emittedDimensions.set(name, contentKey);
+
+      const variantDecl = emitVariantDimensionDecl(
+        j,
+        dimension,
+        objectToAst,
+        literalToAst,
+        isAstNode,
+      );
+      programBody.push(variantDecl as any);
+    }
+  }
+}
+
+/**
+ * Emit a variant dimension as a separate `const <name>Variants = stylex.create({...})` call.
+ * Includes eslint-disable comment for stylex/no-unused since variant styles are accessed dynamically.
+ */
+function emitVariantDimensionDecl(
+  j: any,
+  dimension: VariantDimension,
+  objectToAst: (j: any, v: Record<string, unknown>) => any,
+  literalToAst: (j: any, v: unknown) => any,
+  isAstNode: (v: unknown) => boolean,
+): any {
+  const properties = Object.entries(dimension.variants).map(([variantValue, styles]) => {
+    return j.property(
+      "init",
+      j.identifier(variantValue),
+      styles && typeof styles === "object" && !isAstNode(styles)
+        ? objectToAst(j, styles as Record<string, unknown>)
+        : literalToAst(j, styles),
+    );
+  });
+
+  const variantDecl = j.variableDeclaration("const", [
+    j.variableDeclarator(
+      j.identifier(dimension.variantObjectName),
+      j.callExpression(j.memberExpression(j.identifier("stylex"), j.identifier("create")), [
+        j.objectExpression(properties),
+      ]),
+    ),
+  ]);
+
+  return variantDecl;
 }

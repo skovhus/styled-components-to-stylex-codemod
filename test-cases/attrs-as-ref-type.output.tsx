@@ -11,20 +11,16 @@ type TextProps = React.PropsWithChildren<{
 }>;
 
 function Text(props: TextProps) {
-  const { as: Component = "span", className, children, style, variant, ...rest } = props;
+  const {
+    as: Component = "span",
+    className,
+    children,
+    style,
+    variant: variant = "regular",
+    ...rest
+  } = props;
   return (
-    <Component
-      {...rest}
-      {...mergedSx(
-        [
-          styles.text,
-          variant === "large" && styles.textLarge,
-          variant === "small" && styles.textSmall,
-        ],
-        className,
-        style,
-      )}
-    >
+    <Component {...rest} {...mergedSx([styles.text, variants[variant]], className, style)}>
       {children}
     </Component>
   );
@@ -58,12 +54,6 @@ const styles = stylex.create({
   text: {
     fontSize: "14px",
   },
-  textLarge: {
-    fontSize: "18px",
-  },
-  textSmall: {
-    fontSize: "12px",
-  },
 
   // When .attrs({ as: "label" }) is used, the component should accept:
   // 1. HTMLLabelElement-specific props like htmlFor
@@ -71,5 +61,17 @@ const styles = stylex.create({
   label: {
     cursor: "pointer",
     userSelect: "none",
+  },
+});
+
+const variants = stylex.create({
+  large: {
+    fontSize: "18px",
+  },
+  small: {
+    fontSize: "12px",
+  },
+  regular: {
+    fontSize: "14px",
   },
 });

@@ -1,5 +1,5 @@
 import type { ASTNode, JSCodeshift, Property, RestElement } from "jscodeshift";
-import type { StyledDecl } from "../transform-types.js";
+import type { StyledDecl, VariantDimension } from "../transform-types.js";
 import { emitStyleMerging, type StyleMergerConfig } from "./style-merger.js";
 
 type ExpressionKind = Parameters<JSCodeshift["expressionStatement"]>[0];
@@ -191,6 +191,10 @@ export function emitComponentWrappers(ctx: any): {
 
     // Track props that need to be destructured for conditional styles
     const destructureProps: string[] = [];
+    // Track default values for props (used for destructuring defaults on optional props)
+    const propDefaults = new Map<string, string>();
+    // Track namespace boolean props (like 'disabled') that need to be passed to wrapped component
+    const namespaceBooleanProps: string[] = [];
 
     // Add variant style arguments if this component has variants
     if (d.variantStyleKeys) {
@@ -209,6 +213,120 @@ export function emitComponentWrappers(ctx: any): {
             j.memberExpression(j.identifier(stylesIdentifier), j.identifier(variantKey)),
           ),
         );
+      }
+    }
+
+    // Add variant dimension lookups (StyleX variants recipe pattern)
+    // Handles both regular dimensions and namespace dimensions (enabled/disabled pairs)
+    if (d.variantDimensions) {
+      // Group namespace dimensions by their boolean prop and propName
+      const namespacePairs = new Map<
+        string,
+        { enabled?: VariantDimension; disabled?: VariantDimension }
+      >();
+      const regularDimensions: VariantDimension[] = [];
+
+      for (const dim of d.variantDimensions) {
+        if (dim.namespaceBooleanProp) {
+          const key = `${dim.namespaceBooleanProp}:${dim.propName}`;
+          const pair = namespacePairs.get(key) ?? {};
+          if (dim.isDisabledNamespace) {
+            pair.disabled = dim;
+          } else {
+            pair.enabled = dim;
+          }
+          namespacePairs.set(key, pair);
+        } else {
+          regularDimensions.push(dim);
+        }
+      }
+
+      // Process regular (non-namespace) dimensions first
+      for (const dim of regularDimensions) {
+        if (!destructureProps.includes(dim.propName)) {
+          destructureProps.push(dim.propName);
+        }
+        const variantsId = j.identifier(dim.variantObjectName);
+        const propId = j.identifier(dim.propName);
+
+        if (dim.defaultValue === "default") {
+          // When defaultValue is "default", use cast + fallback pattern
+          const keyofExpr = {
+            type: "TSTypeOperator",
+            operator: "keyof",
+            typeAnnotation: j.tsTypeQuery(j.identifier(dim.variantObjectName)),
+          };
+          const castProp = j.tsAsExpression(propId, keyofExpr as any);
+          const lookup = j.memberExpression(variantsId, castProp, true /* computed */);
+          const defaultAccess = j.memberExpression(
+            j.identifier(dim.variantObjectName),
+            j.identifier("default"),
+          );
+          styleArgs.push(j.logicalExpression("??", lookup, defaultAccess));
+        } else {
+          // Simple lookup - all union values are covered in the variant object
+          // Track the default for destructuring - only for optional props to ensure type safety
+          if (dim.defaultValue && dim.isOptional) {
+            propDefaults.set(dim.propName, dim.defaultValue);
+          }
+          const lookup = j.memberExpression(variantsId, propId, true /* computed */);
+          styleArgs.push(lookup);
+        }
+      }
+
+      // Process namespace dimension pairs - emit ternary: boolProp ? disabledVariants[prop] : enabledVariants[prop]
+      for (const [, pair] of namespacePairs) {
+        const { enabled, disabled } = pair;
+        if (!enabled || !disabled) {
+          // Incomplete pair - emit each dimension separately as fallback
+          for (const dim of [enabled, disabled].filter(Boolean) as VariantDimension[]) {
+            if (!destructureProps.includes(dim.propName)) {
+              destructureProps.push(dim.propName);
+            }
+            const lookup = j.memberExpression(
+              j.identifier(dim.variantObjectName),
+              j.identifier(dim.propName),
+              true,
+            );
+            styleArgs.push(lookup);
+          }
+          continue;
+        }
+
+        // Add props to destructure list
+        if (!destructureProps.includes(enabled.propName)) {
+          destructureProps.push(enabled.propName);
+        }
+        if (!destructureProps.includes(enabled.namespaceBooleanProp!)) {
+          destructureProps.push(enabled.namespaceBooleanProp!);
+        }
+
+        // Track namespace boolean prop to pass it to the wrapped component
+        if (!namespaceBooleanProps.includes(enabled.namespaceBooleanProp!)) {
+          namespaceBooleanProps.push(enabled.namespaceBooleanProp!);
+        }
+
+        // Track defaults for destructuring - only for optional props to ensure type safety
+        if (enabled.defaultValue && enabled.defaultValue !== "default" && enabled.isOptional) {
+          propDefaults.set(enabled.propName, enabled.defaultValue);
+        }
+
+        // Build: boolProp ? disabledVariants[prop] : enabledVariants[prop]
+        const boolPropId = j.identifier(enabled.namespaceBooleanProp!);
+        const propId = j.identifier(enabled.propName);
+
+        const enabledLookup = j.memberExpression(
+          j.identifier(enabled.variantObjectName),
+          propId,
+          true,
+        );
+        const disabledLookup = j.memberExpression(
+          j.identifier(disabled.variantObjectName),
+          propId,
+          true,
+        );
+
+        styleArgs.push(j.conditionalExpression(boolPropId, disabledLookup, enabledLookup));
       }
     }
 
@@ -471,9 +589,22 @@ export function emitComponentWrappers(ctx: any): {
         ...(includeChildren ? [patternProp("children", childrenId)] : []),
         ...(allowStyleProp ? [patternProp("style", styleId)] : []),
         // Strip transient props ($-prefixed) from the pass-through spread (styled-components behavior)
+        // Add destructuring defaults for optional props to ensure type safety
         ...destructureProps
           .filter((name): name is string => Boolean(name))
-          .map((name) => patternProp(name)),
+          .map((name) => {
+            const defaultVal = propDefaults.get(name);
+            if (defaultVal) {
+              // Create property with default: { name: name = "defaultValue" }
+              return j.property.from({
+                kind: "init",
+                key: j.identifier(name),
+                value: j.assignmentPattern(j.identifier(name), j.literal(defaultVal)),
+                shorthand: false,
+              }) as Property;
+            }
+            return patternProp(name);
+          }),
         j.restElement(restId),
       ];
 
@@ -552,6 +683,17 @@ export function emitComponentWrappers(ctx: any): {
             ),
           );
         }
+      }
+      // Pass namespace boolean props (like 'disabled') to the wrapped component.
+      // These are destructured for the enabled/disabled styling ternary but also need
+      // to be forwarded as they may be valid HTML attributes on the underlying element.
+      for (const propName of namespaceBooleanProps) {
+        openingAttrs.push(
+          j.jsxAttribute(
+            j.jsxIdentifier(propName),
+            j.jsxExpressionContainer(j.identifier(propName)),
+          ),
+        );
       }
       openingAttrs.push(j.jsxSpreadAttribute(restId));
       openingAttrs.push(j.jsxSpreadAttribute(merging.jsxSpreadExpr));

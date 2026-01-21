@@ -355,3 +355,14 @@ type Story = StoryObj;
 export const All: Story = {
   render: () => <AllTestCases />,
 };
+
+// Helper to create a story for a specific test case
+// Exported for use by the Vite plugin that injects individual story exports
+export const createTestCaseStory = (name: string): Story => ({
+  render: () => <Comparison testCase={name} />,
+});
+
+// Individual test case stories are automatically injected below this marker by
+// the Vite plugin in .storybook/main.ts. The plugin reads the test-cases directory
+// and generates exports like: export const basic = createTestCaseStory("basic");
+// GENERATED_STORIES_MARKER
