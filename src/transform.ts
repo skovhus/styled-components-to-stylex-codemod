@@ -774,15 +774,6 @@ export function transformWithWarnings(
     return true;
   };
 
-  // Helper to count how many times a component is used in JSX
-  const countJsxUsages = (name: string): number => {
-    return root
-      .find(j.JSXElement, {
-        openingElement: { name: { type: "JSXIdentifier", name } },
-      })
-      .size();
-  };
-
   // Pre-pass: set needsWrapperComponent for base components used in JSX and extended.
   // This must happen BEFORE emitStylesAndImports so comment placement is correct.
   // NOTE: We only set needsWrapperComponent here, NOT flatten decl.base to intrinsic.
@@ -824,11 +815,9 @@ export function transformWithWarnings(
             continue;
           }
 
-          const usageCount = countJsxUsages(decl.localName);
           const isSimple = canInlineImportedComponentWrapper(decl);
-          const canInline = isSimple || usageCount === 1;
 
-          if (canInline) {
+          if (isSimple) {
             // Mark as candidate for inlining - styleKey update is deferred until after
             // all needsWrapperComponent checks are done (as/forwardedAs usage, etc.)
             (decl as any).canInlineComponentWrapper = true;
@@ -1549,18 +1538,6 @@ export function transformWithWarnings(
       typeof decl.attrsInfo.staticAttrs.as === "string"
     ) {
       decl.needsWrapperComponent = true;
-    }
-  }
-
-  // Now that all needsWrapperComponent flags are set, finalize inline candidates.
-  // For components marked as canInlineComponentWrapper that didn't get blocked by later checks,
-  // update the styleKey to use the base component name for cleaner output.
-  for (const decl of styledDecls) {
-    if ((decl as any).canInlineComponentWrapper && !decl.needsWrapperComponent) {
-      if (decl.base.kind === "component") {
-        const baseName = decl.base.ident;
-        decl.styleKey = baseName.charAt(0).toLowerCase() + baseName.slice(1);
-      }
     }
   }
 
