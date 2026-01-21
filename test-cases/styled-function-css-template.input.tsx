@@ -41,6 +41,14 @@ const ShadowBox = styled.div<{ $shadow?: string }>(
   `,
 );
 
+// Block body with return statement: (props) => { return css`...`; }
+const BlockBox = styled.div<{ $width?: string }>((props) => {
+  return css`
+      display: block;
+      width: ${props.$width || "100%"};
+    `;
+});
+
 export const App = () => (
   <div>
     <FlexContainer $align="left">
@@ -52,5 +60,6 @@ export const App = () => (
     </FlexContainer>
     <BorderBox $borderColor="red">Red border</BorderBox>
     <ShadowBox $shadow="0 2px 4px rgba(0,0,0,0.2)">With shadow</ShadowBox>
+    <BlockBox $width="50%">Half width</BlockBox>
   </div>
 );

@@ -38,6 +38,7 @@ export const App = () => (
     >
       With shadow
     </div>
+    <div {...stylex.props(styles.blockBox, styles.blockBoxWidth("50%"))}>Half width</div>
   </div>
 );
 
@@ -81,5 +82,14 @@ const styles = stylex.create({
   },
   shadowBoxBoxShadow: (boxShadow: string) => ({
     boxShadow,
+  }),
+
+  // Block body with return statement: (props) => { return css`...`; }
+  blockBox: {
+    display: "block",
+    width: "100%",
+  },
+  blockBoxWidth: (width: string) => ({
+    width,
   }),
 });

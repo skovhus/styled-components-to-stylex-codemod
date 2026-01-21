@@ -242,6 +242,19 @@ function detectUnsupportedCssHelperUsage(args: {
       }
     }
 
+    // Support block body with return: styled.div(props => { return css`...`; })
+    if (arrow.body?.type === "BlockStatement") {
+      const retStmt = arrow.body.body.find((s: any) => s.type === "ReturnStatement");
+      if (retStmt?.argument === cssNode) {
+        // Check if this arrow is a direct argument to a styled call
+        const arrowParent = cur.parentPath?.node;
+        if (isStyledCallExpression(arrowParent, styledLocalNames)) {
+          // This is the pattern styled.div(props => { return css`...`; }) - allowed
+          return;
+        }
+      }
+    }
+
     // Support ConditionalExpression: props.$x ? css`...` : css`...`
     if (arrow.body?.type === "ConditionalExpression") {
       const cond = arrow.body;
@@ -256,8 +269,8 @@ function detectUnsupportedCssHelperUsage(args: {
         unsupported = true;
         return;
       }
-    } else if (arrow.body !== cssNode) {
-      // Not a direct body, not a conditional, not a logical - unsupported
+    } else if (arrow.body !== cssNode && arrow.body?.type !== "BlockStatement") {
+      // Not a direct body, not a conditional, not a logical, not a block - unsupported
       unsupported = true;
       return;
     }
