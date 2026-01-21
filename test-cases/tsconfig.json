@@ -2,6 +2,8 @@
   "extends": "../tsconfig.json",
   "compilerOptions": {
     "noEmit": true,
+    "incremental": true,
+    "tsBuildInfoFile": "./.tsbuildinfo",
     "rootDir": ".",
     "types": ["node", "vite/client", "react", "react-dom"],
     "jsx": "react-jsx",

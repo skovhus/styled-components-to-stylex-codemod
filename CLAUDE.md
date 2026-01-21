@@ -10,9 +10,8 @@ Codemod to transform styled-components to StyleX using jscodeshift.
 
 ```bash
 pnpm install
-pnpm test:run         # Run tests once
-pnpm lint:fix         # Lint with auto fixes applied
-pnpm run ci           # Run lint + typecheck + test + build
+pnpm test:run    # Run tests once
+pnpm check       # Run lint + tsc + test
 ```
 
 ## Rules
