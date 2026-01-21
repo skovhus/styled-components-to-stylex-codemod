@@ -6,6 +6,7 @@ import { getMemberPathFromIdentifier } from "../jscodeshift-utils.js";
 export function createThemeResolvers(args: {
   root: Collection<ASTNode>;
   j: JSCodeshift;
+  filePath: string;
   resolveValue: Adapter["resolveValue"];
   parseExpr: (exprSource: string) => any;
   resolverImports: Map<string, ImportSpec>;
@@ -14,7 +15,7 @@ export function createThemeResolvers(args: {
   resolveThemeValue: (expr: any) => unknown;
   resolveThemeValueFromFn: (expr: any) => unknown;
 } {
-  const { root, j, resolveValue, parseExpr, resolverImports } = args;
+  const { root, j, filePath, resolveValue, parseExpr, resolverImports } = args;
 
   const hasLocalThemeBinding = (() => {
     let found = false;
@@ -65,7 +66,7 @@ export function createThemeResolvers(args: {
     if (!parts || !parts.length) {
       return null;
     }
-    const resolved = resolveValue({ kind: "theme", path: parts.join(".") });
+    const resolved = resolveValue({ kind: "theme", path: parts.join("."), filePath });
     if (!resolved) {
       return null;
     }
@@ -131,7 +132,7 @@ export function createThemeResolvers(args: {
     if (!themePath) {
       return null;
     }
-    const resolved = resolveValue({ kind: "theme", path: themePath });
+    const resolved = resolveValue({ kind: "theme", path: themePath, filePath });
     if (!resolved) {
       return null;
     }

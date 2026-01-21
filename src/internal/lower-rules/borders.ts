@@ -338,7 +338,7 @@ export function tryHandleInterpolatedBorder(args: {
       }
       const parts = getMemberPathFromIdentifier(expr as Expression, "theme");
       if (parts && parts.length > 0) {
-        const resolved = resolveValue({ kind: "theme", path: parts.join(".") });
+        const resolved = resolveValue({ kind: "theme", path: parts.join("."), filePath });
         if (resolved) {
           for (const imp of resolved.imports ?? []) {
             resolverImports.set(JSON.stringify(imp), imp);

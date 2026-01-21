@@ -148,6 +148,7 @@ export function transformWithWarnings(
   ): void =>
     rewriteCssVarsInStyleObjectImpl({
       obj,
+      filePath: file.path,
       definedVars,
       varsToDrop,
       isAstNode,

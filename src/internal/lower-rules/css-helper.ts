@@ -14,6 +14,7 @@ type ImportMapEntry = {
 
 export function createCssHelperResolver(args: {
   importMap: Map<string, ImportMapEntry>;
+  filePath: string;
   resolveValue: Adapter["resolveValue"];
   parseExpr: (exprSource: string) => any;
   resolverImports: Map<string, ImportSpec>;
@@ -26,7 +27,7 @@ export function createCssHelperResolver(args: {
     _ownerName: string,
   ) => Record<string, unknown> | null;
 } {
-  const { importMap, resolveValue, parseExpr, resolverImports, cssValueToJs } = args;
+  const { importMap, filePath, resolveValue, parseExpr, resolverImports, cssValueToJs } = args;
 
   const isCssHelperTaggedTemplate = (expr: any): expr is { quasi: any } => {
     if (!expr || expr.type !== "TaggedTemplateExpression") {
@@ -67,6 +68,7 @@ export function createCssHelperResolver(args: {
     const res = resolveValue({
       kind: "theme",
       path: themePath,
+      filePath,
     });
     if (!res) {
       return null;

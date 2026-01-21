@@ -3,6 +3,7 @@ import type { Adapter, ImportSpec } from "../adapter.js";
 
 export function rewriteCssVarsInString(args: {
   raw: string;
+  filePath: string;
   definedVars: Map<string, string>;
   varsToDrop: Set<string>;
   resolveValue: Adapter["resolveValue"];
@@ -83,6 +84,7 @@ function findCssVarCalls(raw: string): VarCall[] {
 
 function rewriteCssVarsInStringImpl(args: {
   raw: string;
+  filePath: string;
   definedVars: Map<string, string>;
   varsToDrop: Set<string>;
   resolveValue: Adapter["resolveValue"];
@@ -90,7 +92,7 @@ function rewriteCssVarsInStringImpl(args: {
   parseExpr: (exprSource: string) => ExpressionKind | null;
   j: JSCodeshift;
 }): unknown {
-  const { raw, definedVars, varsToDrop, resolveValue, addImport, parseExpr, j } = args;
+  const { raw, filePath, definedVars, varsToDrop, resolveValue, addImport, parseExpr, j } = args;
 
   const calls = findCssVarCalls(raw);
   if (calls.length === 0) {
@@ -109,6 +111,7 @@ function rewriteCssVarsInStringImpl(args: {
     const res = resolveValue({
       kind: "cssVariable",
       name: c.name,
+      filePath,
       ...(c.fallback ? { fallback: c.fallback } : {}),
       ...(definedValue ? { definedValue } : {}),
     });

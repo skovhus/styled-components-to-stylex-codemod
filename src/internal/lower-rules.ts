@@ -160,6 +160,7 @@ export function lowerRules(args: {
     {
       root,
       j,
+      filePath,
       resolveValue,
       parseExpr,
       resolverImports,
@@ -168,6 +169,7 @@ export function lowerRules(args: {
 
   const { isCssHelperTaggedTemplate, resolveCssHelperTemplate } = createCssHelperResolver({
     importMap,
+    filePath,
     resolveValue,
     parseExpr,
     resolverImports,
@@ -1118,7 +1120,7 @@ export function lowerRules(args: {
               return false;
             }
 
-            const resolved = resolveValue({ kind: "theme", path: themeObjectPath });
+            const resolved = resolveValue({ kind: "theme", path: themeObjectPath, filePath });
             if (!resolved) {
               return false;
             }
@@ -2080,10 +2082,50 @@ export function lowerRules(args: {
             }
             continue;
           }
+          const describeInterpolation = (): string => {
+            type SlotPart = { kind: "slot"; slotId: number };
+            const valueParts = (d.value as { parts?: unknown[] }).parts ?? [];
+            const slotPart = valueParts.find(
+              (p): p is SlotPart => !!p && typeof p === "object" && (p as SlotPart).kind === "slot",
+            );
+            if (!slotPart) {
+              return d.property ? `property "${d.property}"` : "unknown";
+            }
+            const expr = decl.templateExpressions[slotPart.slotId] as {
+              type?: string;
+              name?: string;
+              callee?: { type?: string; name?: string; property?: { type?: string; name?: string } };
+            } | null;
+            if (!expr || typeof expr !== "object") {
+              return d.property ? `property "${d.property}"` : "unknown";
+            }
+            if (expr.type === "ArrowFunctionExpression" || expr.type === "FunctionExpression") {
+              return `arrow function in "${d.property ?? "unknown"}"`;
+            }
+            if (expr.type === "CallExpression") {
+              const callee = expr.callee;
+              const calleeName =
+                callee?.type === "Identifier"
+                  ? callee.name
+                  : callee?.type === "MemberExpression" && callee.property?.type === "Identifier"
+                    ? callee.property.name
+                    : null;
+              return calleeName
+                ? `call to "${calleeName}" in "${d.property ?? "unknown"}"`
+                : `call expression in "${d.property ?? "unknown"}"`;
+            }
+            if (expr.type === "Identifier") {
+              return `identifier "${expr.name}" in "${d.property ?? "unknown"}"`;
+            }
+            if (expr.type === "MemberExpression" || expr.type === "OptionalMemberExpression") {
+              return `member expression in "${d.property ?? "unknown"}"`;
+            }
+            return d.property ? `expression in "${d.property}"` : "unknown expression";
+          };
           warnings.push({
             severity: "warning",
             type: "dynamic-node",
-            message: `Unsupported interpolation for ${decl.localName}.`,
+            message: `Unsupported interpolation: ${describeInterpolation()}.`,
             ...(loc ? { loc } : {}),
           });
           bail = true;

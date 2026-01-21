@@ -8,13 +8,26 @@ import { assertValidAdapter } from "./internal/public-api-validation.js";
 // Value Resolution
 // ────────────────────────────────────────────────────────────────────────────
 
-type ThemeResolveContext = { kind: "theme"; path: string };
+type ThemeResolveContext = {
+  kind: "theme";
+  path: string;
+  /**
+   * Absolute path of the file currently being transformed.
+   * Useful for adapter logic that wants to branch by caller file.
+   */
+  filePath?: string;
+};
 
 type CssVariableResolveContext = {
   kind: "cssVariable";
   name: string;
   fallback?: string;
   definedValue?: string;
+  /**
+   * Absolute path of the file currently being transformed.
+   * Useful for adapter logic that wants to branch by caller file.
+   */
+  filePath?: string;
 };
 
 export type CallResolveContext = {
