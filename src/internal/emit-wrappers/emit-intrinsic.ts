@@ -1,5 +1,5 @@
 import type { ASTNode, JSCodeshift } from "jscodeshift";
-import type { StyledDecl } from "../transform-types.js";
+import type { StyledDecl, VariantDimension } from "../transform-types.js";
 import { emitStyleMerging, type StyleMergerConfig } from "./style-merger.js";
 
 type ExpressionKind = Parameters<JSCodeshift["expressionStatement"]>[0];
@@ -92,6 +92,139 @@ export function emitIntrinsicWrappers(ctx: any): {
       visit(p.expr, undefined);
     }
     return [...names];
+  };
+
+  /**
+   * Build variant dimension lookup expressions for StyleX variants recipe pattern.
+   * Generates: variantsObj[prop as keyof typeof variantsObj] ?? variantsObj.default
+   *
+   * @param dimensions - Variant dimensions to process
+   * @param styleArgs - Array to push generated expressions into
+   * @param destructureProps - Optional array to track props that need destructuring
+   * @param propDefaults - Optional map to populate with default values for props (for destructuring)
+   */
+  const buildVariantDimensionLookups = (
+    dimensions: VariantDimension[],
+    styleArgs: ExpressionKind[],
+    destructureProps?: string[],
+    propDefaults?: Map<string, string>,
+  ): void => {
+    // Group namespace dimensions by their boolean prop and propName
+    const namespacePairs = new Map<
+      string,
+      { enabled?: VariantDimension; disabled?: VariantDimension }
+    >();
+    const regularDimensions: VariantDimension[] = [];
+
+    for (const dim of dimensions) {
+      if (dim.namespaceBooleanProp) {
+        const key = `${dim.namespaceBooleanProp}:${dim.propName}`;
+        const pair = namespacePairs.get(key) ?? {};
+        if (dim.isDisabledNamespace) {
+          pair.disabled = dim;
+        } else {
+          pair.enabled = dim;
+        }
+        namespacePairs.set(key, pair);
+      } else {
+        regularDimensions.push(dim);
+      }
+    }
+
+    // Process regular (non-namespace) dimensions first
+    for (const dim of regularDimensions) {
+      if (destructureProps && !destructureProps.includes(dim.propName)) {
+        destructureProps.push(dim.propName);
+      }
+      const variantsId = j.identifier(dim.variantObjectName);
+      const propId = j.identifier(dim.propName);
+
+      if (dim.defaultValue === "default") {
+        // When defaultValue is "default", the variant object has a "default" key that doesn't
+        // match any prop type value. We need:
+        // 1. A cast: prop as keyof typeof variantsObj (to satisfy TypeScript)
+        // 2. A fallback: ?? variantsObj.default (for prop values not in the object)
+        const keyofExpr = {
+          type: "TSTypeOperator",
+          operator: "keyof",
+          typeAnnotation: j.tsTypeQuery(j.identifier(dim.variantObjectName)),
+        };
+        const castProp = j.tsAsExpression(propId, keyofExpr as any);
+        const lookup = j.memberExpression(variantsId, castProp, true /* computed */);
+        const defaultAccess = j.memberExpression(
+          j.identifier(dim.variantObjectName),
+          j.identifier("default"),
+        );
+        styleArgs.push(j.logicalExpression("??", lookup, defaultAccess));
+      } else {
+        // When defaultValue is an actual prop value (not "default"), all union values are
+        // covered in the variant object. We can use a simple lookup without cast or fallback:
+        // variantsObj[prop]
+        // Track the default for destructuring - only for optional props to ensure type safety
+        if (dim.defaultValue && dim.isOptional && propDefaults) {
+          propDefaults.set(dim.propName, dim.defaultValue);
+        }
+        const lookup = j.memberExpression(variantsId, propId, true /* computed */);
+        styleArgs.push(lookup);
+      }
+    }
+
+    // Process namespace dimension pairs - emit ternary: boolProp ? disabledVariants[prop] : enabledVariants[prop]
+    for (const [, pair] of namespacePairs) {
+      const { enabled, disabled } = pair;
+      if (!enabled || !disabled) {
+        // Incomplete pair - emit each dimension separately as fallback
+        for (const dim of [enabled, disabled].filter(Boolean) as VariantDimension[]) {
+          if (destructureProps && !destructureProps.includes(dim.propName)) {
+            destructureProps.push(dim.propName);
+          }
+          const lookup = j.memberExpression(
+            j.identifier(dim.variantObjectName),
+            j.identifier(dim.propName),
+            true,
+          );
+          styleArgs.push(lookup);
+        }
+        continue;
+      }
+
+      // Add props to destructure list and track defaults
+      if (destructureProps) {
+        if (!destructureProps.includes(enabled.propName)) {
+          destructureProps.push(enabled.propName);
+        }
+        if (!destructureProps.includes(enabled.namespaceBooleanProp!)) {
+          destructureProps.push(enabled.namespaceBooleanProp!);
+        }
+      }
+
+      // Track defaults for destructuring - only for optional props to ensure type safety
+      if (
+        enabled.defaultValue &&
+        enabled.defaultValue !== "default" &&
+        enabled.isOptional &&
+        propDefaults
+      ) {
+        propDefaults.set(enabled.propName, enabled.defaultValue);
+      }
+
+      // Build: boolProp ? disabledVariants[prop] : enabledVariants[prop]
+      const boolPropId = j.identifier(enabled.namespaceBooleanProp!);
+      const propId = j.identifier(enabled.propName);
+
+      const enabledLookup = j.memberExpression(
+        j.identifier(enabled.variantObjectName),
+        propId,
+        true,
+      );
+      const disabledLookup = j.memberExpression(
+        j.identifier(disabled.variantObjectName),
+        propId,
+        true,
+      );
+
+      styleArgs.push(j.conditionalExpression(boolPropId, disabledLookup, enabledLookup));
+    }
   };
 
   const mergeAsIntoPropsWithChildren = (typeText: string): string | null => {
@@ -479,6 +612,8 @@ export function emitIntrinsicWrappers(ctx: any): {
 
       // Track props that need to be destructured for variant styles
       const destructureProps: string[] = [];
+      // Track default values for props (for destructuring defaults)
+      const propDefaults = new Map<string, string>();
 
       // Add variant style arguments if this component has variants
       if (d.variantStyleKeys) {
@@ -497,6 +632,16 @@ export function emitIntrinsicWrappers(ctx: any): {
             ),
           );
         }
+      }
+
+      // Add variant dimension lookups (StyleX variants recipe pattern)
+      if (d.variantDimensions) {
+        buildVariantDimensionLookups(
+          d.variantDimensions,
+          styleArgs,
+          destructureProps,
+          propDefaults,
+        );
       }
 
       // Add adapter-resolved StyleX styles (emitted directly into stylex.props args).
@@ -563,8 +708,20 @@ export function emitIntrinsicWrappers(ctx: any): {
             ...(allowClassNameProp ? [patternProp("className", classNameId)] : []),
             ...(isVoidTag ? [] : [patternProp("children", childrenId)]),
             ...(allowStyleProp ? [patternProp("style", styleId)] : []),
-            // Add variant props to destructuring
-            ...destructureProps.filter(Boolean).map((name) => patternProp(name)),
+            // Add variant props to destructuring (with defaults when available)
+            ...destructureProps.filter(Boolean).map((name) => {
+              const defaultVal = propDefaults.get(name);
+              if (defaultVal) {
+                // Create property with default: { name = "defaultValue" }
+                return j.property.from({
+                  kind: "init",
+                  key: j.identifier(name),
+                  value: j.assignmentPattern(j.identifier(name), j.literal(defaultVal)),
+                  shorthand: false,
+                });
+              }
+              return patternProp(name);
+            }),
             j.restElement(restId),
           ] as any),
           propsId,
@@ -756,6 +913,10 @@ export function emitIntrinsicWrappers(ctx: any): {
         }
       }
     }
+    // Add variant dimension prop names
+    for (const dim of d.variantDimensions ?? []) {
+      extraProps.add(dim.propName);
+    }
     for (const p of d.styleFnFromProps ?? []) {
       if (p?.jsxProp && p.jsxProp !== "__props") {
         extraProps.add(p.jsxProp);
@@ -905,9 +1066,26 @@ export function emitIntrinsicWrappers(ctx: any): {
       }
     }
 
+    const dropProps = d.shouldForwardProp?.dropProps ?? [];
+    const dropPrefix = d.shouldForwardProp?.dropPrefix;
+
+    // Initialize destructureParts and propDefaults early so buildVariantDimensionLookups can populate them
+    const destructureParts: string[] = [];
+    // Track default values for props (for destructuring defaults)
+    const propDefaults = new Map<string, string>();
+    for (const p of dropProps) {
+      destructureParts.push(p);
+    }
+
+    // Add variant dimension lookups (StyleX variants recipe pattern)
+    if (d.variantDimensions) {
+      // Pass destructureParts and propDefaults to track props and their defaults
+      buildVariantDimensionLookups(d.variantDimensions, styleArgs, destructureParts, propDefaults);
+    }
+
     const styleFnPairs = d.styleFnFromProps ?? [];
     for (const p of styleFnPairs) {
-      const prefix = d.shouldForwardProp?.dropPrefix;
+      const prefix = dropPrefix;
       const isPrefixProp =
         !!prefix &&
         typeof p.jsxProp === "string" &&
@@ -933,14 +1111,6 @@ export function emitIntrinsicWrappers(ctx: any): {
           j.logicalExpression("&&", j.binaryExpression("!=", propExpr, j.nullLiteral()), call),
         );
       }
-    }
-
-    const dropProps = d.shouldForwardProp?.dropProps ?? [];
-    const dropPrefix = d.shouldForwardProp?.dropPrefix;
-
-    const destructureParts: string[] = [];
-    for (const p of dropProps) {
-      destructureParts.push(p);
     }
     for (const p of knownPrefixProps) {
       if (!destructureParts.includes(p)) {
@@ -1002,7 +1172,20 @@ export function emitIntrinsicWrappers(ctx: any): {
       const isVoid = VOID_TAGS.has(tagName);
       const patternProps: ASTNode[] = [
         ...(isVoid ? [] : [patternProp("children", childrenId)]),
-        ...destructureParts.filter(Boolean).map((name) => patternProp(name)),
+        // Add props to destructuring (with defaults when available)
+        ...destructureParts.filter(Boolean).map((name) => {
+          const defaultVal = propDefaults.get(name);
+          if (defaultVal) {
+            // Create property with default: { name = "defaultValue" }
+            return j.property.from({
+              kind: "init",
+              key: j.identifier(name),
+              value: j.assignmentPattern(j.identifier(name), j.literal(defaultVal)),
+              shorthand: false,
+            });
+          }
+          return patternProp(name);
+        }),
         ...(includeRest ? [j.restElement(restId)] : []),
       ];
       const declStmt = j.variableDeclaration("const", [
@@ -1160,7 +1343,20 @@ export function emitIntrinsicWrappers(ctx: any): {
       ...(allowClassNameProp ? [patternProp("className", classNameId)] : []),
       ...(isVoidTag ? [] : [patternProp("children", childrenId)]),
       ...(allowStyleProp ? [patternProp("style", styleId)] : []),
-      ...destructureParts.filter(Boolean).map((name) => patternProp(name)),
+      // Add props to destructuring (with defaults when available)
+      ...destructureParts.filter(Boolean).map((name) => {
+        const defaultVal = propDefaults.get(name);
+        if (defaultVal) {
+          // Create property with default: { name = "defaultValue" }
+          return j.property.from({
+            kind: "init",
+            key: j.identifier(name),
+            value: j.assignmentPattern(j.identifier(name), j.literal(defaultVal)),
+            shorthand: false,
+          });
+        }
+        return patternProp(name);
+      }),
       ...(includeRest ? [j.restElement(restId)] : []),
     ];
 
@@ -1361,6 +1557,10 @@ export function emitIntrinsicWrappers(ctx: any): {
             }
           }
         }
+      }
+      // Add variant dimension prop names
+      for (const dim of d.variantDimensions ?? []) {
+        variantProps.add(dim.propName);
       }
       const extraProps = new Set<string>();
       if (d.extraStylexPropsArgs) {
@@ -1731,15 +1931,17 @@ export function emitIntrinsicWrappers(ctx: any): {
         skipProps: explicitPropNames,
       });
 
-      const variantPropsForType = new Set(
-        Object.keys(d.variantStyleKeys ?? {}).flatMap((when: string) => {
+      const variantPropsForType = new Set([
+        ...Object.keys(d.variantStyleKeys ?? {}).flatMap((when: string) => {
           return when.split("&&").flatMap((part: string) => {
             const cleanPart = part.replace(/^!/, "");
             const colonIdx = cleanPart.indexOf(":");
             return colonIdx >= 0 ? [cleanPart.slice(0, colonIdx)] : [cleanPart];
           });
         }),
-      );
+        // Add variant dimension prop names
+        ...(d.variantDimensions ?? []).map((dim) => dim.propName),
+      ]);
       const styleFnPropsForType = new Set(
         (d.styleFnFromProps ?? [])
           .map((p: any) => p.jsxProp)
@@ -1892,6 +2094,8 @@ export function emitIntrinsicWrappers(ctx: any): {
     ];
 
     const destructureProps: string[] = [];
+    // Track default values for props (for destructuring defaults)
+    const propDefaults = new Map<string, string>();
 
     // Add adapter-resolved StyleX styles (emitted directly into stylex.props args).
     if (d.extraStylexPropsArgs) {
@@ -1926,6 +2130,11 @@ export function emitIntrinsicWrappers(ctx: any): {
           ),
         );
       }
+    }
+
+    // Add variant dimension lookups (StyleX variants recipe pattern)
+    if (d.variantDimensions) {
+      buildVariantDimensionLookups(d.variantDimensions, styleArgs, destructureProps, propDefaults);
     }
 
     for (const prop of collectInlineStylePropNames(d.inlineStyleProps ?? [])) {
@@ -2047,7 +2256,20 @@ export function emitIntrinsicWrappers(ctx: any): {
         ...(allowClassNameProp ? [patternProp("className", classNameId)] : []),
         ...(isVoidTag ? [] : [patternProp("children", childrenId)]),
         ...(allowStyleProp ? [patternProp("style", styleId)] : []),
-        ...destructureProps.map((name) => patternProp(name)),
+        // Add variant props to destructuring (with defaults when available)
+        ...destructureProps.map((name) => {
+          const defaultVal = propDefaults.get(name);
+          if (defaultVal) {
+            // Create property with default: { name = "defaultValue" }
+            return j.property.from({
+              kind: "init",
+              key: j.identifier(name),
+              value: j.assignmentPattern(j.identifier(name), j.literal(defaultVal)),
+              shorthand: false,
+            });
+          }
+          return patternProp(name);
+        }),
         ...(restId ? [j.restElement(restId)] : []),
       ];
       const declStmt = j.variableDeclaration("const", [
@@ -2132,6 +2354,7 @@ export function emitIntrinsicWrappers(ctx: any): {
           emitTypes,
           styleArgs,
           destructureProps,
+          propDefaults,
           allowClassNameProp: false,
           allowStyleProp: false,
           includeRest: shouldIncludeRest,

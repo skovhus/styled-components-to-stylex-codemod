@@ -212,6 +212,37 @@ export function emitComponentWrappers(ctx: any): {
       }
     }
 
+    // Add variant dimension lookups (StyleX variants recipe pattern)
+    // e.g., colorVariants[color as keyof typeof colorVariants] ?? colorVariants.default
+    if (d.variantDimensions) {
+      for (const dim of d.variantDimensions) {
+        if (!destructureProps.includes(dim.propName)) {
+          destructureProps.push(dim.propName);
+        }
+        const variantsId = j.identifier(dim.variantObjectName);
+        const propId = j.identifier(dim.propName);
+
+        // Build: variantsObj[prop as keyof typeof variantsObj] ?? variantsObj.default
+        const keyofExpr = {
+          type: "TSTypeOperator",
+          operator: "keyof",
+          typeAnnotation: j.tsTypeQuery(j.identifier(dim.variantObjectName)),
+        };
+        const castProp = j.tsAsExpression(propId, keyofExpr as any);
+        const lookup = j.memberExpression(variantsId, castProp, true /* computed */);
+
+        if (dim.defaultValue === "default") {
+          const defaultAccess = j.memberExpression(
+            j.identifier(dim.variantObjectName),
+            j.identifier("default"),
+          );
+          styleArgs.push(j.logicalExpression("??", lookup, defaultAccess));
+        } else {
+          styleArgs.push(lookup);
+        }
+      }
+    }
+
     // Add adapter-resolved StyleX styles (emitted directly into stylex.props args).
     if (d.extraStylexPropsArgs) {
       for (const extra of d.extraStylexPropsArgs) {

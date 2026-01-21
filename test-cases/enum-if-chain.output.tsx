@@ -9,17 +9,7 @@ type TopArrowStemProps = Omit<React.ComponentProps<"g">, "className" | "style"> 
 
 function TopArrowStem(props: TopArrowStemProps) {
   const { children, $state } = props;
-  return (
-    <g
-      {...stylex.props(
-        styles.topArrowStem,
-        $state === "down" && styles.topArrowStemStateDown,
-        $state === "up" && styles.topArrowStemStateUp,
-      )}
-    >
-      {children}
-    </g>
-  );
+  return <g {...stylex.props(styles.topArrowStem, $stateVariants[$state])}>{children}</g>;
 }
 
 export const App = () => (
@@ -44,11 +34,18 @@ const styles = stylex.create({
     transition: "opacity 150ms ease,transform 150ms ease",
     transform: "scaleY(1)",
   },
-  topArrowStemStateDown: {
+});
+
+const $stateVariants = stylex.create({
+  down: {
     opacity: 0,
     transform: "scaleY(0)",
   },
-  topArrowStemStateUp: {
+  up: {
     transform: "scaleY(3.27)",
+  },
+  both: {
+    opacity: 1,
+    transform: "scaleY(1)",
   },
 });

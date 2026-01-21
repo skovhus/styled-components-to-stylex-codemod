@@ -13,17 +13,14 @@ type Props = {
 type ButtonProps = Omit<React.ComponentProps<"button">, "className" | "style"> & Props;
 
 function Button(props: ButtonProps) {
-  const { children, color, size, disabled } = props;
+  const { children, size: size = "small", color: color = "secondary", disabled } = props;
   return (
     <button
       disabled={disabled}
       {...stylex.props(
         styles.button,
-        color === "primary" && styles.buttonColorPrimary,
-        size === "medium" && styles.buttonSizeMedium,
-        disabled && styles.buttonDisabled,
-        disabled && color === "primary" && styles.buttonDisabledColorPrimary,
-        disabled && color !== "primary" && styles.buttonDisabledColorNotPrimary,
+        sizeVariants[size],
+        disabled ? colorDisabledVariants[color] : colorEnabledVariants[color],
       )}
     >
       {children}
@@ -49,44 +46,56 @@ const styles = stylex.create({
   button: {
     appearance: "none",
     borderWidth: 0,
-    backgroundColor: {
-      default: "gray",
-      ":hover": "darkgray",
-    },
     color: "white",
     fontSize: "1rem",
     paddingBlock: "4px",
     paddingInline: "8px",
   },
-  buttonColorPrimary: {
+});
+
+const colorEnabledVariants = stylex.create({
+  primary: {
     backgroundColor: {
       default: "blue",
       ":hover": "darkblue",
     },
   },
-  buttonSizeMedium: {
-    fontSize: "1.2rem",
-    paddingBlock: "8px",
-    paddingInline: "16px",
+  secondary: {
+    backgroundColor: {
+      default: "gray",
+      ":hover": "darkgray",
+    },
   },
-  buttonDisabled: {
-    color: "rgb(204, 204, 204)",
-    cursor: "not-allowed",
-  },
-  buttonDisabledColorPrimary: {
-    color: "rgb(204, 204, 204)",
-    cursor: "not-allowed",
+});
+
+const colorDisabledVariants = stylex.create({
+  primary: {
     backgroundColor: {
       default: "grey",
       ":hover": "darkblue",
     },
-  },
-  buttonDisabledColorNotPrimary: {
     color: "rgb(204, 204, 204)",
     cursor: "not-allowed",
+  },
+  secondary: {
     backgroundColor: {
       default: "grey",
       ":hover": "darkgray",
     },
+    color: "rgb(204, 204, 204)",
+    cursor: "not-allowed",
+  },
+});
+
+const sizeVariants = stylex.create({
+  medium: {
+    fontSize: "1.2rem",
+    paddingBlock: "8px",
+    paddingInline: "16px",
+  },
+  small: {
+    fontSize: "1rem",
+    paddingBlock: "4px",
+    paddingInline: "8px",
   },
 });

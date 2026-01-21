@@ -28,7 +28,7 @@ import {
   parsePseudoElement,
   parseSimplePseudo,
 } from "./selectors.js";
-import type { StyledDecl } from "./transform-types.js";
+import type { StyledDecl, VariantDimension } from "./transform-types.js";
 import type { WarningLog } from "./logger.js";
 
 export type DescendantOverride = {
@@ -628,11 +628,12 @@ export function lowerRules(args: {
     const inlineStyleProps: Array<{ prop: string; expr: ExpressionKind }> = [];
     const localVarValues = new Map<string, string>();
 
-    const { findJsxPropTsType, annotateParamFromJsxProp } = createTypeInferenceHelpers({
-      root,
-      j,
-      decl,
-    });
+    const { findJsxPropTsType, annotateParamFromJsxProp, isJsxPropOptional } =
+      createTypeInferenceHelpers({
+        root,
+        j,
+        decl,
+      });
 
     const addPropComments = (
       target: any,
@@ -1164,10 +1165,10 @@ export function lowerRules(args: {
       // - Descendant element selectors: `& a { ... }`, `& h1, & h2 { ... }`
       // - Chained pseudos like `:not(...)`
       //
-      // NOTE: descendant component selectors use `__SC_EXPR_` placeholders and are handled separately.
+      // NOTE: normalize interpolated component selectors before the complex selector checks
+      // to avoid skipping bails for selectors like `${Other} .child &`.
       if (typeof rule.selector === "string") {
-        const s = rule.selector.trim();
-        const hasExprPlaceholder = s.includes("__SC_EXPR_");
+        const s = normalizeInterpolatedSelector(rule.selector).trim();
 
         if (s.includes(",") && !parseCommaSeparatedPseudos(s)) {
           // Bail on comma-separated selectors unless ALL parts are valid pseudo-selectors
@@ -1175,11 +1176,11 @@ export function lowerRules(args: {
           bail = true;
         } else if (s.includes(":not(")) {
           bail = true;
-        } else if (!hasExprPlaceholder && /&\.[a-zA-Z0-9_-]+/.test(s)) {
+        } else if (/&\.[a-zA-Z0-9_-]+/.test(s)) {
           // Any class selector on the same element (except the sibling patterns handled above).
           bail = true;
-        } else if (!hasExprPlaceholder && /\s+[a-zA-Z]/.test(s)) {
-          // Descendant element selectors like `& a`, `& h1`, etc.
+        } else if (/\s+[a-zA-Z.#]/.test(s)) {
+          // Descendant element/class/id selectors like `& a`, `& .child`, `& #foo`, etc.
           bail = true;
         }
 
@@ -2961,68 +2962,129 @@ export function lowerRules(args: {
         );
       };
 
-      // Special-case: if we have a boolean "disabled" variant bucket overriding a prop that also has
-      // a hover map, preserve CSS specificity semantics by emitting a compound variant keyed off
-      // `disabled && color === "primary"` (when available).
-      //
-      // This matches styled-components semantics for patterns like:
-      //  - &:hover { background-color: (color === "primary" ? darkblue : darkgray) }
-      //  - disabled && "background-color: grey"
-      //
-      // In CSS, :hover can still override base disabled declarations due to higher specificity.
-      // In StyleX, a later `backgroundColor` assignment can clobber pseudo maps, so we need the
-      // disabled bucket to include an explicit ':hover' value for the relevant color case.
-      const disabledKey = "disabled";
-      const colorPrimaryKey = `color === "primary"`;
-      const disabledBucket = variantBuckets.get(disabledKey);
-      const colorPrimaryBucket = variantBuckets.get(colorPrimaryKey);
-      if (disabledBucket && (styleObj as any).backgroundColor) {
-        const baseBg = (styleObj as any).backgroundColor;
-        const primaryBg = (colorPrimaryBucket as any)?.backgroundColor ?? null;
+      // Check if we should use namespace dimensions pattern instead of compound buckets
+      // This is triggered when a boolean bucket overlaps CSS props with an enum bucket that
+      // has a 2-value union type (indicating a variants-recipe pattern)
+      const shouldUseNamespaceDimensions = (() => {
+        const disabledBucket = variantBuckets.get("disabled");
+        if (!disabledBucket) {
+          return false;
+        }
+        const disabledCssProps = new Set(Object.keys(disabledBucket));
 
-        const baseHover = isPseudoOrMediaMap(baseBg) ? (baseBg as any)[":hover"] : null;
-        const primaryHover = isPseudoOrMediaMap(primaryBg) ? (primaryBg as any)[":hover"] : null;
+        // Check for enum buckets with 2-value union types that overlap with disabled
+        for (const [when] of variantBuckets.entries()) {
+          const match = when.match(/^([a-zA-Z_$][a-zA-Z0-9_$]*)\s*===\s*"([^"]*)"$/);
+          if (!match) {
+            continue;
+          }
+          const propName = match[1]!;
+          const propType = findJsxPropTsType(propName);
+          const unionValues = extractUnionLiteralValues(propType);
+          if (!unionValues || unionValues.length !== 2) {
+            continue;
+          }
 
-        const disabledBg = (disabledBucket as any).backgroundColor;
-        const disabledDefault = isPseudoOrMediaMap(disabledBg)
-          ? (disabledBg as any).default
-          : (disabledBg ?? null);
+          const enumBucket = variantBuckets.get(when);
+          if (!enumBucket) {
+            continue;
+          }
+          for (const cssProp of Object.keys(enumBucket)) {
+            if (disabledCssProps.has(cssProp)) {
+              return true;
+            }
+          }
+        }
+        return false;
+      })();
 
-        if (disabledDefault !== null && baseHover !== null && primaryHover !== null) {
-          // Remove the base disabled backgroundColor override; we'll replace it with compound buckets.
-          delete (disabledBucket as any).backgroundColor;
+      // Skip compound bucket creation if we'll use namespace dimensions instead
+      if (!shouldUseNamespaceDimensions) {
+        // Special-case: if we have a boolean "disabled" variant bucket overriding a prop that also has
+        // a hover map, preserve CSS specificity semantics by emitting a compound variant keyed off
+        // `disabled && color === "primary"` (when available).
+        //
+        // This matches styled-components semantics for patterns like:
+        //  - &:hover { background-color: (color === "primary" ? darkblue : darkgray) }
+        //  - disabled && "background-color: grey"
+        //
+        // In CSS, :hover can still override base disabled declarations due to higher specificity.
+        // In StyleX, a later `backgroundColor` assignment can clobber pseudo maps, so we need the
+        // disabled bucket to include an explicit ':hover' value for the relevant color case.
+        const disabledKey = "disabled";
+        const colorPrimaryKey = `color === "primary"`;
+        const disabledBucket = variantBuckets.get(disabledKey);
+        const colorPrimaryBucket = variantBuckets.get(colorPrimaryKey);
+        if (disabledBucket && (styleObj as any).backgroundColor) {
+          const baseBg = (styleObj as any).backgroundColor;
+          const primaryBg = (colorPrimaryBucket as any)?.backgroundColor ?? null;
 
-          const disabledPrimaryWhen = `${disabledKey} && ${colorPrimaryKey}`;
-          const disabledNotPrimaryWhen = `${disabledKey} && color !== "primary"`;
+          const baseHover = isPseudoOrMediaMap(baseBg) ? (baseBg as any)[":hover"] : null;
+          const primaryHover = isPseudoOrMediaMap(primaryBg) ? (primaryBg as any)[":hover"] : null;
 
-          const mkBucket = (hoverVal: any) => ({
-            ...(disabledBucket as any),
-            backgroundColor: { default: disabledDefault, ":hover": hoverVal },
-          });
+          const disabledBg = (disabledBucket as any).backgroundColor;
+          const disabledDefault = isPseudoOrMediaMap(disabledBg)
+            ? (disabledBg as any).default
+            : (disabledBg ?? null);
 
-          variantBuckets.set(disabledPrimaryWhen, mkBucket(primaryHover));
-          variantStyleKeys[disabledPrimaryWhen] ??= `${decl.styleKey}${toSuffixFromProp(
-            disabledPrimaryWhen,
-          )}`;
+          if (disabledDefault !== null && baseHover !== null && primaryHover !== null) {
+            // Remove the base disabled backgroundColor override; we'll replace it with compound buckets.
+            delete (disabledBucket as any).backgroundColor;
 
-          variantBuckets.set(disabledNotPrimaryWhen, mkBucket(baseHover));
-          variantStyleKeys[disabledNotPrimaryWhen] ??= `${decl.styleKey}${toSuffixFromProp(
-            disabledNotPrimaryWhen,
-          )}`;
+            const disabledPrimaryWhen = `${disabledKey} && ${colorPrimaryKey}`;
+            const disabledNotPrimaryWhen = `${disabledKey} && color !== "primary"`;
+
+            const mkBucket = (hoverVal: any) => ({
+              ...(disabledBucket as any),
+              backgroundColor: { default: disabledDefault, ":hover": hoverVal },
+            });
+
+            variantBuckets.set(disabledPrimaryWhen, mkBucket(primaryHover));
+            variantStyleKeys[disabledPrimaryWhen] ??= `${decl.styleKey}${toSuffixFromProp(
+              disabledPrimaryWhen,
+            )}`;
+
+            variantBuckets.set(disabledNotPrimaryWhen, mkBucket(baseHover));
+            variantStyleKeys[disabledNotPrimaryWhen] ??= `${decl.styleKey}${toSuffixFromProp(
+              disabledNotPrimaryWhen,
+            )}`;
+          }
         }
       }
     }
 
-    for (const [when, obj] of variantBuckets.entries()) {
-      const key = variantStyleKeys[when]!;
+    // Group enum-like variant conditions into dimensions for StyleX variants recipe pattern
+    const { dimensions, remainingBuckets, remainingStyleKeys, propsToStrip } =
+      groupVariantBucketsIntoDimensions(
+        variantBuckets,
+        variantStyleKeys,
+        decl.styleKey,
+        styleObj,
+        findJsxPropTsType,
+        isJsxPropOptional,
+      );
+
+    // Store dimensions for separate stylex.create calls
+    if (dimensions.length > 0) {
+      decl.variantDimensions = dimensions;
+      decl.needsWrapperComponent = true;
+      // Remove CSS props that were moved to variant dimensions from base styles
+      for (const prop of propsToStrip) {
+        delete (styleObj as Record<string, unknown>)[prop];
+      }
+    }
+
+    // Add remaining (compound/boolean) variants to resolvedStyleObjects
+    for (const [when, obj] of remainingBuckets.entries()) {
+      const key = remainingStyleKeys[when]!;
       resolvedStyleObjects.set(key, obj);
     }
     for (const [k, v] of attrBuckets.entries()) {
       resolvedStyleObjects.set(k, v);
     }
-    if (Object.keys(variantStyleKeys).length) {
-      decl.variantStyleKeys = variantStyleKeys;
-      // If we have variant styles keyed off props (e.g. `color === "primary"`),
+    if (Object.keys(remainingStyleKeys).length) {
+      decl.variantStyleKeys = remainingStyleKeys;
+      // If we have variant styles keyed off props (e.g. `disabled`),
       // we need a wrapper component to evaluate those conditions at runtime and
       // avoid forwarding custom variant props to DOM nodes.
       decl.needsWrapperComponent = true;
@@ -3075,4 +3137,341 @@ export function lowerRules(args: {
   }
 
   return { resolvedStyleObjects, descendantOverrides, ancestorSelectorParents, bail };
+}
+
+/**
+ * Parses a variant condition string to extract prop name, operator, and value.
+ * Supports patterns like: `color === "primary"`, `size !== "small"`, `disabled`
+ * Does NOT handle compound conditions like `disabled && color === "primary"`.
+ */
+type ParsedVariantCondition =
+  | { type: "equality"; propName: string; operator: "===" | "!=="; value: string }
+  | { type: "boolean"; propName: string; negated: boolean }
+  | { type: "compound" | "unknown" };
+
+function parseVariantCondition(when: string): ParsedVariantCondition {
+  const trimmed = when.trim();
+
+  // Compound condition (contains &&)
+  if (trimmed.includes("&&")) {
+    return { type: "compound" };
+  }
+
+  // Negated boolean: !propName or !(propName)
+  if (trimmed.startsWith("!")) {
+    const inner = trimmed
+      .slice(1)
+      .trim()
+      .replace(/^\(|\)$/g, "");
+    if (/^[a-zA-Z_$][a-zA-Z0-9_$]*$/.test(inner)) {
+      return { type: "boolean", propName: inner, negated: true };
+    }
+    return { type: "unknown" };
+  }
+
+  // Equality: propName === "value" or propName !== "value"
+  const eqMatch = trimmed.match(/^([a-zA-Z_$][a-zA-Z0-9_$]*)\s*(===|!==)\s*"([^"]*)"$/);
+  if (eqMatch) {
+    return {
+      type: "equality",
+      propName: eqMatch[1]!,
+      operator: eqMatch[2] as "===" | "!==",
+      value: eqMatch[3]!,
+    };
+  }
+
+  // Simple boolean: propName (no operators)
+  if (/^[a-zA-Z_$][a-zA-Z0-9_$]*$/.test(trimmed)) {
+    return { type: "boolean", propName: trimmed, negated: false };
+  }
+
+  return { type: "unknown" };
+}
+
+/**
+ * Extract string literal values from a TypeScript union type.
+ * Returns an array of literal values, or null if the type doesn't contain string literals.
+ */
+function extractUnionLiteralValues(tsType: unknown): string[] | null {
+  if (!tsType || typeof tsType !== "object") {
+    return null;
+  }
+
+  const type = tsType as { type?: string; types?: unknown[]; literal?: { value?: unknown } };
+
+  // Handle TSUnionType: "up" | "down" | "both"
+  if (type.type === "TSUnionType" && Array.isArray(type.types)) {
+    const values: string[] = [];
+    for (const t of type.types) {
+      const inner = t as { type?: string; literal?: { value?: unknown } };
+      if (inner.type === "TSLiteralType" && typeof inner.literal?.value === "string") {
+        values.push(inner.literal.value);
+      }
+    }
+    return values.length > 0 ? values : null;
+  }
+
+  // Handle single TSLiteralType
+  if (type.type === "TSLiteralType" && typeof type.literal?.value === "string") {
+    return [type.literal.value];
+  }
+
+  return null;
+}
+
+/**
+ * Groups variant buckets into dimensions for the StyleX variants recipe pattern.
+ *
+ * A dimension is created when:
+ * - Multiple conditions test the same prop with `===` against different string values
+ * - OR a single `===` condition exists (the else branch becomes a default variant)
+ *
+ * Compound conditions (e.g., `disabled && color === "primary"`) are kept separate
+ * and not grouped into dimensions.
+ */
+function groupVariantBucketsIntoDimensions(
+  variantBuckets: Map<string, Record<string, unknown>>,
+  variantStyleKeys: Record<string, string>,
+  _baseStyleKey: string,
+  baseStyles: Record<string, unknown>,
+  findJsxPropTsType?: (propName: string) => unknown,
+  isJsxPropOptional?: (propName: string) => boolean,
+): {
+  dimensions: VariantDimension[];
+  remainingBuckets: Map<string, Record<string, unknown>>;
+  remainingStyleKeys: Record<string, string>;
+  propsToStrip: Set<string>;
+} {
+  // Helper to generate variant object name, avoiding redundant "variantVariants"
+  const getVariantObjectName = (propName: string, suffix?: "Enabled" | "Disabled"): string => {
+    if (propName === "variant") {
+      return suffix ? `${suffix.toLowerCase()}Variants` : "variants";
+    }
+    return suffix ? `${propName}${suffix}Variants` : `${propName}Variants`;
+  };
+
+  // Group conditions by prop name (only equality conditions)
+  const propGroups = new Map<
+    string,
+    Array<{ when: string; value: string; styles: Record<string, unknown> }>
+  >();
+  const remainingBuckets = new Map<string, Record<string, unknown>>();
+  const remainingStyleKeys: Record<string, string> = {};
+  // Track CSS props that should be stripped from base styles (moved to variants)
+  const propsToStrip = new Set<string>();
+
+  for (const [when, styles] of variantBuckets.entries()) {
+    const parsed = parseVariantCondition(when);
+
+    if (parsed.type === "equality" && parsed.operator === "===") {
+      const existing = propGroups.get(parsed.propName) ?? [];
+      existing.push({ when, value: parsed.value, styles });
+      propGroups.set(parsed.propName, existing);
+    } else {
+      // Keep compound, boolean, and other conditions as-is
+      remainingBuckets.set(when, styles);
+      if (variantStyleKeys[when]) {
+        remainingStyleKeys[when] = variantStyleKeys[when];
+      }
+    }
+  }
+
+  const dimensions: VariantDimension[] = [];
+
+  // Collect boolean buckets and their CSS props (e.g., "disabled" → { backgroundColor, color })
+  const booleanBuckets = new Map<
+    string,
+    { cssProps: Set<string>; styles: Record<string, unknown> }
+  >();
+  for (const [when, styles] of variantBuckets.entries()) {
+    const parsed = parseVariantCondition(when);
+    if (parsed.type === "boolean" && !parsed.negated) {
+      booleanBuckets.set(parsed.propName, {
+        cssProps: new Set(Object.keys(styles)),
+        styles,
+      });
+    }
+  }
+
+  // Check if we're in a "variants-recipe" pattern: any enum has boolean overlap
+  let isVariantsRecipePattern = false;
+  for (const [, variants] of propGroups.entries()) {
+    const variantCssProps = new Set(variants.flatMap((v) => Object.keys(v.styles)));
+    for (const [, boolData] of booleanBuckets) {
+      for (const cssProp of variantCssProps) {
+        if (boolData.cssProps.has(cssProp)) {
+          isVariantsRecipePattern = true;
+          break;
+        }
+      }
+      if (isVariantsRecipePattern) {
+        break;
+      }
+    }
+    if (isVariantsRecipePattern) {
+      break;
+    }
+  }
+
+  for (const [propName, variants] of propGroups.entries()) {
+    const propType = findJsxPropTsType?.(propName);
+    const unionValues = extractUnionLiteralValues(propType);
+
+    // For single-condition variants, check if we can create a dimension
+    if (variants.length === 1) {
+      const explicitValue = variants[0]!.value;
+
+      // Only create dimension if: variants-recipe pattern AND union has exactly 2 values
+      if (
+        isVariantsRecipePattern &&
+        unionValues &&
+        unionValues.length === 2 &&
+        unionValues.includes(explicitValue)
+      ) {
+        // Continue to create dimension
+      } else {
+        // Move to remaining buckets (conditional pattern)
+        for (const v of variants) {
+          remainingBuckets.set(v.when, v.styles);
+          const styleKey = variantStyleKeys[v.when];
+          if (styleKey) {
+            remainingStyleKeys[v.when] = styleKey;
+          }
+        }
+        continue;
+      }
+    }
+
+    // Build variant map with explicit values and infer default from base styles
+    const variantMap: Record<string, Record<string, unknown>> = {};
+    const allOverriddenProps = new Set<string>();
+
+    for (const v of variants) {
+      variantMap[v.value] = v.styles;
+      for (const cssProp of Object.keys(v.styles)) {
+        allOverriddenProps.add(cssProp);
+      }
+    }
+
+    // Find base style values for overridden props (represents else branch)
+    const defaultStyles: Record<string, unknown> = {};
+    for (const cssProp of allOverriddenProps) {
+      if (cssProp in baseStyles) {
+        defaultStyles[cssProp] = baseStyles[cssProp];
+      }
+    }
+
+    // Determine the default value name
+    // For variants-recipe pattern with optional props, use actual value name + destructuring default
+    // For other cases, use "default" key with cast+fallback
+    let defaultValue: string | undefined;
+    const propIsOptional = isJsxPropOptional?.(propName) ?? false;
+
+    if (Object.keys(defaultStyles).length > 0 && unionValues) {
+      const explicitValues = new Set(variants.map((v) => v.value));
+      const remainingValues = unionValues.filter((v) => !explicitValues.has(v));
+      if (remainingValues.length === 1 && remainingValues[0]) {
+        // Use actual remaining value as key - for variants-recipe, this enables simple lookup
+        // even for optional props when we emit destructuring defaults
+        defaultValue = remainingValues[0];
+        variantMap[defaultValue] = defaultStyles;
+        // Note: We don't strip from base styles here - that only happens for namespace
+        // dimensions where the ternary lookup guarantees a defined value
+      } else {
+        // Multiple remaining values - use "default" with cast+fallback
+        defaultValue = "default";
+        variantMap["default"] = defaultStyles;
+      }
+    }
+
+    // Check if this prop has boolean overlap (needs namespace dimensions)
+    const variantCssProps = new Set(Object.keys(variants[0]!.styles));
+    let overlappingBoolProp: string | undefined;
+    let overlappingBoolStyles: Record<string, unknown> | undefined;
+    for (const [boolProp, boolData] of booleanBuckets) {
+      for (const cssProp of variantCssProps) {
+        if (boolData.cssProps.has(cssProp)) {
+          overlappingBoolProp = boolProp;
+          overlappingBoolStyles = boolData.styles;
+          break;
+        }
+      }
+      if (overlappingBoolProp) {
+        break;
+      }
+    }
+
+    if (overlappingBoolProp && overlappingBoolStyles) {
+      // Create namespace dimensions: enabled and disabled
+      // Enabled namespace: original variants
+      dimensions.push({
+        propName,
+        variantObjectName: getVariantObjectName(propName, "Enabled"),
+        variants: variantMap,
+        defaultValue,
+        namespaceBooleanProp: overlappingBoolProp,
+        isDisabledNamespace: false,
+        isOptional: propIsOptional,
+      });
+
+      // Disabled namespace: variants merged with boolean styles
+      const disabledVariantMap: Record<string, Record<string, unknown>> = {};
+      for (const [variantValue, variantStyles] of Object.entries(variantMap)) {
+        // Merge: boolean styles override variant styles, except hover stays from variant
+        const merged: Record<string, unknown> = { ...variantStyles };
+        for (const [cssProp, boolValue] of Object.entries(overlappingBoolStyles)) {
+          const variantValue2 = merged[cssProp];
+          // For pseudo maps (like backgroundColor with :hover), merge carefully
+          if (
+            typeof variantValue2 === "object" &&
+            variantValue2 !== null &&
+            typeof boolValue === "string"
+          ) {
+            // Boolean sets default, keep variant's hover
+            merged[cssProp] = { ...(variantValue2 as object), default: boolValue };
+          } else {
+            merged[cssProp] = boolValue;
+          }
+        }
+        // Also add any boolean styles that don't overlap with variant
+        for (const [cssProp, boolValue] of Object.entries(overlappingBoolStyles)) {
+          if (!(cssProp in merged)) {
+            merged[cssProp] = boolValue;
+          }
+        }
+        disabledVariantMap[variantValue] = merged;
+      }
+
+      dimensions.push({
+        propName,
+        variantObjectName: getVariantObjectName(propName, "Disabled"),
+        variants: disabledVariantMap,
+        defaultValue,
+        namespaceBooleanProp: overlappingBoolProp,
+        isDisabledNamespace: true,
+        isOptional: propIsOptional,
+      });
+
+      // Remove the boolean bucket from remaining since it's merged into disabled namespace
+      remainingBuckets.delete(overlappingBoolProp);
+      delete remainingStyleKeys[overlappingBoolProp];
+
+      // Mark CSS props for stripping from base styles - namespace dimensions use a ternary
+      // that guarantees a defined lookup, so base styles are not needed as fallback
+      for (const cssProp of variantCssProps) {
+        propsToStrip.add(cssProp);
+      }
+    } else {
+      // Simple dimension without namespace
+      dimensions.push({
+        propName,
+        variantObjectName: getVariantObjectName(propName),
+        variants: variantMap,
+        defaultValue,
+        isOptional: propIsOptional,
+      });
+    }
+  }
+
+  return { dimensions, remainingBuckets, remainingStyleKeys, propsToStrip };
 }

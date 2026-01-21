@@ -1,5 +1,5 @@
 import type { Collection } from "jscodeshift";
-import type { StyledDecl } from "./transform-types.js";
+import type { StyledDecl, VariantDimension } from "./transform-types.js";
 import path from "node:path";
 import type { ImportSource, ImportSpec, StyleMergerConfig } from "../adapter.js";
 
@@ -565,4 +565,64 @@ export function emitStylesAndImports(args: {
   // This keeps component logic first, styles last for better readability.
   const programBody = root.get().node.program.body as any[];
   programBody.push(stylesDecl as any);
+
+  // Emit separate stylex.create declarations for variant dimensions
+  // This implements the StyleX "variants recipe" pattern where each variant
+  // dimension (e.g., color, size) gets its own stylex.create call.
+  const emittedDimensionNames = new Set<string>();
+  for (const decl of styledDecls) {
+    if (!decl.variantDimensions) {
+      continue;
+    }
+
+    for (const dimension of decl.variantDimensions) {
+      // Avoid emitting the same dimension twice (e.g., if multiple components share it)
+      if (emittedDimensionNames.has(dimension.variantObjectName)) {
+        continue;
+      }
+      emittedDimensionNames.add(dimension.variantObjectName);
+
+      const variantDecl = emitVariantDimensionDecl(
+        j,
+        dimension,
+        objectToAst,
+        literalToAst,
+        isAstNode,
+      );
+      programBody.push(variantDecl as any);
+    }
+  }
+}
+
+/**
+ * Emit a variant dimension as a separate `const <name>Variants = stylex.create({...})` call.
+ * Includes eslint-disable comment for stylex/no-unused since variant styles are accessed dynamically.
+ */
+function emitVariantDimensionDecl(
+  j: any,
+  dimension: VariantDimension,
+  objectToAst: (j: any, v: Record<string, unknown>) => any,
+  literalToAst: (j: any, v: unknown) => any,
+  isAstNode: (v: unknown) => boolean,
+): any {
+  const properties = Object.entries(dimension.variants).map(([variantValue, styles]) => {
+    return j.property(
+      "init",
+      j.identifier(variantValue),
+      styles && typeof styles === "object" && !isAstNode(styles)
+        ? objectToAst(j, styles as Record<string, unknown>)
+        : literalToAst(j, styles),
+    );
+  });
+
+  const variantDecl = j.variableDeclaration("const", [
+    j.variableDeclarator(
+      j.identifier(dimension.variantObjectName),
+      j.callExpression(j.memberExpression(j.identifier("stylex"), j.identifier("create")), [
+        j.objectExpression(properties),
+      ]),
+    ),
+  ]);
+
+  return variantDecl;
 }

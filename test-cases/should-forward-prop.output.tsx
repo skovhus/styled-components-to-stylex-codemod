@@ -70,8 +70,8 @@ function Card(props: CardProps) {
     <div
       {...stylex.props(
         styles.card,
-        variant === "primary" && styles.cardVariantPrimary,
         rounded && styles.cardRounded,
+        variant === "primary" && styles.cardVariantPrimary,
         styles.cardBoxShadow(props),
       )}
     >
@@ -157,11 +157,11 @@ const styles = stylex.create({
     padding: "16px",
     color: "white",
   },
-  cardVariantPrimary: {
-    backgroundColor: "#BF4F74",
-  },
   cardRounded: {
     borderRadius: "16px",
+  },
+  cardVariantPrimary: {
+    backgroundColor: "#BF4F74",
   },
   cardBoxShadow: (props) => ({
     boxShadow: `0 ${(props.elevation || 1) * 2}px ${(props.elevation || 1) * 4}px rgba(0, 0, 0, 0.8)`,

@@ -11,13 +11,13 @@ type BoxProps = React.PropsWithChildren<{
 // 2. NOT forward them to the underlying DOM element
 
 export function Box(props: BoxProps) {
-  const { children, $size, $isActive } = props;
+  const { children, $isActive, $size } = props;
   return (
     <div
       {...stylex.props(
         styles.box,
-        $size === "large" && styles.boxSizeLarge,
         $isActive && styles.boxActive,
+        $size === "large" && styles.boxSizeLarge,
       )}
     >
       {children}
@@ -69,11 +69,11 @@ const styles = stylex.create({
     backgroundColor: "gray",
     color: "white",
   },
-  boxSizeLarge: {
-    padding: "16px",
-  },
   boxActive: {
     backgroundColor: "blue",
+  },
+  boxSizeLarge: {
+    padding: "16px",
   },
   image: {
     opacity: 1,
