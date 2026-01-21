@@ -38,6 +38,7 @@ import {
   normalizeSelectorForInputAttributePseudos,
   normalizeInterpolatedSelector,
   parseAttributeSelector,
+  parseChainedPseudo,
   parseCommaSeparatedPseudos,
   parsePseudoElement,
   parseSimplePseudo,
@@ -664,7 +665,9 @@ export function lowerRules(args: {
           // Bail on comma-separated selectors unless ALL parts are valid pseudo-selectors
           // (e.g., "&:hover, &:focus" is OK, but "&:hover, & .child" is not)
           bail = true;
-        } else if (s.includes(":not(")) {
+        } else if (s.includes(":not(") && !parseChainedPseudo(s)) {
+          // Bail on :not() unless it's a valid chained pseudo-selector
+          // (e.g., "&:focus:not(:disabled)" is OK, but "& .foo:not(:disabled)" is not)
           bail = true;
         } else if (/&\.[a-zA-Z0-9_-]+/.test(s)) {
           // Any class selector on the same element (except the sibling patterns handled above).
@@ -782,9 +785,11 @@ export function lowerRules(args: {
       }
 
       // Support comma-separated pseudo-selectors like "&:hover, &:focus"
+      // and chained pseudo-selectors like "&:focus:not(:disabled)"
       const pseudos =
         parseCommaSeparatedPseudos(selector) ??
-        (parseSimplePseudo(selector) ? [parseSimplePseudo(selector)!] : null);
+        (parseSimplePseudo(selector) ? [parseSimplePseudo(selector)!] : null) ??
+        (parseChainedPseudo(selector) ? [parseChainedPseudo(selector)!] : null);
       const pseudoElement = parsePseudoElement(selector);
 
       const attrSel = parseAttributeSelector(selector);

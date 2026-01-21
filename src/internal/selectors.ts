@@ -5,6 +5,43 @@ export function parseSimplePseudo(selector: string): string | null {
 }
 
 /**
+ * Parse chained pseudo-selectors like "&:focus:not(:disabled)" into ":focus:not(:disabled)".
+ * Supports:
+ * - Simple pseudos: &:hover, &:focus, &:checked, &:disabled, etc.
+ * - :not() with simple pseudo: &:not(:disabled), &:focus:not(:disabled)
+ * - Multiple :not() chains: &:hover:not(:disabled):not(:focus)
+ *
+ * Returns null if selector doesn't match the chained pseudo pattern.
+ */
+export function parseChainedPseudo(selector: string): string | null {
+  // Remove leading & if present
+  const s = selector.startsWith("&") ? selector.slice(1) : selector;
+
+  // Must start with :
+  if (!s.startsWith(":")) {
+    return null;
+  }
+
+  // Match pattern: one or more of (:pseudo-name or :not(:pseudo-name))
+  // Pattern breakdown:
+  // - :[a-zA-Z-]+ matches simple pseudos like :hover, :focus, :disabled
+  // - :not\(:[a-zA-Z-]+\) matches :not(:disabled), :not(:focus), etc.
+  const chainedPattern = /^(:[a-zA-Z-]+|:not\(:[a-zA-Z-]+\))+$/;
+
+  if (!chainedPattern.test(s)) {
+    return null;
+  }
+
+  // Must have at least one segment
+  const segments = s.match(/:[a-zA-Z-]+|:not\(:[a-zA-Z-]+\)/g);
+  if (!segments || segments.length === 0) {
+    return null;
+  }
+
+  return s;
+}
+
+/**
  * Parse comma-separated pseudo-selectors like "&:hover, &:focus" into an array [":hover", ":focus"].
  * Returns null if any part is not a valid simple pseudo-selector.
  */
