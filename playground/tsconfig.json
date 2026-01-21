@@ -1,7 +1,9 @@
 {
   "extends": "../tsconfig.json",
   "compilerOptions": {
-    "noEmit": true
+    "noEmit": true,
+    "incremental": true,
+    "tsBuildInfoFile": "./.tsbuildinfo"
   },
   "include": ["src/**/*", "vite.config.ts"],
   "exclude": ["../node_modules", "../dist", "../dist-playground", "../test-cases", "../coverage"]
