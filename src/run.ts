@@ -163,7 +163,8 @@ export async function runTransform(options: RunTransformOptions): Promise<RunTra
       const msg = `adapter.resolveValue threw an error: ${
         e instanceof Error ? e.message : String(e)
       }`;
-      Logger.error(msg, ctx);
+      const filePath = ctx.filePath ?? "<unknown>";
+      Logger.logError(msg, filePath, undefined, ctx);
       throw e;
     }
   };
@@ -173,7 +174,7 @@ export async function runTransform(options: RunTransformOptions): Promise<RunTra
       return adapter.resolveCall(ctx);
     } catch (e) {
       const msg = `adapter.resolveCall threw an error: ${e instanceof Error ? e.message : String(e)}`;
-      Logger.error(msg, ctx);
+      Logger.logError(msg, ctx.callSiteFilePath, undefined, ctx);
       throw e;
     }
   };

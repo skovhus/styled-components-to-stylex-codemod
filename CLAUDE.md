@@ -33,7 +33,7 @@ pnpm run ci           # Run lint + typecheck + test + build
 
 Run repo scripts directly with `node`, see `scripts` folder
 
-- `scripts/debug-test.mjs` - Generates `.actual.tsx` files for failing test cases to compare against expected `.output.tsx` files. Run with `node scripts/debug-test.mjs` after `pnpm build`.
+- `scripts/debug-test.mts` - Generates `.actual.tsx` files for failing test cases to compare against expected `.output.tsx` files. Run with `node scripts/debug-test.mts`.
 - `scripts/regenerate-test-case-outputs.mts` - Updates test case output files.
   - All supported test cases: `node scripts/regenerate-test-case-outputs.mts`
   - Single test case: `node scripts/regenerate-test-case-outputs.mts --only attrs`

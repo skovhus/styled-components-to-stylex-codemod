@@ -6,6 +6,7 @@ type ExpressionKind = Parameters<JSCodeshift["expressionStatement"]>[0];
 
 export function rewriteCssVarsInStyleObject(args: {
   obj: Record<string, unknown>;
+  filePath: string;
   definedVars: Map<string, string>;
   varsToDrop: Set<string>;
   isAstNode: (v: unknown) => boolean;
@@ -19,6 +20,7 @@ export function rewriteCssVarsInStyleObject(args: {
 
 function rewriteCssVarsInStyleObjectImpl(args: {
   obj: Record<string, unknown>;
+  filePath: string;
   definedVars: Map<string, string>;
   varsToDrop: Set<string>;
   isAstNode: (v: unknown) => boolean;
@@ -27,7 +29,17 @@ function rewriteCssVarsInStyleObjectImpl(args: {
   parseExpr: (exprSource: string) => ExpressionKind | null;
   j: JSCodeshift;
 }): void {
-  const { obj, definedVars, varsToDrop, isAstNode, resolveValue, addImport, parseExpr, j } = args;
+  const {
+    obj,
+    filePath,
+    definedVars,
+    varsToDrop,
+    isAstNode,
+    resolveValue,
+    addImport,
+    parseExpr,
+    j,
+  } = args;
   for (const [k, v] of Object.entries(obj)) {
     if (v && typeof v === "object") {
       if (isAstNode(v)) {
@@ -35,6 +47,7 @@ function rewriteCssVarsInStyleObjectImpl(args: {
       }
       rewriteCssVarsInStyleObjectImpl({
         obj: v as Record<string, unknown>,
+        filePath,
         definedVars,
         varsToDrop,
         isAstNode,
@@ -48,6 +61,7 @@ function rewriteCssVarsInStyleObjectImpl(args: {
     if (typeof v === "string") {
       obj[k] = rewriteCssVarsInString({
         raw: v,
+        filePath,
         definedVars,
         varsToDrop,
         resolveValue,

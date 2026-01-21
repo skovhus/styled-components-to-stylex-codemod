@@ -109,6 +109,18 @@ export function createTypeInferenceHelpers(args: { root: any; j: any; decl: Styl
       return findPropertyInTypeLiteral(typeAnn, propName) ?? indexedAccess;
     }
 
+    // Handle intersection types like `IconProps & { state: "up" | "down" | "both" }`
+    if (typeAnn?.type === "TSIntersectionType" && Array.isArray(typeAnn.types)) {
+      for (const member of typeAnn.types) {
+        if (member?.type === "TSTypeLiteral") {
+          const result = findPropertyInTypeLiteral(member, propName);
+          if (result) {
+            return result;
+          }
+        }
+      }
+    }
+
     return indexedAccess;
   };
 

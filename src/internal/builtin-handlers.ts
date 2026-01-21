@@ -269,7 +269,7 @@ function tryResolveThemeAccess(
     return null;
   }
 
-  const res = ctx.resolveValue({ kind: "theme", path });
+  const res = ctx.resolveValue({ kind: "theme", path, filePath: ctx.filePath });
   if (!res) {
     return null;
   }
@@ -508,7 +508,7 @@ function tryResolveConditionalValue(
     if (!path) {
       return null;
     }
-    const res = ctx.resolveValue({ kind: "theme", path });
+    const res = ctx.resolveValue({ kind: "theme", path, filePath: ctx.filePath });
     if (!res) {
       return null;
     }

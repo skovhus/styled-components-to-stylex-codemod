@@ -15,10 +15,11 @@ export function shouldSkipForThemeProvider(args: {
   const { root, j, styledImports } = args;
 
   const themeProviderImportForSkip = styledImports
-    .find(j.ImportSpecifier, {
-      imported: { type: "Identifier", name: "ThemeProvider" },
-    } as any)
-    .nodes()[0] as any;
+    .find(j.ImportSpecifier)
+    .filter(
+      (p) => p.node.imported.type === "Identifier" && p.node.imported.name === "ThemeProvider",
+    )
+    .nodes()[0];
   const themeProviderLocalForSkip =
     themeProviderImportForSkip?.local?.type === "Identifier"
       ? themeProviderImportForSkip.local.name
@@ -28,7 +29,12 @@ export function shouldSkipForThemeProvider(args: {
   if (!themeProviderLocalForSkip) {
     return false;
   }
-  return root.find(j.JSXIdentifier, { name: themeProviderLocalForSkip } as any).size() > 0;
+  return (
+    root
+      .find(j.JSXIdentifier)
+      .filter((p) => p.node.name === themeProviderLocalForSkip)
+      .size() > 0
+  );
 }
 
 export function collectThemeProviderSkipWarnings(args: {
@@ -43,7 +49,7 @@ export function collectThemeProviderSkipWarnings(args: {
     styledImports,
     j,
     importedName: "ThemeProvider",
-  }) as any;
+  });
   const themeProviderLocalForSkip =
     themeProviderImportForSkip?.local?.type === "Identifier"
       ? themeProviderImportForSkip.local.name
@@ -53,7 +59,11 @@ export function collectThemeProviderSkipWarnings(args: {
   if (!themeProviderLocalForSkip) {
     return warnings;
   }
-  const isUsed = root.find(j.JSXIdentifier, { name: themeProviderLocalForSkip } as any).size() > 0;
+  const isUsed =
+    root
+      .find(j.JSXIdentifier)
+      .filter((p) => p.node.name === themeProviderLocalForSkip)
+      .size() > 0;
   if (!isUsed) {
     return warnings;
   }
@@ -85,7 +95,7 @@ export function collectCssHelperSkipWarnings(args: {
     styledImports,
     j,
     importedName: "css",
-  }) as any;
+  });
   const cssLocalForSkip =
     cssImportForSkip?.local?.type === "Identifier"
       ? cssImportForSkip.local.name
@@ -98,29 +108,66 @@ export function collectCssHelperSkipWarnings(args: {
 
   const isUsed =
     root
-      .find(j.TaggedTemplateExpression, {
-        tag: { type: "Identifier", name: cssLocalForSkip },
-      } as any)
+      .find(j.TaggedTemplateExpression)
+      .filter((p) => p.node.tag.type === "Identifier" && p.node.tag.name === cssLocalForSkip)
       .size() > 0 ||
     root
-      .find(j.CallExpression, { callee: { type: "Identifier", name: cssLocalForSkip } } as any)
+      .find(j.CallExpression)
+      .filter((p) => p.node.callee.type === "Identifier" && p.node.callee.name === cssLocalForSkip)
       .size() > 0;
   if (!isUsed) {
     return warnings;
   }
 
-  const warning: WarningLog = {
-    severity: "warning",
-    type: "unsupported-feature",
-    message: "`css` helper usage from styled-components is not supported",
-  };
-  if (cssImportForSkip?.loc) {
-    warning.loc = {
-      line: cssImportForSkip.loc.start.line,
-      column: cssImportForSkip.loc.start.column ?? 0,
+  const message =
+    "`css` helper usage from styled-components is not supported because nested css blocks are not transformed.";
+  const usageLocs: Array<{ line: number; column: number }> = [];
+  type NodeWithLoc = ASTNode & {
+    loc?: {
+      start?: {
+        line?: number;
+        column?: number;
+      };
     };
+  };
+  const hasLoc = (node: ASTNode): node is NodeWithLoc => "loc" in node;
+  const noteLoc = (node: ASTNode): void => {
+    if (!hasLoc(node)) {
+      return;
+    }
+    const loc = node.loc?.start;
+    if (!loc?.line && loc?.line !== 0) {
+      return;
+    }
+    usageLocs.push({ line: loc.line, column: loc.column ?? 0 });
+  };
+
+  root
+    .find(j.TaggedTemplateExpression)
+    .filter((p) => p.node.tag.type === "Identifier" && p.node.tag.name === cssLocalForSkip)
+    .forEach((p) => noteLoc(p.node));
+  root
+    .find(j.CallExpression)
+    .filter((p) => p.node.callee.type === "Identifier" && p.node.callee.name === cssLocalForSkip)
+    .forEach((p) => noteLoc(p.node));
+
+  if (usageLocs.length === 0) {
+    warnings.push({
+      severity: "warning",
+      type: "unsupported-feature",
+      message,
+    });
+    return warnings;
   }
-  warnings.push(warning);
+
+  for (const loc of usageLocs) {
+    warnings.push({
+      severity: "warning",
+      type: "unsupported-feature",
+      message,
+      loc,
+    });
+  }
   return warnings;
 }
 
@@ -129,7 +176,7 @@ export function collectCreateGlobalStyleWarnings(
 ): WarningLog[] {
   const warnings: WarningLog[] = [];
 
-  styledImports.forEach((importPath: any) => {
+  styledImports.forEach((importPath) => {
     const specifiers = importPath.node.specifiers ?? [];
     for (const specifier of specifiers) {
       if (
@@ -186,9 +233,8 @@ function findStyledComponentsNamedImport(args: {
 }): ImportSpecifier | null {
   const { styledImports, j, importedName } = args;
   const spec = styledImports
-    .find(j.ImportSpecifier, {
-      imported: { type: "Identifier", name: importedName },
-    } as any)
+    .find(j.ImportSpecifier)
+    .filter((p) => p.node.imported.type === "Identifier" && p.node.imported.name === importedName)
     .nodes()[0];
   return spec ?? null;
 }

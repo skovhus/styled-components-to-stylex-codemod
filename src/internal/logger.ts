@@ -28,10 +28,18 @@ export class Logger {
   }
 
   /**
-   * Log an error message to stderr.
+   * Log an error message to stderr with file path and optional location.
+   * Formats like warnings: "Error filepath:line:column\nmessage"
    */
-  public static error(message: string, context?: unknown): void {
-    Logger.writeWithSpacing(`${Logger.colorizeErrorLabel("Error")} ${message}`, context);
+  public static logError(
+    message: string,
+    filePath: string,
+    loc?: { line: number; column: number },
+    context?: unknown,
+  ): void {
+    const location = loc ? `${filePath}:${loc.line}:${loc.column}` : filePath;
+    const label = Logger.colorizeErrorLabel("Error");
+    Logger.writeWithSpacing(`${label} ${location}\n${message}`, context);
   }
 
   /**
