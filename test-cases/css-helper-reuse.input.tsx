@@ -26,9 +26,22 @@ const ProjectRow = styled.div`
   }
 `;
 
+const CheckMark = styled.div<{ $opaque: boolean }>`
+  ${(props) =>
+    props.$opaque &&
+    css`
+      opacity: 0.4;
+    `}
+  width: 10px;
+  height: 10px;
+  background-color: red;
+`;
+
 export const App = () => (
   <div>
     <GroupHeaderRow>Group</GroupHeaderRow>
     <ProjectRow>Project</ProjectRow>
+    <CheckMark $opaque={true} />
+    <CheckMark $opaque={false} />
   </div>
 );
