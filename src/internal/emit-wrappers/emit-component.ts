@@ -193,6 +193,8 @@ export function emitComponentWrappers(ctx: any): {
     const destructureProps: string[] = [];
     // Track default values for props (used for destructuring defaults on optional props)
     const propDefaults = new Map<string, string>();
+    // Track namespace boolean props (like 'disabled') that need to be passed to wrapped component
+    const namespaceBooleanProps: string[] = [];
 
     // Add variant style arguments if this component has variants
     if (d.variantStyleKeys) {
@@ -297,6 +299,11 @@ export function emitComponentWrappers(ctx: any): {
         }
         if (!destructureProps.includes(enabled.namespaceBooleanProp!)) {
           destructureProps.push(enabled.namespaceBooleanProp!);
+        }
+
+        // Track namespace boolean prop to pass it to the wrapped component
+        if (!namespaceBooleanProps.includes(enabled.namespaceBooleanProp!)) {
+          namespaceBooleanProps.push(enabled.namespaceBooleanProp!);
         }
 
         // Track defaults for destructuring - only for optional props to ensure type safety
@@ -676,6 +683,17 @@ export function emitComponentWrappers(ctx: any): {
             ),
           );
         }
+      }
+      // Pass namespace boolean props (like 'disabled') to the wrapped component.
+      // These are destructured for the enabled/disabled styling ternary but also need
+      // to be forwarded as they may be valid HTML attributes on the underlying element.
+      for (const propName of namespaceBooleanProps) {
+        openingAttrs.push(
+          j.jsxAttribute(
+            j.jsxIdentifier(propName),
+            j.jsxExpressionContainer(j.identifier(propName)),
+          ),
+        );
       }
       openingAttrs.push(j.jsxSpreadAttribute(restId));
       openingAttrs.push(j.jsxSpreadAttribute(merging.jsxSpreadExpr));

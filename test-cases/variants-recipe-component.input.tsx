@@ -7,10 +7,12 @@ import styled from "styled-components";
 type BaseButtonProps = React.PropsWithChildren<{
   className?: string;
   style?: React.CSSProperties;
+  disabled?: boolean;
 }>;
 
 function BaseButton(props: BaseButtonProps) {
-  return <button {...props} />;
+  const { disabled, ...rest } = props;
+  return <button disabled={disabled} {...rest} />;
 }
 
 type ButtonProps = {

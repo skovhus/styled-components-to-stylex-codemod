@@ -7,10 +7,12 @@ import * as stylex from "@stylexjs/stylex";
 type BaseButtonProps = React.PropsWithChildren<{
   className?: string;
   style?: React.CSSProperties;
+  disabled?: boolean;
 }>;
 
 function BaseButton(props: BaseButtonProps) {
-  return <button {...props} />;
+  const { disabled, ...rest } = props;
+  return <button disabled={disabled} {...rest} />;
 }
 
 type ButtonProps = Omit<React.ComponentProps<typeof BaseButton>, "className" | "style"> & {
@@ -22,6 +24,7 @@ function Button(props: ButtonProps) {
   const { children, color: color = "secondary", disabled, ...rest } = props;
   return (
     <BaseButton
+      disabled={disabled}
       {...rest}
       {...stylex.props(
         styles.button,
