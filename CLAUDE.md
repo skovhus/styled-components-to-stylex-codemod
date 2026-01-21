@@ -50,6 +50,7 @@ Storybook renders all test cases side-by-side (input with styled-components, out
 
 - **Auto-discovery**: Test cases are automatically discovered from `test-cases/*.input.tsx` and `*.output.tsx` files
 - **"All" story**: Shows all test cases on a single page at `http://localhost:6006/?path=/story/test-cases--all`
+- **Individual stories**: Each test case has its own story URL, e.g., `http://localhost:6006/?path=/story/test-cases--enum-if-chain`
 
 Run `pnpm storybook` to start the dev server and visually compare transformations.
 
