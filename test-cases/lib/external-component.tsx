@@ -1,7 +1,11 @@
 import * as React from "react";
 
-export function ExternalComponent(props: React.HTMLAttributes<HTMLDivElement>) {
-  const { className, children, ...rest } = props;
+type Props = React.HTMLAttributes<HTMLDivElement> & {
+  isOpen: boolean;
+};
+
+export function ExternalComponent(props: Props) {
+  const { className, children, isOpen, ...rest } = props;
   return (
     <div className={className} {...rest}>
       {children ?? "ExternalComponent"}

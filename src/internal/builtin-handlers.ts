@@ -927,6 +927,16 @@ function tryResolveInlineStyleValueForNestedPropAccess(node: DynamicNode): Handl
   if (!path || path.length <= 1) {
     return null;
   }
+  // IMPORTANT: do not attempt to preserve `props.theme.*` via inline styles.
+  // StyleX output does not have `props.theme` at runtime (styled-components injects theme via context),
+  // so this would produce incorrect output unless a project-specific hook (e.g. useTheme()) is wired in.
+  if (path[0] === "theme") {
+    return {
+      type: "keepOriginal",
+      reason:
+        "Theme-dependent values require a project-specific theme source (e.g. useTheme()); cannot safely preserve.",
+    };
+  }
   return { type: "emitInlineStyleValueFromProps" };
 }
 
