@@ -569,18 +569,62 @@ export function emitStylesAndImports(args: {
   // Emit separate stylex.create declarations for variant dimensions
   // This implements the StyleX "variants recipe" pattern where each variant
   // dimension (e.g., color, size) gets its own stylex.create call.
-  const emittedDimensionNames = new Set<string>();
+  //
+  // First pass: detect name conflicts (same variantObjectName with different content)
+  // If two components have the same prop name but different styles, we need unique names
+  const dimensionsByName = new Map<
+    string,
+    Array<{ dimension: VariantDimension; componentName: string; contentKey: string }>
+  >();
+
+  for (const decl of styledDecls) {
+    if (!decl.variantDimensions) {
+      continue;
+    }
+    for (const dimension of decl.variantDimensions) {
+      const name = dimension.variantObjectName;
+      const contentKey = JSON.stringify(dimension.variants);
+      const entries = dimensionsByName.get(name) ?? [];
+      entries.push({ dimension, componentName: decl.localName, contentKey });
+      dimensionsByName.set(name, entries);
+    }
+  }
+
+  // Second pass: rename conflicting dimensions to include component prefix
+  const lowerFirst = (s: string) => s.charAt(0).toLowerCase() + s.slice(1);
+  for (const [name, entries] of dimensionsByName) {
+    // Check if all entries have the same content (can share the same declaration)
+    const uniqueContents = new Set(entries.map((e) => e.contentKey));
+    if (uniqueContents.size > 1) {
+      // Conflict: same name but different content - rename each to include component prefix
+      for (const entry of entries) {
+        const prefix = lowerFirst(entry.componentName);
+        // Extract the base name (e.g., "colorVariants" → "Color", "variants" → "")
+        const baseName = name.endsWith("Variants") ? name.slice(0, -8) : name;
+        const capitalBase = baseName.charAt(0).toUpperCase() + baseName.slice(1);
+        entry.dimension.variantObjectName = capitalBase
+          ? `${prefix}${capitalBase}Variants`
+          : `${prefix}Variants`;
+      }
+    }
+  }
+
+  // Third pass: emit declarations (dedupe by final name and content)
+  const emittedDimensions = new Map<string, string>(); // name → contentKey
   for (const decl of styledDecls) {
     if (!decl.variantDimensions) {
       continue;
     }
 
     for (const dimension of decl.variantDimensions) {
-      // Avoid emitting the same dimension twice (e.g., if multiple components share it)
-      if (emittedDimensionNames.has(dimension.variantObjectName)) {
+      const name = dimension.variantObjectName;
+      const contentKey = JSON.stringify(dimension.variants);
+
+      // Skip if already emitted with same content
+      if (emittedDimensions.get(name) === contentKey) {
         continue;
       }
-      emittedDimensionNames.add(dimension.variantObjectName);
+      emittedDimensions.set(name, contentKey);
 
       const variantDecl = emitVariantDimensionDecl(
         j,

@@ -20,11 +20,33 @@ function Button(props: ButtonProps) {
       {...stylex.props(
         styles.button,
         sizeVariants[size],
-        disabled ? colorDisabledVariants[color] : colorEnabledVariants[color],
+        disabled ? buttonColorDisabledVariants[color] : buttonColorEnabledVariants[color],
       )}
     >
       {children}
     </button>
+  );
+}
+
+// Second component with same "color" prop but different styles
+// This tests that conflicting variant names get per-component prefixes
+type LinkProps = Omit<React.ComponentProps<"a">, "className" | "style"> & {
+  color?: "primary" | "secondary";
+  disabled?: boolean;
+};
+
+function Link(props: LinkProps) {
+  const { children, color: color = "secondary", disabled, ...rest } = props;
+  return (
+    <a
+      {...rest}
+      {...stylex.props(
+        styles.link,
+        disabled ? linkColorDisabledVariants[color] : linkColorEnabledVariants[color],
+      )}
+    >
+      {children}
+    </a>
   );
 }
 
@@ -38,6 +60,12 @@ export function App() {
       <Button color="primary" size="medium" disabled>
         Disabled
       </Button>
+      <Link color="primary" href="#">
+        Primary Link
+      </Link>
+      <Link color="secondary" href="#">
+        Secondary Link
+      </Link>
     </div>
   );
 }
@@ -51,9 +79,15 @@ const styles = stylex.create({
     paddingBlock: "4px",
     paddingInline: "8px",
   },
+  link: {
+    textDecoration: {
+      default: "none",
+      ":hover": "underline",
+    },
+  },
 });
 
-const colorEnabledVariants = stylex.create({
+const buttonColorEnabledVariants = stylex.create({
   primary: {
     backgroundColor: {
       default: "blue",
@@ -68,7 +102,7 @@ const colorEnabledVariants = stylex.create({
   },
 });
 
-const colorDisabledVariants = stylex.create({
+const buttonColorDisabledVariants = stylex.create({
   primary: {
     backgroundColor: {
       default: "grey",
@@ -97,5 +131,37 @@ const sizeVariants = stylex.create({
     fontSize: "1rem",
     paddingBlock: "4px",
     paddingInline: "8px",
+  },
+});
+
+const linkColorEnabledVariants = stylex.create({
+  primary: {
+    color: {
+      default: "red",
+      ":hover": "darkred",
+    },
+  },
+  secondary: {
+    color: {
+      default: "green",
+      ":hover": "darkgreen",
+    },
+  },
+});
+
+const linkColorDisabledVariants = stylex.create({
+  primary: {
+    color: {
+      default: "grey",
+      ":hover": "darkred",
+    },
+    cursor: "not-allowed",
+  },
+  secondary: {
+    color: {
+      default: "grey",
+      ":hover": "darkgreen",
+    },
+    cursor: "not-allowed",
   },
 });
