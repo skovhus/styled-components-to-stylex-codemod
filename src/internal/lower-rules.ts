@@ -360,7 +360,7 @@ export function lowerRules(args: {
       }
       if (
         expr.body?.type !== "LogicalExpression" ||
-        expr.body.operator !== "||" ||
+        (expr.body.operator !== "||" && expr.body.operator !== "??") ||
         expr.body.left?.type !== "MemberExpression"
       ) {
         return false;

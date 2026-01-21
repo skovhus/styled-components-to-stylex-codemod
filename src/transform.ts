@@ -18,7 +18,7 @@ import {
   universalSelectorUnsupportedWarning,
 } from "./internal/policy.js";
 import { Logger, type WarningLog } from "./internal/logger.js";
-import type { TransformOptions, TransformResult } from "./internal/transform-types.js";
+import type { StyledDecl, TransformOptions, TransformResult } from "./internal/transform-types.js";
 import { assertValidAdapter } from "./internal/public-api-validation.js";
 import { buildImportMap } from "./internal/transform-import-map.js";
 import { parseExpr as parseExprImpl } from "./internal/transform-parse-expr.js";
@@ -725,6 +725,55 @@ export function transformWithWarnings(
     );
   };
 
+  // Helper to determine if a styled(ImportedComponent) wrapper is simple enough to inline.
+  // Returns true if there's no complex logic that requires a wrapper function.
+  const canInlineImportedComponentWrapper = (decl: StyledDecl): boolean => {
+    if (decl.variantStyleKeys && Object.keys(decl.variantStyleKeys).length > 0) {
+      return false;
+    }
+    if (decl.variantDimensions && decl.variantDimensions.length > 0) {
+      return false;
+    }
+    if (decl.styleFnFromProps && decl.styleFnFromProps.length > 0) {
+      return false;
+    }
+    if (decl.inlineStyleProps && decl.inlineStyleProps.length > 0) {
+      return false;
+    }
+    if (decl.extraStylexPropsArgs && decl.extraStylexPropsArgs.length > 0) {
+      return false;
+    }
+    if (decl.extraStyleKeys && decl.extraStyleKeys.length > 0) {
+      return false;
+    }
+    if (decl.enumVariant) {
+      return false;
+    }
+    if (decl.siblingWrapper) {
+      return false;
+    }
+    if (decl.attrWrapper) {
+      return false;
+    }
+    if (decl.shouldForwardProp) {
+      return false;
+    }
+
+    if (decl.attrsInfo) {
+      if (decl.attrsInfo.conditionalAttrs?.length) {
+        return false;
+      }
+      if (decl.attrsInfo.defaultAttrs?.length) {
+        return false;
+      }
+      if (decl.attrsInfo.invertedBoolAttrs?.length) {
+        return false;
+      }
+    }
+
+    return true;
+  };
+
   // Pre-pass: set needsWrapperComponent for base components used in JSX and extended.
   // This must happen BEFORE emitStylesAndImports so comment placement is correct.
   // NOTE: We only set needsWrapperComponent here, NOT flatten decl.base to intrinsic.
@@ -747,12 +796,9 @@ export function transformWithWarnings(
     }
   }
 
-  // Styled components wrapping IMPORTED (non-styled) components that are used in JSX need wrappers.
-  // This preserves the component boundary so that:
-  // 1. Props like `variant`, `color` from the imported component are preserved
-  // 2. The `as` prop can be properly handled
-  // 3. The component can be referenced in `typeof` expressions
-  // Note: Local components (defined in the same file) can be inlined safely.
+  // Styled components wrapping IMPORTED (non-styled) components that are used in JSX.
+  // These CAN be inlined if simple enough OR only used once.
+  // Complex wrappers (with variants, dynamic styles, attrs logic, etc.) still need wrappers.
   for (const decl of styledDecls) {
     if (decl.isCssHelper) {
       continue;
@@ -764,7 +810,22 @@ export function transformWithWarnings(
       if (!baseDecl && isImportedComponent) {
         const isUsedInJsxElement = isUsedInJsx(decl.localName);
         if (isUsedInJsxElement) {
-          decl.needsWrapperComponent = true;
+          // Skip if already marked as needing wrapper (e.g., exported components)
+          if (decl.needsWrapperComponent) {
+            continue;
+          }
+
+          const isSimple = canInlineImportedComponentWrapper(decl);
+
+          if (isSimple) {
+            // Mark as candidate for inlining - styleKey update is deferred until after
+            // all needsWrapperComponent checks are done (as/forwardedAs usage, etc.)
+            (decl as any).canInlineComponentWrapper = true;
+          } else {
+            decl.needsWrapperComponent = true;
+          }
+          // Note: other conditions (used as value, className/style in JSX, as prop) are checked later
+          // and may still set needsWrapperComponent = true
         }
       }
     }

@@ -62,6 +62,9 @@ const styles = stylex.create({
     borderColor: "#BF4F74",
     borderRadius: "3px",
   },
+
+  // Pattern 2: styled(Component) where Component has custom props (like variant)
+  // When used with as="label", the component's props must be preserved
   text: {
     marginTop: "4px",
   },
