@@ -43,7 +43,7 @@
     "typecheck:playground": "tsc -p playground/tsconfig.json --noEmit",
     "typecheck": "concurrently 'pnpm:typecheck:*'",
     "check": "concurrently 'pnpm:lint' 'pnpm:typecheck' 'pnpm:test:run' 'pnpm:knip'",
-    "ci": "pnpm check",
+    "ci": "pnpm lint && pnpm typecheck && pnpm test:run && pnpm knip && pnpm build",
     "knip": "knip",
     "prepublishOnly": "pnpm run build",
     "storybook": "storybook dev -p 6006",

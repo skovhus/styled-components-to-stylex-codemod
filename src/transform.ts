@@ -507,6 +507,7 @@ export function transformWithWarnings(
     root,
     j,
     styledDefaultImport,
+    cssLocal,
     toStyleKey,
     toSuffixFromProp,
   });
