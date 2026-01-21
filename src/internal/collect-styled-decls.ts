@@ -1194,6 +1194,71 @@ function collectStyledDeclsImpl(args: {
         };
       };
 
+      // Helper to wrap an expression in an arrow function for non-destructured params
+      // e.g., (p) => css`${p.color}` -> wraps p.color in (props) => props.color
+      const wrapExprInArrowFnWithPropsRename = (expr: any, propsParamName: string): any => {
+        // Deep clone the expression to avoid mutating the original
+        const cloneNode = (node: any): any => {
+          if (!node || typeof node !== "object") {
+            return node;
+          }
+          if (Array.isArray(node)) {
+            return node.map(cloneNode);
+          }
+          const clone: any = {};
+          for (const key of Object.keys(node)) {
+            // Skip loc and other metadata
+            if (key === "loc" || key === "start" || key === "end" || key === "range") {
+              continue;
+            }
+            clone[key] = cloneNode(node[key]);
+          }
+          return clone;
+        };
+
+        const clonedExpr = cloneNode(expr);
+
+        // If the param name is not "props", rename references to it
+        if (propsParamName !== "props") {
+          const renameReferences = (node: any): void => {
+            if (!node || typeof node !== "object") {
+              return;
+            }
+
+            // Rename identifier references that match the old props param name
+            if (node.type === "Identifier" && node.name === propsParamName) {
+              node.name = "props";
+              return;
+            }
+
+            // Recurse into object properties
+            for (const key of Object.keys(node)) {
+              if (key === "type" || key === "loc" || key === "start" || key === "end") {
+                continue;
+              }
+              const child = node[key];
+              if (Array.isArray(child)) {
+                for (const item of child) {
+                  renameReferences(item);
+                }
+              } else if (child && typeof child === "object") {
+                renameReferences(child);
+              }
+            }
+          };
+
+          renameReferences(clonedExpr);
+        }
+
+        // Wrap in ArrowFunctionExpression
+        return {
+          type: "ArrowFunctionExpression",
+          params: [{ type: "Identifier", name: "props" }],
+          body: clonedExpr,
+          expression: true,
+        };
+      };
+
       if (arg0.type === "ObjectExpression") {
         fillFromObject(arg0 as any);
       } else if (arg0.type === "ArrowFunctionExpression") {
@@ -1214,11 +1279,25 @@ function collectStyledDeclsImpl(args: {
           // Extract destructured params and transform expressions
           const destructuredParams = extractDestructuredParams(arg0);
           const propsParam = getPropsParamName(arg0);
-          const transformedExpressions = parsed.slots.map((s) =>
-            destructuredParams.size > 0
-              ? wrapExprInArrowFn(s.expression, destructuredParams, propsParam)
-              : s.expression,
-          );
+
+          // Determine if we need to wrap expressions in ArrowFunctionExpressions
+          // Case 1: Destructured params like ({$color}) => css`...${$color}...`
+          //         -> Need to wrap and transform $color to props.$color
+          // Case 2: Non-destructured param like (props) => css`...${props.color}...`
+          //         -> Need to wrap but no transformation needed (already references props)
+          const needsWrapping = destructuredParams.size > 0 || propsParam !== null;
+
+          const transformedExpressions = parsed.slots.map((s) => {
+            if (!needsWrapping) {
+              return s.expression;
+            }
+            if (destructuredParams.size > 0) {
+              // Destructured case: transform identifiers to props.identifier
+              return wrapExprInArrowFn(s.expression, destructuredParams, propsParam);
+            }
+            // Non-destructured case: wrap in arrow fn, renaming param if needed
+            return wrapExprInArrowFnWithPropsRename(s.expression, propsParam!);
+          });
 
           styledDecls.push({
             ...placementHints,

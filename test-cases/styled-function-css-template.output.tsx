@@ -32,6 +32,12 @@ export const App = () => (
     <FlexContainer $align="right">
       <div {...stylex.props(styles.coloredBox)}>Right aligned</div>
     </FlexContainer>
+    <div {...stylex.props(styles.borderBox, styles.borderBoxBorderColor("red"))}>Red border</div>
+    <div
+      {...stylex.props(styles.shadowBox, styles.shadowBoxBoxShadow("0 2px 4px rgba(0,0,0,0.2)"))}
+    >
+      With shadow
+    </div>
   </div>
 );
 
@@ -54,5 +60,26 @@ const styles = stylex.create({
   },
   coloredBoxBackgroundColor: (backgroundColor: string) => ({
     backgroundColor,
+  }),
+
+  // Non-destructured props pattern: (props) => css`...${props.color}...`
+  borderBox: {
+    padding: "8px",
+    borderWidth: "2px",
+    borderStyle: "solid",
+    borderColor: "black",
+    margin: "4px",
+  },
+  borderBoxBorderColor: (borderColor: string) => ({
+    borderColor,
+  }),
+
+  // Non-destructured props with different param name: (p) => css`...${p.color}...`
+  shadowBox: {
+    padding: "12px",
+    boxShadow: "none",
+  },
+  shadowBoxBoxShadow: (boxShadow: string) => ({
+    boxShadow,
   }),
 });
