@@ -128,6 +128,43 @@ export function lowerRules(args: {
   const descendantOverrideHover = new Map<string, Record<string, unknown>>();
   let bail = false;
 
+  // Pre-compute properties and values defined by each css helper from their rules.
+  // This allows us to know what properties a css helper provides (and their values)
+  // before styled components that use them are processed, which is needed for
+  // correct pseudo selector handling (setting proper default values).
+  const cssHelperValuesByKey = new Map<string, Map<string, unknown>>();
+  for (const decl of styledDecls) {
+    if (!decl.isCssHelper) {
+      continue;
+    }
+    const propValues = new Map<string, unknown>();
+    for (const rule of decl.rules) {
+      // Only process top-level rules (selector "&") for base values
+      if (rule.selector.trim() !== "&") {
+        continue;
+      }
+      for (const d of rule.declarations) {
+        if (d.property && d.value.kind === "static") {
+          const stylexDecls = cssDeclarationToStylexDeclarations(d);
+          for (const sd of stylexDecls) {
+            if (sd.value.kind === "static") {
+              propValues.set(sd.prop, cssValueToJs(sd.value, d.important, sd.prop));
+            }
+          }
+        } else if (d.property && d.value.kind === "interpolated") {
+          // Handle interpolated values (e.g., theme variables)
+          const stylexDecls = cssDeclarationToStylexDeclarations(d);
+          for (const sd of stylexDecls) {
+            // Store a marker that this property comes from css helper but value is dynamic
+            // We'll need to resolve this when actually processing the styled component
+            propValues.set(sd.prop, { __cssHelperDynamicValue: true, decl, declaration: d });
+          }
+        }
+      }
+    }
+    cssHelperValuesByKey.set(decl.styleKey, propValues);
+  }
+
   // ─────────────────────────────────────────────────────────────────────────────
   // Helper: Extract static prefix/suffix from interpolated CSS values
   // ─────────────────────────────────────────────────────────────────────────────
@@ -207,6 +244,9 @@ export function lowerRules(args: {
     const attrBuckets = new Map<string, Record<string, unknown>>();
     const inlineStyleProps: Array<{ prop: string; expr: ExpressionKind }> = [];
     const localVarValues = new Map<string, string>();
+    // Track properties defined by composed css helpers along with their values
+    // so we can set proper default values for pseudo selectors.
+    const cssHelperPropValues = new Map<string, unknown>();
 
     const { findJsxPropTsType, annotateParamFromJsxProp, isJsxPropOptional } =
       createTypeInferenceHelpers({
@@ -380,20 +420,17 @@ export function lowerRules(args: {
       if (!paramName) {
         return false;
       }
-      if (expr.body?.type !== "ConditionalExpression") {
-        return false;
-      }
 
-      const readPropName = (node: any): string | null => {
-        const path = getMemberPathFromIdentifier(node as any, paramName);
+      const readPropName = (node: ExpressionKind): string | null => {
+        const path = getMemberPathFromIdentifier(node, paramName);
         if (!path || path.length !== 1) {
           return null;
         }
         return path[0]!;
       };
 
-      const testInfo = (() => {
-        const test = expr.body.test as any;
+      type TestInfo = { when: string; propName: string };
+      const parseTestInfo = (test: ExpressionKind): TestInfo | null => {
         if (!test || typeof test !== "object") {
           return null;
         }
@@ -401,55 +438,139 @@ export function lowerRules(args: {
           const propName = readPropName(test);
           return propName ? { when: propName, propName } : null;
         }
-        if (test.type === "UnaryExpression" && test.operator === "!") {
-          const propName = readPropName(test.argument);
+        if (test.type === "UnaryExpression" && test.operator === "!" && test.argument) {
+          const propName = readPropName(test.argument as ExpressionKind);
           return propName ? { when: `!${propName}`, propName } : null;
         }
         if (
           test.type === "BinaryExpression" &&
-          (test.operator === "===" || test.operator === "!==") &&
-          (test.left?.type === "MemberExpression" || test.left?.type === "OptionalMemberExpression")
+          (test.operator === "===" || test.operator === "!==")
         ) {
-          const propName = readPropName(test.left);
-          const rhs = literalToStaticValue(test.right);
-          if (!propName || rhs === null) {
-            return null;
+          const left = test.left;
+          if (left.type === "MemberExpression" || left.type === "OptionalMemberExpression") {
+            const propName = readPropName(left);
+            const rhs = literalToStaticValue(test.right);
+            if (!propName || rhs === null) {
+              return null;
+            }
+            const rhsValue = JSON.stringify(rhs);
+            return { when: `${propName} ${test.operator} ${rhsValue}`, propName };
           }
-          const rhsValue = JSON.stringify(rhs);
-          return { when: `${propName} ${test.operator} ${rhsValue}`, propName };
         }
         return null;
-      })();
+      };
 
+      const applyVariant = (testInfo: TestInfo, consStyle: Record<string, unknown>): void => {
+        const when = testInfo.when;
+        const existingBucket = variantBuckets.get(when);
+        const nextBucket = existingBucket ? { ...existingBucket } : {};
+        mergeStyleObjects(nextBucket, consStyle);
+        variantBuckets.set(when, nextBucket);
+        variantStyleKeys[when] ??= `${decl.styleKey}${toSuffixFromProp(when)}`;
+        if (testInfo.propName && !testInfo.propName.startsWith("$")) {
+          ensureShouldForwardPropDrop(decl, testInfo.propName);
+        }
+      };
+
+      // Handle LogicalExpression: props.$x && css`...`
+      const body = expr.body;
+      if (body?.type === "LogicalExpression" && body.operator === "&&") {
+        const testInfo = parseTestInfo(body.left as ExpressionKind);
+        if (!testInfo) {
+          return false;
+        }
+        if (!isCssHelperTaggedTemplate(body.right)) {
+          return false;
+        }
+        const cssNode = body.right as { quasi: ExpressionKind };
+        const consStyle = resolveCssHelperTemplate(cssNode.quasi, paramName, decl.localName);
+        if (!consStyle) {
+          return false;
+        }
+        applyVariant(testInfo, consStyle);
+        return true;
+      }
+
+      // Handle ConditionalExpression: props.$x ? css`...` : css`...`
+      if (body?.type !== "ConditionalExpression") {
+        return false;
+      }
+
+      const testInfo = parseTestInfo(body.test as ExpressionKind);
       if (!testInfo) {
         return false;
       }
 
-      const cons = expr.body.consequent as any;
-      const alt = expr.body.alternate as any;
+      const cons = body.consequent;
+      const alt = body.alternate;
       if (!isCssHelperTaggedTemplate(cons) || !isCssHelperTaggedTemplate(alt)) {
         return false;
       }
 
-      const consStyle = resolveCssHelperTemplate(cons.quasi, paramName, decl.localName);
-      const altStyle = resolveCssHelperTemplate(alt.quasi, paramName, decl.localName);
+      const consNode = cons as { quasi: ExpressionKind };
+      const altNode = alt as { quasi: ExpressionKind };
+      const consStyle = resolveCssHelperTemplate(consNode.quasi, paramName, decl.localName);
+      const altStyle = resolveCssHelperTemplate(altNode.quasi, paramName, decl.localName);
       if (!consStyle || !altStyle) {
         return false;
       }
 
       mergeStyleObjects(styleObj, altStyle);
-
-      const when = testInfo.when;
-      const existingBucket = variantBuckets.get(when);
-      const nextBucket = existingBucket ? { ...existingBucket } : {};
-      mergeStyleObjects(nextBucket, consStyle);
-      variantBuckets.set(when, nextBucket);
-      variantStyleKeys[when] ??= `${decl.styleKey}${toSuffixFromProp(when)}`;
-      if (testInfo.propName && !testInfo.propName.startsWith("$")) {
-        ensureShouldForwardPropDrop(decl, testInfo.propName);
-      }
+      applyVariant(testInfo, consStyle);
       return true;
     };
+
+    // Pre-scan rules to detect css helper placeholders and populate cssHelperPropValues
+    // BEFORE processing any pseudo selectors that might reference those properties.
+    // Also detect imported css helpers (identifiers that aren't in cssHelperNames) and bail.
+    let hasImportedCssHelper = false;
+    for (const rule of decl.rules) {
+      for (const d of rule.declarations) {
+        if (!d.property && d.value.kind === "interpolated") {
+          const slotPart = (
+            d.value as { parts?: Array<{ kind: string; slotId?: number }> }
+          ).parts?.find((p) => p.kind === "slot");
+          if (slotPart && slotPart.kind === "slot" && slotPart.slotId !== undefined) {
+            const expr = decl.templateExpressions[slotPart.slotId];
+            if (
+              expr &&
+              typeof expr === "object" &&
+              "type" in expr &&
+              expr.type === "Identifier" &&
+              "name" in expr &&
+              typeof expr.name === "string"
+            ) {
+              // Check if it's a css helper defined in this file
+              if (cssHelperNames.has(expr.name)) {
+                const helperKey = toStyleKey(expr.name);
+                const helperValues = cssHelperValuesByKey.get(helperKey);
+                if (helperValues) {
+                  for (const [prop, value] of helperValues) {
+                    cssHelperPropValues.set(prop, value);
+                  }
+                }
+              } else {
+                // This might be an imported css helper - we can't determine its properties.
+                // Mark for bail to avoid generating incorrect default values.
+                hasImportedCssHelper = true;
+              }
+            }
+          }
+        }
+      }
+    }
+
+    // Bail if the declaration uses an imported css helper whose properties we can't determine.
+    if (hasImportedCssHelper) {
+      warnings.push({
+        severity: "error",
+        type: "unsupported-feature",
+        message: `Imported CSS helper mixins (${decl.localName}) - cannot determine inherited properties for correct pseudo selector handling`,
+        ...(decl.loc ? { loc: decl.loc } : {}),
+      });
+      bail = true;
+      break;
+    }
 
     for (const rule of decl.rules) {
       // (debug logging removed)
@@ -760,7 +881,38 @@ export function lowerRules(args: {
               perPropPseudo[out.prop] ??= {};
               const existing = perPropPseudo[out.prop]!;
               if (!("default" in existing)) {
-                existing.default = (styleObj as any)[out.prop] ?? null;
+                const existingVal = (styleObj as Record<string, unknown>)[out.prop];
+                if (existingVal !== undefined) {
+                  existing.default = existingVal;
+                } else if (cssHelperPropValues.has(out.prop)) {
+                  // Use the css helper's value as the default
+                  const helperVal = cssHelperPropValues.get(out.prop);
+                  if (
+                    helperVal &&
+                    typeof helperVal === "object" &&
+                    "__cssHelperDynamicValue" in helperVal
+                  ) {
+                    // Dynamic value - need to resolve from already-processed css helper
+                    const helperDecl = (helperVal as { decl?: StyledDecl }).decl;
+                    if (helperDecl) {
+                      const resolvedHelper = resolvedStyleObjects.get(
+                        toStyleKey(helperDecl.localName),
+                      );
+                      if (resolvedHelper && typeof resolvedHelper === "object") {
+                        existing.default =
+                          (resolvedHelper as Record<string, unknown>)[out.prop] ?? null;
+                      } else {
+                        existing.default = null;
+                      }
+                    } else {
+                      existing.default = null;
+                    }
+                  } else {
+                    existing.default = helperVal;
+                  }
+                } else {
+                  existing.default = null;
+                }
               }
               for (const ps of pseudos) {
                 existing[ps] = resolved;
@@ -847,6 +999,14 @@ export function lowerRules(args: {
                   extras.push(helperKey);
                 }
                 decl.extraStyleKeys = extras;
+                // Track properties and values defined by this css helper so we can
+                // set proper default values for pseudo selectors on these properties.
+                const helperValues = cssHelperValuesByKey.get(helperKey);
+                if (helperValues) {
+                  for (const [prop, value] of helperValues) {
+                    cssHelperPropValues.set(prop, value);
+                  }
+                }
                 continue;
               }
             }
@@ -2094,7 +2254,11 @@ export function lowerRules(args: {
             const expr = decl.templateExpressions[slotPart.slotId] as {
               type?: string;
               name?: string;
-              callee?: { type?: string; name?: string; property?: { type?: string; name?: string } };
+              callee?: {
+                type?: string;
+                name?: string;
+                property?: { type?: string; name?: string };
+              };
             } | null;
             if (!expr || typeof expr !== "object") {
               return d.property ? `property "${d.property}"` : "unknown";
@@ -2172,18 +2336,54 @@ export function lowerRules(args: {
             localVarValues.set(out.prop, value);
           }
 
+          // Helper to get default value for pseudo selectors when property comes from css helper
+          const getCssHelperDefaultValue = (propName: string): unknown => {
+            const helperVal = cssHelperPropValues.get(propName);
+            if (helperVal === undefined) {
+              return null;
+            }
+            if (
+              helperVal &&
+              typeof helperVal === "object" &&
+              "__cssHelperDynamicValue" in helperVal
+            ) {
+              // Dynamic value - look up from already-resolved css helper
+              const helperDecl = (helperVal as Record<string, unknown>).decl as
+                | StyledDecl
+                | undefined;
+              if (helperDecl) {
+                const resolvedHelper = resolvedStyleObjects.get(toStyleKey(helperDecl.localName));
+                if (resolvedHelper && typeof resolvedHelper === "object") {
+                  return (resolvedHelper as Record<string, unknown>)[propName] ?? null;
+                }
+              }
+              return null;
+            }
+            return helperVal;
+          };
+
           // Handle nested pseudo + media: `&:hover { @media (...) { ... } }`
-          // This produces: { ":hover": { default: null, "@media (...)": value } }
+          // This produces: { ":hover": { default: value, "@media (...)": value } }
           if (media && pseudos?.length) {
             perPropPseudo[out.prop] ??= {};
             const existing = perPropPseudo[out.prop]!;
             if (!("default" in existing)) {
-              existing.default = (styleObj as any)[out.prop] ?? null;
+              const existingVal = (styleObj as Record<string, unknown>)[out.prop];
+              if (existingVal !== undefined) {
+                existing.default = existingVal;
+              } else if (cssHelperPropValues.has(out.prop)) {
+                existing.default = getCssHelperDefaultValue(out.prop);
+              } else {
+                existing.default = null;
+              }
             }
             // For each pseudo, create/update a nested media map
             for (const ps of pseudos) {
               if (!existing[ps] || typeof existing[ps] !== "object") {
-                existing[ps] = { default: null };
+                const defaultVal = cssHelperPropValues.has(out.prop)
+                  ? getCssHelperDefaultValue(out.prop)
+                  : null;
+                existing[ps] = { default: defaultVal };
               }
               (existing[ps] as Record<string, unknown>)[media] = value;
             }
@@ -2194,7 +2394,14 @@ export function lowerRules(args: {
             perPropMedia[out.prop] ??= {};
             const existing = perPropMedia[out.prop]!;
             if (!("default" in existing)) {
-              existing.default = (styleObj as any)[out.prop] ?? null;
+              const existingVal = (styleObj as Record<string, unknown>)[out.prop];
+              if (existingVal !== undefined) {
+                existing.default = existingVal;
+              } else if (cssHelperPropValues.has(out.prop)) {
+                existing.default = getCssHelperDefaultValue(out.prop);
+              } else {
+                existing.default = null;
+              }
             }
             existing[media] = value;
             continue;
@@ -2204,7 +2411,16 @@ export function lowerRules(args: {
             perPropPseudo[out.prop] ??= {};
             const existing = perPropPseudo[out.prop]!;
             if (!("default" in existing)) {
-              existing.default = (styleObj as any)[out.prop] ?? null;
+              // If the property comes from a composed css helper, use the helper's
+              // value as the default to preserve it during style merging.
+              const existingVal = (styleObj as Record<string, unknown>)[out.prop];
+              if (existingVal !== undefined) {
+                existing.default = existingVal;
+              } else if (cssHelperPropValues.has(out.prop)) {
+                existing.default = getCssHelperDefaultValue(out.prop);
+              } else {
+                existing.default = null;
+              }
             }
             // Apply to all pseudos (e.g., both :hover and :focus for "&:hover, &:focus")
             for (const ps of pseudos) {

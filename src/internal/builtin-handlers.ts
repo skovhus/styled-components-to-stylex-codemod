@@ -908,6 +908,28 @@ function tryResolveInlineStyleValueForConditionalExpression(
   return { type: "emitInlineStyleValueFromProps" };
 }
 
+function tryResolveInlineStyleValueForNestedPropAccess(node: DynamicNode): HandlerResult | null {
+  if (!node.css.property) {
+    return null;
+  }
+  const expr = node.expr;
+  if (!isArrowFunctionExpression(expr)) {
+    return null;
+  }
+  const paramName = getArrowFnSingleParamName(expr);
+  if (!paramName) {
+    return null;
+  }
+  if (expr.body.type !== "MemberExpression") {
+    return null;
+  }
+  const path = getMemberPathFromIdentifier(expr.body, paramName);
+  if (!path || path.length <= 1) {
+    return null;
+  }
+  return { type: "emitInlineStyleValueFromProps" };
+}
+
 function tryResolvePropAccess(node: DynamicNode): HandlerResult | null {
   if (!node.css.property) {
     return null;
@@ -957,6 +979,7 @@ export function resolveDynamicNode(
     tryResolveConditionalCssBlockTernary(node) ??
     tryResolveConditionalCssBlock(node) ??
     tryResolveArrowFnCallWithSinglePropArg(node) ??
+    tryResolveInlineStyleValueForNestedPropAccess(node) ??
     tryResolvePropAccess(node) ??
     tryResolveInlineStyleValueForConditionalExpression(node)
   );

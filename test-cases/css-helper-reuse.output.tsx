@@ -1,10 +1,24 @@
+import * as React from "react";
 import * as stylex from "@stylexjs/stylex";
 import { themeVars } from "./tokens.stylex";
+
+type CheckMarkProps = React.PropsWithChildren<{
+  $opaque: boolean;
+}>;
+
+function CheckMark(props: CheckMarkProps) {
+  const { children, $opaque } = props;
+  return (
+    <div {...stylex.props(styles.checkMark, $opaque && styles.checkMarkOpaque)}>{children}</div>
+  );
+}
 
 export const App = () => (
   <div>
     <div {...stylex.props(styles.rowBase, styles.groupHeaderRow)}>Group</div>
     <div {...stylex.props(styles.rowBase, styles.projectRow)}>Project</div>
+    <CheckMark $opaque={true} />
+    <CheckMark $opaque={false} />
   </div>
 );
 
@@ -32,8 +46,16 @@ const styles = stylex.create({
   },
   projectRow: {
     backgroundColor: {
-      default: null,
+      default: themeVars.bgBase,
       ":hover": themeVars.bgBaseHover,
     },
+  },
+  checkMark: {
+    width: "10px",
+    height: "10px",
+    backgroundColor: "red",
+  },
+  checkMarkOpaque: {
+    opacity: 0.4,
   },
 });

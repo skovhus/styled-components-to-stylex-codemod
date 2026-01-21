@@ -206,12 +206,21 @@ function detectUnsupportedCssHelperUsage(args: {
       unsupported = true;
       return;
     }
-    if (arrow.body?.type !== "ConditionalExpression") {
-      unsupported = true;
-      return;
+    // Support ConditionalExpression: props.$x ? css`...` : css`...`
+    if (arrow.body?.type === "ConditionalExpression") {
+      const cond = arrow.body;
+      if (cond.consequent !== cssNode && cond.alternate !== cssNode) {
+        unsupported = true;
+        return;
+      }
     }
-    const cond = arrow.body;
-    if (cond.consequent !== cssNode && cond.alternate !== cssNode) {
+    // Support LogicalExpression: props.$x && css`...`
+    else if (arrow.body?.type === "LogicalExpression" && arrow.body.operator === "&&") {
+      if (arrow.body.right !== cssNode) {
+        unsupported = true;
+        return;
+      }
+    } else {
       unsupported = true;
       return;
     }
