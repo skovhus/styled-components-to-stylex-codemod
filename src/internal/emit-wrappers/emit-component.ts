@@ -191,6 +191,8 @@ export function emitComponentWrappers(ctx: any): {
 
     // Track props that need to be destructured for conditional styles
     const destructureProps: string[] = [];
+    // Track default values for props (used for destructuring defaults on optional props)
+    const propDefaults = new Map<string, string>();
 
     // Add variant style arguments if this component has variants
     if (d.variantStyleKeys) {
@@ -261,6 +263,10 @@ export function emitComponentWrappers(ctx: any): {
           styleArgs.push(j.logicalExpression("??", lookup, defaultAccess));
         } else {
           // Simple lookup - all union values are covered in the variant object
+          // Track the default for destructuring - only for optional props to ensure type safety
+          if (dim.defaultValue && dim.isOptional) {
+            propDefaults.set(dim.propName, dim.defaultValue);
+          }
           const lookup = j.memberExpression(variantsId, propId, true /* computed */);
           styleArgs.push(lookup);
         }
@@ -291,6 +297,11 @@ export function emitComponentWrappers(ctx: any): {
         }
         if (!destructureProps.includes(enabled.namespaceBooleanProp!)) {
           destructureProps.push(enabled.namespaceBooleanProp!);
+        }
+
+        // Track defaults for destructuring - only for optional props to ensure type safety
+        if (enabled.defaultValue && enabled.defaultValue !== "default" && enabled.isOptional) {
+          propDefaults.set(enabled.propName, enabled.defaultValue);
         }
 
         // Build: boolProp ? disabledVariants[prop] : enabledVariants[prop]
@@ -571,9 +582,22 @@ export function emitComponentWrappers(ctx: any): {
         ...(includeChildren ? [patternProp("children", childrenId)] : []),
         ...(allowStyleProp ? [patternProp("style", styleId)] : []),
         // Strip transient props ($-prefixed) from the pass-through spread (styled-components behavior)
+        // Add destructuring defaults for optional props to ensure type safety
         ...destructureProps
           .filter((name): name is string => Boolean(name))
-          .map((name) => patternProp(name)),
+          .map((name) => {
+            const defaultVal = propDefaults.get(name);
+            if (defaultVal) {
+              // Create property with default: { name: name = "defaultValue" }
+              return j.property.from({
+                kind: "init",
+                key: j.identifier(name),
+                value: j.assignmentPattern(j.identifier(name), j.literal(defaultVal)),
+                shorthand: false,
+              }) as Property;
+            }
+            return patternProp(name);
+          }),
         j.restElement(restId),
       ];
 
