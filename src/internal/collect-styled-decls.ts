@@ -7,13 +7,14 @@ import type { StyledDecl } from "./transform-types.js";
 /**
  * Collect styled component declarations and pre-resolved object-style decls.
  *
- * This module is intentionally “dumb”: it only *collects* declarations and metadata.
+ * This module is intentionally "dumb": it only *collects* declarations and metadata.
  * It does not emit styles or rewrite JSX.
  */
 export function collectStyledDecls(args: {
   root: Collection<any>;
   j: any;
   styledDefaultImport: string | undefined;
+  cssLocal?: string;
   toStyleKey: (localName: string) => string;
   toSuffixFromProp: (propName: string) => string;
 }): {
@@ -28,6 +29,7 @@ function collectStyledDeclsImpl(args: {
   root: Collection<any>;
   j: any;
   styledDefaultImport: string | undefined;
+  cssLocal?: string;
   toStyleKey: (localName: string) => string;
   toSuffixFromProp: (propName: string) => string;
 }): {
@@ -35,7 +37,7 @@ function collectStyledDeclsImpl(args: {
   hasUniversalSelectors: boolean;
   universalSelectorLoc: { line: number; column: number } | null;
 } {
-  const { root, j, styledDefaultImport, toStyleKey, toSuffixFromProp } = args;
+  const { root, j, styledDefaultImport, cssLocal, toStyleKey, toSuffixFromProp } = args;
 
   const styledDecls: StyledDecl[] = [];
   let hasUniversalSelectors = false;
@@ -1057,11 +1059,181 @@ function collectStyledDeclsImpl(args: {
         }
       };
 
+      // Helper to extract css template from arrow function body
+      const extractCssTemplate = (body: any): any => {
+        if (!body) {
+          return null;
+        }
+        // Direct body: ({ $prop }) => css`...`
+        if (
+          body.type === "TaggedTemplateExpression" &&
+          body.tag?.type === "Identifier" &&
+          body.tag.name === cssLocal
+        ) {
+          return body.quasi;
+        }
+        // Block body: ({ $prop }) => { return css`...`; }
+        if (body.type === "BlockStatement") {
+          const ret = body.body.find((s: any) => s.type === "ReturnStatement") as any;
+          if (
+            ret?.argument?.type === "TaggedTemplateExpression" &&
+            ret.argument.tag?.type === "Identifier" &&
+            ret.argument.tag.name === cssLocal
+          ) {
+            return ret.argument.quasi;
+          }
+        }
+        return null;
+      };
+
+      // Helper to extract destructured parameter names from arrow function
+      const extractDestructuredParams = (arrowFn: any): Set<string> => {
+        const params = new Set<string>();
+        const param0 = arrowFn.params?.[0];
+        if (param0?.type === "ObjectPattern") {
+          for (const prop of param0.properties ?? []) {
+            if (
+              (prop.type === "Property" || prop.type === "ObjectProperty") &&
+              prop.key?.type === "Identifier"
+            ) {
+              params.add(prop.key.name);
+            }
+          }
+        } else if (param0?.type === "Identifier") {
+          // Single identifier param like (props) => ... - not destructured
+          // We'll use this name as the props param name
+        }
+        return params;
+      };
+
+      // Helper to get the props parameter name from arrow function
+      const getPropsParamName = (arrowFn: any): string | null => {
+        const param0 = arrowFn.params?.[0];
+        if (param0?.type === "Identifier") {
+          return param0.name;
+        }
+        return null;
+      };
+
+      // Helper to wrap an expression in an arrow function that takes props
+      // and replaces references to destructured params with props.paramName
+      const wrapExprInArrowFn = (
+        expr: any,
+        destructuredParams: Set<string>,
+        originalPropsParam: string | null,
+      ): any => {
+        if (destructuredParams.size === 0 && !originalPropsParam) {
+          // No params to transform, return as-is
+          return expr;
+        }
+
+        // Deep clone the expression to avoid mutating the original
+        const cloneNode = (node: any): any => {
+          if (!node || typeof node !== "object") {
+            return node;
+          }
+          if (Array.isArray(node)) {
+            return node.map(cloneNode);
+          }
+          const clone: any = {};
+          for (const key of Object.keys(node)) {
+            // Skip loc and other metadata
+            if (key === "loc" || key === "start" || key === "end" || key === "range") {
+              continue;
+            }
+            clone[key] = cloneNode(node[key]);
+          }
+          return clone;
+        };
+
+        const clonedExpr = cloneNode(expr);
+
+        // Transform identifiers that match destructured params to props.identifier
+        const transformNode = (node: any): void => {
+          if (!node || typeof node !== "object") {
+            return;
+          }
+
+          // Transform identifier references
+          if (node.type === "Identifier" && destructuredParams.has(node.name)) {
+            // Convert `$align` to a MemberExpression `props.$align`
+            // We do this by changing the node in place
+            const propName = node.name;
+            node.type = "MemberExpression";
+            node.object = { type: "Identifier", name: "props" };
+            node.property = { type: "Identifier", name: propName };
+            node.computed = false;
+            delete node.name;
+            return;
+          }
+
+          // Recurse into object properties
+          for (const key of Object.keys(node)) {
+            if (key === "type" || key === "loc" || key === "start" || key === "end") {
+              continue;
+            }
+            const child = node[key];
+            if (Array.isArray(child)) {
+              for (const item of child) {
+                transformNode(item);
+              }
+            } else if (child && typeof child === "object") {
+              transformNode(child);
+            }
+          }
+        };
+
+        transformNode(clonedExpr);
+
+        // Wrap in ArrowFunctionExpression
+        return {
+          type: "ArrowFunctionExpression",
+          params: [{ type: "Identifier", name: "props" }],
+          body: clonedExpr,
+          expression: true,
+        };
+      };
+
       if (arg0.type === "ObjectExpression") {
         fillFromObject(arg0 as any);
       } else if (arg0.type === "ArrowFunctionExpression") {
         const body: any = arg0.body;
-        if (body?.type === "ObjectExpression") {
+        const cssTemplate = cssLocal ? extractCssTemplate(body) : null;
+
+        if (cssTemplate) {
+          // Handle styled.div(props => css`...`) pattern
+          const templateLoc = getTemplateLoc(cssTemplate);
+          const parsed = parseStyledTemplateLiteral(cssTemplate);
+          const rules = normalizeStylisAstToIR(parsed.stylisAst, parsed.slots, {
+            rawCss: parsed.rawCss,
+          });
+          if (hasUniversalSelectorInRules(rules)) {
+            noteUniversalSelector(cssTemplate);
+          }
+
+          // Extract destructured params and transform expressions
+          const destructuredParams = extractDestructuredParams(arg0);
+          const propsParam = getPropsParamName(arg0);
+          const transformedExpressions = parsed.slots.map((s) =>
+            destructuredParams.size > 0
+              ? wrapExprInArrowFn(s.expression, destructuredParams, propsParam)
+              : s.expression,
+          );
+
+          styledDecls.push({
+            ...placementHints,
+            localName: id.name,
+            base: { kind: "intrinsic", tagName },
+            styleKey: toStyleKey(id.name),
+            rules,
+            templateExpressions: transformedExpressions,
+            rawCss: parsed.rawCss,
+            ...(templateLoc ? { loc: templateLoc } : {}),
+            ...(propsType ? { propsType } : {}),
+            ...(leadingComments ? { leadingComments } : {}),
+          });
+          return;
+        } else if (body?.type === "ObjectExpression") {
           fillFromObject(body);
         } else if (body?.type === "BlockStatement") {
           const ret = body.body.find((s: any) => s.type === "ReturnStatement") as any;

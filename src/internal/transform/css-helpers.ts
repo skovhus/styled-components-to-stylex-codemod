@@ -155,6 +155,31 @@ function getCssHelperTemplateLoc(template: any): Loc {
   return { line: start.line, column: start.column ?? 0 };
 }
 
+function isStyledCallExpression(node: any, styledLocalNames: Set<string>): boolean {
+  // styled.div(...) or styled("div")(...) pattern
+  if (node?.type !== "CallExpression") {
+    return false;
+  }
+  const callee = node.callee;
+  // styled.div(...)
+  if (
+    callee?.type === "MemberExpression" &&
+    callee.object?.type === "Identifier" &&
+    styledLocalNames.has(callee.object.name)
+  ) {
+    return true;
+  }
+  // styled("div")(...)
+  if (
+    callee?.type === "CallExpression" &&
+    callee.callee?.type === "Identifier" &&
+    styledLocalNames.has(callee.callee.name)
+  ) {
+    return true;
+  }
+  return false;
+}
+
 function detectUnsupportedCssHelperUsage(args: {
   root: any;
   j: JSCodeshift;
@@ -206,6 +231,17 @@ function detectUnsupportedCssHelperUsage(args: {
       unsupported = true;
       return;
     }
+
+    // Support direct css template body: styled.div(props => css`...`)
+    if (arrow.body === cssNode) {
+      // Check if this arrow is a direct argument to a styled call
+      const arrowParent = cur.parentPath?.node;
+      if (isStyledCallExpression(arrowParent, styledLocalNames)) {
+        // This is the pattern styled.div(props => css`...`) - allowed
+        return;
+      }
+    }
+
     // Support ConditionalExpression: props.$x ? css`...` : css`...`
     if (arrow.body?.type === "ConditionalExpression") {
       const cond = arrow.body;
@@ -220,7 +256,8 @@ function detectUnsupportedCssHelperUsage(args: {
         unsupported = true;
         return;
       }
-    } else {
+    } else if (arrow.body !== cssNode) {
+      // Not a direct body, not a conditional, not a logical - unsupported
       unsupported = true;
       return;
     }
@@ -232,6 +269,11 @@ function detectUnsupportedCssHelperUsage(args: {
         anc?.node?.type === "TaggedTemplateExpression" &&
         isStyledTag(styledLocalNames, anc.node.tag)
       ) {
+        hasStyledAncestor = true;
+        break;
+      }
+      // Also check for styled call expression: styled.div(fn => css`...`)
+      if (isStyledCallExpression(anc?.node, styledLocalNames)) {
         hasStyledAncestor = true;
         break;
       }
