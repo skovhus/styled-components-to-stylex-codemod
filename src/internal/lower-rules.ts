@@ -1,8 +1,6 @@
 import type { API, ASTNode, Collection, JSCodeshift } from "jscodeshift";
-import { compile } from "stylis";
 import { resolveDynamicNode } from "./builtin-handlers.js";
 import type { InternalHandlerContext } from "./builtin-handlers.js";
-import { normalizeStylisAstToIR } from "./css-ir.js";
 import { cssDeclarationToStylexDeclarations, cssPropertyToStylexProp } from "./css-prop-mapping.js";
 import { getMemberPathFromIdentifier, getNodeLocStart } from "./jscodeshift-utils.js";
 import type { Adapter, ImportSource, ImportSpec } from "../adapter.js";
@@ -14,12 +12,28 @@ import {
   wrapExprWithStaticParts,
 } from "./lower-rules/interpolations.js";
 import { splitDirectionalProperty } from "./stylex-shorthands.js";
-import { parseStyledTemplateLiteral } from "./styled-css.js";
 import {
   createTypeInferenceHelpers,
   ensureShouldForwardPropDrop,
   literalToStaticValue,
 } from "./lower-rules/types.js";
+import {
+  buildTemplateWithStaticParts,
+  collectPropsFromArrowFn,
+  countConditionalExpressions,
+  hasThemeAccessInArrowFn,
+  hasUnsupportedConditionalTest,
+  inlineArrowFunctionBody,
+  unwrapArrowFunctionToPropsExpr,
+} from "./lower-rules/inline-styles.js";
+import { addPropComments } from "./lower-rules/comments.js";
+import { createCssHelperResolver } from "./lower-rules/css-helper.js";
+import { createThemeResolvers } from "./lower-rules/theme.js";
+import {
+  extractUnionLiteralValues,
+  groupVariantBucketsIntoDimensions,
+} from "./lower-rules/variants.js";
+import { mergeStyleObjects, toKebab } from "./lower-rules/utils.js";
 import {
   normalizeSelectorForInputAttributePseudos,
   normalizeInterpolatedSelector,
@@ -28,7 +42,7 @@ import {
   parsePseudoElement,
   parseSimplePseudo,
 } from "./selectors.js";
-import type { StyledDecl, VariantDimension } from "./transform-types.js";
+import type { StyledDecl } from "./transform-types.js";
 import type { WarningLog } from "./logger.js";
 
 export type DescendantOverride = {
@@ -127,292 +141,6 @@ export function lowerRules(args: {
   // See: https://stylexjs.com/docs/learn/styling-ui/defining-styles/
   // ─────────────────────────────────────────────────────────────────────────────
 
-  // (helpers extracted to `./lower-rules/*` modules)
-
-  // Build a template literal with static prefix/suffix around a dynamic expression.
-  // e.g., prefix="" suffix="ms" expr=<call> -> `${<call>}ms`
-  const buildTemplateWithStaticParts = (
-    j: JSCodeshift,
-    expr: ExpressionKind,
-    prefix: string,
-    suffix: string,
-  ): ExpressionKind => {
-    if (!prefix && !suffix) {
-      return expr;
-    }
-    return j.templateLiteral(
-      [
-        j.templateElement({ raw: prefix, cooked: prefix }, false),
-        j.templateElement({ raw: suffix, cooked: suffix }, true),
-      ],
-      [expr],
-    );
-  };
-
-  const unwrapArrowFunctionToPropsExpr = (
-    expr: any,
-  ): { expr: any; propsUsed: Set<string> } | null => {
-    if (!expr || expr.type !== "ArrowFunctionExpression") {
-      return null;
-    }
-    if (expr.params?.length !== 1 || expr.params[0]?.type !== "Identifier") {
-      return null;
-    }
-    const paramName = expr.params[0].name;
-    const bodyExpr =
-      expr.body?.type === "BlockStatement"
-        ? expr.body.body?.find((s: any) => s.type === "ReturnStatement")?.argument
-        : expr.body;
-    if (!bodyExpr) {
-      return null;
-    }
-
-    const propsUsed = new Set<string>();
-    let safeToInline = true;
-    const cloneNode = (node: any): any => {
-      if (!node || typeof node !== "object") {
-        return node;
-      }
-      if (Array.isArray(node)) {
-        return node.map(cloneNode);
-      }
-      const out: any = {};
-      for (const key of Object.keys(node)) {
-        if (key === "loc" || key === "comments" || key === "tokens") {
-          continue;
-        }
-        out[key] = cloneNode((node as any)[key]);
-      }
-      return out;
-    };
-    const clone = cloneNode(bodyExpr);
-    const replace = (node: any): any => {
-      if (!node || typeof node !== "object") {
-        return node;
-      }
-      if (Array.isArray(node)) {
-        return node.map(replace);
-      }
-      if (
-        (node.type === "MemberExpression" || node.type === "OptionalMemberExpression") &&
-        node.object?.type === "Identifier" &&
-        node.object.name === paramName &&
-        node.property?.type === "Identifier" &&
-        node.computed === false
-      ) {
-        const propName = node.property.name;
-        if (!propName.startsWith("$")) {
-          safeToInline = false;
-          return node;
-        }
-        propsUsed.add(propName);
-        return j.identifier(propName);
-      }
-      for (const key of Object.keys(node)) {
-        if (key === "loc" || key === "comments") {
-          continue;
-        }
-        const child = (node as any)[key];
-        if (child && typeof child === "object") {
-          (node as any)[key] = replace(child);
-        }
-      }
-      return node;
-    };
-    const replaced = replace(clone);
-    if (!safeToInline || propsUsed.size === 0) {
-      return null;
-    }
-    return { expr: replaced, propsUsed };
-  };
-
-  const collectPropsFromArrowFn = (expr: any): Set<string> => {
-    const props = new Set<string>();
-    if (!expr || expr.type !== "ArrowFunctionExpression") {
-      return props;
-    }
-    const paramName = expr.params?.[0]?.type === "Identifier" ? expr.params[0].name : null;
-    if (!paramName) {
-      return props;
-    }
-    const visit = (node: any): void => {
-      if (!node || typeof node !== "object") {
-        return;
-      }
-      if (Array.isArray(node)) {
-        for (const child of node) {
-          visit(child);
-        }
-        return;
-      }
-      if (
-        (node.type === "MemberExpression" || node.type === "OptionalMemberExpression") &&
-        node.object?.type === "Identifier" &&
-        node.object.name === paramName &&
-        node.property?.type === "Identifier" &&
-        node.computed === false
-      ) {
-        props.add(node.property.name);
-      }
-      for (const key of Object.keys(node)) {
-        if (key === "loc" || key === "comments") {
-          continue;
-        }
-        const child = (node as any)[key];
-        if (child && typeof child === "object") {
-          visit(child);
-        }
-      }
-    };
-    const bodyExpr =
-      expr.body?.type === "BlockStatement"
-        ? expr.body.body?.find((s: any) => s.type === "ReturnStatement")?.argument
-        : expr.body;
-    visit(bodyExpr);
-    return props;
-  };
-
-  const countConditionalExpressions = (node: any): number => {
-    if (!node || typeof node !== "object") {
-      return 0;
-    }
-    if (Array.isArray(node)) {
-      return node.reduce((sum, child) => sum + countConditionalExpressions(child), 0);
-    }
-    let count = node.type === "ConditionalExpression" ? 1 : 0;
-    for (const key of Object.keys(node)) {
-      if (key === "loc" || key === "comments") {
-        continue;
-      }
-      const child = node[key];
-      if (child && typeof child === "object") {
-        count += countConditionalExpressions(child);
-      }
-    }
-    return count;
-  };
-
-  const hasThemeAccessInArrowFn = (expr: any): boolean => {
-    if (!expr || expr.type !== "ArrowFunctionExpression") {
-      return false;
-    }
-    if (expr.params?.length !== 1 || expr.params[0]?.type !== "Identifier") {
-      return false;
-    }
-    const paramName = expr.params[0].name;
-    const bodyExpr =
-      expr.body?.type === "BlockStatement"
-        ? expr.body.body?.find((s: any) => s.type === "ReturnStatement")?.argument
-        : expr.body;
-    if (!bodyExpr) {
-      return false;
-    }
-    let found = false;
-    const visit = (node: any): void => {
-      if (!node || typeof node !== "object" || found) {
-        return;
-      }
-      if (Array.isArray(node)) {
-        for (const child of node) {
-          visit(child);
-        }
-        return;
-      }
-      if (
-        (node.type === "MemberExpression" || node.type === "OptionalMemberExpression") &&
-        node.object?.type === "Identifier" &&
-        node.object.name === paramName &&
-        node.property?.type === "Identifier" &&
-        node.property.name === "theme" &&
-        node.computed === false
-      ) {
-        found = true;
-        return;
-      }
-      for (const key of Object.keys(node)) {
-        if (key === "loc" || key === "comments") {
-          continue;
-        }
-        const child = (node as any)[key];
-        if (child && typeof child === "object") {
-          visit(child);
-        }
-      }
-    };
-    visit(bodyExpr);
-    return found;
-  };
-
-  const inlineArrowFunctionBody = (expr: any): ExpressionKind | null => {
-    if (!expr || expr.type !== "ArrowFunctionExpression") {
-      return null;
-    }
-    if (expr.params?.length !== 1 || expr.params[0]?.type !== "Identifier") {
-      return null;
-    }
-    const paramName = expr.params[0].name;
-    const bodyExpr =
-      expr.body?.type === "BlockStatement"
-        ? expr.body.body?.find((s: any) => s.type === "ReturnStatement")?.argument
-        : expr.body;
-    if (!bodyExpr) {
-      return null;
-    }
-    const cloneNode = (node: any): any => {
-      if (!node || typeof node !== "object") {
-        return node;
-      }
-      if (Array.isArray(node)) {
-        return node.map(cloneNode);
-      }
-      const out: any = {};
-      for (const key of Object.keys(node)) {
-        if (key === "loc" || key === "comments" || key === "tokens") {
-          continue;
-        }
-        out[key] = cloneNode((node as any)[key]);
-      }
-      return out;
-    };
-    const replace = (node: any): any => {
-      if (!node || typeof node !== "object") {
-        return node;
-      }
-      if (Array.isArray(node)) {
-        return node.map(replace);
-      }
-      if (node.type === "Identifier" && node.name === paramName) {
-        return j.identifier("props");
-      }
-      if (node.type === "MemberExpression" || node.type === "OptionalMemberExpression") {
-        node.object = replace(node.object);
-        if (node.computed) {
-          node.property = replace(node.property);
-        }
-        return node;
-      }
-      if (node.type === "Property") {
-        if (node.computed) {
-          node.key = replace(node.key);
-        }
-        node.value = replace(node.value);
-        return node;
-      }
-      for (const key of Object.keys(node)) {
-        if (key === "loc" || key === "comments") {
-          continue;
-        }
-        const child = (node as any)[key];
-        if (child && typeof child === "object") {
-          (node as any)[key] = replace(child);
-        }
-      }
-      return node;
-    };
-    const cloned = cloneNode(bodyExpr);
-    return replace(cloned);
-  };
-
   const warnPropInlineStyle = (
     decl: StyledDecl,
     propName: string | null | undefined,
@@ -428,68 +156,23 @@ export function lowerRules(args: {
     });
   };
 
-  const hasUnsupportedConditionalTest = (expr: any): boolean => {
-    if (!expr || expr.type !== "ArrowFunctionExpression") {
-      return false;
-    }
-    const bodyExpr =
-      expr.body?.type === "BlockStatement"
-        ? expr.body.body?.find((s: any) => s.type === "ReturnStatement")?.argument
-        : expr.body;
-    if (!bodyExpr) {
-      return false;
-    }
-    let found = false;
-    const visit = (node: any): void => {
-      if (!node || typeof node !== "object" || found) {
-        return;
-      }
-      if (Array.isArray(node)) {
-        for (const child of node) {
-          visit(child);
-        }
-        return;
-      }
-      if (
-        node.type === "ConditionalExpression" &&
-        (node.test?.type === "LogicalExpression" || node.test?.type === "ConditionalExpression")
-      ) {
-        found = true;
-        return;
-      }
-      for (const key of Object.keys(node)) {
-        if (key === "loc" || key === "comments") {
-          continue;
-        }
-        const child = (node as any)[key];
-        if (child && typeof child === "object") {
-          visit(child);
-        }
-      }
-    };
-    visit(bodyExpr);
-    return found;
-  };
+  const { hasLocalThemeBinding, resolveThemeValue, resolveThemeValueFromFn } = createThemeResolvers(
+    {
+      root,
+      j,
+      resolveValue,
+      parseExpr,
+      resolverImports,
+    },
+  );
 
-  const hasLocalThemeBinding = (() => {
-    let found = false;
-    root.find(j.VariableDeclarator, { id: { type: "Identifier", name: "theme" } }).forEach(() => {
-      found = true;
-    });
-    root.find(j.FunctionDeclaration, { id: { type: "Identifier", name: "theme" } }).forEach(() => {
-      found = true;
-    });
-    root.find(j.ImportSpecifier, { local: { name: "theme" } } as any).forEach(() => {
-      found = true;
-    });
-    root.find(j.ImportDefaultSpecifier, { local: { name: "theme" } } as any).forEach(() => {
-      found = true;
-    });
-    root.find(j.ImportNamespaceSpecifier, { local: { name: "theme" } } as any).forEach(() => {
-      found = true;
-    });
-    return found;
-  })();
+  const { isCssHelperTaggedTemplate, resolveCssHelperTemplate } = createCssHelperResolver({
+    importMap,
+    resolveValue,
+    parseExpr,
+    resolverImports,
+    cssValueToJs,
+  });
 
   const bailUnsupported = (message: string): void => {
     warnings.push({
@@ -498,111 +181,6 @@ export function lowerRules(args: {
       message,
     });
     bail = true;
-  };
-
-  const resolveThemeValue = (expr: any): unknown => {
-    if (hasLocalThemeBinding) {
-      return null;
-    }
-    if (!expr || typeof expr !== "object") {
-      return null;
-    }
-    const getPathFromThemeRoot = (node: any): string[] | null => {
-      const parts: string[] = [];
-      let cur: any = node;
-      while (cur && (cur.type === "MemberExpression" || cur.type === "OptionalMemberExpression")) {
-        if (cur.computed) {
-          return null;
-        }
-        if (cur.property?.type !== "Identifier") {
-          return null;
-        }
-        parts.unshift(cur.property.name);
-        cur = cur.object;
-      }
-      if (!cur || cur.type !== "Identifier" || cur.name !== "theme") {
-        return null;
-      }
-      return parts;
-    };
-    const parts = getPathFromThemeRoot(expr);
-    if (!parts || !parts.length) {
-      return null;
-    }
-    const resolved = resolveValue({ kind: "theme", path: parts.join(".") });
-    if (!resolved) {
-      return null;
-    }
-    for (const imp of resolved.imports ?? []) {
-      resolverImports.set(JSON.stringify(imp), imp);
-    }
-    return parseExpr(resolved.expr);
-  };
-
-  const resolveThemeValueFromFn = (expr: any): unknown => {
-    if (!expr || (expr.type !== "ArrowFunctionExpression" && expr.type !== "FunctionExpression")) {
-      return null;
-    }
-    const bodyExpr =
-      expr.body?.type === "BlockStatement"
-        ? expr.body.body?.find((s: any) => s.type === "ReturnStatement")?.argument
-        : expr.body;
-    if (!bodyExpr) {
-      return null;
-    }
-    const direct = resolveThemeValue(bodyExpr);
-    if (direct) {
-      return direct;
-    }
-    const paramName =
-      expr.params?.[0]?.type === "Identifier" ? (expr.params[0].name as string) : null;
-    const unwrap = (node: any): any => {
-      let cur = node;
-      while (cur) {
-        if (cur.type === "ParenthesizedExpression") {
-          cur = cur.expression;
-          continue;
-        }
-        if (cur.type === "TSAsExpression" || cur.type === "TSNonNullExpression") {
-          cur = cur.expression;
-          continue;
-        }
-        if (cur.type === "ChainExpression") {
-          cur = cur.expression;
-          continue;
-        }
-        break;
-      }
-      return cur;
-    };
-    const unwrapped = unwrap(bodyExpr);
-    if (
-      !unwrapped ||
-      (unwrapped.type !== "MemberExpression" && unwrapped.type !== "OptionalMemberExpression")
-    ) {
-      return null;
-    }
-    let themePath: string | null = null;
-    const directPath = getMemberPathFromIdentifier(unwrapped as any, "theme");
-    if (directPath && directPath.length > 0) {
-      themePath = directPath.join(".");
-    } else if (paramName) {
-      const paramPath = getMemberPathFromIdentifier(unwrapped as any, paramName);
-      if (paramPath && paramPath[0] === "theme") {
-        themePath = paramPath.slice(1).join(".");
-      }
-    }
-    if (!themePath) {
-      return null;
-    }
-    const resolved = resolveValue({ kind: "theme", path: themePath });
-    if (!resolved) {
-      return null;
-    }
-    for (const imp of resolved.imports ?? []) {
-      resolverImports.set(JSON.stringify(imp), imp);
-    }
-    return parseExpr(resolved.expr);
   };
 
   for (const decl of styledDecls) {
@@ -635,218 +213,7 @@ export function lowerRules(args: {
         decl,
       });
 
-    const addPropComments = (
-      target: any,
-      prop: string,
-      comments: { leading?: string | null; trailingLine?: string | null },
-    ): void => {
-      if (!prop) {
-        return;
-      }
-      const leading = comments.leading ?? null;
-      const trailingLine = comments.trailingLine ?? null;
-      if (!leading && !trailingLine) {
-        return;
-      }
-      const key = "__propComments";
-      const existing = (target as any)[key];
-      const map =
-        existing && typeof existing === "object" && !Array.isArray(existing)
-          ? existing
-          : ({} as any);
-      const prev = (map[prop] && typeof map[prop] === "object" ? map[prop] : {}) as any;
-      if (leading) {
-        prev.leading = leading;
-      }
-      if (trailingLine) {
-        prev.trailingLine = trailingLine;
-      }
-      map[prop] = prev;
-      (target as any)[key] = map;
-    };
-
-    const toKebab = (s: string) =>
-      s
-        .replace(/([a-z0-9])([A-Z])/g, "$1-$2")
-        .replace(/[^a-zA-Z0-9-]/g, "-")
-        .toLowerCase();
-
-    const isAstNode = (v: unknown): v is { type: string } =>
-      !!v && typeof v === "object" && !Array.isArray(v) && typeof (v as any).type === "string";
-
-    const mergeStyleObjects = (
-      target: Record<string, unknown>,
-      source: Record<string, unknown>,
-    ) => {
-      for (const [key, value] of Object.entries(source)) {
-        const existing = (target as any)[key];
-        if (
-          existing &&
-          value &&
-          typeof existing === "object" &&
-          typeof value === "object" &&
-          !Array.isArray(existing) &&
-          !Array.isArray(value) &&
-          !isAstNode(existing) &&
-          !isAstNode(value)
-        ) {
-          mergeStyleObjects(existing as Record<string, unknown>, value as Record<string, unknown>);
-        } else {
-          (target as any)[key] = value as any;
-        }
-      }
-    };
-
-    const isCssHelperTaggedTemplate = (expr: any): expr is { quasi: any } => {
-      if (!expr || expr.type !== "TaggedTemplateExpression") {
-        return false;
-      }
-      if (expr.tag?.type !== "Identifier") {
-        return false;
-      }
-      const localName = expr.tag.name;
-      const imp = importMap.get(localName);
-      return (
-        !!imp &&
-        imp.importedName === "css" &&
-        imp.source?.kind === "specifier" &&
-        imp.source.value === "styled-components"
-      );
-    };
-
-    const resolveHelperExprToAst = (expr: any, paramName: string | null): any => {
-      if (!expr || typeof expr !== "object") {
-        return null;
-      }
-      if (
-        expr.type === "StringLiteral" ||
-        expr.type === "NumericLiteral" ||
-        expr.type === "Literal"
-      ) {
-        return expr;
-      }
-      const path =
-        paramName && (expr.type === "MemberExpression" || expr.type === "OptionalMemberExpression")
-          ? getMemberPathFromIdentifier(expr as any, paramName)
-          : null;
-      if (!path || path[0] !== "theme") {
-        return null;
-      }
-      const themePath = path.slice(1).join(".");
-      const res = resolveValue({
-        kind: "theme",
-        path: themePath,
-      });
-      if (!res) {
-        return null;
-      }
-      for (const imp of res.imports ?? []) {
-        resolverImports.set(JSON.stringify(imp), imp);
-      }
-      const exprAst = parseExpr(res.expr);
-      return exprAst ?? null;
-    };
-
-    const resolveCssHelperTemplate = (
-      template: any,
-      paramName: string | null,
-      _ownerName: string,
-    ): Record<string, unknown> | null => {
-      const parsed = parseStyledTemplateLiteral(template);
-      const rawCss = parsed.rawCss;
-      const wrappedRawCss = `& { ${rawCss} }`;
-      const stylisAst = compile(wrappedRawCss);
-      const rules = normalizeStylisAstToIR(stylisAst as any, parsed.slots, {
-        rawCss: wrappedRawCss,
-      });
-      const slotExprById = new Map(parsed.slots.map((s) => [s.index, s.expression]));
-
-      const out: Record<string, unknown> = {};
-
-      const normalizePseudoElement = (pseudo: string | null): string | null => {
-        if (!pseudo) {
-          return null;
-        }
-        if (pseudo === ":before" || pseudo === ":after") {
-          return `::${pseudo.slice(1)}`;
-        }
-        return pseudo.startsWith("::") ? pseudo : null;
-      };
-
-      for (const rule of rules) {
-        if (rule.atRuleStack.length > 0) {
-          return null;
-        }
-        const selector = (rule.selector ?? "").trim();
-        let target = out;
-        if (selector !== "&") {
-          const pseudoElement = parsePseudoElement(selector);
-          const simplePseudo = parseSimplePseudo(selector);
-          const normalizedPseudoElement = normalizePseudoElement(
-            pseudoElement ??
-              (simplePseudo === ":before" || simplePseudo === ":after" ? simplePseudo : null),
-          );
-          if (bail) {
-            return null;
-          }
-          if (normalizedPseudoElement) {
-            const nested = (out[normalizedPseudoElement] as any) ?? {};
-            out[normalizedPseudoElement] = nested;
-            target = nested;
-          } else if (simplePseudo) {
-            const nested = (out[simplePseudo] as any) ?? {};
-            out[simplePseudo] = nested;
-            target = nested;
-          } else {
-            return null;
-          }
-        }
-
-        for (const d of rule.declarations) {
-          if (!d.property) {
-            return null;
-          }
-          if (d.value.kind === "static") {
-            for (const mapped of cssDeclarationToStylexDeclarations(d)) {
-              let value = cssValueToJs(mapped.value, d.important, mapped.prop);
-              if (mapped.prop === "content" && typeof value === "string") {
-                const m = value.match(/^['"]([\s\S]*)['"]$/);
-                if (m) {
-                  value = `"${m[1]}"`;
-                } else if (!value.startsWith('"') && !value.endsWith('"')) {
-                  value = `"${value}"`;
-                }
-              }
-              (target as any)[mapped.prop] = value as any;
-            }
-            continue;
-          }
-
-          if (d.important) {
-            return null;
-          }
-
-          const parts = d.value.parts ?? [];
-          if (parts.length !== 1 || parts[0]?.kind !== "slot") {
-            return null;
-          }
-          const slotId = parts[0].slotId;
-          const expr = slotExprById.get(slotId);
-          if (!expr) {
-            return null;
-          }
-          const exprAst = resolveHelperExprToAst(expr as any, paramName);
-          if (!exprAst) {
-            return null;
-          }
-          for (const mapped of cssDeclarationToStylexDeclarations(d)) {
-            (target as any)[mapped.prop] = exprAst as any;
-          }
-        }
-      }
-
-      return out;
-    };
+    // (helpers imported from `./lower-rules/*`)
 
     // (animation + interpolated-string helpers extracted to `./lower-rules/*`)
 
@@ -2317,7 +1684,7 @@ export function lowerRules(args: {
                   }
                   const propsParam = j.identifier("props");
                   const valueExprRaw = (() => {
-                    const unwrapped = unwrapArrowFunctionToPropsExpr(e);
+                    const unwrapped = unwrapArrowFunctionToPropsExpr(j, e);
                     if (hasThemeAccessInArrowFn(e)) {
                       warnPropInlineStyle(
                         decl,
@@ -2328,7 +1695,7 @@ export function lowerRules(args: {
                       bail = true;
                       return null;
                     }
-                    const inlineExpr = unwrapped?.expr ?? inlineArrowFunctionBody(e);
+                    const inlineExpr = unwrapped?.expr ?? inlineArrowFunctionBody(j, e);
                     if (!inlineExpr) {
                       warnPropInlineStyle(
                         decl,
@@ -2433,8 +1800,8 @@ export function lowerRules(args: {
                   bail = true;
                   break;
                 }
-                const unwrapped = unwrapArrowFunctionToPropsExpr(e);
-                const inlineExpr = unwrapped?.expr ?? inlineArrowFunctionBody(e);
+                const unwrapped = unwrapArrowFunctionToPropsExpr(j, e);
+                const inlineExpr = unwrapped?.expr ?? inlineArrowFunctionBody(j, e);
                 if (!inlineExpr) {
                   warnPropInlineStyle(decl, d.property, "expression cannot be safely inlined", loc);
                   bail = true;
@@ -2650,8 +2017,8 @@ export function lowerRules(args: {
                 if (e.params?.[0]?.type === "Identifier") {
                   propsParam = j.identifier(e.params[0].name);
                 }
-                const unwrapped = unwrapArrowFunctionToPropsExpr(e);
-                const inlineExpr = unwrapped?.expr ?? inlineArrowFunctionBody(e);
+                const unwrapped = unwrapArrowFunctionToPropsExpr(j, e);
+                const inlineExpr = unwrapped?.expr ?? inlineArrowFunctionBody(j, e);
                 if (!inlineExpr) {
                   warnPropInlineStyle(decl, d.property, "expression cannot be safely inlined", loc);
                   bail = true;
@@ -3137,341 +2504,4 @@ export function lowerRules(args: {
   }
 
   return { resolvedStyleObjects, descendantOverrides, ancestorSelectorParents, bail };
-}
-
-/**
- * Parses a variant condition string to extract prop name, operator, and value.
- * Supports patterns like: `color === "primary"`, `size !== "small"`, `disabled`
- * Does NOT handle compound conditions like `disabled && color === "primary"`.
- */
-type ParsedVariantCondition =
-  | { type: "equality"; propName: string; operator: "===" | "!=="; value: string }
-  | { type: "boolean"; propName: string; negated: boolean }
-  | { type: "compound" | "unknown" };
-
-function parseVariantCondition(when: string): ParsedVariantCondition {
-  const trimmed = when.trim();
-
-  // Compound condition (contains &&)
-  if (trimmed.includes("&&")) {
-    return { type: "compound" };
-  }
-
-  // Negated boolean: !propName or !(propName)
-  if (trimmed.startsWith("!")) {
-    const inner = trimmed
-      .slice(1)
-      .trim()
-      .replace(/^\(|\)$/g, "");
-    if (/^[a-zA-Z_$][a-zA-Z0-9_$]*$/.test(inner)) {
-      return { type: "boolean", propName: inner, negated: true };
-    }
-    return { type: "unknown" };
-  }
-
-  // Equality: propName === "value" or propName !== "value"
-  const eqMatch = trimmed.match(/^([a-zA-Z_$][a-zA-Z0-9_$]*)\s*(===|!==)\s*"([^"]*)"$/);
-  if (eqMatch) {
-    return {
-      type: "equality",
-      propName: eqMatch[1]!,
-      operator: eqMatch[2] as "===" | "!==",
-      value: eqMatch[3]!,
-    };
-  }
-
-  // Simple boolean: propName (no operators)
-  if (/^[a-zA-Z_$][a-zA-Z0-9_$]*$/.test(trimmed)) {
-    return { type: "boolean", propName: trimmed, negated: false };
-  }
-
-  return { type: "unknown" };
-}
-
-/**
- * Extract string literal values from a TypeScript union type.
- * Returns an array of literal values, or null if the type doesn't contain string literals.
- */
-function extractUnionLiteralValues(tsType: unknown): string[] | null {
-  if (!tsType || typeof tsType !== "object") {
-    return null;
-  }
-
-  const type = tsType as { type?: string; types?: unknown[]; literal?: { value?: unknown } };
-
-  // Handle TSUnionType: "up" | "down" | "both"
-  if (type.type === "TSUnionType" && Array.isArray(type.types)) {
-    const values: string[] = [];
-    for (const t of type.types) {
-      const inner = t as { type?: string; literal?: { value?: unknown } };
-      if (inner.type === "TSLiteralType" && typeof inner.literal?.value === "string") {
-        values.push(inner.literal.value);
-      }
-    }
-    return values.length > 0 ? values : null;
-  }
-
-  // Handle single TSLiteralType
-  if (type.type === "TSLiteralType" && typeof type.literal?.value === "string") {
-    return [type.literal.value];
-  }
-
-  return null;
-}
-
-/**
- * Groups variant buckets into dimensions for the StyleX variants recipe pattern.
- *
- * A dimension is created when:
- * - Multiple conditions test the same prop with `===` against different string values
- * - OR a single `===` condition exists (the else branch becomes a default variant)
- *
- * Compound conditions (e.g., `disabled && color === "primary"`) are kept separate
- * and not grouped into dimensions.
- */
-function groupVariantBucketsIntoDimensions(
-  variantBuckets: Map<string, Record<string, unknown>>,
-  variantStyleKeys: Record<string, string>,
-  _baseStyleKey: string,
-  baseStyles: Record<string, unknown>,
-  findJsxPropTsType?: (propName: string) => unknown,
-  isJsxPropOptional?: (propName: string) => boolean,
-): {
-  dimensions: VariantDimension[];
-  remainingBuckets: Map<string, Record<string, unknown>>;
-  remainingStyleKeys: Record<string, string>;
-  propsToStrip: Set<string>;
-} {
-  // Helper to generate variant object name, avoiding redundant "variantVariants"
-  const getVariantObjectName = (propName: string, suffix?: "Enabled" | "Disabled"): string => {
-    if (propName === "variant") {
-      return suffix ? `${suffix.toLowerCase()}Variants` : "variants";
-    }
-    return suffix ? `${propName}${suffix}Variants` : `${propName}Variants`;
-  };
-
-  // Group conditions by prop name (only equality conditions)
-  const propGroups = new Map<
-    string,
-    Array<{ when: string; value: string; styles: Record<string, unknown> }>
-  >();
-  const remainingBuckets = new Map<string, Record<string, unknown>>();
-  const remainingStyleKeys: Record<string, string> = {};
-  // Track CSS props that should be stripped from base styles (moved to variants)
-  const propsToStrip = new Set<string>();
-
-  for (const [when, styles] of variantBuckets.entries()) {
-    const parsed = parseVariantCondition(when);
-
-    if (parsed.type === "equality" && parsed.operator === "===") {
-      const existing = propGroups.get(parsed.propName) ?? [];
-      existing.push({ when, value: parsed.value, styles });
-      propGroups.set(parsed.propName, existing);
-    } else {
-      // Keep compound, boolean, and other conditions as-is
-      remainingBuckets.set(when, styles);
-      if (variantStyleKeys[when]) {
-        remainingStyleKeys[when] = variantStyleKeys[when];
-      }
-    }
-  }
-
-  const dimensions: VariantDimension[] = [];
-
-  // Collect boolean buckets and their CSS props (e.g., "disabled" → { backgroundColor, color })
-  const booleanBuckets = new Map<
-    string,
-    { cssProps: Set<string>; styles: Record<string, unknown> }
-  >();
-  for (const [when, styles] of variantBuckets.entries()) {
-    const parsed = parseVariantCondition(when);
-    if (parsed.type === "boolean" && !parsed.negated) {
-      booleanBuckets.set(parsed.propName, {
-        cssProps: new Set(Object.keys(styles)),
-        styles,
-      });
-    }
-  }
-
-  // Check if we're in a "variants-recipe" pattern: any enum has boolean overlap
-  let isVariantsRecipePattern = false;
-  for (const [, variants] of propGroups.entries()) {
-    const variantCssProps = new Set(variants.flatMap((v) => Object.keys(v.styles)));
-    for (const [, boolData] of booleanBuckets) {
-      for (const cssProp of variantCssProps) {
-        if (boolData.cssProps.has(cssProp)) {
-          isVariantsRecipePattern = true;
-          break;
-        }
-      }
-      if (isVariantsRecipePattern) {
-        break;
-      }
-    }
-    if (isVariantsRecipePattern) {
-      break;
-    }
-  }
-
-  for (const [propName, variants] of propGroups.entries()) {
-    const propType = findJsxPropTsType?.(propName);
-    const unionValues = extractUnionLiteralValues(propType);
-
-    // For single-condition variants, check if we can create a dimension
-    if (variants.length === 1) {
-      const explicitValue = variants[0]!.value;
-
-      // Only create dimension if: variants-recipe pattern AND union has exactly 2 values
-      if (
-        isVariantsRecipePattern &&
-        unionValues &&
-        unionValues.length === 2 &&
-        unionValues.includes(explicitValue)
-      ) {
-        // Continue to create dimension
-      } else {
-        // Move to remaining buckets (conditional pattern)
-        for (const v of variants) {
-          remainingBuckets.set(v.when, v.styles);
-          const styleKey = variantStyleKeys[v.when];
-          if (styleKey) {
-            remainingStyleKeys[v.when] = styleKey;
-          }
-        }
-        continue;
-      }
-    }
-
-    // Build variant map with explicit values and infer default from base styles
-    const variantMap: Record<string, Record<string, unknown>> = {};
-    const allOverriddenProps = new Set<string>();
-
-    for (const v of variants) {
-      variantMap[v.value] = v.styles;
-      for (const cssProp of Object.keys(v.styles)) {
-        allOverriddenProps.add(cssProp);
-      }
-    }
-
-    // Find base style values for overridden props (represents else branch)
-    const defaultStyles: Record<string, unknown> = {};
-    for (const cssProp of allOverriddenProps) {
-      if (cssProp in baseStyles) {
-        defaultStyles[cssProp] = baseStyles[cssProp];
-      }
-    }
-
-    // Determine the default value name
-    // For variants-recipe pattern with optional props, use actual value name + destructuring default
-    // For other cases, use "default" key with cast+fallback
-    let defaultValue: string | undefined;
-    const propIsOptional = isJsxPropOptional?.(propName) ?? false;
-
-    if (Object.keys(defaultStyles).length > 0 && unionValues) {
-      const explicitValues = new Set(variants.map((v) => v.value));
-      const remainingValues = unionValues.filter((v) => !explicitValues.has(v));
-      if (remainingValues.length === 1 && remainingValues[0]) {
-        // Use actual remaining value as key - for variants-recipe, this enables simple lookup
-        // even for optional props when we emit destructuring defaults
-        defaultValue = remainingValues[0];
-        variantMap[defaultValue] = defaultStyles;
-        // Note: We don't strip from base styles here - that only happens for namespace
-        // dimensions where the ternary lookup guarantees a defined value
-      } else {
-        // Multiple remaining values - use "default" with cast+fallback
-        defaultValue = "default";
-        variantMap["default"] = defaultStyles;
-      }
-    }
-
-    // Check if this prop has boolean overlap (needs namespace dimensions)
-    const variantCssProps = new Set(Object.keys(variants[0]!.styles));
-    let overlappingBoolProp: string | undefined;
-    let overlappingBoolStyles: Record<string, unknown> | undefined;
-    for (const [boolProp, boolData] of booleanBuckets) {
-      for (const cssProp of variantCssProps) {
-        if (boolData.cssProps.has(cssProp)) {
-          overlappingBoolProp = boolProp;
-          overlappingBoolStyles = boolData.styles;
-          break;
-        }
-      }
-      if (overlappingBoolProp) {
-        break;
-      }
-    }
-
-    if (overlappingBoolProp && overlappingBoolStyles) {
-      // Create namespace dimensions: enabled and disabled
-      // Enabled namespace: original variants
-      dimensions.push({
-        propName,
-        variantObjectName: getVariantObjectName(propName, "Enabled"),
-        variants: variantMap,
-        defaultValue,
-        namespaceBooleanProp: overlappingBoolProp,
-        isDisabledNamespace: false,
-        isOptional: propIsOptional,
-      });
-
-      // Disabled namespace: variants merged with boolean styles
-      const disabledVariantMap: Record<string, Record<string, unknown>> = {};
-      for (const [variantValue, variantStyles] of Object.entries(variantMap)) {
-        // Merge: boolean styles override variant styles, except hover stays from variant
-        const merged: Record<string, unknown> = { ...variantStyles };
-        for (const [cssProp, boolValue] of Object.entries(overlappingBoolStyles)) {
-          const variantValue2 = merged[cssProp];
-          // For pseudo maps (like backgroundColor with :hover), merge carefully
-          if (
-            typeof variantValue2 === "object" &&
-            variantValue2 !== null &&
-            typeof boolValue === "string"
-          ) {
-            // Boolean sets default, keep variant's hover
-            merged[cssProp] = { ...(variantValue2 as object), default: boolValue };
-          } else {
-            merged[cssProp] = boolValue;
-          }
-        }
-        // Also add any boolean styles that don't overlap with variant
-        for (const [cssProp, boolValue] of Object.entries(overlappingBoolStyles)) {
-          if (!(cssProp in merged)) {
-            merged[cssProp] = boolValue;
-          }
-        }
-        disabledVariantMap[variantValue] = merged;
-      }
-
-      dimensions.push({
-        propName,
-        variantObjectName: getVariantObjectName(propName, "Disabled"),
-        variants: disabledVariantMap,
-        defaultValue,
-        namespaceBooleanProp: overlappingBoolProp,
-        isDisabledNamespace: true,
-        isOptional: propIsOptional,
-      });
-
-      // Remove the boolean bucket from remaining since it's merged into disabled namespace
-      remainingBuckets.delete(overlappingBoolProp);
-      delete remainingStyleKeys[overlappingBoolProp];
-
-      // Mark CSS props for stripping from base styles - namespace dimensions use a ternary
-      // that guarantees a defined lookup, so base styles are not needed as fallback
-      for (const cssProp of variantCssProps) {
-        propsToStrip.add(cssProp);
-      }
-    } else {
-      // Simple dimension without namespace
-      dimensions.push({
-        propName,
-        variantObjectName: getVariantObjectName(propName),
-        variants: variantMap,
-        defaultValue,
-        isOptional: propIsOptional,
-      });
-    }
-  }
-
-  return { dimensions, remainingBuckets, remainingStyleKeys, propsToStrip };
 }

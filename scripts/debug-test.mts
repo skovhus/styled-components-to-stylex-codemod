@@ -1,7 +1,13 @@
 import { applyTransform } from "jscodeshift/src/testUtils.js";
-import transform from "../dist/transform.mjs";
-import { readFileSync, writeFileSync } from "fs";
-import { join } from "path";
+import { readFileSync, writeFileSync } from "node:fs";
+import { register } from "node:module";
+import { join } from "node:path";
+import { pathToFileURL } from "node:url";
+
+// Allow Node to run `src/*.ts` directly even though source uses `.js` specifiers.
+register(new URL("./src-ts-specifier-loader.mjs", import.meta.url).href, pathToFileURL(".."));
+
+const { default: transform } = await import("../src/transform.ts");
 
 // Minimal fixture adapter that returns false for shouldSupportExternalStyling
 // (matching the behavior of fixtureAdapter for most test cases)
