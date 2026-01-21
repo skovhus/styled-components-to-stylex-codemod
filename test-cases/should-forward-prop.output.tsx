@@ -95,6 +95,9 @@ export const App = () => (
     <Box $background="#f0f0f0" $padding="24px">
       Box with transient-like props
     </Box>
+    <div {...stylex.props(styles.colorBox, styles.colorBoxBackgroundColor("#bf4f74"))}>
+      Nullish Coalescing Box
+    </div>
     <Card variant="primary" elevation={3} rounded>
       Elevated Card
     </Card>
@@ -148,6 +151,15 @@ const styles = stylex.create({
   }),
   boxPadding: (padding: string) => ({
     padding,
+  }),
+
+  // Using nullish coalescing operator for fallbacks
+  colorBox: {
+    backgroundColor: "#e0e0e0",
+    padding: "16px",
+  },
+  colorBoxBackgroundColor: (backgroundColor: string) => ({
+    backgroundColor,
   }),
 
   // Filter multiple custom props

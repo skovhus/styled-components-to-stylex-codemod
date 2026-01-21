@@ -36,6 +36,12 @@ const Box = styled.div.withConfig({
   box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
 `;
 
+// Using nullish coalescing operator for fallbacks
+const ColorBox = styled.div<{ $color?: string }>`
+  background: ${(props) => props.$color ?? "#e0e0e0"};
+  padding: 16px;
+`;
+
 // Filter multiple custom props
 const Card = styled.div.withConfig({
   shouldForwardProp: (prop) => !["variant", "elevation", "rounded"].includes(prop),
@@ -62,6 +68,7 @@ export const App = () => (
     <Box $background="#f0f0f0" $padding="24px">
       Box with transient-like props
     </Box>
+    <ColorBox $color="#bf4f74">Nullish Coalescing Box</ColorBox>
     <Card variant="primary" elevation={3} rounded>
       Elevated Card
     </Card>
