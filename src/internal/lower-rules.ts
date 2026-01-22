@@ -2622,7 +2622,7 @@ export function lowerRules(args: {
               return d.property ? `property "${d.property}"` : "unknown";
             }
             if (expr.type === "ArrowFunctionExpression" || expr.type === "FunctionExpression") {
-              return `arrow function in "${d.property ?? "unknown"}"`;
+              return `arrow function`;
             }
             if (expr.type === "CallExpression") {
               const callee = expr.callee;

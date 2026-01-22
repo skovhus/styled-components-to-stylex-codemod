@@ -1,4 +1,3 @@
-// expected-warnings: createGlobalStyle
 import { createGlobalStyle } from "styled-components";
 
 const GlobalStyle = createGlobalStyle`

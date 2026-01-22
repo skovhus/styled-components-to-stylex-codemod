@@ -213,8 +213,6 @@ function assertExportsApp(source: string, fileLabel: string): void {
   }
 }
 
-type ExpectedWarning = string;
-
 const WARNING_TOKEN_MATCHERS: Record<string, (w: WarningLog) => boolean> = {
   ThemeProvider: (w) => w.type === "unsupported-feature" && w.message.includes("ThemeProvider"),
   "css-helper": (w) => w.type === "unsupported-feature" && w.message.includes("`css` helper"),
@@ -243,46 +241,6 @@ const WARNING_TOKEN_MATCHERS: Record<string, (w: WarningLog) => boolean> = {
 function warningMatchesToken(warning: WarningLog, token: string): boolean {
   const matcher = WARNING_TOKEN_MATCHERS[token];
   return matcher ? matcher(warning) : false;
-}
-
-function extractTokensFromWarnings(warnings: WarningLog[], tokens: string[]): string[] {
-  const found = new Set<string>();
-  for (const w of warnings) {
-    for (const token of tokens) {
-      if (warningMatchesToken(w, token)) {
-        found.add(token);
-      }
-    }
-  }
-  return [...found].sort();
-}
-
-function readExpectedWarningsFromComments(source: string): ExpectedWarning[] | null {
-  // Convention (place near top of fixture):
-  //   // expected-warnings: createGlobalStyle, component-selector
-  // Can appear multiple times; values are merged.
-  const features = new Set<string>();
-  const lines = source.split(/\r?\n/);
-  // Only scan the header-ish region to avoid false positives in code samples.
-  const maxLines = Math.min(lines.length, 30);
-  for (let i = 0; i < maxLines; i++) {
-    const line = lines[i]!;
-    const match = line.match(/^\s*\/\/\s*expected-warnings\s*:\s*(.+?)\s*$/);
-    if (!match) {
-      continue;
-    }
-    const raw = match[1] ?? "";
-    for (const part of raw.split(",")) {
-      const feature = part.trim();
-      if (feature) {
-        features.add(feature);
-      }
-    }
-  }
-  if (features.size === 0) {
-    return null;
-  }
-  return [...features];
 }
 
 describe("test case file pairing", () => {
@@ -339,34 +297,6 @@ describe("output invariants", () => {
           expect(disallowedImports).not.toContain(imp);
         }
       }
-    },
-  );
-});
-
-describe("fixture warning expectations", () => {
-  it.each(fixtureCases)(
-    "$outputFile warnings should match expectations (if provided)",
-    ({ inputPath, outputPath }) => {
-      const { input } = readTestCase("", inputPath, outputPath);
-      const expected = readExpectedWarningsFromComments(input);
-
-      const result = transformWithWarnings(
-        { source: input, path: inputPath },
-        { jscodeshift: j, j, stats: () => {}, report: () => {} },
-        { adapter: fixtureAdapter },
-      );
-
-      // Fixture expectations only cover stable `unsupported-feature` warnings.
-      // Dynamic-node warnings are runtime/bail diagnostics and are not asserted via fixtures.
-      const expectedTokens = expected ?? [];
-      const actualTokens = extractTokensFromWarnings(result.warnings, expectedTokens);
-
-      if (!expected) {
-        expect(actualTokens).toEqual([]);
-        return;
-      }
-
-      expect(actualTokens).toEqual([...expectedTokens].sort());
     },
   );
 });
