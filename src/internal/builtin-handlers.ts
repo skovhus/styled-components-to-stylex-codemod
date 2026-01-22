@@ -1380,6 +1380,29 @@ function literalToStaticValue(node: unknown): string | number | null {
   if (type === "NumericLiteral") {
     return (node as { value: number }).value;
   }
+  // Handle TemplateLiteral without expressions (static template string)
+  if (type === "TemplateLiteral") {
+    const n = node as { expressions?: unknown[]; quasis?: Array<{ value?: { raw?: string } }> };
+    if (!n.expressions || n.expressions.length === 0) {
+      const quasis = n.quasis ?? [];
+      return quasis.map((q) => q.value?.raw ?? "").join("");
+    }
+  }
+  // Handle css`` tagged template literal (styled-components css helper)
+  if (type === "TaggedTemplateExpression") {
+    const n = node as {
+      tag?: { type?: string; name?: string };
+      quasi?: { expressions?: unknown[]; quasis?: Array<{ value?: { raw?: string } }> };
+    };
+    // Only handle `css` tag (the styled-components css helper)
+    if (n.tag?.type === "Identifier" && n.tag.name === "css") {
+      const quasi = n.quasi;
+      if (quasi && (!quasi.expressions || quasi.expressions.length === 0)) {
+        const quasis = quasi.quasis ?? [];
+        return quasis.map((q) => q.value?.raw ?? "").join("");
+      }
+    }
+  }
   return null;
 }
 
