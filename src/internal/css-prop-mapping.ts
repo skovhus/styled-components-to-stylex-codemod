@@ -45,7 +45,15 @@ export function cssDeclarationToStylexDeclarations(decl: CssDeclarationIR): Styl
   }
 
   if (prop === "background") {
-    return [{ prop: "backgroundColor", value: decl.value }];
+    // StyleX doesn't support the `background` shorthand.
+    // Use `backgroundImage` for gradients/images, `backgroundColor` for colors.
+    const isGradientOrImage =
+      decl.value.kind === "static" &&
+      (/\b(linear|radial|conic|repeating-linear|repeating-radial|repeating-conic)-gradient\b/.test(
+        decl.valueRaw,
+      ) ||
+        /\burl\s*\(/.test(decl.valueRaw));
+    return [{ prop: isGradientOrImage ? "backgroundImage" : "backgroundColor", value: decl.value }];
   }
 
   if (prop === "border") {
