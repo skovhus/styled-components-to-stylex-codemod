@@ -17,6 +17,8 @@ if ! git diff-index --quiet HEAD --; then
 fi
 echo "✓ Working tree is clean"
 
+npm login
+
 echo ""
 echo "📦 Bumping version..."
 pnpm version patch -m "chore(release): v%s [skip ci]"
