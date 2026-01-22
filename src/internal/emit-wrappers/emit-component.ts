@@ -364,6 +364,10 @@ export function emitComponentWrappers(ctx: any): {
         j.memberExpression(j.identifier(stylesIdentifier), j.identifier(p.fnKey)),
         [propExpr],
       );
+      if (p.condition === "truthy") {
+        styleArgs.push(j.logicalExpression("&&", propExpr, call));
+        continue;
+      }
       const required =
         p.jsxProp === "__props" || isPropRequiredInPropsTypeLiteral(d.propsType, p.jsxProp);
       if (required) {

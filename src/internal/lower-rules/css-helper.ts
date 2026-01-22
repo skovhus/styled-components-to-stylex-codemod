@@ -25,7 +25,10 @@ export function createCssHelperResolver(args: {
     template: any,
     paramName: string | null,
     _ownerName: string,
-  ) => Record<string, unknown> | null;
+  ) => {
+    style: Record<string, unknown>;
+    dynamicProps: Array<{ jsxProp: string; stylexProp: string }>;
+  } | null;
 } {
   const { importMap, filePath, resolveValue, parseExpr, resolverImports, cssValueToJs } = args;
 
@@ -84,7 +87,10 @@ export function createCssHelperResolver(args: {
     template: any,
     paramName: string | null,
     _ownerName: string,
-  ): Record<string, unknown> | null => {
+  ): {
+    style: Record<string, unknown>;
+    dynamicProps: Array<{ jsxProp: string; stylexProp: string }>;
+  } | null => {
     const parsed = parseStyledTemplateLiteral(template);
     const rawCss = parsed.rawCss;
     const wrappedRawCss = `& { ${rawCss} }`;
@@ -95,6 +101,8 @@ export function createCssHelperResolver(args: {
     const slotExprById = new Map(parsed.slots.map((s) => [s.index, s.expression]));
 
     const out: Record<string, unknown> = {};
+    const dynamicProps: Array<{ jsxProp: string; stylexProp: string }> = [];
+    const dynamicPropKeys = new Set<string>();
 
     const normalizePseudoElement = (pseudo: string | null): string | null => {
       if (!pseudo) {
@@ -111,6 +119,7 @@ export function createCssHelperResolver(args: {
         return null;
       }
       const selector = (rule.selector ?? "").trim();
+      const allowDynamicValues = selector === "&";
       let target = out;
       if (selector !== "&") {
         const parsed = parseSelector(selector);
@@ -178,16 +187,35 @@ export function createCssHelperResolver(args: {
           return null;
         }
         const exprAst = resolveHelperExprToAst(expr as any, paramName);
-        if (!exprAst) {
+        if (exprAst) {
+          for (const mapped of cssDeclarationToStylexDeclarations(d)) {
+            (target as any)[mapped.prop] = exprAst as any;
+          }
+          continue;
+        }
+
+        const propPath =
+          paramName && (expr as any)?.type
+            ? getMemberPathFromIdentifier(expr as any, paramName)
+            : null;
+        if (!allowDynamicValues || !propPath || propPath.length !== 1) {
+          return null;
+        }
+        const jsxProp = propPath[0]!;
+        if (jsxProp === "theme") {
           return null;
         }
         for (const mapped of cssDeclarationToStylexDeclarations(d)) {
-          (target as any)[mapped.prop] = exprAst as any;
+          const key = `${jsxProp}:${mapped.prop}`;
+          if (!dynamicPropKeys.has(key)) {
+            dynamicPropKeys.add(key);
+            dynamicProps.push({ jsxProp, stylexProp: mapped.prop });
+          }
         }
       }
     }
 
-    return out;
+    return { style: out, dynamicProps };
   };
 
   return { isCssHelperTaggedTemplate, resolveCssHelperTemplate };
