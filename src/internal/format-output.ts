@@ -39,40 +39,76 @@ export function formatOutput(code: string): string {
   // This keeps wrapper components compact and matches our fixture formatting.
   out = out.replace(/\n[ \t]*\n(\s*return\b)/g, "\n$1");
 
-  // Ensure there is a blank line after the final top-level import (when imports exist).
-  // Some of our fixtures assert this formatting (especially after `import * as stylex ...`).
+  // Normalize import spacing at the top of the file:
+  // - Keep React and StyleX imports adjacent (no blank line between them).
+  // - Ensure a blank line after the final top-level import.
   out = (() => {
     const lines = out.split("\n");
-    // Find the last consecutive import line at the top of the file (after optional leading comments).
+    const isImportLine = (line: string) => line.startsWith("import ");
+    const isBlankLine = (line: string) => line.trim() === "";
+    const isReactImport = (line: string) =>
+      /^import\s+.*\s+from\s+["']react["'];?$/.test(line.trim());
+    const isStylexImport = (line: string) =>
+      /^import\s+.*\s+from\s+["']@stylexjs\/stylex["'];?$/.test(line.trim());
+
+    // Find the top import block (allowing blank lines between imports).
+    let importStart = -1;
+    let importEnd = -1;
     let i = 0;
-    while (
-      i < lines.length &&
-      (lines[i]?.startsWith("//") || lines[i]?.startsWith("/*") || lines[i] === "")
-    ) {
-      // Stop on first non-comment/non-empty if we haven't started imports yet.
-      // (We only care about top-of-file import blocks.)
-      // If we see an import, we break out of this loop below.
-      if (lines[i]?.startsWith("import ")) {
-        break;
-      }
-      i++;
-    }
-    // Now consume consecutive import lines.
-    let lastImportIdx = -1;
     for (; i < lines.length; i++) {
       const line = lines[i] ?? "";
-      if (line.startsWith("import ")) {
-        lastImportIdx = i;
+      const trimmed = line.trim();
+      if (isImportLine(line)) {
+        importStart = i;
+        importEnd = i;
+        i++;
+        break;
+      }
+      if (trimmed === "" || trimmed.startsWith("//") || trimmed.startsWith("/*") || trimmed.startsWith("*")) {
         continue;
       }
       break;
     }
-    if (lastImportIdx >= 0) {
-      const next = lines[lastImportIdx + 1];
+
+    if (importStart >= 0) {
+      for (; i < lines.length; i++) {
+        const line = lines[i] ?? "";
+        if (isImportLine(line)) {
+          importEnd = i;
+          continue;
+        }
+        if (isBlankLine(line)) {
+          continue;
+        }
+        break;
+      }
+
+      // Remove blank lines between React and StyleX imports.
+      for (let idx = importStart; idx <= importEnd; idx++) {
+        if (!isReactImport(lines[idx] ?? "")) {
+          continue;
+        }
+        let nextIdx = idx + 1;
+        while (nextIdx <= importEnd && isBlankLine(lines[nextIdx] ?? "")) {
+          nextIdx++;
+        }
+        if (nextIdx <= importEnd && isStylexImport(lines[nextIdx] ?? "")) {
+          const blanksToRemove = nextIdx - idx - 1;
+          if (blanksToRemove > 0) {
+            lines.splice(idx + 1, blanksToRemove);
+            importEnd -= blanksToRemove;
+          }
+        }
+        break;
+      }
+
+      // Ensure a blank line after the last import line in the block.
+      const next = lines[importEnd + 1];
       if (next !== undefined && next.trim() !== "") {
-        lines.splice(lastImportIdx + 1, 0, "");
+        lines.splice(importEnd + 1, 0, "");
       }
     }
+
     return lines.join("\n");
   })();
 
