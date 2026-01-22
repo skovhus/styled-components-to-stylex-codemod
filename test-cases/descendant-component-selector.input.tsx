@@ -7,12 +7,14 @@ import styled from "styled-components";
 
 const Content = styled.div`
   background: ${(props) => props.theme.color.bgSub};
+  width: 100px;
+  height: 100px;
 `;
 
 export const ContainerLink = styled.a`
   &:focus-visible ${Content} {
-    outline: 2px solid ${(props) => props.theme.color.labelBase};
-    outline-offset: 2px;
+    outline: 10px solid ${(props) => props.theme.color.labelBase};
+    outline-offset: 5px;
   }
 `;
 
@@ -54,7 +56,8 @@ export const App = () => (
       <Icon />
     </Button>
     <br />
-    <ContainerLink>
+    <br />
+    <ContainerLink href="#">
       <Content />
     </ContainerLink>
   </div>

@@ -6,11 +6,15 @@ import * as React from "react";
 
 import * as stylex from "@stylexjs/stylex";
 import { themeVars } from "./tokens.stylex";
-type ContainerLinkProps = React.PropsWithChildren<{}>;
+type ContainerLinkProps = Omit<React.ComponentProps<"a">, "className" | "style">;
 
 export function ContainerLink(props: ContainerLinkProps) {
-  const { children } = props;
-  return <a {...stylex.props(stylex.defaultMarker())}>{children}</a>;
+  const { children, ...rest } = props;
+  return (
+    <a {...rest} {...stylex.props(stylex.defaultMarker())}>
+      {children}
+    </a>
+  );
 }
 
 export const App = () => (
@@ -20,7 +24,8 @@ export const App = () => (
       <span {...stylex.props(styles.icon, styles.iconInButton)} />
     </button>
     <br />
-    <ContainerLink>
+    <br />
+    <ContainerLink href="#">
       <div {...stylex.props(styles.content, styles.contentInContainerLink)} />
     </ContainerLink>
   </div>
@@ -29,6 +34,8 @@ export const App = () => (
 const styles = stylex.create({
   content: {
     backgroundColor: themeVars.bgSub,
+    width: "100px",
+    height: "100px",
   },
   icon: {
     display: "inline-block",
@@ -53,11 +60,11 @@ const styles = stylex.create({
   contentInContainerLink: {
     outline: {
       default: null,
-      [stylex.when.ancestor(":focus-visible")]: `2px solid ${themeVars.labelBase}`,
+      [stylex.when.ancestor(":focus-visible")]: `10px solid ${themeVars.labelBase}`,
     },
     outlineOffset: {
       default: null,
-      [stylex.when.ancestor(":focus-visible")]: "2px",
+      [stylex.when.ancestor(":focus-visible")]: "5px",
     },
   },
   iconInButton: {
