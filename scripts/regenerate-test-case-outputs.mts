@@ -62,8 +62,8 @@ async function updateFixture(name: string) {
   const input = await readFile(inputPath, "utf-8");
 
   const result = applyTransform(
-    transform as any,
-    { adapter: fixtureAdapter as any },
+    transform,
+    { adapter: fixtureAdapter },
     { source: input, path: inputPath },
     { parser: "tsx" },
   );

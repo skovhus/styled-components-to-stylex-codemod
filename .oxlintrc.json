@@ -1,9 +1,7 @@
 {
   "$schema": "https://raw.githubusercontent.com/oxc-project/oxc/main/npm/oxlint/configuration_schema.json",
   "rules": {
-    "no-unused-vars": "error",
     "no-console": "error",
-    "eqeqeq": "error",
     "curly": "error",
     "no-constant-condition": "error",
     "no-debugger": "error",
@@ -21,6 +19,7 @@
   "categories": {
     "correctness": "error",
     "suspicious": "off", // TODO: enable
+    // Restriction
     "perf": "off"
   },
   "ignorePatterns": [

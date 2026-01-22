@@ -24,7 +24,7 @@ function Flex(props: FlexProps) {
 }
 
 export const Container = styled(Flex)<{ $color?: string }>`
-  ${props =>
+  ${(props) =>
     props.$color &&
     css`
       background-color: ${props.$color};

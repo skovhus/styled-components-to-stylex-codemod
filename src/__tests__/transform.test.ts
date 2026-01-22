@@ -9,6 +9,7 @@ import transform, { transformWithWarnings } from "../transform.js";
 import type { TransformOptions } from "../transform.js";
 import { customAdapter, fixtureAdapter } from "./fixture-adapters.js";
 import { type WarningLog } from "../internal/logger.js";
+import type { Adapter, ResolveValueContext } from "../adapter.js";
 
 // Suppress codemod logs in tests
 vi.mock("../internal/logger.js", () => ({
@@ -134,7 +135,7 @@ function runTransform(
 ): string {
   const opts: TransformOptions = {
     adapter: fixtureAdapter,
-    ...(options as any),
+    ...options,
   };
   const result = applyTransform(transform, opts, { source, path: filePath }, { parser });
   // applyTransform returns empty string when no changes, return original source
@@ -153,7 +154,7 @@ function runTransformWithDiagnostics(
 ): { code: string | null; warnings: ReturnType<typeof transformWithWarnings>["warnings"] } {
   const opts: TransformOptions = {
     adapter: fixtureAdapter,
-    ...(options as any),
+    ...options,
   };
   const jWithParser = jscodeshift.withParser(parser);
   const result = transformWithWarnings(
@@ -548,7 +549,7 @@ export const App = () => <Box $on />;
       shouldSupportExternalStyling() {
         return false;
       },
-      resolveValue(ctx: any) {
+      resolveValue(ctx: ResolveValueContext) {
         if (ctx.kind !== "theme") {
           return null;
         }
@@ -564,7 +565,8 @@ export const App = () => <Box $on />;
       resolveCall() {
         return null;
       },
-    } as any;
+      styleMerger: null,
+    } satisfies Adapter;
 
     const result = transformWithWarnings(
       { source, path: "split-variants-resolved-value-parse-failure.tsx" },
@@ -601,7 +603,7 @@ export const App = () => (
       shouldSupportExternalStyling() {
         return false;
       },
-      resolveValue(ctx: any) {
+      resolveValue(ctx: ResolveValueContext) {
         // Intentionally do not resolve any calls.
         if (ctx.kind === "theme" || ctx.kind === "cssVariable") {
           return null;
@@ -611,7 +613,8 @@ export const App = () => (
       resolveCall() {
         return null;
       },
-    } as any;
+      styleMerger: null,
+    } satisfies Adapter;
 
     const result = transformWithWarnings(
       { source, path: join(testCasesDir, "dynamic-helper-transition-speed.input.tsx") },
@@ -646,11 +649,12 @@ export const App = () => <Button>Click</Button>;
   });
 
   it("should skip transforming the file when adapter.resolveValue returns undefined (and log context)", () => {
+    // This adapter intentionally returns undefined (not null) to test error handling
     const adapterWithUndefined = {
       shouldSupportExternalStyling() {
         return false;
       },
-      resolveValue(ctx: any) {
+      resolveValue(ctx: ResolveValueContext) {
         if (ctx.kind === "theme") {
           // Intentionally return undefined (e.g. missing return in user adapter)
           return;
@@ -660,12 +664,14 @@ export const App = () => <Button>Click</Button>;
       resolveCall() {
         return null;
       },
-    } as any;
+      styleMerger: null,
+    };
 
     const result = transformWithWarnings(
       { source: themeSource, path: "adapter-undefined-return.tsx" },
       { jscodeshift: j, j, stats: () => {}, report: () => {} },
-      { adapter: adapterWithUndefined },
+      // Cast to Adapter since this adapter intentionally has invalid return type
+      { adapter: adapterWithUndefined as unknown as Adapter },
     );
 
     expect(result.code).toBeNull();
