@@ -1025,9 +1025,23 @@ function tryResolveConditionalCssBlockTernary(node: DynamicNode): HandlerResult 
     if (variants.length > 0) {
       // Build the "else" condition by negating all positive conditions
       const allConditions = variants.map((v) => v.when).join(" || ");
+      let defaultWhen = `!(${allConditions})`;
+
+      // Normalize double negation: !(!prop) → prop
+      // This happens when the original test was negated: !props.$x ? A : B
+      // Without this, both variants would start with "!" and fall through the
+      // lower-rules processing logic, silently dropping the styles.
+      if (variants.length === 1) {
+        const singleWhen = variants[0]!.when;
+        // Check for simple negated prop (e.g., "!$open") without operators
+        if (singleWhen.startsWith("!") && !singleWhen.includes(" ")) {
+          defaultWhen = singleWhen.slice(1); // "!$open" → "$open"
+        }
+      }
+
       variants.push({
         nameHint: "default",
-        when: `!(${allConditions})`,
+        when: defaultWhen,
         style: defaultStyle,
       });
     }
