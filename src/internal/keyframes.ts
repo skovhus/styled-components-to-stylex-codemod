@@ -1,6 +1,6 @@
 import type { ASTNode, Collection, ImportDeclaration, JSCodeshift } from "jscodeshift";
 import { compile } from "stylis";
-import { cssPropertyToStylexProp } from "./css-prop-mapping.js";
+import { cssPropertyToStylexProp, resolveBackgroundStylexProp } from "./css-prop-mapping.js";
 
 export function convertStyledKeyframes(args: {
   root: Collection<ASTNode>;
@@ -74,7 +74,9 @@ function parseKeyframesTemplate(args: {
           continue;
         }
         const raw = propRaw.trim();
-        const prop = raw === "background" ? "backgroundColor" : cssPropertyToStylexProp(raw);
+        const prop = cssPropertyToStylexProp(
+          raw === "background" ? resolveBackgroundStylexProp(valueRaw) : raw,
+        );
         styleObj[prop] = /^-?\d+(\.\d+)?$/.test(valueRaw) ? Number(valueRaw) : valueRaw;
       }
 

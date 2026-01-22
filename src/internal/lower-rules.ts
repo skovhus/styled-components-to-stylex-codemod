@@ -1,7 +1,12 @@
 import type { API, ASTNode, Collection, JSCodeshift } from "jscodeshift";
 import { resolveDynamicNode } from "./builtin-handlers.js";
 import type { InternalHandlerContext } from "./builtin-handlers.js";
-import { cssDeclarationToStylexDeclarations, cssPropertyToStylexProp } from "./css-prop-mapping.js";
+import {
+  cssDeclarationToStylexDeclarations,
+  cssPropertyToStylexProp,
+  resolveBackgroundStylexProp,
+  resolveBackgroundStylexPropForVariants,
+} from "./css-prop-mapping.js";
 import { getMemberPathFromIdentifier, getNodeLocStart } from "./jscodeshift-utils.js";
 import type { Adapter, ImportSource, ImportSpec } from "../adapter.js";
 import { tryHandleAnimation } from "./lower-rules/animation.js";
@@ -1705,9 +1710,27 @@ export function lowerRules(args: {
             const allPos = res.variants.filter((v: any) => !v.when.startsWith("!"));
 
             const cssProp = (d.property ?? "").trim();
-            // Map CSS property to StyleX property (handle special cases like background → backgroundColor)
-            const stylexProp =
-              cssProp === "background" ? "backgroundColor" : cssPropertyToStylexProp(cssProp);
+            let stylexProp: string;
+            if (cssProp === "background") {
+              const variantValues = res.variants
+                .filter((v: any) => typeof v.expr === "string")
+                .map((v: any) => v.expr as string);
+              const resolved = resolveBackgroundStylexPropForVariants(variantValues);
+              if (!resolved) {
+                // Heterogeneous - can't safely transform
+                warnings.push({
+                  severity: "warning",
+                  type: "unsupported-feature",
+                  message: `Heterogeneous background values (mix of gradients and colors) cannot be safely transformed for ${decl.localName}.`,
+                  ...(loc ? { loc } : {}),
+                });
+                bail = true;
+                break;
+              }
+              stylexProp = resolved;
+            } else {
+              stylexProp = cssPropertyToStylexProp(cssProp);
+            }
 
             // Extract static prefix/suffix from CSS value for wrapping resolved values
             // e.g., `rotate(${...})` should wrap the resolved value with `rotate(...)`.
@@ -1967,8 +1990,29 @@ export function lowerRules(args: {
 
           if (res && res.type === "splitMultiPropVariantsResolvedValue") {
             const cssProp = (d.property ?? "").trim();
-            const stylexProp =
-              cssProp === "background" ? "backgroundColor" : cssPropertyToStylexProp(cssProp);
+            let stylexPropMulti: string;
+            if (cssProp === "background") {
+              const variantValues = [
+                res.outerTruthyBranch?.expr,
+                res.innerTruthyBranch?.expr,
+                res.innerFalsyBranch?.expr,
+              ].filter((expr): expr is string => typeof expr === "string");
+              const resolved = resolveBackgroundStylexPropForVariants(variantValues);
+              if (!resolved) {
+                // Heterogeneous - can't safely transform
+                warnings.push({
+                  severity: "warning",
+                  type: "unsupported-feature",
+                  message: `Heterogeneous background values (mix of gradients and colors) cannot be safely transformed for ${decl.localName}.`,
+                  ...(loc ? { loc } : {}),
+                });
+                bail = true;
+                break;
+              }
+              stylexPropMulti = resolved;
+            } else {
+              stylexPropMulti = cssPropertyToStylexProp(cssProp);
+            }
 
             // Extract static prefix/suffix from CSS value for wrapping resolved values
             const { prefix: staticPrefix, suffix: staticSuffix } = extractStaticParts(d.value, {
@@ -2002,7 +2046,7 @@ export function lowerRules(args: {
                 resolverImports.set(JSON.stringify(imp), imp);
               }
               if (pseudos?.length) {
-                const existing = target[stylexProp];
+                const existing = target[stylexPropMulti];
                 const isAstNode =
                   !!existing &&
                   typeof existing === "object" &&
@@ -2016,16 +2060,16 @@ export function lowerRules(args: {
                 // Set default from target first, then fall back to base styleObj.
                 // Only use null if neither has a value (for properties like outlineStyle that need explicit null).
                 if (!("default" in map)) {
-                  const baseValue = existing ?? styleObj[stylexProp];
+                  const baseValue = existing ?? styleObj[stylexPropMulti];
                   map.default = baseValue ?? null;
                 }
                 for (const ps of pseudos) {
                   map[ps] = parsed.exprAst as any;
                 }
-                target[stylexProp] = map;
+                target[stylexPropMulti] = map;
                 return;
               }
-              target[stylexProp] = parsed.exprAst as any;
+              target[stylexPropMulti] = parsed.exprAst as any;
             };
 
             // Parse all three branches
@@ -2803,7 +2847,9 @@ export function lowerRules(args: {
             continue;
           }
           // Convert CSS property name to camelCase (e.g., outline-offset -> outlineOffset)
-          const outProp = cssPropertyToStylexProp(prop === "background" ? "backgroundColor" : prop);
+          const outProp = cssPropertyToStylexProp(
+            prop === "background" ? resolveBackgroundStylexProp(value) : prop,
+          );
           const jsVal = cssValueToJs({ kind: "static", value } as any, false, outProp);
           (bucket as Record<string, unknown>)[outProp] = jsVal;
         }

@@ -1,6 +1,7 @@
 import type { Collection } from "jscodeshift";
 import type { CssRuleIR } from "./css-ir.js";
 import { normalizeStylisAstToIR } from "./css-ir.js";
+import { resolveBackgroundStylexProp } from "./css-prop-mapping.js";
 import { parseStyledTemplateLiteral } from "./styled-css.js";
 import type { StyledDecl } from "./transform-types.js";
 
@@ -1011,8 +1012,13 @@ function collectStyledDeclsImpl(args: {
           if (!key) {
             continue;
           }
-          const styleKey = key === "background" ? "backgroundColor" : key;
           const v: any = prop.value;
+          const styleKey =
+            key === "background"
+              ? v.type === "StringLiteral"
+                ? resolveBackgroundStylexProp(v.value)
+                : "backgroundColor"
+              : key;
           if (v.type === "StringLiteral") {
             styleObj[styleKey] = v.value;
           } else if (v.type === "NumericLiteral") {
