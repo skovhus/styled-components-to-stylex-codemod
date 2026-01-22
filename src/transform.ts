@@ -71,13 +71,12 @@ export function transformWithWarnings(
 
   // Preserve existing `import React ... from "react"` (default or namespace import) even if it becomes "unused"
   // after the transform. JSX runtime differences and local conventions can make this import intentionally present.
+  // NOTE: Check `.value` directly rather than relying on `.type === "StringLiteral"` since ESTree-style parsers
+  // emit `Literal` nodes for import sources. Both node types have a `.value` property with the module specifier.
   const preserveReactImport =
     root
       .find(j.ImportDeclaration)
-      .filter(
-        (p: ASTPath<ImportDeclaration>) =>
-          p.node?.source?.type === "StringLiteral" && p.node.source.value === "react",
-      )
+      .filter((p: ASTPath<ImportDeclaration>) => (p.node?.source as any)?.value === "react")
       .filter((p: ASTPath<ImportDeclaration>) =>
         (p.node.specifiers ?? []).some(
           (s) =>
