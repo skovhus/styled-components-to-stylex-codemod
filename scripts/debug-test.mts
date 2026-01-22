@@ -9,19 +9,8 @@ register(new URL("./src-ts-specifier-loader.mjs", import.meta.url).href, pathToF
 
 const { default: transform } = await import("../src/transform.ts");
 
-// Minimal fixture adapter that returns false for shouldSupportExternalStyling
-// (matching the behavior of fixtureAdapter for most test cases)
-const fixtureAdapter = {
-  styleMerger: null,
-  shouldSupportExternalStyling(ctx) {
-    return (
-      ctx.filePath.includes("external-styles-support") && ctx.componentName === "ExportedButton"
-    );
-  },
-  resolveValue(_ctx) {
-    return null;
-  },
-};
+// Import the fixtureAdapter from the test utilities
+import { fixtureAdapter } from "../src/__tests__/fixture-adapters.ts";
 
 // Get test case names from command line or use defaults
 const defaultTestCases = [

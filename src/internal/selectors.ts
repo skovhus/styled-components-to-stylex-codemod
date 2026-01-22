@@ -1,80 +1,201 @@
-export function parseSimplePseudo(selector: string): string | null {
-  // "&:hover" -> ":hover"
-  const m = selector.match(/^&(:[a-zA-Z-]+)$/) ?? selector.match(/^(:[a-zA-Z-]+)$/);
-  return m ? m[1]! : null;
-}
+import selectorParser from "postcss-selector-parser";
 
 /**
- * Parse chained pseudo-selectors like "&:focus:not(:disabled)" into ":focus:not(:disabled)".
- * Supports:
- * - Simple pseudos: &:hover, &:focus, &:checked, &:disabled, etc.
- * - :not() with simple pseudo: &:not(:disabled), &:focus:not(:disabled)
- * - Multiple :not() chains: &:hover:not(:disabled):not(:focus)
- *
- * Returns null if selector doesn't match the chained pseudo pattern.
+ * Result of parsing a selector for StyleX compatibility.
  */
-export function parseChainedPseudo(selector: string): string | null {
-  // Remove leading & if present
-  const s = selector.startsWith("&") ? selector.slice(1) : selector;
+export type ParsedSelector =
+  | { kind: "base" } // Just "&"
+  | { kind: "pseudo"; pseudos: string[] } // ":hover", ":focus:not(:disabled)", etc.
+  | { kind: "pseudoElement"; element: string } // "::before", "::after"
+  | { kind: "attribute"; attr: ParsedAttributeSelector }
+  | { kind: "unsupported"; reason: string };
 
-  // Must start with :
-  if (!s.startsWith(":")) {
-    return null;
-  }
-
-  // Match pattern: one or more of (:pseudo-name or :not(:pseudo-name))
-  // Pattern breakdown:
-  // - :[a-zA-Z-]+ matches simple pseudos like :hover, :focus, :disabled
-  // - :not\(:[a-zA-Z-]+\) matches :not(:disabled), :not(:focus), etc.
-  const chainedPattern = /^(:[a-zA-Z-]+|:not\(:[a-zA-Z-]+\))+$/;
-
-  if (!chainedPattern.test(s)) {
-    return null;
-  }
-
-  // Must have at least one segment
-  const segments = s.match(/:[a-zA-Z-]+|:not\(:[a-zA-Z-]+\)/g);
-  if (!segments || segments.length === 0) {
-    return null;
-  }
-
-  return s;
-}
-
-/**
- * Parse comma-separated pseudo-selectors like "&:hover, &:focus" into an array [":hover", ":focus"].
- * Returns null if any part is not a valid simple pseudo-selector.
- */
-export function parseCommaSeparatedPseudos(selector: string): string[] | null {
-  const parts = selector.split(",").map((s) => s.trim());
-  const pseudos: string[] = [];
-  for (const part of parts) {
-    const pseudo = parseSimplePseudo(part);
-    if (!pseudo) {
-      return null;
-    }
-    pseudos.push(pseudo);
-  }
-  return pseudos.length > 0 ? pseudos : null;
-}
-
-export function parsePseudoElement(selector: string): string | null {
-  const m = selector.match(/^&(::[a-zA-Z-]+)$/) ?? selector.match(/^(::[a-zA-Z-]+)$/);
-  return m ? m[1]! : null;
-}
-
-export function parseAttributeSelector(selector: string): {
-  kind: "typeCheckbox" | "typeRadio" | "hrefStartsHttps" | "hrefEndsPdf" | "targetBlankAfter";
+type ParsedAttributeSelector = {
+  type: "typeCheckbox" | "typeRadio" | "hrefStartsHttps" | "hrefEndsPdf" | "targetBlankAfter";
   suffix: string;
   pseudoElement?: string | null;
-} | null {
+};
+
+/**
+ * Parse a CSS selector using postcss-selector-parser and determine
+ * if it's compatible with StyleX (only pseudo-classes/elements on &).
+ */
+export function parseSelector(selector: string): ParsedSelector {
+  const trimmed = selector.trim();
+
+  // Handle base selector
+  if (trimmed === "&" || trimmed === "") {
+    return { kind: "base" };
+  }
+
+  // Check for attribute selectors first (special handling)
+  const attrResult = parseAttributeSelectorInternal(trimmed);
+  if (attrResult) {
+    return { kind: "attribute", attr: attrResult };
+  }
+
+  try {
+    const ast = selectorParser().astSync(trimmed);
+
+    // We only support single selectors or comma-separated pseudo selectors
+    const selectors = ast.nodes;
+
+    if (selectors.length === 0) {
+      return { kind: "base" };
+    }
+
+    // For comma-separated selectors, each must be a valid pseudo on &
+    if (selectors.length > 1) {
+      const pseudos: string[] = [];
+      for (const sel of selectors) {
+        const result = parseSingleSelector(sel);
+        if (result.kind !== "pseudo" || result.pseudos.length !== 1) {
+          return {
+            kind: "unsupported",
+            reason: "comma-separated selectors must all be simple pseudos",
+          };
+        }
+        pseudos.push(result.pseudos[0]!);
+      }
+      return { kind: "pseudo", pseudos };
+    }
+
+    // Single selector
+    return parseSingleSelector(selectors[0]!);
+  } catch {
+    return { kind: "unsupported", reason: "failed to parse selector" };
+  }
+}
+
+/**
+ * Parse a single selector (not comma-separated).
+ */
+function parseSingleSelector(selector: selectorParser.Selector): ParsedSelector {
+  const nodes = selector.nodes;
+
+  if (nodes.length === 0) {
+    return { kind: "base" };
+  }
+
+  // Check for unsupported patterns
+  let hasNesting = false;
+  let hasCombinator = false;
+  let hasClass = false;
+  let hasId = false;
+  let hasTag = false;
+  let hasUniversal = false;
+  const pseudoClasses: selectorParser.Pseudo[] = [];
+  const pseudoElements: selectorParser.Pseudo[] = [];
+
+  for (const node of nodes) {
+    switch (node.type) {
+      case "nesting":
+        hasNesting = true;
+        break;
+      case "combinator":
+        // Space, >, +, ~ are all combinators indicating descendant/child/sibling
+        // Note: space combinator has node.value of " " which is a valid combinator
+        hasCombinator = true;
+        break;
+      case "class":
+        hasClass = true;
+        break;
+      case "id":
+        hasId = true;
+        break;
+      case "tag":
+        hasTag = true;
+        break;
+      case "universal":
+        hasUniversal = true;
+        break;
+      case "pseudo":
+        if (node.value.startsWith("::")) {
+          pseudoElements.push(node);
+        } else {
+          pseudoClasses.push(node);
+        }
+        break;
+      case "attribute":
+        // Attribute selectors like [disabled] - generally unsupported
+        // (handled separately for specific cases like input[type="checkbox"])
+        return { kind: "unsupported", reason: "attribute selector" };
+    }
+  }
+
+  // Check for unsupported patterns
+  if (hasCombinator) {
+    return { kind: "unsupported", reason: "descendant/child/sibling selector" };
+  }
+  if (hasClass) {
+    return { kind: "unsupported", reason: "class selector" };
+  }
+  if (hasId) {
+    return { kind: "unsupported", reason: "id selector" };
+  }
+  if (hasTag) {
+    return { kind: "unsupported", reason: "tag selector" };
+  }
+  if (hasUniversal) {
+    return { kind: "unsupported", reason: "universal selector" };
+  }
+
+  // Must have nesting selector (&) or be just pseudos
+  if (!hasNesting && (pseudoClasses.length > 0 || pseudoElements.length > 0)) {
+    // Allow standalone pseudo selectors like ":hover" (equivalent to "&:hover")
+  }
+
+  // Handle pseudo-elements
+  if (pseudoElements.length > 0) {
+    if (pseudoElements.length > 1) {
+      return { kind: "unsupported", reason: "multiple pseudo-elements" };
+    }
+    if (pseudoClasses.length > 0) {
+      // Pseudo-classes with pseudo-elements is complex
+      return { kind: "unsupported", reason: "pseudo-class with pseudo-element" };
+    }
+    return { kind: "pseudoElement", element: pseudoElements[0]!.value };
+  }
+
+  // Handle pseudo-classes
+  if (pseudoClasses.length > 0) {
+    // Build the full pseudo string including chained :not() etc.
+    const pseudoString = buildPseudoString(pseudoClasses);
+    return { kind: "pseudo", pseudos: [pseudoString] };
+  }
+
+  // Just & with nothing else
+  return { kind: "base" };
+}
+
+/**
+ * Build the full pseudo-class string from parsed pseudo nodes.
+ * Handles chained pseudos like :focus:not(:disabled).
+ */
+function buildPseudoString(pseudos: selectorParser.Pseudo[]): string {
+  return pseudos
+    .map((p) => {
+      if (p.nodes && p.nodes.length > 0) {
+        // Has arguments like :not(:disabled) or :nth-child(2)
+        const inner = p.nodes.map((n) => n.toString()).join("");
+        return `${p.value}(${inner})`;
+      }
+      return p.value;
+    })
+    .join("");
+}
+
+/**
+ * Parse attribute selectors for special cases (input type, link href).
+ */
+function parseAttributeSelectorInternal(selector: string): ParsedAttributeSelector | null {
   // &[… ]::after (used for link external indicator)
   const afterSel = selector.match(/^&\[(.+)\](::after)$/) ?? selector.match(/^\[(.+)\](::after)$/);
   if (afterSel) {
     const inside = afterSel[1]!;
     if (inside.replace(/\s+/g, "") === 'target="_blank"') {
       return {
-        kind: "targetBlankAfter",
+        type: "targetBlankAfter",
         suffix: "External",
         pseudoElement: "::after",
       };
@@ -92,8 +213,8 @@ export function parseAttributeSelector(selector: string): {
   const typeEq = inside.match(/^type\s*=\s*"(checkbox|radio)"$/);
   if (typeEq) {
     return typeEq[1] === "checkbox"
-      ? { kind: "typeCheckbox", suffix: "Checkbox" }
-      : { kind: "typeRadio", suffix: "Radio" };
+      ? { type: "typeCheckbox", suffix: "Checkbox" }
+      : { type: "typeRadio", suffix: "Radio" };
   }
 
   // href^="https" / href$=".pdf"
@@ -102,28 +223,27 @@ export function parseAttributeSelector(selector: string): {
     const op = hrefOp[1];
     const val = hrefOp[2];
     if (op === "^" && val === "https") {
-      return { kind: "hrefStartsHttps", suffix: "Https" };
+      return { type: "hrefStartsHttps", suffix: "Https" };
     }
     if (op === "$" && val === ".pdf") {
-      return { kind: "hrefEndsPdf", suffix: "Pdf" };
+      return { type: "hrefEndsPdf", suffix: "Pdf" };
     }
   }
 
-  // target="_blank"]::after is encoded by stylis as selector '&[target="_blank"]::after' sometimes;
-  // normalize by detecting 'target="_blank"]::after' in the selector string.
+  // target="_blank"]::after
   const targetAfter = selector.match(/^&\[(target\s*=\s*"_blank")\](::after)$/);
   if (targetAfter) {
     return {
-      kind: "targetBlankAfter",
+      type: "targetBlankAfter",
       suffix: "External",
       pseudoElement: "::after",
     };
   }
 
-  // Also accept '&[target="_blank"]::after' without the above match (fallback).
+  // Fallback for target="_blank"::after
   if (selector.includes('[target="_blank"]') && selector.includes("::after")) {
     return {
-      kind: "targetBlankAfter",
+      type: "targetBlankAfter",
       suffix: "External",
       pseudoElement: "::after",
     };
@@ -132,17 +252,27 @@ export function parseAttributeSelector(selector: string): {
   return null;
 }
 
+// =============================================================================
+// Non-parsing utility functions (kept as-is)
+// =============================================================================
+
 export function normalizeInterpolatedSelector(selectorRaw: string): string {
   if (!/__SC_EXPR_\d+__/.test(selectorRaw)) {
     return selectorRaw;
   }
-  return selectorRaw
-    .replace(/__SC_EXPR_\d+__/g, "&")
-    .replace(/\s+/g, " ")
-    .trim()
-    .replace(/&\s*&/g, "&")
-    .replace(/&\s*&:/g, "&:")
-    .replace(/&\s*:/g, "&:");
+  return (
+    selectorRaw
+      .replace(/__SC_EXPR_\d+__/g, "&")
+      .replace(/\s+/g, " ")
+      .trim()
+      // Normalize `& &:pseudo` to `&:pseudo` (css helper interpolation + pseudo selector).
+      // This handles patterns like `${rowBase}\n&:hover { ... }` where the css helper
+      // interpolation becomes `&` and the nested pseudo selector is `&:hover`.
+      // NOTE: We intentionally do NOT normalize `& &` or `&&` without a pseudo, as those
+      // are specificity hacks that should bail (handled in transform.ts).
+      .replace(/&\s*&:/g, "&:")
+      .replace(/&\s*:/g, "&:")
+  );
 }
 
 export function normalizeSelectorForInputAttributePseudos(
