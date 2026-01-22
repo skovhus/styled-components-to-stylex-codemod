@@ -1846,8 +1846,11 @@ export function lowerRules(args: {
                   existing && typeof existing === "object" && !Array.isArray(existing) && !isAstNode
                     ? (existing as Record<string, unknown>)
                     : ({} as Record<string, unknown>);
+                // Set default from target first, then fall back to base styleObj.
+                // Only use null if neither has a value (for properties like outlineStyle that need explicit null).
                 if (!("default" in map)) {
-                  map.default = existing ?? null;
+                  const baseValue = existing ?? styleObj[stylexProp];
+                  map.default = baseValue ?? null;
                 }
                 map[media] = parsed.exprAst as any;
                 target[stylexProp] = map;
@@ -1871,8 +1874,11 @@ export function lowerRules(args: {
                   existing && typeof existing === "object" && !Array.isArray(existing) && !isAstNode
                     ? (existing as Record<string, unknown>)
                     : ({} as Record<string, unknown>);
+                // Set default from target first, then fall back to base styleObj.
+                // Only use null if neither has a value (for properties like outlineStyle that need explicit null).
                 if (!("default" in map)) {
-                  map.default = existing ?? null;
+                  const baseValue = existing ?? styleObj[stylexProp];
+                  map.default = baseValue ?? null;
                 }
                 // Apply to all pseudos (e.g., both :hover and :focus for "&:hover, &:focus")
                 for (const ps of pseudos) {
@@ -1937,6 +1943,134 @@ export function lowerRules(args: {
                 : toSuffixFromProp(whenClean);
               variantStyleKeys[whenClean] ??= `${decl.styleKey}${suffix}`;
             }
+            continue;
+          }
+
+          if (res && res.type === "splitMultiPropVariantsResolvedValue") {
+            const cssProp = (d.property ?? "").trim();
+            const stylexProp =
+              cssProp === "background" ? "backgroundColor" : cssPropertyToStylexProp(cssProp);
+
+            // Extract static prefix/suffix from CSS value for wrapping resolved values
+            const { prefix: staticPrefix, suffix: staticSuffix } = extractStaticParts(d.value, {
+              skipForProperty: /^border(-top|-right|-bottom|-left)?-color$/,
+              property: cssProp,
+            });
+
+            const parseResolved = (
+              expr: string,
+              imports: any[],
+            ): { exprAst: unknown; imports: any[] } | null => {
+              const wrappedExpr = wrapExprWithStaticParts(expr, staticPrefix, staticSuffix);
+              const exprAst = parseExpr(wrappedExpr);
+              if (!exprAst) {
+                warnings.push({
+                  severity: "error",
+                  type: "dynamic-node",
+                  message: `Adapter returned an unparseable expression for ${decl.localName}; dropping this declaration.`,
+                  ...(loc ? { loc } : {}),
+                });
+                return null;
+              }
+              return { exprAst, imports: imports ?? [] };
+            };
+
+            const applyParsed = (
+              target: Record<string, unknown>,
+              parsed: { exprAst: unknown; imports: any[] },
+            ): void => {
+              for (const imp of parsed.imports) {
+                resolverImports.set(JSON.stringify(imp), imp);
+              }
+              if (pseudos?.length) {
+                const existing = target[stylexProp];
+                const isAstNode =
+                  !!existing &&
+                  typeof existing === "object" &&
+                  !Array.isArray(existing) &&
+                  "type" in (existing as any) &&
+                  typeof (existing as any).type === "string";
+                const map =
+                  existing && typeof existing === "object" && !Array.isArray(existing) && !isAstNode
+                    ? (existing as Record<string, unknown>)
+                    : ({} as Record<string, unknown>);
+                // Set default from target first, then fall back to base styleObj.
+                // Only use null if neither has a value (for properties like outlineStyle that need explicit null).
+                if (!("default" in map)) {
+                  const baseValue = existing ?? styleObj[stylexProp];
+                  map.default = baseValue ?? null;
+                }
+                for (const ps of pseudos) {
+                  map[ps] = parsed.exprAst as any;
+                }
+                target[stylexProp] = map;
+                return;
+              }
+              target[stylexProp] = parsed.exprAst as any;
+            };
+
+            // Parse all three branches
+            const outerParsed = parseResolved(
+              res.outerTruthyBranch.expr,
+              res.outerTruthyBranch.imports,
+            );
+            const innerTruthyParsed = parseResolved(
+              res.innerTruthyBranch.expr,
+              res.innerTruthyBranch.imports,
+            );
+            const innerFalsyParsed = parseResolved(
+              res.innerFalsyBranch.expr,
+              res.innerFalsyBranch.imports,
+            );
+
+            if (!outerParsed || !innerTruthyParsed || !innerFalsyParsed) {
+              bailUnsupported(
+                `Unparseable resolved interpolation in ${decl.localName}; cannot safely emit styles.`,
+              );
+              break;
+            }
+
+            // Generate style keys for each branch
+            const capitalize = (s: string) => s.charAt(0).toUpperCase() + s.slice(1);
+            const outerKey = `${decl.styleKey}${capitalize(res.outerProp)}`;
+            const innerTruthyKey = `${decl.styleKey}${capitalize(res.innerProp)}True`;
+            const innerFalsyKey = `${decl.styleKey}${capitalize(res.innerProp)}False`;
+
+            // Create variant buckets for each branch
+            const outerBucket = { ...variantBuckets.get(res.outerProp) } as Record<string, unknown>;
+            applyParsed(outerBucket, outerParsed);
+            variantBuckets.set(res.outerProp, outerBucket);
+            variantStyleKeys[res.outerProp] ??= outerKey;
+
+            const innerTruthyWhen = `${res.innerProp}True`;
+            const innerTruthyBucket = { ...variantBuckets.get(innerTruthyWhen) } as Record<
+              string,
+              unknown
+            >;
+            applyParsed(innerTruthyBucket, innerTruthyParsed);
+            variantBuckets.set(innerTruthyWhen, innerTruthyBucket);
+            variantStyleKeys[innerTruthyWhen] ??= innerTruthyKey;
+
+            const innerFalsyWhen = `${res.innerProp}False`;
+            const innerFalsyBucket = { ...variantBuckets.get(innerFalsyWhen) } as Record<
+              string,
+              unknown
+            >;
+            applyParsed(innerFalsyBucket, innerFalsyParsed);
+            variantBuckets.set(innerFalsyWhen, innerFalsyBucket);
+            variantStyleKeys[innerFalsyWhen] ??= innerFalsyKey;
+
+            // Store compound variant info for emit phase
+            decl.compoundVariants ??= [];
+            decl.compoundVariants.push({
+              outerProp: res.outerProp,
+              outerTruthyKey: outerKey,
+              innerProp: res.innerProp,
+              innerTruthyKey,
+              innerFalsyKey,
+            });
+
+            decl.needsWrapperComponent = true;
             continue;
           }
 

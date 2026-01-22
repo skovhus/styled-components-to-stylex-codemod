@@ -1,11 +1,10 @@
 import * as React from "react";
 import styled from "styled-components";
-import { ColorConverter } from "./lib/ColorConverter";
 
 const CardContainer = styled.label<{ checked: boolean; disabled?: boolean }>`
   display: flex;
   align-items: flex-start;
-  padding: 16px;
+  margin: 8px;
   border-radius: 6px;
   opacity: ${(props) => (props.disabled ? 0.5 : 1)};
   position: relative;
@@ -33,12 +32,15 @@ const CardContent = styled.div`
 `;
 
 export const App = () => (
-  <div>
+  <div style={{ display: "flex", flexDirection: "column" }}>
     <CardContainer checked={false} disabled={false}>
-      <CardContent>Option 1</CardContent>
+      <CardContent>Unchecked, not disabled</CardContent>
+    </CardContainer>
+    <CardContainer checked={true} disabled={false}>
+      <CardContent>Checked, not disabled</CardContent>
     </CardContainer>
     <CardContainer checked={true} disabled={true}>
-      <CardContent>Option 2</CardContent>
+      <CardContent>Checked, disabled</CardContent>
     </CardContainer>
   </div>
 );

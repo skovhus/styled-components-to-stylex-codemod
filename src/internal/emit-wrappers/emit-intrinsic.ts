@@ -227,6 +227,56 @@ export function emitIntrinsicWrappers(ctx: any): {
     }
   };
 
+  /**
+   * Build compound variant expressions for multi-prop nested ternaries.
+   * Generates: outerProp ? styles.outerKey : innerProp ? styles.innerTrueKey : styles.innerFalseKey
+   *
+   * @param compoundVariants - Array of compound variant configurations
+   * @param styleArgs - Array to push generated expressions into
+   * @param destructureProps - Optional array to track props that need destructuring
+   */
+  const buildCompoundVariantExpressions = (
+    compoundVariants: NonNullable<StyledDecl["compoundVariants"]>,
+    styleArgs: ExpressionKind[],
+    destructureProps?: string[],
+  ): void => {
+    for (const cv of compoundVariants) {
+      // Add props to destructure list
+      if (destructureProps) {
+        if (!destructureProps.includes(cv.outerProp)) {
+          destructureProps.push(cv.outerProp);
+        }
+        if (!destructureProps.includes(cv.innerProp)) {
+          destructureProps.push(cv.innerProp);
+        }
+      }
+
+      // Build: outerProp ? styles.outerKey : innerProp ? styles.innerTrueKey : styles.innerFalseKey
+      const outerPropId = j.identifier(cv.outerProp);
+      const innerPropId = j.identifier(cv.innerProp);
+      const outerStyle = j.memberExpression(
+        j.identifier(stylesIdentifier),
+        j.identifier(cv.outerTruthyKey),
+      );
+      const innerTrueStyle = j.memberExpression(
+        j.identifier(stylesIdentifier),
+        j.identifier(cv.innerTruthyKey),
+      );
+      const innerFalseStyle = j.memberExpression(
+        j.identifier(stylesIdentifier),
+        j.identifier(cv.innerFalsyKey),
+      );
+
+      // Build inner ternary: innerProp ? innerTrueStyle : innerFalseStyle
+      const innerTernary = j.conditionalExpression(innerPropId, innerTrueStyle, innerFalseStyle);
+
+      // Build outer ternary: outerProp ? outerStyle : innerTernary
+      const outerTernary = j.conditionalExpression(outerPropId, outerStyle, innerTernary);
+
+      styleArgs.push(outerTernary);
+    }
+  };
+
   const mergeAsIntoPropsWithChildren = (typeText: string): string | null => {
     const prefix = "React.PropsWithChildren<";
     if (!typeText.trim().startsWith(prefix) || !typeText.trim().endsWith(">")) {
@@ -615,9 +665,21 @@ export function emitIntrinsicWrappers(ctx: any): {
       // Track default values for props (for destructuring defaults)
       const propDefaults = new Map<string, string>();
 
+      // Collect keys used by compound variants (they're handled separately)
+      const compoundVariantKeys = new Set<string>();
+      for (const cv of d.compoundVariants ?? []) {
+        compoundVariantKeys.add(cv.outerProp);
+        compoundVariantKeys.add(`${cv.innerProp}True`);
+        compoundVariantKeys.add(`${cv.innerProp}False`);
+      }
+
       // Add variant style arguments if this component has variants
       if (d.variantStyleKeys) {
         for (const [when, variantKey] of Object.entries(d.variantStyleKeys)) {
+          // Skip keys handled by compound variants
+          if (compoundVariantKeys.has(when)) {
+            continue;
+          }
           const { cond, props } = parseVariantWhenToAst(j, when);
           for (const p of props) {
             if (p && !destructureProps.includes(p)) {
@@ -642,6 +704,11 @@ export function emitIntrinsicWrappers(ctx: any): {
           destructureProps,
           propDefaults,
         );
+      }
+
+      // Add compound variant expressions (multi-prop nested ternaries)
+      if (d.compoundVariants) {
+        buildCompoundVariantExpressions(d.compoundVariants, styleArgs, destructureProps);
       }
 
       // Add adapter-resolved StyleX styles (emitted directly into stylex.props args).
@@ -917,6 +984,11 @@ export function emitIntrinsicWrappers(ctx: any): {
     for (const dim of d.variantDimensions ?? []) {
       extraProps.add(dim.propName);
     }
+    // Add compound variant prop names
+    for (const cv of d.compoundVariants ?? []) {
+      extraProps.add(cv.outerProp);
+      extraProps.add(cv.innerProp);
+    }
     for (const p of d.styleFnFromProps ?? []) {
       if (p?.jsxProp && p.jsxProp !== "__props") {
         extraProps.add(p.jsxProp);
@@ -1053,8 +1125,20 @@ export function emitIntrinsicWrappers(ctx: any): {
       }
     }
 
+    // Collect keys used by compound variants (they're handled separately)
+    const compoundVariantKeys = new Set<string>();
+    for (const cv of d.compoundVariants ?? []) {
+      compoundVariantKeys.add(cv.outerProp);
+      compoundVariantKeys.add(`${cv.innerProp}True`);
+      compoundVariantKeys.add(`${cv.innerProp}False`);
+    }
+
     if (d.variantStyleKeys) {
       for (const [when, variantKey] of Object.entries(d.variantStyleKeys)) {
+        // Skip keys handled by compound variants
+        if (compoundVariantKeys.has(when)) {
+          continue;
+        }
         const { cond } = parseVariantWhenToAst(j, when);
         styleArgs.push(
           j.logicalExpression(
@@ -1072,6 +1156,10 @@ export function emitIntrinsicWrappers(ctx: any): {
     // This ensures variant props like $wrapLines are destructured from props
     if (d.variantStyleKeys) {
       for (const when of Object.keys(d.variantStyleKeys)) {
+        // Skip keys handled by compound variants
+        if (compoundVariantKeys.has(when)) {
+          continue;
+        }
         const { props } = parseVariantWhenToAst(j, when);
         for (const p of props) {
           if (p && !dropProps.includes(p)) {
@@ -1094,6 +1182,11 @@ export function emitIntrinsicWrappers(ctx: any): {
     if (d.variantDimensions) {
       // Pass destructureParts and propDefaults to track props and their defaults
       buildVariantDimensionLookups(d.variantDimensions, styleArgs, destructureParts, propDefaults);
+    }
+
+    // Add compound variant expressions (multi-prop nested ternaries)
+    if (d.compoundVariants) {
+      buildCompoundVariantExpressions(d.compoundVariants, styleArgs, destructureParts);
     }
 
     const styleFnPairs = d.styleFnFromProps ?? [];
@@ -1575,6 +1668,11 @@ export function emitIntrinsicWrappers(ctx: any): {
       for (const dim of d.variantDimensions ?? []) {
         variantProps.add(dim.propName);
       }
+      // Add compound variant prop names
+      for (const cv of d.compoundVariants ?? []) {
+        variantProps.add(cv.outerProp);
+        variantProps.add(cv.innerProp);
+      }
       const extraProps = new Set<string>();
       if (d.extraStylexPropsArgs) {
         for (const extra of d.extraStylexPropsArgs) {
@@ -1954,6 +2052,8 @@ export function emitIntrinsicWrappers(ctx: any): {
         }),
         // Add variant dimension prop names
         ...(d.variantDimensions ?? []).map((dim) => dim.propName),
+        // Add compound variant prop names
+        ...(d.compoundVariants ?? []).flatMap((cv) => [cv.outerProp, cv.innerProp]),
       ]);
       const styleFnPropsForType = new Set(
         (d.styleFnFromProps ?? [])
@@ -2126,8 +2226,20 @@ export function emitIntrinsicWrappers(ctx: any): {
         }
       }
     }
+    // Collect keys used by compound variants (they're handled separately)
+    const compoundVariantKeys = new Set<string>();
+    for (const cv of d.compoundVariants ?? []) {
+      compoundVariantKeys.add(cv.outerProp);
+      compoundVariantKeys.add(`${cv.innerProp}True`);
+      compoundVariantKeys.add(`${cv.innerProp}False`);
+    }
+
     if (d.variantStyleKeys) {
       for (const [when, variantKey] of Object.entries(d.variantStyleKeys)) {
+        // Skip keys handled by compound variants
+        if (compoundVariantKeys.has(when)) {
+          continue;
+        }
         const { cond, props } = parseVariantWhenToAst(j, when);
         for (const p of props) {
           if (p && !destructureProps.includes(p)) {
@@ -2148,6 +2260,11 @@ export function emitIntrinsicWrappers(ctx: any): {
     // Add variant dimension lookups (StyleX variants recipe pattern)
     if (d.variantDimensions) {
       buildVariantDimensionLookups(d.variantDimensions, styleArgs, destructureProps, propDefaults);
+    }
+
+    // Add compound variant expressions (multi-prop nested ternaries)
+    if (d.compoundVariants) {
+      buildCompoundVariantExpressions(d.compoundVariants, styleArgs, destructureProps);
     }
 
     for (const prop of collectInlineStylePropNames(d.inlineStyleProps ?? [])) {

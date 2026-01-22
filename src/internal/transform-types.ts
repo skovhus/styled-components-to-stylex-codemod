@@ -78,6 +78,20 @@ export type StyledDecl = {
    * and uses object lookup (`variants[prop]`) instead of conditionals.
    */
   variantDimensions?: VariantDimension[];
+  /**
+   * Compound variants for multi-prop nested ternaries like:
+   *   outerProp ? A : innerProp ? B : C
+   *
+   * Each entry contains variant style keys for all three branches and
+   * instructs the emit phase to generate a compound ternary expression.
+   */
+  compoundVariants?: Array<{
+    outerProp: string;
+    outerTruthyKey: string;
+    innerProp: string;
+    innerTruthyKey: string;
+    innerFalsyKey: string;
+  }>;
   needsWrapperComponent?: boolean;
   /**
    * Whether this component should support external className/style extension.

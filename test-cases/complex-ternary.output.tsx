@@ -26,12 +26,15 @@ function CardContainer(props: CardContainerProps) {
 }
 
 export const App = () => (
-  <div>
+  <div style={{ display: "flex", flexDirection: "column" }}>
     <CardContainer checked={false} disabled={false}>
-      <div {...stylex.props(styles.cardContent)}>Option 1</div>
+      <div {...stylex.props(styles.cardContent)}>Unchecked, not disabled</div>
+    </CardContainer>
+    <CardContainer checked={true} disabled={false}>
+      <div {...stylex.props(styles.cardContent)}>Checked, not disabled</div>
     </CardContainer>
     <CardContainer checked={true} disabled={true}>
-      <div {...stylex.props(styles.cardContent)}>Option 2</div>
+      <div {...stylex.props(styles.cardContent)}>Checked, disabled</div>
     </CardContainer>
   </div>
 );
@@ -40,7 +43,7 @@ const styles = stylex.create({
   cardContainer: {
     display: "flex",
     alignItems: "flex-start",
-    padding: "16px",
+    margin: "8px",
     borderRadius: "6px",
     opacity: 1,
     position: "relative",
@@ -55,19 +58,19 @@ const styles = stylex.create({
   cardContainerDisabled: {
     opacity: 0.5,
     borderColor: {
-      default: null,
+      default: themeVars.bgSub,
       ":hover": themeVars.bgBase,
     },
   },
   cardContainerCheckedTrue: {
     borderColor: {
-      default: null,
+      default: themeVars.bgSub,
       ":hover": themeVars.bgSub,
     },
   },
   cardContainerCheckedFalse: {
     borderColor: {
-      default: null,
+      default: themeVars.bgSub,
       ":hover": themeVars.bgBase,
     },
   },

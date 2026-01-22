@@ -142,6 +142,24 @@ export type HandlerResult =
     }
   | {
       /**
+       * Split a multi-prop nested ternary like `outer ? A : inner ? B : C` where
+       * outer and inner test different boolean props.
+       *
+       * Example: `disabled ? bgBase : checked ? bgSub : bgBase`
+       *
+       * The caller emits variant buckets for each branch and wires them into a
+       * compound ternary at usage time:
+       *   `disabled ? styles.xDisabled : checked ? styles.xCheckedTrue : styles.xCheckedFalse`
+       */
+      type: "splitMultiPropVariantsResolvedValue";
+      outerProp: string;
+      outerTruthyBranch: { expr: string; imports: ImportSpec[] };
+      innerProp: string;
+      innerTruthyBranch: { expr: string; imports: ImportSpec[] };
+      innerFalsyBranch: { expr: string; imports: ImportSpec[] };
+    }
+  | {
+      /**
        * Signal that this handler does not know how to transform the node.
        *
        * The caller typically falls back to other strategies (or drops the declaration)
@@ -633,18 +651,51 @@ function tryResolveConditionalValue(
     if (alt === "invalid") {
       return { type: "keepOriginal", reason: invalidCurriedValue! };
     }
+    const outerProp = testPath[0]!;
+
+    // Check for multi-prop nested ternary: outerProp ? A : innerProp ? B : C
+    // where alternate is a conditional testing a different boolean prop
+    if (cons && !alt && alternate.type === "ConditionalExpression") {
+      const innerTest = (alternate as any).test;
+      const innerTestPath =
+        innerTest?.type === "MemberExpression"
+          ? getMemberPathFromIdentifier(innerTest, paramName!)
+          : null;
+      // Only handle when inner tests a different single-level prop
+      if (innerTestPath && innerTestPath.length === 1 && innerTestPath[0] !== outerProp) {
+        const innerCons = getBranch((alternate as any).consequent);
+        const innerAlt = getBranch((alternate as any).alternate);
+        if (innerCons && innerCons !== "invalid" && innerAlt && innerAlt !== "invalid") {
+          // All branches must use "create" usage (not "props")
+          if (
+            cons.usage === "create" &&
+            innerCons.usage === "create" &&
+            innerAlt.usage === "create"
+          ) {
+            return {
+              type: "splitMultiPropVariantsResolvedValue",
+              outerProp,
+              outerTruthyBranch: { expr: cons.expr, imports: cons.imports },
+              innerProp: innerTestPath[0]!,
+              innerTruthyBranch: { expr: innerCons.expr, imports: innerCons.imports },
+              innerFalsyBranch: { expr: innerAlt.expr, imports: innerAlt.imports },
+            };
+          }
+        }
+      }
+    }
+
     if (!cons || !alt) {
       return null;
     }
-    const whenExpr = testPath[0]!;
     const allUsages = new Set([cons.usage, alt.usage]);
     if (allUsages.size !== 1) {
       return null;
     }
     const usage = cons.usage;
     const variants = [
-      { nameHint: "truthy", when: whenExpr, expr: cons.expr, imports: cons.imports },
-      { nameHint: "falsy", when: `!${whenExpr}`, expr: alt.expr, imports: alt.imports },
+      { nameHint: "truthy", when: outerProp, expr: cons.expr, imports: cons.imports },
+      { nameHint: "falsy", when: `!${outerProp}`, expr: alt.expr, imports: alt.imports },
     ];
     return usage === "props"
       ? { type: "splitVariantsResolvedStyles", variants }
