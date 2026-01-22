@@ -833,23 +833,45 @@ export function lowerRules(args: {
                       : resolveThemeValue(expr);
                   if (resolved) {
                     for (const out of cssDeclarationToStylexDeclarations(d)) {
-                      // Build the value: if there's static text around the interpolation, include it
+                      // Build the value: preserve the order of static and interpolated parts
                       const parts =
                         (d.value as { parts?: Array<{ kind: string; value?: string }> }).parts ??
                         [];
-                      const staticPrefix = parts
-                        .filter((p) => p.kind === "static")
-                        .map((p) => p.value ?? "")
-                        .join("");
-                      const finalValue = staticPrefix
-                        ? j.templateLiteral(
-                            [
-                              j.templateElement({ raw: staticPrefix, cooked: staticPrefix }, false),
-                              j.templateElement({ raw: "", cooked: "" }, true),
-                            ],
-                            [resolved as ExpressionKind],
-                          )
-                        : resolved;
+                      const hasStaticParts = parts.some((p) => p.kind === "static" && p.value);
+                      let finalValue: unknown;
+                      if (hasStaticParts) {
+                        // Build a proper template literal preserving the order of parts
+                        const quasis: any[] = [];
+                        const expressions: any[] = [];
+                        let currentStatic = "";
+
+                        for (let i = 0; i < parts.length; i++) {
+                          const part = parts[i];
+                          if (!part) {
+                            continue;
+                          }
+                          if (part.kind === "static") {
+                            currentStatic += part.value ?? "";
+                          } else if (part.kind === "slot") {
+                            // Add the accumulated static text as a quasi
+                            quasis.push(
+                              j.templateElement(
+                                { raw: currentStatic, cooked: currentStatic },
+                                false,
+                              ),
+                            );
+                            currentStatic = "";
+                            expressions.push(resolved);
+                          }
+                        }
+                        // Add the final static text (may be empty)
+                        quasis.push(
+                          j.templateElement({ raw: currentStatic, cooked: currentStatic }, true),
+                        );
+                        finalValue = j.templateLiteral(quasis, expressions);
+                      } else {
+                        finalValue = resolved;
+                      }
                       (bucket as Record<string, unknown>)[out.prop] = finalValue;
                     }
                   }
