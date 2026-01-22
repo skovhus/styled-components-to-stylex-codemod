@@ -7,9 +7,9 @@
  * - `${color} dashed` should correctly become `${color} dashed` (suffix preserved)
  */
 import * as React from "react";
-
 import * as stylex from "@stylexjs/stylex";
 import { themeVars } from "./tokens.stylex";
+
 type ContainerLinkProps = Omit<React.ComponentProps<"a">, "className" | "style">;
 
 export function ContainerLink(props: ContainerLinkProps) {
