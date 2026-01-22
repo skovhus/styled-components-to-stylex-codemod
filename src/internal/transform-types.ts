@@ -106,7 +106,11 @@ export type StyledDecl = {
    * and/or `style` even if there are no direct JSX callsites with those attributes in this file.
    */
   usedAsValue?: boolean;
-  styleFnFromProps?: Array<{ fnKey: string; jsxProp: string }>;
+  styleFnFromProps?: Array<{
+    fnKey: string;
+    jsxProp: string;
+    condition?: "truthy";
+  }>;
   shouldForwardProp?: { dropProps: string[]; dropPrefix?: string };
   /**
    * True when `shouldForwardProp` came from `styled.*.withConfig({ shouldForwardProp })`.

@@ -245,7 +245,11 @@ export function lowerRules(args: {
     const nestedSelectors: Record<string, Record<string, unknown>> = {};
     const variantBuckets = new Map<string, Record<string, unknown>>();
     const variantStyleKeys: Record<string, string> = {};
-    const styleFnFromProps: Array<{ fnKey: string; jsxProp: string }> = [];
+    const styleFnFromProps: Array<{
+      fnKey: string;
+      jsxProp: string;
+      condition?: "truthy";
+    }> = [];
     const styleFnDecls = new Map<string, any>();
     const attrBuckets = new Map<string, Record<string, unknown>>();
     const inlineStyleProps: Array<{ prop: string; expr: ExpressionKind }> = [];
@@ -489,11 +493,44 @@ export function lowerRules(args: {
           return false;
         }
         const cssNode = body.right as { quasi: ExpressionKind };
-        const consStyle = resolveCssHelperTemplate(cssNode.quasi, paramName, decl.localName);
-        if (!consStyle) {
+        const resolved = resolveCssHelperTemplate(cssNode.quasi, paramName, decl.localName);
+        if (!resolved) {
           return false;
         }
-        applyVariant(testInfo, consStyle);
+        const { style: consStyle, dynamicProps } = resolved;
+
+        if (dynamicProps.length > 0) {
+          const propName = testInfo.propName;
+          const hasMismatchedProp = dynamicProps.some((p) => p.jsxProp !== propName);
+          const isComparison = testInfo.when.includes("===") || testInfo.when.includes("!==");
+          if (!propName || hasMismatchedProp || testInfo.when.startsWith("!") || isComparison) {
+            return false;
+          }
+          for (const dyn of dynamicProps) {
+            const fnKey = `${decl.styleKey}${toSuffixFromProp(dyn.stylexProp)}`;
+            if (!styleFnDecls.has(fnKey)) {
+              const param = j.identifier(dyn.stylexProp);
+              annotateParamFromJsxProp(param, dyn.jsxProp);
+              const valueId = j.identifier(dyn.stylexProp);
+              const p = j.property("init", valueId, valueId) as any;
+              p.shorthand = true;
+              const bodyExpr = j.objectExpression([p]);
+              styleFnDecls.set(fnKey, j.arrowFunctionExpression([param], bodyExpr));
+            }
+            if (!styleFnFromProps.some((p) => p.fnKey === fnKey)) {
+              styleFnFromProps.push({
+                fnKey,
+                jsxProp: dyn.jsxProp,
+                condition: "truthy",
+              });
+            }
+            ensureShouldForwardPropDrop(decl, dyn.jsxProp);
+          }
+        }
+
+        if (Object.keys(consStyle).length > 0) {
+          applyVariant(testInfo, consStyle);
+        }
         return true;
       }
 
@@ -515,11 +552,17 @@ export function lowerRules(args: {
 
       const consNode = cons as { quasi: ExpressionKind };
       const altNode = alt as { quasi: ExpressionKind };
-      const consStyle = resolveCssHelperTemplate(consNode.quasi, paramName, decl.localName);
-      const altStyle = resolveCssHelperTemplate(altNode.quasi, paramName, decl.localName);
-      if (!consStyle || !altStyle) {
+      const consResolved = resolveCssHelperTemplate(consNode.quasi, paramName, decl.localName);
+      const altResolved = resolveCssHelperTemplate(altNode.quasi, paramName, decl.localName);
+      if (!consResolved || !altResolved) {
         return false;
       }
+      if (consResolved.dynamicProps.length > 0 || altResolved.dynamicProps.length > 0) {
+        return false;
+      }
+
+      const consStyle = consResolved.style;
+      const altStyle = altResolved.style;
 
       mergeStyleObjects(styleObj, altStyle);
       applyVariant(testInfo, consStyle);
