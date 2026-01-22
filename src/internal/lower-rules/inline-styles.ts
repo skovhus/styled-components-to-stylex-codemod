@@ -1,4 +1,5 @@
 import type { JSCodeshift } from "jscodeshift";
+import { getFunctionBodyExpr } from "../jscodeshift-utils.js";
 
 type ExpressionKind = Parameters<JSCodeshift["expressionStatement"]>[0];
 
@@ -33,10 +34,7 @@ export function unwrapArrowFunctionToPropsExpr(
     return null;
   }
   const paramName = expr.params[0].name;
-  const bodyExpr =
-    expr.body?.type === "BlockStatement"
-      ? expr.body.body?.find((s: any) => s.type === "ReturnStatement")?.argument
-      : expr.body;
+  const bodyExpr = getFunctionBodyExpr(expr);
   if (!bodyExpr) {
     return null;
   }
@@ -138,11 +136,7 @@ export function collectPropsFromArrowFn(expr: any): Set<string> {
       }
     }
   };
-  const bodyExpr =
-    expr.body?.type === "BlockStatement"
-      ? expr.body.body?.find((s: any) => s.type === "ReturnStatement")?.argument
-      : expr.body;
-  visit(bodyExpr);
+  visit(getFunctionBodyExpr(expr));
   return props;
 }
 
@@ -174,10 +168,7 @@ export function hasThemeAccessInArrowFn(expr: any): boolean {
     return false;
   }
   const paramName = expr.params[0].name;
-  const bodyExpr =
-    expr.body?.type === "BlockStatement"
-      ? expr.body.body?.find((s: any) => s.type === "ReturnStatement")?.argument
-      : expr.body;
+  const bodyExpr = getFunctionBodyExpr(expr);
   if (!bodyExpr) {
     return false;
   }
@@ -225,10 +216,7 @@ export function inlineArrowFunctionBody(j: JSCodeshift, expr: any): ExpressionKi
     return null;
   }
   const paramName = expr.params[0].name;
-  const bodyExpr =
-    expr.body?.type === "BlockStatement"
-      ? expr.body.body?.find((s: any) => s.type === "ReturnStatement")?.argument
-      : expr.body;
+  const bodyExpr = getFunctionBodyExpr(expr);
   if (!bodyExpr) {
     return null;
   }
@@ -291,10 +279,7 @@ export function hasUnsupportedConditionalTest(expr: any): boolean {
   if (!expr || expr.type !== "ArrowFunctionExpression") {
     return false;
   }
-  const bodyExpr =
-    expr.body?.type === "BlockStatement"
-      ? expr.body.body?.find((s: any) => s.type === "ReturnStatement")?.argument
-      : expr.body;
+  const bodyExpr = getFunctionBodyExpr(expr);
   if (!bodyExpr) {
     return false;
   }

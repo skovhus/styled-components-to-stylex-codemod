@@ -1,6 +1,7 @@
 import type { Collection } from "jscodeshift";
 import type { CssRuleIR } from "./css-ir.js";
 import { normalizeStylisAstToIR } from "./css-ir.js";
+import { getFunctionBodyExpr } from "./jscodeshift-utils.js";
 import { resolveBackgroundStylexProp } from "./css-prop-mapping.js";
 import { parseStyledTemplateLiteral } from "./styled-css.js";
 import type { StyledDecl } from "./transform-types.js";
@@ -319,11 +320,7 @@ function collectStyledDeclsImpl(args: {
       }
     };
 
-    const body =
-      fn.body?.type === "BlockStatement"
-        ? fn.body.body.find((s: any) => s.type === "ReturnStatement")?.argument
-        : fn.body;
-    collect(body);
+    collect(getFunctionBodyExpr(fn));
 
     const dropPropsArr = [...dropProps];
     if (!dropPropsArr.length && !dropPrefix) {

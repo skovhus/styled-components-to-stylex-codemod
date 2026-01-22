@@ -7,7 +7,11 @@ import {
   resolveBackgroundStylexProp,
   resolveBackgroundStylexPropForVariants,
 } from "./css-prop-mapping.js";
-import { getMemberPathFromIdentifier, getNodeLocStart } from "./jscodeshift-utils.js";
+import {
+  getFunctionBodyExpr,
+  getMemberPathFromIdentifier,
+  getNodeLocStart,
+} from "./jscodeshift-utils.js";
 import type { Adapter, ImportSource, ImportSpec } from "../adapter.js";
 import { tryHandleAnimation } from "./lower-rules/animation.js";
 import { tryHandleInterpolatedBorder } from "./lower-rules/borders.js";
@@ -2276,10 +2280,7 @@ export function lowerRules(args: {
               const e = decl.templateExpressions[slotId] as any;
               if (e?.type === "ArrowFunctionExpression") {
                 if (pseudos?.length || media) {
-                  const bodyExpr =
-                    e.body?.type === "BlockStatement"
-                      ? e.body.body?.find((s: any) => s.type === "ReturnStatement")?.argument
-                      : e.body;
+                  const bodyExpr = getFunctionBodyExpr(e);
                   if (countConditionalExpressions(bodyExpr) > 1) {
                     warnings.push({
                       severity: "warning",

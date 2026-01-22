@@ -1,7 +1,7 @@
 import type { ASTNode, Collection, JSCodeshift } from "jscodeshift";
 
 import type { Adapter, ImportSpec } from "../../adapter.js";
-import { getMemberPathFromIdentifier } from "../jscodeshift-utils.js";
+import { getFunctionBodyExpr, getMemberPathFromIdentifier } from "../jscodeshift-utils.js";
 
 export function createThemeResolvers(args: {
   root: Collection<ASTNode>;
@@ -44,25 +44,7 @@ export function createThemeResolvers(args: {
     if (!expr || typeof expr !== "object") {
       return null;
     }
-    const getPathFromThemeRoot = (node: any): string[] | null => {
-      const parts: string[] = [];
-      let cur: any = node;
-      while (cur && (cur.type === "MemberExpression" || cur.type === "OptionalMemberExpression")) {
-        if (cur.computed) {
-          return null;
-        }
-        if (cur.property?.type !== "Identifier") {
-          return null;
-        }
-        parts.unshift(cur.property.name);
-        cur = cur.object;
-      }
-      if (!cur || cur.type !== "Identifier" || cur.name !== "theme") {
-        return null;
-      }
-      return parts;
-    };
-    const parts = getPathFromThemeRoot(expr);
+    const parts = getMemberPathFromIdentifier(expr, "theme");
     if (!parts || !parts.length) {
       return null;
     }
@@ -80,10 +62,7 @@ export function createThemeResolvers(args: {
     if (!expr || (expr.type !== "ArrowFunctionExpression" && expr.type !== "FunctionExpression")) {
       return null;
     }
-    const bodyExpr =
-      expr.body?.type === "BlockStatement"
-        ? expr.body.body?.find((s: any) => s.type === "ReturnStatement")?.argument
-        : expr.body;
+    const bodyExpr = getFunctionBodyExpr(expr);
     if (!bodyExpr) {
       return null;
     }
