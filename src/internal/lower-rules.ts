@@ -2254,7 +2254,10 @@ export function lowerRules(args: {
                 styleFnDecls.set(fnKey, j.arrowFunctionExpression([param], body));
               }
 
-              styleFnFromProps.push({ fnKey, jsxProp: res.propName });
+              // Use condition: "truthy" to mirror the original `props.textColor ? ... : fallback`
+              // semantics. This ensures falsy-but-defined values (empty string, 0, false) use
+              // the fallback rather than attempting an indexed lookup.
+              styleFnFromProps.push({ fnKey, jsxProp: res.propName, condition: "truthy" });
             }
 
             if (bail) {
