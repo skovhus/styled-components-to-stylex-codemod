@@ -61,6 +61,25 @@ export function getNodeLocStart(
   return { line: loc.line, column: loc.column };
 }
 
+/**
+ * Extracts the expression from an arrow/function expression body.
+ * - For expression bodies: returns the expression directly
+ * - For block bodies: returns the argument of the first return statement
+ */
+export function getFunctionBodyExpr(fn: {
+  body?: { type?: string; body?: Array<{ type?: string; argument?: unknown }> };
+}): unknown {
+  const body = fn.body;
+  if (!body || typeof body !== "object") {
+    return undefined;
+  }
+  if ((body as { type?: string }).type === "BlockStatement") {
+    const block = body as { body?: Array<{ type?: string; argument?: unknown }> };
+    return block.body?.find((s) => s.type === "ReturnStatement")?.argument;
+  }
+  return body;
+}
+
 function isIdentifier(node: unknown, name?: string): node is Identifier {
   return (
     !!node &&
@@ -71,7 +90,6 @@ function isIdentifier(node: unknown, name?: string): node is Identifier {
 }
 
 function isMemberExpression(node: unknown): node is MemberExpression {
-  return (
-    !!node && typeof node === "object" && (node as { type?: string }).type === "MemberExpression"
-  );
+  const type = !!node && typeof node === "object" ? (node as { type?: string }).type : null;
+  return type === "MemberExpression" || type === "OptionalMemberExpression";
 }
