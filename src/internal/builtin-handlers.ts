@@ -294,63 +294,91 @@ function tryResolveThemeAccess(
   return { type: "resolvedValue", expr: res.expr, imports: res.imports };
 }
 
+type CallExpressionNode = {
+  type?: string;
+  callee?: unknown;
+  arguments?: unknown[];
+};
+
+function isCallExpressionNode(node: unknown): node is CallExpressionNode {
+  return !!node && typeof node === "object" && (node as { type?: string }).type === "CallExpression";
+}
+
+function callArgFromNode(node: unknown): CallResolveContext["args"][number] {
+  if (!node || typeof node !== "object") {
+    return { kind: "unknown" };
+  }
+  const type = (node as { type?: string }).type;
+  if (type === "StringLiteral") {
+    return { kind: "literal", value: (node as { value: string }).value };
+  }
+  if (type === "NumericLiteral") {
+    return { kind: "literal", value: (node as { value: number }).value };
+  }
+  if (type === "BooleanLiteral") {
+    return { kind: "literal", value: (node as { value: boolean }).value };
+  }
+  if (type === "NullLiteral") {
+    return { kind: "literal", value: null };
+  }
+  if (type === "Literal") {
+    const v = (node as { value?: unknown }).value;
+    if (typeof v === "string" || typeof v === "number" || typeof v === "boolean" || v === null) {
+      return { kind: "literal", value: v };
+    }
+  }
+  return { kind: "unknown" };
+}
+
+function callArgsFromNode(args: unknown): CallResolveContext["args"] {
+  if (!Array.isArray(args)) {
+    return [];
+  }
+  return args.map((arg) => callArgFromNode(arg));
+}
+
+function resolveImportedHelperCall(
+  callExpr: CallExpressionNode,
+  ctx: InternalHandlerContext,
+): CallResolveResult | "keepOriginal" | "unresolved" {
+  const callee = callExpr.callee;
+  if (!callee || typeof callee !== "object") {
+    return "keepOriginal";
+  }
+  const calleeType = (callee as { type?: string }).type;
+  if (calleeType !== "Identifier") {
+    return "keepOriginal";
+  }
+  const calleeIdent = (callee as { name?: string }).name;
+  if (typeof calleeIdent !== "string") {
+    return "keepOriginal";
+  }
+  const imp = ctx.resolveImport(calleeIdent);
+  const calleeImportedName = imp?.importedName;
+  const calleeSource = imp?.source;
+  if (!calleeImportedName || !calleeSource) {
+    return "keepOriginal";
+  }
+  const args = callArgsFromNode(callExpr.arguments);
+  const res = ctx.resolveCall({
+    callSiteFilePath: ctx.filePath,
+    calleeImportedName,
+    calleeSource,
+    args,
+  });
+  return res ? res : "unresolved";
+}
+
 function tryResolveCallExpression(
   node: DynamicNode,
   ctx: InternalHandlerContext,
 ): HandlerResult | null {
-  const expr: any = node.expr as any;
-  if (!expr || typeof expr !== "object" || expr.type !== "CallExpression") {
+  const expr = node.expr;
+  if (!isCallExpressionNode(expr)) {
     return null;
   }
 
-  const resolveSimpleHelperCall = (
-    callExpr: any,
-  ): CallResolveResult | "keepOriginal" | "unresolved" => {
-    // Only support the simplest call shape: `identifier("stringLiteral")` where identifier is a
-    // named import we can trace back to a concrete file. Anything else should bail.
-    if (callExpr.callee?.type !== "Identifier" || typeof callExpr.callee.name !== "string") {
-      return "keepOriginal";
-    }
-    const calleeIdent = callExpr.callee.name;
-    const imp = ctx.resolveImport(calleeIdent);
-    const calleeImportedName = imp?.importedName;
-    const calleeSource = imp?.source;
-    if (!calleeImportedName || !calleeSource) {
-      return "keepOriginal";
-    }
-
-    const rawArgs = callExpr.arguments ?? [];
-    if (rawArgs.length !== 1) {
-      return "keepOriginal";
-    }
-    const a = rawArgs[0];
-    const arg0 =
-      a && typeof a === "object" && a.type === "StringLiteral"
-        ? ({
-            kind: "literal" as const,
-            value: a.value as string,
-          } satisfies CallResolveContext["args"][number])
-        : a && typeof a === "object" && a.type === "Literal" && typeof (a as any).value === "string"
-          ? ({
-              kind: "literal" as const,
-              value: (a as any).value as string,
-            } satisfies CallResolveContext["args"][number])
-          : null;
-    if (!arg0) {
-      return "keepOriginal";
-    }
-    const args: CallResolveContext["args"] = [arg0];
-
-    const res = ctx.resolveCall({
-      callSiteFilePath: ctx.filePath,
-      calleeImportedName,
-      calleeSource,
-      args,
-    });
-    return res ? (res as any) : "unresolved";
-  };
-
-  const simple = resolveSimpleHelperCall(expr);
+  const simple = resolveImportedHelperCall(expr, ctx);
   if (simple !== "keepOriginal" && simple !== "unresolved") {
     return simple.usage === "props"
       ? { type: "resolvedStyles", expr: simple.expr, imports: simple.imports }
@@ -362,11 +390,11 @@ function tryResolveCallExpression(
   // We treat this as equivalent to `helper("key")` when the adapter returns usage:"props" or "create".
   //
   // This is intentionally narrow and only used when the adapter explicitly opts in with usage:"props".
-  if (expr.callee?.type === "CallExpression") {
+  if (isCallExpressionNode(expr.callee)) {
     const outerArgs = expr.arguments ?? [];
     if (outerArgs.length === 1) {
       const innerCall = expr.callee;
-      const innerRes = resolveSimpleHelperCall(innerCall);
+      const innerRes = resolveImportedHelperCall(innerCall, ctx);
       if (innerRes !== "keepOriginal" && innerRes !== "unresolved") {
         if (innerRes.usage === "create") {
           return {
@@ -386,7 +414,16 @@ function tryResolveCallExpression(
   if (simple === "unresolved") {
     // This is a supported helper-call shape but the adapter chose not to resolve it.
     // Treat as unsupported so the caller can bail and surface a warning.
-    const calleeIdent = expr.callee?.name;
+    const calleeIdent = (() => {
+      const callee = expr.callee;
+      if (!callee || typeof callee !== "object") {
+        return null;
+      }
+      if ((callee as { type?: string }).type !== "Identifier") {
+        return null;
+      }
+      return (callee as { name?: string }).name ?? null;
+    })();
     const imp = typeof calleeIdent === "string" ? ctx.resolveImport(calleeIdent) : null;
     const importedName = imp?.importedName ?? calleeIdent ?? "unknown";
     return {
@@ -398,7 +435,7 @@ function tryResolveCallExpression(
   // If we got here, it’s a call expression we don’t understand.
   return {
     type: "keepOriginal",
-    reason: 'Unsupported call expression (expected helper("literal") or helper("literal")(...))',
+    reason: "Unsupported call expression (expected imported helper(...) or imported helper(...)(...))",
   };
 }
 
@@ -436,57 +473,28 @@ function tryResolveConditionalValue(
     if (!b || typeof b !== "object") {
       return null;
     }
-    if ((b as { type?: string }).type === "CallExpression") {
-      const call = b as {
-        type: "CallExpression";
-        callee?: { type?: string; name?: string };
-        arguments?: unknown[];
-      };
-
-      const resolveSimpleCall = (c: any): CallResolveResult | null => {
-        const calleeIdent =
-          c.callee && c.callee.type === "Identifier" ? (c.callee.name ?? null) : null;
-        const arg0 = (() => {
-          const a = c.arguments?.[0] as { type?: string; value?: unknown } | undefined;
-          if (!a) {
-            return null;
-          }
-          if (a.type === "StringLiteral") {
-            return { kind: "literal" as const, value: a.value as string };
-          }
-          if (a.type === "Literal" && typeof a.value === "string") {
-            return { kind: "literal" as const, value: a.value };
-          }
-          return null;
-        })();
-        if (!calleeIdent || !arg0 || (c.arguments?.length ?? 0) !== 1) {
+    if (isCallExpressionNode(b)) {
+      const call = b;
+      const resolveAdapterCall = (c: CallExpressionNode): CallResolveResult | null => {
+        const res = resolveImportedHelperCall(c, ctx);
+        if (res === "keepOriginal" || res === "unresolved") {
           return null;
         }
-        const imp = ctx.resolveImport(calleeIdent);
-        if (!imp?.importedName || !imp.source) {
-          return null;
-        }
-        const res = ctx.resolveCall({
-          callSiteFilePath: ctx.filePath,
-          calleeImportedName: imp.importedName,
-          calleeSource: imp.source,
-          args: [arg0],
-        });
-        return res as any;
+        return res;
       };
 
-      // helper("key")
-      const simple = resolveSimpleCall(call as any);
+      // helper(...)
+      const simple = resolveAdapterCall(call);
       if (simple) {
         return { usage: simple.usage, expr: simple.expr, imports: simple.imports };
       }
 
-      // helper("key")(propsParam)
-      if (call.callee && (call.callee as any).type === "CallExpression") {
-        const inner = call.callee as any;
+      // helper(...)(propsParam)
+      if (isCallExpressionNode(call.callee)) {
+        const inner = call.callee;
         const outerArgs = call.arguments ?? [];
         if (outerArgs.length === 1 && outerArgs[0] && typeof outerArgs[0] === "object") {
-          const innerRes = resolveSimpleCall(inner);
+          const innerRes = resolveAdapterCall(inner);
           if (innerRes) {
             if (innerRes.usage === "create") {
               invalidCurriedValue = [

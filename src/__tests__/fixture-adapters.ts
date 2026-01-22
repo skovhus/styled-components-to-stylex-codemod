@@ -124,6 +124,19 @@ export const fixtureAdapter = defineAdapter({
       return null;
     }
 
+    if (ctx.calleeImportedName === "gradient") {
+      return {
+        usage: "props",
+        expr: "helpers.gradient",
+        imports: [
+          {
+            from: { kind: "specifier", value: "./lib/helpers.stylex" },
+            names: [{ imported: "helpers" }],
+          },
+        ],
+      };
+    }
+
     const arg0 = ctx.args[0];
     const key = arg0?.kind === "literal" && typeof arg0.value === "string" ? arg0.value : null;
     if (!key) {

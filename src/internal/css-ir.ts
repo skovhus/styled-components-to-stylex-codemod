@@ -243,6 +243,24 @@ export function normalizeStylisAstToIR(
           // Only emit if this placeholder corresponds to a known slot.
           const mapped = slotByPlaceholder.get(placeholder);
           if (mapped !== undefined) {
+            const alreadyDeclared = rules.some(
+              (rule) =>
+                rule.selector === "&" &&
+                rule.atRuleStack.length === 0 &&
+                rule.declarations.some((decl) => {
+                  if (decl.property !== "" || decl.value.kind !== "interpolated") {
+                    return false;
+                  }
+                  const parts = decl.value.parts;
+                  return (
+                    parts.length === 1 && parts[0]?.kind === "slot" && parts[0].slotId === mapped
+                  );
+                }),
+            );
+            if (alreadyDeclared) {
+              line = "";
+              return;
+            }
             const decl: CssDeclarationIR = {
               property: "",
               value: { kind: "interpolated", parts: [{ kind: "slot", slotId: mapped }] },
