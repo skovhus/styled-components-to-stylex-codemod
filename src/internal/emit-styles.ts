@@ -16,6 +16,8 @@ export function emitStylesAndImports(args: {
   literalToAst: (j: any, v: unknown) => any;
   stylesIdentifier: string;
   styleMerger: StyleMergerConfig | null;
+  /** Style keys that are ancestor selector parents (needed for descendant override matching) */
+  ancestorSelectorParents?: Set<string>;
 }): { emptyStyleKeys: Set<string> } {
   const {
     root,
@@ -30,6 +32,7 @@ export function emitStylesAndImports(args: {
     literalToAst,
     stylesIdentifier,
     styleMerger,
+    ancestorSelectorParents,
   } = args;
 
   // Preserve file header directives (e.g. `// oxlint-disable ...`). Depending on the parser/printer,
@@ -511,11 +514,16 @@ export function emitStylesAndImports(args: {
   }
 
   // Compute the set of empty style keys (style objects with no properties)
+  // EXCEPT for ancestor selector parents - those need to remain for descendant override matching
   const emptyStyleKeys = new Set<string>();
   for (const [k, v] of resolvedStyleObjects.entries()) {
     if (v && typeof v === "object" && !isAstNode(v)) {
       if (Object.keys(v as Record<string, unknown>).length === 0) {
-        emptyStyleKeys.add(k);
+        // Don't mark as empty if this is an ancestor selector parent
+        // (even empty, the key is needed for JSX ancestor matching)
+        if (!ancestorSelectorParents?.has(k)) {
+          emptyStyleKeys.add(k);
+        }
       }
     }
   }

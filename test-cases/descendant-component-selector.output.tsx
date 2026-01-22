@@ -15,17 +15,10 @@ type ContainerLinkProps = Omit<React.ComponentProps<"a">, "className" | "style">
 export function ContainerLink(props: ContainerLinkProps) {
   const { children, ...rest } = props;
   return (
-    <a {...rest} {...stylex.props(stylex.defaultMarker())}>
+    <a {...rest} {...stylex.props(styles.containerLink, stylex.defaultMarker())}>
       {children}
     </a>
   );
-}
-
-type ShadowContainerProps = React.PropsWithChildren<{}>;
-
-export function ShadowContainer(props: ShadowContainerProps) {
-  const { children } = props;
-  return <div {...stylex.props(stylex.defaultMarker())}>{children}</div>;
 }
 
 export const App = () => (
@@ -41,9 +34,9 @@ export const App = () => (
     </ContainerLink>
     <br />
     <br />
-    <ShadowContainer>
+    <div {...stylex.props(styles.shadowContainer, stylex.defaultMarker())}>
       <div {...stylex.props(styles.shadowBox, styles.shadowBoxInShadowContainer)} />
-    </ShadowContainer>
+    </div>
   </div>
 );
 
@@ -53,6 +46,7 @@ const styles = stylex.create({
     width: "100px",
     height: "100px",
   },
+  containerLink: {},
 
   // Test: interpolation with static suffix (e.g., `0 4px 8px ${color}`)
   shadowBox: {
@@ -60,6 +54,7 @@ const styles = stylex.create({
     height: "50px",
     backgroundColor: "white",
   },
+  shadowContainer: {},
   icon: {
     display: "inline-block",
     width: "16px",

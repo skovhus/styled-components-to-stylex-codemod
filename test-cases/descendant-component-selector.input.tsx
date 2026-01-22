@@ -29,7 +29,7 @@ const ShadowBox = styled.div`
   background: white;
 `;
 
-export const ShadowContainer = styled.div`
+const ShadowContainer = styled.div`
   &:hover ${ShadowBox} {
     box-shadow: 0 4px 8px ${(props) => props.theme.color.labelBase};
   }
