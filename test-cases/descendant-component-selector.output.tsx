@@ -15,7 +15,7 @@ type ContainerLinkProps = Omit<React.ComponentProps<"a">, "className" | "style">
 export function ContainerLink(props: ContainerLinkProps) {
   const { children, ...rest } = props;
   return (
-    <a {...rest} {...stylex.props(styles.containerLink, stylex.defaultMarker())}>
+    <a {...rest} {...stylex.props(stylex.defaultMarker())}>
       {children}
     </a>
   );
@@ -34,7 +34,7 @@ export const App = () => (
     </ContainerLink>
     <br />
     <br />
-    <div {...stylex.props(styles.shadowContainer, stylex.defaultMarker())}>
+    <div {...stylex.props(stylex.defaultMarker())}>
       <div {...stylex.props(styles.shadowBox, styles.shadowBoxInShadowContainer)} />
     </div>
   </div>
@@ -46,7 +46,6 @@ const styles = stylex.create({
     width: "100px",
     height: "100px",
   },
-  containerLink: {},
 
   // Test: interpolation with static suffix (e.g., `0 4px 8px ${color}`)
   shadowBox: {
@@ -54,7 +53,6 @@ const styles = stylex.create({
     height: "50px",
     backgroundColor: "white",
   },
-  shadowContainer: {},
   icon: {
     display: "inline-block",
     width: "16px",

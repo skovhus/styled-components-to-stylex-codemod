@@ -110,6 +110,10 @@ export function postProcessTransformedAst(args: {
       return null;
     };
 
+    // Track empty ancestor style keys to remove AFTER all descendant matching is done.
+    // We defer removal so that ancestor matching can still find the style keys.
+    const pendingEmptyKeyRemovals: Array<{ call: any; key: string }> = [];
+
     const visit = (node: any, ancestors: any[]) => {
       if (!node || node.type !== "JSXElement") {
         return;
@@ -124,19 +128,9 @@ export function postProcessTransformedAst(args: {
       if (call) {
         for (const parentKey of ancestorSelectorParents) {
           if (hasStyleKeyArg(call, parentKey)) {
-            // If the style key is empty, remove it from the arguments
+            // If the style key is empty, record for later removal (after descendant matching)
             if (emptyStyleKeys?.has(parentKey)) {
-              call.arguments = (call.arguments ?? []).filter(
-                (a: any) =>
-                  !(
-                    a?.type === "MemberExpression" &&
-                    a.object?.type === "Identifier" &&
-                    a.object.name === "styles" &&
-                    a.property?.type === "Identifier" &&
-                    a.property.name === parentKey
-                  ),
-              );
-              changed = true;
+              pendingEmptyKeyRemovals.push({ call, key: parentKey });
             }
             // Add defaultMarker if not already present
             if (!hasDefaultMarker(call)) {
@@ -190,6 +184,26 @@ export function postProcessTransformedAst(args: {
       }
       visit(p.node, []);
     });
+
+    // Now that all descendant matching is done, remove the empty ancestor style keys.
+    // This allows the matching to work (ancestors still had their keys) while
+    // avoiding empty style objects in the final output.
+    for (const { call, key } of pendingEmptyKeyRemovals) {
+      const originalLength = (call.arguments ?? []).length;
+      call.arguments = (call.arguments ?? []).filter(
+        (a: any) =>
+          !(
+            a?.type === "MemberExpression" &&
+            a.object?.type === "Identifier" &&
+            a.object.name === "styles" &&
+            a.property?.type === "Identifier" &&
+            a.property.name === key
+          ),
+      );
+      if ((call.arguments ?? []).length !== originalLength) {
+        changed = true;
+      }
+    }
   }
 
   // Remove empty style key references from ALL stylex.props() calls and style merger calls

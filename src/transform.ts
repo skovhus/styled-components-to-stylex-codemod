@@ -1152,7 +1152,6 @@ export function transformWithWarnings(
     literalToAst,
     stylesIdentifier,
     styleMerger: adapter.styleMerger,
-    ancestorSelectorParents,
   });
   hasChanges = true;
 
