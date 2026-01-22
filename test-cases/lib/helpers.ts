@@ -25,6 +25,12 @@ export const flexCenter = () => `
   justify-content: center;
 `;
 
+// Gradient helper - returns a CSS string for gradient text
+export const gradient = () => `
+  background-image: linear-gradient(90deg, #ff6b6b, #5f6cff);
+  color: transparent;
+`;
+
 type Speed = "normal" | "slow" | "fast";
 
 export const transitionSpeed = (speed: Speed) => `var(--speed-${speed})`;

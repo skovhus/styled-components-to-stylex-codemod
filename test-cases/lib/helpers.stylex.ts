@@ -13,6 +13,10 @@ export const helpers = stylex.create({
     alignItems: "center",
     justifyContent: "center",
   },
+  gradient: {
+    backgroundImage: "linear-gradient(90deg, #ff6b6b, #5f6cff)",
+    color: "transparent",
+  },
 });
 
 export const borders = stylex.create({
