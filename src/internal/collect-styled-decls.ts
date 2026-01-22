@@ -1,6 +1,7 @@
 import type { Collection } from "jscodeshift";
 import type { CssRuleIR } from "./css-ir.js";
 import { normalizeStylisAstToIR } from "./css-ir.js";
+import { isBackgroundImageValue } from "./css-prop-mapping.js";
 import { parseStyledTemplateLiteral } from "./styled-css.js";
 import type { StyledDecl } from "./transform-types.js";
 
@@ -1012,18 +1013,9 @@ function collectStyledDeclsImpl(args: {
             continue;
           }
           const v: any = prop.value;
-          // StyleX doesn't support the `background` shorthand.
-          // Use `backgroundImage` for gradients/images, `backgroundColor` for colors.
-          const isGradientOrImageStyled =
-            key === "background" &&
-            v.type === "StringLiteral" &&
-            (/\b(linear|radial|conic|repeating-linear|repeating-radial|repeating-conic)-gradient\b/.test(
-              v.value,
-            ) ||
-              /\burl\s*\(/.test(v.value));
           const styleKey =
             key === "background"
-              ? isGradientOrImageStyled
+              ? v.type === "StringLiteral" && isBackgroundImageValue(v.value)
                 ? "backgroundImage"
                 : "backgroundColor"
               : key;

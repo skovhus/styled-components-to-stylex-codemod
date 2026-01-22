@@ -1,6 +1,6 @@
 import type { ASTNode, Collection, ImportDeclaration, JSCodeshift } from "jscodeshift";
 import { compile } from "stylis";
-import { cssPropertyToStylexProp } from "./css-prop-mapping.js";
+import { cssPropertyToStylexProp, isBackgroundImageValue } from "./css-prop-mapping.js";
 
 export function convertStyledKeyframes(args: {
   root: Collection<ASTNode>;
@@ -74,17 +74,9 @@ function parseKeyframesTemplate(args: {
           continue;
         }
         const raw = propRaw.trim();
-        // StyleX doesn't support the `background` shorthand.
-        // Use `backgroundImage` for gradients/images, `backgroundColor` for colors.
-        const isGradientOrImageKeyframe =
-          raw === "background" &&
-          (/\b(linear|radial|conic|repeating-linear|repeating-radial|repeating-conic)-gradient\b/.test(
-            valueRaw,
-          ) ||
-            /\burl\s*\(/.test(valueRaw));
         const prop = cssPropertyToStylexProp(
           raw === "background"
-            ? isGradientOrImageKeyframe
+            ? isBackgroundImageValue(valueRaw)
               ? "backgroundImage"
               : "backgroundColor"
             : raw,
