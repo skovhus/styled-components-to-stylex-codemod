@@ -1545,14 +1545,47 @@ export function transformWithWarnings(
 
   // Now that all needsWrapperComponent flags are set, flatten base components where appropriate.
   // This must happen AFTER extendsStyleKey is set (line 986) and AFTER all wrapper flags are set.
+  //
+  // This also handles chains of styled components (e.g., A = styled(B), B = styled(C), C = styled(div))
+  // by resolving the entire chain and collecting intermediate style keys.
   for (const decl of styledDecls) {
     if (decl.base.kind === "component") {
-      const baseDecl = declByLocal.get(decl.base.ident);
-      if (baseDecl?.base.kind === "intrinsic") {
-        // If the base component is used in JSX AND this component needs a wrapper,
+      // Resolve the chain of styled components to find the ultimate base.
+      // Collect intermediate style keys along the way.
+      const intermediateStyleKeys: string[] = [];
+      let currentBase: StyledDecl["base"] = decl.base;
+      let resolvedBaseDecl = declByLocal.get(decl.base.ident);
+      const visited = new Set<string>([decl.localName]); // Prevent infinite loops
+
+      while (resolvedBaseDecl && currentBase.kind === "component") {
+        // Avoid circular references
+        if (visited.has(currentBase.ident)) {
+          break;
+        }
+        visited.add(currentBase.ident);
+
+        // Add the intermediate component's style key
+        intermediateStyleKeys.push(resolvedBaseDecl.styleKey);
+
+        // Move to the next level in the chain
+        currentBase = resolvedBaseDecl.base;
+        if (currentBase.kind === "component") {
+          resolvedBaseDecl = declByLocal.get(currentBase.ident);
+        } else {
+          resolvedBaseDecl = undefined;
+        }
+      }
+
+      // Now currentBase is either:
+      // 1. An intrinsic element (kind === "intrinsic")
+      // 2. A component that's not in declByLocal (external/imported component)
+
+      if (currentBase.kind === "intrinsic") {
+        // If the immediate base component is used in JSX AND this component needs a wrapper,
         // keep as component reference so the wrapper can delegate to the base wrapper.
         // Otherwise flatten to intrinsic tag for inline style merging.
-        const baseUsedInJsx = isUsedInJsx(decl.base.ident);
+        const immediateBaseIdent = decl.base.ident;
+        const baseUsedInJsx = isUsedInJsx(immediateBaseIdent);
         const shouldDelegate = baseUsedInJsx && decl.needsWrapperComponent;
         // Don't flatten if this component has .attrs({ as: "element" }) that specifies
         // a different element - it needs to render that element directly.
@@ -1560,7 +1593,43 @@ export function transformWithWarnings(
           decl.attrsInfo?.staticAttrs?.as && typeof decl.attrsInfo.staticAttrs.as === "string";
         if (!shouldDelegate && !hasAsAttr) {
           // Flatten to intrinsic tag for inline style merging
-          decl.base = { kind: "intrinsic", tagName: baseDecl.base.tagName };
+          decl.base = { kind: "intrinsic", tagName: currentBase.tagName };
+          // Add intermediate style keys (excluding the one we already set via extendsStyleKey)
+          if (intermediateStyleKeys.length > 1) {
+            const extras = decl.extraStyleKeys ?? [];
+            // Add all intermediate keys except the first one (which is already in extendsStyleKey)
+            for (const key of intermediateStyleKeys.slice(1)) {
+              if (!extras.includes(key)) {
+                extras.push(key);
+              }
+            }
+            decl.extraStyleKeys = extras;
+          }
+        }
+      } else if (currentBase.kind === "component") {
+        // The ultimate base is an external component (not in declByLocal).
+        // Update the base to point directly to the external component.
+        const immediateBaseIdent = decl.base.ident;
+        const immediateBaseDecl = declByLocal.get(immediateBaseIdent);
+        const baseUsedInJsx = isUsedInJsx(immediateBaseIdent);
+        const shouldDelegate = baseUsedInJsx && decl.needsWrapperComponent && immediateBaseDecl;
+
+        if (!shouldDelegate) {
+          // Flatten to the ultimate external component
+          decl.base = currentBase;
+          // Add intermediate style keys (all of them, since we're skipping the intermediate components)
+          if (intermediateStyleKeys.length > 0) {
+            const extras = decl.extraStyleKeys ?? [];
+            for (const key of intermediateStyleKeys) {
+              if (!extras.includes(key)) {
+                extras.push(key);
+              }
+            }
+            decl.extraStyleKeys = extras;
+          }
+          // Clear extendsStyleKey since we're not extending a local styled component anymore
+          // (the styles are now in extraStyleKeys)
+          delete decl.extendsStyleKey;
         }
       }
     }
