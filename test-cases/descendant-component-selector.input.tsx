@@ -1,4 +1,20 @@
+/**
+ * Test case for descendant component selectors.
+ * Demonstrates the `&:pseudo ${Component}` pattern being transformed to `stylex.when.ancestor()`.
+ */
+import * as React from "react";
 import styled from "styled-components";
+
+const Content = styled.div`
+  background: ${(props) => props.theme.color.bgSub};
+`;
+
+export const ContainerLink = styled.a`
+  &:focus-visible ${Content} {
+    outline: 2px solid ${(props) => props.theme.color.labelBase};
+    outline-offset: 2px;
+  }
+`;
 
 const Icon = styled.span`
   display: inline-block;
@@ -6,6 +22,7 @@ const Icon = styled.span`
   height: 16px;
   background: currentColor;
   mask-size: contain;
+  border-radius: 50%;
 `;
 
 const Button = styled.button`
@@ -33,8 +50,12 @@ const Button = styled.button`
 export const App = () => (
   <div>
     <Button>
-      <Icon />
       Click me
+      <Icon />
     </Button>
+    <br />
+    <ContainerLink>
+      <Content />
+    </ContainerLink>
   </div>
 );

@@ -6,6 +6,10 @@ export function postProcessTransformedAst(args: {
   j: any;
   descendantOverrides: DescendantOverride[];
   ancestorSelectorParents: Set<string>;
+  /** Map from component local name to its style key (for ancestor selector matching) */
+  componentNameToStyleKey?: Map<string, string>;
+  /** Set of style keys that have empty style objects (should be excluded from stylex.props calls) */
+  emptyStyleKeys?: Set<string>;
   preserveReactImport?: boolean;
   /** Local names of identifiers added as new imports (should shadow old imports with same name) */
   newImportLocalNames?: Set<string>;
@@ -17,6 +21,8 @@ export function postProcessTransformedAst(args: {
     j,
     descendantOverrides,
     ancestorSelectorParents,
+    componentNameToStyleKey,
+    emptyStyleKeys,
     preserveReactImport,
     newImportLocalNames,
     newImportSourcesByLocal,
@@ -91,6 +97,19 @@ export function postProcessTransformedAst(args: {
       overridesByChild.set(o.childStyleKey, [...(overridesByChild.get(o.childStyleKey) ?? []), o]);
     }
 
+    // Get JSX element name (for JSXIdentifier or JSXMemberExpression)
+    const getJsxElementName = (opening: any): string | null => {
+      const name = opening?.name;
+      if (!name) {
+        return null;
+      }
+      if (name.type === "JSXIdentifier") {
+        return name.name;
+      }
+      // For member expressions like Foo.Bar, just return null for now
+      return null;
+    };
+
     const visit = (node: any, ancestors: any[]) => {
       if (!node || node.type !== "JSXElement") {
         return;
@@ -98,12 +117,32 @@ export function postProcessTransformedAst(args: {
       const opening = node.openingElement;
       const attrs = (opening.attributes ?? []) as any[];
       const call = getStylexPropsCallFromAttrs(attrs);
+      const elementName = getJsxElementName(opening);
+      // Get the style key for this element if it's a known component
+      const elementStyleKey = elementName ? componentNameToStyleKey?.get(elementName) : null;
 
       if (call) {
         for (const parentKey of ancestorSelectorParents) {
-          if (hasStyleKeyArg(call, parentKey) && !hasDefaultMarker(call)) {
-            call.arguments = [...(call.arguments ?? []), makeDefaultMarkerCall()];
-            changed = true;
+          if (hasStyleKeyArg(call, parentKey)) {
+            // If the style key is empty, remove it from the arguments
+            if (emptyStyleKeys?.has(parentKey)) {
+              call.arguments = (call.arguments ?? []).filter(
+                (a: any) =>
+                  !(
+                    a?.type === "MemberExpression" &&
+                    a.object?.type === "Identifier" &&
+                    a.object.name === "styles" &&
+                    a.property?.type === "Identifier" &&
+                    a.property.name === parentKey
+                  ),
+              );
+              changed = true;
+            }
+            // Add defaultMarker if not already present
+            if (!hasDefaultMarker(call)) {
+              call.arguments = [...(call.arguments ?? []), makeDefaultMarkerCall()];
+              changed = true;
+            }
           }
         }
       }
@@ -114,8 +153,12 @@ export function postProcessTransformedAst(args: {
             continue;
           }
           for (const o of list) {
+            // Check if any ancestor has a stylex.props call with the parent style key,
+            // OR if any ancestor is a component whose style key matches the parent style key
             const matched = ancestors.some(
-              (a: any) => a?.call && hasStyleKeyArg(a.call, o.parentStyleKey),
+              (a: any) =>
+                (a?.call && hasStyleKeyArg(a.call, o.parentStyleKey)) ||
+                (a?.elementStyleKey && a.elementStyleKey === o.parentStyleKey),
             );
             if (!matched) {
               continue;
@@ -133,7 +176,7 @@ export function postProcessTransformedAst(args: {
         }
       }
 
-      const nextAncestors = [...ancestors, { call }];
+      const nextAncestors = [...ancestors, { call, elementStyleKey }];
       for (const c of node.children ?? []) {
         if (c?.type === "JSXElement") {
           visit(c, nextAncestors);
@@ -146,6 +189,46 @@ export function postProcessTransformedAst(args: {
         return;
       }
       visit(p.node, []);
+    });
+  }
+
+  // Remove empty style key references from ALL stylex.props() calls and style merger calls
+  if (emptyStyleKeys && emptyStyleKeys.size > 0) {
+    const isEmptyStyleRef = (a: any): boolean =>
+      a?.type === "MemberExpression" &&
+      a.object?.type === "Identifier" &&
+      a.object.name === "styles" &&
+      a.property?.type === "Identifier" &&
+      emptyStyleKeys.has(a.property.name);
+
+    root.find(j.CallExpression).forEach((p: any) => {
+      const call = p.node;
+
+      // Handle stylex.props() calls
+      if (
+        call?.callee?.type === "MemberExpression" &&
+        call.callee.object?.type === "Identifier" &&
+        call.callee.object.name === "stylex" &&
+        call.callee.property?.type === "Identifier" &&
+        call.callee.property.name === "props"
+      ) {
+        const originalLength = (call.arguments ?? []).length;
+        call.arguments = (call.arguments ?? []).filter((a: any) => !isEmptyStyleRef(a));
+        if (call.arguments.length !== originalLength) {
+          changed = true;
+        }
+      }
+
+      // Handle style merger calls (e.g., mergedSx([styles.foo, styles.bar], className, style))
+      // The first argument is an array of style references
+      if (call?.callee?.type === "Identifier" && call.arguments?.[0]?.type === "ArrayExpression") {
+        const arr = call.arguments[0];
+        const originalLength = (arr.elements ?? []).length;
+        arr.elements = (arr.elements ?? []).filter((e: any) => !isEmptyStyleRef(e));
+        if (arr.elements.length !== originalLength) {
+          changed = true;
+        }
+      }
     });
   }
 

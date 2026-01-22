@@ -121,8 +121,12 @@ export function lowerRules(args: {
   const declByLocalName = new Map(styledDecls.map((d) => [d.localName, d]));
   const descendantOverrides: DescendantOverride[] = [];
   const ancestorSelectorParents = new Set<string>();
-  const descendantOverrideBase = new Map<string, Record<string, unknown>>();
-  const descendantOverrideHover = new Map<string, Record<string, unknown>>();
+  // Map<overrideStyleKey, Map<pseudo|null, Record<prop, value>>>
+  // null key = base styles, string key = pseudo styles (e.g., ":hover", ":focus-visible")
+  const descendantOverridePseudoBuckets = new Map<
+    string,
+    Map<string | null, Record<string, unknown>>
+  >();
   let bail = false;
 
   // Pre-compute properties and values defined by each css helper from their rules.
@@ -773,36 +777,82 @@ export function lowerRules(args: {
           continue;
         }
 
-        // `${Child}` / `&:hover ${Child}` (Parent styling a descendant child)
+        // `${Child}` / `&:hover ${Child}` / `&:focus-visible ${Child}` (Parent styling a descendant child)
         if (otherLocal && !isCssHelperPlaceholder && selTrim2.startsWith("&")) {
           const childDecl = declByLocalName.get(otherLocal);
-          const isHover = rule.selector.includes(":hover");
+          // Extract the actual pseudo-selector (e.g., ":hover", ":focus-visible")
+          const pseudoMatch = rule.selector.match(/&(:[a-z-]+(?:\([^)]*\))?)/i);
+          const ancestorPseudo: string | null = pseudoMatch?.[1] ?? null;
           if (childDecl) {
             const overrideStyleKey = `${toStyleKey(otherLocal)}In${decl.localName}`;
             ancestorSelectorParents.add(decl.styleKey);
-            descendantOverrides.push({
-              parentStyleKey: decl.styleKey,
-              childStyleKey: childDecl.styleKey,
-              overrideStyleKey,
-            });
-            const baseBucket = descendantOverrideBase.get(overrideStyleKey) ?? {};
-            const hoverBucket = descendantOverrideHover.get(overrideStyleKey) ?? {};
-            descendantOverrideBase.set(overrideStyleKey, baseBucket);
-            descendantOverrideHover.set(overrideStyleKey, hoverBucket);
+            // Only add to descendantOverrides once per override key
+            if (!descendantOverridePseudoBuckets.has(overrideStyleKey)) {
+              descendantOverrides.push({
+                parentStyleKey: decl.styleKey,
+                childStyleKey: childDecl.styleKey,
+                overrideStyleKey,
+              });
+            }
+            // Get or create the pseudo buckets map for this override key
+            let pseudoBuckets = descendantOverridePseudoBuckets.get(overrideStyleKey);
+            if (!pseudoBuckets) {
+              pseudoBuckets = new Map();
+              descendantOverridePseudoBuckets.set(overrideStyleKey, pseudoBuckets);
+            }
+            // Get or create the bucket for this specific pseudo (or null for base)
+            let bucket = pseudoBuckets.get(ancestorPseudo);
+            if (!bucket) {
+              bucket = {};
+              pseudoBuckets.set(ancestorPseudo, bucket);
+            }
 
             for (const d of rule.declarations) {
-              if (d.value.kind !== "static") {
-                continue;
-              }
-              for (const out of cssDeclarationToStylexDeclarations(d)) {
-                if (out.value.kind !== "static") {
-                  continue;
+              // Handle static values
+              if (d.value.kind === "static") {
+                for (const out of cssDeclarationToStylexDeclarations(d)) {
+                  if (out.value.kind !== "static") {
+                    continue;
+                  }
+                  const v = cssValueToJs(out.value, d.important, out.prop);
+                  (bucket as Record<string, unknown>)[out.prop] = v;
                 }
-                const v = cssValueToJs(out.value, d.important, out.prop);
-                if (!isHover) {
-                  (baseBucket as any)[out.prop] = v;
-                } else {
-                  (hoverBucket as any)[out.prop] = v;
+              } else if (d.value.kind === "interpolated" && d.property) {
+                // Handle interpolated theme values (e.g., ${props => props.theme.color.labelBase})
+                const slotPart = (
+                  d.value as { parts?: Array<{ kind: string; slotId?: number }> }
+                ).parts?.find((p) => p.kind === "slot");
+                if (slotPart && slotPart.slotId !== undefined) {
+                  const expr = decl.templateExpressions[slotPart.slotId] as unknown;
+                  const resolved =
+                    expr &&
+                    typeof expr === "object" &&
+                    ((expr as { type?: string }).type === "ArrowFunctionExpression" ||
+                      (expr as { type?: string }).type === "FunctionExpression")
+                      ? resolveThemeValueFromFn(expr)
+                      : resolveThemeValue(expr);
+                  if (resolved) {
+                    for (const out of cssDeclarationToStylexDeclarations(d)) {
+                      // Build the value: if there's static text around the interpolation, include it
+                      const parts =
+                        (d.value as { parts?: Array<{ kind: string; value?: string }> }).parts ??
+                        [];
+                      const staticPrefix = parts
+                        .filter((p) => p.kind === "static")
+                        .map((p) => p.value ?? "")
+                        .join("");
+                      const finalValue = staticPrefix
+                        ? j.templateLiteral(
+                            [
+                              j.templateElement({ raw: staticPrefix, cooked: staticPrefix }, false),
+                              j.templateElement({ raw: "", cooked: "" }, true),
+                            ],
+                            [resolved as ExpressionKind],
+                          )
+                        : resolved;
+                      (bucket as Record<string, unknown>)[out.prop] = finalValue;
+                    }
+                  }
                 }
               }
             }
@@ -2523,10 +2573,11 @@ export function lowerRules(args: {
     if (
       decl.rawCss &&
       (/__SC_EXPR_\d+__\s*\{/.test(decl.rawCss) ||
-        /&:hover\s+__SC_EXPR_\d+__\s*\{/.test(decl.rawCss))
+        /&:[a-z-]+(?:\([^)]*\))?\s+__SC_EXPR_\d+__\s*\{/i.test(decl.rawCss))
     ) {
       let didApply = false;
-      const applyBlock = (slotId: number, declsText: string, isHover: boolean) => {
+      // ancestorPseudo is null for base styles, or the pseudo string (e.g., ":hover", ":focus-visible")
+      const applyBlock = (slotId: number, declsText: string, ancestorPseudo: string | null) => {
         const expr = decl.templateExpressions[slotId] as any;
         if (!expr || expr.type !== "Identifier") {
           return;
@@ -2538,15 +2589,26 @@ export function lowerRules(args: {
         }
         const overrideStyleKey = `${toStyleKey(childLocal)}In${decl.localName}`;
         ancestorSelectorParents.add(decl.styleKey);
-        descendantOverrides.push({
-          parentStyleKey: decl.styleKey,
-          childStyleKey: childDecl.styleKey,
-          overrideStyleKey,
-        });
-        const baseBucket = descendantOverrideBase.get(overrideStyleKey) ?? {};
-        const hoverBucket = descendantOverrideHover.get(overrideStyleKey) ?? {};
-        descendantOverrideBase.set(overrideStyleKey, baseBucket);
-        descendantOverrideHover.set(overrideStyleKey, hoverBucket);
+        // Only add to descendantOverrides once per override key
+        if (!descendantOverridePseudoBuckets.has(overrideStyleKey)) {
+          descendantOverrides.push({
+            parentStyleKey: decl.styleKey,
+            childStyleKey: childDecl.styleKey,
+            overrideStyleKey,
+          });
+        }
+        // Get or create the pseudo buckets map for this override key
+        let pseudoBuckets = descendantOverridePseudoBuckets.get(overrideStyleKey);
+        if (!pseudoBuckets) {
+          pseudoBuckets = new Map();
+          descendantOverridePseudoBuckets.set(overrideStyleKey, pseudoBuckets);
+        }
+        // Get or create the bucket for this specific pseudo (or null for base)
+        let bucket = pseudoBuckets.get(ancestorPseudo);
+        if (!bucket) {
+          bucket = {};
+          pseudoBuckets.set(ancestorPseudo, bucket);
+        }
         didApply = true;
 
         const declLines = declsText
@@ -2560,29 +2622,33 @@ export function lowerRules(args: {
           }
           const prop = m[1]!.trim();
           const value = m[2]!.trim();
-          const outProp =
-            prop === "background" ? "backgroundColor" : prop === "mask-size" ? "maskSize" : prop;
-          const jsVal = cssValueToJs({ kind: "static", value } as any, false, outProp);
-          if (!isHover) {
-            (baseBucket as any)[outProp] = jsVal;
-          } else {
-            (hoverBucket as any)[outProp] = jsVal;
+          // Skip values that contain unresolved interpolation placeholders - these should
+          // be handled by the IR handler which has proper theme resolution
+          if (/__SC_EXPR_\d+__/.test(value)) {
+            continue;
           }
+          // Convert CSS property name to camelCase (e.g., outline-offset -> outlineOffset)
+          const outProp = cssPropertyToStylexProp(prop === "background" ? "backgroundColor" : prop);
+          const jsVal = cssValueToJs({ kind: "static", value } as any, false, outProp);
+          (bucket as Record<string, unknown>)[outProp] = jsVal;
         }
       };
 
       const baseRe = /__SC_EXPR_(\d+)__\s*\{([\s\S]*?)\}/g;
       let m: RegExpExecArray | null;
       while ((m = baseRe.exec(decl.rawCss))) {
-        const before = decl.rawCss.slice(Math.max(0, m.index - 20), m.index);
-        if (/&:hover\s+$/.test(before)) {
+        const before = decl.rawCss.slice(Math.max(0, m.index - 30), m.index);
+        // Skip if this is preceded by a pseudo selector pattern
+        if (/&:[a-z-]+(?:\([^)]*\))?\s+$/i.test(before)) {
           continue;
         }
-        applyBlock(Number(m[1]), m[2] ?? "", false);
+        applyBlock(Number(m[1]), m[2] ?? "", null);
       }
-      const hoverRe = /&:hover\s+__SC_EXPR_(\d+)__\s*\{([\s\S]*?)\}/g;
-      while ((m = hoverRe.exec(decl.rawCss))) {
-        applyBlock(Number(m[1]), m[2] ?? "", true);
+      // Match any pseudo selector pattern: &:hover, &:focus-visible, &:active, etc.
+      const pseudoRe = /&(:[a-z-]+(?:\([^)]*\))?)\s+__SC_EXPR_(\d+)__\s*\{([\s\S]*?)\}/gi;
+      while ((m = pseudoRe.exec(decl.rawCss))) {
+        const pseudo = m[1]!;
+        applyBlock(Number(m[2]), m[3] ?? "", pseudo);
       }
 
       if (didApply) {
@@ -2771,39 +2837,79 @@ export function lowerRules(args: {
     }
   }
 
-  if (descendantOverrideBase.size || descendantOverrideHover.size) {
-    const ancestorHoverKey = j.callExpression(
-      j.memberExpression(
-        j.memberExpression(j.identifier("stylex"), j.identifier("when")),
-        j.identifier("ancestor"),
-      ),
-      [j.literal(":hover")],
-    );
+  // Generate style objects from descendant override pseudo buckets
+  if (descendantOverridePseudoBuckets.size > 0) {
+    const makeAncestorKey = (pseudo: string) =>
+      j.callExpression(
+        j.memberExpression(
+          j.memberExpression(j.identifier("stylex"), j.identifier("when")),
+          j.identifier("ancestor"),
+        ),
+        [j.literal(pseudo)],
+      );
 
-    for (const [overrideKey, baseBucket] of descendantOverrideBase.entries()) {
-      const hoverBucket = descendantOverrideHover.get(overrideKey) ?? {};
+    const isAstNode = (v: unknown): v is ExpressionKind =>
+      !!v && typeof v === "object" && "type" in v;
+
+    for (const [overrideKey, pseudoBuckets] of descendantOverridePseudoBuckets.entries()) {
+      const baseBucket = pseudoBuckets.get(null) ?? {};
       const props: any[] = [];
 
-      const allProps = new Set<string>([...Object.keys(baseBucket), ...Object.keys(hoverBucket)]);
-
-      for (const prop of allProps) {
-        const baseVal = (baseBucket as any)[prop];
-        const hoverVal = (hoverBucket as any)[prop];
-
-        if (hoverVal !== undefined) {
-          const mapExpr = j.objectExpression([
-            j.property("init", j.identifier("default"), literalToAst(j, baseVal ?? null)),
-            Object.assign(j.property("init", ancestorHoverKey as any, literalToAst(j, hoverVal)), {
-              computed: true,
-            }) as any,
-          ]);
-          props.push(j.property("init", j.identifier(prop), mapExpr));
-        } else {
-          props.push(j.property("init", j.identifier(prop), literalToAst(j, baseVal)));
+      // Collect all property names across all pseudo buckets
+      const allPropNames = new Set<string>();
+      for (const bucket of pseudoBuckets.values()) {
+        for (const prop of Object.keys(bucket)) {
+          allPropNames.add(prop);
         }
       }
 
-      resolvedStyleObjects.set(overrideKey, j.objectExpression(props) as any);
+      for (const prop of allPropNames) {
+        const baseVal = (baseBucket as Record<string, unknown>)[prop];
+        // Collect pseudo values for this property
+        const pseudoValues: Array<{ pseudo: string; value: unknown }> = [];
+        for (const [pseudo, bucket] of pseudoBuckets.entries()) {
+          if (pseudo === null) {
+            continue;
+          }
+          const val = (bucket as Record<string, unknown>)[prop];
+          if (val !== undefined) {
+            pseudoValues.push({ pseudo, value: val });
+          }
+        }
+
+        if (pseudoValues.length > 0) {
+          // Build object expression with default and pseudo values
+          const objProps: any[] = [
+            j.property(
+              "init",
+              j.identifier("default"),
+              isAstNode(baseVal) ? baseVal : literalToAst(j, baseVal ?? null),
+            ),
+          ];
+          for (const { pseudo, value } of pseudoValues) {
+            const ancestorKey = makeAncestorKey(pseudo);
+            const valExpr = isAstNode(value) ? value : literalToAst(j, value);
+            const propNode = Object.assign(j.property("init", ancestorKey, valExpr), {
+              computed: true,
+            });
+            objProps.push(propNode);
+          }
+          const mapExpr = j.objectExpression(objProps);
+          props.push(j.property("init", j.identifier(prop), mapExpr));
+        } else if (baseVal !== undefined) {
+          props.push(
+            j.property(
+              "init",
+              j.identifier(prop),
+              isAstNode(baseVal) ? baseVal : literalToAst(j, baseVal),
+            ),
+          );
+        }
+      }
+
+      if (props.length > 0) {
+        resolvedStyleObjects.set(overrideKey, j.objectExpression(props) as unknown);
+      }
     }
   }
 

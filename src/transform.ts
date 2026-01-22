@@ -1139,7 +1139,7 @@ export function transformWithWarnings(
     }
   }
 
-  emitStylesAndImports({
+  const { emptyStyleKeys } = emitStylesAndImports({
     root,
     j,
     filePath: file.path,
@@ -2321,11 +2321,19 @@ export function transformWithWarnings(
     }
   }
 
+  // Create a map from component local names to style keys for ancestor selector matching
+  const componentNameToStyleKey = new Map<string, string>();
+  for (const decl of styledDecls) {
+    componentNameToStyleKey.set(decl.localName, decl.styleKey);
+  }
+
   const post = postProcessTransformedAst({
     root,
     j,
     descendantOverrides,
     ancestorSelectorParents,
+    componentNameToStyleKey,
+    emptyStyleKeys,
     preserveReactImport,
     newImportLocalNames,
     newImportSourcesByLocal,
