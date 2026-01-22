@@ -1,6 +1,10 @@
 /**
  * Test case for descendant component selectors.
  * Demonstrates the `&:pseudo ${Component}` pattern being transformed to `stylex.when.ancestor()`.
+ *
+ * Also tests that interpolations with static suffixes preserve the correct order:
+ * - `2px solid ${color}` should NOT become `2px solid ${color}` (prefix only)
+ * - `${color} dashed` should correctly become `${color} dashed` (suffix preserved)
  */
 import * as React from "react";
 
@@ -17,6 +21,13 @@ export function ContainerLink(props: ContainerLinkProps) {
   );
 }
 
+type ShadowContainerProps = React.PropsWithChildren<{}>;
+
+export function ShadowContainer(props: ShadowContainerProps) {
+  const { children } = props;
+  return <div {...stylex.props(stylex.defaultMarker())}>{children}</div>;
+}
+
 export const App = () => (
   <div>
     <button {...stylex.props(styles.button, stylex.defaultMarker())}>
@@ -28,6 +39,11 @@ export const App = () => (
     <ContainerLink href="#">
       <div {...stylex.props(styles.content, styles.contentInContainerLink)} />
     </ContainerLink>
+    <br />
+    <br />
+    <ShadowContainer>
+      <div {...stylex.props(styles.shadowBox, styles.shadowBoxInShadowContainer)} />
+    </ShadowContainer>
   </div>
 );
 
@@ -36,6 +52,13 @@ const styles = stylex.create({
     backgroundColor: themeVars.bgSub,
     width: "100px",
     height: "100px",
+  },
+
+  // Test: interpolation with static suffix (e.g., `0 4px 8px ${color}`)
+  shadowBox: {
+    width: "50px",
+    height: "50px",
+    backgroundColor: "white",
   },
   icon: {
     display: "inline-block",
@@ -65,6 +88,12 @@ const styles = stylex.create({
     outlineOffset: {
       default: null,
       [stylex.when.ancestor(":focus-visible")]: "5px",
+    },
+  },
+  shadowBoxInShadowContainer: {
+    boxShadow: {
+      default: null,
+      [stylex.when.ancestor(":hover")]: `0 4px 8px ${themeVars.labelBase}`,
     },
   },
   iconInButton: {

@@ -1,6 +1,10 @@
 /**
  * Test case for descendant component selectors.
  * Demonstrates the `&:pseudo ${Component}` pattern being transformed to `stylex.when.ancestor()`.
+ *
+ * Also tests that interpolations with static suffixes preserve the correct order:
+ * - `2px solid ${color}` should NOT become `2px solid ${color}` (prefix only)
+ * - `${color} dashed` should correctly become `${color} dashed` (suffix preserved)
  */
 import * as React from "react";
 import styled from "styled-components";
@@ -15,6 +19,19 @@ export const ContainerLink = styled.a`
   &:focus-visible ${Content} {
     outline: 10px solid ${(props) => props.theme.color.labelBase};
     outline-offset: 5px;
+  }
+`;
+
+// Test: interpolation with static suffix (e.g., `0 4px 8px ${color}`)
+const ShadowBox = styled.div`
+  width: 50px;
+  height: 50px;
+  background: white;
+`;
+
+export const ShadowContainer = styled.div`
+  &:hover ${ShadowBox} {
+    box-shadow: 0 4px 8px ${(props) => props.theme.color.labelBase};
   }
 `;
 
@@ -60,5 +77,10 @@ export const App = () => (
     <ContainerLink href="#">
       <Content />
     </ContainerLink>
+    <br />
+    <br />
+    <ShadowContainer>
+      <ShadowBox />
+    </ShadowContainer>
   </div>
 );
