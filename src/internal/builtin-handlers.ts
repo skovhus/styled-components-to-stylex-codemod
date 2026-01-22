@@ -167,6 +167,29 @@ export type HandlerResult =
        */
       type: "keepOriginal";
       reason: string;
+    }
+  | {
+      /**
+       * Emit a conditional StyleX style function where a prop is used both as
+       * the truthy condition and as an index into a resolved theme object.
+       *
+       * Pattern: `props.textColor ? props.theme.color[props.textColor] : props.theme.color.labelTitle`
+       *
+       * Output: `(textColor: Colors | undefined) => ({ color: textColor ? themeVars[textColor] : themeVars.labelTitle })`
+       */
+      type: "emitConditionalIndexedThemeFunction";
+      /** The prop name used in both the condition and as the index (e.g., "textColor") */
+      propName: string;
+      /** The prop's TypeScript type annotation (e.g., "Colors"), or null if unknown */
+      propType: string | null;
+      /** Resolved theme object expression (e.g., "themeVars") */
+      themeObjectExpr: string;
+      /** Imports required for themeObjectExpr */
+      themeObjectImports: ImportSpec[];
+      /** Resolved fallback expression (e.g., "themeVars.labelTitle") */
+      fallbackExpr: string;
+      /** Imports required for fallbackExpr */
+      fallbackImports: ImportSpec[];
     };
 
 export type InternalHandlerContext = {
@@ -301,7 +324,9 @@ type CallExpressionNode = {
 };
 
 function isCallExpressionNode(node: unknown): node is CallExpressionNode {
-  return !!node && typeof node === "object" && (node as { type?: string }).type === "CallExpression";
+  return (
+    !!node && typeof node === "object" && (node as { type?: string }).type === "CallExpression"
+  );
 }
 
 function callArgFromNode(node: unknown): CallResolveContext["args"][number] {
@@ -435,7 +460,8 @@ function tryResolveCallExpression(
   // If we got here, it’s a call expression we don’t understand.
   return {
     type: "keepOriginal",
-    reason: "Unsupported call expression (expected imported helper(...) or imported helper(...)(...))",
+    reason:
+      "Unsupported call expression (expected imported helper(...) or imported helper(...)(...))",
   };
 }
 
@@ -643,6 +669,75 @@ function tryResolveConditionalValue(
     };
   };
 
+  // Helper: Extract indexed theme lookup from a computed member expression like:
+  //   props.theme.color[props.textColor]
+  // Returns the theme object path (e.g., "color") and the index prop name if valid.
+  const tryExtractIndexedThemeLookup = (
+    branch: unknown,
+    expectedIndexProp: string,
+  ): { themeObjectPath: string; indexPropName: string } | null => {
+    const n = branch as { type?: string; computed?: boolean; object?: unknown; property?: unknown };
+    if (!n || n.type !== "MemberExpression" || n.computed !== true) {
+      return null;
+    }
+
+    // Extract index prop name from the computed property (must be props.expectedIndexProp)
+    const extractIndexPropName = (): string | null => {
+      const p = n.property as { type?: string; name?: string };
+      if (!p || typeof p !== "object") {
+        return null;
+      }
+      // Simple identifier: props.theme.color[textColor] (unusual but possible)
+      if (p.type === "Identifier" && typeof p.name === "string") {
+        return p.name;
+      }
+      // Member expression: props.theme.color[props.textColor]
+      if (p.type === "MemberExpression" && paramName) {
+        const path = getMemberPathFromIdentifier(p as any, paramName);
+        if (path && path.length === 1) {
+          return path[0]!;
+        }
+      }
+      return null;
+    };
+
+    const indexPropName = extractIndexPropName();
+    if (indexPropName !== expectedIndexProp) {
+      return null;
+    }
+
+    // Extract theme object path from the base object (e.g., props.theme.color -> "color")
+    const obj = n.object as { type?: string };
+    if (!obj || obj.type !== "MemberExpression" || !paramName) {
+      return null;
+    }
+    const parts = getMemberPathFromIdentifier(obj as any, paramName);
+    if (!parts || parts.length < 2 || parts[0] !== "theme") {
+      return null;
+    }
+    const themeObjectPath = parts.slice(1).join(".");
+
+    return { themeObjectPath, indexPropName };
+  };
+
+  // Helper: Extract static theme value from a non-computed member expression like:
+  //   props.theme.color.labelTitle
+  const tryExtractStaticThemeValue = (
+    branch: unknown,
+  ): { expr: string; imports: ImportSpec[] } | null => {
+    const n = branch as { type?: string; computed?: boolean };
+    if (!n || n.type !== "MemberExpression" || n.computed === true || !paramName) {
+      return null;
+    }
+    const path = getMemberPathFromIdentifier(n as any, paramName);
+    if (!path || path[0] !== "theme" || path.length < 2) {
+      return null;
+    }
+    const themePath = path.slice(1).join(".");
+    const resolved = ctx.resolveValue({ kind: "theme", path: themePath, filePath: ctx.filePath });
+    return resolved ? { expr: resolved.expr, imports: resolved.imports } : null;
+  };
+
   const { test, consequent, alternate } = expr.body;
 
   // 1) props.foo ? a : b (simple boolean test)
@@ -687,6 +782,36 @@ function tryResolveConditionalValue(
               innerProp: innerTestPath[0]!,
               innerTruthyBranch: { expr: innerCons.expr, imports: innerCons.imports },
               innerFalsyBranch: { expr: innerAlt.expr, imports: innerAlt.imports },
+            };
+          }
+        }
+      }
+    }
+
+    // Check for conditional indexed theme lookup:
+    //   props.textColor ? props.theme.color[props.textColor] : props.theme.color.labelTitle
+    // Where the test prop is also used as the index into a theme object.
+    if (!cons) {
+      const indexedResult = tryExtractIndexedThemeLookup(consequent, outerProp);
+      if (indexedResult) {
+        // Resolve the theme object (e.g., "color" -> "themeVars")
+        const themeObjResolved = ctx.resolveValue({
+          kind: "theme",
+          path: indexedResult.themeObjectPath,
+          filePath: ctx.filePath,
+        });
+        if (themeObjResolved) {
+          // Extract static fallback from alternate branch
+          const fallbackResult = tryExtractStaticThemeValue(alternate);
+          if (fallbackResult) {
+            return {
+              type: "emitConditionalIndexedThemeFunction",
+              propName: outerProp,
+              propType: null, // Type will be inferred from component props in lower-rules.ts
+              themeObjectExpr: themeObjResolved.expr,
+              themeObjectImports: themeObjResolved.imports,
+              fallbackExpr: fallbackResult.expr,
+              fallbackImports: fallbackResult.imports,
             };
           }
         }

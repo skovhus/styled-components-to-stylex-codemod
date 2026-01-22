@@ -517,7 +517,11 @@ export function lowerRules(args: {
               const bodyExpr = j.objectExpression([p]);
               styleFnDecls.set(fnKey, j.arrowFunctionExpression([param], bodyExpr));
             }
-            if (!styleFnFromProps.some((p) => p.fnKey === fnKey)) {
+            if (
+              !styleFnFromProps.some(
+                (p) => p.fnKey === fnKey && p.jsxProp === dyn.jsxProp && p.condition === "truthy",
+              )
+            ) {
               styleFnFromProps.push({
                 fnKey,
                 jsxProp: dyn.jsxProp,
@@ -2175,6 +2179,90 @@ export function lowerRules(args: {
               innerTruthyKey,
               innerFalsyKey,
             });
+
+            decl.needsWrapperComponent = true;
+            continue;
+          }
+
+          if (res && res.type === "emitConditionalIndexedThemeFunction") {
+            // Handle conditional indexed theme lookup:
+            //   props.textColor ? props.theme.color[props.textColor] : props.theme.color.labelTitle
+            //
+            // Strategy: Add fallback as base style, style function provides override when prop is defined.
+            // This works because the emit logic guards the function call with `propName != null &&`.
+            //   Base style: { color: themeVars.labelTitle }
+            //   Style function: (textColor: Colors) => ({ color: themeVars[textColor] })
+            //   Usage: styles.badge, textColor != null && styles.badgeColor(textColor)
+
+            // Add imports from both theme resolutions
+            for (const imp of res.themeObjectImports) {
+              resolverImports.set(JSON.stringify(imp), imp);
+            }
+            for (const imp of res.fallbackImports) {
+              resolverImports.set(JSON.stringify(imp), imp);
+            }
+
+            // Mark prop to not forward to DOM
+            ensureShouldForwardPropDrop(decl, res.propName);
+
+            // Parse the theme expressions
+            const themeObjAst = parseExpr(res.themeObjectExpr);
+            const fallbackAst = parseExpr(res.fallbackExpr);
+            if (!themeObjAst || !fallbackAst) {
+              warnings.push({
+                severity: "error",
+                type: "dynamic-node",
+                message: `Failed to parse theme expressions for ${decl.localName}; dropping this declaration.`,
+                ...(loc ? { loc } : {}),
+              });
+              bail = true;
+              break;
+            }
+
+            // Generate function-based style for each CSS output property
+            const outs = cssDeclarationToStylexDeclarations(d);
+            for (const out of outs) {
+              if (!out.prop) {
+                continue;
+              }
+
+              // Add fallback to base styleObj
+              styleObj[out.prop] = fallbackAst as any;
+
+              const fnKey = `${decl.styleKey}${toSuffixFromProp(out.prop)}`;
+              if (!styleFnDecls.has(fnKey)) {
+                // Get prop type from component's type annotation if available
+                const propTsType = findJsxPropTsType(res.propName);
+                const param = j.identifier(res.propName);
+
+                // Add type annotation (without | undefined since the function is only called when defined)
+                if (propTsType && typeof propTsType === "object" && (propTsType as any).type) {
+                  (param as any).typeAnnotation = j.tsTypeAnnotation(propTsType as any);
+                }
+
+                // Build: themeObj[propName] (no conditional - fallback is in base style)
+                const valueExpr = j.memberExpression(
+                  themeObjAst as any,
+                  j.identifier(res.propName),
+                  true,
+                );
+
+                const body = j.objectExpression([
+                  j.property("init", j.identifier(out.prop), valueExpr),
+                ]);
+
+                styleFnDecls.set(fnKey, j.arrowFunctionExpression([param], body));
+              }
+
+              // Use condition: "truthy" to mirror the original `props.textColor ? ... : fallback`
+              // semantics. This ensures falsy-but-defined values (empty string, 0, false) use
+              // the fallback rather than attempting an indexed lookup.
+              styleFnFromProps.push({ fnKey, jsxProp: res.propName, condition: "truthy" });
+            }
+
+            if (bail) {
+              break;
+            }
 
             decl.needsWrapperComponent = true;
             continue;
