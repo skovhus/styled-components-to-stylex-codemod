@@ -1209,7 +1209,8 @@ export function emitIntrinsicWrappers(ctx: any): {
         [propExpr],
       );
       if (p.condition === "truthy") {
-        styleArgs.push(j.logicalExpression("&&", propExpr, call));
+        const truthy = j.unaryExpression("!", j.unaryExpression("!", propExpr));
+        styleArgs.push(j.logicalExpression("&&", truthy, call));
         continue;
       }
       const required =
@@ -2288,7 +2289,8 @@ export function emitIntrinsicWrappers(ctx: any): {
         destructureProps.push(p.jsxProp);
       }
       if (p.condition === "truthy") {
-        styleArgs.push(j.logicalExpression("&&", propExpr, call));
+        const truthy = j.unaryExpression("!", j.unaryExpression("!", propExpr));
+        styleArgs.push(j.logicalExpression("&&", truthy, call));
         continue;
       }
       const required =

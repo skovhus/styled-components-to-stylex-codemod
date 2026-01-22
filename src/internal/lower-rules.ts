@@ -245,7 +245,11 @@ export function lowerRules(args: {
     const nestedSelectors: Record<string, Record<string, unknown>> = {};
     const variantBuckets = new Map<string, Record<string, unknown>>();
     const variantStyleKeys: Record<string, string> = {};
-    const styleFnFromProps: Array<{ fnKey: string; jsxProp: string }> = [];
+    const styleFnFromProps: Array<{
+      fnKey: string;
+      jsxProp: string;
+      condition?: "truthy";
+    }> = [];
     const styleFnDecls = new Map<string, any>();
     const attrBuckets = new Map<string, Record<string, unknown>>();
     const inlineStyleProps: Array<{ prop: string; expr: ExpressionKind }> = [];

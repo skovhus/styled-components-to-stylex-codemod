@@ -35,7 +35,7 @@ export function Container(props: ContainerProps) {
     <Flex
       {...rest}
       {...mergedSx(
-        [styles.container, $color && styles.containerBackgroundColor($color)],
+        [styles.container, !!$color && styles.containerBackgroundColor($color)],
         className,
         style,
       )}
