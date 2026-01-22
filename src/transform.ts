@@ -1543,16 +1543,38 @@ export function transformWithWarnings(
     }
   }
 
+  // Helper to check if a styled decl has wrapper semantics that would be lost by flattening.
+  // These are behaviors that change the rendered output beyond just styles:
+  // - .attrs({ as: "element" }) - changes the rendered element type
+  // - shouldForwardProp - filters which props are forwarded to the DOM
+  const hasWrapperSemantics = (d: StyledDecl): boolean => {
+    // .attrs({ as: "element" }) with a string value changes the rendered element
+    if (d.attrsInfo?.staticAttrs?.as && typeof d.attrsInfo.staticAttrs.as === "string") {
+      return true;
+    }
+    // shouldForwardProp filters props, so it must be preserved
+    if (d.shouldForwardProp) {
+      return true;
+    }
+    return false;
+  };
+
   // Now that all needsWrapperComponent flags are set, flatten base components where appropriate.
   // This must happen AFTER extendsStyleKey is set (line 986) and AFTER all wrapper flags are set.
   //
   // This also handles chains of styled components (e.g., A = styled(B), B = styled(C), C = styled(div))
   // by resolving the entire chain and collecting intermediate style keys.
+  //
+  // IMPORTANT: Skip flattening when any intermediate component in the chain has wrapper semantics
+  // (e.g., due to .attrs({ as: "button" }) or shouldForwardProp). Otherwise we would drop those
+  // wrapper semantics, changing the rendered element or prop forwarding behavior.
   for (const decl of styledDecls) {
     if (decl.base.kind === "component") {
       // Resolve the chain of styled components to find the ultimate base.
       // Collect intermediate style keys along the way.
+      // Also track if any intermediate component has wrapper semantics.
       const intermediateStyleKeys: string[] = [];
+      let anyIntermediateHasWrapperSemantics = false;
       let currentBase: StyledDecl["base"] = decl.base;
       let resolvedBaseDecl = declByLocal.get(decl.base.ident);
       const visited = new Set<string>([decl.localName]); // Prevent infinite loops
@@ -1563,6 +1585,11 @@ export function transformWithWarnings(
           break;
         }
         visited.add(currentBase.ident);
+
+        // Check if this intermediate component has wrapper semantics
+        if (hasWrapperSemantics(resolvedBaseDecl)) {
+          anyIntermediateHasWrapperSemantics = true;
+        }
 
         // Add the intermediate component's style key
         intermediateStyleKeys.push(resolvedBaseDecl.styleKey);
@@ -1579,6 +1606,11 @@ export function transformWithWarnings(
       // Now currentBase is either:
       // 1. An intrinsic element (kind === "intrinsic")
       // 2. A component that's not in declByLocal (external/imported component)
+
+      // Skip flattening if any intermediate component has wrapper semantics that would be lost
+      if (anyIntermediateHasWrapperSemantics) {
+        continue;
+      }
 
       if (currentBase.kind === "intrinsic") {
         // If the immediate base component is used in JSX AND this component needs a wrapper,
