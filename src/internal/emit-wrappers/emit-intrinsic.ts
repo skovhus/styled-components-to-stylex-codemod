@@ -1067,6 +1067,19 @@ export function emitIntrinsicWrappers(ctx: any): {
     }
 
     const dropProps = d.shouldForwardProp?.dropProps ?? [];
+
+    // Extract props from variantStyleKeys and add to drop list for destructuring
+    // This ensures variant props like $wrapLines are destructured from props
+    if (d.variantStyleKeys) {
+      for (const when of Object.keys(d.variantStyleKeys)) {
+        const { props } = parseVariantWhenToAst(j, when);
+        for (const p of props) {
+          if (p && !dropProps.includes(p)) {
+            dropProps.push(p);
+          }
+        }
+      }
+    }
     const dropPrefix = d.shouldForwardProp?.dropPrefix;
 
     // Initialize destructureParts and propDefaults early so buildVariantDimensionLookups can populate them
