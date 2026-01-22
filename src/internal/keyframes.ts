@@ -74,7 +74,21 @@ function parseKeyframesTemplate(args: {
           continue;
         }
         const raw = propRaw.trim();
-        const prop = raw === "background" ? "backgroundColor" : cssPropertyToStylexProp(raw);
+        // StyleX doesn't support the `background` shorthand.
+        // Use `backgroundImage` for gradients/images, `backgroundColor` for colors.
+        const isGradientOrImageKeyframe =
+          raw === "background" &&
+          (/\b(linear|radial|conic|repeating-linear|repeating-radial|repeating-conic)-gradient\b/.test(
+            valueRaw,
+          ) ||
+            /\burl\s*\(/.test(valueRaw));
+        const prop = cssPropertyToStylexProp(
+          raw === "background"
+            ? isGradientOrImageKeyframe
+              ? "backgroundImage"
+              : "backgroundColor"
+            : raw,
+        );
         styleObj[prop] = /^-?\d+(\.\d+)?$/.test(valueRaw) ? Number(valueRaw) : valueRaw;
       }
 

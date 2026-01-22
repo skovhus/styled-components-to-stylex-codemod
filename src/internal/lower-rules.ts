@@ -1705,9 +1705,24 @@ export function lowerRules(args: {
             const allPos = res.variants.filter((v: any) => !v.when.startsWith("!"));
 
             const cssProp = (d.property ?? "").trim();
-            // Map CSS property to StyleX property (handle special cases like background → backgroundColor)
+            // StyleX doesn't support the `background` shorthand.
+            // Use `backgroundImage` for gradients/images, `backgroundColor` for colors.
+            const hasGradientOrImage =
+              cssProp === "background" &&
+              res.variants.some(
+                (v: any) =>
+                  typeof v.expr === "string" &&
+                  (/\b(linear|radial|conic|repeating-linear|repeating-radial|repeating-conic)-gradient\b/.test(
+                    v.expr,
+                  ) ||
+                    /\burl\s*\(/.test(v.expr)),
+              );
             const stylexProp =
-              cssProp === "background" ? "backgroundColor" : cssPropertyToStylexProp(cssProp);
+              cssProp === "background"
+                ? hasGradientOrImage
+                  ? "backgroundImage"
+                  : "backgroundColor"
+                : cssPropertyToStylexProp(cssProp);
 
             // Extract static prefix/suffix from CSS value for wrapping resolved values
             // e.g., `rotate(${...})` should wrap the resolved value with `rotate(...)`.
@@ -1967,8 +1982,28 @@ export function lowerRules(args: {
 
           if (res && res.type === "splitMultiPropVariantsResolvedValue") {
             const cssProp = (d.property ?? "").trim();
+            // StyleX doesn't support the `background` shorthand.
+            // Use `backgroundImage` for gradients/images, `backgroundColor` for colors.
+            const hasGradientOrImageMulti =
+              cssProp === "background" &&
+              [
+                res.outerTruthyBranch?.expr,
+                res.innerTruthyBranch?.expr,
+                res.innerFalsyBranch?.expr,
+              ].some(
+                (expr) =>
+                  typeof expr === "string" &&
+                  (/\b(linear|radial|conic|repeating-linear|repeating-radial|repeating-conic)-gradient\b/.test(
+                    expr,
+                  ) ||
+                    /\burl\s*\(/.test(expr)),
+              );
             const stylexProp =
-              cssProp === "background" ? "backgroundColor" : cssPropertyToStylexProp(cssProp);
+              cssProp === "background"
+                ? hasGradientOrImageMulti
+                  ? "backgroundImage"
+                  : "backgroundColor"
+                : cssPropertyToStylexProp(cssProp);
 
             // Extract static prefix/suffix from CSS value for wrapping resolved values
             const { prefix: staticPrefix, suffix: staticSuffix } = extractStaticParts(d.value, {
@@ -2803,7 +2838,21 @@ export function lowerRules(args: {
             continue;
           }
           // Convert CSS property name to camelCase (e.g., outline-offset -> outlineOffset)
-          const outProp = cssPropertyToStylexProp(prop === "background" ? "backgroundColor" : prop);
+          // StyleX doesn't support the `background` shorthand.
+          // Use `backgroundImage` for gradients/images, `backgroundColor` for colors.
+          const isGradientOrImageValue =
+            prop === "background" &&
+            (/\b(linear|radial|conic|repeating-linear|repeating-radial|repeating-conic)-gradient\b/.test(
+              value,
+            ) ||
+              /\burl\s*\(/.test(value));
+          const outProp = cssPropertyToStylexProp(
+            prop === "background"
+              ? isGradientOrImageValue
+                ? "backgroundImage"
+                : "backgroundColor"
+              : prop,
+          );
           const jsVal = cssValueToJs({ kind: "static", value } as any, false, outProp);
           (bucket as Record<string, unknown>)[outProp] = jsVal;
         }

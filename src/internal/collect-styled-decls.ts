@@ -1011,8 +1011,22 @@ function collectStyledDeclsImpl(args: {
           if (!key) {
             continue;
           }
-          const styleKey = key === "background" ? "backgroundColor" : key;
           const v: any = prop.value;
+          // StyleX doesn't support the `background` shorthand.
+          // Use `backgroundImage` for gradients/images, `backgroundColor` for colors.
+          const isGradientOrImageStyled =
+            key === "background" &&
+            v.type === "StringLiteral" &&
+            (/\b(linear|radial|conic|repeating-linear|repeating-radial|repeating-conic)-gradient\b/.test(
+              v.value,
+            ) ||
+              /\burl\s*\(/.test(v.value));
+          const styleKey =
+            key === "background"
+              ? isGradientOrImageStyled
+                ? "backgroundImage"
+                : "backgroundColor"
+              : key;
           if (v.type === "StringLiteral") {
             styleObj[styleKey] = v.value;
           } else if (v.type === "NumericLiteral") {
