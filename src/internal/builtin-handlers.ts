@@ -837,37 +837,220 @@ function tryResolveConditionalCssBlockTernary(node: DynamicNode): HandlerResult 
     return null;
   }
 
-  // Support patterns like:
-  //   ${(props) => (props.$dim ? "opacity: 0.5;" : "")}
-  const test = expr.body.test as any;
-  if (!test || test.type !== "MemberExpression") {
-    return null;
-  }
-  const testPath = getMemberPathFromIdentifier(test, paramName);
-  if (!testPath || testPath.length !== 1) {
-    return null;
-  }
-  const when = testPath[0]!;
+  // Helper to parse a condition test and extract propName + when condition
+  type ConditionInfo =
+    | { kind: "boolean"; propName: string; isNegated: boolean }
+    | {
+        kind: "comparison";
+        propName: string;
+        operator: "===" | "!==";
+        rhsValue: string;
+        rhsRaw: unknown;
+      };
 
-  const consText = literalToString(expr.body.consequent);
-  const altText = literalToString(expr.body.alternate);
-  if (consText === null || altText === null) {
+  const parseConditionTest = (test: unknown): ConditionInfo | null => {
+    if (!test || typeof test !== "object") {
+      return null;
+    }
+    const t = test as {
+      type?: string;
+      operator?: string;
+      argument?: unknown;
+      left?: unknown;
+      right?: unknown;
+    };
+
+    // Simple prop access: props.$dim
+    if (t.type === "MemberExpression") {
+      const testPath = getMemberPathFromIdentifier(t as any, paramName);
+      if (!testPath || testPath.length !== 1) {
+        return null;
+      }
+      return { kind: "boolean", propName: testPath[0]!, isNegated: false };
+    }
+
+    // Negated prop access: !props.$open
+    if (t.type === "UnaryExpression" && t.operator === "!") {
+      const arg = t.argument as { type?: string } | undefined;
+      if (arg?.type === "MemberExpression") {
+        const testPath = getMemberPathFromIdentifier(arg as any, paramName);
+        if (!testPath || testPath.length !== 1) {
+          return null;
+        }
+        return { kind: "boolean", propName: testPath[0]!, isNegated: true };
+      }
+      return null;
+    }
+
+    // Comparison: props.variant === "micro" or props.variant !== "micro"
+    if (t.type === "BinaryExpression" && (t.operator === "===" || t.operator === "!==")) {
+      const left = t.left as { type?: string } | undefined;
+      if (left?.type !== "MemberExpression") {
+        return null;
+      }
+      const testPath = getMemberPathFromIdentifier(left as any, paramName);
+      if (!testPath || testPath.length !== 1) {
+        return null;
+      }
+      const rhsRaw = literalToStaticValue(t.right);
+      if (rhsRaw === null) {
+        return null;
+      }
+      return {
+        kind: "comparison",
+        propName: testPath[0]!,
+        operator: t.operator as "===" | "!==",
+        rhsValue: JSON.stringify(rhsRaw),
+        rhsRaw,
+      };
+    }
+
+    return null;
+  };
+
+  // Helper to build `when` string from condition info
+  const buildWhenCondition = (cond: ConditionInfo, isTruthyBranch: boolean): string => {
+    if (cond.kind === "boolean") {
+      // For boolean tests:
+      // - truthy branch: propName (or !propName if negated test)
+      // - falsy branch: !propName (or propName if negated test)
+      if (isTruthyBranch) {
+        return cond.isNegated ? `!${cond.propName}` : cond.propName;
+      } else {
+        return cond.isNegated ? cond.propName : `!${cond.propName}`;
+      }
+    }
+    // For comparison tests:
+    // - truthy branch: propName === value (or propName !== value)
+    // - falsy branch: the negation
+    if (isTruthyBranch) {
+      return `${cond.propName} ${cond.operator} ${cond.rhsValue}`;
+    } else {
+      const inverseOp = cond.operator === "===" ? "!==" : "===";
+      return `${cond.propName} ${inverseOp} ${cond.rhsValue}`;
+    }
+  };
+
+  // Helper to build nameHint from condition info
+  const buildNameHint = (cond: ConditionInfo, isTruthyBranch: boolean): string => {
+    if (cond.kind === "boolean") {
+      return isTruthyBranch ? "truthy" : "falsy";
+    }
+    // For comparison tests, use the RHS value as hint (e.g., "micro", "small")
+    if (isTruthyBranch) {
+      return typeof cond.rhsRaw === "string" ? cond.rhsRaw : String(cond.rhsRaw);
+    }
+    return "default";
+  };
+
+  type VariantWithStyle = { nameHint: string; when: string; style: Record<string, unknown> };
+
+  // Recursively extract variants from nested ternaries
+  // e.g., variant === "micro" ? "..." : variant === "small" ? "..." : "..."
+  const extractVariantsFromTernary = (
+    condExpr: unknown,
+    expectedPropName?: string,
+  ): { variants: VariantWithStyle[]; defaultStyle: Record<string, unknown> | null } | null => {
+    if (!condExpr || typeof condExpr !== "object") {
+      return null;
+    }
+    const ce = condExpr as {
+      type?: string;
+      test?: unknown;
+      consequent?: unknown;
+      alternate?: unknown;
+    };
+
+    // Base case: not a conditional, this is the default value (a CSS string)
+    if (ce.type !== "ConditionalExpression") {
+      const cssText = literalToString(condExpr);
+      if (cssText === null) {
+        return null;
+      }
+      const style = cssText.trim() ? parseCssDeclarationBlock(cssText) : null;
+      return { variants: [], defaultStyle: style };
+    }
+
+    const condInfo = parseConditionTest(ce.test);
+    if (!condInfo) {
+      return null;
+    }
+
+    // Ensure all conditions in the chain test the same property
+    if (expectedPropName && condInfo.propName !== expectedPropName) {
+      return null;
+    }
+
+    const consText = literalToString(ce.consequent);
+    if (consText === null) {
+      return null;
+    }
+    const consStyle = consText.trim() ? parseCssDeclarationBlock(consText) : null;
+
+    // Recursively process the alternate branch
+    const nested = extractVariantsFromTernary(ce.alternate, condInfo.propName);
+    if (!nested) {
+      return null;
+    }
+
+    const variants: VariantWithStyle[] = [];
+
+    // Add the consequent as a variant
+    if (consStyle) {
+      variants.push({
+        nameHint: buildNameHint(condInfo, true),
+        when: buildWhenCondition(condInfo, true),
+        style: consStyle,
+      });
+    }
+
+    // Add nested variants
+    variants.push(...nested.variants);
+
+    return { variants, defaultStyle: nested.defaultStyle };
+  };
+
+  // Extract variants from the ternary expression
+  const result = extractVariantsFromTernary(expr.body);
+  if (!result) {
     return null;
   }
 
-  const consStyle = consText.trim() ? parseCssDeclarationBlock(consText) : null;
-  const altStyle = altText.trim() ? parseCssDeclarationBlock(altText) : null;
-  if (!consStyle && !altStyle) {
+  const { variants, defaultStyle } = result;
+
+  // For single-level ternaries with a non-empty default (alternate), add it as a variant
+  // This handles cases like: props.$dim ? "opacity: 0.5;" : "opacity: 1;"
+  if (defaultStyle && Object.keys(defaultStyle).length > 0) {
+    // Need to determine the condition for the default branch
+    if (variants.length > 0) {
+      // Build the "else" condition by negating all positive conditions
+      const allConditions = variants.map((v) => v.when).join(" || ");
+      let defaultWhen = `!(${allConditions})`;
+
+      // Normalize double negation: !(!prop) → prop
+      // This happens when the original test was negated: !props.$x ? A : B
+      // Without this, both variants would start with "!" and fall through the
+      // lower-rules processing logic, silently dropping the styles.
+      if (variants.length === 1) {
+        const singleWhen = variants[0]!.when;
+        // Check for simple negated prop (e.g., "!$open") without operators
+        if (singleWhen.startsWith("!") && !singleWhen.includes(" ")) {
+          defaultWhen = singleWhen.slice(1); // "!$open" → "$open"
+        }
+      }
+
+      variants.push({
+        nameHint: "default",
+        when: defaultWhen,
+        style: defaultStyle,
+      });
+    }
+  }
+
+  if (variants.length === 0) {
     return null;
   }
 
-  const variants: Array<{ nameHint: string; when: string; style: Record<string, unknown> }> = [];
-  if (altStyle) {
-    variants.push({ nameHint: "falsy", when: `!${when}`, style: altStyle });
-  }
-  if (consStyle) {
-    variants.push({ nameHint: "truthy", when, style: consStyle });
-  }
   return { type: "splitVariants", variants };
 }
 

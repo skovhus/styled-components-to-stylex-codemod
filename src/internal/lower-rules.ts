@@ -1633,16 +1633,35 @@ export function lowerRules(args: {
           }
 
           if (res && res.type === "splitVariants") {
-            const neg = res.variants.find((v: any) => v.when.startsWith("!"));
-            const pos = res.variants.find((v: any) => !v.when.startsWith("!"));
+            const negVariants = res.variants.filter((v: any) => v.when.startsWith("!"));
+            const posVariants = res.variants.filter((v: any) => !v.when.startsWith("!"));
 
-            if (neg) {
+            if (negVariants.length === 1 && posVariants.length > 0) {
+              // Classic pattern with one default (neg) and conditional variants (pos)
+              // Pattern: prop === "a" ? A : prop === "b" ? B : C
+              // → C is default, A and B are conditional
+              const neg = negVariants[0]!;
               Object.assign(styleObj, neg.style);
-            }
-            if (pos) {
-              const when = pos.when.replace(/^!/, "");
-              variantBuckets.set(when, { ...variantBuckets.get(when), ...pos.style });
-              variantStyleKeys[when] ??= `${decl.styleKey}${toSuffixFromProp(when)}`;
+              for (const pos of posVariants) {
+                variantBuckets.set(pos.when, { ...variantBuckets.get(pos.when), ...pos.style });
+                // toSuffixFromProp handles both simple props ($dim → Dim) and
+                // comparison expressions (variant === "micro" → VariantMicro)
+                variantStyleKeys[pos.when] ??= `${decl.styleKey}${toSuffixFromProp(pos.when)}`;
+              }
+            } else if (negVariants.length === 1 && posVariants.length === 0) {
+              // Only negated variant: style is conditional on !prop
+              // Pattern: !prop ? A : "" → A is conditional on !prop (i.e., when prop is false)
+              const neg = negVariants[0]!;
+              variantBuckets.set(neg.when, { ...variantBuckets.get(neg.when), ...neg.style });
+              // toSuffixFromProp handles negated props: !$open → NotOpen
+              variantStyleKeys[neg.when] ??= `${decl.styleKey}${toSuffixFromProp(neg.when)}`;
+            } else if (posVariants.length > 0) {
+              // Only positive variants (no default)
+              // Pattern: prop ? A : "" or prop === "a" ? A : ""
+              for (const pos of posVariants) {
+                variantBuckets.set(pos.when, { ...variantBuckets.get(pos.when), ...pos.style });
+                variantStyleKeys[pos.when] ??= `${decl.styleKey}${toSuffixFromProp(pos.when)}`;
+              }
             }
             continue;
           }
