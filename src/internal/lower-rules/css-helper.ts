@@ -5,7 +5,7 @@ import { normalizeStylisAstToIR } from "../css-ir.js";
 import { cssDeclarationToStylexDeclarations } from "../css-prop-mapping.js";
 import { getMemberPathFromIdentifier } from "../jscodeshift-utils.js";
 import { parseStyledTemplateLiteral } from "../styled-css.js";
-import { parsePseudoElement, parseSimplePseudo } from "../selectors.js";
+import { parseSelector } from "../selectors.js";
 
 type ImportMapEntry = {
   importedName: string;
@@ -113,20 +113,32 @@ export function createCssHelperResolver(args: {
       const selector = (rule.selector ?? "").trim();
       let target = out;
       if (selector !== "&") {
-        const pseudoElement = parsePseudoElement(selector);
-        const simplePseudo = parseSimplePseudo(selector);
-        const normalizedPseudoElement = normalizePseudoElement(
-          pseudoElement ??
-            (simplePseudo === ":before" || simplePseudo === ":after" ? simplePseudo : null),
-        );
-        if (normalizedPseudoElement) {
-          const nested = (out[normalizedPseudoElement] as any) ?? {};
-          out[normalizedPseudoElement] = nested;
-          target = nested;
-        } else if (simplePseudo) {
-          const nested = (out[simplePseudo] as any) ?? {};
-          out[simplePseudo] = nested;
-          target = nested;
+        const parsed = parseSelector(selector);
+
+        if (parsed.kind === "pseudoElement") {
+          const normalizedPseudoElement = normalizePseudoElement(parsed.element);
+          if (normalizedPseudoElement) {
+            const nested = (out[normalizedPseudoElement] as any) ?? {};
+            out[normalizedPseudoElement] = nested;
+            target = nested;
+          } else {
+            return null;
+          }
+        } else if (parsed.kind === "pseudo" && parsed.pseudos.length === 1) {
+          const simplePseudo = parsed.pseudos[0]!;
+          // Handle :before/:after as pseudo-elements
+          const normalizedPseudoElement = normalizePseudoElement(
+            simplePseudo === ":before" || simplePseudo === ":after" ? simplePseudo : null,
+          );
+          if (normalizedPseudoElement) {
+            const nested = (out[normalizedPseudoElement] as any) ?? {};
+            out[normalizedPseudoElement] = nested;
+            target = nested;
+          } else {
+            const nested = (out[simplePseudo] as any) ?? {};
+            out[simplePseudo] = nested;
+            target = nested;
+          }
         } else {
           return null;
         }

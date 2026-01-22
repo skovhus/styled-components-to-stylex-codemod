@@ -1,27 +1,17 @@
 import styled from "styled-components";
 
-// Multiple selectors (comma-separated)
+// Class selectors with comma-separated (not pure pseudo-selectors)
+// Note: Pure pseudo-selectors like "&:hover, &:focus" ARE supported
+// but mixing with class/attribute selectors is not
 const MultiSelector = styled.button`
-  &:hover,
-  &:focus {
-    background: #BF4F74;
-    color: white;
-  }
-
-  &:active,
-  &:focus-visible {
-    outline: 2px solid #4F74BF;
-    outline-offset: 2px;
-  }
-
   &.active,
   &[aria-selected="true"] {
-    background: #4F74BF;
+    background: #4f74bf;
     color: white;
   }
 `;
 
-// Compound selectors
+// Compound class selectors (multiple classes on same element)
 const CompoundSelector = styled.div`
   &.card.highlighted {
     border: 2px solid gold;
@@ -33,22 +23,7 @@ const CompoundSelector = styled.div`
   }
 `;
 
-// Chained pseudo-selectors
-const ChainedPseudo = styled.input`
-  &:focus:not(:disabled) {
-    border-color: #BF4F74;
-  }
-
-  &:hover:not(:disabled):not(:focus) {
-    border-color: #999;
-  }
-
-  &:checked:not(:disabled) {
-    background: #BF4F74;
-  }
-`;
-
-// Complex nested selectors
+// Complex nested selectors (descendant element selectors)
 const ComplexNested = styled.nav`
   & a {
     color: #333;
@@ -56,12 +31,12 @@ const ComplexNested = styled.nav`
 
     &:hover,
     &:focus {
-      color: #BF4F74;
+      color: #bf4f74;
     }
 
     &.active {
       font-weight: bold;
-      color: #4F74BF;
+      color: #4f74bf;
     }
   }
 `;
@@ -86,7 +61,6 @@ export const App = () => (
   <div>
     <MultiSelector>Multi Selector</MultiSelector>
     <CompoundSelector className="card highlighted">Compound</CompoundSelector>
-    <ChainedPseudo type="checkbox" />
     <ComplexNested>
       <a href="#" className="active">
         Active Link

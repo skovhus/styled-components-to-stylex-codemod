@@ -345,13 +345,14 @@ export function transformWithWarnings(
       severity: "warning" as const,
       type: "unsupported-feature" as const,
       message:
-        "Styled-components specificity hacks like `&&` / `&&&` are not representable in StyleX. The output may not preserve selector specificity and may require manual adjustments.",
+        "Styled-components specificity hacks like `&&` / `&&&` are not representable in StyleX.",
     };
     if (specificityHackLoc) {
       warnings.push({ ...warning, loc: specificityHackLoc });
     } else {
       warnings.push(warning);
     }
+    return { code: null, warnings };
   }
 
   // --- Core transform ---

@@ -37,10 +37,7 @@ import { mergeStyleObjects, toKebab } from "./lower-rules/utils.js";
 import {
   normalizeSelectorForInputAttributePseudos,
   normalizeInterpolatedSelector,
-  parseAttributeSelector,
-  parseCommaSeparatedPseudos,
-  parsePseudoElement,
-  parseSimplePseudo,
+  parseSelector,
 } from "./selectors.js";
 import type { StyledDecl } from "./transform-types.js";
 import type { WarningLog } from "./logger.js";
@@ -659,27 +656,70 @@ export function lowerRules(args: {
       // to avoid skipping bails for selectors like `${Other} .child &`.
       if (typeof rule.selector === "string") {
         const s = normalizeInterpolatedSelector(rule.selector).trim();
+        const hasComponentExpr = rule.selector.includes("__SC_EXPR_");
 
-        if (s.includes(",") && !parseCommaSeparatedPseudos(s)) {
-          // Bail on comma-separated selectors unless ALL parts are valid pseudo-selectors
-          // (e.g., "&:hover, &:focus" is OK, but "&:hover, & .child" is not)
-          bail = true;
-        } else if (s.includes(":not(")) {
-          bail = true;
-        } else if (/&\.[a-zA-Z0-9_-]+/.test(s)) {
-          // Any class selector on the same element (except the sibling patterns handled above).
-          bail = true;
-        } else if (/\s+[a-zA-Z.#]/.test(s)) {
-          // Descendant element/class/id selectors like `& a`, `& .child`, `& #foo`, etc.
-          bail = true;
-        }
+        // Component selector patterns that have special handling below:
+        // 1. `${Other}:hover &` - requires :hover and ends with &
+        // 2. `&:hover ${Child}` or just `& ${Child}` - starts with & and contains component
+        // Other component selector patterns (like `${Other} .child`) should bail.
+        const isHandledComponentPattern =
+          hasComponentExpr &&
+          (rule.selector.includes(":hover") ||
+            rule.selector.trim().startsWith("&") ||
+            /^__SC_EXPR_\d+__\s*\{/.test(rule.selector.trim()));
 
-        if (bail) {
+        // Use heuristic-based bail checks. We need to allow:
+        // - Component selectors that have special handling
+        // - Attribute selectors (have special handling for input type, href, etc.)
+        // Note: Specificity hacks (&&, &&&) bail early in transform.ts
+
+        // Check for descendant pseudo selectors BEFORE normalization collapses them.
+        // "& :not(:disabled)" (with space) targets descendants, not the component itself.
+        // normalizeInterpolatedSelector would collapse this to "&:not(:disabled)" which
+        // has completely different semantics. We must bail on these patterns.
+        if (/&\s+:/.test(rule.selector)) {
+          bail = true;
           warnings.push({
             severity: "warning",
             type: "unsupported-feature",
-            message:
-              "Complex selectors (grouped selectors, descendant element selectors, class-conditioned selectors, or :not() chains) are not currently supported",
+            message: "Unsupported selector: descendant pseudo selector (space before pseudo)",
+            ...(decl.loc ? { loc: decl.loc } : {}),
+          });
+          break;
+        }
+
+        if (s.includes(",") && !isHandledComponentPattern) {
+          // Comma-separated selectors: bail unless ALL parts are valid pseudo-selectors
+          const parsed = parseSelector(s);
+          if (parsed.kind !== "pseudo") {
+            bail = true;
+            warnings.push({
+              severity: "warning",
+              type: "unsupported-feature",
+              message: "Unsupported selector: comma-separated selectors must all be simple pseudos",
+              ...(decl.loc ? { loc: decl.loc } : {}),
+            });
+            break;
+          }
+        } else if (/&\.[a-zA-Z0-9_-]+/.test(s)) {
+          // Class selector on same element like &.active
+          // Note: Specificity hacks (&&, &&&) bail early in transform.ts
+          bail = true;
+          warnings.push({
+            severity: "warning",
+            type: "unsupported-feature",
+            message: "Unsupported selector: class selector",
+            ...(decl.loc ? { loc: decl.loc } : {}),
+          });
+          break;
+        } else if (/\s+[a-zA-Z.#]/.test(s) && !isHandledComponentPattern) {
+          // Descendant element/class/id selectors like `& a`, `& .child`, `& #foo`
+          // But NOT `&:hover ${Child}` (component selector pattern)
+          bail = true;
+          warnings.push({
+            severity: "warning",
+            type: "unsupported-feature",
+            message: "Unsupported selector: descendant/child/sibling selector",
             ...(decl.loc ? { loc: decl.loc } : {}),
           });
           break;
@@ -782,12 +822,18 @@ export function lowerRules(args: {
       }
 
       // Support comma-separated pseudo-selectors like "&:hover, &:focus"
-      const pseudos =
-        parseCommaSeparatedPseudos(selector) ??
-        (parseSimplePseudo(selector) ? [parseSimplePseudo(selector)!] : null);
-      const pseudoElement = parsePseudoElement(selector);
-
-      const attrSel = parseAttributeSelector(selector);
+      // and chained pseudo-selectors like "&:focus:not(:disabled)"
+      const parsedSelector = parseSelector(selector);
+      const pseudos = parsedSelector.kind === "pseudo" ? parsedSelector.pseudos : null;
+      const pseudoElement = parsedSelector.kind === "pseudoElement" ? parsedSelector.element : null;
+      const attrSel =
+        parsedSelector.kind === "attribute"
+          ? {
+              kind: parsedSelector.attr.type,
+              suffix: parsedSelector.attr.suffix,
+              pseudoElement: parsedSelector.attr.pseudoElement,
+            }
+          : null;
       const attrWrapperKind =
         decl.base.kind === "intrinsic" && decl.base.tagName === "input"
           ? "input"
