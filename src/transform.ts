@@ -1,6 +1,6 @@
-import type { API, FileInfo, Options } from "jscodeshift";
+import type { API, ASTPath, FileInfo, ImportDeclaration, JSXAttribute, Options } from "jscodeshift";
 import path from "node:path";
-import type { ImportSource } from "./adapter.js";
+import type { ImportSource, ImportSpec } from "./adapter.js";
 import { assertNoNullNodesInArrays } from "./internal/ast-safety.js";
 import { collectStyledDecls } from "./internal/collect-styled-decls.js";
 import { formatOutput } from "./internal/format-output.js";
@@ -62,9 +62,11 @@ export function transformWithWarnings(
 
   // `forwardedAs` is styled-components-specific; in StyleX output we standardize on `as`.
   root
-    .find(j.JSXAttribute, { name: { type: "JSXIdentifier", name: "forwardedAs" } } as any)
-    .forEach((p: any) => {
-      p.node.name.name = "as";
+    .find(j.JSXAttribute, { name: { type: "JSXIdentifier", name: "forwardedAs" } })
+    .forEach((p: ASTPath<JSXAttribute>) => {
+      if (p.node.name.type === "JSXIdentifier") {
+        p.node.name.name = "as";
+      }
     });
 
   // Preserve existing `import React ... from "react"` (default or namespace import) even if it becomes "unused"
@@ -72,10 +74,13 @@ export function transformWithWarnings(
   const preserveReactImport =
     root
       .find(j.ImportDeclaration)
-      .filter((p: any) => (p.node?.source as any)?.value === "react")
-      .filter((p: any) =>
+      .filter(
+        (p: ASTPath<ImportDeclaration>) =>
+          p.node?.source?.type === "StringLiteral" && p.node.source.value === "react",
+      )
+      .filter((p: ASTPath<ImportDeclaration>) =>
         (p.node.specifiers ?? []).some(
-          (s: any) =>
+          (s) =>
             (s.type === "ImportDefaultSpecifier" || s.type === "ImportNamespaceSpecifier") &&
             s.local?.type === "Identifier" &&
             s.local.name === "React",
@@ -92,7 +97,7 @@ export function transformWithWarnings(
     adapter,
     "transform(options) - missing `adapter` (if you run the jscodeshift transform directly, pass options.adapter)",
   );
-  const resolverImports = new Map<string, any>();
+  const resolverImports = new Map<string, ImportSpec>();
 
   let hasChanges = false;
   const {
@@ -814,6 +819,13 @@ export function transformWithWarnings(
         if (isUsedInJsxElement) {
           // Skip if already marked as needing wrapper (e.g., exported components)
           if (decl.needsWrapperComponent) {
+            continue;
+          }
+
+          // If this component is extended by another styled component, it must remain
+          // as a component (not inlined) so the extending component can delegate to it.
+          if (extendedBy.has(decl.localName)) {
+            decl.needsWrapperComponent = true;
             continue;
           }
 
