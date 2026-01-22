@@ -16,7 +16,7 @@ export function emitStylesAndImports(args: {
   literalToAst: (j: any, v: unknown) => any;
   stylesIdentifier: string;
   styleMerger: StyleMergerConfig | null;
-}): void {
+}): { emptyStyleKeys: Set<string> } {
   const {
     root,
     j,
@@ -510,30 +510,43 @@ export function emitStylesAndImports(args: {
     }
   }
 
+  // Compute the set of empty style keys (style objects with no properties)
+  const emptyStyleKeys = new Set<string>();
+  for (const [k, v] of resolvedStyleObjects.entries()) {
+    if (v && typeof v === "object" && !isAstNode(v)) {
+      if (Object.keys(v as Record<string, unknown>).length === 0) {
+        emptyStyleKeys.add(k);
+      }
+    }
+  }
+
   // Insert `const styles = stylex.create(...)` (or stylexStyles if styles is already used) near top (after imports)
   const stylesDecl = j.variableDeclaration("const", [
     j.variableDeclarator(
       j.identifier(stylesIdentifier),
       j.callExpression(j.memberExpression(j.identifier("stylex"), j.identifier("create")), [
         j.objectExpression(
-          [...resolvedStyleObjects.entries()].map(([k, v]) => {
-            const prop = j.property(
-              "init",
-              j.identifier(k),
-              v && typeof v === "object" && !isAstNode(v)
-                ? objectToAst(j, v as Record<string, unknown>)
-                : literalToAst(j, v),
-            );
-            const comments = styleKeyToComments.get(k);
-            if (comments && comments.length > 0) {
-              (prop as any).comments = comments.map((c: any) => ({
-                ...c,
-                leading: true,
-                trailing: false,
-              }));
-            }
-            return prop;
-          }),
+          [...resolvedStyleObjects.entries()]
+            // Filter out empty style objects
+            .filter(([k]) => !emptyStyleKeys.has(k))
+            .map(([k, v]) => {
+              const prop = j.property(
+                "init",
+                j.identifier(k),
+                v && typeof v === "object" && !isAstNode(v)
+                  ? objectToAst(j, v as Record<string, unknown>)
+                  : literalToAst(j, v),
+              );
+              const comments = styleKeyToComments.get(k);
+              if (comments && comments.length > 0) {
+                (prop as any).comments = comments.map((c: any) => ({
+                  ...c,
+                  leading: true,
+                  trailing: false,
+                }));
+              }
+              return prop;
+            }),
         ),
       ]),
     ),
@@ -636,6 +649,8 @@ export function emitStylesAndImports(args: {
       programBody.push(variantDecl as any);
     }
   }
+
+  return { emptyStyleKeys };
 }
 
 /**

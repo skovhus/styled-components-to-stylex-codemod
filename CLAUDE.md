@@ -19,6 +19,7 @@ pnpm check       # Run lint + tsc + test
 - src folder code should never depend on test-cases or test-case logic
 - transformations should be safe and lossless, bail if we cannot preserve the semantics of the input
 - always run "pnpn run ci" to validate changes
+- when fixing bugs or addressing review comments, add a test case or unit test to document the regression and prevent future breakage
 
 ## Code guidelines
 

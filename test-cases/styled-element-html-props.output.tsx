@@ -15,7 +15,7 @@ interface TextColorProps extends React.ComponentProps<"span"> {
 export function TextColor(props: TextColorProps) {
   const { as: Component = "span", className, children, style, color } = props;
   return (
-    <Component {...mergedSx([styles.textColor, styles.textColorColor(color)], className, style)}>
+    <Component {...mergedSx([styles.textColorColor(color)], className, style)}>
       {children}
     </Component>
   );
@@ -29,7 +29,6 @@ export const App = () => (
 );
 
 const styles = stylex.create({
-  textColor: {},
   textColorColor: (color: string) => ({
     color,
   }),

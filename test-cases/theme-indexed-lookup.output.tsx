@@ -42,7 +42,7 @@ interface TextColorProps extends Omit<React.ComponentProps<"span">, "className" 
 
 export function TextColor(props: TextColorProps) {
   const { children, color } = props;
-  return <span {...stylex.props(styles.textColor, styles.textColorColor(color))}>{children}</span>;
+  return <span {...stylex.props(styles.textColorColor(color))}>{children}</span>;
 }
 
 const styles = stylex.create({
@@ -60,7 +60,6 @@ const styles = stylex.create({
   boxBackgroundColor: ($bg: Color) => ({
     backgroundColor: themeVars[$bg],
   }),
-  textColor: {},
   textColorColor: (color: Colors) => ({
     color: themeVars[color],
   }),

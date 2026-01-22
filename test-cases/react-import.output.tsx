@@ -25,9 +25,7 @@ interface ThemeSpanProps extends Omit<React.ComponentProps<"span">, "className" 
 
 export function ThemeSpan(props: ThemeSpanProps) {
   const { children, variant } = props;
-  return (
-    <span {...stylex.props(styles.themeSpan, styles.themeSpanColor(variant))}>{children}</span>
-  );
+  return <span {...stylex.props(styles.themeSpanColor(variant))}>{children}</span>;
 }
 
 export function App() {
@@ -51,7 +49,6 @@ const styles = stylex.create({
     backgroundColor: "blue",
     color: "white",
   },
-  themeSpan: {},
   themeSpanColor: (variant: "labelBase" | "labelMuted" | "labelTitle") => ({
     color: themeVars[variant],
   }),
