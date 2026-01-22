@@ -517,7 +517,11 @@ export function lowerRules(args: {
               const bodyExpr = j.objectExpression([p]);
               styleFnDecls.set(fnKey, j.arrowFunctionExpression([param], bodyExpr));
             }
-            if (!styleFnFromProps.some((p) => p.fnKey === fnKey)) {
+            if (
+              !styleFnFromProps.some(
+                (p) => p.fnKey === fnKey && p.jsxProp === dyn.jsxProp && p.condition === "truthy",
+              )
+            ) {
               styleFnFromProps.push({
                 fnKey,
                 jsxProp: dyn.jsxProp,
