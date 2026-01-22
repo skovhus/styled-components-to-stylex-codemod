@@ -5,8 +5,7 @@ import styled from "styled-components";
 // Pattern: !props.$prop ? "css;" : ""
 
 export const Tooltip = styled.div<{ $open?: boolean }>`
-  position: absolute;
-  ${(props) => (!props.$open ? "pointer-events: none; opacity: 0;" : "")}
+  ${(props) => (!props.$open ? "pointer-events: none; opacity: 0.1;" : "")}
 `;
 
 export const App = () => (

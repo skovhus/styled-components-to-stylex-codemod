@@ -10,7 +10,7 @@ type TooltipProps = React.PropsWithChildren<{
 
 export function Tooltip(props: TooltipProps) {
   const { children, $open } = props;
-  return <div {...stylex.props(styles.tooltip, !$open && styles.tooltipNotOpen)}>{children}</div>;
+  return <div {...stylex.props(!$open && styles.tooltipNotOpen)}>{children}</div>;
 }
 
 export const App = () => (
@@ -22,11 +22,8 @@ export const App = () => (
 );
 
 const styles = stylex.create({
-  tooltip: {
-    position: "absolute",
-  },
   tooltipNotOpen: {
     pointerEvents: "none",
-    opacity: 0,
+    opacity: 0.1,
   },
 });
