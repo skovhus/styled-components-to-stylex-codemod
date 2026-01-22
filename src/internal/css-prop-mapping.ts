@@ -4,15 +4,27 @@ import { splitDirectionalProperty } from "./stylex-shorthands.js";
 export type StylexPropDecl = { prop: string; value: CssValue };
 
 /**
- * Check if a CSS value contains a gradient or image that requires `backgroundImage`
- * instead of `backgroundColor`. StyleX doesn't support the `background` shorthand.
+ * For a `background` CSS property, determine the appropriate StyleX property name.
+ * Returns `backgroundImage` for gradients/images, `backgroundColor` for colors.
  */
-export function isBackgroundImageValue(value: string): boolean {
-  return (
-    /\b(linear|radial|conic|repeating-linear|repeating-radial|repeating-conic)-gradient\b/.test(
-      value,
-    ) || /\burl\s*\(/.test(value)
-  );
+export function resolveBackgroundStylexProp(value: string): "backgroundImage" | "backgroundColor" {
+  return isBackgroundImageValue(value) ? "backgroundImage" : "backgroundColor";
+}
+
+/**
+ * For a `background` CSS property with multiple variant values, determine the
+ * appropriate StyleX property name if all values are consistent.
+ * Returns null if values are heterogeneous (mix of gradients and colors).
+ */
+export function resolveBackgroundStylexPropForVariants(
+  values: string[],
+): "backgroundImage" | "backgroundColor" | null {
+  const hasGradient = values.some(isBackgroundImageValue);
+  const hasColor = values.some((v) => !isBackgroundImageValue(v));
+  if (hasGradient && hasColor) {
+    return null; // Heterogeneous - can't safely transform
+  }
+  return hasGradient ? "backgroundImage" : "backgroundColor";
 }
 
 export function cssDeclarationToStylexDeclarations(decl: CssDeclarationIR): StylexPropDecl[] {
@@ -92,6 +104,20 @@ export function cssPropertyToStylexProp(prop: string): string {
     return prop;
   }
   return prop.replace(/-([a-z])/g, (_, ch: string) => ch.toUpperCase());
+}
+
+// --- Non-exported helpers ---
+
+/**
+ * Check if a CSS value contains a gradient or image that requires `backgroundImage`
+ * instead of `backgroundColor`. StyleX doesn't support the `background` shorthand.
+ */
+function isBackgroundImageValue(value: string): boolean {
+  return (
+    /\b(linear|radial|conic|repeating-linear|repeating-radial|repeating-conic)-gradient\b/.test(
+      value,
+    ) || /\burl\s*\(/.test(value)
+  );
 }
 
 const BORDER_STYLES = new Set([

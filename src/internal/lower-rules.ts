@@ -4,7 +4,8 @@ import type { InternalHandlerContext } from "./builtin-handlers.js";
 import {
   cssDeclarationToStylexDeclarations,
   cssPropertyToStylexProp,
-  isBackgroundImageValue,
+  resolveBackgroundStylexProp,
+  resolveBackgroundStylexPropForVariants,
 } from "./css-prop-mapping.js";
 import { getMemberPathFromIdentifier, getNodeLocStart } from "./jscodeshift-utils.js";
 import type { Adapter, ImportSource, ImportSpec } from "../adapter.js";
@@ -1709,20 +1710,24 @@ export function lowerRules(args: {
             const allPos = res.variants.filter((v: any) => !v.when.startsWith("!"));
 
             const cssProp = (d.property ?? "").trim();
-            // For background property, check if variants are heterogeneous (mix of gradients and colors).
-            // If so, we can't safely transform - bail and keep original.
             let stylexProp: string;
             if (cssProp === "background") {
               const variantValues = res.variants
                 .filter((v: any) => typeof v.expr === "string")
                 .map((v: any) => v.expr as string);
-              const hasGradient = variantValues.some(isBackgroundImageValue);
-              const hasColor = variantValues.some((v: string) => !isBackgroundImageValue(v));
-              if (hasGradient && hasColor) {
-                // Mixed background types - can't safely transform
-                continue;
+              const resolved = resolveBackgroundStylexPropForVariants(variantValues);
+              if (!resolved) {
+                // Heterogeneous - can't safely transform
+                warnings.push({
+                  severity: "warning",
+                  type: "unsupported-feature",
+                  message: `Heterogeneous background values (mix of gradients and colors) cannot be safely transformed for ${decl.localName}.`,
+                  ...(loc ? { loc } : {}),
+                });
+                bail = true;
+                break;
               }
-              stylexProp = hasGradient ? "backgroundImage" : "backgroundColor";
+              stylexProp = resolved;
             } else {
               stylexProp = cssPropertyToStylexProp(cssProp);
             }
@@ -1985,8 +1990,6 @@ export function lowerRules(args: {
 
           if (res && res.type === "splitMultiPropVariantsResolvedValue") {
             const cssProp = (d.property ?? "").trim();
-            // For background property, check if variants are heterogeneous (mix of gradients and colors).
-            // If so, we can't safely transform - bail and keep original.
             let stylexPropMulti: string;
             if (cssProp === "background") {
               const variantValues = [
@@ -1994,13 +1997,19 @@ export function lowerRules(args: {
                 res.innerTruthyBranch?.expr,
                 res.innerFalsyBranch?.expr,
               ].filter((expr): expr is string => typeof expr === "string");
-              const hasGradient = variantValues.some(isBackgroundImageValue);
-              const hasColor = variantValues.some((v) => !isBackgroundImageValue(v));
-              if (hasGradient && hasColor) {
-                // Mixed background types - can't safely transform
-                continue;
+              const resolved = resolveBackgroundStylexPropForVariants(variantValues);
+              if (!resolved) {
+                // Heterogeneous - can't safely transform
+                warnings.push({
+                  severity: "warning",
+                  type: "unsupported-feature",
+                  message: `Heterogeneous background values (mix of gradients and colors) cannot be safely transformed for ${decl.localName}.`,
+                  ...(loc ? { loc } : {}),
+                });
+                bail = true;
+                break;
               }
-              stylexPropMulti = hasGradient ? "backgroundImage" : "backgroundColor";
+              stylexPropMulti = resolved;
             } else {
               stylexPropMulti = cssPropertyToStylexProp(cssProp);
             }
@@ -2839,11 +2848,7 @@ export function lowerRules(args: {
           }
           // Convert CSS property name to camelCase (e.g., outline-offset -> outlineOffset)
           const outProp = cssPropertyToStylexProp(
-            prop === "background"
-              ? isBackgroundImageValue(value)
-                ? "backgroundImage"
-                : "backgroundColor"
-              : prop,
+            prop === "background" ? resolveBackgroundStylexProp(value) : prop,
           );
           const jsVal = cssValueToJs({ kind: "static", value } as any, false, outProp);
           (bucket as Record<string, unknown>)[outProp] = jsVal;
