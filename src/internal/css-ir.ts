@@ -229,7 +229,8 @@ export function normalizeStylisAstToIR(
   // We only recover placeholders at top-level (brace depth 0) to avoid accidentally pulling
   // placeholders from nested selector blocks or at-rules.
   if (rawCss) {
-    const placeholderLineRe = /^__SC_EXPR_(\d+)__$/;
+    // Accept optional trailing semicolon since templates often include `${expr};`
+    const placeholderLineRe = /^__SC_EXPR_(\d+)__\s*;?\s*$/;
     let depth = 0;
     let line = "";
 

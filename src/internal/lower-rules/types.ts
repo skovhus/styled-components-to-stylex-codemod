@@ -33,6 +33,7 @@ export function literalToStaticValue(node: any): string | number | null {
 
 export function createTypeInferenceHelpers(args: { root: any; j: any; decl: StyledDecl }): {
   findJsxPropTsType: (jsxProp: string) => unknown;
+  findJsxPropTsTypeForVariantExtraction: (jsxProp: string) => unknown;
   annotateParamFromJsxProp: (paramId: any, jsxProp: string) => void;
   isJsxPropOptional: (jsxProp: string) => boolean;
 } {
@@ -77,6 +78,31 @@ export function createTypeInferenceHelpers(args: { root: any; j: any; decl: Styl
       }
     }
     return null;
+  };
+
+  // Resolve a type reference like `Appearance` to its underlying type annotation when possible.
+  // This is intentionally narrow: we only unwrap locally-declared aliases/interfaces in this file.
+  const resolveTypeReference = (t: any): unknown => {
+    if (!t || typeof t !== "object") {
+      return t;
+    }
+    if (t.type !== "TSTypeReference") {
+      return t;
+    }
+    const typeName = t.typeName?.name;
+    if (!typeName || typeof typeName !== "string") {
+      return t;
+    }
+    const typeDecl = findTypeDeclaration(typeName);
+    if (!typeDecl) {
+      return t;
+    }
+    // If it's a type alias like: type Appearance = "normal" | "small" | ...
+    if (typeDecl.typeAnnotation) {
+      return typeDecl.typeAnnotation;
+    }
+    // If it's an interface, keep as-is (caller can inspect members if needed).
+    return t;
   };
 
   // Resolve indexed access types like Props["state"] to their underlying type
@@ -180,6 +206,24 @@ export function createTypeInferenceHelpers(args: { root: any; j: any; decl: Styl
     }
 
     return null;
+  };
+
+  // Variant extraction wants literal union values, so we *optionally* unwrap local type aliases here.
+  // We keep `findJsxPropTsType` returning the original type reference so emitted function param types
+  // remain stable (e.g. `$bg: Color` instead of `$bg: "labelBase" | "labelMuted"`).
+  const findJsxPropTsTypeForVariantExtraction = (jsxProp: string): unknown => {
+    const t: any = findJsxPropTsType(jsxProp);
+    if (!t || typeof t !== "object") {
+      return t;
+    }
+    if (t.type === "TSTypeReference") {
+      const resolved: any = resolveTypeReference(t);
+      // Only unwrap when it resolves to union/literal (so extractUnionLiteralValues can see it)
+      if (resolved?.type === "TSUnionType" || resolved?.type === "TSLiteralType") {
+        return resolved;
+      }
+    }
+    return t;
   };
 
   const annotateParamFromJsxProp = (paramId: any, jsxProp: string): void => {
@@ -289,5 +333,10 @@ export function createTypeInferenceHelpers(args: { root: any; j: any; decl: Styl
     return false;
   };
 
-  return { findJsxPropTsType, annotateParamFromJsxProp, isJsxPropOptional };
+  return {
+    findJsxPropTsType,
+    findJsxPropTsTypeForVariantExtraction,
+    annotateParamFromJsxProp,
+    isJsxPropOptional,
+  };
 }

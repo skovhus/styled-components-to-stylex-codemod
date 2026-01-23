@@ -26,6 +26,7 @@ import {
   extractAndRemoveCssHelpers,
   isIdentifierReference,
   isStyledTag as isStyledTagImpl,
+  removeInlinedCssHelperFunctions,
   type UnsupportedCssUsage,
 } from "./internal/transform/css-helpers.js";
 import {
@@ -203,6 +204,7 @@ export function transformWithWarnings(
 
   const cssHelperNames = cssHelpers.cssHelperNames;
   const cssHelperDecls = cssHelpers.cssHelperDecls;
+  const cssHelperFunctions = cssHelpers.cssHelperFunctions;
   const cssHelperHasUniversalSelectors = cssHelpers.cssHelperHasUniversalSelectors;
   const cssHelperUniversalSelectorLoc = cssHelpers.cssHelperUniversalSelectorLoc;
   if (cssHelpers.changed) {
@@ -569,6 +571,7 @@ export function transformWithWarnings(
     styledDecls,
     keyframesNames,
     cssHelperNames,
+    cssHelperFunctions,
     stringMappingFns,
     toStyleKey,
     toSuffixFromProp,
@@ -582,6 +585,18 @@ export function transformWithWarnings(
   const ancestorSelectorParents = lowered.ancestorSelectorParents;
   if (lowered.bail || resolveValueBailRef.value) {
     return { code: null, warnings };
+  }
+
+  // Now that we know the file is transformable, remove any css helper functions that were inlined.
+  if (
+    removeInlinedCssHelperFunctions({
+      root,
+      j,
+      cssLocal,
+      names: lowered.usedCssHelperFunctions,
+    })
+  ) {
+    hasChanges = true;
   }
 
   // Detect if there's a local variable named `styles` in the file (not part of styled-components code)

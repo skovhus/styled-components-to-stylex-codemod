@@ -37,6 +37,7 @@ import {
 } from "./lower-rules/inline-styles.js";
 import { addPropComments } from "./lower-rules/comments.js";
 import { createCssHelperResolver } from "./lower-rules/css-helper.js";
+import { parseSwitchReturningCssTemplates } from "./lower-rules/switch-variants.js";
 import { createThemeResolvers } from "./lower-rules/theme.js";
 import {
   extractUnionLiteralValues,
@@ -50,6 +51,7 @@ import {
 } from "./selectors.js";
 import type { StyledDecl } from "./transform-types.js";
 import type { WarningLog, WarningType } from "./logger.js";
+import type { CssHelperFunction } from "./transform/css-helpers.js";
 
 export type DescendantOverride = {
   parentStyleKey: string;
@@ -78,6 +80,7 @@ export function lowerRules(args: {
   styledDecls: StyledDecl[];
   keyframesNames: Set<string>;
   cssHelperNames: Set<string>;
+  cssHelperFunctions: Map<string, CssHelperFunction>;
   stringMappingFns: Map<
     string,
     {
@@ -102,6 +105,7 @@ export function lowerRules(args: {
   resolvedStyleObjects: Map<string, unknown>;
   descendantOverrides: DescendantOverride[];
   ancestorSelectorParents: Set<string>;
+  usedCssHelperFunctions: Set<string>;
   bail: boolean;
 } {
   const {
@@ -117,6 +121,7 @@ export function lowerRules(args: {
     styledDecls,
     keyframesNames,
     cssHelperNames,
+    cssHelperFunctions,
     stringMappingFns,
     toStyleKey,
     toSuffixFromProp,
@@ -236,6 +241,8 @@ export function lowerRules(args: {
     bail = true;
   };
 
+  const usedCssHelperFunctions = new Set<string>();
+
   for (const decl of styledDecls) {
     if (decl.preResolvedStyle) {
       resolvedStyleObjects.set(decl.styleKey, decl.preResolvedStyle);
@@ -266,12 +273,16 @@ export function lowerRules(args: {
     // so we can set proper default values for pseudo selectors.
     const cssHelperPropValues = new Map<string, unknown>();
 
-    const { findJsxPropTsType, annotateParamFromJsxProp, isJsxPropOptional } =
-      createTypeInferenceHelpers({
-        root,
-        j,
-        decl,
-      });
+    const {
+      findJsxPropTsType,
+      findJsxPropTsTypeForVariantExtraction,
+      annotateParamFromJsxProp,
+      isJsxPropOptional,
+    } = createTypeInferenceHelpers({
+      root,
+      j,
+      decl,
+    });
 
     // (helpers imported from `./lower-rules/*`)
 
@@ -578,6 +589,231 @@ export function lowerRules(args: {
 
       mergeStyleObjects(styleObj, altStyle);
       applyVariant(testInfo, consStyle);
+      return true;
+    };
+
+    const tryHandleCssHelperFunctionSwitchBlock = (d: any): boolean => {
+      // Handle: ${(props) => helper(props.appearance)}
+      // where `helper` is: const helper = (appearance) => css`... ${() => { switch(appearance) { ... return css`...` }}} ...`
+      if (d.value.kind !== "interpolated") {
+        return false;
+      }
+      if (d.property) {
+        return false;
+      }
+      const parts = d.value.parts ?? [];
+      if (parts.length !== 1 || parts[0]?.kind !== "slot") {
+        return false;
+      }
+      const slotId = parts[0].slotId;
+      const expr = decl.templateExpressions[slotId] as any;
+      if (!expr || expr.type !== "ArrowFunctionExpression") {
+        return false;
+      }
+      const propsParam = expr.params?.[0];
+      if (!propsParam || propsParam.type !== "Identifier") {
+        return false;
+      }
+      const propsParamName = propsParam.name;
+      const body = expr.body as any;
+      if (!body || body.type !== "CallExpression") {
+        return false;
+      }
+      if (body.callee?.type !== "Identifier") {
+        return false;
+      }
+      const helperName = body.callee.name as string;
+      const helperFn = cssHelperFunctions.get(helperName);
+      if (!helperFn) {
+        return false;
+      }
+      const arg0 = body.arguments?.[0];
+      const propPath = getMemberPathFromIdentifier(arg0 as any, propsParamName);
+      if (!propPath || propPath.length !== 1) {
+        return false;
+      }
+      const jsxProp = propPath[0]!;
+
+      // Extract base styles and a single switch interpolation from the helper template.
+      const baseFromHelper: Record<string, unknown> = {};
+      let sawSwitch = false;
+
+      for (const rule of helperFn.rules) {
+        if (rule.atRuleStack.length > 0) {
+          warnings.push({
+            severity: "warning",
+            type: "`css` helper function switch must return css templates in all branches",
+            loc: helperFn.loc ?? decl.loc,
+            context: { reason: "at-rule-in-helper" },
+          });
+          bail = true;
+          return true;
+        }
+        if ((rule.selector ?? "").trim() !== "&") {
+          warnings.push({
+            severity: "warning",
+            type: "`css` helper function switch must return css templates in all branches",
+            loc: helperFn.loc ?? decl.loc,
+            context: { reason: "nested-selector-in-helper", selector: rule.selector },
+          });
+          bail = true;
+          return true;
+        }
+        for (const hd of rule.declarations) {
+          if (hd.property) {
+            if (hd.value.kind !== "static") {
+              warnings.push({
+                severity: "warning",
+                type: "`css` helper function switch must return css templates in all branches",
+                loc: helperFn.loc ?? decl.loc,
+                context: { reason: "dynamic-decl-in-helper", property: hd.property },
+              });
+              bail = true;
+              return true;
+            }
+            for (const out of cssDeclarationToStylexDeclarations(hd)) {
+              (baseFromHelper as any)[out.prop] = cssValueToJs(out.value, hd.important, out.prop);
+            }
+            continue;
+          }
+
+          // Expect exactly one switch interpolation.
+          if (hd.value.kind !== "interpolated") {
+            continue;
+          }
+          const hparts = (hd.value as any).parts ?? [];
+          if (hparts.length !== 1 || hparts[0]?.kind !== "slot") {
+            warnings.push({
+              severity: "warning",
+              type: "`css` helper function switch must return css templates in all branches",
+              loc: helperFn.loc ?? decl.loc,
+              context: { reason: "unsupported-interpolation-shape" },
+            });
+            bail = true;
+            return true;
+          }
+          if (sawSwitch) {
+            warnings.push({
+              severity: "warning",
+              type: "`css` helper function switch must return css templates in all branches",
+              loc: helperFn.loc ?? decl.loc,
+              context: { reason: "multiple-switch-interpolations" },
+            });
+            bail = true;
+            return true;
+          }
+          const hslotId = hparts[0].slotId;
+          const hexpr = helperFn.templateExpressions[hslotId] as any;
+          if (!hexpr || hexpr.type !== "ArrowFunctionExpression") {
+            warnings.push({
+              severity: "warning",
+              type: "`css` helper function switch must return css templates in all branches",
+              loc: helperFn.loc ?? decl.loc,
+              context: { reason: "switch-interpolation-not-arrow" },
+            });
+            bail = true;
+            return true;
+          }
+          if ((hexpr.params ?? []).length !== 0) {
+            warnings.push({
+              severity: "warning",
+              type: "`css` helper function switch must return css templates in all branches",
+              loc: helperFn.loc ?? decl.loc,
+              context: { reason: "switch-iife-has-params" },
+            });
+            bail = true;
+            return true;
+          }
+          const hbody = hexpr.body as any;
+          if (!hbody || hbody.type !== "BlockStatement") {
+            warnings.push({
+              severity: "warning",
+              type: "`css` helper function switch must return css templates in all branches",
+              loc: helperFn.loc ?? decl.loc,
+              context: { reason: "switch-iife-not-block" },
+            });
+            bail = true;
+            return true;
+          }
+          const stmts = hbody.body ?? [];
+          if (!Array.isArray(stmts) || stmts.length !== 1 || stmts[0]?.type !== "SwitchStatement") {
+            warnings.push({
+              severity: "warning",
+              type: "`css` helper function switch must return css templates in all branches",
+              loc: helperFn.loc ?? decl.loc,
+              context: { reason: "switch-iife-not-single-switch" },
+            });
+            bail = true;
+            return true;
+          }
+
+          const parsed = parseSwitchReturningCssTemplates({
+            switchStmt: stmts[0],
+            expectedDiscriminantIdent: helperFn.paramName,
+            isCssHelperTaggedTemplate,
+            warnings,
+            loc: helperFn.loc ?? decl.loc,
+          });
+          if (!parsed) {
+            bail = true;
+            return true;
+          }
+
+          const defaultResolved = resolveCssHelperTemplate(
+            parsed.defaultCssTemplate.quasi,
+            null,
+            decl.localName,
+          );
+          if (!defaultResolved || defaultResolved.dynamicProps.length > 0) {
+            warnings.push({
+              severity: "warning",
+              type: "`css` helper function switch must return css templates in all branches",
+              loc: helperFn.loc ?? decl.loc,
+              context: { reason: "default-css-not-resolvable" },
+            });
+            bail = true;
+            return true;
+          }
+          mergeStyleObjects(baseFromHelper, defaultResolved.style);
+
+          for (const [caseValue, tpl] of parsed.caseCssTemplates.entries()) {
+            const res = resolveCssHelperTemplate(tpl.quasi, null, decl.localName);
+            if (!res || res.dynamicProps.length > 0) {
+              warnings.push({
+                severity: "warning",
+                type: "`css` helper function switch must return css templates in all branches",
+                loc: helperFn.loc ?? decl.loc,
+                context: { reason: "case-css-not-resolvable", caseValue },
+              });
+              bail = true;
+              return true;
+            }
+            const when = `${jsxProp} === ${JSON.stringify(caseValue)}`;
+            const existingBucket = variantBuckets.get(when);
+            const nextBucket = existingBucket ? { ...existingBucket } : {};
+            mergeStyleObjects(nextBucket, res.style);
+            variantBuckets.set(when, nextBucket);
+            variantStyleKeys[when] ??= `${decl.styleKey}${toSuffixFromProp(when)}`;
+          }
+
+          // Ensure prop is dropped from DOM (unless transient)
+          if (!jsxProp.startsWith("$")) {
+            ensureShouldForwardPropDrop(decl, jsxProp);
+          }
+          sawSwitch = true;
+        }
+      }
+
+      if (!sawSwitch) {
+        // This was a css helper function, but not the supported switch-returning-css pattern.
+        return false;
+      }
+
+      // Only mark as inlined once we've successfully handled the helper.
+      usedCssHelperFunctions.add(helperName);
+
+      // Merge helper base styles into component base style.
+      mergeStyleObjects(styleObj, baseFromHelper);
       return true;
     };
 
@@ -1184,6 +1420,9 @@ export function lowerRules(args: {
             }
           }
           if (tryHandleCssHelperConditionalBlock(d)) {
+            continue;
+          }
+          if (tryHandleCssHelperFunctionSwitchBlock(d)) {
             continue;
           }
           if (tryHandleLogicalOrDefault(d)) {
@@ -3085,7 +3324,7 @@ export function lowerRules(args: {
             continue;
           }
           const propName = match[1]!;
-          const propType = findJsxPropTsType(propName);
+          const propType = findJsxPropTsTypeForVariantExtraction(propName);
           const unionValues = extractUnionLiteralValues(propType);
           if (!unionValues || unionValues.length !== 2) {
             continue;
@@ -3166,7 +3405,7 @@ export function lowerRules(args: {
         variantStyleKeys,
         decl.styleKey,
         styleObj,
-        findJsxPropTsType,
+        findJsxPropTsTypeForVariantExtraction,
         isJsxPropOptional,
       );
 
@@ -3282,5 +3521,11 @@ export function lowerRules(args: {
     }
   }
 
-  return { resolvedStyleObjects, descendantOverrides, ancestorSelectorParents, bail };
+  return {
+    resolvedStyleObjects,
+    descendantOverrides,
+    ancestorSelectorParents,
+    usedCssHelperFunctions,
+    bail,
+  };
 }

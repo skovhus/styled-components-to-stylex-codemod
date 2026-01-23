@@ -1,15 +1,10 @@
-import * as React from "react";
+import React from "react";
 import styled, { css } from "styled-components";
 
-// css helper inside a regular function cannot be statically transformed
-
-type Appearance = "normal" | "small" | "medium" | "large" | "xlarge";
-
-const inputStyles = (appearance: Appearance) => css`
-  -webkit-app-region: no-drag;
+const inputStyles = (appearance) => css`
   background: hotpink;
   width: 30px;
-  padding: 10px;
+  margin: 10px;
 
   ${() => {
     switch (appearance) {
@@ -27,14 +22,14 @@ const inputStyles = (appearance: Appearance) => css`
       }
       default: {
         return css`
-          height: 30px;
+          height: 50px;
         `;
       }
     }
   }}
 `;
 
-const StyleBox = styled.div<{ appearance: Appearance }>`
+const StyleBox = styled.div`
   ${(props) => inputStyles(props.appearance)};
 `;
 
