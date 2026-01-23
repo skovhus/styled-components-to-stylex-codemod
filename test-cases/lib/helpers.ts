@@ -89,3 +89,12 @@ export const screenSize = {
 export function themedBorder(colorKey: ThemeColor) {
   return (props: ThemedStyledProps) => `1px solid ${props.theme.color[colorKey]}`;
 }
+
+/**
+ * Component wrapper helper - wraps a component for testing styled(wrapper(Component)) patterns
+ */
+export function wrapComponent<P extends object>(
+  Component: React.ComponentType<P>,
+): React.ComponentType<P> {
+  return Component;
+}
