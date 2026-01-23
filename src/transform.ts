@@ -3,6 +3,7 @@ import path from "node:path";
 import type { ImportSource, ImportSpec } from "./adapter.js";
 import { assertNoNullNodesInArrays } from "./internal/ast-safety.js";
 import { collectStyledDecls } from "./internal/collect-styled-decls.js";
+import { extractStyledCallArgs } from "./internal/extract-styled-call-args.js";
 import { formatOutput } from "./internal/format-output.js";
 import { convertStyledKeyframes } from "./internal/keyframes.js";
 import { lowerRules } from "./internal/lower-rules.js";
@@ -494,6 +495,15 @@ export function transformWithWarnings(
         j(imp).remove();
       }
     });
+    hasChanges = true;
+  }
+
+  // Pre-process: extract CallExpression arguments from styled() calls into separate variables.
+  // This transforms patterns like styled(motion.create(Component)) into:
+  //   const MotionComponent = motion.create(Component);
+  //   styled(MotionComponent)
+  // which can then be handled by the normal styled(Identifier) collection path.
+  if (extractStyledCallArgs({ root, j, styledDefaultImport })) {
     hasChanges = true;
   }
 
