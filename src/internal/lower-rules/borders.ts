@@ -3,7 +3,6 @@ import type { Adapter, ImportSource } from "../../adapter.js";
 import { resolveDynamicNode, type InternalHandlerContext } from "../builtin-handlers.js";
 import { getMemberPathFromIdentifier, getNodeLocStart } from "../jscodeshift-utils.js";
 import type { StyledDecl } from "../transform-types.js";
-import type { WarningLog } from "../logger.js";
 
 type ExpressionKind = Parameters<JSCodeshift["expressionStatement"]>[0];
 
@@ -24,7 +23,6 @@ export function tryHandleInterpolatedBorder(args: {
       source: ImportSource;
     }
   >;
-  warnings: WarningLog[];
   resolverImports: Map<string, any>;
   parseExpr: (exprSource: string) => ExpressionKind | null;
   toSuffixFromProp: (propName: string) => string;
@@ -42,7 +40,6 @@ export function tryHandleInterpolatedBorder(args: {
     resolveValue,
     resolveCall,
     importMap,
-    warnings,
     resolverImports,
     parseExpr,
     toSuffixFromProp,
@@ -268,14 +265,6 @@ export function tryHandleInterpolatedBorder(args: {
           const v = importMap.get(localName);
           return v ? v : null;
         },
-        warn: (w: any) => {
-          warnings.push({
-            severity: "warning",
-            type: "dynamic-node",
-            message: w.message,
-            ...(w.loc ? { loc: w.loc } : {}),
-          });
-        },
       } satisfies InternalHandlerContext,
     );
     if (res && res.type === "resolvedValue") {
@@ -296,10 +285,10 @@ export function tryHandleInterpolatedBorder(args: {
           }
         }
         if (hasStaticWidthOrStyle) {
-          (styleObj as any)[colorProp] = exprAst as any;
+          styleObj[colorProp] = exprAst;
         } else {
           const fullProp = direction ? `border${direction}` : "border";
-          (styleObj as any)[fullProp] = exprAst as any;
+          styleObj[fullProp] = exprAst;
         }
         return true;
       }

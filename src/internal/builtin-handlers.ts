@@ -13,6 +13,7 @@ import {
   isArrowFunctionExpression,
 } from "./jscodeshift-utils.js";
 import { cssDeclarationToStylexDeclarations } from "./css-prop-mapping.js";
+import type { WarningType } from "./logger.js";
 
 export type DynamicNode = {
   slotId: number;
@@ -166,7 +167,8 @@ export type HandlerResult =
        * and may surface `reason` as a warning.
        */
       type: "keepOriginal";
-      reason: string;
+      reason: WarningType;
+      context?: Record<string, unknown>;
     }
   | {
       /**
@@ -201,7 +203,6 @@ export type InternalHandlerContext = {
     importedName: string;
     source: ImportSource;
   } | null;
-  warn: (warning: HandlerWarning) => void;
 };
 
 type ThemeParamInfo =
@@ -268,12 +269,6 @@ type DynamicNodeUsageContext = {
 type DynamicNodeLoc = {
   line?: number;
   column?: number;
-};
-
-type HandlerWarning = {
-  feature: string;
-  message: string;
-  loc?: DynamicNodeLoc;
 };
 
 function tryResolveThemeAccess(
@@ -424,11 +419,14 @@ function tryResolveCallExpression(
         if (innerRes.usage === "create") {
           return {
             type: "keepOriginal",
-            reason: [
-              'Curried helper call resolved to usage "create".',
-              'Use usage "props" when the helper returns a StyleX style object (for stylex.props).',
-              'usage "create" is only valid for single CSS property values (non-curried calls).',
-            ].join(" "),
+            reason:
+              "Curried helper call resolved to usage 'create', use usage 'props' when the helper returns a StyleX style object",
+            context: {
+              help: [
+                'Use usage "props" when the helper returns a StyleX style object (for stylex.props).',
+                'usage "create" is only valid for single CSS property values (non-curried calls).',
+              ].join(" "),
+            },
           };
         }
         return { type: "resolvedStyles", expr: innerRes.expr, imports: innerRes.imports };
@@ -453,7 +451,8 @@ function tryResolveCallExpression(
     const importedName = imp?.importedName ?? calleeIdent ?? "unknown";
     return {
       type: "keepOriginal",
-      reason: `Unresolved helper call ${importedName}(...) (adapter resolveCall returned null)`,
+      reason: `Adapter returned null for helper call`,
+      context: { importedName },
     };
   }
 
@@ -486,7 +485,16 @@ function tryResolveConditionalValue(
   type BranchUsage = "props" | "create";
   type Branch = { usage: BranchUsage; expr: string; imports: ImportSpec[] } | null;
 
-  let invalidCurriedValue: string | null = null;
+  const invalidCurriedError: WarningType =
+    "Curried helper call resolved to usage 'create', use usage 'props' when the helper returns a StyleX style object";
+  const invalidCurriedContext = {
+    help: [
+      'Use usage "props" when the helper returns a StyleX style object (for stylex.props).',
+      'usage "create" is only valid for single CSS property values (non-curried calls).',
+    ].join(" "),
+  };
+
+  let invalidCurriedValue: boolean = false;
   const branchToExpr = (b: unknown): Branch => {
     const v = literalToStaticValue(b);
     if (v !== null) {
@@ -523,11 +531,7 @@ function tryResolveConditionalValue(
           const innerRes = resolveAdapterCall(inner);
           if (innerRes) {
             if (innerRes.usage === "create") {
-              invalidCurriedValue = [
-                'Curried helper call resolved to usage "create".',
-                'Use usage "props" when the helper returns a StyleX style object (for stylex.props).',
-                'usage "create" is only valid for single CSS property values (non-curried calls).',
-              ].join(" ");
+              invalidCurriedValue = true;
               return null;
             }
             return { usage: "props", expr: innerRes.expr, imports: innerRes.imports };
@@ -748,11 +752,11 @@ function tryResolveConditionalValue(
   if (testPath && testPath.length === 1) {
     const cons = getBranch(consequent);
     if (cons === "invalid") {
-      return { type: "keepOriginal", reason: invalidCurriedValue! };
+      return { type: "keepOriginal", reason: invalidCurriedError, context: invalidCurriedContext };
     }
     const alt = getBranch(alternate);
     if (alt === "invalid") {
-      return { type: "keepOriginal", reason: invalidCurriedValue! };
+      return { type: "keepOriginal", reason: invalidCurriedError, context: invalidCurriedContext };
     }
     const outerProp = testPath[0]!;
 
@@ -841,7 +845,7 @@ function tryResolveConditionalValue(
   if (condInfo) {
     const consExpr = getBranch(consequent);
     if (consExpr === "invalid") {
-      return { type: "keepOriginal", reason: invalidCurriedValue! };
+      return { type: "keepOriginal", reason: invalidCurriedError, context: invalidCurriedContext };
     }
     if (!consExpr) {
       return null;
@@ -1266,7 +1270,7 @@ function tryResolveInlineStyleValueForConditionalExpression(
       return {
         type: "keepOriginal",
         reason:
-          "Theme-dependent conditional values require a project-specific theme source (e.g. useTheme()); cannot safely preserve.",
+          "Theme-dependent conditional values require a project-specific theme source (e.g. useTheme())",
       };
     }
   }
@@ -1301,7 +1305,7 @@ function tryResolveInlineStyleValueForNestedPropAccess(node: DynamicNode): Handl
     return {
       type: "keepOriginal",
       reason:
-        "Theme-dependent values require a project-specific theme source (e.g. useTheme()); cannot safely preserve.",
+        "Theme-dependent nested prop access requires a project-specific theme source (e.g. useTheme())",
     };
   }
   return { type: "emitInlineStyleValueFromProps" };

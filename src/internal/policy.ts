@@ -68,18 +68,17 @@ export function collectThemeProviderSkipWarnings(args: {
     return warnings;
   }
 
-  const warning: WarningLog = {
+  warnings.push({
     severity: "warning",
-    type: "unsupported-feature",
-    message: "ThemeProvider usage is project-specific",
-  };
-  if (themeProviderImportForSkip?.loc) {
-    warning.loc = {
-      line: themeProviderImportForSkip.loc.start.line,
-      column: themeProviderImportForSkip.loc.start.column ?? 0,
-    };
-  }
-  warnings.push(warning);
+    type: "ThemeProvider conversion needs to be handled manually",
+    loc: themeProviderImportForSkip?.loc
+      ? {
+          line: themeProviderImportForSkip.loc.start.line,
+          column: themeProviderImportForSkip.loc.start.column ?? 0,
+        }
+      : undefined,
+  });
+
   return warnings;
 }
 
@@ -119,8 +118,8 @@ export function collectCssHelperSkipWarnings(args: {
     return warnings;
   }
 
-  const message =
-    "`css` helper usage from styled-components is not supported because nested css blocks are not transformed.";
+  const warningType =
+    "`css` helper usage from styled-components is not supported because nested css blocks are not transformed" as const;
   const usageLocs: Array<{ line: number; column: number }> = [];
   type NodeWithLoc = ASTNode & {
     loc?: {
@@ -154,8 +153,8 @@ export function collectCssHelperSkipWarnings(args: {
   if (usageLocs.length === 0) {
     warnings.push({
       severity: "warning",
-      type: "unsupported-feature",
-      message,
+      type: warningType,
+      loc: undefined,
     });
     return warnings;
   }
@@ -163,11 +162,11 @@ export function collectCssHelperSkipWarnings(args: {
   for (const loc of usageLocs) {
     warnings.push({
       severity: "warning",
-      type: "unsupported-feature",
-      message,
+      type: warningType,
       loc,
     });
   }
+
   return warnings;
 }
 
@@ -184,19 +183,16 @@ export function collectCreateGlobalStyleWarnings(
         specifier.imported.type === "Identifier" &&
         specifier.imported.name === "createGlobalStyle"
       ) {
-        const warning: WarningLog = {
+        warnings.push({
           severity: "warning",
-          type: "unsupported-feature",
-          message:
-            "createGlobalStyle is not supported in StyleX. Global styles should be handled separately (e.g., in a CSS file or using CSS reset libraries).",
-        };
-        if (specifier.loc) {
-          warning.loc = {
-            line: specifier.loc.start.line,
-            column: specifier.loc.start.column ?? 0,
-          };
-        }
-        warnings.push(warning);
+          type: "createGlobalStyle is not supported in StyleX. Global styles should be handled separately (e.g., in a CSS file or using CSS reset libraries)",
+          loc: specifier.loc
+            ? {
+                line: specifier.loc.start.line,
+                column: specifier.loc.start.column ?? 0,
+              }
+            : undefined,
+        });
       }
     }
   });
@@ -213,17 +209,6 @@ export function shouldSkipForCreateGlobalStyle(args: {
     j: args.j,
     importedName: "createGlobalStyle",
   });
-}
-
-export function universalSelectorUnsupportedWarning(
-  loc?: { line: number; column: number } | null,
-): WarningLog {
-  return {
-    severity: "warning",
-    type: "unsupported-feature",
-    message: "Universal selectors (`*`) are currently unsupported",
-    ...(loc ? { loc } : {}),
-  };
 }
 
 function findStyledComponentsNamedImport(args: {

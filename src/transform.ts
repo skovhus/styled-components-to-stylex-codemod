@@ -15,7 +15,6 @@ import {
   collectThemeProviderSkipWarnings,
   shouldSkipForCreateGlobalStyle,
   shouldSkipForThemeProvider,
-  universalSelectorUnsupportedWarning,
 } from "./internal/policy.js";
 import { Logger, type WarningLog } from "./internal/logger.js";
 import type { StyledDecl, TransformOptions, TransformResult } from "./internal/transform-types.js";
@@ -327,17 +326,11 @@ export function transformWithWarnings(
   });
 
   if (hasComponentSelector) {
-    const warning = {
-      severity: "warning" as const,
-      type: "unsupported-feature" as const,
-      message:
-        "Component selectors like `${OtherComponent}:hover &` are not directly representable in StyleX. Manual refactor is required to preserve relationship/hover semantics.",
-    };
-    if (componentSelectorLoc) {
-      warnings.push({ ...warning, loc: componentSelectorLoc });
-    } else {
-      warnings.push(warning);
-    }
+    warnings.push({
+      severity: "warning",
+      type: "Component selectors like `${OtherComponent}:hover &` are not directly representable in StyleX. Manual refactor is required",
+      loc: componentSelectorLoc,
+    });
 
     // Policy: component selectors like `${OtherComponent}:hover &` require a semantic refactor.
     // Bail out to avoid producing incorrect output.
@@ -345,17 +338,11 @@ export function transformWithWarnings(
   }
 
   if (hasSpecificityHack) {
-    const warning = {
-      severity: "warning" as const,
-      type: "unsupported-feature" as const,
-      message:
-        "Styled-components specificity hacks like `&&` / `&&&` are not representable in StyleX.",
-    };
-    if (specificityHackLoc) {
-      warnings.push({ ...warning, loc: specificityHackLoc });
-    } else {
-      warnings.push(warning);
-    }
+    warnings.push({
+      severity: "warning",
+      type: "Styled-components specificity hacks like `&&` / `&&&` are not representable in StyleX",
+      loc: specificityHackLoc,
+    });
     return { code: null, warnings };
   }
 
@@ -560,7 +547,11 @@ export function transformWithWarnings(
   // Universal selectors (`*`) are currently unsupported (too many edge cases to map to StyleX safely).
   // Skip transforming the entire file to avoid producing incorrect output.
   if (hasUniversalSelectors) {
-    warnings.push(universalSelectorUnsupportedWarning(universalSelectorLoc));
+    warnings.push({
+      severity: "warning",
+      type: "Universal selectors (`*`) are currently unsupported",
+      loc: universalSelectorLoc,
+    });
     return { code: null, warnings };
   }
 
