@@ -59,10 +59,6 @@ export function App() {
   );
 }
 
-// Bug 5: Transient props ($-prefixed) should NOT be passed to DOM elements.
-// styled-components automatically filters these out, but the generated
-// StyleX wrapper must also filter them.
-
 const styles = stylex.create({
   box: {
     padding: "8px",
