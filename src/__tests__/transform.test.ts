@@ -8,7 +8,6 @@ import { format } from "oxfmt";
 import transform, { transformWithWarnings } from "../transform.js";
 import type { TransformOptions } from "../transform.js";
 import { customAdapter, fixtureAdapter } from "./fixture-adapters.js";
-import { type WarningLog } from "../internal/logger.js";
 import type { Adapter, ResolveValueContext } from "../adapter.js";
 
 // Suppress codemod logs in tests
@@ -17,7 +16,6 @@ vi.mock("../internal/logger.js", () => ({
     warn: vi.fn(),
     error: vi.fn(),
     logWarnings: vi.fn(),
-    flushWarnings: vi.fn(() => []),
   },
 }));
 
@@ -214,36 +212,6 @@ function assertExportsApp(source: string, fileLabel: string): void {
   }
 }
 
-const WARNING_TOKEN_MATCHERS: Record<string, (w: WarningLog) => boolean> = {
-  ThemeProvider: (w) => w.type === "unsupported-feature" && w.message.includes("ThemeProvider"),
-  "css-helper": (w) => w.type === "unsupported-feature" && w.message.includes("`css` helper"),
-  createGlobalStyle: (w) =>
-    w.type === "unsupported-feature" && w.message.includes("createGlobalStyle"),
-  "component-selector": (w) =>
-    w.type === "unsupported-feature" && w.message.includes("Component selectors"),
-  specificity: (w) => w.type === "unsupported-feature" && w.message.includes("specificity"),
-  "universal-selector": (w) =>
-    w.type === "unsupported-feature" && w.message.includes("Universal selectors"),
-  "complex-selectors": (w) =>
-    w.type === "unsupported-feature" && w.message.includes("Complex selectors"),
-  "vendor-prefixed-property": (w) =>
-    w.type === "unsupported-feature" && w.message.includes("Vendor-prefixed property"),
-  "vendor-prefixed-pseudo": (w) =>
-    w.type === "unsupported-feature" && w.message.includes("Vendor-prefixed pseudo-element"),
-  "unparseable-interpolation": (w) =>
-    w.type === "unsupported-feature" && w.message.includes("Unparseable resolved interpolation"),
-  "adapter-resolveValue": (w) => w.type === "dynamic-node" && w.message.includes("Adapter"),
-  "dynamic-call": (w) =>
-    w.type === "dynamic-node" &&
-    (w.message.includes("helper call") || w.message.includes("call expression")),
-  "dynamic-interpolation": (w) => w.type === "dynamic-node" && w.message.includes("interpolation"),
-};
-
-function warningMatchesToken(warning: WarningLog, token: string): boolean {
-  const matcher = WARNING_TOKEN_MATCHERS[token];
-  return matcher ? matcher(warning) : false;
-}
-
 describe("test case file pairing", () => {
   it("should have matching input/output files for all test cases", () => {
     // This test verifies the test case structure is valid
@@ -318,7 +286,7 @@ describe("transform", () => {
     const normalizedInput = await normalizeCode(input, inputPath);
     if (normalizedResult === normalizedInput) {
       const warningsInfo = diagnostics.warnings.length
-        ? `\n\nTransform warnings that may explain the failure:\n${diagnostics.warnings.map((w) => `  - ${w.message}`).join("\n")}`
+        ? `\n\nTransform warnings that may explain the failure:\n${diagnostics.warnings.map((w) => `  - ${w.type}`).join("\n")}`
         : "";
       throw new Error(
         `Transform produced no changes (bailed or returned unchanged code).${warningsInfo}`,
@@ -378,10 +346,9 @@ export const App = () => (
     expect(result.warnings).toHaveLength(1);
     const warning = result.warnings[0]!;
     expect(warning).toMatchObject({
-      type: "unsupported-feature",
+      type: "createGlobalStyle is not supported in StyleX. Global styles should be handled separately (e.g., in a CSS file or using CSS reset libraries)",
       severity: "warning",
     });
-    expect(warning.message).toContain("createGlobalStyle is not supported in StyleX");
   });
 
   it("should not warn when createGlobalStyle is not used", () => {
@@ -422,7 +389,9 @@ export const App = () => <Box><span /></Box>;
     );
 
     expect(result.code).toBeNull();
-    expect(result.warnings.some((w) => warningMatchesToken(w, "universal-selector"))).toBe(true);
+    expect(
+      result.warnings.some((w) => w.type === "Universal selectors (`*`) are currently unsupported"),
+    ).toBe(true);
   });
 
   it("should bail on unsupported conditional with theme access in test expressions in shouldForwardProp wrappers", () => {
@@ -575,9 +544,9 @@ export const App = () => <Box $on />;
     );
 
     expect(result.code).toBeNull();
-    expect(result.warnings.some((w) => warningMatchesToken(w, "unparseable-interpolation"))).toBe(
-      true,
-    );
+    expect(
+      result.warnings.some((w) => w.type === "Adapter returned an unparseable styles expression"),
+    ).toBe(true);
   });
 });
 
@@ -623,7 +592,9 @@ export const App = () => (
     );
 
     expect(result.code).toBeNull();
-    expect(result.warnings.some((w) => warningMatchesToken(w, "dynamic-call"))).toBe(true);
+    expect(result.warnings.some((w) => w.type === "Adapter returned null for helper call")).toBe(
+      true,
+    );
   });
 });
 
@@ -675,10 +646,12 @@ export const App = () => <Button>Click</Button>;
     );
 
     expect(result.code).toBeNull();
-    const w = result.warnings.find((x) => warningMatchesToken(x, "adapter-resolveValue"));
+    const w = result.warnings.some(
+      (w) =>
+        w.type ===
+        "Adapter.resolveValue returned undefined. This usually means your adapter forgot to return a value",
+    );
     expect(w).toBeTruthy();
-    expect(w!.message).toMatch(/returned undefined/i);
-    expect(w!.context).toMatchObject({ kind: "theme" });
   });
 });
 

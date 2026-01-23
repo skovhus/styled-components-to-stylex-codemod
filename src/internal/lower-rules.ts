@@ -37,6 +37,7 @@ import {
 } from "./lower-rules/inline-styles.js";
 import { addPropComments } from "./lower-rules/comments.js";
 import { createCssHelperResolver } from "./lower-rules/css-helper.js";
+import { parseSwitchReturningCssTemplates } from "./lower-rules/switch-variants.js";
 import { createThemeResolvers } from "./lower-rules/theme.js";
 import {
   extractUnionLiteralValues,
@@ -49,7 +50,8 @@ import {
   parseSelector,
 } from "./selectors.js";
 import type { StyledDecl } from "./transform-types.js";
-import type { WarningLog } from "./logger.js";
+import type { WarningLog, WarningType } from "./logger.js";
+import type { CssHelperFunction } from "./transform/css-helpers.js";
 
 export type DescendantOverride = {
   parentStyleKey: string;
@@ -78,6 +80,7 @@ export function lowerRules(args: {
   styledDecls: StyledDecl[];
   keyframesNames: Set<string>;
   cssHelperNames: Set<string>;
+  cssHelperFunctions: Map<string, CssHelperFunction>;
   stringMappingFns: Map<
     string,
     {
@@ -102,6 +105,7 @@ export function lowerRules(args: {
   resolvedStyleObjects: Map<string, unknown>;
   descendantOverrides: DescendantOverride[];
   ancestorSelectorParents: Set<string>;
+  usedCssHelperFunctions: Set<string>;
   bail: boolean;
 } {
   const {
@@ -117,6 +121,7 @@ export function lowerRules(args: {
     styledDecls,
     keyframesNames,
     cssHelperNames,
+    cssHelperFunctions,
     stringMappingFns,
     toStyleKey,
     toSuffixFromProp,
@@ -190,16 +195,19 @@ export function lowerRules(args: {
 
   const warnPropInlineStyle = (
     decl: StyledDecl,
+    type: WarningType,
     propName: string | null | undefined,
-    reason: string,
     loc: { line: number; column: number } | null | undefined,
   ): void => {
     const propLabel = propName ?? "unknown";
     warnings.push({
       severity: "warning",
-      type: "dynamic-node",
-      message: `Unsupported prop-based inline style for ${decl.localName} (${propLabel}): ${reason}.`,
-      ...(loc ? { loc } : {}),
+      type,
+      loc,
+      context: {
+        localName: decl.localName,
+        propLabel,
+      },
     });
   };
 
@@ -223,14 +231,17 @@ export function lowerRules(args: {
     cssValueToJs,
   });
 
-  const bailUnsupported = (message: string): void => {
+  const bailUnsupported = (decl: StyledDecl, type: WarningType): void => {
     warnings.push({
       severity: "error",
-      type: "unsupported-feature",
-      message,
+      type,
+      loc: decl.loc,
+      context: { localName: decl.localName },
     });
     bail = true;
   };
+
+  const usedCssHelperFunctions = new Set<string>();
 
   for (const decl of styledDecls) {
     if (decl.preResolvedStyle) {
@@ -262,12 +273,16 @@ export function lowerRules(args: {
     // so we can set proper default values for pseudo selectors.
     const cssHelperPropValues = new Map<string, unknown>();
 
-    const { findJsxPropTsType, annotateParamFromJsxProp, isJsxPropOptional } =
-      createTypeInferenceHelpers({
-        root,
-        j,
-        decl,
-      });
+    const {
+      findJsxPropTsType,
+      findJsxPropTsTypeForVariantExtraction,
+      annotateParamFromJsxProp,
+      isJsxPropOptional,
+    } = createTypeInferenceHelpers({
+      root,
+      j,
+      decl,
+    });
 
     // (helpers imported from `./lower-rules/*`)
 
@@ -577,6 +592,231 @@ export function lowerRules(args: {
       return true;
     };
 
+    const tryHandleCssHelperFunctionSwitchBlock = (d: any): boolean => {
+      // Handle: ${(props) => helper(props.appearance)}
+      // where `helper` is: const helper = (appearance) => css`... ${() => { switch(appearance) { ... return css`...` }}} ...`
+      if (d.value.kind !== "interpolated") {
+        return false;
+      }
+      if (d.property) {
+        return false;
+      }
+      const parts = d.value.parts ?? [];
+      if (parts.length !== 1 || parts[0]?.kind !== "slot") {
+        return false;
+      }
+      const slotId = parts[0].slotId;
+      const expr = decl.templateExpressions[slotId] as any;
+      if (!expr || expr.type !== "ArrowFunctionExpression") {
+        return false;
+      }
+      const propsParam = expr.params?.[0];
+      if (!propsParam || propsParam.type !== "Identifier") {
+        return false;
+      }
+      const propsParamName = propsParam.name;
+      const body = expr.body as any;
+      if (!body || body.type !== "CallExpression") {
+        return false;
+      }
+      if (body.callee?.type !== "Identifier") {
+        return false;
+      }
+      const helperName = body.callee.name as string;
+      const helperFn = cssHelperFunctions.get(helperName);
+      if (!helperFn) {
+        return false;
+      }
+      const arg0 = body.arguments?.[0];
+      const propPath = getMemberPathFromIdentifier(arg0 as any, propsParamName);
+      if (!propPath || propPath.length !== 1) {
+        return false;
+      }
+      const jsxProp = propPath[0]!;
+
+      // Extract base styles and a single switch interpolation from the helper template.
+      const baseFromHelper: Record<string, unknown> = {};
+      let sawSwitch = false;
+
+      for (const rule of helperFn.rules) {
+        if (rule.atRuleStack.length > 0) {
+          warnings.push({
+            severity: "warning",
+            type: "`css` helper function switch must return css templates in all branches",
+            loc: helperFn.loc ?? decl.loc,
+            context: { reason: "at-rule-in-helper" },
+          });
+          bail = true;
+          return true;
+        }
+        if ((rule.selector ?? "").trim() !== "&") {
+          warnings.push({
+            severity: "warning",
+            type: "`css` helper function switch must return css templates in all branches",
+            loc: helperFn.loc ?? decl.loc,
+            context: { reason: "nested-selector-in-helper", selector: rule.selector },
+          });
+          bail = true;
+          return true;
+        }
+        for (const hd of rule.declarations) {
+          if (hd.property) {
+            if (hd.value.kind !== "static") {
+              warnings.push({
+                severity: "warning",
+                type: "`css` helper function switch must return css templates in all branches",
+                loc: helperFn.loc ?? decl.loc,
+                context: { reason: "dynamic-decl-in-helper", property: hd.property },
+              });
+              bail = true;
+              return true;
+            }
+            for (const out of cssDeclarationToStylexDeclarations(hd)) {
+              (baseFromHelper as any)[out.prop] = cssValueToJs(out.value, hd.important, out.prop);
+            }
+            continue;
+          }
+
+          // Expect exactly one switch interpolation.
+          if (hd.value.kind !== "interpolated") {
+            continue;
+          }
+          const hparts = (hd.value as any).parts ?? [];
+          if (hparts.length !== 1 || hparts[0]?.kind !== "slot") {
+            warnings.push({
+              severity: "warning",
+              type: "`css` helper function switch must return css templates in all branches",
+              loc: helperFn.loc ?? decl.loc,
+              context: { reason: "unsupported-interpolation-shape" },
+            });
+            bail = true;
+            return true;
+          }
+          if (sawSwitch) {
+            warnings.push({
+              severity: "warning",
+              type: "`css` helper function switch must return css templates in all branches",
+              loc: helperFn.loc ?? decl.loc,
+              context: { reason: "multiple-switch-interpolations" },
+            });
+            bail = true;
+            return true;
+          }
+          const hslotId = hparts[0].slotId;
+          const hexpr = helperFn.templateExpressions[hslotId] as any;
+          if (!hexpr || hexpr.type !== "ArrowFunctionExpression") {
+            warnings.push({
+              severity: "warning",
+              type: "`css` helper function switch must return css templates in all branches",
+              loc: helperFn.loc ?? decl.loc,
+              context: { reason: "switch-interpolation-not-arrow" },
+            });
+            bail = true;
+            return true;
+          }
+          if ((hexpr.params ?? []).length !== 0) {
+            warnings.push({
+              severity: "warning",
+              type: "`css` helper function switch must return css templates in all branches",
+              loc: helperFn.loc ?? decl.loc,
+              context: { reason: "switch-iife-has-params" },
+            });
+            bail = true;
+            return true;
+          }
+          const hbody = hexpr.body as any;
+          if (!hbody || hbody.type !== "BlockStatement") {
+            warnings.push({
+              severity: "warning",
+              type: "`css` helper function switch must return css templates in all branches",
+              loc: helperFn.loc ?? decl.loc,
+              context: { reason: "switch-iife-not-block" },
+            });
+            bail = true;
+            return true;
+          }
+          const stmts = hbody.body ?? [];
+          if (!Array.isArray(stmts) || stmts.length !== 1 || stmts[0]?.type !== "SwitchStatement") {
+            warnings.push({
+              severity: "warning",
+              type: "`css` helper function switch must return css templates in all branches",
+              loc: helperFn.loc ?? decl.loc,
+              context: { reason: "switch-iife-not-single-switch" },
+            });
+            bail = true;
+            return true;
+          }
+
+          const parsed = parseSwitchReturningCssTemplates({
+            switchStmt: stmts[0],
+            expectedDiscriminantIdent: helperFn.paramName,
+            isCssHelperTaggedTemplate,
+            warnings,
+            loc: helperFn.loc ?? decl.loc,
+          });
+          if (!parsed) {
+            bail = true;
+            return true;
+          }
+
+          const defaultResolved = resolveCssHelperTemplate(
+            parsed.defaultCssTemplate.quasi,
+            null,
+            decl.localName,
+          );
+          if (!defaultResolved || defaultResolved.dynamicProps.length > 0) {
+            warnings.push({
+              severity: "warning",
+              type: "`css` helper function switch must return css templates in all branches",
+              loc: helperFn.loc ?? decl.loc,
+              context: { reason: "default-css-not-resolvable" },
+            });
+            bail = true;
+            return true;
+          }
+          mergeStyleObjects(baseFromHelper, defaultResolved.style);
+
+          for (const [caseValue, tpl] of parsed.caseCssTemplates.entries()) {
+            const res = resolveCssHelperTemplate(tpl.quasi, null, decl.localName);
+            if (!res || res.dynamicProps.length > 0) {
+              warnings.push({
+                severity: "warning",
+                type: "`css` helper function switch must return css templates in all branches",
+                loc: helperFn.loc ?? decl.loc,
+                context: { reason: "case-css-not-resolvable", caseValue },
+              });
+              bail = true;
+              return true;
+            }
+            const when = `${jsxProp} === ${JSON.stringify(caseValue)}`;
+            const existingBucket = variantBuckets.get(when);
+            const nextBucket = existingBucket ? { ...existingBucket } : {};
+            mergeStyleObjects(nextBucket, res.style);
+            variantBuckets.set(when, nextBucket);
+            variantStyleKeys[when] ??= `${decl.styleKey}${toSuffixFromProp(when)}`;
+          }
+
+          // Ensure prop is dropped from DOM (unless transient)
+          if (!jsxProp.startsWith("$")) {
+            ensureShouldForwardPropDrop(decl, jsxProp);
+          }
+          sawSwitch = true;
+        }
+      }
+
+      if (!sawSwitch) {
+        // This was a css helper function, but not the supported switch-returning-css pattern.
+        return false;
+      }
+
+      // Only mark as inlined once we've successfully handled the helper.
+      usedCssHelperFunctions.add(helperName);
+
+      // Merge helper base styles into component base style.
+      mergeStyleObjects(styleObj, baseFromHelper);
+      return true;
+    };
+
     // Pre-scan rules to detect css helper placeholders and populate cssHelperPropValues
     // BEFORE processing any pseudo selectors that might reference those properties.
     // Also detect imported css helpers (identifiers that aren't in cssHelperNames) and bail.
@@ -621,9 +861,9 @@ export function lowerRules(args: {
     if (hasImportedCssHelper) {
       warnings.push({
         severity: "error",
-        type: "unsupported-feature",
-        message: `Imported CSS helper mixins (${decl.localName}) - cannot determine inherited properties for correct pseudo selector handling`,
-        ...(decl.loc ? { loc: decl.loc } : {}),
+        type: "Imported CSS helper mixins: cannot determine inherited properties for correct pseudo selector handling",
+        loc: decl.loc,
+        context: { localName: decl.localName },
       });
       bail = true;
       break;
@@ -741,9 +981,8 @@ export function lowerRules(args: {
           bail = true;
           warnings.push({
             severity: "warning",
-            type: "unsupported-feature",
-            message: "Unsupported selector: descendant pseudo selector (space before pseudo)",
-            ...(decl.loc ? { loc: decl.loc } : {}),
+            type: "Unsupported selector: descendant pseudo selector (space before pseudo)",
+            loc: decl.loc,
           });
           break;
         }
@@ -755,9 +994,8 @@ export function lowerRules(args: {
             bail = true;
             warnings.push({
               severity: "warning",
-              type: "unsupported-feature",
-              message: "Unsupported selector: comma-separated selectors must all be simple pseudos",
-              ...(decl.loc ? { loc: decl.loc } : {}),
+              type: "Unsupported selector: comma-separated selectors must all be simple pseudos",
+              loc: decl.loc,
             });
             break;
           }
@@ -767,9 +1005,8 @@ export function lowerRules(args: {
           bail = true;
           warnings.push({
             severity: "warning",
-            type: "unsupported-feature",
-            message: "Unsupported selector: class selector",
-            ...(decl.loc ? { loc: decl.loc } : {}),
+            type: "Unsupported selector: class selector",
+            loc: decl.loc,
           });
           break;
         } else if (/\s+[a-zA-Z.#]/.test(s) && !isHandledComponentPattern) {
@@ -778,9 +1015,8 @@ export function lowerRules(args: {
           bail = true;
           warnings.push({
             severity: "warning",
-            type: "unsupported-feature",
-            message: "Unsupported selector: descendant/child/sibling selector",
-            ...(decl.loc ? { loc: decl.loc } : {}),
+            type: "Unsupported selector: descendant/child/sibling selector",
+            loc: decl.loc,
           });
           break;
         }
@@ -1021,7 +1257,6 @@ export function lowerRules(args: {
               resolveValue,
               resolveCall,
               importMap,
-              warnings,
               resolverImports,
               parseExpr,
               toSuffixFromProp,
@@ -1132,7 +1367,6 @@ export function lowerRules(args: {
                   const v = importMap.get(localName);
                   return v ? v : null;
                 },
-                warn: () => {},
               } satisfies InternalHandlerContext,
             );
             if (res && res.type === "resolvedValue") {
@@ -1186,6 +1420,9 @@ export function lowerRules(args: {
             }
           }
           if (tryHandleCssHelperConditionalBlock(d)) {
+            continue;
+          }
+          if (tryHandleCssHelperFunctionSwitchBlock(d)) {
             continue;
           }
           if (tryHandleLogicalOrDefault(d)) {
@@ -1519,8 +1756,9 @@ export function lowerRules(args: {
                 if (!indexedExprAst) {
                   warnings.push({
                     severity: "error",
-                    type: "dynamic-node",
-                    message: `Adapter returned an unparseable expression for ${decl.localName}; dropping this declaration.`,
+                    type: "Adapter returned an unparseable styles expression",
+                    loc: decl.loc,
+                    context: { localName: decl.localName, resolved },
                   });
                   bail = true;
                   continue;
@@ -1604,15 +1842,6 @@ export function lowerRules(args: {
                 const v = importMap.get(localName);
                 return v ? v : null;
               },
-              warn: (w: any) => {
-                const loc = w.loc;
-                warnings.push({
-                  severity: "warning",
-                  type: "dynamic-node",
-                  message: w.message,
-                  ...(loc ? { loc } : {}),
-                });
-              },
             } satisfies InternalHandlerContext,
           );
 
@@ -1622,10 +1851,9 @@ export function lowerRules(args: {
             if (rule.selector.trim() !== "&" || (rule.atRuleStack ?? []).length) {
               warnings.push({
                 severity: "warning",
-                type: "dynamic-node",
-                message:
-                  "Resolved StyleX styles cannot be applied under nested selectors/at-rules; manual follow-up required.",
-                ...(loc ? { loc } : {}),
+                type: "Adapter resolved StyleX styles cannot be applied under nested selectors/at-rules",
+                loc,
+                context: { selector: rule.selector },
               });
               bail = true;
               break;
@@ -1637,9 +1865,9 @@ export function lowerRules(args: {
             if (!exprAst) {
               warnings.push({
                 severity: "error",
-                type: "dynamic-node",
-                message: `Adapter returned an unparseable styles expression for ${decl.localName}; dropping this declaration.`,
-                ...(loc ? { loc } : {}),
+                type: "Adapter returned an unparseable styles expression",
+                loc: decl.loc,
+                context: { localName: decl.localName, res },
               });
               continue;
             }
@@ -1666,9 +1894,9 @@ export function lowerRules(args: {
             if (!exprAst) {
               warnings.push({
                 severity: "error",
-                type: "dynamic-node",
-                message: `Adapter returned an unparseable expression for ${decl.localName}; dropping this declaration.`,
-                ...(loc ? { loc } : {}),
+                type: "Adapter returned an unparseable styles expression",
+                loc: decl.loc,
+                context: { localName: decl.localName },
               });
               continue;
             }
@@ -1726,10 +1954,9 @@ export function lowerRules(args: {
             if (rule.selector.trim() !== "&" || (rule.atRuleStack ?? []).length) {
               warnings.push({
                 severity: "warning",
-                type: "dynamic-node",
-                message:
-                  "Resolved StyleX styles cannot be applied under nested selectors/at-rules; manual follow-up required.",
-                ...(loc ? { loc } : {}),
+                type: "Adapter resolved StyleX styles cannot be applied under nested selectors/at-rules",
+                loc,
+                context: { selector: rule.selector },
               });
               bail = true;
               break;
@@ -1742,9 +1969,9 @@ export function lowerRules(args: {
               if (!exprAst) {
                 warnings.push({
                   severity: "error",
-                  type: "dynamic-node",
-                  message: `Adapter returned an unparseable styles expression for ${decl.localName}; dropping this declaration.`,
-                  ...(loc ? { loc } : {}),
+                  type: "Adapter returned an unparseable styles expression",
+                  loc,
+                  context: { localName: decl.localName },
                 });
                 continue;
               }
@@ -1771,9 +1998,8 @@ export function lowerRules(args: {
                 // Heterogeneous - can't safely transform
                 warnings.push({
                   severity: "warning",
-                  type: "unsupported-feature",
-                  message: `Heterogeneous background values (mix of gradients and colors) cannot be safely transformed for ${decl.localName}.`,
-                  ...(loc ? { loc } : {}),
+                  type: "Heterogeneous background values (mix of gradients and colors) not currently supported",
+                  loc: decl.loc,
                 });
                 bail = true;
                 break;
@@ -1799,9 +2025,9 @@ export function lowerRules(args: {
               if (!exprAst) {
                 warnings.push({
                   severity: "error",
-                  type: "dynamic-node",
-                  message: `Adapter returned an unparseable expression for ${decl.localName}; dropping this declaration.`,
-                  ...(loc ? { loc } : {}),
+                  type: "Adapter returned an unparseable styles expression",
+                  loc: decl.loc,
+                  context: { localName: decl.localName, expr },
                 });
                 return null;
               }
@@ -1988,9 +2214,7 @@ export function lowerRules(args: {
             // (mirrors the `resolvedValue` behavior) and avoid emitting empty variant buckets.
             const negParsed = neg ? parseResolved(neg.expr, neg.imports) : null;
             if (neg && !negParsed) {
-              bailUnsupported(
-                `Unparseable resolved interpolation in ${decl.localName}; cannot safely emit styles.`,
-              );
+              bailUnsupported(decl, "Adapter returned an unparseable styles expression");
               break;
             }
             // Parse all positive variants - skip entire declaration if any fail
@@ -2009,9 +2233,7 @@ export function lowerRules(args: {
               allPosParsed.push({ when: posV.when, nameHint: posV.nameHint, parsed });
             }
             if (anyPosFailed) {
-              bailUnsupported(
-                `Unparseable resolved interpolation in ${decl.localName}; cannot safely emit styles.`,
-              );
+              bailUnsupported(decl, `Adapter returned an unparseable styles expression`);
               break;
             }
 
@@ -2053,9 +2275,9 @@ export function lowerRules(args: {
                 // Heterogeneous - can't safely transform
                 warnings.push({
                   severity: "warning",
-                  type: "unsupported-feature",
-                  message: `Heterogeneous background values (mix of gradients and colors) cannot be safely transformed for ${decl.localName}.`,
-                  ...(loc ? { loc } : {}),
+                  type: "Heterogeneous background values (mix of gradients and colors) not currently supported",
+                  loc: decl.loc,
+                  context: { localName: decl.localName },
                 });
                 bail = true;
                 break;
@@ -2080,9 +2302,9 @@ export function lowerRules(args: {
               if (!exprAst) {
                 warnings.push({
                   severity: "error",
-                  type: "dynamic-node",
-                  message: `Adapter returned an unparseable expression for ${decl.localName}; dropping this declaration.`,
-                  ...(loc ? { loc } : {}),
+                  type: "Adapter returned an unparseable styles expression",
+                  loc: decl.loc,
+                  context: { localName: decl.localName, expr },
                 });
                 return null;
               }
@@ -2138,9 +2360,7 @@ export function lowerRules(args: {
             );
 
             if (!outerParsed || !innerTruthyParsed || !innerFalsyParsed) {
-              bailUnsupported(
-                `Unparseable resolved interpolation in ${decl.localName}; cannot safely emit styles.`,
-              );
+              bailUnsupported(decl, "Adapter returned an unparseable styles expression");
               break;
             }
 
@@ -2215,9 +2435,13 @@ export function lowerRules(args: {
             if (!themeObjAst || !fallbackAst) {
               warnings.push({
                 severity: "error",
-                type: "dynamic-node",
-                message: `Failed to parse theme expressions for ${decl.localName}; dropping this declaration.`,
-                ...(loc ? { loc } : {}),
+                type: "Failed to parse theme expressions",
+                loc: decl.loc,
+                context: {
+                  localName: decl.localName,
+                  themeObjExpr: res.themeObjectExpr,
+                  fallbackExpr: res.fallbackExpr,
+                },
               });
               bail = true;
               break;
@@ -2284,9 +2508,9 @@ export function lowerRules(args: {
                   if (countConditionalExpressions(bodyExpr) > 1) {
                     warnings.push({
                       severity: "warning",
-                      type: "dynamic-node",
-                      message: `Unsupported nested conditional interpolation for ${decl.localName}.`,
-                      ...(loc ? { loc } : {}),
+                      type: `Unsupported nested conditional interpolation`,
+                      loc,
+                      context: { localName: decl.localName },
                     });
                     bail = true;
                     break;
@@ -2297,8 +2521,8 @@ export function lowerRules(args: {
                     if (hasThemeAccessInArrowFn(e)) {
                       warnPropInlineStyle(
                         decl,
+                        "Unsupported prop-based inline style props.theme access is not supported",
                         d.property,
-                        "props.theme access is not supported in inline styles",
                         loc,
                       );
                       bail = true;
@@ -2308,8 +2532,8 @@ export function lowerRules(args: {
                     if (!inlineExpr) {
                       warnPropInlineStyle(
                         decl,
+                        "Unsupported prop-based inline style expression cannot be safely inlined",
                         d.property,
-                        "expression cannot be safely inlined",
                         loc,
                       );
                       bail = true;
@@ -2388,9 +2612,9 @@ export function lowerRules(args: {
                 if (decl.shouldForwardProp && hasUnsupportedConditionalTest(e)) {
                   warnings.push({
                     severity: "warning",
-                    type: "dynamic-node",
-                    message: `Unsupported conditional test in shouldForwardProp for ${decl.localName}.`,
-                    ...(loc ? { loc } : {}),
+                    type: "Unsupported conditional test in shouldForwardProp",
+                    loc,
+                    context: { localName: decl.localName },
                   });
                   bail = true;
                   break;
@@ -2402,8 +2626,8 @@ export function lowerRules(args: {
                 if (hasThemeAccessInArrowFn(e)) {
                   warnPropInlineStyle(
                     decl,
+                    "Unsupported prop-based inline style props.theme access is not supported",
                     d.property,
-                    "props.theme access is not supported in inline styles",
                     loc,
                   );
                   bail = true;
@@ -2412,7 +2636,12 @@ export function lowerRules(args: {
                 const unwrapped = unwrapArrowFunctionToPropsExpr(j, e);
                 const inlineExpr = unwrapped?.expr ?? inlineArrowFunctionBody(j, e);
                 if (!inlineExpr) {
-                  warnPropInlineStyle(decl, d.property, "expression cannot be safely inlined", loc);
+                  warnPropInlineStyle(
+                    decl,
+                    "Unsupported prop-based inline style expression cannot be safely inlined",
+                    d.property,
+                    loc,
+                  );
                   bail = true;
                   break;
                 }
@@ -2582,9 +2811,8 @@ export function lowerRules(args: {
           if (res && res.type === "keepOriginal") {
             warnings.push({
               severity: "warning",
-              type: "dynamic-node",
-              message: res.reason,
-              ...(loc ? { loc } : {}),
+              type: res.reason,
+              loc,
             });
             bail = true;
             break;
@@ -2602,8 +2830,8 @@ export function lowerRules(args: {
                 if (hasUnsupportedConditionalTest(e)) {
                   warnPropInlineStyle(
                     decl,
+                    "Unsupported conditional test in shouldForwardProp",
                     d.property,
-                    "unsupported conditional test in shouldForwardProp",
                     loc,
                   );
                   bail = true;
@@ -2612,8 +2840,8 @@ export function lowerRules(args: {
                 if (hasThemeAccessInArrowFn(e)) {
                   warnPropInlineStyle(
                     decl,
+                    "Unsupported prop-based inline style props.theme access is not supported",
                     d.property,
-                    "props.theme access is not supported in inline styles",
                     loc,
                   );
                   bail = true;
@@ -2629,7 +2857,12 @@ export function lowerRules(args: {
                 const unwrapped = unwrapArrowFunctionToPropsExpr(j, e);
                 const inlineExpr = unwrapped?.expr ?? inlineArrowFunctionBody(j, e);
                 if (!inlineExpr) {
-                  warnPropInlineStyle(decl, d.property, "expression cannot be safely inlined", loc);
+                  warnPropInlineStyle(
+                    decl,
+                    "Unsupported prop-based inline style expression cannot be safely inlined",
+                    d.property,
+                    loc,
+                  );
                   bail = true;
                   break;
                 }
@@ -2689,14 +2922,20 @@ export function lowerRules(args: {
             }
             continue;
           }
-          const describeInterpolation = (): string => {
+
+          const describeInterpolation = (): {
+            type: WarningType;
+            context?: Record<string, unknown>;
+          } | null => {
             type SlotPart = { kind: "slot"; slotId: number };
             const valueParts = (d.value as { parts?: unknown[] }).parts ?? [];
             const slotPart = valueParts.find(
               (p): p is SlotPart => !!p && typeof p === "object" && (p as SlotPart).kind === "slot",
             );
             if (!slotPart) {
-              return d.property ? `property "${d.property}"` : "unknown";
+              return d.property
+                ? { type: "Unsupported interpolation: property", context: { property: d.property } }
+                : null;
             }
             const expr = decl.templateExpressions[slotPart.slotId] as {
               type?: string;
@@ -2708,10 +2947,12 @@ export function lowerRules(args: {
               };
             } | null;
             if (!expr || typeof expr !== "object") {
-              return d.property ? `property "${d.property}"` : "unknown";
+              return d.property
+                ? { type: "Unsupported interpolation: property", context: { property: d.property } }
+                : null;
             }
             if (expr.type === "ArrowFunctionExpression" || expr.type === "FunctionExpression") {
-              return `arrow function`;
+              return { type: "Unsupported interpolation: arrow function" };
             }
             if (expr.type === "CallExpression") {
               const callee = expr.callee;
@@ -2721,23 +2962,37 @@ export function lowerRules(args: {
                   : callee?.type === "MemberExpression" && callee.property?.type === "Identifier"
                     ? callee.property.name
                     : null;
-              return calleeName
-                ? `call to "${calleeName}" in "${d.property ?? "unknown"}"`
-                : `call expression in "${d.property ?? "unknown"}"`;
+              return {
+                type: "Unsupported interpolation: call expression",
+                context: { callExpression: calleeName, property: d.property },
+              };
             }
             if (expr.type === "Identifier") {
-              return `identifier "${expr.name}" in "${d.property ?? "unknown"}"`;
+              return {
+                type: "Unsupported interpolation: identifier",
+                context: { identifier: expr.name },
+              };
             }
             if (expr.type === "MemberExpression" || expr.type === "OptionalMemberExpression") {
-              return `member expression in "${d.property ?? "unknown"}"`;
+              return {
+                type: "Unsupported interpolation: member expression",
+                context: { memberExpression: expr.type },
+              };
             }
-            return d.property ? `expression in "${d.property}"` : "unknown expression";
+            return d.property
+              ? {
+                  type: "Unsupported interpolation: call expression",
+                  context: { expression: d.property },
+                }
+              : null;
           };
+
+          const warning = describeInterpolation();
           warnings.push({
             severity: "warning",
-            type: "dynamic-node",
-            message: `Unsupported interpolation: ${describeInterpolation()}.`,
-            ...(loc ? { loc } : {}),
+            type: warning?.type || "Unsupported interpolation: unknown",
+            loc,
+            context: warning?.context,
           });
           bail = true;
           break;
@@ -3069,7 +3324,7 @@ export function lowerRules(args: {
             continue;
           }
           const propName = match[1]!;
-          const propType = findJsxPropTsType(propName);
+          const propType = findJsxPropTsTypeForVariantExtraction(propName);
           const unionValues = extractUnionLiteralValues(propType);
           if (!unionValues || unionValues.length !== 2) {
             continue;
@@ -3150,7 +3405,7 @@ export function lowerRules(args: {
         variantStyleKeys,
         decl.styleKey,
         styleObj,
-        findJsxPropTsType,
+        findJsxPropTsTypeForVariantExtraction,
         isJsxPropOptional,
       );
 
@@ -3266,5 +3521,11 @@ export function lowerRules(args: {
     }
   }
 
-  return { resolvedStyleObjects, descendantOverrides, ancestorSelectorParents, bail };
+  return {
+    resolvedStyleObjects,
+    descendantOverrides,
+    ancestorSelectorParents,
+    usedCssHelperFunctions,
+    bail,
+  };
 }

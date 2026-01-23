@@ -250,8 +250,7 @@ function App() {
                   )}
                   {warnings.map((w, i) => (
                     <li key={i} style={styles.warningItem}>
-                      <span style={styles.warningFeature}>{w.type}</span>
-                      <span style={styles.warningMessage}>{w.message}</span>
+                      <span style={styles.warningMessage}>{w.type}</span>
                       {w.loc && <span style={styles.warningLoc}>line {w.loc.line}</span>}
                     </li>
                   ))}

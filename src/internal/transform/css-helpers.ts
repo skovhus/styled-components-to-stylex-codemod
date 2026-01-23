@@ -1,11 +1,82 @@
 import type { Collection, JSCodeshift } from "jscodeshift";
 import { compile } from "stylis";
 
+import type { CssRuleIR } from "../css-ir.js";
 import { normalizeStylisAstToIR } from "../css-ir.js";
 import { parseStyledTemplateLiteral } from "../styled-css.js";
 import type { StyledDecl } from "../transform-types.js";
 
 type Loc = { line: number; column: number } | null;
+
+export type CssHelperFunction = {
+  name: string;
+  paramName: string;
+  paramType?: unknown;
+  loc: Loc;
+  rules: CssRuleIR[];
+  templateExpressions: unknown[];
+  rawCss: string;
+};
+
+export function removeInlinedCssHelperFunctions(args: {
+  root: any;
+  j: JSCodeshift;
+  cssLocal: string | undefined;
+  names: Set<string>;
+}): boolean {
+  const { root, j, cssLocal, names } = args;
+  if (!cssLocal || names.size === 0) {
+    return false;
+  }
+  const exportedLocalNames = buildExportedLocalNames(root, j);
+  let changed = false;
+
+  root
+    .find(j.VariableDeclarator, {
+      init: { type: "ArrowFunctionExpression" },
+    })
+    .forEach((p: any) => {
+      if (p.node.id.type !== "Identifier") {
+        return;
+      }
+      const name = p.node.id.name;
+      if (!names.has(name)) {
+        return;
+      }
+      if (exportedLocalNames.has(name)) {
+        return;
+      }
+      const init = p.node.init as any;
+      if (!init || init.type !== "ArrowFunctionExpression") {
+        return;
+      }
+      const body = init.body as any;
+      if (
+        !body ||
+        body.type !== "TaggedTemplateExpression" ||
+        body.tag?.type !== "Identifier" ||
+        body.tag.name !== cssLocal
+      ) {
+        return;
+      }
+
+      const decl = p.parentPath?.node;
+      if (decl?.type === "VariableDeclaration") {
+        decl.declarations = decl.declarations.filter((dcl: any) => dcl !== p.node);
+        if (decl.declarations.length === 0) {
+          const exportDecl = p.parentPath?.parentPath?.node;
+          if (exportDecl?.type === "ExportNamedDeclaration") {
+            j(p).closest(j.ExportNamedDeclaration).remove();
+          } else {
+            j(p).closest(j.VariableDeclaration).remove();
+          }
+        }
+      }
+      changed = true;
+    });
+
+  return changed;
+}
 
 export function isIdentifierReference(p: any): boolean {
   const parent = p?.parent?.node;
@@ -180,28 +251,93 @@ function isStyledCallExpression(node: any, styledLocalNames: Set<string>): boole
   return false;
 }
 
+interface UnsupportedCssUsage {
+  loc: Loc;
+  reason: "call-expression" | "outside-styled-template";
+}
+
 function detectUnsupportedCssHelperUsage(args: {
   root: any;
   j: JSCodeshift;
   cssLocal: string;
   styledLocalNames: Set<string>;
-}): boolean {
+}): UnsupportedCssUsage[] {
   const { root, j, cssLocal, styledLocalNames } = args;
+  const unsupportedUsages: UnsupportedCssUsage[] = [];
 
-  const usedAsCall =
-    root.find(j.CallExpression, { callee: { type: "Identifier", name: cssLocal } } as any).size() >
-    0;
-  if (usedAsCall) {
-    return true;
-  }
+  const getLoc = (node: any): Loc => {
+    const start = node?.loc?.start;
+    if (!start?.line && start?.line !== 0) {
+      return null;
+    }
+    return { line: start.line, column: start.column ?? 0 };
+  };
+
+  // Check for css(...) call expressions - these are unsupported
+  root
+    .find(j.CallExpression, { callee: { type: "Identifier", name: cssLocal } } as any)
+    .forEach((p: any) => {
+      unsupportedUsages.push({ loc: getLoc(p.node), reason: "call-expression" });
+    });
 
   const cssTagged = root.find(j.TaggedTemplateExpression, {
     tag: { type: "Identifier", name: cssLocal },
   } as any);
 
-  let unsupported = false;
+  const isSwitchReturnCssInsideCssTemplateIife = (p: any): boolean => {
+    // Allow nested `return css`...`` inside a switch that's wrapped in a template IIFE,
+    // inside any `css` tagged template:
+    //   css` ... ${() => { switch(x) { ... return css`...` }}} ... `
+    const cssNode = p?.node as any;
+    const ret = p?.parentPath?.node as any;
+    if (!ret || ret.type !== "ReturnStatement" || ret.argument !== cssNode) {
+      return false;
+    }
+
+    // Find the nearest enclosing ArrowFunctionExpression and ensure we passed through a SwitchStatement.
+    let cur: any = p.parentPath;
+    let sawSwitch = false;
+    let iifePath: any = null;
+    while (cur && cur.parentPath) {
+      cur = cur.parentPath;
+      const n = cur?.node;
+      if (!n) {
+        break;
+      }
+      if (n.type === "SwitchStatement") {
+        sawSwitch = true;
+      }
+      if (n.type === "ArrowFunctionExpression") {
+        iifePath = cur;
+        break;
+      }
+    }
+    if (!iifePath || !sawSwitch) {
+      return false;
+    }
+    if ((iifePath.node.params ?? []).length !== 0) {
+      return false;
+    }
+
+    // Find the enclosing `css` tagged template.
+    let up: any = iifePath;
+    while (up && up.parentPath) {
+      up = up.parentPath;
+      const n = up?.node as any;
+      if (
+        n?.type === "TaggedTemplateExpression" &&
+        n.tag?.type === "Identifier" &&
+        n.tag.name === cssLocal
+      ) {
+        return true;
+      }
+    }
+
+    return false;
+  };
+
   cssTagged.forEach((p: any) => {
-    if (unsupported) {
+    if (isSwitchReturnCssInsideCssTemplateIife(p)) {
       return;
     }
     const cssNode = p.node as any;
@@ -228,7 +364,8 @@ function detectUnsupportedCssHelperUsage(args: {
       }
     }
     if (!arrow) {
-      unsupported = true;
+      // css template outside arrow function (e.g. in regular function or top-level return)
+      unsupportedUsages.push({ loc: getLoc(cssNode), reason: "outside-styled-template" });
       return;
     }
 
@@ -238,6 +375,15 @@ function detectUnsupportedCssHelperUsage(args: {
       const arrowParent = cur.parentPath?.node;
       if (isStyledCallExpression(arrowParent, styledLocalNames)) {
         // This is the pattern styled.div(props => css`...`) - allowed
+        return;
+      }
+      // Support css helper functions: const helper = (x) => css`...`
+      // (These may later be inlined when called from a styled template.)
+      if (
+        arrowParent?.type === "VariableDeclarator" &&
+        arrowParent.init === arrow &&
+        arrowParent.id?.type === "Identifier"
+      ) {
         return;
       }
     }
@@ -259,19 +405,19 @@ function detectUnsupportedCssHelperUsage(args: {
     if (arrow.body?.type === "ConditionalExpression") {
       const cond = arrow.body;
       if (cond.consequent !== cssNode && cond.alternate !== cssNode) {
-        unsupported = true;
+        unsupportedUsages.push({ loc: getLoc(cssNode), reason: "outside-styled-template" });
         return;
       }
     }
     // Support LogicalExpression: props.$x && css`...`
     else if (arrow.body?.type === "LogicalExpression" && arrow.body.operator === "&&") {
       if (arrow.body.right !== cssNode) {
-        unsupported = true;
+        unsupportedUsages.push({ loc: getLoc(cssNode), reason: "outside-styled-template" });
         return;
       }
     } else if (arrow.body !== cssNode && arrow.body?.type !== "BlockStatement") {
       // Not a direct body, not a conditional, not a logical, not a block - unsupported
-      unsupported = true;
+      unsupportedUsages.push({ loc: getLoc(cssNode), reason: "outside-styled-template" });
       return;
     }
     let hasStyledAncestor = false;
@@ -292,12 +438,14 @@ function detectUnsupportedCssHelperUsage(args: {
       }
     }
     if (!hasStyledAncestor) {
-      unsupported = true;
+      unsupportedUsages.push({ loc: getLoc(cssNode), reason: "outside-styled-template" });
       return;
     }
   });
-  return unsupported;
+  return unsupportedUsages;
 }
+
+export { type UnsupportedCssUsage };
 
 export function extractAndRemoveCssHelpers(args: {
   root: any;
@@ -306,7 +454,8 @@ export function extractAndRemoveCssHelpers(args: {
   cssLocal: string | undefined;
   toStyleKey: (name: string) => string;
 }): {
-  hasUnsupportedCssHelperUsage: boolean;
+  unsupportedCssUsages: UnsupportedCssUsage[];
+  cssHelperFunctions: Map<string, CssHelperFunction>;
   cssHelperNames: Set<string>;
   cssHelperDecls: StyledDecl[];
   cssHelperHasUniversalSelectors: boolean;
@@ -318,6 +467,7 @@ export function extractAndRemoveCssHelpers(args: {
   const styledLocalNames = collectStyledDefaultImportLocalNames(styledImports);
   const exportedLocalNames = buildExportedLocalNames(root, j);
 
+  const cssHelperFunctions = new Map<string, CssHelperFunction>();
   const cssHelperNames = new Set<string>();
   const cssHelperDecls: StyledDecl[] = [];
   let cssHelperHasUniversalSelectors = false;
@@ -326,7 +476,8 @@ export function extractAndRemoveCssHelpers(args: {
 
   if (!cssLocal) {
     return {
-      hasUnsupportedCssHelperUsage: false,
+      unsupportedCssUsages: [],
+      cssHelperFunctions,
       cssHelperNames,
       cssHelperDecls,
       cssHelperHasUniversalSelectors,
@@ -335,15 +486,16 @@ export function extractAndRemoveCssHelpers(args: {
     };
   }
 
-  const hasUnsupportedCssHelperUsage = detectUnsupportedCssHelperUsage({
+  const unsupportedCssUsages = detectUnsupportedCssHelperUsage({
     root,
     j,
     cssLocal,
     styledLocalNames,
   });
-  if (hasUnsupportedCssHelperUsage) {
+  if (unsupportedCssUsages.length > 0) {
     return {
-      hasUnsupportedCssHelperUsage: true,
+      unsupportedCssUsages,
+      cssHelperFunctions,
       cssHelperNames,
       cssHelperDecls,
       cssHelperHasUniversalSelectors,
@@ -426,6 +578,58 @@ export function extractAndRemoveCssHelpers(args: {
       changed = true;
     });
 
+  // Collect css helper functions like: const helper = (x) => css`...`
+  // These are NOT converted here; they are collected for later inlining.
+  root
+    .find(j.VariableDeclarator, {
+      init: { type: "ArrowFunctionExpression" },
+    })
+    .forEach((p: any) => {
+      if (p.node.id.type !== "Identifier") {
+        return;
+      }
+      const name = p.node.id.name;
+      const init = p.node.init as any;
+      if (!init || init.type !== "ArrowFunctionExpression") {
+        return;
+      }
+      const param0 = init.params?.[0];
+      if (!param0 || param0.type !== "Identifier") {
+        return;
+      }
+      const paramName = param0.name;
+      const paramType = (param0 as any).typeAnnotation;
+
+      const body = init.body as any;
+      if (
+        !body ||
+        body.type !== "TaggedTemplateExpression" ||
+        body.tag?.type !== "Identifier" ||
+        body.tag.name !== cssLocal
+      ) {
+        return;
+      }
+      const template = body.quasi;
+      const parsed = parseStyledTemplateLiteral(template);
+      // Compile with an `& { ... }` wrapper so Stylis emits declarations under `&`,
+      // but pass the *unwrapped* raw template CSS for placeholder recovery heuristics.
+      const wrappedRawCss = `& { ${parsed.rawCss} }`;
+      const stylisAst = compile(wrappedRawCss);
+      const rules = normalizeStylisAstToIR(stylisAst as any, parsed.slots, {
+        rawCss: parsed.rawCss,
+      });
+
+      cssHelperFunctions.set(name, {
+        name,
+        paramName,
+        paramType,
+        loc: getCssHelperTemplateLoc(template),
+        rules,
+        templateExpressions: parsed.slots.map((s) => s.expression),
+        rawCss: parsed.rawCss,
+      });
+    });
+
   // Remove `css` import specifier from styled-components imports ONLY if `css` is no longer referenced.
   // This avoids producing "only-import-changes" outputs when we didn't actually transform `css` usage
   // (e.g. `return css\`...\`` inside a function).
@@ -452,7 +656,8 @@ export function extractAndRemoveCssHelpers(args: {
   }
 
   return {
-    hasUnsupportedCssHelperUsage: false,
+    unsupportedCssUsages: [],
+    cssHelperFunctions,
     cssHelperNames,
     cssHelperDecls,
     cssHelperHasUniversalSelectors,

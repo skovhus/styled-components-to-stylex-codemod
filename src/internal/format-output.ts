@@ -64,7 +64,12 @@ export function formatOutput(code: string): string {
         i++;
         break;
       }
-      if (trimmed === "" || trimmed.startsWith("//") || trimmed.startsWith("/*") || trimmed.startsWith("*")) {
+      if (
+        trimmed === "" ||
+        trimmed.startsWith("//") ||
+        trimmed.startsWith("/*") ||
+        trimmed.startsWith("*")
+      ) {
         continue;
       }
       break;
