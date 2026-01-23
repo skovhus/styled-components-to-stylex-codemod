@@ -314,6 +314,12 @@ export function emitComponentWrappers(ctx: any): {
     // Add style function calls for dynamic prop-based styles
     const styleFnPairs = d.styleFnFromProps ?? [];
     for (const p of styleFnPairs) {
+      if (p.callArg?.type === "Identifier") {
+        const name = (p.callArg as any).name as string | undefined;
+        if (name && !destructureProps.includes(name)) {
+          destructureProps.push(name);
+        }
+      }
       const propExpr =
         p.jsxProp === "__props"
           ? propsIdForExpr
@@ -324,7 +330,12 @@ export function emitComponentWrappers(ctx: any): {
         [callArg],
       );
       if (p.conditionWhen) {
-        const { cond } = parseVariantWhenToAst(j, p.conditionWhen);
+        const { cond, props } = parseVariantWhenToAst(j, p.conditionWhen);
+        for (const prop of props) {
+          if (prop && !destructureProps.includes(prop)) {
+            destructureProps.push(prop);
+          }
+        }
         styleArgs.push(j.logicalExpression("&&", cond, call));
         continue;
       }

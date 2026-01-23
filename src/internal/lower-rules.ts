@@ -546,7 +546,15 @@ export function lowerRules(args: {
       const outs = cssDeclarationToStylexDeclarations(d);
       for (const out of outs) {
         (styleObj as any)[out.prop] = baseTheme as any;
-        const fnKey = `${decl.styleKey}${toSuffixFromProp(out.prop)}`;
+        const baseFnKey = `${decl.styleKey}${toSuffixFromProp(out.prop)}`;
+        let fnKey = baseFnKey;
+        if (styleFnDecls.has(fnKey)) {
+          let idx = 1;
+          while (styleFnDecls.has(`${baseFnKey}Alt${idx}`)) {
+            idx += 1;
+          }
+          fnKey = `${baseFnKey}Alt${idx}`;
+        }
         if (!styleFnDecls.has(fnKey)) {
           const param = j.identifier(out.prop);
           const valueId = j.identifier(out.prop);
