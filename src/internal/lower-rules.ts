@@ -501,6 +501,30 @@ export function lowerRules(args: {
         }
       };
 
+      const isTriviallyPureVoidArg = (arg: any): boolean => {
+        if (!arg || typeof arg !== "object") {
+          return false;
+        }
+        // Allow `void 0`, `void null`, `void ""`, `void 1`, `void false`.
+        if (arg.type === "NumericLiteral" && arg.value === 0) {
+          return true;
+        }
+        if (arg.type === "NullLiteral") {
+          return true;
+        }
+        if (arg.type === "StringLiteral" && arg.value === "") {
+          return true;
+        }
+        if (arg.type === "BooleanLiteral" && arg.value === false) {
+          return true;
+        }
+        if (arg.type === "Literal") {
+          const v = (arg as { value?: unknown }).value;
+          return v === 0 || v === null || v === "" || v === false;
+        }
+        return false;
+      };
+
       const isEmptyCssBranch = (node: ExpressionKind): boolean => {
         if (!node || typeof node !== "object") {
           return false;
@@ -529,7 +553,7 @@ export function lowerRules(args: {
           return true;
         }
         if (node.type === "UnaryExpression" && node.operator === "void") {
-          return true;
+          return isTriviallyPureVoidArg((node as any).argument);
         }
         return false;
       };
