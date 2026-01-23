@@ -137,6 +137,19 @@ export const fixtureAdapter = defineAdapter({
       };
     }
 
+    if (ctx.calleeImportedName === "thinPixel") {
+      return {
+        usage: "create",
+        expr: "pixelVars.thin",
+        imports: [
+          {
+            from: { kind: "specifier", value: "./tokens.stylex" },
+            names: [{ imported: "pixelVars" }],
+          },
+        ],
+      };
+    }
+
     const arg0 = ctx.args[0];
     const key = arg0?.kind === "literal" && typeof arg0.value === "string" ? arg0.value : null;
     if (!key) {

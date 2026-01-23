@@ -69,3 +69,7 @@ export const fontSizeVars = stylex.defineVars({
   medium: "14px",
   large: "16px",
 });
+
+export const pixelVars = stylex.defineVars({
+  thin: "0.5px",
+});

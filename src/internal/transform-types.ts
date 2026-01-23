@@ -110,6 +110,8 @@ export type StyledDecl = {
     fnKey: string;
     jsxProp: string;
     condition?: "truthy";
+    conditionWhen?: string;
+    callArg?: ASTNode;
   }>;
   shouldForwardProp?: { dropProps: string[]; dropPrefix?: string };
   /**
