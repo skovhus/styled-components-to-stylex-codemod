@@ -129,6 +129,10 @@ export function transformWithWarnings(
   // Policy: createGlobalStyle is unsupported in StyleX; emit a warning when imported.
   warnings.push(...collectCreateGlobalStyleWarnings(styledImports));
 
+  if (shouldSkipForCreateGlobalStyle({ styledImports, j })) {
+    return { code: null, warnings };
+  }
+
   // Convert `styled-components` keyframes to `stylex.keyframes`.
   // Docs: https://stylexjs.com/docs/api/javascript/keyframes
   const keyframesImport = styledImports
@@ -279,12 +283,6 @@ export function transformWithWarnings(
       });
     }
   });
-
-  // If a file uses createGlobalStyle, we don't support transforming it.
-  // Keep these fixtures as `_unsupported.*`.
-  if (shouldSkipForCreateGlobalStyle({ styledImports, j })) {
-    return { code: null, warnings };
-  }
 
   // Detect patterns that aren't directly representable in StyleX (or require semantic rewrites).
   // These warnings are used for per-fixture expectations and help guide manual follow-ups.

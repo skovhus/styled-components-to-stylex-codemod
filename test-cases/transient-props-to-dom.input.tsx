@@ -1,10 +1,6 @@
 import React from "react";
 import styled from "styled-components";
 
-// Bug 5: Transient props ($-prefixed) should NOT be passed to DOM elements.
-// styled-components automatically filters these out, but the generated
-// StyleX wrapper must also filter them.
-
 // Pattern 1: Exported components - become wrapper functions that must:
 // 1. Accept the transient props for styling decisions
 // 2. NOT forward them to the underlying DOM element

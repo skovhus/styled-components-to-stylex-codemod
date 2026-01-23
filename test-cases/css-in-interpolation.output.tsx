@@ -22,10 +22,6 @@ export function App() {
   );
 }
 
-// Bug 3b: css helper used inside styled component interpolations
-// should be transformed into conditional StyleX styles.
-// The `css` import must be removed and the css`` blocks transformed.
-
 const styles = stylex.create({
   button: {
     paddingBlock: "8px",
