@@ -1162,10 +1162,16 @@ export function emitIntrinsicWrappers(ctx: any): {
         : p.jsxProp === "__props"
           ? j.identifier("props")
           : j.identifier(p.jsxProp);
+      const callArg = p.callArg ? (p.callArg as any) : propExpr;
       const call = j.callExpression(
         j.memberExpression(j.identifier(stylesIdentifier), j.identifier(p.fnKey)),
-        [propExpr],
+        [callArg],
       );
+      if (p.conditionWhen) {
+        const { cond } = parseVariantWhenToAst(j, p.conditionWhen);
+        styleArgs.push(j.logicalExpression("&&", cond, call));
+        continue;
+      }
       if (p.condition === "truthy") {
         const truthy = j.unaryExpression("!", j.unaryExpression("!", propExpr));
         styleArgs.push(j.logicalExpression("&&", truthy, call));

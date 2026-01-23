@@ -264,6 +264,8 @@ export function lowerRules(args: {
       fnKey: string;
       jsxProp: string;
       condition?: "truthy";
+      conditionWhen?: string;
+      callArg?: ExpressionKind;
     }> = [];
     const styleFnDecls = new Map<string, any>();
     const attrBuckets = new Map<string, Record<string, unknown>>();
@@ -426,6 +428,160 @@ export function lowerRules(args: {
           styleFnDecls.set(fnKey, j.arrowFunctionExpression([param], j.objectExpression([p])));
         }
       }
+      return true;
+    };
+
+    const tryHandleConditionalPropCoalesceWithTheme = (d: any): boolean => {
+      if (d.value.kind !== "interpolated") {
+        return false;
+      }
+      if (!d.property) {
+        return false;
+      }
+      const parts = d.value.parts ?? [];
+      if (parts.length !== 1 || parts[0]?.kind !== "slot") {
+        return false;
+      }
+      const slotId = parts[0].slotId;
+      const expr = decl.templateExpressions[slotId] as any;
+      if (!expr || expr.type !== "ArrowFunctionExpression") {
+        return false;
+      }
+      const paramName = expr.params?.[0]?.type === "Identifier" ? expr.params[0].name : null;
+      if (!paramName) {
+        return false;
+      }
+      const body = expr.body as any;
+      if (!body || body.type !== "ConditionalExpression") {
+        return false;
+      }
+
+      const testPath = getMemberPathFromIdentifier(body.test as any, paramName);
+      if (!testPath || testPath.length !== 1) {
+        return false;
+      }
+      const conditionProp = testPath[0]!;
+
+      const resolveThemeAst = (node: any): ExpressionKind | null => {
+        if (hasLocalThemeBinding) {
+          return null;
+        }
+        const path = getMemberPathFromIdentifier(node as any, paramName);
+        if (!path || path[0] !== "theme") {
+          return null;
+        }
+        const themePath = path.slice(1).join(".");
+        if (!themePath) {
+          return null;
+        }
+        const resolved = resolveValue({ kind: "theme", path: themePath, filePath });
+        if (!resolved) {
+          return null;
+        }
+        for (const imp of resolved.imports ?? []) {
+          resolverImports.set(JSON.stringify(imp), imp);
+        }
+        const exprAst = parseExpr(resolved.expr);
+        return (exprAst as ExpressionKind) ?? null;
+      };
+
+      const readPropAccess = (node: any): string | null => {
+        const path = getMemberPathFromIdentifier(node as any, paramName);
+        if (!path || path.length !== 1) {
+          return null;
+        }
+        return path[0]!;
+      };
+
+      type NullishBranch = { propName: string; fallback: ExpressionKind };
+      const parseNullishBranch = (node: any): NullishBranch | null => {
+        if (!node || node.type !== "LogicalExpression" || node.operator !== "??") {
+          return null;
+        }
+        const propName = readPropAccess(node.left);
+        if (!propName) {
+          return null;
+        }
+        const fallback = resolveThemeAst(node.right);
+        if (!fallback) {
+          return null;
+        }
+        return { propName, fallback };
+      };
+
+      const consNullish = parseNullishBranch(body.consequent);
+      const altNullish = parseNullishBranch(body.alternate);
+      const consTheme = resolveThemeAst(body.consequent);
+      const altTheme = resolveThemeAst(body.alternate);
+
+      const buildPropAccess = (prop: string): ExpressionKind => {
+        const isIdent = /^[$A-Z_][0-9A-Z_$]*$/i.test(prop);
+        return isIdent
+          ? (j.memberExpression(j.identifier("props"), j.identifier(prop)) as ExpressionKind)
+          : (j.memberExpression(j.identifier("props"), j.literal(prop), true) as ExpressionKind);
+      };
+
+      let nullishPropName: string | null = null;
+      let baseTheme: ExpressionKind | null = null;
+      let fallbackTheme: ExpressionKind | null = null;
+      let conditionWhen: string | null = null;
+      if (consNullish && altTheme) {
+        baseTheme = altTheme;
+        fallbackTheme = consNullish.fallback;
+        nullishPropName = consNullish.propName;
+        conditionWhen = conditionProp;
+      } else if (altNullish && consTheme) {
+        baseTheme = consTheme;
+        fallbackTheme = altNullish.fallback;
+        nullishPropName = altNullish.propName;
+        conditionWhen = `!${conditionProp}`;
+      } else {
+        return false;
+      }
+
+      if (!baseTheme || !fallbackTheme || !nullishPropName || !conditionWhen) {
+        return false;
+      }
+
+      const outs = cssDeclarationToStylexDeclarations(d);
+      for (const out of outs) {
+        (styleObj as any)[out.prop] = baseTheme as any;
+        const baseFnKey = `${decl.styleKey}${toSuffixFromProp(out.prop)}`;
+        let fnKey = baseFnKey;
+        if (styleFnDecls.has(fnKey)) {
+          let idx = 1;
+          while (styleFnDecls.has(`${baseFnKey}Alt${idx}`)) {
+            idx += 1;
+          }
+          fnKey = `${baseFnKey}Alt${idx}`;
+        }
+        if (!styleFnDecls.has(fnKey)) {
+          const param = j.identifier(out.prop);
+          const valueId = j.identifier(out.prop);
+          annotateParamFromJsxProp(param, nullishPropName);
+          const bodyExpr = j.objectExpression([
+            j.property("init", j.identifier(out.prop), valueId as any),
+          ]);
+          styleFnDecls.set(fnKey, j.arrowFunctionExpression([param], bodyExpr));
+        }
+        if (!styleFnFromProps.some((p) => p.fnKey === fnKey)) {
+          const isIdent = /^[$A-Z_][0-9A-Z_$]*$/i.test(nullishPropName);
+          const baseArg = isIdent
+            ? (j.identifier(nullishPropName) as ExpressionKind)
+            : buildPropAccess(nullishPropName);
+          const callArg = j.logicalExpression("??", baseArg, fallbackTheme) as ExpressionKind;
+          styleFnFromProps.push({
+            fnKey,
+            jsxProp: conditionProp,
+            conditionWhen,
+            callArg: callArg as any,
+          });
+        }
+      }
+
+      ensureShouldForwardPropDrop(decl, conditionProp);
+      ensureShouldForwardPropDrop(decl, nullishPropName);
+      decl.needsWrapperComponent = true;
       return true;
     };
 
@@ -1538,6 +1694,11 @@ export function lowerRules(args: {
           }
           if (tryHandleLogicalOrDefault(d)) {
             continue;
+          }
+          if (!media && !attrTarget && !pseudos?.length) {
+            if (tryHandleConditionalPropCoalesceWithTheme(d)) {
+              continue;
+            }
           }
 
           // Support enum-like block-body `if` chains that return static values.

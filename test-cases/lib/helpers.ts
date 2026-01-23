@@ -31,6 +31,12 @@ export const gradient = () => `
   color: transparent;
 `;
 
+// Thin pixel helper - returns a CSS string for a thin pixel
+export const thinPixel = () => {
+  // This would do some runtime lookup, etc.
+  return "0.5px";
+};
+
 type Speed = "normal" | "slow" | "fast";
 
 export const transitionSpeed = (speed: Speed) => `var(--speed-${speed})`;
