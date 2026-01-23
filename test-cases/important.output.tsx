@@ -4,6 +4,7 @@ import { mergedSx } from "./lib/mergedSx";
 
 type OverrideButtonProps = React.PropsWithChildren<{
   style?: React.CSSProperties;
+  ref?: React.Ref<HTMLButtonElement>;
 }>;
 
 // Using !important to override inline styles or third-party CSS
@@ -14,6 +15,7 @@ function OverrideButton(props: OverrideButtonProps) {
 
 type MixedStylesProps = React.PropsWithChildren<{
   style?: React.CSSProperties;
+  ref?: React.Ref<HTMLParagraphElement>;
 }>;
 
 // Mixed important and normal

@@ -2,6 +2,7 @@ import type { ASTNode, Property, RestElement } from "jscodeshift";
 import type { StyledDecl, VariantDimension } from "../transform-types.js";
 import { emitStyleMerging, type StyleMergerConfig } from "./style-merger.js";
 import { collectInlineStylePropNames, type ExpressionKind, type InlineStyleProp } from "./types.js";
+import { TAG_TO_HTML_ELEMENT } from "./type-helpers.js";
 
 export function emitComponentWrappers(ctx: any): {
   emitted: ASTNode[];
@@ -23,7 +24,6 @@ export function emitComponentWrappers(ctx: any): {
     getExplicitPropNames,
     inferredComponentWrapperPropsTypeText,
     getAttrsAsString,
-    TAG_TO_HTML_ELEMENT,
     injectRefPropIntoTypeLiteralString,
     joinIntersection,
     emitNamedPropsType,
@@ -72,7 +72,7 @@ export function emitComponentWrappers(ctx: any): {
 
       if (explicitTypeExists && explicit && explicitTypeName) {
         const baseTypeText = (() => {
-          const base = `React.ComponentProps<typeof ${wrappedComponent}>`;
+          const base = `React.ComponentPropsWithRef<typeof ${wrappedComponent}>`;
           const omitted: string[] = [];
           if (!allowClassNameProp) {
             omitted.push('"className"');
@@ -95,7 +95,7 @@ export function emitComponentWrappers(ctx: any): {
           : new Set<string>();
 
         if (isPolymorphicComponentWrapper) {
-          const baseProps = `React.ComponentProps<typeof ${wrappedComponent}>`;
+          const baseProps = `React.ComponentPropsWithRef<typeof ${wrappedComponent}>`;
           const omitted: string[] = [];
           if (!allowClassNameProp) {
             omitted.push('"className"');

@@ -23,7 +23,7 @@ function Text(props: TextProps & { as?: React.ElementType }) {
   );
 }
 
-type LabelProps = React.ComponentProps<typeof Text> & {
+type LabelProps = React.ComponentPropsWithRef<typeof Text> & {
   htmlFor?: string;
   ref?: React.Ref<HTMLLabelElement>;
 };

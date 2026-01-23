@@ -15,7 +15,7 @@ function Button<C extends React.ElementType = "button">(props: ButtonProps<C>) {
   );
 }
 
-type ButtonWrapperProps = Omit<React.ComponentProps<typeof Button>, "className" | "style">;
+type ButtonWrapperProps = Omit<React.ComponentPropsWithRef<typeof Button>, "className" | "style">;
 
 function ButtonWrapper(props: ButtonWrapperProps) {
   return <Button {...props} {...stylex.props(styles.buttonWrapper)} />;

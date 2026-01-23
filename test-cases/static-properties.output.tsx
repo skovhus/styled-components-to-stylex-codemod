@@ -39,7 +39,7 @@ export function ExtendedButton(props: ExtendedButtonProps) {
 
 ExtendedButton.HEIGHT = (BaseButton as any).HEIGHT;
 type CommandMenuTextDividerProps = Omit<
-  React.ComponentProps<typeof ActionMenuTextDivider>,
+  React.ComponentPropsWithRef<typeof ActionMenuTextDivider>,
   "className" | "style"
 >;
 
@@ -49,7 +49,7 @@ export function CommandMenuTextDivider(props: CommandMenuTextDividerProps) {
 
 CommandMenuTextDivider.HEIGHT = ActionMenuTextDivider.HEIGHT;
 type CommandMenuGroupHeaderProps = Omit<
-  React.ComponentProps<typeof ActionMenuGroupHeader>,
+  React.ComponentPropsWithRef<typeof ActionMenuGroupHeader>,
   "className" | "style"
 >;
 

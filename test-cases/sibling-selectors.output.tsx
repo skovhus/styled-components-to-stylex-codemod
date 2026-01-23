@@ -4,6 +4,7 @@ import { mergedSx } from "./lib/mergedSx";
 
 type ThingProps = React.PropsWithChildren<{
   className?: string;
+  ref?: React.Ref<HTMLDivElement>;
   isAdjacentSibling?: any;
   isSiblingAfterSomething?: any;
 }> & { isAdjacentSibling?: boolean; isSiblingAfterSomething?: boolean };

@@ -20,7 +20,10 @@ function BaseDivider(props: React.PropsWithChildren<BaseDividerProps>) {
   );
 }
 
-type StyledDividerProps = Omit<React.ComponentProps<typeof BaseDivider>, "className" | "style">;
+type StyledDividerProps = Omit<
+  React.ComponentPropsWithRef<typeof BaseDivider>,
+  "className" | "style"
+>;
 
 export function StyledDivider(props: StyledDividerProps) {
   return <BaseDivider {...props} {...stylex.props(styles.styledDivider)} />;

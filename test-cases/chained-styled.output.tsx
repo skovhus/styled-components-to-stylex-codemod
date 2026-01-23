@@ -2,13 +2,13 @@ import * as React from "react";
 import * as stylex from "@stylexjs/stylex";
 import { Text } from "./lib/text";
 
-type HelpTextProps = Omit<React.ComponentProps<typeof Text>, "className" | "style">;
+type HelpTextProps = Omit<React.ComponentPropsWithRef<typeof Text>, "className" | "style">;
 
 export function HelpText(props: HelpTextProps) {
   return <Text {...props} {...stylex.props(styles.text, styles.helpText)} />;
 }
 
-type SeparatorProps = Omit<React.ComponentProps<typeof Text>, "className" | "style">;
+type SeparatorProps = Omit<React.ComponentPropsWithRef<typeof Text>, "className" | "style">;
 
 export function Separator(props: SeparatorProps) {
   return <Text {...props} {...stylex.props(styles.separator)} />;
