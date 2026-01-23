@@ -501,6 +501,55 @@ export function lowerRules(args: {
         }
       };
 
+      const isEmptyCssBranch = (node: ExpressionKind): boolean => {
+        if (!node || typeof node !== "object") {
+          return false;
+        }
+        if (node.type === "StringLiteral" && node.value === "") {
+          return true;
+        }
+        if (node.type === "Literal" && node.value === "") {
+          return true;
+        }
+        if (node.type === "TemplateLiteral") {
+          const exprs = node.expressions ?? [];
+          if (exprs.length > 0) {
+            return false;
+          }
+          const raw = (node.quasis ?? []).map((q: any) => q.value?.raw ?? "").join("");
+          return raw.length === 0;
+        }
+        if (node.type === "NullLiteral") {
+          return true;
+        }
+        if (node.type === "Identifier" && node.name === "undefined") {
+          return true;
+        }
+        if (node.type === "BooleanLiteral" && node.value === false) {
+          return true;
+        }
+        if (node.type === "UnaryExpression" && node.operator === "void") {
+          return true;
+        }
+        return false;
+      };
+
+      const invertWhen = (when: string): string | null => {
+        if (when.includes(" === ")) {
+          return when.replace(" === ", " !== ");
+        }
+        if (when.includes(" !== ")) {
+          return when.replace(" !== ", " === ");
+        }
+        if (when.startsWith("!")) {
+          return when.slice(1);
+        }
+        if (!when.includes(" ")) {
+          return `!${when}`;
+        }
+        return null;
+      };
+
       // Handle LogicalExpression: props.$x && css`...`
       const body = expr.body;
       if (body?.type === "LogicalExpression" && body.operator === "&&") {
@@ -569,27 +618,65 @@ export function lowerRules(args: {
 
       const cons = body.consequent;
       const alt = body.alternate;
-      if (!isCssHelperTaggedTemplate(cons) || !isCssHelperTaggedTemplate(alt)) {
+      const consIsCss = isCssHelperTaggedTemplate(cons);
+      const altIsCss = isCssHelperTaggedTemplate(alt);
+      const consIsEmpty = isEmptyCssBranch(cons);
+      const altIsEmpty = isEmptyCssBranch(alt);
+
+      if (!(consIsCss || altIsCss)) {
         return false;
       }
 
-      const consNode = cons as { quasi: ExpressionKind };
-      const altNode = alt as { quasi: ExpressionKind };
-      const consResolved = resolveCssHelperTemplate(consNode.quasi, paramName, decl.localName);
-      const altResolved = resolveCssHelperTemplate(altNode.quasi, paramName, decl.localName);
-      if (!consResolved || !altResolved) {
-        return false;
-      }
-      if (consResolved.dynamicProps.length > 0 || altResolved.dynamicProps.length > 0) {
-        return false;
+      const resolveCssBranch = (
+        node: any,
+      ): {
+        style: Record<string, unknown>;
+        dynamicProps: Array<{ jsxProp: string; stylexProp: string }>;
+      } | null => {
+        if (!isCssHelperTaggedTemplate(node)) {
+          return null;
+        }
+        const tplNode = node as { quasi: ExpressionKind };
+        return resolveCssHelperTemplate(tplNode.quasi, paramName, decl.localName);
+      };
+
+      if (consIsCss && altIsCss) {
+        const consResolved = resolveCssBranch(cons);
+        const altResolved = resolveCssBranch(alt);
+        if (!consResolved || !altResolved) {
+          return false;
+        }
+        if (consResolved.dynamicProps.length > 0 || altResolved.dynamicProps.length > 0) {
+          return false;
+        }
+        mergeStyleObjects(styleObj, altResolved.style);
+        applyVariant(testInfo, consResolved.style);
+        return true;
       }
 
-      const consStyle = consResolved.style;
-      const altStyle = altResolved.style;
+      if (consIsCss && altIsEmpty) {
+        const consResolved = resolveCssBranch(cons);
+        if (!consResolved || consResolved.dynamicProps.length > 0) {
+          return false;
+        }
+        applyVariant(testInfo, consResolved.style);
+        return true;
+      }
 
-      mergeStyleObjects(styleObj, altStyle);
-      applyVariant(testInfo, consStyle);
-      return true;
+      if (consIsEmpty && altIsCss) {
+        const altResolved = resolveCssBranch(alt);
+        if (!altResolved || altResolved.dynamicProps.length > 0) {
+          return false;
+        }
+        const invertedWhen = invertWhen(testInfo.when);
+        if (!invertedWhen) {
+          return false;
+        }
+        applyVariant({ ...testInfo, when: invertedWhen }, altResolved.style);
+        return true;
+      }
+
+      return false;
     };
 
     const tryHandleCssHelperFunctionSwitchBlock = (d: any): boolean => {

@@ -1,6 +1,7 @@
 "use client";
 import React from "react";
 import * as stylex from "@stylexjs/stylex";
+import { themeVars } from "./tokens.stylex";
 
 type ImgProps = Omit<React.ComponentProps<"img">, "className" | "style"> & {
   $isInactive?: boolean;
@@ -9,7 +10,16 @@ type ImgProps = Omit<React.ComponentProps<"img">, "className" | "style"> & {
 
 function Img(props: ImgProps) {
   const { $disabled, $isInactive, ...rest } = props;
-  return <img {...rest} {...stylex.props(styles.img, $disabled && styles.imgDisabled)} />;
+  return (
+    <img
+      {...rest}
+      {...stylex.props(
+        styles.img,
+        $disabled && styles.imgDisabled,
+        $isInactive && styles.imgInactive,
+      )}
+    />
+  );
 }
 
 export const App = () => (
@@ -27,5 +37,9 @@ const styles = stylex.create({
   },
   imgDisabled: {
     filter: "opacity(0.65)",
+  },
+  imgInactive: {
+    backgroundColor: themeVars.bgSub,
+    filter: "opacity(0.5) grayscale(1)",
   },
 });

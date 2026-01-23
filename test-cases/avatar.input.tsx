@@ -14,6 +14,13 @@ const Img = styled.img<{ $isInactive?: boolean; $disabled?: boolean }>`
           filter: opacity(0.65);
         `
       : ""}
+  ${(props) =>
+    props.$isInactive
+      ? css`
+          background-color: ${props.theme.color.bgSub};
+          filter: opacity(0.5) grayscale(1);
+        `
+      : ""};
 `;
 
 export const App = () => (
