@@ -1,18 +1,13 @@
-import type { ASTNode, Collection, Comment, JSCodeshift } from "jscodeshift";
-import type { StyledDecl } from "../transform-types.js";
-import type { ExportInfo } from "./types.js";
+import type { ASTNode, Comment } from "jscodeshift";
+import type { WrapperEmitter } from "./wrapper-emitter.js";
 
 export function insertEmittedWrappers(args: {
-  root: Collection<ASTNode>;
-  j: JSCodeshift;
+  emitter: WrapperEmitter;
   emitted: ASTNode[];
-  wrapperDecls: StyledDecl[];
-  exportedComponents: Map<string, ExportInfo>;
-  emitTypes: boolean;
   needsReactTypeImport: boolean;
 }): void {
-  const { root, j, emitted, wrapperDecls, exportedComponents, emitTypes, needsReactTypeImport } =
-    args;
+  const { emitter, emitted, needsReactTypeImport } = args;
+  const { root, j, wrapperDecls, exportedComponents, emitTypes } = emitter;
 
   if (emitted.length > 0) {
     // Re-order emitted wrapper nodes to match `wrapperDecls` source order.

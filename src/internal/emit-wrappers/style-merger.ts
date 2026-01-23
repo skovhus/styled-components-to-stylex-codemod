@@ -1,8 +1,6 @@
 import type { Identifier, JSCodeshift } from "jscodeshift";
 import type { StyleMergerConfig } from "../../adapter.js";
 
-export type { StyleMergerConfig };
-
 /**
  * Result of emitting style merging logic.
  */
