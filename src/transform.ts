@@ -11,7 +11,6 @@ import { emitWrappers } from "./internal/emit-wrappers.js";
 import { postProcessTransformedAst } from "./internal/rewrite-jsx.js";
 import {
   collectCreateGlobalStyleWarnings,
-  collectCssHelperSkipWarnings,
   collectThemeProviderSkipWarnings,
   shouldSkipForCreateGlobalStyle,
   shouldSkipForThemeProvider,
@@ -27,6 +26,7 @@ import {
   extractAndRemoveCssHelpers,
   isIdentifierReference,
   isStyledTag as isStyledTagImpl,
+  type UnsupportedCssUsage,
 } from "./internal/transform/css-helpers.js";
 import {
   getStaticPropertiesFromImport as getStaticPropertiesFromImportImpl,
@@ -197,8 +197,8 @@ export function transformWithWarnings(
     toStyleKey,
   });
 
-  if (cssHelpers.hasUnsupportedCssHelperUsage) {
-    return { code: null, warnings: collectCssHelperSkipWarnings({ root, j, styledImports }) };
+  if (cssHelpers.unsupportedCssUsages.length > 0) {
+    return { code: null, warnings: buildUnsupportedCssWarnings(cssHelpers.unsupportedCssUsages) };
   }
 
   const cssHelperNames = cssHelpers.cssHelperNames;
@@ -2735,6 +2735,17 @@ function toSuffixFromProp(propName: string): string {
     return raw.slice(2);
   }
   return raw.charAt(0).toUpperCase() + raw.slice(1);
+}
+
+function buildUnsupportedCssWarnings(usages: UnsupportedCssUsage[]): WarningLog[] {
+  return usages.map((usage) => ({
+    severity: "warning" as const,
+    type:
+      usage.reason === "call-expression"
+        ? ("`css` helper usage as a function call (css(...)) is not supported" as const)
+        : ("`css` helper used outside of a styled component template cannot be statically transformed" as const),
+    loc: usage.loc ?? undefined,
+  }));
 }
 
 function isJsxElementNamed(name: string) {

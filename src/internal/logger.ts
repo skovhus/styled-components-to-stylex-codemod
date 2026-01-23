@@ -3,7 +3,8 @@ import { readFileSync } from "node:fs";
 type Severity = "info" | "warning" | "error";
 
 export type WarningType =
-  | "`css` helper usage from styled-components is not supported because nested css blocks are not transformed"
+  | "`css` helper usage as a function call (css(...)) is not supported"
+  | "`css` helper used outside of a styled component template cannot be statically transformed"
   | "Adapter resolved StyleX styles cannot be applied under nested selectors/at-rules"
   | "Adapter returned an unparseable styles expression"
   | "Adapter returned null for helper call"

@@ -180,30 +180,40 @@ function isStyledCallExpression(node: any, styledLocalNames: Set<string>): boole
   return false;
 }
 
+interface UnsupportedCssUsage {
+  loc: Loc;
+  reason: "call-expression" | "outside-styled-template";
+}
+
 function detectUnsupportedCssHelperUsage(args: {
   root: any;
   j: JSCodeshift;
   cssLocal: string;
   styledLocalNames: Set<string>;
-}): boolean {
+}): UnsupportedCssUsage[] {
   const { root, j, cssLocal, styledLocalNames } = args;
+  const unsupportedUsages: UnsupportedCssUsage[] = [];
 
-  const usedAsCall =
-    root.find(j.CallExpression, { callee: { type: "Identifier", name: cssLocal } } as any).size() >
-    0;
-  if (usedAsCall) {
-    return true;
-  }
+  const getLoc = (node: any): Loc => {
+    const start = node?.loc?.start;
+    if (!start?.line && start?.line !== 0) {
+      return null;
+    }
+    return { line: start.line, column: start.column ?? 0 };
+  };
+
+  // Check for css(...) call expressions - these are unsupported
+  root
+    .find(j.CallExpression, { callee: { type: "Identifier", name: cssLocal } } as any)
+    .forEach((p: any) => {
+      unsupportedUsages.push({ loc: getLoc(p.node), reason: "call-expression" });
+    });
 
   const cssTagged = root.find(j.TaggedTemplateExpression, {
     tag: { type: "Identifier", name: cssLocal },
   } as any);
 
-  let unsupported = false;
   cssTagged.forEach((p: any) => {
-    if (unsupported) {
-      return;
-    }
     const cssNode = p.node as any;
     const parent = p.parentPath?.node;
     if (
@@ -228,7 +238,8 @@ function detectUnsupportedCssHelperUsage(args: {
       }
     }
     if (!arrow) {
-      unsupported = true;
+      // css template outside arrow function (e.g. in regular function or top-level return)
+      unsupportedUsages.push({ loc: getLoc(cssNode), reason: "outside-styled-template" });
       return;
     }
 
@@ -259,19 +270,19 @@ function detectUnsupportedCssHelperUsage(args: {
     if (arrow.body?.type === "ConditionalExpression") {
       const cond = arrow.body;
       if (cond.consequent !== cssNode && cond.alternate !== cssNode) {
-        unsupported = true;
+        unsupportedUsages.push({ loc: getLoc(cssNode), reason: "outside-styled-template" });
         return;
       }
     }
     // Support LogicalExpression: props.$x && css`...`
     else if (arrow.body?.type === "LogicalExpression" && arrow.body.operator === "&&") {
       if (arrow.body.right !== cssNode) {
-        unsupported = true;
+        unsupportedUsages.push({ loc: getLoc(cssNode), reason: "outside-styled-template" });
         return;
       }
     } else if (arrow.body !== cssNode && arrow.body?.type !== "BlockStatement") {
       // Not a direct body, not a conditional, not a logical, not a block - unsupported
-      unsupported = true;
+      unsupportedUsages.push({ loc: getLoc(cssNode), reason: "outside-styled-template" });
       return;
     }
     let hasStyledAncestor = false;
@@ -292,12 +303,14 @@ function detectUnsupportedCssHelperUsage(args: {
       }
     }
     if (!hasStyledAncestor) {
-      unsupported = true;
+      unsupportedUsages.push({ loc: getLoc(cssNode), reason: "outside-styled-template" });
       return;
     }
   });
-  return unsupported;
+  return unsupportedUsages;
 }
+
+export { type UnsupportedCssUsage };
 
 export function extractAndRemoveCssHelpers(args: {
   root: any;
@@ -306,7 +319,7 @@ export function extractAndRemoveCssHelpers(args: {
   cssLocal: string | undefined;
   toStyleKey: (name: string) => string;
 }): {
-  hasUnsupportedCssHelperUsage: boolean;
+  unsupportedCssUsages: UnsupportedCssUsage[];
   cssHelperNames: Set<string>;
   cssHelperDecls: StyledDecl[];
   cssHelperHasUniversalSelectors: boolean;
@@ -326,7 +339,7 @@ export function extractAndRemoveCssHelpers(args: {
 
   if (!cssLocal) {
     return {
-      hasUnsupportedCssHelperUsage: false,
+      unsupportedCssUsages: [],
       cssHelperNames,
       cssHelperDecls,
       cssHelperHasUniversalSelectors,
@@ -335,15 +348,15 @@ export function extractAndRemoveCssHelpers(args: {
     };
   }
 
-  const hasUnsupportedCssHelperUsage = detectUnsupportedCssHelperUsage({
+  const unsupportedCssUsages = detectUnsupportedCssHelperUsage({
     root,
     j,
     cssLocal,
     styledLocalNames,
   });
-  if (hasUnsupportedCssHelperUsage) {
+  if (unsupportedCssUsages.length > 0) {
     return {
-      hasUnsupportedCssHelperUsage: true,
+      unsupportedCssUsages,
       cssHelperNames,
       cssHelperDecls,
       cssHelperHasUniversalSelectors,
@@ -452,7 +465,7 @@ export function extractAndRemoveCssHelpers(args: {
   }
 
   return {
-    hasUnsupportedCssHelperUsage: false,
+    unsupportedCssUsages: [],
     cssHelperNames,
     cssHelperDecls,
     cssHelperHasUniversalSelectors,
