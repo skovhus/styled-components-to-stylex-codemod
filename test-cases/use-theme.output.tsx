@@ -20,6 +20,7 @@ export function Input(props: InputProps) {
 
 type ColorPickerWrapperProps = React.PropsWithChildren<{
   style?: React.CSSProperties;
+  ref?: React.Ref<HTMLDivElement>;
 }>;
 
 function ColorPickerWrapper(props: ColorPickerWrapperProps) {

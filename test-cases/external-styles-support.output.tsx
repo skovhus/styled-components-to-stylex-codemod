@@ -5,6 +5,7 @@ import { mergedSx } from "./lib/mergedSx";
 type ExportedButtonProps = React.PropsWithChildren<{
   className?: string;
   style?: React.CSSProperties;
+  ref?: React.Ref<HTMLButtonElement>;
   as?: React.ElementType;
 }>;
 

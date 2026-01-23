@@ -27,7 +27,7 @@ export function TextColor(props: TextColorProps) {
 // Pattern 2: styled(Component) - wrapper needs component's props + HTML attributes
 const BaseText = (props: React.ComponentProps<"span">) => <span {...props} />;
 
-interface HighlightProps extends Omit<React.ComponentProps<typeof BaseText>, "style"> {
+interface HighlightProps extends Omit<React.ComponentPropsWithRef<typeof BaseText>, "style"> {
   /** Whether to highlight */
   highlighted?: boolean;
 }

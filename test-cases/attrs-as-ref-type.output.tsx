@@ -26,7 +26,7 @@ function Text(props: TextProps) {
   );
 }
 
-type LabelProps = Omit<React.ComponentProps<typeof Text>, "className" | "style"> & {
+type LabelProps = Omit<React.ComponentPropsWithRef<typeof Text>, "className" | "style"> & {
   htmlFor?: string;
   ref?: React.Ref<HTMLLabelElement>;
 };

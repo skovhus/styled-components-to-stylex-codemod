@@ -16,12 +16,12 @@ function Button<C extends React.ElementType = "button">(props: ButtonProps<C>) {
   );
 }
 
-type StyledTextProps<C extends React.ElementType = typeof Text> = React.ComponentProps<
+type StyledTextProps<C extends React.ElementType = typeof Text> = React.ComponentPropsWithRef<
   typeof Text
 > &
   Omit<
     React.ComponentPropsWithoutRef<C>,
-    keyof React.ComponentProps<typeof Text> | "className" | "style"
+    keyof React.ComponentPropsWithRef<typeof Text> | "className" | "style"
   > & {
     as?: C;
   };

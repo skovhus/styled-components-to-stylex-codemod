@@ -2,14 +2,18 @@ import * as React from "react";
 import * as stylex from "@stylexjs/stylex";
 import { themeVars } from "./tokens.stylex";
 
-type CardProps = React.PropsWithChildren<{}>;
+type CardProps = React.PropsWithChildren<{
+  ref?: React.Ref<HTMLDivElement>;
+}>;
 
 export function Card(props: CardProps) {
   const { children } = props;
   return <div {...stylex.props(styles.card)}>{children}</div>;
 }
 
-type ButtonProps = React.PropsWithChildren<{}>;
+type ButtonProps = React.PropsWithChildren<{
+  ref?: React.Ref<HTMLButtonElement>;
+}>;
 
 // Another component to ensure multiple components work
 export function Button(props: ButtonProps) {

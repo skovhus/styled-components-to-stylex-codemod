@@ -18,14 +18,19 @@ function Text(props: TextProps & { as?: React.ElementType }) {
   );
 }
 
-type StyledButtonProps = React.ComponentProps<typeof Text> & { ref?: React.Ref<HTMLButtonElement> };
+type StyledButtonProps = React.ComponentPropsWithRef<typeof Text> & {
+  ref?: React.Ref<HTMLButtonElement>;
+};
 
 function StyledButton(props: StyledButtonProps) {
   const { className, style, ...rest } = props;
   return <Text as="button" {...rest} {...mergedSx(styles.styledButton, className, style)} />;
 }
 
-type ClickableTextProps = Omit<React.ComponentProps<typeof StyledButton>, "className" | "style">;
+type ClickableTextProps = Omit<
+  React.ComponentPropsWithRef<typeof StyledButton>,
+  "className" | "style"
+>;
 
 export function ClickableText(props: ClickableTextProps) {
   return <StyledButton {...props} {...stylex.props(styles.clickableText)} />;

@@ -2,8 +2,11 @@ import type { ASTNode } from "jscodeshift";
 import type { StyledDecl, VariantDimension } from "../transform-types.js";
 import { emitStyleMerging, type StyleMergerConfig } from "./style-merger.js";
 import { collectInlineStylePropNames, type ExpressionKind, type InlineStyleProp } from "./types.js";
+import { VOID_TAGS } from "./type-helpers.js";
 
-export function emitIntrinsicWrappers(ctx: any): {
+export function emitIntrinsicWrappers(
+  ctx: { styleMerger: StyleMergerConfig | null; wrapperDecls: StyledDecl[] } & Record<string, any>,
+): {
   emitted: ASTNode[];
   needsReactTypeImport: boolean;
 } {
@@ -33,16 +36,12 @@ export function emitIntrinsicWrappers(ctx: any): {
     getExplicitPropNames,
     isPropRequiredInPropsTypeLiteral,
     reactIntrinsicAttrsType,
-    VOID_TAGS,
     patternProp,
     withLeadingComments,
     emitMinimalWrapper,
     withLeadingCommentsOnFirstFunction,
     styleMerger,
-  } = ctx as { styleMerger: StyleMergerConfig | null; wrapperDecls: StyledDecl[] } & Record<
-    string,
-    any
-  >;
+  } = ctx;
 
   const emitted: ASTNode[] = [];
   let needsReactTypeImport = false;
