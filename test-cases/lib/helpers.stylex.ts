@@ -1,5 +1,5 @@
 import * as stylex from "@stylexjs/stylex";
-import { themeVars } from "../tokens.stylex";
+import { $colors } from "../tokens.stylex";
 
 // CSS snippet helpers converted to StyleX create objects
 export const helpers = stylex.create({
@@ -23,6 +23,6 @@ export const borders = stylex.create({
   labelMuted: {
     borderWidth: "1px",
     borderStyle: "solid",
-    borderColor: themeVars.labelMuted,
+    borderColor: $colors.labelMuted,
   },
 });

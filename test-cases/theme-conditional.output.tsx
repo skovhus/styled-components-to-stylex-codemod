@@ -1,6 +1,6 @@
 import * as React from "react";
 import * as stylex from "@stylexjs/stylex";
-import { themeVars } from "./tokens.stylex";
+import { $colors } from "./tokens.stylex";
 
 type OptionLabelProps = React.PropsWithChildren<{
   $disabled?: boolean;
@@ -28,11 +28,11 @@ const styles = stylex.create({
     gap: "4px",
     alignItems: "center",
     fontSize: "11px",
-    color: themeVars.labelBase,
+    color: $colors.labelBase,
     cursor: "pointer",
   },
   optionLabelDisabled: {
-    color: themeVars.labelMuted,
+    color: $colors.labelMuted,
     cursor: "not-allowed",
   },
 });

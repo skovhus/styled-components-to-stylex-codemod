@@ -1,6 +1,6 @@
 import React from "react";
 import * as stylex from "@stylexjs/stylex";
-import { themeVars } from "./tokens.stylex";
+import { $colors } from "./tokens.stylex";
 import { animated } from "./lib/react-spring";
 
 export function App() {
@@ -33,6 +33,6 @@ const styles = stylex.create({
     color: "white",
     borderWidth: "1px",
     borderStyle: "solid",
-    borderColor: themeVars.primaryColor,
+    borderColor: $colors.primaryColor,
   },
 });

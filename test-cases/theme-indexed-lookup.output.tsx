@@ -1,6 +1,6 @@
 import * as React from "react";
 import * as stylex from "@stylexjs/stylex";
-import { themeVars } from "./tokens.stylex";
+import { $colors } from "./tokens.stylex";
 
 type Color = "labelBase" | "labelMuted";
 
@@ -54,13 +54,13 @@ const styles = stylex.create({
   boxBackgroundColorHover: ($hoverColor: Color) => ({
     backgroundColor: {
       default: null,
-      ":hover": themeVars[$hoverColor],
+      ":hover": $colors[$hoverColor],
     },
   }),
   boxBackgroundColor: ($bg: Color) => ({
-    backgroundColor: themeVars[$bg],
+    backgroundColor: $colors[$bg],
   }),
   textColorColor: (color: Colors) => ({
-    color: themeVars[color],
+    color: $colors[color],
   }),
 });

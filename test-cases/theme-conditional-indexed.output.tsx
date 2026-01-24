@@ -1,6 +1,6 @@
 import * as React from "react";
 import * as stylex from "@stylexjs/stylex";
-import { themeVars } from "./tokens.stylex";
+import { $colors } from "./tokens.stylex";
 import type { Colors } from "./lib/colors";
 
 export interface BadgeProps extends Omit<React.ComponentProps<"div">, "className" | "style"> {
@@ -29,9 +29,9 @@ const styles = stylex.create({
     paddingBlock: "4px",
     paddingInline: "8px",
     borderRadius: "4px",
-    color: themeVars.labelTitle,
+    color: $colors.labelTitle,
   },
   badgeColor: (textColor: Colors) => ({
-    color: themeVars[textColor],
+    color: $colors[textColor],
   }),
 });

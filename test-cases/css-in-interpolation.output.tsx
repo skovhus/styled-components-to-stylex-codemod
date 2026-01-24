@@ -1,6 +1,6 @@
 import React from "react";
 import * as stylex from "@stylexjs/stylex";
-import { themeVars } from "./tokens.stylex";
+import { $colors } from "./tokens.stylex";
 
 type ButtonProps = React.PropsWithChildren<{
   $primary?: boolean;
@@ -27,7 +27,7 @@ const styles = stylex.create({
     paddingBlock: "8px",
     paddingInline: "16px",
     borderRadius: "4px",
-    backgroundColor: themeVars.bgBase,
+    backgroundColor: $colors.bgBase,
     color: "black",
   },
   buttonPrimary: {
