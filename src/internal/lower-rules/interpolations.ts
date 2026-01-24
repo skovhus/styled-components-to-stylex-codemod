@@ -69,10 +69,11 @@ export function tryHandleInterpolatedStringValue(args: {
   d: any;
   styleObj: Record<string, unknown>;
   resolveCallExpr?: (expr: any) => { resolved: any; imports?: any[] } | null;
+  resolveImportedValueExpr?: (expr: any) => { resolved: any; imports?: any[] } | null;
   addImport?: (imp: any) => void;
   resolveThemeValue?: (expr: any) => unknown;
 }): boolean {
-  const { j, decl, d, styleObj, resolveCallExpr, addImport } = args;
+  const { j, decl, d, styleObj, resolveCallExpr, resolveImportedValueExpr, addImport } = args;
   // Handle common “string interpolation” cases:
   //  - background: ${dynamicColor}
   //  - padding: ${spacing}px
@@ -130,6 +131,16 @@ export function tryHandleInterpolatedStringValue(args: {
     if (expr.type === "CallExpression") {
       return false;
     }
+    const importedResolved = resolveImportedValueExpr?.(expr);
+    if (importedResolved) {
+      for (const imp of importedResolved.imports ?? []) {
+        addImport?.(imp);
+      }
+      for (const out of cssDeclarationToStylexDeclarations(d)) {
+        (styleObj as any)[out.prop] = importedResolved.resolved;
+      }
+      return true;
+    }
     const themeResolved = args.resolveThemeValue?.(expr);
     const shouldWrapThemeExpr =
       !themeResolved &&
@@ -150,7 +161,14 @@ export function tryHandleInterpolatedStringValue(args: {
     return true;
   }
 
-  const tl = buildInterpolatedTemplate({ j, decl, cssValue: d.value, resolveCallExpr, addImport });
+  const tl = buildInterpolatedTemplate({
+    j,
+    decl,
+    cssValue: d.value,
+    resolveCallExpr,
+    resolveImportedValueExpr,
+    addImport,
+  });
   if (!tl) {
     return false;
   }
@@ -166,9 +184,10 @@ function buildInterpolatedTemplate(args: {
   decl: StyledDecl;
   cssValue: any;
   resolveCallExpr?: (expr: any) => { resolved: any; imports?: any[] } | null;
+  resolveImportedValueExpr?: (expr: any) => { resolved: any; imports?: any[] } | null;
   addImport?: (imp: any) => void;
 }): unknown {
-  const { j, decl, cssValue, resolveCallExpr, addImport } = args;
+  const { j, decl, cssValue, resolveCallExpr, resolveImportedValueExpr, addImport } = args;
   // Build a JS TemplateLiteral from CssValue parts when it's basically string interpolation,
   // e.g. `${spacing}px`, `${spacing / 2}px 0`, `1px solid ${theme.color.secondary}` (handled elsewhere).
   if (!cssValue || cssValue.kind !== "interpolated") {
@@ -220,6 +239,30 @@ function buildInterpolatedTemplate(args: {
           exprs.push(resolved.resolved);
           continue;
         }
+      }
+      const importedResolved = resolveImportedValueExpr?.(expr);
+      if (importedResolved) {
+        if (
+          importedResolved.resolved?.type === "StringLiteral" ||
+          (importedResolved.resolved?.type === "Literal" &&
+            typeof importedResolved.resolved.value === "string")
+        ) {
+          const strValue = importedResolved.resolved.value;
+          q += strValue;
+          fullStaticValue += strValue;
+          for (const imp of importedResolved.imports ?? []) {
+            addImport?.(imp);
+          }
+          continue;
+        }
+        quasis.push(j.templateElement({ raw: q, cooked: q }, false));
+        q = "";
+        allStatic = false;
+        for (const imp of importedResolved.imports ?? []) {
+          addImport?.(imp);
+        }
+        exprs.push(importedResolved.resolved);
+        continue;
       }
       quasis.push(j.templateElement({ raw: q, cooked: q }, false));
       q = "";

@@ -7,6 +7,7 @@ export type WarningType =
   | "`css` helper used outside of a styled component template cannot be statically transformed"
   | "`css` helper function switch must return css templates in all branches"
   | "Adapter resolved StyleX styles cannot be applied under nested selectors/at-rules"
+  | "Adapter returned an unparseable value expression"
   | "Adapter returned an unparseable styles expression"
   | "Adapter returned null for helper call"
   | "Adapter.resolveCall must return { usage: 'props' | 'create', expr, imports }"

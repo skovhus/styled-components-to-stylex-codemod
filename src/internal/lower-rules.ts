@@ -1599,6 +1599,72 @@ export function lowerRules(args: {
           if (tryHandleThemeValueInPseudo()) {
             continue;
           }
+          const resolveImportedValueExpr = (
+            expr: any,
+          ): { resolved: any; imports?: any[] } | null => {
+            if (!expr || typeof expr !== "object") {
+              return null;
+            }
+            const extractRootAndPath = (node: any): { root: string; path: string[] } | null => {
+              if (!node || typeof node !== "object") {
+                return null;
+              }
+              if (node.type === "Identifier") {
+                return { root: node.name, path: [] };
+              }
+              if (node.type !== "MemberExpression" && node.type !== "OptionalMemberExpression") {
+                return null;
+              }
+              const parts: string[] = [];
+              let cur: any = node;
+              while (
+                cur &&
+                (cur.type === "MemberExpression" || cur.type === "OptionalMemberExpression")
+              ) {
+                if (cur.computed) {
+                  return null;
+                }
+                if (cur.property?.type !== "Identifier") {
+                  return null;
+                }
+                parts.unshift(cur.property.name);
+                cur = cur.object;
+              }
+              if (cur?.type !== "Identifier") {
+                return null;
+              }
+              return { root: cur.name, path: parts };
+            };
+            const info = extractRootAndPath(expr);
+            if (!info) {
+              return null;
+            }
+            const imp = importMap.get(info.root);
+            if (!imp) {
+              return null;
+            }
+            const res = resolveValue({
+              kind: "importedValue",
+              importedName: imp.importedName,
+              source: imp.source,
+              ...(info.path.length ? { path: info.path.join(".") } : {}),
+              filePath,
+            });
+            if (!res) {
+              return null;
+            }
+            const exprAst = parseExpr(res.expr);
+            if (!exprAst) {
+              warnings.push({
+                severity: "error",
+                type: "Adapter returned an unparseable value expression",
+                loc: getNodeLocStart(expr),
+                context: { localName: decl.localName, res },
+              });
+              return null;
+            }
+            return { resolved: exprAst, imports: res.imports };
+          };
           // Create a resolver for embedded call expressions in compound CSS values
           const resolveCallExpr = (expr: any): { resolved: any; imports?: any[] } | null => {
             if (expr?.type !== "CallExpression") {
@@ -1655,6 +1721,7 @@ export function lowerRules(args: {
               styleObj,
               resolveCallExpr,
               addImport,
+              resolveImportedValueExpr,
               resolveThemeValue,
             })
           ) {

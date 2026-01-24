@@ -41,6 +41,10 @@ type Speed = "normal" | "slow" | "fast";
 
 export const transitionSpeed = (speed: Speed) => `var(--speed-${speed})`;
 
+export const zIndex = {
+  modal: 1000,
+};
+
 // Font weight helper - returns numeric font weights
 export const fontWeight = (weight: "normal" | "medium" | "bold") => {
   const weights = { normal: 400, medium: 500, bold: 600 };

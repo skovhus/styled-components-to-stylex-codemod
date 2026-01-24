@@ -73,3 +73,7 @@ export const fontSizeVars = stylex.defineVars({
 export const pixelVars = stylex.defineVars({
   thin: "0.5px",
 });
+
+export const $zIndex = stylex.defineVars({
+  modal: "1000",
+});

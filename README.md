@@ -139,7 +139,7 @@ console.log(result);
 
 Adapters are the main extension point. They let you control:
 
-- how theme paths and CSS variables are turned into StyleX-compatible JS values (`resolveValue`)
+- how theme paths, CSS variables, and imported values are turned into StyleX-compatible JS values (`resolveValue`)
 - what extra imports to inject into transformed files (returned from `resolveValue`)
 - how helper calls are resolved (via `resolveCall({ ... })` returning `usage: "props" | "create"`; `null`/`undefined` now bails)
 - which exported components should support external className/style extension (`shouldSupportExternalStyling`)
@@ -224,6 +224,7 @@ When `shouldSupportExternalStyling` returns `true`, the generated component will
 When the codemod encounters an interpolation inside a styled template literal, it runs an internal dynamic resolution pipeline which covers common cases like:
 
 - theme access (`props.theme...`) via `resolveValue({ kind: "theme", path })`
+- imported value access (`import { zIndex } ...; ${zIndex.popover}`) via `resolveValue({ kind: "importedValue", importedName, source, path })`
 - prop access (`props.foo`) and conditionals (`props.foo ? "a" : "b"`, `props.foo && "color: red;"`)
 - simple helper calls (`transitionSpeed("slowTransition")`) via `resolveCall({ ... })` returning `usage: "create"`
 - style helper calls (returning StyleX styles) via `resolveCall({ ... })` returning `usage: "props"`; these are emitted as extra `stylex.props(...)` args

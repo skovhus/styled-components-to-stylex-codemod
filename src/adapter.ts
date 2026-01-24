@@ -30,6 +30,29 @@ type CssVariableResolveContext = {
   filePath?: string;
 };
 
+type ImportedValueResolveContext = {
+  kind: "importedValue";
+  /**
+   * Imported name of the binding used in the interpolation.
+   * Example: `import { zIndex as z } from "./lib"` -> importedName: "zIndex"
+   */
+  importedName: string;
+  /**
+   * Import source for the binding.
+   */
+  source: ImportSource;
+  /**
+   * Member path from the imported binding (if any).
+   * Example: `zIndex.popover` -> "popover"
+   */
+  path?: string;
+  /**
+   * Absolute path of the file currently being transformed.
+   * Useful for adapter logic that wants to branch by caller file.
+   */
+  filePath?: string;
+};
+
 export type CallResolveContext = {
   /**
    * Absolute path of the file currently being transformed.
@@ -53,11 +76,14 @@ export type CallResolveContext = {
 };
 
 /**
- * Context for `adapter.resolveValue(...)` (theme + css variables).
+ * Context for `adapter.resolveValue(...)` (theme + css variables + imported values).
  *
  * Helper calls are handled separately via `adapter.resolveCall(...)`.
  */
-export type ResolveValueContext = ThemeResolveContext | CssVariableResolveContext;
+export type ResolveValueContext =
+  | ThemeResolveContext
+  | CssVariableResolveContext
+  | ImportedValueResolveContext;
 
 /**
  * Result for `adapter.resolveValue(...)` (theme + css variables).
@@ -160,10 +186,10 @@ export interface StyleMergerConfig {
 
 export interface Adapter {
   /**
-   * Resolver for theme paths + CSS variables.
+   * Resolver for theme paths + CSS variables + imported values.
    *
    * Notes:
-   * - Return `{ expr, imports }` for both theme + css variables.
+   * - Return `{ expr, imports }` for theme, css variables, and imported values.
    * - Optionally return `{ dropDefinition: true }` for css variables to remove the local `--x: ...` definition.
    * - Return `null` to leave a value unresolved.
    */
