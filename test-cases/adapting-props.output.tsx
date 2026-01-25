@@ -23,6 +23,29 @@ function Button(props: ButtonProps) {
   );
 }
 
+type BadgeProps = Omit<React.ComponentProps<"span">, "className" | "style"> & {
+  size?: "small" | "medium" | "large";
+};
+
+// Test case: inner ternary tests the same prop as outer
+// The inner variants must be guarded by the outer falsy condition
+// to prevent the "medium" background from leaking into size === "small"
+function Badge(props: BadgeProps) {
+  const { children, size } = props;
+  return (
+    <span
+      {...stylex.props(
+        styles.badge,
+        size !== "small" && size === "large" && styles.badgeSizeNotSmallSizeLarge,
+        size !== "small" && size !== "large" && styles.badgeSizeNotSmallSizeNotLarge,
+        size === "small" && styles.badgeSizeSmall,
+      )}
+    >
+      {children}
+    </span>
+  );
+}
+
 export const App = () => (
   <div>
     <Button>Normal</Button>
@@ -32,6 +55,10 @@ export const App = () => (
     <Button hollow $primary>
       Primary Hollow
     </Button>
+    <br />
+    <Badge size="small">Small</Badge>
+    <Badge size="medium">Medium</Badge>
+    <Badge size="large">Large</Badge>
   </div>
 );
 
@@ -57,5 +84,17 @@ const styles = stylex.create({
   },
   buttonNotHollowNotPrimary: {
     backgroundColor: "white",
+  },
+  badge: {
+    display: "inline-block",
+  },
+  badgeSizeNotSmallSizeLarge: {
+    backgroundColor: "blue",
+  },
+  badgeSizeNotSmallSizeNotLarge: {
+    backgroundColor: "gray",
+  },
+  badgeSizeSmall: {
+    fontSize: "10px",
   },
 });

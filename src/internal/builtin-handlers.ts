@@ -1170,28 +1170,15 @@ function tryResolveConditionalCssBlockTernary(node: DynamicNode): HandlerResult 
       });
     }
 
-    // Add nested variants, combining with outer condition's falsy branch if needed
-    // This handles cases like: hollow ? A : `background: ${$primary ? X : Y}`
-    // where the inner ternary tests a different property than the outer
+    // Add nested variants, combining with outer condition's falsy branch
+    // All nested variants are in the else branch, so they need the outer falsy guard.
+    // This is always correct, even for enum chains where conditions are mutually exclusive.
     const outerFalsyCondition = buildWhenCondition(condInfo, false);
     for (const nestedVariant of nested.variants) {
-      // Extract the prop name from the nested when string
-      // Handles: "$primary", "!$primary", "variant === \"x\"", "variant !== \"x\""
-      const nestedWhen = nestedVariant.when;
-      const nestedPropMatch = nestedWhen.match(/^!?([a-zA-Z_$][a-zA-Z0-9_$]*)/);
-      const nestedPropName = nestedPropMatch?.[1];
-
-      // Combine conditions when nested variant tests a different property
-      const testsDifferentProp = nestedPropName && nestedPropName !== condInfo.propName;
-      if (testsDifferentProp) {
-        // Combine: !outer && innerCondition
-        variants.push({
-          ...nestedVariant,
-          when: `${outerFalsyCondition} && ${nestedVariant.when}`,
-        });
-      } else {
-        variants.push(nestedVariant);
-      }
+      variants.push({
+        ...nestedVariant,
+        when: `${outerFalsyCondition} && ${nestedVariant.when}`,
+      });
     }
 
     return { variants, defaultStyle: nested.defaultStyle };
