@@ -99,6 +99,11 @@ export type StyledDecl = {
    */
   supportsExternalStyles?: boolean;
   /**
+   * Whether this component should support an `as` prop at its public boundary.
+   * True when exported and the adapter opts-in.
+   */
+  supportsAsProp?: boolean;
+  /**
    * True when the styled component identifier is used as a value (not only rendered in JSX),
    * e.g. passed as a prop: `<VirtualList outerElementType={StyledDiv} />`.
    *

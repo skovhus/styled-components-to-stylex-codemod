@@ -215,6 +215,15 @@ export interface Adapter {
   shouldSupportExternalStyling: (context: ExternalStylesContext) => boolean;
 
   /**
+   * Called for exported styled components to determine if they should accept
+   * the polymorphic `as` prop even when it is not used within the file.
+   *
+   * Return true to enable `as` support on the exported component boundary.
+   * Defaults to false when omitted.
+   */
+  shouldSupportAsProp?: (context: ExternalStylesContext) => boolean;
+
+  /**
    * Custom merger function for className/style combining.
    * When provided, generates cleaner output using this function instead of
    * the verbose className/style merging pattern.

@@ -143,6 +143,7 @@ Adapters are the main extension point. They let you control:
 - what extra imports to inject into transformed files (returned from `resolveValue`)
 - how helper calls are resolved (via `resolveCall({ ... })` returning `usage: "props" | "create"`; `null`/`undefined` now bails)
 - which exported components should support external className/style extension (`shouldSupportExternalStyling`)
+- which exported components should accept the polymorphic `as` prop (`shouldSupportAsProp`)
 - how className/style merging is handled for components accepting external styling (`styleMerger`)
 
 #### Style Merger
@@ -218,6 +219,30 @@ When `shouldSupportExternalStyling` returns `true`, the generated component will
 - Accept `className` and `style` props
 - Merge them with the StyleX-generated styles
 - Forward remaining props via `...rest`
+
+#### Polymorphic `as` Support
+
+Exported components only get `as` support when it is used inside the file (or when
+the inferred props type already includes it). If you need exported components to
+support `as` for external usage, opt in via `shouldSupportAsProp`:
+
+```ts
+const adapter = defineAdapter({
+  resolveValue(ctx) {
+    // ... value resolution logic
+    return null;
+  },
+
+  shouldSupportExternalStyling() {
+    return false;
+  },
+
+  shouldSupportAsProp(ctx) {
+    // ctx: { filePath, componentName, exportName, isDefaultExport }
+    return ctx.filePath.includes("/shared/components/");
+  },
+});
+```
 
 #### Dynamic interpolations
 

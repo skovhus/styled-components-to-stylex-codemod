@@ -49,6 +49,7 @@ export function assertValidAdapter(
   const resolveValue = obj?.resolveValue;
   const resolveCall = obj?.resolveCall;
   const shouldSupportExternalStyling = obj?.shouldSupportExternalStyling;
+  const shouldSupportAsProp = obj?.shouldSupportAsProp;
 
   if (!candidate || typeof candidate !== "object") {
     throw new Error(
@@ -114,6 +115,15 @@ export function assertValidAdapter(
       [
         `${where}: adapter.shouldSupportExternalStyling must be a function.`,
         `Received: shouldSupportExternalStyling=${describeValue(shouldSupportExternalStyling)}`,
+      ].join("\n"),
+    );
+  }
+
+  if (shouldSupportAsProp !== undefined && typeof shouldSupportAsProp !== "function") {
+    throw new Error(
+      [
+        `${where}: adapter.shouldSupportAsProp must be a function when provided.`,
+        `Received: shouldSupportAsProp=${describeValue(shouldSupportAsProp)}`,
       ].join("\n"),
     );
   }

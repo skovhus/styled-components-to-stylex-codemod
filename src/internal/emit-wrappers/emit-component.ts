@@ -35,7 +35,9 @@ export function emitComponentWrappers(emitter: WrapperEmitter): {
     }
     const wrappedComponent = d.base.ident;
     const wrappedComponentHasAs = wrapperNames.has(wrappedComponent);
-    const isPolymorphicComponentWrapper = wrapperNames.has(d.localName) && !wrappedComponentHasAs;
+    const supportsAsProp = d.supportsAsProp ?? false;
+    const shouldAllowAsProp = wrapperNames.has(d.localName) || supportsAsProp;
+    const isPolymorphicComponentWrapper = shouldAllowAsProp && !wrappedComponentHasAs;
     const allowClassNameProp = emitter.shouldAllowClassNameProp(d);
     const allowStyleProp = emitter.shouldAllowStyleProp(d);
     const propsIdForExpr = j.identifier("props");

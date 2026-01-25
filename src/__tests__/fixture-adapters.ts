@@ -7,6 +7,8 @@ const externalStylingFilePaths = [
   "attrs-polymorphic-as",
 ];
 
+const asPropFilePaths = ["exported-as-prop"];
+
 // Fixtures don't use theme resolution, but the transformer requires an adapter.
 export const fixtureAdapter = defineAdapter({
   // Use mergedSx merger function for cleaner className/style merging output
@@ -35,6 +37,14 @@ export const fixtureAdapter = defineAdapter({
       return ctx.componentName === "TextColor" || ctx.componentName === "ThemeText";
     }
 
+    return false;
+  },
+
+  // Enable `as` prop support for exported components in selected fixtures.
+  shouldSupportAsProp(ctx) {
+    if (asPropFilePaths.some((filePath) => ctx.filePath.includes(filePath))) {
+      return true;
+    }
     return false;
   },
 

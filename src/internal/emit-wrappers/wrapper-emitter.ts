@@ -209,6 +209,20 @@ export class WrapperEmitter {
     return used.has("*") || used.has("style");
   }
 
+  shouldAllowAsPropForIntrinsic(d: StyledDecl, tagName: string): boolean {
+    if (VOID_TAGS.has(tagName)) {
+      return false;
+    }
+    if (d.supportsAsProp) {
+      return true;
+    }
+    if (d.supportsExternalStyles) {
+      return true;
+    }
+    const used = this.getUsedAttrs(d.localName);
+    return used.has("as") || used.has("forwardedAs");
+  }
+
   private stringifyTsTypeName(n: AstNodeOrNull): string | null {
     if (!n) {
       return null;
@@ -825,6 +839,7 @@ export class WrapperEmitter {
     propDefaults?: Map<string, string>;
     allowClassNameProp?: boolean;
     allowStyleProp?: boolean;
+    allowAsProp?: boolean;
     includeRest?: boolean;
     defaultAttrs?: Array<{ jsxProp: string; attrName: string; value: unknown }>;
     conditionalAttrs?: Array<{ jsxProp: string; attrName: string; value: unknown }>;
@@ -842,6 +857,7 @@ export class WrapperEmitter {
       propDefaults,
       allowClassNameProp = false,
       allowStyleProp = false,
+      allowAsProp = false,
       includeRest = true,
       defaultAttrs = [],
       conditionalAttrs = [],
@@ -930,6 +946,16 @@ export class WrapperEmitter {
     const propsId = j.identifier("props");
 
     const patternProps: Array<Property | RestElement> = [];
+    if (allowAsProp) {
+      patternProps.push(
+        j.property.from({
+          kind: "init",
+          key: j.identifier("as"),
+          value: j.assignmentPattern(j.identifier("Component"), j.literal(tagName)),
+          shorthand: false,
+        }) as Property,
+      );
+    }
     if (!isVoidTag) {
       patternProps.push(this.patternProp("children"));
     }
@@ -1081,10 +1107,11 @@ export class WrapperEmitter {
       );
     }
 
-    const openingEl = j.jsxOpeningElement(j.jsxIdentifier(tagName), jsxAttrs, isVoidTag);
+    const renderedTagName = allowAsProp ? "Component" : tagName;
+    const openingEl = j.jsxOpeningElement(j.jsxIdentifier(renderedTagName), jsxAttrs, isVoidTag);
     const jsx = j.jsxElement(
       openingEl,
-      isVoidTag ? null : j.jsxClosingElement(j.jsxIdentifier(tagName)),
+      isVoidTag ? null : j.jsxClosingElement(j.jsxIdentifier(renderedTagName)),
       isVoidTag ? [] : [j.jsxExpressionContainer(j.identifier("children"))],
     );
 

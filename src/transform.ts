@@ -932,6 +932,23 @@ export function transformWithWarnings(
     });
   }
 
+  // Determine supportsAsProp for each decl (before emitStylesAndImports for wrapper generation)
+  const shouldSupportAsProp =
+    typeof adapter.shouldSupportAsProp === "function" ? adapter.shouldSupportAsProp : null;
+  for (const decl of styledDecls) {
+    const exportInfo = exportedComponents.get(decl.localName);
+    if (!exportInfo || !shouldSupportAsProp) {
+      decl.supportsAsProp = false;
+      continue;
+    }
+    decl.supportsAsProp = shouldSupportAsProp({
+      filePath: file.path,
+      componentName: decl.localName,
+      exportName: exportInfo.exportName,
+      isDefaultExport: exportInfo.isDefault,
+    });
+  }
+
   // Early detection of components used as values (before emitStylesAndImports for merger import)
   // Components passed as props (e.g., <Component elementType={StyledDiv} />) need className/style merging
   for (const decl of styledDecls) {
