@@ -52,7 +52,7 @@ import {
   extractUnionLiteralValues,
   groupVariantBucketsIntoDimensions,
 } from "./lower-rules/variants.js";
-import { mergeStyleObjects, toKebab } from "./lower-rules/utils.js";
+import { ensureStyleMapWithDefault, mergeStyleObjects, toKebab } from "./lower-rules/utils.js";
 import { addResolverImport, addResolverImports } from "./resolver-imports.js";
 import {
   normalizeSelectorForInputAttributePseudos,
@@ -2729,44 +2729,16 @@ export function lowerRules(args: {
               // overwriting the base/default value.
               if (media) {
                 const existing = target[stylexProp];
-                const map =
-                  existing &&
-                  typeof existing === "object" &&
-                  !Array.isArray(existing) &&
-                  !isAstNode(existing)
-                    ? (existing as Record<string, unknown>)
-                    : ({} as Record<string, unknown>);
-                // Set default from target first, then fall back to base styleObj.
-                // Only use null if neither has a value (for properties like outlineStyle that need explicit null).
-                if (!("default" in map)) {
-                  const baseValue = existing ?? styleObj[stylexProp];
-                  map.default = baseValue ?? null;
-                }
+                const map = ensureStyleMapWithDefault(existing, styleObj[stylexProp]);
                 map[media] = parsed.exprAst as any;
                 target[stylexProp] = map;
                 return;
               }
               if (pseudos?.length) {
                 const existing = target[stylexProp];
-                // `existing` may be:
-                // - a scalar (string/number)
-                // - an AST node (e.g. { type: "StringLiteral", ... })
-                // - an already-built pseudo map (plain object with `default` / `:hover` keys)
-                //
-                // Only treat it as an existing pseudo map when it's a plain object *and* not an AST node.
-                const map =
-                  existing &&
-                  typeof existing === "object" &&
-                  !Array.isArray(existing) &&
-                  !isAstNode(existing)
-                    ? (existing as Record<string, unknown>)
-                    : ({} as Record<string, unknown>);
-                // Set default from target first, then fall back to base styleObj.
-                // Only use null if neither has a value (for properties like outlineStyle that need explicit null).
-                if (!("default" in map)) {
-                  const baseValue = existing ?? styleObj[stylexProp];
-                  map.default = baseValue ?? null;
-                }
+                // `existing` may be a scalar, AST node, or existing pseudo map.
+                // Only treat it as a map when it's a plain object and not an AST node.
+                const map = ensureStyleMapWithDefault(existing, styleObj[stylexProp]);
                 // Apply to all pseudos (e.g., both :hover and :focus for "&:hover, &:focus")
                 for (const ps of pseudos) {
                   map[ps] = parsed.exprAst as any;
@@ -2886,19 +2858,7 @@ export function lowerRules(args: {
               addResolverImports(resolverImports, parsed.imports);
               if (pseudos?.length) {
                 const existing = target[stylexPropMulti];
-                const map =
-                  existing &&
-                  typeof existing === "object" &&
-                  !Array.isArray(existing) &&
-                  !isAstNode(existing)
-                    ? (existing as Record<string, unknown>)
-                    : ({} as Record<string, unknown>);
-                // Set default from target first, then fall back to base styleObj.
-                // Only use null if neither has a value (for properties like outlineStyle that need explicit null).
-                if (!("default" in map)) {
-                  const baseValue = existing ?? styleObj[stylexPropMulti];
-                  map.default = baseValue ?? null;
-                }
+                const map = ensureStyleMapWithDefault(existing, styleObj[stylexPropMulti]);
                 for (const ps of pseudos) {
                   map[ps] = parsed.exprAst as any;
                 }
