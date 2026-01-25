@@ -4,12 +4,10 @@ export function ensureStyleMapWithDefault(
   existing: unknown,
   baseValue: unknown,
 ): Record<string, unknown> {
-  const existingMap = isPlainObject(existing);
-  const map = (existingMap ? existing : {}) as Record<string, unknown>;
+  const map = (isPlainObject(existing) ? existing : {}) as Record<string, unknown>;
   if (!("default" in map)) {
-    const fallback = existingMap ? baseValue : existing;
-    const defaultValue = fallback === map ? null : fallback;
-    map.default = defaultValue ?? null;
+    const fallback = existing ?? baseValue;
+    map.default = fallback ?? null;
   }
   return map;
 }
