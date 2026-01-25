@@ -690,7 +690,7 @@ export const App = () => <Button>Click</Button>;
 describe("styleMerger configuration", () => {
   const mergerAdapter = {
     externalInterface() {
-      return { styles: true, as: false };
+      return { styles: true } as const;
     },
     resolveValue() {
       return null;
@@ -871,7 +871,7 @@ export const App = () => <Box $delay={100} />;
     const adapterWithoutMerger = {
       styleMerger: null,
       externalInterface() {
-        return { styles: true, as: false };
+        return { styles: true } as const;
       },
       resolveValue() {
         return null;

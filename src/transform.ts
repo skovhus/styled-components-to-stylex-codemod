@@ -934,7 +934,9 @@ export function transformWithWarnings(
       isDefaultExport: exportInfo.isDefault,
     });
     decl.supportsExternalStyles = extResult?.styles === true;
-    decl.supportsAsProp = extResult?.as === true;
+    // When styles: true, `as` is implicitly enabled (no `as` property in that branch)
+    // When styles: false, check the explicit `as` property
+    decl.supportsAsProp = extResult?.styles === false && extResult.as === true;
   }
 
   // Early detection of components used as values (before emitStylesAndImports for merger import)

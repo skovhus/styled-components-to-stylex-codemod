@@ -706,6 +706,13 @@ export function emitIntrinsicWrappers(emitter: WrapperEmitter): {
         }
       }
 
+      // Add style function calls for dynamic prop-based styles
+      emitter.buildStyleFnExpressions({
+        d,
+        styleArgs,
+        destructureProps,
+      });
+
       const isVoidTag = VOID_TAGS.has(tagName);
       const propsParamId = j.identifier("props");
       if (emitTypes) {
@@ -2091,31 +2098,12 @@ export function emitIntrinsicWrappers(emitter: WrapperEmitter): {
       }
     }
 
-    const styleFnPairs = d.styleFnFromProps ?? [];
-    for (const p of styleFnPairs) {
-      const propExpr = p.jsxProp === "__props" ? j.identifier("props") : j.identifier(p.jsxProp);
-      const call = j.callExpression(
-        j.memberExpression(j.identifier(stylesIdentifier), j.identifier(p.fnKey)),
-        [propExpr],
-      );
-      if (p.jsxProp !== "__props" && !destructureProps.includes(p.jsxProp)) {
-        destructureProps.push(p.jsxProp);
-      }
-      if (p.condition === "truthy") {
-        const truthy = j.unaryExpression("!", j.unaryExpression("!", propExpr));
-        styleArgs.push(j.logicalExpression("&&", truthy, call));
-        continue;
-      }
-      const required =
-        p.jsxProp === "__props" || emitter.isPropRequiredInPropsTypeLiteral(d.propsType, p.jsxProp);
-      if (required) {
-        styleArgs.push(call);
-      } else {
-        styleArgs.push(
-          j.logicalExpression("&&", j.binaryExpression("!=", propExpr, j.nullLiteral()), call),
-        );
-      }
-    }
+    // Add style function calls for dynamic prop-based styles
+    emitter.buildStyleFnExpressions({
+      d,
+      styleArgs,
+      destructureProps,
+    });
 
     if (d.attrsInfo?.conditionalAttrs?.length) {
       for (const c of d.attrsInfo.conditionalAttrs) {

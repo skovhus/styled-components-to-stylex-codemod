@@ -27,7 +27,7 @@ export const fixtureAdapter = defineAdapter({
   // Configure external interface for exported components
   externalInterface(ctx): ExternalInterfaceResult {
     let styles = false;
-    let as = false;
+    let asOnly = false;
 
     // Enable external styles for exported components in specific test cases where the expected
     // output includes className/style prop support and HTMLAttributes extension.
@@ -43,15 +43,20 @@ export const fixtureAdapter = defineAdapter({
       }
     }
 
-    // Enable `as` prop support for exported components in selected fixtures.
+    // Enable `as` prop support (without styles) for exported components in selected fixtures.
     if (asPropFilePaths.some((filePath) => ctx.filePath.includes(filePath))) {
-      as = true;
+      asOnly = true;
     }
 
-    if (!styles && !as) {
-      return null;
+    // When styles is true, `as` is implicitly enabled
+    if (styles) {
+      return { styles: true };
     }
-    return { styles: styles, as: as };
+    // When only `as` is needed (no style merging)
+    if (asOnly) {
+      return { styles: false, as: true };
+    }
+    return null;
   },
 
   resolveValue(ctx) {

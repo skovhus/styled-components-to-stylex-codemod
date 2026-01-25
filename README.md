@@ -168,7 +168,7 @@ const adapter = defineAdapter({
 
   externalInterface(ctx) {
     if (ctx.filePath.includes("/shared/components/")) {
-      return { styles: true, as: false };
+      return { styles: true };
     }
     return null;
   },
@@ -211,17 +211,12 @@ const adapter = defineAdapter({
   externalInterface(ctx) {
     // ctx: { filePath, componentName, exportName, isDefaultExport }
 
-    // Example: Enable styles for all exports in shared components folder
+    // Example: Enable styles (and `as`) for all exports in shared components folder
     if (ctx.filePath.includes("/shared/components/")) {
-      return { styles: true, as: false };
+      return { styles: true };
     }
 
-    // Example: Enable both styles and `as` prop for specific components
-    if (ctx.componentName === "Button" || ctx.componentName === "Card") {
-      return { styles: true, as: true };
-    }
-
-    // Example: Enable only `as` prop
+    // Example: Enable only `as` prop (no style merging)
     if (ctx.componentName === "Typography") {
       return { styles: false, as: true };
     }
@@ -237,17 +232,18 @@ const adapter = defineAdapter({
 The `externalInterface` method returns:
 
 - `null` — no external interface (neither className/style nor `as` prop)
-- `{ styles: true, as: false }` — accept className/style props for external styling
-- `{ styles: false, as: true }` — accept polymorphic `as` prop
-- `{ styles: true, as: true }` — both features enabled
+- `{ styles: true }` — accept className/style props AND polymorphic `as` prop
+- `{ styles: false, as: true }` — accept only polymorphic `as` prop (no style merging)
+- `{ styles: false, as: false }` — equivalent to `null`
 
 When `styles: true`, the generated component will:
 
 - Accept `className` and `style` props
 - Merge them with the StyleX-generated styles
 - Forward remaining props via `...rest`
+- Accept polymorphic `as` prop (required for style merging to work correctly)
 
-When `as: true`, the generated component will accept a polymorphic `as` prop to render as a different element or component.
+When `{ styles: false, as: true }`, the generated component will accept a polymorphic `as` prop but won't include className/style merging.
 
 #### Dynamic interpolations
 

@@ -157,18 +157,15 @@ export interface ExternalInterfaceContext {
 /**
  * Result type for `adapter.externalInterface(...)`.
  *
- * - `null` → no external interface support (both disabled)
- * - `{ styles: true }` → only className/style support
- * - `{ as: true }` → only polymorphic as prop support
- * - `{ as: true, styles: true }` → both features enabled
- * - Omitted properties default to `false`
+ * - `null` → no external interface support (neither styles nor `as`)
+ * - `{ styles: true }` → enable className/style support AND polymorphic `as` prop
+ * - `{ styles: false, as: true }` → enable only polymorphic `as` prop (no style merging)
+ * - `{ styles: false, as: false }` → equivalent to `null`
+ *
+ * Note: When `styles: true`, the `as` prop is always enabled because the style
+ * merging implementation requires polymorphic rendering support.
  */
-export type ExternalInterfaceResult = {
-  /** Enable className/style prop support for external styling */
-  styles?: boolean;
-  /** Enable polymorphic `as` prop support */
-  as?: boolean;
-} | null;
+export type ExternalInterfaceResult = { styles: true } | { styles: false; as: boolean } | null;
 
 // ────────────────────────────────────────────────────────────────────────────
 // Style Merger Configuration
@@ -227,11 +224,10 @@ export interface Adapter {
    * Called for exported styled components to determine their external interface.
    *
    * Return:
-   * - `null` → no external interface (neither className/style nor `as` prop)
-   * - `{ styles: true }` → accept className/style props for external styling
-   * - `{ as: true }` → accept polymorphic `as` prop
-   * - `{ styles: true, as: true }` → both features enabled
-   * - Omitted properties default to `false`
+   * - `null` → no external interface (neither styles nor `as`)
+   * - `{ styles: true }` → accept className/style props AND polymorphic `as` prop
+   * - `{ styles: false, as: true }` → accept only polymorphic `as` prop
+   * - `{ styles: false, as: false }` → equivalent to `null`
    */
   externalInterface: (context: ExternalInterfaceContext) => ExternalInterfaceResult;
 
@@ -289,9 +285,9 @@ export interface Adapter {
  *
  *     // Configure external interface for exported components
  *     externalInterface(ctx) {
- *       // Example: Enable styles for shared components folder
+ *       // Example: Enable styles (and `as`) for shared components folder
  *       if (ctx.filePath.includes("/shared/components/")) {
- *         return { styles: true, as: false };
+ *         return { styles: true };
  *       }
  *       return null;
  *     },
