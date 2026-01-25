@@ -60,6 +60,9 @@ export type DescendantOverride = {
 };
 
 type ExpressionKind = Parameters<JSCodeshift["expressionStatement"]>[0];
+type AstPath = { node: ASTNode; parentPath?: AstPath | null };
+type IdentifierNode = { type: "Identifier"; name: string };
+type CallExpressionNode = { type: "CallExpression"; callee: unknown };
 
 export function lowerRules(args: {
   api: API;
@@ -242,6 +245,291 @@ export function lowerRules(args: {
   };
 
   const usedCssHelperFunctions = new Set<string>();
+
+  const shadowedIdentCache = new WeakMap<object, boolean>();
+  const isFunctionNode = (node: any): boolean =>
+    !!node &&
+    (node.type === "FunctionDeclaration" ||
+      node.type === "FunctionExpression" ||
+      node.type === "ArrowFunctionExpression");
+  const isLoopNode = (node: any): boolean =>
+    !!node &&
+    (node.type === "ForStatement" ||
+      node.type === "ForInStatement" ||
+      node.type === "ForOfStatement");
+  const collectPatternIdentifiers = (pattern: any, out: Set<string>): void => {
+    if (!pattern || typeof pattern !== "object") {
+      return;
+    }
+    switch (pattern.type) {
+      case "Identifier":
+        out.add(pattern.name);
+        return;
+      case "RestElement":
+        collectPatternIdentifiers(pattern.argument, out);
+        return;
+      case "AssignmentPattern":
+        collectPatternIdentifiers(pattern.left, out);
+        return;
+      case "ObjectPattern":
+        for (const prop of pattern.properties ?? []) {
+          if (!prop) {
+            continue;
+          }
+          if (prop.type === "RestElement") {
+            collectPatternIdentifiers(prop.argument, out);
+          } else {
+            collectPatternIdentifiers(prop.value ?? prop.argument, out);
+          }
+        }
+        return;
+      case "ArrayPattern":
+        for (const elem of pattern.elements ?? []) {
+          collectPatternIdentifiers(elem, out);
+        }
+        return;
+      case "TSParameterProperty":
+        collectPatternIdentifiers(pattern.parameter, out);
+        return;
+      default:
+        return;
+    }
+  };
+  const getRootIdentifierInfo = (
+    node: any,
+  ): { rootName: string; rootNode: any; path: string[] } | null => {
+    if (!node || typeof node !== "object") {
+      return null;
+    }
+    if (node.type === "Identifier") {
+      return { rootName: node.name, rootNode: node, path: [] };
+    }
+    if (node.type !== "MemberExpression" && node.type !== "OptionalMemberExpression") {
+      return null;
+    }
+    const parts: string[] = [];
+    let cur: any = node;
+    while (cur && (cur.type === "MemberExpression" || cur.type === "OptionalMemberExpression")) {
+      if (cur.computed) {
+        return null;
+      }
+      if (cur.property?.type !== "Identifier") {
+        return null;
+      }
+      parts.unshift(cur.property.name);
+      cur = cur.object;
+    }
+    if (cur?.type !== "Identifier") {
+      return null;
+    }
+    return { rootName: cur.name, rootNode: cur, path: parts };
+  };
+  const isAstPath = (value: unknown): value is AstPath =>
+    !!value && typeof value === "object" && "node" in value;
+  const isIdentifierNode = (node: unknown): node is IdentifierNode => {
+    if (!node || typeof node !== "object") {
+      return false;
+    }
+    const typed = node as { type?: unknown; name?: unknown };
+    return typed.type === "Identifier" && typeof typed.name === "string";
+  };
+  const isCallExpressionNode = (node: unknown): node is CallExpressionNode => {
+    if (!node || typeof node !== "object") {
+      return false;
+    }
+    return (node as { type?: unknown }).type === "CallExpression";
+  };
+  const getDeclaratorId = (decl: unknown): unknown => {
+    if (!decl || typeof decl !== "object") {
+      return null;
+    }
+    if (!("id" in decl)) {
+      return null;
+    }
+    return (decl as { id?: unknown }).id ?? null;
+  };
+  const findIdentifierPath = (identNode: unknown): AstPath | null => {
+    if (!identNode || typeof identNode !== "object") {
+      return null;
+    }
+    const paths = root
+      .find(j.Identifier)
+      .filter((p) => p.node === identNode)
+      .paths();
+    const first = paths[0] ?? null;
+    return first && isAstPath(first) ? first : null;
+  };
+  const getNearestFunctionNode = (path: AstPath | null): ASTNode | null => {
+    let cur: AstPath | null | undefined = path;
+    while (cur) {
+      if (isFunctionNode(cur.node)) {
+        return cur.node;
+      }
+      cur = cur.parentPath ?? null;
+    }
+    return null;
+  };
+  const functionHasVarBinding = (fn: any, name: string): boolean => {
+    const body = fn?.body;
+    if (!body || typeof body !== "object") {
+      return false;
+    }
+    let found = false;
+    j(body)
+      .find(j.VariableDeclaration, { kind: "var" })
+      .forEach((p) => {
+        if (found) {
+          return;
+        }
+        const nearestFn = getNearestFunctionNode(p);
+        if (nearestFn !== fn) {
+          return;
+        }
+        for (const decl of p.node.declarations ?? []) {
+          const ids = new Set<string>();
+          const declId = getDeclaratorId(decl);
+          if (!declId) {
+            continue;
+          }
+          collectPatternIdentifiers(declId, ids);
+          if (ids.has(name)) {
+            found = true;
+            return;
+          }
+        }
+      });
+    return found;
+  };
+  const blockDeclaresName = (block: any, name: string): boolean => {
+    const body = block?.body ?? [];
+    for (const stmt of body) {
+      if (!stmt || typeof stmt !== "object") {
+        continue;
+      }
+      if (stmt.type === "VariableDeclaration" && (stmt.kind === "let" || stmt.kind === "const")) {
+        for (const decl of stmt.declarations ?? []) {
+          const ids = new Set<string>();
+          collectPatternIdentifiers(decl.id, ids);
+          if (ids.has(name)) {
+            return true;
+          }
+        }
+      } else if (stmt.type === "FunctionDeclaration" || stmt.type === "ClassDeclaration") {
+        if (stmt.id?.type === "Identifier" && stmt.id.name === name) {
+          return true;
+        }
+      }
+    }
+    return false;
+  };
+  const functionDeclaresName = (fn: any, name: string): boolean => {
+    if (fn?.id?.type === "Identifier" && fn.id.name === name) {
+      return true;
+    }
+    for (const param of fn?.params ?? []) {
+      const ids = new Set<string>();
+      collectPatternIdentifiers(param, ids);
+      if (ids.has(name)) {
+        return true;
+      }
+    }
+    return functionHasVarBinding(fn, name);
+  };
+  const loopDeclaresName = (node: any, name: string): boolean => {
+    const init = node?.init ?? node?.left;
+    if (!init || typeof init !== "object") {
+      return false;
+    }
+    if (init.type === "VariableDeclaration" && (init.kind === "let" || init.kind === "const")) {
+      for (const decl of init.declarations ?? []) {
+        const ids = new Set<string>();
+        collectPatternIdentifiers(decl.id, ids);
+        if (ids.has(name)) {
+          return true;
+        }
+      }
+    }
+    return false;
+  };
+  const isIdentifierShadowed = (identNode: any, name: string): boolean => {
+    if (!identNode || typeof identNode !== "object") {
+      return true;
+    }
+    const cached = shadowedIdentCache.get(identNode);
+    if (cached !== undefined) {
+      return cached;
+    }
+    const path = findIdentifierPath(identNode);
+    if (!path) {
+      // If the identifier isn't in the root AST (e.g. synthetic nodes), we can't prove shadowing.
+      // Treat as not shadowed so adapter-driven resolution can still apply.
+      shadowedIdentCache.set(identNode, false);
+      return false;
+    }
+    let cur: any = path;
+    while (cur) {
+      const node = cur.node;
+      if (isFunctionNode(node) && functionDeclaresName(node, name)) {
+        shadowedIdentCache.set(identNode, true);
+        return true;
+      }
+      if (node?.type === "BlockStatement" && blockDeclaresName(node, name)) {
+        shadowedIdentCache.set(identNode, true);
+        return true;
+      }
+      if (node?.type === "CatchClause") {
+        const ids = new Set<string>();
+        collectPatternIdentifiers(node.param, ids);
+        if (ids.has(name)) {
+          shadowedIdentCache.set(identNode, true);
+          return true;
+        }
+      }
+      if (isLoopNode(node) && loopDeclaresName(node, name)) {
+        shadowedIdentCache.set(identNode, true);
+        return true;
+      }
+      cur = cur.parentPath;
+    }
+    shadowedIdentCache.set(identNode, false);
+    return false;
+  };
+  const getCallCalleeIdentifier = (expr: unknown, localName: string): IdentifierNode | null => {
+    if (!isCallExpressionNode(expr)) {
+      return null;
+    }
+    const callee = expr.callee;
+    if (isIdentifierNode(callee) && callee.name === localName) {
+      return callee;
+    }
+    if (isCallExpressionNode(callee)) {
+      const innerCallee = callee.callee;
+      if (isIdentifierNode(innerCallee) && innerCallee.name === localName) {
+        return innerCallee;
+      }
+    }
+    return null;
+  };
+  const resolveImportForIdent = (localName: string, identNode?: object | null) => {
+    if (identNode && isIdentifierShadowed(identNode, localName)) {
+      return null;
+    }
+    const v = importMap.get(localName);
+    return v ? v : null;
+  };
+  const resolveImportForExpr = (expr: unknown, localName: string) => {
+    const calleeIdent = getCallCalleeIdentifier(expr, localName);
+    if (!calleeIdent) {
+      return null;
+    }
+    return resolveImportForIdent(localName, calleeIdent);
+  };
+  const resolveImportInScope = (localName: string, identNode?: unknown) => {
+    if (identNode && typeof identNode === "object") {
+      return resolveImportForIdent(localName, identNode);
+    }
+    return resolveImportForIdent(localName, null);
+  };
 
   for (const decl of styledDecls) {
     if (decl.preResolvedStyle) {
@@ -1602,44 +1890,11 @@ export function lowerRules(args: {
           const resolveImportedValueExpr = (
             expr: any,
           ): { resolved: any; imports?: any[] } | null => {
-            if (!expr || typeof expr !== "object") {
-              return null;
-            }
-            const extractRootAndPath = (node: any): { root: string; path: string[] } | null => {
-              if (!node || typeof node !== "object") {
-                return null;
-              }
-              if (node.type === "Identifier") {
-                return { root: node.name, path: [] };
-              }
-              if (node.type !== "MemberExpression" && node.type !== "OptionalMemberExpression") {
-                return null;
-              }
-              const parts: string[] = [];
-              let cur: any = node;
-              while (
-                cur &&
-                (cur.type === "MemberExpression" || cur.type === "OptionalMemberExpression")
-              ) {
-                if (cur.computed) {
-                  return null;
-                }
-                if (cur.property?.type !== "Identifier") {
-                  return null;
-                }
-                parts.unshift(cur.property.name);
-                cur = cur.object;
-              }
-              if (cur?.type !== "Identifier") {
-                return null;
-              }
-              return { root: cur.name, path: parts };
-            };
-            const info = extractRootAndPath(expr);
+            const info = getRootIdentifierInfo(expr);
             if (!info) {
               return null;
             }
-            const imp = importMap.get(info.root);
+            const imp = resolveImportInScope(info.rootName, info.rootNode);
             if (!imp) {
               return null;
             }
@@ -1696,10 +1951,7 @@ export function lowerRules(args: {
                 filePath,
                 resolveValue,
                 resolveCall,
-                resolveImport: (localName: string) => {
-                  const v = importMap.get(localName);
-                  return v ? v : null;
-                },
+                resolveImport: (localName: string) => resolveImportForExpr(expr, localName),
               } satisfies InternalHandlerContext,
             );
             if (res && res.type === "resolvedValue") {
@@ -2152,12 +2404,13 @@ export function lowerRules(args: {
 
           const slotPart = d.value.parts.find((p: any) => p.kind === "slot");
           const slotId = slotPart && slotPart.kind === "slot" ? slotPart.slotId : 0;
-          const loc = getNodeLocStart(decl.templateExpressions[slotId] as any);
+          const expr = decl.templateExpressions[slotId];
+          const loc = getNodeLocStart(expr as any);
 
           const res = resolveDynamicNode(
             {
               slotId,
-              expr: decl.templateExpressions[slotId],
+              expr,
               css: {
                 kind: "declaration",
                 selector: rule.selector,
@@ -2177,10 +2430,7 @@ export function lowerRules(args: {
               filePath,
               resolveValue,
               resolveCall,
-              resolveImport: (localName: string) => {
-                const v = importMap.get(localName);
-                return v ? v : null;
-              },
+              resolveImport: resolveImportInScope,
             } satisfies InternalHandlerContext,
           );
 

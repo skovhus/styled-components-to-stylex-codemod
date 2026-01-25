@@ -199,7 +199,10 @@ export type InternalHandlerContext = {
   filePath: string;
   resolveValue: (context: ResolveValueContext) => ResolveValueResult | null;
   resolveCall: (context: CallResolveContext) => CallResolveResult | null;
-  resolveImport: (localName: string) => {
+  resolveImport: (
+    localName: string,
+    identNode?: unknown,
+  ) => {
     importedName: string;
     source: ImportSource;
   } | null;
@@ -437,8 +440,8 @@ function tryResolveCallExpression(
   if (simple === "unresolved") {
     // This is a supported helper-call shape but the adapter chose not to resolve it.
     // Treat as unsupported so the caller can bail and surface a warning.
+    const callee = expr.callee;
     const calleeIdent = (() => {
-      const callee = expr.callee;
       if (!callee || typeof callee !== "object") {
         return null;
       }
