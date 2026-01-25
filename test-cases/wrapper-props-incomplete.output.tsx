@@ -1,7 +1,7 @@
 import * as React from "react";
 import * as stylex from "@stylexjs/stylex";
 import { mergedSx } from "./lib/mergedSx";
-import { themeVars } from "./tokens.stylex";
+import { $colors } from "./tokens.stylex";
 import type { Colors } from "./lib/colors";
 
 // Bug 12: When codemod generates wrapper function, the props type must include
@@ -83,6 +83,6 @@ const styles = stylex.create({
     backgroundColor: "yellow",
   },
   themeTextColor: (themeColor: Colors) => ({
-    color: themeVars[themeColor],
+    color: $colors[themeColor],
   }),
 });

@@ -1,7 +1,7 @@
 "use client";
 import React from "react";
 import * as stylex from "@stylexjs/stylex";
-import { themeVars } from "./tokens.stylex";
+import { $colors } from "./tokens.stylex";
 
 type ImgProps = Omit<React.ComponentProps<"img">, "className" | "style"> & {
   $isInactive?: boolean;
@@ -39,7 +39,7 @@ const styles = stylex.create({
     filter: "opacity(0.65)",
   },
   imgInactive: {
-    backgroundColor: themeVars.bgSub,
+    backgroundColor: $colors.bgSub,
     filter: "opacity(0.5) grayscale(1)",
   },
 });

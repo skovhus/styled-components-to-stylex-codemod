@@ -8,7 +8,7 @@
  */
 import * as React from "react";
 import * as stylex from "@stylexjs/stylex";
-import { themeVars } from "./tokens.stylex";
+import { $colors } from "./tokens.stylex";
 
 type ContainerLinkProps = Omit<React.ComponentProps<"a">, "className" | "style">;
 
@@ -42,7 +42,7 @@ export const App = () => (
 
 const styles = stylex.create({
   content: {
-    backgroundColor: themeVars.bgSub,
+    backgroundColor: $colors.bgSub,
     width: "100px",
     height: "100px",
   },
@@ -76,7 +76,7 @@ const styles = stylex.create({
   contentInContainerLink: {
     outline: {
       default: null,
-      [stylex.when.ancestor(":focus-visible")]: `10px solid ${themeVars.labelBase}`,
+      [stylex.when.ancestor(":focus-visible")]: `10px solid ${$colors.labelBase}`,
     },
     outlineOffset: {
       default: null,
@@ -86,7 +86,7 @@ const styles = stylex.create({
   shadowBoxInShadowContainer: {
     boxShadow: {
       default: null,
-      [stylex.when.ancestor(":hover")]: `0 4px 8px ${themeVars.labelBase}`,
+      [stylex.when.ancestor(":hover")]: `0 4px 8px ${$colors.labelBase}`,
     },
   },
   iconInButton: {

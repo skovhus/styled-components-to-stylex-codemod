@@ -1,7 +1,7 @@
 import * as React from "react";
 import * as stylex from "@stylexjs/stylex";
 import { mergedSx } from "./lib/mergedSx";
-import { themeVars } from "./tokens.stylex";
+import { $colors } from "./tokens.stylex";
 import { useTheme } from "styled-components";
 
 type InputProps = {
@@ -34,13 +34,13 @@ const styles = stylex.create({
   colorPickerWrapper: {
     width: "auto",
     height: "10px",
-    backgroundColor: themeVars.bgBase,
-    boxShadow: `0 2px 4px ${themeVars.primaryColor}`,
+    backgroundColor: $colors.bgBase,
+    boxShadow: `0 2px 4px ${$colors.primaryColor}`,
     borderRadius: "8px",
     display: "flex",
     borderWidth: "1px",
     borderStyle: "solid",
-    borderColor: themeVars.bgSub,
+    borderColor: $colors.bgSub,
     minWidth: "300px",
     padding: "12px",
   },

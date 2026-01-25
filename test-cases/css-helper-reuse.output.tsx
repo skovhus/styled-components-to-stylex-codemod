@@ -1,6 +1,6 @@
 import * as React from "react";
 import * as stylex from "@stylexjs/stylex";
-import { themeVars } from "./tokens.stylex";
+import { $colors } from "./tokens.stylex";
 
 type CheckMarkProps = React.PropsWithChildren<{
   $opaque: boolean;
@@ -29,10 +29,10 @@ const styles = stylex.create({
     zIndex: 3, // above regular rows
     borderTopWidth: "1px",
     borderTopStyle: "solid",
-    borderTopColor: themeVars.bgBorderFaint,
+    borderTopColor: $colors.bgBorderFaint,
     borderBottomWidth: "1px",
     borderBottomStyle: "solid",
-    borderBottomColor: themeVars.bgBorderFaint,
+    borderBottomColor: $colors.bgBorderFaint,
   },
   rowBase: {
     display: "grid",
@@ -42,12 +42,12 @@ const styles = stylex.create({
     paddingBlock: 0,
     paddingInline: "8px",
     minHeight: "36px",
-    backgroundColor: themeVars.bgBase,
+    backgroundColor: $colors.bgBase,
   },
   projectRow: {
     backgroundColor: {
-      default: themeVars.bgBase,
-      ":hover": themeVars.bgBaseHover,
+      default: $colors.bgBase,
+      ":hover": $colors.bgBaseHover,
     },
   },
   checkMark: {

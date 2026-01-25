@@ -1,6 +1,6 @@
 import React from "react";
 import * as stylex from "@stylexjs/stylex";
-import { pixelVars, themeVars } from "./tokens.stylex";
+import { pixelVars, $colors } from "./tokens.stylex";
 
 type LineProps = Omit<React.ComponentProps<"div">, "className" | "style"> & {
   $isRemoval?: boolean;
@@ -13,7 +13,7 @@ function Line(props: LineProps) {
     <div
       {...stylex.props(
         styles.line,
-        $isRemoval && styles.lineBackgroundColor($deletionColor ?? themeVars.bgBase),
+        $isRemoval && styles.lineBackgroundColor($deletionColor ?? $colors.bgBase),
       )}
     >
       {children}
@@ -32,7 +32,7 @@ export const App = () => (
 const styles = stylex.create({
   line: {
     height: pixelVars.thin,
-    backgroundColor: themeVars.bgSub,
+    backgroundColor: $colors.bgSub,
     margin: "10px",
   },
   lineBackgroundColor: (backgroundColor: string) => ({

@@ -483,6 +483,24 @@ export function lowerRules(args: {
     return resolveImportForIdent(localName, null);
   };
 
+  const isValidIdentifierName = (name: string): boolean => /^[$A-Z_][0-9A-Z_$]*$/i.test(name);
+
+  const buildSafeIndexedParamName = (
+    preferred: string,
+    containerExpr: ExpressionKind | null,
+  ): string => {
+    if (!isValidIdentifierName(preferred)) {
+      return "propValue";
+    }
+    if (
+      containerExpr?.type === "Identifier" &&
+      (containerExpr as { name?: string }).name === preferred
+    ) {
+      return `${preferred}Value`;
+    }
+    return preferred;
+  };
+
   for (const decl of styledDecls) {
     if (decl.preResolvedStyle) {
       resolvedStyleObjects.set(decl.styleKey, decl.preResolvedStyle);
@@ -2272,12 +2290,14 @@ export function lowerRules(args: {
                 // NOTE: This is TypeScript-only syntax (TSAsExpression + `keyof typeof`),
                 // so we parse it explicitly with a TSX parser here rather than relying on
                 // the generic `parseExpr` helper.
+                const resolvedExprAst = parseExpr(resolved.expr);
+                const paramName = buildSafeIndexedParamName(indexPropName, resolvedExprAst);
                 const indexedExprAst = (() => {
                   // We intentionally do NOT add `as keyof typeof themeVars` fallbacks.
                   // If a fixture uses a `string` key to index theme colors, it should be fixed at the
                   // input/type level to use a proper key union (e.g. `Colors`), and the output should
                   // reflect that contract.
-                  const exprSource = `(${resolved.expr})[${indexPropName}]`;
+                  const exprSource = `(${resolved.expr})[${paramName}]`;
                   try {
                     const jParse = api.jscodeshift.withParser("tsx");
                     const program = jParse(`(${exprSource});`);
@@ -2307,7 +2327,7 @@ export function lowerRules(args: {
                   continue;
                 }
 
-                const param = j.identifier(indexPropName);
+                const param = j.identifier(paramName);
                 // Prefer the prop's own type when available (e.g. `Color` / `Colors`) so we don't end up with
                 // `keyof typeof themeVars` in fixture outputs.
                 const propTsType = findJsxPropTsType(indexPropName);
@@ -2993,7 +3013,8 @@ export function lowerRules(args: {
               if (!styleFnDecls.has(fnKey)) {
                 // Get prop type from component's type annotation if available
                 const propTsType = findJsxPropTsType(res.propName);
-                const param = j.identifier(res.propName);
+                const paramName = buildSafeIndexedParamName(res.propName, themeObjAst);
+                const param = j.identifier(paramName);
 
                 // Add type annotation (without | undefined since the function is only called when defined)
                 if (propTsType && typeof propTsType === "object" && (propTsType as any).type) {
@@ -3003,7 +3024,7 @@ export function lowerRules(args: {
                 // Build: themeObj[propName] (no conditional - fallback is in base style)
                 const valueExpr = j.memberExpression(
                   themeObjAst as any,
-                  j.identifier(res.propName),
+                  j.identifier(paramName),
                   true,
                 );
 

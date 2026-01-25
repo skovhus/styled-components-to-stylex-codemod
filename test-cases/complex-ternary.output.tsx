@@ -1,6 +1,6 @@
 import * as React from "react";
 import * as stylex from "@stylexjs/stylex";
-import { themeVars } from "./tokens.stylex";
+import { $colors } from "./tokens.stylex";
 
 type CardContainerProps = React.PropsWithChildren<{
   checked: boolean;
@@ -49,7 +49,7 @@ const styles = stylex.create({
     position: "relative",
     borderWidth: "1px",
     borderStyle: "solid",
-    borderColor: themeVars.bgSub,
+    borderColor: $colors.bgSub,
     outlineStyle: {
       default: null,
       ":focus-within:has(:focus-visible)": "solid",
@@ -58,20 +58,20 @@ const styles = stylex.create({
   cardContainerDisabled: {
     opacity: 0.5,
     borderColor: {
-      default: themeVars.bgSub,
-      ":hover": themeVars.bgBase,
+      default: $colors.bgSub,
+      ":hover": $colors.bgBase,
     },
   },
   cardContainerCheckedTrue: {
     borderColor: {
-      default: themeVars.bgSub,
-      ":hover": themeVars.bgSub,
+      default: $colors.bgSub,
+      ":hover": $colors.bgSub,
     },
   },
   cardContainerCheckedFalse: {
     borderColor: {
-      default: themeVars.bgSub,
-      ":hover": themeVars.bgBase,
+      default: $colors.bgSub,
+      ":hover": $colors.bgBase,
     },
   },
   cardContent: {

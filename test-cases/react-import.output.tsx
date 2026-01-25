@@ -1,6 +1,6 @@
 import * as React from "react";
 import * as stylex from "@stylexjs/stylex";
-import { themeVars } from "./tokens.stylex";
+import { $colors } from "./tokens.stylex";
 
 type CardProps = React.PropsWithChildren<{
   ref?: React.Ref<HTMLDivElement>;
@@ -24,7 +24,7 @@ export function Button(props: ButtonProps) {
 }
 
 // Pattern 2: Component with theme access (like TextColor.tsx in a design system)
-// Uses props.theme.color which the adapter resolves to themeVars
+// Uses props.theme.color which the adapter resolves to $colors
 interface ThemeSpanProps extends Omit<React.ComponentProps<"span">, "className" | "style"> {
   variant: "labelBase" | "labelMuted" | "labelTitle";
 }
@@ -50,6 +50,6 @@ const styles = stylex.create({
     color: "white",
   },
   themeSpanColor: (variant: "labelBase" | "labelMuted" | "labelTitle") => ({
-    color: themeVars[variant],
+    color: $colors[variant],
   }),
 });

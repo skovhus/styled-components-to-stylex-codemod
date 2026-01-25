@@ -41,17 +41,17 @@ export const fixtureAdapter = defineAdapter({
   resolveValue(ctx) {
     if (ctx.kind === "theme") {
       // Test fixtures use a small ThemeProvider theme shape:
-      //   props.theme.color.labelBase  -> themeVars.labelBase
-      //   props.theme.color[bg]        -> themeVars[bg]
+      //   props.theme.color.labelBase  -> $colors.labelBase
+      //   props.theme.color[bg]        -> $colors[bg]
       //
       // `ctx.path` is the dot-path on the theme object (no bracket/index parts).
       if (ctx.path === "color") {
         return {
-          expr: "themeVars",
+          expr: "$colors",
           imports: [
             {
               from: { kind: "specifier", value: "./tokens.stylex" },
-              names: [{ imported: "themeVars" }],
+              names: [{ imported: "$colors" }],
             },
           ],
         };
@@ -59,11 +59,11 @@ export const fixtureAdapter = defineAdapter({
 
       const lastSegment = ctx.path.split(".").pop();
       return {
-        expr: `themeVars.${lastSegment}`,
+        expr: `$colors.${lastSegment}`,
         imports: [
           {
             from: { kind: "specifier", value: "./tokens.stylex" },
-            names: [{ imported: "themeVars" }],
+            names: [{ imported: "$colors" }],
           },
         ],
       };
@@ -189,15 +189,15 @@ export const fixtureAdapter = defineAdapter({
     }
 
     // Handle color() helper from ./lib/helpers.ts
-    // color("bgBase") -> themeVars.bgBase
+    // color("bgBase") -> $colors.bgBase
     if (ctx.calleeImportedName === "color") {
       return {
         usage: "create",
-        expr: `themeVars.${key}`,
+        expr: `$colors.${key}`,
         imports: [
           {
             from: { kind: "specifier", value: "./tokens.stylex" },
-            names: [{ imported: "themeVars" }],
+            names: [{ imported: "$colors" }],
           },
         ],
       };
