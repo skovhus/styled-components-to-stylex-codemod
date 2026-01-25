@@ -179,6 +179,37 @@ export function emitIntrinsicWrappers(emitter: WrapperEmitter): {
     return didUpdate;
   };
 
+  const shouldAllowAsProp = (d: StyledDecl, tagName: string): boolean =>
+    emitter.shouldAllowAsPropForIntrinsic(d, tagName);
+
+  const asDestructureProp = (tagName: string) =>
+    j.property.from({
+      kind: "init",
+      key: j.identifier("as"),
+      value: j.assignmentPattern(j.identifier("Component"), j.literal(tagName)),
+      shorthand: false,
+    });
+
+  const withAsPropType = (typeText: string, allowAsProp: boolean): string => {
+    if (!allowAsProp) {
+      return typeText;
+    }
+    const merged = mergeAsIntoPropsWithChildren(typeText);
+    if (merged) {
+      return merged;
+    }
+    return emitter.joinIntersection(typeText, "{ as?: React.ElementType }");
+  };
+
+  const emitPropsType = (localName: string, typeText: string, allowAsProp: boolean): boolean => {
+    const typeAliasEmitted = emitNamedPropsType(localName, withAsPropType(typeText, allowAsProp));
+    if (!typeAliasEmitted && allowAsProp) {
+      addAsPropToExistingType(emitter.propsTypeNameFor(localName));
+    }
+    needsReactTypeImport = true;
+    return typeAliasEmitted;
+  };
+
   const inputWrapperDecls = wrapperDecls.filter(
     (d: StyledDecl) =>
       d.base.kind === "intrinsic" && d.base.tagName === "input" && d.attrWrapper?.kind === "input",
@@ -187,9 +218,17 @@ export function emitIntrinsicWrappers(emitter: WrapperEmitter): {
     (d: StyledDecl) =>
       d.base.kind === "intrinsic" && d.base.tagName === "a" && d.attrWrapper?.kind === "link",
   );
-  const intrinsicPolymorphicWrapperDecls = wrapperDecls.filter(
-    (d: StyledDecl) => d.base.kind === "intrinsic" && wrapperNames.has(d.localName),
-  );
+  const intrinsicPolymorphicWrapperDecls = wrapperDecls.filter((d: StyledDecl) => {
+    if (d.base.kind !== "intrinsic") {
+      return false;
+    }
+    // Skip specialized wrappers (input/link with attrWrapper) - they have their own handlers
+    if (d.attrWrapper) {
+      return false;
+    }
+    // Use wrapperNames (includes props type check and JSX usage) OR supportsAsProp (adapter opt-in)
+    return wrapperNames.has(d.localName) || (d.supportsAsProp ?? false);
+  });
   const shouldForwardPropWrapperDecls = wrapperDecls.filter(
     (d: StyledDecl) => d.shouldForwardProp && !d.enumVariant && d.base.kind === "intrinsic",
   );
@@ -200,23 +239,22 @@ export function emitIntrinsicWrappers(emitter: WrapperEmitter): {
     for (const d of inputWrapperDecls) {
       const allowClassNameProp = emitter.shouldAllowClassNameProp(d);
       const allowStyleProp = emitter.shouldAllowStyleProp(d);
+      const allowAsProp = shouldAllowAsProp(d, "input");
       const explicit = emitter.stringifyTsType(d.propsType);
-      emitNamedPropsType(
-        d.localName,
+      const baseTypeText =
         explicit ??
-          (() => {
-            const base = "React.InputHTMLAttributes<HTMLInputElement>";
-            const omitted: string[] = [];
-            if (!allowClassNameProp) {
-              omitted.push('"className"');
-            }
-            if (!allowStyleProp) {
-              omitted.push('"style"');
-            }
-            return omitted.length > 0 ? `Omit<${base}, ${omitted.join(" | ")}>` : base;
-          })(),
-      );
-      needsReactTypeImport = true;
+        (() => {
+          const base = "React.InputHTMLAttributes<HTMLInputElement>";
+          const omitted: string[] = [];
+          if (!allowClassNameProp) {
+            omitted.push('"className"');
+          }
+          if (!allowStyleProp) {
+            omitted.push('"style"');
+          }
+          return omitted.length > 0 ? `Omit<${base}, ${omitted.join(" | ")}>` : base;
+        })();
+      emitPropsType(d.localName, baseTypeText, allowAsProp);
 
       const aw = d.attrWrapper!;
       const styleArgs: ExpressionKind[] = [
@@ -244,23 +282,39 @@ export function emitIntrinsicWrappers(emitter: WrapperEmitter): {
 
       emitted.push(
         allowClassNameProp
-          ? emitTypes
-            ? (j.template.statement`
-                function ${j.identifier(d.localName)}(props: ${j.identifier(emitter.propsTypeNameFor(d.localName))}) {
-                const { type, className, ...rest } = props;
-                const sx = stylex.props(${styleArgs});
-                return (
-                  <input
-                    {...sx}
-                    className={[sx.className, className].filter(Boolean).join(" ")}
-                    type={type}
-                    {...rest}
-                  />
-                );
-              }
-              ` as any)
-            : (j.template.statement`
-                function ${j.identifier(d.localName)}(props) {
+          ? allowAsProp
+            ? emitTypes
+              ? (j.template.statement`
+                  function ${j.identifier(d.localName)}(props: ${j.identifier(emitter.propsTypeNameFor(d.localName))}) {
+                  const { as: Component = "input", type, className, ...rest } = props;
+                  const sx = stylex.props(${styleArgs});
+                  return (
+                    <Component
+                      {...sx}
+                      className={[sx.className, className].filter(Boolean).join(" ")}
+                      type={type}
+                      {...rest}
+                    />
+                  );
+                }
+                ` as any)
+              : (j.template.statement`
+                  function ${j.identifier(d.localName)}(props) {
+                    const { as: Component = "input", type, className, ...rest } = props;
+                    const sx = stylex.props(${styleArgs});
+                    return (
+                      <Component
+                        {...sx}
+                        className={[sx.className, className].filter(Boolean).join(" ")}
+                        type={type}
+                        {...rest}
+                      />
+                    );
+                  }
+                ` as any)
+            : emitTypes
+              ? (j.template.statement`
+                  function ${j.identifier(d.localName)}(props: ${j.identifier(emitter.propsTypeNameFor(d.localName))}) {
                   const { type, className, ...rest } = props;
                   const sx = stylex.props(${styleArgs});
                   return (
@@ -272,22 +326,52 @@ export function emitIntrinsicWrappers(emitter: WrapperEmitter): {
                     />
                   );
                 }
-              ` as any)
-          : emitTypes
-            ? (j.template.statement`
-                function ${j.identifier(d.localName)}(props: ${j.identifier(emitter.propsTypeNameFor(d.localName))}) {
-                  const { type, ...rest } = props;
-                  const sx = stylex.props(${styleArgs});
-                  return <input type={type} {...rest} {...sx} />;
-                }
-              ` as any)
-            : (j.template.statement`
-                function ${j.identifier(d.localName)}(props) {
-                  const { type, ...rest } = props;
-                  const sx = stylex.props(${styleArgs});
-                  return <input type={type} {...rest} {...sx} />;
-                }
-              ` as any),
+                ` as any)
+              : (j.template.statement`
+                  function ${j.identifier(d.localName)}(props) {
+                    const { type, className, ...rest } = props;
+                    const sx = stylex.props(${styleArgs});
+                    return (
+                      <input
+                        {...sx}
+                        className={[sx.className, className].filter(Boolean).join(" ")}
+                        type={type}
+                        {...rest}
+                      />
+                    );
+                  }
+                ` as any)
+          : allowAsProp
+            ? emitTypes
+              ? (j.template.statement`
+                  function ${j.identifier(d.localName)}(props: ${j.identifier(emitter.propsTypeNameFor(d.localName))}) {
+                    const { as: Component = "input", type, ...rest } = props;
+                    const sx = stylex.props(${styleArgs});
+                    return <Component type={type} {...rest} {...sx} />;
+                  }
+                ` as any)
+              : (j.template.statement`
+                  function ${j.identifier(d.localName)}(props) {
+                    const { as: Component = "input", type, ...rest } = props;
+                    const sx = stylex.props(${styleArgs});
+                    return <Component type={type} {...rest} {...sx} />;
+                  }
+                ` as any)
+            : emitTypes
+              ? (j.template.statement`
+                  function ${j.identifier(d.localName)}(props: ${j.identifier(emitter.propsTypeNameFor(d.localName))}) {
+                    const { type, ...rest } = props;
+                    const sx = stylex.props(${styleArgs});
+                    return <input type={type} {...rest} {...sx} />;
+                  }
+                ` as any)
+              : (j.template.statement`
+                  function ${j.identifier(d.localName)}(props) {
+                    const { type, ...rest } = props;
+                    const sx = stylex.props(${styleArgs});
+                    return <input type={type} {...rest} {...sx} />;
+                  }
+                ` as any),
       );
     }
   }
@@ -296,25 +380,24 @@ export function emitIntrinsicWrappers(emitter: WrapperEmitter): {
     for (const d of linkWrapperDecls) {
       const allowClassNameProp = emitter.shouldAllowClassNameProp(d);
       const allowStyleProp = emitter.shouldAllowStyleProp(d);
+      const allowAsProp = shouldAllowAsProp(d, "a");
       const explicit = emitter.stringifyTsType(d.propsType);
-      emitNamedPropsType(
-        d.localName,
+      const baseTypeText =
         explicit ??
-          emitter.withChildren(
-            (() => {
-              const base = "React.AnchorHTMLAttributes<HTMLAnchorElement>";
-              const omitted: string[] = [];
-              if (!allowClassNameProp) {
-                omitted.push('"className"');
-              }
-              if (!allowStyleProp) {
-                omitted.push('"style"');
-              }
-              return omitted.length > 0 ? `Omit<${base}, ${omitted.join(" | ")}>` : base;
-            })(),
-          ),
-      );
-      needsReactTypeImport = true;
+        emitter.withChildren(
+          (() => {
+            const base = "React.AnchorHTMLAttributes<HTMLAnchorElement>";
+            const omitted: string[] = [];
+            if (!allowClassNameProp) {
+              omitted.push('"className"');
+            }
+            if (!allowStyleProp) {
+              omitted.push('"style"');
+            }
+            return omitted.length > 0 ? `Omit<${base}, ${omitted.join(" | ")}>` : base;
+          })(),
+        );
+      emitPropsType(d.localName, baseTypeText, allowAsProp);
 
       const aw = d.attrWrapper!;
       const base = j.memberExpression(j.identifier(stylesIdentifier), j.identifier(d.styleKey));
@@ -352,30 +435,52 @@ export function emitIntrinsicWrappers(emitter: WrapperEmitter): {
 
       emitted.push(
         allowClassNameProp
-          ? emitTypes
-            ? (j.template.statement`
-                function ${j.identifier(d.localName)}(props: ${j.identifier(emitter.propsTypeNameFor(d.localName))}) {
-                  const { href, target, className, children, ...rest } = props;
-                const isHttps = href?.startsWith("https");
-                const isPdf = href?.endsWith(".pdf");
-                const isExternal = target === "_blank";
-                const sx = stylex.props(${styleArgs});
-                return (
-                  <a
-                    {...sx}
-                    className={[sx.className, className].filter(Boolean).join(" ")}
-                    href={href}
-                    target={target}
-                      {...rest}
-                  >
-                    {children}
-                  </a>
-                );
-              }
-              ` as any)
-            : (j.template.statement`
-                function ${j.identifier(d.localName)}(props) {
-                  const { href, target, className, children, ...rest } = props;
+          ? allowAsProp
+            ? emitTypes
+              ? (j.template.statement`
+                  function ${j.identifier(d.localName)}(props: ${j.identifier(emitter.propsTypeNameFor(d.localName))}) {
+                    const { as: Component = "a", href, target, className, children, ...rest } = props;
+                  const isHttps = href?.startsWith("https");
+                  const isPdf = href?.endsWith(".pdf");
+                  const isExternal = target === "_blank";
+                  const sx = stylex.props(${styleArgs});
+                  return (
+                    <Component
+                      {...sx}
+                      className={[sx.className, className].filter(Boolean).join(" ")}
+                      href={href}
+                      target={target}
+                        {...rest}
+                    >
+                      {children}
+                    </Component>
+                  );
+                }
+                ` as any)
+              : (j.template.statement`
+                  function ${j.identifier(d.localName)}(props) {
+                    const { as: Component = "a", href, target, className, children, ...rest } = props;
+                    const isHttps = href?.startsWith("https");
+                    const isPdf = href?.endsWith(".pdf");
+                    const isExternal = target === "_blank";
+                    const sx = stylex.props(${styleArgs});
+                    return (
+                      <Component
+                        {...sx}
+                        className={[sx.className, className].filter(Boolean).join(" ")}
+                        href={href}
+                        target={target}
+                        {...rest}
+                      >
+                        {children}
+                      </Component>
+                    );
+                  }
+                ` as any)
+            : emitTypes
+              ? (j.template.statement`
+                  function ${j.identifier(d.localName)}(props: ${j.identifier(emitter.propsTypeNameFor(d.localName))}) {
+                    const { href, target, className, children, ...rest } = props;
                   const isHttps = href?.startsWith("https");
                   const isPdf = href?.endsWith(".pdf");
                   const isExternal = target === "_blank";
@@ -386,42 +491,92 @@ export function emitIntrinsicWrappers(emitter: WrapperEmitter): {
                       className={[sx.className, className].filter(Boolean).join(" ")}
                       href={href}
                       target={target}
-                      {...rest}
+                        {...rest}
                     >
                       {children}
                     </a>
                   );
                 }
-              ` as any)
-          : emitTypes
-            ? (j.template.statement`
-                function ${j.identifier(d.localName)}(props: ${j.identifier(emitter.propsTypeNameFor(d.localName))}) {
-                  const { href, target, children, ...rest } = props;
-                  const isHttps = href?.startsWith("https");
-                  const isPdf = href?.endsWith(".pdf");
-                  const isExternal = target === "_blank";
-                  const sx = stylex.props(${styleArgs});
-                  return (
-                    <a href={href} target={target} {...rest} {...sx}>
-                      {children}
-                    </a>
-                  );
-                }
-              ` as any)
-            : (j.template.statement`
-                function ${j.identifier(d.localName)}(props) {
-                  const { href, target, children, ...rest } = props;
-                  const isHttps = href?.startsWith("https");
-                  const isPdf = href?.endsWith(".pdf");
-                  const isExternal = target === "_blank";
-                  const sx = stylex.props(${styleArgs});
-                  return (
-                    <a href={href} target={target} {...rest} {...sx}>
-                      {children}
-                    </a>
-                  );
-                }
-              ` as any),
+                ` as any)
+              : (j.template.statement`
+                  function ${j.identifier(d.localName)}(props) {
+                    const { href, target, className, children, ...rest } = props;
+                    const isHttps = href?.startsWith("https");
+                    const isPdf = href?.endsWith(".pdf");
+                    const isExternal = target === "_blank";
+                    const sx = stylex.props(${styleArgs});
+                    return (
+                      <a
+                        {...sx}
+                        className={[sx.className, className].filter(Boolean).join(" ")}
+                        href={href}
+                        target={target}
+                        {...rest}
+                      >
+                        {children}
+                      </a>
+                    );
+                  }
+                ` as any)
+          : allowAsProp
+            ? emitTypes
+              ? (j.template.statement`
+                  function ${j.identifier(d.localName)}(props: ${j.identifier(emitter.propsTypeNameFor(d.localName))}) {
+                    const { as: Component = "a", href, target, children, ...rest } = props;
+                    const isHttps = href?.startsWith("https");
+                    const isPdf = href?.endsWith(".pdf");
+                    const isExternal = target === "_blank";
+                    const sx = stylex.props(${styleArgs});
+                    return (
+                      <Component href={href} target={target} {...rest} {...sx}>
+                        {children}
+                      </Component>
+                    );
+                  }
+                ` as any)
+              : (j.template.statement`
+                  function ${j.identifier(d.localName)}(props) {
+                    const { as: Component = "a", href, target, children, ...rest } = props;
+                    const isHttps = href?.startsWith("https");
+                    const isPdf = href?.endsWith(".pdf");
+                    const isExternal = target === "_blank";
+                    const sx = stylex.props(${styleArgs});
+                    return (
+                      <Component href={href} target={target} {...rest} {...sx}>
+                        {children}
+                      </Component>
+                    );
+                  }
+                ` as any)
+            : emitTypes
+              ? (j.template.statement`
+                  function ${j.identifier(d.localName)}(props: ${j.identifier(emitter.propsTypeNameFor(d.localName))}) {
+                    const { href, target, children, ...rest } = props;
+                    const isHttps = href?.startsWith("https");
+                    const isPdf = href?.endsWith(".pdf");
+                    const isExternal = target === "_blank";
+                    const sx = stylex.props(${styleArgs});
+                    return (
+                      <a href={href} target={target} {...rest} {...sx}>
+                        {children}
+                      </a>
+                    );
+                  }
+                ` as any)
+              : (j.template.statement`
+                  function ${j.identifier(d.localName)}(props) {
+                    const { href, target, children, ...rest } = props;
+                    const isHttps = href?.startsWith("https");
+                    const isPdf = href?.endsWith(".pdf");
+                    const isExternal = target === "_blank";
+                    const sx = stylex.props(${styleArgs});
+                    return (
+                      <a href={href} target={target} {...rest} {...sx}>
+                        {children}
+                      </a>
+                    );
+                  }
+                ` as any),
       );
     }
   }
@@ -434,7 +589,7 @@ export function emitIntrinsicWrappers(emitter: WrapperEmitter): {
       const tagName = d.base.tagName;
       const allowClassNameProp = emitter.shouldAllowClassNameProp(d);
       const allowStyleProp = emitter.shouldAllowStyleProp(d);
-      const allowAsProp = !VOID_TAGS.has(tagName);
+      const allowAsProp = shouldAllowAsProp(d, tagName);
       const explicit = emitter.stringifyTsType(d.propsType);
 
       // Check if the explicit props type is a simple (non-generic) type reference.
@@ -551,6 +706,13 @@ export function emitIntrinsicWrappers(emitter: WrapperEmitter): {
         }
       }
 
+      // Add style function calls for dynamic prop-based styles
+      emitter.buildStyleFnExpressions({
+        d,
+        styleArgs,
+        destructureProps,
+      });
+
       const isVoidTag = VOID_TAGS.has(tagName);
       const propsParamId = j.identifier("props");
       if (emitTypes) {
@@ -656,6 +818,7 @@ export function emitIntrinsicWrappers(emitter: WrapperEmitter): {
       if (!d.enumVariant) {
         continue;
       }
+      const allowAsProp = shouldAllowAsProp(d, "div");
       const { propName, baseKey, cases } = d.enumVariant;
       const primary = cases[0];
       const secondary = cases[1];
@@ -664,8 +827,7 @@ export function emitIntrinsicWrappers(emitter: WrapperEmitter): {
       }
       const explicit = emitter.stringifyTsType(d.propsType);
       if (explicit) {
-        emitNamedPropsType(d.localName, emitter.withChildren(explicit));
-        needsReactTypeImport = true;
+        emitPropsType(d.localName, emitter.withChildren(explicit), allowAsProp);
       } else {
         // Best-effort: treat enum variant prop as a string-literal union.
         const hasNeq = cases.some((c) => c.kind === "neq");
@@ -675,11 +837,10 @@ export function emitIntrinsicWrappers(emitter: WrapperEmitter): {
           : values.length > 0
             ? values.map((v) => JSON.stringify(v)).join(" | ")
             : "string";
-        emitNamedPropsType(
-          d.localName,
-          emitter.withChildren(`React.HTMLAttributes<HTMLDivElement> & { ${propName}?: ${union} }`),
+        const typeText = emitter.withChildren(
+          `React.HTMLAttributes<HTMLDivElement> & { ${propName}?: ${union} }`,
         );
-        needsReactTypeImport = true;
+        emitPropsType(d.localName, typeText, allowAsProp);
       }
       const propsParamId = j.identifier("props");
       emitter.annotatePropsParam(propsParamId, d.localName);
@@ -690,6 +851,7 @@ export function emitIntrinsicWrappers(emitter: WrapperEmitter): {
       const declStmt = j.variableDeclaration("const", [
         j.variableDeclarator(
           j.objectPattern([
+            ...(allowAsProp ? [asDestructureProp("div")] : []),
             patternProp(propName, variantId),
             patternProp("children", childrenId),
           ] as any),
@@ -724,13 +886,15 @@ export function emitIntrinsicWrappers(emitter: WrapperEmitter): {
       ]);
 
       const openingEl = j.jsxOpeningElement(
-        j.jsxIdentifier("div"),
+        j.jsxIdentifier(allowAsProp ? "Component" : "div"),
         [j.jsxSpreadAttribute(j.identifier("sx"))],
         false,
       );
-      const jsx = j.jsxElement(openingEl, j.jsxClosingElement(j.jsxIdentifier("div")), [
-        j.jsxExpressionContainer(childrenId),
-      ]);
+      const jsx = j.jsxElement(
+        openingEl,
+        j.jsxClosingElement(j.jsxIdentifier(allowAsProp ? "Component" : "div")),
+        [j.jsxExpressionContainer(childrenId)],
+      );
 
       emitted.push(
         withLeadingComments(
@@ -753,6 +917,7 @@ export function emitIntrinsicWrappers(emitter: WrapperEmitter): {
     const tagName = d.base.tagName;
     const allowClassNameProp = emitter.shouldAllowClassNameProp(d);
     const allowStyleProp = emitter.shouldAllowStyleProp(d);
+    const allowAsProp = shouldAllowAsProp(d, tagName);
 
     const extraProps = new Set<string>();
     for (const p of d.shouldForwardProp?.dropProps ?? []) {
@@ -872,7 +1037,7 @@ export function emitIntrinsicWrappers(emitter: WrapperEmitter): {
       return VOID_TAGS.has(tagName) ? inferred : emitter.withChildren(inferred);
     })();
 
-    const typeAliasEmitted = emitNamedPropsType(d.localName, finalTypeText);
+    const typeAliasEmitted = emitPropsType(d.localName, finalTypeText, allowAsProp);
     if (!typeAliasEmitted && explicit) {
       const propsTypeName = emitter.propsTypeNameFor(d.localName);
       const extendBaseTypeText = (() => {
@@ -1083,7 +1248,10 @@ export function emitIntrinsicWrappers(emitter: WrapperEmitter): {
     if (!allowClassNameProp && !allowStyleProp) {
       const isVoid = VOID_TAGS.has(tagName);
       const patternProps = emitter.buildDestructurePatternProps({
-        baseProps: isVoid ? [] : [patternProp("children", childrenId)],
+        baseProps: [
+          ...(allowAsProp ? [asDestructureProp(tagName)] : []),
+          ...(isVoid ? [] : [patternProp("children", childrenId)]),
+        ],
         destructureProps: destructureParts,
         propDefaults,
         includeRest,
@@ -1156,7 +1324,7 @@ export function emitIntrinsicWrappers(emitter: WrapperEmitter): {
       emitter.appendMergingAttrs(openingAttrs, merging);
 
       const jsx = emitter.buildJsxElement({
-        tagName,
+        tagName: allowAsProp ? "Component" : tagName,
         attrs: openingAttrs,
         includeChildren: !isVoid,
         childrenExpr: childrenId,
@@ -1186,6 +1354,7 @@ export function emitIntrinsicWrappers(emitter: WrapperEmitter): {
 
     const patternProps = emitter.buildDestructurePatternProps({
       baseProps: [
+        ...(allowAsProp ? [asDestructureProp(tagName)] : []),
         ...(allowClassNameProp ? [patternProp("className", classNameId)] : []),
         ...(isVoidTag ? [] : [patternProp("children", childrenId)]),
         ...(allowStyleProp ? [patternProp("style", styleId)] : []),
@@ -1241,7 +1410,7 @@ export function emitIntrinsicWrappers(emitter: WrapperEmitter): {
     emitter.appendMergingAttrs(openingAttrs, merging);
 
     const jsx = emitter.buildJsxElement({
-      tagName,
+      tagName: allowAsProp ? "Component" : tagName,
       attrs: openingAttrs,
       includeChildren: !isVoidTag,
       childrenExpr: childrenId,
@@ -1291,7 +1460,7 @@ export function emitIntrinsicWrappers(emitter: WrapperEmitter): {
       return false;
     }
     // Don't duplicate the polymorphic wrapper path.
-    if (tagName === "button" && wrapperNames.has(d.localName)) {
+    if (wrapperNames.has(d.localName) || (d.supportsAsProp ?? false)) {
       return false;
     }
     // Avoid duplicating other specialized wrappers.
@@ -1309,6 +1478,7 @@ export function emitIntrinsicWrappers(emitter: WrapperEmitter): {
     const supportsExternalStyles = d.supportsExternalStyles ?? false;
     const allowClassNameProp = emitter.shouldAllowClassNameProp(d);
     const allowStyleProp = emitter.shouldAllowStyleProp(d);
+    const allowAsProp = shouldAllowAsProp(d, tagName);
     {
       const explicit = emitter.stringifyTsType(d.propsType);
       const shouldUseIntrinsicProps = (() => {
@@ -1333,8 +1503,8 @@ export function emitIntrinsicWrappers(emitter: WrapperEmitter): {
       // For non-void tags without explicit type, wrap in PropsWithChildren
       const typeWithChildren =
         !explicit && !VOID_TAGS.has(tagName) ? emitter.withChildren(baseTypeText) : baseTypeText;
-      emitNamedPropsType(d.localName, explicit ?? typeWithChildren);
-      needsReactTypeImport = true;
+      const typeText = explicit ?? typeWithChildren;
+      emitPropsType(d.localName, typeText, allowAsProp);
     }
     const styleArgs: ExpressionKind[] = [
       ...(d.extendsStyleKey
@@ -1421,6 +1591,7 @@ export function emitIntrinsicWrappers(emitter: WrapperEmitter): {
             emitTypes,
             styleArgs,
             destructureProps,
+            allowAsProp,
             allowClassNameProp: false,
             allowStyleProp: false,
             includeRest,
@@ -1440,6 +1611,7 @@ export function emitIntrinsicWrappers(emitter: WrapperEmitter): {
 
     const patternProps = emitter.buildDestructurePatternProps({
       baseProps: [
+        ...(allowAsProp ? [asDestructureProp(tagName)] : []),
         patternProp("className", classNameId),
         ...(isVoidTag ? [] : [patternProp("children", childrenId)]),
         patternProp("style", styleId),
@@ -1488,7 +1660,11 @@ export function emitIntrinsicWrappers(emitter: WrapperEmitter): {
     openingAttrs.push(...emitter.buildStaticAttrsFromRecord(d.attrsInfo?.staticAttrs ?? {}));
     emitter.appendMergingAttrs(openingAttrs, merging);
 
-    const openingEl = j.jsxOpeningElement(j.jsxIdentifier(tagName), openingAttrs, false);
+    const openingEl = j.jsxOpeningElement(
+      j.jsxIdentifier(allowAsProp ? "Component" : tagName),
+      openingAttrs,
+      false,
+    );
 
     const jsx = isVoidTag
       ? ({
@@ -1497,9 +1673,11 @@ export function emitIntrinsicWrappers(emitter: WrapperEmitter): {
           closingElement: null,
           children: [],
         } as any)
-      : j.jsxElement(openingEl, j.jsxClosingElement(j.jsxIdentifier(tagName)), [
-          j.jsxExpressionContainer(childrenId),
-        ]);
+      : j.jsxElement(
+          openingEl,
+          j.jsxClosingElement(j.jsxIdentifier(allowAsProp ? "Component" : tagName)),
+          [j.jsxExpressionContainer(childrenId)],
+        );
 
     const bodyStmts: StatementKind[] = [declStmt];
     if (merging.sxDecl) {
@@ -1526,6 +1704,7 @@ export function emitIntrinsicWrappers(emitter: WrapperEmitter): {
       continue;
     }
     const sw = d.siblingWrapper!;
+    const allowAsProp = shouldAllowAsProp(d, "div");
 
     {
       const explicit = emitter.stringifyTsType(d.propsType);
@@ -1543,11 +1722,8 @@ export function emitIntrinsicWrappers(emitter: WrapperEmitter): {
         allowClassNameProp,
         allowStyleProp,
       });
-      emitNamedPropsType(
-        d.localName,
-        explicit ?? emitter.joinIntersection(baseTypeText, extraType),
-      );
-      needsReactTypeImport = true;
+      const typeText = explicit ?? emitter.joinIntersection(baseTypeText, extraType);
+      emitPropsType(d.localName, typeText, allowAsProp);
     }
 
     const propsParamId = j.identifier("props");
@@ -1562,6 +1738,7 @@ export function emitIntrinsicWrappers(emitter: WrapperEmitter): {
     const declStmt = j.variableDeclaration("const", [
       j.variableDeclarator(
         j.objectPattern([
+          ...(allowAsProp ? [asDestructureProp("div")] : []),
           patternProp("children", childrenId),
           patternProp("className", classNameId),
           patternProp(sw.propAdjacent, adjId),
@@ -1612,7 +1789,7 @@ export function emitIntrinsicWrappers(emitter: WrapperEmitter): {
     emitter.appendMergingAttrs(openingAttrs, merging);
 
     const jsx = emitter.buildJsxElement({
-      tagName: "div",
+      tagName: allowAsProp ? "Component" : "div",
       attrs: openingAttrs,
       includeChildren: true,
       childrenExpr: childrenId,
@@ -1655,8 +1832,8 @@ export function emitIntrinsicWrappers(emitter: WrapperEmitter): {
     if (d.attrWrapper) {
       return false;
     }
-    // Skip specialized wrapper categories (polymorphic intrinsic wrappers with as/forwardedAs usage)
-    if (wrapperNames.has(d.localName)) {
+    // Skip specialized wrapper categories (polymorphic intrinsic wrappers)
+    if (wrapperNames.has(d.localName) || (d.supportsAsProp ?? false)) {
       return false;
     }
     // Note: input/a tags without attrWrapper (e.g., simple .attrs() cases) are now
@@ -1671,11 +1848,7 @@ export function emitIntrinsicWrappers(emitter: WrapperEmitter): {
     const allowClassNameProp = emitter.shouldAllowClassNameProp(d);
     const allowStyleProp = emitter.shouldAllowStyleProp(d);
     const usedAttrsForType = emitter.getUsedAttrs(d.localName);
-    const allowAsProp =
-      !VOID_TAGS.has(tagName) &&
-      ((d.supportsExternalStyles ?? false) ||
-        usedAttrsForType.has("as") ||
-        usedAttrsForType.has("forwardedAs"));
+    const allowAsProp = shouldAllowAsProp(d, tagName);
     let inlineTypeText: string | undefined;
     {
       const explicit = emitter.stringifyTsType(d.propsType);
@@ -1925,31 +2098,12 @@ export function emitIntrinsicWrappers(emitter: WrapperEmitter): {
       }
     }
 
-    const styleFnPairs = d.styleFnFromProps ?? [];
-    for (const p of styleFnPairs) {
-      const propExpr = p.jsxProp === "__props" ? j.identifier("props") : j.identifier(p.jsxProp);
-      const call = j.callExpression(
-        j.memberExpression(j.identifier(stylesIdentifier), j.identifier(p.fnKey)),
-        [propExpr],
-      );
-      if (p.jsxProp !== "__props" && !destructureProps.includes(p.jsxProp)) {
-        destructureProps.push(p.jsxProp);
-      }
-      if (p.condition === "truthy") {
-        const truthy = j.unaryExpression("!", j.unaryExpression("!", propExpr));
-        styleArgs.push(j.logicalExpression("&&", truthy, call));
-        continue;
-      }
-      const required =
-        p.jsxProp === "__props" || emitter.isPropRequiredInPropsTypeLiteral(d.propsType, p.jsxProp);
-      if (required) {
-        styleArgs.push(call);
-      } else {
-        styleArgs.push(
-          j.logicalExpression("&&", j.binaryExpression("!=", propExpr, j.nullLiteral()), call),
-        );
-      }
-    }
+    // Add style function calls for dynamic prop-based styles
+    emitter.buildStyleFnExpressions({
+      d,
+      styleArgs,
+      destructureProps,
+    });
 
     if (d.attrsInfo?.conditionalAttrs?.length) {
       for (const c of d.attrsInfo.conditionalAttrs) {
@@ -2115,6 +2269,7 @@ export function emitIntrinsicWrappers(emitter: WrapperEmitter): {
           styleArgs,
           destructureProps,
           propDefaults,
+          allowAsProp,
           allowClassNameProp: false,
           allowStyleProp: false,
           includeRest: shouldIncludeRest,

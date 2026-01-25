@@ -13,7 +13,7 @@ describe("public API runtime validation (DX)", () => {
     expect(() => defineAdapter({ resolveValue: 123 } as any)).toThrowError(/must be a function/);
   });
 
-  it("defineAdapter: throws a helpful message when shouldSupportExternalStyling is missing", () => {
+  it("defineAdapter: throws a helpful message when externalInterface is missing", () => {
     expect(() =>
       defineAdapter({
         resolveValue() {
@@ -23,16 +23,16 @@ describe("public API runtime validation (DX)", () => {
           return null;
         },
       } as any),
-    ).toThrowError(/shouldSupportExternalStyling/);
+    ).toThrowError(/externalInterface/);
   });
 
   it("defineAdapter: throws a helpful message when resolveCall is missing", () => {
-    expect(() =>
-      defineAdapter({ resolveValue() {}, shouldSupportExternalStyling() {} } as any),
-    ).toThrowError(/resolveCall/);
+    expect(() => defineAdapter({ resolveValue() {}, externalInterface() {} } as any)).toThrowError(
+      /resolveCall/,
+    );
   });
 
-  it("defineAdapter: throws a helpful message when shouldSupportExternalStyling is not a function", () => {
+  it("defineAdapter: throws a helpful message when externalInterface is not a function", () => {
     expect(() =>
       defineAdapter({
         resolveValue() {
@@ -41,9 +41,9 @@ describe("public API runtime validation (DX)", () => {
         resolveCall() {
           return null;
         },
-        shouldSupportExternalStyling: "nope",
+        externalInterface: "nope",
       } as any),
-    ).toThrowError(/shouldSupportExternalStyling/);
+    ).toThrowError(/externalInterface/);
   });
 
   it("runTransform: throws a helpful message when options is missing", async () => {

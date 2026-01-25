@@ -209,6 +209,20 @@ export class WrapperEmitter {
     return used.has("*") || used.has("style");
   }
 
+  shouldAllowAsPropForIntrinsic(d: StyledDecl, tagName: string): boolean {
+    if (VOID_TAGS.has(tagName)) {
+      return false;
+    }
+    if (d.supportsAsProp) {
+      return true;
+    }
+    if (d.supportsExternalStyles) {
+      return true;
+    }
+    const used = this.getUsedAttrs(d.localName);
+    return used.has("as") || used.has("forwardedAs");
+  }
+
   private stringifyTsTypeName(n: AstNodeOrNull): string | null {
     if (!n) {
       return null;
@@ -825,6 +839,7 @@ export class WrapperEmitter {
     propDefaults?: Map<string, string>;
     allowClassNameProp?: boolean;
     allowStyleProp?: boolean;
+    allowAsProp?: boolean;
     includeRest?: boolean;
     defaultAttrs?: Array<{ jsxProp: string; attrName: string; value: unknown }>;
     conditionalAttrs?: Array<{ jsxProp: string; attrName: string; value: unknown }>;
@@ -842,6 +857,7 @@ export class WrapperEmitter {
       propDefaults,
       allowClassNameProp = false,
       allowStyleProp = false,
+      allowAsProp = false,
       includeRest = true,
       defaultAttrs = [],
       conditionalAttrs = [],
@@ -930,6 +946,16 @@ export class WrapperEmitter {
     const propsId = j.identifier("props");
 
     const patternProps: Array<Property | RestElement> = [];
+    if (allowAsProp) {
+      patternProps.push(
+        j.property.from({
+          kind: "init",
+          key: j.identifier("as"),
+          value: j.assignmentPattern(j.identifier("Component"), j.literal(tagName)),
+          shorthand: false,
+        }) as Property,
+      );
+    }
     if (!isVoidTag) {
       patternProps.push(this.patternProp("children"));
     }
@@ -1081,10 +1107,11 @@ export class WrapperEmitter {
       );
     }
 
-    const openingEl = j.jsxOpeningElement(j.jsxIdentifier(tagName), jsxAttrs, isVoidTag);
+    const renderedTagName = allowAsProp ? "Component" : tagName;
+    const openingEl = j.jsxOpeningElement(j.jsxIdentifier(renderedTagName), jsxAttrs, isVoidTag);
     const jsx = j.jsxElement(
       openingEl,
-      isVoidTag ? null : j.jsxClosingElement(j.jsxIdentifier(tagName)),
+      isVoidTag ? null : j.jsxClosingElement(j.jsxIdentifier(renderedTagName)),
       isVoidTag ? [] : [j.jsxExpressionContainer(j.identifier("children"))],
     );
 
@@ -1515,6 +1542,84 @@ export class WrapperEmitter {
       );
 
       styleArgs.push(j.conditionalExpression(boolPropId, disabledLookup, enabledLookup));
+    }
+  }
+
+  /**
+   * Build style function call expressions for dynamic prop-based styles.
+   * This is a shared helper for handling `styleFnFromProps` consistently across
+   * different wrapper types (component wrappers, intrinsic wrappers, etc.).
+   *
+   * @param args.d - The styled component declaration
+   * @param args.styleArgs - Array to push generated style expressions into
+   * @param args.destructureProps - Optional array to track props that need destructuring
+   * @param args.propExprBuilder - Function to build the expression for accessing a prop
+   * @param args.propsIdentifier - Identifier to use for "props" in __props case (defaults to "props")
+   */
+  buildStyleFnExpressions(args: {
+    d: StyledDecl;
+    styleArgs: ExpressionKind[];
+    destructureProps?: string[];
+    propExprBuilder?: (jsxProp: string) => ExpressionKind;
+    propsIdentifier?: ExpressionKind;
+  }): void {
+    const { j, stylesIdentifier } = this;
+    const { d, styleArgs, destructureProps } = args;
+    const propsId = args.propsIdentifier ?? j.identifier("props");
+    const propExprBuilder = args.propExprBuilder ?? ((prop: string) => j.identifier(prop));
+
+    const styleFnPairs = d.styleFnFromProps ?? [];
+    for (const p of styleFnPairs) {
+      const propExpr = p.jsxProp === "__props" ? propsId : propExprBuilder(p.jsxProp);
+      const callArg = p.callArg ? (p.callArg as ExpressionKind) : propExpr;
+      const call = j.callExpression(
+        j.memberExpression(j.identifier(stylesIdentifier), j.identifier(p.fnKey)),
+        [callArg],
+      );
+
+      // Track call arg identifier for destructuring if needed
+      if (
+        p.callArg &&
+        (p.callArg as ASTNode & { type?: string; name?: string })?.type === "Identifier"
+      ) {
+        const name = (p.callArg as ASTNode & { name?: string }).name;
+        if (name && destructureProps && !destructureProps.includes(name)) {
+          destructureProps.push(name);
+        }
+      }
+
+      // Track prop for destructuring
+      if (p.jsxProp !== "__props" && destructureProps && !destructureProps.includes(p.jsxProp)) {
+        destructureProps.push(p.jsxProp);
+      }
+
+      // Handle conditional style based on conditionWhen
+      if (p.conditionWhen) {
+        const { cond } = this.collectConditionProps({
+          when: p.conditionWhen,
+          destructureProps,
+        });
+        styleArgs.push(j.logicalExpression("&&", cond, call));
+        continue;
+      }
+
+      // Handle truthy condition
+      if (p.condition === "truthy") {
+        const truthy = j.unaryExpression("!", j.unaryExpression("!", propExpr));
+        styleArgs.push(j.logicalExpression("&&", truthy, call));
+        continue;
+      }
+
+      // Handle required vs optional props
+      const required =
+        p.jsxProp === "__props" || this.isPropRequiredInPropsTypeLiteral(d.propsType, p.jsxProp);
+      if (required) {
+        styleArgs.push(call);
+      } else {
+        styleArgs.push(
+          j.logicalExpression("&&", j.binaryExpression("!=", propExpr, j.nullLiteral()), call),
+        );
+      }
     }
   }
 }

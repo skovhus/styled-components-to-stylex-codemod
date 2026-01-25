@@ -515,8 +515,8 @@ export const App = () => <Box $on />;
 `;
 
     const adapterWithBadThemeExpr = {
-      shouldSupportExternalStyling() {
-        return false;
+      externalInterface() {
+        return null;
       },
       resolveValue(ctx: ResolveValueContext) {
         if (ctx.kind !== "theme") {
@@ -569,8 +569,8 @@ export const App = () => (
 `;
 
     const adapterWithoutCallResolution = {
-      shouldSupportExternalStyling() {
-        return false;
+      externalInterface() {
+        return null;
       },
       resolveValue(ctx: ResolveValueContext) {
         // Intentionally do not resolve any calls.
@@ -654,8 +654,8 @@ export const App = () => <Button>Click</Button>;
   it("should skip transforming the file when adapter.resolveValue returns undefined (and log context)", () => {
     // This adapter intentionally returns undefined (not null) to test error handling
     const adapterWithUndefined = {
-      shouldSupportExternalStyling() {
-        return false;
+      externalInterface() {
+        return null;
       },
       resolveValue(ctx: ResolveValueContext) {
         if (ctx.kind === "theme") {
@@ -689,8 +689,8 @@ export const App = () => <Button>Click</Button>;
 
 describe("styleMerger configuration", () => {
   const mergerAdapter = {
-    shouldSupportExternalStyling() {
-      return true;
+    externalInterface() {
+      return { styles: true } as const;
     },
     resolveValue() {
       return null;
@@ -704,8 +704,8 @@ describe("styleMerger configuration", () => {
     },
   };
   const noExternalMergerAdapter = {
-    shouldSupportExternalStyling() {
-      return false;
+    externalInterface() {
+      return null;
     },
     resolveValue() {
       return null;
@@ -870,8 +870,8 @@ export const App = () => <Box $delay={100} />;
   it("should use verbose pattern when no merger is configured", async () => {
     const adapterWithoutMerger = {
       styleMerger: null,
-      shouldSupportExternalStyling() {
-        return true;
+      externalInterface() {
+        return { styles: true } as const;
       },
       resolveValue() {
         return null;

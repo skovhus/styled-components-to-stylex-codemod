@@ -35,7 +35,9 @@ export function emitComponentWrappers(emitter: WrapperEmitter): {
     }
     const wrappedComponent = d.base.ident;
     const wrappedComponentHasAs = wrapperNames.has(wrappedComponent);
-    const isPolymorphicComponentWrapper = wrapperNames.has(d.localName) && !wrappedComponentHasAs;
+    const supportsAsProp = d.supportsAsProp ?? false;
+    const shouldAllowAsProp = wrapperNames.has(d.localName) || supportsAsProp;
+    const isPolymorphicComponentWrapper = shouldAllowAsProp && !wrappedComponentHasAs;
     const allowClassNameProp = emitter.shouldAllowClassNameProp(d);
     const allowStyleProp = emitter.shouldAllowStyleProp(d);
     const propsIdForExpr = j.identifier("props");
@@ -54,7 +56,7 @@ export function emitComponentWrappers(emitter: WrapperEmitter): {
       const explicitTypeName = isSimpleTypeRef ? (propsType?.typeName?.name ?? null) : null;
       const explicitTypeExists = explicitTypeName && emitter.typeExistsInFile(explicitTypeName);
 
-      if (explicitTypeExists && explicit && explicitTypeName) {
+      if (explicitTypeExists && explicit && explicitTypeName && !isPolymorphicComponentWrapper) {
         const baseTypeText = (() => {
           const base = `React.ComponentPropsWithRef<typeof ${wrappedComponent}>`;
           const omitted: string[] = [];
@@ -91,6 +93,8 @@ export function emitComponentWrappers(emitter: WrapperEmitter): {
             baseProps,
             `Omit<React.ComponentPropsWithoutRef<C>, keyof ${baseProps} | "className" | "style">`,
             "{\n  as?: C;\n}",
+            // Include user's explicit props type if it exists
+            ...(explicit ? [explicit] : []),
           ].join(" & ");
           emitNamedPropsType(
             d.localName,
@@ -188,46 +192,13 @@ export function emitComponentWrappers(emitter: WrapperEmitter): {
     }
 
     // Add style function calls for dynamic prop-based styles
-    const styleFnPairs = d.styleFnFromProps ?? [];
-    for (const p of styleFnPairs) {
-      if (p.callArg?.type === "Identifier") {
-        const name = (p.callArg as any).name as string | undefined;
-        if (name && !destructureProps.includes(name)) {
-          destructureProps.push(name);
-        }
-      }
-      const propExpr =
-        p.jsxProp === "__props"
-          ? propsIdForExpr
-          : j.memberExpression(propsIdForExpr, j.identifier(p.jsxProp));
-      const callArg = p.callArg ? (p.callArg as any) : propExpr;
-      const call = j.callExpression(
-        j.memberExpression(j.identifier(stylesIdentifier), j.identifier(p.fnKey)),
-        [callArg],
-      );
-      if (p.conditionWhen) {
-        const { cond } = emitter.collectConditionProps({
-          when: p.conditionWhen,
-          destructureProps,
-        });
-        styleArgs.push(j.logicalExpression("&&", cond, call));
-        continue;
-      }
-      if (p.condition === "truthy") {
-        const truthy = j.unaryExpression("!", j.unaryExpression("!", propExpr));
-        styleArgs.push(j.logicalExpression("&&", truthy, call));
-        continue;
-      }
-      const required =
-        p.jsxProp === "__props" || emitter.isPropRequiredInPropsTypeLiteral(d.propsType, p.jsxProp);
-      if (required) {
-        styleArgs.push(call);
-      } else {
-        styleArgs.push(
-          j.logicalExpression("&&", j.binaryExpression("!=", propExpr, j.nullLiteral()), call),
-        );
-      }
-    }
+    emitter.buildStyleFnExpressions({
+      d,
+      styleArgs,
+      destructureProps,
+      propExprBuilder: (prop) => j.memberExpression(propsIdForExpr, j.identifier(prop)),
+      propsIdentifier: propsIdForExpr,
+    });
 
     // For component wrappers, filter out transient props ($-prefixed) that are NOT used in styling.
     // In styled-components, transient props are automatically filtered before passing to wrapped component.

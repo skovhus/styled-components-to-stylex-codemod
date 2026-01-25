@@ -62,13 +62,16 @@ export function App() {
 interface ThemeTextProps extends React.ComponentProps<"span"> {
   /** Theme color name */
   themeColor: Colors;
+  as?: React.ElementType;
 }
 
 /** A text span that gets color from theme */
 export function ThemeText(props: ThemeTextProps) {
-  const { className, children, style, themeColor } = props;
+  const { as: Component = "span", className, children, style, themeColor } = props;
   return (
-    <span {...mergedSx([styles.themeTextColor(themeColor)], className, style)}>{children}</span>
+    <Component {...mergedSx([styles.themeTextColor(themeColor)], className, style)}>
+      {children}
+    </Component>
   );
 }
 
