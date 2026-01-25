@@ -26,6 +26,9 @@ export const App = () => (
   <div>
     <Img src="https://picsum.photos/200" $disabled />
     <Img src="https://picsum.photos/200" />
+    <br />
+    <Img src="https://picsum.photos/200" $disabled $isInactive />
+    <Img src="https://picsum.photos/200" $isInactive />
   </div>
 );
 
@@ -39,6 +42,7 @@ const styles = stylex.create({
     filter: "opacity(0.65)",
   },
   imgInactive: {
+    boxShadow: `0 0 0 1px ${$colors.bgSub}`,
     backgroundColor: $colors.bgSub,
     filter: "opacity(0.5) grayscale(1)",
   },

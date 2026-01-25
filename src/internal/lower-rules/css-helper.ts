@@ -6,6 +6,7 @@ import { cssDeclarationToStylexDeclarations } from "../css-prop-mapping.js";
 import { getMemberPathFromIdentifier } from "../jscodeshift-utils.js";
 import { parseStyledTemplateLiteral } from "../styled-css.js";
 import { parseSelector } from "../selectors.js";
+import { wrapExprWithStaticParts } from "./interpolations.js";
 
 type ImportMapEntry = {
   importedName: string;
@@ -49,7 +50,10 @@ export function createCssHelperResolver(args: {
     );
   };
 
-  const resolveHelperExprToAst = (expr: any, paramName: string | null): any => {
+  const resolveHelperExprToAst = (
+    expr: any,
+    paramName: string | null,
+  ): { ast: any; exprString: string } | null => {
     if (!expr || typeof expr !== "object") {
       return null;
     }
@@ -58,7 +62,7 @@ export function createCssHelperResolver(args: {
       expr.type === "NumericLiteral" ||
       expr.type === "Literal"
     ) {
-      return expr;
+      return { ast: expr, exprString: JSON.stringify(expr.value) };
     }
     const path =
       paramName && (expr.type === "MemberExpression" || expr.type === "OptionalMemberExpression")
@@ -80,7 +84,7 @@ export function createCssHelperResolver(args: {
       resolverImports.set(JSON.stringify(imp), imp);
     }
     const exprAst = parseExpr(res.expr);
-    return exprAst ?? null;
+    return exprAst ? { ast: exprAst, exprString: res.expr } : null;
   };
 
   const resolveCssHelperTemplate = (
@@ -178,20 +182,58 @@ export function createCssHelperResolver(args: {
         }
 
         const parts = d.value.parts ?? [];
-        if (parts.length !== 1 || parts[0]?.kind !== "slot") {
+
+        // Find slots in the value parts
+        const slotParts = parts.filter((p: { kind: string }) => p.kind === "slot");
+        if (slotParts.length !== 1) {
+          // Only support single-slot values
           return null;
         }
-        const slotId = parts[0].slotId;
+        const slotPart = slotParts[0] as { kind: "slot"; slotId: number };
+        const slotId = slotPart.slotId;
         const expr = slotExprById.get(slotId);
         if (!expr) {
           return null;
         }
-        const exprAst = resolveHelperExprToAst(expr as any, paramName);
-        if (exprAst) {
-          for (const mapped of cssDeclarationToStylexDeclarations(d)) {
-            (target as any)[mapped.prop] = exprAst as any;
+        const resolved = resolveHelperExprToAst(expr as any, paramName);
+        if (resolved) {
+          // Check if there are static parts around the slot (e.g., box-shadow: 0 0 0 1px ${theme})
+          const hasStaticParts = parts.length > 1;
+          if (hasStaticParts) {
+            // Extract prefix and suffix static parts
+            let prefix = "";
+            let suffix = "";
+            let foundSlot = false;
+            for (const part of parts) {
+              if (part.kind === "slot") {
+                foundSlot = true;
+                continue;
+              }
+              if (part.kind === "static") {
+                if (foundSlot) {
+                  suffix += part.value ?? "";
+                } else {
+                  prefix += part.value ?? "";
+                }
+              }
+            }
+            // Create a template literal string using the shared helper (same logic as top-level)
+            const wrappedExpr = wrapExprWithStaticParts(resolved.exprString, prefix, suffix);
+            const templateAst = parseExpr(wrappedExpr);
+            if (templateAst) {
+              for (const mapped of cssDeclarationToStylexDeclarations(d)) {
+                (target as any)[mapped.prop] = templateAst as any;
+              }
+              continue;
+            }
+            // Fall through if parsing failed
+            return null;
+          } else {
+            for (const mapped of cssDeclarationToStylexDeclarations(d)) {
+              (target as any)[mapped.prop] = resolved.ast as any;
+            }
+            continue;
           }
-          continue;
         }
 
         const propPath =
