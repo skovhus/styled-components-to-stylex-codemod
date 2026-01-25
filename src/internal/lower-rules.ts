@@ -252,7 +252,7 @@ export function lowerRules(args: {
 
   const usedCssHelperFunctions = new Set<string>();
 
-const shadowedIdentCache = new WeakMap<object, boolean>();
+  const shadowedIdentCache = new WeakMap<object, boolean>();
   const isLoopNode = (node: unknown): boolean => {
     if (!node || typeof node !== "object") {
       return false;
