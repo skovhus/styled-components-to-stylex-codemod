@@ -4,7 +4,7 @@ import type { Adapter, ImportSource, ImportSpec } from "../../adapter.js";
 import { normalizeStylisAstToIR } from "../css-ir.js";
 import { cssDeclarationToStylexDeclarations } from "../css-prop-mapping.js";
 import { getMemberPathFromIdentifier } from "../jscodeshift-utils.js";
-import type { WarningType } from "../logger.js";
+import type { WarningLog, WarningType } from "../logger.js";
 import { parseStyledTemplateLiteral } from "../styled-css.js";
 import { parseSelector } from "../selectors.js";
 import { wrapExprWithStaticParts } from "./interpolations.js";
@@ -21,19 +21,20 @@ export function createCssHelperResolver(args: {
   parseExpr: (exprSource: string) => any;
   resolverImports: Map<string, ImportSpec>;
   cssValueToJs: (value: unknown, important?: boolean, propName?: string) => unknown;
-  onBail?: (type: WarningType, context?: { property?: string }) => void;
+  warnings: WarningLog[];
 }): {
   isCssHelperTaggedTemplate: (expr: any) => expr is { quasi: any };
   resolveCssHelperTemplate: (
     template: any,
     paramName: string | null,
-    _ownerName: string,
+    ownerName: string,
+    loc: { line: number; column: number } | null | undefined,
   ) => {
     style: Record<string, unknown>;
     dynamicProps: Array<{ jsxProp: string; stylexProp: string }>;
   } | null;
 } {
-  const { importMap, filePath, resolveValue, parseExpr, resolverImports, cssValueToJs, onBail } =
+  const { importMap, filePath, resolveValue, parseExpr, resolverImports, cssValueToJs, warnings } =
     args;
 
   const isCssHelperTaggedTemplate = (expr: any): expr is { quasi: any } => {
@@ -93,11 +94,22 @@ export function createCssHelperResolver(args: {
   const resolveCssHelperTemplate = (
     template: any,
     paramName: string | null,
-    _ownerName: string,
+    ownerName: string,
+    loc: { line: number; column: number } | null | undefined,
   ): {
     style: Record<string, unknown>;
     dynamicProps: Array<{ jsxProp: string; stylexProp: string }>;
   } | null => {
+    const bail = (type: WarningType, context?: { property?: string }): null => {
+      warnings.push({
+        severity: "warning",
+        type,
+        loc,
+        context: { localName: ownerName, ...context },
+      });
+      return null;
+    };
+
     const parsed = parseStyledTemplateLiteral(template);
     const rawCss = parsed.rawCss;
     const wrappedRawCss = `& { ${rawCss} }`;
@@ -123,8 +135,7 @@ export function createCssHelperResolver(args: {
 
     for (const rule of rules) {
       if (rule.atRuleStack.length > 0) {
-        onBail?.("Conditional `css` block: @-rules (e.g., @media, @supports) are not supported");
-        return null;
+        return bail("Conditional `css` block: @-rules (e.g., @media, @supports) are not supported");
       }
       const selector = (rule.selector ?? "").trim();
       const allowDynamicValues = selector === "&";
@@ -139,8 +150,7 @@ export function createCssHelperResolver(args: {
             out[normalizedPseudoElement] = nested;
             target = nested;
           } else {
-            onBail?.("Conditional `css` block: unsupported selector");
-            return null;
+            return bail("Conditional `css` block: unsupported selector");
           }
         } else if (parsed.kind === "pseudo" && parsed.pseudos.length === 1) {
           const simplePseudo = parsed.pseudos[0]!;
@@ -158,15 +168,13 @@ export function createCssHelperResolver(args: {
             target = nested;
           }
         } else {
-          onBail?.("Conditional `css` block: unsupported selector");
-          return null;
+          return bail("Conditional `css` block: unsupported selector");
         }
       }
 
       for (const d of rule.declarations) {
         if (!d.property) {
-          onBail?.("Conditional `css` block: missing CSS property name");
-          return null;
+          return bail("Conditional `css` block: missing CSS property name");
         }
         if (d.value.kind === "static") {
           for (const mapped of cssDeclarationToStylexDeclarations(d)) {
@@ -185,10 +193,9 @@ export function createCssHelperResolver(args: {
         }
 
         if (d.important) {
-          onBail?.("Conditional `css` block: !important is not supported in StyleX", {
+          return bail("Conditional `css` block: !important is not supported in StyleX", {
             property: d.property,
           });
-          return null;
         }
 
         const parts = d.value.parts ?? [];
@@ -197,13 +204,10 @@ export function createCssHelperResolver(args: {
         const slotParts = parts.filter((p: { kind: string }) => p.kind === "slot");
         if (slotParts.length !== 1) {
           // Only support single-slot values
-          onBail?.(
+          return bail(
             "Conditional `css` block: multiple interpolation slots in a single property value",
-            {
-              property: d.property,
-            },
+            { property: d.property },
           );
-          return null;
         }
 
         // Check if there are static parts around the slot (e.g., box-shadow: 0 0 0 1px ${theme})
@@ -213,10 +217,9 @@ export function createCssHelperResolver(args: {
         const slotId = slotPart.slotId;
         const expr = slotExprById.get(slotId);
         if (!expr) {
-          onBail?.("Conditional `css` block: missing interpolation expression", {
+          return bail("Conditional `css` block: missing interpolation expression", {
             property: d.property,
           });
-          return null;
         }
         const resolved = resolveHelperExprToAst(expr as any, paramName);
         if (resolved) {
@@ -248,10 +251,9 @@ export function createCssHelperResolver(args: {
               continue;
             }
             // Fall through if parsing failed
-            onBail?.("Conditional `css` block: failed to parse expression", {
+            return bail("Conditional `css` block: failed to parse expression", {
               property: d.property,
             });
-            return null;
           } else {
             for (const mapped of cssDeclarationToStylexDeclarations(d)) {
               (target as any)[mapped.prop] = resolved.ast as any;
@@ -263,11 +265,10 @@ export function createCssHelperResolver(args: {
         // Mixed static/dynamic values with non-theme expressions cannot be safely transformed
         // (e.g., border: 1px solid ${props.color} would lose the "1px solid " prefix)
         if (hasStaticParts) {
-          onBail?.(
+          return bail(
             "Conditional `css` block: mixed static/dynamic values with non-theme expressions cannot be safely transformed",
             { property: d.property },
           );
-          return null;
         }
 
         const propPath =

@@ -231,45 +231,15 @@ export function lowerRules(args: {
     },
   );
 
-  // Mutable context for css-helper bail callbacks
-  let cssHelperBailContext: {
-    loc: { line: number; column: number } | null;
-    localName: string;
-  } | null = null;
-
-  const { isCssHelperTaggedTemplate, resolveCssHelperTemplate: rawResolveCssHelperTemplate } =
-    createCssHelperResolver({
-      importMap,
-      filePath,
-      resolveValue,
-      parseExpr,
-      resolverImports,
-      cssValueToJs,
-      onBail: (type, context) => {
-        if (!cssHelperBailContext) {
-          return;
-        }
-        warnings.push({
-          severity: "warning",
-          type,
-          loc: cssHelperBailContext.loc,
-          context: { localName: cssHelperBailContext.localName, ...context },
-        });
-      },
-    });
-
-  // Wrapper that sets context before calling the resolver
-  const resolveCssHelperTemplate = (
-    template: Parameters<typeof rawResolveCssHelperTemplate>[0],
-    paramName: Parameters<typeof rawResolveCssHelperTemplate>[1],
-    ownerName: Parameters<typeof rawResolveCssHelperTemplate>[2],
-    loc: { line: number; column: number } | null | undefined,
-  ): ReturnType<typeof rawResolveCssHelperTemplate> => {
-    cssHelperBailContext = { loc: loc ?? null, localName: ownerName };
-    const result = rawResolveCssHelperTemplate(template, paramName, ownerName);
-    cssHelperBailContext = null;
-    return result;
-  };
+  const { isCssHelperTaggedTemplate, resolveCssHelperTemplate } = createCssHelperResolver({
+    importMap,
+    filePath,
+    resolveValue,
+    parseExpr,
+    resolverImports,
+    cssValueToJs,
+    warnings,
+  });
 
   const bailUnsupported = (decl: StyledDecl, type: WarningType): void => {
     warnings.push({
