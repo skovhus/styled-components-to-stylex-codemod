@@ -43,6 +43,17 @@ export const transitionSpeed = (speed: Speed) => `var(--speed-${speed})`;
 
 export const zIndex = {
   modal: 1000,
+  popover: 900,
+};
+
+export const config = {
+  ui: {
+    spacing: {
+      small: "4px",
+      medium: "8px",
+      large: "16px",
+    },
+  },
 };
 
 // Font weight helper - returns numeric font weights

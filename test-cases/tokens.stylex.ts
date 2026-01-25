@@ -76,4 +76,11 @@ export const pixelVars = stylex.defineVars({
 
 export const $zIndex = stylex.defineVars({
   modal: "1000",
+  popover: "900",
+});
+
+export const $config = stylex.defineVars({
+  "ui.spacing.small": "4px",
+  "ui.spacing.medium": "8px",
+  "ui.spacing.large": "16px",
 });

@@ -8,9 +8,11 @@ import type {
   ResolveValueResult,
 } from "../adapter.js";
 import {
+  type CallExpressionNode,
   getArrowFnSingleParamName,
   getMemberPathFromIdentifier,
   isArrowFunctionExpression,
+  isCallExpressionNode,
 } from "./jscodeshift-utils.js";
 import { cssDeclarationToStylexDeclarations } from "./css-prop-mapping.js";
 import type { WarningType } from "./logger.js";
@@ -313,18 +315,6 @@ function tryResolveThemeAccess(
     return null;
   }
   return { type: "resolvedValue", expr: res.expr, imports: res.imports };
-}
-
-type CallExpressionNode = {
-  type?: string;
-  callee?: unknown;
-  arguments?: unknown[];
-};
-
-function isCallExpressionNode(node: unknown): node is CallExpressionNode {
-  return (
-    !!node && typeof node === "object" && (node as { type?: string }).type === "CallExpression"
-  );
 }
 
 function callArgFromNode(node: unknown): CallResolveContext["args"][number] {

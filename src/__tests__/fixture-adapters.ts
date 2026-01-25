@@ -132,6 +132,19 @@ export const fixtureAdapter = defineAdapter({
           ],
         };
       }
+      if (ctx.importedName === "config") {
+        const path = ctx.path ?? "";
+        // For nested paths like "ui.spacing.small", use bracket notation with the full path
+        return {
+          expr: path ? `$config["${path}"]` : "$config",
+          imports: [
+            {
+              from: { kind: "specifier", value: "./tokens.stylex" },
+              names: [{ imported: "$config" }],
+            },
+          ],
+        };
+      }
     }
 
     return null;

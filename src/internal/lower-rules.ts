@@ -8,9 +8,18 @@ import {
   resolveBackgroundStylexPropForVariants,
 } from "./css-prop-mapping.js";
 import {
+  type AstPath,
+  type IdentifierNode,
+  extractRootAndPath,
   getFunctionBodyExpr,
   getMemberPathFromIdentifier,
   getNodeLocStart,
+  isAstNode,
+  isAstPath,
+  isIdentifierNode,
+  isCallExpressionNode,
+  isFunctionNode,
+  getDeclaratorId,
 } from "./jscodeshift-utils.js";
 import type { Adapter, ImportSource, ImportSpec } from "../adapter.js";
 import { tryHandleAnimation } from "./lower-rules/animation.js";
@@ -60,9 +69,6 @@ export type DescendantOverride = {
 };
 
 type ExpressionKind = Parameters<JSCodeshift["expressionStatement"]>[0];
-type AstPath = { node: ASTNode; parentPath?: AstPath | null };
-type IdentifierNode = { type: "Identifier"; name: string };
-type CallExpressionNode = { type: "CallExpression"; callee: unknown };
 
 export function lowerRules(args: {
   api: API;
@@ -247,16 +253,13 @@ export function lowerRules(args: {
   const usedCssHelperFunctions = new Set<string>();
 
   const shadowedIdentCache = new WeakMap<object, boolean>();
-  const isFunctionNode = (node: any): boolean =>
-    !!node &&
-    (node.type === "FunctionDeclaration" ||
-      node.type === "FunctionExpression" ||
-      node.type === "ArrowFunctionExpression");
-  const isLoopNode = (node: any): boolean =>
-    !!node &&
-    (node.type === "ForStatement" ||
-      node.type === "ForInStatement" ||
-      node.type === "ForOfStatement");
+  const isLoopNode = (node: unknown): boolean => {
+    if (!node || typeof node !== "object") {
+      return false;
+    }
+    const type = (node as { type?: string }).type;
+    return type === "ForStatement" || type === "ForInStatement" || type === "ForOfStatement";
+  };
   const collectPatternIdentifiers = (pattern: any, out: Set<string>): void => {
     if (!pattern || typeof pattern !== "object") {
       return;
@@ -295,59 +298,8 @@ export function lowerRules(args: {
         return;
     }
   };
-  const getRootIdentifierInfo = (
-    node: any,
-  ): { rootName: string; rootNode: any; path: string[] } | null => {
-    if (!node || typeof node !== "object") {
-      return null;
-    }
-    if (node.type === "Identifier") {
-      return { rootName: node.name, rootNode: node, path: [] };
-    }
-    if (node.type !== "MemberExpression" && node.type !== "OptionalMemberExpression") {
-      return null;
-    }
-    const parts: string[] = [];
-    let cur: any = node;
-    while (cur && (cur.type === "MemberExpression" || cur.type === "OptionalMemberExpression")) {
-      if (cur.computed) {
-        return null;
-      }
-      if (cur.property?.type !== "Identifier") {
-        return null;
-      }
-      parts.unshift(cur.property.name);
-      cur = cur.object;
-    }
-    if (cur?.type !== "Identifier") {
-      return null;
-    }
-    return { rootName: cur.name, rootNode: cur, path: parts };
-  };
-  const isAstPath = (value: unknown): value is AstPath =>
-    !!value && typeof value === "object" && "node" in value;
-  const isIdentifierNode = (node: unknown): node is IdentifierNode => {
-    if (!node || typeof node !== "object") {
-      return false;
-    }
-    const typed = node as { type?: unknown; name?: unknown };
-    return typed.type === "Identifier" && typeof typed.name === "string";
-  };
-  const isCallExpressionNode = (node: unknown): node is CallExpressionNode => {
-    if (!node || typeof node !== "object") {
-      return false;
-    }
-    return (node as { type?: unknown }).type === "CallExpression";
-  };
-  const getDeclaratorId = (decl: unknown): unknown => {
-    if (!decl || typeof decl !== "object") {
-      return null;
-    }
-    if (!("id" in decl)) {
-      return null;
-    }
-    return (decl as { id?: unknown }).id ?? null;
-  };
+  // Use the consolidated member expression extraction utility
+  const getRootIdentifierInfo = extractRootAndPath;
   const findIdentifierPath = (identNode: unknown): AstPath | null => {
     if (!identNode || typeof identNode !== "object") {
       return null;
@@ -2744,14 +2696,11 @@ export function lowerRules(args: {
               // overwriting the base/default value.
               if (media) {
                 const existing = target[stylexProp];
-                const isAstNode =
-                  !!existing &&
+                const map =
+                  existing &&
                   typeof existing === "object" &&
                   !Array.isArray(existing) &&
-                  "type" in (existing as any) &&
-                  typeof (existing as any).type === "string";
-                const map =
-                  existing && typeof existing === "object" && !Array.isArray(existing) && !isAstNode
+                  !isAstNode(existing)
                     ? (existing as Record<string, unknown>)
                     : ({} as Record<string, unknown>);
                 // Set default from target first, then fall back to base styleObj.
@@ -2772,14 +2721,11 @@ export function lowerRules(args: {
                 // - an already-built pseudo map (plain object with `default` / `:hover` keys)
                 //
                 // Only treat it as an existing pseudo map when it's a plain object *and* not an AST node.
-                const isAstNode =
-                  !!existing &&
+                const map =
+                  existing &&
                   typeof existing === "object" &&
                   !Array.isArray(existing) &&
-                  "type" in (existing as any) &&
-                  typeof (existing as any).type === "string";
-                const map =
-                  existing && typeof existing === "object" && !Array.isArray(existing) && !isAstNode
+                  !isAstNode(existing)
                     ? (existing as Record<string, unknown>)
                     : ({} as Record<string, unknown>);
                 // Set default from target first, then fall back to base styleObj.
@@ -2909,14 +2855,11 @@ export function lowerRules(args: {
               }
               if (pseudos?.length) {
                 const existing = target[stylexPropMulti];
-                const isAstNode =
-                  !!existing &&
+                const map =
+                  existing &&
                   typeof existing === "object" &&
                   !Array.isArray(existing) &&
-                  "type" in (existing as any) &&
-                  typeof (existing as any).type === "string";
-                const map =
-                  existing && typeof existing === "object" && !Array.isArray(existing) && !isAstNode
+                  !isAstNode(existing)
                     ? (existing as Record<string, unknown>)
                     : ({} as Record<string, unknown>);
                 // Set default from target first, then fall back to base styleObj.
@@ -3876,12 +3819,6 @@ export function lowerRules(args: {
     // Currently we only synthesize compound variants for the `disabled` + `color === "primary"` pattern
     // so that hover can still win (matching CSS specificity semantics).
     {
-      const isAstNode = (v: unknown): boolean =>
-        !!v &&
-        typeof v === "object" &&
-        !Array.isArray(v) &&
-        "type" in (v as any) &&
-        typeof (v as any).type === "string";
       const isPseudoOrMediaMap = (v: unknown): v is Record<string, unknown> => {
         if (!v || typeof v !== "object" || Array.isArray(v) || isAstNode(v)) {
           return false;
@@ -4045,8 +3982,8 @@ export function lowerRules(args: {
         [j.literal(pseudo)],
       );
 
-    const isAstNode = (v: unknown): v is ExpressionKind =>
-      !!v && typeof v === "object" && "type" in v;
+    // Local type guard that narrows to ExpressionKind for use with jscodeshift builders
+    const isExpressionNode = (v: unknown): v is ExpressionKind => isAstNode(v);
 
     for (const [overrideKey, pseudoBuckets] of descendantOverridePseudoBuckets.entries()) {
       const baseBucket = pseudoBuckets.get(null) ?? {};
@@ -4080,12 +4017,12 @@ export function lowerRules(args: {
             j.property(
               "init",
               j.identifier("default"),
-              isAstNode(baseVal) ? baseVal : literalToAst(j, baseVal ?? null),
+              isExpressionNode(baseVal) ? baseVal : literalToAst(j, baseVal ?? null),
             ),
           ];
           for (const { pseudo, value } of pseudoValues) {
             const ancestorKey = makeAncestorKey(pseudo);
-            const valExpr = isAstNode(value) ? value : literalToAst(j, value);
+            const valExpr = isExpressionNode(value) ? value : literalToAst(j, value);
             const propNode = Object.assign(j.property("init", ancestorKey, valExpr), {
               computed: true,
             });
@@ -4098,7 +4035,7 @@ export function lowerRules(args: {
             j.property(
               "init",
               j.identifier(prop),
-              isAstNode(baseVal) ? baseVal : literalToAst(j, baseVal),
+              isExpressionNode(baseVal) ? baseVal : literalToAst(j, baseVal),
             ),
           );
         }

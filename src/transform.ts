@@ -1,5 +1,6 @@
 import type { API, ASTPath, FileInfo, ImportDeclaration, JSXAttribute, Options } from "jscodeshift";
 import path from "node:path";
+import { isAstNode } from "./internal/jscodeshift-utils.js";
 import type { ImportSource, ImportSpec } from "./adapter.js";
 import { assertNoNullNodesInArrays } from "./internal/ast-safety.js";
 import { collectStyledDecls } from "./internal/collect-styled-decls.js";
@@ -2678,10 +2679,6 @@ function literalToAst(j: API["jscodeshift"], value: unknown): any {
   }
   // fallback (should be unreachable, but keep it defensive)
   return j.literal("[Unknown]");
-}
-
-function isAstNode(v: unknown): v is { type: string } {
-  return !!v && typeof v === "object" && typeof (v as any).type === "string";
 }
 
 function cssValueToJs(value: any, important = false, propName?: string): unknown {
