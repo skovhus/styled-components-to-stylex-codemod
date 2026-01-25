@@ -13,6 +13,16 @@ type ImportMapEntry = {
   source: ImportSource;
 };
 
+export type CssHelperBailReason =
+  | "mixed-static-dynamic-non-theme"
+  | "multiple-slots"
+  | "at-rule"
+  | "unsupported-selector"
+  | "important"
+  | "missing-property"
+  | "missing-slot-expr"
+  | "parse-failed";
+
 export function createCssHelperResolver(args: {
   importMap: Map<string, ImportMapEntry>;
   filePath: string;
@@ -20,6 +30,7 @@ export function createCssHelperResolver(args: {
   parseExpr: (exprSource: string) => any;
   resolverImports: Map<string, ImportSpec>;
   cssValueToJs: (value: unknown, important?: boolean, propName?: string) => unknown;
+  onBail?: (reason: CssHelperBailReason, context?: { property?: string }) => void;
 }): {
   isCssHelperTaggedTemplate: (expr: any) => expr is { quasi: any };
   resolveCssHelperTemplate: (
@@ -31,7 +42,8 @@ export function createCssHelperResolver(args: {
     dynamicProps: Array<{ jsxProp: string; stylexProp: string }>;
   } | null;
 } {
-  const { importMap, filePath, resolveValue, parseExpr, resolverImports, cssValueToJs } = args;
+  const { importMap, filePath, resolveValue, parseExpr, resolverImports, cssValueToJs, onBail } =
+    args;
 
   const isCssHelperTaggedTemplate = (expr: any): expr is { quasi: any } => {
     if (!expr || expr.type !== "TaggedTemplateExpression") {
@@ -120,6 +132,7 @@ export function createCssHelperResolver(args: {
 
     for (const rule of rules) {
       if (rule.atRuleStack.length > 0) {
+        onBail?.("at-rule");
         return null;
       }
       const selector = (rule.selector ?? "").trim();
@@ -135,6 +148,7 @@ export function createCssHelperResolver(args: {
             out[normalizedPseudoElement] = nested;
             target = nested;
           } else {
+            onBail?.("unsupported-selector");
             return null;
           }
         } else if (parsed.kind === "pseudo" && parsed.pseudos.length === 1) {
@@ -153,12 +167,14 @@ export function createCssHelperResolver(args: {
             target = nested;
           }
         } else {
+          onBail?.("unsupported-selector");
           return null;
         }
       }
 
       for (const d of rule.declarations) {
         if (!d.property) {
+          onBail?.("missing-property");
           return null;
         }
         if (d.value.kind === "static") {
@@ -178,6 +194,7 @@ export function createCssHelperResolver(args: {
         }
 
         if (d.important) {
+          onBail?.("important", { property: d.property });
           return null;
         }
 
@@ -187,18 +204,22 @@ export function createCssHelperResolver(args: {
         const slotParts = parts.filter((p: { kind: string }) => p.kind === "slot");
         if (slotParts.length !== 1) {
           // Only support single-slot values
+          onBail?.("multiple-slots", { property: d.property });
           return null;
         }
+
+        // Check if there are static parts around the slot (e.g., box-shadow: 0 0 0 1px ${theme})
+        const hasStaticParts = parts.length > 1;
+
         const slotPart = slotParts[0] as { kind: "slot"; slotId: number };
         const slotId = slotPart.slotId;
         const expr = slotExprById.get(slotId);
         if (!expr) {
+          onBail?.("missing-slot-expr", { property: d.property });
           return null;
         }
         const resolved = resolveHelperExprToAst(expr as any, paramName);
         if (resolved) {
-          // Check if there are static parts around the slot (e.g., box-shadow: 0 0 0 1px ${theme})
-          const hasStaticParts = parts.length > 1;
           if (hasStaticParts) {
             // Extract prefix and suffix static parts
             let prefix = "";
@@ -227,6 +248,7 @@ export function createCssHelperResolver(args: {
               continue;
             }
             // Fall through if parsing failed
+            onBail?.("parse-failed", { property: d.property });
             return null;
           } else {
             for (const mapped of cssDeclarationToStylexDeclarations(d)) {
@@ -234,6 +256,13 @@ export function createCssHelperResolver(args: {
             }
             continue;
           }
+        }
+
+        // Mixed static/dynamic values with non-theme expressions cannot be safely transformed
+        // (e.g., border: 1px solid ${props.color} would lose the "1px solid " prefix)
+        if (hasStaticParts) {
+          onBail?.("mixed-static-dynamic-non-theme", { property: d.property });
+          return null;
         }
 
         const propPath =

@@ -45,7 +45,7 @@ import {
   unwrapArrowFunctionToPropsExpr,
 } from "./lower-rules/inline-styles.js";
 import { addPropComments } from "./lower-rules/comments.js";
-import { createCssHelperResolver } from "./lower-rules/css-helper.js";
+import { createCssHelperResolver, type CssHelperBailReason } from "./lower-rules/css-helper.js";
 import { parseSwitchReturningCssTemplates } from "./lower-rules/switch-variants.js";
 import { createThemeResolvers } from "./lower-rules/theme.js";
 import {
@@ -231,14 +231,51 @@ export function lowerRules(args: {
     },
   );
 
-  const { isCssHelperTaggedTemplate, resolveCssHelperTemplate } = createCssHelperResolver({
-    importMap,
-    filePath,
-    resolveValue,
-    parseExpr,
-    resolverImports,
-    cssValueToJs,
-  });
+  // Mutable context for css-helper bail callbacks
+  let cssHelperBailContext: {
+    loc: { line: number; column: number } | null;
+    localName: string;
+  } | null = null;
+
+  const cssHelperBailReasonToWarningType: Partial<Record<CssHelperBailReason, WarningType>> = {
+    "mixed-static-dynamic-non-theme":
+      "CSS helper: mixed static/dynamic values with non-theme expressions cannot be safely transformed",
+  };
+
+  const { isCssHelperTaggedTemplate, resolveCssHelperTemplate: rawResolveCssHelperTemplate } =
+    createCssHelperResolver({
+      importMap,
+      filePath,
+      resolveValue,
+      parseExpr,
+      resolverImports,
+      cssValueToJs,
+      onBail: (reason, context) => {
+        const warningType = cssHelperBailReasonToWarningType[reason];
+        if (!warningType || !cssHelperBailContext) {
+          return;
+        }
+        warnings.push({
+          severity: "warning",
+          type: warningType,
+          loc: cssHelperBailContext.loc,
+          context: { localName: cssHelperBailContext.localName, ...context },
+        });
+      },
+    });
+
+  // Wrapper that sets context before calling the resolver
+  const resolveCssHelperTemplate = (
+    template: Parameters<typeof rawResolveCssHelperTemplate>[0],
+    paramName: Parameters<typeof rawResolveCssHelperTemplate>[1],
+    ownerName: Parameters<typeof rawResolveCssHelperTemplate>[2],
+    loc: { line: number; column: number } | null | undefined,
+  ): ReturnType<typeof rawResolveCssHelperTemplate> => {
+    cssHelperBailContext = { loc: loc ?? null, localName: ownerName };
+    const result = rawResolveCssHelperTemplate(template, paramName, ownerName);
+    cssHelperBailContext = null;
+    return result;
+  };
 
   const bailUnsupported = (decl: StyledDecl, type: WarningType): void => {
     warnings.push({
@@ -999,7 +1036,12 @@ export function lowerRules(args: {
           return false;
         }
         const cssNode = body.right as { quasi: ExpressionKind };
-        const resolved = resolveCssHelperTemplate(cssNode.quasi, paramName, decl.localName);
+        const resolved = resolveCssHelperTemplate(
+          cssNode.quasi,
+          paramName,
+          decl.localName,
+          decl.loc,
+        );
         if (!resolved) {
           return false;
         }
@@ -1075,7 +1117,7 @@ export function lowerRules(args: {
           return null;
         }
         const tplNode = node as { quasi: ExpressionKind };
-        return resolveCssHelperTemplate(tplNode.quasi, paramName, decl.localName);
+        return resolveCssHelperTemplate(tplNode.quasi, paramName, decl.localName, decl.loc);
       };
 
       if (consIsCss && altIsCss) {
@@ -1288,6 +1330,7 @@ export function lowerRules(args: {
             parsed.defaultCssTemplate.quasi,
             null,
             decl.localName,
+            helperFn.loc ?? decl.loc,
           );
           if (!defaultResolved || defaultResolved.dynamicProps.length > 0) {
             warnings.push({
@@ -1302,7 +1345,12 @@ export function lowerRules(args: {
           mergeStyleObjects(baseFromHelper, defaultResolved.style);
 
           for (const [caseValue, tpl] of parsed.caseCssTemplates.entries()) {
-            const res = resolveCssHelperTemplate(tpl.quasi, null, decl.localName);
+            const res = resolveCssHelperTemplate(
+              tpl.quasi,
+              null,
+              decl.localName,
+              helperFn.loc ?? decl.loc,
+            );
             if (!res || res.dynamicProps.length > 0) {
               warnings.push({
                 severity: "warning",
