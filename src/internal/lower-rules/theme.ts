@@ -2,6 +2,7 @@ import type { ASTNode, Collection, JSCodeshift } from "jscodeshift";
 
 import type { Adapter, ImportSpec } from "../../adapter.js";
 import { getFunctionBodyExpr, getMemberPathFromIdentifier } from "../jscodeshift-utils.js";
+import { addResolverImports } from "../resolver-imports.js";
 
 export function createThemeResolvers(args: {
   root: Collection<ASTNode>;
@@ -52,9 +53,7 @@ export function createThemeResolvers(args: {
     if (!resolved) {
       return null;
     }
-    for (const imp of resolved.imports ?? []) {
-      resolverImports.set(JSON.stringify(imp), imp);
-    }
+    addResolverImports(resolverImports, resolved.imports);
     return parseExpr(resolved.expr);
   };
 
@@ -115,9 +114,7 @@ export function createThemeResolvers(args: {
     if (!resolved) {
       return null;
     }
-    for (const imp of resolved.imports ?? []) {
-      resolverImports.set(JSON.stringify(imp), imp);
-    }
+    addResolverImports(resolverImports, resolved.imports);
     return parseExpr(resolved.expr);
   };
 

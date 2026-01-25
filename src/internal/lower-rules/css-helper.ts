@@ -6,8 +6,9 @@ import { cssDeclarationToStylexDeclarations } from "../css-prop-mapping.js";
 import { getMemberPathFromIdentifier } from "../jscodeshift-utils.js";
 import type { WarningLog, WarningType } from "../logger.js";
 import { parseStyledTemplateLiteral } from "../styled-css.js";
+import { addResolverImports } from "../resolver-imports.js";
 import { parseSelector } from "../selectors.js";
-import { wrapExprWithStaticParts } from "./interpolations.js";
+import { extractStaticParts, wrapExprWithStaticParts } from "./interpolations.js";
 
 type ImportMapEntry = {
   importedName: string;
@@ -84,9 +85,7 @@ export function createCssHelperResolver(args: {
     if (!res) {
       return null;
     }
-    for (const imp of res.imports ?? []) {
-      resolverImports.set(JSON.stringify(imp), imp);
-    }
+    addResolverImports(resolverImports, res.imports);
     const exprAst = parseExpr(res.expr);
     return exprAst ? { ast: exprAst, exprString: res.expr } : null;
   };
@@ -224,23 +223,7 @@ export function createCssHelperResolver(args: {
         const resolved = resolveHelperExprToAst(expr as any, paramName);
         if (resolved) {
           if (hasStaticParts) {
-            // Extract prefix and suffix static parts
-            let prefix = "";
-            let suffix = "";
-            let foundSlot = false;
-            for (const part of parts) {
-              if (part.kind === "slot") {
-                foundSlot = true;
-                continue;
-              }
-              if (part.kind === "static") {
-                if (foundSlot) {
-                  suffix += part.value ?? "";
-                } else {
-                  prefix += part.value ?? "";
-                }
-              }
-            }
+            const { prefix, suffix } = extractStaticParts(d.value);
             // Create a template literal string using the shared helper (same logic as top-level)
             const wrappedExpr = wrapExprWithStaticParts(resolved.exprString, prefix, suffix);
             const templateAst = parseExpr(wrappedExpr);

@@ -24,6 +24,7 @@ import { buildImportMap } from "./internal/transform-import-map.js";
 import { parseExpr as parseExprImpl } from "./internal/transform-parse-expr.js";
 import { createResolveAdapterSafe } from "./internal/transform-resolve-value.js";
 import { rewriteCssVarsInStyleObject as rewriteCssVarsInStyleObjectImpl } from "./internal/transform-css-vars.js";
+import { addResolverImport } from "./internal/resolver-imports.js";
 import {
   extractAndRemoveCssHelpers,
   isIdentifierReference,
@@ -163,7 +164,7 @@ export function transformWithWarnings(
       varsToDrop,
       isAstNode,
       resolveValue: resolveValueSafe,
-      addImport: (imp) => resolverImports.set(JSON.stringify(imp), imp),
+      addImport: (imp) => addResolverImport(resolverImports, imp),
       parseExpr,
       j,
     });

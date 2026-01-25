@@ -53,6 +53,7 @@ import {
   groupVariantBucketsIntoDimensions,
 } from "./lower-rules/variants.js";
 import { mergeStyleObjects, toKebab } from "./lower-rules/utils.js";
+import { addResolverImport, addResolverImports } from "./resolver-imports.js";
 import {
   normalizeSelectorForInputAttributePseudos,
   normalizeInterpolatedSelector,
@@ -737,9 +738,7 @@ export function lowerRules(args: {
         if (!resolved) {
           return null;
         }
-        for (const imp of resolved.imports ?? []) {
-          resolverImports.set(JSON.stringify(imp), imp);
-        }
+        addResolverImports(resolverImports, resolved.imports);
         const exprAst = parseExpr(resolved.expr);
         return (exprAst as ExpressionKind) ?? null;
       };
@@ -1944,8 +1943,8 @@ export function lowerRules(args: {
             }
             return null;
           };
-          const addImport = (imp: any) => {
-            resolverImports.set(JSON.stringify(imp), imp);
+          const addImport = (imp: ImportSpec | null | undefined) => {
+            addResolverImport(resolverImports, imp);
           };
           if (
             tryHandleInterpolatedStringValue({
@@ -2269,9 +2268,7 @@ export function lowerRules(args: {
               return false;
             }
 
-            for (const imp of resolved.imports ?? []) {
-              resolverImports.set(JSON.stringify(imp), imp);
-            }
+            addResolverImports(resolverImports, resolved.imports);
 
             // Ensure we generate a wrapper so we can consume the prop without forwarding it to DOM.
             ensureShouldForwardPropDrop(decl, indexPropName);
@@ -2431,9 +2428,7 @@ export function lowerRules(args: {
               bail = true;
               break;
             }
-            for (const imp of res.imports ?? []) {
-              resolverImports.set(JSON.stringify(imp), imp);
-            }
+            addResolverImports(resolverImports, res.imports);
             const exprAst = parseExpr(res.expr);
             if (!exprAst) {
               warnings.push({
@@ -2451,9 +2446,7 @@ export function lowerRules(args: {
           }
 
           if (res && res.type === "resolvedValue") {
-            for (const imp of res.imports ?? []) {
-              resolverImports.set(JSON.stringify(imp), imp);
-            }
+            addResolverImports(resolverImports, res.imports);
 
             // Extract and wrap static prefix/suffix (skip for border-color since expansion handled it)
             const cssProp = (d.property ?? "").trim();
@@ -2547,9 +2540,7 @@ export function lowerRules(args: {
               break;
             }
             for (const v of res.variants) {
-              for (const imp of v.imports ?? []) {
-                resolverImports.set(JSON.stringify(imp), imp);
-              }
+              addResolverImports(resolverImports, v.imports);
               const exprAst = parseExpr(v.expr);
               if (!exprAst) {
                 warnings.push({
@@ -2603,8 +2594,8 @@ export function lowerRules(args: {
 
             const parseResolved = (
               expr: string,
-              imports: any[],
-            ): { exprAst: unknown; imports: any[] } | null => {
+              imports: ImportSpec[] | null | undefined,
+            ): { exprAst: unknown; imports: ImportSpec[] } | null => {
               const wrappedExpr = wrapExprWithStaticParts(expr, staticPrefix, staticSuffix);
               const exprAst = parseExpr(wrappedExpr);
               if (!exprAst) {
@@ -2720,11 +2711,9 @@ export function lowerRules(args: {
 
             const applyParsed = (
               target: Record<string, unknown>,
-              parsed: { exprAst: unknown; imports: any[] },
+              parsed: { exprAst: unknown; imports: ImportSpec[] },
             ): void => {
-              for (const imp of parsed.imports) {
-                resolverImports.set(JSON.stringify(imp), imp);
-              }
+              addResolverImports(resolverImports, parsed.imports);
               // Special handling for border shorthand with string literal values
               if (cssProp === "border" && expandBorderShorthand(target, parsed.exprAst)) {
                 return;
@@ -2892,11 +2881,9 @@ export function lowerRules(args: {
 
             const applyParsed = (
               target: Record<string, unknown>,
-              parsed: { exprAst: unknown; imports: any[] },
+              parsed: { exprAst: unknown; imports: ImportSpec[] },
             ): void => {
-              for (const imp of parsed.imports) {
-                resolverImports.set(JSON.stringify(imp), imp);
-              }
+              addResolverImports(resolverImports, parsed.imports);
               if (pseudos?.length) {
                 const existing = target[stylexPropMulti];
                 const map =
@@ -2995,12 +2982,8 @@ export function lowerRules(args: {
             //   Usage: styles.badge, textColor != null && styles.badgeColor(textColor)
 
             // Add imports from both theme resolutions
-            for (const imp of res.themeObjectImports) {
-              resolverImports.set(JSON.stringify(imp), imp);
-            }
-            for (const imp of res.fallbackImports) {
-              resolverImports.set(JSON.stringify(imp), imp);
-            }
+            addResolverImports(resolverImports, res.themeObjectImports);
+            addResolverImports(resolverImports, res.fallbackImports);
 
             // Mark prop to not forward to DOM
             ensureShouldForwardPropDrop(decl, res.propName);

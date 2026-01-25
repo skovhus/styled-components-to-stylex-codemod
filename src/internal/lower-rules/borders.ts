@@ -1,7 +1,8 @@
 import type { API, Expression, JSCodeshift } from "jscodeshift";
-import type { Adapter, ImportSource } from "../../adapter.js";
+import type { Adapter, ImportSource, ImportSpec } from "../../adapter.js";
 import { resolveDynamicNode, type InternalHandlerContext } from "../builtin-handlers.js";
 import { getMemberPathFromIdentifier, getNodeLocStart } from "../jscodeshift-utils.js";
+import { addResolverImports } from "../resolver-imports.js";
 import type { StyledDecl } from "../transform-types.js";
 
 type ExpressionKind = Parameters<JSCodeshift["expressionStatement"]>[0];
@@ -23,7 +24,7 @@ export function tryHandleInterpolatedBorder(args: {
       source: ImportSource;
     }
   >;
-  resolverImports: Map<string, any>;
+  resolverImports: Map<string, ImportSpec>;
   parseExpr: (exprSource: string) => ExpressionKind | null;
   toSuffixFromProp: (propName: string) => string;
   variantBuckets: Map<string, Record<string, unknown>>;
@@ -268,9 +269,7 @@ export function tryHandleInterpolatedBorder(args: {
       } satisfies InternalHandlerContext,
     );
     if (res && res.type === "resolvedValue") {
-      for (const imp of res.imports ?? []) {
-        resolverImports.set(JSON.stringify(imp), imp);
-      }
+      addResolverImports(resolverImports, res.imports);
       const exprAst = parseExpr(res.expr);
       if (exprAst) {
         const exprNode = exprAst as { type?: string; value?: unknown };
@@ -329,9 +328,7 @@ export function tryHandleInterpolatedBorder(args: {
       if (parts && parts.length > 0) {
         const resolved = resolveValue({ kind: "theme", path: parts.join("."), filePath });
         if (resolved) {
-          for (const imp of resolved.imports ?? []) {
-            resolverImports.set(JSON.stringify(imp), imp);
-          }
+          addResolverImports(resolverImports, resolved.imports);
           const exprAst = parseExpr(resolved.expr);
           if (exprAst) {
             (styleObj as any)[colorProp] = exprAst as any;
