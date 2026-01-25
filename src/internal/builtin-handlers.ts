@@ -366,7 +366,7 @@ function resolveImportedHelperCall(
   if (typeof calleeIdent !== "string") {
     return "keepOriginal";
   }
-  const imp = ctx.resolveImport(calleeIdent);
+  const imp = ctx.resolveImport(calleeIdent, callee);
   const calleeImportedName = imp?.importedName;
   const calleeSource = imp?.source;
   if (!calleeImportedName || !calleeSource) {
@@ -440,7 +440,7 @@ function tryResolveCallExpression(
       }
       return (callee as { name?: string }).name ?? null;
     })();
-    const imp = typeof calleeIdent === "string" ? ctx.resolveImport(calleeIdent) : null;
+    const imp = typeof calleeIdent === "string" ? ctx.resolveImport(calleeIdent, callee) : null;
     const importedName = imp?.importedName ?? calleeIdent ?? "unknown";
     return {
       type: "keepOriginal",

@@ -15,7 +15,7 @@ type ThemeResolveContext = {
    * Absolute path of the file currently being transformed.
    * Useful for adapter logic that wants to branch by caller file.
    */
-  filePath?: string;
+  filePath: string;
 };
 
 type CssVariableResolveContext = {
@@ -27,7 +27,7 @@ type CssVariableResolveContext = {
    * Absolute path of the file currently being transformed.
    * Useful for adapter logic that wants to branch by caller file.
    */
-  filePath?: string;
+  filePath: string;
 };
 
 type ImportedValueResolveContext = {
@@ -50,7 +50,7 @@ type ImportedValueResolveContext = {
    * Absolute path of the file currently being transformed.
    * Useful for adapter logic that wants to branch by caller file.
    */
-  filePath?: string;
+  filePath: string;
 };
 
 export type CallResolveContext = {
