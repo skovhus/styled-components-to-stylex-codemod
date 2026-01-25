@@ -17,6 +17,7 @@ const Img = styled.img<{ $isInactive?: boolean; $disabled?: boolean }>`
   ${(props) =>
     props.$isInactive
       ? css`
+          box-shadow: 0 0 0 1px ${props.theme.color.bgSub};
           background-color: ${props.theme.color.bgSub};
           filter: opacity(0.5) grayscale(1);
         `
@@ -27,5 +28,8 @@ export const App = () => (
   <div>
     <Img src="https://picsum.photos/200" $disabled />
     <Img src="https://picsum.photos/200" />
+    <br />
+    <Img src="https://picsum.photos/200" $disabled $isInactive />
+    <Img src="https://picsum.photos/200" $isInactive />
   </div>
 );
