@@ -3,12 +3,23 @@ import * as stylex from "@stylexjs/stylex";
 
 type ButtonProps = React.PropsWithChildren<{
   $primary?: boolean;
+  hollow?: boolean;
 }>;
 
 function Button(props: ButtonProps) {
-  const { children, $primary } = props;
+  const { children, $primary, hollow } = props;
   return (
-    <button {...stylex.props(styles.button, $primary && styles.buttonPrimary)}>{children}</button>
+    <button
+      {...stylex.props(
+        styles.button,
+        $primary && styles.buttonPrimary,
+        hollow && styles.buttonHollow,
+        !hollow && $primary && styles.buttonNotHollowPrimary,
+        !hollow && !$primary && styles.buttonNotHollowNotPrimary,
+      )}
+    >
+      {children}
+    </button>
   );
 }
 
@@ -16,24 +27,35 @@ export const App = () => (
   <div>
     <Button>Normal</Button>
     <Button $primary>Primary</Button>
+    <br />
+    <Button hollow>Hollow</Button>
+    <Button hollow $primary>
+      Primary Hollow
+    </Button>
   </div>
 );
 
 const styles = stylex.create({
   button: {
-    backgroundColor: "white",
     color: "#BF4F74",
     fontSize: "1em",
     margin: "1em",
     paddingBlock: "0.25em",
     paddingInline: "1em",
-    borderWidth: "2px",
-    borderStyle: "solid",
-    borderColor: "#BF4F74",
     borderRadius: "3px",
   },
   buttonPrimary: {
-    backgroundColor: "#BF4F74",
     color: "white",
+  },
+  buttonHollow: {
+    borderWidth: "2px",
+    borderStyle: "solid",
+    borderColor: "#bf4f74",
+  },
+  buttonNotHollowPrimary: {
+    backgroundColor: "#BF4F74",
+  },
+  buttonNotHollowNotPrimary: {
+    backgroundColor: "white",
   },
 });
