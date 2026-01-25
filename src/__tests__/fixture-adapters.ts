@@ -1,10 +1,16 @@
-import { defineAdapter, type ResolveValueContext, type ResolveValueResult } from "../adapter.ts";
+import {
+  defineAdapter,
+  type ExternalInterfaceResult,
+  type ResolveValueContext,
+  type ResolveValueResult,
+} from "../adapter.ts";
 
 const externalStylingFilePaths = [
   "styled-element-html-props",
   "styled-input-html-props",
   "transient-prop-not-forwarded",
   "attrs-polymorphic-as",
+  "external-styles-support",
 ];
 
 const asPropFilePaths = ["exported-as-prop"];
@@ -18,34 +24,34 @@ export const fixtureAdapter = defineAdapter({
     importSource: { kind: "specifier", value: "./lib/mergedSx" },
   },
 
-  // Enable external styles for exported components in specific test cases where the expected
-  // output includes className/style prop support and HTMLAttributes extension.
-  shouldSupportExternalStyling(ctx) {
-    // check if parts of ctx.filePath are in externalStylingFilePaths
-    if (externalStylingFilePaths.some((filePath) => ctx.filePath.includes(filePath))) {
-      return true;
-    }
+  // Configure external interface for exported components
+  externalInterface(ctx): ExternalInterfaceResult {
+    let styles = false;
+    let as = false;
 
-    // external-styles-support test case - only ExportedButton supports external styles
-    if (ctx.filePath.includes("external-styles-support")) {
-      return ctx.componentName === "ExportedButton";
+    // Enable external styles for exported components in specific test cases where the expected
+    // output includes className/style prop support and HTMLAttributes extension.
+    if (externalStylingFilePaths.some((filePath) => ctx.filePath.includes(filePath))) {
+      styles = true;
     }
 
     // wrapper-props-incomplete - TextColor and ThemeText should extend HTMLAttributes
     // Highlight wraps a component and shouldn't support external styles
     if (ctx.filePath.includes("wrapper-props-incomplete")) {
-      return ctx.componentName === "TextColor" || ctx.componentName === "ThemeText";
+      if (ctx.componentName === "TextColor" || ctx.componentName === "ThemeText") {
+        styles = true;
+      }
     }
 
-    return false;
-  },
-
-  // Enable `as` prop support for exported components in selected fixtures.
-  shouldSupportAsProp(ctx) {
+    // Enable `as` prop support for exported components in selected fixtures.
     if (asPropFilePaths.some((filePath) => ctx.filePath.includes(filePath))) {
-      return true;
+      as = true;
     }
-    return false;
+
+    if (!styles && !as) {
+      return null;
+    }
+    return { styles: styles, as: as };
   },
 
   resolveValue(ctx) {
@@ -293,8 +299,8 @@ function customResolveValue(ctx: ResolveValueContext): ResolveValueResult | null
 // Test adapters - examples of custom adapter usage
 export const customAdapter = defineAdapter({
   styleMerger: null,
-  shouldSupportExternalStyling() {
-    return false;
+  externalInterface() {
+    return null;
   },
   resolveValue: customResolveValue,
   resolveCall(_ctx) {

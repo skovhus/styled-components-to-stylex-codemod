@@ -140,10 +140,10 @@ export type ImportSource =
 export type ImportSpec = { from: ImportSource; names: Array<{ imported: string; local?: string }> };
 
 // ────────────────────────────────────────────────────────────────────────────
-// External Styles Context
+// External Interface Context and Result
 // ────────────────────────────────────────────────────────────────────────────
 
-export interface ExternalStylesContext {
+export interface ExternalInterfaceContext {
   /** Absolute path of the file being transformed */
   filePath: string;
   /** Local name of the styled component */
@@ -153,6 +153,22 @@ export interface ExternalStylesContext {
   /** Whether it's a default export */
   isDefaultExport: boolean;
 }
+
+/**
+ * Result type for `adapter.externalInterface(...)`.
+ *
+ * - `null` → no external interface support (both disabled)
+ * - `{ styles: true }` → only className/style support
+ * - `{ as: true }` → only polymorphic as prop support
+ * - `{ as: true, styles: true }` → both features enabled
+ * - Omitted properties default to `false`
+ */
+export type ExternalInterfaceResult = {
+  /** Enable className/style prop support for external styling */
+  styles?: boolean;
+  /** Enable polymorphic `as` prop support */
+  as?: boolean;
+} | null;
 
 // ────────────────────────────────────────────────────────────────────────────
 // Style Merger Configuration
@@ -208,20 +224,16 @@ export interface Adapter {
   resolveCall: (context: CallResolveContext) => CallResolveResult | null;
 
   /**
-   * Called for exported styled components to determine if they should support
-   * external className/style extension. Return true to generate wrapper with
-   * className/style/rest merging.
-   */
-  shouldSupportExternalStyling: (context: ExternalStylesContext) => boolean;
-
-  /**
-   * Called for exported styled components to determine if they should accept
-   * the polymorphic `as` prop even when it is not used within the file.
+   * Called for exported styled components to determine their external interface.
    *
-   * Return true to enable `as` support on the exported component boundary.
-   * Defaults to false when omitted.
+   * Return:
+   * - `null` → no external interface (neither className/style nor `as` prop)
+   * - `{ styles: true }` → accept className/style props for external styling
+   * - `{ as: true }` → accept polymorphic `as` prop
+   * - `{ styles: true, as: true }` → both features enabled
+   * - Omitted properties default to `false`
    */
-  shouldSupportAsProp?: (context: ExternalStylesContext) => boolean;
+  externalInterface: (context: ExternalInterfaceContext) => ExternalInterfaceResult;
 
   /**
    * Custom merger function for className/style combining.
@@ -275,10 +287,13 @@ export interface Adapter {
  *       return null;
  *     },
  *
- *     // Enable className/style/rest support for exported components
- *     shouldSupportExternalStyling(ctx) {
- *       // Example: Enable for all exported components in a shared components folder
- *       return ctx.filePath.includes("/shared/components/");
+ *     // Configure external interface for exported components
+ *     externalInterface(ctx) {
+ *       // Example: Enable styles for shared components folder
+ *       if (ctx.filePath.includes("/shared/components/")) {
+ *         return { styles: true, as: false };
+ *       }
+ *       return null;
  *     },
  *
  *     // Optional: provide a custom merger, or use `null` for the default verbose merge output

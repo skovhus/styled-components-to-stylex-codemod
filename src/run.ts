@@ -192,8 +192,8 @@ export async function runTransform(options: RunTransformOptions): Promise<RunTra
 
   const adapterWithLogging: Adapter = {
     styleMerger: adapter.styleMerger,
-    shouldSupportExternalStyling(ctx) {
-      return adapter.shouldSupportExternalStyling(ctx);
+    externalInterface(ctx) {
+      return adapter.externalInterface(ctx);
     },
     resolveValue: resolveValueWithLogging,
     resolveCall: resolveCallWithLogging,

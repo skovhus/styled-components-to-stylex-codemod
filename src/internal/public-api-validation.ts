@@ -48,8 +48,7 @@ export function assertValidAdapter(
   const obj = candidate as Record<string, unknown>;
   const resolveValue = obj?.resolveValue;
   const resolveCall = obj?.resolveCall;
-  const shouldSupportExternalStyling = obj?.shouldSupportExternalStyling;
-  const shouldSupportAsProp = obj?.shouldSupportAsProp;
+  const externalInterface = obj?.externalInterface;
 
   if (!candidate || typeof candidate !== "object") {
     throw new Error(
@@ -60,7 +59,7 @@ export function assertValidAdapter(
         "Adapter requirements:",
         "  - adapter.resolveValue(context) is required",
         "  - adapter.resolveCall(context) is required",
-        "  - adapter.shouldSupportExternalStyling(context) is required",
+        "  - adapter.externalInterface(context) is required",
         "",
         "resolveValue(context) is called with one of these shapes:",
         '  - { kind: "theme", path }',
@@ -110,20 +109,11 @@ export function assertValidAdapter(
     );
   }
 
-  if (typeof shouldSupportExternalStyling !== "function") {
+  if (typeof externalInterface !== "function") {
     throw new Error(
       [
-        `${where}: adapter.shouldSupportExternalStyling must be a function.`,
-        `Received: shouldSupportExternalStyling=${describeValue(shouldSupportExternalStyling)}`,
-      ].join("\n"),
-    );
-  }
-
-  if (shouldSupportAsProp !== undefined && typeof shouldSupportAsProp !== "function") {
-    throw new Error(
-      [
-        `${where}: adapter.shouldSupportAsProp must be a function when provided.`,
-        `Received: shouldSupportAsProp=${describeValue(shouldSupportAsProp)}`,
+        `${where}: adapter.externalInterface must be a function.`,
+        `Received: externalInterface=${describeValue(externalInterface)}`,
       ].join("\n"),
     );
   }

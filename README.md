@@ -119,9 +119,11 @@ const adapter = defineAdapter({
     };
   },
 
-  shouldSupportExternalStyling() {
-    return false;
+  externalInterface() {
+    return null;
   },
+
+  styleMerger: null,
 });
 
 const result = await runTransform({
@@ -142,8 +144,7 @@ Adapters are the main extension point. They let you control:
 - how theme paths, CSS variables, and imported values are turned into StyleX-compatible JS values (`resolveValue`)
 - what extra imports to inject into transformed files (returned from `resolveValue`)
 - how helper calls are resolved (via `resolveCall({ ... })` returning `usage: "props" | "create"`; `null`/`undefined` now bails)
-- which exported components should support external className/style extension (`shouldSupportExternalStyling`)
-- which exported components should accept the polymorphic `as` prop (`shouldSupportAsProp`)
+- which exported components should support external className/style extension and/or polymorphic `as` prop (`externalInterface`)
 - how className/style merging is handled for components accepting external styling (`styleMerger`)
 
 #### Style Merger
@@ -161,8 +162,15 @@ const adapter = defineAdapter({
     return null;
   },
 
-  shouldSupportExternalStyling(ctx) {
-    return ctx.filePath.includes("/shared/components/");
+  resolveCall() {
+    return null;
+  },
+
+  externalInterface(ctx) {
+    if (ctx.filePath.includes("/shared/components/")) {
+      return { styles: true, as: false };
+    }
+    return null;
   },
 
   // Use a custom merger function for cleaner output
@@ -185,9 +193,9 @@ function mergedSx(
 
 See [`test-cases/lib/mergedSx.ts`](./test-cases/lib/mergedSx.ts) for a reference implementation.
 
-#### External Styles Support
+#### External Interface (Styles and Polymorphic `as` Support)
 
-Transformed components are "closed" by default — they don't accept external `className` or `style` props. Use `shouldSupportExternalStyling` to control which exported components should support external styling:
+Transformed components are "closed" by default — they don't accept external `className` or `style` props, and exported components only get `as` support when it is used inside the file. Use `externalInterface` to control which exported components should support these features:
 
 ```ts
 const adapter = defineAdapter({
@@ -196,53 +204,50 @@ const adapter = defineAdapter({
     return null;
   },
 
-  shouldSupportExternalStyling(ctx) {
+  resolveCall() {
+    return null;
+  },
+
+  externalInterface(ctx) {
     // ctx: { filePath, componentName, exportName, isDefaultExport }
 
-    // Example: Enable for all exports in shared components folder
+    // Example: Enable styles for all exports in shared components folder
     if (ctx.filePath.includes("/shared/components/")) {
-      return true;
+      return { styles: true, as: false };
     }
 
-    // Example: Enable for specific component names
+    // Example: Enable both styles and `as` prop for specific components
     if (ctx.componentName === "Button" || ctx.componentName === "Card") {
-      return true;
+      return { styles: true, as: true };
     }
 
-    return false;
+    // Example: Enable only `as` prop
+    if (ctx.componentName === "Typography") {
+      return { styles: false, as: true };
+    }
+
+    // Disable both (default)
+    return null;
   },
+
+  styleMerger: null,
 });
 ```
 
-When `shouldSupportExternalStyling` returns `true`, the generated component will:
+The `externalInterface` method returns:
+
+- `null` — no external interface (neither className/style nor `as` prop)
+- `{ styles: true, as: false }` — accept className/style props for external styling
+- `{ styles: false, as: true }` — accept polymorphic `as` prop
+- `{ styles: true, as: true }` — both features enabled
+
+When `styles: true`, the generated component will:
 
 - Accept `className` and `style` props
 - Merge them with the StyleX-generated styles
 - Forward remaining props via `...rest`
 
-#### Polymorphic `as` Support
-
-Exported components only get `as` support when it is used inside the file (or when
-the inferred props type already includes it). If you need exported components to
-support `as` for external usage, opt in via `shouldSupportAsProp`:
-
-```ts
-const adapter = defineAdapter({
-  resolveValue(ctx) {
-    // ... value resolution logic
-    return null;
-  },
-
-  shouldSupportExternalStyling() {
-    return false;
-  },
-
-  shouldSupportAsProp(ctx) {
-    // ctx: { filePath, componentName, exportName, isDefaultExport }
-    return ctx.filePath.includes("/shared/components/");
-  },
-});
-```
+When `as: true`, the generated component will accept a polymorphic `as` prop to render as a different element or component.
 
 #### Dynamic interpolations
 

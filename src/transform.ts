@@ -908,45 +908,33 @@ export function transformWithWarnings(
     }
   }
 
-  // Determine supportsExternalStyles for each decl (before emitStylesAndImports for merger import)
+  // Determine supportsExternalStyles and supportsAsProp for each decl
+  // (before emitStylesAndImports for merger import and wrapper generation)
   for (const decl of styledDecls) {
-    // 1. If extended by another styled component in this file -> YES
+    // 1. If extended by another styled component in this file -> enable external styles
     if (extendedBy.has(decl.localName)) {
       decl.supportsExternalStyles = true;
-      continue;
-    }
-
-    // 2. If NOT exported -> NO
-    const exportInfo = exportedComponents.get(decl.localName);
-    if (!exportInfo) {
-      decl.supportsExternalStyles = false;
-      continue;
-    }
-
-    // 3. If exported, ask adapter
-    decl.supportsExternalStyles = adapter.shouldSupportExternalStyling({
-      filePath: file.path,
-      componentName: decl.localName,
-      exportName: exportInfo.exportName,
-      isDefaultExport: exportInfo.isDefault,
-    });
-  }
-
-  // Determine supportsAsProp for each decl (before emitStylesAndImports for wrapper generation)
-  const shouldSupportAsProp =
-    typeof adapter.shouldSupportAsProp === "function" ? adapter.shouldSupportAsProp : null;
-  for (const decl of styledDecls) {
-    const exportInfo = exportedComponents.get(decl.localName);
-    if (!exportInfo || !shouldSupportAsProp) {
       decl.supportsAsProp = false;
       continue;
     }
-    decl.supportsAsProp = shouldSupportAsProp({
+
+    // 2. If NOT exported -> disable both
+    const exportInfo = exportedComponents.get(decl.localName);
+    if (!exportInfo) {
+      decl.supportsExternalStyles = false;
+      decl.supportsAsProp = false;
+      continue;
+    }
+
+    // 3. If exported, ask adapter for external interface configuration
+    const extResult = adapter.externalInterface({
       filePath: file.path,
       componentName: decl.localName,
       exportName: exportInfo.exportName,
       isDefaultExport: exportInfo.isDefault,
     });
+    decl.supportsExternalStyles = extResult?.styles === true;
+    decl.supportsAsProp = extResult?.as === true;
   }
 
   // Early detection of components used as values (before emitStylesAndImports for merger import)
