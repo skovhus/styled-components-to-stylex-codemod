@@ -5,16 +5,6 @@ import {
   type ResolveValueResult,
 } from "../adapter.ts";
 
-const externalStylingFilePaths = [
-  "styled-element-html-props",
-  "styled-input-html-props",
-  "transient-prop-not-forwarded",
-  "attrs-polymorphic-as",
-  "external-styles-support",
-];
-
-const asPropFilePaths = ["exported-as-prop"];
-
 // Fixtures don't use theme resolution, but the transformer requires an adapter.
 export const fixtureAdapter = defineAdapter({
   // Use mergedSx merger function for cleaner className/style merging output
@@ -26,36 +16,33 @@ export const fixtureAdapter = defineAdapter({
 
   // Configure external interface for exported components
   externalInterface(ctx): ExternalInterfaceResult {
-    let styles = false;
-    let asOnly = false;
-
     // Enable external styles for exported components in specific test cases where the expected
     // output includes className/style prop support and HTMLAttributes extension.
-    if (externalStylingFilePaths.some((filePath) => ctx.filePath.includes(filePath))) {
-      styles = true;
+    if (
+      [
+        "attrs-polymorphic-as",
+        "external-styles-support",
+        "styled-element-html-props",
+        "styled-input-html-props",
+        "transient-prop-not-forwarded",
+      ].some((filePath) => ctx.filePath.includes(filePath))
+    ) {
+      return { styles: true };
     }
 
     // wrapper-props-incomplete - TextColor and ThemeText should extend HTMLAttributes
     // Highlight wraps a component and shouldn't support external styles
     if (ctx.filePath.includes("wrapper-props-incomplete")) {
       if (ctx.componentName === "TextColor" || ctx.componentName === "ThemeText") {
-        styles = true;
+        return { styles: true };
       }
     }
 
     // Enable `as` prop support (without styles) for exported components in selected fixtures.
-    if (asPropFilePaths.some((filePath) => ctx.filePath.includes(filePath))) {
-      asOnly = true;
-    }
-
-    // When styles is true, `as` is implicitly enabled
-    if (styles) {
-      return { styles: true };
-    }
-    // When only `as` is needed (no style merging)
-    if (asOnly) {
+    if (["exported-as-prop"].some((filePath) => ctx.filePath.includes(filePath))) {
       return { styles: false, as: true };
     }
+
     return null;
   },
 

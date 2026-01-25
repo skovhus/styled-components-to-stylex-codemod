@@ -1,3 +1,4 @@
+// oxlint-disable no-console
 import { useState, useEffect, useCallback, useRef } from "react";
 import CodeMirror from "@uiw/react-codemirror";
 import { javascript } from "@codemirror/lang-javascript";
@@ -37,6 +38,7 @@ function App() {
       lastValidAdapterRef.current = adapter;
       setAdapterError(null);
     } catch (e) {
+      console.error(e);
       setAdapterError(e instanceof Error ? e.message : String(e));
       // Keep lastValidAdapterRef unchanged so we can still use it
     }
