@@ -56,7 +56,7 @@ export function emitComponentWrappers(emitter: WrapperEmitter): {
       const explicitTypeName = isSimpleTypeRef ? (propsType?.typeName?.name ?? null) : null;
       const explicitTypeExists = explicitTypeName && emitter.typeExistsInFile(explicitTypeName);
 
-      if (explicitTypeExists && explicit && explicitTypeName) {
+      if (explicitTypeExists && explicit && explicitTypeName && !isPolymorphicComponentWrapper) {
         const baseTypeText = (() => {
           const base = `React.ComponentPropsWithRef<typeof ${wrappedComponent}>`;
           const omitted: string[] = [];
@@ -93,6 +93,8 @@ export function emitComponentWrappers(emitter: WrapperEmitter): {
             baseProps,
             `Omit<React.ComponentPropsWithoutRef<C>, keyof ${baseProps} | "className" | "style">`,
             "{\n  as?: C;\n}",
+            // Include user's explicit props type if it exists
+            ...(explicit ? [explicit] : []),
           ].join(" & ");
           emitNamedPropsType(
             d.localName,
