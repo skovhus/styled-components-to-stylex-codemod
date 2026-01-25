@@ -1094,11 +1094,47 @@ function tryResolveConditionalCssBlockTernary(node: DynamicNode): HandlerResult 
     // Base case: not a conditional, this is the default value (a CSS string)
     if (ce.type !== "ConditionalExpression") {
       const cssText = literalToString(condExpr);
-      if (cssText === null) {
-        return null;
+      if (cssText !== null) {
+        const style = cssText.trim() ? parseCssDeclarationBlock(cssText) : null;
+        return { variants: [], defaultStyle: style };
       }
-      const style = cssText.trim() ? parseCssDeclarationBlock(cssText) : null;
-      return { variants: [], defaultStyle: style };
+
+      // Try template literal with prop-based ternary: `background: ${props.$x ? "a" : "b"}`
+      const parsed = parseCssTemplateLiteralWithTernary(condExpr);
+      if (parsed) {
+        // Use parseConditionTest to validate and extract prop info from inner ternary
+        const innerCondInfo = parseConditionTest(parsed.innerTest);
+        if (!innerCondInfo) {
+          return null;
+        }
+
+        // Build CSS text for each branch and parse into styles
+        const truthyCss = `${parsed.prefix}${parsed.truthyValue}${parsed.suffix}`;
+        const falsyCss = `${parsed.prefix}${parsed.falsyValue}${parsed.suffix}`;
+        const truthyStyle = truthyCss.trim() ? parseCssDeclarationBlock(truthyCss) : null;
+        const falsyStyle = falsyCss.trim() ? parseCssDeclarationBlock(falsyCss) : null;
+
+        // Use existing helpers for consistency
+        const innerVariants: VariantWithStyle[] = [];
+        if (truthyStyle) {
+          innerVariants.push({
+            nameHint: buildNameHint(innerCondInfo, true),
+            when: buildWhenCondition(innerCondInfo, true),
+            style: truthyStyle,
+          });
+        }
+        if (falsyStyle) {
+          innerVariants.push({
+            nameHint: buildNameHint(innerCondInfo, false),
+            when: buildWhenCondition(innerCondInfo, false),
+            style: falsyStyle,
+          });
+        }
+        // All cases are covered by the inner ternary, so no defaultStyle
+        return { variants: innerVariants, defaultStyle: null };
+      }
+
+      return null;
     }
 
     const condInfo = parseConditionTest(ce.test);
@@ -1134,8 +1170,16 @@ function tryResolveConditionalCssBlockTernary(node: DynamicNode): HandlerResult 
       });
     }
 
-    // Add nested variants
-    variants.push(...nested.variants);
+    // Add nested variants, combining with outer condition's falsy branch
+    // All nested variants are in the else branch, so they need the outer falsy guard.
+    // This is always correct, even for enum chains where conditions are mutually exclusive.
+    const outerFalsyCondition = buildWhenCondition(condInfo, false);
+    for (const nestedVariant of nested.variants) {
+      variants.push({
+        ...nestedVariant,
+        when: `${outerFalsyCondition} && ${nestedVariant.when}`,
+      });
+    }
 
     return { variants, defaultStyle: nested.defaultStyle };
   };
@@ -1406,6 +1450,65 @@ function literalToStaticValue(node: unknown): string | number | null {
 function literalToString(node: unknown): string | null {
   const v = literalToStaticValue(node);
   return typeof v === "string" ? v : null;
+}
+
+/**
+ * Parses a template literal that contains a simple prop-based ternary expression.
+ * Supports patterns like: `background: ${props.$primary ? "red" : "blue"}`
+ *
+ * Returns the static parts (prefix/suffix), the inner conditional's test node,
+ * and the truthy/falsy values, or null if not a supported pattern.
+ */
+function parseCssTemplateLiteralWithTernary(node: unknown): {
+  prefix: string;
+  suffix: string;
+  innerTest: unknown;
+  truthyValue: string;
+  falsyValue: string;
+} | null {
+  if (!node || typeof node !== "object") {
+    return null;
+  }
+  const n = node as {
+    type?: string;
+    expressions?: unknown[];
+    quasis?: Array<{ value?: { raw?: string; cooked?: string } }>;
+  };
+
+  // Must be a TemplateLiteral with exactly 1 expression
+  if (n.type !== "TemplateLiteral") {
+    return null;
+  }
+  if (!n.expressions || n.expressions.length !== 1) {
+    return null;
+  }
+  if (!n.quasis || n.quasis.length !== 2) {
+    return null;
+  }
+
+  // Extract the static parts (quasis)
+  const prefix = n.quasis[0]?.value?.cooked ?? n.quasis[0]?.value?.raw ?? "";
+  const suffix = n.quasis[1]?.value?.cooked ?? n.quasis[1]?.value?.raw ?? "";
+
+  // The expression must be a ConditionalExpression
+  const expr = n.expressions[0] as {
+    type?: string;
+    test?: unknown;
+    consequent?: unknown;
+    alternate?: unknown;
+  };
+  if (!expr || expr.type !== "ConditionalExpression") {
+    return null;
+  }
+
+  // Extract truthy and falsy values - they must be string literals
+  const truthyValue = literalToString(expr.consequent);
+  const falsyValue = literalToString(expr.alternate);
+  if (truthyValue === null || falsyValue === null) {
+    return null;
+  }
+
+  return { prefix, suffix, innerTest: expr.test, truthyValue, falsyValue };
 }
 
 function sanitizeIdentifier(s: string): string {

@@ -2513,11 +2513,23 @@ export function lowerRules(args: {
               // toSuffixFromProp handles negated props: !$open → NotOpen
               variantStyleKeys[neg.when] ??= `${decl.styleKey}${toSuffixFromProp(neg.when)}`;
             } else if (posVariants.length > 0) {
-              // Only positive variants (no default)
+              // Positive variants (with or without multiple negatives)
               // Pattern: prop ? A : "" or prop === "a" ? A : ""
+              // Also handles: hollow ? A : (inner ternary produces multiple negatives)
               for (const pos of posVariants) {
                 variantBuckets.set(pos.when, { ...variantBuckets.get(pos.when), ...pos.style });
                 variantStyleKeys[pos.when] ??= `${decl.styleKey}${toSuffixFromProp(pos.when)}`;
+              }
+              // Also process negative variants (compound conditions like !hollow && $primary)
+              for (const neg of negVariants) {
+                variantBuckets.set(neg.when, { ...variantBuckets.get(neg.when), ...neg.style });
+                variantStyleKeys[neg.when] ??= `${decl.styleKey}${toSuffixFromProp(neg.when)}`;
+              }
+            } else if (negVariants.length > 0) {
+              // Only negative variants (multiple compound conditions)
+              for (const neg of negVariants) {
+                variantBuckets.set(neg.when, { ...variantBuckets.get(neg.when), ...neg.style });
+                variantStyleKeys[neg.when] ??= `${decl.styleKey}${toSuffixFromProp(neg.when)}`;
               }
             }
             continue;
