@@ -115,6 +115,38 @@ export const fixtureAdapter = defineAdapter({
       }
     }
 
+    if (ctx.kind === "importedValue") {
+      const source = ctx.source.value;
+      if (!source.includes("lib/helpers") && !source.includes("lib\\helpers")) {
+        return null;
+      }
+      if (ctx.importedName === "zIndex") {
+        const path = ctx.path ?? "";
+        return {
+          expr: path ? `$zIndex.${path}` : "$zIndex",
+          imports: [
+            {
+              from: { kind: "specifier", value: "./tokens.stylex" },
+              names: [{ imported: "$zIndex" }],
+            },
+          ],
+        };
+      }
+      if (ctx.importedName === "config") {
+        const path = ctx.path ?? "";
+        // For nested paths like "ui.spacing.small", use bracket notation with the full path
+        return {
+          expr: path ? `$config["${path}"]` : "$config",
+          imports: [
+            {
+              from: { kind: "specifier", value: "./tokens.stylex" },
+              names: [{ imported: "$config" }],
+            },
+          ],
+        };
+      }
+    }
+
     return null;
   },
   resolveCall(ctx) {

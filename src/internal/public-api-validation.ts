@@ -64,6 +64,7 @@ export function assertValidAdapter(
         "resolveValue(context) is called with one of these shapes:",
         '  - { kind: "theme", path }',
         '  - { kind: "cssVariable", name, fallback?, definedValue? }',
+        '  - { kind: "importedValue", importedName, source, path? }',
         "",
         "resolveCall(context) is called with:",
         "  - { callSiteFilePath, calleeImportedName, calleeSource, args }",

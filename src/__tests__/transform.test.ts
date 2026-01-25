@@ -598,6 +598,38 @@ export const App = () => (
   });
 });
 
+describe("import resolution scope", () => {
+  it("should not resolve imported values when a local binding shadows the import", () => {
+    const source = `
+import React from "react";
+import styled from "styled-components";
+import { zIndex } from "./lib/helpers";
+
+export function App() {
+  const zIndex = { modal: 2000 };
+  const Overlay = styled.div\`
+    position: fixed;
+    z-index: \${zIndex.modal};
+  \`;
+  return <Overlay />;
+}
+`;
+
+    const result = transformWithWarnings(
+      { source, path: "shadowed-import.tsx" },
+      { jscodeshift: j, j, stats: () => {}, report: () => {} },
+      { adapter: fixtureAdapter },
+    );
+
+    expect(result.code).not.toBeNull();
+    expect(result.warnings).toHaveLength(0);
+    const code = result.code ?? "";
+    expect(code).toContain("zIndex: zIndex.modal");
+    expect(code).not.toContain("$zIndex");
+    expect(code).not.toContain("tokens.stylex");
+  });
+});
+
 describe("adapter configuration", () => {
   const themeSource = `
 import styled from 'styled-components';

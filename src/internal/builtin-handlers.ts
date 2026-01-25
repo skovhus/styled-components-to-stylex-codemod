@@ -8,9 +8,11 @@ import type {
   ResolveValueResult,
 } from "../adapter.js";
 import {
+  type CallExpressionNode,
   getArrowFnSingleParamName,
   getMemberPathFromIdentifier,
   isArrowFunctionExpression,
+  isCallExpressionNode,
 } from "./jscodeshift-utils.js";
 import { cssDeclarationToStylexDeclarations } from "./css-prop-mapping.js";
 import type { WarningType } from "./logger.js";
@@ -199,7 +201,10 @@ export type InternalHandlerContext = {
   filePath: string;
   resolveValue: (context: ResolveValueContext) => ResolveValueResult | null;
   resolveCall: (context: CallResolveContext) => CallResolveResult | null;
-  resolveImport: (localName: string) => {
+  resolveImport: (
+    localName: string,
+    identNode?: unknown,
+  ) => {
     importedName: string;
     source: ImportSource;
   } | null;
@@ -312,18 +317,6 @@ function tryResolveThemeAccess(
   return { type: "resolvedValue", expr: res.expr, imports: res.imports };
 }
 
-type CallExpressionNode = {
-  type?: string;
-  callee?: unknown;
-  arguments?: unknown[];
-};
-
-function isCallExpressionNode(node: unknown): node is CallExpressionNode {
-  return (
-    !!node && typeof node === "object" && (node as { type?: string }).type === "CallExpression"
-  );
-}
-
 function callArgFromNode(node: unknown): CallResolveContext["args"][number] {
   if (!node || typeof node !== "object") {
     return { kind: "unknown" };
@@ -373,7 +366,7 @@ function resolveImportedHelperCall(
   if (typeof calleeIdent !== "string") {
     return "keepOriginal";
   }
-  const imp = ctx.resolveImport(calleeIdent);
+  const imp = ctx.resolveImport(calleeIdent, callee);
   const calleeImportedName = imp?.importedName;
   const calleeSource = imp?.source;
   if (!calleeImportedName || !calleeSource) {
@@ -437,8 +430,8 @@ function tryResolveCallExpression(
   if (simple === "unresolved") {
     // This is a supported helper-call shape but the adapter chose not to resolve it.
     // Treat as unsupported so the caller can bail and surface a warning.
+    const callee = expr.callee;
     const calleeIdent = (() => {
-      const callee = expr.callee;
       if (!callee || typeof callee !== "object") {
         return null;
       }
@@ -447,7 +440,7 @@ function tryResolveCallExpression(
       }
       return (callee as { name?: string }).name ?? null;
     })();
-    const imp = typeof calleeIdent === "string" ? ctx.resolveImport(calleeIdent) : null;
+    const imp = typeof calleeIdent === "string" ? ctx.resolveImport(calleeIdent, callee) : null;
     const importedName = imp?.importedName ?? calleeIdent ?? "unknown";
     return {
       type: "keepOriginal",

@@ -73,3 +73,14 @@ export const fontSizeVars = stylex.defineVars({
 export const pixelVars = stylex.defineVars({
   thin: "0.5px",
 });
+
+export const $zIndex = stylex.defineVars({
+  modal: "1000",
+  popover: "900",
+});
+
+export const $config = stylex.defineVars({
+  "ui.spacing.small": "4px",
+  "ui.spacing.medium": "8px",
+  "ui.spacing.large": "16px",
+});

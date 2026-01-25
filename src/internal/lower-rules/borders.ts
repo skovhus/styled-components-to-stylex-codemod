@@ -261,7 +261,7 @@ export function tryHandleInterpolatedBorder(args: {
         filePath,
         resolveValue,
         resolveCall,
-        resolveImport: (localName: string) => {
+        resolveImport: (localName: string, _identNode?: unknown) => {
           const v = importMap.get(localName);
           return v ? v : null;
         },
