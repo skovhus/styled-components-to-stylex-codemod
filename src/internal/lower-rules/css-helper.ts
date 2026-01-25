@@ -4,6 +4,7 @@ import type { Adapter, ImportSource, ImportSpec } from "../../adapter.js";
 import { normalizeStylisAstToIR } from "../css-ir.js";
 import { cssDeclarationToStylexDeclarations } from "../css-prop-mapping.js";
 import { getMemberPathFromIdentifier } from "../jscodeshift-utils.js";
+import type { WarningType } from "../logger.js";
 import { parseStyledTemplateLiteral } from "../styled-css.js";
 import { parseSelector } from "../selectors.js";
 import { wrapExprWithStaticParts } from "./interpolations.js";
@@ -13,16 +14,6 @@ type ImportMapEntry = {
   source: ImportSource;
 };
 
-export type CssHelperBailReason =
-  | "mixed-static-dynamic-non-theme"
-  | "multiple-slots"
-  | "at-rule"
-  | "unsupported-selector"
-  | "important"
-  | "missing-property"
-  | "missing-slot-expr"
-  | "parse-failed";
-
 export function createCssHelperResolver(args: {
   importMap: Map<string, ImportMapEntry>;
   filePath: string;
@@ -30,7 +21,7 @@ export function createCssHelperResolver(args: {
   parseExpr: (exprSource: string) => any;
   resolverImports: Map<string, ImportSpec>;
   cssValueToJs: (value: unknown, important?: boolean, propName?: string) => unknown;
-  onBail?: (reason: CssHelperBailReason, context?: { property?: string }) => void;
+  onBail?: (type: WarningType, context?: { property?: string }) => void;
 }): {
   isCssHelperTaggedTemplate: (expr: any) => expr is { quasi: any };
   resolveCssHelperTemplate: (
@@ -132,7 +123,7 @@ export function createCssHelperResolver(args: {
 
     for (const rule of rules) {
       if (rule.atRuleStack.length > 0) {
-        onBail?.("at-rule");
+        onBail?.("Conditional `css` block: @-rules (e.g., @media, @supports) are not supported");
         return null;
       }
       const selector = (rule.selector ?? "").trim();
@@ -148,7 +139,7 @@ export function createCssHelperResolver(args: {
             out[normalizedPseudoElement] = nested;
             target = nested;
           } else {
-            onBail?.("unsupported-selector");
+            onBail?.("Conditional `css` block: unsupported selector");
             return null;
           }
         } else if (parsed.kind === "pseudo" && parsed.pseudos.length === 1) {
@@ -167,14 +158,14 @@ export function createCssHelperResolver(args: {
             target = nested;
           }
         } else {
-          onBail?.("unsupported-selector");
+          onBail?.("Conditional `css` block: unsupported selector");
           return null;
         }
       }
 
       for (const d of rule.declarations) {
         if (!d.property) {
-          onBail?.("missing-property");
+          onBail?.("Conditional `css` block: missing CSS property name");
           return null;
         }
         if (d.value.kind === "static") {
@@ -194,7 +185,9 @@ export function createCssHelperResolver(args: {
         }
 
         if (d.important) {
-          onBail?.("important", { property: d.property });
+          onBail?.("Conditional `css` block: !important is not supported in StyleX", {
+            property: d.property,
+          });
           return null;
         }
 
@@ -204,7 +197,12 @@ export function createCssHelperResolver(args: {
         const slotParts = parts.filter((p: { kind: string }) => p.kind === "slot");
         if (slotParts.length !== 1) {
           // Only support single-slot values
-          onBail?.("multiple-slots", { property: d.property });
+          onBail?.(
+            "Conditional `css` block: multiple interpolation slots in a single property value",
+            {
+              property: d.property,
+            },
+          );
           return null;
         }
 
@@ -215,7 +213,9 @@ export function createCssHelperResolver(args: {
         const slotId = slotPart.slotId;
         const expr = slotExprById.get(slotId);
         if (!expr) {
-          onBail?.("missing-slot-expr", { property: d.property });
+          onBail?.("Conditional `css` block: missing interpolation expression", {
+            property: d.property,
+          });
           return null;
         }
         const resolved = resolveHelperExprToAst(expr as any, paramName);
@@ -248,7 +248,9 @@ export function createCssHelperResolver(args: {
               continue;
             }
             // Fall through if parsing failed
-            onBail?.("parse-failed", { property: d.property });
+            onBail?.("Conditional `css` block: failed to parse expression", {
+              property: d.property,
+            });
             return null;
           } else {
             for (const mapped of cssDeclarationToStylexDeclarations(d)) {
@@ -261,7 +263,10 @@ export function createCssHelperResolver(args: {
         // Mixed static/dynamic values with non-theme expressions cannot be safely transformed
         // (e.g., border: 1px solid ${props.color} would lose the "1px solid " prefix)
         if (hasStaticParts) {
-          onBail?.("mixed-static-dynamic-non-theme", { property: d.property });
+          onBail?.(
+            "Conditional `css` block: mixed static/dynamic values with non-theme expressions cannot be safely transformed",
+            { property: d.property },
+          );
           return null;
         }
 

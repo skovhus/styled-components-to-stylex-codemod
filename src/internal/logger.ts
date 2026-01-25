@@ -39,8 +39,14 @@ export type WarningType =
   | "Unsupported selector: comma-separated selectors must all be simple pseudos"
   | "Unsupported selector: descendant pseudo selector (space before pseudo)"
   | "Unsupported selector: descendant/child/sibling selector"
-  | "CSS helper: mixed static/dynamic values with non-theme expressions cannot be safely transformed"
-  | "CSS helper: unsupported pattern";
+  | "Conditional `css` block: mixed static/dynamic values with non-theme expressions cannot be safely transformed"
+  | "Conditional `css` block: multiple interpolation slots in a single property value"
+  | "Conditional `css` block: @-rules (e.g., @media, @supports) are not supported"
+  | "Conditional `css` block: unsupported selector"
+  | "Conditional `css` block: !important is not supported in StyleX"
+  | "Conditional `css` block: missing CSS property name"
+  | "Conditional `css` block: missing interpolation expression"
+  | "Conditional `css` block: failed to parse expression";
 
 export interface WarningLog {
   severity: Severity;

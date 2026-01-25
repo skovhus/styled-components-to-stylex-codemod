@@ -45,7 +45,7 @@ import {
   unwrapArrowFunctionToPropsExpr,
 } from "./lower-rules/inline-styles.js";
 import { addPropComments } from "./lower-rules/comments.js";
-import { createCssHelperResolver, type CssHelperBailReason } from "./lower-rules/css-helper.js";
+import { createCssHelperResolver } from "./lower-rules/css-helper.js";
 import { parseSwitchReturningCssTemplates } from "./lower-rules/switch-variants.js";
 import { createThemeResolvers } from "./lower-rules/theme.js";
 import {
@@ -237,11 +237,6 @@ export function lowerRules(args: {
     localName: string;
   } | null = null;
 
-  const cssHelperBailReasonToWarningType: Partial<Record<CssHelperBailReason, WarningType>> = {
-    "mixed-static-dynamic-non-theme":
-      "CSS helper: mixed static/dynamic values with non-theme expressions cannot be safely transformed",
-  };
-
   const { isCssHelperTaggedTemplate, resolveCssHelperTemplate: rawResolveCssHelperTemplate } =
     createCssHelperResolver({
       importMap,
@@ -250,14 +245,13 @@ export function lowerRules(args: {
       parseExpr,
       resolverImports,
       cssValueToJs,
-      onBail: (reason, context) => {
-        const warningType = cssHelperBailReasonToWarningType[reason];
-        if (!warningType || !cssHelperBailContext) {
+      onBail: (type, context) => {
+        if (!cssHelperBailContext) {
           return;
         }
         warnings.push({
           severity: "warning",
-          type: warningType,
+          type,
           loc: cssHelperBailContext.loc,
           context: { localName: cssHelperBailContext.localName, ...context },
         });
