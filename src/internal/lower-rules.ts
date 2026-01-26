@@ -1107,6 +1107,31 @@ export function lowerRules(args: {
           return true;
         }
 
+        // Handle TemplateLiteral without expressions: props.$x && `width: 10px;`
+        if (body.right?.type === "TemplateLiteral") {
+          const tpl = body.right as {
+            expressions?: unknown[];
+            quasis?: Array<{ value?: { raw?: string; cooked?: string } }>;
+          };
+          // Only support static template literals (no interpolations)
+          if (tpl.expressions && tpl.expressions.length > 0) {
+            return false;
+          }
+          const rawCss =
+            tpl.quasis?.map((q) => q.value?.cooked ?? q.value?.raw ?? "").join("") ?? "";
+          if (!rawCss.trim()) {
+            return true; // Empty template literal is valid (no styles to apply)
+          }
+          const consStyle = resolveStaticCssBlock(rawCss);
+          if (!consStyle) {
+            return false;
+          }
+          if (Object.keys(consStyle).length > 0) {
+            applyVariant(testInfo, consStyle);
+          }
+          return true;
+        }
+
         return false;
       }
 
