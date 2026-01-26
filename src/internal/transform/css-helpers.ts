@@ -251,6 +251,82 @@ function isStyledCallExpression(node: any, styledLocalNames: Set<string>): boole
   return false;
 }
 
+/**
+ * Checks if a MemberExpression node is inside a styled template literal.
+ * This is used to verify that CSS helper object members are only used
+ * in places where we can safely inline them.
+ */
+function isMemberExpressionInsideStyledTemplate(
+  memberPath: any,
+  styledLocalNames: Set<string>,
+): boolean {
+  // Walk up the AST to find if we're inside a styled template literal
+  let cur: any = memberPath;
+  while (cur && cur.parentPath) {
+    cur = cur.parentPath;
+    const node = cur?.node;
+    if (!node) {
+      break;
+    }
+    // Check if we're inside a styled tagged template expression
+    if (node.type === "TaggedTemplateExpression" && isStyledTag(styledLocalNames, node.tag)) {
+      return true;
+    }
+    // Also check for styled call expression: styled.div(fn => ...)
+    if (isStyledCallExpression(node, styledLocalNames)) {
+      return true;
+    }
+  }
+  return false;
+}
+
+/**
+ * Check if all usages of specific object member CSS helpers are inside styled templates.
+ * Returns true if all usages are safe, false if any usage is outside styled templates.
+ */
+function areObjectMemberCssHelpersOnlyUsedInStyledTemplates(args: {
+  root: any;
+  j: JSCodeshift;
+  objectName: string;
+  propNames: Set<string>;
+  styledLocalNames: Set<string>;
+}): boolean {
+  const { root, j, objectName, propNames, styledLocalNames } = args;
+
+  // Find all MemberExpression nodes where object is the objectName
+  const memberExpressions = root.find(j.MemberExpression, {
+    object: { type: "Identifier", name: objectName },
+    property: { type: "Identifier" },
+  } as any);
+
+  let allSafe = true;
+  memberExpressions.forEach((p: any) => {
+    const propNode = p.node.property;
+    if (propNode?.type !== "Identifier") {
+      return;
+    }
+    const propName = propNode.name;
+    // Only check properties that are CSS helpers
+    if (!propNames.has(propName)) {
+      return;
+    }
+    // Skip if this is the property definition itself (inside the object literal)
+    const parent = p.parentPath?.node;
+    if (
+      (parent?.type === "Property" || parent?.type === "ObjectProperty") &&
+      parent.value === p.node
+    ) {
+      return;
+    }
+    // Check if this usage is inside a styled template
+    if (!isMemberExpressionInsideStyledTemplate(p, styledLocalNames)) {
+      allSafe = false;
+    }
+  });
+
+  return allSafe;
+}
+
 interface UnsupportedCssUsage {
   loc: Loc;
   reason: "call-expression" | "outside-styled-template";
@@ -742,13 +818,37 @@ export function extractAndRemoveCssHelpers(args: {
 
       // Only add to cssHelperObjectMembers if we found at least one CSS property
       if (memberMap.size > 0) {
+        const cssHelperPropNames = new Set(memberMap.keys());
+
+        // Safety check: bail if any CSS helper member is used outside styled templates
+        // This prevents breaking code that uses these properties elsewhere
+        const allUsagesSafe = areObjectMemberCssHelpersOnlyUsedInStyledTemplates({
+          root,
+          j,
+          objectName,
+          propNames: cssHelperPropNames,
+          styledLocalNames,
+        });
+
+        if (!allUsagesSafe) {
+          // Remove the decls we added for this object since we're bailing
+          for (const propName of cssHelperPropNames) {
+            const qualifiedName = `${objectName}.${propName}`;
+            const idx = cssHelperDecls.findIndex((d) => d.localName === qualifiedName);
+            if (idx >= 0) {
+              cssHelperDecls.splice(idx, 1);
+            }
+          }
+          // Don't add to cssHelperObjectMembers - bail on this object
+          return;
+        }
+
         cssHelperObjectMembers.set(objectName, memberMap);
 
         // Remove the CSS helper properties from the object (unless exported)
         const isExported = exportedLocalNames.has(objectName);
         if (!isExported) {
           // Filter out the CSS helper properties
-          const cssHelperPropNames = new Set(memberMap.keys());
           const remainingProps = objectExpr.properties.filter((prop: any) => {
             if (prop.type !== "Property" && prop.type !== "ObjectProperty") {
               return true; // Keep non-property items like spread
