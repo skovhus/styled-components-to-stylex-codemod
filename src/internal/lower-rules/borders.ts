@@ -3,6 +3,11 @@ import type { Adapter, ImportSource } from "../../adapter.js";
 import { resolveDynamicNode, type InternalHandlerContext } from "../builtin-handlers.js";
 import { getMemberPathFromIdentifier, getNodeLocStart } from "../jscodeshift-utils.js";
 import type { StyledDecl } from "../transform-types.js";
+import {
+  parseBorderShorthandParts,
+  parseInterpolatedBorderStaticParts,
+} from "../css-prop-mapping.js";
+import { extractStaticParts } from "./interpolations.js";
 
 type ExpressionKind = Parameters<JSCodeshift["expressionStatement"]>[0];
 
@@ -64,9 +69,6 @@ export function tryHandleInterpolatedBorder(args: {
   const direction = directionRaw
     ? directionRaw.slice(1).charAt(0).toUpperCase() + directionRaw.slice(2)
     : "";
-  const widthProp = `border${direction}Width`;
-  const styleProp = `border${direction}Style`;
-  const colorProp = `border${direction}Color`;
   if (d.value.kind !== "interpolated") {
     return false;
   }
@@ -80,32 +82,16 @@ export function tryHandleInterpolatedBorder(args: {
   }
   const slotId = Number(slotTok.match(/^__SC_EXPR_(\d+)__$/)![1]);
 
-  const borderStyles = new Set([
-    "none",
-    "solid",
-    "dashed",
-    "dotted",
-    "double",
-    "groove",
-    "ridge",
-    "inset",
-    "outset",
-  ]);
-  let width: string | undefined;
-  let style: string | undefined;
-  for (const t of tokens) {
-    if (/^__SC_EXPR_\d+__$/.test(t)) {
-      continue;
-    }
-    if (!width && /^-?\d*\.?\d+(px|rem|em|vh|vw|vmin|vmax|%)?$/.test(t)) {
-      width = t;
-      continue;
-    }
-    if (!style && borderStyles.has(t)) {
-      style = t;
-      continue;
-    }
+  const { prefix, suffix } = extractStaticParts(d.value, { property: prop });
+  const borderParts = parseInterpolatedBorderStaticParts({ prop, prefix, suffix });
+  const widthProp = `border${direction}Width`;
+  const styleProp = `border${direction}Style`;
+  const colorProp = `border${direction}Color`;
+  if (!borderParts && `${prefix}${suffix}`.trim()) {
+    return false;
   }
+  const width = borderParts?.width;
+  const style = borderParts?.style;
   if (width) {
     (styleObj as any)[widthProp] = width;
   }
@@ -120,35 +106,11 @@ export function tryHandleInterpolatedBorder(args: {
   // Helper to parse a border shorthand string and return expanded properties
   // Uses direction-aware property names (widthProp, styleProp, colorProp)
   const parseBorderShorthand = (value: string): Record<string, string> | null => {
-    const tokens = value.trim().split(/\s+/);
-    const borderStylesSet = new Set([
-      "none",
-      "solid",
-      "dashed",
-      "dotted",
-      "double",
-      "groove",
-      "ridge",
-      "inset",
-      "outset",
-    ]);
-    const looksLikeLengthLocal = (t: string) =>
-      /^-?\d*\.?\d+(px|rem|em|vh|vw|vmin|vmax|%)?$/.test(t);
-
-    let bWidth: string | undefined;
-    let bStyle: string | undefined;
-    const colorParts: string[] = [];
-    for (const token of tokens) {
-      if (!bWidth && looksLikeLengthLocal(token)) {
-        bWidth = token;
-      } else if (!bStyle && borderStylesSet.has(token)) {
-        bStyle = token;
-      } else {
-        colorParts.push(token);
-      }
+    const parsed = parseBorderShorthandParts(value);
+    if (!parsed) {
+      return null;
     }
-    const bColor = colorParts.join(" ").trim();
-    // If we found at least width or style, this is a border shorthand
+    const { width: bWidth, style: bStyle, color: bColor } = parsed;
     if (bWidth || bStyle) {
       const result: Record<string, string> = {};
       if (bWidth) {
@@ -162,7 +124,6 @@ export function tryHandleInterpolatedBorder(args: {
       }
       return result;
     }
-    // Just a color value
     if (bColor) {
       return { [colorProp]: bColor };
     }
@@ -300,21 +261,11 @@ export function tryHandleInterpolatedBorder(args: {
       if (suffix.trim() !== "") {
         return null;
       }
-      const tokens = prefix.trim().split(/\s+/).filter(Boolean);
-      if (tokens.length < 2) {
+      const parsed = parseInterpolatedBorderStaticParts({ prop, prefix, suffix });
+      if (!parsed?.width || !parsed?.style) {
         return null;
       }
-      // Expect a simple border shorthand prefix like: "1px solid"
-      const w = tokens.find((t: string) => /^-?\d*\.?\d+(px|rem|em|vh|vw|vmin|vmax|%)?$/.test(t));
-      const s = tokens.find((t: string) => borderStyles.has(t));
-      if (!w || !s) {
-        return null;
-      }
-      // Be conservative: only accept exactly `<width> <style>` (no extra tokens)
-      if (tokens.length !== 2) {
-        return null;
-      }
-      return { width: w, style: s, colorExpr: exprs[0] };
+      return { width: parsed.width, style: parsed.style, colorExpr: exprs[0] };
     };
 
     const bumpResolverImportToEnd = (predicate: (spec: unknown) => boolean): void => {

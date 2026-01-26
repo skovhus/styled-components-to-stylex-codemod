@@ -1,13 +1,13 @@
 import * as React from "react";
 import * as stylex from "@stylexjs/stylex";
 
-type ButtonProps = React.PropsWithChildren<{
+type ButtonProps = Omit<React.ComponentProps<"button">, "className" | "style"> & {
   $primary?: boolean;
   hollow?: boolean;
-}>;
+};
 
 function Button(props: ButtonProps) {
-  const { children, $primary, hollow } = props;
+  const { children, hollow, $primary } = props;
   return (
     <button
       {...stylex.props(
@@ -85,6 +85,10 @@ const styles = stylex.create({
   buttonNotHollowNotPrimary: {
     backgroundColor: "white",
   },
+
+  // Test case: inner ternary tests the same prop as outer
+  // The inner variants must be guarded by the outer falsy condition
+  // to prevent the "medium" background from leaking into size === "small"
   badge: {
     display: "inline-block",
   },

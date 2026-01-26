@@ -27,6 +27,80 @@ export function resolveBackgroundStylexPropForVariants(
   return hasGradient ? "backgroundImage" : "backgroundColor";
 }
 
+export function parseInterpolatedBorderStaticParts(args: {
+  prop: string;
+  prefix: string;
+  suffix: string;
+}): {
+  widthProp: string;
+  styleProp: string;
+  colorProp: string;
+  width?: string;
+  style?: string;
+} | null {
+  const { prop, prefix, suffix } = args;
+  const borderMatch = prop.match(/^border(-top|-right|-bottom|-left)?$/);
+  if (!borderMatch) {
+    return null;
+  }
+  const directionRaw = borderMatch[1] ?? "";
+  const direction = directionRaw
+    ? directionRaw.slice(1).charAt(0).toUpperCase() + directionRaw.slice(2)
+    : "";
+  const widthProp = `border${direction}Width`;
+  const styleProp = `border${direction}Style`;
+  const colorProp = `border${direction}Color`;
+
+  const tokens = `${prefix}${suffix}`.trim().split(/\s+/).filter(Boolean);
+  let width: string | undefined;
+  let style: string | undefined;
+  for (const token of tokens) {
+    if (!width && looksLikeLength(token)) {
+      width = token;
+      continue;
+    }
+    if (!style && BORDER_STYLES.has(token)) {
+      style = token;
+      continue;
+    }
+    return null;
+  }
+  if (!width && !style) {
+    return null;
+  }
+  return { widthProp, styleProp, colorProp, width, style };
+}
+
+export function parseBorderShorthandParts(valueRaw: string): {
+  width?: string;
+  style?: string;
+  color?: string;
+} | null {
+  const tokens = valueRaw.trim().split(/\s+/).filter(Boolean);
+  if (tokens.length === 0) {
+    return null;
+  }
+  let width: string | undefined;
+  let style: string | undefined;
+  const colorParts: string[] = [];
+  for (const token of tokens) {
+    if (!width && looksLikeLength(token)) {
+      width = token;
+      continue;
+    }
+    if (!style && BORDER_STYLES.has(token)) {
+      style = token;
+      continue;
+    }
+    colorParts.push(token);
+  }
+  const color = colorParts.join(" ").trim();
+  if (!width && !style && !color) {
+    return null;
+  }
+  return { width, style, color: color || undefined };
+}
+
 export function cssDeclarationToStylexDeclarations(decl: CssDeclarationIR): StylexPropDecl[] {
   const prop = decl.property.trim();
 

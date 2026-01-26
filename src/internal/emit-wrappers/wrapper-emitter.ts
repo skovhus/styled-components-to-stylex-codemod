@@ -1569,6 +1569,67 @@ export class WrapperEmitter {
     const propExprBuilder = args.propExprBuilder ?? ((prop: string) => j.identifier(prop));
 
     const styleFnPairs = d.styleFnFromProps ?? [];
+    const explicitPropNames = d.propsType ? this.getExplicitPropNames(d.propsType) : null;
+    const inferPropFromCallArg = (expr: ExpressionKind | null | undefined): string | null => {
+      if (!expr || typeof expr !== "object") {
+        return null;
+      }
+      const unwrap = (node: ExpressionKind): ExpressionKind => {
+        let cur = node;
+        while (cur && typeof cur === "object") {
+          const t = (cur as { type?: string }).type;
+          if (t === "ParenthesizedExpression") {
+            cur = (cur as any).expression as ExpressionKind;
+            continue;
+          }
+          if (t === "TSAsExpression" || t === "TSNonNullExpression") {
+            cur = (cur as any).expression as ExpressionKind;
+            continue;
+          }
+          if (t === "TemplateLiteral") {
+            const exprs = (cur as any).expressions ?? [];
+            if (exprs.length === 1) {
+              cur = exprs[0] as ExpressionKind;
+              continue;
+            }
+          }
+          break;
+        }
+        return cur;
+      };
+      const unwrapped = unwrap(expr);
+      if (unwrapped?.type === "Identifier") {
+        return unwrapped.name;
+      }
+      if (unwrapped?.type === "ConditionalExpression") {
+        const test = (unwrapped as any).test as ExpressionKind;
+        if (test?.type === "Identifier") {
+          return test.name;
+        }
+      }
+      return null;
+    };
+    const collectIdentifiers = (node: unknown, out: Set<string>): void => {
+      if (!node || typeof node !== "object") {
+        return;
+      }
+      if (Array.isArray(node)) {
+        for (const child of node) {
+          collectIdentifiers(child, out);
+        }
+        return;
+      }
+      const typed = node as { type?: string; name?: string };
+      if (typed.type === "Identifier" && typed.name) {
+        out.add(typed.name);
+      }
+      for (const key of Object.keys(node as Record<string, unknown>)) {
+        if (key === "loc" || key === "comments") {
+          continue;
+        }
+        collectIdentifiers((node as Record<string, unknown>)[key], out);
+      }
+    };
     for (const p of styleFnPairs) {
       const propExpr = p.jsxProp === "__props" ? propsId : propExprBuilder(p.jsxProp);
       const callArg = p.callArg ? (p.callArg as ExpressionKind) : propExpr;
@@ -1585,6 +1646,21 @@ export class WrapperEmitter {
         const name = (p.callArg as ASTNode & { name?: string }).name;
         if (name && destructureProps && !destructureProps.includes(name)) {
           destructureProps.push(name);
+        }
+      }
+      if (p.callArg && destructureProps) {
+        const inferred = inferPropFromCallArg(p.callArg as ExpressionKind);
+        if (inferred && !destructureProps.includes(inferred)) {
+          destructureProps.push(inferred);
+        }
+      }
+      if (p.callArg && destructureProps && explicitPropNames && explicitPropNames.size > 0) {
+        const names = new Set<string>();
+        collectIdentifiers(p.callArg, names);
+        for (const name of names) {
+          if (explicitPropNames.has(name) && !destructureProps.includes(name)) {
+            destructureProps.push(name);
+          }
         }
       }
 

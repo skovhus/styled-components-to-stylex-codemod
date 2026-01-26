@@ -5,6 +5,7 @@ import type { InternalHandlerContext } from "./builtin-handlers.js";
 import {
   cssDeclarationToStylexDeclarations,
   cssPropertyToStylexProp,
+  parseInterpolatedBorderStaticParts,
   resolveBackgroundStylexProp,
   resolveBackgroundStylexPropForVariants,
 } from "./css-prop-mapping.js";
@@ -63,6 +64,7 @@ import type { StyledDecl } from "./transform-types.js";
 import type { WarningLog, WarningType } from "./logger.js";
 import type { CssHelperFunction, CssHelperObjectMembers } from "./transform/css-helpers.js";
 import { normalizeStylisAstToIR } from "./css-ir.js";
+import { parseStyledTemplateLiteral } from "./styled-css.js";
 
 export type DescendantOverride = {
   parentStyleKey: string;
@@ -888,6 +890,228 @@ export function lowerRules(args: {
       return out;
     };
 
+    const isPlainTemplateLiteral = (node: ExpressionKind | null | undefined): boolean =>
+      !!node && typeof node === "object" && (node as { type?: string }).type === "TemplateLiteral";
+
+    const buildPropAccessExpr = (propName: string): ExpressionKind => {
+      const isIdent = /^[$A-Z_][0-9A-Z_$]*$/i.test(propName);
+      return isIdent
+        ? (j.identifier(propName) as ExpressionKind)
+        : (j.memberExpression(j.identifier("props"), j.literal(propName), true) as ExpressionKind);
+    };
+
+    const resolveThemeFromPropsMember = (
+      node: unknown,
+      paramName: string | null,
+    ): ExpressionKind | null => {
+      if (!paramName) {
+        return null;
+      }
+      if (!node || typeof node !== "object") {
+        return null;
+      }
+      const type = (node as { type?: string }).type;
+      if (type !== "MemberExpression" && type !== "OptionalMemberExpression") {
+        return null;
+      }
+      const parts = getMemberPathFromIdentifier(node as any, paramName);
+      if (!parts || parts[0] !== "theme" || parts.length <= 1) {
+        return null;
+      }
+      const themePath = parts.slice(1).join(".");
+      const resolved = resolveValue({ kind: "theme", path: themePath, filePath });
+      if (!resolved) {
+        return null;
+      }
+      for (const imp of resolved.imports ?? []) {
+        resolverImports.set(JSON.stringify(imp), imp);
+      }
+      const exprAst = parseExpr(resolved.expr);
+      return (exprAst as ExpressionKind) ?? null;
+    };
+
+    const resolveDynamicTemplateExpr = (
+      expr: unknown,
+      paramName: string | null,
+    ): { jsxProp: string; callArg: ExpressionKind } | null => {
+      if (!expr || typeof expr !== "object" || !paramName) {
+        return null;
+      }
+      const exprType = (expr as { type?: string }).type;
+      if (exprType === "MemberExpression" || exprType === "OptionalMemberExpression") {
+        const propPath = getMemberPathFromIdentifier(expr as any, paramName);
+        if (!propPath || propPath.length !== 1) {
+          return null;
+        }
+        const jsxProp = propPath[0]!;
+        if (jsxProp === "theme") {
+          return null;
+        }
+        return { jsxProp, callArg: buildPropAccessExpr(jsxProp) };
+      }
+      if (exprType === "LogicalExpression" && (expr as any).operator === "??") {
+        const left = (expr as any).left as unknown;
+        const right = (expr as any).right as unknown;
+        const propPath = getMemberPathFromIdentifier(left as any, paramName);
+        if (!propPath || propPath.length !== 1) {
+          return null;
+        }
+        const jsxProp = propPath[0]!;
+        if (jsxProp === "theme") {
+          return null;
+        }
+        const themeAst = resolveThemeFromPropsMember(right, paramName);
+        if (!themeAst) {
+          return null;
+        }
+        const baseArg = buildPropAccessExpr(jsxProp);
+        return {
+          jsxProp,
+          callArg: j.logicalExpression("??", baseArg, themeAst) as ExpressionKind,
+        };
+      }
+      if (exprType === "ConditionalExpression") {
+        const cond = expr as {
+          test?: unknown;
+          consequent?: unknown;
+          alternate?: unknown;
+        };
+        const propPath = getMemberPathFromIdentifier(cond.test as any, paramName);
+        if (!propPath || propPath.length !== 1) {
+          return null;
+        }
+        const jsxProp = propPath[0]!;
+        if (jsxProp === "theme") {
+          return null;
+        }
+        const baseArg = buildPropAccessExpr(jsxProp);
+        const consProp = getMemberPathFromIdentifier(cond.consequent as any, paramName);
+        const altProp = getMemberPathFromIdentifier(cond.alternate as any, paramName);
+        const consIsProp = !!consProp && consProp.length === 1 && consProp[0] === jsxProp;
+        const altIsProp = !!altProp && altProp.length === 1 && altProp[0] === jsxProp;
+        const consTheme = resolveThemeFromPropsMember(cond.consequent, paramName);
+        const altTheme = resolveThemeFromPropsMember(cond.alternate, paramName);
+        if (consIsProp && altTheme) {
+          return {
+            jsxProp,
+            callArg: j.conditionalExpression(baseArg, baseArg, altTheme) as ExpressionKind,
+          };
+        }
+        if (altIsProp && consTheme) {
+          return {
+            jsxProp,
+            callArg: j.conditionalExpression(baseArg, consTheme, baseArg) as ExpressionKind,
+          };
+        }
+      }
+      return null;
+    };
+
+    const resolveTemplateLiteralBranch = (
+      node: { type: "TemplateLiteral"; expressions?: unknown[]; quasis?: unknown[] },
+      paramName: string | null,
+    ): {
+      style: Record<string, unknown>;
+      dynamicEntries: Array<{ jsxProp: string; stylexProp: string; callArg: ExpressionKind }>;
+    } | null => {
+      const parsed = parseStyledTemplateLiteral(node as any);
+      const wrappedRawCss = `& { ${parsed.rawCss} }`;
+      const stylisAst = compile(wrappedRawCss);
+      const rules = normalizeStylisAstToIR(stylisAst as any, parsed.slots, {
+        rawCss: wrappedRawCss,
+      });
+      const slotExprById = new Map(parsed.slots.map((s) => [s.index, s.expression]));
+      const style: Record<string, unknown> = {};
+      const dynamicEntries: Array<{
+        jsxProp: string;
+        stylexProp: string;
+        callArg: ExpressionKind;
+      }> = [];
+
+      for (const rule of rules) {
+        if (rule.atRuleStack.length > 0) {
+          return null;
+        }
+        const selector = (rule.selector ?? "").trim();
+        if (selector !== "&") {
+          return null;
+        }
+        for (const d of rule.declarations) {
+          if (!d.property) {
+            return null;
+          }
+          if (d.value.kind === "static") {
+            for (const mapped of cssDeclarationToStylexDeclarations(d)) {
+              let value = cssValueToJs(mapped.value, d.important, mapped.prop);
+              if (mapped.prop === "content" && typeof value === "string") {
+                const m = value.match(/^['"]([\s\S]*)['"]$/);
+                if (m) {
+                  value = `"${m[1]}"`;
+                } else if (!value.startsWith('"') && !value.endsWith('"')) {
+                  value = `"${value}"`;
+                }
+              }
+              (style as any)[mapped.prop] = value as any;
+            }
+            continue;
+          }
+          if (d.important) {
+            return null;
+          }
+          if (d.value.kind !== "interpolated") {
+            return null;
+          }
+          const parts = d.value.parts ?? [];
+          const slotParts = parts.filter((p: { kind: string }) => p.kind === "slot");
+          if (slotParts.length !== 1) {
+            return null;
+          }
+          const slotPart = slotParts[0] as { kind: "slot"; slotId: number };
+          const expr = slotExprById.get(slotPart.slotId);
+          if (!expr) {
+            return null;
+          }
+          const resolved = resolveDynamicTemplateExpr(expr, paramName);
+          if (!resolved) {
+            return null;
+          }
+          const propName = d.property?.trim() ?? "";
+          const { prefix, suffix } = extractStaticParts(d.value, { property: propName });
+          const borderParts = parseInterpolatedBorderStaticParts({
+            prop: propName,
+            prefix,
+            suffix,
+          });
+          if (borderParts) {
+            if (borderParts.width) {
+              (style as any)[borderParts.widthProp] = borderParts.width;
+            }
+            if (borderParts.style) {
+              (style as any)[borderParts.styleProp] = borderParts.style;
+            }
+            dynamicEntries.push({
+              jsxProp: resolved.jsxProp,
+              stylexProp: borderParts.colorProp,
+              callArg: resolved.callArg,
+            });
+            continue;
+          }
+          const callArg =
+            prefix || suffix
+              ? buildTemplateWithStaticParts(j, resolved.callArg, prefix, suffix)
+              : resolved.callArg;
+          for (const mapped of cssDeclarationToStylexDeclarations(d)) {
+            dynamicEntries.push({
+              jsxProp: resolved.jsxProp,
+              stylexProp: mapped.prop,
+              callArg,
+            });
+          }
+        }
+      }
+      return { style, dynamicEntries };
+    };
+
     const tryHandleCssHelperConditionalBlock = (d: any): boolean => {
       if (d.value.kind !== "interpolated") {
         return false;
@@ -1149,10 +1373,12 @@ export function lowerRules(args: {
       const alt = body.alternate;
       const consIsCss = isCssHelperTaggedTemplate(cons);
       const altIsCss = isCssHelperTaggedTemplate(alt);
+      const consIsTpl = isPlainTemplateLiteral(cons);
+      const altIsTpl = isPlainTemplateLiteral(alt);
       const consIsEmpty = isEmptyCssBranch(cons);
       const altIsEmpty = isEmptyCssBranch(alt);
 
-      if (!(consIsCss || altIsCss)) {
+      if (!(consIsCss || altIsCss || consIsTpl || altIsTpl)) {
         return false;
       }
 
@@ -1202,6 +1428,119 @@ export function lowerRules(args: {
           return false;
         }
         applyVariant({ ...testInfo, when: invertedWhen }, altResolved.style);
+        return true;
+      }
+
+      const applyDynamicEntries = (
+        entries: Array<{ jsxProp: string; stylexProp: string; callArg: ExpressionKind }>,
+        conditionWhen: string,
+      ): boolean => {
+        for (const entry of entries) {
+          const fnKey = `${decl.styleKey}${toSuffixFromProp(entry.stylexProp)}`;
+          if (!styleFnDecls.has(fnKey)) {
+            const param = j.identifier(entry.stylexProp);
+            const valueId = j.identifier(entry.stylexProp);
+            annotateParamFromJsxProp(param, entry.jsxProp);
+            const p = j.property("init", valueId, valueId) as any;
+            p.shorthand = true;
+            const bodyExpr = j.objectExpression([p]);
+            styleFnDecls.set(fnKey, j.arrowFunctionExpression([param], bodyExpr));
+          }
+          if (
+            !styleFnFromProps.some(
+              (p) =>
+                p.fnKey === fnKey &&
+                p.jsxProp === entry.jsxProp &&
+                p.conditionWhen === conditionWhen,
+            )
+          ) {
+            styleFnFromProps.push({
+              fnKey,
+              jsxProp: entry.jsxProp,
+              conditionWhen,
+              callArg: entry.callArg,
+            });
+          }
+          ensureShouldForwardPropDrop(decl, entry.jsxProp);
+        }
+        return true;
+      };
+
+      if (consIsTpl && altIsTpl) {
+        if (testInfo.propName) {
+          ensureShouldForwardPropDrop(decl, testInfo.propName);
+        }
+        const consResolved = resolveTemplateLiteralBranch(
+          cons as { type: "TemplateLiteral" },
+          paramName,
+        );
+        const altResolved = resolveTemplateLiteralBranch(
+          alt as { type: "TemplateLiteral" },
+          paramName,
+        );
+        if (!consResolved || !altResolved) {
+          return false;
+        }
+        const invertedWhen = invertWhen(testInfo.when);
+        if (!invertedWhen) {
+          return false;
+        }
+        if (Object.keys(consResolved.style).length > 0) {
+          applyVariant(testInfo, consResolved.style);
+        }
+        if (Object.keys(altResolved.style).length > 0) {
+          applyVariant({ ...testInfo, when: invertedWhen }, altResolved.style);
+        }
+        if (consResolved.dynamicEntries.length > 0) {
+          applyDynamicEntries(consResolved.dynamicEntries, testInfo.when);
+        }
+        if (altResolved.dynamicEntries.length > 0) {
+          applyDynamicEntries(altResolved.dynamicEntries, invertedWhen);
+        }
+        return true;
+      }
+
+      if (consIsTpl && altIsEmpty) {
+        if (testInfo.propName) {
+          ensureShouldForwardPropDrop(decl, testInfo.propName);
+        }
+        const consResolved = resolveTemplateLiteralBranch(
+          cons as { type: "TemplateLiteral" },
+          paramName,
+        );
+        if (!consResolved) {
+          return false;
+        }
+        if (Object.keys(consResolved.style).length > 0) {
+          applyVariant(testInfo, consResolved.style);
+        }
+        if (consResolved.dynamicEntries.length > 0) {
+          applyDynamicEntries(consResolved.dynamicEntries, testInfo.when);
+        }
+        return true;
+      }
+
+      if (consIsEmpty && altIsTpl) {
+        if (testInfo.propName) {
+          ensureShouldForwardPropDrop(decl, testInfo.propName);
+        }
+        const altResolved = resolveTemplateLiteralBranch(
+          alt as { type: "TemplateLiteral" },
+          paramName,
+        );
+        if (!altResolved) {
+          return false;
+        }
+        const invertedWhen = invertWhen(testInfo.when);
+        if (!invertedWhen) {
+          return false;
+        }
+        if (Object.keys(altResolved.style).length > 0) {
+          applyVariant({ ...testInfo, when: invertedWhen }, altResolved.style);
+        }
+        if (altResolved.dynamicEntries.length > 0) {
+          applyDynamicEntries(altResolved.dynamicEntries, invertedWhen);
+        }
         return true;
       }
 
