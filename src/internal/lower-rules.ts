@@ -74,6 +74,31 @@ export type DescendantOverride = {
 
 type ExpressionKind = Parameters<JSCodeshift["expressionStatement"]>[0];
 
+/**
+ * Type for variant test condition info
+ */
+type TestInfo = { when: string; propName: string };
+
+/**
+ * Inverts a "when" condition string for the opposite variant branch.
+ * E.g., "!$active" -> "$active", "$x === true" -> "$x !== true"
+ */
+function invertWhen(when: string): string | null {
+  if (when.startsWith("!")) {
+    return when.slice(1);
+  }
+  const match = when.match(/^(.+)\s+(===|!==)\s+(.+)$/);
+  if (match) {
+    const [, propName, op, rhs] = match;
+    const invOp = op === "===" ? "!==" : "===";
+    return `${propName} ${invOp} ${rhs}`;
+  }
+  if (!when.includes(" ")) {
+    return `!${when}`;
+  }
+  return null;
+}
+
 export function lowerRules(args: {
   api: API;
   j: JSCodeshift;
@@ -551,6 +576,82 @@ export function lowerRules(args: {
       j,
       decl,
     });
+
+    // Shared helper to apply a style variant for a given test condition
+    const applyVariant = (testInfo: TestInfo, consStyle: Record<string, unknown>): void => {
+      const when = testInfo.when;
+      const existingBucket = variantBuckets.get(when);
+      const nextBucket = existingBucket ? { ...existingBucket } : {};
+      mergeStyleObjects(nextBucket, consStyle);
+      variantBuckets.set(when, nextBucket);
+      variantStyleKeys[when] ??= `${decl.styleKey}${toSuffixFromProp(when)}`;
+      if (testInfo.propName && !testInfo.propName.startsWith("$")) {
+        ensureShouldForwardPropDrop(decl, testInfo.propName);
+      }
+    };
+
+    // Factory to create prop test helpers given the arrow function parameter name
+    const createPropTestHelpers = (
+      paramName: string,
+    ): {
+      readPropName: (node: ExpressionKind) => string | null;
+      parseTestInfo: (test: ExpressionKind) => TestInfo | null;
+    } => {
+      const readPropName = (node: ExpressionKind): string | null => {
+        const path = getMemberPathFromIdentifier(node, paramName);
+        if (!path || path.length !== 1) {
+          return null;
+        }
+        return path[0]!;
+      };
+
+      const parseTestInfo = (test: ExpressionKind): TestInfo | null => {
+        if (!test || typeof test !== "object") {
+          return null;
+        }
+        if (test.type === "MemberExpression" || test.type === "OptionalMemberExpression") {
+          const propName = readPropName(test);
+          return propName ? { when: propName, propName } : null;
+        }
+        if (test.type === "UnaryExpression" && test.operator === "!" && test.argument) {
+          const propName = readPropName(test.argument as ExpressionKind);
+          return propName ? { when: `!${propName}`, propName } : null;
+        }
+        if (
+          test.type === "BinaryExpression" &&
+          (test.operator === "===" || test.operator === "!==")
+        ) {
+          const left = test.left;
+          if (left.type === "MemberExpression" || left.type === "OptionalMemberExpression") {
+            const propName = readPropName(left);
+            const rhs = literalToStaticValue(test.right);
+            if (!propName || rhs === null) {
+              return null;
+            }
+            const rhsValue = JSON.stringify(rhs);
+            return { when: `${propName} ${test.operator} ${rhsValue}`, propName };
+          }
+        }
+        return null;
+      };
+
+      return { readPropName, parseTestInfo };
+    };
+
+    // Build reusable handler context for resolveDynamicNode calls
+    const handlerContext: InternalHandlerContext = {
+      api,
+      filePath,
+      resolveValue,
+      resolveCall,
+      resolveImport: resolveImportInScope,
+    };
+
+    // Build component info for resolveDynamicNode calls
+    const componentInfo =
+      decl.base.kind === "intrinsic"
+        ? { localName: decl.localName, base: "intrinsic" as const, tagOrIdent: decl.base.tagName }
+        : { localName: decl.localName, base: "component" as const, tagOrIdent: decl.base.ident };
 
     // (helpers imported from `./lower-rules/*`)
 
@@ -1104,23 +1205,10 @@ export function lowerRules(args: {
                   ...(d.property ? { property: d.property } : {}),
                   valueRaw: d.valueRaw ?? "",
                 },
-                component:
-                  decl.base.kind === "intrinsic"
-                    ? {
-                        localName: decl.localName,
-                        base: "intrinsic",
-                        tagOrIdent: decl.base.tagName,
-                      }
-                    : { localName: decl.localName, base: "component", tagOrIdent: decl.base.ident },
+                component: componentInfo,
                 usage: { jsxUsages: 0, hasPropsSpread: false },
               },
-              {
-                api,
-                filePath,
-                resolveValue,
-                resolveCall,
-                resolveImport: resolveImportInScope,
-              } satisfies InternalHandlerContext,
+              handlerContext,
             );
 
             if (adapterRes && adapterRes.type === "resolvedValue") {
@@ -1242,56 +1330,7 @@ export function lowerRules(args: {
         return false;
       }
 
-      const readPropName = (node: ExpressionKind): string | null => {
-        const path = getMemberPathFromIdentifier(node, paramName);
-        if (!path || path.length !== 1) {
-          return null;
-        }
-        return path[0]!;
-      };
-
-      type TestInfo = { when: string; propName: string };
-      const parseTestInfo = (test: ExpressionKind): TestInfo | null => {
-        if (!test || typeof test !== "object") {
-          return null;
-        }
-        if (test.type === "MemberExpression" || test.type === "OptionalMemberExpression") {
-          const propName = readPropName(test);
-          return propName ? { when: propName, propName } : null;
-        }
-        if (test.type === "UnaryExpression" && test.operator === "!" && test.argument) {
-          const propName = readPropName(test.argument as ExpressionKind);
-          return propName ? { when: `!${propName}`, propName } : null;
-        }
-        if (
-          test.type === "BinaryExpression" &&
-          (test.operator === "===" || test.operator === "!==")
-        ) {
-          const left = test.left;
-          if (left.type === "MemberExpression" || left.type === "OptionalMemberExpression") {
-            const propName = readPropName(left);
-            const rhs = literalToStaticValue(test.right);
-            if (!propName || rhs === null) {
-              return null;
-            }
-            const rhsValue = JSON.stringify(rhs);
-            return { when: `${propName} ${test.operator} ${rhsValue}`, propName };
-          }
-        }
-        return null;
-      };
-
-      const applyVariant = (testInfo: TestInfo, consStyle: Record<string, unknown>): void => {
-        const when = testInfo.when;
-        const existingBucket = variantBuckets.get(when);
-        const nextBucket = existingBucket ? { ...existingBucket } : {};
-        mergeStyleObjects(nextBucket, consStyle);
-        variantBuckets.set(when, nextBucket);
-        variantStyleKeys[when] ??= `${decl.styleKey}${toSuffixFromProp(when)}`;
-        if (testInfo.propName && !testInfo.propName.startsWith("$")) {
-          ensureShouldForwardPropDrop(decl, testInfo.propName);
-        }
-      };
+      const { parseTestInfo } = createPropTestHelpers(paramName);
 
       const isTriviallyPureVoidArg = (arg: any): boolean => {
         if (!arg || typeof arg !== "object") {
@@ -1348,22 +1387,6 @@ export function lowerRules(args: {
           return isTriviallyPureVoidArg((node as any).argument);
         }
         return false;
-      };
-
-      const invertWhen = (when: string): string | null => {
-        if (when.includes(" === ")) {
-          return when.replace(" === ", " !== ");
-        }
-        if (when.includes(" !== ")) {
-          return when.replace(" !== ", " === ");
-        }
-        if (when.startsWith("!")) {
-          return when.slice(1);
-        }
-        if (!when.includes(" ")) {
-          return `!${when}`;
-        }
-        return null;
       };
 
       // Handle LogicalExpression: props.$x && css`...`
@@ -1690,71 +1713,7 @@ export function lowerRules(args: {
         return false;
       }
 
-      // Local helpers - same logic as in tryHandleCssHelperConditionalBlock
-      const readPropName = (node: ExpressionKind): string | null => {
-        const path = getMemberPathFromIdentifier(node, paramName);
-        if (!path || path.length !== 1) {
-          return null;
-        }
-        return path[0]!;
-      };
-
-      type TestInfo = { when: string; propName: string };
-      const parseTestInfo = (test: ExpressionKind): TestInfo | null => {
-        if (!test || typeof test !== "object") {
-          return null;
-        }
-        if (test.type === "MemberExpression" || test.type === "OptionalMemberExpression") {
-          const propName = readPropName(test);
-          return propName ? { when: propName, propName } : null;
-        }
-        if (test.type === "UnaryExpression" && test.operator === "!" && test.argument) {
-          const propName = readPropName(test.argument as ExpressionKind);
-          return propName ? { when: `!${propName}`, propName } : null;
-        }
-        if (
-          test.type === "BinaryExpression" &&
-          (test.operator === "===" || test.operator === "!==")
-        ) {
-          const left = test.left;
-          if (left.type === "MemberExpression" || left.type === "OptionalMemberExpression") {
-            const propName = readPropName(left);
-            const rhs = literalToStaticValue(test.right);
-            if (!propName || rhs === null) {
-              return null;
-            }
-            const rhsValue = JSON.stringify(rhs);
-            return { when: `${propName} ${test.operator} ${rhsValue}`, propName };
-          }
-        }
-        return null;
-      };
-
-      const applyVariant = (testInfo: TestInfo, consStyle: Record<string, unknown>): void => {
-        const when = testInfo.when;
-        const existingBucket = variantBuckets.get(when);
-        const nextBucket = existingBucket ? { ...existingBucket } : {};
-        mergeStyleObjects(nextBucket, consStyle);
-        variantBuckets.set(when, nextBucket);
-        variantStyleKeys[when] ??= `${decl.styleKey}${toSuffixFromProp(when)}`;
-        if (testInfo.propName && !testInfo.propName.startsWith("$")) {
-          ensureShouldForwardPropDrop(decl, testInfo.propName);
-        }
-      };
-
-      const invertWhen = (when: string): string | null => {
-        if (when.startsWith("!")) {
-          return when.slice(1);
-        }
-        const match = when.match(/^(.+)\s+(===|!==)\s+(.+)$/);
-        if (match) {
-          const [, propName, op, rhs] = match;
-          const invOp = op === "===" ? "!==" : "===";
-          return `${propName} ${invOp} ${rhs}`;
-        }
-        return `!${when}`;
-      };
-
+      const { parseTestInfo } = createPropTestHelpers(paramName);
       const testInfo = parseTestInfo(body.test as ExpressionKind);
       if (!testInfo) {
         return false;
@@ -1796,19 +1755,10 @@ export function lowerRules(args: {
                 property: d.property,
                 valueRaw: "",
               },
-              component:
-                decl.base.kind === "intrinsic"
-                  ? { localName: decl.localName, base: "intrinsic", tagOrIdent: decl.base.tagName }
-                  : { localName: decl.localName, base: "component", tagOrIdent: decl.base.ident },
+              component: componentInfo,
               usage: { jsxUsages: 0, hasPropsSpread: false },
             },
-            {
-              api,
-              filePath,
-              resolveValue,
-              resolveCall,
-              resolveImport: resolveImportInScope,
-            } satisfies InternalHandlerContext,
+            handlerContext,
           );
 
           if (adapterRes && adapterRes.type === "resolvedValue") {
@@ -2737,23 +2687,13 @@ export function lowerRules(args: {
                   ...(d.property ? { property: d.property } : {}),
                   valueRaw: d.valueRaw,
                 },
-                component:
-                  decl.base.kind === "intrinsic"
-                    ? {
-                        localName: decl.localName,
-                        base: "intrinsic",
-                        tagOrIdent: decl.base.tagName,
-                      }
-                    : { localName: decl.localName, base: "component", tagOrIdent: decl.base.ident },
+                component: componentInfo,
                 usage: { jsxUsages: 0, hasPropsSpread: false },
               },
               {
-                api,
-                filePath,
-                resolveValue,
-                resolveCall,
+                ...handlerContext,
                 resolveImport: (localName: string) => resolveImportForExpr(expr, localName),
-              } satisfies InternalHandlerContext,
+              },
             );
             if (res && res.type === "resolvedValue") {
               const exprAst = parseExpr(res.expr);
@@ -3262,20 +3202,11 @@ export function lowerRules(args: {
                 ...(d.property ? { property: d.property } : {}),
                 valueRaw: d.valueRaw,
               },
-              component:
-                decl.base.kind === "intrinsic"
-                  ? { localName: decl.localName, base: "intrinsic", tagOrIdent: decl.base.tagName }
-                  : { localName: decl.localName, base: "component", tagOrIdent: decl.base.ident },
+              component: componentInfo,
               usage: { jsxUsages: 0, hasPropsSpread: false },
               ...(loc ? { loc } : {}),
             },
-            {
-              api,
-              filePath,
-              resolveValue,
-              resolveCall,
-              resolveImport: resolveImportInScope,
-            } satisfies InternalHandlerContext,
+            handlerContext,
           );
 
           if (res && res.type === "resolvedStyles") {
