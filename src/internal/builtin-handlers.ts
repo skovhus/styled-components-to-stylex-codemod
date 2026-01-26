@@ -195,6 +195,22 @@ export type HandlerResult =
       fallbackExpr: string;
       /** Imports required for fallbackExpr */
       fallbackImports: ImportSpec[];
+    }
+  | {
+      /**
+       * Emit a StyleX style function that uses an indexed theme lookup with the prop itself as fallback.
+       *
+       * Pattern: `props.theme.color[props.backgroundColor] || props.backgroundColor`
+       *
+       * Output: `(backgroundColor: Color) => ({ backgroundColor: $colors[backgroundColor] ?? backgroundColor })`
+       */
+      type: "emitIndexedThemeFunctionWithPropFallback";
+      /** The prop name used as the index (e.g., "backgroundColor") */
+      propName: string;
+      /** Resolved theme object expression (e.g., "$colors") */
+      themeObjectExpr: string;
+      /** Imports required for themeObjectExpr */
+      themeObjectImports: ImportSpec[];
     };
 
 export type InternalHandlerContext = {
@@ -276,6 +292,53 @@ type DynamicNodeLoc = {
   line?: number;
   column?: number;
 };
+
+/**
+ * Extract indexed theme lookup info from a computed member expression like:
+ *   props.theme.color[props.textColor]
+ * Returns the theme object path (e.g., "color") and the index prop name if valid.
+ */
+function extractIndexedThemeLookupInfo(
+  node: unknown,
+  paramName: string,
+): { themeObjectPath: string; indexPropName: string } | null {
+  const n = node as { type?: string; computed?: boolean; object?: unknown; property?: unknown };
+  if (!n || n.type !== "MemberExpression" || n.computed !== true) {
+    return null;
+  }
+
+  // Extract index prop name from the computed property
+  const p = n.property as { type?: string; name?: string };
+  let indexPropName: string | null = null;
+
+  if (p?.type === "Identifier" && typeof p.name === "string") {
+    // Simple identifier: props.theme.color[textColor] (unusual but possible)
+    indexPropName = p.name;
+  } else if (p?.type === "MemberExpression") {
+    // Member expression: props.theme.color[props.textColor]
+    const path = getMemberPathFromIdentifier(p as any, paramName);
+    if (path && path.length === 1) {
+      indexPropName = path[0]!;
+    }
+  }
+
+  if (!indexPropName) {
+    return null;
+  }
+
+  // Extract theme object path from the base object (e.g., props.theme.color -> "color")
+  const obj = n.object as { type?: string };
+  if (!obj || obj.type !== "MemberExpression") {
+    return null;
+  }
+  const parts = getMemberPathFromIdentifier(obj as any, paramName);
+  if (!parts || parts.length < 2 || parts[0] !== "theme") {
+    return null;
+  }
+  const themeObjectPath = parts.slice(1).join(".");
+
+  return { themeObjectPath, indexPropName };
+}
 
 function tryResolveThemeAccess(
   node: DynamicNode,
@@ -826,52 +889,19 @@ function tryResolveConditionalValue(
   // Helper: Extract indexed theme lookup from a computed member expression like:
   //   props.theme.color[props.textColor]
   // Returns the theme object path (e.g., "color") and the index prop name if valid.
+  // Uses shared helper but adds expectedIndexProp validation.
   const tryExtractIndexedThemeLookup = (
     branch: unknown,
     expectedIndexProp: string,
   ): { themeObjectPath: string; indexPropName: string } | null => {
-    const n = branch as { type?: string; computed?: boolean; object?: unknown; property?: unknown };
-    if (!n || n.type !== "MemberExpression" || n.computed !== true) {
+    if (!paramName) {
       return null;
     }
-
-    // Extract index prop name from the computed property (must be props.expectedIndexProp)
-    const extractIndexPropName = (): string | null => {
-      const p = n.property as { type?: string; name?: string };
-      if (!p || typeof p !== "object") {
-        return null;
-      }
-      // Simple identifier: props.theme.color[textColor] (unusual but possible)
-      if (p.type === "Identifier" && typeof p.name === "string") {
-        return p.name;
-      }
-      // Member expression: props.theme.color[props.textColor]
-      if (p.type === "MemberExpression" && paramName) {
-        const path = getMemberPathFromIdentifier(p as any, paramName);
-        if (path && path.length === 1) {
-          return path[0]!;
-        }
-      }
-      return null;
-    };
-
-    const indexPropName = extractIndexPropName();
-    if (indexPropName !== expectedIndexProp) {
+    const result = extractIndexedThemeLookupInfo(branch, paramName);
+    if (!result || result.indexPropName !== expectedIndexProp) {
       return null;
     }
-
-    // Extract theme object path from the base object (e.g., props.theme.color -> "color")
-    const obj = n.object as { type?: string };
-    if (!obj || obj.type !== "MemberExpression" || !paramName) {
-      return null;
-    }
-    const parts = getMemberPathFromIdentifier(obj as any, paramName);
-    if (!parts || parts.length < 2 || parts[0] !== "theme") {
-      return null;
-    }
-    const themeObjectPath = parts.slice(1).join(".");
-
-    return { themeObjectPath, indexPropName };
+    return result;
   };
 
   // Helper: Extract static theme value from a non-computed member expression like:
@@ -1070,6 +1100,80 @@ function tryResolveConditionalValue(
   }
 
   return null;
+}
+
+/**
+ * Handle indexed theme lookup with prop fallback:
+ *   props.theme.color[props.backgroundColor] || props.backgroundColor
+ *
+ * Output: (backgroundColor: Color) => ({ backgroundColor: $colors[backgroundColor] ?? backgroundColor })
+ */
+function tryResolveIndexedThemeWithPropFallback(
+  node: DynamicNode,
+  ctx: InternalHandlerContext,
+): HandlerResult | null {
+  if (!node.css.property) {
+    return null;
+  }
+  const expr = node.expr;
+  if (!isArrowFunctionExpression(expr)) {
+    return null;
+  }
+  const paramName = getArrowFnSingleParamName(expr);
+  if (!paramName) {
+    return null;
+  }
+
+  const body = expr.body as {
+    type?: string;
+    operator?: string;
+    left?: unknown;
+    right?: unknown;
+  } | null;
+
+  // Must be a LogicalExpression with || or ??
+  if (
+    !body ||
+    body.type !== "LogicalExpression" ||
+    (body.operator !== "||" && body.operator !== "??")
+  ) {
+    return null;
+  }
+
+  // Right side must be a simple prop access: props.propName
+  const rightPath = getMemberPathFromIdentifier(body.right as any, paramName);
+  if (!rightPath || rightPath.length !== 1) {
+    return null;
+  }
+  const fallbackPropName = rightPath[0]!;
+
+  // Left side must be an indexed theme lookup: props.theme.color[props.propName]
+  const indexedResult = extractIndexedThemeLookupInfo(body.left, paramName);
+  if (!indexedResult) {
+    return null;
+  }
+
+  // The index prop and fallback prop must be the same
+  if (indexedResult.indexPropName !== fallbackPropName) {
+    return null;
+  }
+
+  // Resolve the theme object (e.g., "color" -> "$colors")
+  const themeObjResolved = ctx.resolveValue({
+    kind: "theme",
+    path: indexedResult.themeObjectPath,
+    filePath: ctx.filePath,
+  });
+  if (!themeObjResolved) {
+    return null;
+  }
+
+  return {
+    type: "emitIndexedThemeFunctionWithPropFallback",
+    propName: indexedResult.indexPropName,
+    themeObjectExpr: themeObjResolved.expr,
+    themeObjectImports: themeObjResolved.imports,
+  };
 }
 
 function tryResolveConditionalCssBlock(node: DynamicNode): HandlerResult | null {
@@ -1590,6 +1694,7 @@ export function resolveDynamicNode(
     tryResolveCallExpression(node, ctx) ??
     tryResolveArrowFnHelperCallWithThemeArg(node, ctx) ??
     tryResolveConditionalValue(node, ctx) ??
+    tryResolveIndexedThemeWithPropFallback(node, ctx) ??
     tryResolveConditionalCssBlockTernary(node) ??
     tryResolveConditionalCssBlock(node) ??
     tryResolveArrowFnCallWithSinglePropArg(node) ??

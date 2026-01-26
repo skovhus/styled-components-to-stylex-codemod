@@ -3215,6 +3215,90 @@ export function lowerRules(args: {
             continue;
           }
 
+          if (res && res.type === "emitIndexedThemeFunctionWithPropFallback") {
+            // Handle indexed theme lookup with prop fallback:
+            //   props.theme.color[props.backgroundColor] || props.backgroundColor
+            //
+            // Output: (backgroundColor: Color) => ({ backgroundColor: $colors[backgroundColor] ?? backgroundColor })
+
+            // Add imports from theme resolution
+            for (const imp of res.themeObjectImports) {
+              resolverImports.set(JSON.stringify(imp), imp);
+            }
+
+            // Mark prop to not forward to DOM
+            ensureShouldForwardPropDrop(decl, res.propName);
+
+            // Parse the theme expression
+            const themeObjAst = parseExpr(res.themeObjectExpr);
+            if (!themeObjAst) {
+              warnings.push({
+                severity: "error",
+                type: "Failed to parse theme expressions",
+                loc: decl.loc,
+                context: {
+                  localName: decl.localName,
+                  themeObjExpr: res.themeObjectExpr,
+                },
+              });
+              bail = true;
+              break;
+            }
+
+            // Generate function-based style for each CSS output property
+            const outs = cssDeclarationToStylexDeclarations(d);
+            for (const out of outs) {
+              if (!out.prop) {
+                continue;
+              }
+
+              const fnKey = `${decl.styleKey}${toSuffixFromProp(out.prop)}`;
+              if (!styleFnDecls.has(fnKey)) {
+                // Get prop type from component's type annotation if available
+                const propTsType = findJsxPropTsType(res.propName);
+                const paramName = buildSafeIndexedParamName(res.propName, themeObjAst);
+                const param = j.identifier(paramName);
+
+                // Add type annotation if available
+                if (propTsType && typeof propTsType === "object" && (propTsType as any).type) {
+                  (param as any).typeAnnotation = j.tsTypeAnnotation(propTsType as any);
+                }
+
+                // Build: themeObj[propName] ?? `${propName}`
+                // The template literal wrapper satisfies StyleX's static analyzer for the fallback
+                const indexedLookup = j.memberExpression(
+                  themeObjAst as any,
+                  j.identifier(paramName),
+                  true,
+                );
+                const fallbackExpr = j.templateLiteral(
+                  [
+                    j.templateElement({ raw: "", cooked: "" }, false),
+                    j.templateElement({ raw: "", cooked: "" }, true),
+                  ],
+                  [j.identifier(paramName)],
+                );
+                const valueExpr = j.logicalExpression("??", indexedLookup, fallbackExpr);
+
+                const body = j.objectExpression([
+                  j.property("init", j.identifier(out.prop), valueExpr),
+                ]);
+
+                styleFnDecls.set(fnKey, j.arrowFunctionExpression([param], body));
+              }
+
+              // No condition - always call the function (the fallback is built into the expression)
+              styleFnFromProps.push({ fnKey, jsxProp: res.propName });
+            }
+
+            if (bail) {
+              break;
+            }
+
+            decl.needsWrapperComponent = true;
+            continue;
+          }
+
           if (res && res.type === "emitInlineStyleValueFromProps") {
             if (!d.property) {
               // This handler is only intended for value interpolations on concrete properties.
