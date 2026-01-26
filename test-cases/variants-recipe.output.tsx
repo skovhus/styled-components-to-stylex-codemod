@@ -36,7 +36,7 @@ type LinkProps = Omit<React.ComponentProps<"a">, "className" | "style"> & {
 };
 
 function Link(props: LinkProps) {
-  const { children, color: color = "secondary", disabled, ...rest } = props;
+  const { children, disabled, color: color = "secondary", ...rest } = props;
   return (
     <a
       {...rest}

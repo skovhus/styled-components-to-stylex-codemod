@@ -599,6 +599,12 @@ function tryResolveConditionalValue(
   const branchToExpr = (b: unknown): Branch => {
     const v = literalToStaticValue(b);
     if (v !== null) {
+      // Booleans are not valid CSS values; styled-components treats falsy
+      // interpolations as "omit this declaration", so bail instead of emitting
+      // invalid CSS like `cursor: false`.
+      if (typeof v === "boolean") {
+        return null;
+      }
       return {
         usage: "create",
         expr: typeof v === "string" ? JSON.stringify(v) : String(v),
@@ -1476,6 +1482,30 @@ function tryResolveInlineStyleValueForConditionalExpression(
       };
     }
   }
+  // IMPORTANT: boolean values in conditional branches are not valid CSS values.
+  // In styled-components, falsy interpolations like `false` mean "omit this declaration",
+  // so we should bail rather than emitting invalid CSS like `cursor: false`.
+  {
+    const cond = expr.body as { consequent?: unknown; alternate?: unknown };
+    const consType = (cond.consequent as { type?: string } | undefined)?.type;
+    const altType = (cond.alternate as { type?: string } | undefined)?.type;
+    if (consType === "BooleanLiteral" || altType === "BooleanLiteral") {
+      return null;
+    }
+    // Also check estree-style Literal with boolean value
+    if (consType === "Literal") {
+      const v = (cond.consequent as { value?: unknown }).value;
+      if (typeof v === "boolean") {
+        return null;
+      }
+    }
+    if (altType === "Literal") {
+      const v = (cond.alternate as { value?: unknown }).value;
+      if (typeof v === "boolean") {
+        return null;
+      }
+    }
+  }
   // Signal to the caller that we can preserve this declaration as an inline style
   // by calling the function with `props`.
   return { type: "emitInlineStyleValueFromProps" };
@@ -1569,7 +1599,7 @@ export function resolveDynamicNode(
   );
 }
 
-function literalToStaticValue(node: unknown): string | number | null {
+function literalToStaticValue(node: unknown): string | number | boolean | null {
   if (!node || typeof node !== "object") {
     return null;
   }
@@ -1577,10 +1607,13 @@ function literalToStaticValue(node: unknown): string | number | null {
   if (type === "StringLiteral") {
     return (node as { value: string }).value;
   }
+  if (type === "BooleanLiteral") {
+    return (node as { value: boolean }).value;
+  }
   // Some parsers (or mixed ASTs) use estree-style `Literal`.
   if (type === "Literal") {
     const v = (node as { value?: unknown }).value;
-    if (typeof v === "string" || typeof v === "number") {
+    if (typeof v === "string" || typeof v === "number" || typeof v === "boolean") {
       return v;
     }
   }

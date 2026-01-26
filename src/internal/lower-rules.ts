@@ -1,4 +1,5 @@
 import type { API, ASTNode, Collection, JSCodeshift } from "jscodeshift";
+import { compile } from "stylis";
 import { resolveDynamicNode } from "./builtin-handlers.js";
 import type { InternalHandlerContext } from "./builtin-handlers.js";
 import {
@@ -61,6 +62,7 @@ import {
 import type { StyledDecl } from "./transform-types.js";
 import type { WarningLog, WarningType } from "./logger.js";
 import type { CssHelperFunction } from "./transform/css-helpers.js";
+import { normalizeStylisAstToIR } from "./css-ir.js";
 
 export type DescendantOverride = {
   parentStyleKey: string;
@@ -845,6 +847,45 @@ export function lowerRules(args: {
       return true;
     };
 
+    const resolveStaticCssBlock = (rawCss: string): Record<string, unknown> | null => {
+      const wrappedRawCss = `& { ${rawCss} }`;
+      const stylisAst = compile(wrappedRawCss);
+      const rules = normalizeStylisAstToIR(stylisAst as any, [], {
+        rawCss: wrappedRawCss,
+      });
+      const out: Record<string, unknown> = {};
+      for (const rule of rules) {
+        if (rule.atRuleStack.length > 0) {
+          return null;
+        }
+        const selector = (rule.selector ?? "").trim();
+        if (selector !== "&") {
+          return null;
+        }
+        for (const d of rule.declarations) {
+          if (!d.property) {
+            return null;
+          }
+          if (d.value.kind !== "static") {
+            return null;
+          }
+          for (const mapped of cssDeclarationToStylexDeclarations(d)) {
+            let value = cssValueToJs(mapped.value, d.important, mapped.prop);
+            if (mapped.prop === "content" && typeof value === "string") {
+              const m = value.match(/^['"]([\s\S]*)['"]$/);
+              if (m) {
+                value = `"${m[1]}"`;
+              } else if (!value.startsWith('"') && !value.endsWith('"')) {
+                value = `"${value}"`;
+              }
+            }
+            out[mapped.prop] = value;
+          }
+        }
+      }
+      return out;
+    };
+
     const tryHandleCssHelperConditionalBlock = (d: any): boolean => {
       if (d.value.kind !== "interpolated") {
         return false;
@@ -997,58 +1038,74 @@ export function lowerRules(args: {
         if (!testInfo) {
           return false;
         }
-        if (!isCssHelperTaggedTemplate(body.right)) {
-          return false;
-        }
-        const cssNode = body.right as { quasi: ExpressionKind };
-        const resolved = resolveCssHelperTemplate(
-          cssNode.quasi,
-          paramName,
-          decl.localName,
-          decl.loc,
-        );
-        if (!resolved) {
-          return false;
-        }
-        const { style: consStyle, dynamicProps } = resolved;
-
-        if (dynamicProps.length > 0) {
-          const propName = testInfo.propName;
-          const hasMismatchedProp = dynamicProps.some((p) => p.jsxProp !== propName);
-          const isComparison = testInfo.when.includes("===") || testInfo.when.includes("!==");
-          if (!propName || hasMismatchedProp || testInfo.when.startsWith("!") || isComparison) {
+        if (isCssHelperTaggedTemplate(body.right)) {
+          const cssNode = body.right as { quasi: ExpressionKind };
+          const resolved = resolveCssHelperTemplate(
+            cssNode.quasi,
+            paramName,
+            decl.localName,
+            decl.loc,
+          );
+          if (!resolved) {
             return false;
           }
-          for (const dyn of dynamicProps) {
-            const fnKey = `${decl.styleKey}${toSuffixFromProp(dyn.stylexProp)}`;
-            if (!styleFnDecls.has(fnKey)) {
-              const param = j.identifier(dyn.stylexProp);
-              annotateParamFromJsxProp(param, dyn.jsxProp);
-              const valueId = j.identifier(dyn.stylexProp);
-              const p = j.property("init", valueId, valueId) as any;
-              p.shorthand = true;
-              const bodyExpr = j.objectExpression([p]);
-              styleFnDecls.set(fnKey, j.arrowFunctionExpression([param], bodyExpr));
+          const { style: consStyle, dynamicProps } = resolved;
+
+          if (dynamicProps.length > 0) {
+            const propName = testInfo.propName;
+            const hasMismatchedProp = dynamicProps.some((p) => p.jsxProp !== propName);
+            const isComparison = testInfo.when.includes("===") || testInfo.when.includes("!==");
+            if (!propName || hasMismatchedProp || testInfo.when.startsWith("!") || isComparison) {
+              return false;
             }
-            if (
-              !styleFnFromProps.some(
-                (p) => p.fnKey === fnKey && p.jsxProp === dyn.jsxProp && p.condition === "truthy",
-              )
-            ) {
-              styleFnFromProps.push({
-                fnKey,
-                jsxProp: dyn.jsxProp,
-                condition: "truthy",
-              });
+            for (const dyn of dynamicProps) {
+              const fnKey = `${decl.styleKey}${toSuffixFromProp(dyn.stylexProp)}`;
+              if (!styleFnDecls.has(fnKey)) {
+                const param = j.identifier(dyn.stylexProp);
+                annotateParamFromJsxProp(param, dyn.jsxProp);
+                const valueId = j.identifier(dyn.stylexProp);
+                const p = j.property("init", valueId, valueId) as any;
+                p.shorthand = true;
+                const bodyExpr = j.objectExpression([p]);
+                styleFnDecls.set(fnKey, j.arrowFunctionExpression([param], bodyExpr));
+              }
+              if (
+                !styleFnFromProps.some(
+                  (p) => p.fnKey === fnKey && p.jsxProp === dyn.jsxProp && p.condition === "truthy",
+                )
+              ) {
+                styleFnFromProps.push({
+                  fnKey,
+                  jsxProp: dyn.jsxProp,
+                  condition: "truthy",
+                });
+              }
+              ensureShouldForwardPropDrop(decl, dyn.jsxProp);
             }
-            ensureShouldForwardPropDrop(decl, dyn.jsxProp);
           }
+
+          if (Object.keys(consStyle).length > 0) {
+            applyVariant(testInfo, consStyle);
+          }
+          return true;
         }
 
-        if (Object.keys(consStyle).length > 0) {
-          applyVariant(testInfo, consStyle);
+        if (
+          body.right?.type === "StringLiteral" ||
+          (body.right?.type === "Literal" && typeof body.right.value === "string")
+        ) {
+          const rawCss = body.right.value as string;
+          const consStyle = resolveStaticCssBlock(rawCss);
+          if (!consStyle) {
+            return false;
+          }
+          if (Object.keys(consStyle).length > 0) {
+            applyVariant(testInfo, consStyle);
+          }
+          return true;
         }
-        return true;
+
+        return false;
       }
 
       // Handle ConditionalExpression: props.$x ? css`...` : css`...`
@@ -2049,11 +2106,22 @@ export function lowerRules(args: {
                   return null;
                 }
                 if (cons.type === "ReturnStatement") {
-                  return literalToStaticValue(cons.argument);
+                  const value = literalToStaticValue(cons.argument);
+                  if (value === null || typeof value === "boolean") {
+                    return null;
+                  }
+                  return value;
                 }
                 if (cons.type === "BlockStatement") {
                   const ret = (cons.body ?? []).find((s: any) => s?.type === "ReturnStatement");
-                  return ret ? literalToStaticValue(ret.argument) : null;
+                  if (!ret) {
+                    return null;
+                  }
+                  const value = literalToStaticValue(ret.argument);
+                  if (value === null || typeof value === "boolean") {
+                    return null;
+                  }
+                  return value;
                 }
                 return null;
               };
@@ -2100,7 +2168,11 @@ export function lowerRules(args: {
                   continue;
                 }
                 if (stmt.type === "ReturnStatement") {
-                  defaultValue = literalToStaticValue(stmt.argument);
+                  const value = literalToStaticValue(stmt.argument);
+                  if (value === null || typeof value === "boolean") {
+                    return false;
+                  }
+                  defaultValue = value;
                   continue;
                 }
                 // Any other statement shape => too risky.

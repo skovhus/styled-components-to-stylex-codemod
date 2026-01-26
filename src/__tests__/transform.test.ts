@@ -906,3 +906,47 @@ export const App = () => <Button>Click</Button>;
     expect(result.code).toContain("...sx.style");
   });
 });
+
+describe("conditional value handling", () => {
+  it("should bail when a boolean literal is used as a CSS value in conditional expression", () => {
+    // In styled-components, falsy interpolations like `false` mean "omit this declaration".
+    // We should bail rather than producing invalid CSS like `cursor: "false"`.
+    const source = `
+import styled from "styled-components";
+
+const Button = styled.button<{ $disabled?: boolean }>\`
+  cursor: \${(p) => (p.$disabled ? "not-allowed" : false)};
+\`;
+
+export const App = () => <Button $disabled>Click</Button>;
+`;
+
+    const result = transformWithWarnings(
+      { source, path: "boolean-css-value.tsx" },
+      { jscodeshift: j, j, stats: () => {}, report: () => {} },
+      { adapter: fixtureAdapter },
+    );
+
+    expect(result.code).toBeNull();
+  });
+
+  it("should bail when true is used as a CSS value in conditional expression", () => {
+    const source = `
+import styled from "styled-components";
+
+const Button = styled.button<{ $active?: boolean }>\`
+  visibility: \${(p) => (p.$active ? true : "hidden")};
+\`;
+
+export const App = () => <Button $active>Click</Button>;
+`;
+
+    const result = transformWithWarnings(
+      { source, path: "boolean-true-css-value.tsx" },
+      { jscodeshift: j, j, stats: () => {}, report: () => {} },
+      { adapter: fixtureAdapter },
+    );
+
+    expect(result.code).toBeNull();
+  });
+});
