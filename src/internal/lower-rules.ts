@@ -3278,7 +3278,7 @@ export function lowerRules(args: {
                   ],
                   [j.identifier(paramName)],
                 );
-                const valueExpr = j.logicalExpression("??", indexedLookup, fallbackExpr);
+                const valueExpr = j.logicalExpression(res.operator, indexedLookup, fallbackExpr);
 
                 const body = j.objectExpression([
                   j.property("init", j.identifier(out.prop), valueExpr),

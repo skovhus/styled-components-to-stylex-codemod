@@ -202,7 +202,7 @@ export type HandlerResult =
        *
        * Pattern: `props.theme.color[props.backgroundColor] || props.backgroundColor`
        *
-       * Output: `(backgroundColor: Color) => ({ backgroundColor: $colors[backgroundColor] ?? backgroundColor })`
+       * Output: `(backgroundColor: Color) => ({ backgroundColor: $colors[backgroundColor] || backgroundColor })`
        */
       type: "emitIndexedThemeFunctionWithPropFallback";
       /** The prop name used as the index (e.g., "backgroundColor") */
@@ -211,6 +211,8 @@ export type HandlerResult =
       themeObjectExpr: string;
       /** Imports required for themeObjectExpr */
       themeObjectImports: ImportSpec[];
+      /** The original operator from the input ("||" or "??") */
+      operator: "||" | "??";
     };
 
 export type InternalHandlerContext = {
@@ -1173,6 +1175,7 @@ function tryResolveIndexedThemeWithPropFallback(
     propName: indexedResult.indexPropName,
     themeObjectExpr: themeObjResolved.expr,
     themeObjectImports: themeObjResolved.imports,
+    operator: body.operator as "||" | "??",
   };
 }
 

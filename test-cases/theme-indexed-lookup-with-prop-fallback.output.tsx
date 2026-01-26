@@ -23,6 +23,6 @@ export const App = () => (
 
 const styles = stylex.create({
   viewBackgroundColor: (backgroundColor: Color) => ({
-    backgroundColor: $colors[backgroundColor] ?? `${backgroundColor}`,
+    backgroundColor: $colors[backgroundColor] || `${backgroundColor}`,
   }),
 });
