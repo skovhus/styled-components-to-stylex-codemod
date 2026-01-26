@@ -1776,6 +1776,8 @@ export function lowerRules(args: {
                     cssHelperPropValues.set(prop, value);
                   }
                 }
+              } else if (declByLocalName.has(expr.name)) {
+                // Local styled component mixin - supported without precomputed defaults.
               } else {
                 // This might be an imported css helper - we can't determine its properties.
                 // Mark for bail to avoid generating incorrect default values.
@@ -2386,6 +2388,17 @@ export function lowerRules(args: {
                   }
                 }
                 continue;
+              }
+              if (expr?.type === "Identifier") {
+                const mixinDecl = declByLocalName.get(expr.name);
+                if (mixinDecl && !mixinDecl.isCssHelper && mixinDecl.localName !== decl.localName) {
+                  const extras = decl.extraStyleKeys ?? [];
+                  if (!extras.includes(mixinDecl.styleKey)) {
+                    extras.push(mixinDecl.styleKey);
+                  }
+                  decl.extraStyleKeys = extras;
+                  continue;
+                }
               }
               // Handle member expression CSS helpers (e.g., buttonStyles.rootCss)
               const rootInfo = extractRootAndPath(expr);
