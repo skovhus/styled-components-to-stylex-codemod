@@ -5,17 +5,13 @@ import { $colors } from "./tokens.stylex";
 type Size = "tiny" | "small" | "normal";
 
 type Props = {
-  /** The color of the badge. */
   color?: string;
-  /** Whether to render a hollow badge. */
   hollow?: boolean;
-  /** The size of the badge. */
   size?: Size;
 };
 
 type ColorBadgeProps = Omit<React.ComponentProps<"div">, "className" | "style"> & Props;
 
-/** Renders a rounded color badge, tweaked to look nice in the current theme. */
 export function ColorBadge(props: ColorBadgeProps) {
   const { children, hollow, color, size: size = "normal" } = props;
   return (
@@ -46,7 +42,6 @@ export const App = () => (
 );
 
 const styles = stylex.create({
-  /** Renders a rounded color badge, tweaked to look nice in the current theme. */
   colorBadge: {
     width: "12px",
     height: "12px",

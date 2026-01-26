@@ -3,15 +3,11 @@ import styled from "styled-components";
 type Size = "tiny" | "small" | "normal";
 
 type Props = {
-  /** The color of the badge. */
   color?: string;
-  /** Whether to render a hollow badge. */
   hollow?: boolean;
-  /** The size of the badge. */
   size?: Size;
 };
 
-/** Renders a rounded color badge, tweaked to look nice in the current theme. */
 export const ColorBadge = styled("div")<Props>`
   width: 12px;
   height: 12px;
