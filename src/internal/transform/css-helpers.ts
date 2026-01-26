@@ -1,4 +1,4 @@
-import type { Collection, JSCodeshift } from "jscodeshift";
+import type { Collection, JSCodeshift, TemplateLiteral } from "jscodeshift";
 import { compile } from "stylis";
 
 import type { CssRuleIR } from "../css-ir.js";
@@ -251,6 +251,82 @@ function isStyledCallExpression(node: any, styledLocalNames: Set<string>): boole
   return false;
 }
 
+/**
+ * Checks if a MemberExpression node is inside a styled template literal.
+ * This is used to verify that CSS helper object members are only used
+ * in places where we can safely inline them.
+ */
+function isMemberExpressionInsideStyledTemplate(
+  memberPath: any,
+  styledLocalNames: Set<string>,
+): boolean {
+  // Walk up the AST to find if we're inside a styled template literal
+  let cur: any = memberPath;
+  while (cur && cur.parentPath) {
+    cur = cur.parentPath;
+    const node = cur?.node;
+    if (!node) {
+      break;
+    }
+    // Check if we're inside a styled tagged template expression
+    if (node.type === "TaggedTemplateExpression" && isStyledTag(styledLocalNames, node.tag)) {
+      return true;
+    }
+    // Also check for styled call expression: styled.div(fn => ...)
+    if (isStyledCallExpression(node, styledLocalNames)) {
+      return true;
+    }
+  }
+  return false;
+}
+
+/**
+ * Check if all usages of specific object member CSS helpers are inside styled templates.
+ * Returns true if all usages are safe, false if any usage is outside styled templates.
+ */
+function areObjectMemberCssHelpersOnlyUsedInStyledTemplates(args: {
+  root: any;
+  j: JSCodeshift;
+  objectName: string;
+  propNames: Set<string>;
+  styledLocalNames: Set<string>;
+}): boolean {
+  const { root, j, objectName, propNames, styledLocalNames } = args;
+
+  // Find all MemberExpression nodes where object is the objectName
+  const memberExpressions = root.find(j.MemberExpression, {
+    object: { type: "Identifier", name: objectName },
+    property: { type: "Identifier" },
+  } as any);
+
+  let allSafe = true;
+  memberExpressions.forEach((p: any) => {
+    const propNode = p.node.property;
+    if (propNode?.type !== "Identifier") {
+      return;
+    }
+    const propName = propNode.name;
+    // Only check properties that are CSS helpers
+    if (!propNames.has(propName)) {
+      return;
+    }
+    // Skip if this is the property definition itself (inside the object literal)
+    const parent = p.parentPath?.node;
+    if (
+      (parent?.type === "Property" || parent?.type === "ObjectProperty") &&
+      parent.value === p.node
+    ) {
+      return;
+    }
+    // Check if this usage is inside a styled template
+    if (!isMemberExpressionInsideStyledTemplate(p, styledLocalNames)) {
+      allSafe = false;
+    }
+  });
+
+  return allSafe;
+}
+
 interface UnsupportedCssUsage {
   loc: Loc;
   reason: "call-expression" | "outside-styled-template";
@@ -346,6 +422,15 @@ function detectUnsupportedCssHelperUsage(args: {
       parent?.type === "VariableDeclarator" &&
       parent.init === cssNode &&
       parent.id?.type === "Identifier"
+    ) {
+      return;
+    }
+    // Allow css templates as values of object properties:
+    //   const obj = { prop: css`...` }
+    if (
+      (parent?.type === "Property" || parent?.type === "ObjectProperty") &&
+      parent.value === cssNode &&
+      parent.key?.type === "Identifier"
     ) {
       return;
     }
@@ -447,6 +532,13 @@ function detectUnsupportedCssHelperUsage(args: {
 
 export { type UnsupportedCssUsage };
 
+/**
+ * Tracks CSS helpers that are object properties, e.g.:
+ *   const buttonStyles = { rootCss: css`...`, sizeCss: css`...` }
+ * Maps: objectName -> propertyName -> StyledDecl
+ */
+export type CssHelperObjectMembers = Map<string, Map<string, StyledDecl>>;
+
 export function extractAndRemoveCssHelpers(args: {
   root: any;
   j: JSCodeshift;
@@ -457,6 +549,7 @@ export function extractAndRemoveCssHelpers(args: {
   unsupportedCssUsages: UnsupportedCssUsage[];
   cssHelperFunctions: Map<string, CssHelperFunction>;
   cssHelperNames: Set<string>;
+  cssHelperObjectMembers: CssHelperObjectMembers;
   cssHelperDecls: StyledDecl[];
   cssHelperHasUniversalSelectors: boolean;
   cssHelperUniversalSelectorLoc: Loc;
@@ -469,6 +562,7 @@ export function extractAndRemoveCssHelpers(args: {
 
   const cssHelperFunctions = new Map<string, CssHelperFunction>();
   const cssHelperNames = new Set<string>();
+  const cssHelperObjectMembers: CssHelperObjectMembers = new Map();
   const cssHelperDecls: StyledDecl[] = [];
   let cssHelperHasUniversalSelectors = false;
   let cssHelperUniversalSelectorLoc: Loc = null;
@@ -479,6 +573,7 @@ export function extractAndRemoveCssHelpers(args: {
       unsupportedCssUsages: [],
       cssHelperFunctions,
       cssHelperNames,
+      cssHelperObjectMembers,
       cssHelperDecls,
       cssHelperHasUniversalSelectors,
       cssHelperUniversalSelectorLoc,
@@ -497,6 +592,7 @@ export function extractAndRemoveCssHelpers(args: {
       unsupportedCssUsages,
       cssHelperFunctions,
       cssHelperNames,
+      cssHelperObjectMembers,
       cssHelperDecls,
       cssHelperHasUniversalSelectors,
       cssHelperUniversalSelectorLoc,
@@ -630,6 +726,162 @@ export function extractAndRemoveCssHelpers(args: {
       });
     });
 
+  // Collect CSS helpers defined as object properties:
+  //   const buttonStyles = { rootCss: css`...`, sizeCss: css`...` }
+  root
+    .find(j.VariableDeclarator, {
+      init: { type: "ObjectExpression" },
+    })
+    .forEach((p: any) => {
+      if (p.node.id.type !== "Identifier") {
+        return;
+      }
+      const objectName = p.node.id.name;
+      const objectExpr = p.node.init as { properties?: unknown[] };
+      if (!objectExpr.properties || !Array.isArray(objectExpr.properties)) {
+        return;
+      }
+
+      // Check if this object contains any CSS template literal properties
+      const memberMap = new Map<string, StyledDecl>();
+
+      for (const prop of objectExpr.properties) {
+        const propTyped = prop as {
+          type?: string;
+          key?: { type?: string; name?: string };
+          value?: { type?: string; tag?: { type?: string; name?: string }; quasi?: unknown };
+        };
+
+        // Only handle simple property definitions (not spread, getters, etc.)
+        if (propTyped.type !== "Property" && propTyped.type !== "ObjectProperty") {
+          continue;
+        }
+
+        // Only handle identifier keys (not computed or string literal keys)
+        if (propTyped.key?.type !== "Identifier") {
+          continue;
+        }
+
+        const propName = propTyped.key.name;
+        if (!propName) {
+          continue;
+        }
+
+        // Check if the value is a css template literal
+        const value = propTyped.value;
+        if (
+          !value ||
+          value.type !== "TaggedTemplateExpression" ||
+          value.tag?.type !== "Identifier" ||
+          value.tag.name !== cssLocal
+        ) {
+          continue;
+        }
+
+        // Parse the CSS template
+        const template = value.quasi as TemplateLiteral;
+        const parsed = parseStyledTemplateLiteral(template);
+
+        // Only support static CSS templates (no interpolations) for now
+        // to keep the implementation simpler and safer
+        if (parsed.slots.length > 0) {
+          continue;
+        }
+
+        const rawCss = `& { ${parsed.rawCss} }`;
+        const stylisAst = compile(rawCss);
+        const rules = normalizeStylisAstToIR(stylisAst as any, parsed.slots, { rawCss });
+
+        if (rules.some((r) => typeof r.selector === "string" && r.selector.includes("*"))) {
+          noteCssHelperUniversalSelector(template);
+        }
+
+        // Create a qualified name for the style key: objectName + PropName
+        const qualifiedName = `${objectName}.${propName}`;
+        const styleKey = toStyleKey(
+          `${objectName}${propName.charAt(0).toUpperCase()}${propName.slice(1)}`,
+        );
+
+        const decl: StyledDecl = {
+          localName: qualifiedName,
+          base: { kind: "intrinsic", tagName: "div" },
+          styleKey,
+          isCssHelper: true,
+          rules,
+          templateExpressions: [],
+          rawCss,
+        };
+
+        memberMap.set(propName, decl);
+        cssHelperDecls.push(decl);
+      }
+
+      // Only add to cssHelperObjectMembers if we found at least one CSS property
+      if (memberMap.size > 0) {
+        const cssHelperPropNames = new Set(memberMap.keys());
+
+        // Safety check: bail if any CSS helper member is used outside styled templates
+        // This prevents breaking code that uses these properties elsewhere
+        const allUsagesSafe = areObjectMemberCssHelpersOnlyUsedInStyledTemplates({
+          root,
+          j,
+          objectName,
+          propNames: cssHelperPropNames,
+          styledLocalNames,
+        });
+
+        if (!allUsagesSafe) {
+          // Remove the decls we added for this object since we're bailing
+          for (const propName of cssHelperPropNames) {
+            const qualifiedName = `${objectName}.${propName}`;
+            const idx = cssHelperDecls.findIndex((d) => d.localName === qualifiedName);
+            if (idx >= 0) {
+              cssHelperDecls.splice(idx, 1);
+            }
+          }
+          // Don't add to cssHelperObjectMembers - bail on this object
+          return;
+        }
+
+        cssHelperObjectMembers.set(objectName, memberMap);
+
+        // Remove the CSS helper properties from the object (unless exported)
+        const isExported = exportedLocalNames.has(objectName);
+        if (!isExported) {
+          // Filter out the CSS helper properties
+          const remainingProps = objectExpr.properties.filter((prop: any) => {
+            if (prop.type !== "Property" && prop.type !== "ObjectProperty") {
+              return true; // Keep non-property items like spread
+            }
+            if (prop.key?.type !== "Identifier") {
+              return true; // Keep computed or non-identifier keys
+            }
+            return !cssHelperPropNames.has(prop.key.name);
+          });
+
+          if (remainingProps.length === 0) {
+            // All properties were CSS helpers - remove the entire declaration
+            const decl = p.parentPath?.node;
+            if (decl?.type === "VariableDeclaration") {
+              decl.declarations = decl.declarations.filter((dcl: any) => dcl !== p.node);
+              if (decl.declarations.length === 0) {
+                const exportDecl = p.parentPath?.parentPath?.node;
+                if (exportDecl?.type === "ExportNamedDeclaration") {
+                  j(p).closest(j.ExportNamedDeclaration).remove();
+                } else {
+                  j(p).closest(j.VariableDeclaration).remove();
+                }
+              }
+            }
+          } else {
+            // Some properties remain - just remove the CSS helper properties
+            objectExpr.properties = remainingProps;
+          }
+        }
+        changed = true;
+      }
+    });
+
   // Remove `css` import specifier from styled-components imports ONLY if `css` is no longer referenced.
   // This avoids producing "only-import-changes" outputs when we didn't actually transform `css` usage
   // (e.g. `return css\`...\`` inside a function).
@@ -659,6 +911,7 @@ export function extractAndRemoveCssHelpers(args: {
     unsupportedCssUsages: [],
     cssHelperFunctions,
     cssHelperNames,
+    cssHelperObjectMembers,
     cssHelperDecls,
     cssHelperHasUniversalSelectors,
     cssHelperUniversalSelectorLoc,

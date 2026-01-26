@@ -208,6 +208,7 @@ export function transformWithWarnings(
   }
 
   const cssHelperNames = cssHelpers.cssHelperNames;
+  const cssHelperObjectMembers = cssHelpers.cssHelperObjectMembers;
   const cssHelperDecls = cssHelpers.cssHelperDecls;
   const cssHelperFunctions = cssHelpers.cssHelperFunctions;
   const cssHelperHasUniversalSelectors = cssHelpers.cssHelperHasUniversalSelectors;
@@ -579,6 +580,7 @@ export function transformWithWarnings(
     styledDecls,
     keyframesNames,
     cssHelperNames,
+    cssHelperObjectMembers,
     cssHelperFunctions,
     stringMappingFns,
     toStyleKey,
