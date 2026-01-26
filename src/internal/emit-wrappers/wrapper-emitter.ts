@@ -16,6 +16,7 @@ import { emitStyleMerging } from "./style-merger.js";
 import type { ExportInfo, ExpressionKind, InlineStyleProp } from "./types.js";
 import { TAG_TO_HTML_ELEMENT, VOID_TAGS } from "./type-helpers.js";
 import type { VariantDimension } from "../transform-types.js";
+import { collectIdentifiers } from "../jscodeshift-utils.js";
 
 type TsTypeAnnotationInput = Parameters<JSCodeshift["tsTypeAnnotation"]>[0];
 type BlockStatementBody = Parameters<JSCodeshift["blockStatement"]>[0];
@@ -1569,6 +1570,46 @@ export class WrapperEmitter {
     const propExprBuilder = args.propExprBuilder ?? ((prop: string) => j.identifier(prop));
 
     const styleFnPairs = d.styleFnFromProps ?? [];
+    const explicitPropNames = d.propsType ? this.getExplicitPropNames(d.propsType) : null;
+    const inferPropFromCallArg = (expr: ExpressionKind | null | undefined): string | null => {
+      if (!expr || typeof expr !== "object") {
+        return null;
+      }
+      const unwrap = (node: ExpressionKind): ExpressionKind => {
+        let cur = node;
+        while (cur && typeof cur === "object") {
+          const t = (cur as { type?: string }).type;
+          if (t === "ParenthesizedExpression") {
+            cur = (cur as any).expression as ExpressionKind;
+            continue;
+          }
+          if (t === "TSAsExpression" || t === "TSNonNullExpression") {
+            cur = (cur as any).expression as ExpressionKind;
+            continue;
+          }
+          if (t === "TemplateLiteral") {
+            const exprs = (cur as any).expressions ?? [];
+            if (exprs.length === 1) {
+              cur = exprs[0] as ExpressionKind;
+              continue;
+            }
+          }
+          break;
+        }
+        return cur;
+      };
+      const unwrapped = unwrap(expr);
+      if (unwrapped?.type === "Identifier") {
+        return unwrapped.name;
+      }
+      if (unwrapped?.type === "ConditionalExpression") {
+        const test = (unwrapped as any).test as ExpressionKind;
+        if (test?.type === "Identifier") {
+          return test.name;
+        }
+      }
+      return null;
+    };
     for (const p of styleFnPairs) {
       const propExpr = p.jsxProp === "__props" ? propsId : propExprBuilder(p.jsxProp);
       const callArg = p.callArg ? (p.callArg as ExpressionKind) : propExpr;
@@ -1585,6 +1626,21 @@ export class WrapperEmitter {
         const name = (p.callArg as ASTNode & { name?: string }).name;
         if (name && destructureProps && !destructureProps.includes(name)) {
           destructureProps.push(name);
+        }
+      }
+      if (p.callArg && destructureProps) {
+        const inferred = inferPropFromCallArg(p.callArg as ExpressionKind);
+        if (inferred && !destructureProps.includes(inferred)) {
+          destructureProps.push(inferred);
+        }
+      }
+      if (p.callArg && destructureProps && explicitPropNames && explicitPropNames.size > 0) {
+        const names = new Set<string>();
+        collectIdentifiers(p.callArg, names);
+        for (const name of names) {
+          if (explicitPropNames.has(name) && !destructureProps.includes(name)) {
+            destructureProps.push(name);
+          }
         }
       }
 
@@ -1619,6 +1675,54 @@ export class WrapperEmitter {
         styleArgs.push(
           j.logicalExpression("&&", j.binaryExpression("!=", propExpr, j.nullLiteral()), call),
         );
+      }
+    }
+  }
+
+  /**
+   * Collects all props that need to be destructured based on styleFnFromProps,
+   * explicit prop names used in styleArgs, and shouldForwardProp.dropProps.
+   *
+   * This is called after buildStyleFnExpressions to ensure all referenced
+   * identifiers are properly destructured in the wrapper function.
+   */
+  collectDestructurePropsFromStyleFns(args: {
+    d: StyledDecl;
+    styleArgs: ExpressionKind[];
+    destructureProps: string[];
+  }): void {
+    const { d, styleArgs, destructureProps } = args;
+
+    // Collect jsxProp and conditionWhen props from styleFnFromProps
+    for (const p of d.styleFnFromProps ?? []) {
+      if (p.jsxProp && p.jsxProp !== "__props" && !destructureProps.includes(p.jsxProp)) {
+        destructureProps.push(p.jsxProp);
+      }
+      if (p.conditionWhen) {
+        this.collectConditionProps({ when: p.conditionWhen, destructureProps });
+      }
+    }
+
+    // Collect identifiers from styleArgs that match explicit prop names
+    if (d.propsType) {
+      const explicitProps = this.getExplicitPropNames(d.propsType);
+      if (explicitProps.size > 0) {
+        const used = new Set<string>();
+        for (const arg of styleArgs) {
+          collectIdentifiers(arg, used);
+        }
+        for (const name of used) {
+          if (explicitProps.has(name) && !destructureProps.includes(name)) {
+            destructureProps.push(name);
+          }
+        }
+      }
+    }
+
+    // Collect props that should be dropped (not forwarded to the element)
+    for (const prop of d.shouldForwardProp?.dropProps ?? []) {
+      if (prop && !destructureProps.includes(prop)) {
+        destructureProps.push(prop);
       }
     }
   }

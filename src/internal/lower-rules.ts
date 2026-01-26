@@ -50,10 +50,15 @@ import { createCssHelperResolver } from "./lower-rules/css-helper.js";
 import { parseSwitchReturningCssTemplates } from "./lower-rules/switch-variants.js";
 import { createThemeResolvers } from "./lower-rules/theme.js";
 import {
+  resolveTemplateLiteralBranch,
+  resolveTemplateLiteralValue,
+} from "./lower-rules/template-literals.js";
+import {
   extractUnionLiteralValues,
   groupVariantBucketsIntoDimensions,
 } from "./lower-rules/variants.js";
 import { mergeStyleObjects, toKebab } from "./lower-rules/utils.js";
+import { normalizeStylisAstToIR } from "./css-ir.js";
 import {
   normalizeSelectorForInputAttributePseudos,
   normalizeInterpolatedSelector,
@@ -62,7 +67,6 @@ import {
 import type { StyledDecl } from "./transform-types.js";
 import type { WarningLog, WarningType } from "./logger.js";
 import type { CssHelperFunction, CssHelperObjectMembers } from "./transform/css-helpers.js";
-import { normalizeStylisAstToIR } from "./css-ir.js";
 
 export type DescendantOverride = {
   parentStyleKey: string;
@@ -71,6 +75,31 @@ export type DescendantOverride = {
 };
 
 type ExpressionKind = Parameters<JSCodeshift["expressionStatement"]>[0];
+
+/**
+ * Type for variant test condition info
+ */
+type TestInfo = { when: string; propName: string };
+
+/**
+ * Inverts a "when" condition string for the opposite variant branch.
+ * E.g., "!$active" -> "$active", "$x === true" -> "$x !== true"
+ */
+function invertWhen(when: string): string | null {
+  if (when.startsWith("!")) {
+    return when.slice(1);
+  }
+  const match = when.match(/^(.+)\s+(===|!==)\s+(.+)$/);
+  if (match) {
+    const [, propName, op, rhs] = match;
+    const invOp = op === "===" ? "!==" : "===";
+    return `${propName} ${invOp} ${rhs}`;
+  }
+  if (!when.includes(" ")) {
+    return `!${when}`;
+  }
+  return null;
+}
 
 export function lowerRules(args: {
   api: API;
@@ -550,6 +579,82 @@ export function lowerRules(args: {
       decl,
     });
 
+    // Shared helper to apply a style variant for a given test condition
+    const applyVariant = (testInfo: TestInfo, consStyle: Record<string, unknown>): void => {
+      const when = testInfo.when;
+      const existingBucket = variantBuckets.get(when);
+      const nextBucket = existingBucket ? { ...existingBucket } : {};
+      mergeStyleObjects(nextBucket, consStyle);
+      variantBuckets.set(when, nextBucket);
+      variantStyleKeys[when] ??= `${decl.styleKey}${toSuffixFromProp(when)}`;
+      if (testInfo.propName && !testInfo.propName.startsWith("$")) {
+        ensureShouldForwardPropDrop(decl, testInfo.propName);
+      }
+    };
+
+    // Factory to create prop test helpers given the arrow function parameter name
+    const createPropTestHelpers = (
+      paramName: string,
+    ): {
+      readPropName: (node: ExpressionKind) => string | null;
+      parseTestInfo: (test: ExpressionKind) => TestInfo | null;
+    } => {
+      const readPropName = (node: ExpressionKind): string | null => {
+        const path = getMemberPathFromIdentifier(node, paramName);
+        if (!path || path.length !== 1) {
+          return null;
+        }
+        return path[0]!;
+      };
+
+      const parseTestInfo = (test: ExpressionKind): TestInfo | null => {
+        if (!test || typeof test !== "object") {
+          return null;
+        }
+        if (test.type === "MemberExpression" || test.type === "OptionalMemberExpression") {
+          const propName = readPropName(test);
+          return propName ? { when: propName, propName } : null;
+        }
+        if (test.type === "UnaryExpression" && test.operator === "!" && test.argument) {
+          const propName = readPropName(test.argument as ExpressionKind);
+          return propName ? { when: `!${propName}`, propName } : null;
+        }
+        if (
+          test.type === "BinaryExpression" &&
+          (test.operator === "===" || test.operator === "!==")
+        ) {
+          const left = test.left;
+          if (left.type === "MemberExpression" || left.type === "OptionalMemberExpression") {
+            const propName = readPropName(left);
+            const rhs = literalToStaticValue(test.right);
+            if (!propName || rhs === null) {
+              return null;
+            }
+            const rhsValue = JSON.stringify(rhs);
+            return { when: `${propName} ${test.operator} ${rhsValue}`, propName };
+          }
+        }
+        return null;
+      };
+
+      return { readPropName, parseTestInfo };
+    };
+
+    // Build reusable handler context for resolveDynamicNode calls
+    const handlerContext: InternalHandlerContext = {
+      api,
+      filePath,
+      resolveValue,
+      resolveCall,
+      resolveImport: resolveImportInScope,
+    };
+
+    // Build component info for resolveDynamicNode calls
+    const componentInfo =
+      decl.base.kind === "intrinsic"
+        ? { localName: decl.localName, base: "intrinsic" as const, tagOrIdent: decl.base.tagName }
+        : { localName: decl.localName, base: "component" as const, tagOrIdent: decl.base.ident };
+
     // (helpers imported from `./lower-rules/*`)
 
     // (animation + interpolated-string helpers extracted to `./lower-rules/*`)
@@ -888,6 +993,9 @@ export function lowerRules(args: {
       return out;
     };
 
+    const isPlainTemplateLiteral = (node: ExpressionKind | null | undefined): boolean =>
+      !!node && typeof node === "object" && (node as { type?: string }).type === "TemplateLiteral";
+
     const tryHandleCssHelperConditionalBlock = (d: any): boolean => {
       if (d.value.kind !== "interpolated") {
         return false;
@@ -909,56 +1017,7 @@ export function lowerRules(args: {
         return false;
       }
 
-      const readPropName = (node: ExpressionKind): string | null => {
-        const path = getMemberPathFromIdentifier(node, paramName);
-        if (!path || path.length !== 1) {
-          return null;
-        }
-        return path[0]!;
-      };
-
-      type TestInfo = { when: string; propName: string };
-      const parseTestInfo = (test: ExpressionKind): TestInfo | null => {
-        if (!test || typeof test !== "object") {
-          return null;
-        }
-        if (test.type === "MemberExpression" || test.type === "OptionalMemberExpression") {
-          const propName = readPropName(test);
-          return propName ? { when: propName, propName } : null;
-        }
-        if (test.type === "UnaryExpression" && test.operator === "!" && test.argument) {
-          const propName = readPropName(test.argument as ExpressionKind);
-          return propName ? { when: `!${propName}`, propName } : null;
-        }
-        if (
-          test.type === "BinaryExpression" &&
-          (test.operator === "===" || test.operator === "!==")
-        ) {
-          const left = test.left;
-          if (left.type === "MemberExpression" || left.type === "OptionalMemberExpression") {
-            const propName = readPropName(left);
-            const rhs = literalToStaticValue(test.right);
-            if (!propName || rhs === null) {
-              return null;
-            }
-            const rhsValue = JSON.stringify(rhs);
-            return { when: `${propName} ${test.operator} ${rhsValue}`, propName };
-          }
-        }
-        return null;
-      };
-
-      const applyVariant = (testInfo: TestInfo, consStyle: Record<string, unknown>): void => {
-        const when = testInfo.when;
-        const existingBucket = variantBuckets.get(when);
-        const nextBucket = existingBucket ? { ...existingBucket } : {};
-        mergeStyleObjects(nextBucket, consStyle);
-        variantBuckets.set(when, nextBucket);
-        variantStyleKeys[when] ??= `${decl.styleKey}${toSuffixFromProp(when)}`;
-        if (testInfo.propName && !testInfo.propName.startsWith("$")) {
-          ensureShouldForwardPropDrop(decl, testInfo.propName);
-        }
-      };
+      const { parseTestInfo } = createPropTestHelpers(paramName);
 
       const isTriviallyPureVoidArg = (arg: any): boolean => {
         if (!arg || typeof arg !== "object") {
@@ -1015,22 +1074,6 @@ export function lowerRules(args: {
           return isTriviallyPureVoidArg((node as any).argument);
         }
         return false;
-      };
-
-      const invertWhen = (when: string): string | null => {
-        if (when.includes(" === ")) {
-          return when.replace(" === ", " !== ");
-        }
-        if (when.includes(" !== ")) {
-          return when.replace(" !== ", " === ");
-        }
-        if (when.startsWith("!")) {
-          return when.slice(1);
-        }
-        if (!when.includes(" ")) {
-          return `!${when}`;
-        }
-        return null;
       };
 
       // Handle LogicalExpression: props.$x && css`...`
@@ -1149,10 +1192,12 @@ export function lowerRules(args: {
       const alt = body.alternate;
       const consIsCss = isCssHelperTaggedTemplate(cons);
       const altIsCss = isCssHelperTaggedTemplate(alt);
+      const consIsTpl = isPlainTemplateLiteral(cons);
+      const altIsTpl = isPlainTemplateLiteral(alt);
       const consIsEmpty = isEmptyCssBranch(cons);
       const altIsEmpty = isEmptyCssBranch(alt);
 
-      if (!(consIsCss || altIsCss)) {
+      if (!(consIsCss || altIsCss || consIsTpl || altIsTpl)) {
         return false;
       }
 
@@ -1205,7 +1250,270 @@ export function lowerRules(args: {
         return true;
       }
 
+      const applyDynamicEntries = (
+        entries: Array<{ jsxProp: string; stylexProp: string; callArg: ExpressionKind }>,
+        conditionWhen: string,
+      ): boolean => {
+        for (const entry of entries) {
+          const fnKey = `${decl.styleKey}${toSuffixFromProp(entry.stylexProp)}`;
+          if (!styleFnDecls.has(fnKey)) {
+            const param = j.identifier(entry.stylexProp);
+            const valueId = j.identifier(entry.stylexProp);
+            annotateParamFromJsxProp(param, entry.jsxProp);
+            const p = j.property("init", valueId, valueId) as any;
+            p.shorthand = true;
+            const bodyExpr = j.objectExpression([p]);
+            styleFnDecls.set(fnKey, j.arrowFunctionExpression([param], bodyExpr));
+          }
+          if (
+            !styleFnFromProps.some(
+              (p) =>
+                p.fnKey === fnKey &&
+                p.jsxProp === entry.jsxProp &&
+                p.conditionWhen === conditionWhen,
+            )
+          ) {
+            styleFnFromProps.push({
+              fnKey,
+              jsxProp: entry.jsxProp,
+              conditionWhen,
+              callArg: entry.callArg,
+            });
+          }
+          ensureShouldForwardPropDrop(decl, entry.jsxProp);
+        }
+        return true;
+      };
+
+      if (consIsTpl && altIsTpl) {
+        if (testInfo.propName) {
+          ensureShouldForwardPropDrop(decl, testInfo.propName);
+        }
+        const consResolved = resolveTemplateLiteralBranch({
+          j,
+          node: cons as any,
+          paramName,
+          filePath,
+          parseExpr,
+          cssValueToJs,
+          resolveValue,
+          resolveCall,
+          resolveImportInScope,
+          resolverImports,
+          componentInfo,
+          handlerContext,
+        });
+        const altResolved = resolveTemplateLiteralBranch({
+          j,
+          node: alt as any,
+          paramName,
+          filePath,
+          parseExpr,
+          cssValueToJs,
+          resolveValue,
+          resolveCall,
+          resolveImportInScope,
+          resolverImports,
+          componentInfo,
+          handlerContext,
+        });
+        if (!consResolved || !altResolved) {
+          return false;
+        }
+        const invertedWhen = invertWhen(testInfo.when);
+        if (!invertedWhen) {
+          return false;
+        }
+        if (Object.keys(consResolved.style).length > 0) {
+          applyVariant(testInfo, consResolved.style);
+        }
+        if (Object.keys(altResolved.style).length > 0) {
+          applyVariant({ ...testInfo, when: invertedWhen }, altResolved.style);
+        }
+        if (consResolved.dynamicEntries.length > 0) {
+          applyDynamicEntries(consResolved.dynamicEntries, testInfo.when);
+        }
+        if (altResolved.dynamicEntries.length > 0) {
+          applyDynamicEntries(altResolved.dynamicEntries, invertedWhen);
+        }
+        return true;
+      }
+
+      if (consIsTpl && altIsEmpty) {
+        if (testInfo.propName) {
+          ensureShouldForwardPropDrop(decl, testInfo.propName);
+        }
+        const consResolved = resolveTemplateLiteralBranch({
+          j,
+          node: cons as any,
+          paramName,
+          filePath,
+          parseExpr,
+          cssValueToJs,
+          resolveValue,
+          resolveCall,
+          resolveImportInScope,
+          resolverImports,
+          componentInfo,
+          handlerContext,
+        });
+        if (!consResolved) {
+          return false;
+        }
+        if (Object.keys(consResolved.style).length > 0) {
+          applyVariant(testInfo, consResolved.style);
+        }
+        if (consResolved.dynamicEntries.length > 0) {
+          applyDynamicEntries(consResolved.dynamicEntries, testInfo.when);
+        }
+        return true;
+      }
+
+      if (consIsEmpty && altIsTpl) {
+        if (testInfo.propName) {
+          ensureShouldForwardPropDrop(decl, testInfo.propName);
+        }
+        const altResolved = resolveTemplateLiteralBranch({
+          j,
+          node: alt as any,
+          paramName,
+          filePath,
+          parseExpr,
+          cssValueToJs,
+          resolveValue,
+          resolveCall,
+          resolveImportInScope,
+          resolverImports,
+          componentInfo,
+          handlerContext,
+        });
+        if (!altResolved) {
+          return false;
+        }
+        const invertedWhen = invertWhen(testInfo.when);
+        if (!invertedWhen) {
+          return false;
+        }
+        if (Object.keys(altResolved.style).length > 0) {
+          applyVariant({ ...testInfo, when: invertedWhen }, altResolved.style);
+        }
+        if (altResolved.dynamicEntries.length > 0) {
+          applyDynamicEntries(altResolved.dynamicEntries, invertedWhen);
+        }
+        return true;
+      }
+
       return false;
+    };
+
+    // Handle property-level ternary with template literal branches containing helper calls:
+    //   background: ${(props) => props.$faded
+    //     ? `linear-gradient(..., ${color("bgBorder")(props)} ...)`
+    //     : `linear-gradient(..., ${color("bgBorder")(props)} ...)`}
+    //
+    // When both branches are template literals that can be fully resolved via the adapter,
+    // emit StyleX variants for each branch.
+    const tryHandlePropertyTernaryTemplateLiteral = (d: any): boolean => {
+      if (d.value.kind !== "interpolated") {
+        return false;
+      }
+      if (!d.property) {
+        return false;
+      }
+      const parts = d.value.parts ?? [];
+      const slotPart = parts.find((p: any) => p.kind === "slot");
+      if (!slotPart || slotPart.kind !== "slot") {
+        return false;
+      }
+      const slotId = slotPart.slotId;
+      const expr = decl.templateExpressions[slotId] as any;
+      if (!expr || expr.type !== "ArrowFunctionExpression") {
+        return false;
+      }
+      const paramName =
+        expr.params?.[0]?.type === "Identifier" ? (expr.params[0].name as string) : null;
+      if (!paramName) {
+        return false;
+      }
+      const body = expr.body as any;
+      if (!body || body.type !== "ConditionalExpression") {
+        return false;
+      }
+
+      const { parseTestInfo } = createPropTestHelpers(paramName);
+      const testInfo = parseTestInfo(body.test as ExpressionKind);
+      if (!testInfo) {
+        return false;
+      }
+
+      const cons = body.consequent;
+      const alt = body.alternate;
+      if (cons?.type !== "TemplateLiteral" || alt?.type !== "TemplateLiteral") {
+        return false;
+      }
+
+      const consValue = resolveTemplateLiteralValue({
+        j,
+        tpl: cons as any,
+        property: d.property,
+        filePath,
+        parseExpr,
+        resolveCall,
+        resolveImportInScope,
+        resolverImports,
+        componentInfo,
+        handlerContext,
+      });
+      const altValue = resolveTemplateLiteralValue({
+        j,
+        tpl: alt as any,
+        property: d.property,
+        filePath,
+        parseExpr,
+        resolveCall,
+        resolveImportInScope,
+        resolverImports,
+        componentInfo,
+        handlerContext,
+      });
+
+      if (!consValue || !altValue) {
+        return false;
+      }
+
+      const invertedWhen = invertWhen(testInfo.when);
+      if (!invertedWhen) {
+        return false;
+      }
+
+      // Extract raw value from the template literal for property mapping
+      // (e.g., to detect gradients in "background" property)
+      const altQuasis = (alt.quasis ?? []) as Array<{ value?: { raw?: string; cooked?: string } }>;
+      const valueRawFromTemplate = altQuasis.map((q) => q.value?.raw ?? "").join("");
+
+      // Get the StyleX property name for this CSS property
+      const stylexProps = cssDeclarationToStylexDeclarations({
+        property: d.property,
+        value: { kind: "static", value: valueRawFromTemplate },
+        valueRaw: valueRawFromTemplate,
+        important: false,
+      });
+      if (stylexProps.length === 0) {
+        return false;
+      }
+      const stylexProp = stylexProps[0]!.prop;
+
+      // Add the "false" branch value to the base style
+      styleObj[stylexProp] = altValue;
+
+      // Add the "true" branch value as a variant
+      applyVariant(testInfo, { [stylexProp]: consValue });
+
+      if (testInfo.propName) {
+        ensureShouldForwardPropDrop(decl, testInfo.propName);
+      }
+
+      return true;
     };
 
     const tryHandleCssHelperFunctionSwitchBlock = (d: any): boolean => {
@@ -2022,23 +2330,13 @@ export function lowerRules(args: {
                   ...(d.property ? { property: d.property } : {}),
                   valueRaw: d.valueRaw,
                 },
-                component:
-                  decl.base.kind === "intrinsic"
-                    ? {
-                        localName: decl.localName,
-                        base: "intrinsic",
-                        tagOrIdent: decl.base.tagName,
-                      }
-                    : { localName: decl.localName, base: "component", tagOrIdent: decl.base.ident },
+                component: componentInfo,
                 usage: { jsxUsages: 0, hasPropsSpread: false },
               },
               {
-                api,
-                filePath,
-                resolveValue,
-                resolveCall,
+                ...handlerContext,
                 resolveImport: (localName: string) => resolveImportForExpr(expr, localName),
-              } satisfies InternalHandlerContext,
+              },
             );
             if (res && res.type === "resolvedValue") {
               const exprAst = parseExpr(res.expr);
@@ -2113,6 +2411,9 @@ export function lowerRules(args: {
                 }
               }
             }
+          }
+          if (tryHandlePropertyTernaryTemplateLiteral(d)) {
+            continue;
           }
           if (tryHandleCssHelperConditionalBlock(d)) {
             continue;
@@ -2544,20 +2845,11 @@ export function lowerRules(args: {
                 ...(d.property ? { property: d.property } : {}),
                 valueRaw: d.valueRaw,
               },
-              component:
-                decl.base.kind === "intrinsic"
-                  ? { localName: decl.localName, base: "intrinsic", tagOrIdent: decl.base.tagName }
-                  : { localName: decl.localName, base: "component", tagOrIdent: decl.base.ident },
+              component: componentInfo,
               usage: { jsxUsages: 0, hasPropsSpread: false },
               ...(loc ? { loc } : {}),
             },
-            {
-              api,
-              filePath,
-              resolveValue,
-              resolveCall,
-              resolveImport: resolveImportInScope,
-            } satisfies InternalHandlerContext,
+            handlerContext,
           );
 
           if (res && res.type === "resolvedStyles") {

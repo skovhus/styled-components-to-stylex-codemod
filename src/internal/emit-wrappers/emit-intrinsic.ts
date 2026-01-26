@@ -712,6 +712,7 @@ export function emitIntrinsicWrappers(emitter: WrapperEmitter): {
         styleArgs,
         destructureProps,
       });
+      emitter.collectDestructurePropsFromStyleFns({ d, styleArgs, destructureProps });
 
       const isVoidTag = VOID_TAGS.has(tagName);
       const propsParamId = j.identifier("props");
@@ -2104,6 +2105,7 @@ export function emitIntrinsicWrappers(emitter: WrapperEmitter): {
       styleArgs,
       destructureProps,
     });
+    emitter.collectDestructurePropsFromStyleFns({ d, styleArgs, destructureProps });
 
     if (d.attrsInfo?.conditionalAttrs?.length) {
       for (const c of d.attrsInfo.conditionalAttrs) {
