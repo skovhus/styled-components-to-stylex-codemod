@@ -2,6 +2,7 @@ import type { Collection } from "jscodeshift";
 import type { StyledDecl, VariantDimension } from "./transform-types.js";
 import path from "node:path";
 import type { ImportSource, ImportSpec, StyleMergerConfig } from "../adapter.js";
+import { isAstNode } from "./jscodeshift-utils.js";
 
 export function emitStylesAndImports(args: {
   root: Collection<any>;
@@ -11,7 +12,6 @@ export function emitStylesAndImports(args: {
   resolverImports: Map<string, any>;
   resolvedStyleObjects: Map<string, any>;
   styledDecls: StyledDecl[];
-  isAstNode: (v: unknown) => boolean;
   objectToAst: (j: any, v: Record<string, unknown>) => any;
   literalToAst: (j: any, v: unknown) => any;
   stylesIdentifier: string;
@@ -25,7 +25,6 @@ export function emitStylesAndImports(args: {
     resolverImports,
     resolvedStyleObjects,
     styledDecls,
-    isAstNode,
     objectToAst,
     literalToAst,
     stylesIdentifier,
@@ -639,13 +638,7 @@ export function emitStylesAndImports(args: {
       }
       emittedDimensions.set(name, contentKey);
 
-      const variantDecl = emitVariantDimensionDecl(
-        j,
-        dimension,
-        objectToAst,
-        literalToAst,
-        isAstNode,
-      );
+      const variantDecl = emitVariantDimensionDecl(j, dimension, objectToAst, literalToAst);
       programBody.push(variantDecl as any);
     }
   }
@@ -662,7 +655,6 @@ function emitVariantDimensionDecl(
   dimension: VariantDimension,
   objectToAst: (j: any, v: Record<string, unknown>) => any,
   literalToAst: (j: any, v: unknown) => any,
-  isAstNode: (v: unknown) => boolean,
 ): any {
   const properties = Object.entries(dimension.variants).map(([variantValue, styles]) => {
     return j.property(

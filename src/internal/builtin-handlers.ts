@@ -317,11 +317,20 @@ function tryResolveThemeAccess(
   return { type: "resolvedValue", expr: res.expr, imports: res.imports };
 }
 
-function callArgFromNode(node: unknown): CallResolveContext["args"][number] {
+function callArgFromNode(
+  node: unknown,
+  propsParamName?: string,
+): CallResolveContext["args"][number] {
   if (!node || typeof node !== "object") {
     return { kind: "unknown" };
   }
   const type = (node as { type?: string }).type;
+  if (type === "MemberExpression" && typeof propsParamName === "string" && propsParamName) {
+    const parts = getMemberPathFromIdentifier(node as any, propsParamName);
+    if (parts && parts[0] === "theme" && parts.length > 1) {
+      return { kind: "theme", path: parts.slice(1).join(".") };
+    }
+  }
   if (type === "StringLiteral") {
     return { kind: "literal", value: (node as { value: string }).value };
   }
@@ -343,16 +352,17 @@ function callArgFromNode(node: unknown): CallResolveContext["args"][number] {
   return { kind: "unknown" };
 }
 
-function callArgsFromNode(args: unknown): CallResolveContext["args"] {
+function callArgsFromNode(args: unknown, propsParamName?: string): CallResolveContext["args"] {
   if (!Array.isArray(args)) {
     return [];
   }
-  return args.map((arg) => callArgFromNode(arg));
+  return args.map((arg) => callArgFromNode(arg, propsParamName));
 }
 
 function resolveImportedHelperCall(
   callExpr: CallExpressionNode,
   ctx: InternalHandlerContext,
+  propsParamName?: string,
 ): CallResolveResult | "keepOriginal" | "unresolved" {
   const callee = callExpr.callee;
   if (!callee || typeof callee !== "object") {
@@ -372,7 +382,7 @@ function resolveImportedHelperCall(
   if (!calleeImportedName || !calleeSource) {
     return "keepOriginal";
   }
-  const args = callArgsFromNode(callExpr.arguments);
+  const args = callArgsFromNode(callExpr.arguments, propsParamName);
   const res = ctx.resolveCall({
     callSiteFilePath: ctx.filePath,
     calleeImportedName,
@@ -455,6 +465,71 @@ function tryResolveCallExpression(
     reason:
       "Unsupported call expression (expected imported helper(...) or imported helper(...)(...))",
   };
+}
+
+function tryResolveArrowFnHelperCallWithThemeArg(
+  node: DynamicNode,
+  ctx: InternalHandlerContext,
+): HandlerResult | null {
+  if (!node.css.property) {
+    return null;
+  }
+  const expr: any = node.expr as any;
+  if (!isArrowFunctionExpression(expr)) {
+    return null;
+  }
+  const propsParamName = getArrowFnSingleParamName(expr);
+  if (!propsParamName) {
+    return null;
+  }
+  const body: any = expr.body as any;
+  if (!isCallExpressionNode(body)) {
+    return null;
+  }
+  const args = body.arguments ?? [];
+  if (args.length !== 1) {
+    return null;
+  }
+  const arg0 = args[0] as any;
+  if (!arg0 || arg0.type !== "MemberExpression") {
+    return null;
+  }
+  const parts = getMemberPathFromIdentifier(arg0, propsParamName);
+  if (!parts || parts[0] !== "theme" || parts.length <= 1) {
+    return null;
+  }
+
+  const simple = resolveImportedHelperCall(body, ctx, propsParamName);
+  if (simple !== "keepOriginal" && simple !== "unresolved") {
+    return simple.usage === "props"
+      ? { type: "resolvedStyles", expr: simple.expr, imports: simple.imports }
+      : { type: "resolvedValue", expr: simple.expr, imports: simple.imports };
+  }
+
+  if (simple === "unresolved") {
+    // This is a supported helper-call shape but the adapter chose not to resolve it.
+    // Treat as unsupported so the caller can bail and surface a warning.
+    const callee = body.callee;
+    const calleeIdent = (() => {
+      if (!callee || typeof callee !== "object") {
+        return null;
+      }
+      if ((callee as { type?: string }).type !== "Identifier") {
+        return null;
+      }
+      return (callee as { name?: string }).name ?? null;
+    })();
+    const imp =
+      typeof calleeIdent === "string" ? ctx.resolveImport(calleeIdent, callee as any) : null;
+    const importedName = imp?.importedName ?? calleeIdent ?? "unknown";
+    return {
+      type: "keepOriginal",
+      reason: `Adapter returned null for helper call`,
+      context: { importedName },
+    };
+  }
+
+  return null;
 }
 
 function tryResolveConditionalValue(
@@ -1393,6 +1468,7 @@ export function resolveDynamicNode(
   return (
     tryResolveThemeAccess(node, ctx) ??
     tryResolveCallExpression(node, ctx) ??
+    tryResolveArrowFnHelperCallWithThemeArg(node, ctx) ??
     tryResolveConditionalValue(node, ctx) ??
     tryResolveConditionalCssBlockTernary(node) ??
     tryResolveConditionalCssBlock(node) ??

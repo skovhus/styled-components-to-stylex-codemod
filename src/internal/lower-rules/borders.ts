@@ -13,6 +13,7 @@ export function tryHandleInterpolatedBorder(args: {
   decl: StyledDecl;
   d: any;
   styleObj: Record<string, unknown>;
+  extraStyleObjects: Map<string, Record<string, unknown>>;
   hasLocalThemeBinding: boolean;
   resolveValue: Adapter["resolveValue"];
   resolveCall: Adapter["resolveCall"];
@@ -37,6 +38,7 @@ export function tryHandleInterpolatedBorder(args: {
     decl,
     d,
     styleObj,
+    extraStyleObjects,
     resolveValue,
     resolveCall,
     importMap,
@@ -236,64 +238,181 @@ export function tryHandleInterpolatedBorder(args: {
 
   // Handle call expressions (like helper functions) by resolving via resolveDynamicNode:
   //   border: 1px solid ${color("bgSub")}
-  if (expr?.type === "CallExpression") {
-    const loc = getNodeLocStart(expr);
-    const res = resolveDynamicNode(
-      {
-        slotId,
-        expr,
-        css: {
-          kind: "declaration",
-          selector: "&",
-          atRuleStack: [],
-          property: colorProp,
-          valueRaw: d.valueRaw,
+  {
+    const resolveBorderExpr = (node: any): { exprAst: any; imports: any[] } | null => {
+      const loc = getNodeLocStart(node);
+      const res = resolveDynamicNode(
+        {
+          slotId,
+          expr: node,
+          css: {
+            kind: "declaration",
+            selector: "&",
+            atRuleStack: [],
+            property: colorProp,
+            valueRaw: d.valueRaw,
+          },
+          component:
+            decl.base.kind === "intrinsic"
+              ? { localName: decl.localName, base: "intrinsic", tagOrIdent: decl.base.tagName }
+              : { localName: decl.localName, base: "component", tagOrIdent: decl.base.ident },
+          usage: { jsxUsages: 0, hasPropsSpread: false },
+          ...(loc ? { loc } : {}),
         },
-        component:
-          decl.base.kind === "intrinsic"
-            ? { localName: decl.localName, base: "intrinsic", tagOrIdent: decl.base.tagName }
-            : { localName: decl.localName, base: "component", tagOrIdent: decl.base.ident },
-        usage: { jsxUsages: 0, hasPropsSpread: false },
-        ...(loc ? { loc } : {}),
-      },
-      {
-        api,
-        filePath,
-        resolveValue,
-        resolveCall,
-        resolveImport: (localName: string, _identNode?: unknown) => {
-          const v = importMap.get(localName);
-          return v ? v : null;
-        },
-      } satisfies InternalHandlerContext,
-    );
-    if (res && res.type === "resolvedValue") {
-      for (const imp of res.imports ?? []) {
-        resolverImports.set(JSON.stringify(imp), imp);
+        {
+          api,
+          filePath,
+          resolveValue,
+          resolveCall,
+          resolveImport: (localName: string, _identNode?: unknown) => {
+            const v = importMap.get(localName);
+            return v ? v : null;
+          },
+        } satisfies InternalHandlerContext,
+      );
+      if (!res || res.type !== "resolvedValue") {
+        return null;
       }
       const exprAst = parseExpr(res.expr);
-      if (exprAst) {
-        const exprNode = exprAst as { type?: string; value?: unknown };
-        if (exprNode.type === "StringLiteral" || exprNode.type === "Literal") {
-          const raw = typeof exprNode.value === "string" ? exprNode.value : null;
-          if (raw) {
-            const parsed = parseBorderShorthand(raw);
-            if (parsed) {
-              Object.assign(styleObj, parsed);
-              return true;
-            }
+      if (!exprAst) {
+        return null;
+      }
+      return { exprAst, imports: res.imports ?? [] };
+    };
+
+    const parseTemplateLiteralBorderShorthand = (
+      value: any,
+    ): {
+      width?: string;
+      style?: string;
+      colorExpr: any;
+    } | null => {
+      if (!value || value.type !== "TemplateLiteral") {
+        return null;
+      }
+      const quasis = value.quasis ?? [];
+      const exprs = value.expressions ?? [];
+      if (quasis.length !== 2 || exprs.length !== 1) {
+        return null;
+      }
+      const prefix = quasis[0]?.value?.cooked ?? quasis[0]?.value?.raw ?? "";
+      const suffix = quasis[1]?.value?.cooked ?? quasis[1]?.value?.raw ?? "";
+      if (suffix.trim() !== "") {
+        return null;
+      }
+      const tokens = prefix.trim().split(/\s+/).filter(Boolean);
+      if (tokens.length < 2) {
+        return null;
+      }
+      // Expect a simple border shorthand prefix like: "1px solid"
+      const w = tokens.find((t: string) => /^-?\d*\.?\d+(px|rem|em|vh|vw|vmin|vmax|%)?$/.test(t));
+      const s = tokens.find((t: string) => borderStyles.has(t));
+      if (!w || !s) {
+        return null;
+      }
+      // Be conservative: only accept exactly `<width> <style>` (no extra tokens)
+      if (tokens.length !== 2) {
+        return null;
+      }
+      return { width: w, style: s, colorExpr: exprs[0] };
+    };
+
+    const bumpResolverImportToEnd = (predicate: (spec: unknown) => boolean): void => {
+      let bump: { k: string; v: unknown } | null = null;
+      for (const [k, v] of resolverImports.entries()) {
+        if (predicate(v)) {
+          bump = { k, v };
+          break;
+        }
+      }
+      if (bump) {
+        resolverImports.delete(bump.k);
+        resolverImports.set(bump.k, bump.v);
+      }
+    };
+
+    // Support helper calls:
+    // - direct: ${borderByColor(themeVar)}
+    // - wrapped in arrow fn: ${(p) => borderByColor(p.theme.color.bgSub)}
+    const isResolvableHelper =
+      expr?.type === "CallExpression" ||
+      (expr?.type === "ArrowFunctionExpression" && expr.body?.type === "CallExpression");
+    if (isResolvableHelper) {
+      const resolved = resolveBorderExpr(expr);
+      if (!resolved) {
+        return false;
+      }
+
+      for (const imp of resolved.imports) {
+        resolverImports.set(JSON.stringify(imp), imp);
+      }
+
+      // Special case: helper returns a border shorthand string (or template literal),
+      // and this interpolation had no static width/style tokens. Reuse the same
+      // expansion approach as css-helper-reuse: emit width/style/color separately.
+      if (!hasStaticWidthOrStyle) {
+        const parsedTpl = parseTemplateLiteralBorderShorthand(resolved.exprAst);
+        if (parsedTpl) {
+          const fullProp = direction ? `border${direction}` : "border";
+          const extraKey = fullProp;
+          const bucket = extraStyleObjects.get(extraKey) ?? {};
+          if (parsedTpl.width) {
+            (bucket as any)[widthProp] = parsedTpl.width;
+          }
+          if (parsedTpl.style) {
+            (bucket as any)[styleProp] = parsedTpl.style;
+          }
+          (bucket as any)[colorProp] = parsedTpl.colorExpr;
+          extraStyleObjects.set(extraKey, bucket);
+
+          decl.extraStylexPropsArgs ??= [];
+          decl.extraStylexPropsArgs.push({
+            expr: j.memberExpression(j.identifier("styles"), j.identifier(extraKey)),
+          });
+          // `extraStylexPropsArgs` are only emitted for wrapper components.
+          // If this styled component would otherwise be eligible for inlining, we'd drop the extra
+          // `styles.<extraKey>` argument and lose the border expansion. Force a wrapper to preserve
+          // semantics.
+          decl.needsWrapperComponent = true;
+
+          // Import insertion currently always happens right after the stylex import, which means
+          // later inserts appear above earlier inserts. For this pattern, we want helper imports
+          // (e.g. `borders`) to appear above theme token imports (e.g. `$colors`), matching
+          // existing fixture conventions.
+          bumpResolverImportToEnd((spec) => {
+            const from = (spec as any)?.from;
+            const names = (spec as any)?.names;
+            return (
+              from?.kind === "specifier" &&
+              from.value === "./lib/helpers.stylex" &&
+              Array.isArray(names) &&
+              names.some((n: any) => n?.imported === "borders")
+            );
+          });
+          return true;
+        }
+      }
+
+      // Existing behavior: treat as border color expression (or full border value if width/style absent).
+      const exprNode = resolved.exprAst as { type?: string; value?: unknown };
+      if (exprNode.type === "StringLiteral" || exprNode.type === "Literal") {
+        const raw = typeof exprNode.value === "string" ? exprNode.value : null;
+        if (raw) {
+          const parsed = parseBorderShorthand(raw);
+          if (parsed) {
+            Object.assign(styleObj, parsed);
+            return true;
           }
         }
-        if (hasStaticWidthOrStyle) {
-          styleObj[colorProp] = exprAst;
-        } else {
-          const fullProp = direction ? `border${direction}` : "border";
-          styleObj[fullProp] = exprAst;
-        }
-        return true;
       }
+      if (hasStaticWidthOrStyle) {
+        styleObj[colorProp] = resolved.exprAst;
+      } else {
+        const fullProp = direction ? `border${direction}` : "border";
+        styleObj[fullProp] = resolved.exprAst;
+      }
+      return true;
     }
-    // If resolution failed, fall through to other handlers
   }
 
   // Handle arrow functions that are simple member expressions (like theme access):

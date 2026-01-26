@@ -519,6 +519,7 @@ export function lowerRules(args: {
     const nestedSelectors: Record<string, Record<string, unknown>> = {};
     const variantBuckets = new Map<string, Record<string, unknown>>();
     const variantStyleKeys: Record<string, string> = {};
+    const extraStyleObjects = new Map<string, Record<string, unknown>>();
     const styleFnFromProps: Array<{
       fnKey: string;
       jsxProp: string;
@@ -1790,6 +1791,7 @@ export function lowerRules(args: {
               decl,
               d,
               styleObj,
+              extraStyleObjects,
               hasLocalThemeBinding,
               resolveValue,
               resolveCall,
@@ -3850,12 +3852,18 @@ export function lowerRules(args: {
       decl.styleKey = baseKey;
       resolvedStyleObjects.delete(oldKey);
       resolvedStyleObjects.set(baseKey, styleObj);
+      for (const [k, v] of extraStyleObjects.entries()) {
+        resolvedStyleObjects.set(k, v);
+      }
       for (const c of cases) {
         resolvedStyleObjects.set(c.styleKey, { backgroundColor: c.value });
       }
       decl.needsWrapperComponent = true;
     } else {
       resolvedStyleObjects.set(decl.styleKey, styleObj);
+      for (const [k, v] of extraStyleObjects.entries()) {
+        resolvedStyleObjects.set(k, v);
+      }
     }
 
     // Preserve CSS cascade semantics for pseudo selectors when variant buckets override the same property.
