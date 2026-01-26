@@ -3287,7 +3287,9 @@ export function lowerRules(args: {
                 styleFnDecls.set(fnKey, j.arrowFunctionExpression([param], body));
               }
 
-              // No condition - always call the function (the fallback is built into the expression)
+              // Let the wrapper emitter handle required vs optional props:
+              // - Required props: styles.fn(prop)
+              // - Optional props: prop != null && styles.fn(prop)
               styleFnFromProps.push({ fnKey, jsxProp: res.propName });
             }
 
