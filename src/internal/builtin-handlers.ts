@@ -10,6 +10,7 @@ import type {
 import {
   type CallExpressionNode,
   getArrowFnSingleParamName,
+  getFunctionBodyExpr,
   getMemberPathFromIdentifier,
   isArrowFunctionExpression,
   isCallExpressionNode,
@@ -1002,31 +1003,43 @@ function tryResolveConditionalCssBlock(node: DynamicNode): HandlerResult | null 
 
   // Support patterns like:
   //   ${(props) => props.$upsideDown && "transform: rotate(180deg);"}
-  if (expr.body.type === "LogicalExpression" && expr.body.operator === "&&") {
-    const { left, right } = expr.body;
-    const testPath =
-      left.type === "MemberExpression" ? getMemberPathFromIdentifier(left, paramName) : null;
-    if (!testPath || testPath.length !== 1) {
-      return null;
-    }
-
-    const cssText = literalToString(right);
-    if (cssText === null || cssText === undefined) {
-      return null;
-    }
-
-    const style = parseCssDeclarationBlock(cssText);
-    if (!style) {
-      return null;
-    }
-
-    return {
-      type: "splitVariants",
-      variants: [{ nameHint: "truthy", when: testPath[0]!, style }],
-    };
+  // Also supports arrow functions with a block body containing only a return statement:
+  //   ${(props) => { return props.$upsideDown && "transform: rotate(180deg);"; }}
+  const body = getFunctionBodyExpr(expr) as {
+    type?: string;
+    operator?: string;
+    left?: unknown;
+    right?: unknown;
+  } | null;
+  if (!body || body.type !== "LogicalExpression" || body.operator !== "&&") {
+    return null;
+  }
+  const { left, right } = body;
+  const testPath =
+    (left as { type?: string })?.type === "MemberExpression"
+      ? getMemberPathFromIdentifier(
+          left as Parameters<typeof getMemberPathFromIdentifier>[0],
+          paramName,
+        )
+      : null;
+  if (!testPath || testPath.length !== 1) {
+    return null;
   }
 
-  return null;
+  const cssText = literalToString(right);
+  if (cssText === null || cssText === undefined) {
+    return null;
+  }
+
+  const style = parseCssDeclarationBlock(cssText);
+  if (!style) {
+    return null;
+  }
+
+  return {
+    type: "splitVariants",
+    variants: [{ nameHint: "truthy", when: testPath[0]!, style }],
+  };
 }
 
 function tryResolveConditionalCssBlockTernary(node: DynamicNode): HandlerResult | null {
@@ -1038,7 +1051,9 @@ function tryResolveConditionalCssBlockTernary(node: DynamicNode): HandlerResult 
   if (!paramName) {
     return null;
   }
-  if (expr.body.type !== "ConditionalExpression") {
+  // Support both expression bodies and block bodies with a single return statement
+  const body = getFunctionBodyExpr(expr) as { type?: string } | null;
+  if (!body || body.type !== "ConditionalExpression") {
     return null;
   }
 
@@ -1260,7 +1275,7 @@ function tryResolveConditionalCssBlockTernary(node: DynamicNode): HandlerResult 
   };
 
   // Extract variants from the ternary expression
-  const result = extractVariantsFromTernary(expr.body);
+  const result = extractVariantsFromTernary(body);
   if (!result) {
     return null;
   }

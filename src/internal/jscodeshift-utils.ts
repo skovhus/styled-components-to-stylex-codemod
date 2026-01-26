@@ -217,18 +217,23 @@ export function getNodeLocStart(
 /**
  * Extracts the expression from an arrow/function expression body.
  * - For expression bodies: returns the expression directly
- * - For block bodies: returns the argument of the first return statement
+ * - For block bodies: returns the argument of the return statement,
+ *   but ONLY if the block contains exactly one statement (a ReturnStatement).
+ *   This ensures we don't support arrow functions with complex logic in the body.
  */
-export function getFunctionBodyExpr(fn: {
-  body?: { type?: string; body?: Array<{ type?: string; argument?: unknown }> };
-}): unknown {
+export function getFunctionBodyExpr(fn: { body?: unknown }): unknown {
   const body = fn.body;
   if (!body || typeof body !== "object") {
     return undefined;
   }
   if ((body as { type?: string }).type === "BlockStatement") {
     const block = body as { body?: Array<{ type?: string; argument?: unknown }> };
-    return block.body?.find((s) => s.type === "ReturnStatement")?.argument;
+    const statements = block.body;
+    // Only accept block bodies with exactly one ReturnStatement (no other logic)
+    if (statements?.length !== 1 || statements[0]?.type !== "ReturnStatement") {
+      return undefined;
+    }
+    return statements[0].argument;
   }
   return body;
 }
