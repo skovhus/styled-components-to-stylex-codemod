@@ -61,7 +61,7 @@ import {
 } from "./selectors.js";
 import type { StyledDecl } from "./transform-types.js";
 import type { WarningLog, WarningType } from "./logger.js";
-import type { CssHelperFunction } from "./transform/css-helpers.js";
+import type { CssHelperFunction, CssHelperObjectMembers } from "./transform/css-helpers.js";
 import { normalizeStylisAstToIR } from "./css-ir.js";
 
 export type DescendantOverride = {
@@ -91,6 +91,7 @@ export function lowerRules(args: {
   styledDecls: StyledDecl[];
   keyframesNames: Set<string>;
   cssHelperNames: Set<string>;
+  cssHelperObjectMembers: CssHelperObjectMembers;
   cssHelperFunctions: Map<string, CssHelperFunction>;
   stringMappingFns: Map<
     string,
@@ -132,6 +133,7 @@ export function lowerRules(args: {
     styledDecls,
     keyframesNames,
     cssHelperNames,
+    cssHelperObjectMembers,
     cssHelperFunctions,
     stringMappingFns,
     toStyleKey,
@@ -1447,6 +1449,24 @@ export function lowerRules(args: {
                 hasImportedCssHelper = true;
               }
             }
+            // Also check for member expression CSS helpers (e.g., buttonStyles.rootCss)
+            else if (expr && typeof expr === "object" && "type" in expr) {
+              const rootInfo = extractRootAndPath(expr);
+              if (rootInfo && rootInfo.path.length === 1) {
+                const objectMemberMap = cssHelperObjectMembers.get(rootInfo.rootName);
+                if (objectMemberMap) {
+                  const memberDecl = objectMemberMap.get(rootInfo.path[0]!);
+                  if (memberDecl) {
+                    const helperValues = cssHelperValuesByKey.get(memberDecl.styleKey);
+                    if (helperValues) {
+                      for (const [prop, value] of helperValues) {
+                        cssHelperPropValues.set(prop, value);
+                      }
+                    }
+                  }
+                }
+              }
+            }
           }
         }
       }
@@ -2043,6 +2063,29 @@ export function lowerRules(args: {
                   }
                 }
                 continue;
+              }
+              // Handle member expression CSS helpers (e.g., buttonStyles.rootCss)
+              const rootInfo = extractRootAndPath(expr);
+              if (rootInfo && rootInfo.path.length === 1) {
+                const objectMemberMap = cssHelperObjectMembers.get(rootInfo.rootName);
+                if (objectMemberMap) {
+                  const memberDecl = objectMemberMap.get(rootInfo.path[0]!);
+                  if (memberDecl) {
+                    const extras = decl.extraStyleKeys ?? [];
+                    if (!extras.includes(memberDecl.styleKey)) {
+                      extras.push(memberDecl.styleKey);
+                    }
+                    decl.extraStyleKeys = extras;
+                    // Track properties and values defined by this css helper
+                    const helperValues = cssHelperValuesByKey.get(memberDecl.styleKey);
+                    if (helperValues) {
+                      for (const [prop, value] of helperValues) {
+                        cssHelperPropValues.set(prop, value);
+                      }
+                    }
+                    continue;
+                  }
+                }
               }
             }
           }
