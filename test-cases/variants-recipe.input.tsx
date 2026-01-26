@@ -24,8 +24,11 @@ const Button = styled.button<Props>`
   font-size: ${(props) => (props.size === "medium" ? "1.2rem" : "1rem")};
   padding: ${(props) => (props.size === "medium" ? "8px 16px" : "4px 8px")};
 
-  ${(props) =>
-    props.disabled && "background-color: grey; color: rgb(204, 204, 204); cursor: not-allowed;"}
+  ${(props) => {
+    return props.disabled
+      ? "background-color: grey; color: rgb(204, 204, 204); cursor: not-allowed;"
+      : "";
+  }}
 `;
 
 // Second component with same "color" prop but different styles
