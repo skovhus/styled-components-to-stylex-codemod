@@ -3757,7 +3757,50 @@ export function lowerRules(args: {
                 : null;
             }
             if (expr.type === "ArrowFunctionExpression" || expr.type === "FunctionExpression") {
-              return { type: "Unsupported interpolation: arrow function" };
+              // Provide more specific warning based on arrow function body type
+              const body = (expr as { body?: { type?: string; operator?: string } }).body;
+              const bodyType = body?.type;
+              if (bodyType === "ConditionalExpression") {
+                return {
+                  type: "Arrow function: conditional branches could not be resolved to static or theme values",
+                  context: { property: d.property },
+                };
+              }
+              if (bodyType === "LogicalExpression") {
+                const op = body?.operator;
+                if (op === "&&") {
+                  return {
+                    type: "Arrow function: logical expression pattern not supported",
+                    context: {
+                      property: d.property,
+                      operator: op,
+                      hint: "Expected: props.x && 'css-string'",
+                    },
+                  };
+                }
+                if (op === "||" || op === "??") {
+                  return {
+                    type: "Arrow function: indexed theme lookup pattern not matched",
+                    context: { property: d.property, operator: op },
+                  };
+                }
+              }
+              if (bodyType === "CallExpression") {
+                return {
+                  type: "Arrow function: helper call could not be resolved by adapter",
+                  context: { property: d.property },
+                };
+              }
+              if (bodyType === "MemberExpression") {
+                return {
+                  type: "Arrow function: theme access path could not be resolved",
+                  context: { property: d.property },
+                };
+              }
+              return {
+                type: "Arrow function: body is not a recognized pattern (expected ternary, logical, call, or member expression)",
+                context: { property: d.property, bodyType },
+              };
             }
             if (expr.type === "CallExpression") {
               const callee = expr.callee;

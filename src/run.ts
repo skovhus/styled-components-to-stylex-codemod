@@ -66,17 +66,6 @@ export interface RunTransformResult {
   timeElapsed: number;
   /** Warnings emitted during transformation */
   warnings: CollectedWarning[];
-  /**
-   * Print a formatted warning report to stderr, grouped by message.
-   * Each warning category shows all file locations with code snippets.
-   *
-   * @example
-   * ```ts
-   * const result = await runTransform({ files, adapter });
-   * result.printWarningReport();
-   * ```
-   */
-  printWarningReport: () => void;
 }
 
 const __filename = fileURLToPath(import.meta.url);
@@ -219,7 +208,6 @@ export async function runTransform(options: RunTransformOptions): Promise<RunTra
       transformed: 0,
       timeElapsed: 0,
       warnings: [],
-      printWarningReport: () => {},
     };
   }
 
@@ -283,6 +271,7 @@ export async function runTransform(options: RunTransformOptions): Promise<RunTra
   }
 
   const report = Logger.createReport();
+  report.print();
 
   return {
     errors: result.error,
@@ -291,6 +280,5 @@ export async function runTransform(options: RunTransformOptions): Promise<RunTra
     transformed: result.ok,
     timeElapsed: parseFloat(result.timeElapsed) || 0,
     warnings: report.getWarnings(),
-    printWarningReport: () => report.print(),
   };
 }
