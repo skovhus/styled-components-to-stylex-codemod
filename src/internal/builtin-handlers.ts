@@ -567,6 +567,12 @@ function tryResolveConditionalValue(
   const branchToExpr = (b: unknown): Branch => {
     const v = literalToStaticValue(b);
     if (v !== null) {
+      // Booleans are not valid CSS values; styled-components treats falsy
+      // interpolations as "omit this declaration", so bail instead of emitting
+      // invalid CSS like `cursor: false`.
+      if (typeof v === "boolean") {
+        return null;
+      }
       return {
         usage: "create",
         expr: typeof v === "string" ? JSON.stringify(v) : String(v),
@@ -1399,6 +1405,30 @@ function tryResolveInlineStyleValueForConditionalExpression(
         reason:
           "Theme-dependent conditional values require a project-specific theme source (e.g. useTheme())",
       };
+    }
+  }
+  // IMPORTANT: boolean values in conditional branches are not valid CSS values.
+  // In styled-components, falsy interpolations like `false` mean "omit this declaration",
+  // so we should bail rather than emitting invalid CSS like `cursor: false`.
+  {
+    const cond = expr.body as { consequent?: unknown; alternate?: unknown };
+    const consType = (cond.consequent as { type?: string } | undefined)?.type;
+    const altType = (cond.alternate as { type?: string } | undefined)?.type;
+    if (consType === "BooleanLiteral" || altType === "BooleanLiteral") {
+      return null;
+    }
+    // Also check estree-style Literal with boolean value
+    if (consType === "Literal") {
+      const v = (cond.consequent as { value?: unknown }).value;
+      if (typeof v === "boolean") {
+        return null;
+      }
+    }
+    if (altType === "Literal") {
+      const v = (cond.alternate as { value?: unknown }).value;
+      if (typeof v === "boolean") {
+        return null;
+      }
     }
   }
   // Signal to the caller that we can preserve this declaration as an inline style
