@@ -11,7 +11,7 @@ export function ensureShouldForwardPropDrop(decl: StyledDecl, propName: string):
   decl.shouldForwardProp = { ...existing, dropProps: [...dropProps] };
 }
 
-export function literalToStaticValue(node: any): string | number | null {
+export function literalToStaticValue(node: any): string | number | boolean | null {
   if (!node || typeof node !== "object") {
     return null;
   }
@@ -21,10 +21,15 @@ export function literalToStaticValue(node: any): string | number | null {
   if (node.type === "NumericLiteral") {
     return node.value;
   }
+  if (node.type === "BooleanLiteral") {
+    return node.value;
+  }
   // Support recast "Literal" nodes when parser produces them.
   if (
     node.type === "Literal" &&
-    (typeof node.value === "string" || typeof node.value === "number")
+    (typeof node.value === "string" ||
+      typeof node.value === "number" ||
+      typeof node.value === "boolean")
   ) {
     return node.value;
   }

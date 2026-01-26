@@ -1494,7 +1494,7 @@ export function resolveDynamicNode(
   );
 }
 
-function literalToStaticValue(node: unknown): string | number | null {
+function literalToStaticValue(node: unknown): string | number | boolean | null {
   if (!node || typeof node !== "object") {
     return null;
   }
@@ -1502,10 +1502,13 @@ function literalToStaticValue(node: unknown): string | number | null {
   if (type === "StringLiteral") {
     return (node as { value: string }).value;
   }
+  if (type === "BooleanLiteral") {
+    return (node as { value: boolean }).value;
+  }
   // Some parsers (or mixed ASTs) use estree-style `Literal`.
   if (type === "Literal") {
     const v = (node as { value?: unknown }).value;
-    if (typeof v === "string" || typeof v === "number") {
+    if (typeof v === "string" || typeof v === "number" || typeof v === "boolean") {
       return v;
     }
   }
