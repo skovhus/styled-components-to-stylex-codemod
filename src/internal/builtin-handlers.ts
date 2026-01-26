@@ -565,21 +565,29 @@ function tryResolveConditionalValue(
 
   let invalidCurriedValue: boolean = false;
   // Helper to resolve a MemberExpression as a theme path
-  const resolveThemeFromMemberExpr = (
-    node: unknown,
-  ): { path: string } | null => {
-    if (!node || typeof node !== "object" || (node as { type?: string }).type !== "MemberExpression") {
+  const resolveThemeFromMemberExpr = (node: unknown): { path: string } | null => {
+    if (
+      !node ||
+      typeof node !== "object" ||
+      (node as { type?: string }).type !== "MemberExpression"
+    ) {
       return null;
     }
     if (info?.kind === "propsParam" && paramName) {
-      const parts = getMemberPathFromIdentifier(node as Parameters<typeof getMemberPathFromIdentifier>[0], paramName);
+      const parts = getMemberPathFromIdentifier(
+        node as Parameters<typeof getMemberPathFromIdentifier>[0],
+        paramName,
+      );
       if (!parts || parts[0] !== "theme") {
         return null;
       }
       return { path: parts.slice(1).join(".") };
     }
     if (info?.kind === "themeBinding") {
-      const parts = getMemberPathFromIdentifier(node as Parameters<typeof getMemberPathFromIdentifier>[0], info.themeName);
+      const parts = getMemberPathFromIdentifier(
+        node as Parameters<typeof getMemberPathFromIdentifier>[0],
+        info.themeName,
+      );
       if (!parts) {
         return null;
       }
@@ -624,7 +632,11 @@ function tryResolveConditionalValue(
         if (!themeInfo) {
           return null;
         }
-        const res = ctx.resolveValue({ kind: "theme", path: themeInfo.path, filePath: ctx.filePath });
+        const res = ctx.resolveValue({
+          kind: "theme",
+          path: themeInfo.path,
+          filePath: ctx.filePath,
+        });
         if (!res) {
           return null;
         }
@@ -636,7 +648,7 @@ function tryResolveConditionalValue(
       const parts: string[] = [];
       for (let i = 0; i < quasis.length; i++) {
         const quasi = quasis[i];
-        const raw = quasi?.value?.cooked ?? quasi?.value?.raw ?? "";
+        const raw = quasi?.value?.raw ?? quasi?.value?.cooked ?? "";
         parts.push(raw);
         if (i < resolvedExprs.length) {
           parts.push("${" + resolvedExprs[i]!.expr + "}");
