@@ -581,6 +581,7 @@ export function lowerRules(args: {
         return null;
       }
       if (helperVal && typeof helperVal === "object" && "__cssHelperDynamicValue" in helperVal) {
+        // Dynamic value - look up from already-resolved css helper
         const helperDecl = (helperVal as Record<string, unknown>).decl as StyledDecl | undefined;
         if (helperDecl) {
           const resolvedHelper = resolvedStyleObjects.get(toStyleKey(helperDecl.localName));
@@ -2229,6 +2230,126 @@ export function lowerRules(args: {
         }
       }
 
+      const applyResolvedPropValue = (
+        prop: string,
+        value: unknown,
+        commentSource: { leading?: string; trailingLine?: string } | null,
+      ): void => {
+        if (attrTarget) {
+          if (attrPseudoElement) {
+            const nested = (attrTarget[attrPseudoElement] as any) ?? {};
+            nested[prop] = value;
+            attrTarget[attrPseudoElement] = nested;
+            if (commentSource) {
+              addPropComments(nested, prop, {
+                leading: commentSource.leading,
+                trailingLine: commentSource.trailingLine,
+              });
+            }
+            return;
+          }
+          attrTarget[prop] = value;
+          if (commentSource) {
+            addPropComments(attrTarget, prop, {
+              leading: commentSource.leading,
+              trailingLine: commentSource.trailingLine,
+            });
+          }
+          return;
+        }
+
+        if (prop && prop.startsWith("--") && typeof value === "string") {
+          localVarValues.set(prop, value);
+        }
+
+        // Handle nested pseudo + media: `&:hover { @media (...) { ... } }`
+        // This produces: { ":hover": { default: value, "@media (...)": value } }
+        if (media && pseudos?.length) {
+          perPropPseudo[prop] ??= {};
+          const existing = perPropPseudo[prop]!;
+          if (!("default" in existing)) {
+            const existingVal = (styleObj as Record<string, unknown>)[prop];
+            if (existingVal !== undefined) {
+              existing.default = existingVal;
+            } else if (cssHelperPropValues.has(prop)) {
+              existing.default = getComposedDefaultValue(prop);
+            } else {
+              existing.default = null;
+            }
+          }
+          // For each pseudo, create/update a nested media map
+          for (const ps of pseudos) {
+            if (!existing[ps] || typeof existing[ps] !== "object") {
+              const defaultVal = cssHelperPropValues.has(prop)
+                ? getComposedDefaultValue(prop)
+                : null;
+              existing[ps] = { default: defaultVal };
+            }
+            (existing[ps] as Record<string, unknown>)[media] = value;
+          }
+          return;
+        }
+
+        if (media) {
+          perPropMedia[prop] ??= {};
+          const existing = perPropMedia[prop]!;
+          if (!("default" in existing)) {
+            const existingVal = (styleObj as Record<string, unknown>)[prop];
+            if (existingVal !== undefined) {
+              existing.default = existingVal;
+            } else if (cssHelperPropValues.has(prop)) {
+              existing.default = getComposedDefaultValue(prop);
+            } else {
+              existing.default = null;
+            }
+          }
+          existing[media] = value;
+          return;
+        }
+
+        if (pseudos?.length) {
+          perPropPseudo[prop] ??= {};
+          const existing = perPropPseudo[prop]!;
+          if (!("default" in existing)) {
+            // If the property comes from a composed css helper, use the helper's
+            // value as the default to preserve it during style merging.
+            const existingVal = (styleObj as Record<string, unknown>)[prop];
+            if (existingVal !== undefined) {
+              existing.default = existingVal;
+            } else if (cssHelperPropValues.has(prop)) {
+              existing.default = getComposedDefaultValue(prop);
+            } else {
+              existing.default = null;
+            }
+          }
+          // Apply to all pseudos (e.g., both :hover and :focus for "&:hover, &:focus")
+          for (const ps of pseudos) {
+            existing[ps] = value;
+          }
+          return;
+        }
+
+        if (pseudoElement) {
+          nestedSelectors[pseudoElement] ??= {};
+          nestedSelectors[pseudoElement]![prop] = value;
+          if (commentSource) {
+            addPropComments(nestedSelectors[pseudoElement]!, prop, {
+              leading: commentSource.leading,
+              trailingLine: commentSource.trailingLine,
+            });
+          }
+          return;
+        }
+
+        styleObj[prop] = value;
+        if (commentSource) {
+          addPropComments(styleObj, prop, {
+            leading: commentSource.leading,
+            trailingLine: commentSource.trailingLine,
+          });
+        }
+      };
+
       for (const d of rule.declarations) {
         if (d.value.kind === "interpolated") {
           if (bail) {
@@ -2970,18 +3091,17 @@ export function lowerRules(args: {
               });
               continue;
             }
-            {
-              const outs = cssDeclarationToStylexDeclarations(d);
-              for (let i = 0; i < outs.length; i++) {
-                const out = outs[i]!;
-                styleObj[out.prop] = exprAst as any;
-                if (i === 0) {
-                  addPropComments(styleObj, out.prop, {
-                    leading: (d as any).leadingComment,
-                    trailingLine: (d as any).trailingLineComment,
-                  });
-                }
-              }
+            const outs = cssDeclarationToStylexDeclarations(d);
+            for (let i = 0; i < outs.length; i++) {
+              const out = outs[i]!;
+              const commentSource =
+                i === 0
+                  ? {
+                      leading: (d as any).leadingComment,
+                      trailingLine: (d as any).trailingLineComment,
+                    }
+                  : null;
+              applyResolvedPropValue(out.prop, exprAst as any, commentSource);
             }
             continue;
           }
@@ -4213,120 +4333,14 @@ export function lowerRules(args: {
               value = `"${value}"`;
             }
           }
-
-          if (attrTarget) {
-            if (attrPseudoElement) {
-              const nested = (attrTarget[attrPseudoElement] as any) ?? {};
-              nested[out.prop] = value;
-              attrTarget[attrPseudoElement] = nested;
-              if (i === 0) {
-                addPropComments(nested, out.prop, {
+          const commentSource =
+            i === 0
+              ? {
                   leading: (d as any).leadingComment,
                   trailingLine: (d as any).trailingLineComment,
-                });
-              }
-              continue;
-            }
-            attrTarget[out.prop] = value;
-            if (i === 0) {
-              addPropComments(attrTarget, out.prop, {
-                leading: (d as any).leadingComment,
-                trailingLine: (d as any).trailingLineComment,
-              });
-            }
-            continue;
-          }
-
-          if (out.prop && out.prop.startsWith("--") && typeof value === "string") {
-            localVarValues.set(out.prop, value);
-          }
-
-          // Handle nested pseudo + media: `&:hover { @media (...) { ... } }`
-          // This produces: { ":hover": { default: value, "@media (...)": value } }
-          if (media && pseudos?.length) {
-            perPropPseudo[out.prop] ??= {};
-            const existing = perPropPseudo[out.prop]!;
-            if (!("default" in existing)) {
-              const existingVal = (styleObj as Record<string, unknown>)[out.prop];
-              if (existingVal !== undefined) {
-                existing.default = existingVal;
-              } else if (cssHelperPropValues.has(out.prop)) {
-                existing.default = getComposedDefaultValue(out.prop);
-              } else {
-                existing.default = null;
-              }
-            }
-            // For each pseudo, create/update a nested media map
-            for (const ps of pseudos) {
-              if (!existing[ps] || typeof existing[ps] !== "object") {
-                const defaultVal = cssHelperPropValues.has(out.prop)
-                  ? getComposedDefaultValue(out.prop)
-                  : null;
-                existing[ps] = { default: defaultVal };
-              }
-              (existing[ps] as Record<string, unknown>)[media] = value;
-            }
-            continue;
-          }
-
-          if (media) {
-            perPropMedia[out.prop] ??= {};
-            const existing = perPropMedia[out.prop]!;
-            if (!("default" in existing)) {
-              const existingVal = (styleObj as Record<string, unknown>)[out.prop];
-              if (existingVal !== undefined) {
-                existing.default = existingVal;
-              } else if (cssHelperPropValues.has(out.prop)) {
-                existing.default = getComposedDefaultValue(out.prop);
-              } else {
-                existing.default = null;
-              }
-            }
-            existing[media] = value;
-            continue;
-          }
-
-          if (pseudos?.length) {
-            perPropPseudo[out.prop] ??= {};
-            const existing = perPropPseudo[out.prop]!;
-            if (!("default" in existing)) {
-              // If the property comes from a composed css helper, use the helper's
-              // value as the default to preserve it during style merging.
-              const existingVal = (styleObj as Record<string, unknown>)[out.prop];
-              if (existingVal !== undefined) {
-                existing.default = existingVal;
-              } else if (cssHelperPropValues.has(out.prop)) {
-                existing.default = getComposedDefaultValue(out.prop);
-              } else {
-                existing.default = null;
-              }
-            }
-            // Apply to all pseudos (e.g., both :hover and :focus for "&:hover, &:focus")
-            for (const ps of pseudos) {
-              existing[ps] = value;
-            }
-            continue;
-          }
-
-          if (pseudoElement) {
-            nestedSelectors[pseudoElement] ??= {};
-            nestedSelectors[pseudoElement]![out.prop] = value;
-            if (i === 0) {
-              addPropComments(nestedSelectors[pseudoElement]!, out.prop, {
-                leading: (d as any).leadingComment,
-                trailingLine: (d as any).trailingLineComment,
-              });
-            }
-            continue;
-          }
-
-          styleObj[out.prop] = value;
-          if (i === 0) {
-            addPropComments(styleObj, out.prop, {
-              leading: (d as any).leadingComment,
-              trailingLine: (d as any).trailingLineComment,
-            });
-          }
+                }
+              : null;
+          applyResolvedPropValue(out.prop, value, commentSource);
         }
       }
       if (bail) {
