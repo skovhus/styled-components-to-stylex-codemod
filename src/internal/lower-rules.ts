@@ -1063,16 +1063,125 @@ export function lowerRules(args: {
           }
           const parts = d.value.parts ?? [];
           const slotParts = parts.filter((p: { kind: string }) => p.kind === "slot");
+          if (slotParts.length === 0) {
+            return null;
+          }
+
+          // Try to resolve all slots - either via prop access or adapter call
+          const resolvedSlots = new Map<
+            number,
+            | { kind: "dynamic"; jsxProp: string; callArg: ExpressionKind }
+            | { kind: "static"; exprAst: ExpressionKind }
+          >();
+
+          for (const sp of slotParts) {
+            const slotId = (sp as { slotId: number }).slotId;
+            const expr = slotExprById.get(slotId);
+            if (!expr) {
+              return null;
+            }
+
+            // First try prop-based resolution
+            const propResolved = resolveDynamicTemplateExpr(expr, paramName);
+            if (propResolved) {
+              resolvedSlots.set(slotId, {
+                kind: "dynamic",
+                jsxProp: propResolved.jsxProp,
+                callArg: propResolved.callArg,
+              });
+              continue;
+            }
+
+            // Try adapter-based resolution for call expressions
+            const adapterRes = resolveDynamicNode(
+              {
+                slotId,
+                expr,
+                css: {
+                  kind: "declaration",
+                  selector: "&",
+                  atRuleStack: [],
+                  ...(d.property ? { property: d.property } : {}),
+                  valueRaw: d.valueRaw ?? "",
+                },
+                component:
+                  decl.base.kind === "intrinsic"
+                    ? {
+                        localName: decl.localName,
+                        base: "intrinsic",
+                        tagOrIdent: decl.base.tagName,
+                      }
+                    : { localName: decl.localName, base: "component", tagOrIdent: decl.base.ident },
+                usage: { jsxUsages: 0, hasPropsSpread: false },
+              },
+              {
+                api,
+                filePath,
+                resolveValue,
+                resolveCall,
+                resolveImport: resolveImportInScope,
+              } satisfies InternalHandlerContext,
+            );
+
+            if (adapterRes && adapterRes.type === "resolvedValue") {
+              for (const imp of adapterRes.imports ?? []) {
+                resolverImports.set(JSON.stringify(imp), imp);
+              }
+              const exprAst = parseExpr(adapterRes.expr);
+              if (exprAst) {
+                resolvedSlots.set(slotId, { kind: "static", exprAst: exprAst as ExpressionKind });
+                continue;
+              }
+            }
+
+            // Can't resolve this slot
+            return null;
+          }
+
+          // Check if all slots resolved to static values
+          const allStatic = [...resolvedSlots.values()].every((r) => r.kind === "static");
+
+          if (allStatic) {
+            // Build a template literal with static interpolations
+            const quasis: any[] = [];
+            const expressions: ExpressionKind[] = [];
+            let currentStaticPart = "";
+
+            for (const part of parts) {
+              if (part.kind === "static") {
+                currentStaticPart += (part as { kind: "static"; value: string }).value;
+              } else if (part.kind === "slot") {
+                quasis.push(
+                  j.templateElement({ raw: currentStaticPart, cooked: currentStaticPart }, false),
+                );
+                currentStaticPart = "";
+                const resolved = resolvedSlots.get(
+                  (part as { kind: "slot"; slotId: number }).slotId,
+                );
+                if (resolved?.kind === "static") {
+                  expressions.push(resolved.exprAst);
+                }
+              }
+            }
+            quasis.push(
+              j.templateElement({ raw: currentStaticPart, cooked: currentStaticPart }, true),
+            );
+
+            const templateLiteral = j.templateLiteral(quasis, expressions);
+
+            for (const mapped of cssDeclarationToStylexDeclarations(d)) {
+              (style as any)[mapped.prop] = templateLiteral;
+            }
+            continue;
+          }
+
+          // Handle single dynamic slot (original behavior)
           if (slotParts.length !== 1) {
             return null;
           }
           const slotPart = slotParts[0] as { kind: "slot"; slotId: number };
-          const expr = slotExprById.get(slotPart.slotId);
-          if (!expr) {
-            return null;
-          }
-          const resolved = resolveDynamicTemplateExpr(expr, paramName);
-          if (!resolved) {
+          const resolved = resolvedSlots.get(slotPart.slotId);
+          if (!resolved || resolved.kind !== "dynamic") {
             return null;
           }
           const propName = d.property?.trim() ?? "";
@@ -1545,6 +1654,273 @@ export function lowerRules(args: {
       }
 
       return false;
+    };
+
+    // Handle property-level ternary with template literal branches containing helper calls:
+    //   background: ${(props) => props.$faded
+    //     ? `linear-gradient(..., ${color("bgBorder")(props)} ...)`
+    //     : `linear-gradient(..., ${color("bgBorder")(props)} ...)`}
+    //
+    // When both branches are template literals that can be fully resolved via the adapter,
+    // emit StyleX variants for each branch.
+    const tryHandlePropertyTernaryTemplateLiteral = (d: any): boolean => {
+      if (d.value.kind !== "interpolated") {
+        return false;
+      }
+      if (!d.property) {
+        return false;
+      }
+      const parts = d.value.parts ?? [];
+      const slotPart = parts.find((p: any) => p.kind === "slot");
+      if (!slotPart || slotPart.kind !== "slot") {
+        return false;
+      }
+      const slotId = slotPart.slotId;
+      const expr = decl.templateExpressions[slotId] as any;
+      if (!expr || expr.type !== "ArrowFunctionExpression") {
+        return false;
+      }
+      const paramName =
+        expr.params?.[0]?.type === "Identifier" ? (expr.params[0].name as string) : null;
+      if (!paramName) {
+        return false;
+      }
+      const body = expr.body as any;
+      if (!body || body.type !== "ConditionalExpression") {
+        return false;
+      }
+
+      // Local helpers - same logic as in tryHandleCssHelperConditionalBlock
+      const readPropName = (node: ExpressionKind): string | null => {
+        const path = getMemberPathFromIdentifier(node, paramName);
+        if (!path || path.length !== 1) {
+          return null;
+        }
+        return path[0]!;
+      };
+
+      type TestInfo = { when: string; propName: string };
+      const parseTestInfo = (test: ExpressionKind): TestInfo | null => {
+        if (!test || typeof test !== "object") {
+          return null;
+        }
+        if (test.type === "MemberExpression" || test.type === "OptionalMemberExpression") {
+          const propName = readPropName(test);
+          return propName ? { when: propName, propName } : null;
+        }
+        if (test.type === "UnaryExpression" && test.operator === "!" && test.argument) {
+          const propName = readPropName(test.argument as ExpressionKind);
+          return propName ? { when: `!${propName}`, propName } : null;
+        }
+        if (
+          test.type === "BinaryExpression" &&
+          (test.operator === "===" || test.operator === "!==")
+        ) {
+          const left = test.left;
+          if (left.type === "MemberExpression" || left.type === "OptionalMemberExpression") {
+            const propName = readPropName(left);
+            const rhs = literalToStaticValue(test.right);
+            if (!propName || rhs === null) {
+              return null;
+            }
+            const rhsValue = JSON.stringify(rhs);
+            return { when: `${propName} ${test.operator} ${rhsValue}`, propName };
+          }
+        }
+        return null;
+      };
+
+      const applyVariant = (testInfo: TestInfo, consStyle: Record<string, unknown>): void => {
+        const when = testInfo.when;
+        const existingBucket = variantBuckets.get(when);
+        const nextBucket = existingBucket ? { ...existingBucket } : {};
+        mergeStyleObjects(nextBucket, consStyle);
+        variantBuckets.set(when, nextBucket);
+        variantStyleKeys[when] ??= `${decl.styleKey}${toSuffixFromProp(when)}`;
+        if (testInfo.propName && !testInfo.propName.startsWith("$")) {
+          ensureShouldForwardPropDrop(decl, testInfo.propName);
+        }
+      };
+
+      const invertWhen = (when: string): string | null => {
+        if (when.startsWith("!")) {
+          return when.slice(1);
+        }
+        const match = when.match(/^(.+)\s+(===|!==)\s+(.+)$/);
+        if (match) {
+          const [, propName, op, rhs] = match;
+          const invOp = op === "===" ? "!==" : "===";
+          return `${propName} ${invOp} ${rhs}`;
+        }
+        return `!${when}`;
+      };
+
+      const testInfo = parseTestInfo(body.test as ExpressionKind);
+      if (!testInfo) {
+        return false;
+      }
+
+      const cons = body.consequent;
+      const alt = body.alternate;
+      if (cons?.type !== "TemplateLiteral" || alt?.type !== "TemplateLiteral") {
+        return false;
+      }
+
+      // Resolve a template literal VALUE (not a CSS block) to a static expression
+      const resolveTemplateValue = (tpl: {
+        type: "TemplateLiteral";
+        quasis?: unknown[];
+        expressions?: unknown[];
+      }): ExpressionKind | null => {
+        const quasis = (tpl.quasis ?? []) as Array<{ value?: { raw?: string; cooked?: string } }>;
+        const expressions = (tpl.expressions ?? []) as unknown[];
+
+        if (expressions.length === 0) {
+          // Static template literal - return as-is
+          const staticValue = quasis.map((q) => q.value?.cooked ?? q.value?.raw ?? "").join("");
+          return j.literal(staticValue) as ExpressionKind;
+        }
+
+        // Try to resolve each expression
+        const resolvedExprs: ExpressionKind[] = [];
+        for (const expr of expressions) {
+          // Try adapter resolution for the expression
+          const adapterRes = resolveDynamicNode(
+            {
+              slotId: 0,
+              expr,
+              css: {
+                kind: "declaration",
+                selector: "&",
+                atRuleStack: [],
+                property: d.property,
+                valueRaw: "",
+              },
+              component:
+                decl.base.kind === "intrinsic"
+                  ? { localName: decl.localName, base: "intrinsic", tagOrIdent: decl.base.tagName }
+                  : { localName: decl.localName, base: "component", tagOrIdent: decl.base.ident },
+              usage: { jsxUsages: 0, hasPropsSpread: false },
+            },
+            {
+              api,
+              filePath,
+              resolveValue,
+              resolveCall,
+              resolveImport: resolveImportInScope,
+            } satisfies InternalHandlerContext,
+          );
+
+          if (adapterRes && adapterRes.type === "resolvedValue") {
+            for (const imp of adapterRes.imports ?? []) {
+              resolverImports.set(JSON.stringify(imp), imp);
+            }
+            const exprAst = parseExpr(adapterRes.expr);
+            if (exprAst) {
+              resolvedExprs.push(exprAst as ExpressionKind);
+              continue;
+            }
+          }
+
+          // Handle curried call pattern: helper("key")(props)
+          // resolveDynamicNode rejects curried calls with usage:"create" because they're
+          // not style objects, but for template literals we want the value.
+          if (isCallExpressionNode(expr)) {
+            const callee = (expr as { callee?: unknown }).callee;
+            if (isCallExpressionNode(callee)) {
+              // This is a curried call: innerCall(props)
+              const innerCall = callee;
+              const innerCallee = (innerCall as { callee?: unknown }).callee;
+              const innerCalleeType = (innerCallee as { type?: string })?.type;
+              const innerCalleeIdent = (innerCallee as { name?: string })?.name;
+              if (innerCalleeType === "Identifier" && typeof innerCalleeIdent === "string") {
+                const imp = resolveImportInScope(innerCalleeIdent, innerCallee);
+                if (imp) {
+                  // Build args for the inner call
+                  const innerArgs = ((innerCall as { arguments?: unknown[] }).arguments ?? []).map(
+                    (arg: unknown) => {
+                      const staticVal = literalToStaticValue(arg);
+                      if (staticVal !== null) {
+                        return { kind: "literal" as const, value: staticVal };
+                      }
+                      return { kind: "unknown" as const };
+                    },
+                  );
+                  const callRes = resolveCall({
+                    callSiteFilePath: filePath,
+                    calleeImportedName: imp.importedName,
+                    calleeSource: imp.source,
+                    args: innerArgs,
+                  });
+                  if (callRes && callRes.usage === "create") {
+                    for (const callImp of callRes.imports ?? []) {
+                      resolverImports.set(JSON.stringify(callImp), callImp);
+                    }
+                    const callExprAst = parseExpr(callRes.expr);
+                    if (callExprAst) {
+                      resolvedExprs.push(callExprAst as ExpressionKind);
+                      continue;
+                    }
+                  }
+                }
+              }
+            }
+          }
+
+          // Can't resolve this expression
+          return null;
+        }
+
+        // Build a template literal with resolved expressions
+        const newQuasis = quasis.map((q, i) =>
+          j.templateElement(
+            { raw: q.value?.raw ?? "", cooked: q.value?.cooked ?? q.value?.raw ?? "" },
+            i === quasis.length - 1,
+          ),
+        );
+        return j.templateLiteral(newQuasis, resolvedExprs) as ExpressionKind;
+      };
+
+      const consValue = resolveTemplateValue(cons);
+      const altValue = resolveTemplateValue(alt);
+
+      if (!consValue || !altValue) {
+        return false;
+      }
+
+      const invertedWhen = invertWhen(testInfo.when);
+      if (!invertedWhen) {
+        return false;
+      }
+
+      // Extract raw value from the template literal for property mapping
+      // (e.g., to detect gradients in "background" property)
+      const altQuasis = (alt.quasis ?? []) as Array<{ value?: { raw?: string; cooked?: string } }>;
+      const valueRawFromTemplate = altQuasis.map((q) => q.value?.raw ?? "").join("");
+
+      // Get the StyleX property name for this CSS property
+      const stylexProps = cssDeclarationToStylexDeclarations({
+        property: d.property,
+        value: { kind: "static", value: valueRawFromTemplate },
+        valueRaw: valueRawFromTemplate,
+        important: false,
+      });
+      if (stylexProps.length === 0) {
+        return false;
+      }
+      const stylexProp = stylexProps[0]!.prop;
+
+      // Add the "false" branch value to the base style
+      styleObj[stylexProp] = altValue;
+
+      // Add the "true" branch value as a variant
+      applyVariant(testInfo, { [stylexProp]: consValue });
+
+      if (testInfo.propName) {
+        ensureShouldForwardPropDrop(decl, testInfo.propName);
+      }
+
+      return true;
     };
 
     const tryHandleCssHelperFunctionSwitchBlock = (d: any): boolean => {
@@ -2452,6 +2828,9 @@ export function lowerRules(args: {
                 }
               }
             }
+          }
+          if (tryHandlePropertyTernaryTemplateLiteral(d)) {
+            continue;
           }
           if (tryHandleCssHelperConditionalBlock(d)) {
             continue;
