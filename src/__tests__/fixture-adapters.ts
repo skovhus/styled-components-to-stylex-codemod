@@ -192,6 +192,33 @@ export const fixtureAdapter = defineAdapter({
 
     const arg0 = ctx.args[0];
     const key = arg0?.kind === "literal" && typeof arg0.value === "string" ? arg0.value : null;
+    const themeColorKey = (() => {
+      if (!arg0 || arg0.kind !== "theme") {
+        return null;
+      }
+      // Only support theme color paths like: props.theme.color.bgSub -> "color.bgSub"
+      if (!arg0.path.startsWith("color.")) {
+        return null;
+      }
+      const k = arg0.path.slice("color.".length);
+      return k ? k : null;
+    })();
+
+    // Handle borderByColor(theme.color.*) helper from ./lib/helpers.ts
+    // borderByColor(props.theme.color.bgSub) -> `1px solid ${$colors.bgSub}`
+    if (ctx.calleeImportedName === "borderByColor" && themeColorKey) {
+      return {
+        usage: "create",
+        expr: `\`1px solid \${$colors.${themeColorKey}}\``,
+        imports: [
+          {
+            from: { kind: "specifier", value: "./tokens.stylex" },
+            names: [{ imported: "$colors" }],
+          },
+        ],
+      };
+    }
+
     if (!key) {
       return null;
     }

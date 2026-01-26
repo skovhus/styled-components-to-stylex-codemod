@@ -106,6 +106,13 @@ export function themedBorder(colorKey: ThemeColor) {
 }
 
 /**
+ * A helper function that returns a CSS string for a border with a given color.
+ */
+export function borderByColor(color: string) {
+  return `1px solid ${color}`;
+}
+
+/**
  * Component wrapper helper - wraps a component for testing styled(wrapper(Component)) patterns
  */
 export function wrapComponent<P extends object>(

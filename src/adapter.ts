@@ -70,9 +70,16 @@ export type CallResolveContext = {
    */
   calleeSource: { kind: "absolutePath"; value: string } | { kind: "specifier"; value: string };
   /**
-   * Call arguments (only literals are surfaced precisely; everything else is `unknown`).
+   * Call arguments.
+   * - literals are surfaced precisely
+   * - theme member access can be surfaced as `{ kind: "theme", path }`
+   * - everything else is `unknown`
    */
-  args: Array<{ kind: "literal"; value: string | number | boolean | null } | { kind: "unknown" }>;
+  args: Array<
+    | { kind: "literal"; value: string | number | boolean | null }
+    | { kind: "theme"; path: string }
+    | { kind: "unknown" }
+  >;
 };
 
 /**
