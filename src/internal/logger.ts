@@ -206,7 +206,7 @@ export class LoggerReport {
     );
     lines.push("─".repeat(60));
 
-    const MAX_EXAMPLES = 10;
+    const MAX_EXAMPLES = 15;
 
     for (const group of groups) {
       lines.push("");
@@ -299,9 +299,9 @@ export class LoggerReport {
     }
 
     const snippetLines: string[] = [];
-    // Include 2 lines above, the problematic line, and 2 lines below
+    // Include 2 lines above, the problematic line, and 4 lines below
     const startLine = Math.max(0, lineIndex - 2);
-    const endLine = Math.min(lines.length - 1, lineIndex + 2);
+    const endLine = Math.min(lines.length - 1, lineIndex + 4);
     for (let i = startLine; i <= endLine; i++) {
       const lineNum = String(i + 1).padStart(4, " ");
       const marker = i === lineIndex ? ">" : " ";

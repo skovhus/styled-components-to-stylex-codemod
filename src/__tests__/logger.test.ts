@@ -90,8 +90,8 @@ describe("Logger", () => {
       `);
     });
 
-    it("limits examples to 10 per category", () => {
-      for (let i = 0; i < 12; i++) {
+    it("limits examples to 15 per category", () => {
+      for (let i = 0; i < 17; i++) {
         Logger.logWarnings(
           [{ severity: "warning", type: "Unsupported selector: class selector", loc: null }],
           `/path/file${String(i).padStart(2, "0")}.tsx`,
@@ -101,10 +101,10 @@ describe("Logger", () => {
       expect(Logger.createReport().toString()).toMatchInlineSnapshot(`
         "
         ────────────────────────────────────────────────────────────
-        Warning Summary: 12 warning(s) in 1 category(s)
+        Warning Summary: 17 warning(s) in 1 category(s)
         ────────────────────────────────────────────────────────────
 
-        ▸ Unsupported selector: class selector (12)
+        ▸ Unsupported selector: class selector (17)
 
           /path/file00.tsx
 
@@ -125,6 +125,16 @@ describe("Logger", () => {
           /path/file08.tsx
 
           /path/file09.tsx
+
+          /path/file10.tsx
+
+          /path/file11.tsx
+
+          /path/file12.tsx
+
+          /path/file13.tsx
+
+          /path/file14.tsx
 
           ... and 2 more file(s)
         "
