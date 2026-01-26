@@ -486,16 +486,41 @@ function tryResolveConditionalValue(
       'usage "create" is only valid for single CSS property values (non-curried calls).',
     ].join(" "),
   };
+  const invalidBooleanBranchError: WarningType =
+    "Conditional values that resolve to booleans cannot be safely transformed";
+  const invalidBooleanBranchContext = {
+    help: [
+      "styled-components omits declarations for falsy interpolations.",
+      "StyleX requires explicit values; rewrite to a valid value or bail.",
+    ].join(" "),
+  };
 
-  let invalidCurriedValue: boolean = false;
+  let invalidBranchReason: {
+    type: WarningType;
+    context?: Record<string, unknown>;
+  } | null = null;
+  const markInvalidBranch = (type: WarningType, context?: Record<string, unknown>): void => {
+    if (!invalidBranchReason) {
+      invalidBranchReason = { type, context };
+    }
+  };
+  const buildInvalidBranchResult = (): HandlerResult => ({
+    type: "keepOriginal",
+    reason: invalidBranchReason?.type ?? invalidCurriedError,
+    context: invalidBranchReason?.context ?? invalidCurriedContext,
+  });
+
   const branchToExpr = (b: unknown): Branch => {
     const v = literalToStaticValue(b);
-    if (v !== null) {
-      return {
-        usage: "create",
-        expr: typeof v === "string" ? JSON.stringify(v) : String(v),
-        imports: [],
-      };
+    if (typeof v === "string") {
+      return { usage: "create", expr: JSON.stringify(v), imports: [] };
+    }
+    if (typeof v === "number") {
+      return { usage: "create", expr: String(v), imports: [] };
+    }
+    if (typeof v === "boolean") {
+      markInvalidBranch(invalidBooleanBranchError, invalidBooleanBranchContext);
+      return null;
     }
     if (!b || typeof b !== "object") {
       return null;
@@ -524,7 +549,7 @@ function tryResolveConditionalValue(
           const innerRes = resolveAdapterCall(inner);
           if (innerRes) {
             if (innerRes.usage === "create") {
-              invalidCurriedValue = true;
+              markInvalidBranch(invalidCurriedError, invalidCurriedContext);
               return null;
             }
             return { usage: "props", expr: innerRes.expr, imports: innerRes.imports };
@@ -566,7 +591,7 @@ function tryResolveConditionalValue(
 
   const getBranch = (value: unknown): Branch | "invalid" => {
     const branch = branchToExpr(value);
-    if (invalidCurriedValue) {
+    if (invalidBranchReason) {
       return "invalid";
     }
     return branch;
@@ -609,12 +634,12 @@ function tryResolveConditionalValue(
   const extractNestedTernaryVariants = (
     condExpr: any,
     expectedPropName?: string,
-  ): { variants: Variant[]; defaultBranch: NonNullable<Branch> } | null => {
+  ): { variants: Variant[]; defaultBranch: NonNullable<Branch> } | "invalid" | null => {
     if (condExpr.type !== "ConditionalExpression") {
       // Base case: not a conditional, this is the default value
       const branch = getBranch(condExpr);
       if (branch === "invalid") {
-        return null;
+        return "invalid";
       }
       if (!branch) {
         return null;
@@ -635,7 +660,7 @@ function tryResolveConditionalValue(
 
     const consExpr = getBranch(consequent);
     if (consExpr === "invalid") {
-      return null;
+      return "invalid";
     }
     if (!consExpr) {
       return null;
@@ -649,6 +674,9 @@ function tryResolveConditionalValue(
     const nested = extractNestedTernaryVariants(alternate, condInfo.propName);
     if (!nested) {
       return null;
+    }
+    if (nested === "invalid") {
+      return "invalid";
     }
 
     // Add this condition's variant
@@ -745,11 +773,11 @@ function tryResolveConditionalValue(
   if (testPath && testPath.length === 1) {
     const cons = getBranch(consequent);
     if (cons === "invalid") {
-      return { type: "keepOriginal", reason: invalidCurriedError, context: invalidCurriedContext };
+      return buildInvalidBranchResult();
     }
     const alt = getBranch(alternate);
     if (alt === "invalid") {
-      return { type: "keepOriginal", reason: invalidCurriedError, context: invalidCurriedContext };
+      return buildInvalidBranchResult();
     }
     const outerProp = testPath[0]!;
 
@@ -838,7 +866,7 @@ function tryResolveConditionalValue(
   if (condInfo) {
     const consExpr = getBranch(consequent);
     if (consExpr === "invalid") {
-      return { type: "keepOriginal", reason: invalidCurriedError, context: invalidCurriedContext };
+      return buildInvalidBranchResult();
     }
     if (!consExpr) {
       return null;
@@ -866,6 +894,9 @@ function tryResolveConditionalValue(
 
     // Check if alternate is a nested ternary testing the same property
     const nested = extractNestedTernaryVariants(alternate, condInfo.propName);
+    if (nested === "invalid") {
+      return buildInvalidBranchResult();
+    }
     if (nested) {
       const rhsNameHint =
         typeof condInfo.rhsRaw === "string" ? condInfo.rhsRaw : String(condInfo.rhsRaw);
@@ -1416,7 +1447,7 @@ export function resolveDynamicNode(
   );
 }
 
-function literalToStaticValue(node: unknown): string | number | null {
+function literalToStaticValue(node: unknown): string | number | boolean | null {
   if (!node || typeof node !== "object") {
     return null;
   }
@@ -1424,10 +1455,13 @@ function literalToStaticValue(node: unknown): string | number | null {
   if (type === "StringLiteral") {
     return (node as { value: string }).value;
   }
+  if (type === "BooleanLiteral") {
+    return (node as { value: boolean }).value;
+  }
   // Some parsers (or mixed ASTs) use estree-style `Literal`.
   if (type === "Literal") {
     const v = (node as { value?: unknown }).value;
-    if (typeof v === "string" || typeof v === "number") {
+    if (typeof v === "string" || typeof v === "number" || typeof v === "boolean") {
       return v;
     }
   }
