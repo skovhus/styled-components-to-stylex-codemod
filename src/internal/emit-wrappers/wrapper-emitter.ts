@@ -16,6 +16,7 @@ import { emitStyleMerging } from "./style-merger.js";
 import type { ExportInfo, ExpressionKind, InlineStyleProp } from "./types.js";
 import { TAG_TO_HTML_ELEMENT, VOID_TAGS } from "./type-helpers.js";
 import type { VariantDimension } from "../transform-types.js";
+import { collectIdentifiers } from "../jscodeshift-utils.js";
 
 type TsTypeAnnotationInput = Parameters<JSCodeshift["tsTypeAnnotation"]>[0];
 type BlockStatementBody = Parameters<JSCodeshift["blockStatement"]>[0];
@@ -1609,27 +1610,6 @@ export class WrapperEmitter {
       }
       return null;
     };
-    const collectIdentifiers = (node: unknown, out: Set<string>): void => {
-      if (!node || typeof node !== "object") {
-        return;
-      }
-      if (Array.isArray(node)) {
-        for (const child of node) {
-          collectIdentifiers(child, out);
-        }
-        return;
-      }
-      const typed = node as { type?: string; name?: string };
-      if (typed.type === "Identifier" && typed.name) {
-        out.add(typed.name);
-      }
-      for (const key of Object.keys(node as Record<string, unknown>)) {
-        if (key === "loc" || key === "comments") {
-          continue;
-        }
-        collectIdentifiers((node as Record<string, unknown>)[key], out);
-      }
-    };
     for (const p of styleFnPairs) {
       const propExpr = p.jsxProp === "__props" ? propsId : propExprBuilder(p.jsxProp);
       const callArg = p.callArg ? (p.callArg as ExpressionKind) : propExpr;
@@ -1695,6 +1675,54 @@ export class WrapperEmitter {
         styleArgs.push(
           j.logicalExpression("&&", j.binaryExpression("!=", propExpr, j.nullLiteral()), call),
         );
+      }
+    }
+  }
+
+  /**
+   * Collects all props that need to be destructured based on styleFnFromProps,
+   * explicit prop names used in styleArgs, and shouldForwardProp.dropProps.
+   *
+   * This is called after buildStyleFnExpressions to ensure all referenced
+   * identifiers are properly destructured in the wrapper function.
+   */
+  collectDestructurePropsFromStyleFns(args: {
+    d: StyledDecl;
+    styleArgs: ExpressionKind[];
+    destructureProps: string[];
+  }): void {
+    const { d, styleArgs, destructureProps } = args;
+
+    // Collect jsxProp and conditionWhen props from styleFnFromProps
+    for (const p of d.styleFnFromProps ?? []) {
+      if (p.jsxProp && p.jsxProp !== "__props" && !destructureProps.includes(p.jsxProp)) {
+        destructureProps.push(p.jsxProp);
+      }
+      if (p.conditionWhen) {
+        this.collectConditionProps({ when: p.conditionWhen, destructureProps });
+      }
+    }
+
+    // Collect identifiers from styleArgs that match explicit prop names
+    if (d.propsType) {
+      const explicitProps = this.getExplicitPropNames(d.propsType);
+      if (explicitProps.size > 0) {
+        const used = new Set<string>();
+        for (const arg of styleArgs) {
+          collectIdentifiers(arg, used);
+        }
+        for (const name of used) {
+          if (explicitProps.has(name) && !destructureProps.includes(name)) {
+            destructureProps.push(name);
+          }
+        }
+      }
+    }
+
+    // Collect props that should be dropped (not forwarded to the element)
+    for (const prop of d.shouldForwardProp?.dropProps ?? []) {
+      if (prop && !destructureProps.includes(prop)) {
+        destructureProps.push(prop);
       }
     }
   }

@@ -712,54 +712,7 @@ export function emitIntrinsicWrappers(emitter: WrapperEmitter): {
         styleArgs,
         destructureProps,
       });
-      for (const p of d.styleFnFromProps ?? []) {
-        if (p.jsxProp && p.jsxProp !== "__props" && !destructureProps.includes(p.jsxProp)) {
-          destructureProps.push(p.jsxProp);
-        }
-        if (p.conditionWhen) {
-          emitter.collectConditionProps({ when: p.conditionWhen, destructureProps });
-        }
-      }
-      if (d.propsType) {
-        const explicitProps = emitter.getExplicitPropNames(d.propsType);
-        if (explicitProps.size > 0) {
-          const collectIdentifiers = (node: unknown, out: Set<string>): void => {
-            if (!node || typeof node !== "object") {
-              return;
-            }
-            if (Array.isArray(node)) {
-              for (const child of node) {
-                collectIdentifiers(child, out);
-              }
-              return;
-            }
-            const typed = node as { type?: string; name?: string };
-            if (typed.type === "Identifier" && typed.name) {
-              out.add(typed.name);
-            }
-            for (const key of Object.keys(node as Record<string, unknown>)) {
-              if (key === "loc" || key === "comments") {
-                continue;
-              }
-              collectIdentifiers((node as Record<string, unknown>)[key], out);
-            }
-          };
-          const used = new Set<string>();
-          for (const arg of styleArgs) {
-            collectIdentifiers(arg, used);
-          }
-          for (const name of used) {
-            if (explicitProps.has(name) && !destructureProps.includes(name)) {
-              destructureProps.push(name);
-            }
-          }
-        }
-      }
-      for (const prop of d.shouldForwardProp?.dropProps ?? []) {
-        if (prop && !destructureProps.includes(prop)) {
-          destructureProps.push(prop);
-        }
-      }
+      emitter.collectDestructurePropsFromStyleFns({ d, styleArgs, destructureProps });
 
       const isVoidTag = VOID_TAGS.has(tagName);
       const propsParamId = j.identifier("props");
@@ -2152,54 +2105,7 @@ export function emitIntrinsicWrappers(emitter: WrapperEmitter): {
       styleArgs,
       destructureProps,
     });
-    for (const p of d.styleFnFromProps ?? []) {
-      if (p.jsxProp && p.jsxProp !== "__props" && !destructureProps.includes(p.jsxProp)) {
-        destructureProps.push(p.jsxProp);
-      }
-      if (p.conditionWhen) {
-        emitter.collectConditionProps({ when: p.conditionWhen, destructureProps });
-      }
-    }
-    if (d.propsType) {
-      const explicitProps = emitter.getExplicitPropNames(d.propsType);
-      if (explicitProps.size > 0) {
-        const collectIdentifiers = (node: unknown, out: Set<string>): void => {
-          if (!node || typeof node !== "object") {
-            return;
-          }
-          if (Array.isArray(node)) {
-            for (const child of node) {
-              collectIdentifiers(child, out);
-            }
-            return;
-          }
-          const typed = node as { type?: string; name?: string };
-          if (typed.type === "Identifier" && typed.name) {
-            out.add(typed.name);
-          }
-          for (const key of Object.keys(node as Record<string, unknown>)) {
-            if (key === "loc" || key === "comments") {
-              continue;
-            }
-            collectIdentifiers((node as Record<string, unknown>)[key], out);
-          }
-        };
-        const used = new Set<string>();
-        for (const arg of styleArgs) {
-          collectIdentifiers(arg, used);
-        }
-        for (const name of used) {
-          if (explicitProps.has(name) && !destructureProps.includes(name)) {
-            destructureProps.push(name);
-          }
-        }
-      }
-    }
-    for (const prop of d.shouldForwardProp?.dropProps ?? []) {
-      if (prop && !destructureProps.includes(prop)) {
-        destructureProps.push(prop);
-      }
-    }
+    emitter.collectDestructurePropsFromStyleFns({ d, styleArgs, destructureProps });
 
     if (d.attrsInfo?.conditionalAttrs?.length) {
       for (const c of d.attrsInfo.conditionalAttrs) {

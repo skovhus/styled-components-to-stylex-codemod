@@ -238,6 +238,35 @@ export function getFunctionBodyExpr(fn: { body?: unknown }): unknown {
   return body;
 }
 
+/**
+ * Recursively collects all Identifier names from an AST node into a Set.
+ * Skips 'loc' and 'comments' properties to avoid traversing metadata.
+ *
+ * @param node - The AST node to traverse
+ * @param out - The Set to collect identifier names into
+ */
+export function collectIdentifiers(node: unknown, out: Set<string>): void {
+  if (!node || typeof node !== "object") {
+    return;
+  }
+  if (Array.isArray(node)) {
+    for (const child of node) {
+      collectIdentifiers(child, out);
+    }
+    return;
+  }
+  const typed = node as { type?: string; name?: string };
+  if (typed.type === "Identifier" && typed.name) {
+    out.add(typed.name);
+  }
+  for (const key of Object.keys(node as Record<string, unknown>)) {
+    if (key === "loc" || key === "comments") {
+      continue;
+    }
+    collectIdentifiers((node as Record<string, unknown>)[key], out);
+  }
+}
+
 // Internal helper - not exported
 function isIdentifier(node: unknown, name?: string): node is Identifier {
   return (
