@@ -564,6 +564,30 @@ function tryResolveConditionalValue(
   };
 
   let invalidCurriedValue: boolean = false;
+  // Helper to resolve a MemberExpression as a theme path
+  const resolveThemeFromMemberExpr = (
+    node: unknown,
+  ): { path: string } | null => {
+    if (!node || typeof node !== "object" || (node as { type?: string }).type !== "MemberExpression") {
+      return null;
+    }
+    if (info?.kind === "propsParam" && paramName) {
+      const parts = getMemberPathFromIdentifier(node as Parameters<typeof getMemberPathFromIdentifier>[0], paramName);
+      if (!parts || parts[0] !== "theme") {
+        return null;
+      }
+      return { path: parts.slice(1).join(".") };
+    }
+    if (info?.kind === "themeBinding") {
+      const parts = getMemberPathFromIdentifier(node as Parameters<typeof getMemberPathFromIdentifier>[0], info.themeName);
+      if (!parts) {
+        return null;
+      }
+      return { path: parts.join(".") };
+    }
+    return null;
+  };
+
   const branchToExpr = (b: unknown): Branch => {
     const v = literalToStaticValue(b);
     if (v !== null) {
@@ -576,6 +600,62 @@ function tryResolveConditionalValue(
     if (!b || typeof b !== "object") {
       return null;
     }
+
+    // Handle template literals with theme interpolations
+    // e.g., `inset 0 0 0 1px ${props.theme.color.primaryColor}, 0px 1px 2px rgba(0, 0, 0, 0.06)`
+    const bType = (b as { type?: string }).type;
+    if (bType === "TemplateLiteral") {
+      const tl = b as {
+        expressions?: unknown[];
+        quasis?: Array<{ value?: { raw?: string; cooked?: string } }>;
+      };
+      const expressions = tl.expressions ?? [];
+      const quasis = tl.quasis ?? [];
+
+      // Must have at least one expression (otherwise literalToStaticValue would have handled it)
+      if (expressions.length === 0) {
+        return null;
+      }
+
+      // All expressions must be resolvable theme accesses
+      const resolvedExprs: Array<{ expr: string; imports: ImportSpec[] }> = [];
+      for (const expr of expressions) {
+        const themeInfo = resolveThemeFromMemberExpr(expr);
+        if (!themeInfo) {
+          return null;
+        }
+        const res = ctx.resolveValue({ kind: "theme", path: themeInfo.path, filePath: ctx.filePath });
+        if (!res) {
+          return null;
+        }
+        resolvedExprs.push({ expr: res.expr, imports: res.imports });
+      }
+
+      // Build the template literal expression string
+      // quasis and expressions interleave: quasi0 ${expr0} quasi1 ${expr1} quasi2
+      const parts: string[] = [];
+      for (let i = 0; i < quasis.length; i++) {
+        const quasi = quasis[i];
+        const raw = quasi?.value?.cooked ?? quasi?.value?.raw ?? "";
+        parts.push(raw);
+        if (i < resolvedExprs.length) {
+          parts.push("${" + resolvedExprs[i]!.expr + "}");
+        }
+      }
+
+      // Merge all imports
+      const allImports: ImportSpec[] = [];
+      for (const r of resolvedExprs) {
+        allImports.push(...r.imports);
+      }
+
+      return {
+        usage: "create",
+        expr: "`" + parts.join("") + "`",
+        imports: allImports,
+      };
+    }
+
     if (isCallExpressionNode(b)) {
       const call = b;
       const resolveAdapterCall = (c: CallExpressionNode): CallResolveResult | null => {
@@ -610,30 +690,13 @@ function tryResolveConditionalValue(
 
       return null;
     }
-    if ((b as any).type !== "MemberExpression") {
+
+    // Handle direct MemberExpression theme access (reuse the helper)
+    const themeInfo = resolveThemeFromMemberExpr(b);
+    if (!themeInfo) {
       return null;
     }
-    const path = (() => {
-      if (info?.kind === "propsParam" && paramName) {
-        const parts = getMemberPathFromIdentifier(b as any, paramName);
-        if (!parts || parts[0] !== "theme") {
-          return null;
-        }
-        return parts.slice(1).join(".");
-      }
-      if (info?.kind === "themeBinding") {
-        const parts = getMemberPathFromIdentifier(b as any, info.themeName);
-        if (!parts) {
-          return null;
-        }
-        return parts.join(".");
-      }
-      return null;
-    })();
-    if (!path) {
-      return null;
-    }
-    const res = ctx.resolveValue({ kind: "theme", path, filePath: ctx.filePath });
+    const res = ctx.resolveValue({ kind: "theme", path: themeInfo.path, filePath: ctx.filePath });
     if (!res) {
       return null;
     }
