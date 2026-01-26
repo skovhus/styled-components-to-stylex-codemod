@@ -5,7 +5,6 @@ import type { InternalHandlerContext } from "./builtin-handlers.js";
 import {
   cssDeclarationToStylexDeclarations,
   cssPropertyToStylexProp,
-  parseInterpolatedBorderStaticParts,
   resolveBackgroundStylexProp,
   resolveBackgroundStylexPropForVariants,
 } from "./css-prop-mapping.js";
@@ -51,10 +50,15 @@ import { createCssHelperResolver } from "./lower-rules/css-helper.js";
 import { parseSwitchReturningCssTemplates } from "./lower-rules/switch-variants.js";
 import { createThemeResolvers } from "./lower-rules/theme.js";
 import {
+  resolveTemplateLiteralBranch,
+  resolveTemplateLiteralValue,
+} from "./lower-rules/template-literals.js";
+import {
   extractUnionLiteralValues,
   groupVariantBucketsIntoDimensions,
 } from "./lower-rules/variants.js";
 import { mergeStyleObjects, toKebab } from "./lower-rules/utils.js";
+import { normalizeStylisAstToIR } from "./css-ir.js";
 import {
   normalizeSelectorForInputAttributePseudos,
   normalizeInterpolatedSelector,
@@ -63,8 +67,6 @@ import {
 import type { StyledDecl } from "./transform-types.js";
 import type { WarningLog, WarningType } from "./logger.js";
 import type { CssHelperFunction, CssHelperObjectMembers } from "./transform/css-helpers.js";
-import { normalizeStylisAstToIR } from "./css-ir.js";
-import { parseStyledTemplateLiteral } from "./styled-css.js";
 
 export type DescendantOverride = {
   parentStyleKey: string;
@@ -994,321 +996,6 @@ export function lowerRules(args: {
     const isPlainTemplateLiteral = (node: ExpressionKind | null | undefined): boolean =>
       !!node && typeof node === "object" && (node as { type?: string }).type === "TemplateLiteral";
 
-    const buildPropAccessExpr = (propName: string): ExpressionKind => {
-      const isIdent = /^[$A-Z_][0-9A-Z_$]*$/i.test(propName);
-      return isIdent
-        ? (j.identifier(propName) as ExpressionKind)
-        : (j.memberExpression(j.identifier("props"), j.literal(propName), true) as ExpressionKind);
-    };
-
-    const resolveThemeFromPropsMember = (
-      node: unknown,
-      paramName: string | null,
-    ): ExpressionKind | null => {
-      if (!paramName) {
-        return null;
-      }
-      if (!node || typeof node !== "object") {
-        return null;
-      }
-      const type = (node as { type?: string }).type;
-      if (type !== "MemberExpression" && type !== "OptionalMemberExpression") {
-        return null;
-      }
-      const parts = getMemberPathFromIdentifier(node as any, paramName);
-      if (!parts || parts[0] !== "theme" || parts.length <= 1) {
-        return null;
-      }
-      const themePath = parts.slice(1).join(".");
-      const resolved = resolveValue({ kind: "theme", path: themePath, filePath });
-      if (!resolved) {
-        return null;
-      }
-      for (const imp of resolved.imports ?? []) {
-        resolverImports.set(JSON.stringify(imp), imp);
-      }
-      const exprAst = parseExpr(resolved.expr);
-      return (exprAst as ExpressionKind) ?? null;
-    };
-
-    const resolveDynamicTemplateExpr = (
-      expr: unknown,
-      paramName: string | null,
-    ): { jsxProp: string; callArg: ExpressionKind } | null => {
-      if (!expr || typeof expr !== "object" || !paramName) {
-        return null;
-      }
-      const exprType = (expr as { type?: string }).type;
-      if (exprType === "MemberExpression" || exprType === "OptionalMemberExpression") {
-        const propPath = getMemberPathFromIdentifier(expr as any, paramName);
-        if (!propPath || propPath.length !== 1) {
-          return null;
-        }
-        const jsxProp = propPath[0]!;
-        if (jsxProp === "theme") {
-          return null;
-        }
-        return { jsxProp, callArg: buildPropAccessExpr(jsxProp) };
-      }
-      if (exprType === "LogicalExpression" && (expr as any).operator === "??") {
-        const left = (expr as any).left as unknown;
-        const right = (expr as any).right as unknown;
-        const propPath = getMemberPathFromIdentifier(left as any, paramName);
-        if (!propPath || propPath.length !== 1) {
-          return null;
-        }
-        const jsxProp = propPath[0]!;
-        if (jsxProp === "theme") {
-          return null;
-        }
-        const themeAst = resolveThemeFromPropsMember(right, paramName);
-        if (!themeAst) {
-          return null;
-        }
-        const baseArg = buildPropAccessExpr(jsxProp);
-        return {
-          jsxProp,
-          callArg: j.logicalExpression("??", baseArg, themeAst) as ExpressionKind,
-        };
-      }
-      if (exprType === "ConditionalExpression") {
-        const cond = expr as {
-          test?: unknown;
-          consequent?: unknown;
-          alternate?: unknown;
-        };
-        const propPath = getMemberPathFromIdentifier(cond.test as any, paramName);
-        if (!propPath || propPath.length !== 1) {
-          return null;
-        }
-        const jsxProp = propPath[0]!;
-        if (jsxProp === "theme") {
-          return null;
-        }
-        const baseArg = buildPropAccessExpr(jsxProp);
-        const consProp = getMemberPathFromIdentifier(cond.consequent as any, paramName);
-        const altProp = getMemberPathFromIdentifier(cond.alternate as any, paramName);
-        const consIsProp = !!consProp && consProp.length === 1 && consProp[0] === jsxProp;
-        const altIsProp = !!altProp && altProp.length === 1 && altProp[0] === jsxProp;
-        const consTheme = resolveThemeFromPropsMember(cond.consequent, paramName);
-        const altTheme = resolveThemeFromPropsMember(cond.alternate, paramName);
-        if (consIsProp && altTheme) {
-          return {
-            jsxProp,
-            callArg: j.conditionalExpression(baseArg, baseArg, altTheme) as ExpressionKind,
-          };
-        }
-        if (altIsProp && consTheme) {
-          return {
-            jsxProp,
-            callArg: j.conditionalExpression(baseArg, consTheme, baseArg) as ExpressionKind,
-          };
-        }
-      }
-      return null;
-    };
-
-    const resolveTemplateLiteralBranch = (
-      node: { type: "TemplateLiteral"; expressions?: unknown[]; quasis?: unknown[] },
-      paramName: string | null,
-    ): {
-      style: Record<string, unknown>;
-      dynamicEntries: Array<{ jsxProp: string; stylexProp: string; callArg: ExpressionKind }>;
-    } | null => {
-      const parsed = parseStyledTemplateLiteral(node as any);
-      const wrappedRawCss = `& { ${parsed.rawCss} }`;
-      const stylisAst = compile(wrappedRawCss);
-      const rules = normalizeStylisAstToIR(stylisAst as any, parsed.slots, {
-        rawCss: wrappedRawCss,
-      });
-      const slotExprById = new Map(parsed.slots.map((s) => [s.index, s.expression]));
-      const style: Record<string, unknown> = {};
-      const dynamicEntries: Array<{
-        jsxProp: string;
-        stylexProp: string;
-        callArg: ExpressionKind;
-      }> = [];
-
-      for (const rule of rules) {
-        if (rule.atRuleStack.length > 0) {
-          return null;
-        }
-        const selector = (rule.selector ?? "").trim();
-        if (selector !== "&") {
-          return null;
-        }
-        for (const d of rule.declarations) {
-          if (!d.property) {
-            return null;
-          }
-          if (d.value.kind === "static") {
-            for (const mapped of cssDeclarationToStylexDeclarations(d)) {
-              let value = cssValueToJs(mapped.value, d.important, mapped.prop);
-              if (mapped.prop === "content" && typeof value === "string") {
-                const m = value.match(/^['"]([\s\S]*)['"]$/);
-                if (m) {
-                  value = `"${m[1]}"`;
-                } else if (!value.startsWith('"') && !value.endsWith('"')) {
-                  value = `"${value}"`;
-                }
-              }
-              (style as any)[mapped.prop] = value as any;
-            }
-            continue;
-          }
-          if (d.important) {
-            return null;
-          }
-          if (d.value.kind !== "interpolated") {
-            return null;
-          }
-          const parts = d.value.parts ?? [];
-          const slotParts = parts.filter((p: { kind: string }) => p.kind === "slot");
-          if (slotParts.length === 0) {
-            return null;
-          }
-
-          // Try to resolve all slots - either via prop access or adapter call
-          const resolvedSlots = new Map<
-            number,
-            | { kind: "dynamic"; jsxProp: string; callArg: ExpressionKind }
-            | { kind: "static"; exprAst: ExpressionKind }
-          >();
-
-          for (const sp of slotParts) {
-            const slotId = (sp as { slotId: number }).slotId;
-            const expr = slotExprById.get(slotId);
-            if (!expr) {
-              return null;
-            }
-
-            // First try prop-based resolution
-            const propResolved = resolveDynamicTemplateExpr(expr, paramName);
-            if (propResolved) {
-              resolvedSlots.set(slotId, {
-                kind: "dynamic",
-                jsxProp: propResolved.jsxProp,
-                callArg: propResolved.callArg,
-              });
-              continue;
-            }
-
-            // Try adapter-based resolution for call expressions
-            const adapterRes = resolveDynamicNode(
-              {
-                slotId,
-                expr,
-                css: {
-                  kind: "declaration",
-                  selector: "&",
-                  atRuleStack: [],
-                  ...(d.property ? { property: d.property } : {}),
-                  valueRaw: d.valueRaw ?? "",
-                },
-                component: componentInfo,
-                usage: { jsxUsages: 0, hasPropsSpread: false },
-              },
-              handlerContext,
-            );
-
-            if (adapterRes && adapterRes.type === "resolvedValue") {
-              for (const imp of adapterRes.imports ?? []) {
-                resolverImports.set(JSON.stringify(imp), imp);
-              }
-              const exprAst = parseExpr(adapterRes.expr);
-              if (exprAst) {
-                resolvedSlots.set(slotId, { kind: "static", exprAst: exprAst as ExpressionKind });
-                continue;
-              }
-            }
-
-            // Can't resolve this slot
-            return null;
-          }
-
-          // Check if all slots resolved to static values
-          const allStatic = [...resolvedSlots.values()].every((r) => r.kind === "static");
-
-          if (allStatic) {
-            // Build a template literal with static interpolations
-            const quasis: any[] = [];
-            const expressions: ExpressionKind[] = [];
-            let currentStaticPart = "";
-
-            for (const part of parts) {
-              if (part.kind === "static") {
-                currentStaticPart += (part as { kind: "static"; value: string }).value;
-              } else if (part.kind === "slot") {
-                quasis.push(
-                  j.templateElement({ raw: currentStaticPart, cooked: currentStaticPart }, false),
-                );
-                currentStaticPart = "";
-                const resolved = resolvedSlots.get(
-                  (part as { kind: "slot"; slotId: number }).slotId,
-                );
-                if (resolved?.kind === "static") {
-                  expressions.push(resolved.exprAst);
-                }
-              }
-            }
-            quasis.push(
-              j.templateElement({ raw: currentStaticPart, cooked: currentStaticPart }, true),
-            );
-
-            const templateLiteral = j.templateLiteral(quasis, expressions);
-
-            for (const mapped of cssDeclarationToStylexDeclarations(d)) {
-              (style as any)[mapped.prop] = templateLiteral;
-            }
-            continue;
-          }
-
-          // Handle single dynamic slot (original behavior)
-          if (slotParts.length !== 1) {
-            return null;
-          }
-          const slotPart = slotParts[0] as { kind: "slot"; slotId: number };
-          const resolved = resolvedSlots.get(slotPart.slotId);
-          if (!resolved || resolved.kind !== "dynamic") {
-            return null;
-          }
-          const propName = d.property?.trim() ?? "";
-          const { prefix, suffix } = extractStaticParts(d.value, { property: propName });
-          const borderParts = parseInterpolatedBorderStaticParts({
-            prop: propName,
-            prefix,
-            suffix,
-          });
-          if (borderParts) {
-            if (borderParts.width) {
-              (style as any)[borderParts.widthProp] = borderParts.width;
-            }
-            if (borderParts.style) {
-              (style as any)[borderParts.styleProp] = borderParts.style;
-            }
-            dynamicEntries.push({
-              jsxProp: resolved.jsxProp,
-              stylexProp: borderParts.colorProp,
-              callArg: resolved.callArg,
-            });
-            continue;
-          }
-          const callArg =
-            prefix || suffix
-              ? buildTemplateWithStaticParts(j, resolved.callArg, prefix, suffix)
-              : resolved.callArg;
-          for (const mapped of cssDeclarationToStylexDeclarations(d)) {
-            dynamicEntries.push({
-              jsxProp: resolved.jsxProp,
-              stylexProp: mapped.prop,
-              callArg,
-            });
-          }
-        }
-      }
-      return { style, dynamicEntries };
-    };
-
     const tryHandleCssHelperConditionalBlock = (d: any): boolean => {
       if (d.value.kind !== "interpolated") {
         return false;
@@ -1602,14 +1289,34 @@ export function lowerRules(args: {
         if (testInfo.propName) {
           ensureShouldForwardPropDrop(decl, testInfo.propName);
         }
-        const consResolved = resolveTemplateLiteralBranch(
-          cons as { type: "TemplateLiteral" },
+        const consResolved = resolveTemplateLiteralBranch({
+          j,
+          node: cons as any,
           paramName,
-        );
-        const altResolved = resolveTemplateLiteralBranch(
-          alt as { type: "TemplateLiteral" },
+          filePath,
+          parseExpr,
+          cssValueToJs,
+          resolveValue,
+          resolveCall,
+          resolveImportInScope,
+          resolverImports,
+          componentInfo,
+          handlerContext,
+        });
+        const altResolved = resolveTemplateLiteralBranch({
+          j,
+          node: alt as any,
           paramName,
-        );
+          filePath,
+          parseExpr,
+          cssValueToJs,
+          resolveValue,
+          resolveCall,
+          resolveImportInScope,
+          resolverImports,
+          componentInfo,
+          handlerContext,
+        });
         if (!consResolved || !altResolved) {
           return false;
         }
@@ -1636,10 +1343,20 @@ export function lowerRules(args: {
         if (testInfo.propName) {
           ensureShouldForwardPropDrop(decl, testInfo.propName);
         }
-        const consResolved = resolveTemplateLiteralBranch(
-          cons as { type: "TemplateLiteral" },
+        const consResolved = resolveTemplateLiteralBranch({
+          j,
+          node: cons as any,
           paramName,
-        );
+          filePath,
+          parseExpr,
+          cssValueToJs,
+          resolveValue,
+          resolveCall,
+          resolveImportInScope,
+          resolverImports,
+          componentInfo,
+          handlerContext,
+        });
         if (!consResolved) {
           return false;
         }
@@ -1656,10 +1373,20 @@ export function lowerRules(args: {
         if (testInfo.propName) {
           ensureShouldForwardPropDrop(decl, testInfo.propName);
         }
-        const altResolved = resolveTemplateLiteralBranch(
-          alt as { type: "TemplateLiteral" },
+        const altResolved = resolveTemplateLiteralBranch({
+          j,
+          node: alt as any,
           paramName,
-        );
+          filePath,
+          parseExpr,
+          cssValueToJs,
+          resolveValue,
+          resolveCall,
+          resolveImportInScope,
+          resolverImports,
+          componentInfo,
+          handlerContext,
+        });
         if (!altResolved) {
           return false;
         }
@@ -1725,114 +1452,30 @@ export function lowerRules(args: {
         return false;
       }
 
-      // Resolve a template literal VALUE (not a CSS block) to a static expression
-      const resolveTemplateValue = (tpl: {
-        type: "TemplateLiteral";
-        quasis?: unknown[];
-        expressions?: unknown[];
-      }): ExpressionKind | null => {
-        const quasis = (tpl.quasis ?? []) as Array<{ value?: { raw?: string; cooked?: string } }>;
-        const expressions = (tpl.expressions ?? []) as unknown[];
-
-        if (expressions.length === 0) {
-          // Static template literal - return as-is
-          const staticValue = quasis.map((q) => q.value?.cooked ?? q.value?.raw ?? "").join("");
-          return j.literal(staticValue) as ExpressionKind;
-        }
-
-        // Try to resolve each expression
-        const resolvedExprs: ExpressionKind[] = [];
-        for (const expr of expressions) {
-          // Try adapter resolution for the expression
-          const adapterRes = resolveDynamicNode(
-            {
-              slotId: 0,
-              expr,
-              css: {
-                kind: "declaration",
-                selector: "&",
-                atRuleStack: [],
-                property: d.property,
-                valueRaw: "",
-              },
-              component: componentInfo,
-              usage: { jsxUsages: 0, hasPropsSpread: false },
-            },
-            handlerContext,
-          );
-
-          if (adapterRes && adapterRes.type === "resolvedValue") {
-            for (const imp of adapterRes.imports ?? []) {
-              resolverImports.set(JSON.stringify(imp), imp);
-            }
-            const exprAst = parseExpr(adapterRes.expr);
-            if (exprAst) {
-              resolvedExprs.push(exprAst as ExpressionKind);
-              continue;
-            }
-          }
-
-          // Handle curried call pattern: helper("key")(props)
-          // resolveDynamicNode rejects curried calls with usage:"create" because they're
-          // not style objects, but for template literals we want the value.
-          if (isCallExpressionNode(expr)) {
-            const callee = (expr as { callee?: unknown }).callee;
-            if (isCallExpressionNode(callee)) {
-              // This is a curried call: innerCall(props)
-              const innerCall = callee;
-              const innerCallee = (innerCall as { callee?: unknown }).callee;
-              const innerCalleeType = (innerCallee as { type?: string })?.type;
-              const innerCalleeIdent = (innerCallee as { name?: string })?.name;
-              if (innerCalleeType === "Identifier" && typeof innerCalleeIdent === "string") {
-                const imp = resolveImportInScope(innerCalleeIdent, innerCallee);
-                if (imp) {
-                  // Build args for the inner call
-                  const innerArgs = ((innerCall as { arguments?: unknown[] }).arguments ?? []).map(
-                    (arg: unknown) => {
-                      const staticVal = literalToStaticValue(arg);
-                      if (staticVal !== null) {
-                        return { kind: "literal" as const, value: staticVal };
-                      }
-                      return { kind: "unknown" as const };
-                    },
-                  );
-                  const callRes = resolveCall({
-                    callSiteFilePath: filePath,
-                    calleeImportedName: imp.importedName,
-                    calleeSource: imp.source,
-                    args: innerArgs,
-                  });
-                  if (callRes && callRes.usage === "create") {
-                    for (const callImp of callRes.imports ?? []) {
-                      resolverImports.set(JSON.stringify(callImp), callImp);
-                    }
-                    const callExprAst = parseExpr(callRes.expr);
-                    if (callExprAst) {
-                      resolvedExprs.push(callExprAst as ExpressionKind);
-                      continue;
-                    }
-                  }
-                }
-              }
-            }
-          }
-
-          // Can't resolve this expression
-          return null;
-        }
-
-        // Build a template literal with resolved expressions
-        const newQuasis = quasis.map((q, i) =>
-          j.templateElement(
-            { raw: q.value?.raw ?? "", cooked: q.value?.cooked ?? q.value?.raw ?? "" },
-            i === quasis.length - 1,
-          ),
-        );
-        return j.templateLiteral(newQuasis, resolvedExprs) as ExpressionKind;
-      };
-
-      const consValue = resolveTemplateValue(cons);
-      const altValue = resolveTemplateValue(alt);
+      const consValue = resolveTemplateLiteralValue({
+        j,
+        tpl: cons as any,
+        property: d.property,
+        filePath,
+        parseExpr,
+        resolveCall,
+        resolveImportInScope,
+        resolverImports,
+        componentInfo,
+        handlerContext,
+      });
+      const altValue = resolveTemplateLiteralValue({
+        j,
+        tpl: alt as any,
+        property: d.property,
+        filePath,
+        parseExpr,
+        resolveCall,
+        resolveImportInScope,
+        resolverImports,
+        componentInfo,
+        handlerContext,
+      });
 
       if (!consValue || !altValue) {
         return false;
