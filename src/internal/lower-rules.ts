@@ -14,6 +14,7 @@ import {
   getFunctionBodyExpr,
   getMemberPathFromIdentifier,
   getNodeLocStart,
+  isAstNode,
   isAstPath,
   isIdentifierNode,
   isCallExpressionNode,
@@ -484,8 +485,6 @@ export function lowerRules(args: {
   };
 
   const isValidIdentifierName = (name: string): boolean => /^[$A-Z_][0-9A-Z_$]*$/i.test(name);
-  const isAstNode = (v: unknown): v is ASTNode =>
-    !!v && typeof v === "object" && typeof (v as { type?: unknown }).type === "string";
 
   const buildSafeIndexedParamName = (
     preferred: string,

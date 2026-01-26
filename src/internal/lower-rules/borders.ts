@@ -369,6 +369,11 @@ export function tryHandleInterpolatedBorder(args: {
           decl.extraStylexPropsArgs.push({
             expr: j.memberExpression(j.identifier("styles"), j.identifier(extraKey)),
           });
+          // `extraStylexPropsArgs` are only emitted for wrapper components.
+          // If this styled component would otherwise be eligible for inlining, we'd drop the extra
+          // `styles.<extraKey>` argument and lose the border expansion. Force a wrapper to preserve
+          // semantics.
+          decl.needsWrapperComponent = true;
 
           // Import insertion currently always happens right after the stylex import, which means
           // later inserts appear above earlier inserts. For this pattern, we want helper imports

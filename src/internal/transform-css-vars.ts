@@ -1,6 +1,7 @@
 import type { JSCodeshift } from "jscodeshift";
 import type { Adapter, ImportSpec } from "../adapter.js";
 import { rewriteCssVarsInString } from "./css-vars.js";
+import { isAstNode } from "./jscodeshift-utils.js";
 
 type ExpressionKind = Parameters<JSCodeshift["expressionStatement"]>[0];
 
@@ -9,7 +10,6 @@ export function rewriteCssVarsInStyleObject(args: {
   filePath: string;
   definedVars: Map<string, string>;
   varsToDrop: Set<string>;
-  isAstNode: (v: unknown) => boolean;
   resolveValue: Adapter["resolveValue"];
   addImport: (imp: ImportSpec) => void;
   parseExpr: (exprSource: string) => ExpressionKind | null;
@@ -23,23 +23,12 @@ function rewriteCssVarsInStyleObjectImpl(args: {
   filePath: string;
   definedVars: Map<string, string>;
   varsToDrop: Set<string>;
-  isAstNode: (v: unknown) => boolean;
   resolveValue: Adapter["resolveValue"];
   addImport: (imp: ImportSpec) => void;
   parseExpr: (exprSource: string) => ExpressionKind | null;
   j: JSCodeshift;
 }): void {
-  const {
-    obj,
-    filePath,
-    definedVars,
-    varsToDrop,
-    isAstNode,
-    resolveValue,
-    addImport,
-    parseExpr,
-    j,
-  } = args;
+  const { obj, filePath, definedVars, varsToDrop, resolveValue, addImport, parseExpr, j } = args;
   for (const [k, v] of Object.entries(obj)) {
     if (v && typeof v === "object") {
       if (isAstNode(v)) {
@@ -50,7 +39,6 @@ function rewriteCssVarsInStyleObjectImpl(args: {
         filePath,
         definedVars,
         varsToDrop,
-        isAstNode,
         resolveValue,
         addImport,
         parseExpr,
