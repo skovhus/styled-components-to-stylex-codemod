@@ -1,22 +1,37 @@
-import styled from "styled-components";
+import styled, { css } from "styled-components";
 
-// Base styled component that will be used as a mixin
-const HiddenOnMobile = styled.div`
+// Base css mixins that will be shared
+const hiddenOnMobileMixin = css`
   @media (max-width: 767px) {
     display: none;
   }
 `;
 
-// Using another styled component's styles as a mixin
+const colorMixin = css`
+  color: red;
+`;
+
+const HiddenOnMobile = styled.div`
+  ${hiddenOnMobileMixin}
+`;
+
+// Using shared mixins within components
 const ElementWithMixin = styled.div`
   color: red;
   padding: 16px;
-  ${HiddenOnMobile}
+  ${hiddenOnMobileMixin}
+`;
+
+const ElementWithMixinHover = styled.div`
+  ${colorMixin}
+  &:hover {
+    color: blue;
+  }
 `;
 
 const AnotherMixedElement = styled.div`
   background-color: blue;
-  ${HiddenOnMobile}
+  ${hiddenOnMobileMixin}
   font-weight: bold;
 `;
 
@@ -24,6 +39,7 @@ export const App = () => (
   <div>
     <HiddenOnMobile>Hidden on mobile (base)</HiddenOnMobile>
     <ElementWithMixin>Red with mixin</ElementWithMixin>
+    <ElementWithMixinHover>Red default, blue hover mixin</ElementWithMixinHover>
     <AnotherMixedElement>Blue with mixin</AnotherMixedElement>
   </div>
 );

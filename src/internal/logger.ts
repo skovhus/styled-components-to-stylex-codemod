@@ -27,6 +27,7 @@ export type WarningType =
   | "Failed to parse theme expressions"
   | "Heterogeneous background values (mix of gradients and colors) not currently supported"
   | "Imported CSS helper mixins: cannot determine inherited properties for correct pseudo selector handling"
+  | "Using styled-components components as mixins is not supported"
   | "Styled-components specificity hacks like `&&` / `&&&` are not representable in StyleX"
   | "Theme-dependent conditional values require a project-specific theme source (e.g. useTheme())"
   | "Theme-dependent nested prop access requires a project-specific theme source (e.g. useTheme())"
