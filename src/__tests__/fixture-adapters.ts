@@ -164,10 +164,20 @@ export const fixtureAdapter = defineAdapter({
       return null;
     }
 
-    if (ctx.calleeImportedName === "gradient") {
+    const helperStyleKey = (() => {
+      switch (ctx.calleeImportedName) {
+        case "gradient":
+        case "truncate":
+        case "flexCenter":
+          return ctx.calleeImportedName;
+        default:
+          return null;
+      }
+    })();
+    if (helperStyleKey) {
       return {
         usage: "props",
-        expr: "helpers.gradient",
+        expr: `helpers.${helperStyleKey}`,
         imports: [
           {
             from: { kind: "specifier", value: "./lib/helpers.stylex" },

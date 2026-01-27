@@ -7,7 +7,6 @@ type Props = {
   hollow?: boolean;
   size?: Size;
 };
-
 export const ColorBadge = styled("div")<Props>`
   width: 12px;
   height: 12px;
