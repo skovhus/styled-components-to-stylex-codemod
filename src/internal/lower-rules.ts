@@ -2080,6 +2080,15 @@ export function lowerRules(args: {
           // Extract the actual pseudo-selector (e.g., ":hover", ":focus-visible")
           const pseudoMatch = rule.selector.match(/&(:[a-z-]+(?:\([^)]*\))?)/i);
           const ancestorPseudo: string | null = pseudoMatch?.[1] ?? null;
+          if (!childDecl) {
+            bail = true;
+            warnings.push({
+              severity: "warning",
+              type: "Unsupported selector: unknown component selector",
+              loc: decl.loc,
+            });
+            break;
+          }
           if (childDecl) {
             const overrideStyleKey = `${toStyleKey(otherLocal)}In${decl.localName}`;
             ancestorSelectorParents.add(decl.styleKey);
