@@ -62,5 +62,24 @@ export const App = () => (
     <Point $size={100} style={{ top: "10px" }} />
     <CollapseArrowIcon $isOpen />
     <CollapseArrowIcon $isOpen={false} />
+    <StyledAnimatedContainer $direction="up" $delay={0.4} />
   </div>
 );
+
+interface AnimatedContainerProps {
+  className?: string;
+  style?: React.CSSProperties;
+  $direction?: string;
+  $delay?: number;
+}
+
+function AnimatedContainer(props: AnimatedContainerProps) {
+  const { className, style, $direction, $delay } = props;
+  return (
+    <div className={className} data-direction={$direction} data-delay={$delay} style={style} />
+  );
+}
+
+const StyledAnimatedContainer = styled(AnimatedContainer)`
+  max-width: 90vw;
+`;
