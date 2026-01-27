@@ -185,15 +185,7 @@ export function lowerRules(args: {
   >();
   let bail = false;
 
-  // Pre-compute properties and values defined by each css helper from their rules.
-  // This allows us to know what properties a css helper provides (and their values)
-  // before styled components that use them are processed, which is needed for
-  // correct pseudo selector handling (setting proper default values).
-  const cssHelperValuesByKey = new Map<string, Map<string, unknown>>();
-  for (const decl of styledDecls) {
-    if (!decl.isCssHelper) {
-      continue;
-    }
+  const computeDeclBasePropValues = (decl: StyledDecl): Map<string, unknown> => {
     const propValues = new Map<string, unknown>();
     for (const rule of decl.rules) {
       // Only process top-level rules (selector "&") for base values
@@ -209,17 +201,33 @@ export function lowerRules(args: {
             }
           }
         } else if (d.property && d.value.kind === "interpolated") {
-          // Handle interpolated values (e.g., theme variables)
           const stylexDecls = cssDeclarationToStylexDeclarations(d);
           for (const sd of stylexDecls) {
-            // Store a marker that this property comes from css helper but value is dynamic
-            // We'll need to resolve this when actually processing the styled component
+            // Store a marker that this property comes from a composed style source
+            // but its value is dynamic (resolved later).
             propValues.set(sd.prop, { __cssHelperDynamicValue: true, decl, declaration: d });
           }
         }
       }
     }
-    cssHelperValuesByKey.set(decl.styleKey, propValues);
+    return propValues;
+  };
+
+  // Pre-compute properties and values defined by each css helper and mixin from their rules.
+  // This allows us to know what properties they provide (and their values) before styled
+  // components that use them are processed, which is needed for correct pseudo selector
+  // handling (setting proper default values).
+  const cssHelperValuesByKey = new Map<string, Map<string, unknown>>();
+  const mixinValuesByKey = new Map<string, Map<string, unknown>>();
+  for (const decl of styledDecls) {
+    const propValues = computeDeclBasePropValues(decl);
+    if (decl.isCssHelper) {
+      cssHelperValuesByKey.set(decl.styleKey, propValues);
+      continue;
+    }
+    if (propValues.size > 0) {
+      mixinValuesByKey.set(decl.styleKey, propValues);
+    }
   }
 
   // ─────────────────────────────────────────────────────────────────────────────
@@ -567,6 +575,24 @@ export function lowerRules(args: {
     // Track properties defined by composed css helpers along with their values
     // so we can set proper default values for pseudo selectors.
     const cssHelperPropValues = new Map<string, unknown>();
+    const resolveComposedDefaultValue = (helperVal: unknown, propName: string): unknown => {
+      if (helperVal === undefined) {
+        return null;
+      }
+      if (helperVal && typeof helperVal === "object" && "__cssHelperDynamicValue" in helperVal) {
+        const helperDecl = (helperVal as Record<string, unknown>).decl as StyledDecl | undefined;
+        if (helperDecl) {
+          const resolvedHelper = resolvedStyleObjects.get(toStyleKey(helperDecl.localName));
+          if (resolvedHelper && typeof resolvedHelper === "object") {
+            return (resolvedHelper as Record<string, unknown>)[propName] ?? null;
+          }
+        }
+        return null;
+      }
+      return helperVal;
+    };
+    const getComposedDefaultValue = (propName: string): unknown =>
+      resolveComposedDefaultValue(cssHelperPropValues.get(propName), propName);
 
     const {
       findJsxPropTsType,
@@ -1776,6 +1802,8 @@ export function lowerRules(args: {
                     cssHelperPropValues.set(prop, value);
                   }
                 }
+              } else if (declByLocalName.has(expr.name)) {
+                // Local styled component mixin - handled later (unsupported, will bail).
               } else {
                 // This might be an imported css helper - we can't determine its properties.
                 // Mark for bail to avoid generating incorrect default values.
@@ -2003,14 +2031,32 @@ export function lowerRules(args: {
                 }
                 const hoverValue = out.value.value;
                 const rawBase = (styleObj as any)[out.prop] as unknown;
-                const baseValue =
-                  typeof rawBase === "string" || typeof rawBase === "number" ? String(rawBase) : "";
+                let baseValue: string | null = null;
+                if (typeof rawBase === "string" || typeof rawBase === "number") {
+                  baseValue = String(rawBase);
+                } else if (cssHelperPropValues.has(out.prop)) {
+                  const helperDefault = getComposedDefaultValue(out.prop);
+                  if (typeof helperDefault === "string" || typeof helperDefault === "number") {
+                    baseValue = String(helperDefault);
+                  }
+                } else if (parentDecl) {
+                  const parentValues = parentDecl.isCssHelper
+                    ? cssHelperValuesByKey.get(parentDecl.styleKey)
+                    : mixinValuesByKey.get(parentDecl.styleKey);
+                  const parentValue = resolveComposedDefaultValue(
+                    parentValues?.get(out.prop),
+                    out.prop,
+                  );
+                  if (typeof parentValue === "string" || typeof parentValue === "number") {
+                    baseValue = String(parentValue);
+                  }
+                }
                 const varName = `--sc2sx-${toKebab(decl.localName)}-${toKebab(out.prop)}`;
                 (parentStyle as any)[varName] = {
-                  default: baseValue || null,
+                  default: baseValue ?? null,
                   ":hover": hoverValue,
                 };
-                styleObj[out.prop] = `var(${varName}, ${baseValue || "inherit"})`;
+                styleObj[out.prop] = `var(${varName}, ${baseValue ?? "inherit"})`;
               }
             }
           }
@@ -2386,6 +2432,22 @@ export function lowerRules(args: {
                   }
                 }
                 continue;
+              }
+              if (expr?.type === "Identifier") {
+                const mixinDecl = declByLocalName.get(expr.name);
+                if (mixinDecl && !mixinDecl.isCssHelper && mixinDecl.localName !== decl.localName) {
+                  bail = true;
+                  warnings.push({
+                    severity: "warning",
+                    type: "Using styled-components components as mixins is not supported; use css`` mixins or strings instead",
+                    loc: getNodeLocStart(expr) ?? decl.loc,
+                    context: {
+                      localName: decl.localName,
+                      mixin: mixinDecl.localName,
+                    },
+                  });
+                  continue;
+                }
               }
               // Handle member expression CSS helpers (e.g., buttonStyles.rootCss)
               const rootInfo = extractRootAndPath(expr);
@@ -4178,32 +4240,6 @@ export function lowerRules(args: {
             localVarValues.set(out.prop, value);
           }
 
-          // Helper to get default value for pseudo selectors when property comes from css helper
-          const getCssHelperDefaultValue = (propName: string): unknown => {
-            const helperVal = cssHelperPropValues.get(propName);
-            if (helperVal === undefined) {
-              return null;
-            }
-            if (
-              helperVal &&
-              typeof helperVal === "object" &&
-              "__cssHelperDynamicValue" in helperVal
-            ) {
-              // Dynamic value - look up from already-resolved css helper
-              const helperDecl = (helperVal as Record<string, unknown>).decl as
-                | StyledDecl
-                | undefined;
-              if (helperDecl) {
-                const resolvedHelper = resolvedStyleObjects.get(toStyleKey(helperDecl.localName));
-                if (resolvedHelper && typeof resolvedHelper === "object") {
-                  return (resolvedHelper as Record<string, unknown>)[propName] ?? null;
-                }
-              }
-              return null;
-            }
-            return helperVal;
-          };
-
           // Handle nested pseudo + media: `&:hover { @media (...) { ... } }`
           // This produces: { ":hover": { default: value, "@media (...)": value } }
           if (media && pseudos?.length) {
@@ -4214,7 +4250,7 @@ export function lowerRules(args: {
               if (existingVal !== undefined) {
                 existing.default = existingVal;
               } else if (cssHelperPropValues.has(out.prop)) {
-                existing.default = getCssHelperDefaultValue(out.prop);
+                existing.default = getComposedDefaultValue(out.prop);
               } else {
                 existing.default = null;
               }
@@ -4223,7 +4259,7 @@ export function lowerRules(args: {
             for (const ps of pseudos) {
               if (!existing[ps] || typeof existing[ps] !== "object") {
                 const defaultVal = cssHelperPropValues.has(out.prop)
-                  ? getCssHelperDefaultValue(out.prop)
+                  ? getComposedDefaultValue(out.prop)
                   : null;
                 existing[ps] = { default: defaultVal };
               }
@@ -4240,7 +4276,7 @@ export function lowerRules(args: {
               if (existingVal !== undefined) {
                 existing.default = existingVal;
               } else if (cssHelperPropValues.has(out.prop)) {
-                existing.default = getCssHelperDefaultValue(out.prop);
+                existing.default = getComposedDefaultValue(out.prop);
               } else {
                 existing.default = null;
               }
@@ -4259,7 +4295,7 @@ export function lowerRules(args: {
               if (existingVal !== undefined) {
                 existing.default = existingVal;
               } else if (cssHelperPropValues.has(out.prop)) {
-                existing.default = getCssHelperDefaultValue(out.prop);
+                existing.default = getComposedDefaultValue(out.prop);
               } else {
                 existing.default = null;
               }
