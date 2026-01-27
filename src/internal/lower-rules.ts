@@ -230,6 +230,29 @@ export function lowerRules(args: {
     }
   }
 
+  const staticPropertyOwners = new Set<string>();
+  root
+    .find(j.ExpressionStatement, {
+      expression: {
+        type: "AssignmentExpression",
+        operator: "=",
+        left: {
+          type: "MemberExpression",
+          object: { type: "Identifier" },
+          property: { type: "Identifier" },
+        },
+      },
+    } as any)
+    .forEach((p) => {
+      const expr = p.node.expression as {
+        left?: { object?: { name?: string } };
+      };
+      const ownerName = expr.left?.object?.name;
+      if (ownerName) {
+        staticPropertyOwners.add(ownerName);
+      }
+    });
+
   // ─────────────────────────────────────────────────────────────────────────────
   // Helper: Extract static prefix/suffix from interpolated CSS values
   // ─────────────────────────────────────────────────────────────────────────────
@@ -2415,6 +2438,39 @@ export function lowerRules(args: {
           const addImport = (imp: any) => {
             resolverImports.set(JSON.stringify(imp), imp);
           };
+          if (d.property && d.value.kind === "interpolated") {
+            const slotParts =
+              (d.value as { parts?: Array<{ kind?: string; slotId?: number }> }).parts ?? [];
+            for (const part of slotParts) {
+              if (part?.kind !== "slot" || part.slotId === undefined) {
+                continue;
+              }
+              const expr = decl.templateExpressions[part.slotId] as {
+                type?: string;
+                body?: unknown;
+                object?: { type?: string; name?: string };
+              };
+              const baseExpr =
+                expr?.type === "ArrowFunctionExpression" || expr?.type === "FunctionExpression"
+                  ? (expr.body as any)
+                  : (expr as any);
+              if (
+                baseExpr?.type !== "MemberExpression" &&
+                baseExpr?.type !== "OptionalMemberExpression"
+              ) {
+                continue;
+              }
+              const obj = baseExpr.object;
+              if (obj?.type !== "Identifier" || !staticPropertyOwners.has(obj.name)) {
+                continue;
+              }
+              bailUnsupported(decl, "Unsupported interpolation: member expression");
+              break;
+            }
+            if (bail) {
+              continue;
+            }
+          }
           if (
             tryHandleInterpolatedStringValue({
               j,
