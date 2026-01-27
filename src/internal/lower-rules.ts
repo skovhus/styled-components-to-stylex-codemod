@@ -1803,7 +1803,7 @@ export function lowerRules(args: {
                   }
                 }
               } else if (declByLocalName.has(expr.name)) {
-                // Local styled component mixin - supported without precomputed defaults.
+                // Local styled component mixin - handled later (unsupported, will bail).
               } else {
                 // This might be an imported css helper - we can't determine its properties.
                 // Mark for bail to avoid generating incorrect default values.
@@ -2439,7 +2439,7 @@ export function lowerRules(args: {
                   bail = true;
                   warnings.push({
                     severity: "warning",
-                    type: "Using styled-components components as mixins is not supported",
+                    type: "Using styled-components components as mixins is not supported; use css`` mixins or strings instead",
                     loc: getNodeLocStart(expr) ?? decl.loc,
                     context: {
                       localName: decl.localName,
