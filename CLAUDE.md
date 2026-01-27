@@ -24,6 +24,7 @@ pnpm check       # Run lint + tsc + test
 ## Code guidelines
 
 - Prefer iteration & modularization over code duplication.
+- **Unify and abstract**: Use existing primitives/helpers whenever possible. Extend or generalize shared utilities instead of adding parallel logic so the codebase uses the same primitives consistently.
 - **Centralize common logic**: When adding new functionality, look for existing helper functions that can be extended rather than duplicating patterns. Key utilities like `literalToStaticValue` in `builtin-handlers.ts` handle AST node extraction and should be enhanced to support new node types rather than adding ad-hoc checks elsewhere.
 - **keep all exports at the top of each file** (after imports), and keep **non-exported helpers further down**
 - TypeScript: Never use "any".

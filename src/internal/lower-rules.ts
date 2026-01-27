@@ -1933,6 +1933,17 @@ export function lowerRules(args: {
       if (typeof rule.selector === "string") {
         const s = normalizeInterpolatedSelector(rule.selector).trim();
         const hasComponentExpr = rule.selector.includes("__SC_EXPR_");
+        const hasInterpolatedPseudo = /:[^\s{]*__SC_EXPR_\d+__/.test(rule.selector);
+
+        if (hasInterpolatedPseudo) {
+          bail = true;
+          warnings.push({
+            severity: "warning",
+            type: "Unsupported selector: interpolated pseudo selector",
+            loc: decl.loc,
+          });
+          break;
+        }
 
         // Component selector patterns that have special handling below:
         // 1. `${Other}:hover &` - requires :hover and ends with &

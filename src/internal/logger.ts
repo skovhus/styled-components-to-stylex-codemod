@@ -54,7 +54,8 @@ export type WarningType =
   | "Unsupported selector: class selector"
   | "Unsupported selector: comma-separated selectors must all be simple pseudos"
   | "Unsupported selector: descendant pseudo selector (space before pseudo)"
-  | "Unsupported selector: descendant/child/sibling selector";
+  | "Unsupported selector: descendant/child/sibling selector"
+  | "Unsupported selector: interpolated pseudo selector";
 
 export interface WarningLog {
   severity: Severity;
