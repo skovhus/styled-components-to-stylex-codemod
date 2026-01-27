@@ -2293,9 +2293,9 @@ export function transformWithWarnings(
           }
 
           if (!variantProps.has(n)) {
-            // Strip transient props (starting with $) that aren't used in styles.
-            // These are styled-components conventions that shouldn't reach the DOM.
-            if (n.startsWith("$")) {
+            // Strip transient props (starting with $) only for intrinsic elements.
+            // For styled(Component), transient props should still reach the wrapped component.
+            if (n.startsWith("$") && decl.base.kind === "intrinsic") {
               continue;
             }
             keptLeadingAfterVariants.push(attr);

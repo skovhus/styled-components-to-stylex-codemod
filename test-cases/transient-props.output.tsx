@@ -85,8 +85,23 @@ export const App = () => (
     <Point $size={100} style={{ top: "10px" }} />
     <CollapseArrowIcon $isOpen />
     <CollapseArrowIcon $isOpen={false} />
+    <AnimatedContainer $direction="up" $delay={0.4} {...stylex.props(styles.animatedContainer)} />
   </div>
 );
+
+interface AnimatedContainerProps {
+  className?: string;
+  style?: React.CSSProperties;
+  $direction?: string;
+  $delay?: number;
+}
+
+function AnimatedContainer(props: AnimatedContainerProps) {
+  const { className, style, $direction, $delay } = props;
+  return (
+    <div className={className} data-direction={$direction} data-delay={$delay} style={style} />
+  );
+}
 
 const styles = stylex.create({
   comp: {
@@ -114,5 +129,8 @@ const styles = stylex.create({
   },
   collapseArrowIconOpen: {
     transform: "rotate(90deg)",
+  },
+  animatedContainer: {
+    maxWidth: "90vw",
   },
 });

@@ -203,7 +203,8 @@ export function emitComponentWrappers(emitter: WrapperEmitter): {
     // For component wrappers, filter out transient props ($-prefixed) that are NOT used in styling.
     // In styled-components, transient props are automatically filtered before passing to wrapped component.
     // We need to mimic this behavior by destructuring them out when not used for conditional styles.
-    // Track which transient props are for filtering only (not used in styling) so we don't pass them back.
+    // Track which transient props are for filtering only (not used in styling).
+    // These are transient props that we should strip before forwarding.
     const filterOnlyTransientProps: string[] = [];
     // Track transient props that are defined in the WRAPPER's explicit type (not the base's).
     // These should NOT be passed back to the base component because the base doesn't accept them.
@@ -321,8 +322,8 @@ export function emitComponentWrappers(emitter: WrapperEmitter): {
         }
       }
 
-      // Add transient props to destructureProps if not already used for styling
-      for (const prop of transientProps) {
+      // Add wrapper-only transient props to destructureProps to filter them out.
+      for (const prop of wrapperOnlyTransientProps) {
         if (!destructureProps.includes(prop)) {
           destructureProps.push(prop);
           // Track that this prop is for filtering only, not for styling
