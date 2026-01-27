@@ -1,6 +1,7 @@
 import type { ASTNode, Property } from "jscodeshift";
 import type { StyledDecl } from "../transform-types.js";
 import { emitStyleMerging } from "./style-merger.js";
+import { withLeadingComments } from "./comments.js";
 import { collectInlineStylePropNames, type ExpressionKind, type InlineStyleProp } from "./types.js";
 import { TAG_TO_HTML_ELEMENT } from "./type-helpers.js";
 import type { JsxAttr, JsxTagName, StatementKind, WrapperEmitter } from "./wrapper-emitter.js";
@@ -494,12 +495,15 @@ export function emitComponentWrappers(emitter: WrapperEmitter): {
       stmts.push(j.returnStatement(jsx as any));
 
       emitted.push(
-        emitter.buildWrapperFunction({
-          localName: d.localName,
-          params: [propsParamId],
-          bodyStmts: stmts,
-          typeParameters: polymorphicFnTypeParams,
-        }),
+        withLeadingComments(
+          emitter.buildWrapperFunction({
+            localName: d.localName,
+            params: [propsParamId],
+            bodyStmts: stmts,
+            typeParameters: polymorphicFnTypeParams,
+          }),
+          d,
+        ),
       );
     } else {
       // Simple case: always forward props + styles.
@@ -517,12 +521,15 @@ export function emitComponentWrappers(emitter: WrapperEmitter): {
         includeChildren: false,
       });
       emitted.push(
-        emitter.buildWrapperFunction({
-          localName: d.localName,
-          params: [propsParamId],
-          bodyStmts: [j.returnStatement(jsx as any)],
-          typeParameters: polymorphicFnTypeParams,
-        }),
+        withLeadingComments(
+          emitter.buildWrapperFunction({
+            localName: d.localName,
+            params: [propsParamId],
+            bodyStmts: [j.returnStatement(jsx as any)],
+            typeParameters: polymorphicFnTypeParams,
+          }),
+          d,
+        ),
       );
     }
   }

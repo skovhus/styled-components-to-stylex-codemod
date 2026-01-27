@@ -25,6 +25,7 @@ type StyledDividerProps = Omit<
   "className" | "style"
 >;
 
+/** Styled wrapper - should still accept children */
 export function StyledDivider(props: StyledDividerProps) {
   return <BaseDivider {...props} {...stylex.props(styles.styledDivider)} />;
 }

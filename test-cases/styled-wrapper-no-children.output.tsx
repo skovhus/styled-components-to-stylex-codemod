@@ -24,6 +24,7 @@ function TextDivider(props: TextDividerProps) {
 TextDivider.HEIGHT = 30;
 type StyledTextDividerProps = React.ComponentPropsWithRef<typeof TextDivider>;
 
+/** Styled wrapper for TextDivider */
 export function StyledTextDivider(props: StyledTextDividerProps) {
   const { className, style, ...rest } = props;
   return <TextDivider {...rest} {...mergedSx(styles.textDivider, className, style)} />;

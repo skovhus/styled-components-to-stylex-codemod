@@ -280,16 +280,11 @@ export function emitStylesAndImports(args: {
     if (!Array.isArray(cs) || cs.length === 0) {
       continue;
     }
-    // For wrapper components, include ALL comments as narrative since they
-    // should appear before `const styles`. The wrapper function will get its
-    // own subset of comments via getWrapperLeadingComments.
-    // For non-wrapper components, use the standard split to separate Bug narrative
-    // from property comments (which go inside stylex.create).
+    // For wrapper components, keep comments on the wrapper function only to avoid
+    // duplicating them on the styles object. Non-wrapper components still use the
+    // standard split to separate Bug narrative from property comments.
     const narrative = d.needsWrapperComponent
-      ? cs.filter((c: any) => {
-          const key = `${(c as any)?.type ?? "Comment"}:${String((c as any)?.value ?? "").trim()}`;
-          return !propCommentKeys.has(key);
-        })
+      ? []
       : splitBugNarrativeLeadingComments(cs).narrative;
     if (narrative.length === 0) {
       continue;

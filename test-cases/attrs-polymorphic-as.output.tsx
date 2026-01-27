@@ -28,6 +28,10 @@ type LabelProps = React.ComponentPropsWithRef<typeof Text> & {
   ref?: React.Ref<HTMLLabelElement>;
 };
 
+/**
+ * Label component using .attrs to set as="label"
+ * The wrapper should use label-specific props (htmlFor)
+ */
 export function Label(props: LabelProps) {
   const { className, children, style, ...rest } = props;
   return (

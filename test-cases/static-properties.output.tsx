@@ -43,6 +43,8 @@ type CommandMenuTextDividerProps = Omit<
   "className" | "style"
 >;
 
+// Pattern 3: styled(ImportedComponent) should inherit static properties
+// ActionMenuTextDivider.HEIGHT is defined in another file
 export function CommandMenuTextDivider(props: CommandMenuTextDividerProps) {
   return <ActionMenuTextDivider {...props} {...stylex.props(styles.commandMenuTextDivider)} />;
 }
@@ -53,6 +55,7 @@ type CommandMenuGroupHeaderProps = Omit<
   "className" | "style"
 >;
 
+// Pattern 4: Another imported component with static property
 export function CommandMenuGroupHeader(props: CommandMenuGroupHeaderProps) {
   return <ActionMenuGroupHeader {...props} {...stylex.props(styles.commandMenuGroupHeader)} />;
 }

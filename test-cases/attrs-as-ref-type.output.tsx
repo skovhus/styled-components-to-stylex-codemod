@@ -31,6 +31,9 @@ type LabelProps = Omit<React.ComponentPropsWithRef<typeof Text>, "className" | "
   ref?: React.Ref<HTMLLabelElement>;
 };
 
+// When .attrs({ as: "label" }) is used, the component should accept:
+// 1. HTMLLabelElement-specific props like htmlFor
+// 2. ref with type RefObject<HTMLLabelElement>
 function Label(props: LabelProps) {
   return <Text {...props} as="label" {...stylex.props(styles.label)} />;
 }

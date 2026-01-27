@@ -23,6 +23,10 @@ type LabelProps = Omit<React.ComponentPropsWithRef<typeof Text>, "className" | "
   ref?: React.Ref<HTMLLabelElement>;
 };
 
+/**
+ * Label component that can be used with htmlFor to target an input.
+ * Uses .attrs({ as: "label" }) to set the element type.
+ */
 export function Label(props: LabelProps) {
   return <Text {...props} as="label" {...stylex.props(styles.label)} />;
 }

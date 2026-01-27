@@ -53,6 +53,7 @@ const IconButtonInner = (props: IconButtonProps) => {
   return <button {...rest}>{children}</button>;
 };
 
+// styled(FunctionComponent) should NOT create a duplicate IconButtonProps type
 export function IconButton(props: IconButtonProps) {
   return <IconButtonInner {...props} {...stylex.props(styles.iconButton)} />;
 }

@@ -65,6 +65,7 @@ type CollapseArrowIconProps = Omit<
   "className" | "style"
 >;
 
+// The wrapper uses $isOpen for styling; ArrowIcon declares it in props but filters before spreading
 export function CollapseArrowIcon(props: CollapseArrowIconProps) {
   const { $isOpen, ...rest } = props;
   return (

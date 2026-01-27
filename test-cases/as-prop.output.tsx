@@ -26,6 +26,8 @@ type StyledTextProps<C extends React.ElementType = typeof Text> = React.Componen
     as?: C;
   };
 
+// Pattern 2: styled(Component) where Component has custom props (like variant)
+// When used with as="label", the component's props must be preserved
 function StyledText<C extends React.ElementType = typeof Text>(props: StyledTextProps<C>) {
   const { as: Component = Text, ...rest } = props;
   return <Component {...rest} {...stylex.props(styles.text)} />;
