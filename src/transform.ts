@@ -1821,7 +1821,6 @@ export function transformWithWarnings(
   }
 
   // Generate static property inheritance for styled components wrapping IMPORTED components
-  // e.g., CommandMenuTextDivider.HEIGHT = ActionMenuTextDivider.HEIGHT
   // We detect these by:
   // 1. Finding property accesses on styled components that wrap imports (same-file usage)
   // 2. OR by analyzing the imported file to find static property assignments (cross-file)
