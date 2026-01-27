@@ -69,7 +69,9 @@ export function tryHandleInterpolatedStringValue(args: {
   d: any;
   styleObj: Record<string, unknown>;
   resolveCallExpr?: (expr: any) => { resolved: any; imports?: any[] } | null;
-  resolveImportedValueExpr?: (expr: any) => { resolved: any; imports?: any[] } | null;
+  resolveImportedValueExpr?: (
+    expr: any,
+  ) => { resolved: any; imports?: any[] } | { bail: true } | null;
   addImport?: (imp: any) => void;
   resolveThemeValue?: (expr: any) => unknown;
 }): boolean {
@@ -133,11 +135,16 @@ export function tryHandleInterpolatedStringValue(args: {
     }
     const importedResolved = resolveImportedValueExpr?.(expr);
     if (importedResolved) {
-      for (const imp of importedResolved.imports ?? []) {
+      // Check if the resolver signaled a bail
+      if ("bail" in importedResolved) {
+        return false;
+      }
+      const resolved = importedResolved;
+      for (const imp of resolved.imports ?? []) {
         addImport?.(imp);
       }
       for (const out of cssDeclarationToStylexDeclarations(d)) {
-        (styleObj as any)[out.prop] = importedResolved.resolved;
+        (styleObj as any)[out.prop] = resolved.resolved;
       }
       return true;
     }
@@ -184,7 +191,9 @@ function buildInterpolatedTemplate(args: {
   decl: StyledDecl;
   cssValue: any;
   resolveCallExpr?: (expr: any) => { resolved: any; imports?: any[] } | null;
-  resolveImportedValueExpr?: (expr: any) => { resolved: any; imports?: any[] } | null;
+  resolveImportedValueExpr?: (
+    expr: any,
+  ) => { resolved: any; imports?: any[] } | { bail: true } | null;
   addImport?: (imp: any) => void;
 }): unknown {
   const { j, decl, cssValue, resolveCallExpr, resolveImportedValueExpr, addImport } = args;
@@ -242,15 +251,19 @@ function buildInterpolatedTemplate(args: {
       }
       const importedResolved = resolveImportedValueExpr?.(expr);
       if (importedResolved) {
+        // Check if the resolver signaled a bail
+        if ("bail" in importedResolved) {
+          return null;
+        }
+        const resolved = importedResolved;
         if (
-          importedResolved.resolved?.type === "StringLiteral" ||
-          (importedResolved.resolved?.type === "Literal" &&
-            typeof importedResolved.resolved.value === "string")
+          resolved.resolved?.type === "StringLiteral" ||
+          (resolved.resolved?.type === "Literal" && typeof resolved.resolved.value === "string")
         ) {
-          const strValue = importedResolved.resolved.value;
+          const strValue = resolved.resolved.value;
           q += strValue;
           fullStaticValue += strValue;
-          for (const imp of importedResolved.imports ?? []) {
+          for (const imp of resolved.imports ?? []) {
             addImport?.(imp);
           }
           continue;
@@ -258,10 +271,10 @@ function buildInterpolatedTemplate(args: {
         quasis.push(j.templateElement({ raw: q, cooked: q }, false));
         q = "";
         allStatic = false;
-        for (const imp of importedResolved.imports ?? []) {
+        for (const imp of resolved.imports ?? []) {
           addImport?.(imp);
         }
-        exprs.push(importedResolved.resolved);
+        exprs.push(resolved.resolved);
         continue;
       }
       quasis.push(j.templateElement({ raw: q, cooked: q }, false));

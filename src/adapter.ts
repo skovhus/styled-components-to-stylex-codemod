@@ -208,12 +208,12 @@ export interface Adapter {
   /**
    * Resolver for theme paths + CSS variables + imported values.
    *
-   * Notes:
-   * - Return `{ expr, imports }` for theme, css variables, and imported values.
+   * Return:
+   * - `{ expr, imports }` for theme, css variables, and imported values.
    * - Optionally return `{ dropDefinition: true }` for css variables to remove the local `--x: ...` definition.
-   * - Return `null` to leave a value unresolved.
+   * - `undefined` to bail/skip the file (for cssVariable: keeps the original `var(...)` unchanged)
    */
-  resolveValue: (context: ResolveValueContext) => ResolveValueResult | null;
+  resolveValue: (context: ResolveValueContext) => ResolveValueResult | undefined;
 
   /**
    * Resolver for helper calls found inside template interpolations.
@@ -223,9 +223,9 @@ export interface Adapter {
    *   (usable as an argument to `stylex.props(...)`).
    * - `{ usage: "create", expr, imports }` when the call resolves to a single CSS value
    *   (usable inside `stylex.create(...)` declarations).
-   * - `null` to leave the call unresolved (the file may bail with a warning depending on context).
+   * - `undefined` to bail/skip the file
    */
-  resolveCall: (context: CallResolveContext) => CallResolveResult | null;
+  resolveCall: (context: CallResolveContext) => CallResolveResult | undefined;
 
   /**
    * Called for exported styled components to determine their external interface.
@@ -277,7 +277,7 @@ export interface Adapter {
  *           ],
  *         };
  *       }
- *       return null;
+ *       // Return undefined to bail/skip the file
  *     },
  *
  *     resolveCall(ctx) {
@@ -285,9 +285,8 @@ export interface Adapter {
  *       // Return:
  *       // - { usage: "props", expr, imports } for StyleX styles (usable in stylex.props)
  *       // - { usage: "create", expr, imports } for a single value (usable in stylex.create)
- *       // - null to leave the call unresolved
+ *       // - undefined to bail/skip the file
  *       void ctx;
- *       return null;
  *     },
  *
  *     // Configure external interface for exported components

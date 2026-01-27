@@ -1,5 +1,6 @@
 import * as React from "react";
 import * as stylex from "@stylexjs/stylex";
+import { fontWeightVars } from "./tokens.stylex";
 
 type HighlightProps = React.PropsWithChildren<{
   $dim: boolean;
@@ -21,7 +22,7 @@ export const App = () => (
 
 const styles = stylex.create({
   highlight: {
-    fontWeight: "var(--font-weight-medium)",
+    fontWeight: fontWeightVars.medium,
   },
   highlightDim: {
     opacity: 0.5,

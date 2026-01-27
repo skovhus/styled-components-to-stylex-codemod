@@ -2500,7 +2500,7 @@ export function lowerRules(args: {
           }
           const resolveImportedValueExpr = (
             expr: any,
-          ): { resolved: any; imports?: any[] } | null => {
+          ): { resolved: any; imports?: any[] } | { bail: true } | null => {
             const info = getRootIdentifierInfo(expr);
             if (!info) {
               return null;
@@ -2517,7 +2517,20 @@ export function lowerRules(args: {
               filePath,
             });
             if (!res) {
-              return null;
+              // Adapter returned undefined for an identified imported value - bail
+              warnings.push({
+                severity: "error",
+                type: "Adapter returned undefined for imported value",
+                loc: getNodeLocStart(expr) ?? decl.loc,
+                context: {
+                  localName: decl.localName,
+                  importedName: imp.importedName,
+                  source: imp.source.value,
+                  path: info.path.length ? info.path.join(".") : undefined,
+                },
+              });
+              bail = true;
+              return { bail: true };
             }
             const exprAst = parseExpr(res.expr);
             if (!exprAst) {

@@ -520,7 +520,7 @@ export const App = () => <Box $on />;
       },
       resolveValue(ctx: ResolveValueContext) {
         if (ctx.kind !== "theme") {
-          return null;
+          return undefined;
         }
         if (ctx.path === "colors.primary") {
           // Intentionally unparseable; lower-rules should warn and skip this declaration without emitting empty variants.
@@ -529,10 +529,10 @@ export const App = () => <Box $on />;
         if (ctx.path === "colors.secondary") {
           return { expr: '"blue"', imports: [] };
         }
-        return null;
+        return undefined;
       },
       resolveCall() {
-        return null;
+        return undefined;
       },
       styleMerger: null,
     } satisfies Adapter;
@@ -575,12 +575,12 @@ export const App = () => (
       resolveValue(ctx: ResolveValueContext) {
         // Intentionally do not resolve any calls.
         if (ctx.kind === "theme" || ctx.kind === "cssVariable") {
-          return null;
+          return undefined;
         }
-        return null;
+        return undefined;
       },
       resolveCall() {
-        return null;
+        return undefined;
       },
       styleMerger: null,
     } satisfies Adapter;
@@ -592,9 +592,9 @@ export const App = () => (
     );
 
     expect(result.code).toBeNull();
-    expect(result.warnings.some((w) => w.type === "Adapter returned null for helper call")).toBe(
-      true,
-    );
+    expect(
+      result.warnings.some((w) => w.type === "Adapter returned undefined for helper call"),
+    ).toBe(true);
   });
 });
 
@@ -650,41 +650,6 @@ export const App = () => <Button>Click</Button>;
 
     expect(result.warnings).toHaveLength(0);
   });
-
-  it("should skip transforming the file when adapter.resolveValue returns undefined (and log context)", () => {
-    // This adapter intentionally returns undefined (not null) to test error handling
-    const adapterWithUndefined = {
-      externalInterface() {
-        return null;
-      },
-      resolveValue(ctx: ResolveValueContext) {
-        if (ctx.kind === "theme") {
-          // Intentionally return undefined (e.g. missing return in user adapter)
-          return;
-        }
-        return null;
-      },
-      resolveCall() {
-        return null;
-      },
-      styleMerger: null,
-    };
-
-    const result = transformWithWarnings(
-      { source: themeSource, path: "adapter-undefined-return.tsx" },
-      { jscodeshift: j, j, stats: () => {}, report: () => {} },
-      // Cast to Adapter since this adapter intentionally has invalid return type
-      { adapter: adapterWithUndefined as unknown as Adapter },
-    );
-
-    expect(result.code).toBeNull();
-    const w = result.warnings.some(
-      (w) =>
-        w.type ===
-        "Adapter.resolveValue returned undefined. This usually means your adapter forgot to return a value",
-    );
-    expect(w).toBeTruthy();
-  });
 });
 
 describe("styleMerger configuration", () => {
@@ -693,10 +658,10 @@ describe("styleMerger configuration", () => {
       return { styles: true } as const;
     },
     resolveValue() {
-      return null;
+      return undefined;
     },
     resolveCall() {
-      return null;
+      return undefined;
     },
     styleMerger: {
       functionName: "stylexProps",
@@ -708,10 +673,10 @@ describe("styleMerger configuration", () => {
       return null;
     },
     resolveValue() {
-      return null;
+      return undefined;
     },
     resolveCall() {
-      return null;
+      return undefined;
     },
     styleMerger: {
       functionName: "stylexProps",
@@ -874,10 +839,10 @@ export const App = () => <Box $delay={100} />;
         return { styles: true } as const;
       },
       resolveValue() {
-        return null;
+        return undefined;
       },
       resolveCall() {
-        return null;
+        return undefined;
       },
     };
 

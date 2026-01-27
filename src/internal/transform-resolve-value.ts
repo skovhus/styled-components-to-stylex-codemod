@@ -8,51 +8,35 @@ import type {
 import type { WarningLog } from "./logger.js";
 
 export function createResolveAdapterSafe(args: { adapter: Adapter; warnings: WarningLog[] }): {
-  resolveValueSafe: (ctx: ResolveValueContext) => ResolveValueResult | null;
-  resolveCallSafe: (ctx: CallResolveContext) => CallResolveResult | null;
+  resolveValueSafe: (ctx: ResolveValueContext) => ResolveValueResult | undefined;
+  resolveCallSafe: (ctx: CallResolveContext) => CallResolveResult | undefined;
   bailRef: { value: boolean };
 } {
   const { adapter, warnings } = args;
   const bailRef = { value: false };
 
-  const resolveValueSafe = (ctx: ResolveValueContext): ResolveValueResult | null => {
+  const resolveValueSafe = (ctx: ResolveValueContext): ResolveValueResult | undefined => {
     if (bailRef.value) {
-      return null;
+      return undefined;
     }
     const res = adapter.resolveValue(ctx);
-    if (typeof res === "undefined") {
+    // `undefined` means bail/skip the file, except for cssVariable where it means "keep as-is"
+    if (res === undefined && ctx.kind !== "cssVariable") {
       bailRef.value = true;
-      warnings.push({
-        severity: "error",
-        type: "Adapter.resolveValue returned undefined. This usually means your adapter forgot to return a value",
-        loc: undefined,
-        context: {
-          ...ctx,
-          help: "Return null to leave a value unresolved, or return { expr, imports } to resolve it. File skipped.",
-        },
-      });
-      return null;
+      return undefined;
     }
     return res;
   };
 
-  const resolveCallSafe = (ctx: CallResolveContext): CallResolveResult | null => {
+  const resolveCallSafe = (ctx: CallResolveContext): CallResolveResult | undefined => {
     if (bailRef.value) {
-      return null;
+      return undefined;
     }
     const res = adapter.resolveCall(ctx);
-    if (res === null || typeof res === "undefined") {
+    // `undefined` means bail/skip the file
+    if (res === undefined) {
       bailRef.value = true;
-      warnings.push({
-        severity: "error",
-        type: "Adapter.resolveCall returned null or undefined",
-        loc: undefined,
-        context: {
-          ...ctx,
-          help: 'Return { usage: "props" | "create", expr, imports } to resolve it. File skipped.',
-        },
-      });
-      return null;
+      return undefined;
     }
     if (res && typeof res === "object") {
       const usage = (res as Partial<CallResolveResult>).usage;
@@ -64,7 +48,7 @@ export function createResolveAdapterSafe(args: { adapter: Adapter; warnings: War
           loc: undefined,
           context: ctx,
         });
-        return null;
+        return undefined;
       }
     }
     return res;

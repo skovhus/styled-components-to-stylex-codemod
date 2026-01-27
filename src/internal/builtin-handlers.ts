@@ -218,8 +218,8 @@ export type HandlerResult =
 export type InternalHandlerContext = {
   api: API;
   filePath: string;
-  resolveValue: (context: ResolveValueContext) => ResolveValueResult | null;
-  resolveCall: (context: CallResolveContext) => CallResolveResult | null;
+  resolveValue: (context: ResolveValueContext) => ResolveValueResult | undefined;
+  resolveCall: (context: CallResolveContext) => CallResolveResult | undefined;
   resolveImport: (
     localName: string,
     identNode?: unknown,
@@ -455,7 +455,7 @@ function resolveImportedHelperCall(
     calleeSource,
     args,
   });
-  return res ? res : "unresolved";
+  return res ?? "unresolved";
 }
 
 function tryResolveCallExpression(
@@ -520,7 +520,7 @@ function tryResolveCallExpression(
     const importedName = imp?.importedName ?? calleeIdent ?? "unknown";
     return {
       type: "keepOriginal",
-      reason: `Adapter returned null for helper call`,
+      reason: `Adapter returned undefined for helper call`,
       context: { importedName },
     };
   }
@@ -590,7 +590,7 @@ function tryResolveArrowFnHelperCallWithThemeArg(
     const importedName = imp?.importedName ?? calleeIdent ?? "unknown";
     return {
       type: "keepOriginal",
-      reason: `Adapter returned null for helper call`,
+      reason: `Adapter returned undefined for helper call`,
       context: { importedName },
     };
   }
@@ -741,10 +741,10 @@ function tryResolveConditionalValue(
 
     if (isCallExpressionNode(b)) {
       const call = b;
-      const resolveAdapterCall = (c: CallExpressionNode): CallResolveResult | null => {
+      const resolveAdapterCall = (c: CallExpressionNode): CallResolveResult | undefined => {
         const res = resolveImportedHelperCall(c, ctx);
         if (res === "keepOriginal" || res === "unresolved") {
-          return null;
+          return undefined;
         }
         return res;
       };

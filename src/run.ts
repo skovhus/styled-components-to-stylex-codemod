@@ -156,7 +156,7 @@ export async function runTransform(options: RunTransformOptions): Promise<RunTra
   const adapter = options.adapter;
   assertValidAdapter(adapter, "runTransform(options)");
 
-  const resolveValueWithLogging = (ctx: ResolveValueContext): ResolveValueResult | null => {
+  const resolveValueWithLogging = (ctx: ResolveValueContext): ResolveValueResult | undefined => {
     try {
       return adapter.resolveValue(ctx);
     } catch (e) {
@@ -169,7 +169,7 @@ export async function runTransform(options: RunTransformOptions): Promise<RunTra
     }
   };
 
-  const resolveCallWithLogging = (ctx: CallResolveContext): CallResolveResult | null => {
+  const resolveCallWithLogging = (ctx: CallResolveContext): CallResolveResult | undefined => {
     try {
       return adapter.resolveCall(ctx);
     } catch (e) {

@@ -95,10 +95,6 @@ export const fixtureAdapter = defineAdapter({
       }
 
       // css-variables fixture: map known vars to `vars.*` and `textVars.*`
-      const combinedImport = {
-        from: { kind: "specifier" as const, value: "./css-variables.stylex" },
-        names: [{ imported: "vars" }, { imported: "textVars" }],
-      };
       const varsMap: Record<string, string> = {
         "--color-primary": "colorPrimary",
         "--color-secondary": "colorSecondary",
@@ -112,21 +108,52 @@ export const fixtureAdapter = defineAdapter({
         "--font-size": "fontSize",
         "--line-height": "lineHeight",
       };
+      const fontWeightVarsMap: Record<string, string> = {
+        "--font-weight-medium": "fontWeightVars.medium",
+      };
 
       const v = varsMap[name];
       if (v) {
-        return { expr: `vars.${v}`, imports: [combinedImport] };
+        return {
+          expr: `vars.${v}`,
+          imports: [
+            {
+              from: { kind: "specifier" as const, value: "./css-variables.stylex" },
+              names: [{ imported: "vars" }, { imported: "textVars" }],
+            },
+          ],
+        };
       }
       const t = textVarsMap[name];
       if (t) {
-        return { expr: `textVars.${t}`, imports: [combinedImport] };
+        return {
+          expr: `textVars.${t}`,
+          imports: [
+            {
+              from: { kind: "specifier" as const, value: "./css-variables.stylex" },
+              names: [{ imported: "textVars" }],
+            },
+          ],
+        };
+      }
+      const f = fontWeightVarsMap[name];
+      if (f) {
+        return {
+          expr: `${f}`,
+          imports: [
+            {
+              from: { kind: "specifier" as const, value: "./tokens.stylex" },
+              names: [{ imported: "fontWeightVars" }],
+            },
+          ],
+        };
       }
     }
 
     if (ctx.kind === "importedValue") {
       const source = ctx.source.value;
       if (!source.includes("lib/helpers") && !source.includes("lib\\helpers")) {
-        return null;
+        throw new Error(`Unknown imported value: ${ctx.importedName}`);
       }
       if (ctx.importedName === "zIndex") {
         const path = ctx.path ?? "";
@@ -155,13 +182,14 @@ export const fixtureAdapter = defineAdapter({
       }
     }
 
-    return null;
+    // Return undefined to bail/skip the file
+    return undefined;
   },
   resolveCall(ctx) {
     const src = ctx.calleeSource.value;
     // Note: calleeSource.value may or may not include the extension
     if (!src.includes("lib/helpers") && !src.includes("lib\\helpers")) {
-      return null;
+      throw new Error(`Unknown helper: ${src} ${ctx.calleeImportedName}`);
     }
 
     const helperStyleKey = (() => {
@@ -171,7 +199,7 @@ export const fixtureAdapter = defineAdapter({
         case "flexCenter":
           return ctx.calleeImportedName;
         default:
-          return null;
+          return undefined;
       }
     })();
     if (helperStyleKey) {
@@ -204,11 +232,11 @@ export const fixtureAdapter = defineAdapter({
     const key = arg0?.kind === "literal" && typeof arg0.value === "string" ? arg0.value : null;
     const themeColorKey = (() => {
       if (!arg0 || arg0.kind !== "theme") {
-        return null;
+        return undefined;
       }
       // Only support theme color paths like: props.theme.color.bgSub -> "color.bgSub"
       if (!arg0.path.startsWith("color.")) {
-        return null;
+        return undefined;
       }
       const k = arg0.path.slice("color.".length);
       return k ? k : null;
@@ -230,7 +258,7 @@ export const fixtureAdapter = defineAdapter({
     }
 
     if (!key) {
-      return null;
+      return undefined;
     }
 
     // Handle color() helper from ./lib/helpers.ts
@@ -306,13 +334,13 @@ export const fixtureAdapter = defineAdapter({
       };
     }
 
-    return null;
+    return undefined;
   },
 });
 
-function customResolveValue(ctx: ResolveValueContext): ResolveValueResult | null {
+function customResolveValue(ctx: ResolveValueContext): ResolveValueResult | undefined {
   if (ctx.kind !== "theme") {
-    return null;
+    return undefined;
   }
   return {
     expr: `customVar('${ctx.path}', '')`,
@@ -333,6 +361,6 @@ export const customAdapter = defineAdapter({
   },
   resolveValue: customResolveValue,
   resolveCall(_ctx) {
-    return null;
+    return undefined;
   },
 });
