@@ -2278,11 +2278,18 @@ export function lowerRules(args: {
           }
           // For each pseudo, create/update a nested media map
           for (const ps of pseudos) {
-            if (!existing[ps] || typeof existing[ps] !== "object") {
-              const defaultVal = cssHelperPropValues.has(prop)
+            const current = existing[ps];
+            if (!current || typeof current !== "object") {
+              const fallbackDefault = cssHelperPropValues.has(prop)
                 ? getComposedDefaultValue(prop)
                 : null;
-              existing[ps] = { default: defaultVal };
+              const preservedDefault = current !== undefined ? current : fallbackDefault;
+              existing[ps] = { default: preservedDefault };
+            } else if (!("default" in (current as Record<string, unknown>))) {
+              const fallbackDefault = cssHelperPropValues.has(prop)
+                ? getComposedDefaultValue(prop)
+                : null;
+              (current as Record<string, unknown>).default = fallbackDefault;
             }
             (existing[ps] as Record<string, unknown>)[media] = value;
           }
