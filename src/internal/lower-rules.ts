@@ -5,7 +5,6 @@ import type { InternalHandlerContext } from "./builtin-handlers.js";
 import {
   cssDeclarationToStylexDeclarations,
   cssPropertyToStylexProp,
-  parseInterpolatedBorderStaticParts,
   resolveBackgroundStylexProp,
   resolveBackgroundStylexPropForVariants,
 } from "./css-prop-mapping.js";
