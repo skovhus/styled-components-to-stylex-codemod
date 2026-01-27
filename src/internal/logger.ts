@@ -55,7 +55,8 @@ export type WarningType =
   | "Unsupported selector: descendant pseudo selector (space before pseudo)"
   | "Unsupported selector: descendant/child/sibling selector"
   | "Unsupported selector: unknown component selector"
-  | "Unsupported selector: interpolated pseudo selector";
+  | "Unsupported selector: interpolated pseudo selector"
+  | "Dynamic styles inside pseudo elements (::before/::after) are not supported by StyleX. See https://github.com/facebook/stylex/issues/1396";
 
 export interface WarningLog {
   severity: Severity;

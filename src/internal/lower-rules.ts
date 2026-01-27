@@ -2226,6 +2226,24 @@ export function lowerRules(args: {
       // Support comma-separated pseudo-selectors like "&:hover, &:focus"
       // and chained pseudo-selectors like "&:focus:not(:disabled)"
       const parsedSelector = parseSelector(selector);
+
+      // Bail on unsupported selectors that weren't caught by the heuristic checks above.
+      // The heuristic regex checks may miss cases where Stylis normalizes selectors differently
+      // (e.g., `& > button[disabled]` becomes `&>button[disabled]` after form-feed stripping).
+      if (
+        parsedSelector.kind === "unsupported" &&
+        selector !== "&" &&
+        !rule.selector.includes("__SC_EXPR_")
+      ) {
+        bail = true;
+        warnings.push({
+          severity: "warning",
+          type: "Unsupported selector: descendant/child/sibling selector",
+          loc: decl.loc,
+        });
+        break;
+      }
+
       const pseudos = parsedSelector.kind === "pseudo" ? parsedSelector.pseudos : null;
       const pseudoElement = parsedSelector.kind === "pseudoElement" ? parsedSelector.element : null;
       const attrSel =
@@ -2409,6 +2427,19 @@ export function lowerRules(args: {
           }
           if (tryHandleAnimation({ j, decl, d, keyframesNames, styleObj })) {
             continue;
+          }
+          // Bail on dynamic styles inside pseudo elements (::before/::after).
+          // StyleX generates invalid @property rules for these cases.
+          // See: https://github.com/facebook/stylex/issues/1396
+          if (pseudoElement) {
+            warnings.push({
+              severity: "error",
+              type: "Dynamic styles inside pseudo elements (::before/::after) are not supported by StyleX. See https://github.com/facebook/stylex/issues/1396",
+              loc: decl.loc,
+              context: { localName: decl.localName, pseudoElement },
+            });
+            bail = true;
+            break;
           }
           if (
             tryHandleInterpolatedBorder({
