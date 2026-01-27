@@ -1,3 +1,4 @@
+import valueParser from "postcss-value-parser";
 import type { StyledDecl } from "../transform-types.js";
 import { cssDeclarationToStylexDeclarations } from "../css-prop-mapping.js";
 
@@ -31,27 +32,34 @@ export function tryHandleAnimation(args: {
     return null;
   };
 
-  const splitTopLevelCommas = (s: string): string[] => {
-    const out: string[] = [];
-    let buf = "";
-    let depth = 0;
-    for (let i = 0; i < s.length; i++) {
-      const ch = s[i]!;
-      if (ch === "(") {
-        depth++;
-      }
-      if (ch === ")") {
-        depth = Math.max(0, depth - 1);
-      }
-      if (ch === "," && depth === 0) {
-        out.push(buf);
-        buf = "";
+  const parseAnimationSegments = (raw: string): string[][] => {
+    const parsed = valueParser(raw);
+    const segments: valueParser.Node[][] = [];
+    let current: valueParser.Node[] = [];
+
+    for (const node of parsed.nodes) {
+      if (node.type === "div" && node.value === ",") {
+        if (current.length > 0) {
+          segments.push(current);
+        }
+        current = [];
         continue;
       }
-      buf += ch;
+      current.push(node);
     }
-    out.push(buf);
-    return out.map((x) => x.trim()).filter(Boolean);
+    if (current.length > 0) {
+      segments.push(current);
+    }
+
+    return segments
+      .map((nodes) =>
+        nodes
+          .filter((n) => n.type !== "space")
+          .map((n) => valueParser.stringify(n))
+          .map((t) => t.trim())
+          .filter(Boolean),
+      )
+      .filter((tokens) => tokens.length > 0);
   };
 
   const buildCommaTemplate = (
@@ -94,19 +102,22 @@ export function tryHandleAnimation(args: {
 
   // animation: ${kf} 2s linear infinite; or with commas
   if (prop === "animation" && typeof d.valueRaw === "string") {
-    const segments = splitTopLevelCommas(d.valueRaw);
+    const segments = parseAnimationSegments(d.valueRaw);
     if (!segments.length) {
       return false;
     }
 
     const animNames: Array<{ kind: "ident"; name: string } | { kind: "text"; value: string }> = [];
-    const durations: string[] = [];
-    const timings: string[] = [];
-    const delays: string[] = [];
-    const iterations: string[] = [];
+    const durations: Array<string | null> = [];
+    const timings: Array<string | null> = [];
+    const delays: Array<string | null> = [];
+    const iterations: Array<string | null> = [];
+    const directions: Array<string | null> = [];
+    const fillModes: Array<string | null> = [];
+    const playStates: Array<string | null> = [];
+    const timelines: Array<string | null> = [];
 
-    for (const seg of segments) {
-      const tokens = seg.split(/\s+/).filter(Boolean);
+    for (const tokens of segments) {
       if (!tokens.length) {
         return false;
       }
@@ -124,12 +135,8 @@ export function tryHandleAnimation(args: {
 
       // Remaining tokens
       const timeTokens = tokens.filter((t) => /^(?:\d+|\d*\.\d+)(ms|s)$/.test(t));
-      if (timeTokens[0]) {
-        durations.push(timeTokens[0]);
-      }
-      if (timeTokens[1]) {
-        delays.push(timeTokens[1]);
-      }
+      durations.push(timeTokens[0] ?? null);
+      delays.push(timeTokens[1] ?? null);
 
       const timing = tokens.find(
         (t) =>
@@ -141,14 +148,70 @@ export function tryHandleAnimation(args: {
           t.startsWith("cubic-bezier(") ||
           t.startsWith("steps("),
       );
-      if (timing) {
-        timings.push(timing);
-      }
+      timings.push(timing ?? null);
+
+      const direction = tokens.find(
+        (t) => t === "normal" || t === "reverse" || t === "alternate" || t === "alternate-reverse",
+      );
+      directions.push(direction ?? null);
+
+      const fillMode = tokens.find(
+        (t) => t === "none" || t === "forwards" || t === "backwards" || t === "both",
+      );
+      fillModes.push(fillMode ?? null);
+
+      const playState = tokens.find((t) => t === "running" || t === "paused");
+      playStates.push(playState ?? null);
+
+      const timeline = tokens.find((t) => {
+        if (t === "auto") {
+          return true;
+        }
+        if (t.startsWith("scroll(") || t.startsWith("view(")) {
+          return true;
+        }
+        if (!/^[a-zA-Z_][\w-]*$/.test(t)) {
+          return false;
+        }
+        if (
+          t === "linear" ||
+          t === "ease" ||
+          t === "ease-in" ||
+          t === "ease-out" ||
+          t === "ease-in-out"
+        ) {
+          return false;
+        }
+        if (
+          t === "inherit" ||
+          t === "initial" ||
+          t === "unset" ||
+          t === "revert" ||
+          t === "revert-layer"
+        ) {
+          return false;
+        }
+        if (t === "normal" || t === "reverse" || t === "alternate" || t === "alternate-reverse") {
+          return false;
+        }
+        if (t === "none" || t === "forwards" || t === "backwards" || t === "both") {
+          return false;
+        }
+        if (t === "running" || t === "paused") {
+          return false;
+        }
+        if (t === "infinite" || /^\d+$/.test(t)) {
+          return false;
+        }
+        if (/^(?:\d+|\d*\.\d+)(ms|s)$/.test(t)) {
+          return false;
+        }
+        return true;
+      });
+      timelines.push(timeline ?? null);
 
       const iter = tokens.find((t) => t === "infinite" || /^\d+$/.test(t));
-      if (iter) {
-        iterations.push(iter);
-      }
+      iterations.push(iter ?? null);
     }
 
     if (animNames.length === 1 && animNames[0]!.kind === "ident") {
@@ -156,17 +219,34 @@ export function tryHandleAnimation(args: {
     } else {
       (styleObj as any).animationName = buildCommaTemplate(animNames) as any;
     }
-    if (durations.length) {
-      (styleObj as any).animationDuration = durations.join(", ");
+    const anyValues = (values: Array<string | null>): boolean =>
+      values.some((value) => value !== null);
+    const joinWithDefaults = (values: Array<string | null>, fallback: string): string =>
+      values.map((value) => value ?? fallback).join(", ");
+
+    if (anyValues(durations)) {
+      (styleObj as any).animationDuration = joinWithDefaults(durations, "0s");
     }
-    if (timings.length) {
-      (styleObj as any).animationTimingFunction = timings.join(", ");
+    if (anyValues(timings)) {
+      (styleObj as any).animationTimingFunction = joinWithDefaults(timings, "ease");
     }
-    if (delays.length) {
-      (styleObj as any).animationDelay = delays.join(", ");
+    if (anyValues(delays)) {
+      (styleObj as any).animationDelay = joinWithDefaults(delays, "0s");
     }
-    if (iterations.length) {
-      (styleObj as any).animationIterationCount = iterations.join(", ");
+    if (anyValues(iterations)) {
+      (styleObj as any).animationIterationCount = joinWithDefaults(iterations, "1");
+    }
+    if (anyValues(directions)) {
+      (styleObj as any).animationDirection = joinWithDefaults(directions, "normal");
+    }
+    if (anyValues(fillModes)) {
+      (styleObj as any).animationFillMode = joinWithDefaults(fillModes, "none");
+    }
+    if (anyValues(playStates)) {
+      (styleObj as any).animationPlayState = joinWithDefaults(playStates, "running");
+    }
+    if (anyValues(timelines)) {
+      (styleObj as any).animationTimeline = joinWithDefaults(timelines, "auto");
     }
     return true;
   }

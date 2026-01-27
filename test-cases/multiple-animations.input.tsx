@@ -32,7 +32,7 @@ const scaleUp = keyframes`
 
 // Single animation
 const FadeBox = styled.div`
-  animation: ${fadeIn} 0.5s ease-in-out;
+  animation: ${fadeIn} 0.6s cubic-bezier(0.165, 0.84, 0.44, 1) both;
 `;
 
 // Multiple animations combined
@@ -57,11 +57,24 @@ const SequentialAnimation = styled.div`
   animation: ${fadeIn} 0.3s ease-out 0s, ${slideIn} 0.5s ease-out 0.3s;
 `;
 
+// Shorthand with full property coverage
+const FullAnimation = styled.div`
+  animation: ${fadeIn} 1s steps(4, end) 200ms 3 alternate both running;
+`;
+
+// Mixed play-state, direction, fill-mode across segments
+const MixedStates = styled.div`
+  animation: ${fadeIn} 500ms ease-in 0s 1 normal both paused,
+    ${slideIn} 700ms ease-out 100ms infinite reverse forwards paused;
+`;
+
 export const App = () => (
   <div>
     <FadeBox>Fade in</FadeBox>
     <AnimatedCard>Animated Card</AnimatedCard>
     <BounceIn>Bounce In</BounceIn>
     <SequentialAnimation>Sequential</SequentialAnimation>
+    <FullAnimation>Full Animation</FullAnimation>
+    <MixedStates>Mixed States</MixedStates>
   </div>
 );

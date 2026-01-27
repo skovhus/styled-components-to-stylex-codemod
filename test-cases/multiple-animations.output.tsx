@@ -36,6 +36,8 @@ export const App = () => (
     <div {...stylex.props(styles.animatedCard)}>Animated Card</div>
     <div {...stylex.props(styles.bounceIn)}>Bounce In</div>
     <div {...stylex.props(styles.sequentialAnimation)}>Sequential</div>
+    <div {...stylex.props(styles.fullAnimation)}>Full Animation</div>
+    <div {...stylex.props(styles.mixedStates)}>Mixed States</div>
   </div>
 );
 
@@ -43,8 +45,9 @@ const styles = stylex.create({
   // Single animation
   fadeBox: {
     animationName: fadeIn,
-    animationDuration: "0.5s",
-    animationTimingFunction: "ease-in-out",
+    animationDuration: "0.6s",
+    animationTimingFunction: "cubic-bezier(0.165, 0.84, 0.44, 1)",
+    animationFillMode: "both",
   },
 
   // Multiple animations combined
@@ -72,5 +75,29 @@ const styles = stylex.create({
     animationDuration: "0.3s, 0.5s",
     animationTimingFunction: "ease-out, ease-out",
     animationDelay: "0s, 0.3s",
+  },
+
+  // Shorthand with full property coverage
+  fullAnimation: {
+    animationName: fadeIn,
+    animationDuration: "1s",
+    animationTimingFunction: "steps(4, end)",
+    animationDelay: "200ms",
+    animationIterationCount: "3",
+    animationDirection: "alternate",
+    animationFillMode: "both",
+    animationPlayState: "running",
+  },
+
+  // Mixed play-state, direction, fill-mode across segments
+  mixedStates: {
+    animationName: `${fadeIn}, ${slideIn}`,
+    animationDuration: "500ms, 700ms",
+    animationTimingFunction: "ease-in, ease-out",
+    animationDelay: "0s, 100ms",
+    animationIterationCount: "1, infinite",
+    animationDirection: "normal, reverse",
+    animationFillMode: "both, forwards",
+    animationPlayState: "paused, paused",
   },
 });
