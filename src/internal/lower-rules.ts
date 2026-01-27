@@ -1142,7 +1142,8 @@ export function lowerRules(args: {
             decl.loc,
           );
           if (!resolved) {
-            return false;
+            bail = true;
+            return true;
           }
           const { style: consStyle, dynamicProps } = resolved;
 
@@ -1268,7 +1269,8 @@ export function lowerRules(args: {
         const consResolved = resolveCssBranch(cons);
         const altResolved = resolveCssBranch(alt);
         if (!consResolved || !altResolved) {
-          return false;
+          bail = true;
+          return true;
         }
         if (consResolved.dynamicProps.length > 0 || altResolved.dynamicProps.length > 0) {
           return false;
@@ -1280,7 +1282,11 @@ export function lowerRules(args: {
 
       if (consIsCss && altIsEmpty) {
         const consResolved = resolveCssBranch(cons);
-        if (!consResolved || consResolved.dynamicProps.length > 0) {
+        if (!consResolved) {
+          bail = true;
+          return true;
+        }
+        if (consResolved.dynamicProps.length > 0) {
           return false;
         }
         applyVariant(testInfo, consResolved.style);
@@ -1289,7 +1295,11 @@ export function lowerRules(args: {
 
       if (consIsEmpty && altIsCss) {
         const altResolved = resolveCssBranch(alt);
-        if (!altResolved || altResolved.dynamicProps.length > 0) {
+        if (!altResolved) {
+          bail = true;
+          return true;
+        }
+        if (altResolved.dynamicProps.length > 0) {
           return false;
         }
         const invertedWhen = invertWhen(testInfo.when);

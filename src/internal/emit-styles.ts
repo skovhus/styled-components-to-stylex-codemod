@@ -283,9 +283,7 @@ export function emitStylesAndImports(args: {
     // For wrapper components, keep comments on the wrapper function only to avoid
     // duplicating them on the styles object. Non-wrapper components still use the
     // standard split to separate Bug narrative from property comments.
-    const narrative = d.needsWrapperComponent
-      ? []
-      : splitBugNarrativeLeadingComments(cs).narrative;
+    const narrative = d.needsWrapperComponent ? [] : splitBugNarrativeLeadingComments(cs).narrative;
     if (narrative.length === 0) {
       continue;
     }

@@ -91,6 +91,79 @@ export function createCssHelperResolver(args: {
     return exprAst ? { ast: exprAst, exprString: res.expr } : null;
   };
 
+  const hasThemeAccessInExpr = (expr: any, paramName: string | null): boolean => {
+    if (!expr || typeof expr !== "object" || !paramName) {
+      return false;
+    }
+    let found = false;
+    const visit = (node: any): void => {
+      if (!node || typeof node !== "object" || found) {
+        return;
+      }
+      if (Array.isArray(node)) {
+        for (const child of node) {
+          visit(child);
+        }
+        return;
+      }
+      if (
+        (node.type === "MemberExpression" || node.type === "OptionalMemberExpression") &&
+        node.object?.type === "Identifier" &&
+        node.object.name === paramName &&
+        node.property?.type === "Identifier" &&
+        node.property.name === "theme" &&
+        node.computed === false
+      ) {
+        found = true;
+        return;
+      }
+      for (const key of Object.keys(node)) {
+        if (key === "loc" || key === "comments") {
+          continue;
+        }
+        const child = node[key];
+        if (child && typeof child === "object") {
+          visit(child);
+        }
+      }
+    };
+    visit(expr);
+    return found;
+  };
+
+  const hasCallExpressionInExpr = (expr: any): boolean => {
+    if (!expr || typeof expr !== "object") {
+      return false;
+    }
+    let found = false;
+    const visit = (node: any): void => {
+      if (!node || typeof node !== "object" || found) {
+        return;
+      }
+      if (Array.isArray(node)) {
+        for (const child of node) {
+          visit(child);
+        }
+        return;
+      }
+      if (node.type === "CallExpression") {
+        found = true;
+        return;
+      }
+      for (const key of Object.keys(node)) {
+        if (key === "loc" || key === "comments") {
+          continue;
+        }
+        const child = node[key];
+        if (child && typeof child === "object") {
+          visit(child);
+        }
+      }
+    };
+    visit(expr);
+    return found;
+  };
+
   const resolveCssHelperTemplate = (
     template: any,
     paramName: string | null,
@@ -221,7 +294,17 @@ export function createCssHelperResolver(args: {
             property: d.property,
           });
         }
+        if (hasCallExpressionInExpr(expr)) {
+          return bail("Conditional `css` block: failed to parse expression", {
+            property: d.property,
+          });
+        }
         const resolved = resolveHelperExprToAst(expr as any, paramName);
+        if (!resolved && hasThemeAccessInExpr(expr, paramName)) {
+          return bail("Conditional `css` block: failed to parse expression", {
+            property: d.property,
+          });
+        }
         if (resolved) {
           if (hasStaticParts) {
             // Extract prefix and suffix static parts
