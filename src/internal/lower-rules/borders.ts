@@ -87,6 +87,7 @@ export function tryHandleInterpolatedBorder(args: {
   const widthProp = `border${direction}Width`;
   const styleProp = `border${direction}Style`;
   const colorProp = `border${direction}Color`;
+  const directionLower = direction ? direction.toLowerCase() : "";
   const staticRaw = `${prefix}${suffix}`.trim();
   let width = borderParts?.width;
   let style = borderParts?.style;
@@ -127,6 +128,18 @@ export function tryHandleInterpolatedBorder(args: {
       : interpolationTarget === "width"
         ? widthProp
         : styleProp;
+  const targetCssProperty =
+    interpolationTarget === "width"
+      ? directionLower
+        ? `border-${directionLower}-width`
+        : "border-width"
+      : interpolationTarget === "style"
+        ? directionLower
+          ? `border-${directionLower}-style`
+          : "border-style"
+        : directionLower
+          ? `border-${directionLower}-color`
+          : "border-color";
 
   // Now treat the interpolated portion as the resolved target property.
   const expr = (decl as any).templateExpressions[slotId] as any;
@@ -220,18 +233,7 @@ export function tryHandleInterpolatedBorder(args: {
       n?.type === "MemberExpression" || n?.type === "OptionalMemberExpression";
     if (isMemberExpr(cons) || isMemberExpr(alt)) {
       // Defer to the dynamic resolver by treating this as the target border interpolation.
-      d.property =
-        interpolationTarget === "width"
-          ? direction
-            ? `border-${direction.toLowerCase()}-width`
-            : "border-width"
-          : interpolationTarget === "style"
-            ? direction
-              ? `border-${direction.toLowerCase()}-style`
-              : "border-style"
-            : direction
-              ? `border-${direction.toLowerCase()}-color`
-              : "border-color";
+      d.property = targetCssProperty;
       return false;
     }
   }
@@ -417,18 +419,7 @@ export function tryHandleInterpolatedBorder(args: {
     // Simple arrow function returning a member expression: (p) => p.theme.color.X
     if (body?.type === "MemberExpression") {
       // Mutate the declaration's property so fallback handlers use the target property
-      d.property =
-        interpolationTarget === "width"
-          ? direction
-            ? `border-${direction.toLowerCase()}-width`
-            : "border-width"
-          : interpolationTarget === "style"
-            ? direction
-              ? `border-${direction.toLowerCase()}-style`
-              : "border-style"
-            : direction
-              ? `border-${direction.toLowerCase()}-color`
-              : "border-color";
+      d.property = targetCssProperty;
       return false; // Let the generic handler resolve the theme value
     }
   }
