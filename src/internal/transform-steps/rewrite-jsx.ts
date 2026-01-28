@@ -413,7 +413,8 @@ export function rewriteJsxStep(ctx: TransformContext): StepResult {
 
           if (!variantProps.has(n)) {
             // Strip transient props (starting with $) only for intrinsic elements.
-            // For styled(Component), transient props should still reach the wrapped component.
+            // For styled(Component), transient props should still reach the wrapped component
+            // (unless consumed by styleFnFromProps, which is handled above at line 387).
             if (n.startsWith("$") && decl.base.kind === "intrinsic") {
               continue;
             }
