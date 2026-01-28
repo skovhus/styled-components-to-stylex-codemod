@@ -4,6 +4,7 @@ import { resolveDynamicNode } from "./builtin-handlers.js";
 import type { InternalHandlerContext } from "./builtin-handlers.js";
 import {
   cssDeclarationToStylexDeclarations,
+  parseBorderShorthandParts,
   cssPropertyToStylexProp,
   resolveBackgroundStylexProp,
   resolveBackgroundStylexPropForVariants,
@@ -3391,37 +3392,11 @@ export function lowerRules(args: {
               if (typeof value !== "string") {
                 return false;
               }
-              const tokens = value.trim().split(/\s+/);
-              const BORDER_STYLES = new Set([
-                "none",
-                "solid",
-                "dashed",
-                "dotted",
-                "double",
-                "groove",
-                "ridge",
-                "inset",
-                "outset",
-              ]);
-              const looksLikeLength = (t: string) =>
-                /^-?\d*\.?\d+(px|rem|em|vh|vw|vmin|vmax|ch|ex|lh|%)?$/.test(t);
-
-              let width: string | undefined;
-              let style: string | undefined;
-              const colorParts: string[] = [];
-              for (const token of tokens) {
-                if (!width && looksLikeLength(token)) {
-                  width = token;
-                } else if (!style && BORDER_STYLES.has(token)) {
-                  style = token;
-                } else {
-                  colorParts.push(token);
-                }
-              }
-              const color = colorParts.join(" ").trim();
-              if (!width && !style && !color) {
+              const parsed = parseBorderShorthandParts(value);
+              if (!parsed) {
                 return false;
               }
+              const { width, style, color } = parsed;
               if (width) {
                 target["borderWidth"] = j.literal(width);
               }
