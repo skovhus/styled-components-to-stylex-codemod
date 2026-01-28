@@ -22,6 +22,7 @@ export const fixtureAdapter = defineAdapter({
       [
         "attrs-polymorphic-as",
         "external-styles-support",
+        "input-external-styles",
         "styled-element-html-props",
         "styled-input-html-props",
         "transient-prop-not-forwarded",

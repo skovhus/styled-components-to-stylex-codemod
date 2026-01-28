@@ -211,14 +211,16 @@ export class WrapperEmitter {
   }
 
   shouldAllowAsPropForIntrinsic(d: StyledDecl, tagName: string): boolean {
-    if (VOID_TAGS.has(tagName)) {
-      return false;
-    }
+    // Allow `as` prop when explicitly requested via adapter, even for void tags
     if (d.supportsAsProp) {
       return true;
     }
     if (d.supportsExternalStyles) {
       return true;
+    }
+    // For void tags without explicit opt-in, don't allow `as` prop
+    if (VOID_TAGS.has(tagName)) {
+      return false;
     }
     const used = this.getUsedAttrs(d.localName);
     return used.has("as") || used.has("forwardedAs");
@@ -1323,6 +1325,35 @@ export class WrapperEmitter {
       }
     }
     return attrs;
+  }
+
+  /**
+   * Build all attrs from attrsInfo in the correct order:
+   * defaultAttrs, conditionalAttrs, invertedBoolAttrs, staticAttrs
+   */
+  buildAttrsFromAttrsInfo(args: {
+    attrsInfo: StyledDecl["attrsInfo"];
+    propExprFor: (prop: string) => ExpressionKind;
+  }): JsxAttr[] {
+    const { attrsInfo, propExprFor } = args;
+    if (!attrsInfo) {
+      return [];
+    }
+    return [
+      ...this.buildDefaultAttrsFromProps({
+        defaultAttrs: attrsInfo.defaultAttrs ?? [],
+        propExprFor,
+      }),
+      ...this.buildConditionalAttrs({
+        conditionalAttrs: attrsInfo.conditionalAttrs ?? [],
+        testExprFor: propExprFor,
+      }),
+      ...this.buildInvertedBoolAttrs({
+        invertedBoolAttrs: attrsInfo.invertedBoolAttrs ?? [],
+        testExprFor: propExprFor,
+      }),
+      ...this.buildStaticAttrsFromRecord(attrsInfo.staticAttrs ?? {}),
+    ];
   }
 
   appendMergingAttrs(attrs: JsxAttr[], merging: ReturnType<typeof emitStyleMerging>): void {

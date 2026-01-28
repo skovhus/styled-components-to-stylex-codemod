@@ -786,7 +786,13 @@ export function emitIntrinsicWrappers(emitter: WrapperEmitter): {
         inlineStyleProps: [],
       });
 
-      const attrs: JsxAttr[] = [j.jsxSpreadAttribute(restId)];
+      const attrs: JsxAttr[] = [
+        ...emitter.buildAttrsFromAttrsInfo({
+          attrsInfo: d.attrsInfo,
+          propExprFor: (prop) => j.identifier(prop),
+        }),
+        j.jsxSpreadAttribute(restId),
+      ];
       emitter.appendMergingAttrs(attrs, merging);
       const jsx = emitter.buildJsxElement({
         tagName: allowAsProp ? "Component" : tagName,
@@ -1299,29 +1305,13 @@ export function emitIntrinsicWrappers(emitter: WrapperEmitter): {
         inlineStyleProps: (d.inlineStyleProps ?? []) as InlineStyleProp[],
       });
 
-      const openingAttrs: JsxAttr[] = [];
-      openingAttrs.push(
-        ...emitter.buildDefaultAttrsFromProps({
-          defaultAttrs: d.attrsInfo?.defaultAttrs ?? [],
+      const openingAttrs: JsxAttr[] = [
+        ...emitter.buildAttrsFromAttrsInfo({
+          attrsInfo: d.attrsInfo,
           propExprFor: (prop) => j.identifier(prop),
         }),
-      );
-      openingAttrs.push(
-        ...emitter.buildConditionalAttrs({
-          conditionalAttrs: d.attrsInfo?.conditionalAttrs ?? [],
-          testExprFor: (prop) => j.identifier(prop),
-        }),
-      );
-      openingAttrs.push(
-        ...emitter.buildInvertedBoolAttrs({
-          invertedBoolAttrs: d.attrsInfo?.invertedBoolAttrs ?? [],
-          testExprFor: (prop) => j.identifier(prop),
-        }),
-      );
-      openingAttrs.push(...emitter.buildStaticAttrsFromRecord(d.attrsInfo?.staticAttrs ?? {}));
-      if (includeRest) {
-        openingAttrs.push(j.jsxSpreadAttribute(restId));
-      }
+        ...(includeRest ? [j.jsxSpreadAttribute(restId)] : []),
+      ];
       emitter.appendMergingAttrs(openingAttrs, merging);
 
       const jsx = emitter.buildJsxElement({
@@ -1637,28 +1627,13 @@ export function emitIntrinsicWrappers(emitter: WrapperEmitter): {
       inlineStyleProps: [],
     });
 
-    const openingAttrs: JsxAttr[] = [];
-
-    openingAttrs.push(
-      ...emitter.buildDefaultAttrsFromProps({
-        defaultAttrs: d.attrsInfo?.defaultAttrs ?? [],
+    const openingAttrs: JsxAttr[] = [
+      ...emitter.buildAttrsFromAttrsInfo({
+        attrsInfo: d.attrsInfo,
         propExprFor: (prop) => j.identifier(prop),
       }),
-    );
-    openingAttrs.push(
-      ...emitter.buildConditionalAttrs({
-        conditionalAttrs: d.attrsInfo?.conditionalAttrs ?? [],
-        testExprFor: (prop) => j.identifier(prop),
-      }),
-    );
-    openingAttrs.push(
-      ...emitter.buildInvertedBoolAttrs({
-        invertedBoolAttrs: d.attrsInfo?.invertedBoolAttrs ?? [],
-        testExprFor: (prop) => j.identifier(prop),
-      }),
-    );
-    openingAttrs.push(j.jsxSpreadAttribute(restId));
-    openingAttrs.push(...emitter.buildStaticAttrsFromRecord(d.attrsInfo?.staticAttrs ?? {}));
+      j.jsxSpreadAttribute(restId),
+    ];
     emitter.appendMergingAttrs(openingAttrs, merging);
 
     const openingEl = j.jsxOpeningElement(
@@ -2224,11 +2199,13 @@ export function emitIntrinsicWrappers(emitter: WrapperEmitter): {
         inlineStyleProps: (d.inlineStyleProps ?? []) as InlineStyleProp[],
       });
 
-      // Build attrs: {...rest} then {...mergedStylexProps(...)} so stylex styles override
-      const openingAttrs: JsxAttr[] = [];
-      if (restId) {
-        openingAttrs.push(j.jsxSpreadAttribute(restId));
-      }
+      const openingAttrs: JsxAttr[] = [
+        ...emitter.buildAttrsFromAttrsInfo({
+          attrsInfo: d.attrsInfo,
+          propExprFor: (prop) => j.identifier(prop),
+        }),
+        ...(restId ? [j.jsxSpreadAttribute(restId)] : []),
+      ];
       emitter.appendMergingAttrs(openingAttrs, merging);
 
       const jsx = emitter.buildJsxElement({
