@@ -202,28 +202,6 @@ export function analyzeBeforeEmitStep(ctx: TransformContext): StepResult {
     return true;
   };
 
-  // Pre-pass: set needsWrapperComponent for base components used in JSX and extended.
-  // This must happen BEFORE emitStylesAndImports so comment placement is correct.
-  // NOTE: We only set needsWrapperComponent here, NOT flatten decl.base to intrinsic.
-  // Base flattening happens later after extendsStyleKey is set.
-  for (const decl of styledDecls) {
-    if (decl.isCssHelper) {
-      continue;
-    }
-    if (decl.base.kind === "component") {
-      const baseDecl = declByLocal.get(decl.base.ident);
-      if (baseDecl?.base.kind === "intrinsic") {
-        // If the base component is used in JSX AND this component needs a wrapper,
-        // the base component also needs a wrapper for delegation to work.
-        const baseUsedInJsx = isUsedInJsx(decl.base.ident);
-        const shouldDelegate = baseUsedInJsx && decl.needsWrapperComponent;
-        if (shouldDelegate) {
-          baseDecl.needsWrapperComponent = true;
-        }
-      }
-    }
-  }
-
   // Styled components wrapping IMPORTED (non-styled) components that are used in JSX.
   // Simple wrappers can be inlined; complex ones (variants, dynamic styles, attrs logic, etc.)
   // still need wrappers.
@@ -404,6 +382,28 @@ export function analyzeBeforeEmitStep(ctx: TransformContext): StepResult {
     if (usedAsValue) {
       decl.usedAsValue = true;
       decl.needsWrapperComponent = true;
+    }
+  }
+
+  // Ensure base components get wrappers when a derived component delegates to them.
+  // Run this AFTER all needsWrapperComponent signals (exports, className/style usage, usedAsValue, etc.)
+  // so delegation doesn't reference a base that was inlined/removed.
+  for (const decl of styledDecls) {
+    if (decl.isCssHelper) {
+      continue;
+    }
+    if (decl.base.kind === "component") {
+      const baseDecl = declByLocal.get(decl.base.ident);
+      if (!baseDecl) {
+        continue;
+      }
+      // If the base component is used in JSX AND this component needs a wrapper,
+      // the base component also needs a wrapper for delegation to work.
+      const baseUsedInJsx = isUsedInJsx(decl.base.ident);
+      const shouldDelegate = baseUsedInJsx && decl.needsWrapperComponent;
+      if (shouldDelegate) {
+        baseDecl.needsWrapperComponent = true;
+      }
     }
   }
 
