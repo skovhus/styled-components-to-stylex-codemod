@@ -6,6 +6,7 @@ import { $colors } from "./tokens.stylex";
 export function App() {
   return (
     <>
+      <Sentence>Test</Sentence>
       <PaddedMutedSentence style={{ marginBottom: 0 }}>Test</PaddedMutedSentence>
       <PaddedSentence>Okay</PaddedSentence>
     </>
@@ -14,19 +15,26 @@ export function App() {
 
 App.displayName = "App";
 
-type PaddedSentenceProps = React.PropsWithChildren<{
+type SentenceProps = React.PropsWithChildren<{
   className?: string;
   style?: React.CSSProperties;
   ref?: React.Ref<HTMLDivElement>;
   as?: React.ElementType;
 }>;
 
-function PaddedSentence(props: PaddedSentenceProps) {
+function Sentence(props: SentenceProps) {
   const { as: Component = "div", className, children, style } = props;
+  return <Component {...mergedSx(styles.sentence, className, style)}>{children}</Component>;
+}
+
+type PaddedSentenceProps = React.ComponentPropsWithRef<typeof Sentence>;
+
+function PaddedSentence(props: PaddedSentenceProps) {
+  const { className, children, style, ...rest } = props;
   return (
-    <Component {...mergedSx([styles.sentence, styles.paddedSentence], className, style)}>
+    <Sentence {...rest} {...mergedSx(styles.paddedSentence, className, style)}>
       {children}
-    </Component>
+    </Sentence>
   );
 }
 

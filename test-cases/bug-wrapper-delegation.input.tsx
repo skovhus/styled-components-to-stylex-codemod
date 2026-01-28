@@ -4,6 +4,7 @@ import { color } from "./lib/helpers";
 export function App() {
   return (
     <>
+      <Sentence>Test</Sentence>
       <PaddedMutedSentence style={{ marginBottom: 0 }}>Test</PaddedMutedSentence>
       <PaddedSentence>Okay</PaddedSentence>
     </>
