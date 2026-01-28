@@ -10,6 +10,8 @@ import type {
   CallResolveResult,
   ResolveValueContext,
   ResolveValueResult,
+  SelectorResolveContext,
+  SelectorResolveResult,
 } from "./adapter.js";
 import { Logger, type CollectedWarning } from "./internal/logger.js";
 import { assertValidAdapter, describeValue } from "./internal/public-api-validation.js";
@@ -179,6 +181,18 @@ export async function runTransform(options: RunTransformOptions): Promise<RunTra
     }
   };
 
+  const resolveSelectorWithLogging = (
+    ctx: SelectorResolveContext,
+  ): SelectorResolveResult | undefined => {
+    try {
+      return adapter.resolveSelector(ctx);
+    } catch (e) {
+      const msg = `adapter.resolveSelector threw an error: ${e instanceof Error ? e.message : String(e)}`;
+      Logger.logError(msg, ctx.filePath, undefined, ctx);
+      throw e;
+    }
+  };
+
   const adapterWithLogging: Adapter = {
     styleMerger: adapter.styleMerger,
     externalInterface(ctx) {
@@ -186,6 +200,7 @@ export async function runTransform(options: RunTransformOptions): Promise<RunTra
     },
     resolveValue: resolveValueWithLogging,
     resolveCall: resolveCallWithLogging,
+    resolveSelector: resolveSelectorWithLogging,
   };
 
   // Resolve file paths from glob patterns

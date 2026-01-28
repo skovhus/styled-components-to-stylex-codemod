@@ -3,6 +3,8 @@ import {
   type ExternalInterfaceResult,
   type ResolveValueContext,
   type ResolveValueResult,
+  type SelectorResolveContext,
+  type SelectorResolveResult,
 } from "../adapter.ts";
 
 // Fixtures don't use theme resolution, but the transformer requires an adapter.
@@ -336,6 +338,28 @@ export const fixtureAdapter = defineAdapter({
 
     return undefined;
   },
+  resolveSelector(ctx) {
+    const source = ctx.source.value;
+    if (!source.includes("lib/helpers") && !source.includes("lib\\helpers")) {
+      return undefined;
+    }
+
+    // Handle screenSize.phone, screenSize.tablet, etc.
+    if (ctx.importedName === "screenSize" && ctx.path) {
+      return {
+        kind: "media",
+        expr: `breakpoints.${ctx.path}`,
+        imports: [
+          {
+            from: { kind: "specifier", value: "./lib/breakpoints.stylex" },
+            names: [{ imported: "breakpoints" }],
+          },
+        ],
+      };
+    }
+
+    return undefined;
+  },
 });
 
 function customResolveValue(ctx: ResolveValueContext): ResolveValueResult | undefined {
@@ -353,6 +377,10 @@ function customResolveValue(ctx: ResolveValueContext): ResolveValueResult | unde
   };
 }
 
+function customResolveSelector(_ctx: SelectorResolveContext): SelectorResolveResult | undefined {
+  return undefined;
+}
+
 // Test adapters - examples of custom adapter usage
 export const customAdapter = defineAdapter({
   styleMerger: null,
@@ -363,4 +391,5 @@ export const customAdapter = defineAdapter({
   resolveCall(_ctx) {
     return undefined;
   },
+  resolveSelector: customResolveSelector,
 });

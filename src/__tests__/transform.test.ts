@@ -534,6 +534,9 @@ export const App = () => <Box $on />;
       resolveCall() {
         return undefined;
       },
+      resolveSelector() {
+        return undefined;
+      },
       styleMerger: null,
     } satisfies Adapter;
 
@@ -580,6 +583,9 @@ export const App = () => (
         return undefined;
       },
       resolveCall() {
+        return undefined;
+      },
+      resolveSelector() {
         return undefined;
       },
       styleMerger: null,
@@ -663,6 +669,9 @@ describe("styleMerger configuration", () => {
     resolveCall() {
       return undefined;
     },
+    resolveSelector() {
+      return undefined;
+    },
     styleMerger: {
       functionName: "stylexProps",
       importSource: { kind: "specifier" as const, value: "@company/ui-utils" },
@@ -676,6 +685,9 @@ describe("styleMerger configuration", () => {
       return undefined;
     },
     resolveCall() {
+      return undefined;
+    },
+    resolveSelector() {
       return undefined;
     },
     styleMerger: {
@@ -842,6 +854,9 @@ export const App = () => <Box $delay={100} />;
         return undefined;
       },
       resolveCall() {
+        return undefined;
+      },
+      resolveSelector() {
         return undefined;
       },
     };

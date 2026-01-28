@@ -4,12 +4,15 @@ import type {
   CallResolveResult,
   ResolveValueContext,
   ResolveValueResult,
+  SelectorResolveContext,
+  SelectorResolveResult,
 } from "../adapter.js";
 import type { WarningLog } from "./logger.js";
 
 export function createResolveAdapterSafe(args: { adapter: Adapter; warnings: WarningLog[] }): {
   resolveValueSafe: (ctx: ResolveValueContext) => ResolveValueResult | undefined;
   resolveCallSafe: (ctx: CallResolveContext) => CallResolveResult | undefined;
+  resolveSelectorSafe: (ctx: SelectorResolveContext) => SelectorResolveResult | undefined;
   bailRef: { value: boolean };
 } {
   const { adapter, warnings } = args;
@@ -54,5 +57,12 @@ export function createResolveAdapterSafe(args: { adapter: Adapter; warnings: War
     return res;
   };
 
-  return { resolveValueSafe, resolveCallSafe, bailRef };
+  const resolveSelectorSafe = (ctx: SelectorResolveContext): SelectorResolveResult | undefined => {
+    // Note: resolveSelector returning undefined does NOT bail the entire file.
+    // It just means this specific selector interpolation couldn't be resolved,
+    // and the calling code will handle the bail for that component.
+    return adapter.resolveSelector(ctx);
+  };
+
+  return { resolveValueSafe, resolveCallSafe, resolveSelectorSafe, bailRef };
 }
