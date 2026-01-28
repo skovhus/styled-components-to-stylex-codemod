@@ -2467,6 +2467,7 @@ export function lowerRules(args: {
               resolverImports,
               parseExpr,
               applyResolvedPropValue: (prop, value) => applyResolvedPropValue(prop, value, null),
+              bailUnsupported: (type) => bailUnsupported(decl, type),
               toSuffixFromProp,
               variantBuckets,
               variantStyleKeys,

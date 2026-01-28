@@ -3,6 +3,7 @@ import type { Adapter, ImportSource } from "../../adapter.js";
 import { resolveDynamicNode, type InternalHandlerContext } from "../builtin-handlers.js";
 import { getMemberPathFromIdentifier, getNodeLocStart } from "../utilities/jscodeshift-utils.js";
 import type { StyledDecl } from "../transform-types.js";
+import type { WarningType } from "../logger.js";
 import {
   parseBorderShorthandParts,
   parseInterpolatedBorderStaticParts,
@@ -31,6 +32,7 @@ export function tryHandleInterpolatedBorder(args: {
   resolverImports: Map<string, any>;
   parseExpr: (exprSource: string) => ExpressionKind | null;
   applyResolvedPropValue: (prop: string, value: unknown) => void;
+  bailUnsupported: (type: WarningType) => void;
   toSuffixFromProp: (propName: string) => string;
   variantBuckets: Map<string, Record<string, unknown>>;
   variantStyleKeys: Record<string, string>;
@@ -49,6 +51,7 @@ export function tryHandleInterpolatedBorder(args: {
     resolverImports,
     parseExpr,
     applyResolvedPropValue,
+    bailUnsupported,
     toSuffixFromProp,
     variantBuckets,
     variantStyleKeys,
@@ -255,6 +258,18 @@ export function tryHandleInterpolatedBorder(args: {
   // Handle call expressions (like helper functions) by resolving via resolveDynamicNode:
   //   border: 1px solid ${color("bgSub")}
   {
+    const callExpr =
+      expr?.type === "CallExpression"
+        ? expr
+        : expr?.type === "ArrowFunctionExpression" && expr.body?.type === "CallExpression"
+          ? expr.body
+          : null;
+    const callIdent = callExpr?.callee?.type === "Identifier" ? callExpr.callee.name : null;
+    const callIsImported = callIdent ? importMap.has(callIdent) : false;
+    const unresolvedCallWarning: WarningType = callIsImported
+      ? "Adapter returned undefined for helper call"
+      : "Unsupported call expression (expected imported helper(...) or imported helper(...)(...))";
+
     const resolveBorderExpr = (node: any): { exprAst: any; imports: any[] } | null => {
       const loc = getNodeLocStart(node);
       const res = resolveDynamicNode(
@@ -346,7 +361,8 @@ export function tryHandleInterpolatedBorder(args: {
     if (isResolvableHelper) {
       const resolved = resolveBorderExpr(expr);
       if (!resolved) {
-        return false;
+        bailUnsupported(unresolvedCallWarning);
+        return true;
       }
       applyStaticProps();
 
