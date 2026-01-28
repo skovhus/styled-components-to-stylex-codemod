@@ -1,4 +1,5 @@
 import type { WarningLog } from "../logger.js";
+import { literalToString } from "../utilities/jscodeshift-utils.js";
 
 export type CssSwitchParseResult = {
   // Maps explicit string literal cases to the returned css tagged template expression
@@ -30,20 +31,6 @@ function getSingleReturnStmt(
     if (inner?.type === "ReturnStatement") {
       return inner as any;
     }
-  }
-  return null;
-}
-
-function readStringLiteral(node: any): string | null {
-  if (!node || typeof node !== "object") {
-    return null;
-  }
-  if (node.type === "StringLiteral" && typeof node.value === "string") {
-    return node.value;
-  }
-  // jscodeshift "Literal" (babel7 compat) can be string
-  if (node.type === "Literal" && typeof node.value === "string") {
-    return node.value;
   }
   return null;
 }
@@ -89,7 +76,7 @@ export function parseSwitchReturningCssTemplates(args: {
       continue;
     }
     const isDefault = c.test == null;
-    const label = isDefault ? null : readStringLiteral(c.test);
+    const label = isDefault ? null : literalToString(c.test);
     if (!isDefault && !label) {
       warnings.push({
         severity: "warning",

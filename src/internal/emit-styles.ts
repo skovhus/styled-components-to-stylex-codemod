@@ -2,7 +2,8 @@ import type { Collection } from "jscodeshift";
 import type { StyledDecl, VariantDimension } from "./transform-types.js";
 import path from "node:path";
 import type { ImportSource, ImportSpec, StyleMergerConfig } from "../adapter.js";
-import { isAstNode } from "./jscodeshift-utils.js";
+import { isAstNode } from "./utilities/jscodeshift-utils.js";
+import { lowerFirst } from "./utilities/string-utils.js";
 
 export function emitStylesAndImports(args: {
   root: Collection<any>;
@@ -283,9 +284,7 @@ export function emitStylesAndImports(args: {
     // For wrapper components, keep comments on the wrapper function only to avoid
     // duplicating them on the styles object. Non-wrapper components still use the
     // standard split to separate Bug narrative from property comments.
-    const narrative = d.needsWrapperComponent
-      ? []
-      : splitBugNarrativeLeadingComments(cs).narrative;
+    const narrative = d.needsWrapperComponent ? [] : splitBugNarrativeLeadingComments(cs).narrative;
     if (narrative.length === 0) {
       continue;
     }
@@ -598,7 +597,6 @@ export function emitStylesAndImports(args: {
   }
 
   // Second pass: rename conflicting dimensions to include component prefix
-  const lowerFirst = (s: string) => s.charAt(0).toLowerCase() + s.slice(1);
   for (const [name, entries] of dimensionsByName) {
     // Check if all entries have the same content (can share the same declaration)
     const uniqueContents = new Set(entries.map((e) => e.contentKey));

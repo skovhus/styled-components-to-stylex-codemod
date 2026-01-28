@@ -14,7 +14,10 @@ import {
   getMemberPathFromIdentifier,
   isArrowFunctionExpression,
   isCallExpressionNode,
-} from "./jscodeshift-utils.js";
+  literalToStaticValue,
+  literalToString,
+} from "./utilities/jscodeshift-utils.js";
+import { sanitizeIdentifier } from "./utilities/string-utils.js";
 import { cssDeclarationToStylexDeclarations } from "./css-prop-mapping.js";
 import type { WarningType } from "./logger.js";
 
@@ -1707,58 +1710,6 @@ export function resolveDynamicNode(
   );
 }
 
-function literalToStaticValue(node: unknown): string | number | boolean | null {
-  if (!node || typeof node !== "object") {
-    return null;
-  }
-  const type = (node as { type?: string }).type;
-  if (type === "StringLiteral") {
-    return (node as { value: string }).value;
-  }
-  if (type === "BooleanLiteral") {
-    return (node as { value: boolean }).value;
-  }
-  // Some parsers (or mixed ASTs) use estree-style `Literal`.
-  if (type === "Literal") {
-    const v = (node as { value?: unknown }).value;
-    if (typeof v === "string" || typeof v === "number" || typeof v === "boolean") {
-      return v;
-    }
-  }
-  if (type === "NumericLiteral") {
-    return (node as { value: number }).value;
-  }
-  // Handle TemplateLiteral without expressions (static template string)
-  if (type === "TemplateLiteral") {
-    const n = node as { expressions?: unknown[]; quasis?: Array<{ value?: { raw?: string } }> };
-    if (!n.expressions || n.expressions.length === 0) {
-      const quasis = n.quasis ?? [];
-      return quasis.map((q) => q.value?.raw ?? "").join("");
-    }
-  }
-  // Handle css`` tagged template literal (styled-components css helper)
-  if (type === "TaggedTemplateExpression") {
-    const n = node as {
-      tag?: { type?: string; name?: string };
-      quasi?: { expressions?: unknown[]; quasis?: Array<{ value?: { raw?: string } }> };
-    };
-    // Only handle `css` tag (the styled-components css helper)
-    if (n.tag?.type === "Identifier" && n.tag.name === "css") {
-      const quasi = n.quasi;
-      if (quasi && (!quasi.expressions || quasi.expressions.length === 0)) {
-        const quasis = quasi.quasis ?? [];
-        return quasis.map((q) => q.value?.raw ?? "").join("");
-      }
-    }
-  }
-  return null;
-}
-
-function literalToString(node: unknown): string | null {
-  const v = literalToStaticValue(node);
-  return typeof v === "string" ? v : null;
-}
-
 /**
  * Parses a template literal that contains a simple prop-based ternary expression.
  * Supports patterns like: `background: ${props.$primary ? "red" : "blue"}`
@@ -1816,10 +1767,6 @@ function parseCssTemplateLiteralWithTernary(node: unknown): {
   }
 
   return { prefix, suffix, innerTest: expr.test, truthyValue, falsyValue };
-}
-
-function sanitizeIdentifier(s: string): string {
-  return s.replace(/[^a-zA-Z0-9_]/g, "_");
 }
 
 function styleFromSingleDeclaration(

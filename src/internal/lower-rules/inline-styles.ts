@@ -1,5 +1,5 @@
 import type { JSCodeshift } from "jscodeshift";
-import { getFunctionBodyExpr } from "../jscodeshift-utils.js";
+import { cloneAstNode, getFunctionBodyExpr } from "../utilities/jscodeshift-utils.js";
 
 type ExpressionKind = Parameters<JSCodeshift["expressionStatement"]>[0];
 
@@ -41,23 +41,7 @@ export function unwrapArrowFunctionToPropsExpr(
 
   const propsUsed = new Set<string>();
   let safeToInline = true;
-  const cloneNode = (node: any): any => {
-    if (!node || typeof node !== "object") {
-      return node;
-    }
-    if (Array.isArray(node)) {
-      return node.map(cloneNode);
-    }
-    const out: any = {};
-    for (const key of Object.keys(node)) {
-      if (key === "loc" || key === "comments" || key === "tokens") {
-        continue;
-      }
-      out[key] = cloneNode((node as any)[key]);
-    }
-    return out;
-  };
-  const clone = cloneNode(bodyExpr);
+  const clone = cloneAstNode(bodyExpr);
   const replace = (node: any): any => {
     if (!node || typeof node !== "object") {
       return node;
@@ -220,22 +204,6 @@ export function inlineArrowFunctionBody(j: JSCodeshift, expr: any): ExpressionKi
   if (!bodyExpr) {
     return null;
   }
-  const cloneNode = (node: any): any => {
-    if (!node || typeof node !== "object") {
-      return node;
-    }
-    if (Array.isArray(node)) {
-      return node.map(cloneNode);
-    }
-    const out: any = {};
-    for (const key of Object.keys(node)) {
-      if (key === "loc" || key === "comments" || key === "tokens") {
-        continue;
-      }
-      out[key] = cloneNode((node as any)[key]);
-    }
-    return out;
-  };
   const replace = (node: any): any => {
     if (!node || typeof node !== "object") {
       return node;
@@ -271,7 +239,7 @@ export function inlineArrowFunctionBody(j: JSCodeshift, expr: any): ExpressionKi
     }
     return node;
   };
-  const cloned = cloneNode(bodyExpr);
+  const cloned = cloneAstNode(bodyExpr);
   return replace(cloned);
 }
 

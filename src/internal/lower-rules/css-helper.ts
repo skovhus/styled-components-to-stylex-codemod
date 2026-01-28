@@ -3,7 +3,7 @@ import { compile } from "stylis";
 import type { Adapter, ImportSource, ImportSpec } from "../../adapter.js";
 import { normalizeStylisAstToIR } from "../css-ir.js";
 import { cssDeclarationToStylexDeclarations } from "../css-prop-mapping.js";
-import { getMemberPathFromIdentifier } from "../jscodeshift-utils.js";
+import { getMemberPathFromIdentifier } from "../utilities/jscodeshift-utils.js";
 import type { WarningLog, WarningType } from "../logger.js";
 import { parseStyledTemplateLiteral } from "../styled-css.js";
 import { parseSelector } from "../selectors.js";

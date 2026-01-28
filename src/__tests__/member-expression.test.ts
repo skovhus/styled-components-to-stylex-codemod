@@ -1,6 +1,9 @@
 import { describe, it, expect } from "vitest";
 import jscodeshift, { type Expression } from "jscodeshift";
-import { extractRootAndPath, getMemberPathFromIdentifier } from "../internal/jscodeshift-utils";
+import {
+  extractRootAndPath,
+  getMemberPathFromIdentifier,
+} from "../internal/utilities/jscodeshift-utils";
 
 const j = jscodeshift.withParser("tsx");
 

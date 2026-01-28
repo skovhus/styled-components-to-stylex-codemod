@@ -267,6 +267,122 @@ export function collectIdentifiers(node: unknown, out: Set<string>): void {
   }
 }
 
+/**
+ * Converts an AST literal node to its static JavaScript value.
+ *
+ * Supports:
+ * - StringLiteral, NumericLiteral, BooleanLiteral (Babel AST)
+ * - Literal (ESTree/recast AST)
+ * - TemplateLiteral without expressions (static template strings)
+ * - TaggedTemplateExpression with css tag (styled-components css helper)
+ *
+ * Returns null for non-literal or dynamic nodes.
+ */
+export function literalToStaticValue(node: unknown): string | number | boolean | null {
+  if (!node || typeof node !== "object") {
+    return null;
+  }
+  const type = (node as { type?: string }).type;
+  if (type === "StringLiteral") {
+    return (node as { value: string }).value;
+  }
+  if (type === "BooleanLiteral") {
+    return (node as { value: boolean }).value;
+  }
+  // Some parsers (or mixed ASTs) use estree-style `Literal`.
+  if (type === "Literal") {
+    const v = (node as { value?: unknown }).value;
+    if (typeof v === "string" || typeof v === "number" || typeof v === "boolean") {
+      return v;
+    }
+  }
+  if (type === "NumericLiteral") {
+    return (node as { value: number }).value;
+  }
+  // Handle TemplateLiteral without expressions (static template string)
+  if (type === "TemplateLiteral") {
+    const n = node as { expressions?: unknown[]; quasis?: Array<{ value?: { raw?: string } }> };
+    if (!n.expressions || n.expressions.length === 0) {
+      const quasis = n.quasis ?? [];
+      return quasis.map((q) => q.value?.raw ?? "").join("");
+    }
+  }
+  // Handle css`` tagged template literal (styled-components css helper)
+  if (type === "TaggedTemplateExpression") {
+    const n = node as { tag?: { type?: string; name?: string }; quasi?: unknown };
+    if (n.tag?.type === "Identifier" && n.tag.name === "css") {
+      return literalToStaticValue(n.quasi);
+    }
+  }
+  return null;
+}
+
+/**
+ * Converts an AST literal node to a string value.
+ * Returns null if the node is not a string literal.
+ */
+export function literalToString(node: unknown): string | null {
+  const v = literalToStaticValue(node);
+  return typeof v === "string" ? v : null;
+}
+
+/**
+ * Set of AST metadata keys that should typically be skipped during traversal or cloning.
+ * These keys contain position/source information and are not part of the logical AST structure.
+ */
+const AST_METADATA_KEYS = new Set(["loc", "start", "end", "range", "comments", "tokens"]);
+
+/**
+ * Deep clones an AST node, stripping metadata properties (loc, comments, tokens, etc.).
+ * Useful for creating modified copies of AST nodes without mutating the original.
+ *
+ * @param node - The AST node to clone
+ * @returns A deep clone with metadata properties removed
+ */
+export function cloneAstNode<T>(node: T): T {
+  if (!node || typeof node !== "object") {
+    return node;
+  }
+  if (Array.isArray(node)) {
+    return node.map(cloneAstNode) as T;
+  }
+  const out: Record<string, unknown> = {};
+  for (const key of Object.keys(node as Record<string, unknown>)) {
+    if (AST_METADATA_KEYS.has(key)) {
+      continue;
+    }
+    out[key] = cloneAstNode((node as Record<string, unknown>)[key]);
+  }
+  return out as T;
+}
+
+/**
+ * Type guard for LogicalExpression nodes.
+ */
+export function isLogicalExpressionNode(
+  node: unknown,
+): node is { type: "LogicalExpression"; operator: string; left: Expression; right: Expression } {
+  return (
+    !!node && typeof node === "object" && (node as { type?: string }).type === "LogicalExpression"
+  );
+}
+
+/**
+ * Type guard for ConditionalExpression nodes.
+ */
+export function isConditionalExpressionNode(node: unknown): node is {
+  type: "ConditionalExpression";
+  test: Expression;
+  consequent: Expression;
+  alternate: Expression;
+} {
+  return (
+    !!node &&
+    typeof node === "object" &&
+    (node as { type?: string }).type === "ConditionalExpression"
+  );
+}
+
 // Internal helper - not exported
 function isIdentifier(node: unknown, name?: string): node is Identifier {
   return (

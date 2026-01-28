@@ -8,8 +8,10 @@ import { normalizeStylisAstToIR } from "../css-ir.js";
 import {
   getMemberPathFromIdentifier,
   isCallExpressionNode,
+  isConditionalExpressionNode,
+  isLogicalExpressionNode,
   type CallExpressionNode,
-} from "../jscodeshift-utils.js";
+} from "../utilities/jscodeshift-utils.js";
 import { parseStyledTemplateLiteral } from "../styled-css.js";
 import { extractStaticParts } from "./interpolations.js";
 import { buildTemplateWithStaticParts } from "./inline-styles.js";
@@ -24,20 +26,6 @@ type ResolveImportInScope = (localName: string, identNode?: unknown) => ImportMe
 type ComponentInfo =
   | { localName: string; base: "intrinsic"; tagOrIdent: string }
   | { localName: string; base: "component"; tagOrIdent: string };
-
-type LogicalExpressionNode = {
-  type: "LogicalExpression";
-  operator: string;
-  left: Expression;
-  right: Expression;
-};
-
-type ConditionalExpressionNode = {
-  type: "ConditionalExpression";
-  test: Expression;
-  consequent: Expression;
-  alternate: Expression;
-};
 
 export type TemplateDynamicEntry = {
   jsxProp: string;
@@ -550,12 +538,4 @@ function buildPropAccessExpr(j: JSCodeshift, propName: string): ExpressionKind {
   return isIdent
     ? (j.identifier(propName) as ExpressionKind)
     : (j.memberExpression(j.identifier("props"), j.literal(propName), true) as ExpressionKind);
-}
-
-function isLogicalExpressionNode(expr: Expression): expr is LogicalExpressionNode {
-  return expr.type === "LogicalExpression";
-}
-
-function isConditionalExpressionNode(expr: Expression): expr is ConditionalExpressionNode {
-  return expr.type === "ConditionalExpression";
 }

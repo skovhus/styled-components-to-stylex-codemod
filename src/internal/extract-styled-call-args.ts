@@ -1,4 +1,5 @@
 import type { Collection } from "jscodeshift";
+import { capitalize } from "./utilities/string-utils.js";
 
 /**
  * Extract CallExpression arguments from styled() calls into separate variable declarations.
@@ -152,8 +153,4 @@ function generateExtractedVarName(
 
   // Fallback: use the styled component name with a suffix
   return `${styledName}Base`;
-}
-
-function capitalize(s: string): string {
-  return s.charAt(0).toUpperCase() + s.slice(1);
 }

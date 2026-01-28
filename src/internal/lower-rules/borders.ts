@@ -1,7 +1,7 @@
 import type { API, Expression, JSCodeshift } from "jscodeshift";
 import type { Adapter, ImportSource } from "../../adapter.js";
 import { resolveDynamicNode, type InternalHandlerContext } from "../builtin-handlers.js";
-import { getMemberPathFromIdentifier, getNodeLocStart } from "../jscodeshift-utils.js";
+import { getMemberPathFromIdentifier, getNodeLocStart } from "../utilities/jscodeshift-utils.js";
 import type { StyledDecl } from "../transform-types.js";
 import {
   parseBorderShorthandParts,
