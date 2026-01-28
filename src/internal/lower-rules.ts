@@ -3936,9 +3936,43 @@ export function lowerRules(args: {
                 const fnKey = `${decl.styleKey}${toSuffixFromProp(out.prop)}`;
                 if (!styleFnDecls.has(fnKey)) {
                   const valueExpr = cloneAstNode(bodyExpr) as ExpressionKind;
+                  const buildPropValue = (): ExpressionKind => {
+                    if (media && pseudos?.length) {
+                      const pseudoProps = pseudos.map((ps) =>
+                        j.property(
+                          "init",
+                          j.literal(ps),
+                          j.objectExpression([
+                            j.property("init", j.identifier("default"), j.literal(null)),
+                            j.property("init", j.literal(media), valueExpr),
+                          ]),
+                        ),
+                      );
+                      return j.objectExpression([
+                        j.property("init", j.identifier("default"), j.literal(null)),
+                        ...pseudoProps,
+                      ]);
+                    }
+                    if (media) {
+                      return j.objectExpression([
+                        j.property("init", j.identifier("default"), j.literal(null)),
+                        j.property("init", j.literal(media), valueExpr),
+                      ]);
+                    }
+                    const pseudoProps = pseudos?.map((ps) =>
+                      j.property("init", j.literal(ps), valueExpr),
+                    );
+                    if (pseudoProps?.length) {
+                      return j.objectExpression([
+                        j.property("init", j.identifier("default"), j.literal(null)),
+                        ...pseudoProps,
+                      ]);
+                    }
+                    return valueExpr;
+                  };
                   const param = j.identifier(paramName);
                   const body = j.objectExpression([
-                    j.property("init", j.identifier(out.prop), valueExpr),
+                    j.property("init", j.identifier(out.prop), buildPropValue()),
                   ]);
                   styleFnDecls.set(fnKey, j.arrowFunctionExpression([param], body));
                 }
