@@ -79,6 +79,14 @@ export type HandlerResult =
     }
   | {
       /**
+       * Emit a StyleX style function that takes an object of transient props.
+       * This preserves complex template literals while keeping styles in StyleX.
+       */
+      type: "emitStyleFunctionFromPropsObject";
+      props: string[];
+    }
+  | {
+      /**
        * Emit a StyleX style function keyed off a single JSX prop.
        *
        * The caller uses this to generate a helper like:
@@ -1621,6 +1629,80 @@ function tryResolveInlineStyleValueForConditionalExpression(
   return { type: "emitInlineStyleValueFromProps" };
 }
 
+function tryResolveStyleFunctionFromTemplateLiteral(node: DynamicNode): HandlerResult | null {
+  if (!node.css.property) {
+    return null;
+  }
+  const expr = node.expr;
+  if (!isArrowFunctionExpression(expr)) {
+    return null;
+  }
+  const paramName = getArrowFnSingleParamName(expr);
+  if (!paramName) {
+    return null;
+  }
+  const body = getFunctionBodyExpr(expr) as {
+    type?: string;
+    expressions?: unknown[];
+  } | null;
+  if (!body || body.type !== "TemplateLiteral") {
+    return null;
+  }
+  const expressions = body.expressions ?? [];
+  if (expressions.length === 0) {
+    return null;
+  }
+  const { hasUsableProps, hasNonTransientProps, props } = (() => {
+    const seen = new Set<string>();
+    const props: string[] = [];
+    const addProp = (name: string): void => {
+      if (seen.has(name)) {
+        return;
+      }
+      seen.add(name);
+      props.push(name);
+    };
+    const visit = (node: unknown): void => {
+      if (!node || typeof node !== "object") {
+        return;
+      }
+      if (Array.isArray(node)) {
+        for (const child of node) {
+          visit(child);
+        }
+        return;
+      }
+      const n = node as { type?: string };
+      if (n.type === "MemberExpression" || n.type === "OptionalMemberExpression") {
+        const path = getMemberPathFromIdentifier(node as any, paramName);
+        if (path && path.length > 0) {
+          addProp(path[0]!);
+          // Keep walking to collect other props.
+        }
+      }
+      for (const key of Object.keys(n)) {
+        if (key === "loc" || key === "comments") {
+          continue;
+        }
+        const child = (node as Record<string, unknown>)[key];
+        visit(child);
+      }
+    };
+    for (const expr of expressions) {
+      visit(expr);
+    }
+    return {
+      hasUsableProps: props.length > 0,
+      hasNonTransientProps: props.some((name) => !name.startsWith("$")),
+      props,
+    };
+  })();
+  if (!hasUsableProps || hasNonTransientProps) {
+    return null;
+  }
+  return { type: "emitStyleFunctionFromPropsObject", props };
+}
+
 function tryResolveInlineStyleValueForNestedPropAccess(node: DynamicNode): HandlerResult | null {
   if (!node.css.property) {
     return null;
@@ -1704,6 +1786,7 @@ export function resolveDynamicNode(
     tryResolveConditionalCssBlockTernary(node) ??
     tryResolveConditionalCssBlock(node) ??
     tryResolveArrowFnCallWithSinglePropArg(node) ??
+    tryResolveStyleFunctionFromTemplateLiteral(node) ??
     tryResolveInlineStyleValueForNestedPropAccess(node) ??
     tryResolvePropAccess(node) ??
     tryResolveInlineStyleValueForConditionalExpression(node)

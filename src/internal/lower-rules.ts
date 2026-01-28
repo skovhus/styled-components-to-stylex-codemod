@@ -12,6 +12,7 @@ import {
 import {
   type AstPath,
   type IdentifierNode,
+  cloneAstNode,
   extractRootAndPath,
   getFunctionBodyExpr,
   getMemberPathFromIdentifier,
@@ -3886,6 +3887,82 @@ export function lowerRules(args: {
 
             decl.needsWrapperComponent = true;
             continue;
+          }
+
+          if (res && res.type === "emitStyleFunctionFromPropsObject") {
+            if (!d.property) {
+              // This handler is only intended for value interpolations on concrete properties.
+              // If the IR is missing a property, fall through to other handlers.
+            } else {
+              const e = decl.templateExpressions[slotId] as any;
+              if (
+                e?.type !== "ArrowFunctionExpression" &&
+                e?.type !== "FunctionExpression"
+              ) {
+                bailUnsupported(decl, "Unsupported interpolation: arrow function");
+                break;
+              }
+              if (hasThemeAccessInArrowFn(e)) {
+                warnPropInlineStyle(
+                  decl,
+                  "Unsupported prop-based inline style props.theme access is not supported",
+                  d.property,
+                  loc,
+                );
+                bail = true;
+                break;
+              }
+              const bodyExpr = getFunctionBodyExpr(e);
+              if (!bodyExpr) {
+                warnPropInlineStyle(
+                  decl,
+                  "Unsupported prop-based inline style expression cannot be safely inlined",
+                  d.property,
+                  loc,
+                );
+                bail = true;
+                break;
+              }
+              for (const propName of res.props ?? []) {
+                ensureShouldForwardPropDrop(decl, propName);
+              }
+              decl.needsWrapperComponent = true;
+              const paramName =
+                e.params?.[0]?.type === "Identifier" ? e.params[0].name : "props";
+              for (const out of cssDeclarationToStylexDeclarations(d)) {
+                if (!out.prop) {
+                  continue;
+                }
+                const fnKey = `${decl.styleKey}${toSuffixFromProp(out.prop)}`;
+                if (!styleFnDecls.has(fnKey)) {
+                  const valueExpr = cloneAstNode(bodyExpr) as ExpressionKind;
+                  const param = j.identifier(paramName);
+                  const body = j.objectExpression([
+                    j.property("init", j.identifier(out.prop), valueExpr),
+                  ]);
+                  styleFnDecls.set(fnKey, j.arrowFunctionExpression([param], body));
+                }
+                if (!styleFnFromProps.some((p) => p.fnKey === fnKey)) {
+                  const callArg = j.objectExpression(
+                    (res.props ?? []).map((propName) => {
+                      const prop = j.property(
+                        "init",
+                        j.identifier(propName),
+                        j.identifier(propName),
+                      ) as any;
+                      prop.shorthand = true;
+                      return prop;
+                    }),
+                  );
+                  styleFnFromProps.push({
+                    fnKey,
+                    jsxProp: "__props",
+                    callArg,
+                  });
+                }
+              }
+              continue;
+            }
           }
 
           if (res && res.type === "emitInlineStyleValueFromProps") {
