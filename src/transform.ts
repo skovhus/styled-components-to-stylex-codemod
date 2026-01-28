@@ -349,153 +349,13 @@ export function transformWithWarnings(
   }
 
   // --- Core transform ---
-  // We can have styled-components usage without a default import (e.g. only `createGlobalStyle`,
-  // `ThemeProvider`, `withTheme`). Don't early-return; instead apply what we can.
+  // We can have styled-components usage without a default import (e.g. only `keyframes` or `css`).
+  // Don't early-return; instead apply what we can.
   const styledDefaultSpecifier = styledImports.find(j.ImportDefaultSpecifier).nodes()[0];
   const styledDefaultImport =
     styledDefaultSpecifier?.local?.type === "Identifier"
       ? styledDefaultSpecifier.local.name
       : undefined;
-
-  // Handle `createGlobalStyle` minimally: remove the global style component and its usage.
-  // (We still emit an unsupported-feature warning above.)
-  const createGlobalStyleLocal = styledImports
-    .find(j.ImportSpecifier)
-    .nodes()
-    .find((s) => s.imported.type === "Identifier" && s.imported.name === "createGlobalStyle")
-    ?.local?.name;
-  if (createGlobalStyleLocal) {
-    const globalStyleComponentNames = new Set<string>();
-    // Remove `const GlobalStyle = createGlobalStyle`... declarations.
-    root
-      .find(j.VariableDeclarator)
-      .filter((p) => {
-        const init = p.node.init;
-        return (
-          !!init &&
-          init.type === "TaggedTemplateExpression" &&
-          init.tag.type === "Identifier" &&
-          init.tag.name === createGlobalStyleLocal
-        );
-      })
-      .forEach((p) => {
-        if (p.node.id.type === "Identifier") {
-          globalStyleComponentNames.add(p.node.id.name);
-        }
-        // Remove the whole variable declaration statement.
-        j(p).closest(j.VariableDeclaration).remove();
-        hasChanges = true;
-      });
-
-    // Remove `<GlobalStyle />` usages (whatever the local component name was).
-    for (const name of globalStyleComponentNames) {
-      root.find(j.JSXElement).filter(isJsxElementNamed(name)).remove();
-      root.find(j.JSXSelfClosingElement).filter(isJsxSelfClosingNamed(name)).remove();
-    }
-
-    // Remove the import specifier (or whole import if now empty).
-    styledImports.forEach((imp) => {
-      const specs = imp.node.specifiers ?? [];
-      imp.node.specifiers = specs.filter((s) => {
-        if (s.type !== "ImportSpecifier") {
-          return true;
-        }
-        if (s.imported.type !== "Identifier") {
-          return true;
-        }
-        return s.imported.name !== "createGlobalStyle";
-      });
-      if ((imp.node.specifiers?.length ?? 0) === 0) {
-        j(imp).remove();
-      }
-    });
-    hasChanges = true;
-  }
-
-  // Handle `ThemeProvider` / `withTheme` minimally by unwrapping providers and passing `theme` explicitly.
-  const themeProviderLocal = styledImports
-    .find(j.ImportSpecifier)
-    .nodes()
-    .find((s) => s.imported.type === "Identifier" && s.imported.name === "ThemeProvider")?.local
-    ?.name as string | undefined;
-  const withThemeLocal = styledImports
-    .find(j.ImportSpecifier)
-    .nodes()
-    .find((s) => s.imported.type === "Identifier" && s.imported.name === "withTheme")?.local
-    ?.name as string | undefined;
-
-  if (withThemeLocal) {
-    // Rewrite `const X = withTheme(Y)` => `const X = Y`
-    root
-      .find(j.VariableDeclarator)
-      .filter((p) => {
-        const init = p.node.init;
-        return (
-          !!init &&
-          init.type === "CallExpression" &&
-          init.callee.type === "Identifier" &&
-          init.callee.name === withThemeLocal
-        );
-      })
-      .forEach((p) => {
-        const init = p.node.init;
-        if (!init || init.type !== "CallExpression") {
-          return;
-        }
-        const arg0 = init.arguments[0];
-        if (!arg0 || arg0.type !== "Identifier") {
-          return;
-        }
-        p.node.init = arg0;
-        hasChanges = true;
-      });
-  }
-
-  if (themeProviderLocal) {
-    // Replace `<ThemeProvider theme={theme}>{children}</ThemeProvider>` with its children.
-    root
-      .find(j.JSXElement)
-      .filter(isJsxElementNamed(themeProviderLocal))
-      .forEach((p) => {
-        const children = (p.node.children ?? []).filter(
-          (c) => c.type !== "JSXText" || c.value.trim() !== "",
-        );
-        if (children.length === 1) {
-          j(p).replaceWith(children[0] as any);
-        } else {
-          j(p).replaceWith(
-            j.jsxFragment(j.jsxOpeningFragment(), j.jsxClosingFragment(), children as any),
-          );
-        }
-        hasChanges = true;
-      });
-  }
-
-  if (themeProviderLocal || withThemeLocal) {
-    // Remove ThemeProvider/withTheme import specifiers; if that was the whole import, remove it.
-    styledImports.forEach((imp) => {
-      const specs = imp.node.specifiers ?? [];
-      imp.node.specifiers = specs.filter((s) => {
-        if (s.type !== "ImportSpecifier") {
-          return true;
-        }
-        if (s.imported.type !== "Identifier") {
-          return true;
-        }
-        if (themeProviderLocal && s.imported.name === "ThemeProvider") {
-          return false;
-        }
-        if (withThemeLocal && s.imported.name === "withTheme") {
-          return false;
-        }
-        return true;
-      });
-      if ((imp.node.specifiers?.length ?? 0) === 0) {
-        j(imp).remove();
-      }
-    });
-    hasChanges = true;
-  }
 
   // Pre-process: extract CallExpression arguments from styled() calls into separate variables.
   // This transforms patterns like styled(motion.create(Component)) into:
@@ -530,7 +390,7 @@ export function transformWithWarnings(
     });
   }
 
-  // If we didn't find any styled declarations but performed other edits (e.g. createGlobalStyle / ThemeProvider),
+  // If we didn't find any styled declarations but performed other edits (e.g. keyframes conversion),
   // we'll still emit output without injecting StyleX styles.
   if (styledDecls.length === 0) {
     return {
@@ -819,8 +679,8 @@ export function transformWithWarnings(
   }
 
   // Styled components wrapping IMPORTED (non-styled) components that are used in JSX.
-  // These CAN be inlined if simple enough OR only used once.
-  // Complex wrappers (with variants, dynamic styles, attrs logic, etc.) still need wrappers.
+  // Simple wrappers can be inlined; complex ones (variants, dynamic styles, attrs logic, etc.)
+  // still need wrappers.
   for (const decl of styledDecls) {
     if (decl.isCssHelper) {
       continue;
@@ -845,12 +705,7 @@ export function transformWithWarnings(
           }
 
           const isSimple = canInlineImportedComponentWrapper(decl);
-
-          if (isSimple) {
-            // Mark as candidate for inlining - styleKey update is deferred until after
-            // all needsWrapperComponent checks are done (as/forwardedAs usage, etc.)
-            (decl as any).canInlineComponentWrapper = true;
-          } else {
+          if (!isSimple) {
             decl.needsWrapperComponent = true;
           }
           // Note: other conditions (used as value, className/style in JSX, as prop) are checked later
@@ -1007,7 +862,7 @@ export function transformWithWarnings(
   }
 
   // Helper to check if a type member is `as?: React.ElementType`.
-  const isAsElementTypeMemberEarly = (member: any): boolean => {
+  const isAsElementTypeMember = (member: any): boolean => {
     if (
       member.type !== "TSPropertySignature" ||
       member.key?.type !== "Identifier" ||
@@ -1018,6 +873,7 @@ export function transformWithWarnings(
     const memberType = member.typeAnnotation?.typeAnnotation;
     if (memberType?.type === "TSTypeReference") {
       const memberTypeName = memberType.typeName;
+      // Check for React.ElementType
       if (
         memberTypeName?.type === "TSQualifiedName" &&
         memberTypeName.left?.name === "React" &&
@@ -1025,6 +881,7 @@ export function transformWithWarnings(
       ) {
         return true;
       }
+      // Check for ElementType (without React. prefix)
       if (memberTypeName?.type === "Identifier" && memberTypeName.name === "ElementType") {
         return true;
       }
@@ -1032,39 +889,47 @@ export function transformWithWarnings(
     return false;
   };
 
-  // Helper to check if a type contains `as?: React.ElementType` property (early version).
-  const typeContainsAsElementTypeEarly = (typeNode: any): boolean => {
+  // Helper to check if a type contains `as?: React.ElementType` property.
+  // This handles both inline type literals and type references.
+  const typeContainsAsElementType = (typeNode: any): boolean => {
     if (!typeNode) {
       return false;
     }
+    // Handle intersection types: A & B & C
     if (typeNode.type === "TSIntersectionType") {
-      return (typeNode.types ?? []).some(typeContainsAsElementTypeEarly);
+      return (typeNode.types ?? []).some((t: any) => typeContainsAsElementType(t));
     }
+    // Handle parenthesized types: (A & B)
     if (typeNode.type === "TSParenthesizedType") {
-      return typeContainsAsElementTypeEarly(typeNode.typeAnnotation);
+      return typeContainsAsElementType(typeNode.typeAnnotation);
     }
+    // Handle type references (e.g., TextProps, React.PropsWithChildren<{...}>)
     if (typeNode.type === "TSTypeReference") {
+      // Check type parameters (e.g., React.PropsWithChildren<{ as?: ... }>)
       const typeParams = typeNode.typeParameters?.params ?? [];
       for (const tp of typeParams) {
-        if (typeContainsAsElementTypeEarly(tp)) {
+        if (typeContainsAsElementType(tp)) {
           return true;
         }
       }
+      // If it's a simple identifier, look it up
       if (typeNode.typeName?.type === "Identifier") {
         const typeName = typeNode.typeName.name;
+        // Look up type alias
         const typeAlias = root
           .find(j.TSTypeAliasDeclaration)
           .filter((p) => (p.node as any).id?.name === typeName);
         if (typeAlias.size() > 0) {
-          return typeContainsAsElementTypeEarly(typeAlias.get().node.typeAnnotation);
+          return typeContainsAsElementType(typeAlias.get().node.typeAnnotation);
         }
+        // Look up interface
         const iface = root
           .find(j.TSInterfaceDeclaration)
           .filter((p) => (p.node as any).id?.name === typeName);
         if (iface.size() > 0) {
           const body = iface.get().node.body?.body ?? [];
           for (const member of body) {
-            if (isAsElementTypeMemberEarly(member)) {
+            if (isAsElementTypeMember(member)) {
               return true;
             }
           }
@@ -1072,9 +937,10 @@ export function transformWithWarnings(
       }
       return false;
     }
+    // Handle type literals: { as?: React.ElementType; ... }
     if (typeNode.type === "TSTypeLiteral") {
       for (const member of typeNode.members ?? []) {
-        if (isAsElementTypeMemberEarly(member)) {
+        if (isAsElementTypeMember(member)) {
           return true;
         }
       }
@@ -1082,7 +948,7 @@ export function transformWithWarnings(
     return false;
   };
 
-  // Early detection of polymorphic intrinsic wrappers (before emitStylesAndImports for merger import)
+  // Detection of polymorphic intrinsic wrappers (before emitStylesAndImports for merger import)
   // These are intrinsic styled components (styled.tag) used with as={} in JSX OR whose props type
   // includes as?: React.ElementType. They pass style through directly instead of merging.
   for (const decl of styledDecls) {
@@ -1097,7 +963,7 @@ export function transformWithWarnings(
         el.find(j.JSXAttribute, { name: { type: "JSXIdentifier", name: "forwardedAs" } }).size() >
         0;
       // Also check if props type contains as?: React.ElementType
-      const propsTypeHasAs = decl.propsType && typeContainsAsElementTypeEarly(decl.propsType);
+      const propsTypeHasAs = decl.propsType && typeContainsAsElementType(decl.propsType);
       if (hasAs || hasForwardedAs || propsTypeHasAs) {
         (decl as any).isPolymorphicIntrinsicWrapper = true;
       }
@@ -1256,97 +1122,6 @@ export function transformWithWarnings(
   // Remove styled declarations and rewrite JSX usages
 
   const wrapperNames = new Set<string>();
-  // Track wrappers that have expression `as` values (not just string literals)
-  // These need generic polymorphic types to accept component-specific props
-  const expressionAsWrapperNames = new Set<string>();
-
-  // Helper to check if a type member is `as?: React.ElementType`.
-  const isAsElementTypeMember = (member: any): boolean => {
-    if (
-      member.type !== "TSPropertySignature" ||
-      member.key?.type !== "Identifier" ||
-      member.key.name !== "as"
-    ) {
-      return false;
-    }
-    const memberType = member.typeAnnotation?.typeAnnotation;
-    if (memberType?.type === "TSTypeReference") {
-      const memberTypeName = memberType.typeName;
-      // Check for React.ElementType
-      if (
-        memberTypeName?.type === "TSQualifiedName" &&
-        memberTypeName.left?.name === "React" &&
-        memberTypeName.right?.name === "ElementType"
-      ) {
-        return true;
-      }
-      // Check for ElementType (without React. prefix)
-      if (memberTypeName?.type === "Identifier" && memberTypeName.name === "ElementType") {
-        return true;
-      }
-    }
-    return false;
-  };
-
-  // Helper to check if a type contains `as?: React.ElementType` property.
-  // This handles both inline type literals and type references.
-  const typeContainsAsElementType = (typeNode: any): boolean => {
-    if (!typeNode) {
-      return false;
-    }
-    // Handle intersection types: A & B & C
-    if (typeNode.type === "TSIntersectionType") {
-      return (typeNode.types ?? []).some((t: any) => typeContainsAsElementType(t));
-    }
-    // Handle parenthesized types: (A & B)
-    if (typeNode.type === "TSParenthesizedType") {
-      return typeContainsAsElementType(typeNode.typeAnnotation);
-    }
-    // Handle type references (e.g., TextProps, React.PropsWithChildren<{...}>)
-    if (typeNode.type === "TSTypeReference") {
-      // Check type parameters (e.g., React.PropsWithChildren<{ as?: ... }>)
-      const typeParams = typeNode.typeParameters?.params ?? [];
-      for (const tp of typeParams) {
-        if (typeContainsAsElementType(tp)) {
-          return true;
-        }
-      }
-      // If it's a simple identifier, look it up
-      if (typeNode.typeName?.type === "Identifier") {
-        const typeName = typeNode.typeName.name;
-        // Look up type alias
-        const typeAlias = root
-          .find(j.TSTypeAliasDeclaration)
-          .filter((p) => (p.node as any).id?.name === typeName);
-        if (typeAlias.size() > 0) {
-          return typeContainsAsElementType(typeAlias.get().node.typeAnnotation);
-        }
-        // Look up interface
-        const iface = root
-          .find(j.TSInterfaceDeclaration)
-          .filter((p) => (p.node as any).id?.name === typeName);
-        if (iface.size() > 0) {
-          const body = iface.get().node.body?.body ?? [];
-          for (const member of body) {
-            if (isAsElementTypeMember(member)) {
-              return true;
-            }
-          }
-        }
-      }
-      return false;
-    }
-    // Handle type literals: { as?: React.ElementType; ... }
-    if (typeNode.type === "TSTypeLiteral") {
-      for (const member of typeNode.members ?? []) {
-        if (isAsElementTypeMember(member)) {
-          return true;
-        }
-      }
-    }
-    return false;
-  };
-
   // Detect styled components whose props type includes `as?: React.ElementType`.
   // These need polymorphic wrapper generation.
   // Note: Don't automatically add children - they may use .attrs({ as: "element" })
@@ -1419,17 +1194,6 @@ export function transformWithWarnings(
           .size() > 0;
       if (hasAs || hasForwardedAs) {
         wrapperNames.add(decl.localName);
-        // Check if any `as` value is an expression (not a string literal)
-        // e.g., as={animated.span} vs as="a"
-        const hasExpressionAs = asAttrs.some((path) => {
-          const value = path.node.value;
-          // JSXExpressionContainer means it's an expression like {animated.span}
-          // StringLiteral/Literal means it's a string like "a"
-          return value?.type === "JSXExpressionContainer";
-        });
-        if (hasExpressionAs) {
-          expressionAsWrapperNames.add(decl.localName);
-        }
       }
     }
   }
@@ -1494,75 +1258,6 @@ export function transformWithWarnings(
           decl.needsWrapperComponent = true;
         }
       }
-    }
-
-    // Styled components used as values (not just rendered in JSX) need wrapper components.
-    // For example: <Component elementType={StyledDiv} /> passes StyledDiv as a value.
-    // Without a wrapper, the identifier would be undefined after the styled declaration is removed.
-    const usedAsValue =
-      root
-        .find(j.Identifier, { name: decl.localName })
-        .filter((p) => {
-          // Skip the styled component declaration itself
-          if (p.parentPath?.node?.type === "VariableDeclarator") {
-            return false;
-          }
-          // Skip JSX element names (these are handled by inline substitution)
-          if (p.parentPath?.node?.type === "JSXOpeningElement") {
-            return false;
-          }
-          if (p.parentPath?.node?.type === "JSXClosingElement") {
-            return false;
-          }
-          // Skip JSX member expressions like <Styled.Component />
-          if (
-            p.parentPath?.node?.type === "JSXMemberExpression" &&
-            (p.parentPath.node as any).object === p.node
-          ) {
-            return false;
-          }
-          // Skip styled(Component) extensions - the Component being extended
-          // This checks if we're an argument to a CallExpression that is part of styled()
-          if (p.parentPath?.node?.type === "CallExpression") {
-            const callExpr = p.parentPath.node as any;
-            const callee = callExpr.callee;
-            // styled(Component) - callee is the styled identifier
-            if (callee?.type === "Identifier" && callee.name === styledDefaultImport) {
-              return false;
-            }
-            // styled(Component).withConfig() - callee is MemberExpression
-            if (
-              callee?.type === "MemberExpression" &&
-              callee.object?.type === "CallExpression" &&
-              callee.object.callee?.type === "Identifier" &&
-              callee.object.callee.name === styledDefaultImport
-            ) {
-              return false;
-            }
-          }
-          // Skip TaggedTemplateExpression tags - like styled(Component)`...`
-          if (p.parentPath?.node?.type === "TaggedTemplateExpression") {
-            return false;
-          }
-          // Skip if this is the argument to a styled(Component) call within a TaggedTemplateExpression
-          if (
-            p.parentPath?.node?.type === "CallExpression" &&
-            p.parentPath.parentPath?.node?.type === "TaggedTemplateExpression"
-          ) {
-            return false;
-          }
-          // Skip if this is inside a template literal (e.g., ${Link}:hover & pattern)
-          if (p.parentPath?.node?.type === "TemplateLiteral") {
-            return false;
-          }
-          // This is a value reference - could be passed as a prop, assigned, etc.
-          return true;
-        })
-        .size() > 0;
-
-    if (usedAsValue) {
-      decl.usedAsValue = true;
-      decl.needsWrapperComponent = true;
     }
 
     // Component wrappers with `.attrs({ as: "element" })` that specify a different element
@@ -2772,18 +2467,4 @@ function buildUnsupportedCssWarnings(usages: UnsupportedCssUsage[]): WarningLog[
         : ("`css` helper used outside of a styled component template cannot be statically transformed" as const),
     loc: usage.loc ?? undefined,
   }));
-}
-
-function isJsxElementNamed(name: string) {
-  return (p: any) => {
-    const n = p.node.openingElement?.name;
-    return n && n.type === "JSXIdentifier" && n.name === name;
-  };
-}
-
-function isJsxSelfClosingNamed(name: string) {
-  return (p: any) => {
-    const n = p.node.name;
-    return n && n.type === "JSXIdentifier" && n.name === name;
-  };
 }
