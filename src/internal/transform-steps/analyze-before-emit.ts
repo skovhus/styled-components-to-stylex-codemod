@@ -162,9 +162,8 @@ export function analyzeBeforeEmitStep(ctx: TransformContext): StepResult {
     if (decl.variantDimensions && decl.variantDimensions.length > 0) {
       return false;
     }
-    if (decl.styleFnFromProps && decl.styleFnFromProps.length > 0) {
-      return false;
-    }
+    // styleFnFromProps CAN be inlined - the JSX rewriter handles extracting
+    // prop values and calling the style functions at usage sites.
     if (decl.inlineStyleProps && decl.inlineStyleProps.length > 0) {
       return false;
     }
