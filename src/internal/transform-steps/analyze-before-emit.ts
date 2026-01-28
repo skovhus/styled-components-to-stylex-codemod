@@ -1,6 +1,10 @@
 import { CONTINUE, type StepResult } from "../transform-types.js";
 import type { StyledDecl } from "../transform-types.js";
 import { TransformContext, type ExportInfo } from "../transform-context.js";
+import {
+  isComponentUsedInJsx,
+  propagateDelegationWrapperRequirements,
+} from "../utilities/delegation-utils.js";
 
 /**
  * Analyzes declarations to determine wrappers, exports, usage patterns, and import aliasing before emit.
@@ -142,16 +146,7 @@ export function analyzeBeforeEmitStep(ctx: TransformContext): StepResult {
   }
 
   // Helper to check if a component is used in JSX
-  const isUsedInJsx = (name: string): boolean => {
-    return (
-      root
-        .find(j.JSXElement, {
-          openingElement: { name: { type: "JSXIdentifier", name } },
-        })
-        .size() > 0 ||
-      root.find(j.JSXOpeningElement, { name: { type: "JSXIdentifier", name } }).size() > 0
-    );
-  };
+  const isUsedInJsx = (name: string): boolean => isComponentUsedInJsx(root, j, name);
 
   // Helper to determine if a styled(ImportedComponent) wrapper is simple enough to inline.
   // Returns true if there's no complex logic that requires a wrapper function.
@@ -388,24 +383,7 @@ export function analyzeBeforeEmitStep(ctx: TransformContext): StepResult {
   // Ensure base components get wrappers when a derived component delegates to them.
   // Run this AFTER all needsWrapperComponent signals (exports, className/style usage, usedAsValue, etc.)
   // so delegation doesn't reference a base that was inlined/removed.
-  for (const decl of styledDecls) {
-    if (decl.isCssHelper) {
-      continue;
-    }
-    if (decl.base.kind === "component") {
-      const baseDecl = declByLocal.get(decl.base.ident);
-      if (!baseDecl) {
-        continue;
-      }
-      // If the base component is used in JSX AND this component needs a wrapper,
-      // the base component also needs a wrapper for delegation to work.
-      const baseUsedInJsx = isUsedInJsx(decl.base.ident);
-      const shouldDelegate = baseUsedInJsx && decl.needsWrapperComponent;
-      if (shouldDelegate) {
-        baseDecl.needsWrapperComponent = true;
-      }
-    }
-  }
+  propagateDelegationWrapperRequirements({ root, j, styledDecls, declByLocal });
 
   // Helper to check if a type member is `as?: React.ElementType`.
   const isAsElementTypeMember = (member: any): boolean => {

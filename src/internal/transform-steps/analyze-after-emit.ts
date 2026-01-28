@@ -1,6 +1,10 @@
 import { CONTINUE, type StepResult } from "../transform-types.js";
 import type { StyledDecl } from "../transform-types.js";
 import { TransformContext } from "../transform-context.js";
+import {
+  isComponentUsedInJsx,
+  propagateDelegationWrapperRequirements,
+} from "../utilities/delegation-utils.js";
 
 /**
  * Finalizes wrapper decisions, polymorphic handling, and base flattening after style emission.
@@ -240,6 +244,10 @@ export function analyzeAfterEmitStep(ctx: TransformContext): StepResult {
     }
   }
 
+  // Propagate needsWrapperComponent transitively through chains.
+  // Run AFTER all local needsWrapperComponent flags are set (lines above).
+  propagateDelegationWrapperRequirements({ root, j, styledDecls, declByLocal });
+
   // Helper to check if a styled decl has wrapper semantics that would be lost by flattening.
   // These are behaviors that change the rendered output beyond just styles:
   // - .attrs({ as: "element" }) - changes the rendered element type
@@ -314,17 +322,7 @@ export function analyzeAfterEmitStep(ctx: TransformContext): StepResult {
         // keep as component reference so the wrapper can delegate to the base wrapper.
         // Otherwise flatten to intrinsic tag for inline style merging.
         const immediateBaseIdent = decl.base.ident;
-        const baseUsedInJsx =
-          root
-            .find(j.JSXElement, {
-              openingElement: { name: { type: "JSXIdentifier", name: immediateBaseIdent } },
-            })
-            .size() > 0 ||
-          root
-            .find(j.JSXOpeningElement, {
-              name: { type: "JSXIdentifier", name: immediateBaseIdent },
-            })
-            .size() > 0;
+        const baseUsedInJsx = isComponentUsedInJsx(root, j, immediateBaseIdent);
         const shouldDelegate = baseUsedInJsx && decl.needsWrapperComponent;
         // Don't flatten if this component has .attrs({ as: "element" }) that specifies
         // a different element - it needs to render that element directly.
@@ -350,17 +348,7 @@ export function analyzeAfterEmitStep(ctx: TransformContext): StepResult {
         // Update the base to point directly to the external component.
         const immediateBaseIdent = decl.base.ident;
         const immediateBaseDecl = declByLocal.get(immediateBaseIdent);
-        const baseUsedInJsx =
-          root
-            .find(j.JSXElement, {
-              openingElement: { name: { type: "JSXIdentifier", name: immediateBaseIdent } },
-            })
-            .size() > 0 ||
-          root
-            .find(j.JSXOpeningElement, {
-              name: { type: "JSXIdentifier", name: immediateBaseIdent },
-            })
-            .size() > 0;
+        const baseUsedInJsx = isComponentUsedInJsx(root, j, immediateBaseIdent);
         const shouldDelegate = baseUsedInJsx && decl.needsWrapperComponent && immediateBaseDecl;
 
         if (!shouldDelegate) {
