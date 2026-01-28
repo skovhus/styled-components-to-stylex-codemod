@@ -1,6 +1,9 @@
+import type { JSXAttribute, JSXSpreadAttribute } from "jscodeshift";
 import { CONTINUE, type StepResult } from "../transform-types.js";
 import type { StyledDecl } from "../transform-types.js";
 import { TransformContext, type ExportInfo } from "../transform-context.js";
+
+type JsxAttr = JSXAttribute | JSXSpreadAttribute;
 
 /**
  * Analyzes declarations to determine wrappers, exports, usage patterns, and import aliasing before emit.
@@ -282,6 +285,48 @@ export function analyzeBeforeEmitStep(ctx: TransformContext): StepResult {
     if (className || style) {
       (decl as any).receivesClassNameOrStyleInJsx = true;
       if (!decl.needsWrapperComponent) {
+        decl.needsWrapperComponent = true;
+      }
+    }
+  }
+
+  // Helper to check if any JSX usage of a component has spread attributes.
+  // Used to detect cases where styleFnFromProps values might come via spread.
+  const hasSpreadInJsx = (name: string): boolean => {
+    let found = false;
+    const checkOpening = (opening: { attributes?: JsxAttr[] }) => {
+      if (found) {
+        return;
+      }
+      for (const attr of opening.attributes ?? []) {
+        if (attr.type === "JSXSpreadAttribute") {
+          found = true;
+          return;
+        }
+      }
+    };
+    // Note: jscodeshift's filter types don't match runtime behavior well,
+    // so we cast the filter objects (same pattern used throughout codebase).
+    root
+      .find(j.JSXElement, {
+        openingElement: { name: { type: "JSXIdentifier", name } },
+      } as object)
+      .forEach((p) => checkOpening(p.node.openingElement as { attributes?: JsxAttr[] }));
+    root
+      .find(j.JSXSelfClosingElement, { name: { type: "JSXIdentifier", name } } as object)
+      .forEach((p) => checkOpening(p.node as { attributes?: JsxAttr[] }));
+    return found;
+  };
+
+  // Components with styleFnFromProps that have spread attributes in JSX need wrappers.
+  // The JSX rewriter can only extract styleFn prop values from explicit attributes,
+  // not from spreads like `<StyledComp {...props} />`.
+  for (const decl of styledDecls) {
+    if (decl.needsWrapperComponent) {
+      continue;
+    }
+    if (decl.styleFnFromProps && decl.styleFnFromProps.length > 0) {
+      if (hasSpreadInJsx(decl.localName)) {
         decl.needsWrapperComponent = true;
       }
     }
