@@ -715,6 +715,9 @@ export function emitIntrinsicWrappers(emitter: WrapperEmitter): {
       emitter.collectDestructurePropsFromStyleFns({ d, styleArgs, destructureProps });
 
       const isVoidTag = VOID_TAGS.has(tagName);
+      // When allowAsProp is true, include children support even for void tags
+      // because the user might use `as="textarea"` which requires children
+      const includeChildren = allowAsProp || !isVoidTag;
       const propsParamId = j.identifier("props");
       if (emitTypes) {
         if (isExplicitNonGenericType) {
@@ -753,7 +756,7 @@ export function emitIntrinsicWrappers(emitter: WrapperEmitter): {
                 ]
               : []),
             ...(allowClassNameProp ? [patternProp("className", classNameId)] : []),
-            ...(isVoidTag ? [] : [patternProp("children", childrenId)]),
+            ...(includeChildren ? [patternProp("children", childrenId)] : []),
             ...(allowStyleProp ? [patternProp("style", styleId)] : []),
             // Add variant props to destructuring (with defaults when available)
             ...destructureProps.filter(Boolean).map((name) => {
@@ -797,7 +800,7 @@ export function emitIntrinsicWrappers(emitter: WrapperEmitter): {
       const jsx = emitter.buildJsxElement({
         tagName: allowAsProp ? "Component" : tagName,
         attrs,
-        includeChildren: !isVoidTag,
+        includeChildren,
         childrenExpr: childrenId,
       });
 
@@ -1254,10 +1257,13 @@ export function emitIntrinsicWrappers(emitter: WrapperEmitter): {
 
     if (!allowClassNameProp && !allowStyleProp) {
       const isVoid = VOID_TAGS.has(tagName);
+      // When allowAsProp is true, include children support even for void tags
+      // because the user might use `as="textarea"` which requires children
+      const includeChildrenInner = allowAsProp || !isVoid;
       const patternProps = emitter.buildDestructurePatternProps({
         baseProps: [
           ...(allowAsProp ? [asDestructureProp(tagName)] : []),
-          ...(isVoid ? [] : [patternProp("children", childrenId)]),
+          ...(includeChildrenInner ? [patternProp("children", childrenId)] : []),
         ],
         destructureProps: destructureParts,
         propDefaults,
@@ -1317,7 +1323,7 @@ export function emitIntrinsicWrappers(emitter: WrapperEmitter): {
       const jsx = emitter.buildJsxElement({
         tagName: allowAsProp ? "Component" : tagName,
         attrs: openingAttrs,
-        includeChildren: !isVoid,
+        includeChildren: includeChildrenInner,
         childrenExpr: childrenId,
       });
 
@@ -1343,11 +1349,14 @@ export function emitIntrinsicWrappers(emitter: WrapperEmitter): {
       continue;
     }
 
+    // When allowAsProp is true, include children support even for void tags
+    // because the user might use `as="textarea"` which requires children
+    const includeChildrenOuter = allowAsProp || !isVoidTag;
     const patternProps = emitter.buildDestructurePatternProps({
       baseProps: [
         ...(allowAsProp ? [asDestructureProp(tagName)] : []),
         ...(allowClassNameProp ? [patternProp("className", classNameId)] : []),
-        ...(isVoidTag ? [] : [patternProp("children", childrenId)]),
+        ...(includeChildrenOuter ? [patternProp("children", childrenId)] : []),
         ...(allowStyleProp ? [patternProp("style", styleId)] : []),
       ],
       destructureProps: destructureParts,
@@ -1403,7 +1412,7 @@ export function emitIntrinsicWrappers(emitter: WrapperEmitter): {
     const jsx = emitter.buildJsxElement({
       tagName: allowAsProp ? "Component" : tagName,
       attrs: openingAttrs,
-      includeChildren: !isVoidTag,
+      includeChildren: includeChildrenOuter,
       childrenExpr: childrenId,
     });
 
@@ -2153,6 +2162,9 @@ export function emitIntrinsicWrappers(emitter: WrapperEmitter): {
 
     if (allowAsProp || allowClassNameProp || allowStyleProp) {
       const isVoidTag = VOID_TAGS.has(tagName);
+      // When allowAsProp is true, include children support even for void tags
+      // because the user might use `as="textarea"` which requires children
+      const includeChildren = allowAsProp || !isVoidTag;
       const propsParamId = j.identifier("props");
       emitter.annotatePropsParam(propsParamId, d.localName, inlineTypeText);
       const propsId = j.identifier("props");
@@ -2175,7 +2187,7 @@ export function emitIntrinsicWrappers(emitter: WrapperEmitter): {
               ]
             : []),
           ...(allowClassNameProp ? [patternProp("className", classNameId)] : []),
-          ...(isVoidTag ? [] : [patternProp("children", childrenId)]),
+          ...(includeChildren ? [patternProp("children", childrenId)] : []),
           ...(allowStyleProp ? [patternProp("style", styleId)] : []),
         ],
         destructureProps,
@@ -2211,7 +2223,7 @@ export function emitIntrinsicWrappers(emitter: WrapperEmitter): {
       const jsx = emitter.buildJsxElement({
         tagName: allowAsProp ? "Component" : tagName,
         attrs: openingAttrs,
-        includeChildren: !isVoidTag,
+        includeChildren,
         childrenExpr: childrenId,
       });
 

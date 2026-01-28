@@ -12,8 +12,12 @@ type RangeInputProps = React.ComponentProps<"input"> & { as?: React.ElementType 
  * Should accept all HTML input attributes like max, min, type, value, onChange, etc.
  */
 export function RangeInput(props: RangeInputProps) {
-  const { as: Component = "input", className, style, ...rest } = props;
-  return <Component {...rest} {...mergedSx(styles.rangeInput, className, style)} />;
+  const { as: Component = "input", className, children, style, ...rest } = props;
+  return (
+    <Component {...rest} {...mergedSx(styles.rangeInput, className, style)}>
+      {children}
+    </Component>
+  );
 }
 
 // Usage should work with HTML input attributes

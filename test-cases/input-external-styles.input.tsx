@@ -19,5 +19,7 @@ export const App = () => (
   <>
     <StyledInput placeholder="Type here" value="hello" onChange={() => {}} />
     <StyledInput as="textarea" placeholder="Textarea mode" />
+    {/* Children should be forwarded when using as prop with non-void element */}
+    <StyledInput as="button">Click me</StyledInput>
   </>
 );

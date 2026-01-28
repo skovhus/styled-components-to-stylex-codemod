@@ -7,8 +7,12 @@ type StyledInputProps<C extends React.ElementType = "input"> = React.ComponentPr
 };
 
 export function StyledInput<C extends React.ElementType = "input">(props: StyledInputProps<C>) {
-  const { as: Component = "input", className, style, ...rest } = props;
-  return <Component {...rest} {...mergedSx(styles.styledInput, className, style)} />;
+  const { as: Component = "input", className, children, style, ...rest } = props;
+  return (
+    <Component {...rest} {...mergedSx(styles.styledInput, className, style)}>
+      {children}
+    </Component>
+  );
 }
 
 // Usage: should pass through all input props
@@ -16,6 +20,8 @@ export const App = () => (
   <>
     <StyledInput placeholder="Type here" value="hello" onChange={() => {}} />
     <StyledInput as="textarea" placeholder="Textarea mode" />
+    {/* Children should be forwarded when using as prop with non-void element */}
+    <StyledInput as="button">Click me</StyledInput>
   </>
 );
 
