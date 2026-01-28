@@ -1,7 +1,10 @@
 import type { ASTNode, Collection, JSCodeshift } from "jscodeshift";
 
 import type { Adapter, ImportSpec } from "../../adapter.js";
-import { getFunctionBodyExpr, getMemberPathFromIdentifier } from "../jscodeshift-utils.js";
+import {
+  getFunctionBodyExpr,
+  getMemberPathFromIdentifier,
+} from "../utilities/jscodeshift-utils.js";
 
 export function createThemeResolvers(args: {
   root: Collection<ASTNode>;

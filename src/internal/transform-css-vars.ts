@@ -1,7 +1,7 @@
 import type { JSCodeshift } from "jscodeshift";
 import type { Adapter, ImportSpec } from "../adapter.js";
 import { rewriteCssVarsInString } from "./css-vars.js";
-import { isAstNode } from "./jscodeshift-utils.js";
+import { isAstNode } from "./utilities/jscodeshift-utils.js";
 
 type ExpressionKind = Parameters<JSCodeshift["expressionStatement"]>[0];
 

@@ -1,7 +1,7 @@
 import type { Collection } from "jscodeshift";
 import type { CssRuleIR } from "./css-ir.js";
 import { normalizeStylisAstToIR } from "./css-ir.js";
-import { getFunctionBodyExpr } from "./jscodeshift-utils.js";
+import { cloneAstNode, getFunctionBodyExpr } from "./utilities/jscodeshift-utils.js";
 import { resolveBackgroundStylexProp } from "./css-prop-mapping.js";
 import { parseStyledTemplateLiteral } from "./styled-css.js";
 import type { StyledDecl } from "./transform-types.js";
@@ -1131,25 +1131,7 @@ function collectStyledDeclsImpl(args: {
         }
 
         // Deep clone the expression to avoid mutating the original
-        const cloneNode = (node: any): any => {
-          if (!node || typeof node !== "object") {
-            return node;
-          }
-          if (Array.isArray(node)) {
-            return node.map(cloneNode);
-          }
-          const clone: any = {};
-          for (const key of Object.keys(node)) {
-            // Skip loc and other metadata
-            if (key === "loc" || key === "start" || key === "end" || key === "range") {
-              continue;
-            }
-            clone[key] = cloneNode(node[key]);
-          }
-          return clone;
-        };
-
-        const clonedExpr = cloneNode(expr);
+        const clonedExpr = cloneAstNode(expr);
 
         // Transform identifiers that match destructured params to props.identifier
         const transformNode = (node: any): void => {
@@ -1201,25 +1183,7 @@ function collectStyledDeclsImpl(args: {
       // e.g., (p) => css`${p.color}` -> wraps p.color in (props) => props.color
       const wrapExprInArrowFnWithPropsRename = (expr: any, propsParamName: string): any => {
         // Deep clone the expression to avoid mutating the original
-        const cloneNode = (node: any): any => {
-          if (!node || typeof node !== "object") {
-            return node;
-          }
-          if (Array.isArray(node)) {
-            return node.map(cloneNode);
-          }
-          const clone: any = {};
-          for (const key of Object.keys(node)) {
-            // Skip loc and other metadata
-            if (key === "loc" || key === "start" || key === "end" || key === "range") {
-              continue;
-            }
-            clone[key] = cloneNode(node[key]);
-          }
-          return clone;
-        };
-
-        const clonedExpr = cloneNode(expr);
+        const clonedExpr = cloneAstNode(expr);
 
         // If the param name is not "props", rename references to it
         if (propsParamName !== "props") {

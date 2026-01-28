@@ -1,6 +1,6 @@
 import type { StyledDecl } from "../transform-types.js";
 import { cssDeclarationToStylexDeclarations } from "../css-prop-mapping.js";
-import { getMemberPathFromIdentifier } from "../jscodeshift-utils.js";
+import { getMemberPathFromIdentifier } from "../utilities/jscodeshift-utils.js";
 import { splitDirectionalProperty } from "../stylex-shorthands.js";
 
 export function extractStaticParts(

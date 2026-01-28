@@ -1,5 +1,7 @@
 import type { StyledDecl } from "../transform-types.js";
 
+export { literalToStaticValue } from "../utilities/jscodeshift-utils.js";
+
 export function ensureShouldForwardPropDrop(decl: StyledDecl, propName: string): void {
   // Ensure we generate a wrapper so we can consume the styling prop without forwarding it to DOM.
   decl.needsWrapperComponent = true;
@@ -9,31 +11,6 @@ export function ensureShouldForwardPropDrop(decl: StyledDecl, propName: string):
   const dropProps = new Set<string>(existing.dropProps ?? []);
   dropProps.add(propName);
   decl.shouldForwardProp = { ...existing, dropProps: [...dropProps] };
-}
-
-export function literalToStaticValue(node: any): string | number | boolean | null {
-  if (!node || typeof node !== "object") {
-    return null;
-  }
-  if (node.type === "StringLiteral") {
-    return node.value;
-  }
-  if (node.type === "NumericLiteral") {
-    return node.value;
-  }
-  if (node.type === "BooleanLiteral") {
-    return node.value;
-  }
-  // Support recast "Literal" nodes when parser produces them.
-  if (
-    node.type === "Literal" &&
-    (typeof node.value === "string" ||
-      typeof node.value === "number" ||
-      typeof node.value === "boolean")
-  ) {
-    return node.value;
-  }
-  return null;
 }
 
 export function createTypeInferenceHelpers(args: { root: any; j: any; decl: StyledDecl }): {

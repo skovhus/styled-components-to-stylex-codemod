@@ -21,7 +21,7 @@ import {
   isCallExpressionNode,
   isFunctionNode,
   getDeclaratorId,
-} from "./jscodeshift-utils.js";
+} from "./utilities/jscodeshift-utils.js";
 import type { Adapter, ImportSource, ImportSpec } from "../adapter.js";
 import { tryHandleAnimation } from "./lower-rules/animation.js";
 import { tryHandleInterpolatedBorder } from "./lower-rules/borders.js";

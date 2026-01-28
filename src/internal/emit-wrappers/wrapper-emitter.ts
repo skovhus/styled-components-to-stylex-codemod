@@ -16,7 +16,7 @@ import { emitStyleMerging } from "./style-merger.js";
 import type { ExportInfo, ExpressionKind, InlineStyleProp } from "./types.js";
 import { TAG_TO_HTML_ELEMENT, VOID_TAGS } from "./type-helpers.js";
 import type { VariantDimension } from "../transform-types.js";
-import { collectIdentifiers } from "../jscodeshift-utils.js";
+import { collectIdentifiers } from "../utilities/jscodeshift-utils.js";
 
 type TsTypeAnnotationInput = Parameters<JSCodeshift["tsTypeAnnotation"]>[0];
 type BlockStatementBody = Parameters<JSCodeshift["blockStatement"]>[0];

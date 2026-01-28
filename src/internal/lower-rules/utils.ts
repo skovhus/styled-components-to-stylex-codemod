@@ -1,11 +1,6 @@
-import { isAstNode } from "../jscodeshift-utils.js";
+import { isAstNode } from "../utilities/jscodeshift-utils.js";
 
-export function toKebab(s: string): string {
-  return s
-    .replace(/([a-z0-9])([A-Z])/g, "$1-$2")
-    .replace(/[^a-zA-Z0-9-]/g, "-")
-    .toLowerCase();
-}
+export { toKebab } from "../utilities/string-utils.js";
 
 export function mergeStyleObjects(
   target: Record<string, unknown>,

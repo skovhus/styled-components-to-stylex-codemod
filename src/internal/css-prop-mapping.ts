@@ -1,5 +1,6 @@
 import type { CssDeclarationIR, CssValue } from "./css-ir.js";
 import { splitDirectionalProperty } from "./stylex-shorthands.js";
+import { isBackgroundImageValue, looksLikeLength } from "./utilities/string-utils.js";
 
 export type StylexPropDecl = { prop: string; value: CssValue };
 
@@ -182,18 +183,6 @@ export function cssPropertyToStylexProp(prop: string): string {
 
 // --- Non-exported helpers ---
 
-/**
- * Check if a CSS value contains a gradient or image that requires `backgroundImage`
- * instead of `backgroundColor`. StyleX doesn't support the `background` shorthand.
- */
-function isBackgroundImageValue(value: string): boolean {
-  return (
-    /\b(linear|radial|conic|repeating-linear|repeating-radial|repeating-conic)-gradient\b/.test(
-      value,
-    ) || /\burl\s*\(/.test(value)
-  );
-}
-
 const BORDER_STYLES = new Set([
   "none",
   "solid",
@@ -259,8 +248,4 @@ function borderShorthandToStylex(valueRaw: string, direction: string): StylexPro
     return [{ prop: baseProp, value: { kind: "static", value: v } }];
   }
   return out;
-}
-
-function looksLikeLength(token: string): boolean {
-  return /^-?\d*\.?\d+(px|rem|em|vh|vw|vmin|vmax|ch|ex|lh|svh|svw|dvh|dvw|cqw|cqh|%)?$/.test(token);
 }

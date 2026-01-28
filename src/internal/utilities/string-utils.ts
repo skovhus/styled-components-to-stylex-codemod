@@ -1,0 +1,56 @@
+export function toKebab(s: string): string {
+  return s
+    .replace(/([a-z0-9])([A-Z])/g, "$1-$2")
+    .replace(/[^a-zA-Z0-9-]/g, "-")
+    .toLowerCase();
+}
+
+/**
+ * Capitalizes the first character of a string.
+ * @example capitalize("hello") => "Hello"
+ */
+export function capitalize(s: string): string {
+  return s.charAt(0).toUpperCase() + s.slice(1);
+}
+
+/**
+ * Lowercases the first character of a string.
+ * @example lowerFirst("Hello") => "hello"
+ */
+export function lowerFirst(s: string): string {
+  return s.charAt(0).toLowerCase() + s.slice(1);
+}
+
+/**
+ * Removes non-alphanumeric characters (except underscores) from a string.
+ * Useful for sanitizing strings to be valid JavaScript identifiers.
+ * @example sanitizeIdentifier("my-var!") => "my_var_"
+ */
+export function sanitizeIdentifier(s: string): string {
+  return s.replace(/[^a-zA-Z0-9_]/g, "_");
+}
+
+/**
+ * Checks if a CSS value looks like a length unit (px, rem, em, %, etc.).
+ * Matches numeric values with optional CSS length units.
+ * @example looksLikeLength("10px") => true
+ * @example looksLikeLength("1.5rem") => true
+ * @example looksLikeLength("auto") => false
+ */
+export function looksLikeLength(token: string): boolean {
+  return /^-?\d*\.?\d+(px|rem|em|vh|vw|vmin|vmax|ch|ex|lh|svh|svw|dvh|dvw|cqw|cqh|%)?$/.test(token);
+}
+
+/**
+ * Checks if a CSS value appears to be a background image (gradient or url).
+ * @example isBackgroundImageValue("linear-gradient(red, blue)") => true
+ * @example isBackgroundImageValue("url(image.png)") => true
+ * @example isBackgroundImageValue("#fff") => false
+ */
+export function isBackgroundImageValue(value: string): boolean {
+  return (
+    /\b(linear|radial|conic|repeating-linear|repeating-radial|repeating-conic)-gradient\b/.test(
+      value,
+    ) || /\burl\s*\(/.test(value)
+  );
+}

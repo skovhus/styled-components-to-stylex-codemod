@@ -1,11 +1,11 @@
 import type { API, ASTPath, FileInfo, ImportDeclaration, JSXAttribute, Options } from "jscodeshift";
 import path from "node:path";
-import { isAstNode } from "./internal/jscodeshift-utils.js";
+import { isAstNode } from "./internal/utilities/jscodeshift-utils.js";
 import type { ImportSource, ImportSpec } from "./adapter.js";
-import { assertNoNullNodesInArrays } from "./internal/ast-safety.js";
+import { assertNoNullNodesInArrays } from "./internal/utilities/ast-safety.js";
 import { collectStyledDecls } from "./internal/collect-styled-decls.js";
 import { extractStyledCallArgs } from "./internal/extract-styled-call-args.js";
-import { formatOutput } from "./internal/format-output.js";
+import { formatOutput } from "./internal/utilities/format-output.js";
 import { convertStyledKeyframes } from "./internal/keyframes.js";
 import { lowerRules } from "./internal/lower-rules.js";
 import { emitStylesAndImports } from "./internal/emit-styles.js";
