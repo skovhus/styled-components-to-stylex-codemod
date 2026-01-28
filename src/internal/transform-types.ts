@@ -2,6 +2,7 @@ import type { ASTNode, Comment, JSCodeshift, Options } from "jscodeshift";
 import type { Adapter } from "../adapter.js";
 import type { CssRuleIR } from "./css-ir.js";
 import type { WarningLog } from "./logger.js";
+import type { TransformContext } from "./transform-context.js";
 
 /**
  * Result of the transform including any log entries
@@ -10,6 +11,32 @@ export interface TransformResult {
   code: string | null;
   warnings: WarningLog[];
 }
+
+/**
+ * Result of a transform pipeline step.
+ */
+export type StepReturnReason = "skip" | "bail" | "done";
+
+export type StepResult =
+  | { kind: "continue" }
+  | { kind: "return"; result: TransformResult; reason: StepReturnReason };
+
+/**
+ * Sentinel value indicating the pipeline should continue to the next step.
+ */
+export const CONTINUE: StepResult = { kind: "continue" };
+
+/**
+ * Creates a step result that stops the pipeline with a final TransformResult.
+ */
+export function returnResult(result: TransformResult, reason: StepReturnReason): StepResult {
+  return { kind: "return", result, reason };
+}
+
+/**
+ * Signature for a single transform pipeline step.
+ */
+export type TransformStep = (ctx: TransformContext) => StepResult;
 
 /**
  * Options for the transform
