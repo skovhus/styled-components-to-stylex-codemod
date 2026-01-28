@@ -4556,14 +4556,30 @@ export function lowerRules(args: {
       styleObj[prop] = map;
     }
     // Merge computed media keys (from adapter.resolveSelector)
+    // Preserves any existing @media or pseudo entries already in styleObj[prop]
     for (const [prop, entry] of perPropComputedMedia) {
-      // Build a nested object with default and __computedKeys
-      const nested: Record<string, unknown> = { default: entry.defaultValue };
-      (nested as any).__computedKeys = entry.entries.map((e) => ({
-        keyExpr: e.keyExpr,
-        value: e.value,
-      }));
-      styleObj[prop] = nested;
+      const existing = styleObj[prop];
+      // If the prop already has a media/pseudo map, merge into it
+      if (existing && typeof existing === "object" && !isAstNode(existing)) {
+        const merged = existing as Record<string, unknown>;
+        // Add default if not already present
+        if (!("default" in merged)) {
+          merged.default = entry.defaultValue;
+        }
+        // Add computed keys to existing object
+        (merged as Record<string, unknown>).__computedKeys = entry.entries.map((e) => ({
+          keyExpr: e.keyExpr,
+          value: e.value,
+        }));
+      } else {
+        // No existing map, create a new nested object with default and __computedKeys
+        const nested: Record<string, unknown> = { default: entry.defaultValue };
+        (nested as Record<string, unknown>).__computedKeys = entry.entries.map((e) => ({
+          keyExpr: e.keyExpr,
+          value: e.value,
+        }));
+        styleObj[prop] = nested;
+      }
     }
     for (const [sel, obj] of Object.entries(nestedSelectors)) {
       styleObj[sel] = obj;
