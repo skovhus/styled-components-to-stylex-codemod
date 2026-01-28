@@ -48,6 +48,7 @@ export function assertValidAdapter(
   const obj = candidate as Record<string, unknown>;
   const resolveValue = obj?.resolveValue;
   const resolveCall = obj?.resolveCall;
+  const resolveSelector = obj?.resolveSelector;
   const externalInterface = obj?.externalInterface;
 
   if (!candidate || typeof candidate !== "object") {
@@ -59,6 +60,7 @@ export function assertValidAdapter(
         "Adapter requirements:",
         "  - adapter.resolveValue(context) is required",
         "  - adapter.resolveCall(context) is required",
+        "  - adapter.resolveSelector(context) is required",
         "  - adapter.externalInterface(context) is required",
         "",
         "resolveValue(context) is called with one of these shapes:",
@@ -68,6 +70,9 @@ export function assertValidAdapter(
         "",
         "resolveCall(context) is called with:",
         "  - { callSiteFilePath, calleeImportedName, calleeSource, args }",
+        "",
+        "resolveSelector(context) is called with:",
+        '  - { kind: "selectorInterpolation", importedName, source, path? }',
         "",
         `Docs/examples: ${ADAPTER_DOCS_URL}`,
       ].join("\n"),
@@ -102,6 +107,22 @@ export function assertValidAdapter(
         "Adapter shape:",
         "  {",
         '    resolveCall(context) { return { usage: "props" | "create", expr: string, imports: ImportSpec[] } | null }',
+        "  }",
+        "",
+        `Docs/examples: ${ADAPTER_DOCS_URL}`,
+      ].join("\n"),
+    );
+  }
+
+  if (typeof resolveSelector !== "function") {
+    throw new Error(
+      [
+        `${where}: adapter.resolveSelector must be a function.`,
+        `Received: resolveSelector=${describeValue(resolveSelector)}`,
+        "",
+        "Adapter shape:",
+        "  {",
+        '    resolveSelector(context) { return { kind: "media", expr: string, imports: ImportSpec[] } | undefined }',
         "  }",
         "",
         `Docs/examples: ${ADAPTER_DOCS_URL}`,

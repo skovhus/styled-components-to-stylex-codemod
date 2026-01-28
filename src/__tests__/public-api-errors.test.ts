@@ -13,6 +13,19 @@ describe("public API runtime validation (DX)", () => {
     expect(() => defineAdapter({ resolveValue: 123 } as any)).toThrowError(/must be a function/);
   });
 
+  it("defineAdapter: throws a helpful message when resolveSelector is missing", () => {
+    expect(() =>
+      defineAdapter({
+        resolveValue() {
+          return null;
+        },
+        resolveCall() {
+          return null;
+        },
+      } as any),
+    ).toThrowError(/resolveSelector/);
+  });
+
   it("defineAdapter: throws a helpful message when externalInterface is missing", () => {
     expect(() =>
       defineAdapter({
@@ -21,6 +34,9 @@ describe("public API runtime validation (DX)", () => {
         },
         resolveCall() {
           return null;
+        },
+        resolveSelector() {
+          return undefined;
         },
       } as any),
     ).toThrowError(/externalInterface/);
@@ -40,6 +56,9 @@ describe("public API runtime validation (DX)", () => {
         },
         resolveCall() {
           return null;
+        },
+        resolveSelector() {
+          return undefined;
         },
         externalInterface: "nope",
       } as any),

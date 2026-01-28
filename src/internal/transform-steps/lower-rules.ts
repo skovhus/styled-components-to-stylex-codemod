@@ -30,6 +30,7 @@ export function lowerRulesStep(ctx: TransformContext): StepResult {
     filePath: file.path,
     resolveValue: ctx.resolveValueSafe,
     resolveCall: ctx.resolveCallSafe,
+    resolveSelector: ctx.resolveSelectorSafe,
     importMap,
     warnings,
     resolverImports: ctx.resolverImports,

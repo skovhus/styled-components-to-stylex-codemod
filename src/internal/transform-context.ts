@@ -26,6 +26,7 @@ export class TransformContext {
   resolverImports: Map<string, ImportSpec>;
   resolveValueSafe: Adapter["resolveValue"];
   resolveCallSafe: Adapter["resolveCall"];
+  resolveSelectorSafe: Adapter["resolveSelector"];
   resolveValueBailRef: { value: boolean };
   patternProp: (keyName: string, valueId?: any) => any;
   getStaticPropertiesFromImport: (source: ImportSource, componentName: string) => string[];
@@ -87,10 +88,11 @@ export class TransformContext {
     );
 
     const resolverImports = new Map<string, ImportSpec>();
-    const { resolveValueSafe, resolveCallSafe, bailRef } = createResolveAdapterSafe({
-      adapter,
-      warnings,
-    });
+    const { resolveValueSafe, resolveCallSafe, resolveSelectorSafe, bailRef } =
+      createResolveAdapterSafe({
+        adapter,
+        warnings,
+      });
 
     const parseExpr = (exprSource: string): any => parseExprImpl(api, exprSource);
 
@@ -125,6 +127,7 @@ export class TransformContext {
     this.resolverImports = resolverImports;
     this.resolveValueSafe = resolveValueSafe;
     this.resolveCallSafe = resolveCallSafe;
+    this.resolveSelectorSafe = resolveSelectorSafe;
     this.resolveValueBailRef = bailRef;
     this.patternProp = patternProp;
     this.getStaticPropertiesFromImport = getStaticPropertiesFromImport;

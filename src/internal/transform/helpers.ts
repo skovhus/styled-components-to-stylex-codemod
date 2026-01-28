@@ -8,9 +8,21 @@ export function toStyleKey(name: string): string {
   return name.charAt(0).toLowerCase() + name.slice(1);
 }
 
+/**
+ * Entry for a computed property key in style objects.
+ * Used for dynamic keys like `[breakpoints.phone]` in StyleX styles.
+ */
+export type ComputedKeyEntry = {
+  /** AST node for the computed key expression */
+  keyExpr: unknown;
+  /** The value (can be nested object, string, number, etc.) */
+  value: unknown;
+};
+
 export function objectToAst(j: API["jscodeshift"], obj: Record<string, unknown>): any {
   const spreadsRaw = obj.__spreads;
   const propCommentsRaw = (obj as any).__propComments;
+  const computedKeysRaw = (obj as any).__computedKeys;
   const spreads =
     Array.isArray(spreadsRaw) && spreadsRaw.every((s) => typeof s === "string")
       ? (spreadsRaw as string[])
@@ -19,6 +31,9 @@ export function objectToAst(j: API["jscodeshift"], obj: Record<string, unknown>)
     propCommentsRaw && typeof propCommentsRaw === "object" && !Array.isArray(propCommentsRaw)
       ? (propCommentsRaw as Record<string, any>)
       : {};
+  const computedKeys: ComputedKeyEntry[] = Array.isArray(computedKeysRaw)
+    ? (computedKeysRaw as ComputedKeyEntry[])
+    : [];
 
   const props: any[] = [];
 
@@ -31,6 +46,9 @@ export function objectToAst(j: API["jscodeshift"], obj: Record<string, unknown>)
       continue;
     }
     if (key === "__propComments") {
+      continue;
+    }
+    if (key === "__computedKeys") {
       continue;
     }
     const keyNode =
@@ -86,6 +104,21 @@ export function objectToAst(j: API["jscodeshift"], obj: Record<string, unknown>)
 
     props.push(prop);
   }
+
+  // Emit computed key properties (e.g., [breakpoints.phone]: value)
+  for (const entry of computedKeys) {
+    if (!entry.keyExpr || !isAstNode(entry.keyExpr)) {
+      continue;
+    }
+    const valueAst =
+      entry.value && typeof entry.value === "object" && !isAstNode(entry.value)
+        ? objectToAst(j, entry.value as Record<string, unknown>)
+        : literalToAst(j, entry.value);
+    const prop = j.property("init", entry.keyExpr as any, valueAst);
+    (prop as any).computed = true;
+    props.push(prop);
+  }
+
   return j.objectExpression(props);
 }
 

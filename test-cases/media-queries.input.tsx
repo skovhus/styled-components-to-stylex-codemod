@@ -2,45 +2,130 @@ import styled from "styled-components";
 
 const Container = styled.div`
   width: 100%;
-  padding: 1rem;
-  background: papayawhip;
+  padding: 1.5rem;
+  background: linear-gradient(135deg, #ffe4b5 0%, #ffd699 100%);
+  border-radius: 12px;
+  box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
 
   @media (min-width: 768px) {
     width: 750px;
     margin: 0 auto;
+    padding: 2rem;
+    background: linear-gradient(135deg, #98fb98 0%, #90ee90 100%);
   }
 
   @media (min-width: 1024px) {
     width: 960px;
-    background: mediumseagreen;
+    padding: 2.5rem;
+    background: linear-gradient(135deg, #87ceeb 0%, #add8e6 100%);
   }
+`;
+
+const Title = styled.h2`
+  margin: 0 0 1rem;
+  font-size: 1.5rem;
+  color: #333;
+
+  @media (min-width: 768px) {
+    font-size: 2rem;
+  }
+
+  @media (min-width: 1024px) {
+    font-size: 2.5rem;
+  }
+`;
+
+const Grid = styled.div`
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 1rem;
+
+  @media (min-width: 768px) {
+    grid-template-columns: repeat(2, 1fr);
+    gap: 1.5rem;
+  }
+
+  @media (min-width: 1024px) {
+    grid-template-columns: repeat(3, 1fr);
+    gap: 2rem;
+  }
+`;
+
+const Card = styled.div`
+  padding: 1rem;
+  background: white;
+  border-radius: 8px;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+  transition: transform 0.2s ease, box-shadow 0.2s ease;
+
+  &:hover {
+    @media (hover: hover) {
+      transform: translateY(-4px);
+      box-shadow: 0 8px 16px rgba(0, 0, 0, 0.15);
+    }
+  }
+`;
+
+const CardTitle = styled.h3`
+  margin: 0 0 0.5rem;
+  font-size: 1rem;
+  color: #555;
+`;
+
+const CardText = styled.p`
+  margin: 0;
+  font-size: 0.875rem;
+  color: #777;
+  line-height: 1.5;
 `;
 
 const Button = styled.button`
   display: block;
-  margin-top: 1rem;
+  width: 100%;
+  margin-top: 1.5rem;
   padding: 12px 24px;
-  background: royalblue;
+  background: linear-gradient(135deg, #4169e1 0%, #6495ed 100%);
   border: 0;
   border-radius: 8px;
   cursor: pointer;
-  color: hotpink;
-  transition: transform 0.2s ease;
+  color: white;
+  font-size: 1rem;
+  font-weight: 600;
+  transition: transform 0.2s ease, box-shadow 0.2s ease;
+
+  @media (min-width: 768px) {
+    width: auto;
+  }
 
   &:hover {
     @media (hover: hover) {
-      transform: scale(1.1);
+      transform: scale(1.05);
+      box-shadow: 0 4px 12px rgba(65, 105, 225, 0.4);
     }
   }
 
   &:active {
-    transform: scale(0.9);
+    transform: scale(0.95);
   }
 `;
 
 export const App = () => (
   <Container>
-    <span>Responsive container</span>
-    <Button>Hover me</Button>
+    <Title>Responsive Media Queries</Title>
+    <Grid>
+      <Card>
+        <CardTitle>Card One</CardTitle>
+        <CardText>Resize the window to see the layout change from 1 to 2 to 3 columns.</CardText>
+      </Card>
+      <Card>
+        <CardTitle>Card Two</CardTitle>
+        <CardText>The background color also changes at different breakpoints.</CardText>
+      </Card>
+      <Card>
+        <CardTitle>Card Three</CardTitle>
+        <CardText>Hover over cards to see the hover effect (on devices that support it).</CardText>
+      </Card>
+    </Grid>
+    <Button>Interactive Button</Button>
   </Container>
 );

@@ -147,6 +147,60 @@ export type ImportSource =
 export type ImportSpec = { from: ImportSource; names: Array<{ imported: string; local?: string }> };
 
 // ────────────────────────────────────────────────────────────────────────────
+// Selector Interpolation Resolution
+// ────────────────────────────────────────────────────────────────────────────
+
+/**
+ * Context for `adapter.resolveSelector(...)`.
+ *
+ * This handles patterns like `${screenSize.phone} { ... }` where an imported
+ * value is used as a CSS selector (typically a media query helper).
+ */
+export type SelectorResolveContext = {
+  kind: "selectorInterpolation";
+  /**
+   * Imported name of the binding used in the interpolation.
+   * Example: `import { screenSize } from "./lib"` -> importedName: "screenSize"
+   */
+  importedName: string;
+  /**
+   * Import source for the binding.
+   */
+  source: ImportSource;
+  /**
+   * Member path from the imported binding (if any).
+   * Example: `screenSize.phone` -> "phone"
+   */
+  path?: string;
+  /**
+   * Absolute path of the file currently being transformed.
+   */
+  filePath: string;
+};
+
+/**
+ * Result for `adapter.resolveSelector(...)`.
+ */
+export type SelectorResolveResult = {
+  /**
+   * The kind of selector resolved.
+   * Currently only "media" is supported.
+   */
+  kind: "media";
+  /**
+   * JS expression to use as the computed property key.
+   * Should reference a `defineConsts` value for media queries.
+   * Example: "breakpoints.phone"
+   */
+  expr: string;
+  /**
+   * Import statements required by `expr`.
+   * Example: [{ from: { kind: "specifier", value: "./breakpoints.stylex" }, names: [{ imported: "breakpoints" }] }]
+   */
+  imports: ImportSpec[];
+};
+
+// ────────────────────────────────────────────────────────────────────────────
 // External Interface Context and Result
 // ────────────────────────────────────────────────────────────────────────────
 
@@ -254,6 +308,18 @@ export interface Adapter {
    * ```
    */
   styleMerger: StyleMergerConfig | null;
+
+  /**
+   * Resolver for interpolations used in selector position.
+   *
+   * This handles patterns like `${screenSize.phone} { ... }` where an imported
+   * value is used as a CSS selector (typically a media query helper).
+   *
+   * Return:
+   * - `{ kind: "media", expr, imports }` when the interpolation resolves to a media query
+   * - `undefined` to bail/skip the file
+   */
+  resolveSelector: (context: SelectorResolveContext) => SelectorResolveResult | undefined;
 }
 
 // ────────────────────────────────────────────────────────────────────────────
@@ -285,6 +351,14 @@ export interface Adapter {
  *       // Return:
  *       // - { usage: "props", expr, imports } for StyleX styles (usable in stylex.props)
  *       // - { usage: "create", expr, imports } for a single value (usable in stylex.create)
+ *       // - undefined to bail/skip the file
+ *       void ctx;
+ *     },
+ *
+ *     resolveSelector(ctx) {
+ *       // Resolve imported values used in selector position (e.g., media query helpers).
+ *       // Return:
+ *       // - { kind: "media", expr, imports } for media queries (e.g., breakpoints.phone)
  *       // - undefined to bail/skip the file
  *       void ctx;
  *     },

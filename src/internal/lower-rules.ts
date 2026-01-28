@@ -68,6 +68,7 @@ import {
 import type { StyledDecl } from "./transform-types.js";
 import type { WarningLog, WarningType } from "./logger.js";
 import type { CssHelperFunction, CssHelperObjectMembers } from "./transform/css-helpers.js";
+import type { ComputedKeyEntry } from "./transform/helpers.js";
 
 export type DescendantOverride = {
   parentStyleKey: string;
@@ -109,6 +110,7 @@ export function lowerRules(args: {
   filePath: string;
   resolveValue: Adapter["resolveValue"];
   resolveCall: Adapter["resolveCall"];
+  resolveSelector: Adapter["resolveSelector"];
   importMap: Map<
     string,
     {
@@ -157,6 +159,7 @@ export function lowerRules(args: {
     filePath,
     resolveValue,
     resolveCall,
+    resolveSelector,
     importMap,
     warnings,
     resolverImports,
@@ -581,6 +584,12 @@ export function lowerRules(args: {
     const styleObj: Record<string, unknown> = {};
     const perPropPseudo: Record<string, Record<string, unknown>> = {};
     const perPropMedia: Record<string, Record<string, unknown>> = {};
+    // Track computed media keys (from adapter.resolveSelector) separately
+    // Map<prop, { defaultValue: unknown, entries: ComputedKeyEntry[] }>
+    const perPropComputedMedia = new Map<
+      string,
+      { defaultValue: unknown; entries: ComputedKeyEntry[] }
+    >();
     const nestedSelectors: Record<string, Record<string, unknown>> = {};
     const variantBuckets = new Map<string, Record<string, unknown>>();
     const variantStyleKeys: Record<string, string> = {};
@@ -1881,6 +1890,9 @@ export function lowerRules(args: {
     }
 
     for (const rule of decl.rules) {
+      // Track resolved selector media for this rule (set by adapter.resolveSelector)
+      let resolvedSelectorMedia: { keyExpr: unknown; exprSource: string } | null = null;
+
       // (debug logging removed)
       // Sibling selectors:
       // - & + &  (adjacent sibling)
@@ -2222,6 +2234,61 @@ export function lowerRules(args: {
           }
           continue;
         }
+
+        // Selector interpolation that's a MemberExpression (e.g., screenSize.phone)
+        // Try to resolve it via the adapter as a media query helper.
+        if (
+          !otherLocal &&
+          slotExpr &&
+          (slotExpr.type === "MemberExpression" || slotExpr.type === "OptionalMemberExpression")
+        ) {
+          const info = getRootIdentifierInfo(slotExpr);
+          const identifierDesc = info
+            ? info.path.length > 0
+              ? `${info.rootName}.${info.path.join(".")}`
+              : info.rootName
+            : "unknown expression";
+
+          // Try to resolve via adapter
+          let resolved = false;
+          if (info) {
+            const imp = resolveImportInScope(info.rootName, info.rootNode);
+            if (imp) {
+              const selectorResult = resolveSelector({
+                kind: "selectorInterpolation",
+                importedName: imp.importedName,
+                source: imp.source,
+                path: info.path.length > 0 ? info.path.join(".") : undefined,
+                filePath,
+              });
+
+              if (selectorResult && selectorResult.kind === "media") {
+                // Store the resolved media expression for this rule
+                const mediaExpr = parseExpr(selectorResult.expr);
+                if (mediaExpr) {
+                  resolvedSelectorMedia = { keyExpr: mediaExpr, exprSource: selectorResult.expr };
+                  // Add required imports
+                  for (const impSpec of selectorResult.imports ?? []) {
+                    resolverImports.set(JSON.stringify(impSpec), impSpec);
+                  }
+                  resolved = true;
+                }
+              }
+            }
+          }
+
+          if (!resolved) {
+            // Bail: adapter couldn't resolve this selector interpolation
+            bail = true;
+            warnings.push({
+              severity: "error",
+              type: "Unsupported selector interpolation: imported value in selector position",
+              loc: decl.loc,
+              context: { selector: rule.selector, expression: identifierDesc },
+            });
+            break;
+          }
+        }
       }
 
       let media = rule.atRuleStack.find((a) => a.startsWith("@media"));
@@ -2382,6 +2449,25 @@ export function lowerRules(args: {
             }
           }
           existing[media] = value;
+          return;
+        }
+
+        // Handle resolved selector media (from adapter.resolveSelector)
+        // These use computed property keys like [breakpoints.phone]
+        if (resolvedSelectorMedia) {
+          let entry = perPropComputedMedia.get(prop);
+          if (!entry) {
+            const existingVal = (styleObj as Record<string, unknown>)[prop];
+            const defaultValue =
+              existingVal !== undefined
+                ? existingVal
+                : cssHelperPropValues.has(prop)
+                  ? getComposedDefaultValue(prop)
+                  : null;
+            entry = { defaultValue, entries: [] };
+            perPropComputedMedia.set(prop, entry);
+          }
+          entry.entries.push({ keyExpr: resolvedSelectorMedia.keyExpr, value });
           return;
         }
 
@@ -4468,6 +4554,32 @@ export function lowerRules(args: {
     }
     for (const [prop, map] of Object.entries(perPropMedia)) {
       styleObj[prop] = map;
+    }
+    // Merge computed media keys (from adapter.resolveSelector)
+    // Preserves any existing @media or pseudo entries already in styleObj[prop]
+    for (const [prop, entry] of perPropComputedMedia) {
+      const existing = styleObj[prop];
+      // If the prop already has a media/pseudo map, merge into it
+      if (existing && typeof existing === "object" && !isAstNode(existing)) {
+        const merged = existing as Record<string, unknown>;
+        // Add default if not already present
+        if (!("default" in merged)) {
+          merged.default = entry.defaultValue;
+        }
+        // Add computed keys to existing object
+        (merged as Record<string, unknown>).__computedKeys = entry.entries.map((e) => ({
+          keyExpr: e.keyExpr,
+          value: e.value,
+        }));
+      } else {
+        // No existing map, create a new nested object with default and __computedKeys
+        const nested: Record<string, unknown> = { default: entry.defaultValue };
+        (nested as Record<string, unknown>).__computedKeys = entry.entries.map((e) => ({
+          keyExpr: e.keyExpr,
+          value: e.value,
+        }));
+        styleObj[prop] = nested;
+      }
     }
     for (const [sel, obj] of Object.entries(nestedSelectors)) {
       styleObj[sel] = obj;
