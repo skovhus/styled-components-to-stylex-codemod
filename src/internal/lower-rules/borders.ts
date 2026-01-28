@@ -3,6 +3,7 @@ import type { Adapter, ImportSource } from "../../adapter.js";
 import { resolveDynamicNode, type InternalHandlerContext } from "../builtin-handlers.js";
 import { getMemberPathFromIdentifier, getNodeLocStart } from "../utilities/jscodeshift-utils.js";
 import type { StyledDecl } from "../transform-types.js";
+import type { WarningType } from "../logger.js";
 import {
   parseBorderShorthandParts,
   parseInterpolatedBorderStaticParts,
@@ -17,7 +18,6 @@ export function tryHandleInterpolatedBorder(args: {
   filePath: string;
   decl: StyledDecl;
   d: any;
-  styleObj: Record<string, unknown>;
   extraStyleObjects: Map<string, Record<string, unknown>>;
   hasLocalThemeBinding: boolean;
   resolveValue: Adapter["resolveValue"];
@@ -31,6 +31,8 @@ export function tryHandleInterpolatedBorder(args: {
   >;
   resolverImports: Map<string, any>;
   parseExpr: (exprSource: string) => ExpressionKind | null;
+  applyResolvedPropValue: (prop: string, value: unknown) => void;
+  bailUnsupported: (type: WarningType) => void;
   toSuffixFromProp: (propName: string) => string;
   variantBuckets: Map<string, Record<string, unknown>>;
   variantStyleKeys: Record<string, string>;
@@ -42,13 +44,14 @@ export function tryHandleInterpolatedBorder(args: {
     filePath,
     decl,
     d,
-    styleObj,
     extraStyleObjects,
     resolveValue,
     resolveCall,
     importMap,
     resolverImports,
     parseExpr,
+    applyResolvedPropValue,
+    bailUnsupported,
     toSuffixFromProp,
     variantBuckets,
     variantStyleKeys,
@@ -87,20 +90,61 @@ export function tryHandleInterpolatedBorder(args: {
   const widthProp = `border${direction}Width`;
   const styleProp = `border${direction}Style`;
   const colorProp = `border${direction}Color`;
-  if (!borderParts && `${prefix}${suffix}`.trim()) {
-    return false;
+  const directionLower = direction ? direction.toLowerCase() : "";
+  const staticRaw = `${prefix}${suffix}`.trim();
+  let width = borderParts?.width;
+  let style = borderParts?.style;
+  let color: string | undefined;
+  let interpolationTarget: "color" | "width" | "style" = "color";
+
+  if (!borderParts && staticRaw) {
+    const parsedStatic = parseBorderShorthandParts(staticRaw);
+    if (!parsedStatic || !parsedStatic.color || (!parsedStatic.width && !parsedStatic.style)) {
+      return false;
+    }
+    if (parsedStatic.width && parsedStatic.style) {
+      return false;
+    }
+    width = parsedStatic.width;
+    style = parsedStatic.style;
+    color = parsedStatic.color;
+    interpolationTarget = parsedStatic.width ? "style" : "width";
   }
-  const width = borderParts?.width;
-  const style = borderParts?.style;
+
+  if (!borderParts && !staticRaw) {
+    // No static parts; keep default assumption that interpolation is the color value.
+  }
+
   if (width) {
-    (styleObj as any)[widthProp] = width;
+    applyResolvedPropValue(widthProp, width);
   }
   if (style) {
-    (styleObj as any)[styleProp] = style;
+    applyResolvedPropValue(styleProp, style);
+  }
+  if (color) {
+    applyResolvedPropValue(colorProp, color);
   }
   const hasStaticWidthOrStyle = Boolean(width || style);
+  const targetProp =
+    interpolationTarget === "color"
+      ? colorProp
+      : interpolationTarget === "width"
+        ? widthProp
+        : styleProp;
+  const targetCssProperty =
+    interpolationTarget === "width"
+      ? directionLower
+        ? `border-${directionLower}-width`
+        : "border-width"
+      : interpolationTarget === "style"
+        ? directionLower
+          ? `border-${directionLower}-style`
+          : "border-style"
+        : directionLower
+          ? `border-${directionLower}-color`
+          : "border-color";
 
-  // Now treat the interpolated portion as the border color.
+  // Now treat the interpolated portion as the resolved target property.
   const expr = (decl as any).templateExpressions[slotId] as any;
 
   // Helper to parse a border shorthand string and return expanded properties
@@ -171,7 +215,7 @@ export function tryHandleInterpolatedBorder(args: {
       } else {
         // Original behavior: default to alternate, conditionally apply consequent
         if (altParsed?.[colorProp]) {
-          (styleObj as any)[colorProp] = altParsed[colorProp];
+          applyResolvedPropValue(colorProp, altParsed[colorProp]);
         }
         if (consParsed?.[colorProp]) {
           variantBuckets.set(when, {
@@ -191,8 +235,8 @@ export function tryHandleInterpolatedBorder(args: {
     const isMemberExpr = (n: any): boolean =>
       n?.type === "MemberExpression" || n?.type === "OptionalMemberExpression";
     if (isMemberExpr(cons) || isMemberExpr(alt)) {
-      // Defer to the dynamic resolver by treating this as a border-color interpolation.
-      d.property = direction ? `border-${direction.toLowerCase()}-color` : "border-color";
+      // Defer to the dynamic resolver by treating this as the target border interpolation.
+      d.property = targetCssProperty;
       return false;
     }
   }
@@ -200,6 +244,18 @@ export function tryHandleInterpolatedBorder(args: {
   // Handle call expressions (like helper functions) by resolving via resolveDynamicNode:
   //   border: 1px solid ${color("bgSub")}
   {
+    const callExpr =
+      expr?.type === "CallExpression"
+        ? expr
+        : expr?.type === "ArrowFunctionExpression" && expr.body?.type === "CallExpression"
+          ? expr.body
+          : null;
+    const callIdent = callExpr?.callee?.type === "Identifier" ? callExpr.callee.name : null;
+    const callIsImported = callIdent ? importMap.has(callIdent) : false;
+    const unresolvedCallWarning: WarningType = callIsImported
+      ? "Adapter returned undefined for helper call"
+      : "Unsupported call expression (expected imported helper(...) or imported helper(...)(...))";
+
     const resolveBorderExpr = (node: any): { exprAst: any; imports: any[] } | null => {
       const loc = getNodeLocStart(node);
       const res = resolveDynamicNode(
@@ -291,7 +347,8 @@ export function tryHandleInterpolatedBorder(args: {
     if (isResolvableHelper) {
       const resolved = resolveBorderExpr(expr);
       if (!resolved) {
-        return false;
+        bailUnsupported(unresolvedCallWarning);
+        return true;
       }
 
       for (const imp of resolved.imports) {
@@ -351,16 +408,18 @@ export function tryHandleInterpolatedBorder(args: {
         if (raw) {
           const parsed = parseBorderShorthand(raw);
           if (parsed) {
-            Object.assign(styleObj, parsed);
+            for (const [prop, value] of Object.entries(parsed)) {
+              applyResolvedPropValue(prop, value);
+            }
             return true;
           }
         }
       }
       if (hasStaticWidthOrStyle) {
-        styleObj[colorProp] = resolved.exprAst;
+        applyResolvedPropValue(targetProp, resolved.exprAst);
       } else {
         const fullProp = direction ? `border${direction}` : "border";
-        styleObj[fullProp] = resolved.exprAst;
+        applyResolvedPropValue(fullProp, resolved.exprAst);
       }
       return true;
     }
@@ -369,30 +428,32 @@ export function tryHandleInterpolatedBorder(args: {
   // Handle arrow functions that are simple member expressions (like theme access):
   //   border: 1px solid ${(props) => props.theme.color.primary}
   //   border-right: 1px solid ${(props) => props.theme.borderColor}
-  // In this case, we modify the declaration's property to be the color property so that
+  // In this case, we modify the declaration's property to be the target property so that
   // the generic dynamic handler (resolveDynamicNode) outputs the correct property.
   if (expr?.type === "ArrowFunctionExpression") {
     const body = expr.body as any;
     // Simple arrow function returning a member expression: (p) => p.theme.color.X
     if (body?.type === "MemberExpression") {
-      // Mutate the declaration's property so fallback handlers use the color property
-      // e.g., "border" → "border-color", "border-right" → "border-right-color"
-      d.property = direction ? `border-${direction.toLowerCase()}-color` : "border-color";
+      // Mutate the declaration's property so fallback handlers use the target property
+      d.property = targetCssProperty;
       return false; // Let the generic handler resolve the theme value
     }
   }
 
-  // Simple color expression (identifier/template literal) → border color expr
+  // Simple expression (identifier/template literal) → target border property value
   if (expr && expr.type !== "ArrowFunctionExpression") {
     if (expr.type === "MemberExpression") {
       if (hasLocalThemeBinding) {
-        (styleObj as any)[colorProp] = j.templateLiteral(
-          [
-            j.templateElement({ raw: "", cooked: "" }, false),
-            j.templateElement({ raw: "", cooked: "" }, true),
-          ],
-          [expr as any],
-        ) as any;
+        applyResolvedPropValue(
+          targetProp,
+          j.templateLiteral(
+            [
+              j.templateElement({ raw: "", cooked: "" }, false),
+              j.templateElement({ raw: "", cooked: "" }, true),
+            ],
+            [expr as any],
+          ) as any,
+        );
         return true;
       }
       const parts = getMemberPathFromIdentifier(expr as Expression, "theme");
@@ -404,20 +465,20 @@ export function tryHandleInterpolatedBorder(args: {
           }
           const exprAst = parseExpr(resolved.expr);
           if (exprAst) {
-            (styleObj as any)[colorProp] = exprAst as any;
+            applyResolvedPropValue(targetProp, exprAst as any);
             return true;
           }
         }
       }
     }
-    (styleObj as any)[colorProp] = expr as any;
+    applyResolvedPropValue(targetProp, expr as any);
     return true;
   }
 
   // fallback to inline style via wrapper
   if (decl.shouldForwardProp) {
     inlineStyleProps.push({
-      prop: colorProp,
+      prop: targetProp,
       expr:
         expr?.type === "ArrowFunctionExpression"
           ? j.callExpression(expr, [j.identifier("props")])
