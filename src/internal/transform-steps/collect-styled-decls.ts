@@ -78,7 +78,7 @@ export function collectStyledDeclsStep(ctx: TransformContext): StepResult {
           : null,
         warnings: ctx.warnings,
       },
-      "done",
+      "skip",
     );
   }
 

@@ -15,7 +15,7 @@ export interface TransformResult {
 /**
  * Result of a transform pipeline step.
  */
-export type StepReturnReason = "skip" | "bail" | "done";
+export type StepReturnReason = "skip" | "bail";
 
 export type StepResult =
   | { kind: "continue" }
