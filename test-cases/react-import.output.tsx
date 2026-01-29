@@ -9,12 +9,8 @@ type CardProps = React.PropsWithChildren<{
 // This component uses JSX but has no explicit React import
 // (modern JSX transform doesn't require it for styled-components)
 export function Card(props: CardProps) {
-  const { children, ...rest } = props;
-  return (
-    <div {...rest} {...stylex.props(styles.card)}>
-      {children}
-    </div>
-  );
+  const { children } = props;
+  return <div {...stylex.props(styles.card)}>{children}</div>;
 }
 
 type ButtonProps = React.PropsWithChildren<{
@@ -23,12 +19,8 @@ type ButtonProps = React.PropsWithChildren<{
 
 // Another component to ensure multiple components work
 export function Button(props: ButtonProps) {
-  const { children, ...rest } = props;
-  return (
-    <button {...rest} {...stylex.props(styles.button)}>
-      {children}
-    </button>
-  );
+  const { children } = props;
+  return <button {...stylex.props(styles.button)}>{children}</button>;
 }
 
 // Pattern 2: Component with theme access (like TextColor.tsx in a design system)
@@ -38,12 +30,8 @@ interface ThemeSpanProps extends Omit<React.ComponentProps<"span">, "className" 
 }
 
 export function ThemeSpan(props: ThemeSpanProps) {
-  const { children, variant, ...rest } = props;
-  return (
-    <span {...rest} {...stylex.props(styles.themeSpanColor(variant))}>
-      {children}
-    </span>
-  );
+  const { children, variant } = props;
+  return <span {...stylex.props(styles.themeSpanColor(variant))}>{children}</span>;
 }
 
 export function App() {

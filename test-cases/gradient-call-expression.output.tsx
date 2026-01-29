@@ -7,12 +7,8 @@ type GradientTextProps = React.PropsWithChildren<{
 }>;
 
 export function GradientText(props: GradientTextProps) {
-  const { children, ...rest } = props;
-  return (
-    <span {...rest} {...stylex.props(styles.gradientText, helpers.gradient)}>
-      {children}
-    </span>
-  );
+  const { children } = props;
+  return <span {...stylex.props(styles.gradientText, helpers.gradient)}>{children}</span>;
 }
 
 export const App = () => <GradientText>Gradient text</GradientText>;

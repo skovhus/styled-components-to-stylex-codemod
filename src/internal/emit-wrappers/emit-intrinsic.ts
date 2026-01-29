@@ -1235,8 +1235,6 @@ export function emitIntrinsicWrappers(emitter: WrapperEmitter): {
     const { hasAny: hasLocalUsage } = emitter.getJsxCallsites(d.localName);
 
     const shouldIncludeRest =
-      d.isExported ||
-      emitter.exportedComponents.has(d.localName) ||
       emitter.isUsedAsValueInFile(d.localName) ||
       (hasLocalUsage && usedAttrs.has("*")) ||
       (hasLocalUsage &&
@@ -2152,8 +2150,6 @@ export function emitIntrinsicWrappers(emitter: WrapperEmitter): {
         return !destructureProps.includes(n);
       });
     const shouldIncludeRest =
-      d.isExported ||
-      emitter.exportedComponents.has(d.localName) ||
       emitter.isUsedAsValueInFile(d.localName) ||
       hasExplicitPropsToPassThrough ||
       (hasLocalUsage && usedAttrs.has("*")) ||
