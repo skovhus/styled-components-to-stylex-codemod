@@ -199,16 +199,32 @@ export function insertEmittedWrappers(args: {
         .size() > 0;
 
     if (!hasReactBinding) {
-      const firstImport = root.find(j.ImportDeclaration).at(0);
-      const reactImport = j.importDeclaration(
-        [j.importNamespaceSpecifier(j.identifier("React"))],
-        j.literal("react"),
-      ) as any;
+      // Check if there's an existing import from "react" (e.g., `import { useCallback } from "react"`)
+      const existingReactImport = root
+        .find(j.ImportDeclaration)
+        .filter((p: any) => (p.node?.source as any)?.value === "react")
+        .at(0);
 
-      if (firstImport.size() > 0) {
-        firstImport.insertBefore(reactImport);
+      if (existingReactImport.size() > 0) {
+        // Add default specifier to the existing import (can't mix namespace with named imports)
+        // This turns `import { useCallback } from "react"` into `import React, { useCallback } from "react"`
+        const importNode = existingReactImport.get().node;
+        const specifiers = importNode.specifiers ?? [];
+        specifiers.unshift(j.importDefaultSpecifier(j.identifier("React")));
+        importNode.specifiers = specifiers;
       } else {
-        root.get().node.program.body.unshift(reactImport);
+        // No existing react import, create a new one with namespace style
+        const firstImport = root.find(j.ImportDeclaration).at(0);
+        const reactImport = j.importDeclaration(
+          [j.importNamespaceSpecifier(j.identifier("React"))],
+          j.literal("react"),
+        ) as any;
+
+        if (firstImport.size() > 0) {
+          firstImport.insertBefore(reactImport);
+        } else {
+          root.get().node.program.body.unshift(reactImport);
+        }
       }
     }
   }
