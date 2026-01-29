@@ -659,17 +659,13 @@ export function emitIntrinsicWrappers(emitter: WrapperEmitter): {
           if (compoundVariantKeys.has(when)) {
             continue;
           }
-          const { cond, isBoolean } = emitter.collectConditionProps({ when, destructureProps });
+          const { cond } = emitter.collectConditionProps({ when, destructureProps });
           const styleExpr = j.memberExpression(
             j.identifier(stylesIdentifier),
             j.identifier(variantKey),
           );
-          // Use && for boolean conditions, ternary for simple identifiers (could be "" or 0)
-          if (isBoolean) {
-            styleArgs.push(j.logicalExpression("&&", cond, styleExpr));
-          } else {
-            styleArgs.push(j.conditionalExpression(cond, styleExpr, j.identifier("undefined")));
-          }
+          // Simple style lookups always use && (falsy values like false/undefined are valid for stylex.props)
+          styleArgs.push(j.logicalExpression("&&", cond, styleExpr));
         }
       }
 
@@ -1121,17 +1117,13 @@ export function emitIntrinsicWrappers(emitter: WrapperEmitter): {
         if (compoundVariantKeys.has(when)) {
           continue;
         }
-        const { cond, isBoolean } = emitter.collectConditionProps({ when });
+        const { cond } = emitter.collectConditionProps({ when });
         const styleExpr = j.memberExpression(
           j.identifier(stylesIdentifier),
           j.identifier(variantKey),
         );
-        // Use && for boolean conditions, ternary for simple identifiers (could be "" or 0)
-        if (isBoolean) {
-          styleArgs.push(j.logicalExpression("&&", cond, styleExpr));
-        } else {
-          styleArgs.push(j.conditionalExpression(cond, styleExpr, j.identifier("undefined")));
-        }
+        // Simple style lookups always use && (falsy values like false/undefined are valid for stylex.props)
+        styleArgs.push(j.logicalExpression("&&", cond, styleExpr));
       }
     }
 

@@ -22,7 +22,7 @@ type StyledLinkProps = Omit<React.ComponentPropsWithRef<typeof Link>, "className
 
 function StyledLink(props: StyledLinkProps) {
   const { $red, ...rest } = props;
-  return <Link {...rest} {...stylex.props(styles.link, $red ? styles.linkRed : undefined)} />;
+  return <Link {...rest} {...stylex.props(styles.link, $red && styles.linkRed)} />;
 }
 
 type PointProps = {
@@ -72,10 +72,7 @@ export function CollapseArrowIcon(props: CollapseArrowIconProps) {
     <ArrowIcon
       $isOpen={$isOpen}
       {...rest}
-      {...stylex.props(
-        styles.collapseArrowIcon,
-        $isOpen ? styles.collapseArrowIconOpen : undefined,
-      )}
+      {...stylex.props(styles.collapseArrowIcon, $isOpen && styles.collapseArrowIconOpen)}
     />
   );
 }

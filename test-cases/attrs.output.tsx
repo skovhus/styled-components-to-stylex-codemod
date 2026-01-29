@@ -59,7 +59,7 @@ export function Background(props: BackgroundProps) {
       column={true}
       center={true}
       {...rest}
-      {...stylex.props(styles.background, loaded ? styles.backgroundLoaded : undefined)}
+      {...stylex.props(styles.background, loaded && styles.backgroundLoaded)}
     >
       {children}
     </Flex>

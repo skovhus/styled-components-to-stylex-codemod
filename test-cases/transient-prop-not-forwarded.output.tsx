@@ -47,7 +47,7 @@ export function Scrollable(props: ScrollableProps) {
     <Flex
       {...rest}
       {...mergedSx(
-        [styles.scrollable, $applyBackground ? styles.scrollableApplyBackground : undefined],
+        [styles.scrollable, $applyBackground && styles.scrollableApplyBackground],
         className,
         style,
       )}

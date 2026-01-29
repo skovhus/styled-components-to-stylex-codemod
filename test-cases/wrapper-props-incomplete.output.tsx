@@ -37,10 +37,7 @@ export function Highlight(props: HighlightProps) {
   return (
     <BaseText
       {...rest}
-      {...mergedSx(
-        [styles.highlight, highlighted ? styles.highlightHighlighted : undefined],
-        className,
-      )}
+      {...mergedSx([styles.highlight, highlighted && styles.highlightHighlighted], className)}
     >
       {children}
     </BaseText>
