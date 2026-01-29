@@ -166,7 +166,7 @@ export async function runTransform(options: RunTransformOptions): Promise<RunTra
         e instanceof Error ? e.message : String(e)
       }`;
       const filePath = ctx.filePath ?? "<unknown>";
-      Logger.logError(msg, filePath, undefined, ctx);
+      Logger.logError(msg, filePath, ctx.loc, ctx);
       throw e;
     }
   };
@@ -176,7 +176,7 @@ export async function runTransform(options: RunTransformOptions): Promise<RunTra
       return adapter.resolveCall(ctx);
     } catch (e) {
       const msg = `adapter.resolveCall threw an error: ${e instanceof Error ? e.message : String(e)}`;
-      Logger.logError(msg, ctx.callSiteFilePath, undefined, ctx);
+      Logger.logError(msg, ctx.callSiteFilePath, ctx.loc, ctx);
       throw e;
     }
   };
@@ -188,7 +188,7 @@ export async function runTransform(options: RunTransformOptions): Promise<RunTra
       return adapter.resolveSelector(ctx);
     } catch (e) {
       const msg = `adapter.resolveSelector threw an error: ${e instanceof Error ? e.message : String(e)}`;
-      Logger.logError(msg, ctx.filePath, undefined, ctx);
+      Logger.logError(msg, ctx.filePath, ctx.loc, ctx);
       throw e;
     }
   };

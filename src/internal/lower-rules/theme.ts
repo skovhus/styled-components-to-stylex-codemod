@@ -4,6 +4,7 @@ import type { Adapter, ImportSpec } from "../../adapter.js";
 import {
   getFunctionBodyExpr,
   getMemberPathFromIdentifier,
+  getNodeLocStart,
 } from "../utilities/jscodeshift-utils.js";
 
 export function createThemeResolvers(args: {
@@ -51,7 +52,12 @@ export function createThemeResolvers(args: {
     if (!parts || !parts.length) {
       return null;
     }
-    const resolved = resolveValue({ kind: "theme", path: parts.join("."), filePath });
+    const resolved = resolveValue({
+      kind: "theme",
+      path: parts.join("."),
+      filePath,
+      loc: getNodeLocStart(expr) ?? undefined,
+    });
     if (!resolved) {
       return null;
     }
@@ -114,7 +120,12 @@ export function createThemeResolvers(args: {
     if (!themePath) {
       return null;
     }
-    const resolved = resolveValue({ kind: "theme", path: themePath, filePath });
+    const resolved = resolveValue({
+      kind: "theme",
+      path: themePath,
+      filePath,
+      loc: getNodeLocStart(unwrapped) ?? undefined,
+    });
     if (!resolved) {
       return null;
     }

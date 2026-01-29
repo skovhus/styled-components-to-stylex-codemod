@@ -253,7 +253,7 @@ export function tryHandleInterpolatedBorder(args: {
     const callIdent = callExpr?.callee?.type === "Identifier" ? callExpr.callee.name : null;
     const callIsImported = callIdent ? importMap.has(callIdent) : false;
     const unresolvedCallWarning: WarningType = callIsImported
-      ? "Adapter returned undefined for helper call"
+      ? "Adapter resolveCall returned undefined for helper call"
       : "Unsupported call expression (expected imported helper(...) or imported helper(...)(...))";
 
     const resolveBorderExpr = (node: any): { exprAst: any; imports: any[] } | null => {
@@ -458,7 +458,12 @@ export function tryHandleInterpolatedBorder(args: {
       }
       const parts = getMemberPathFromIdentifier(expr as Expression, "theme");
       if (parts && parts.length > 0) {
-        const resolved = resolveValue({ kind: "theme", path: parts.join("."), filePath });
+        const resolved = resolveValue({
+          kind: "theme",
+          path: parts.join("."),
+          filePath,
+          loc: getNodeLocStart(expr) ?? undefined,
+        });
         if (resolved) {
           for (const imp of resolved.imports ?? []) {
             resolverImports.set(JSON.stringify(imp), imp);

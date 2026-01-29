@@ -549,7 +549,9 @@ export const App = () => <Box $on />;
 
     expect(result.code).toBeNull();
     expect(
-      result.warnings.some((w) => w.type === "Adapter returned an unparseable styles expression"),
+      result.warnings.some(
+        (w) => w.type === "Adapter resolveCall returned an unparseable styles expression",
+      ),
     ).toBe(true);
   });
 });
@@ -600,7 +602,9 @@ export const App = () => (
 
     expect(result.code).toBeNull();
     expect(
-      result.warnings.some((w) => w.type === "Adapter returned undefined for helper call"),
+      result.warnings.some(
+        (w) => w.type === "Adapter resolveCall returned undefined for helper call",
+      ),
     ).toBe(true);
   });
 });

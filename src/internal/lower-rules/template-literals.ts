@@ -8,6 +8,7 @@ import { normalizeStylisAstToIR } from "../css-ir.js";
 import {
   extractRootAndPath,
   getMemberPathFromIdentifier,
+  getNodeLocStart,
   isCallExpressionNode,
   isConditionalExpressionNode,
   isLogicalExpressionNode,
@@ -431,7 +432,12 @@ function resolveThemeFromPropsMember(args: {
     return null;
   }
   const themePath = parts.slice(1).join(".");
-  const resolved = resolveValue({ kind: "theme", path: themePath, filePath });
+  const resolved = resolveValue({
+    kind: "theme",
+    path: themePath,
+    filePath,
+    loc: getNodeLocStart(expr) ?? undefined,
+  });
   if (!resolved) {
     return null;
   }
@@ -534,11 +540,13 @@ function resolveStaticTemplateExpressionAst(args: {
             }
             return { kind: "unknown" as const };
           });
+          const callLoc = innerCall.loc?.start;
           const callRes = resolveCall({
             callSiteFilePath: filePath,
             calleeImportedName: imp.importedName,
             calleeSource: imp.source,
             args: innerArgs,
+            ...(callLoc ? { loc: { line: callLoc.line, column: callLoc.column } } : {}),
           });
           if (callRes && callRes.usage === "create") {
             for (const callImp of callRes.imports ?? []) {

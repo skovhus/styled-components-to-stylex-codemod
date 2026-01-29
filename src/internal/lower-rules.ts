@@ -945,7 +945,12 @@ export function lowerRules(args: {
         if (!themePath) {
           return null;
         }
-        const resolved = resolveValue({ kind: "theme", path: themePath, filePath });
+        const resolved = resolveValue({
+          kind: "theme",
+          path: themePath,
+          filePath,
+          loc: getNodeLocStart(node) ?? undefined,
+        });
         if (!resolved) {
           return null;
         }
@@ -2302,6 +2307,7 @@ export function lowerRules(args: {
                 source: imp.source,
                 path: info.path.length > 0 ? info.path.join(".") : undefined,
                 filePath,
+                loc: getNodeLocStart(slotExpr) ?? undefined,
               });
 
               if (selectorResult && selectorResult.kind === "media") {
@@ -2686,12 +2692,13 @@ export function lowerRules(args: {
               source: imp.source,
               ...(info.path.length ? { path: info.path.join(".") } : {}),
               filePath,
+              loc: getNodeLocStart(expr) ?? undefined,
             });
             if (!res) {
               // Adapter returned undefined for an identified imported value - bail
               warnings.push({
                 severity: "error",
-                type: "Adapter returned undefined for imported value",
+                type: "Adapter resolveValue returned undefined for imported value",
                 loc: getNodeLocStart(expr) ?? decl.loc,
                 context: {
                   localName: decl.localName,
@@ -2707,7 +2714,7 @@ export function lowerRules(args: {
             if (!exprAst) {
               warnings.push({
                 severity: "error",
-                type: "Adapter returned an unparseable value expression",
+                type: "Adapter resolveValue returned an unparseable value expression",
                 loc: getNodeLocStart(expr),
                 context: { localName: decl.localName, res },
               });
@@ -3160,7 +3167,12 @@ export function lowerRules(args: {
               return false;
             }
 
-            const resolved = resolveValue({ kind: "theme", path: themeObjectPath, filePath });
+            const resolved = resolveValue({
+              kind: "theme",
+              path: themeObjectPath,
+              filePath,
+              loc: getNodeLocStart(body.object) ?? undefined,
+            });
             if (!resolved) {
               return false;
             }
@@ -3227,7 +3239,7 @@ export function lowerRules(args: {
                 if (!indexedExprAst) {
                   warnings.push({
                     severity: "error",
-                    type: "Adapter returned an unparseable styles expression",
+                    type: "Adapter resolveCall returned an unparseable styles expression",
                     loc: decl.loc,
                     context: { localName: decl.localName, resolved },
                   });
@@ -3325,7 +3337,7 @@ export function lowerRules(args: {
             if (!exprAst) {
               warnings.push({
                 severity: "error",
-                type: "Adapter returned an unparseable styles expression",
+                type: "Adapter resolveCall returned an unparseable styles expression",
                 loc: decl.loc,
                 context: { localName: decl.localName, res },
               });
@@ -3354,7 +3366,7 @@ export function lowerRules(args: {
             if (!exprAst) {
               warnings.push({
                 severity: "error",
-                type: "Adapter returned an unparseable styles expression",
+                type: "Adapter resolveCall returned an unparseable styles expression",
                 loc: decl.loc,
                 context: { localName: decl.localName },
               });
@@ -3440,7 +3452,7 @@ export function lowerRules(args: {
               if (!exprAst) {
                 warnings.push({
                   severity: "error",
-                  type: "Adapter returned an unparseable styles expression",
+                  type: "Adapter resolveCall returned an unparseable styles expression",
                   loc,
                   context: { localName: decl.localName },
                 });
@@ -3496,7 +3508,7 @@ export function lowerRules(args: {
               if (!exprAst) {
                 warnings.push({
                   severity: "error",
-                  type: "Adapter returned an unparseable styles expression",
+                  type: "Adapter resolveCall returned an unparseable styles expression",
                   loc: decl.loc,
                   context: { localName: decl.localName, expr },
                 });
@@ -3653,7 +3665,10 @@ export function lowerRules(args: {
             // (mirrors the `resolvedValue` behavior) and avoid emitting empty variant buckets.
             const negParsed = neg ? parseResolved(neg.expr, neg.imports) : null;
             if (neg && !negParsed) {
-              bailUnsupported(decl, "Adapter returned an unparseable styles expression");
+              bailUnsupported(
+                decl,
+                "Adapter resolveCall returned an unparseable styles expression",
+              );
               break;
             }
             // Parse all positive variants - skip entire declaration if any fail
@@ -3672,7 +3687,10 @@ export function lowerRules(args: {
               allPosParsed.push({ when: posV.when, nameHint: posV.nameHint, parsed });
             }
             if (anyPosFailed) {
-              bailUnsupported(decl, `Adapter returned an unparseable styles expression`);
+              bailUnsupported(
+                decl,
+                `Adapter resolveCall returned an unparseable styles expression`,
+              );
               break;
             }
 
@@ -3741,7 +3759,7 @@ export function lowerRules(args: {
               if (!exprAst) {
                 warnings.push({
                   severity: "error",
-                  type: "Adapter returned an unparseable styles expression",
+                  type: "Adapter resolveCall returned an unparseable styles expression",
                   loc: decl.loc,
                   context: { localName: decl.localName, expr },
                 });
@@ -3796,7 +3814,10 @@ export function lowerRules(args: {
             );
 
             if (!outerParsed || !innerTruthyParsed || !innerFalsyParsed) {
-              bailUnsupported(decl, "Adapter returned an unparseable styles expression");
+              bailUnsupported(
+                decl,
+                "Adapter resolveCall returned an unparseable styles expression",
+              );
               break;
             }
 

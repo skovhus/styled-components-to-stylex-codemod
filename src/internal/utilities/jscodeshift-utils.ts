@@ -1,4 +1,4 @@
-import type { ArrowFunctionExpression, ASTNode, Expression, Identifier, Node } from "jscodeshift";
+import type { ArrowFunctionExpression, ASTNode, Expression, Identifier } from "jscodeshift";
 
 /**
  * AST type definitions for common node patterns.
@@ -12,6 +12,7 @@ export type CallExpressionNode = {
   type: "CallExpression";
   callee: unknown;
   arguments?: unknown[];
+  loc?: { start: { line: number; column: number }; end: { line: number; column: number } };
 };
 
 export type AstPath = {
@@ -204,10 +205,9 @@ export function getArrowFnSingleParamName(fn: ArrowFunctionExpression): string |
   return isIdentifier(p) ? p.name : null;
 }
 
-export function getNodeLocStart(
-  node: Node | null | undefined,
-): { line: number; column: number } | null {
-  const loc = node?.loc?.start;
+export function getNodeLocStart(node: unknown): { line: number; column: number } | null {
+  const n = node as { loc?: { start?: { line: number; column: number } } } | null | undefined;
+  const loc = n?.loc?.start;
   if (!loc) {
     return null;
   }
