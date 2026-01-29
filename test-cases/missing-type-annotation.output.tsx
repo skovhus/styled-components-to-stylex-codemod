@@ -13,9 +13,10 @@ interface BoxProps extends Omit<React.ComponentProps<"div">, "className" | "styl
 
 // Component with props that affect styles
 export function Box(props: BoxProps) {
-  const { children, bordered, bg } = props;
+  const { children, bordered, bg, ...rest } = props;
   return (
     <div
+      {...rest}
       {...stylex.props(
         styles.box,
         !bordered && styles.boxNotBordered,

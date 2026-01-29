@@ -8,9 +8,9 @@ export interface BadgeProps extends Omit<React.ComponentProps<"div">, "className
 }
 
 export function Badge(props: BadgeProps) {
-  const { children, textColor } = props;
+  const { children, textColor, ...rest } = props;
   return (
-    <div {...stylex.props(styles.badge, !!textColor && styles.badgeColor(textColor))}>
+    <div {...rest} {...stylex.props(styles.badge, !!textColor && styles.badgeColor(textColor))}>
       {children}
     </div>
   );

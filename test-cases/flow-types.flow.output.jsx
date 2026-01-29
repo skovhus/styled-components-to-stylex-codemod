@@ -1,8 +1,12 @@
 import * as stylex from "@stylexjs/stylex";
 
 export function Button(props) {
-  const { children } = props;
-  return <button {...stylex.props(styles.button)}>{children}</button>;
+  const { children, ...rest } = props;
+  return (
+    <button {...rest} {...stylex.props(styles.button)}>
+      {children}
+    </button>
+  );
 }
 
 export const App = () => (

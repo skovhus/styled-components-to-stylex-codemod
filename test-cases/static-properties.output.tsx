@@ -10,8 +10,12 @@ type ListItemProps = React.ComponentProps<"div">;
 
 // Pattern 1: Static properties defined directly on styled component
 export function ListItem(props: ListItemProps) {
-  const { className, children, style } = props;
-  return <div {...mergedSx(styles.listItem, className, style)}>{children}</div>;
+  const { className, children, style, ...rest } = props;
+  return (
+    <div {...rest} {...mergedSx(styles.listItem, className, style)}>
+      {children}
+    </div>
+  );
 }
 
 ListItem.HEIGHT = 42;
@@ -29,9 +33,9 @@ type ExtendedButtonProps = React.ComponentProps<"button">;
 
 // ExtendedButton should have HEIGHT from BaseButton
 export function ExtendedButton(props: ExtendedButtonProps) {
-  const { className, children, style } = props;
+  const { className, children, style, ...rest } = props;
   return (
-    <button {...mergedSx([styles.baseButton, styles.extendedButton], className, style)}>
+    <button {...rest} {...mergedSx([styles.baseButton, styles.extendedButton], className, style)}>
       {children}
     </button>
   );

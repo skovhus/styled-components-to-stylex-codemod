@@ -14,8 +14,12 @@ type ExportedButtonProps = React.PropsWithChildren<{
  * className/style/rest merging for external style extension support.
  **/
 export function ExportedButton(props: ExportedButtonProps) {
-  const { as: Component = "button", className, children, style } = props;
-  return <Component {...mergedSx(styles.exportedButton, className, style)}>{children}</Component>;
+  const { as: Component = "button", className, children, style, ...rest } = props;
+  return (
+    <Component {...rest} {...mergedSx(styles.exportedButton, className, style)}>
+      {children}
+    </Component>
+  );
 }
 
 export const App = () => (
