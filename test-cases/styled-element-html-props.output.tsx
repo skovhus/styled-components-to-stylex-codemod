@@ -13,9 +13,9 @@ interface TextColorProps extends React.ComponentProps<"span"> {
  * When exported, should include HTML span props (className, children, style).
  */
 export function TextColor(props: TextColorProps) {
-  const { as: Component = "span", className, children, style, color, ...rest } = props;
+  const { as: Component = "span", className, children, style, color } = props;
   return (
-    <Component {...rest} {...mergedSx([styles.textColorColor(color)], className, style)}>
+    <Component {...mergedSx([styles.textColorColor(color)], className, style)}>
       {children}
     </Component>
   );

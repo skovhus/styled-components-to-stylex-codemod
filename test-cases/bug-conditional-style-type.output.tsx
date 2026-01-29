@@ -14,11 +14,10 @@ type IconWithTeamColorProps = Omit<React.ComponentProps<"svg">, "className" | "s
 // This causes: TS2345: Argument of type '"" | readonly [...] | undefined'
 //              is not assignable to parameter of type 'StyleXArray<...>'
 export function IconWithTeamColor(props: IconWithTeamColorProps) {
-  const { children, $color, ...rest } = props;
+  const { children, $color } = props;
   return (
     <svg
       className="color-override"
-      {...rest}
       {...stylex.props($color ? styles.iconWithTeamColorFill($color) : undefined)}
     >
       {children}
