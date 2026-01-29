@@ -206,12 +206,20 @@ export function insertEmittedWrappers(args: {
         .at(0);
 
       if (existingReactImport.size() > 0) {
-        // Add default specifier to the existing import (can't mix namespace with named imports)
-        // This turns `import { useCallback } from "react"` into `import React, { useCallback } from "react"`
         const importNode = existingReactImport.get().node;
         const specifiers = importNode.specifiers ?? [];
-        specifiers.unshift(j.importDefaultSpecifier(j.identifier("React")));
-        importNode.specifiers = specifiers;
+        // Check if there's already a default specifier (e.g., `import ReactAlias from "react"`)
+        const hasDefaultSpecifier = specifiers.some(
+          (s: { type: string }) => s.type === "ImportDefaultSpecifier",
+        );
+        if (!hasDefaultSpecifier) {
+          // Add React as default specifier at the beginning (can't mix namespace with named imports)
+          // This turns `import { useCallback } from "react"` into `import React, { useCallback } from "react"`
+          specifiers.unshift(j.importDefaultSpecifier(j.identifier("React")));
+          importNode.specifiers = specifiers;
+        }
+        // If there's already a default specifier with a different name, we leave it as-is
+        // since the user explicitly aliased React and we shouldn't override that choice
       } else {
         // No existing react import, create a new one with namespace style
         const firstImport = root.find(j.ImportDeclaration).at(0);

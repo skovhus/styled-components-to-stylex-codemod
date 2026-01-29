@@ -20,12 +20,19 @@ export function ensureReactImportStep(ctx: TransformContext): StepResult {
       .at(0);
 
     if (existingReactImport.size() > 0) {
-      // Add default specifier to the existing import
       const importNode = existingReactImport.get().node;
       const specifiers = importNode.specifiers ?? [];
-      // Add React as default specifier at the beginning
-      specifiers.unshift(j.importDefaultSpecifier(j.identifier("React")));
-      importNode.specifiers = specifiers;
+      // Check if there's already a default specifier (e.g., `import ReactAlias from "react"`)
+      const hasDefaultSpecifier = specifiers.some(
+        (s: { type: string }) => s.type === "ImportDefaultSpecifier",
+      );
+      if (!hasDefaultSpecifier) {
+        // Add React as default specifier at the beginning
+        specifiers.unshift(j.importDefaultSpecifier(j.identifier("React")));
+        importNode.specifiers = specifiers;
+      }
+      // If there's already a default specifier with a different name, we leave it as-is
+      // since the user explicitly aliased React and we shouldn't override that choice
     } else {
       // No existing react import, create a new one
       const firstImport = root.find(j.ImportDeclaration).at(0);
