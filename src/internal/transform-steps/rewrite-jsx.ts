@@ -329,30 +329,30 @@ export function rewriteJsxStep(ctx: TransformContext): StepResult {
         }
 
         // Preserve original prop order to maintain override semantics:
-        // - Explicit attrs before any spread → leading (before stylex.props)
-        // - Spread attrs → middle (before stylex.props, after leading)
-        // - Explicit attrs after a spread → trailing (after stylex.props, to preserve overrides)
+        // - Attrs before any spread → leading (before rest)
+        // - Everything from first spread onwards → rest (in original interleaved order)
+        // - stylex.props() inserted after the last spread in rest
         // - `style` attr → always last (for inline overrides)
         const leading: typeof keptAttrs = [];
-        const spreads: typeof keptAttrs = [];
-        const trailing: typeof keptAttrs = [];
+        const rest: typeof keptAttrs = [];
+        let styleAttr: (typeof keptAttrs)[0] | null = null;
         let seenSpread = false;
         for (const attr of keptAttrs) {
-          if (attr.type === "JSXSpreadAttribute") {
-            spreads.push(attr);
-            seenSpread = true;
-          } else if (
+          if (
             attr.type === "JSXAttribute" &&
             attr.name.type === "JSXIdentifier" &&
             attr.name.name === "style"
           ) {
             // `style` attribute always goes last to allow inline overrides
-            trailing.push(attr);
+            styleAttr = attr;
+          } else if (attr.type === "JSXSpreadAttribute") {
+            rest.push(attr);
+            seenSpread = true;
           } else if (seenSpread) {
-            // Explicit attrs after a spread go to trailing to preserve override semantics
-            trailing.push(attr);
+            // After first spread, preserve interleaved order in rest
+            rest.push(attr);
           } else {
-            // Explicit attrs before any spread go to leading
+            // Attrs before any spread go to leading
             leading.push(attr);
           }
         }
@@ -380,12 +380,13 @@ export function rewriteJsxStep(ctx: TransformContext): StepResult {
         const variantKeys = decl.variantStyleKeys ?? {};
         const variantProps = new Set(Object.keys(variantKeys));
         const keptLeadingAfterVariants: typeof leading = [];
-        const keptTrailingAfterVariants: typeof trailing = [];
+        const keptRestAfterVariants: typeof rest = [];
         const styleFnPairs = decl.styleFnFromProps ?? [];
         const styleFnProps = new Set(styleFnPairs.map((p) => p.jsxProp));
 
         // Helper to process attrs (strip variants, transient props, styleFn props)
-        const processAttr = (attr: (typeof leading)[0], output: typeof leading) => {
+        // Returns true if attr should be kept, false if consumed/stripped
+        const processAttr = (attr: (typeof leading)[0], output: typeof leading): void => {
           if (attr.type !== "JSXAttribute" || attr.name.type !== "JSXIdentifier") {
             output.push(attr);
             return;
@@ -464,21 +465,37 @@ export function rewriteJsxStep(ctx: TransformContext): StepResult {
           processAttr(attr, keptLeadingAfterVariants);
         }
 
-        // Process trailing attrs (after a spread) - same filtering applies
-        for (const attr of trailing) {
-          processAttr(attr, keptTrailingAfterVariants);
+        // Process rest attrs (from first spread onwards, preserving interleaved order)
+        for (const attr of rest) {
+          processAttr(attr, keptRestAfterVariants);
         }
 
-        // Final order: leading attrs, spreads, stylex.props(), trailing attrs
+        // Recalculate insert index after filtering (some attrs may have been removed)
+        let finalInsertIndex = keptRestAfterVariants.length;
+        for (let i = keptRestAfterVariants.length - 1; i >= 0; i--) {
+          if (keptRestAfterVariants[i]!.type === "JSXSpreadAttribute") {
+            finalInsertIndex = i + 1;
+            break;
+          }
+        }
+
+        // Build final rest with stylex.props inserted after last spread
+        const stylexSpread = j.jsxSpreadAttribute(
+          j.callExpression(j.memberExpression(j.identifier("stylex"), j.identifier("props")), [
+            ...styleArgs,
+          ]),
+        );
+        const finalRest = [
+          ...keptRestAfterVariants.slice(0, finalInsertIndex),
+          stylexSpread,
+          ...keptRestAfterVariants.slice(finalInsertIndex),
+        ];
+
+        // Final order: leading attrs, rest (with stylex.props inserted), style attr last
         opening.attributes = [
           ...keptLeadingAfterVariants,
-          ...spreads,
-          j.jsxSpreadAttribute(
-            j.callExpression(j.memberExpression(j.identifier("stylex"), j.identifier("props")), [
-              ...styleArgs,
-            ]),
-          ),
-          ...keptTrailingAfterVariants,
+          ...finalRest,
+          ...(styleAttr ? [styleAttr] : []),
         ];
       });
   }

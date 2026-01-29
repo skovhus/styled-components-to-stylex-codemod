@@ -25,6 +25,17 @@ export function SecureThumbnail(props: Props) {
   return <Thumbnail {...props} src={secureSrc} />;
 }
 
+// Multiple spreads with explicit attr in between:
+// The explicit attr foo="1" should stay between {...a} and {...b}
+type BoxProps = { className?: string };
+const Box = styled.div`
+  padding: 8px;
+`;
+
+export function MultiSpread(a: BoxProps, b: BoxProps) {
+  return <Box {...a} data-test="middle" {...b} />;
+}
+
 export function App() {
   return <SecureThumbnail src="test.jpg" />;
 }

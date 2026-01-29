@@ -19,6 +19,14 @@ export function SecureThumbnail(props: Props) {
   return <img {...props} {...stylex.props(styles.thumbnail)} src={secureSrc} />;
 }
 
+// Multiple spreads with explicit attr in between:
+// The explicit attr foo="1" should stay between {...a} and {...b}
+type BoxProps = { className?: string };
+
+export function MultiSpread(a: BoxProps, b: BoxProps) {
+  return <div {...a} data-test="middle" {...b} {...stylex.props(styles.box)} />;
+}
+
 export function App() {
   return <SecureThumbnail src="test.jpg" />;
 }
@@ -28,5 +36,8 @@ const styles = stylex.create({
   thumbnail: {
     maxWidth: "180px",
     objectFit: "cover",
+  },
+  box: {
+    padding: "8px",
   },
 });
