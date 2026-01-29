@@ -149,14 +149,12 @@ export function emitComponentWrappers(emitter: WrapperEmitter): {
     if (d.variantStyleKeys) {
       for (const [when, variantKey] of Object.entries(d.variantStyleKeys)) {
         const { cond } = emitter.collectConditionProps({ when, destructureProps });
-
-        styleArgs.push(
-          j.logicalExpression(
-            "&&",
-            cond,
-            j.memberExpression(j.identifier(stylesIdentifier), j.identifier(variantKey)),
-          ),
+        const styleExpr = j.memberExpression(
+          j.identifier(stylesIdentifier),
+          j.identifier(variantKey),
         );
+        // Simple style lookups always use && (falsy values like false/undefined are valid for stylex.props)
+        styleArgs.push(j.logicalExpression("&&", cond, styleExpr));
       }
     }
 
@@ -175,11 +173,13 @@ export function emitComponentWrappers(emitter: WrapperEmitter): {
     if (d.extraStylexPropsArgs) {
       for (const extra of d.extraStylexPropsArgs) {
         if (extra.when) {
-          const { cond } = emitter.collectConditionProps({
+          const { cond, isBoolean } = emitter.collectConditionProps({
             when: extra.when,
             destructureProps,
           });
-          styleArgs.push(j.logicalExpression("&&", cond, extra.expr as any));
+          styleArgs.push(
+            emitter.makeConditionalStyleExpr({ cond, expr: extra.expr as any, isBoolean }),
+          );
         } else {
           styleArgs.push(extra.expr as any);
         }

@@ -1136,11 +1136,15 @@ export class WrapperEmitter {
     ];
   }
 
-  parseVariantWhenToAst(when: string): { cond: LogicalExpressionOperand; props: string[] } {
+  parseVariantWhenToAst(when: string): {
+    cond: LogicalExpressionOperand;
+    props: string[];
+    isBoolean: boolean;
+  } {
     const { j } = this;
     const trimmed = String(when ?? "").trim();
     if (!trimmed) {
-      return { cond: j.identifier("true"), props: [] };
+      return { cond: j.identifier("true"), props: [], isBoolean: true };
     }
 
     if (trimmed.includes("&&")) {
@@ -1153,18 +1157,30 @@ export class WrapperEmitter {
         .slice(1)
         .reduce((acc, cur) => j.logicalExpression("&&", acc, cur.cond), parsed[0]!.cond);
       const props = [...new Set(parsed.flatMap((x) => x.props))];
-      return { cond, props };
+      // Combined && is boolean only if all parts are boolean
+      const isBoolean = parsed.every((p) => p.isBoolean);
+      return { cond, props, isBoolean };
     }
 
     if (trimmed.startsWith("!(") && trimmed.endsWith(")")) {
       const inner = trimmed.slice(2, -1).trim();
       const innerParsed = this.parseVariantWhenToAst(inner);
-      return { cond: j.unaryExpression("!", innerParsed.cond), props: innerParsed.props };
+      // Negation always produces boolean
+      return {
+        cond: j.unaryExpression("!", innerParsed.cond),
+        props: innerParsed.props,
+        isBoolean: true,
+      };
     }
     if (trimmed.startsWith("!")) {
       const inner = trimmed.slice(1).trim();
       const innerParsed = this.parseVariantWhenToAst(inner);
-      return { cond: j.unaryExpression("!", innerParsed.cond), props: innerParsed.props };
+      // Negation always produces boolean
+      return {
+        cond: j.unaryExpression("!", innerParsed.cond),
+        props: innerParsed.props,
+        isBoolean: true,
+      };
     }
 
     if (trimmed.includes("===") || trimmed.includes("!==")) {
@@ -1178,18 +1194,22 @@ export class WrapperEmitter {
             ? j.literal(Number(rhsRaw))
             : j.identifier(rhsRaw);
       const propName = lhs ?? "";
+      // Comparison always produces boolean
       return {
         cond: j.binaryExpression(op as any, j.identifier(propName), rhs),
         props: propName ? [propName] : [],
+        isBoolean: true,
       };
     }
 
-    return { cond: j.identifier(trimmed), props: [trimmed] };
+    // Simple identifier - NOT guaranteed to be boolean (could be "" or 0)
+    return { cond: j.identifier(trimmed), props: [trimmed], isBoolean: false };
   }
 
   collectConditionProps(args: { when: string; destructureProps?: string[] }): {
     cond: LogicalExpressionOperand;
     props: string[];
+    isBoolean: boolean;
   } {
     const { when, destructureProps } = args;
     const parsed = this.parseVariantWhenToAst(when);
@@ -1201,6 +1221,24 @@ export class WrapperEmitter {
       }
     }
     return parsed;
+  }
+
+  /**
+   * Creates a conditional style expression that's safe for stylex.props().
+   * For boolean conditions, uses && (since false is valid for stylex.props).
+   * For non-boolean conditions (could be "" or 0), uses ternary with undefined fallback.
+   */
+  makeConditionalStyleExpr(args: {
+    cond: LogicalExpressionOperand;
+    expr: ExpressionKind;
+    isBoolean: boolean;
+  }): ExpressionKind {
+    const { j } = this;
+    const { cond, expr, isBoolean } = args;
+    if (isBoolean) {
+      return j.logicalExpression("&&", cond, expr);
+    }
+    return j.conditionalExpression(cond, expr, j.identifier("undefined"));
   }
 
   private literalExpr(value: unknown): ExpressionKind {
@@ -1682,15 +1720,15 @@ export class WrapperEmitter {
 
       // Handle conditional style based on conditionWhen
       if (p.conditionWhen) {
-        const { cond } = this.collectConditionProps({
+        const { cond, isBoolean } = this.collectConditionProps({
           when: p.conditionWhen,
           destructureProps,
         });
-        styleArgs.push(j.logicalExpression("&&", cond, call));
+        styleArgs.push(this.makeConditionalStyleExpr({ cond, expr: call, isBoolean }));
         continue;
       }
 
-      // Handle truthy condition
+      // Handle truthy condition - !!prop is always boolean, so && is safe
       if (p.condition === "truthy") {
         const truthy = j.unaryExpression("!", j.unaryExpression("!", propExpr));
         styleArgs.push(j.logicalExpression("&&", truthy, call));
@@ -1703,6 +1741,7 @@ export class WrapperEmitter {
       if (required) {
         styleArgs.push(call);
       } else {
+        // prop != null is always boolean, so && is safe
         styleArgs.push(
           j.logicalExpression("&&", j.binaryExpression("!=", propExpr, j.nullLiteral()), call),
         );
