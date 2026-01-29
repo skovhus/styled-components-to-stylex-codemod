@@ -328,24 +328,31 @@ export function rewriteJsxStep(ctx: TransformContext): StepResult {
           }
         }
 
-        // Preserve original prop order: regular JSX attributes come first (in their original order),
-        // then stylex.props(), then `style` attribute (allowing inline overrides), then spread attributes.
-        // This prevents props like tabIndex from being reordered unexpectedly.
+        // Preserve original prop order to maintain override semantics:
+        // - Attrs before any spread → leading (before rest)
+        // - Everything from first spread onwards → rest (in original interleaved order)
+        // - stylex.props() inserted after the last spread in rest
+        // - `style` attr → always last (for inline overrides)
         const leading: typeof keptAttrs = [];
         const rest: typeof keptAttrs = [];
+        let styleAttr: (typeof keptAttrs)[0] | null = null;
+        let seenSpread = false;
         for (const attr of keptAttrs) {
-          // Spread attributes go after stylex.props
-          if (attr.type === "JSXSpreadAttribute") {
-            rest.push(attr);
-          } else if (
+          if (
             attr.type === "JSXAttribute" &&
             attr.name.type === "JSXIdentifier" &&
             attr.name.name === "style"
           ) {
-            // `style` attribute goes after stylex.props to allow inline overrides
+            // `style` attribute always goes last to allow inline overrides
+            styleAttr = attr;
+          } else if (attr.type === "JSXSpreadAttribute") {
+            rest.push(attr);
+            seenSpread = true;
+          } else if (seenSpread) {
+            // After first spread, preserve interleaved order in rest
             rest.push(attr);
           } else {
-            // All other JSX attributes preserve their original order before stylex.props
+            // Attrs before any spread go to leading
             leading.push(attr);
           }
         }
@@ -373,13 +380,16 @@ export function rewriteJsxStep(ctx: TransformContext): StepResult {
         const variantKeys = decl.variantStyleKeys ?? {};
         const variantProps = new Set(Object.keys(variantKeys));
         const keptLeadingAfterVariants: typeof leading = [];
+        const keptRestAfterVariants: typeof rest = [];
         const styleFnPairs = decl.styleFnFromProps ?? [];
         const styleFnProps = new Set(styleFnPairs.map((p) => p.jsxProp));
-        // Process variant props from leading attrs (regular JSX attributes)
-        for (const attr of leading) {
+
+        // Helper to process attrs (strip variants, transient props, styleFn props)
+        // Returns true if attr should be kept, false if consumed/stripped
+        const processAttr = (attr: (typeof leading)[0], output: typeof leading): void => {
           if (attr.type !== "JSXAttribute" || attr.name.type !== "JSXIdentifier") {
-            keptLeadingAfterVariants.push(attr);
-            continue;
+            output.push(attr);
+            return;
           }
           const n = attr.name.name;
 
@@ -408,18 +418,18 @@ export function rewriteJsxStep(ctx: TransformContext): StepResult {
                 );
               }
             }
-            continue;
+            return;
           }
 
           if (!variantProps.has(n)) {
             // Strip transient props (starting with $) only for intrinsic elements.
             // For styled(Component), transient props should still reach the wrapped component
-            // (unless consumed by styleFnFromProps, which is handled above at line 387).
+            // (unless consumed by styleFnFromProps, which is handled above).
             if (n.startsWith("$") && decl.base.kind === "intrinsic") {
-              continue;
+              return;
             }
-            keptLeadingAfterVariants.push(attr);
-            continue;
+            output.push(attr);
+            return;
           }
 
           const variantStyleKey = variantKeys[n]!;
@@ -431,7 +441,7 @@ export function rewriteJsxStep(ctx: TransformContext): StepResult {
                 j.identifier(variantStyleKey),
               ),
             );
-            continue;
+            return;
           }
           if (attr.value.type === "JSXExpressionContainer") {
             // <X $prop={expr}>
@@ -445,20 +455,47 @@ export function rewriteJsxStep(ctx: TransformContext): StepResult {
                 ),
               ),
             );
-            continue;
+            return;
           }
           // Any other value shape: drop the prop without attempting to apply a variant.
+        };
+
+        // Process leading attrs (before any spread)
+        for (const attr of leading) {
+          processAttr(attr, keptLeadingAfterVariants);
         }
 
-        // Final order: regular attrs (filtered), then stylex.props(), then spread attrs
+        // Process rest attrs (from first spread onwards, preserving interleaved order)
+        for (const attr of rest) {
+          processAttr(attr, keptRestAfterVariants);
+        }
+
+        // Recalculate insert index after filtering (some attrs may have been removed)
+        let finalInsertIndex = keptRestAfterVariants.length;
+        for (let i = keptRestAfterVariants.length - 1; i >= 0; i--) {
+          if (keptRestAfterVariants[i]!.type === "JSXSpreadAttribute") {
+            finalInsertIndex = i + 1;
+            break;
+          }
+        }
+
+        // Build final rest with stylex.props inserted after last spread
+        const stylexSpread = j.jsxSpreadAttribute(
+          j.callExpression(j.memberExpression(j.identifier("stylex"), j.identifier("props")), [
+            ...styleArgs,
+          ]),
+        );
+        const finalRest = [
+          ...keptRestAfterVariants.slice(0, finalInsertIndex),
+          stylexSpread,
+          ...keptRestAfterVariants.slice(finalInsertIndex),
+        ];
+
+        // Final order: leading attrs, rest (with stylex.props inserted), style attr last
         opening.attributes = [
           ...keptLeadingAfterVariants,
-          j.jsxSpreadAttribute(
-            j.callExpression(j.memberExpression(j.identifier("stylex"), j.identifier("props")), [
-              ...styleArgs,
-            ]),
-          ),
-          ...rest,
+          ...finalRest,
+          ...(styleAttr ? [styleAttr] : []),
         ];
       });
   }
