@@ -19,7 +19,7 @@ describe("Logger", () => {
         [
           {
             severity: "warning",
-            type: "Adapter returned an unparseable styles expression",
+            type: "Adapter resolveCall returned an unparseable styles expression",
             loc: null,
           },
         ],
@@ -29,7 +29,7 @@ describe("Logger", () => {
         [
           {
             severity: "warning",
-            type: "Adapter returned an unparseable styles expression",
+            type: "Adapter resolveCall returned an unparseable styles expression",
             loc: null,
           },
         ],
@@ -46,7 +46,7 @@ describe("Logger", () => {
         Warning Summary: 3 warning(s) in 2 category(s)
         ────────────────────────────────────────────────────────────
 
-        ▸ Adapter returned an unparseable styles expression (2)
+        ▸ Adapter resolveCall returned an unparseable styles expression (2)
 
           /path/a.tsx
 

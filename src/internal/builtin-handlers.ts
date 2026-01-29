@@ -12,6 +12,7 @@ import {
   getArrowFnSingleParamName,
   getFunctionBodyExpr,
   getMemberPathFromIdentifier,
+  getNodeLocStart,
   isArrowFunctionExpression,
   isCallExpressionNode,
   literalToStaticValue,
@@ -387,7 +388,12 @@ function tryResolveThemeAccess(
     return null;
   }
 
-  const res = ctx.resolveValue({ kind: "theme", path, filePath: ctx.filePath });
+  const res = ctx.resolveValue({
+    kind: "theme",
+    path,
+    filePath: ctx.filePath,
+    loc: getNodeLocStart(body) ?? undefined,
+  });
   if (!res) {
     return null;
   }
@@ -460,11 +466,13 @@ function resolveImportedHelperCall(
     return "keepOriginal";
   }
   const args = callArgsFromNode(callExpr.arguments, propsParamName);
+  const loc = callExpr.loc?.start;
   const res = ctx.resolveCall({
     callSiteFilePath: ctx.filePath,
     calleeImportedName,
     calleeSource,
     args,
+    ...(loc ? { loc: { line: loc.line, column: loc.column } } : {}),
   });
   return res ?? "unresolved";
 }
@@ -531,7 +539,7 @@ function tryResolveCallExpression(
     const importedName = imp?.importedName ?? calleeIdent ?? "unknown";
     return {
       type: "keepOriginal",
-      reason: `Adapter returned undefined for helper call`,
+      reason: `Adapter resolveCall returned undefined for helper call`,
       context: { importedName },
     };
   }
@@ -601,7 +609,7 @@ function tryResolveArrowFnHelperCallWithThemeArg(
     const importedName = imp?.importedName ?? calleeIdent ?? "unknown";
     return {
       type: "keepOriginal",
-      reason: `Adapter returned undefined for helper call`,
+      reason: `Adapter resolveCall returned undefined for helper call`,
       context: { importedName },
     };
   }
@@ -718,6 +726,7 @@ function tryResolveConditionalValue(
           kind: "theme",
           path: themeInfo.path,
           filePath: ctx.filePath,
+          loc: getNodeLocStart(expr) ?? undefined,
         });
         if (!res) {
           return null;
@@ -790,7 +799,12 @@ function tryResolveConditionalValue(
     if (!themeInfo) {
       return null;
     }
-    const res = ctx.resolveValue({ kind: "theme", path: themeInfo.path, filePath: ctx.filePath });
+    const res = ctx.resolveValue({
+      kind: "theme",
+      path: themeInfo.path,
+      filePath: ctx.filePath,
+      loc: getNodeLocStart(b) ?? undefined,
+    });
     if (!res) {
       return null;
     }
@@ -931,7 +945,12 @@ function tryResolveConditionalValue(
       return null;
     }
     const themePath = path.slice(1).join(".");
-    const resolved = ctx.resolveValue({ kind: "theme", path: themePath, filePath: ctx.filePath });
+    const resolved = ctx.resolveValue({
+      kind: "theme",
+      path: themePath,
+      filePath: ctx.filePath,
+      loc: getNodeLocStart(n) ?? undefined,
+    });
     return resolved ? { expr: resolved.expr, imports: resolved.imports } : null;
   };
 
@@ -996,6 +1015,7 @@ function tryResolveConditionalValue(
           kind: "theme",
           path: indexedResult.themeObjectPath,
           filePath: ctx.filePath,
+          loc: getNodeLocStart(consequent) ?? undefined,
         });
         if (themeObjResolved) {
           // Extract static fallback from alternate branch
@@ -1176,6 +1196,7 @@ function tryResolveIndexedThemeWithPropFallback(
     kind: "theme",
     path: indexedResult.themeObjectPath,
     filePath: ctx.filePath,
+    loc: getNodeLocStart(body.left) ?? undefined,
   });
   if (!themeObjResolved) {
     return null;

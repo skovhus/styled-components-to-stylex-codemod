@@ -16,6 +16,11 @@ type ThemeResolveContext = {
    * Useful for adapter logic that wants to branch by caller file.
    */
   filePath: string;
+  /**
+   * Source location (line/column) of the expression being resolved.
+   * Useful for error reporting.
+   */
+  loc?: { line: number; column: number };
 };
 
 type CssVariableResolveContext = {
@@ -28,6 +33,11 @@ type CssVariableResolveContext = {
    * Useful for adapter logic that wants to branch by caller file.
    */
   filePath: string;
+  /**
+   * Source location (line/column) of the expression being resolved.
+   * Useful for error reporting.
+   */
+  loc?: { line: number; column: number };
 };
 
 type ImportedValueResolveContext = {
@@ -51,6 +61,11 @@ type ImportedValueResolveContext = {
    * Useful for adapter logic that wants to branch by caller file.
    */
   filePath: string;
+  /**
+   * Source location (line/column) of the expression being resolved.
+   * Useful for error reporting.
+   */
+  loc?: { line: number; column: number };
 };
 
 export type CallResolveContext = {
@@ -80,6 +95,11 @@ export type CallResolveContext = {
     | { kind: "theme"; path: string }
     | { kind: "unknown" }
   >;
+  /**
+   * Source location (line/column) of the call expression being resolved.
+   * Useful for error reporting.
+   */
+  loc?: { line: number; column: number };
 };
 
 /**
@@ -176,6 +196,11 @@ export type SelectorResolveContext = {
    * Absolute path of the file currently being transformed.
    */
   filePath: string;
+  /**
+   * Source location (line/column) of the selector interpolation being resolved.
+   * Useful for error reporting.
+   */
+  loc?: { line: number; column: number };
 };
 
 /**
