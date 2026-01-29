@@ -53,6 +53,10 @@ export const App = () => (
 );
 
 const styles = stylex.create({
+  /**
+   * Template literal interpolation inside pseudo/media should stay scoped
+   * when preserved via a StyleX style function.
+   */
   hoverSwatch: {
     display: "inline-block",
   },
