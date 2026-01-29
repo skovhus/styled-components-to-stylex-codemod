@@ -103,6 +103,47 @@ function invertWhen(when: string): string | null {
   return null;
 }
 
+function buildPseudoMediaPropValue(args: {
+  j: JSCodeshift;
+  valueExpr: ExpressionKind;
+  pseudos?: string[] | null;
+  media?: string | null;
+}): ExpressionKind {
+  const { j, valueExpr, pseudos, media } = args;
+  const pseudoList = pseudos ?? [];
+  const hasPseudos = pseudoList.length > 0;
+  if (!media && !hasPseudos) {
+    return valueExpr;
+  }
+  if (media && hasPseudos) {
+    const pseudoProps = pseudoList.map((ps) =>
+      j.property(
+        "init",
+        j.literal(ps),
+        j.objectExpression([
+          j.property("init", j.identifier("default"), j.literal(null)),
+          j.property("init", j.literal(media), valueExpr),
+        ]),
+      ),
+    );
+    return j.objectExpression([
+      j.property("init", j.identifier("default"), j.literal(null)),
+      ...pseudoProps,
+    ]);
+  }
+  if (media) {
+    return j.objectExpression([
+      j.property("init", j.identifier("default"), j.literal(null)),
+      j.property("init", j.literal(media), valueExpr),
+    ]);
+  }
+  const pseudoProps = pseudoList.map((ps) => j.property("init", j.literal(ps), valueExpr));
+  return j.objectExpression([
+    j.property("init", j.identifier("default"), j.literal(null)),
+    ...pseudoProps,
+  ]);
+}
+
 export function lowerRules(args: {
   api: API;
   j: JSCodeshift;
@@ -3936,43 +3977,13 @@ export function lowerRules(args: {
                 const fnKey = `${decl.styleKey}${toSuffixFromProp(out.prop)}`;
                 if (!styleFnDecls.has(fnKey)) {
                   const valueExpr = cloneAstNode(bodyExpr) as ExpressionKind;
-                  const buildPropValue = (): ExpressionKind => {
-                    if (media && pseudos?.length) {
-                      const pseudoProps = pseudos.map((ps) =>
-                        j.property(
-                          "init",
-                          j.literal(ps),
-                          j.objectExpression([
-                            j.property("init", j.identifier("default"), j.literal(null)),
-                            j.property("init", j.literal(media), valueExpr),
-                          ]),
-                        ),
-                      );
-                      return j.objectExpression([
-                        j.property("init", j.identifier("default"), j.literal(null)),
-                        ...pseudoProps,
-                      ]);
-                    }
-                    if (media) {
-                      return j.objectExpression([
-                        j.property("init", j.identifier("default"), j.literal(null)),
-                        j.property("init", j.literal(media), valueExpr),
-                      ]);
-                    }
-                    const pseudoProps = pseudos?.map((ps) =>
-                      j.property("init", j.literal(ps), valueExpr),
-                    );
-                    if (pseudoProps?.length) {
-                      return j.objectExpression([
-                        j.property("init", j.identifier("default"), j.literal(null)),
-                        ...pseudoProps,
-                      ]);
-                    }
-                    return valueExpr;
-                  };
                   const param = j.identifier(paramName);
                   const body = j.objectExpression([
-                    j.property("init", j.identifier(out.prop), buildPropValue()),
+                    j.property(
+                      "init",
+                      j.identifier(out.prop),
+                      buildPseudoMediaPropValue({ j, valueExpr, pseudos, media }),
+                    ),
                   ]);
                   styleFnDecls.set(fnKey, j.arrowFunctionExpression([param], body));
                 }
@@ -4069,40 +4080,13 @@ export function lowerRules(args: {
                       );
                     };
                     const valueExpr = wrapValue(valueExprRaw);
-                    const buildPropValue = (): ExpressionKind => {
-                      if (media && pseudos?.length) {
-                        const pseudoProps = pseudos.map((ps) =>
-                          j.property(
-                            "init",
-                            j.literal(ps),
-                            j.objectExpression([
-                              j.property("init", j.identifier("default"), j.literal(null)),
-                              j.property("init", j.literal(media), valueExpr),
-                            ]),
-                          ),
-                        );
-                        return j.objectExpression([
-                          j.property("init", j.identifier("default"), j.literal(null)),
-                          ...pseudoProps,
-                        ]);
-                      }
-                      if (media) {
-                        return j.objectExpression([
-                          j.property("init", j.identifier("default"), j.literal(null)),
-                          j.property("init", j.literal(media), valueExpr),
-                        ]);
-                      }
-                      const pseudoProps = pseudos?.map((ps) =>
-                        j.property("init", j.literal(ps), valueExpr),
-                      );
-                      return j.objectExpression([
-                        j.property("init", j.identifier("default"), j.literal(null)),
-                        ...(pseudoProps ?? []),
-                      ]);
-                    };
                     const fnKey = `${decl.styleKey}${toSuffixFromProp(out.prop)}FromProps`;
                     if (!styleFnDecls.has(fnKey)) {
-                      const p = j.property("init", j.identifier(out.prop), buildPropValue()) as any;
+                      const p = j.property(
+                        "init",
+                        j.identifier(out.prop),
+                        buildPseudoMediaPropValue({ j, valueExpr, pseudos, media }),
+                      ) as any;
                       const body = j.objectExpression([p]);
                       styleFnDecls.set(fnKey, j.arrowFunctionExpression([propsParam], body));
                     }
@@ -4377,42 +4361,14 @@ export function lowerRules(args: {
                 prefix || suffix
                   ? buildTemplateWithStaticParts(j, baseExpr, prefix, suffix)
                   : baseExpr;
-              const buildPropValue = (): ExpressionKind => {
-                if (media && pseudos?.length) {
-                  const pseudoProps = pseudos.map((ps) =>
-                    j.property(
-                      "init",
-                      j.literal(ps),
-                      j.objectExpression([
-                        j.property("init", j.identifier("default"), j.literal(null)),
-                        j.property("init", j.literal(media), expr),
-                      ]),
-                    ),
-                  );
-                  return j.objectExpression([
-                    j.property("init", j.identifier("default"), j.literal(null)),
-                    ...pseudoProps,
-                  ]);
-                }
-                if (media) {
-                  return j.objectExpression([
-                    j.property("init", j.identifier("default"), j.literal(null)),
-                    j.property("init", j.literal(media), expr),
-                  ]);
-                }
-                if (pseudos?.length) {
-                  const pseudoProps = pseudos.map((ps) => j.property("init", j.literal(ps), expr));
-                  return j.objectExpression([
-                    j.property("init", j.identifier("default"), j.literal(null)),
-                    ...pseudoProps,
-                  ]);
-                }
-                return expr;
-              };
               const fnKey = `${decl.styleKey}${toSuffixFromProp(out.prop)}`;
               if (!styleFnDecls.has(fnKey)) {
                 const body = j.objectExpression([
-                  j.property("init", j.identifier(out.prop), buildPropValue()),
+                  j.property(
+                    "init",
+                    j.identifier(out.prop),
+                    buildPseudoMediaPropValue({ j, valueExpr: expr, pseudos, media }),
+                  ),
                 ]);
                 styleFnDecls.set(fnKey, j.arrowFunctionExpression([propsParam], body));
               }
