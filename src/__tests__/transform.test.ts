@@ -230,6 +230,7 @@ describe("_unsupported fixtures", () => {
       { adapter: fixtureAdapter },
     );
     expect(result.code).toBeNull();
+    expect(result.warnings).toHaveLength(1);
   });
 });
 

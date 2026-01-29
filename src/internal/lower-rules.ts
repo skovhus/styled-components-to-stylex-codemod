@@ -2797,6 +2797,9 @@ export function lowerRules(args: {
           ) {
             continue;
           }
+          if (bail) {
+            break;
+          }
 
           if (!d.property) {
             const slot = d.value.parts.find(
@@ -4022,10 +4025,7 @@ export function lowerRules(args: {
               // If the IR is missing a property, fall through to other handlers.
             } else {
               const e = decl.templateExpressions[slotId] as any;
-              if (
-                e?.type !== "ArrowFunctionExpression" &&
-                e?.type !== "FunctionExpression"
-              ) {
+              if (e?.type !== "ArrowFunctionExpression" && e?.type !== "FunctionExpression") {
                 bailUnsupported(decl, "Unsupported interpolation: arrow function");
                 break;
               }
@@ -4054,8 +4054,7 @@ export function lowerRules(args: {
                 ensureShouldForwardPropDrop(decl, propName);
               }
               decl.needsWrapperComponent = true;
-              const paramName =
-                e.params?.[0]?.type === "Identifier" ? e.params[0].name : "props";
+              const paramName = e.params?.[0]?.type === "Identifier" ? e.params[0].name : "props";
               for (const out of cssDeclarationToStylexDeclarations(d)) {
                 if (!out.prop) {
                   continue;
