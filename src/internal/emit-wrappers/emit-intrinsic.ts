@@ -692,14 +692,9 @@ export function emitIntrinsicWrappers(emitter: WrapperEmitter): {
               when: extra.when,
               destructureProps,
             });
-            // Use && for boolean conditions, ternary for simple identifiers (could be "" or 0)
-            if (isBoolean) {
-              styleArgs.push(j.logicalExpression("&&", cond, extra.expr as any));
-            } else {
-              styleArgs.push(
-                j.conditionalExpression(cond, extra.expr as any, j.identifier("undefined")),
-              );
-            }
+            styleArgs.push(
+              emitter.makeConditionalStyleExpr({ cond, expr: extra.expr as any, isBoolean }),
+            );
           } else {
             styleArgs.push(extra.expr as any);
           }
@@ -1089,14 +1084,9 @@ export function emitIntrinsicWrappers(emitter: WrapperEmitter): {
       for (const extra of d.extraStylexPropsArgs) {
         if (extra.when) {
           const { cond, isBoolean } = emitter.collectConditionProps({ when: extra.when });
-          // Use && for boolean conditions, ternary for simple identifiers (could be "" or 0)
-          if (isBoolean) {
-            styleArgs.push(j.logicalExpression("&&", cond, extra.expr as any));
-          } else {
-            styleArgs.push(
-              j.conditionalExpression(cond, extra.expr as any, j.identifier("undefined")),
-            );
-          }
+          styleArgs.push(
+            emitter.makeConditionalStyleExpr({ cond, expr: extra.expr as any, isBoolean }),
+          );
         } else {
           styleArgs.push(extra.expr as any);
         }
@@ -1193,12 +1183,7 @@ export function emitIntrinsicWrappers(emitter: WrapperEmitter): {
       );
       if (p.conditionWhen) {
         const { cond, isBoolean } = emitter.collectConditionProps({ when: p.conditionWhen });
-        // Use && for boolean conditions, ternary for simple identifiers (could be "" or 0)
-        if (isBoolean) {
-          styleArgs.push(j.logicalExpression("&&", cond, call));
-        } else {
-          styleArgs.push(j.conditionalExpression(cond, call, j.identifier("undefined")));
-        }
+        styleArgs.push(emitter.makeConditionalStyleExpr({ cond, expr: call, isBoolean }));
         continue;
       }
       // !!prop is always boolean, so && is safe
@@ -2054,14 +2039,9 @@ export function emitIntrinsicWrappers(emitter: WrapperEmitter): {
             when: extra.when,
             destructureProps,
           });
-          // Use && for boolean conditions, ternary for simple identifiers (could be "" or 0)
-          if (isBoolean) {
-            styleArgs.push(j.logicalExpression("&&", cond, extra.expr as any));
-          } else {
-            styleArgs.push(
-              j.conditionalExpression(cond, extra.expr as any, j.identifier("undefined")),
-            );
-          }
+          styleArgs.push(
+            emitter.makeConditionalStyleExpr({ cond, expr: extra.expr as any, isBoolean }),
+          );
         } else {
           styleArgs.push(extra.expr as any);
         }

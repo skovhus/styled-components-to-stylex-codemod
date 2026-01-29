@@ -1223,6 +1223,24 @@ export class WrapperEmitter {
     return parsed;
   }
 
+  /**
+   * Creates a conditional style expression that's safe for stylex.props().
+   * For boolean conditions, uses && (since false is valid for stylex.props).
+   * For non-boolean conditions (could be "" or 0), uses ternary with undefined fallback.
+   */
+  makeConditionalStyleExpr(args: {
+    cond: LogicalExpressionOperand;
+    expr: ExpressionKind;
+    isBoolean: boolean;
+  }): ExpressionKind {
+    const { j } = this;
+    const { cond, expr, isBoolean } = args;
+    if (isBoolean) {
+      return j.logicalExpression("&&", cond, expr);
+    }
+    return j.conditionalExpression(cond, expr, j.identifier("undefined"));
+  }
+
   private literalExpr(value: unknown): ExpressionKind {
     const { j } = this;
     if (typeof value === "boolean") {
@@ -1706,12 +1724,7 @@ export class WrapperEmitter {
           when: p.conditionWhen,
           destructureProps,
         });
-        // Use && for boolean conditions, ternary for simple identifiers (could be "" or 0)
-        if (isBoolean) {
-          styleArgs.push(j.logicalExpression("&&", cond, call));
-        } else {
-          styleArgs.push(j.conditionalExpression(cond, call, j.identifier("undefined")));
-        }
+        styleArgs.push(this.makeConditionalStyleExpr({ cond, expr: call, isBoolean }));
         continue;
       }
 

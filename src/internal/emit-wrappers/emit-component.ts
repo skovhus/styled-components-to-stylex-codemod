@@ -177,14 +177,9 @@ export function emitComponentWrappers(emitter: WrapperEmitter): {
             when: extra.when,
             destructureProps,
           });
-          // Use && for boolean conditions, ternary for simple identifiers (could be "" or 0)
-          if (isBoolean) {
-            styleArgs.push(j.logicalExpression("&&", cond, extra.expr as any));
-          } else {
-            styleArgs.push(
-              j.conditionalExpression(cond, extra.expr as any, j.identifier("undefined")),
-            );
-          }
+          styleArgs.push(
+            emitter.makeConditionalStyleExpr({ cond, expr: extra.expr as any, isBoolean }),
+          );
         } else {
           styleArgs.push(extra.expr as any);
         }
