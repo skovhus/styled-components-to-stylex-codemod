@@ -6,6 +6,7 @@ import { cssDeclarationToStylexDeclarations } from "../css-prop-mapping.js";
 import { parseInterpolatedBorderStaticParts } from "../css-prop-mapping.js";
 import { normalizeStylisAstToIR } from "../css-ir.js";
 import {
+  extractRootAndPath,
   getMemberPathFromIdentifier,
   isCallExpressionNode,
   isConditionalExpressionNode,
@@ -490,6 +491,29 @@ function resolveStaticTemplateExpressionAst(args: {
     const exprAst = parseExpr(adapterRes.expr);
     if (exprAst) {
       return exprAst;
+    }
+  }
+
+  const importedInfo = extractRootAndPath(expr);
+  if (importedInfo) {
+    const imp = resolveImportInScope(importedInfo.rootName, importedInfo.rootNode);
+    if (imp) {
+      const res = handlerContext.resolveValue({
+        kind: "importedValue",
+        importedName: imp.importedName,
+        source: imp.source,
+        ...(importedInfo.path.length ? { path: importedInfo.path.join(".") } : {}),
+        filePath,
+      });
+      if (res) {
+        for (const importSpec of res.imports ?? []) {
+          resolverImports.set(JSON.stringify(importSpec), importSpec);
+        }
+        const exprAst = parseExpr(res.expr);
+        if (exprAst) {
+          return exprAst;
+        }
+      }
     }
   }
 
