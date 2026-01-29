@@ -148,15 +148,17 @@ export function emitComponentWrappers(emitter: WrapperEmitter): {
     // Add variant style arguments if this component has variants
     if (d.variantStyleKeys) {
       for (const [when, variantKey] of Object.entries(d.variantStyleKeys)) {
-        const { cond } = emitter.collectConditionProps({ when, destructureProps });
-
-        styleArgs.push(
-          j.logicalExpression(
-            "&&",
-            cond,
-            j.memberExpression(j.identifier(stylesIdentifier), j.identifier(variantKey)),
-          ),
+        const { cond, isBoolean } = emitter.collectConditionProps({ when, destructureProps });
+        const styleExpr = j.memberExpression(
+          j.identifier(stylesIdentifier),
+          j.identifier(variantKey),
         );
+        // Use && for boolean conditions, ternary for simple identifiers (could be "" or 0)
+        if (isBoolean) {
+          styleArgs.push(j.logicalExpression("&&", cond, styleExpr));
+        } else {
+          styleArgs.push(j.conditionalExpression(cond, styleExpr, j.identifier("undefined")));
+        }
       }
     }
 
@@ -175,11 +177,18 @@ export function emitComponentWrappers(emitter: WrapperEmitter): {
     if (d.extraStylexPropsArgs) {
       for (const extra of d.extraStylexPropsArgs) {
         if (extra.when) {
-          const { cond } = emitter.collectConditionProps({
+          const { cond, isBoolean } = emitter.collectConditionProps({
             when: extra.when,
             destructureProps,
           });
-          styleArgs.push(j.logicalExpression("&&", cond, extra.expr as any));
+          // Use && for boolean conditions, ternary for simple identifiers (could be "" or 0)
+          if (isBoolean) {
+            styleArgs.push(j.logicalExpression("&&", cond, extra.expr as any));
+          } else {
+            styleArgs.push(
+              j.conditionalExpression(cond, extra.expr as any, j.identifier("undefined")),
+            );
+          }
         } else {
           styleArgs.push(extra.expr as any);
         }

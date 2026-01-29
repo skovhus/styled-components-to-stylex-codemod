@@ -13,7 +13,7 @@ function Line(props: LineProps) {
     <div
       {...stylex.props(
         styles.line,
-        $isRemoval && styles.lineBackgroundColor($deletionColor ?? $colors.bgBase),
+        $isRemoval ? styles.lineBackgroundColor($deletionColor ?? $colors.bgBase) : undefined,
       )}
     >
       {children}

@@ -7,8 +7,12 @@ type StyledHeaderProps = React.PropsWithChildren<{
 }>;
 
 export function StyledHeader(props: StyledHeaderProps) {
-  const { children } = props;
-  return <header {...stylex.props(styles.styledHeader)}>{children}</header>;
+  const { children, ...rest } = props;
+  return (
+    <header {...rest} {...stylex.props(styles.styledHeader)}>
+      {children}
+    </header>
+  );
 }
 
 export const App = () => (

@@ -659,14 +659,17 @@ export function emitIntrinsicWrappers(emitter: WrapperEmitter): {
           if (compoundVariantKeys.has(when)) {
             continue;
           }
-          const { cond } = emitter.collectConditionProps({ when, destructureProps });
-          styleArgs.push(
-            j.logicalExpression(
-              "&&",
-              cond,
-              j.memberExpression(j.identifier(stylesIdentifier), j.identifier(variantKey)),
-            ),
+          const { cond, isBoolean } = emitter.collectConditionProps({ when, destructureProps });
+          const styleExpr = j.memberExpression(
+            j.identifier(stylesIdentifier),
+            j.identifier(variantKey),
           );
+          // Use && for boolean conditions, ternary for simple identifiers (could be "" or 0)
+          if (isBoolean) {
+            styleArgs.push(j.logicalExpression("&&", cond, styleExpr));
+          } else {
+            styleArgs.push(j.conditionalExpression(cond, styleExpr, j.identifier("undefined")));
+          }
         }
       }
 
@@ -689,11 +692,18 @@ export function emitIntrinsicWrappers(emitter: WrapperEmitter): {
       if (d.extraStylexPropsArgs) {
         for (const extra of d.extraStylexPropsArgs) {
           if (extra.when) {
-            const { cond } = emitter.collectConditionProps({
+            const { cond, isBoolean } = emitter.collectConditionProps({
               when: extra.when,
               destructureProps,
             });
-            styleArgs.push(j.logicalExpression("&&", cond, extra.expr as any));
+            // Use && for boolean conditions, ternary for simple identifiers (could be "" or 0)
+            if (isBoolean) {
+              styleArgs.push(j.logicalExpression("&&", cond, extra.expr as any));
+            } else {
+              styleArgs.push(
+                j.conditionalExpression(cond, extra.expr as any, j.identifier("undefined")),
+              );
+            }
           } else {
             styleArgs.push(extra.expr as any);
           }
@@ -1082,8 +1092,15 @@ export function emitIntrinsicWrappers(emitter: WrapperEmitter): {
     if (d.extraStylexPropsArgs) {
       for (const extra of d.extraStylexPropsArgs) {
         if (extra.when) {
-          const { cond } = emitter.collectConditionProps({ when: extra.when });
-          styleArgs.push(j.logicalExpression("&&", cond, extra.expr as any));
+          const { cond, isBoolean } = emitter.collectConditionProps({ when: extra.when });
+          // Use && for boolean conditions, ternary for simple identifiers (could be "" or 0)
+          if (isBoolean) {
+            styleArgs.push(j.logicalExpression("&&", cond, extra.expr as any));
+          } else {
+            styleArgs.push(
+              j.conditionalExpression(cond, extra.expr as any, j.identifier("undefined")),
+            );
+          }
         } else {
           styleArgs.push(extra.expr as any);
         }
@@ -1104,14 +1121,17 @@ export function emitIntrinsicWrappers(emitter: WrapperEmitter): {
         if (compoundVariantKeys.has(when)) {
           continue;
         }
-        const { cond } = emitter.collectConditionProps({ when });
-        styleArgs.push(
-          j.logicalExpression(
-            "&&",
-            cond,
-            j.memberExpression(j.identifier(stylesIdentifier), j.identifier(variantKey)),
-          ),
+        const { cond, isBoolean } = emitter.collectConditionProps({ when });
+        const styleExpr = j.memberExpression(
+          j.identifier(stylesIdentifier),
+          j.identifier(variantKey),
         );
+        // Use && for boolean conditions, ternary for simple identifiers (could be "" or 0)
+        if (isBoolean) {
+          styleArgs.push(j.logicalExpression("&&", cond, styleExpr));
+        } else {
+          styleArgs.push(j.conditionalExpression(cond, styleExpr, j.identifier("undefined")));
+        }
       }
     }
 
@@ -1180,10 +1200,16 @@ export function emitIntrinsicWrappers(emitter: WrapperEmitter): {
         [callArg],
       );
       if (p.conditionWhen) {
-        const { cond } = emitter.collectConditionProps({ when: p.conditionWhen });
-        styleArgs.push(j.logicalExpression("&&", cond, call));
+        const { cond, isBoolean } = emitter.collectConditionProps({ when: p.conditionWhen });
+        // Use && for boolean conditions, ternary for simple identifiers (could be "" or 0)
+        if (isBoolean) {
+          styleArgs.push(j.logicalExpression("&&", cond, call));
+        } else {
+          styleArgs.push(j.conditionalExpression(cond, call, j.identifier("undefined")));
+        }
         continue;
       }
+      // !!prop is always boolean, so && is safe
       if (p.condition === "truthy") {
         const truthy = j.unaryExpression("!", j.unaryExpression("!", propExpr));
         styleArgs.push(j.logicalExpression("&&", truthy, call));
@@ -1194,6 +1220,7 @@ export function emitIntrinsicWrappers(emitter: WrapperEmitter): {
       if (required) {
         styleArgs.push(call);
       } else {
+        // prop != null is always boolean, so && is safe
         styleArgs.push(
           j.logicalExpression("&&", j.binaryExpression("!=", propExpr, j.nullLiteral()), call),
         );
@@ -1231,6 +1258,8 @@ export function emitIntrinsicWrappers(emitter: WrapperEmitter): {
     const { hasAny: hasLocalUsage } = emitter.getJsxCallsites(d.localName);
 
     const shouldIncludeRest =
+      d.isExported ||
+      emitter.exportedComponents.has(d.localName) ||
       emitter.isUsedAsValueInFile(d.localName) ||
       (hasLocalUsage && usedAttrs.has("*")) ||
       (hasLocalUsage &&
@@ -1247,7 +1276,10 @@ export function emitIntrinsicWrappers(emitter: WrapperEmitter): {
           return !destructureParts.includes(n);
         }));
 
+    // Skip rest spread omission for exported components - external consumers may pass additional props
+    const isExportedComponent = d.isExported || emitter.exportedComponents.has(d.localName);
     const shouldOmitRestSpread =
+      !isExportedComponent &&
       !dropPrefix &&
       dropProps.length > 0 &&
       dropProps.every((p: string) => p.startsWith("$")) &&
@@ -2026,11 +2058,18 @@ export function emitIntrinsicWrappers(emitter: WrapperEmitter): {
     if (d.extraStylexPropsArgs) {
       for (const extra of d.extraStylexPropsArgs) {
         if (extra.when) {
-          const { cond } = emitter.collectConditionProps({
+          const { cond, isBoolean } = emitter.collectConditionProps({
             when: extra.when,
             destructureProps,
           });
-          styleArgs.push(j.logicalExpression("&&", cond, extra.expr as any));
+          // Use && for boolean conditions, ternary for simple identifiers (could be "" or 0)
+          if (isBoolean) {
+            styleArgs.push(j.logicalExpression("&&", cond, extra.expr as any));
+          } else {
+            styleArgs.push(
+              j.conditionalExpression(cond, extra.expr as any, j.identifier("undefined")),
+            );
+          }
         } else {
           styleArgs.push(extra.expr as any);
         }
@@ -2051,14 +2090,12 @@ export function emitIntrinsicWrappers(emitter: WrapperEmitter): {
           continue;
         }
         const { cond } = emitter.collectConditionProps({ when, destructureProps });
-
-        styleArgs.push(
-          j.logicalExpression(
-            "&&",
-            cond,
-            j.memberExpression(j.identifier(stylesIdentifier), j.identifier(variantKey)),
-          ),
+        const styleExpr = j.memberExpression(
+          j.identifier(stylesIdentifier),
+          j.identifier(variantKey),
         );
+        // Simple style lookups always use && (falsy values like false/undefined are valid for stylex.props)
+        styleArgs.push(j.logicalExpression("&&", cond, styleExpr));
       }
     }
 
@@ -2143,6 +2180,8 @@ export function emitIntrinsicWrappers(emitter: WrapperEmitter): {
         return !destructureProps.includes(n);
       });
     const shouldIncludeRest =
+      d.isExported ||
+      emitter.exportedComponents.has(d.localName) ||
       emitter.isUsedAsValueInFile(d.localName) ||
       hasExplicitPropsToPassThrough ||
       (hasLocalUsage && usedAttrs.has("*")) ||
