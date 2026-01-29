@@ -1,5 +1,6 @@
 import type { ASTNode, Comment } from "jscodeshift";
 import type { WrapperEmitter } from "./wrapper-emitter.js";
+import { ensureReactBinding } from "../utilities/ensure-react-binding.js";
 
 export function insertEmittedWrappers(args: {
   emitter: WrapperEmitter;
@@ -184,32 +185,6 @@ export function insertEmittedWrappers(args: {
   }
 
   if (emitTypes && needsReactTypeImport) {
-    const hasReactBinding =
-      root
-        .find(j.ImportDeclaration)
-        .filter((p: any) => (p.node?.source as any)?.value === "react")
-        .filter((p: any) =>
-          (p.node.specifiers ?? []).some(
-            (s: any) =>
-              (s.type === "ImportDefaultSpecifier" || s.type === "ImportNamespaceSpecifier") &&
-              s.local?.type === "Identifier" &&
-              s.local.name === "React",
-          ),
-        )
-        .size() > 0;
-
-    if (!hasReactBinding) {
-      const firstImport = root.find(j.ImportDeclaration).at(0);
-      const reactImport = j.importDeclaration(
-        [j.importNamespaceSpecifier(j.identifier("React"))],
-        j.literal("react"),
-      ) as any;
-
-      if (firstImport.size() > 0) {
-        firstImport.insertBefore(reactImport);
-      } else {
-        root.get().node.program.body.unshift(reactImport);
-      }
-    }
+    ensureReactBinding({ root, j, useNamespaceStyle: true });
   }
 }
