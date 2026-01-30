@@ -31,6 +31,22 @@ pnpm check       # Run lint + tsc + test
 - Prefer type definitions; avoid type assertions (as, !).
 - Use descriptive names for variables & functions
 
+## StyleX Constraints
+
+StyleX does NOT support CSS shorthand properties. When transforming CSS to StyleX:
+
+- `border` must expand to `borderWidth`, `borderStyle`, `borderColor`
+- `margin`/`padding` must expand to directional properties (`marginTop`, etc.)
+- `background` must map to `backgroundColor` or `backgroundImage`
+
+**Key files for shorthand handling:**
+
+- `src/internal/css-prop-mapping.ts` - `cssDeclarationToStylexDeclarations()` is the authoritative source for shorthand expansion
+- `src/internal/lower-rules/borders.ts` - Handles interpolated border values
+- Use `parseInterpolatedBorderStaticParts()` when parsing border values with dynamic expressions
+
+When adding new CSS-to-StyleX transformations, always use these existing helpers rather than directly mapping CSS property names.
+
 ## Scripts
 
 Run repo scripts directly with `node`, see `scripts` folder

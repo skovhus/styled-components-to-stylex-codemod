@@ -3388,8 +3388,17 @@ export function lowerRules(args: {
           }
 
           if (res && res.type === "splitVariants") {
-            const negVariants = res.variants.filter((v: any) => v.when.startsWith("!"));
-            const posVariants = res.variants.filter((v: any) => !v.when.startsWith("!"));
+            // Extract any imports from variants (used by template literal theme resolution)
+            for (const v of res.variants) {
+              if (v.imports) {
+                for (const imp of v.imports) {
+                  resolverImports.set(JSON.stringify(imp), imp);
+                }
+              }
+            }
+
+            const negVariants = res.variants.filter((v) => v.when.startsWith("!"));
+            const posVariants = res.variants.filter((v) => !v.when.startsWith("!"));
 
             if (negVariants.length === 1 && posVariants.length > 0) {
               // Classic pattern with one default (neg) and conditional variants (pos)

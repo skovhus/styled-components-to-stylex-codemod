@@ -102,6 +102,21 @@ export function parseBorderShorthandParts(valueRaw: string): {
   return { width, style, color: color || undefined };
 }
 
+/**
+ * Converts a CSS declaration to StyleX property declarations.
+ *
+ * IMPORTANT: StyleX does not support CSS shorthand properties like `border`, `margin`, `padding`.
+ * This function expands shorthands to their longhand equivalents (e.g., `border` → `borderWidth`,
+ * `borderStyle`, `borderColor`).
+ *
+ * When adding new CSS-to-StyleX conversion logic elsewhere in the codebase:
+ * - ALWAYS use this function or its helpers (like `parseInterpolatedBorderStaticParts`)
+ * - NEVER directly map CSS property names to StyleX without considering shorthand expansion
+ * - For interpolated/dynamic values, see `lower-rules/borders.ts` for border handling patterns
+ *
+ * @see parseInterpolatedBorderStaticParts - For parsing border shorthands with dynamic color values
+ * @see lower-rules/borders.ts - For handling interpolated border values in styled-components
+ */
 export function cssDeclarationToStylexDeclarations(decl: CssDeclarationIR): StylexPropDecl[] {
   const prop = decl.property.trim();
 
