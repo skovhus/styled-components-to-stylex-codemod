@@ -144,10 +144,7 @@ export function cssDeclarationToStylexDeclarations(decl: CssDeclarationIR): Styl
   }
 
   if (prop === "background") {
-    const stylexProp =
-      decl.value.kind === "static" && isBackgroundImageValue(decl.valueRaw)
-        ? "backgroundImage"
-        : "backgroundColor";
+    const stylexProp = resolveBackgroundStylexProp(decl.valueRaw ?? "");
     return [{ prop: stylexProp, value: decl.value }];
   }
 
