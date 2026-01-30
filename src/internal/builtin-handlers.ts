@@ -9,6 +9,7 @@ import type {
 } from "../adapter.js";
 import {
   type CallExpressionNode,
+  getArrowFnParamBindings,
   getArrowFnSingleParamName,
   getFunctionBodyExpr,
   getMemberPathFromIdentifier,
@@ -17,6 +18,7 @@ import {
   isCallExpressionNode,
   literalToStaticValue,
   literalToString,
+  resolveIdentifierToPropName,
 } from "./utilities/jscodeshift-utils.js";
 import { sanitizeIdentifier } from "./utilities/string-utils.js";
 import { cssDeclarationToStylexDeclarations } from "./css-prop-mapping.js";
@@ -1756,6 +1758,18 @@ function tryResolveInlineStyleValueForNestedPropAccess(node: DynamicNode): Handl
   return { type: "emitInlineStyleValueFromProps" };
 }
 
+/**
+ * Handles simple prop access patterns in interpolations.
+ *
+ * Supports both simple params and destructured params:
+ * - `(props) => props.color` → simple param with member access
+ * - `({ color }) => color` → shorthand destructuring
+ * - `({ color: color_ }) => color_` → renamed destructuring
+ * - `({ color = "red" }) => color` → destructuring with default
+ *
+ * Note: Destructured param support is currently limited to this handler.
+ * Other handlers (theme access, conditionals, etc.) only support simple params.
+ */
 function tryResolvePropAccess(node: DynamicNode): HandlerResult | null {
   if (!node.css.property) {
     return null;
@@ -1764,20 +1778,33 @@ function tryResolvePropAccess(node: DynamicNode): HandlerResult | null {
   if (!isArrowFunctionExpression(expr)) {
     return null;
   }
-  const paramName = getArrowFnSingleParamName(expr);
-  if (!paramName) {
-    return null;
-  }
-  if (expr.body.type !== "MemberExpression") {
+
+  const bindings = getArrowFnParamBindings(expr);
+  if (!bindings) {
     return null;
   }
 
-  const path = getMemberPathFromIdentifier(expr.body, paramName);
-  if (!path || path.length !== 1) {
-    return null;
+  let propName: string | null = null;
+
+  if (bindings.kind === "simple") {
+    // Original logic: (props) => props.color
+    if (expr.body.type !== "MemberExpression") {
+      return null;
+    }
+    const path = getMemberPathFromIdentifier(expr.body, bindings.paramName);
+    if (!path || path.length !== 1) {
+      return null;
+    }
+    propName = path[0]!;
+  } else {
+    // New logic: ({ color: color_ }) => color_
+    // Body must be a direct identifier reference
+    propName = resolveIdentifierToPropName(expr.body, bindings);
+    if (!propName) {
+      return null;
+    }
   }
 
-  const propName = path[0]!;
   const cssProp = node.css.property;
   const nameHint = `${sanitizeIdentifier(cssProp)}FromProp`;
 
