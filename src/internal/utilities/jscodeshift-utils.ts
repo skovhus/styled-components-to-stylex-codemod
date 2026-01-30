@@ -205,6 +205,122 @@ export function getArrowFnSingleParamName(fn: ArrowFunctionExpression): string |
   return isIdentifier(p) ? p.name : null;
 }
 
+/**
+ * Information about arrow function parameter bindings.
+ *
+ * For simple params like `(props) => ...`:
+ *   { kind: "simple", paramName: "props" }
+ *
+ * For destructured params like `({ color, size: size_ }) => ...`:
+ *   { kind: "destructured", bindings: Map { "color" -> "color", "size_" -> "size" } }
+ *   where the map is: localName -> originalPropName
+ */
+export type ArrowFnParamBindings =
+  | { kind: "simple"; paramName: string }
+  | { kind: "destructured"; bindings: Map<string, string> };
+
+/**
+ * Extracts parameter binding information from an arrow function.
+ *
+ * Supports:
+ * - Simple identifier params: `(props) => ...`
+ * - Destructured params: `({ color }) => ...`
+ * - Renamed destructured params: `({ color: color_ }) => ...`
+ * - Default values: `({ color = "red" }) => ...`
+ * - Renamed with defaults: `({ color: color_ = "red" }) => ...`
+ *
+ * Returns null for:
+ * - Functions with != 1 parameter
+ * - Rest elements in destructuring (not supported)
+ * - Computed property keys
+ */
+export function getArrowFnParamBindings(fn: ArrowFunctionExpression): ArrowFnParamBindings | null {
+  if (fn.params.length !== 1) {
+    return null;
+  }
+  const p = fn.params[0];
+
+  // Simple identifier: (props) => ...
+  if (isIdentifier(p)) {
+    return { kind: "simple", paramName: p.name };
+  }
+
+  // Object pattern: ({ color, size: size_ }) => ...
+  if (p?.type === "ObjectPattern" && Array.isArray((p as { properties?: unknown[] }).properties)) {
+    const bindings = new Map<string, string>();
+    const props = (p as { properties: Array<{ type?: string; key?: unknown; value?: unknown }> })
+      .properties;
+    for (const prop of props) {
+      // Rest elements not supported: ({ ...rest }) => ...
+      if (prop.type === "RestElement") {
+        return null;
+      }
+      if (prop.type !== "Property" && prop.type !== "ObjectProperty") {
+        continue;
+      }
+      const key = prop.key as { type?: string; name?: string } | undefined;
+      // Computed keys not supported: { [expr]: value }
+      if (!key || key.type !== "Identifier") {
+        continue;
+      }
+      const propName = key.name;
+      if (!propName) {
+        continue;
+      }
+
+      const value = prop.value as { type?: string; name?: string; left?: unknown } | undefined;
+      // Shorthand: { color } -> color maps to color
+      if (value?.type === "Identifier" && typeof value.name === "string") {
+        bindings.set(value.name, propName);
+      }
+      // Default value: { color = "red" } or { color: color_ = "red" }
+      else if (value?.type === "AssignmentPattern") {
+        const left = value.left as { type?: string; name?: string } | undefined;
+        if (left?.type === "Identifier" && typeof left.name === "string") {
+          bindings.set(left.name, propName);
+        }
+      }
+    }
+    if (bindings.size === 0) {
+      return null;
+    }
+    return { kind: "destructured", bindings };
+  }
+
+  return null;
+}
+
+/**
+ * Given an identifier node and param bindings, resolves the original prop name.
+ *
+ * For destructured params like `({ color: color_ }) => color_`:
+ *   resolveIdentifierToPropName(color_Node, bindings) -> "color"
+ *
+ * Returns null if the identifier doesn't correspond to a destructured prop.
+ */
+export function resolveIdentifierToPropName(
+  node: unknown,
+  bindings: ArrowFnParamBindings,
+): string | null {
+  if (!node || typeof node !== "object") {
+    return null;
+  }
+
+  const typed = node as { type?: string; name?: string };
+  if (typed.type !== "Identifier" || typeof typed.name !== "string") {
+    return null;
+  }
+
+  if (bindings.kind === "simple") {
+    // For simple params, the identifier itself is the param name, not a prop reference
+    // The caller should use getMemberPathFromIdentifier for member expressions
+    return null;
+  }
+
+  // For destructured params, look up the local name in the bindings
+  return bindings.bindings.get(typed.name) ?? null;
+}
+
 export function getNodeLocStart(node: unknown): { line: number; column: number } | null {
   const n = node as { loc?: { start?: { line: number; column: number } } } | null | undefined;
   const loc = n?.loc?.start;
