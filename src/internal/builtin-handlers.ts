@@ -1758,6 +1758,18 @@ function tryResolveInlineStyleValueForNestedPropAccess(node: DynamicNode): Handl
   return { type: "emitInlineStyleValueFromProps" };
 }
 
+/**
+ * Handles simple prop access patterns in interpolations.
+ *
+ * Supports both simple params and destructured params:
+ * - `(props) => props.color` → simple param with member access
+ * - `({ color }) => color` → shorthand destructuring
+ * - `({ color: color_ }) => color_` → renamed destructuring
+ * - `({ color = "red" }) => color` → destructuring with default
+ *
+ * Note: Destructured param support is currently limited to this handler.
+ * Other handlers (theme access, conditionals, etc.) only support simple params.
+ */
 function tryResolvePropAccess(node: DynamicNode): HandlerResult | null {
   if (!node.css.property) {
     return null;
