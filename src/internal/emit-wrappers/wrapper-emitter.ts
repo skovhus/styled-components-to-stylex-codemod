@@ -16,7 +16,7 @@ import { emitStyleMerging } from "./style-merger.js";
 import type { ExportInfo, ExpressionKind, InlineStyleProp } from "./types.js";
 import { TAG_TO_HTML_ELEMENT, VOID_TAGS } from "./type-helpers.js";
 import type { VariantDimension } from "../transform-types.js";
-import { collectIdentifiers } from "../utilities/jscodeshift-utils.js";
+import { buildStyleFnConditionExpr, collectIdentifiers } from "../utilities/jscodeshift-utils.js";
 
 type TsTypeAnnotationInput = Parameters<JSCodeshift["tsTypeAnnotation"]>[0];
 type BlockStatementBody = Parameters<JSCodeshift["blockStatement"]>[0];
@@ -1728,24 +1728,11 @@ export class WrapperEmitter {
         continue;
       }
 
-      // Handle truthy condition - !!prop is always boolean, so && is safe
-      if (p.condition === "truthy") {
-        const truthy = j.unaryExpression("!", j.unaryExpression("!", propExpr));
-        styleArgs.push(j.logicalExpression("&&", truthy, call));
-        continue;
-      }
-
-      // Handle required vs optional props
-      const required =
+      const isRequired =
         p.jsxProp === "__props" || this.isPropRequiredInPropsTypeLiteral(d.propsType, p.jsxProp);
-      if (required) {
-        styleArgs.push(call);
-      } else {
-        // prop != null is always boolean, so && is safe
-        styleArgs.push(
-          j.logicalExpression("&&", j.binaryExpression("!=", propExpr, j.nullLiteral()), call),
-        );
-      }
+      styleArgs.push(
+        buildStyleFnConditionExpr({ j, condition: p.condition, propExpr, call, isRequired }),
+      );
     }
   }
 

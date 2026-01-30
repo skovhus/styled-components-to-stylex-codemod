@@ -23,6 +23,7 @@ import {
   isCallExpressionNode,
   isFunctionNode,
   getDeclaratorId,
+  setIdentifierTypeAnnotation,
 } from "./utilities/jscodeshift-utils.js";
 import type { Adapter, ImportSource, ImportSpec } from "../adapter.js";
 import { tryHandleAnimation } from "./lower-rules/animation.js";
@@ -639,7 +640,7 @@ export function lowerRules(args: {
     const styleFnFromProps: Array<{
       fnKey: string;
       jsxProp: string;
-      condition?: "truthy";
+      condition?: "truthy" | "always";
       conditionWhen?: string;
       callArg?: ExpressionKind;
     }> = [];
@@ -842,13 +843,15 @@ export function lowerRules(args: {
     const tryHandleLogicalOrDefault = (d: any): boolean => {
       // Handle: background: ${(p) => p.color || "#BF4F74"}
       //         padding: ${(p) => p.$padding || "16px"}
+      //         transition-delay: ${(p) => p.$delay ?? 0}ms
       if (d.value.kind !== "interpolated") {
         return false;
       }
       if (!d.property) {
         return false;
       }
-      const slot = d.value.parts.find((p: any) => p.kind === "slot");
+      const parts = d.value.parts ?? [];
+      const slot = parts.find((p: any) => p.kind === "slot");
       if (!slot) {
         return false;
       }
@@ -875,25 +878,57 @@ export function lowerRules(args: {
         return false;
       }
       const jsxProp = left.property.name;
-      const right = expr.body.right as any;
-      const fallback =
-        right?.type === "StringLiteral" || right?.type === "Literal"
-          ? right.value
-          : right?.type === "NumericLiteral"
-            ? right.value
-            : null;
-      if (fallback === null) {
+      const right = expr.body.right;
+      const fallback = literalToStaticValue(right);
+      if (fallback === null || typeof fallback === "boolean") {
         return false;
+      }
+
+      // Extract static prefix/suffix (e.g., unit suffixes like "ms" or "px")
+      const { prefix, suffix } = extractStaticParts(d.value);
+      const hasStaticParts = !!(prefix || suffix);
+
+      // When there are static parts, we need a wrapper component to evaluate the template literal at runtime
+      if (hasStaticParts) {
+        decl.needsWrapperComponent = true;
+        ensureShouldForwardPropDrop(decl, jsxProp);
       }
 
       // Default value into base style, plus a style function applied when prop is provided.
       for (const out of cssDeclarationToStylexDeclarations(d)) {
         const fnKey = `${decl.styleKey}${toSuffixFromProp(out.prop)}`;
-        styleObj[out.prop] = fallback;
-        styleFnFromProps.push({ fnKey, jsxProp });
+        // Wrap fallback with static parts if present (e.g., 0 -> "0ms")
+        const baseValue = hasStaticParts ? `${prefix}${fallback}${suffix}` : fallback;
+        styleObj[out.prop] = baseValue;
+
+        if (hasStaticParts) {
+          // When there are static parts, build callArg as template literal: `${$prop ?? fallback}ms`
+          // Use condition: "always" because the callArg handles the null case with ?? operator
+          const propAccess = j.identifier(jsxProp);
+          const logicalExpr = j.logicalExpression(
+            expr.body.operator,
+            propAccess,
+            j.literal(fallback),
+          );
+          const callArg = buildTemplateWithStaticParts(
+            j,
+            logicalExpr as ExpressionKind,
+            prefix,
+            suffix,
+          );
+          styleFnFromProps.push({ fnKey, jsxProp, callArg, condition: "always" });
+        } else {
+          styleFnFromProps.push({ fnKey, jsxProp });
+        }
+
         if (!styleFnDecls.has(fnKey)) {
           const param = j.identifier(out.prop);
-          annotateParamFromJsxProp(param, jsxProp);
+          // When there are static parts, the param type should be string (since we pass template literal)
+          if (hasStaticParts) {
+            setIdentifierTypeAnnotation(param, j.tsTypeAnnotation(j.tsStringKeyword()));
+          } else {
+            annotateParamFromJsxProp(param, jsxProp);
+          }
           const p = j.property("init", j.identifier(out.prop), j.identifier(out.prop)) as any;
           p.shorthand = true;
           styleFnDecls.set(fnKey, j.arrowFunctionExpression([param], j.objectExpression([p])));
@@ -1286,6 +1321,81 @@ export function lowerRules(args: {
         return false;
       }
 
+      // Helper to apply dynamic style entries from template literal interpolations.
+      // When conditionWhen is provided, styles are conditional; otherwise unconditional.
+      const applyDynamicEntries = (
+        entries: Array<{ jsxProp: string; stylexProp: string; callArg: ExpressionKind }>,
+        conditionWhen?: string,
+      ): void => {
+        for (const entry of entries) {
+          const fnKey = `${decl.styleKey}${toSuffixFromProp(entry.stylexProp)}`;
+          if (!styleFnDecls.has(fnKey)) {
+            const param = j.identifier(entry.stylexProp);
+            const valueId = j.identifier(entry.stylexProp);
+            annotateParamFromJsxProp(param, entry.jsxProp);
+            const p = j.property("init", valueId, valueId) as any;
+            p.shorthand = true;
+            const bodyExpr = j.objectExpression([p]);
+            styleFnDecls.set(fnKey, j.arrowFunctionExpression([param], bodyExpr));
+          }
+          if (
+            !styleFnFromProps.some(
+              (p) =>
+                p.fnKey === fnKey &&
+                p.jsxProp === entry.jsxProp &&
+                p.conditionWhen === conditionWhen,
+            )
+          ) {
+            styleFnFromProps.push({
+              fnKey,
+              jsxProp: entry.jsxProp,
+              conditionWhen,
+              callArg: entry.callArg,
+            });
+          }
+          ensureShouldForwardPropDrop(decl, entry.jsxProp);
+        }
+      };
+
+      // Handle direct TemplateLiteral body: (props) => `width: ${props.$width}px;`
+      // Applies styles unconditionally - static styles merge into base, dynamic become style functions.
+      if (body?.type === "TemplateLiteral") {
+        const resolved = resolveTemplateLiteralBranch({
+          j,
+          node: body,
+          paramName,
+          filePath,
+          parseExpr,
+          cssValueToJs,
+          resolveValue,
+          resolveCall,
+          resolveImportInScope,
+          resolverImports,
+          componentInfo,
+          handlerContext,
+        });
+
+        if (!resolved) {
+          return false;
+        }
+
+        const { style, dynamicEntries } = resolved;
+
+        // Static styles go to base object (no condition = always applied)
+        for (const [prop, value] of Object.entries(style)) {
+          styleObj[prop] = value;
+        }
+
+        // Dynamic props become style functions (unconditional - no conditionWhen)
+        applyDynamicEntries(dynamicEntries);
+
+        if (dynamicEntries.length > 0) {
+          decl.needsWrapperComponent = true;
+        }
+
+        return true;
+      }
+
       // Handle ConditionalExpression: props.$x ? css`...` : css`...`
       if (body?.type !== "ConditionalExpression") {
         return false;
@@ -1366,41 +1476,6 @@ export function lowerRules(args: {
         applyVariant({ ...testInfo, when: invertedWhen }, altResolved.style);
         return true;
       }
-
-      const applyDynamicEntries = (
-        entries: Array<{ jsxProp: string; stylexProp: string; callArg: ExpressionKind }>,
-        conditionWhen: string,
-      ): boolean => {
-        for (const entry of entries) {
-          const fnKey = `${decl.styleKey}${toSuffixFromProp(entry.stylexProp)}`;
-          if (!styleFnDecls.has(fnKey)) {
-            const param = j.identifier(entry.stylexProp);
-            const valueId = j.identifier(entry.stylexProp);
-            annotateParamFromJsxProp(param, entry.jsxProp);
-            const p = j.property("init", valueId, valueId) as any;
-            p.shorthand = true;
-            const bodyExpr = j.objectExpression([p]);
-            styleFnDecls.set(fnKey, j.arrowFunctionExpression([param], bodyExpr));
-          }
-          if (
-            !styleFnFromProps.some(
-              (p) =>
-                p.fnKey === fnKey &&
-                p.jsxProp === entry.jsxProp &&
-                p.conditionWhen === conditionWhen,
-            )
-          ) {
-            styleFnFromProps.push({
-              fnKey,
-              jsxProp: entry.jsxProp,
-              conditionWhen,
-              callArg: entry.callArg,
-            });
-          }
-          ensureShouldForwardPropDrop(decl, entry.jsxProp);
-        }
-        return true;
-      };
 
       if (consIsTpl && altIsTpl) {
         if (testInfo.propName) {
@@ -2875,8 +2950,11 @@ export function lowerRules(args: {
           if (tryHandlePropertyTernaryTemplateLiteral(d)) {
             continue;
           }
-          if (tryHandleCssHelperConditionalBlock(d)) {
-            continue;
+          // Only apply to base declarations; variant expansion for pseudo/media/attr buckets is more complex.
+          if (!media && !attrTarget && !pseudos?.length) {
+            if (tryHandleCssHelperConditionalBlock(d)) {
+              continue;
+            }
           }
           if (tryHandleCssHelperFunctionSwitchBlock(d)) {
             continue;

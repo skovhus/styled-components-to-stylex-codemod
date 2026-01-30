@@ -9,14 +9,17 @@ import type {
 } from "../adapter.js";
 import {
   type CallExpressionNode,
+  getArrowFnParamBindings,
   getArrowFnSingleParamName,
   getFunctionBodyExpr,
   getMemberPathFromIdentifier,
   getNodeLocStart,
   isArrowFunctionExpression,
   isCallExpressionNode,
+  isLogicalExpressionNode,
   literalToStaticValue,
   literalToString,
+  resolveIdentifierToPropName,
 } from "./utilities/jscodeshift-utils.js";
 import { escapeRegex, sanitizeIdentifier } from "./utilities/string-utils.js";
 
@@ -1746,6 +1749,42 @@ function tryResolveInlineStyleValueForConditionalExpression(
   return { type: "emitInlineStyleValueFromProps" };
 }
 
+function tryResolveInlineStyleValueForLogicalExpression(node: DynamicNode): HandlerResult | null {
+  // Conservative fallback for logical expressions (e.g., props.$delay ?? 0)
+  // that we can preserve via a wrapper inline style.
+  if (!node.css.property) {
+    return null;
+  }
+  const expr = node.expr;
+  if (!isArrowFunctionExpression(expr)) {
+    return null;
+  }
+  const body = getFunctionBodyExpr(expr);
+  if (!isLogicalExpressionNode(body)) {
+    return null;
+  }
+  // Only handle nullish coalescing (??) and logical OR (||) operators
+  if (body.operator !== "??" && body.operator !== "||") {
+    return null;
+  }
+  // IMPORTANT: do not attempt to preserve `props.theme.*` via inline styles.
+  const paramName = getArrowFnSingleParamName(expr);
+  const leftType = (body.left as { type?: string }).type;
+  const leftPath =
+    paramName && leftType === "MemberExpression"
+      ? getMemberPathFromIdentifier(body.left, paramName)
+      : null;
+  if (leftPath && leftPath[0] === "theme") {
+    return {
+      type: "keepOriginal",
+      reason:
+        "Theme-dependent conditional values require a project-specific theme source (e.g. useTheme())",
+    };
+  }
+  // Signal to the caller that we can preserve this declaration as an inline style
+  return { type: "emitInlineStyleValueFromProps" };
+}
+
 function tryResolveStyleFunctionFromTemplateLiteral(node: DynamicNode): HandlerResult | null {
   if (!node.css.property) {
     return null;
@@ -1852,6 +1891,18 @@ function tryResolveInlineStyleValueForNestedPropAccess(node: DynamicNode): Handl
   return { type: "emitInlineStyleValueFromProps" };
 }
 
+/**
+ * Handles simple prop access patterns in interpolations.
+ *
+ * Supports both simple params and destructured params:
+ * - `(props) => props.color` → simple param with member access
+ * - `({ color }) => color` → shorthand destructuring
+ * - `({ color: color_ }) => color_` → renamed destructuring
+ * - `({ color = "red" }) => color` → destructuring with default
+ *
+ * Note: Destructured param support is currently limited to this handler.
+ * Other handlers (theme access, conditionals, etc.) only support simple params.
+ */
 function tryResolvePropAccess(node: DynamicNode): HandlerResult | null {
   if (!node.css.property) {
     return null;
@@ -1860,20 +1911,33 @@ function tryResolvePropAccess(node: DynamicNode): HandlerResult | null {
   if (!isArrowFunctionExpression(expr)) {
     return null;
   }
-  const paramName = getArrowFnSingleParamName(expr);
-  if (!paramName) {
-    return null;
-  }
-  if (expr.body.type !== "MemberExpression") {
+
+  const bindings = getArrowFnParamBindings(expr);
+  if (!bindings) {
     return null;
   }
 
-  const path = getMemberPathFromIdentifier(expr.body, paramName);
-  if (!path || path.length !== 1) {
-    return null;
+  let propName: string | null = null;
+
+  if (bindings.kind === "simple") {
+    // Original logic: (props) => props.color
+    if (expr.body.type !== "MemberExpression") {
+      return null;
+    }
+    const path = getMemberPathFromIdentifier(expr.body, bindings.paramName);
+    if (!path || path.length !== 1) {
+      return null;
+    }
+    propName = path[0]!;
+  } else {
+    // New logic: ({ color: color_ }) => color_
+    // Body must be a direct identifier reference
+    propName = resolveIdentifierToPropName(expr.body, bindings);
+    if (!propName) {
+      return null;
+    }
   }
 
-  const propName = path[0]!;
   const cssProp = node.css.property;
   const nameHint = `${sanitizeIdentifier(cssProp)}FromProp`;
 
@@ -1906,7 +1970,8 @@ export function resolveDynamicNode(
     tryResolveStyleFunctionFromTemplateLiteral(node) ??
     tryResolveInlineStyleValueForNestedPropAccess(node) ??
     tryResolvePropAccess(node) ??
-    tryResolveInlineStyleValueForConditionalExpression(node)
+    tryResolveInlineStyleValueForConditionalExpression(node) ??
+    tryResolveInlineStyleValueForLogicalExpression(node)
   );
 }
 

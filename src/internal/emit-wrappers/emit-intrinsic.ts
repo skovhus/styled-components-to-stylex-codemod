@@ -1,5 +1,6 @@
 import type { ASTNode } from "jscodeshift";
 import type { StyledDecl } from "../transform-types.js";
+import { buildStyleFnConditionExpr } from "../utilities/jscodeshift-utils.js";
 import { emitStyleMerging } from "./style-merger.js";
 import { collectInlineStylePropNames, type ExpressionKind, type InlineStyleProp } from "./types.js";
 import { VOID_TAGS } from "./type-helpers.js";
@@ -1186,22 +1187,11 @@ export function emitIntrinsicWrappers(emitter: WrapperEmitter): {
         styleArgs.push(emitter.makeConditionalStyleExpr({ cond, expr: call, isBoolean }));
         continue;
       }
-      // !!prop is always boolean, so && is safe
-      if (p.condition === "truthy") {
-        const truthy = j.unaryExpression("!", j.unaryExpression("!", propExpr));
-        styleArgs.push(j.logicalExpression("&&", truthy, call));
-        continue;
-      }
-      const required =
+      const isRequired =
         p.jsxProp === "__props" || emitter.isPropRequiredInPropsTypeLiteral(d.propsType, p.jsxProp);
-      if (required) {
-        styleArgs.push(call);
-      } else {
-        // prop != null is always boolean, so && is safe
-        styleArgs.push(
-          j.logicalExpression("&&", j.binaryExpression("!=", propExpr, j.nullLiteral()), call),
-        );
-      }
+      styleArgs.push(
+        buildStyleFnConditionExpr({ j, condition: p.condition, propExpr, call, isRequired }),
+      );
     }
     for (const p of knownPrefixProps) {
       if (!destructureParts.includes(p)) {
