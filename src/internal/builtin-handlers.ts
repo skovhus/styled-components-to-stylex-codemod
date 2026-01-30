@@ -16,6 +16,7 @@ import {
   getNodeLocStart,
   isArrowFunctionExpression,
   isCallExpressionNode,
+  isLogicalExpressionNode,
   literalToStaticValue,
   literalToString,
   resolveIdentifierToPropName,
@@ -1652,6 +1653,42 @@ function tryResolveInlineStyleValueForConditionalExpression(
   return { type: "emitInlineStyleValueFromProps" };
 }
 
+function tryResolveInlineStyleValueForLogicalExpression(node: DynamicNode): HandlerResult | null {
+  // Conservative fallback for logical expressions (e.g., props.$delay ?? 0)
+  // that we can preserve via a wrapper inline style.
+  if (!node.css.property) {
+    return null;
+  }
+  const expr = node.expr;
+  if (!isArrowFunctionExpression(expr)) {
+    return null;
+  }
+  const body = getFunctionBodyExpr(expr);
+  if (!isLogicalExpressionNode(body)) {
+    return null;
+  }
+  // Only handle nullish coalescing (??) and logical OR (||) operators
+  if (body.operator !== "??" && body.operator !== "||") {
+    return null;
+  }
+  // IMPORTANT: do not attempt to preserve `props.theme.*` via inline styles.
+  const paramName = getArrowFnSingleParamName(expr);
+  const leftType = (body.left as { type?: string }).type;
+  const leftPath =
+    paramName && leftType === "MemberExpression"
+      ? getMemberPathFromIdentifier(body.left, paramName)
+      : null;
+  if (leftPath && leftPath[0] === "theme") {
+    return {
+      type: "keepOriginal",
+      reason:
+        "Theme-dependent conditional values require a project-specific theme source (e.g. useTheme())",
+    };
+  }
+  // Signal to the caller that we can preserve this declaration as an inline style
+  return { type: "emitInlineStyleValueFromProps" };
+}
+
 function tryResolveStyleFunctionFromTemplateLiteral(node: DynamicNode): HandlerResult | null {
   if (!node.css.property) {
     return null;
@@ -1837,7 +1874,8 @@ export function resolveDynamicNode(
     tryResolveStyleFunctionFromTemplateLiteral(node) ??
     tryResolveInlineStyleValueForNestedPropAccess(node) ??
     tryResolvePropAccess(node) ??
-    tryResolveInlineStyleValueForConditionalExpression(node)
+    tryResolveInlineStyleValueForConditionalExpression(node) ??
+    tryResolveInlineStyleValueForLogicalExpression(node)
   );
 }
 

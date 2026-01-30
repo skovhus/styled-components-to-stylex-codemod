@@ -1,4 +1,16 @@
-import type { ArrowFunctionExpression, ASTNode, Expression, Identifier } from "jscodeshift";
+import type {
+  ArrowFunctionExpression,
+  ASTNode,
+  Expression,
+  Identifier,
+  JSCodeshift,
+} from "jscodeshift";
+
+/**
+ * Expression type compatible with jscodeshift's expressionStatement parameter.
+ * This is the standard expression type used throughout this codebase.
+ */
+export type ExpressionKind = Parameters<JSCodeshift["expressionStatement"]>[0];
 
 /**
  * AST type definitions for common node patterns.
@@ -502,6 +514,53 @@ export function isConditionalExpressionNode(node: unknown): node is {
     typeof node === "object" &&
     (node as { type?: string }).type === "ConditionalExpression"
   );
+}
+
+/**
+ * Sets the type annotation on an identifier node.
+ * This encapsulates the pattern needed because jscodeshift's TypeScript types
+ * don't include `typeAnnotation` on Identifier nodes in all contexts.
+ *
+ * @param identifier - The identifier node to annotate
+ * @param typeAnnotation - The type annotation (typically from j.tsTypeAnnotation())
+ */
+export function setIdentifierTypeAnnotation(
+  identifier: Identifier,
+  typeAnnotation: ReturnType<JSCodeshift["tsTypeAnnotation"]>,
+): void {
+  // Cast needed because jscodeshift's Identifier type doesn't include typeAnnotation
+  // in all contexts, but the runtime representation supports it.
+  (identifier as unknown as { typeAnnotation: typeof typeAnnotation }).typeAnnotation =
+    typeAnnotation;
+}
+
+/**
+ * Builds the appropriate expression for a style function call based on condition type.
+ *
+ * Handles three cases:
+ * - "truthy": wraps with `!!prop && call` to guard against falsy values
+ * - "always": returns call directly (the callArg already handles null, e.g., `${$prop ?? 0}ms`)
+ * - undefined (default): wraps with `prop != null && call` for optional props, or returns call for required props
+ */
+export function buildStyleFnConditionExpr(args: {
+  j: JSCodeshift;
+  condition: "truthy" | "always" | undefined;
+  propExpr: ExpressionKind;
+  call: ExpressionKind;
+  isRequired: boolean;
+}): ExpressionKind {
+  const { j, condition, propExpr, call, isRequired } = args;
+  // !!prop is always boolean, so && is safe
+  if (condition === "truthy") {
+    const truthy = j.unaryExpression("!", j.unaryExpression("!", propExpr));
+    return j.logicalExpression("&&", truthy, call);
+  }
+  // callArg handles null case internally (e.g., `${$prop ?? 0}ms`)
+  if (condition === "always" || isRequired) {
+    return call;
+  }
+  // prop != null is always boolean, so && is safe
+  return j.logicalExpression("&&", j.binaryExpression("!=", propExpr, j.nullLiteral()), call);
 }
 
 // Internal helper - not exported
