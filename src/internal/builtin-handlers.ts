@@ -1,4 +1,4 @@
-import type { API } from "jscodeshift";
+import type { API, JSCodeshift, TemplateLiteral } from "jscodeshift";
 import type {
   CallResolveContext,
   CallResolveResult,
@@ -21,8 +21,14 @@ import {
   literalToString,
   resolveIdentifierToPropName,
 } from "./utilities/jscodeshift-utils.js";
-import { sanitizeIdentifier } from "./utilities/string-utils.js";
-import { cssDeclarationToStylexDeclarations } from "./css-prop-mapping.js";
+import { escapeRegex, sanitizeIdentifier } from "./utilities/string-utils.js";
+
+type ExpressionKind = Parameters<JSCodeshift["expressionStatement"]>[0];
+import {
+  cssDeclarationToStylexDeclarations,
+  cssPropertyToStylexProp,
+  parseInterpolatedBorderStaticParts,
+} from "./css-prop-mapping.js";
 import type { WarningType } from "./logger.js";
 
 export type DynamicNode = {
@@ -131,6 +137,7 @@ export type HandlerResult =
         nameHint: string;
         when: string;
         style: Record<string, unknown>;
+        imports?: ImportSpec[];
       }>;
     }
   | {
@@ -280,6 +287,108 @@ function getArrowFnThemeParamInfo(fn: any): ThemeParamInfo | null {
     }
   }
   return null;
+}
+
+/**
+ * Shared helper to resolve a template literal with interpolated expressions.
+ *
+ * @param node - The AST node to check (must be a TemplateLiteral)
+ * @param resolveExpr - Callback to resolve each interpolated expression.
+ *                      Returns { expr, imports } on success, null to bail.
+ * @returns The resolved template literal expression string and merged imports, or null if resolution fails.
+ */
+function resolveTemplateLiteralExpressions(
+  node: unknown,
+  resolveExpr: (expr: unknown) => { expr: string; imports: ImportSpec[] } | null,
+): { expr: string; imports: ImportSpec[] } | null {
+  if (!node || typeof node !== "object" || (node as { type?: string }).type !== "TemplateLiteral") {
+    return null;
+  }
+
+  const tl = node as {
+    expressions?: unknown[];
+    quasis?: Array<{ value?: { raw?: string; cooked?: string } }>;
+  };
+  const expressions = tl.expressions ?? [];
+  const quasis = tl.quasis ?? [];
+
+  // Must have at least one expression (otherwise literalToStaticValue would have handled it)
+  if (expressions.length === 0) {
+    return null;
+  }
+
+  // Resolve all expressions using the provided callback
+  const resolvedExprs: Array<{ expr: string; imports: ImportSpec[] }> = [];
+  for (const expr of expressions) {
+    const resolved = resolveExpr(expr);
+    if (!resolved) {
+      return null;
+    }
+    resolvedExprs.push(resolved);
+  }
+
+  // Build the template literal expression string
+  // quasis and expressions interleave: quasi0 ${expr0} quasi1 ${expr1} quasi2
+  const parts: string[] = [];
+  for (let i = 0; i < quasis.length; i++) {
+    const quasi = quasis[i];
+    const raw = quasi?.value?.raw ?? quasi?.value?.cooked ?? "";
+    parts.push(raw);
+    if (i < resolvedExprs.length) {
+      parts.push("${" + resolvedExprs[i]!.expr + "}");
+    }
+  }
+
+  // Merge all imports
+  const allImports: ImportSpec[] = [];
+  for (const r of resolvedExprs) {
+    allImports.push(...r.imports);
+  }
+
+  return {
+    expr: "`" + parts.join("") + "`",
+    imports: allImports,
+  };
+}
+
+/**
+ * Resolves a template literal with theme interpolations.
+ * Handles patterns like: `inset 0 0 0 1px ${props.theme.color.primaryColor}`
+ *
+ * Returns the resolved template literal expression string and required imports,
+ * or null if the template cannot be resolved (e.g., contains non-theme expressions).
+ */
+function resolveTemplateLiteralWithTheme(
+  node: unknown,
+  paramName: string,
+  ctx: InternalHandlerContext,
+): { expr: string; imports: ImportSpec[] } | null {
+  return resolveTemplateLiteralExpressions(node, (expr) => {
+    // Check if expression is a theme member access: props.theme.xxx
+    if (
+      !expr ||
+      typeof expr !== "object" ||
+      (expr as { type?: string }).type !== "MemberExpression"
+    ) {
+      return null;
+    }
+    const parts = getMemberPathFromIdentifier(
+      expr as Parameters<typeof getMemberPathFromIdentifier>[0],
+      paramName,
+    );
+    if (!parts || parts[0] !== "theme" || parts.length <= 1) {
+      return null;
+    }
+    const themePath = parts.slice(1).join(".");
+
+    const res = ctx.resolveValue({
+      kind: "theme",
+      path: themePath,
+      filePath: ctx.filePath,
+      loc: getNodeLocStart(expr) ?? undefined,
+    });
+    return res ?? null;
+  });
 }
 
 type CssNodeKind = "declaration" | "selector" | "atRule" | "keyframes";
@@ -704,62 +813,21 @@ function tryResolveConditionalValue(
 
     // Handle template literals with theme interpolations
     // e.g., `inset 0 0 0 1px ${props.theme.color.primaryColor}, 0px 1px 2px rgba(0, 0, 0, 0.06)`
-    const bType = (b as { type?: string }).type;
-    if (bType === "TemplateLiteral") {
-      const tl = b as {
-        expressions?: unknown[];
-        quasis?: Array<{ value?: { raw?: string; cooked?: string } }>;
-      };
-      const expressions = tl.expressions ?? [];
-      const quasis = tl.quasis ?? [];
-
-      // Must have at least one expression (otherwise literalToStaticValue would have handled it)
-      if (expressions.length === 0) {
+    const templateResult = resolveTemplateLiteralExpressions(b, (expr) => {
+      const themeInfo = resolveThemeFromMemberExpr(expr);
+      if (!themeInfo) {
         return null;
       }
-
-      // All expressions must be resolvable theme accesses
-      const resolvedExprs: Array<{ expr: string; imports: ImportSpec[] }> = [];
-      for (const expr of expressions) {
-        const themeInfo = resolveThemeFromMemberExpr(expr);
-        if (!themeInfo) {
-          return null;
-        }
-        const res = ctx.resolveValue({
-          kind: "theme",
-          path: themeInfo.path,
-          filePath: ctx.filePath,
-          loc: getNodeLocStart(expr) ?? undefined,
-        });
-        if (!res) {
-          return null;
-        }
-        resolvedExprs.push({ expr: res.expr, imports: res.imports });
-      }
-
-      // Build the template literal expression string
-      // quasis and expressions interleave: quasi0 ${expr0} quasi1 ${expr1} quasi2
-      const parts: string[] = [];
-      for (let i = 0; i < quasis.length; i++) {
-        const quasi = quasis[i];
-        const raw = quasi?.value?.raw ?? quasi?.value?.cooked ?? "";
-        parts.push(raw);
-        if (i < resolvedExprs.length) {
-          parts.push("${" + resolvedExprs[i]!.expr + "}");
-        }
-      }
-
-      // Merge all imports
-      const allImports: ImportSpec[] = [];
-      for (const r of resolvedExprs) {
-        allImports.push(...r.imports);
-      }
-
-      return {
-        usage: "create",
-        expr: "`" + parts.join("") + "`",
-        imports: allImports,
-      };
+      const res = ctx.resolveValue({
+        kind: "theme",
+        path: themeInfo.path,
+        filePath: ctx.filePath,
+        loc: getNodeLocStart(expr) ?? undefined,
+      });
+      return res ?? null;
+    });
+    if (templateResult) {
+      return { usage: "create", ...templateResult };
     }
 
     if (isCallExpressionNode(b)) {
@@ -1214,7 +1282,10 @@ function tryResolveIndexedThemeWithPropFallback(
   };
 }
 
-function tryResolveConditionalCssBlock(node: DynamicNode): HandlerResult | null {
+function tryResolveConditionalCssBlock(
+  node: DynamicNode,
+  ctx: InternalHandlerContext,
+): HandlerResult | null {
   const expr = node.expr;
   if (!isArrowFunctionExpression(expr)) {
     return null;
@@ -1226,6 +1297,7 @@ function tryResolveConditionalCssBlock(node: DynamicNode): HandlerResult | null 
 
   // Support patterns like:
   //   ${(props) => props.$upsideDown && "transform: rotate(180deg);"}
+  //   ${(props) => props.$upsideDown && `box-shadow: ${props.theme.color.x};`}
   // Also supports arrow functions with a block body containing only a return statement:
   //   ${(props) => { return props.$upsideDown && "transform: rotate(180deg);"; }}
   const body = getFunctionBodyExpr(expr) as {
@@ -1249,20 +1321,44 @@ function tryResolveConditionalCssBlock(node: DynamicNode): HandlerResult | null 
     return null;
   }
 
+  // Try static string/template literal first
   const cssText = literalToString(right);
-  if (cssText === null || cssText === undefined) {
-    return null;
+  if (cssText !== null && cssText !== undefined) {
+    const style = parseCssDeclarationBlock(cssText);
+    if (!style) {
+      return null;
+    }
+    return {
+      type: "splitVariants",
+      variants: [{ nameHint: "truthy", when: testPath[0]!, style }],
+    };
   }
 
-  const style = parseCssDeclarationBlock(cssText);
-  if (!style) {
-    return null;
+  // Try template literal with theme expressions
+  const templateResult = resolveTemplateLiteralWithTheme(right, paramName, ctx);
+  if (templateResult) {
+    // Extract CSS text from the resolved template to get property names
+    // The template looks like: `property: value ${resolved};`
+    // We need to parse it to build the style object
+    const templateText = templateResult.expr.slice(1, -1); // Remove backticks
+    const parsed = parseCssDeclarationBlockWithTemplateExpr(templateText, ctx.api);
+    if (!parsed) {
+      return null;
+    }
+    return {
+      type: "splitVariants",
+      variants: [
+        {
+          nameHint: "truthy",
+          when: testPath[0]!,
+          style: parsed.styleObj,
+          imports: templateResult.imports,
+        },
+      ],
+    };
   }
 
-  return {
-    type: "splitVariants",
-    variants: [{ nameHint: "truthy", when: testPath[0]!, style }],
-  };
+  return null;
 }
 
 function tryResolveConditionalCssBlockTernary(node: DynamicNode): HandlerResult | null {
@@ -1869,7 +1965,7 @@ export function resolveDynamicNode(
     tryResolveConditionalValue(node, ctx) ??
     tryResolveIndexedThemeWithPropFallback(node, ctx) ??
     tryResolveConditionalCssBlockTernary(node) ??
-    tryResolveConditionalCssBlock(node) ??
+    tryResolveConditionalCssBlock(node, ctx) ??
     tryResolveArrowFnCallWithSinglePropArg(node) ??
     tryResolveStyleFunctionFromTemplateLiteral(node) ??
     tryResolveInlineStyleValueForNestedPropAccess(node) ??
@@ -2001,4 +2097,332 @@ function coerceStaticCss(value: unknown): unknown {
     return v.value;
   }
   return value;
+}
+
+/**
+ * Parses a CSS declaration block where values may contain template expressions.
+ * Input: "box-shadow: inset 0 0 0 1px ${$colors.primaryColor};"
+ *
+ * Returns the style object with property names mapped to their values.
+ * Values containing ${...} are stored as template literal AST nodes.
+ *
+ * IMPORTANT - StyleX Shorthand Handling:
+ * StyleX does NOT support CSS shorthand properties like `border`. They must be expanded
+ * to longhand properties (borderWidth, borderStyle, borderColor). This function handles
+ * border expansion via `expandBorderShorthandWithTemplateExpr`. When adding support for
+ * new shorthand properties, follow the same pattern:
+ * 1. Check for the shorthand property
+ * 2. Use helpers from css-prop-mapping.ts (e.g., parseInterpolatedBorderStaticParts)
+ * 3. Return expanded longhand properties
+ *
+ * @see cssDeclarationToStylexDeclarations in css-prop-mapping.ts for the authoritative
+ *      list of shorthand properties that need expansion.
+ */
+function parseCssDeclarationBlockWithTemplateExpr(
+  cssText: string,
+  api: API,
+): { styleObj: Record<string, unknown>; hasTemplateValues: boolean } | null {
+  const j = api.jscodeshift;
+  const chunks = cssText
+    .split(";")
+    .map((c) => c.trim())
+    .filter(Boolean);
+  if (chunks.length === 0) {
+    return null;
+  }
+
+  const styleObj: Record<string, unknown> = {};
+  let hasTemplateValues = false;
+
+  for (const chunk of chunks) {
+    const m = chunk.match(/^([^:]+):([\s\S]+)$/);
+    if (!m) {
+      return null;
+    }
+    const property = m[1]!.trim();
+    const valueRaw = m[2]!.trim();
+
+    // Check if value contains template expressions
+    if (valueRaw.includes("${")) {
+      hasTemplateValues = true;
+
+      // Handle border shorthands specially - expand to longhand properties
+      const borderMatch = property.match(/^border(-top|-right|-bottom|-left)?$/);
+      if (borderMatch) {
+        const expanded = expandBorderShorthandWithTemplateExpr(property, valueRaw, j);
+        if (!expanded) {
+          return null;
+        }
+        Object.assign(styleObj, expanded);
+        continue;
+      }
+
+      // Bail on other shorthand properties with template expressions
+      // StyleX doesn't support shorthands, and we can't safely expand these without
+      // knowing the runtime value (e.g., margin: ${spacing} could be 1-4 values)
+      if (isUnsupportedShorthandForTemplateExpr(property)) {
+        return null;
+      }
+
+      // For non-shorthand properties, build a template literal AST node
+      const templateAst = parseValueAsTemplateLiteral(valueRaw, j);
+      if (!templateAst) {
+        return null;
+      }
+      // Map CSS property to StyleX property
+      const stylexProp = cssPropertyToStylexProp(property);
+      styleObj[stylexProp] = templateAst;
+    } else {
+      // Static value - use existing logic
+      const decl = {
+        property,
+        value: { kind: "static" as const, value: valueRaw },
+        important: false,
+        valueRaw,
+      };
+      for (const out of cssDeclarationToStylexDeclarations(decl)) {
+        styleObj[out.prop] = coerceStaticCss(out.value);
+      }
+    }
+  }
+
+  return { styleObj, hasTemplateValues };
+}
+
+/**
+ * Expands a border shorthand with template expressions into longhand properties.
+ * Input: property="border", value="1px solid ${$colors.primaryColor}"
+ * Output: { borderWidth: "1px", borderStyle: "solid", borderColor: <TemplateLiteral AST> }
+ */
+function expandBorderShorthandWithTemplateExpr(
+  property: string,
+  valueRaw: string,
+  j: API["jscodeshift"],
+): Record<string, unknown> | null {
+  // Extract direction from property (e.g., "border-top" -> "Top")
+  const borderMatch = property.match(/^border(-top|-right|-bottom|-left)?$/);
+  if (!borderMatch) {
+    return null;
+  }
+  const directionRaw = borderMatch[1] ?? "";
+  const direction = directionRaw
+    ? directionRaw.slice(1).charAt(0).toUpperCase() + directionRaw.slice(2)
+    : "";
+
+  const widthProp = `border${direction}Width`;
+  const styleProp = `border${direction}Style`;
+  const colorProp = `border${direction}Color`;
+
+  // Extract static parts (prefix/suffix) around template expressions
+  // For "1px solid ${color}", prefix="1px solid ", suffix=""
+  const regex = /\$\{([^}]+)\}/g;
+  let match;
+  let prefix = "";
+  let suffix = "";
+  const expressions: Array<{ text: string; start: number; end: number }> = [];
+
+  let lastIndex = 0;
+  while ((match = regex.exec(valueRaw)) !== null) {
+    if (expressions.length === 0) {
+      prefix = valueRaw.slice(0, match.index);
+    }
+    expressions.push({
+      text: match[1]!.trim(),
+      start: match.index,
+      end: regex.lastIndex,
+    });
+    lastIndex = regex.lastIndex;
+  }
+  suffix = valueRaw.slice(lastIndex);
+
+  // Use existing helper to parse static parts
+  const borderParts = parseInterpolatedBorderStaticParts({ prop: property, prefix, suffix });
+  if (!borderParts) {
+    // If we can't parse, bail
+    return null;
+  }
+
+  const result: Record<string, unknown> = {};
+
+  // Add static width/style if present
+  if (borderParts.width) {
+    result[widthProp] = borderParts.width;
+  }
+  if (borderParts.style) {
+    result[styleProp] = borderParts.style;
+  }
+
+  // Build template literal for color (the dynamic part)
+  // If there are expressions but no static prefix/suffix for them, the whole value is the color
+  if (expressions.length > 0) {
+    const colorTemplateAst = parseValueAsTemplateLiteralForColor(valueRaw, prefix, suffix, j);
+    if (colorTemplateAst) {
+      result[colorProp] = colorTemplateAst;
+    }
+  }
+
+  return Object.keys(result).length > 0 ? result : null;
+}
+
+/**
+ * Builds a template literal AST for the color portion of a border value.
+ * For "1px solid ${color}", returns just the template literal for "${color}".
+ */
+function parseValueAsTemplateLiteralForColor(
+  fullValue: string,
+  prefix: string,
+  suffix: string,
+  j: JSCodeshift,
+): TemplateLiteral | null {
+  // The color part is the value minus the static prefix/suffix (width/style tokens)
+  // For simple cases like "1px solid ${color}", the color is just "${color}"
+  // For "${color}" alone, return just that
+
+  // Parse out expressions from fullValue, keeping only what's between prefix and suffix
+  const regex = /\$\{([^}]+)\}/g;
+  const quasis: Array<{ raw: string; cooked: string }> = [];
+  const expressions: ExpressionKind[] = [];
+
+  // Find where the prefix ends and extract remaining value
+  const prefixTokens = prefix.trim().split(/\s+/).filter(Boolean);
+  const fullTokens = fullValue.split(/\s+/);
+
+  // Find the start of the dynamic part
+  let dynamicStart = 0;
+  for (let i = 0; i < prefixTokens.length && i < fullTokens.length; i++) {
+    if (fullTokens[i] === prefixTokens[i]) {
+      dynamicStart += fullTokens[i]!.length + 1; // +1 for space
+    }
+  }
+
+  // Escape suffix for safe use in regex (handles special chars like $, ., etc.)
+  const escapedSuffix = escapeRegex(suffix.trim());
+  const dynamicPart = fullValue
+    .slice(dynamicStart)
+    .replace(new RegExp(`${escapedSuffix}$`), "")
+    .trim();
+
+  // Parse the dynamic part into template literal
+  let lastIndex = 0;
+  let match;
+  regex.lastIndex = 0;
+
+  while ((match = regex.exec(dynamicPart)) !== null) {
+    const beforeExpr = dynamicPart.slice(lastIndex, match.index);
+    quasis.push({ raw: beforeExpr, cooked: beforeExpr });
+
+    const exprText = match[1]!.trim();
+    const exprAst = parseSimpleExpression(exprText, j);
+    if (!exprAst) {
+      return null;
+    }
+    expressions.push(exprAst);
+    lastIndex = regex.lastIndex;
+  }
+
+  const afterLast = dynamicPart.slice(lastIndex);
+  quasis.push({ raw: afterLast, cooked: afterLast });
+
+  if (expressions.length === 0) {
+    return null;
+  }
+
+  const quasisAst = quasis.map((q, i) =>
+    j.templateElement({ raw: q.raw, cooked: q.cooked }, i === quasis.length - 1),
+  );
+
+  return j.templateLiteral(quasisAst, expressions);
+}
+
+/**
+ * Parses a value string containing ${...} expressions into a template literal AST.
+ * Input: "inset 0 0 0 1px ${$colors.primaryColor}"
+ * Output: TemplateLiteral AST node
+ *
+ * Note: Only handles simple dot-notation member expressions (e.g., "$colors.primaryColor").
+ * More complex expressions (computed properties, function calls) are not supported and will
+ * cause this function to return null.
+ */
+function parseValueAsTemplateLiteral(value: string, j: JSCodeshift): TemplateLiteral | null {
+  // Split by ${...} patterns
+  const regex = /\$\{([^}]+)\}/g;
+  const quasis: Array<{ raw: string; cooked: string }> = [];
+  const expressions: ExpressionKind[] = [];
+
+  let lastIndex = 0;
+  let match;
+
+  while ((match = regex.exec(value)) !== null) {
+    // Add the static part before this expression
+    const raw = value.slice(lastIndex, match.index);
+    quasis.push({ raw, cooked: raw });
+
+    // Add the expression (as an identifier for now - will be parsed later if needed)
+    const exprText = match[1]!.trim();
+    // Parse the expression text into AST
+    // For simple cases like "$colors.primaryColor", create a member expression
+    const exprAst = parseSimpleExpression(exprText, j);
+    if (!exprAst) {
+      return null;
+    }
+    expressions.push(exprAst);
+
+    lastIndex = regex.lastIndex;
+  }
+
+  // Add the final static part
+  const finalRaw = value.slice(lastIndex);
+  quasis.push({ raw: finalRaw, cooked: finalRaw });
+
+  // Build template literal AST
+  const quasisAst = quasis.map((q, i) =>
+    j.templateElement({ raw: q.raw, cooked: q.cooked }, i === quasis.length - 1),
+  );
+
+  return j.templateLiteral(quasisAst, expressions);
+}
+
+/**
+ * Parses a simple expression string into AST.
+ * Supports: identifiers and dot-notation member expressions like "$colors.primaryColor".
+ *
+ * Does NOT support:
+ * - Computed properties: obj["key"]
+ * - Function calls: fn()
+ * - Operators: a + b
+ */
+function parseSimpleExpression(exprText: string, j: JSCodeshift): ExpressionKind | null {
+  // Handle member expression like "$colors.primaryColor"
+  const parts = exprText.split(".");
+  if (parts.length === 0 || !parts[0]) {
+    return null;
+  }
+
+  let ast: ExpressionKind = j.identifier(parts[0]);
+  for (let i = 1; i < parts.length; i++) {
+    ast = j.memberExpression(ast, j.identifier(parts[i]!));
+  }
+
+  return ast;
+}
+
+/**
+ * CSS shorthand properties that cannot be safely expanded when they contain template expressions.
+ * StyleX doesn't support shorthands, and we can't determine how to expand these without
+ * knowing the runtime value.
+ *
+ * Examples of why we bail:
+ * - `margin: ${spacing}` - could be 1-4 values, can't know which directions
+ * - `padding: ${p}` - same issue
+ * - `background: ${bg}` - could be color or image, can't determine at compile time
+ */
+const UNSUPPORTED_SHORTHANDS_FOR_TEMPLATE_EXPR = new Set([
+  "margin",
+  "padding",
+  "background",
+  "scroll-margin",
+]);
+
+function isUnsupportedShorthandForTemplateExpr(property: string): boolean {
+  return UNSUPPORTED_SHORTHANDS_FOR_TEMPLATE_EXPR.has(property);
 }

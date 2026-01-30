@@ -54,3 +54,12 @@ export function isBackgroundImageValue(value: string): boolean {
     ) || /\burl\s*\(/.test(value)
   );
 }
+
+/**
+ * Escapes special regex characters in a string so it can be safely used in a RegExp.
+ * @example escapeRegex("foo.bar") => "foo\\.bar"
+ * @example escapeRegex("$test") => "\\$test"
+ */
+export function escapeRegex(s: string): string {
+  return s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
