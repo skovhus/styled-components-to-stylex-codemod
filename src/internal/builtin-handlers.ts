@@ -2157,7 +2157,14 @@ function parseCssDeclarationBlockWithTemplateExpr(
         continue;
       }
 
-      // For non-border properties, build a template literal AST node
+      // Bail on other shorthand properties with template expressions
+      // StyleX doesn't support shorthands, and we can't safely expand these without
+      // knowing the runtime value (e.g., margin: ${spacing} could be 1-4 values)
+      if (isUnsupportedShorthandForTemplateExpr(property)) {
+        return null;
+      }
+
+      // For non-shorthand properties, build a template literal AST node
       const templateAst = parseValueAsTemplateLiteral(valueRaw, j);
       if (!templateAst) {
         return null;
@@ -2397,4 +2404,25 @@ function parseSimpleExpression(exprText: string, j: JSCodeshift): ExpressionKind
   }
 
   return ast;
+}
+
+/**
+ * CSS shorthand properties that cannot be safely expanded when they contain template expressions.
+ * StyleX doesn't support shorthands, and we can't determine how to expand these without
+ * knowing the runtime value.
+ *
+ * Examples of why we bail:
+ * - `margin: ${spacing}` - could be 1-4 values, can't know which directions
+ * - `padding: ${p}` - same issue
+ * - `background: ${bg}` - could be color or image, can't determine at compile time
+ */
+const UNSUPPORTED_SHORTHANDS_FOR_TEMPLATE_EXPR = new Set([
+  "margin",
+  "padding",
+  "background",
+  "scroll-margin",
+]);
+
+function isUnsupportedShorthandForTemplateExpr(property: string): boolean {
+  return UNSUPPORTED_SHORTHANDS_FOR_TEMPLATE_EXPR.has(property);
 }
