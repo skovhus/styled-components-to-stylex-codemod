@@ -360,14 +360,23 @@ function resolveDynamicTemplateExpr(args: {
       resolveValue,
       resolverImports,
     });
-    if (!themeAst) {
-      return null;
-    }
     const baseArg = buildPropAccessExpr(j, jsxProp);
-    return {
-      jsxProp,
-      callArg: j.logicalExpression("??", baseArg, themeAst) as ExpressionKind,
-    };
+    if (themeAst) {
+      return {
+        jsxProp,
+        callArg: j.logicalExpression("??", baseArg, themeAst) as ExpressionKind,
+      };
+    }
+    // Try to resolve the right side as a static literal value
+    const staticValue = literalToStaticValue(right);
+    if (staticValue !== null) {
+      const literalAst = j.literal(staticValue) as ExpressionKind;
+      return {
+        jsxProp,
+        callArg: j.logicalExpression("??", baseArg, literalAst) as ExpressionKind,
+      };
+    }
+    return null;
   }
   if (exprType === "ConditionalExpression" && isConditionalExpressionNode(expr)) {
     const propPath = getMemberPathFromIdentifier(expr.test, paramName);

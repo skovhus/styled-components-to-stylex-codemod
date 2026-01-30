@@ -141,7 +141,7 @@ export type StyledDecl = {
   styleFnFromProps?: Array<{
     fnKey: string;
     jsxProp: string;
-    condition?: "truthy";
+    condition?: "truthy" | "always";
     conditionWhen?: string;
     callArg?: ASTNode;
   }>;
