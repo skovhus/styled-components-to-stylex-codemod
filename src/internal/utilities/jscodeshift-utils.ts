@@ -258,10 +258,15 @@ export function getArrowFnParamBindings(fn: ArrowFunctionExpression): ArrowFnPar
       if (prop.type !== "Property" && prop.type !== "ObjectProperty") {
         continue;
       }
-      const key = prop.key as { type?: string; name?: string } | undefined;
       // Computed keys not supported: { [expr]: value }
+      // Must bail completely to avoid mis-resolving when computed key shadows a static identifier
+      const propTyped = prop as { computed?: boolean; key?: unknown };
+      if (propTyped.computed === true) {
+        return null;
+      }
+      const key = prop.key as { type?: string; name?: string } | undefined;
       if (!key || key.type !== "Identifier") {
-        continue;
+        return null;
       }
       const propName = key.name;
       if (!propName) {
