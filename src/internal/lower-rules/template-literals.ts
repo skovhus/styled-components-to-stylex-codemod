@@ -29,7 +29,7 @@ type ImportMeta = { importedName: string; source: ImportSource };
 
 type ResolveImportInScope = (localName: string, identNode?: unknown) => ImportMeta | null;
 
-export type ResolveStaticMemberExpression = (
+type ResolveStaticMemberExpression = (
   expr: Expression,
   fallbackLoc?: { line: number; column: number } | null,
 ) => ExpressionKind | null;
