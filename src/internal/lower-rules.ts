@@ -672,7 +672,7 @@ export function lowerRules(args: {
     if (entry.loc.line === usageLoc.line && entry.loc.column > usageLoc.column) {
       return null;
     }
-    return unwrapped as ExpressionKind;
+    return literalToAst(j, entry.value);
   };
 
   const isValidIdentifierName = (name: string): boolean => /^[$A-Z_][0-9A-Z_$]*$/i.test(name);
