@@ -646,7 +646,8 @@ export function lowerRules(args: {
     expr: unknown,
     fallbackLoc?: { line: number; column: number } | null,
   ): ExpressionKind | null => {
-    const info = extractRootAndPath(expr);
+    const unwrapped = unwrapTransparentExpression(expr);
+    const info = extractRootAndPath(unwrapped);
     if (!info || info.path.length !== 1) {
       return null;
     }
@@ -661,7 +662,7 @@ export function lowerRules(args: {
     if (!entry) {
       return null;
     }
-    const usageLoc = getNodeLocStart(expr) ?? fallbackLoc;
+    const usageLoc = getNodeLocStart(unwrapped) ?? fallbackLoc;
     if (!usageLoc || !entry.loc) {
       return null;
     }
@@ -671,7 +672,7 @@ export function lowerRules(args: {
     if (entry.loc.line === usageLoc.line && entry.loc.column > usageLoc.column) {
       return null;
     }
-    return literalToAst(j, entry.value);
+    return unwrapped as ExpressionKind;
   };
 
   const isValidIdentifierName = (name: string): boolean => /^[$A-Z_][0-9A-Z_$]*$/i.test(name);
