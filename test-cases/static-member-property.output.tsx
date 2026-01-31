@@ -30,8 +30,11 @@ const styles = stylex.create({
   dividerContainer: {
     paddingBlock: "5px",
     paddingInline: 0,
+    /* NOTE: Inlined Divider.HEIGHT as StyleX requires it to be statically evaluable */
     height: "10px",
+    /* NOTE: Inlined Divider.WIDTH as StyleX requires it to be statically evaluable */
     width: "200px",
+    /* NOTE: Inlined Divider.BG_COLOR as StyleX requires it to be statically evaluable */
     backgroundColor: "#e0e0e0",
   },
 });

@@ -5,6 +5,7 @@ import {
   literalToStaticValue,
 } from "../utilities/jscodeshift-utils.js";
 import { splitDirectionalProperty } from "../stylex-shorthands.js";
+import { addPropComments } from "./comments.js";
 
 export function extractStaticParts(
   cssValue: any,
@@ -165,8 +166,14 @@ export function tryHandleInterpolatedStringValue(args: {
           [expr as any],
         ) as any)
       : (expr as any);
-    for (const out of cssDeclarationToStylexDeclarations(d)) {
+    const outputs = cssDeclarationToStylexDeclarations(d);
+    for (let i = 0; i < outputs.length; i++) {
+      const out = outputs[i]!;
       (styleObj as any)[out.prop] = themeResolved ?? wrappedExpr;
+      // Add leading comment if present (e.g., for inlined static member expressions)
+      if (i === 0 && (d as any).leadingComment) {
+        addPropComments(styleObj, out.prop, { leading: (d as any).leadingComment });
+      }
     }
     return true;
   }
@@ -183,8 +190,14 @@ export function tryHandleInterpolatedStringValue(args: {
     return false;
   }
 
-  for (const out of cssDeclarationToStylexDeclarations(d)) {
+  const outputs = cssDeclarationToStylexDeclarations(d);
+  for (let i = 0; i < outputs.length; i++) {
+    const out = outputs[i]!;
     (styleObj as any)[out.prop] = tl as any;
+    // Add leading comment if present (e.g., for inlined static member expressions)
+    if (i === 0 && (d as any).leadingComment) {
+      addPropComments(styleObj, out.prop, { leading: (d as any).leadingComment });
+    }
   }
   return true;
 }

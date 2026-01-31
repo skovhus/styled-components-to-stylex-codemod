@@ -2956,6 +2956,10 @@ export function lowerRules(args: {
                   j,
                   resolvedValue,
                 ) as any;
+                // Add a comment documenting the inlined value for maintainability
+                const memberExprStr = `${ownerName}.${propName}`;
+                (d as any).leadingComment =
+                  `NOTE: Inlined ${memberExprStr} as StyleX requires it to be statically evaluable`;
                 continue;
               }
               // Value not resolvable - bail
