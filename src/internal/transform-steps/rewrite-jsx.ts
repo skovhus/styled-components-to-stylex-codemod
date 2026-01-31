@@ -191,8 +191,12 @@ export function rewriteJsxStep(ctx: TransformContext): StepResult {
         const createJsxName = (tag: string) => {
           if (tag.includes(".")) {
             const parts = tag.split(".");
+            const firstPart = parts[0];
+            if (!firstPart) {
+              return j.jsxIdentifier(tag);
+            }
             return j.jsxMemberExpression(
-              j.jsxIdentifier(parts[0]!),
+              j.jsxIdentifier(firstPart),
               j.jsxIdentifier(parts.slice(1).join(".")),
             );
           }

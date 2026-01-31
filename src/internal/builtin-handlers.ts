@@ -471,8 +471,9 @@ function extractIndexedThemeLookupInfo(
   } else if (p?.type === "MemberExpression") {
     // Member expression: props.theme.color[props.textColor]
     const path = getMemberPathFromIdentifier(p as any, paramName);
-    if (path && path.length === 1) {
-      indexPropName = path[0]!;
+    const firstPathPart = path?.[0];
+    if (path && path.length === 1 && firstPathPart) {
+      indexPropName = firstPathPart;
     }
   }
 
@@ -982,10 +983,11 @@ function tryResolveConditionalValue(
       return null;
     }
     const leftPath = getMemberPathFromIdentifier(test.left, paramName);
-    if (!leftPath || leftPath.length !== 1) {
+    const firstLeftPath = leftPath?.[0];
+    if (!leftPath || leftPath.length !== 1 || !firstLeftPath) {
       return null;
     }
-    const propName = leftPath[0]!;
+    const propName = firstLeftPath;
     const rhsRaw = literalToStaticValue(test.right as any);
     if (rhsRaw === null) {
       return null;
@@ -1112,7 +1114,8 @@ function tryResolveConditionalValue(
     paramName && test.type === "MemberExpression"
       ? getMemberPathFromIdentifier(test, paramName)
       : null;
-  if (testPath && testPath.length === 1) {
+  const outerProp = testPath?.[0];
+  if (testPath && testPath.length === 1 && outerProp) {
     const cons = getBranch(consequent);
     if (cons === "invalid") {
       return { type: "keepOriginal", reason: invalidCurriedError, context: invalidCurriedContext };
@@ -1121,18 +1124,18 @@ function tryResolveConditionalValue(
     if (alt === "invalid") {
       return { type: "keepOriginal", reason: invalidCurriedError, context: invalidCurriedContext };
     }
-    const outerProp = testPath[0]!;
 
     // Check for multi-prop nested ternary: outerProp ? A : innerProp ? B : C
     // where alternate is a conditional testing a different boolean prop
-    if (cons && !alt && alternate.type === "ConditionalExpression") {
+    if (cons && !alt && alternate.type === "ConditionalExpression" && paramName) {
       const innerTest = (alternate as any).test;
       const innerTestPath =
         innerTest?.type === "MemberExpression"
-          ? getMemberPathFromIdentifier(innerTest, paramName!)
+          ? getMemberPathFromIdentifier(innerTest, paramName)
           : null;
+      const innerProp = innerTestPath?.[0];
       // Only handle when inner tests a different single-level prop
-      if (innerTestPath && innerTestPath.length === 1 && innerTestPath[0] !== outerProp) {
+      if (innerTestPath && innerTestPath.length === 1 && innerProp && innerProp !== outerProp) {
         const innerCons = getBranch((alternate as any).consequent);
         const innerAlt = getBranch((alternate as any).alternate);
         if (innerCons && innerCons !== "invalid" && innerAlt && innerAlt !== "invalid") {
@@ -1146,7 +1149,7 @@ function tryResolveConditionalValue(
               type: "splitMultiPropVariantsResolvedValue",
               outerProp,
               outerTruthyBranch: { expr: cons.expr, imports: cons.imports },
-              innerProp: innerTestPath[0]!,
+              innerProp,
               innerTruthyBranch: { expr: innerCons.expr, imports: innerCons.imports },
               innerFalsyBranch: { expr: innerAlt.expr, imports: innerAlt.imports },
             };
@@ -1326,10 +1329,10 @@ function tryResolveIndexedThemeWithPropFallback(
 
   // Right side must be a simple prop access: props.propName
   const rightPath = getMemberPathFromIdentifier(body.right as any, paramName);
-  if (!rightPath || rightPath.length !== 1) {
+  const fallbackPropName = rightPath?.[0];
+  if (!rightPath || rightPath.length !== 1 || !fallbackPropName) {
     return null;
   }
-  const fallbackPropName = rightPath[0]!;
 
   // Left side must be an indexed theme lookup: props.theme.color[props.propName]
   const indexedResult = extractIndexedThemeLookupInfo(body.left, paramName);
@@ -1397,7 +1400,8 @@ function tryResolveConditionalCssBlock(
           paramName,
         )
       : null;
-  if (!testPath || testPath.length !== 1) {
+  const testProp = testPath?.[0];
+  if (!testPath || testPath.length !== 1 || !testProp) {
     return null;
   }
 
@@ -1410,7 +1414,7 @@ function tryResolveConditionalCssBlock(
     }
     return {
       type: "splitVariants",
-      variants: [{ nameHint: "truthy", when: testPath[0]!, style }],
+      variants: [{ nameHint: "truthy", when: testProp, style }],
     };
   }
 
@@ -1430,7 +1434,7 @@ function tryResolveConditionalCssBlock(
       variants: [
         {
           nameHint: "truthy",
-          when: testPath[0]!,
+          when: testProp,
           style: parsed.styleObj,
           imports: templateResult.imports,
         },

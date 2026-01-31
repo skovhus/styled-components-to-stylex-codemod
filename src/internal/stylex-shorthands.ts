@@ -77,8 +77,9 @@ function splitDirectionalShorthands(rawValue: string | number, allowImportant = 
   ) {
     return nodes.slice(0, nodes.length - 1).map((node) => `${node} !important`);
   }
-  if (areAllValuesSame(nodes)) {
-    return [nodes[0]!];
+  const firstNode = nodes[0];
+  if (areAllValuesSame(nodes) && firstNode !== undefined) {
+    return [firstNode];
   }
   return nodes;
 }
