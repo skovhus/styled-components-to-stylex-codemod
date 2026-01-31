@@ -86,6 +86,7 @@ type MemberAssignment = {
 };
 
 type MemberAssignmentMap = Map<string, Map<string, MemberAssignment[]>>;
+type MemberAssignmentPathSet = Map<string, Set<string>>;
 
 /**
  * Type for variant test condition info
@@ -286,6 +287,7 @@ export function lowerRules(args: {
 
   const staticPropertyOwners = new Set<string>();
   const memberAssignments: MemberAssignmentMap = new Map();
+  const nonTopLevelMemberAssignments: MemberAssignmentPathSet = new Map();
   const recordMemberAssignment = (args: {
     ownerName: string;
     propertyName: string;
@@ -297,6 +299,14 @@ export function lowerRules(args: {
     propAssignments.push({ index: args.index, value: args.value });
     ownerMap.set(args.propertyName, propAssignments);
     memberAssignments.set(args.ownerName, ownerMap);
+  };
+  const recordNonTopLevelMemberAssignment = (args: {
+    ownerName: string;
+    propertyName: string;
+  }): void => {
+    const ownerMap = nonTopLevelMemberAssignments.get(args.ownerName) ?? new Set();
+    ownerMap.add(args.propertyName);
+    nonTopLevelMemberAssignments.set(args.ownerName, ownerMap);
   };
   const programBody = (root.get().node.program as { body?: unknown[] } | undefined)?.body;
   if (Array.isArray(programBody)) {
@@ -340,6 +350,35 @@ export function lowerRules(args: {
       });
     });
   }
+  root
+    .find(j.AssignmentExpression, {
+      operator: "=",
+      left: {
+        type: "MemberExpression",
+        computed: false,
+        object: { type: "Identifier" },
+        property: { type: "Identifier" },
+      },
+    } as any)
+    .forEach((p) => {
+      const exprStmt = p.parentPath?.node;
+      const parent = p.parentPath?.parentPath?.node;
+      const isTopLevel = exprStmt?.type === "ExpressionStatement" && parent?.type === "Program";
+      if (isTopLevel) {
+        return;
+      }
+      const left = p.node.left as { object?: unknown; property?: unknown } | null;
+      const obj = left?.object;
+      const prop = left?.property;
+      if (!isIdentifierNode(obj) || !isIdentifierNode(prop)) {
+        return;
+      }
+      staticPropertyOwners.add(obj.name);
+      recordNonTopLevelMemberAssignment({
+        ownerName: obj.name,
+        propertyName: prop.name,
+      });
+    });
 
   const isSafeStaticMemberInterpolation = (
     expr: unknown,
@@ -357,6 +396,11 @@ export function lowerRules(args: {
     }
     const propName = info.path[0];
     if (!propName) {
+      return false;
+    }
+    const hasNonTopLevelAssignment =
+      nonTopLevelMemberAssignments.get(info.rootName)?.has(propName) ?? false;
+    if (hasNonTopLevelAssignment) {
       return false;
     }
     const assignments = memberAssignments.get(info.rootName)?.get(propName);
