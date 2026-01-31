@@ -285,28 +285,6 @@ export function lowerRules(args: {
   }
 
   const staticPropertyOwners = new Set<string>();
-  root
-    .find(j.ExpressionStatement, {
-      expression: {
-        type: "AssignmentExpression",
-        operator: "=",
-        left: {
-          type: "MemberExpression",
-          object: { type: "Identifier" },
-          property: { type: "Identifier" },
-        },
-      },
-    } as any)
-    .forEach((p) => {
-      const expr = p.node.expression as {
-        left?: { object?: { name?: string } };
-      };
-      const ownerName = expr.left?.object?.name;
-      if (ownerName) {
-        staticPropertyOwners.add(ownerName);
-      }
-    });
-
   const memberAssignments: MemberAssignmentMap = new Map();
   const recordMemberAssignment = (args: {
     ownerName: string;
@@ -320,35 +298,48 @@ export function lowerRules(args: {
     ownerMap.set(args.propertyName, propAssignments);
     memberAssignments.set(args.ownerName, ownerMap);
   };
-  root.find(j.ExpressionStatement).forEach((p) => {
-    const parentNode = p.parentPath?.node;
-    if (!parentNode || parentNode.type !== "Program") {
-      return;
-    }
-    const stmtIndex = typeof p.name === "number" ? p.name : null;
-    if (stmtIndex === null) {
-      return;
-    }
-    const expr = p.node.expression;
-    if (!expr || expr.type !== "AssignmentExpression" || expr.operator !== "=") {
-      return;
-    }
-    const left = expr.left;
-    if (!left || left.type !== "MemberExpression" || left.computed) {
-      return;
-    }
-    const obj = left.object;
-    const prop = left.property;
-    if (!isIdentifierNode(obj) || !isIdentifierNode(prop)) {
-      return;
-    }
-    recordMemberAssignment({
-      ownerName: obj.name,
-      propertyName: prop.name,
-      index: stmtIndex,
-      value: literalToStaticValue(expr.right),
+  const programBody = (root.get().node.program as { body?: unknown[] } | undefined)?.body;
+  if (Array.isArray(programBody)) {
+    programBody.forEach((stmt, index) => {
+      if (
+        !stmt ||
+        typeof stmt !== "object" ||
+        (stmt as { type?: string }).type !== "ExpressionStatement"
+      ) {
+        return;
+      }
+      const expr = (stmt as { expression?: unknown }).expression as {
+        type?: string;
+        operator?: string;
+        left?: unknown;
+        right?: unknown;
+      };
+      if (!expr || expr.type !== "AssignmentExpression" || expr.operator !== "=") {
+        return;
+      }
+      const left = expr.left as {
+        type?: string;
+        computed?: boolean;
+        object?: unknown;
+        property?: unknown;
+      } | null;
+      if (!left || left.type !== "MemberExpression" || left.computed) {
+        return;
+      }
+      const obj = left.object;
+      const prop = left.property;
+      if (!isIdentifierNode(obj) || !isIdentifierNode(prop)) {
+        return;
+      }
+      staticPropertyOwners.add(obj.name);
+      recordMemberAssignment({
+        ownerName: obj.name,
+        propertyName: prop.name,
+        index,
+        value: literalToStaticValue(expr.right),
+      });
     });
-  });
+  }
 
   const isSafeStaticMemberInterpolation = (
     expr: unknown,
@@ -357,7 +348,7 @@ export function lowerRules(args: {
     if (typeof declIndex !== "number") {
       return false;
     }
-    if (!isAstNode(expr) || expr.type !== "MemberExpression") {
+    if (!isAstNode(expr)) {
       return false;
     }
     const info = extractRootAndPath(expr);
