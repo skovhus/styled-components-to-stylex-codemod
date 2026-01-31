@@ -1,5 +1,9 @@
 import type { JSCodeshift } from "jscodeshift";
-import { cloneAstNode, getFunctionBodyExpr } from "../utilities/jscodeshift-utils.js";
+import {
+  cloneAstNode,
+  getArrowFnParamBindings,
+  getFunctionBodyExpr,
+} from "../utilities/jscodeshift-utils.js";
 
 type ExpressionKind = Parameters<JSCodeshift["expressionStatement"]>[0];
 
@@ -196,14 +200,64 @@ export function inlineArrowFunctionBody(j: JSCodeshift, expr: any): ExpressionKi
   if (!expr || expr.type !== "ArrowFunctionExpression") {
     return null;
   }
-  if (expr.params?.length !== 1 || expr.params[0]?.type !== "Identifier") {
+  if (expr.params?.length !== 1) {
     return null;
   }
-  const paramName = expr.params[0].name;
+  const param = expr.params[0];
   const bodyExpr = getFunctionBodyExpr(expr);
   if (!bodyExpr) {
     return null;
   }
+
+  // Simple identifier param: (props) => ...
+  if (param?.type === "Identifier") {
+    const paramName = param.name;
+    const replace = (node: any): any => {
+      if (!node || typeof node !== "object") {
+        return node;
+      }
+      if (Array.isArray(node)) {
+        return node.map(replace);
+      }
+      if (node.type === "Identifier" && node.name === paramName) {
+        return j.identifier("props");
+      }
+      if (node.type === "MemberExpression" || node.type === "OptionalMemberExpression") {
+        node.object = replace(node.object);
+        if (node.computed) {
+          node.property = replace(node.property);
+        }
+        return node;
+      }
+      if (node.type === "Property") {
+        if (node.computed) {
+          node.key = replace(node.key);
+        }
+        node.value = replace(node.value);
+        return node;
+      }
+      for (const key of Object.keys(node)) {
+        if (key === "loc" || key === "comments") {
+          continue;
+        }
+        const child = (node as any)[key];
+        if (child && typeof child === "object") {
+          (node as any)[key] = replace(child);
+        }
+      }
+      return node;
+    };
+    const cloned = cloneAstNode(bodyExpr);
+    return replace(cloned);
+  }
+
+  // Destructured param: ({ color, size: size_ }) => ...
+  const bindings = getArrowFnParamBindings(expr);
+  if (!bindings || bindings.kind !== "destructured") {
+    return null;
+  }
+
+  // Replace destructured identifiers with props.propName
   const replace = (node: any): any => {
     if (!node || typeof node !== "object") {
       return node;
@@ -211,8 +265,10 @@ export function inlineArrowFunctionBody(j: JSCodeshift, expr: any): ExpressionKi
     if (Array.isArray(node)) {
       return node.map(replace);
     }
-    if (node.type === "Identifier" && node.name === paramName) {
-      return j.identifier("props");
+    // If identifier matches a destructured binding, replace with props.propName
+    if (node.type === "Identifier" && bindings.bindings.has(node.name)) {
+      const propName = bindings.bindings.get(node.name)!;
+      return j.memberExpression(j.identifier("props"), j.identifier(propName));
     }
     if (node.type === "MemberExpression" || node.type === "OptionalMemberExpression") {
       node.object = replace(node.object);
