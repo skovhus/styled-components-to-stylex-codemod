@@ -1,6 +1,6 @@
 import type { StyledDecl } from "../transform-types.js";
 
-export { literalToStaticValue, staticValueToLiteral } from "../utilities/jscodeshift-utils.js";
+export { literalToStaticValue } from "../utilities/jscodeshift-utils.js";
 
 export function ensureShouldForwardPropDrop(decl: StyledDecl, propName: string): void {
   // Ensure we generate a wrapper so we can consume the styling prop without forwarding it to DOM.

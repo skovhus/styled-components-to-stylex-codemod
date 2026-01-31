@@ -38,7 +38,6 @@ import {
   createTypeInferenceHelpers,
   ensureShouldForwardPropDrop,
   literalToStaticValue,
-  staticValueToLiteral,
 } from "./lower-rules/types.js";
 import {
   buildTemplateWithStaticParts,
@@ -2967,21 +2966,22 @@ export function lowerRules(args: {
               if (!staticPropertyOwners.has(rootInfo.rootName)) {
                 continue;
               }
-              // Try to resolve to a safe inlinable value
+              // Check if the member expression can be safely preserved
               const ownerMap = staticPropertyValues.get(rootInfo.rootName);
               const propName = rootInfo.path[0];
               const propInfo = propName && ownerMap ? ownerMap.get(propName) : undefined;
-              // Only resolve if:
+              // Only allow if:
               // 1. The property exists in our collected safe static values
               // 2. The assignment line is before the styled template line (safe ordering)
+              // We keep the original member expression reference (don't inline the value)
+              // so the output stays in sync if the static property value changes.
               const styledTemplateLine = decl.loc?.line;
               if (
                 propInfo &&
                 styledTemplateLine !== undefined &&
                 propInfo.line < styledTemplateLine
               ) {
-                // Successfully resolved - replace the expression with the static value
-                decl.templateExpressions[part.slotId] = staticValueToLiteral(j, propInfo.value);
+                // Safe to use - keep the original member expression reference as-is
                 continue;
               }
               // Could not resolve safely - bail
