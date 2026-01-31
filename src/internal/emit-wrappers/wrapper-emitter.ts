@@ -1585,7 +1585,10 @@ export class WrapperEmitter {
       const { enabled, disabled } = pair;
       if (!enabled || !disabled) {
         // Incomplete pair - emit each dimension separately as fallback
-        for (const dim of [enabled, disabled].filter(Boolean) as VariantDimension[]) {
+        for (const dim of [enabled, disabled]) {
+          if (!dim) {
+            continue;
+          }
           if (destructureProps && !destructureProps.includes(dim.propName)) {
             destructureProps.push(dim.propName);
           }
