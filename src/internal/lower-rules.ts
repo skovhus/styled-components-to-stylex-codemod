@@ -3307,9 +3307,12 @@ export function lowerRules(args: {
                       expr = expr.expression;
                     }
                     // Remove extra.parenthesized flag that causes recast to add parentheses
-                    if (expr?.extra?.parenthesized) {
-                      delete expr.extra.parenthesized;
-                      delete expr.extra.parenStart;
+                    const exprWithExtra = expr as ExpressionKind & {
+                      extra?: { parenthesized?: boolean; parenStart?: number };
+                    };
+                    if (exprWithExtra?.extra?.parenthesized) {
+                      delete exprWithExtra.extra.parenthesized;
+                      delete exprWithExtra.extra.parenStart;
                     }
                     return expr;
                   } catch {
