@@ -277,7 +277,9 @@ export function lowerRules(args: {
     }
   }
 
-  const staticPropertyOwners = new Set<string>();
+  // Collect static property assignments like `Divider.HEIGHT = 10`
+  // Map: owner name → property name → static value (string | number | boolean)
+  const staticPropertyValues = new Map<string, Map<string, string | number | boolean>>();
   root
     .find(j.ExpressionStatement, {
       expression: {
@@ -292,11 +294,22 @@ export function lowerRules(args: {
     } as any)
     .forEach((p) => {
       const expr = p.node.expression as {
-        left?: { object?: { name?: string } };
+        left?: { object?: { name?: string }; property?: { name?: string } };
+        right?: unknown;
       };
       const ownerName = expr.left?.object?.name;
-      if (ownerName) {
-        staticPropertyOwners.add(ownerName);
+      const propName = expr.left?.property?.name;
+      if (ownerName && propName) {
+        // Try to extract a static value from the right-hand side
+        const staticValue = literalToStaticValue(expr.right);
+        if (staticValue !== null) {
+          let ownerMap = staticPropertyValues.get(ownerName);
+          if (!ownerMap) {
+            ownerMap = new Map();
+            staticPropertyValues.set(ownerName, ownerMap);
+          }
+          ownerMap.set(propName, staticValue);
+        }
       }
     });
 
@@ -2912,6 +2925,7 @@ export function lowerRules(args: {
                 type?: string;
                 body?: unknown;
                 object?: { type?: string; name?: string };
+                property?: { type?: string; name?: string };
               };
               const baseExpr =
                 expr?.type === "ArrowFunctionExpression" || expr?.type === "FunctionExpression"
@@ -2924,9 +2938,29 @@ export function lowerRules(args: {
                 continue;
               }
               const obj = baseExpr.object;
-              if (obj?.type !== "Identifier" || !staticPropertyOwners.has(obj.name)) {
+              const prop = baseExpr.property;
+              if (obj?.type !== "Identifier") {
                 continue;
               }
+              const ownerMap = staticPropertyValues.get(obj.name);
+              if (!ownerMap) {
+                continue;
+              }
+              // Try to resolve the static property value
+              const propName = prop?.type === "Identifier" ? prop.name : undefined;
+              if (propName && ownerMap.has(propName)) {
+                // Successfully resolved - replace the expression with the static value
+                const staticValue = ownerMap.get(propName)!;
+                if (typeof staticValue === "number") {
+                  decl.templateExpressions[part.slotId] = j.numericLiteral(staticValue);
+                } else if (typeof staticValue === "string") {
+                  decl.templateExpressions[part.slotId] = j.stringLiteral(staticValue);
+                } else if (typeof staticValue === "boolean") {
+                  decl.templateExpressions[part.slotId] = j.booleanLiteral(staticValue);
+                }
+                continue;
+              }
+              // Could not resolve - bail
               warnings.push({
                 severity: "error",
                 type: "Unsupported interpolation: member expression",
