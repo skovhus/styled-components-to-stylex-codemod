@@ -13,7 +13,7 @@ function parseExpr(code: string): Expression {
   if (!decl?.init) {
     throw new Error("Failed to parse expression");
   }
-  return decl.init as Expression;
+  return decl.init;
 }
 
 describe("extractRootAndPath", () => {

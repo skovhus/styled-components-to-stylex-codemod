@@ -1177,7 +1177,7 @@ export function emitIntrinsicWrappers(emitter: WrapperEmitter): {
         : p.jsxProp === "__props"
           ? j.identifier("props")
           : j.identifier(p.jsxProp);
-      const callArg = p.callArg ? (p.callArg as any) : propExpr;
+      const callArg = p.callArg ?? propExpr;
       const call = j.callExpression(
         j.memberExpression(j.identifier(stylesIdentifier), j.identifier(p.fnKey)),
         [callArg],

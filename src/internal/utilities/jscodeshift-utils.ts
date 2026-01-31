@@ -37,7 +37,7 @@ export type AstPath = {
  */
 export type RootIdentifierInfo = {
   rootName: string;
-  rootNode: Identifier;
+  rootNode: IdentifierNode;
   path: string[];
 };
 
@@ -58,9 +58,8 @@ export function extractRootAndPath(node: unknown): RootIdentifierInfo | null {
   const typed = node as { type?: string };
 
   // Simple identifier case
-  if (typed.type === "Identifier") {
-    const ident = node as Identifier;
-    return { rootName: ident.name, rootNode: ident, path: [] };
+  if (isIdentifierNode(node)) {
+    return { rootName: node.name, rootNode: node, path: [] };
   }
 
   // Not a member expression
@@ -86,8 +85,8 @@ export function extractRootAndPath(node: unknown): RootIdentifierInfo | null {
     if (curTyped.computed) {
       return null;
     }
-    const prop = curTyped.property as { type?: string; name?: string } | undefined;
-    if (!prop || prop.type !== "Identifier" || typeof prop.name !== "string") {
+    const prop = curTyped.property;
+    if (!isIdentifierNode(prop)) {
       return null;
     }
     parts.unshift(prop.name);
@@ -98,12 +97,11 @@ export function extractRootAndPath(node: unknown): RootIdentifierInfo | null {
   if (!cur || typeof cur !== "object") {
     return null;
   }
-  const rootTyped = cur as { type?: string; name?: string };
-  if (rootTyped.type !== "Identifier" || typeof rootTyped.name !== "string") {
+  if (!isIdentifierNode(cur)) {
     return null;
   }
 
-  return { rootName: rootTyped.name, rootNode: cur as Identifier, path: parts };
+  return { rootName: cur.name, rootNode: cur, path: parts };
 }
 
 /**
@@ -347,6 +345,13 @@ export function getNodeLocStart(node: unknown): { line: number; column: number }
   return { line: loc.line, column: loc.column };
 }
 
+const isExpressionKindNode = (node: unknown): node is ExpressionKind => isAstNode(node);
+
+const isReturnStatementNode = (
+  node: unknown,
+): node is { type: "ReturnStatement"; argument?: unknown } =>
+  isAstNode(node) && node.type === "ReturnStatement";
+
 /**
  * Extracts the expression from an arrow/function expression body.
  * - For expression bodies: returns the expression directly
@@ -354,21 +359,28 @@ export function getNodeLocStart(node: unknown): { line: number; column: number }
  *   but ONLY if the block contains exactly one statement (a ReturnStatement).
  *   This ensures we don't support arrow functions with complex logic in the body.
  */
-export function getFunctionBodyExpr(fn: { body?: unknown }): unknown {
+export function getFunctionBodyExpr(fn: { body?: unknown }): ExpressionKind | null | undefined {
   const body = fn.body;
   if (!body || typeof body !== "object") {
     return undefined;
   }
-  if ((body as { type?: string }).type === "BlockStatement") {
-    const block = body as { body?: Array<{ type?: string; argument?: unknown }> };
-    const statements = block.body;
-    // Only accept block bodies with exactly one ReturnStatement (no other logic)
-    if (statements?.length !== 1 || statements[0]?.type !== "ReturnStatement") {
+  if (isAstNode(body) && body.type === "BlockStatement") {
+    const blockBody = (body as { body?: unknown }).body;
+    if (!Array.isArray(blockBody) || blockBody.length !== 1) {
       return undefined;
     }
-    return statements[0].argument;
+    const statement = blockBody[0];
+    // Only accept block bodies with exactly one ReturnStatement (no other logic)
+    if (!isReturnStatementNode(statement)) {
+      return undefined;
+    }
+    const argument = statement.argument ?? null;
+    if (argument === null) {
+      return null;
+    }
+    return isExpressionKindNode(argument) ? argument : undefined;
   }
-  return body;
+  return isExpressionKindNode(body) ? body : undefined;
 }
 
 /**
@@ -564,11 +576,6 @@ export function buildStyleFnConditionExpr(args: {
 }
 
 // Internal helper - not exported
-function isIdentifier(node: unknown, name?: string): node is Identifier {
-  return (
-    !!node &&
-    typeof node === "object" &&
-    (node as { type?: string }).type === "Identifier" &&
-    (name ? (node as Identifier).name === name : true)
-  );
+function isIdentifier(node: unknown, name?: string): node is IdentifierNode {
+  return isIdentifierNode(node) && (name ? node.name === name : true);
 }

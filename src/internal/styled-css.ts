@@ -37,7 +37,7 @@ export function parseStyledTemplateLiteral(template: TemplateLiteral): ParsedSty
     slots.push({
       index: i,
       placeholder,
-      expression: expr as Expression,
+      expression: expr,
       startOffset,
       endOffset,
     });

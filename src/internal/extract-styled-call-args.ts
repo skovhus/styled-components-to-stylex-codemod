@@ -35,64 +35,56 @@ export function extractStyledCallArgs(args: {
     } as object)
     .forEach((p) => {
       const id = p.node.id;
-      const init = p.node.init as { tag: unknown; quasi: unknown };
-      if (id.type !== "Identifier" || !init) {
+      const init = p.node.init;
+      if (id.type !== "Identifier" || !init || init.type !== "TaggedTemplateExpression") {
         return;
       }
 
-      const tag = init.tag as {
-        type: string;
-        callee?: { type: string; name?: string };
-        arguments?: Array<{ type: string; callee?: unknown }>;
-      };
+      const tag = init.tag;
 
       // Check if this is styled(CallExpression)`...`
       if (
-        tag.type === "CallExpression" &&
-        tag.callee?.type === "Identifier" &&
-        tag.callee.name === styledDefaultImport &&
-        tag.arguments?.length === 1 &&
-        tag.arguments[0]?.type === "CallExpression"
+        tag.type !== "CallExpression" ||
+        tag.callee?.type !== "Identifier" ||
+        tag.callee.name !== styledDefaultImport ||
+        tag.arguments?.length !== 1
       ) {
-        const callArg = tag.arguments[0] as {
-          type: string;
-          callee: unknown;
-          arguments: unknown[];
-        };
+        return;
+      }
+      const callArg = tag.arguments[0];
+      if (callArg?.type !== "CallExpression") {
+        return;
+      }
 
-        // Generate a name for the extracted variable
-        // e.g., styled(motion.create(BaseComponent)) -> MotionBaseComponent
-        const extractedName = generateExtractedVarName(callArg, id.name);
+      // Generate a name for the extracted variable
+      // e.g., styled(motion.create(BaseComponent)) -> MotionBaseComponent
+      const extractedName = generateExtractedVarName(callArg, id.name);
 
-        // Create the extracted variable declaration
-        const extractedDecl = j.variableDeclaration("const", [
-          j.variableDeclarator(
-            j.identifier(extractedName),
-            callArg as unknown as Parameters<typeof j.variableDeclarator>[1],
-          ),
-        ]);
+      // Create the extracted variable declaration
+      const extractedDecl = j.variableDeclaration("const", [
+        j.variableDeclarator(j.identifier(extractedName), callArg),
+      ]);
 
-        // Replace the CallExpression in styled() with the new identifier
-        (tag.arguments as unknown[])[0] = j.identifier(extractedName);
+      // Replace the CallExpression in styled() with the new identifier
+      tag.arguments[0] = j.identifier(extractedName);
 
-        // Insert the new declaration before the current VariableDeclaration
-        // p is the VariableDeclarator path
-        // p.parentPath is the "declarations" array path
-        // p.parentPath.parentPath is the VariableDeclaration path
-        // p.parentPath.parentPath.parentPath is the body array path (or Program)
-        const declArrayPath = p.parentPath; // declarations array
-        const varDeclPath = declArrayPath?.parentPath; // VariableDeclaration
-        const bodyArrayPath = varDeclPath?.parentPath; // body array or Program
+      // Insert the new declaration before the current VariableDeclaration
+      // p is the VariableDeclarator path
+      // p.parentPath is the "declarations" array path
+      // p.parentPath.parentPath is the VariableDeclaration path
+      // p.parentPath.parentPath.parentPath is the body array path (or Program)
+      const declArrayPath = p.parentPath; // declarations array
+      const varDeclPath = declArrayPath?.parentPath; // VariableDeclaration
+      const bodyArrayPath = varDeclPath?.parentPath; // body array or Program
 
-        if (
-          varDeclPath?.node?.type === "VariableDeclaration" &&
-          Array.isArray(bodyArrayPath?.value)
-        ) {
-          const idx = bodyArrayPath.value.indexOf(varDeclPath.node);
-          if (idx >= 0) {
-            bodyArrayPath.value.splice(idx, 0, extractedDecl);
-            hasChanges = true;
-          }
+      if (
+        varDeclPath?.node?.type === "VariableDeclaration" &&
+        Array.isArray(bodyArrayPath?.value)
+      ) {
+        const idx = bodyArrayPath.value.indexOf(varDeclPath.node);
+        if (idx >= 0) {
+          bodyArrayPath.value.splice(idx, 0, extractedDecl);
+          hasChanges = true;
         }
       }
     });

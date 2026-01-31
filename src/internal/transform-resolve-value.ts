@@ -42,7 +42,7 @@ export function createResolveAdapterSafe(args: { adapter: Adapter; warnings: War
       return undefined;
     }
     if (res && typeof res === "object") {
-      const usage = (res as Partial<CallResolveResult>).usage;
+      const usage = res.usage;
       if (usage !== "create" && usage !== "props") {
         bailRef.value = true;
         warnings.push({

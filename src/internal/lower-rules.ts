@@ -618,7 +618,7 @@ export function lowerRules(args: {
       resolvedStyleObjects.set(decl.styleKey, decl.preResolvedStyle);
       if (decl.preResolvedFnDecls) {
         for (const [k, v] of Object.entries(decl.preResolvedFnDecls)) {
-          resolvedStyleObjects.set(k, v as any);
+          resolvedStyleObjects.set(k, v);
         }
       }
       continue;
@@ -719,7 +719,7 @@ export function lowerRules(args: {
           return propName ? { when: propName, propName } : null;
         }
         if (test.type === "UnaryExpression" && test.operator === "!" && test.argument) {
-          const propName = readPropName(test.argument as ExpressionKind);
+          const propName = readPropName(test.argument);
           return propName ? { when: `!${propName}`, propName } : null;
         }
         if (
@@ -910,12 +910,7 @@ export function lowerRules(args: {
             propAccess,
             j.literal(fallback),
           );
-          const callArg = buildTemplateWithStaticParts(
-            j,
-            logicalExpr as ExpressionKind,
-            prefix,
-            suffix,
-          );
+          const callArg = buildTemplateWithStaticParts(j, logicalExpr, prefix, suffix);
           styleFnFromProps.push({ fnKey, jsxProp, callArg, condition: "always" });
         } else {
           styleFnFromProps.push({ fnKey, jsxProp });
@@ -993,7 +988,7 @@ export function lowerRules(args: {
           resolverImports.set(JSON.stringify(imp), imp);
         }
         const exprAst = parseExpr(resolved.expr);
-        return (exprAst as ExpressionKind) ?? null;
+        return exprAst;
       };
 
       const readPropAccess = (node: any): string | null => {
@@ -1028,8 +1023,8 @@ export function lowerRules(args: {
       const buildPropAccess = (prop: string): ExpressionKind => {
         const isIdent = /^[$A-Z_][0-9A-Z_$]*$/i.test(prop);
         return isIdent
-          ? (j.memberExpression(j.identifier("props"), j.identifier(prop)) as ExpressionKind)
-          : (j.memberExpression(j.identifier("props"), j.literal(prop), true) as ExpressionKind);
+          ? j.memberExpression(j.identifier("props"), j.identifier(prop))
+          : j.memberExpression(j.identifier("props"), j.literal(prop), true);
       };
 
       let nullishPropName: string | null = null;
@@ -1078,14 +1073,14 @@ export function lowerRules(args: {
         if (!styleFnFromProps.some((p) => p.fnKey === fnKey)) {
           const isIdent = /^[$A-Z_][0-9A-Z_$]*$/i.test(nullishPropName);
           const baseArg = isIdent
-            ? (j.identifier(nullishPropName) as ExpressionKind)
+            ? j.identifier(nullishPropName)
             : buildPropAccess(nullishPropName);
-          const callArg = j.logicalExpression("??", baseArg, fallbackTheme) as ExpressionKind;
+          const callArg = j.logicalExpression("??", baseArg, fallbackTheme);
           styleFnFromProps.push({
             fnKey,
             jsxProp: conditionProp,
             conditionWhen,
-            callArg: callArg as any,
+            callArg,
           });
         }
       }
@@ -1099,7 +1094,7 @@ export function lowerRules(args: {
     const resolveStaticCssBlock = (rawCss: string): Record<string, unknown> | null => {
       const wrappedRawCss = `& { ${rawCss} }`;
       const stylisAst = compile(wrappedRawCss);
-      const rules = normalizeStylisAstToIR(stylisAst as any, [], {
+      const rules = normalizeStylisAstToIR(stylisAst, [], {
         rawCss: wrappedRawCss,
       });
       const out: Record<string, unknown> = {};
@@ -1221,7 +1216,7 @@ export function lowerRules(args: {
       // Handle LogicalExpression: props.$x && css`...`
       const body = expr.body;
       if (body?.type === "LogicalExpression" && body.operator === "&&") {
-        const testInfo = parseTestInfo(body.left as ExpressionKind);
+        const testInfo = parseTestInfo(body.left);
         if (!testInfo) {
           return false;
         }
@@ -1396,7 +1391,7 @@ export function lowerRules(args: {
         return false;
       }
 
-      const testInfo = parseTestInfo(body.test as ExpressionKind);
+      const testInfo = parseTestInfo(body.test);
       if (!testInfo) {
         return false;
       }
@@ -1628,7 +1623,7 @@ export function lowerRules(args: {
       }
 
       const { parseTestInfo } = createPropTestHelpers(paramName);
-      const testInfo = parseTestInfo(body.test as ExpressionKind);
+      const testInfo = parseTestInfo(body.test);
       if (!testInfo) {
         return false;
       }
@@ -1675,7 +1670,7 @@ export function lowerRules(args: {
 
       // Extract raw value from the template literal for property mapping
       // (e.g., to detect gradients in "background" property)
-      const altQuasis = (alt.quasis ?? []) as Array<{ value?: { raw?: string; cooked?: string } }>;
+      const altQuasis: Array<{ value?: { raw?: string; cooked?: string } }> = alt.quasis ?? [];
       const valueRawFromTemplate = altQuasis.map((q) => q.value?.raw ?? "").join("");
 
       // Get the StyleX property name for this CSS property
@@ -3306,15 +3301,18 @@ export function lowerRules(args: {
                   try {
                     const jParse = api.jscodeshift.withParser("tsx");
                     const program = jParse(`(${exprSource});`);
-                    const stmt = program.find(jParse.ExpressionStatement).nodes()[0] as any;
+                    const stmt = program.find(jParse.ExpressionStatement).nodes()[0];
                     let expr = stmt?.expression ?? null;
                     while (expr?.type === "ParenthesizedExpression") {
                       expr = expr.expression;
                     }
                     // Remove extra.parenthesized flag that causes recast to add parentheses
-                    if (expr?.extra?.parenthesized) {
-                      delete expr.extra.parenthesized;
-                      delete expr.extra.parenStart;
+                    const exprWithExtra = expr as ExpressionKind & {
+                      extra?: { parenthesized?: boolean; parenStart?: number };
+                    };
+                    if (exprWithExtra?.extra?.parenthesized) {
+                      delete exprWithExtra.extra.parenthesized;
+                      delete exprWithExtra.extra.parenStart;
                     }
                     return expr;
                   } catch {
@@ -4203,7 +4201,7 @@ export function lowerRules(args: {
                 }
                 const fnKey = `${decl.styleKey}${toSuffixFromProp(out.prop)}`;
                 if (!styleFnDecls.has(fnKey)) {
-                  const valueExpr = cloneAstNode(bodyExpr) as ExpressionKind;
+                  const valueExpr = cloneAstNode(bodyExpr);
                   const param = j.identifier(paramName);
                   const body = j.objectExpression([
                     j.property(
@@ -4498,7 +4496,7 @@ export function lowerRules(args: {
                           return false;
                         });
                         if (prop && prop.type === "Property") {
-                          existingValue = prop.value as ExpressionKind;
+                          existingValue = prop.value;
                         }
                       }
                     }
@@ -5137,7 +5135,7 @@ export function lowerRules(args: {
       }
 
       if (props.length > 0) {
-        resolvedStyleObjects.set(overrideKey, j.objectExpression(props) as unknown);
+        resolvedStyleObjects.set(overrideKey, j.objectExpression(props));
       }
     }
   }

@@ -639,7 +639,7 @@ export function extractAndRemoveCssHelpers(args: {
       // `css\`...\`` snippets are not attached to a selector; parse by wrapping in `& { ... }`.
       const rawCss = `& { ${parsed.rawCss} }`;
       const stylisAst = compile(rawCss);
-      const rules = normalizeStylisAstToIR(stylisAst as any, parsed.slots, { rawCss });
+      const rules = normalizeStylisAstToIR(stylisAst, parsed.slots, { rawCss });
       if (rules.some((r) => typeof r.selector === "string" && r.selector.includes("*"))) {
         noteCssHelperUniversalSelector(template);
       }
@@ -711,7 +711,7 @@ export function extractAndRemoveCssHelpers(args: {
       // but pass the *unwrapped* raw template CSS for placeholder recovery heuristics.
       const wrappedRawCss = `& { ${parsed.rawCss} }`;
       const stylisAst = compile(wrappedRawCss);
-      const rules = normalizeStylisAstToIR(stylisAst as any, parsed.slots, {
+      const rules = normalizeStylisAstToIR(stylisAst, parsed.slots, {
         rawCss: parsed.rawCss,
       });
 
@@ -790,7 +790,7 @@ export function extractAndRemoveCssHelpers(args: {
 
         const rawCss = `& { ${parsed.rawCss} }`;
         const stylisAst = compile(rawCss);
-        const rules = normalizeStylisAstToIR(stylisAst as any, parsed.slots, { rawCss });
+        const rules = normalizeStylisAstToIR(stylisAst, parsed.slots, { rawCss });
 
         if (rules.some((r) => typeof r.selector === "string" && r.selector.includes("*"))) {
           noteCssHelperUniversalSelector(template);
