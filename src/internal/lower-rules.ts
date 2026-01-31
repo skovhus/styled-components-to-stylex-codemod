@@ -3301,7 +3301,7 @@ export function lowerRules(args: {
                   try {
                     const jParse = api.jscodeshift.withParser("tsx");
                     const program = jParse(`(${exprSource});`);
-                    const stmt = program.find(jParse.ExpressionStatement).nodes()[0] as any;
+                    const stmt = program.find(jParse.ExpressionStatement).nodes()[0];
                     let expr = stmt?.expression ?? null;
                     while (expr?.type === "ParenthesizedExpression") {
                       expr = expr.expression;
