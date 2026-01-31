@@ -1,4 +1,3 @@
-// @expected-warning: Unsupported interpolation: member expression
 import React from "react";
 import styled from "styled-components";
 
