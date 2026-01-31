@@ -152,13 +152,14 @@ export function normalizeStylisAstToIR(
 
     if (node.type === "decl") {
       const decls = parseDeclarations(String(node.value ?? ""), slotByPlaceholder);
-      if (decls.length) {
+      const firstDecl = decls[0];
+      if (decls.length && firstDecl) {
         if (pendingComment) {
-          decls[0]!.leadingComment = pendingComment;
+          firstDecl.leadingComment = pendingComment;
           pendingComment = null;
         }
         ensureRule("&", atRuleStack).declarations.push(...decls);
-        lastDecl = decls[decls.length - 1]!;
+        lastDecl = decls[decls.length - 1] ?? null;
       }
       return;
     }
@@ -182,13 +183,14 @@ export function normalizeStylisAstToIR(
           for (const child of children) {
             if (child?.type === "decl") {
               const decls = parseDeclarations(String(child.value ?? ""), slotByPlaceholder);
-              if (decls.length) {
+              const firstDeclInner = decls[0];
+              if (decls.length && firstDeclInner) {
                 if (pendingComment) {
-                  decls[0]!.leadingComment = pendingComment;
+                  firstDeclInner.leadingComment = pendingComment;
                   pendingComment = null;
                 }
                 rule.declarations.push(...decls);
-                lastDecl = decls[decls.length - 1]!;
+                lastDecl = decls[decls.length - 1] ?? null;
               }
             } else if (child?.type === "comm") {
               handleCommentNode(String(child.value ?? ""));

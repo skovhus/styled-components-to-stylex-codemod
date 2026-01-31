@@ -545,8 +545,8 @@ export class WrapperEmitter {
     if (xs.length === 0) {
       return "{}";
     }
-    if (xs.length === 1) {
-      return xs[0]!;
+    if (xs.length === 1 && xs[0]) {
+      return xs[0];
     }
     return xs.join(" & ");
   }
@@ -1166,9 +1166,13 @@ export class WrapperEmitter {
         .map((s) => s.trim())
         .filter(Boolean);
       const parsed = parts.map((p) => this.parseVariantWhenToAst(p));
+      const firstParsed = parsed[0];
+      if (!firstParsed) {
+        return { cond: j.identifier("true"), props: [], isBoolean: true };
+      }
       const cond = parsed
         .slice(1)
-        .reduce((acc, cur) => j.logicalExpression("&&", acc, cur.cond), parsed[0]!.cond);
+        .reduce((acc, cur) => j.logicalExpression("&&", acc, cur.cond), firstParsed.cond);
       const props = [...new Set(parsed.flatMap((x) => x.props))];
       // Combined && is boolean only if all parts are boolean
       const isBoolean = parsed.every((p) => p.isBoolean);

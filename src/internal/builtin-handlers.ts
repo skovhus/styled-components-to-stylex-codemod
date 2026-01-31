@@ -2324,7 +2324,7 @@ function expandBorderShorthandWithTemplateExpr(
       prefix = valueRaw.slice(0, match.index);
     }
     expressions.push({
-      text: match[1]!.trim(),
+      text: (match[1] ?? "").trim(),
       start: match.index,
       end: regex.lastIndex,
     });
@@ -2387,8 +2387,9 @@ function parseValueAsTemplateLiteralForColor(
   // Find the start of the dynamic part
   let dynamicStart = 0;
   for (let i = 0; i < prefixTokens.length && i < fullTokens.length; i++) {
-    if (fullTokens[i] === prefixTokens[i]) {
-      dynamicStart += fullTokens[i]!.length + 1; // +1 for space
+    const fullToken = fullTokens[i];
+    if (fullToken && fullToken === prefixTokens[i]) {
+      dynamicStart += fullToken.length + 1; // +1 for space
     }
   }
 
@@ -2408,7 +2409,7 @@ function parseValueAsTemplateLiteralForColor(
     const beforeExpr = dynamicPart.slice(lastIndex, match.index);
     quasis.push({ raw: beforeExpr, cooked: beforeExpr });
 
-    const exprText = match[1]!.trim();
+    const exprText = (match[1] ?? "").trim();
     const exprAst = parseSimpleExpression(exprText, j);
     if (!exprAst) {
       return null;
@@ -2455,7 +2456,7 @@ function parseValueAsTemplateLiteral(value: string, j: JSCodeshift): TemplateLit
     quasis.push({ raw, cooked: raw });
 
     // Add the expression (as an identifier for now - will be parsed later if needed)
-    const exprText = match[1]!.trim();
+    const exprText = (match[1] ?? "").trim();
     // Parse the expression text into AST
     // For simple cases like "$colors.primaryColor", create a member expression
     const exprAst = parseSimpleExpression(exprText, j);
@@ -2497,7 +2498,10 @@ function parseSimpleExpression(exprText: string, j: JSCodeshift): ExpressionKind
 
   let ast: ExpressionKind = j.identifier(parts[0]);
   for (let i = 1; i < parts.length; i++) {
-    ast = j.memberExpression(ast, j.identifier(parts[i]!));
+    const part = parts[i];
+    if (part) {
+      ast = j.memberExpression(ast, j.identifier(part));
+    }
   }
 
   return ast;

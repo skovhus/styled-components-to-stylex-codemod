@@ -49,19 +49,24 @@ export function parseSelector(selector: string): ParsedSelector {
       const pseudos: string[] = [];
       for (const sel of selectors) {
         const result = parseSingleSelector(sel);
-        if (result.kind !== "pseudo" || result.pseudos.length !== 1) {
+        const firstPseudo = result.kind === "pseudo" ? result.pseudos[0] : undefined;
+        if (result.kind !== "pseudo" || result.pseudos.length !== 1 || !firstPseudo) {
           return {
             kind: "unsupported",
             reason: "comma-separated selectors must all be simple pseudos",
           };
         }
-        pseudos.push(result.pseudos[0]!);
+        pseudos.push(firstPseudo);
       }
       return { kind: "pseudo", pseudos };
     }
 
     // Single selector
-    return parseSingleSelector(selectors[0]!);
+    const firstSelector = selectors[0];
+    if (!firstSelector) {
+      return { kind: "base" };
+    }
+    return parseSingleSelector(firstSelector);
   } catch {
     return { kind: "unsupported", reason: "failed to parse selector" };
   }
@@ -154,7 +159,11 @@ function parseSingleSelector(selector: selectorParser.Selector): ParsedSelector 
       // Pseudo-classes with pseudo-elements is complex
       return { kind: "unsupported", reason: "pseudo-class with pseudo-element" };
     }
-    return { kind: "pseudoElement", element: pseudoElements[0]!.value };
+    const firstPseudoEl = pseudoElements[0];
+    if (!firstPseudoEl) {
+      return { kind: "unsupported", reason: "pseudo-element access error" };
+    }
+    return { kind: "pseudoElement", element: firstPseudoEl.value };
   }
 
   // Handle pseudo-classes
