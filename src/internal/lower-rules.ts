@@ -5028,11 +5028,11 @@ export function lowerRules(args: {
           .filter(Boolean);
         for (const line of declLines) {
           const m = line.match(/^([^:]+):([\s\S]+)$/);
-          if (!m) {
+          if (!m || !m[1] || !m[2]) {
             continue;
           }
-          const prop = m[1]!.trim();
-          const value = m[2]!.trim();
+          const prop = m[1].trim();
+          const value = m[2].trim();
           // Skip values that contain unresolved interpolation placeholders - these should
           // be handled by the IR handler which has proper theme resolution
           if (/__SC_EXPR_\d+__/.test(value)) {
@@ -5060,15 +5060,18 @@ export function lowerRules(args: {
       // Match any pseudo selector pattern: &:hover, &:focus-visible, &:active, etc.
       const pseudoRe = /&(:[a-z-]+(?:\([^)]*\))?)\s+__SC_EXPR_(\d+)__\s*\{([\s\S]*?)\}/gi;
       while ((m = pseudoRe.exec(decl.rawCss))) {
-        const pseudo = m[1]!;
+        if (!m[1]) {
+          continue;
+        }
+        const pseudo = m[1];
         applyBlock(Number(m[2]), m[3] ?? "", pseudo);
       }
 
       if (didApply) {
-        delete (styleObj as any).width;
-        delete (styleObj as any).height;
-        delete (styleObj as any).opacity;
-        delete (styleObj as any).transform;
+        delete styleObj.width;
+        delete styleObj.height;
+        delete styleObj.opacity;
+        delete styleObj.transform;
       }
     }
 

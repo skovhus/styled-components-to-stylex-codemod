@@ -330,7 +330,7 @@ function parseDeclarations(
   //
   // This enables the dynamic resolution pipeline (e.g. `props => props.$x && "transform: ...;"`) to be processed.
   const leadingSlot = trimmed.match(/^(__SC_EXPR_(\d+)__)\s+([\s\S]+)$/);
-  if (leadingSlot) {
+  if (leadingSlot && leadingSlot[1]) {
     const slotId = Number(leadingSlot[2]);
     const rest = leadingSlot[3] ?? "";
     return [
@@ -338,19 +338,19 @@ function parseDeclarations(
         property: "",
         value: { kind: "interpolated", parts: [{ kind: "slot", slotId }] },
         important: false,
-        valueRaw: leadingSlot[1]!,
+        valueRaw: leadingSlot[1],
       },
       ...parseDeclarations(rest, slotByPlaceholder),
     ];
   }
 
   const match = trimmed.match(/^([^:]+):([\s\S]+?);?$/);
-  if (!match) {
+  if (!match || !match[1] || !match[2]) {
     return [];
   }
 
-  const property = match[1]!.trim();
-  let valueRaw = match[2]!.trim();
+  const property = match[1].trim();
+  let valueRaw = match[2].trim();
 
   let important = false;
   if (/!important\s*$/i.test(valueRaw)) {

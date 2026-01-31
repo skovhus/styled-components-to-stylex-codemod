@@ -62,7 +62,7 @@ function parseKeyframesTemplate(args: {
           typeof c.props === "string" && c.props
             ? c.props
             : typeof c.value === "string" && c.value.includes(":")
-              ? c.value.split(":")[0]!.trim()
+              ? (c.value.split(":")[0] ?? "").trim()
               : "";
         const valueRaw =
           typeof c.children === "string"

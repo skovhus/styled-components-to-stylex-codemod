@@ -7,7 +7,7 @@ export function mergeStyleObjects(
   source: Record<string, unknown>,
 ) {
   for (const [key, value] of Object.entries(source)) {
-    const existing = (target as any)[key];
+    const existing = target[key];
     if (
       existing &&
       value &&
@@ -20,7 +20,7 @@ export function mergeStyleObjects(
     ) {
       mergeStyleObjects(existing as Record<string, unknown>, value as Record<string, unknown>);
     } else {
-      (target as any)[key] = value as any;
+      target[key] = value;
     }
   }
 }

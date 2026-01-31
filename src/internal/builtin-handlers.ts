@@ -2164,11 +2164,11 @@ function parseCssDeclarationBlock(cssText: string): Record<string, unknown> | nu
   const style: Record<string, unknown> = {};
   for (const chunk of chunks) {
     const m = chunk.match(/^([^:]+):([\s\S]+)$/);
-    if (!m) {
+    if (!m || !m[1] || !m[2]) {
       return null;
     }
-    const property = m[1]!.trim();
-    const valueRaw = m[2]!.trim();
+    const property = m[1].trim();
+    const valueRaw = m[2].trim();
     const decl = {
       property,
       value: { kind: "static" as const, value: valueRaw },
@@ -2233,11 +2233,11 @@ function parseCssDeclarationBlockWithTemplateExpr(
 
   for (const chunk of chunks) {
     const m = chunk.match(/^([^:]+):([\s\S]+)$/);
-    if (!m) {
+    if (!m || !m[1] || !m[2]) {
       return null;
     }
-    const property = m[1]!.trim();
-    const valueRaw = m[2]!.trim();
+    const property = m[1].trim();
+    const valueRaw = m[2].trim();
 
     // Check if value contains template expressions
     if (valueRaw.includes("${")) {

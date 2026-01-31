@@ -89,7 +89,11 @@ export function tryHandleInterpolatedBorder(args: {
   if (!slotTok) {
     return false;
   }
-  const slotId = Number(slotTok.match(/^__SC_EXPR_(\d+)__$/)![1]);
+  const slotMatch = slotTok.match(/^__SC_EXPR_(\d+)__$/);
+  if (!slotMatch || !slotMatch[1]) {
+    return false;
+  }
+  const slotId = Number(slotMatch[1]);
 
   const { prefix, suffix } = extractStaticParts(d.value, { property: prop });
   const borderParts = parseInterpolatedBorderStaticParts({ prop, prefix, suffix });
