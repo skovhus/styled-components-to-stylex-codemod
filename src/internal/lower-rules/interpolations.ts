@@ -2,6 +2,7 @@ import type { StyledDecl } from "../transform-types.js";
 import { cssDeclarationToStylexDeclarations } from "../css-prop-mapping.js";
 import { getMemberPathFromIdentifier } from "../utilities/jscodeshift-utils.js";
 import { splitDirectionalProperty } from "../stylex-shorthands.js";
+import { literalToStaticValue } from "./types.js";
 
 export function extractStaticParts(
   cssValue: any,
@@ -197,6 +198,13 @@ function buildInterpolatedTemplate(args: {
   addImport?: (imp: any) => void;
 }): unknown {
   const { j, decl, cssValue, resolveCallExpr, resolveImportedValueExpr, addImport } = args;
+  const toStaticText = (node: unknown): string | null => {
+    const staticValue = literalToStaticValue(node);
+    if (staticValue === null) {
+      return null;
+    }
+    return String(staticValue);
+  };
   // Build a JS TemplateLiteral from CssValue parts when it's basically string interpolation,
   // e.g. `${spacing}px`, `${spacing / 2}px 0`, `1px solid ${theme.color.secondary}` (handled elsewhere).
   if (!cssValue || cssValue.kind !== "interpolated") {
@@ -224,14 +232,10 @@ function buildInterpolatedTemplate(args: {
       if (expr.type === "CallExpression" && resolveCallExpr) {
         const resolved = resolveCallExpr(expr);
         if (resolved) {
-          // If resolved to a string literal, inline it directly into the static text
-          if (
-            resolved.resolved?.type === "StringLiteral" ||
-            (resolved.resolved?.type === "Literal" && typeof resolved.resolved.value === "string")
-          ) {
-            const strValue = resolved.resolved.value;
-            q += strValue;
-            fullStaticValue += strValue;
+          const staticText = toStaticText(resolved.resolved);
+          if (staticText !== null) {
+            q += staticText;
+            fullStaticValue += staticText;
             // Add any required imports
             for (const imp of resolved.imports ?? []) {
               addImport?.(imp);
@@ -256,13 +260,10 @@ function buildInterpolatedTemplate(args: {
           return null;
         }
         const resolved = importedResolved;
-        if (
-          resolved.resolved?.type === "StringLiteral" ||
-          (resolved.resolved?.type === "Literal" && typeof resolved.resolved.value === "string")
-        ) {
-          const strValue = resolved.resolved.value;
-          q += strValue;
-          fullStaticValue += strValue;
+        const staticText = toStaticText(resolved.resolved);
+        if (staticText !== null) {
+          q += staticText;
+          fullStaticValue += staticText;
           for (const imp of resolved.imports ?? []) {
             addImport?.(imp);
           }

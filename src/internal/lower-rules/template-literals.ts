@@ -29,6 +29,11 @@ type ImportMeta = { importedName: string; source: ImportSource };
 
 type ResolveImportInScope = (localName: string, identNode?: unknown) => ImportMeta | null;
 
+export type ResolveStaticMemberExpression = (
+  expr: Expression,
+  fallbackLoc?: { line: number; column: number } | null,
+) => ExpressionKind | null;
+
 type ComponentInfo =
   | { localName: string; base: "intrinsic"; tagOrIdent: string }
   | { localName: string; base: "component"; tagOrIdent: string };
@@ -62,6 +67,7 @@ export type TemplateLiteralBranchArgs = {
   resolveCall: Adapter["resolveCall"];
   resolveImportInScope: ResolveImportInScope;
   resolverImports: Map<string, ImportSpec>;
+  resolveStaticMemberExpression?: ResolveStaticMemberExpression;
   componentInfo: ComponentInfo;
   handlerContext: InternalHandlerContext;
 };
@@ -75,6 +81,7 @@ export type TemplateLiteralValueArgs = {
   resolveCall: Adapter["resolveCall"];
   resolveImportInScope: ResolveImportInScope;
   resolverImports: Map<string, ImportSpec>;
+  resolveStaticMemberExpression?: ResolveStaticMemberExpression;
   componentInfo: ComponentInfo;
   handlerContext: InternalHandlerContext;
 };
@@ -93,6 +100,7 @@ export function resolveTemplateLiteralBranch(
     resolveCall,
     resolveImportInScope,
     resolverImports,
+    resolveStaticMemberExpression,
     componentInfo,
     handlerContext,
   } = args;
@@ -189,6 +197,7 @@ export function resolveTemplateLiteralBranch(
           resolveCall,
           resolveImportInScope,
           resolverImports,
+          resolveStaticMemberExpression,
           componentInfo,
           handlerContext,
         });
@@ -297,6 +306,7 @@ export function resolveTemplateLiteralValue(args: TemplateLiteralValueArgs): Exp
     resolveCall,
     resolveImportInScope,
     resolverImports,
+    resolveStaticMemberExpression,
     componentInfo,
     handlerContext,
   } = args;
@@ -319,6 +329,7 @@ export function resolveTemplateLiteralValue(args: TemplateLiteralValueArgs): Exp
       resolveCall,
       resolveImportInScope,
       resolverImports,
+      resolveStaticMemberExpression,
       componentInfo,
       handlerContext,
     });
@@ -487,6 +498,7 @@ function resolveStaticTemplateExpressionAst(args: {
   resolveCall: Adapter["resolveCall"];
   resolveImportInScope: ResolveImportInScope;
   resolverImports: Map<string, ImportSpec>;
+  resolveStaticMemberExpression?: ResolveStaticMemberExpression;
   componentInfo: ComponentInfo;
   handlerContext: InternalHandlerContext;
 }): ExpressionKind | null {
@@ -499,9 +511,15 @@ function resolveStaticTemplateExpressionAst(args: {
     resolveCall,
     resolveImportInScope,
     resolverImports,
+    resolveStaticMemberExpression,
     componentInfo,
     handlerContext,
   } = args;
+
+  const staticResolved = resolveStaticMemberExpression?.(expr, getNodeLocStart(expr));
+  if (staticResolved) {
+    return staticResolved;
+  }
 
   const adapterRes = resolveDynamicNode(
     {

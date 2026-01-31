@@ -80,6 +80,13 @@ export type DescendantOverride = {
 
 type ExpressionKind = Parameters<JSCodeshift["expressionStatement"]>[0];
 
+type StaticMemberValue = string | number | boolean;
+
+type StaticMemberAssignment = {
+  value: StaticMemberValue;
+  loc: { line: number; column: number } | null;
+};
+
 /**
  * Type for variant test condition info
  */
@@ -278,6 +285,43 @@ export function lowerRules(args: {
   }
 
   const staticPropertyOwners = new Set<string>();
+  const staticMemberAssignments = new Map<string, Map<string, StaticMemberAssignment>>();
+  const staticMemberConflicts = new Set<string>();
+  const markStaticMemberConflict = (ownerName: string, propName: string): void => {
+    const key = `${ownerName}.${propName}`;
+    staticMemberConflicts.add(key);
+    const ownerMap = staticMemberAssignments.get(ownerName);
+    if (ownerMap) {
+      ownerMap.delete(propName);
+      if (ownerMap.size === 0) {
+        staticMemberAssignments.delete(ownerName);
+      }
+    }
+  };
+  const unwrapStaticAssignmentValue = (node: unknown): unknown => {
+    let cur = node;
+    while (cur && typeof cur === "object") {
+      const typed = cur as { type?: string; expression?: unknown };
+      if (typed.type === "ParenthesizedExpression") {
+        cur = typed.expression;
+        continue;
+      }
+      if (
+        typed.type === "TSAsExpression" ||
+        typed.type === "TSNonNullExpression" ||
+        typed.type === "TSTypeAssertion"
+      ) {
+        cur = typed.expression;
+        continue;
+      }
+      if (typed.type === "ChainExpression") {
+        cur = typed.expression;
+        continue;
+      }
+      break;
+    }
+    return cur;
+  };
   root
     .find(j.ExpressionStatement, {
       expression: {
@@ -285,6 +329,7 @@ export function lowerRules(args: {
         operator: "=",
         left: {
           type: "MemberExpression",
+          computed: false,
           object: { type: "Identifier" },
           property: { type: "Identifier" },
         },
@@ -292,12 +337,37 @@ export function lowerRules(args: {
     } as any)
     .forEach((p) => {
       const expr = p.node.expression as {
-        left?: { object?: { name?: string } };
+        left?: { object?: { name?: string }; property?: { name?: string } };
+        right?: unknown;
       };
       const ownerName = expr.left?.object?.name;
-      if (ownerName) {
-        staticPropertyOwners.add(ownerName);
+      const propName = expr.left?.property?.name;
+      if (!ownerName || !propName) {
+        return;
       }
+      staticPropertyOwners.add(ownerName);
+      const isTopLevel = p.parentPath?.node?.type === "Program";
+      if (!isTopLevel) {
+        markStaticMemberConflict(ownerName, propName);
+        return;
+      }
+      const key = `${ownerName}.${propName}`;
+      if (staticMemberConflicts.has(key)) {
+        return;
+      }
+      const rightValue = unwrapStaticAssignmentValue(expr.right);
+      const staticValue = literalToStaticValue(rightValue);
+      if (staticValue === null) {
+        markStaticMemberConflict(ownerName, propName);
+        return;
+      }
+      const ownerMap = staticMemberAssignments.get(ownerName) ?? new Map();
+      if (ownerMap.has(propName)) {
+        markStaticMemberConflict(ownerName, propName);
+        return;
+      }
+      ownerMap.set(propName, { value: staticValue, loc: getNodeLocStart(p.node.expression) });
+      staticMemberAssignments.set(ownerName, ownerMap);
     });
 
   // ─────────────────────────────────────────────────────────────────────────────
@@ -593,6 +663,38 @@ export function lowerRules(args: {
       return resolveImportForIdent(localName, identNode);
     }
     return resolveImportForIdent(localName, null);
+  };
+
+  const resolveStaticMemberExpression = (
+    expr: unknown,
+    fallbackLoc?: { line: number; column: number } | null,
+  ): ExpressionKind | null => {
+    const info = extractRootAndPath(expr);
+    if (!info || info.path.length !== 1) {
+      return null;
+    }
+    if (isIdentifierShadowed(info.rootNode, info.rootName)) {
+      return null;
+    }
+    const ownerMap = staticMemberAssignments.get(info.rootName);
+    if (!ownerMap) {
+      return null;
+    }
+    const entry = ownerMap.get(info.path[0]!);
+    if (!entry) {
+      return null;
+    }
+    const usageLoc = getNodeLocStart(expr) ?? fallbackLoc;
+    if (!usageLoc || !entry.loc) {
+      return null;
+    }
+    if (entry.loc.line > usageLoc.line) {
+      return null;
+    }
+    if (entry.loc.line === usageLoc.line && entry.loc.column > usageLoc.column) {
+      return null;
+    }
+    return literalToAst(j, entry.value);
   };
 
   const isValidIdentifierName = (name: string): boolean => /^[$A-Z_][0-9A-Z_$]*$/i.test(name);
@@ -1417,6 +1519,7 @@ export function lowerRules(args: {
           resolveCall,
           resolveImportInScope,
           resolverImports,
+          resolveStaticMemberExpression,
           componentInfo,
           handlerContext,
         });
@@ -1542,6 +1645,7 @@ export function lowerRules(args: {
           resolveCall,
           resolveImportInScope,
           resolverImports,
+          resolveStaticMemberExpression,
           componentInfo,
           handlerContext,
         });
@@ -1556,6 +1660,7 @@ export function lowerRules(args: {
           resolveCall,
           resolveImportInScope,
           resolverImports,
+          resolveStaticMemberExpression,
           componentInfo,
           handlerContext,
         });
@@ -1602,6 +1707,7 @@ export function lowerRules(args: {
           resolveCall,
           resolveImportInScope,
           resolverImports,
+          resolveStaticMemberExpression,
           componentInfo,
           handlerContext,
         });
@@ -1635,6 +1741,7 @@ export function lowerRules(args: {
           resolveCall,
           resolveImportInScope,
           resolverImports,
+          resolveStaticMemberExpression,
           componentInfo,
           handlerContext,
         });
@@ -1715,6 +1822,7 @@ export function lowerRules(args: {
         resolveCall,
         resolveImportInScope,
         resolverImports,
+        resolveStaticMemberExpression,
         componentInfo,
         handlerContext,
       });
@@ -1727,6 +1835,7 @@ export function lowerRules(args: {
         resolveCall,
         resolveImportInScope,
         resolverImports,
+        resolveStaticMemberExpression,
         componentInfo,
         handlerContext,
       });
@@ -2817,6 +2926,10 @@ export function lowerRules(args: {
           const resolveImportedValueExpr = (
             expr: any,
           ): { resolved: any; imports?: any[] } | { bail: true } | null => {
+            const staticResolved = resolveStaticMemberExpression(expr, decl.loc);
+            if (staticResolved) {
+              return { resolved: staticResolved };
+            }
             const info = getRootIdentifierInfo(expr);
             if (!info) {
               return null;
@@ -2925,6 +3038,10 @@ export function lowerRules(args: {
               }
               const obj = baseExpr.object;
               if (obj?.type !== "Identifier" || !staticPropertyOwners.has(obj.name)) {
+                continue;
+              }
+              const staticResolved = resolveStaticMemberExpression(baseExpr, decl.loc);
+              if (staticResolved) {
                 continue;
               }
               warnings.push({
