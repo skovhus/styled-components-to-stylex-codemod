@@ -53,11 +53,16 @@ function findCssVarCalls(raw: string): VarCall[] {
     // Parse inside `var( ... )` conservatively.
     const inside = raw.slice(jIdx, end - 1);
     let p = 0;
-    while (p < inside.length && /\s/.test(inside[p]!)) {
+    while (p < inside.length && /\s/.test(inside.charAt(p))) {
       p++;
     }
     const nameStart = p;
-    while (p < inside.length && !/\s/.test(inside[p]!) && inside[p] !== "," && inside[p] !== ")") {
+    while (
+      p < inside.length &&
+      !/\s/.test(inside.charAt(p)) &&
+      inside.charAt(p) !== "," &&
+      inside.charAt(p) !== ")"
+    ) {
       p++;
     }
     const name = inside.slice(nameStart, p).trim();
@@ -65,7 +70,7 @@ function findCssVarCalls(raw: string): VarCall[] {
       i = end;
       continue;
     }
-    while (p < inside.length && /\s/.test(inside[p]!)) {
+    while (p < inside.length && /\s/.test(inside.charAt(p))) {
       p++;
     }
     let fallback: string | undefined;

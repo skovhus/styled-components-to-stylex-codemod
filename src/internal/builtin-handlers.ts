@@ -362,8 +362,9 @@ function resolveTemplateLiteralExpressions(
     const quasi = quasis[i];
     const raw = quasi?.value?.raw ?? quasi?.value?.cooked ?? "";
     parts.push(raw);
-    if (i < resolvedExprs.length) {
-      parts.push("${" + resolvedExprs[i]!.expr + "}");
+    const resolvedExpr = resolvedExprs[i];
+    if (i < resolvedExprs.length && resolvedExpr) {
+      parts.push("${" + resolvedExpr.expr + "}");
     }
   }
 
@@ -1486,10 +1487,11 @@ function tryResolveConditionalCssBlockTernary(node: DynamicNode): HandlerResult 
     // Simple prop access: props.$dim
     if (t.type === "MemberExpression") {
       const testPath = getMemberPathFromIdentifier(t as any, paramName);
-      if (!testPath || testPath.length !== 1) {
+      const firstProp = testPath?.[0];
+      if (!testPath || testPath.length !== 1 || !firstProp) {
         return null;
       }
-      return { kind: "boolean", propName: testPath[0]!, isNegated: false };
+      return { kind: "boolean", propName: firstProp, isNegated: false };
     }
 
     // Negated prop access: !props.$open
@@ -1497,10 +1499,11 @@ function tryResolveConditionalCssBlockTernary(node: DynamicNode): HandlerResult 
       const arg = t.argument as { type?: string } | undefined;
       if (arg?.type === "MemberExpression") {
         const testPath = getMemberPathFromIdentifier(arg as any, paramName);
-        if (!testPath || testPath.length !== 1) {
+        const firstProp = testPath?.[0];
+        if (!testPath || testPath.length !== 1 || !firstProp) {
           return null;
         }
-        return { kind: "boolean", propName: testPath[0]!, isNegated: true };
+        return { kind: "boolean", propName: firstProp, isNegated: true };
       }
       return null;
     }
@@ -1512,7 +1515,8 @@ function tryResolveConditionalCssBlockTernary(node: DynamicNode): HandlerResult 
         return null;
       }
       const testPath = getMemberPathFromIdentifier(left as any, paramName);
-      if (!testPath || testPath.length !== 1) {
+      const firstProp = testPath?.[0];
+      if (!testPath || testPath.length !== 1 || !firstProp) {
         return null;
       }
       const rhsRaw = literalToStaticValue(t.right);
@@ -1521,7 +1525,7 @@ function tryResolveConditionalCssBlockTernary(node: DynamicNode): HandlerResult 
       }
       return {
         kind: "comparison",
-        propName: testPath[0]!,
+        propName: firstProp,
         operator: t.operator as "===" | "!==",
         rhsValue: JSON.stringify(rhsRaw),
         rhsRaw,
@@ -1698,8 +1702,9 @@ function tryResolveConditionalCssBlockTernary(node: DynamicNode): HandlerResult 
       // This happens when the original test was negated: !props.$x ? A : B
       // Without this, both variants would start with "!" and fall through the
       // lower-rules processing logic, silently dropping the styles.
-      if (variants.length === 1) {
-        const singleWhen = variants[0]!.when;
+      const firstVariant = variants[0];
+      if (variants.length === 1 && firstVariant) {
+        const singleWhen = firstVariant.when;
         // Check for simple negated prop (e.g., "!$open") without operators
         if (singleWhen.startsWith("!") && !singleWhen.includes(" ")) {
           defaultWhen = singleWhen.slice(1); // "!$open" → "$open"
@@ -1751,10 +1756,10 @@ function tryResolveArrowFnCallWithSinglePropArg(node: DynamicNode): HandlerResul
     return null;
   }
   const path = getMemberPathFromIdentifier(arg0, paramName);
-  if (!path || path.length !== 1) {
+  const propName = path?.[0];
+  if (!path || path.length !== 1 || !propName) {
     return null;
   }
-  const propName = path[0]!;
 
   return {
     type: "emitStyleFunction",
@@ -1915,8 +1920,9 @@ function tryResolveStyleFunctionFromTemplateLiteral(node: DynamicNode): HandlerR
       const n = node as { type?: string };
       if (n.type === "MemberExpression" || n.type === "OptionalMemberExpression") {
         const path = getMemberPathFromIdentifier(node as any, paramName);
-        if (path && path.length > 0) {
-          addProp(path[0]!);
+        const firstPathPart = path?.[0];
+        if (path && path.length > 0 && firstPathPart) {
+          addProp(firstPathPart);
           // Keep walking to collect other props.
         }
       }

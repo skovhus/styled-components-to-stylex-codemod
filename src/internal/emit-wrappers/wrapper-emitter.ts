@@ -1599,17 +1599,23 @@ export class WrapperEmitter {
         continue;
       }
 
+      const namespaceBooleanProp = enabled.namespaceBooleanProp;
+      if (!namespaceBooleanProp) {
+        // Skip if namespace boolean prop is not set
+        continue;
+      }
+
       if (destructureProps) {
         if (!destructureProps.includes(enabled.propName)) {
           destructureProps.push(enabled.propName);
         }
-        if (!destructureProps.includes(enabled.namespaceBooleanProp!)) {
-          destructureProps.push(enabled.namespaceBooleanProp!);
+        if (!destructureProps.includes(namespaceBooleanProp)) {
+          destructureProps.push(namespaceBooleanProp);
         }
       }
 
-      if (namespaceBooleanProps && !namespaceBooleanProps.includes(enabled.namespaceBooleanProp!)) {
-        namespaceBooleanProps.push(enabled.namespaceBooleanProp!);
+      if (namespaceBooleanProps && !namespaceBooleanProps.includes(namespaceBooleanProp)) {
+        namespaceBooleanProps.push(namespaceBooleanProp);
       }
 
       if (
@@ -1621,7 +1627,7 @@ export class WrapperEmitter {
         propDefaults.set(enabled.propName, enabled.defaultValue);
       }
 
-      const boolPropId = j.identifier(enabled.namespaceBooleanProp!);
+      const boolPropId = j.identifier(namespaceBooleanProp);
       const propId = j.identifier(enabled.propName);
 
       const enabledLookup = j.memberExpression(

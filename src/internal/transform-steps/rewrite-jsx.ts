@@ -477,7 +477,8 @@ export function rewriteJsxStep(ctx: TransformContext): StepResult {
         // Recalculate insert index after filtering (some attrs may have been removed)
         let finalInsertIndex = keptRestAfterVariants.length;
         for (let i = keptRestAfterVariants.length - 1; i >= 0; i--) {
-          if (keptRestAfterVariants[i]!.type === "JSXSpreadAttribute") {
+          const attr = keptRestAfterVariants[i];
+          if (attr && attr.type === "JSXSpreadAttribute") {
             finalInsertIndex = i + 1;
             break;
           }

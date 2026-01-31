@@ -123,7 +123,10 @@ export function parseSwitchReturningCssTemplates(args: {
     }
 
     // Case label with a return also covers any prior fall-through labels.
-    pendingLabels.push(label!);
+    // At this point isDefault is false, and we already returned at line 80-88 if !label
+    if (label) {
+      pendingLabels.push(label);
+    }
     assignToPending(tpl);
   }
 

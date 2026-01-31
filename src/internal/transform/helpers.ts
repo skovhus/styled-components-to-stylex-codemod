@@ -245,7 +245,7 @@ export function toSuffixFromProp(propName: string): string {
   }
 
   // Common boolean convention: `$isActive` -> `Active` (matches existing fixtures)
-  if (raw.startsWith("is") && raw.length > 2 && /[A-Z]/.test(raw[2]!)) {
+  if (raw.startsWith("is") && raw.length > 2 && /[A-Z]/.test(raw.charAt(2))) {
     return raw.slice(2);
   }
   return raw.charAt(0).toUpperCase() + raw.slice(1);
