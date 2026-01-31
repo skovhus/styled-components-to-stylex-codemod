@@ -1670,7 +1670,7 @@ export function lowerRules(args: {
 
       // Extract raw value from the template literal for property mapping
       // (e.g., to detect gradients in "background" property)
-      const altQuasis = alt.quasis ?? [];
+      const altQuasis: Array<{ value?: { raw?: string; cooked?: string } }> = alt.quasis ?? [];
       const valueRawFromTemplate = altQuasis.map((q) => q.value?.raw ?? "").join("");
 
       // Get the StyleX property name for this CSS property
