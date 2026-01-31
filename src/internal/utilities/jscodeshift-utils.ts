@@ -354,7 +354,7 @@ export function getNodeLocStart(node: unknown): { line: number; column: number }
  *   but ONLY if the block contains exactly one statement (a ReturnStatement).
  *   This ensures we don't support arrow functions with complex logic in the body.
  */
-export function getFunctionBodyExpr(fn: { body?: unknown }): unknown {
+export function getFunctionBodyExpr(fn: { body?: unknown }): ExpressionKind | null | undefined {
   const body = fn.body;
   if (!body || typeof body !== "object") {
     return undefined;

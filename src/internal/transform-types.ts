@@ -143,7 +143,7 @@ export type StyledDecl = {
     jsxProp: string;
     condition?: "truthy" | "always";
     conditionWhen?: string;
-    callArg?: ASTNode;
+    callArg?: ExpressionKind;
   }>;
   shouldForwardProp?: { dropProps: string[]; dropPrefix?: string };
   /**

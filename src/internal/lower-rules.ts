@@ -1080,7 +1080,7 @@ export function lowerRules(args: {
             fnKey,
             jsxProp: conditionProp,
             conditionWhen,
-            callArg: callArg as any,
+            callArg,
           });
         }
       }
@@ -4198,7 +4198,7 @@ export function lowerRules(args: {
                 }
                 const fnKey = `${decl.styleKey}${toSuffixFromProp(out.prop)}`;
                 if (!styleFnDecls.has(fnKey)) {
-                  const valueExpr = cloneAstNode(bodyExpr) as ExpressionKind;
+                  const valueExpr = cloneAstNode(bodyExpr);
                   const param = j.identifier(paramName);
                   const body = j.objectExpression([
                     j.property(
@@ -4493,7 +4493,7 @@ export function lowerRules(args: {
                           return false;
                         });
                         if (prop && prop.type === "Property") {
-                          existingValue = prop.value as ExpressionKind;
+                          existingValue = prop.value;
                         }
                       }
                     }

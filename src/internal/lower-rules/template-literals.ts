@@ -344,7 +344,7 @@ function resolveDynamicTemplateExpr(args: {
   if (exprType === "LogicalExpression" && isLogicalExpressionNode(expr) && expr.operator === "??") {
     const left = expr.left;
     const right = expr.right;
-    const propPath = getMemberPathFromIdentifier(left as Expression, paramName);
+    const propPath = getMemberPathFromIdentifier(left, paramName);
     if (!propPath || propPath.length !== 1) {
       return null;
     }

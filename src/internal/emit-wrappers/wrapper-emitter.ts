@@ -1681,24 +1681,21 @@ export class WrapperEmitter {
     };
     for (const p of styleFnPairs) {
       const propExpr = p.jsxProp === "__props" ? propsId : propExprBuilder(p.jsxProp);
-      const callArg = p.callArg ? (p.callArg as ExpressionKind) : propExpr;
+      const callArg = p.callArg ?? propExpr;
       const call = j.callExpression(
         j.memberExpression(j.identifier(stylesIdentifier), j.identifier(p.fnKey)),
         [callArg],
       );
 
       // Track call arg identifier for destructuring if needed
-      if (
-        p.callArg &&
-        (p.callArg as ASTNode & { type?: string; name?: string })?.type === "Identifier"
-      ) {
-        const name = (p.callArg as ASTNode & { name?: string }).name;
+      if (p.callArg?.type === "Identifier") {
+        const name = p.callArg.name;
         if (name && destructureProps && !destructureProps.includes(name)) {
           destructureProps.push(name);
         }
       }
       if (p.callArg && destructureProps) {
-        const inferred = inferPropFromCallArg(p.callArg as ExpressionKind);
+        const inferred = inferPropFromCallArg(p.callArg);
         if (inferred && !destructureProps.includes(inferred)) {
           destructureProps.push(inferred);
         }
