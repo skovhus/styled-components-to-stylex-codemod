@@ -1,3 +1,4 @@
+// @expected-warning: Unsupported selector: descendant/child/sibling selector
 import styled from "styled-components";
 
 export const Trigger = styled.div`

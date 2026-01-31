@@ -179,7 +179,7 @@ export function createCssHelperResolver(args: {
         severity: "warning",
         type,
         loc,
-        context: { localName: ownerName, ...context },
+        context,
       });
       return null;
     };

@@ -1,3 +1,4 @@
+// @expected-warning: Higher-order styled factory wrappers (e.g. hoc(styled)) are not supported
 import * as React from "react";
 import styled from "styled-components";
 

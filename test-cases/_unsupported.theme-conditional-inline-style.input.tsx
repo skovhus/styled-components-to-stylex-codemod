@@ -1,3 +1,4 @@
+// @expected-warning: Theme-dependent conditional values require a project-specific theme source (e.g. useTheme())
 import * as React from "react";
 import styled from "styled-components";
 

@@ -1,3 +1,4 @@
+// @expected-warning: Dynamic styles inside pseudo elements (::before/::after) are not supported by StyleX. See https://github.com/facebook/stylex/issues/1396
 import styled from "styled-components";
 
 /**

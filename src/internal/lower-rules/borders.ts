@@ -33,6 +33,11 @@ export function tryHandleInterpolatedBorder(args: {
   parseExpr: (exprSource: string) => ExpressionKind | null;
   applyResolvedPropValue: (prop: string, value: unknown) => void;
   bailUnsupported: (type: WarningType) => void;
+  bailUnsupportedWithContext: (
+    type: WarningType,
+    context?: Record<string, unknown>,
+    loc?: { line: number; column: number } | null,
+  ) => void;
   toSuffixFromProp: (propName: string) => string;
   variantBuckets: Map<string, Record<string, unknown>>;
   variantStyleKeys: Record<string, string>;
@@ -52,6 +57,7 @@ export function tryHandleInterpolatedBorder(args: {
     parseExpr,
     applyResolvedPropValue,
     bailUnsupported,
+    bailUnsupportedWithContext,
     toSuffixFromProp,
     variantBuckets,
     variantStyleKeys,
@@ -253,10 +259,19 @@ export function tryHandleInterpolatedBorder(args: {
     const callIdent = callExpr?.callee?.type === "Identifier" ? callExpr.callee.name : null;
     const callIsImported = callIdent ? importMap.has(callIdent) : false;
     const unresolvedCallWarning: WarningType = callIsImported
-      ? "Adapter resolveCall returned undefined for helper call"
+      ? "Adapter helper call in border interpolation did not resolve to a single CSS value"
       : "Unsupported call expression (expected imported helper(...) or imported helper(...)(...))";
 
-    const resolveBorderExpr = (node: any): { exprAst: any; imports: any[] } | null => {
+    const resolveBorderExpr = (
+      node: any,
+    ):
+      | { kind: "ok"; exprAst: any; imports: any[] }
+      | {
+          kind: "warn";
+          warning: WarningType;
+          context?: Record<string, unknown>;
+          loc?: { line: number; column: number } | null | undefined;
+        } => {
       const loc = getNodeLocStart(node);
       const res = resolveDynamicNode(
         {
@@ -287,14 +302,47 @@ export function tryHandleInterpolatedBorder(args: {
           },
         } satisfies InternalHandlerContext,
       );
-      if (!res || res.type !== "resolvedValue") {
-        return null;
+      if (!res) {
+        return { kind: "warn", warning: unresolvedCallWarning };
       }
-      const exprAst = parseExpr(res.expr);
-      if (!exprAst) {
-        return null;
+      if (res.type === "resolvedValue") {
+        const exprAst = parseExpr(res.expr);
+        if (!exprAst) {
+          const context =
+            res.resolveCallContext && res.resolveCallResult
+              ? {
+                  resolveCallContext: res.resolveCallContext,
+                  resolveCallResult: res.resolveCallResult,
+                }
+              : undefined;
+          return {
+            kind: "warn",
+            warning: "Adapter resolveCall returned an unparseable value expression",
+            context,
+          };
+        }
+        return { kind: "ok", exprAst, imports: res.imports ?? [] };
       }
-      return { exprAst, imports: res.imports ?? [] };
+      if (res.type === "resolvedStyles") {
+        const context =
+          res.resolveCallContext && res.resolveCallResult
+            ? {
+                resolveCallContext: res.resolveCallContext,
+                resolveCallResult: res.resolveCallResult,
+              }
+            : undefined;
+        return {
+          kind: "warn",
+          warning:
+            "Adapter resolveCall returned StyleX styles for helper call where a CSS value was expected",
+          context,
+          loc,
+        };
+      }
+      if (res.type === "keepOriginal") {
+        return { kind: "warn", warning: res.reason };
+      }
+      return { kind: "warn", warning: unresolvedCallWarning };
     };
 
     const parseTemplateLiteralBorderShorthand = (
@@ -346,8 +394,12 @@ export function tryHandleInterpolatedBorder(args: {
       (expr?.type === "ArrowFunctionExpression" && expr.body?.type === "CallExpression");
     if (isResolvableHelper) {
       const resolved = resolveBorderExpr(expr);
-      if (!resolved) {
-        bailUnsupported(unresolvedCallWarning);
+      if (resolved.kind !== "ok") {
+        if (resolved.context) {
+          bailUnsupportedWithContext(resolved.warning, resolved.context, resolved.loc);
+        } else {
+          bailUnsupported(resolved.warning);
+        }
         return true;
       }
 

@@ -1,3 +1,4 @@
+// @expected-warning: Universal selectors (`*`) are currently unsupported
 import styled from "styled-components";
 
 const EqualDivider = styled.div`

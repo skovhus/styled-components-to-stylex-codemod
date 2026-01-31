@@ -1,3 +1,4 @@
+// @expected-warning: ThemeProvider conversion needs to be handled manually
 import React from "react";
 import { ThemeProvider, withTheme } from "styled-components";
 

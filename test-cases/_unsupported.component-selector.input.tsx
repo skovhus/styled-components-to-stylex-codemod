@@ -1,3 +1,4 @@
+// @expected-warning: Component selectors like `${OtherComponent}:hover &` are not directly representable in StyleX. Manual refactor is required
 import styled from "styled-components";
 
 const Link = styled.a`
@@ -5,14 +6,14 @@ const Link = styled.a`
   align-items: center;
   padding: 5px 10px;
   background: papayawhip;
-  color: #BF4F74;
+  color: #bf4f74;
 `;
 
 const Icon = styled.svg`
   flex: none;
   width: 48px;
   height: 48px;
-  fill: #BF4F74;
+  fill: #bf4f74;
   transition: fill 0.25s;
 
   ${Link}:hover & {
