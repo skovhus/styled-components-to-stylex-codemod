@@ -2959,6 +2959,8 @@ export function lowerRules(args: {
           const addImport = (imp: any) => {
             resolverImports.set(JSON.stringify(imp), imp);
           };
+          // Track inlined member expressions for comment generation
+          let inlinedMemberExpr: string | null = null;
           if (d.property && d.value.kind === "interpolated") {
             const slotParts =
               (d.value as { parts?: Array<{ kind?: string; slotId?: number }> }).parts ?? [];
@@ -2985,8 +2987,9 @@ export function lowerRules(args: {
               }
               // Check if owner is locally defined and has a safe static value
               const ownerMap = staticPropertyValues.get(rootInfo.rootName);
-              const propName = rootInfo.path[0];
-              const propInfo = propName && ownerMap ? ownerMap.get(propName) : undefined;
+              const memberPropName = rootInfo.path[0];
+              const propInfo =
+                memberPropName && ownerMap ? ownerMap.get(memberPropName) : undefined;
               const styledTemplateLine = decl.loc?.line;
               if (
                 propInfo &&
@@ -2995,6 +2998,7 @@ export function lowerRules(args: {
               ) {
                 // Locally defined with safe ordering - inline the static value
                 const staticValue = propInfo.value;
+                const memberExprStr = `${rootInfo.rootName}.${memberPropName}`;
                 if (typeof staticValue === "number") {
                   decl.templateExpressions[part.slotId] = j.numericLiteral(staticValue);
                 } else if (typeof staticValue === "string") {
@@ -3002,6 +3006,7 @@ export function lowerRules(args: {
                 } else if (typeof staticValue === "boolean") {
                   decl.templateExpressions[part.slotId] = j.booleanLiteral(staticValue);
                 }
+                inlinedMemberExpr = memberExprStr;
                 continue;
               }
               // Not locally defined or unsafe ordering - bail
@@ -3030,6 +3035,13 @@ export function lowerRules(args: {
               resolveThemeValue,
             })
           ) {
+            // Add comment for inlined member expressions
+            if (inlinedMemberExpr && d.property) {
+              const stylexProp = cssPropertyToStylexProp(d.property);
+              addPropComments(styleObj, stylexProp, {
+                leading: `NOTE: Inlined ${inlinedMemberExpr} as StyleX requires static values`,
+              });
+            }
             continue;
           }
           if (bail) {
