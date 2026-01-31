@@ -277,28 +277,11 @@ export function lowerRules(args: {
     }
   }
 
-  // Collect static property assignments like `Divider.HEIGHT = 10`
-  // We track two things:
-  //   1. All static property owners (for bailing on unsafe member expressions)
-  //   2. Safe static values that can be inlined (top-level, with source position)
-  //
-  // An assignment is only safe to inline if:
-  //   - It's at the top-level (not inside functions, conditionals, loops, etc.)
-  //   - The assignment line is before the styled template line
-  //   - The value is a static literal
-  type StaticPropertyInfo = { value: string | number | boolean; line: number };
-  const staticPropertyValues = new Map<string, Map<string, StaticPropertyInfo>>();
+  // Collect identifiers that have static property assignments like `Divider.HEIGHT = 10`
+  // We bail on any member expression interpolation that references these because:
+  //   1. StyleX requires static values in stylex.create() - runtime references don't work
+  //   2. The reference might be to an imported component, which StyleX can't evaluate
   const staticPropertyOwners = new Set<string>();
-
-  // Helper to check if a path is at the top-level (direct child of Program body)
-  const isTopLevelStatement = (path: {
-    parentPath?: { node?: { type?: string } } | null;
-  }): boolean => {
-    // The parent of a top-level ExpressionStatement should be a Program
-    const parentNode = path.parentPath?.node;
-    return parentNode?.type === "Program";
-  };
-
   root
     .find(j.ExpressionStatement, {
       expression: {
@@ -313,31 +296,11 @@ export function lowerRules(args: {
     } as any)
     .forEach((p) => {
       const expr = p.node.expression as {
-        left?: { object?: { name?: string }; property?: { name?: string } };
-        right?: unknown;
+        left?: { object?: { name?: string } };
       };
       const ownerName = expr.left?.object?.name;
-      const propName = expr.left?.property?.name;
       if (ownerName) {
-        // Track all owners for bailing on unsafe member expressions
         staticPropertyOwners.add(ownerName);
-      }
-      // Only collect safe values from top-level assignments
-      if (!isTopLevelStatement(p)) {
-        return;
-      }
-      const assignmentLine = (p.node as { loc?: { start?: { line?: number } } }).loc?.start?.line;
-      if (ownerName && propName && assignmentLine !== undefined) {
-        // Try to extract a static value from the right-hand side
-        const staticValue = literalToStaticValue(expr.right);
-        if (staticValue !== null) {
-          let ownerMap = staticPropertyValues.get(ownerName);
-          if (!ownerMap) {
-            ownerMap = new Map();
-            staticPropertyValues.set(ownerName, ownerMap);
-          }
-          ownerMap.set(propName, { value: staticValue, line: assignmentLine });
-        }
       }
     });
 
@@ -2962,29 +2925,11 @@ export function lowerRules(args: {
               if (!rootInfo || rootInfo.path.length !== 1) {
                 continue;
               }
-              // Only check member expressions that access known static property owners
+              // Bail on member expressions that access known static property owners
+              // StyleX requires static values - runtime references like Component.PROP don't work
               if (!staticPropertyOwners.has(rootInfo.rootName)) {
                 continue;
               }
-              // Check if the member expression can be safely preserved
-              const ownerMap = staticPropertyValues.get(rootInfo.rootName);
-              const propName = rootInfo.path[0];
-              const propInfo = propName && ownerMap ? ownerMap.get(propName) : undefined;
-              // Only allow if:
-              // 1. The property exists in our collected safe static values
-              // 2. The assignment line is before the styled template line (safe ordering)
-              // We keep the original member expression reference (don't inline the value)
-              // so the output stays in sync if the static property value changes.
-              const styledTemplateLine = decl.loc?.line;
-              if (
-                propInfo &&
-                styledTemplateLine !== undefined &&
-                propInfo.line < styledTemplateLine
-              ) {
-                // Safe to use - keep the original member expression reference as-is
-                continue;
-              }
-              // Could not resolve safely - bail
               warnings.push({
                 severity: "error",
                 type: "Unsupported interpolation: member expression",
