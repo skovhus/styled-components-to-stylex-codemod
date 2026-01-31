@@ -950,3 +950,56 @@ export const App = () => <Button $active>Click</Button>;
     expect(result.code).toBeNull();
   });
 });
+
+describe("destructured param defaults", () => {
+  it("should preserve destructured defaults when inlining arrow functions", () => {
+    // Regression test: Previously ({ color = "hotpink" }) => color || "blue"
+    // was incorrectly transformed to props.color || "blue", losing the default.
+    // The correct transformation should be (props.color ?? "hotpink") || "blue"
+    const source = `
+import styled from "styled-components";
+
+const Button = styled.button<{ color?: string }>\`
+  color: \${({ color = "hotpink" }) => color || "blue"};
+\`;
+
+export const App = () => <Button>Click</Button>;
+`;
+
+    const result = transformWithWarnings(
+      { source, path: "destructured-default.tsx" },
+      { jscodeshift: j, j, stats: () => {}, report: () => {} },
+      { adapter: fixtureAdapter },
+    );
+
+    expect(result.code).not.toBeNull();
+    // Should preserve the default using nullish coalescing
+    expect(result.code).toContain('props.color ?? "hotpink"');
+    // Should still have the || fallback
+    expect(result.code).toContain('|| "blue"');
+  });
+
+  it("should preserve renamed destructured param defaults", () => {
+    const source = `
+import styled from "styled-components";
+
+const Box = styled.div<{ margin?: number }>\`
+  margin: \${({ margin: m = 10 }) => m || 5}px;
+\`;
+
+export const App = () => <Box>Test</Box>;
+`;
+
+    const result = transformWithWarnings(
+      { source, path: "renamed-destructured-default.tsx" },
+      { jscodeshift: j, j, stats: () => {}, report: () => {} },
+      { adapter: fixtureAdapter },
+    );
+
+    expect(result.code).not.toBeNull();
+    // Should preserve the default using nullish coalescing on the original prop name
+    expect(result.code).toContain("props.margin ?? 10");
+    // Should still have the || fallback
+    expect(result.code).toContain("|| 5");
+  });
+});

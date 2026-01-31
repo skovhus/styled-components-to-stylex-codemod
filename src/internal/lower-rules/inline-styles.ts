@@ -266,9 +266,15 @@ export function inlineArrowFunctionBody(j: JSCodeshift, expr: any): ExpressionKi
       return node.map(replace);
     }
     // If identifier matches a destructured binding, replace with props.propName
+    // If there's a default value, wrap with nullish coalescing: props.propName ?? defaultValue
     if (node.type === "Identifier" && bindings.bindings.has(node.name)) {
       const propName = bindings.bindings.get(node.name)!;
-      return j.memberExpression(j.identifier("props"), j.identifier(propName));
+      const memberExpr = j.memberExpression(j.identifier("props"), j.identifier(propName));
+      const defaultValue = bindings.defaults?.get(propName);
+      if (defaultValue) {
+        return j.logicalExpression("??", memberExpr, cloneAstNode(defaultValue) as ExpressionKind);
+      }
+      return memberExpr;
     }
     if (node.type === "MemberExpression" || node.type === "OptionalMemberExpression") {
       node.object = replace(node.object);
