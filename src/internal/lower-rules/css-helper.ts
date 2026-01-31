@@ -186,7 +186,7 @@ export function createCssHelperResolver(args: {
     const rawCss = parsed.rawCss;
     const wrappedRawCss = `& { ${rawCss} }`;
     const stylisAst = compile(wrappedRawCss);
-    const rules = normalizeStylisAstToIR(stylisAst as any, parsed.slots, {
+    const rules = normalizeStylisAstToIR(stylisAst, parsed.slots, {
       rawCss: wrappedRawCss,
     });
     const slotExprById = new Map(parsed.slots.map((s) => [s.index, s.expression]));
