@@ -279,8 +279,27 @@ export function lowerRules(args: {
   }
 
   // Collect static property assignments like `Divider.HEIGHT = 10`
-  // Map: owner name → property name → static value (string | number | boolean)
-  const staticPropertyValues = new Map<string, Map<string, string | number | boolean>>();
+  // We track two things:
+  //   1. All static property owners (for bailing on unsafe member expressions)
+  //   2. Safe static values that can be inlined (top-level, with source position)
+  //
+  // An assignment is only safe to inline if:
+  //   - It's at the top-level (not inside functions, conditionals, loops, etc.)
+  //   - The assignment line is before the styled template line
+  //   - The value is a static literal
+  type StaticPropertyInfo = { value: string | number | boolean; line: number };
+  const staticPropertyValues = new Map<string, Map<string, StaticPropertyInfo>>();
+  const staticPropertyOwners = new Set<string>();
+
+  // Helper to check if a path is at the top-level (direct child of Program body)
+  const isTopLevelStatement = (path: {
+    parentPath?: { node?: { type?: string } } | null;
+  }): boolean => {
+    // The parent of a top-level ExpressionStatement should be a Program
+    const parentNode = path.parentPath?.node;
+    return parentNode?.type === "Program";
+  };
+
   root
     .find(j.ExpressionStatement, {
       expression: {
@@ -300,7 +319,16 @@ export function lowerRules(args: {
       };
       const ownerName = expr.left?.object?.name;
       const propName = expr.left?.property?.name;
-      if (ownerName && propName) {
+      if (ownerName) {
+        // Track all owners for bailing on unsafe member expressions
+        staticPropertyOwners.add(ownerName);
+      }
+      // Only collect safe values from top-level assignments
+      if (!isTopLevelStatement(p)) {
+        return;
+      }
+      const assignmentLine = (p.node as { loc?: { start?: { line?: number } } }).loc?.start?.line;
+      if (ownerName && propName && assignmentLine !== undefined) {
         // Try to extract a static value from the right-hand side
         const staticValue = literalToStaticValue(expr.right);
         if (staticValue !== null) {
@@ -309,7 +337,7 @@ export function lowerRules(args: {
             ownerMap = new Map();
             staticPropertyValues.set(ownerName, ownerMap);
           }
-          ownerMap.set(propName, staticValue);
+          ownerMap.set(propName, { value: staticValue, line: assignmentLine });
         }
       }
     });
@@ -2935,19 +2963,28 @@ export function lowerRules(args: {
               if (!rootInfo || rootInfo.path.length !== 1) {
                 continue;
               }
+              // Only check member expressions that access known static property owners
+              if (!staticPropertyOwners.has(rootInfo.rootName)) {
+                continue;
+              }
+              // Try to resolve to a safe inlinable value
               const ownerMap = staticPropertyValues.get(rootInfo.rootName);
-              if (!ownerMap) {
-                continue;
-              }
               const propName = rootInfo.path[0];
-              // Try to resolve the static property value
-              if (propName && ownerMap.has(propName)) {
+              const propInfo = propName && ownerMap ? ownerMap.get(propName) : undefined;
+              // Only resolve if:
+              // 1. The property exists in our collected safe static values
+              // 2. The assignment line is before the styled template line (safe ordering)
+              const styledTemplateLine = decl.loc?.line;
+              if (
+                propInfo &&
+                styledTemplateLine !== undefined &&
+                propInfo.line < styledTemplateLine
+              ) {
                 // Successfully resolved - replace the expression with the static value
-                const staticValue = ownerMap.get(propName)!;
-                decl.templateExpressions[part.slotId] = staticValueToLiteral(j, staticValue);
+                decl.templateExpressions[part.slotId] = staticValueToLiteral(j, propInfo.value);
                 continue;
               }
-              // Could not resolve - bail
+              // Could not resolve safely - bail
               warnings.push({
                 severity: "error",
                 type: "Unsupported interpolation: member expression",
