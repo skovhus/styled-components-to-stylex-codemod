@@ -1227,12 +1227,7 @@ export function lowerRules(args: {
         }
         if (isCssHelperTaggedTemplate(body.right)) {
           const cssNode = body.right as { quasi: ExpressionKind };
-          const resolved = resolveCssHelperTemplate(
-            cssNode.quasi,
-            paramName,
-            decl.localName,
-            decl.loc,
-          );
+          const resolved = resolveCssHelperTemplate(cssNode.quasi, paramName, decl.loc);
           if (!resolved) {
             bail = true;
             return true;
@@ -1429,7 +1424,7 @@ export function lowerRules(args: {
           return null;
         }
         const tplNode = node as { quasi: ExpressionKind };
-        return resolveCssHelperTemplate(tplNode.quasi, paramName, decl.localName, decl.loc);
+        return resolveCssHelperTemplate(tplNode.quasi, paramName, decl.loc);
       };
 
       if (consIsCss && altIsCss) {
@@ -1878,7 +1873,6 @@ export function lowerRules(args: {
           const defaultResolved = resolveCssHelperTemplate(
             parsed.defaultCssTemplate.quasi,
             null,
-            decl.localName,
             helperFn.loc ?? decl.loc,
           );
           if (!defaultResolved || defaultResolved.dynamicProps.length > 0) {
@@ -1894,12 +1888,7 @@ export function lowerRules(args: {
           mergeStyleObjects(baseFromHelper, defaultResolved.style);
 
           for (const [caseValue, tpl] of parsed.caseCssTemplates.entries()) {
-            const res = resolveCssHelperTemplate(
-              tpl.quasi,
-              null,
-              decl.localName,
-              helperFn.loc ?? decl.loc,
-            );
+            const res = resolveCssHelperTemplate(tpl.quasi, null, helperFn.loc ?? decl.loc);
             if (!res || res.dynamicProps.length > 0) {
               warnings.push({
                 severity: "warning",
