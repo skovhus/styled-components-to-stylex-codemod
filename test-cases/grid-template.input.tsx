@@ -1,9 +1,4 @@
-// @expected-warning: Arrow function: body is not a recognized pattern (expected ternary, logical, call, or member expression)
 import styled from "styled-components";
-
-// Pattern from orbiter/src/components/DiffView/UnifiedDiffView.tsx
-// Arrow function with body as TemplateLiteral (not an expression)
-// The codemod expects ternary, logical, call, or member expression
 
 const Container = styled.div`
   display: grid;

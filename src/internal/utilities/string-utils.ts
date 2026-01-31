@@ -63,3 +63,18 @@ export function isBackgroundImageValue(value: string): boolean {
 export function escapeRegex(s: string): string {
   return s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 }
+
+/**
+ * Normalizes whitespace in a CSS value string.
+ * Collapses all sequences of whitespace (including newlines) to single spaces
+ * and trims leading/trailing whitespace.
+ *
+ * This is useful for multiline template literals that are used for formatting
+ * convenience but should produce compact CSS values.
+ *
+ * @example normalizeWhitespace("  foo\n    bar  ") => "foo bar"
+ * @example normalizeWhitespace("\n  value  \n") => "value"
+ */
+export function normalizeWhitespace(s: string): string {
+  return s.replace(/\s+/g, " ").trim();
+}
