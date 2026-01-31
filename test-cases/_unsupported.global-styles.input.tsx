@@ -1,3 +1,4 @@
+// @expected-warning: createGlobalStyle is not supported in StyleX. Global styles should be handled separately (e.g., in a CSS file or using CSS reset libraries)
 import { createGlobalStyle } from "styled-components";
 
 const GlobalStyle = createGlobalStyle`

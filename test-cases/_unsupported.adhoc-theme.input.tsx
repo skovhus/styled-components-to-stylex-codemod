@@ -1,3 +1,4 @@
+// @expected-warning: ThemeProvider conversion needs to be handled manually
 import styled, { ThemeProvider } from "styled-components";
 
 const theme = {

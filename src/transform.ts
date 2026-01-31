@@ -35,9 +35,15 @@ export type { TransformOptions, TransformResult } from "./internal/transform-typ
  * You'll need to implement the actual transformation logic based on your needs.
  */
 export default function transform(file: FileInfo, api: API, options: Options): string | null {
-  const result = transformWithWarnings(file, api, options as TransformOptions);
-  Logger.logWarnings(result.warnings, file.path);
-  return result.code;
+  try {
+    const result = transformWithWarnings(file, api, options as TransformOptions);
+    Logger.logWarnings(result.warnings, file.path);
+    return result.code;
+  } catch (e) {
+    const msg = `Transform failed: ${e instanceof Error ? e.message : String(e)}`;
+    Logger.logError(msg, file.path);
+    throw e;
+  }
 }
 
 /**

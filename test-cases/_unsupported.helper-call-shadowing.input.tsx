@@ -1,3 +1,4 @@
+// @expected-warning: Unsupported call expression (expected imported helper(...) or imported helper(...)(...))
 import React from "react";
 import styled from "styled-components";
 import { color } from "./lib/helpers";

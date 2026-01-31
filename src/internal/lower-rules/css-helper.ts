@@ -27,7 +27,6 @@ export function createCssHelperResolver(args: {
   resolveCssHelperTemplate: (
     template: any,
     paramName: string | null,
-    ownerName: string,
     loc: { line: number; column: number } | null | undefined,
   ) => {
     style: Record<string, unknown>;
@@ -168,7 +167,6 @@ export function createCssHelperResolver(args: {
   const resolveCssHelperTemplate = (
     template: any,
     paramName: string | null,
-    ownerName: string,
     loc: { line: number; column: number } | null | undefined,
   ): {
     style: Record<string, unknown>;
@@ -179,7 +177,7 @@ export function createCssHelperResolver(args: {
         severity: "warning",
         type,
         loc,
-        context: { localName: ownerName, ...context },
+        context,
       });
       return null;
     };

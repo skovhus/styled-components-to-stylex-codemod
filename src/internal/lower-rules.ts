@@ -25,7 +25,7 @@ import {
   getDeclaratorId,
   setIdentifierTypeAnnotation,
 } from "./utilities/jscodeshift-utils.js";
-import type { Adapter, ImportSource, ImportSpec } from "../adapter.js";
+import type { Adapter, ImportSource, ImportSpec, ResolveValueContext } from "../adapter.js";
 import { tryHandleAnimation } from "./lower-rules/animation.js";
 import { tryHandleInterpolatedBorder } from "./lower-rules/borders.js";
 import {
@@ -1227,12 +1227,7 @@ export function lowerRules(args: {
         }
         if (isCssHelperTaggedTemplate(body.right)) {
           const cssNode = body.right as { quasi: ExpressionKind };
-          const resolved = resolveCssHelperTemplate(
-            cssNode.quasi,
-            paramName,
-            decl.localName,
-            decl.loc,
-          );
+          const resolved = resolveCssHelperTemplate(cssNode.quasi, paramName, decl.loc);
           if (!resolved) {
             bail = true;
             return true;
@@ -1429,7 +1424,7 @@ export function lowerRules(args: {
           return null;
         }
         const tplNode = node as { quasi: ExpressionKind };
-        return resolveCssHelperTemplate(tplNode.quasi, paramName, decl.localName, decl.loc);
+        return resolveCssHelperTemplate(tplNode.quasi, paramName, decl.loc);
       };
 
       if (consIsCss && altIsCss) {
@@ -1878,7 +1873,6 @@ export function lowerRules(args: {
           const defaultResolved = resolveCssHelperTemplate(
             parsed.defaultCssTemplate.quasi,
             null,
-            decl.localName,
             helperFn.loc ?? decl.loc,
           );
           if (!defaultResolved || defaultResolved.dynamicProps.length > 0) {
@@ -1894,12 +1888,7 @@ export function lowerRules(args: {
           mergeStyleObjects(baseFromHelper, defaultResolved.style);
 
           for (const [caseValue, tpl] of parsed.caseCssTemplates.entries()) {
-            const res = resolveCssHelperTemplate(
-              tpl.quasi,
-              null,
-              decl.localName,
-              helperFn.loc ?? decl.loc,
-            );
+            const res = resolveCssHelperTemplate(tpl.quasi, null, helperFn.loc ?? decl.loc);
             if (!res || res.dynamicProps.length > 0) {
               warnings.push({
                 severity: "warning",
@@ -2005,7 +1994,6 @@ export function lowerRules(args: {
         severity: "error",
         type: "Imported CSS helper mixins: cannot determine inherited properties for correct pseudo selector handling",
         loc: decl.loc,
-        context: { localName: decl.localName },
       });
       bail = true;
       break;
@@ -2656,7 +2644,7 @@ export function lowerRules(args: {
               severity: "error",
               type: "Dynamic styles inside pseudo elements (::before/::after) are not supported by StyleX. See https://github.com/facebook/stylex/issues/1396",
               loc: decl.loc,
-              context: { localName: decl.localName, pseudoElement },
+              context: { pseudoElement },
             });
             bail = true;
             break;
@@ -2677,6 +2665,15 @@ export function lowerRules(args: {
               parseExpr,
               applyResolvedPropValue: (prop, value) => applyResolvedPropValue(prop, value, null),
               bailUnsupported: (type) => bailUnsupported(decl, type),
+              bailUnsupportedWithContext: (type, context, loc) => {
+                warnings.push({
+                  severity: "error",
+                  type,
+                  loc: loc ?? decl.loc,
+                  context,
+                });
+                bail = true;
+              },
               toSuffixFromProp,
               variantBuckets,
               variantStyleKeys,
@@ -2761,15 +2758,16 @@ export function lowerRules(args: {
             if (!imp) {
               return null;
             }
-            const res = resolveValue({
+            const resolveValueContext: ResolveValueContext = {
               kind: "importedValue",
               importedName: imp.importedName,
               source: imp.source,
               ...(info.path.length ? { path: info.path.join(".") } : {}),
               filePath,
               loc: getNodeLocStart(expr) ?? undefined,
-            });
-            if (!res) {
+            };
+            const resolveValueResult = resolveValue(resolveValueContext);
+            if (!resolveValueResult) {
               // Adapter returned undefined for an identified imported value - bail
               warnings.push({
                 severity: "error",
@@ -2785,17 +2783,21 @@ export function lowerRules(args: {
               bail = true;
               return { bail: true };
             }
-            const exprAst = parseExpr(res.expr);
+            const exprAst = parseExpr(resolveValueResult.expr);
             if (!exprAst) {
               warnings.push({
                 severity: "error",
                 type: "Adapter resolveValue returned an unparseable value expression",
                 loc: getNodeLocStart(expr),
-                context: { localName: decl.localName, res },
+                context: {
+                  localName: decl.localName,
+                  resolveValueResult,
+                  resolveValueContext,
+                },
               });
               return null;
             }
-            return { resolved: exprAst, imports: res.imports };
+            return { resolved: exprAst, imports: resolveValueResult.imports };
           };
           // Create a resolver for embedded call expressions in compound CSS values
           const resolveCallExpr = (expr: any): { resolved: any; imports?: any[] } | null => {
@@ -2858,7 +2860,12 @@ export function lowerRules(args: {
               if (obj?.type !== "Identifier" || !staticPropertyOwners.has(obj.name)) {
                 continue;
               }
-              bailUnsupported(decl, "Unsupported interpolation: member expression");
+              warnings.push({
+                severity: "error",
+                type: "Unsupported interpolation: member expression",
+                loc: getNodeLocStart(baseExpr) ?? decl.loc,
+              });
+              bail = true;
               break;
             }
             if (bail) {
@@ -3399,11 +3406,20 @@ export function lowerRules(args: {
             // Adapter-resolved StyleX style objects are emitted as additional stylex.props args.
             // This is only safe for base selector declarations.
             if (rule.selector.trim() !== "&" || (rule.atRuleStack ?? []).length) {
+              const resolveCallMeta =
+                res.resolveCallContext && res.resolveCallResult
+                  ? {
+                      resolveCallContext: res.resolveCallContext,
+                      resolveCallResult: res.resolveCallResult,
+                    }
+                  : undefined;
               warnings.push({
                 severity: "warning",
                 type: "Adapter resolved StyleX styles cannot be applied under nested selectors/at-rules",
                 loc,
-                context: { selector: rule.selector },
+                context: resolveCallMeta
+                  ? { selector: rule.selector, ...resolveCallMeta }
+                  : { selector: rule.selector },
               });
               bail = true;
               break;
@@ -3413,11 +3429,20 @@ export function lowerRules(args: {
             }
             const exprAst = parseExpr(res.expr);
             if (!exprAst) {
+              const resolveCallMeta =
+                res.resolveCallContext && res.resolveCallResult
+                  ? {
+                      resolveCallContext: res.resolveCallContext,
+                      resolveCallResult: res.resolveCallResult,
+                    }
+                  : undefined;
               warnings.push({
                 severity: "error",
                 type: "Adapter resolveCall returned an unparseable styles expression",
                 loc: decl.loc,
-                context: { localName: decl.localName, res },
+                context: resolveCallMeta
+                  ? { localName: decl.localName, res, ...resolveCallMeta }
+                  : { localName: decl.localName, res },
               });
               continue;
             }
@@ -3442,11 +3467,20 @@ export function lowerRules(args: {
 
             const exprAst = parseExpr(wrappedExpr);
             if (!exprAst) {
+              const resolveCallMeta =
+                res.resolveCallContext && res.resolveCallResult
+                  ? {
+                      resolveCallContext: res.resolveCallContext,
+                      resolveCallResult: res.resolveCallResult,
+                    }
+                  : undefined;
               warnings.push({
                 severity: "error",
-                type: "Adapter resolveCall returned an unparseable styles expression",
+                type: "Adapter resolveCall returned an unparseable value expression",
                 loc: decl.loc,
-                context: { localName: decl.localName },
+                context: resolveCallMeta
+                  ? { localName: decl.localName, res, ...resolveCallMeta }
+                  : { localName: decl.localName, res },
               });
               continue;
             }
@@ -3541,7 +3575,7 @@ export function lowerRules(args: {
                   severity: "error",
                   type: "Adapter resolveCall returned an unparseable styles expression",
                   loc,
-                  context: { localName: decl.localName },
+                  context: { localName: decl.localName, variant: v },
                 });
                 continue;
               }
@@ -4610,7 +4644,6 @@ export function lowerRules(args: {
               if (bodyType === "ConditionalExpression") {
                 return {
                   type: "Arrow function: conditional branches could not be resolved to static or theme values",
-                  context: { property: d.property },
                 };
               }
               if (bodyType === "LogicalExpression") {
@@ -4619,7 +4652,6 @@ export function lowerRules(args: {
                   return {
                     type: "Arrow function: logical expression pattern not supported",
                     context: {
-                      property: d.property,
                       operator: op,
                       hint: "Expected: props.x && 'css-string'",
                     },
@@ -4634,7 +4666,7 @@ export function lowerRules(args: {
               }
               if (bodyType === "CallExpression") {
                 return {
-                  type: "Arrow function: helper call could not be resolved by adapter",
+                  type: "Arrow function: helper call body is not supported",
                   context: { property: d.property },
                 };
               }

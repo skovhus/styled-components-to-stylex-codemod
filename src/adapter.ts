@@ -307,6 +307,18 @@ export interface Adapter {
   resolveCall: (context: CallResolveContext) => CallResolveResult | undefined;
 
   /**
+   * Resolver for interpolations used in selector position.
+   *
+   * This handles patterns like `${screenSize.phone} { ... }` where an imported
+   * value is used as a CSS selector (typically a media query helper).
+   *
+   * Return:
+   * - `{ kind: "media", expr, imports }` when the interpolation resolves to a media query
+   * - `undefined` to bail/skip the file
+   */
+  resolveSelector: (context: SelectorResolveContext) => SelectorResolveResult | undefined;
+
+  /**
    * Called for exported styled components to determine their external interface.
    *
    * Return:
@@ -333,18 +345,6 @@ export interface Adapter {
    * ```
    */
   styleMerger: StyleMergerConfig | null;
-
-  /**
-   * Resolver for interpolations used in selector position.
-   *
-   * This handles patterns like `${screenSize.phone} { ... }` where an imported
-   * value is used as a CSS selector (typically a media query helper).
-   *
-   * Return:
-   * - `{ kind: "media", expr, imports }` when the interpolation resolves to a media query
-   * - `undefined` to bail/skip the file
-   */
-  resolveSelector: (context: SelectorResolveContext) => SelectorResolveResult | undefined;
 }
 
 // ────────────────────────────────────────────────────────────────────────────

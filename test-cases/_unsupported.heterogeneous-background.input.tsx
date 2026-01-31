@@ -1,3 +1,4 @@
+// @expected-warning: Heterogeneous background values (mix of gradients and colors) not currently supported
 import styled from "styled-components";
 
 // This pattern mixes gradients (which need backgroundImage) and colors

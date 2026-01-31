@@ -1,3 +1,4 @@
+// @expected-warning: Unsupported interpolation: member expression
 // CSS helper object members used outside styled templates should bail
 import styled, { css } from "styled-components";
 

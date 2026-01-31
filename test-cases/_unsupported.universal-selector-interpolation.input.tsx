@@ -1,3 +1,4 @@
+// @expected-warning: Arrow function: logical expression pattern not supported
 import styled from "styled-components";
 
 const StyledLink = styled.a<{ $allowTextSelection: boolean }>`

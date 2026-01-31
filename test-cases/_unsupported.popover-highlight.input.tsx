@@ -1,3 +1,4 @@
+// @expected-warning: Unsupported selector: interpolated pseudo selector
 import styled, { css } from "styled-components";
 import { Text } from "./lib/text";
 import { ExternalComponent as Link } from "./lib/external-component";

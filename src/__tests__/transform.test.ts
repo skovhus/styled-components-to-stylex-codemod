@@ -121,6 +121,19 @@ function readTestCase(
   return { input, output, inputPath: resolvedInputPath, outputPath: resolvedOutputPath };
 }
 
+function getExpectedWarningType(source: string, filePath: string): string {
+  const firstLine = source.split(/\r?\n/, 1)[0] ?? "";
+  const match = firstLine.match(/^\/\/\s*@expected-warning:\s*(.+)\s*$/);
+  if (!match) {
+    throw new Error(`Missing expected warning annotation in ${filePath}`);
+  }
+  const expected = match[1];
+  if (!expected) {
+    throw new Error(`Empty expected warning annotation in ${filePath}`);
+  }
+  return expected;
+}
+
 type TestTransformOptions = Partial<Omit<TransformOptions, "adapter">> & {
   adapter?: TransformOptions["adapter"];
 };
@@ -224,6 +237,7 @@ describe("_unsupported fixtures", () => {
   it.each(unsupportedInputs)("%s should bail out", (unsupportedInput) => {
     const inputPath = join(testCasesDir, unsupportedInput);
     const input = readFileSync(inputPath, "utf-8");
+    const expectedWarning = getExpectedWarningType(input, inputPath);
     const result = transformWithWarnings(
       { source: input, path: inputPath },
       { jscodeshift: j, j, stats: () => {}, report: () => {} },
@@ -231,6 +245,7 @@ describe("_unsupported fixtures", () => {
     );
     expect(result.code).toBeNull();
     expect(result.warnings).toHaveLength(1);
+    expect(result.warnings[0]?.type).toBe(expectedWarning);
   });
 });
 

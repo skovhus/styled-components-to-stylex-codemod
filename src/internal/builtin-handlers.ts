@@ -55,6 +55,8 @@ export type HandlerResult =
       type: "resolvedValue";
       expr: string;
       imports: ImportSpec[];
+      resolveCallContext?: CallResolveContext;
+      resolveCallResult?: CallResolveResult;
     }
   | {
       /**
@@ -66,6 +68,8 @@ export type HandlerResult =
       type: "resolvedStyles";
       expr: string;
       imports: ImportSpec[];
+      resolveCallContext?: CallResolveContext;
+      resolveCallResult?: CallResolveResult;
     }
   | {
       /**
@@ -554,39 +558,57 @@ function callArgsFromNode(args: unknown, propsParamName?: string): CallResolveCo
   return args.map((arg) => callArgFromNode(arg, propsParamName));
 }
 
+type ResolveImportedHelperCallResult =
+  | {
+      kind: "resolved";
+      result: CallResolveResult;
+      resolveCallContext: CallResolveContext;
+      resolveCallResult: CallResolveResult;
+    }
+  | { kind: "unresolved"; resolveCallContext: CallResolveContext; resolveCallResult: undefined }
+  | { kind: "keepOriginal" };
+
 function resolveImportedHelperCall(
   callExpr: CallExpressionNode,
   ctx: InternalHandlerContext,
   propsParamName?: string,
-): CallResolveResult | "keepOriginal" | "unresolved" {
+): ResolveImportedHelperCallResult {
   const callee = callExpr.callee;
   if (!callee || typeof callee !== "object") {
-    return "keepOriginal";
+    return { kind: "keepOriginal" };
   }
   const calleeType = (callee as { type?: string }).type;
   if (calleeType !== "Identifier") {
-    return "keepOriginal";
+    return { kind: "keepOriginal" };
   }
   const calleeIdent = (callee as { name?: string }).name;
   if (typeof calleeIdent !== "string") {
-    return "keepOriginal";
+    return { kind: "keepOriginal" };
   }
   const imp = ctx.resolveImport(calleeIdent, callee);
   const calleeImportedName = imp?.importedName;
   const calleeSource = imp?.source;
   if (!calleeImportedName || !calleeSource) {
-    return "keepOriginal";
+    return { kind: "keepOriginal" };
   }
   const args = callArgsFromNode(callExpr.arguments, propsParamName);
   const loc = callExpr.loc?.start;
-  const res = ctx.resolveCall({
+  const resolveCallContext: CallResolveContext = {
     callSiteFilePath: ctx.filePath,
     calleeImportedName,
     calleeSource,
     args,
     ...(loc ? { loc: { line: loc.line, column: loc.column } } : {}),
-  });
-  return res ?? "unresolved";
+  };
+  const res = ctx.resolveCall(resolveCallContext);
+  return res
+    ? {
+        kind: "resolved",
+        result: res,
+        resolveCallContext,
+        resolveCallResult: res,
+      }
+    : { kind: "unresolved", resolveCallContext, resolveCallResult: undefined };
 }
 
 function tryResolveCallExpression(
@@ -599,10 +621,24 @@ function tryResolveCallExpression(
   }
 
   const simple = resolveImportedHelperCall(expr, ctx);
-  if (simple !== "keepOriginal" && simple !== "unresolved") {
-    return simple.usage === "props"
-      ? { type: "resolvedStyles", expr: simple.expr, imports: simple.imports }
-      : { type: "resolvedValue", expr: simple.expr, imports: simple.imports };
+  if (simple.kind === "resolved") {
+    const payload = {
+      resolveCallContext: simple.resolveCallContext,
+      resolveCallResult: simple.resolveCallResult,
+    };
+    return simple.result.usage === "props"
+      ? {
+          type: "resolvedStyles",
+          expr: simple.result.expr,
+          imports: simple.result.imports,
+          ...payload,
+        }
+      : {
+          type: "resolvedValue",
+          expr: simple.result.expr,
+          imports: simple.result.imports,
+          ...payload,
+        };
   }
 
   // Support helper calls that return a function which is immediately invoked with the props param:
@@ -615,8 +651,8 @@ function tryResolveCallExpression(
     if (outerArgs.length === 1) {
       const innerCall = expr.callee;
       const innerRes = resolveImportedHelperCall(innerCall, ctx);
-      if (innerRes !== "keepOriginal" && innerRes !== "unresolved") {
-        if (innerRes.usage === "create") {
+      if (innerRes.kind === "resolved") {
+        if (innerRes.result.usage === "create") {
           return {
             type: "keepOriginal",
             reason:
@@ -629,12 +665,18 @@ function tryResolveCallExpression(
             },
           };
         }
-        return { type: "resolvedStyles", expr: innerRes.expr, imports: innerRes.imports };
+        return {
+          type: "resolvedStyles",
+          expr: innerRes.result.expr,
+          imports: innerRes.result.imports,
+          resolveCallContext: innerRes.resolveCallContext,
+          resolveCallResult: innerRes.resolveCallResult,
+        };
       }
     }
   }
 
-  if (simple === "unresolved") {
+  if (simple.kind === "unresolved") {
     // This is a supported helper-call shape but the adapter chose not to resolve it.
     // Treat as unsupported so the caller can bail and surface a warning.
     const callee = expr.callee;
@@ -697,13 +739,27 @@ function tryResolveArrowFnHelperCallWithThemeArg(
   }
 
   const simple = resolveImportedHelperCall(body, ctx, propsParamName);
-  if (simple !== "keepOriginal" && simple !== "unresolved") {
-    return simple.usage === "props"
-      ? { type: "resolvedStyles", expr: simple.expr, imports: simple.imports }
-      : { type: "resolvedValue", expr: simple.expr, imports: simple.imports };
+  if (simple.kind === "resolved") {
+    const payload = {
+      resolveCallContext: simple.resolveCallContext,
+      resolveCallResult: simple.resolveCallResult,
+    };
+    return simple.result.usage === "props"
+      ? {
+          type: "resolvedStyles",
+          expr: simple.result.expr,
+          imports: simple.result.imports,
+          ...payload,
+        }
+      : {
+          type: "resolvedValue",
+          expr: simple.result.expr,
+          imports: simple.result.imports,
+          ...payload,
+        };
   }
 
-  if (simple === "unresolved") {
+  if (simple.kind === "unresolved") {
     // This is a supported helper-call shape but the adapter chose not to resolve it.
     // Treat as unsupported so the caller can bail and surface a warning.
     const callee = body.callee;
@@ -834,10 +890,10 @@ function tryResolveConditionalValue(
       const call = b;
       const resolveAdapterCall = (c: CallExpressionNode): CallResolveResult | undefined => {
         const res = resolveImportedHelperCall(c, ctx);
-        if (res === "keepOriginal" || res === "unresolved") {
+        if (res.kind !== "resolved") {
           return undefined;
         }
-        return res;
+        return res.result;
       };
 
       // helper(...)
