@@ -4,6 +4,7 @@ import {
   getMemberPathFromIdentifier,
   literalToStaticValue,
 } from "../utilities/jscodeshift-utils.js";
+import { normalizeWhitespace } from "../utilities/string-utils.js";
 import { splitDirectionalProperty } from "../stylex-shorthands.js";
 import { addPropComments } from "./comments.js";
 
@@ -130,7 +131,22 @@ export function tryHandleInterpolatedStringValue(args: {
   const partsOnly = d.value.parts ?? [];
   if (partsOnly.length === 1 && partsOnly[0]?.kind === "slot") {
     const expr = (decl as any).templateExpressions[partsOnly[0].slotId] as any;
-    if (!expr || expr.type === "ArrowFunctionExpression") {
+    if (!expr) {
+      return false;
+    }
+    // Handle arrow functions with static bodies (e.g., `() => "value"` or `() => \`template\``)
+    // These can be simplified to their static value.
+    if (expr.type === "ArrowFunctionExpression") {
+      const staticValue = literalToStaticValue(expr);
+      if (staticValue !== null && typeof staticValue === "string") {
+        // Normalize whitespace for multiline template literals used for formatting convenience
+        const normalizedValue = normalizeWhitespace(staticValue);
+        for (const out of cssDeclarationToStylexDeclarations(d)) {
+          (styleObj as any)[out.prop] = normalizedValue;
+        }
+        return true;
+      }
+      // Arrow functions with dynamic bodies are handled elsewhere
       return false;
     }
     // Give the dynamic resolution pipeline a chance to resolve call-expressions (e.g. helper lookups).

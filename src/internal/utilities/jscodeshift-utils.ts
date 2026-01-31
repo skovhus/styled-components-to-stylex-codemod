@@ -420,6 +420,7 @@ export function collectIdentifiers(node: unknown, out: Set<string>): void {
  * - Literal (ESTree/recast AST)
  * - TemplateLiteral without expressions (static template strings)
  * - TaggedTemplateExpression with css tag (styled-components css helper)
+ * - ArrowFunctionExpression with no params and a static body (e.g., `() => "value"` or `() => \`value\``)
  *
  * Returns null for non-literal or dynamic nodes.
  */
@@ -457,6 +458,16 @@ export function literalToStaticValue(node: unknown): string | number | boolean |
     const n = node as { tag?: { type?: string; name?: string }; quasi?: unknown };
     if (n.tag?.type === "Identifier" && n.tag.name === "css") {
       return literalToStaticValue(n.quasi);
+    }
+  }
+  // Handle ArrowFunctionExpression with no params and static body
+  // e.g., `() => "value"` or `() => \`static template\``
+  if (type === "ArrowFunctionExpression") {
+    const n = node as { params?: unknown[]; body?: unknown };
+    // Only handle zero-param functions (functions with params need runtime evaluation)
+    if (!n.params || n.params.length === 0) {
+      // Recursively check if the body is a static value
+      return literalToStaticValue(n.body);
     }
   }
   return null;
