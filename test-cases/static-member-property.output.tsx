@@ -6,7 +6,11 @@ export const Divider = (props: { style?: React.CSSProperties }) => {
   return <DividerContainer role="separator" style={props.style} />;
 };
 
+// Multiple static properties on the same component
 Divider.HEIGHT = 10;
+
+Divider.WIDTH = 200;
+Divider.BG_COLOR = "#e0e0e0";
 type DividerContainerProps = Omit<React.ComponentProps<"div">, "className">;
 
 function DividerContainer(props: DividerContainerProps) {
@@ -27,5 +31,7 @@ const styles = stylex.create({
     paddingBlock: "5px",
     paddingInline: 0,
     height: "10px",
+    width: "200px",
+    backgroundColor: "#e0e0e0",
   },
 });
