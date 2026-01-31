@@ -1,6 +1,9 @@
 import type { StyledDecl } from "../transform-types.js";
 import { cssDeclarationToStylexDeclarations } from "../css-prop-mapping.js";
-import { getMemberPathFromIdentifier } from "../utilities/jscodeshift-utils.js";
+import {
+  getMemberPathFromIdentifier,
+  literalToStaticValue,
+} from "../utilities/jscodeshift-utils.js";
 import { splitDirectionalProperty } from "../stylex-shorthands.js";
 
 export function extractStaticParts(
@@ -277,14 +280,12 @@ function buildInterpolatedTemplate(args: {
         exprs.push(resolved.resolved);
         continue;
       }
-      // Handle numeric literals by inlining them as static text
-      if (
-        expr.type === "NumericLiteral" ||
-        (expr.type === "Literal" && typeof expr.value === "number")
-      ) {
-        const numValue = String(expr.value);
-        q += numValue;
-        fullStaticValue += numValue;
+      // Handle literals (string/number) by inlining them as static text
+      const literalValue = literalToStaticValue(expr);
+      if (literalValue !== null && typeof literalValue !== "boolean") {
+        const strValue = String(literalValue);
+        q += strValue;
+        fullStaticValue += strValue;
         continue;
       }
       quasis.push(j.templateElement({ raw: q, cooked: q }, false));

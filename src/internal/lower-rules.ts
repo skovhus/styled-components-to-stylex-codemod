@@ -24,6 +24,7 @@ import {
   isFunctionNode,
   getDeclaratorId,
   setIdentifierTypeAnnotation,
+  staticValueToLiteral,
 } from "./utilities/jscodeshift-utils.js";
 import type { Adapter, ImportSource, ImportSpec, ResolveValueContext } from "../adapter.js";
 import { tryHandleAnimation } from "./lower-rules/animation.js";
@@ -2951,13 +2952,10 @@ export function lowerRules(args: {
               const resolvedValue = propName ? ownerMap.get(propName) : undefined;
               if (resolvedValue !== undefined) {
                 // Replace the template expression with a literal value
-                const literalNode =
-                  typeof resolvedValue === "string"
-                    ? j.stringLiteral(resolvedValue)
-                    : typeof resolvedValue === "boolean"
-                      ? j.booleanLiteral(resolvedValue)
-                      : j.numericLiteral(resolvedValue as number);
-                decl.templateExpressions[part.slotId] = literalNode as any;
+                decl.templateExpressions[part.slotId] = staticValueToLiteral(
+                  j,
+                  resolvedValue,
+                ) as any;
                 continue;
               }
               // Value not resolvable - bail
