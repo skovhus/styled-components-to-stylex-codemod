@@ -16,7 +16,11 @@ import { emitStyleMerging } from "./style-merger.js";
 import type { ExportInfo, ExpressionKind, InlineStyleProp } from "./types.js";
 import { TAG_TO_HTML_ELEMENT, VOID_TAGS } from "./type-helpers.js";
 import type { VariantDimension } from "../transform-types.js";
-import { buildStyleFnConditionExpr, collectIdentifiers } from "../utilities/jscodeshift-utils.js";
+import {
+  buildStyleFnConditionExpr,
+  collectIdentifiers,
+  isIdentifierNode,
+} from "../utilities/jscodeshift-utils.js";
 
 type TsTypeAnnotationInput = Parameters<JSCodeshift["tsTypeAnnotation"]>[0];
 type BlockStatementBody = Parameters<JSCodeshift["blockStatement"]>[0];
@@ -230,8 +234,8 @@ export class WrapperEmitter {
     if (!n) {
       return null;
     }
-    if (n.type === "Identifier") {
-      return (n as any).name ?? null;
+    if (isIdentifierNode(n)) {
+      return n.name;
     }
     if (n.type === "TSQualifiedName") {
       const left = this.stringifyTsTypeName((n as any).left);
@@ -875,8 +879,8 @@ export class WrapperEmitter {
       if (!node) {
         return;
       }
-      if (node.type === "Identifier") {
-        expandedDestructureProps.add((node as any).name);
+      if (isIdentifierNode(node)) {
+        expandedDestructureProps.add(node.name);
         return;
       }
       if (
