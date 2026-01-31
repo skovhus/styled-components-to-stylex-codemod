@@ -16,7 +16,11 @@ import { emitStyleMerging } from "./style-merger.js";
 import type { ExportInfo, ExpressionKind, InlineStyleProp } from "./types.js";
 import { TAG_TO_HTML_ELEMENT, VOID_TAGS } from "./type-helpers.js";
 import type { VariantDimension } from "../transform-types.js";
-import { buildStyleFnConditionExpr, collectIdentifiers } from "../utilities/jscodeshift-utils.js";
+import {
+  buildStyleFnConditionExpr,
+  collectIdentifiers,
+  unwrapTransparentExpression,
+} from "../utilities/jscodeshift-utils.js";
 
 type TsTypeAnnotationInput = Parameters<JSCodeshift["tsTypeAnnotation"]>[0];
 type BlockStatementBody = Parameters<JSCodeshift["blockStatement"]>[0];
@@ -1645,21 +1649,13 @@ export class WrapperEmitter {
         return null;
       }
       const unwrap = (node: ExpressionKind): ExpressionKind => {
-        let cur = node;
+        let cur = unwrapTransparentExpression(node) as ExpressionKind;
         while (cur && typeof cur === "object") {
           const t = (cur as { type?: string }).type;
-          if (t === "ParenthesizedExpression") {
-            cur = (cur as any).expression as ExpressionKind;
-            continue;
-          }
-          if (t === "TSAsExpression" || t === "TSNonNullExpression") {
-            cur = (cur as any).expression as ExpressionKind;
-            continue;
-          }
           if (t === "TemplateLiteral") {
             const exprs = (cur as any).expressions ?? [];
             if (exprs.length === 1) {
-              cur = exprs[0] as ExpressionKind;
+              cur = unwrapTransparentExpression(exprs[0]) as ExpressionKind;
               continue;
             }
           }

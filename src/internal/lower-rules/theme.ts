@@ -5,6 +5,7 @@ import {
   getFunctionBodyExpr,
   getMemberPathFromIdentifier,
   getNodeLocStart,
+  unwrapTransparentExpression,
 } from "../utilities/jscodeshift-utils.js";
 
 export function createThemeResolvers(args: {
@@ -81,26 +82,9 @@ export function createThemeResolvers(args: {
     }
     const paramName =
       expr.params?.[0]?.type === "Identifier" ? (expr.params[0].name as string) : null;
-    const unwrap = (node: any): any => {
-      let cur = node;
-      while (cur) {
-        if (cur.type === "ParenthesizedExpression") {
-          cur = cur.expression;
-          continue;
-        }
-        if (cur.type === "TSAsExpression" || cur.type === "TSNonNullExpression") {
-          cur = cur.expression;
-          continue;
-        }
-        if (cur.type === "ChainExpression") {
-          cur = cur.expression;
-          continue;
-        }
-        break;
-      }
-      return cur;
-    };
-    const unwrapped = unwrap(bodyExpr);
+    const unwrapped = unwrapTransparentExpression(bodyExpr) as {
+      type?: string;
+    } | null;
     if (
       !unwrapped ||
       (unwrapped.type !== "MemberExpression" && unwrapped.type !== "OptionalMemberExpression")

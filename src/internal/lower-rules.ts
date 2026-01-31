@@ -24,6 +24,7 @@ import {
   isFunctionNode,
   getDeclaratorId,
   setIdentifierTypeAnnotation,
+  unwrapTransparentExpression,
 } from "./utilities/jscodeshift-utils.js";
 import type { Adapter, ImportSource, ImportSpec, ResolveValueContext } from "../adapter.js";
 import { tryHandleAnimation } from "./lower-rules/animation.js";
@@ -298,30 +299,6 @@ export function lowerRules(args: {
       }
     }
   };
-  const unwrapStaticAssignmentValue = (node: unknown): unknown => {
-    let cur = node;
-    while (cur && typeof cur === "object") {
-      const typed = cur as { type?: string; expression?: unknown };
-      if (typed.type === "ParenthesizedExpression") {
-        cur = typed.expression;
-        continue;
-      }
-      if (
-        typed.type === "TSAsExpression" ||
-        typed.type === "TSNonNullExpression" ||
-        typed.type === "TSTypeAssertion"
-      ) {
-        cur = typed.expression;
-        continue;
-      }
-      if (typed.type === "ChainExpression") {
-        cur = typed.expression;
-        continue;
-      }
-      break;
-    }
-    return cur;
-  };
   root
     .find(j.ExpressionStatement, {
       expression: {
@@ -355,7 +332,7 @@ export function lowerRules(args: {
       if (staticMemberConflicts.has(key)) {
         return;
       }
-      const rightValue = unwrapStaticAssignmentValue(expr.right);
+      const rightValue = unwrapTransparentExpression(expr.right);
       const staticValue = literalToStaticValue(rightValue);
       if (staticValue === null || typeof staticValue === "boolean") {
         markStaticMemberConflict(ownerName, propName);
@@ -3490,11 +3467,8 @@ export function lowerRules(args: {
                   try {
                     const jParse = api.jscodeshift.withParser("tsx");
                     const program = jParse(`(${exprSource});`);
-                    const stmt = program.find(jParse.ExpressionStatement).nodes()[0];
-                    let expr = stmt?.expression ?? null;
-                    while (expr?.type === "ParenthesizedExpression") {
-                      expr = expr.expression;
-                    }
+                    const stmt = program.find(jParse.ExpressionStatement).nodes()[0] as any;
+                    let expr = unwrapTransparentExpression(stmt?.expression ?? null) as any;
                     // Remove extra.parenthesized flag that causes recast to add parentheses
                     const exprWithExtra = expr as ExpressionKind & {
                       extra?: { parenthesized?: boolean; parenStart?: number };

@@ -353,6 +353,35 @@ const isReturnStatementNode = (
   isAstNode(node) && node.type === "ReturnStatement";
 
 /**
+ * Unwraps "transparent" wrapper expressions to their inner expression.
+ *
+ * Handles:
+ * - ParenthesizedExpression
+ * - Type assertions (TSAsExpression / TSTypeAssertion / TypeCastExpression)
+ * - Non-null assertions (TSNonNullExpression)
+ * - Optional chaining wrapper (ChainExpression)
+ */
+export function unwrapTransparentExpression(node: unknown): unknown {
+  let cur = node;
+  while (cur && typeof cur === "object") {
+    const typed = cur as { type?: string; expression?: unknown };
+    if (
+      typed.type === "ParenthesizedExpression" ||
+      typed.type === "TSAsExpression" ||
+      typed.type === "TSNonNullExpression" ||
+      typed.type === "TSTypeAssertion" ||
+      typed.type === "TypeCastExpression" ||
+      typed.type === "ChainExpression"
+    ) {
+      cur = typed.expression;
+      continue;
+    }
+    break;
+  }
+  return cur;
+}
+
+/**
  * Extracts the expression from an arrow/function expression body.
  * - For expression bodies: returns the expression directly
  * - For block bodies: returns the argument of the return statement,

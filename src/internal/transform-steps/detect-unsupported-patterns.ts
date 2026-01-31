@@ -1,29 +1,13 @@
 import { CONTINUE, returnResult, type StepResult } from "../transform-types.js";
 import { TransformContext } from "../transform-context.js";
 import { isStyledTag } from "../transform/css-helpers.js";
+import { unwrapTransparentExpression } from "../utilities/jscodeshift-utils.js";
 
 /**
  * Detects unsupported template patterns (component selectors, specificity hacks) and bails with warnings.
  */
 export function detectUnsupportedPatternsStep(ctx: TransformContext): StepResult {
   const { root, j, warnings, styledLocalNames } = ctx;
-
-  const unwrapExpression = (expr: any): any => {
-    let current = expr;
-    while (current) {
-      if (
-        current.type === "TSAsExpression" ||
-        current.type === "TSNonNullExpression" ||
-        current.type === "TypeCastExpression" ||
-        current.type === "ParenthesizedExpression"
-      ) {
-        current = current.expression;
-        continue;
-      }
-      break;
-    }
-    return current;
-  };
 
   const collectStyledComponentNames = (): Set<string> => {
     const names = new Set<string>();
@@ -280,11 +264,11 @@ export function detectUnsupportedPatternsStep(ctx: TransformContext): StepResult
         }
         const expressions = p.node.quasi?.expressions ?? [];
         for (const expr of expressions) {
-          const base = unwrapExpression(expr);
+          const base = unwrapTransparentExpression(expr) as any;
           if (base?.type !== "MemberExpression" && base?.type !== "OptionalMemberExpression") {
             continue;
           }
-          const obj = unwrapExpression(base.object);
+          const obj = unwrapTransparentExpression(base.object) as any;
           if (obj?.type !== "Identifier") {
             continue;
           }
