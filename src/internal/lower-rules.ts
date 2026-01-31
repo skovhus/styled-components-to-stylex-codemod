@@ -80,6 +80,13 @@ export type DescendantOverride = {
 
 type ExpressionKind = Parameters<JSCodeshift["expressionStatement"]>[0];
 
+type MemberAssignment = {
+  index: number;
+  value: string | number | boolean | null;
+};
+
+type MemberAssignmentMap = Map<string, Map<string, MemberAssignment[]>>;
+
 /**
  * Type for variant test condition info
  */
@@ -299,6 +306,86 @@ export function lowerRules(args: {
         staticPropertyOwners.add(ownerName);
       }
     });
+
+  const memberAssignments: MemberAssignmentMap = new Map();
+  const recordMemberAssignment = (args: {
+    ownerName: string;
+    propertyName: string;
+    index: number;
+    value: string | number | boolean | null;
+  }): void => {
+    const ownerMap = memberAssignments.get(args.ownerName) ?? new Map();
+    const propAssignments = ownerMap.get(args.propertyName) ?? [];
+    propAssignments.push({ index: args.index, value: args.value });
+    ownerMap.set(args.propertyName, propAssignments);
+    memberAssignments.set(args.ownerName, ownerMap);
+  };
+  root.find(j.ExpressionStatement).forEach((p) => {
+    const parentNode = p.parentPath?.node;
+    if (!parentNode || parentNode.type !== "Program") {
+      return;
+    }
+    const stmtIndex = typeof p.name === "number" ? p.name : null;
+    if (stmtIndex === null) {
+      return;
+    }
+    const expr = p.node.expression;
+    if (!expr || expr.type !== "AssignmentExpression" || expr.operator !== "=") {
+      return;
+    }
+    const left = expr.left;
+    if (!left || left.type !== "MemberExpression" || left.computed) {
+      return;
+    }
+    const obj = left.object;
+    const prop = left.property;
+    if (!isIdentifierNode(obj) || !isIdentifierNode(prop)) {
+      return;
+    }
+    recordMemberAssignment({
+      ownerName: obj.name,
+      propertyName: prop.name,
+      index: stmtIndex,
+      value: literalToStaticValue(expr.right),
+    });
+  });
+
+  const isSafeStaticMemberInterpolation = (
+    expr: unknown,
+    declIndex: number | undefined,
+  ): boolean => {
+    if (typeof declIndex !== "number") {
+      return false;
+    }
+    if (!isAstNode(expr) || expr.type !== "MemberExpression") {
+      return false;
+    }
+    const info = extractRootAndPath(expr);
+    if (!info || info.path.length !== 1) {
+      return false;
+    }
+    const propName = info.path[0];
+    if (!propName) {
+      return false;
+    }
+    const assignments = memberAssignments.get(info.rootName)?.get(propName);
+    if (!assignments || assignments.length === 0) {
+      return false;
+    }
+    let latest: MemberAssignment | null = null;
+    for (const assignment of assignments) {
+      if (!latest || assignment.index > latest.index) {
+        latest = assignment;
+      }
+    }
+    if (!latest) {
+      return false;
+    }
+    if (latest.index >= declIndex) {
+      return false;
+    }
+    return latest.value !== null;
+  };
 
   // ─────────────────────────────────────────────────────────────────────────────
   // Helper: Extract static prefix/suffix from interpolated CSS values
@@ -2924,7 +3011,10 @@ export function lowerRules(args: {
                 continue;
               }
               const obj = baseExpr.object;
-              if (obj?.type !== "Identifier" || !staticPropertyOwners.has(obj.name)) {
+              if (!isIdentifierNode(obj) || !staticPropertyOwners.has(obj.name)) {
+                continue;
+              }
+              if (isSafeStaticMemberInterpolation(baseExpr, decl.declIndex)) {
                 continue;
               }
               warnings.push({
