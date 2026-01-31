@@ -277,11 +277,44 @@ export function lowerRules(args: {
     }
   }
 
-  // Collect identifiers that have static property assignments like `Divider.HEIGHT = 10`
-  // We bail on any member expression interpolation that references these because:
-  //   1. StyleX requires static values in stylex.create() - runtime references don't work
-  //   2. The reference might be to an imported component, which StyleX can't evaluate
+  // Collect locally-defined identifiers (functions, variables, classes)
+  // These are safe to inline static properties from since we can see the value.
+  const locallyDefinedIdentifiers = new Set<string>();
+  root.find(j.FunctionDeclaration).forEach((p) => {
+    const name = (p.node.id as { name?: string } | null)?.name;
+    if (name) {
+      locallyDefinedIdentifiers.add(name);
+    }
+  });
+  root.find(j.VariableDeclarator).forEach((p) => {
+    const id = p.node.id as { type?: string; name?: string } | null;
+    if (id?.type === "Identifier" && id.name) {
+      locallyDefinedIdentifiers.add(id.name);
+    }
+  });
+  root.find(j.ClassDeclaration).forEach((p) => {
+    const name = (p.node.id as { name?: string } | null)?.name;
+    if (name) {
+      locallyDefinedIdentifiers.add(name);
+    }
+  });
+
+  // Collect static property assignments like `Divider.HEIGHT = 10`
+  // We track:
+  //   - All owners with static property assignments (for bailing on imported ones)
+  //   - Safe inlinable values for locally-defined owners (top-level, with line info)
+  type StaticPropertyInfo = { value: string | number | boolean; line: number };
+  const staticPropertyValues = new Map<string, Map<string, StaticPropertyInfo>>();
   const staticPropertyOwners = new Set<string>();
+
+  // Helper to check if a path is at the top-level (direct child of Program body)
+  const isTopLevelStatement = (path: {
+    parentPath?: { node?: { type?: string } } | null;
+  }): boolean => {
+    const parentNode = path.parentPath?.node;
+    return parentNode?.type === "Program";
+  };
+
   root
     .find(j.ExpressionStatement, {
       expression: {
@@ -296,11 +329,32 @@ export function lowerRules(args: {
     } as any)
     .forEach((p) => {
       const expr = p.node.expression as {
-        left?: { object?: { name?: string } };
+        left?: { object?: { name?: string }; property?: { name?: string } };
+        right?: unknown;
       };
       const ownerName = expr.left?.object?.name;
+      const propName = expr.left?.property?.name;
       if (ownerName) {
         staticPropertyOwners.add(ownerName);
+      }
+      // Only collect inlinable values for locally-defined identifiers at top-level
+      if (!ownerName || !locallyDefinedIdentifiers.has(ownerName)) {
+        return;
+      }
+      if (!isTopLevelStatement(p)) {
+        return;
+      }
+      const assignmentLine = (p.node as { loc?: { start?: { line?: number } } }).loc?.start?.line;
+      if (propName && assignmentLine !== undefined) {
+        const staticValue = literalToStaticValue(expr.right);
+        if (staticValue !== null) {
+          let ownerMap = staticPropertyValues.get(ownerName);
+          if (!ownerMap) {
+            ownerMap = new Map();
+            staticPropertyValues.set(ownerName, ownerMap);
+          }
+          ownerMap.set(propName, { value: staticValue, line: assignmentLine });
+        }
       }
     });
 
@@ -2925,11 +2979,33 @@ export function lowerRules(args: {
               if (!rootInfo || rootInfo.path.length !== 1) {
                 continue;
               }
-              // Bail on member expressions that access known static property owners
-              // StyleX requires static values - runtime references like Component.PROP don't work
+              // Only check member expressions that access known static property owners
               if (!staticPropertyOwners.has(rootInfo.rootName)) {
                 continue;
               }
+              // Check if owner is locally defined and has a safe static value
+              const ownerMap = staticPropertyValues.get(rootInfo.rootName);
+              const propName = rootInfo.path[0];
+              const propInfo = propName && ownerMap ? ownerMap.get(propName) : undefined;
+              const styledTemplateLine = decl.loc?.line;
+              if (
+                propInfo &&
+                styledTemplateLine !== undefined &&
+                propInfo.line < styledTemplateLine
+              ) {
+                // Locally defined with safe ordering - inline the static value
+                const staticValue = propInfo.value;
+                if (typeof staticValue === "number") {
+                  decl.templateExpressions[part.slotId] = j.numericLiteral(staticValue);
+                } else if (typeof staticValue === "string") {
+                  decl.templateExpressions[part.slotId] = j.stringLiteral(staticValue);
+                } else if (typeof staticValue === "boolean") {
+                  decl.templateExpressions[part.slotId] = j.booleanLiteral(staticValue);
+                }
+                continue;
+              }
+              // Not locally defined or unsafe ordering - bail
+              // (imported components can't be evaluated by StyleX)
               warnings.push({
                 severity: "error",
                 type: "Unsupported interpolation: member expression",

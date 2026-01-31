@@ -1,6 +1,4 @@
-// @expected-warning: Unsupported interpolation: member expression
-// Static member expressions like Component.PROP cannot be transformed to StyleX
-// because StyleX requires static values at compile time.
+// Static member expressions on locally-defined components are inlined
 import React from "react";
 import styled from "styled-components";
 
