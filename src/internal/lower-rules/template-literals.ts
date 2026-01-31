@@ -2,8 +2,12 @@ import type { Expression, JSCodeshift, TemplateLiteral } from "jscodeshift";
 import { compile } from "stylis";
 import type { Adapter, ImportSource, ImportSpec } from "../../adapter.js";
 import { resolveDynamicNode, type InternalHandlerContext } from "../builtin-handlers.js";
-import { cssDeclarationToStylexDeclarations } from "../css-prop-mapping.js";
-import { parseInterpolatedBorderStaticParts } from "../css-prop-mapping.js";
+import {
+  cssDeclarationToStylexDeclarations,
+  cssPropertyToStylexProp,
+  parseInterpolatedBorderStaticParts,
+} from "../css-prop-mapping.js";
+import { isStylexLonghandOnlyShorthand } from "../stylex-shorthands.js";
 import { normalizeStylisAstToIR } from "../css-ir.js";
 import {
   extractRootAndPath,
@@ -35,9 +39,16 @@ export type TemplateDynamicEntry = {
   callArg: ExpressionKind;
 };
 
+export type TemplateInlineEntry = {
+  jsxProp: string;
+  prop: string;
+  callArg: ExpressionKind;
+};
+
 export type TemplateLiteralBranchResult = {
   style: Record<string, unknown>;
   dynamicEntries: TemplateDynamicEntry[];
+  inlineEntries: TemplateInlineEntry[];
 };
 
 export type TemplateLiteralBranchArgs = {
@@ -97,6 +108,7 @@ export function resolveTemplateLiteralBranch(
   );
   const style: Record<string, unknown> = {};
   const dynamicEntries: TemplateDynamicEntry[] = [];
+  const inlineEntries: TemplateInlineEntry[] = [];
 
   for (const rule of rules) {
     if (rule.atRuleStack.length > 0) {
@@ -250,10 +262,19 @@ export function resolveTemplateLiteralBranch(
         });
         continue;
       }
+      const isLonghandOnlyShorthand = isStylexLonghandOnlyShorthand(propName);
       const callArg =
         prefix || suffix
           ? buildTemplateWithStaticParts(j, resolved.callArg, prefix, suffix)
           : resolved.callArg;
+      if (isLonghandOnlyShorthand) {
+        inlineEntries.push({
+          jsxProp: resolved.jsxProp,
+          prop: cssPropertyToStylexProp(propName),
+          callArg,
+        });
+        continue;
+      }
       for (const mapped of cssDeclarationToStylexDeclarations(d)) {
         dynamicEntries.push({
           jsxProp: resolved.jsxProp,
@@ -263,7 +284,7 @@ export function resolveTemplateLiteralBranch(
       }
     }
   }
-  return { style, dynamicEntries };
+  return { style, dynamicEntries, inlineEntries };
 }
 
 export function resolveTemplateLiteralValue(args: TemplateLiteralValueArgs): ExpressionKind | null {

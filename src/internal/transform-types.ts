@@ -205,7 +205,7 @@ export type StyledDecl = {
   isCssHelper?: boolean;
   isExported?: boolean;
   preResolvedFnDecls?: Record<string, unknown>;
-  inlineStyleProps?: Array<{ prop: string; expr: ExpressionKind }>;
+  inlineStyleProps?: Array<{ prop: string; expr: ExpressionKind; jsxProp?: string }>;
   /**
    * Additional style keys (from css`` helper blocks) that should be applied
    * alongside this component's base style.

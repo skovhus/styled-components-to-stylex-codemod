@@ -2,12 +2,19 @@ import type { ASTNode, JSCodeshift } from "jscodeshift";
 
 export type ExportInfo = { exportName: string; isDefault: boolean; isSpecifier: boolean };
 export type ExpressionKind = Parameters<JSCodeshift["expressionStatement"]>[0];
-export type InlineStyleProp = { prop: string; expr: ExpressionKind }; /**
- * Collects $-prefixed identifier names from inline style expressions.
- * These represent transient props that need to be destructured for styling.
+export type InlineStyleProp = { prop: string; expr: ExpressionKind; jsxProp?: string };
+/**
+ * Collects prop identifiers referenced by inline style expressions.
+ * `$`-prefixed names are transient props that must be destructured,
+ * and optional `jsxProp` hints capture additional prop dependencies.
  */
 export function collectInlineStylePropNames(inlineStyleProps: InlineStyleProp[]): string[] {
   const names = new Set<string>();
+  for (const p of inlineStyleProps) {
+    if (p.jsxProp) {
+      names.add(p.jsxProp);
+    }
+  }
   const visit = (node: ASTNode | null | undefined, parent: ASTNode | undefined): void => {
     if (!node || typeof node !== "object") {
       return;

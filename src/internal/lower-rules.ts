@@ -646,7 +646,7 @@ export function lowerRules(args: {
     }> = [];
     const styleFnDecls = new Map<string, any>();
     const attrBuckets = new Map<string, Record<string, unknown>>();
-    const inlineStyleProps: Array<{ prop: string; expr: ExpressionKind }> = [];
+    const inlineStyleProps: Array<{ prop: string; expr: ExpressionKind; jsxProp?: string }> = [];
     const localVarValues = new Map<string, string>();
     // Track properties defined by composed css helpers along with their values
     // so we can set proper default values for pseudo selectors.
@@ -1347,6 +1347,62 @@ export function lowerRules(args: {
         }
       };
 
+      const buildConditionExprFromWhen = (
+        when: string,
+      ): { cond: ExpressionKind; isBoolean: boolean } | null => {
+        const trimmed = when.trim();
+        if (!trimmed) {
+          return null;
+        }
+        if (trimmed.startsWith("!")) {
+          const propName = trimmed.slice(1).trim();
+          if (!propName) {
+            return null;
+          }
+          return {
+            cond: j.unaryExpression("!", j.identifier(propName)),
+            isBoolean: true,
+          };
+        }
+        if (trimmed.includes("===") || trimmed.includes("!==")) {
+          const op = trimmed.includes("!==") ? "!==" : "===";
+          const [lhs, rhsRaw0] = trimmed.split(op).map((s) => s.trim());
+          const rhsRaw = rhsRaw0 ?? "";
+          if (!lhs) {
+            return null;
+          }
+          let rhs: ExpressionKind;
+          try {
+            rhs = j.literal(JSON.parse(rhsRaw));
+          } catch {
+            rhs = j.identifier(rhsRaw);
+          }
+          return {
+            cond: j.binaryExpression(op as any, j.identifier(lhs), rhs),
+            isBoolean: true,
+          };
+        }
+        return { cond: j.identifier(trimmed), isBoolean: false };
+      };
+
+      const applyInlineEntries = (
+        entries: Array<{ jsxProp: string; prop: string; callArg: ExpressionKind }>,
+        conditionWhen?: string,
+      ): void => {
+        const condition = conditionWhen ? buildConditionExprFromWhen(conditionWhen) : null;
+        for (const entry of entries) {
+          const expr =
+            condition && condition.cond
+              ? j.conditionalExpression(condition.cond, entry.callArg, j.identifier("undefined"))
+              : entry.callArg;
+          inlineStyleProps.push({ prop: entry.prop, expr, jsxProp: entry.jsxProp });
+          ensureShouldForwardPropDrop(decl, entry.jsxProp);
+        }
+        if (entries.length > 0) {
+          decl.needsWrapperComponent = true;
+        }
+      };
+
       // Handle direct TemplateLiteral body: (props) => `width: ${props.$width}px;`
       // Applies styles unconditionally - static styles merge into base, dynamic become style functions.
       if (body?.type === "TemplateLiteral") {
@@ -1369,11 +1425,15 @@ export function lowerRules(args: {
           return false;
         }
 
-        const { style, dynamicEntries } = resolved;
+        const { style, dynamicEntries, inlineEntries } = resolved;
 
         // Static styles go to base object (no condition = always applied)
         for (const [prop, value] of Object.entries(style)) {
           styleObj[prop] = value;
+        }
+
+        if (inlineEntries.length > 0) {
+          applyInlineEntries(inlineEntries);
         }
 
         // Dynamic props become style functions (unconditional - no conditionWhen)
@@ -1518,6 +1578,12 @@ export function lowerRules(args: {
         if (altResolved.dynamicEntries.length > 0) {
           applyDynamicEntries(altResolved.dynamicEntries, invertedWhen);
         }
+        if (consResolved.inlineEntries.length > 0) {
+          applyInlineEntries(consResolved.inlineEntries, testInfo.when);
+        }
+        if (altResolved.inlineEntries.length > 0) {
+          applyInlineEntries(altResolved.inlineEntries, invertedWhen);
+        }
         return true;
       }
 
@@ -1547,6 +1613,9 @@ export function lowerRules(args: {
         }
         if (consResolved.dynamicEntries.length > 0) {
           applyDynamicEntries(consResolved.dynamicEntries, testInfo.when);
+        }
+        if (consResolved.inlineEntries.length > 0) {
+          applyInlineEntries(consResolved.inlineEntries, testInfo.when);
         }
         return true;
       }
@@ -1581,6 +1650,9 @@ export function lowerRules(args: {
         }
         if (altResolved.dynamicEntries.length > 0) {
           applyDynamicEntries(altResolved.dynamicEntries, invertedWhen);
+        }
+        if (altResolved.inlineEntries.length > 0) {
+          applyInlineEntries(altResolved.inlineEntries, invertedWhen);
         }
         return true;
       }

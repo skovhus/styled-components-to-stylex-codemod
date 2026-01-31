@@ -8,6 +8,23 @@ type ValueParserNode = {
   nodes?: ValueParserNode[];
 };
 
+// Single source of truth for longhand-only shorthands in StyleX.
+const STYLEX_LONGHAND_ONLY_SHORTHANDS = new Set([
+  "border",
+  "border-top",
+  "border-right",
+  "border-bottom",
+  "border-left",
+  "margin",
+  "padding",
+  "background",
+  "scroll-margin",
+]);
+
+export function isStylexLonghandOnlyShorthand(prop: string): boolean {
+  return STYLEX_LONGHAND_ONLY_SHORTHANDS.has(prop);
+}
+
 function printNode(node: ValueParserNode): string {
   switch (node.type) {
     case "word":

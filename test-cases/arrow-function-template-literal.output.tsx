@@ -21,19 +21,46 @@ type MixedBoxProps = Omit<React.ComponentProps<"div">, "className" | "style"> & 
 // Mixed static and dynamic styles
 function MixedBox(props: MixedBoxProps) {
   const { children, $padding } = props;
-  return <div {...stylex.props(styles.mixedBox, styles.mixedBoxPadding($padding))}>{children}</div>;
+
+  const sx = stylex.props(styles.mixedBox);
+  return (
+    <div
+      {...sx}
+      style={{
+        ...sx.style,
+        padding: $padding,
+      }}
+    >
+      {children}
+    </div>
+  );
 }
 
 type MultiPropBoxProps = Omit<React.ComponentProps<"div">, "className" | "style"> & {
   $margin: string;
   $border: string;
+  $padding: string;
+  $background: string;
+  $scrollMargin: string;
 };
 
 // Multiple dynamic properties in a single template literal
 function MultiPropBox(props: MultiPropBoxProps) {
-  const { children, $margin, $border } = props;
+  const { children, $margin, $border, $padding, $background, $scrollMargin } = props;
+
+  const sx = stylex.props();
   return (
-    <div {...stylex.props(styles.multiPropBoxMargin($margin), styles.multiPropBoxBorder($border))}>
+    <div
+      {...sx}
+      style={{
+        ...sx.style,
+        margin: $margin,
+        border: $border,
+        padding: $padding,
+        background: $background,
+        scrollMargin: $scrollMargin,
+      }}
+    >
       {children}
     </div>
   );
@@ -43,7 +70,13 @@ export const App = () => (
   <div>
     <Box $width="100px" $height="50px" />
     <MixedBox $padding="10px" />
-    <MultiPropBox $margin="8px" $border="1px solid red" />
+    <MultiPropBox
+      $margin="8px"
+      $border="1px solid red"
+      $padding="4px 8px"
+      $background="rebeccapurple"
+      $scrollMargin="12px"
+    />
   </div>
 );
 
@@ -59,13 +92,4 @@ const styles = stylex.create({
   mixedBox: {
     backgroundColor: "blue",
   },
-  mixedBoxPadding: (padding: string) => ({
-    padding,
-  }),
-  multiPropBoxMargin: (margin: string) => ({
-    margin,
-  }),
-  multiPropBoxBorder: (border: string) => ({
-    border,
-  }),
 });

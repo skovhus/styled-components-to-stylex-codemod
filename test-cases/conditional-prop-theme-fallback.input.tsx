@@ -16,7 +16,7 @@ export const ColorBadge = styled("div")<Props>`
   ${(props) =>
     props.hollow
       ? `border: solid 1px ${props.color ? props.color : props.theme.color.labelMuted}`
-      : `background: ${props.color ? props.color : props.theme.color.labelMuted}`};
+      : `background-color: ${props.color ? props.color : props.theme.color.labelMuted}`};
 
   ${(props) =>
     props.size === "tiny" &&
