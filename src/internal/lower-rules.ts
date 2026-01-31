@@ -618,7 +618,7 @@ export function lowerRules(args: {
       resolvedStyleObjects.set(decl.styleKey, decl.preResolvedStyle);
       if (decl.preResolvedFnDecls) {
         for (const [k, v] of Object.entries(decl.preResolvedFnDecls)) {
-          resolvedStyleObjects.set(k, v as any);
+          resolvedStyleObjects.set(k, v);
         }
       }
       continue;
@@ -5135,7 +5135,7 @@ export function lowerRules(args: {
       }
 
       if (props.length > 0) {
-        resolvedStyleObjects.set(overrideKey, j.objectExpression(props) as unknown);
+        resolvedStyleObjects.set(overrideKey, j.objectExpression(props));
       }
     }
   }

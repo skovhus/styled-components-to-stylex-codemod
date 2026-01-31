@@ -66,7 +66,7 @@ export function extractStyledCallArgs(args: {
       ]);
 
       // Replace the CallExpression in styled() with the new identifier
-      (tag.arguments as unknown[])[0] = j.identifier(extractedName);
+      tag.arguments[0] = j.identifier(extractedName);
 
       // Insert the new declaration before the current VariableDeclaration
       // p is the VariableDeclarator path
