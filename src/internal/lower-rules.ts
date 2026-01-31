@@ -80,7 +80,7 @@ export type DescendantOverride = {
 
 type ExpressionKind = Parameters<JSCodeshift["expressionStatement"]>[0];
 
-type StaticMemberValue = string | number | boolean;
+type StaticMemberValue = string | number;
 
 type StaticMemberAssignment = {
   value: StaticMemberValue;
@@ -357,7 +357,7 @@ export function lowerRules(args: {
       }
       const rightValue = unwrapStaticAssignmentValue(expr.right);
       const staticValue = literalToStaticValue(rightValue);
-      if (staticValue === null) {
+      if (staticValue === null || typeof staticValue === "boolean") {
         markStaticMemberConflict(ownerName, propName);
         return;
       }
