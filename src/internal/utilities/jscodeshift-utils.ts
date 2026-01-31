@@ -347,6 +347,13 @@ export function getNodeLocStart(node: unknown): { line: number; column: number }
   return { line: loc.line, column: loc.column };
 }
 
+const isExpressionKindNode = (node: unknown): node is ExpressionKind => isAstNode(node);
+
+const isReturnStatementNode = (
+  node: unknown,
+): node is { type: "ReturnStatement"; argument?: unknown } =>
+  isAstNode(node) && node.type === "ReturnStatement";
+
 /**
  * Extracts the expression from an arrow/function expression body.
  * - For expression bodies: returns the expression directly
@@ -359,16 +366,23 @@ export function getFunctionBodyExpr(fn: { body?: unknown }): ExpressionKind | nu
   if (!body || typeof body !== "object") {
     return undefined;
   }
-  if ((body as { type?: string }).type === "BlockStatement") {
-    const block = body as { body?: Array<{ type?: string; argument?: unknown }> };
-    const statements = block.body;
-    // Only accept block bodies with exactly one ReturnStatement (no other logic)
-    if (statements?.length !== 1 || statements[0]?.type !== "ReturnStatement") {
+  if (isAstNode(body) && body.type === "BlockStatement") {
+    const blockBody = (body as { body?: unknown }).body;
+    if (!Array.isArray(blockBody) || blockBody.length !== 1) {
       return undefined;
     }
-    return statements[0].argument;
+    const statement = blockBody[0];
+    // Only accept block bodies with exactly one ReturnStatement (no other logic)
+    if (!isReturnStatementNode(statement)) {
+      return undefined;
+    }
+    const argument = statement.argument ?? null;
+    if (argument === null) {
+      return null;
+    }
+    return isExpressionKindNode(argument) ? argument : undefined;
   }
-  return body;
+  return isExpressionKindNode(body) ? body : undefined;
 }
 
 /**
