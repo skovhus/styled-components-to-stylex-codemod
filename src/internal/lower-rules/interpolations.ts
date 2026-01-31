@@ -1,6 +1,7 @@
 import type { StyledDecl } from "../transform-types.js";
 import { cssDeclarationToStylexDeclarations } from "../css-prop-mapping.js";
 import { getMemberPathFromIdentifier } from "../utilities/jscodeshift-utils.js";
+import { literalToStaticValue } from "./types.js";
 import { splitDirectionalProperty } from "../stylex-shorthands.js";
 
 export function extractStaticParts(
@@ -219,6 +220,13 @@ function buildInterpolatedTemplate(args: {
       // Only inline non-function expressions.
       if (!expr || expr.type === "ArrowFunctionExpression") {
         return null;
+      }
+      const staticValue = literalToStaticValue(expr);
+      if (staticValue !== null) {
+        const textValue = String(staticValue);
+        q += textValue;
+        fullStaticValue += textValue;
+        continue;
       }
       // Try to resolve CallExpressions through the adapter (e.g., helper function lookups)
       if (expr.type === "CallExpression" && resolveCallExpr) {
