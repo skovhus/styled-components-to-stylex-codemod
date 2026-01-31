@@ -9,7 +9,7 @@ export function parseExpr(api: API, exprSource: string): ExpressionKind | null {
     const jParse = api.jscodeshift.withParser("tsx");
     const program = jParse(`(${exprSource});`);
     const stmt = program.find(jParse.ExpressionStatement).nodes()[0];
-    let expr = (stmt as { expression?: ExpressionKind })?.expression ?? null;
+    let expr = stmt?.expression ?? null;
     // Unwrap ParenthesizedExpression to avoid extra parentheses in output
     while (expr?.type === "ParenthesizedExpression") {
       expr = expr.expression;

@@ -284,7 +284,7 @@ export function resolveTemplateLiteralValue(args: TemplateLiteralValueArgs): Exp
 
   if (expressions.length === 0) {
     const staticValue = quasis.map((q) => q.value?.cooked ?? q.value?.raw ?? "").join("");
-    return j.literal(staticValue) as ExpressionKind;
+    return j.literal(staticValue);
   }
 
   const resolvedExprs: ExpressionKind[] = [];
@@ -313,7 +313,7 @@ export function resolveTemplateLiteralValue(args: TemplateLiteralValueArgs): Exp
       i === quasis.length - 1,
     ),
   );
-  return j.templateLiteral(newQuasis, resolvedExprs) as ExpressionKind;
+  return j.templateLiteral(newQuasis, resolvedExprs);
 }
 
 function resolveDynamicTemplateExpr(args: {
@@ -364,16 +364,16 @@ function resolveDynamicTemplateExpr(args: {
     if (themeAst) {
       return {
         jsxProp,
-        callArg: j.logicalExpression("??", baseArg, themeAst) as ExpressionKind,
+        callArg: j.logicalExpression("??", baseArg, themeAst),
       };
     }
     // Try to resolve the right side as a static literal value
     const staticValue = literalToStaticValue(right);
     if (staticValue !== null) {
-      const literalAst = j.literal(staticValue) as ExpressionKind;
+      const literalAst = j.literal(staticValue);
       return {
         jsxProp,
-        callArg: j.logicalExpression("??", baseArg, literalAst) as ExpressionKind,
+        callArg: j.logicalExpression("??", baseArg, literalAst),
       };
     }
     return null;
@@ -411,13 +411,13 @@ function resolveDynamicTemplateExpr(args: {
     if (consIsProp && altTheme) {
       return {
         jsxProp,
-        callArg: j.conditionalExpression(baseArg, baseArg, altTheme) as ExpressionKind,
+        callArg: j.conditionalExpression(baseArg, baseArg, altTheme),
       };
     }
     if (altIsProp && consTheme) {
       return {
         jsxProp,
-        callArg: j.conditionalExpression(baseArg, consTheme, baseArg) as ExpressionKind,
+        callArg: j.conditionalExpression(baseArg, consTheme, baseArg),
       };
     }
   }
@@ -577,6 +577,6 @@ function resolveStaticTemplateExpressionAst(args: {
 function buildPropAccessExpr(j: JSCodeshift, propName: string): ExpressionKind {
   const isIdent = /^[$A-Z_][0-9A-Z_$]*$/i.test(propName);
   return isIdent
-    ? (j.identifier(propName) as ExpressionKind)
-    : (j.memberExpression(j.identifier("props"), j.literal(propName), true) as ExpressionKind);
+    ? j.identifier(propName)
+    : j.memberExpression(j.identifier("props"), j.literal(propName), true);
 }
