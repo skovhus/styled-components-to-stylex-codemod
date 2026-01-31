@@ -277,6 +277,16 @@ function buildInterpolatedTemplate(args: {
         exprs.push(resolved.resolved);
         continue;
       }
+      // Handle numeric literals by inlining them as static text
+      if (
+        expr.type === "NumericLiteral" ||
+        (expr.type === "Literal" && typeof expr.value === "number")
+      ) {
+        const numValue = String(expr.value);
+        q += numValue;
+        fullStaticValue += numValue;
+        continue;
+      }
       quasis.push(j.templateElement({ raw: q, cooked: q }, false));
       q = "";
       allStatic = false;
