@@ -468,7 +468,7 @@ export class WrapperEmitter {
           `Failed to parse emitted props type for ${localName} (${this.filePath}).`,
           `Type name: ${typeNameWithParams}`,
           `Type expr: ${typeExprText}`,
-          `Error: ${(e as any)?.message ?? String(e)}`,
+          `Error: ${e instanceof Error ? e.message : String(e)}`,
         ].join("\n"),
       );
     }
@@ -491,7 +491,7 @@ export class WrapperEmitter {
           [
             `Failed to parse inline props param type for ${localName} (${this.filePath}).`,
             `Inline type: ${inlineTypeText}`,
-            `Error: ${(e as any)?.message ?? String(e)}`,
+            `Error: ${e instanceof Error ? e.message : String(e)}`,
           ].join("\n"),
         );
       }
@@ -927,7 +927,7 @@ export class WrapperEmitter {
             [
               `Failed to parse inline wrapper props type for ${localName} (${tagName}).`,
               `Inline type: ${inlineTypeText}`,
-              `Error: ${(e as any)?.message ?? String(e)}`,
+              `Error: ${e instanceof Error ? e.message : String(e)}`,
             ].join("\n"),
           );
         }
