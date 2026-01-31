@@ -472,6 +472,27 @@ export function literalToString(node: unknown): string | null {
 }
 
 /**
+ * Converts a static JavaScript value to an AST literal node.
+ * This is the reverse operation of `literalToStaticValue`.
+ *
+ * @param j - The jscodeshift API
+ * @param value - The static value to convert (string, number, or boolean)
+ * @returns An AST literal node representing the value
+ */
+export function staticValueToLiteral(
+  j: JSCodeshift,
+  value: string | number | boolean,
+): ExpressionKind {
+  if (typeof value === "boolean") {
+    return j.booleanLiteral(value);
+  }
+  if (typeof value === "number") {
+    return j.numericLiteral(value);
+  }
+  return j.stringLiteral(value);
+}
+
+/**
  * Set of AST metadata keys that should typically be skipped during traversal or cloning.
  * These keys contain position/source information and are not part of the logical AST structure.
  */

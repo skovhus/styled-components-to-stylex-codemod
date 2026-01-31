@@ -38,6 +38,7 @@ import {
   createTypeInferenceHelpers,
   ensureShouldForwardPropDrop,
   literalToStaticValue,
+  staticValueToLiteral,
 } from "./lower-rules/types.js";
 import {
   buildTemplateWithStaticParts,
@@ -2924,40 +2925,26 @@ export function lowerRules(args: {
               const expr = decl.templateExpressions[part.slotId] as {
                 type?: string;
                 body?: unknown;
-                object?: { type?: string; name?: string };
-                property?: { type?: string; name?: string };
               };
               const baseExpr =
                 expr?.type === "ArrowFunctionExpression" || expr?.type === "FunctionExpression"
                   ? (expr.body as any)
                   : (expr as any);
-              if (
-                baseExpr?.type !== "MemberExpression" &&
-                baseExpr?.type !== "OptionalMemberExpression"
-              ) {
+              // Use extractRootAndPath to parse member expressions like Divider.HEIGHT
+              const rootInfo = extractRootAndPath(baseExpr);
+              if (!rootInfo || rootInfo.path.length !== 1) {
                 continue;
               }
-              const obj = baseExpr.object;
-              const prop = baseExpr.property;
-              if (obj?.type !== "Identifier") {
-                continue;
-              }
-              const ownerMap = staticPropertyValues.get(obj.name);
+              const ownerMap = staticPropertyValues.get(rootInfo.rootName);
               if (!ownerMap) {
                 continue;
               }
+              const propName = rootInfo.path[0];
               // Try to resolve the static property value
-              const propName = prop?.type === "Identifier" ? prop.name : undefined;
               if (propName && ownerMap.has(propName)) {
                 // Successfully resolved - replace the expression with the static value
                 const staticValue = ownerMap.get(propName)!;
-                if (typeof staticValue === "number") {
-                  decl.templateExpressions[part.slotId] = j.numericLiteral(staticValue);
-                } else if (typeof staticValue === "string") {
-                  decl.templateExpressions[part.slotId] = j.stringLiteral(staticValue);
-                } else if (typeof staticValue === "boolean") {
-                  decl.templateExpressions[part.slotId] = j.booleanLiteral(staticValue);
-                }
+                decl.templateExpressions[part.slotId] = staticValueToLiteral(j, staticValue);
                 continue;
               }
               // Could not resolve - bail
