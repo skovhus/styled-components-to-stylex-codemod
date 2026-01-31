@@ -26,6 +26,6 @@ const styles = stylex.create({
   dividerContainer: {
     paddingBlock: "5px",
     paddingInline: 0,
-    height: `${Divider.HEIGHT}px`,
+    height: `${10}px`,
   },
 });

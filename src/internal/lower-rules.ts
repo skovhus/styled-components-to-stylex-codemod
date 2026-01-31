@@ -380,32 +380,32 @@ export function lowerRules(args: {
       });
     });
 
-  const isSafeStaticMemberInterpolation = (
+  const getSafeStaticMemberAssignmentValue = (
     expr: unknown,
     declIndex: number | undefined,
-  ): boolean => {
+  ): string | number | boolean | null => {
     if (typeof declIndex !== "number") {
-      return false;
+      return null;
     }
     if (!isAstNode(expr)) {
-      return false;
+      return null;
     }
     const info = extractRootAndPath(expr);
     if (!info || info.path.length !== 1) {
-      return false;
+      return null;
     }
     const propName = info.path[0];
     if (!propName) {
-      return false;
+      return null;
     }
     const hasNonTopLevelAssignment =
       nonTopLevelMemberAssignments.get(info.rootName)?.has(propName) ?? false;
     if (hasNonTopLevelAssignment) {
-      return false;
+      return null;
     }
     const assignments = memberAssignments.get(info.rootName)?.get(propName);
     if (!assignments || assignments.length === 0) {
-      return false;
+      return null;
     }
     let latest: MemberAssignment | null = null;
     for (const assignment of assignments) {
@@ -413,13 +413,10 @@ export function lowerRules(args: {
         latest = assignment;
       }
     }
-    if (!latest) {
-      return false;
+    if (!latest || latest.index >= declIndex) {
+      return null;
     }
-    if (latest.index >= declIndex) {
-      return false;
-    }
-    return latest.value !== null;
+    return latest.value;
   };
 
   // ─────────────────────────────────────────────────────────────────────────────
@@ -3049,7 +3046,12 @@ export function lowerRules(args: {
               if (!isIdentifierNode(obj) || !staticPropertyOwners.has(obj.name)) {
                 continue;
               }
-              if (isSafeStaticMemberInterpolation(baseExpr, decl.declIndex)) {
+              const resolvedMemberValue = getSafeStaticMemberAssignmentValue(
+                baseExpr,
+                decl.declIndex,
+              );
+              if (resolvedMemberValue !== null) {
+                decl.templateExpressions[part.slotId] = literalToAst(j, resolvedMemberValue);
                 continue;
               }
               warnings.push({
