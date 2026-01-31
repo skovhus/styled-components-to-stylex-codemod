@@ -224,10 +224,14 @@ export function getArrowFnSingleParamName(fn: ArrowFunctionExpression): string |
  * For destructured params like `({ color, size: size_ }) => ...`:
  *   { kind: "destructured", bindings: Map { "color" -> "color", "size_" -> "size" } }
  *   where the map is: localName -> originalPropName
+ *
+ * For destructured params with defaults like `({ padding = "16px" }) => ...`:
+ *   { kind: "destructured", bindings: Map { "padding" -> "padding" }, defaults: Map { "padding" -> "16px" } }
+ *   where defaults maps: originalPropName -> default value AST node
  */
 export type ArrowFnParamBindings =
   | { kind: "simple"; paramName: string }
-  | { kind: "destructured"; bindings: Map<string, string> };
+  | { kind: "destructured"; bindings: Map<string, string>; defaults?: Map<string, unknown> };
 
 /**
  * Extracts parameter binding information from an arrow function.
@@ -258,6 +262,7 @@ export function getArrowFnParamBindings(fn: ArrowFunctionExpression): ArrowFnPar
   // Object pattern: ({ color, size: size_ }) => ...
   if (p?.type === "ObjectPattern" && Array.isArray((p as { properties?: unknown[] }).properties)) {
     const bindings = new Map<string, string>();
+    const defaults = new Map<string, unknown>();
     const props = (p as { properties: Array<{ type?: string; key?: unknown; value?: unknown }> })
       .properties;
     for (const prop of props) {
@@ -283,7 +288,9 @@ export function getArrowFnParamBindings(fn: ArrowFunctionExpression): ArrowFnPar
         continue;
       }
 
-      const value = prop.value as { type?: string; name?: string; left?: unknown } | undefined;
+      const value = prop.value as
+        | { type?: string; name?: string; left?: unknown; right?: unknown }
+        | undefined;
       // Shorthand: { color } -> color maps to color
       if (value?.type === "Identifier" && typeof value.name === "string") {
         bindings.set(value.name, propName);
@@ -293,13 +300,17 @@ export function getArrowFnParamBindings(fn: ArrowFunctionExpression): ArrowFnPar
         const left = value.left as { type?: string; name?: string } | undefined;
         if (left?.type === "Identifier" && typeof left.name === "string") {
           bindings.set(left.name, propName);
+          // Extract default value if present
+          if (value.right) {
+            defaults.set(propName, value.right);
+          }
         }
       }
     }
     if (bindings.size === 0) {
       return null;
     }
-    return { kind: "destructured", bindings };
+    return { kind: "destructured", bindings, defaults: defaults.size > 0 ? defaults : undefined };
   }
 
   return null;

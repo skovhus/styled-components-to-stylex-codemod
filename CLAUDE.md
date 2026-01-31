@@ -73,3 +73,7 @@ Storybook renders all test cases side-by-side (input with styled-components, out
 Run `pnpm storybook` to start the dev server and visually compare transformations.
 
 Use the Playwright MCP to inspect test case rendering.
+
+## Skills
+
+Skills are located in `.claude/skills/`.

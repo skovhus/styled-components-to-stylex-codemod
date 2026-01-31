@@ -1,8 +1,8 @@
 import styled from "styled-components";
 
 // Simple renamed destructured prop
-const Button = styled.button<{ color: string }>`
-  color: ${({ color: color_ }) => color_};
+const Button = styled.button<{ color?: string }>`
+  color: ${({ color: color_ }) => color_ || "hotpink"};
 `;
 
 // Shorthand destructured prop
@@ -29,6 +29,7 @@ const Text = styled.span<{ weight: string; size: string }>`
 export const App = () => (
   <>
     <Button color="red">Click</Button>
+    <Button>Click (default)</Button>
     <Link fontSize="14px" href="#">
       Link
     </Link>

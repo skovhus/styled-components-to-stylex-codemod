@@ -131,6 +131,30 @@ export type HandlerResult =
     }
   | {
       /**
+       * Like `emitStyleFunction`, but also emit a static base style with the default value.
+       *
+       * This supports destructuring defaults like `({ padding = "16px" }) => padding`.
+       *
+       * The caller uses this to generate:
+       *   const styles = stylex.create({
+       *     card: { padding: "16px" },  // static base with default
+       *     cardPadding: (padding) => ({ padding })  // dynamic override
+       *   })
+       *
+       * And apply it:
+       *   stylex.props(styles.card, padding != null && styles.cardPadding(padding))
+       */
+      type: "emitStyleFunctionWithDefault";
+      nameHint: string;
+      params: string;
+      body: string;
+      call: string;
+      defaultValue: unknown;
+      valueTransform?: { kind: "call"; calleeIdent: string };
+      wrapValueInTemplateLiteral?: boolean;
+    }
+  | {
+      /**
        * Split a dynamic interpolation into one or more variant buckets.
        *
        * Each variant contains a static StyleX-style object. The caller is responsible for
@@ -1954,7 +1978,7 @@ function tryResolveInlineStyleValueForNestedPropAccess(node: DynamicNode): Handl
  * - `(props) => props.color` → simple param with member access
  * - `({ color }) => color` → shorthand destructuring
  * - `({ color: color_ }) => color_` → renamed destructuring
- * - `({ color = "red" }) => color` → destructuring with default
+ * - `({ color = "red" }) => color` → destructuring with default (emits static base + dynamic override)
  *
  * Note: Destructured param support is currently limited to this handler.
  * Other handlers (theme access, conditionals, etc.) only support simple params.
@@ -1974,6 +1998,7 @@ function tryResolvePropAccess(node: DynamicNode): HandlerResult | null {
   }
 
   let propName: string | null = null;
+  let defaultValue: unknown = null;
 
   if (bindings.kind === "simple") {
     // Original logic: (props) => props.color
@@ -1992,10 +2017,26 @@ function tryResolvePropAccess(node: DynamicNode): HandlerResult | null {
     if (!propName) {
       return null;
     }
+    // Check if this prop has a default value
+    if (bindings.defaults) {
+      defaultValue = bindings.defaults.get(propName) ?? null;
+    }
   }
 
   const cssProp = node.css.property;
   const nameHint = `${sanitizeIdentifier(cssProp)}FromProp`;
+
+  // If there's a default value, emit both static base style and dynamic override
+  if (defaultValue !== null) {
+    return {
+      type: "emitStyleFunctionWithDefault",
+      nameHint,
+      params: "value: string",
+      body: `{ ${Object.keys(styleFromSingleDeclaration(cssProp, "value"))[0]}: value }`,
+      call: propName,
+      defaultValue,
+    };
+  }
 
   return {
     type: "emitStyleFunction",

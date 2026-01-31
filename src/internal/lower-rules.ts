@@ -4484,6 +4484,45 @@ export function lowerRules(args: {
             }
           }
 
+          // Handle emitStyleFunctionWithDefault: emit both static base style AND dynamic override
+          if (res && res.type === "emitStyleFunctionWithDefault") {
+            const jsxProp = res.call;
+            const outs = cssDeclarationToStylexDeclarations(d);
+
+            // Extract the static default value
+            const defaultStaticValue = literalToStaticValue(res.defaultValue);
+
+            for (let i = 0; i < outs.length; i++) {
+              const out = outs[i]!;
+
+              // Add static base style with default value
+              if (defaultStaticValue !== null && !pseudos?.length && !media) {
+                styleObj[out.prop] = defaultStaticValue;
+              }
+
+              // Add dynamic style function (same as emitStyleFunction)
+              const fnKey = `${decl.styleKey}${toSuffixFromProp(out.prop)}`;
+              styleFnFromProps.push({ fnKey, jsxProp });
+
+              if (!styleFnDecls.has(fnKey)) {
+                const param = j.identifier(out.prop);
+                const valueId = j.identifier(out.prop);
+                if (jsxProp !== "__props") {
+                  annotateParamFromJsxProp(param, jsxProp);
+                }
+                if (jsxProp?.startsWith?.("$")) {
+                  ensureShouldForwardPropDrop(decl, jsxProp);
+                }
+
+                const p = j.property("init", j.identifier(out.prop), valueId) as any;
+                p.shorthand = true;
+                const body = j.objectExpression([p]);
+                styleFnDecls.set(fnKey, j.arrowFunctionExpression([param], body));
+              }
+            }
+            continue;
+          }
+
           if (res && res.type === "emitStyleFunction") {
             const jsxProp = res.call;
             {
