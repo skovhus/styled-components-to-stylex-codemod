@@ -3,6 +3,8 @@ import jscodeshift, { type Expression } from "jscodeshift";
 import {
   extractRootAndPath,
   getMemberPathFromIdentifier,
+  staticValueToLiteral,
+  literalToStaticValue,
 } from "../internal/utilities/jscodeshift-utils";
 
 const j = jscodeshift.withParser("tsx");
@@ -111,5 +113,51 @@ describe("getMemberPathFromIdentifier", () => {
     const expr = parseExpr("props[key]");
     const result = getMemberPathFromIdentifier(expr, "props");
     expect(result).toBeNull();
+  });
+});
+
+describe("staticValueToLiteral", () => {
+  it("creates string literal from string value", () => {
+    const node = staticValueToLiteral(j, "hello");
+    expect(node.type).toBe("StringLiteral");
+    expect(literalToStaticValue(node)).toBe("hello");
+  });
+
+  it("creates numeric literal from number value", () => {
+    const node = staticValueToLiteral(j, 42);
+    expect(node.type).toBe("NumericLiteral");
+    expect(literalToStaticValue(node)).toBe(42);
+  });
+
+  it("creates numeric literal from zero", () => {
+    const node = staticValueToLiteral(j, 0);
+    expect(node.type).toBe("NumericLiteral");
+    expect(literalToStaticValue(node)).toBe(0);
+  });
+
+  it("creates numeric literal from negative number", () => {
+    const node = staticValueToLiteral(j, -10);
+    expect(node.type).toBe("NumericLiteral");
+    expect(literalToStaticValue(node)).toBe(-10);
+  });
+
+  it("creates boolean literal from true", () => {
+    const node = staticValueToLiteral(j, true);
+    expect(node.type).toBe("BooleanLiteral");
+    expect(literalToStaticValue(node)).toBe(true);
+  });
+
+  it("creates boolean literal from false", () => {
+    const node = staticValueToLiteral(j, false);
+    expect(node.type).toBe("BooleanLiteral");
+    expect(literalToStaticValue(node)).toBe(false);
+  });
+
+  it("round-trips with literalToStaticValue", () => {
+    const values: Array<string | number | boolean> = ["test", 123, -5.5, true, false, ""];
+    for (const value of values) {
+      const node = staticValueToLiteral(j, value);
+      expect(literalToStaticValue(node)).toBe(value);
+    }
   });
 });

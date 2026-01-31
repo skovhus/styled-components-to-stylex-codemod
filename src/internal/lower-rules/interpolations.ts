@@ -1,7 +1,11 @@
 import type { StyledDecl } from "../transform-types.js";
 import { cssDeclarationToStylexDeclarations } from "../css-prop-mapping.js";
-import { getMemberPathFromIdentifier } from "../utilities/jscodeshift-utils.js";
+import {
+  getMemberPathFromIdentifier,
+  literalToStaticValue,
+} from "../utilities/jscodeshift-utils.js";
 import { splitDirectionalProperty } from "../stylex-shorthands.js";
+import { addPropComments } from "./comments.js";
 
 export function extractStaticParts(
   cssValue: any,
@@ -162,8 +166,14 @@ export function tryHandleInterpolatedStringValue(args: {
           [expr as any],
         ) as any)
       : (expr as any);
-    for (const out of cssDeclarationToStylexDeclarations(d)) {
+    const outputs = cssDeclarationToStylexDeclarations(d);
+    for (let i = 0; i < outputs.length; i++) {
+      const out = outputs[i]!;
       (styleObj as any)[out.prop] = themeResolved ?? wrappedExpr;
+      // Add leading comment if present (e.g., for inlined static member expressions)
+      if (i === 0 && (d as any).leadingComment) {
+        addPropComments(styleObj, out.prop, { leading: (d as any).leadingComment });
+      }
     }
     return true;
   }
@@ -180,8 +190,14 @@ export function tryHandleInterpolatedStringValue(args: {
     return false;
   }
 
-  for (const out of cssDeclarationToStylexDeclarations(d)) {
+  const outputs = cssDeclarationToStylexDeclarations(d);
+  for (let i = 0; i < outputs.length; i++) {
+    const out = outputs[i]!;
     (styleObj as any)[out.prop] = tl as any;
+    // Add leading comment if present (e.g., for inlined static member expressions)
+    if (i === 0 && (d as any).leadingComment) {
+      addPropComments(styleObj, out.prop, { leading: (d as any).leadingComment });
+    }
   }
   return true;
 }
@@ -275,6 +291,14 @@ function buildInterpolatedTemplate(args: {
           addImport?.(imp);
         }
         exprs.push(resolved.resolved);
+        continue;
+      }
+      // Handle literals (string/number) by inlining them as static text
+      const literalValue = literalToStaticValue(expr);
+      if (literalValue !== null && typeof literalValue !== "boolean") {
+        const strValue = String(literalValue);
+        q += strValue;
+        fullStaticValue += strValue;
         continue;
       }
       quasis.push(j.templateElement({ raw: q, cooked: q }, false));
