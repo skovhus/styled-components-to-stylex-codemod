@@ -16,6 +16,7 @@ import {
   getNodeLocStart,
   isArrowFunctionExpression,
   isCallExpressionNode,
+  isConditionalExpressionNode,
   isLogicalExpressionNode,
   literalToStaticValue,
   literalToString,
@@ -1456,8 +1457,8 @@ function tryResolveConditionalCssBlockTernary(node: DynamicNode): HandlerResult 
     return null;
   }
   // Support both expression bodies and block bodies with a single return statement
-  const body = getFunctionBodyExpr(expr) as { type?: string } | null;
-  if (!body || body.type !== "ConditionalExpression") {
+  const body = getFunctionBodyExpr(expr);
+  if (!isConditionalExpressionNode(body)) {
     return null;
   }
 
@@ -1716,6 +1717,19 @@ function tryResolveConditionalCssBlockTernary(node: DynamicNode): HandlerResult 
         when: defaultWhen,
         style: defaultStyle,
       });
+    } else {
+      // Handle case where truthy branch is empty: props.$x ? "" : "css"
+      // The default style applies when the condition is false.
+      // Parse the condition from the body to determine the falsy condition.
+      const condInfo = parseConditionTest(body.test);
+      if (condInfo) {
+        const falsyWhen = buildWhenCondition(condInfo, false);
+        variants.push({
+          nameHint: "default",
+          when: falsyWhen,
+          style: defaultStyle,
+        });
+      }
     }
   }
 

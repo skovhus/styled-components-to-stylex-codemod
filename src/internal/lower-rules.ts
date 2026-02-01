@@ -1645,7 +1645,13 @@ export function lowerRules(args: {
       const consIsEmpty = isEmptyCssBranch(cons);
       const altIsEmpty = isEmptyCssBranch(alt);
 
-      if (!(consIsCss || altIsCss || consIsTpl || altIsTpl)) {
+      // Check for CallExpression branches (e.g., truncate() helpers)
+      const consIsCall = isCallExpressionNode(cons);
+      const altIsCall = isCallExpressionNode(alt);
+
+      // Note: String literal branches (StringLiteral CSS values) are NOT handled here.
+      // They fall through to tryResolveConditionalCssBlockTernary in builtin-handlers.ts.
+      if (!(consIsCss || altIsCss || consIsTpl || altIsTpl || consIsCall || altIsCall)) {
         return false;
       }
 
@@ -1855,6 +1861,66 @@ export function lowerRules(args: {
         if (altResolved.inlineEntries.length > 0) {
           applyInlineEntries(altResolved.inlineEntries, invertedWhen);
         }
+        return true;
+      }
+
+      // Note: String literal CSS branches (consIsStr && altIsEmpty, consIsEmpty && altIsStr,
+      // and consIsStr && altIsStr) are NOT handled here - they fall through to
+      // tryResolveConditionalCssBlockTernary in builtin-handlers.ts, which handles them
+      // correctly with proper component type generation.
+
+      // Handle CallExpression branches: props.$x ? truncate() : ""
+      // These are helpers that return StyleX style objects (usage: "props")
+      const tryResolveCallExpressionBranch = (
+        callNode: ExpressionKind,
+      ): { expr: string; imports: ImportSpec[] } | null => {
+        const dynamicNode = {
+          slotId: 0,
+          expr: callNode,
+          css: { kind: "declaration" as const, selector: "&", atRuleStack: [] as string[] },
+          component: componentInfo,
+          usage: { jsxUsages: 1, hasPropsSpread: false },
+        };
+        const res = resolveDynamicNode(dynamicNode, handlerContext);
+        if (res && res.type === "resolvedStyles") {
+          return { expr: res.expr, imports: res.imports ?? [] };
+        }
+        return null;
+      };
+
+      // Handle CallExpression in either branch with empty in the other
+      if ((consIsCall && altIsEmpty) || (consIsEmpty && altIsCall)) {
+        const callBranch = consIsCall ? cons : alt;
+        const resolved = tryResolveCallExpressionBranch(callBranch);
+        if (!resolved) {
+          return false;
+        }
+
+        // Determine the when condition: original for truthy branch, inverted for falsy branch
+        let when: string;
+        if (consIsCall) {
+          when = testInfo.when;
+        } else {
+          const invertedWhen = invertWhen(testInfo.when);
+          if (!invertedWhen) {
+            return false;
+          }
+          when = invertedWhen;
+        }
+
+        if (testInfo.propName) {
+          ensureShouldForwardPropDrop(decl, testInfo.propName);
+        }
+        for (const imp of resolved.imports) {
+          resolverImports.set(JSON.stringify(imp), imp);
+        }
+        const exprAst = parseExpr(resolved.expr);
+        if (!exprAst) {
+          return false;
+        }
+        decl.extraStylexPropsArgs ??= [];
+        decl.extraStylexPropsArgs.push({ when, expr: exprAst });
+        decl.needsWrapperComponent = true;
         return true;
       }
 
@@ -5178,10 +5244,40 @@ export function lowerRules(args: {
       delete (styleObj as any)[name];
     }
 
+    // Check for interpolations in pseudo selectors that can't be safely transformed
+    const hasPseudoBlockInterpolation = (() => {
+      if (!decl.rawCss) {
+        return false;
+      }
+      // Match pattern: &:pseudo { ... __SC_EXPR_X__; ... }
+      // where the placeholder is standalone (CSS block interpolation), not a property value
+      const pseudoBlockRe = /&:[a-z-]+(?:\([^)]*\))?\s*\{([^}]*)\}/gi;
+      let m;
+      while ((m = pseudoBlockRe.exec(decl.rawCss))) {
+        const blockContent = m[1] ?? "";
+        // Check if the block contains a standalone placeholder (not part of a property: value)
+        // A standalone placeholder is on its own line with optional whitespace/semicolon
+        const lines = blockContent.split(/[\n\r]/);
+        for (const line of lines) {
+          const trimmed = line.trim();
+          // Skip empty lines
+          if (!trimmed) {
+            continue;
+          }
+          // Check if this line is ONLY a placeholder (no property name before it)
+          if (/^__SC_EXPR_\d+__\s*;?\s*$/.test(trimmed)) {
+            return true;
+          }
+        }
+      }
+      return false;
+    })();
+
     if (
       decl.rawCss &&
       (/__SC_EXPR_\d+__\s*\{/.test(decl.rawCss) ||
-        /&:[a-z-]+(?:\([^)]*\))?\s+__SC_EXPR_\d+__\s*\{/i.test(decl.rawCss))
+        /&:[a-z-]+(?:\([^)]*\))?\s+__SC_EXPR_\d+__\s*\{/i.test(decl.rawCss) ||
+        hasPseudoBlockInterpolation)
     ) {
       let didApply = false;
       // ancestorPseudo is null for base styles, or the pseudo string (e.g., ":hover", ":focus-visible")
@@ -5262,6 +5358,31 @@ export function lowerRules(args: {
         }
         const pseudo = m[1];
         applyBlock(Number(m[2]), m[3] ?? "", pseudo);
+      }
+
+      // Detect interpolations INSIDE pseudo selector blocks that weren't handled.
+      // Pattern: &:hover { __SC_EXPR_X__; } - placeholder is INSIDE the braces.
+      // These interpolations (e.g., conditional helper calls) cannot be safely
+      // transformed under nested selectors because the selector context would be lost.
+      const insidePseudoRe = /&(:[a-z-]+(?:\([^)]*\))?)\s*\{[^}]*__SC_EXPR_(\d+)__[^}]*\}/gi;
+      while ((m = insidePseudoRe.exec(decl.rawCss))) {
+        const pseudo = m[1];
+        const slotId = Number(m[2]);
+        const expr = decl.templateExpressions[slotId] as any;
+        // Only bail if the expression is NOT a component identifier (those are handled above)
+        if (expr && expr.type !== "Identifier") {
+          warnings.push({
+            severity: "warning",
+            type: "Adapter resolved StyleX styles cannot be applied under nested selectors/at-rules",
+            loc: decl.loc,
+            context: { selector: `&${pseudo}` },
+          });
+          bail = true;
+          break;
+        }
+      }
+      if (bail) {
+        break;
       }
 
       if (didApply) {
