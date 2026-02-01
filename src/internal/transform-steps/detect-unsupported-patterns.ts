@@ -301,28 +301,6 @@ export function detectUnsupportedPatternsStep(ctx: TransformContext): StepResult
     }
   }
 
-  if (!staticStyledPropertyLoc && styledLocalNames && styledLocalNames.size > 0) {
-    const styledComponentNames = collectStyledComponentNames();
-    if (styledComponentNames.size > 0) {
-      root.find(j.JSXMemberExpression).forEach((p) => {
-        if (staticStyledPropertyLoc) {
-          return;
-        }
-        const obj = p.node.object;
-        if (obj?.type !== "JSXIdentifier") {
-          return;
-        }
-        if (!styledComponentNames.has(obj.name)) {
-          return;
-        }
-        const loc = (p.node.loc ?? obj.loc)?.start;
-        if (loc?.line !== undefined) {
-          staticStyledPropertyLoc = { line: loc.line, column: loc.column ?? 0 };
-        }
-      });
-    }
-  }
-
   if (hasComponentSelector) {
     warnings.push({
       severity: "warning",

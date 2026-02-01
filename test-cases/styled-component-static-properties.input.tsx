@@ -1,4 +1,3 @@
-// @expected-warning: Static properties on styled components (e.g. Styled.Component) are not supported
 import * as React from "react";
 import styled from "styled-components";
 
@@ -19,10 +18,7 @@ const StyledSelect = styled(BaseSelect)`
   width: 200px;
 `;
 
-// Bug: When StyledSelect is converted, references to StyledSelect.Option,
-// StyledSelect.Group, StyledSelect.Separator are left dangling.
-// This causes: TS2304: Cannot find name 'StyledSelect'
-export function SelectExample() {
+export function App() {
   return (
     <StyledSelect>
       <StyledSelect.Group label="Fruits">
