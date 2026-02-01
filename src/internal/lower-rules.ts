@@ -11,9 +11,11 @@ import {
 } from "./css-prop-mapping.js";
 import {
   type AstPath,
+  type ArrowFnParamBindings,
   type IdentifierNode,
   cloneAstNode,
   extractRootAndPath,
+  getArrowFnParamBindings,
   getFunctionBodyExpr,
   getMemberPathFromIdentifier,
   getNodeLocStart,
@@ -23,6 +25,7 @@ import {
   isCallExpressionNode,
   isFunctionNode,
   getDeclaratorId,
+  resolveIdentifierToPropName,
   setIdentifierTypeAnnotation,
   staticValueToLiteral,
 } from "./utilities/jscodeshift-utils.js";
@@ -708,24 +711,42 @@ export function lowerRules(args: {
       }
     };
 
-    // Factory to create prop test helpers given the arrow function parameter name
+    // Factory to create prop test helpers given the arrow function parameter bindings
     const createPropTestHelpers = (
-      paramName: string,
+      bindings: ArrowFnParamBindings,
     ): {
       readPropName: (node: ExpressionKind) => string | null;
       parseTestInfo: (test: ExpressionKind) => TestInfo | null;
+      parseChainedTestInfo: (test: ExpressionKind) => TestInfo | null;
     } => {
+      const paramName = bindings.kind === "simple" ? bindings.paramName : null;
+
       const readPropName = (node: ExpressionKind): string | null => {
-        const path = getMemberPathFromIdentifier(node, paramName);
-        if (!path || path.length !== 1) {
-          return null;
+        // For simple params, use member path extraction
+        if (paramName) {
+          const path = getMemberPathFromIdentifier(node, paramName);
+          if (path && path.length === 1) {
+            return path[0]!;
+          }
         }
-        return path[0]!;
+        // For destructured params, check if it's a bare identifier from destructuring
+        if (bindings.kind === "destructured") {
+          const propName = resolveIdentifierToPropName(node, bindings);
+          if (propName) {
+            return propName;
+          }
+        }
+        return null;
       };
 
       const parseTestInfo = (test: ExpressionKind): TestInfo | null => {
         if (!test || typeof test !== "object") {
           return null;
+        }
+        // Handle bare Identifier from destructured params: ({ isBw }) => isBw && ...
+        if (test.type === "Identifier" && bindings.kind === "destructured") {
+          const propName = resolveIdentifierToPropName(test, bindings);
+          return propName ? { when: propName, propName } : null;
         }
         if (test.type === "MemberExpression" || test.type === "OptionalMemberExpression") {
           const propName = readPropName(test);
@@ -740,20 +761,76 @@ export function lowerRules(args: {
           (test.operator === "===" || test.operator === "!==")
         ) {
           const left = test.left;
-          if (left.type === "MemberExpression" || left.type === "OptionalMemberExpression") {
-            const propName = readPropName(left);
+
+          // Helper to get rhs value, including special handling for undefined Identifier
+          const getRhsValue = (): string | null => {
+            const rhsTyped = test.right as { type?: string; name?: string };
+            // Handle undefined Identifier
+            if (rhsTyped.type === "Identifier" && rhsTyped.name === "undefined") {
+              return "undefined";
+            }
             const rhs = literalToStaticValue(test.right);
-            if (!propName || rhs === null) {
+            if (rhs === null) {
               return null;
             }
-            const rhsValue = JSON.stringify(rhs);
+            return JSON.stringify(rhs);
+          };
+
+          // Handle destructured identifier on left side
+          if (bindings.kind === "destructured" && left.type === "Identifier") {
+            const propName = resolveIdentifierToPropName(left, bindings);
+            const rhsValue = getRhsValue();
+            if (!propName || rhsValue === null) {
+              return null;
+            }
+            return { when: `${propName} ${test.operator} ${rhsValue}`, propName };
+          }
+          if (left.type === "MemberExpression" || left.type === "OptionalMemberExpression") {
+            const propName = readPropName(left);
+            const rhsValue = getRhsValue();
+            if (!propName || rhsValue === null) {
+              return null;
+            }
             return { when: `${propName} ${test.operator} ${rhsValue}`, propName };
           }
         }
         return null;
       };
 
-      return { readPropName, parseTestInfo };
+      /**
+       * Parse chained && conditions, returning a combined TestInfo.
+       * For: props.a === "x" && props.b === 1
+       * Returns: { when: 'a === "x" && b === 1', propName: null (multiple props) }
+       */
+      const parseChainedTestInfo = (test: ExpressionKind): TestInfo | null => {
+        // First try parsing as a simple test
+        const simple = parseTestInfo(test);
+        if (simple) {
+          return simple;
+        }
+
+        // Handle chained LogicalExpression with &&
+        if (
+          test &&
+          typeof test === "object" &&
+          test.type === "LogicalExpression" &&
+          test.operator === "&&"
+        ) {
+          const leftInfo = parseChainedTestInfo(test.left);
+          const rightInfo = parseTestInfo(test.right);
+          if (leftInfo && rightInfo) {
+            // Combine conditions with &&
+            const combinedWhen = `${leftInfo.when} && ${rightInfo.when}`;
+            // For chained conditions, we use the last propName as the primary
+            // (this matches how variants are typically keyed)
+            return { when: combinedWhen, propName: rightInfo.propName };
+          }
+        }
+
+        return null;
+      };
+
+      return { readPropName, parseTestInfo, parseChainedTestInfo };
     };
 
     // Build reusable handler context for resolveDynamicNode calls
@@ -1162,12 +1239,13 @@ export function lowerRules(args: {
       if (!expr || expr.type !== "ArrowFunctionExpression") {
         return false;
       }
-      const paramName = expr.params?.[0]?.type === "Identifier" ? expr.params[0].name : null;
-      if (!paramName) {
+      const bindings = getArrowFnParamBindings(expr);
+      if (!bindings) {
         return false;
       }
+      const paramName = bindings.kind === "simple" ? bindings.paramName : null;
 
-      const { parseTestInfo } = createPropTestHelpers(paramName);
+      const { parseTestInfo, parseChainedTestInfo } = createPropTestHelpers(bindings);
 
       const isTriviallyPureVoidArg = (arg: any): boolean => {
         if (!arg || typeof arg !== "object") {
@@ -1226,10 +1304,11 @@ export function lowerRules(args: {
         return false;
       };
 
-      // Handle LogicalExpression: props.$x && css`...`
+      // Handle LogicalExpression: props.$x && css`...` or chained: props.$x && props.$y && css`...`
       const body = expr.body;
       if (body?.type === "LogicalExpression" && body.operator === "&&") {
-        const testInfo = parseTestInfo(body.left);
+        // Use parseChainedTestInfo to handle both simple and chained && conditions
+        const testInfo = parseChainedTestInfo(body.left);
         if (!testInfo) {
           return false;
         }
@@ -1305,16 +1384,95 @@ export function lowerRules(args: {
           return true;
         }
 
-        // Handle TemplateLiteral without expressions: props.$x && `width: 10px;`
+        // Handle TemplateLiteral (with or without interpolations): props.$x && `z-index: ${props.$x};`
         if (body.right?.type === "TemplateLiteral") {
           const tpl = body.right as {
             expressions?: unknown[];
             quasis?: Array<{ value?: { raw?: string; cooked?: string } }>;
           };
-          // Only support static template literals (no interpolations)
+
+          // Handle template literals with interpolations
           if (tpl.expressions && tpl.expressions.length > 0) {
-            return false;
+            // Use resolveTemplateLiteralBranch to parse the template
+            const resolved = resolveTemplateLiteralBranch({
+              j,
+              node: body.right,
+              paramName,
+              filePath,
+              parseExpr,
+              cssValueToJs,
+              resolveValue,
+              resolveCall,
+              resolveImportInScope,
+              resolverImports,
+              componentInfo,
+              handlerContext,
+            });
+            if (!resolved) {
+              return false;
+            }
+            const { style, dynamicEntries, inlineEntries } = resolved;
+
+            // Handle dynamic entries (e.g., z-index: ${props.$zIndex})
+            if (dynamicEntries.length > 0) {
+              // For `prop !== undefined` test, allow dynamic props if they match
+              const isUndefinedCheck =
+                testInfo.when.endsWith(" !== undefined") ||
+                testInfo.when.endsWith(' !== "undefined"');
+              const testProp = testInfo.propName;
+
+              // Check if all dynamic props match the test prop
+              const allMatch = dynamicEntries.every((e) => e.jsxProp === testProp);
+              if (!allMatch && !isUndefinedCheck) {
+                return false;
+              }
+
+              // Create style functions for dynamic entries
+              for (const entry of dynamicEntries) {
+                const fnKey = `${decl.styleKey}${toSuffixFromProp(entry.stylexProp)}`;
+                if (!styleFnDecls.has(fnKey)) {
+                  const param = j.identifier(entry.stylexProp);
+                  annotateParamFromJsxProp(param, entry.jsxProp);
+                  const valueId = j.identifier(entry.stylexProp);
+                  const p = j.property("init", valueId, valueId) as any;
+                  p.shorthand = true;
+                  const bodyExpr = j.objectExpression([p]);
+                  styleFnDecls.set(fnKey, j.arrowFunctionExpression([param], bodyExpr));
+                }
+                // Track as conditional: apply when test is truthy
+                // For !== undefined checks, we still use "truthy" since we check the full condition
+                const condition = "truthy" as const;
+                if (
+                  !styleFnFromProps.some(
+                    (p) =>
+                      p.fnKey === fnKey && p.jsxProp === entry.jsxProp && p.condition === condition,
+                  )
+                ) {
+                  styleFnFromProps.push({
+                    fnKey,
+                    jsxProp: entry.jsxProp,
+                    condition,
+                    conditionWhen: testInfo.when,
+                  });
+                }
+                ensureShouldForwardPropDrop(decl, entry.jsxProp);
+              }
+            }
+
+            // Handle inline entries (not yet supported in conditional context)
+            if (inlineEntries.length > 0) {
+              return false;
+            }
+
+            // Apply static styles
+            if (Object.keys(style).length > 0) {
+              applyVariant(testInfo, style);
+            }
+
+            return true;
           }
+
+          // Handle static template literals (no interpolations)
           const rawCss =
             tpl.quasis?.map((q) => q.value?.cooked ?? q.value?.raw ?? "").join("") ?? "";
           if (!rawCss.trim()) {
@@ -1727,9 +1885,8 @@ export function lowerRules(args: {
       if (!expr || expr.type !== "ArrowFunctionExpression") {
         return false;
       }
-      const paramName =
-        expr.params?.[0]?.type === "Identifier" ? (expr.params[0].name as string) : null;
-      if (!paramName) {
+      const bindings = getArrowFnParamBindings(expr);
+      if (!bindings) {
         return false;
       }
       const body = expr.body as any;
@@ -1737,7 +1894,7 @@ export function lowerRules(args: {
         return false;
       }
 
-      const { parseTestInfo } = createPropTestHelpers(paramName);
+      const { parseTestInfo } = createPropTestHelpers(bindings);
       const testInfo = parseTestInfo(body.test);
       if (!testInfo) {
         return false;
