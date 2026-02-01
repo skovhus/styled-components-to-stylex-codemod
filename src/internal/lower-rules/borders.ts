@@ -18,6 +18,8 @@ export function tryHandleInterpolatedBorder(args: {
   filePath: string;
   decl: StyledDecl;
   d: any;
+  selector: string;
+  atRuleStack: string[];
   extraStyleObjects: Map<string, Record<string, unknown>>;
   hasLocalThemeBinding: boolean;
   resolveValue: Adapter["resolveValue"];
@@ -49,6 +51,8 @@ export function tryHandleInterpolatedBorder(args: {
     filePath,
     decl,
     d,
+    selector,
+    atRuleStack,
     extraStyleObjects,
     resolveValue,
     resolveCall,
@@ -266,16 +270,17 @@ export function tryHandleInterpolatedBorder(args: {
       ? "Adapter helper call in border interpolation did not resolve to a single CSS value"
       : "Unsupported call expression (expected imported helper(...) or imported helper(...)(...))";
 
-    const resolveBorderExpr = (
-      node: any,
-    ):
-      | { kind: "ok"; exprAst: any; imports: any[] }
+    type ResolveBorderExprResult =
+      | { kind: "okValue"; exprAst: any; imports: any[] }
+      | { kind: "okStyles"; exprAst: any; imports: any[] }
       | {
           kind: "warn";
           warning: WarningType;
           context?: Record<string, unknown>;
           loc?: { line: number; column: number } | null | undefined;
-        } => {
+        };
+
+    const resolveBorderExpr = (node: any): ResolveBorderExprResult => {
       const loc = getNodeLocStart(node);
       const res = resolveDynamicNode(
         {
@@ -325,22 +330,29 @@ export function tryHandleInterpolatedBorder(args: {
             context,
           };
         }
-        return { kind: "ok", exprAst, imports: res.imports ?? [] };
+        return { kind: "okValue", exprAst, imports: res.imports ?? [] };
       }
       if (res.type === "resolvedStyles") {
-        const context =
-          res.resolveCallContext && res.resolveCallResult
-            ? {
-                resolveCallContext: res.resolveCallContext,
-                resolveCallResult: res.resolveCallResult,
-              }
-            : undefined;
+        const exprAst = parseExpr(res.expr);
+        if (!exprAst) {
+          const context =
+            res.resolveCallContext && res.resolveCallResult
+              ? {
+                  resolveCallContext: res.resolveCallContext,
+                  resolveCallResult: res.resolveCallResult,
+                }
+              : undefined;
+          return {
+            kind: "warn",
+            warning: "Adapter resolveCall returned an unparseable styles expression",
+            context,
+            loc,
+          };
+        }
         return {
-          kind: "warn",
-          warning:
-            "Adapter resolveCall returned StyleX styles for helper call where a CSS value was expected",
-          context,
-          loc,
+          kind: "okStyles",
+          exprAst,
+          imports: res.imports ?? [],
         };
       }
       if (res.type === "keepOriginal") {
@@ -398,7 +410,7 @@ export function tryHandleInterpolatedBorder(args: {
       (expr?.type === "ArrowFunctionExpression" && expr.body?.type === "CallExpression");
     if (isResolvableHelper) {
       const resolved = resolveBorderExpr(expr);
-      if (resolved.kind !== "ok") {
+      if (resolved.kind === "warn") {
         if (resolved.context) {
           bailUnsupportedWithContext(resolved.warning, resolved.context, resolved.loc);
         } else {
@@ -409,6 +421,31 @@ export function tryHandleInterpolatedBorder(args: {
 
       for (const imp of resolved.imports) {
         resolverImports.set(JSON.stringify(imp), imp);
+      }
+
+      if (resolved.kind === "okStyles") {
+        if (directionRaw) {
+          bailUnsupportedWithContext(
+            "Directional border helper styles are not supported",
+            { property: prop },
+            getNodeLocStart(expr),
+          );
+          return true;
+        }
+        if (selector.trim() !== "&" || (atRuleStack ?? []).length > 0) {
+          bailUnsupportedWithContext(
+            "Adapter resolved StyleX styles cannot be applied under nested selectors/at-rules",
+            { selector, atRuleStack },
+            getNodeLocStart(expr),
+          );
+          return true;
+        }
+        decl.extraStylexPropsArgs ??= [];
+        decl.extraStylexPropsArgs.push({
+          expr: resolved.exprAst as any,
+        });
+        decl.needsWrapperComponent = true;
+        return true;
       }
 
       // Special case: helper returns a border shorthand string (or template literal),

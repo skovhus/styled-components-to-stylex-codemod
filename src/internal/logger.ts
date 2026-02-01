@@ -33,6 +33,7 @@ export type WarningType =
   | "Conditional `css` block: ternary branch value could not be resolved (imported values require adapter support)"
   | "Conditional `css` block: ternary expressions inside pseudo selectors are not supported"
   | "Conditional `css` block: unsupported selector"
+  | "Directional border helper styles are not supported"
   | "createGlobalStyle is not supported in StyleX. Global styles should be handled separately (e.g., in a CSS file or using CSS reset libraries)"
   | "Curried helper call resolved to usage 'create', use usage 'props' when the helper returns a StyleX style object"
   | "Dynamic styles inside pseudo elements (::before/::after) are not supported by StyleX. See https://github.com/facebook/stylex/issues/1396"
