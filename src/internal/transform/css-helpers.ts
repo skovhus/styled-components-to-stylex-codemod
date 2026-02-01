@@ -2,7 +2,11 @@ import type { Collection, JSCodeshift, TemplateLiteral } from "jscodeshift";
 import { compile } from "stylis";
 
 import type { CssRuleIR } from "../css-ir.js";
-import { normalizeStylisAstToIR } from "../css-ir.js";
+import {
+  findUniversalSelectorLineOffset,
+  hasUniversalSelectorInRules,
+  normalizeStylisAstToIR,
+} from "../css-ir.js";
 import { parseStyledTemplateLiteral } from "../styled-css.js";
 import type { StyledDecl } from "../transform-types.js";
 
@@ -600,12 +604,26 @@ export function extractAndRemoveCssHelpers(args: {
     };
   }
 
-  const noteCssHelperUniversalSelector = (template: any): void => {
+  const noteCssHelperUniversalSelector = (
+    template: any,
+    rawCss: string,
+    rules: CssRuleIR[],
+  ): void => {
     cssHelperHasUniversalSelectors = true;
     if (cssHelperUniversalSelectorLoc) {
       return;
     }
-    cssHelperUniversalSelectorLoc = getCssHelperTemplateLoc(template);
+    const templateLoc = getCssHelperTemplateLoc(template);
+    if (!templateLoc) {
+      return;
+    }
+    // Find the line offset of the first universal selector in the raw CSS
+    if (hasUniversalSelectorInRules(rules)) {
+      const lineOffset = findUniversalSelectorLineOffset(rawCss);
+      cssHelperUniversalSelectorLoc = { line: templateLoc.line + lineOffset, column: 0 };
+    } else {
+      cssHelperUniversalSelectorLoc = templateLoc;
+    }
   };
 
   const isStillReferenced = (): boolean =>
@@ -641,7 +659,7 @@ export function extractAndRemoveCssHelpers(args: {
       const stylisAst = compile(rawCss);
       const rules = normalizeStylisAstToIR(stylisAst, parsed.slots, { rawCss });
       if (rules.some((r) => typeof r.selector === "string" && r.selector.includes("*"))) {
-        noteCssHelperUniversalSelector(template);
+        noteCssHelperUniversalSelector(template, parsed.rawCss, rules);
       }
 
       cssHelperDecls.push({
@@ -793,7 +811,7 @@ export function extractAndRemoveCssHelpers(args: {
         const rules = normalizeStylisAstToIR(stylisAst, parsed.slots, { rawCss });
 
         if (rules.some((r) => typeof r.selector === "string" && r.selector.includes("*"))) {
-          noteCssHelperUniversalSelector(template);
+          noteCssHelperUniversalSelector(template, parsed.rawCss, rules);
         }
 
         // Create a qualified name for the style key: objectName + PropName

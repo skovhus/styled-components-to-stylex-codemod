@@ -423,3 +423,69 @@ function sameArray(a: readonly string[], b: readonly string[]): boolean {
   }
   return true;
 }
+
+/**
+ * Find the first rule with a universal selector (`*`) in its selector string.
+ * Returns the selector string, or null if none found.
+ */
+function findFirstUniversalSelector(rules: CssRuleIR[]): string | null {
+  for (const r of rules) {
+    if (typeof r.selector === "string" && r.selector.includes("*")) {
+      return r.selector;
+    }
+  }
+  return null;
+}
+
+/**
+ * Check if any rule has a universal selector.
+ */
+export function hasUniversalSelectorInRules(rules: CssRuleIR[]): boolean {
+  return findFirstUniversalSelector(rules) !== null;
+}
+
+/**
+ * Find the line offset (0-indexed) of a universal selector (`*`) within the raw CSS.
+ * Returns the line number relative to the start of the CSS string.
+ *
+ * Stylis normalizes selectors (e.g., `& > *` becomes `>*`), so we can't reliably
+ * match the exact selector string. Instead, we search for patterns that indicate
+ * a universal selector in CSS: `*` followed by whitespace, `{`, or preceded by
+ * combinator characters.
+ */
+export function findUniversalSelectorLineOffset(rawCss: string): number {
+  // Stylis normalizes selectors by removing spaces, so we need to search flexibly.
+  // Look for the `*` character in a selector context (not inside a value like "100*2").
+  // Universal selectors appear as: `& *`, `> *`, `+ *`, `~ *`, or just `*` at start
+
+  // Find all occurrences of `*` and check if they're in a selector context
+  for (let i = 0; i < rawCss.length; i++) {
+    const char = rawCss[i];
+    if (char !== "*") {
+      continue;
+    }
+
+    // Check if this `*` looks like a universal selector:
+    // - preceded by whitespace, combinator, or start of line/string
+    // - followed by whitespace, `{`, `:`, `[`, or end of string
+    const prevChar = i > 0 ? rawCss[i - 1]! : " ";
+    const nextChar = i < rawCss.length - 1 ? rawCss[i + 1]! : " ";
+
+    const validPrev = /[\s>&+~(,]/.test(prevChar) || i === 0;
+    const validNext = /[\s{:[\],)]/.test(nextChar) || i === rawCss.length - 1;
+
+    if (validPrev && validNext) {
+      // Found a universal selector - count newlines before this position
+      let lineOffset = 0;
+      for (let j = 0; j < i; j++) {
+        if (rawCss[j] === "\n") {
+          lineOffset++;
+        }
+      }
+      return lineOffset;
+    }
+  }
+
+  // Fallback: selector not found in raw CSS
+  return 0;
+}
