@@ -825,7 +825,15 @@ function tryResolveConditionalValue(
   const info = getArrowFnThemeParamInfo(expr);
   const paramName = info?.kind === "propsParam" ? info.propsName : null;
 
-  if (expr.body.type !== "ConditionalExpression") {
+  // Use getFunctionBodyExpr to handle both expression-body and block-body arrow functions.
+  // Block bodies with a single return statement (possibly with comments) are supported.
+  const body = getFunctionBodyExpr(expr) as {
+    type?: string;
+    test?: unknown;
+    consequent?: unknown;
+    alternate?: unknown;
+  } | null;
+  if (!body || body.type !== "ConditionalExpression") {
     return null;
   }
 
@@ -1108,7 +1116,11 @@ function tryResolveConditionalValue(
     return resolved ? { expr: resolved.expr, imports: resolved.imports } : null;
   };
 
-  const { test, consequent, alternate } = expr.body;
+  const { test, consequent, alternate } = body as {
+    test: any;
+    consequent: any;
+    alternate: any;
+  };
 
   // 1) props.foo ? a : b (simple boolean test)
   const testPath =

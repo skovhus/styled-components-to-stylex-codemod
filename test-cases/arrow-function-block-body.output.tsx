@@ -1,27 +1,15 @@
 import React from "react";
 import * as stylex from "@stylexjs/stylex";
 
-type BoxProps = Omit<React.ComponentProps<"div">, "className" | "style"> & {
+type BoxProps = React.PropsWithChildren<{
   $large?: boolean;
-};
+}>;
 
 // Arrow function with block body (contains comment)
 // Should be equivalent to expression-body: ${props => props.$large ? 34 : 6}px
 function Box(props: BoxProps) {
   const { children, $large } = props;
-
-  const sx = stylex.props(styles.box);
-  return (
-    <div
-      {...sx}
-      style={{
-        ...sx.style,
-        bottom: `${$large ? 34 : 6}px`,
-      }}
-    >
-      {children}
-    </div>
-  );
+  return <div {...stylex.props(styles.box, $large && styles.boxLarge)}>{children}</div>;
 }
 
 export const App = () => (
@@ -32,9 +20,11 @@ export const App = () => (
 );
 
 const styles = stylex.create({
-  // Arrow function with block body (contains comment)
-  // Should be equivalent to expression-body: ${props => props.$large ? 34 : 6}px
   box: {
     padding: "8px",
+    bottom: `${6}px`,
+  },
+  boxLarge: {
+    bottom: `${34}px`,
   },
 });
