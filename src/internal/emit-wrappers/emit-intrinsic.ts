@@ -784,14 +784,20 @@ export function emitIntrinsicWrappers(emitter: WrapperEmitter): {
         inlineStyleProps: [],
       });
 
+      // For polymorphic components with style passthrough, put stylex.props BEFORE rest
+      // so user's style prop wins (className is already omitted from props type).
+      const allowStylePassthrough = (d as any).allowStylePropPassthrough;
       const attrs: JsxAttr[] = [
         ...emitter.buildAttrsFromAttrsInfo({
           attrsInfo: d.attrsInfo,
           propExprFor: (prop) => j.identifier(prop),
         }),
-        j.jsxSpreadAttribute(restId),
+        ...(allowStylePassthrough ? [] : [j.jsxSpreadAttribute(restId)]),
       ];
       emitter.appendMergingAttrs(attrs, merging);
+      if (allowStylePassthrough) {
+        attrs.push(j.jsxSpreadAttribute(restId));
+      }
       const jsx = emitter.buildJsxElement({
         tagName: allowAsProp ? "Component" : tagName,
         attrs,

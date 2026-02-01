@@ -28,7 +28,7 @@ type AnimatedTextProps<C extends React.ElementType = "span"> = Omit<
 function AnimatedText<C extends React.ElementType = "span">(props: AnimatedTextProps<C>) {
   const { as: Component = "span", children, ...rest } = props;
   return (
-    <Component {...rest} {...stylex.props(styles.animatedText)}>
+    <Component {...stylex.props(styles.animatedText)} {...rest}>
       {children}
     </Component>
   );
