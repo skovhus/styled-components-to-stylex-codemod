@@ -424,6 +424,14 @@ export function tryHandleInterpolatedBorder(args: {
       }
 
       if (resolved.kind === "okStyles") {
+        if (directionRaw) {
+          bailUnsupportedWithContext(
+            "Directional border helper styles are not supported",
+            { property: prop },
+            getNodeLocStart(expr),
+          );
+          return true;
+        }
         if (selector.trim() !== "&" || (atRuleStack ?? []).length > 0) {
           bailUnsupportedWithContext(
             "Adapter resolved StyleX styles cannot be applied under nested selectors/at-rules",
