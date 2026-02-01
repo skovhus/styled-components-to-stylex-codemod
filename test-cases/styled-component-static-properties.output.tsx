@@ -5,15 +5,20 @@ import * as stylex from "@stylexjs/stylex";
 const BaseSelect = (props: { children: React.ReactNode; className?: string }) => (
   <div className={props.className}>{props.children}</div>
 );
+
 BaseSelect.Option = (props: { children: React.ReactNode; value: string }) => (
   <div data-value={props.value}>{props.children}</div>
 );
+
 BaseSelect.Group = (props: { children: React.ReactNode; label: string }) => (
   <div data-label={props.label}>{props.children}</div>
 );
-BaseSelect.Separator = () => <hr />;
 
-type StyledSelectProps = Omit<React.ComponentPropsWithRef<typeof BaseSelect>, "className" | "style">;
+BaseSelect.Separator = () => <hr />;
+type StyledSelectProps = Omit<
+  React.ComponentPropsWithRef<typeof BaseSelect>,
+  "className" | "style"
+>;
 
 // Styled version that extends BaseSelect - inherits static properties
 function StyledSelect(props: StyledSelectProps) {
