@@ -419,7 +419,15 @@ export function createCssHelperResolver(args: {
 
         // Handle ConditionalExpression with static parts: ${prop ? val1 : val2}px
         // We can create variants for each branch
+        // Note: only allowed at root selector level; variants inside pseudo selectors would lose nesting
         if (hasStaticParts && expr && (expr as any).type === "ConditionalExpression") {
+          if (!allowDynamicValues) {
+            // Bail: ternary inside pseudo selector would lose the selector nesting in the variant
+            return bail(
+              "Conditional `css` block: ternary expressions inside pseudo selectors are not supported",
+              { property: d.property },
+            );
+          }
           const ternaryExpr = expr as {
             type: "ConditionalExpression";
             test: any;
