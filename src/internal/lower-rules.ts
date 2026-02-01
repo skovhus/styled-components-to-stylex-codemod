@@ -5180,7 +5180,7 @@ export function lowerRules(args: {
           warnings.push({
             severity: "warning",
             type: warning?.type || "Unsupported interpolation: unknown",
-            loc,
+            loc: loc ?? decl.loc,
             context: warning?.context,
           });
           bail = true;
