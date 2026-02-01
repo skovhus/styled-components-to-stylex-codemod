@@ -43,12 +43,13 @@ export const CommandMenuGroupHeader = styled(ActionMenuGroupHeader)`
 `;
 
 export function App() {
+  // Static properties should be accessible on the transformed component
   const itemHeight = ListItem.HEIGHT;
   const buttonHeight = ExtendedButton.HEIGHT;
   return (
-    <div>
-      <ListItem style={{ height: itemHeight }}>Item 1</ListItem>
-      <ExtendedButton style={{ height: buttonHeight }}>Click me</ExtendedButton>
+    <div data-item-height={itemHeight} data-button-height={buttonHeight}>
+      <ListItem>Item 1</ListItem>
+      <ExtendedButton>Click me</ExtendedButton>
       <CommandMenuTextDivider text="Divider" />
       <CommandMenuGroupHeader title="Header" />
     </div>

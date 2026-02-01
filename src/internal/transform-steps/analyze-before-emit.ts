@@ -1,5 +1,5 @@
 import type { JSXAttribute, JSXSpreadAttribute } from "jscodeshift";
-import { CONTINUE, type StepResult } from "../transform-types.js";
+import { CONTINUE, returnResult, type StepResult } from "../transform-types.js";
 import type { StyledDecl } from "../transform-types.js";
 import { TransformContext, type ExportInfo } from "../transform-context.js";
 import {
@@ -272,12 +272,23 @@ export function analyzeBeforeEmitStep(ctx: TransformContext): StepResult {
     return { className: foundClassName, style: foundStyle };
   };
 
-  // Styled components that receive className/style props in JSX need wrappers to merge them.
-  // Without a wrapper, passing `className` would replace the stylex className instead of merging.
-  // Also track which components receive className/style in JSX for merger import determination.
+  // Check for external style prop usage - this is NOT supported and must bail.
+  // External style props would be silently dropped since StyleX manages styles internally.
   for (const decl of styledDecls) {
     const { className, style } = receivesClassNameOrStyleInJsx(decl.localName);
-    if (className || style) {
+    if (style) {
+      // Bail: external style props cannot be preserved
+      ctx.warnings.push({
+        severity: "error",
+        type: "External style prop usage: styled component is used with a `style` prop in JSX which cannot be preserved",
+        loc: null,
+        context: { componentName: decl.localName },
+      });
+      return returnResult({ code: null, warnings: ctx.warnings }, "bail");
+    }
+    // Styled components that receive className props in JSX need wrappers to merge them.
+    // Without a wrapper, passing `className` would replace the stylex className instead of merging.
+    if (className) {
       (decl as any).receivesClassNameOrStyleInJsx = true;
       if (!decl.needsWrapperComponent) {
         decl.needsWrapperComponent = true;

@@ -62,7 +62,8 @@ export type WarningType =
   | "Unsupported selector: descendant/child/sibling selector"
   | "Unsupported selector: interpolated pseudo selector"
   | "Unsupported selector: unknown component selector"
-  | "Using styled-components components as mixins is not supported; use css`` mixins or strings instead";
+  | "Using styled-components components as mixins is not supported; use css`` mixins or strings instead"
+  | "External style prop usage: styled component is used with a `style` prop in JSX which cannot be preserved";
 
 export interface WarningLog {
   severity: Severity;
