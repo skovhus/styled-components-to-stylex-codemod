@@ -1190,9 +1190,13 @@ export class WrapperEmitter {
         .map((s) => s.trim())
         .filter(Boolean);
       const parsed = parts.map((p) => this.parseVariantWhenToAst(p));
+      const firstParsedOr = parsed[0];
+      if (!firstParsedOr) {
+        return { cond: j.identifier("true"), props: [], isBoolean: true };
+      }
       const cond = parsed
         .slice(1)
-        .reduce((acc, cur) => j.logicalExpression("||", acc, cur.cond), parsed[0]!.cond);
+        .reduce((acc, cur) => j.logicalExpression("||", acc, cur.cond), firstParsedOr.cond);
       const props = [...new Set(parsed.flatMap((x) => x.props))];
       // Combined || is boolean only if all parts are boolean
       const isBoolean = parsed.every((p) => p.isBoolean);
