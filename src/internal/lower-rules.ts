@@ -5087,10 +5087,40 @@ export function lowerRules(args: {
       delete (styleObj as any)[name];
     }
 
+    // Check for interpolations in pseudo selectors that can't be safely transformed
+    const hasPseudoBlockInterpolation = (() => {
+      if (!decl.rawCss) {
+        return false;
+      }
+      // Match pattern: &:pseudo { ... __SC_EXPR_X__; ... }
+      // where the placeholder is standalone (CSS block interpolation), not a property value
+      const pseudoBlockRe = /&:[a-z-]+(?:\([^)]*\))?\s*\{([^}]*)\}/gi;
+      let m;
+      while ((m = pseudoBlockRe.exec(decl.rawCss))) {
+        const blockContent = m[1] ?? "";
+        // Check if the block contains a standalone placeholder (not part of a property: value)
+        // A standalone placeholder is on its own line with optional whitespace/semicolon
+        const lines = blockContent.split(/[\n\r]/);
+        for (const line of lines) {
+          const trimmed = line.trim();
+          // Skip empty lines
+          if (!trimmed) {
+            continue;
+          }
+          // Check if this line is ONLY a placeholder (no property name before it)
+          if (/^__SC_EXPR_\d+__\s*;?\s*$/.test(trimmed)) {
+            return true;
+          }
+        }
+      }
+      return false;
+    })();
+
     if (
       decl.rawCss &&
       (/__SC_EXPR_\d+__\s*\{/.test(decl.rawCss) ||
-        /&:[a-z-]+(?:\([^)]*\))?\s+__SC_EXPR_\d+__\s*\{/i.test(decl.rawCss))
+        /&:[a-z-]+(?:\([^)]*\))?\s+__SC_EXPR_\d+__\s*\{/i.test(decl.rawCss) ||
+        hasPseudoBlockInterpolation)
     ) {
       let didApply = false;
       // ancestorPseudo is null for base styles, or the pseudo string (e.g., ":hover", ":focus-visible")
@@ -5171,6 +5201,31 @@ export function lowerRules(args: {
         }
         const pseudo = m[1];
         applyBlock(Number(m[2]), m[3] ?? "", pseudo);
+      }
+
+      // Detect interpolations INSIDE pseudo selector blocks that weren't handled.
+      // Pattern: &:hover { __SC_EXPR_X__; } - placeholder is INSIDE the braces.
+      // These interpolations (e.g., conditional helper calls) cannot be safely
+      // transformed under nested selectors because the selector context would be lost.
+      const insidePseudoRe = /&(:[a-z-]+(?:\([^)]*\))?)\s*\{[^}]*__SC_EXPR_(\d+)__[^}]*\}/gi;
+      while ((m = insidePseudoRe.exec(decl.rawCss))) {
+        const pseudo = m[1];
+        const slotId = Number(m[2]);
+        const expr = decl.templateExpressions[slotId] as any;
+        // Only bail if the expression is NOT a component identifier (those are handled above)
+        if (expr && expr.type !== "Identifier") {
+          warnings.push({
+            severity: "warning",
+            type: "Adapter resolved StyleX styles cannot be applied under nested selectors/at-rules",
+            loc: decl.loc,
+            context: { selector: `&${pseudo}` },
+          });
+          bail = true;
+          break;
+        }
+      }
+      if (bail) {
+        break;
       }
 
       if (didApply) {
