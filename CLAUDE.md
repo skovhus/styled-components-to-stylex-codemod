@@ -77,3 +77,7 @@ Use the Playwright MCP to inspect test case rendering.
 ## Skills
 
 Skills are located in `.claude/skills/`.
+
+## Agent Workflow
+
+See [.claude/agents.md](.claude/agents.md) for the required post-implementation workflow. All agents MUST run the `refactor-code-quality` skill after implementing features to remove code duplication and ensure type safety.
