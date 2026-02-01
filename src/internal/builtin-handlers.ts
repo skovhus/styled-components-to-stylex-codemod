@@ -22,6 +22,7 @@ import {
   resolveIdentifierToPropName,
 } from "./utilities/jscodeshift-utils.js";
 import { escapeRegex, sanitizeIdentifier } from "./utilities/string-utils.js";
+import { hasThemeAccessInArrowFn } from "./lower-rules/inline-styles.js";
 
 type ExpressionKind = Parameters<JSCodeshift["expressionStatement"]>[0];
 import {
@@ -1893,6 +1894,32 @@ function tryResolveInlineStyleValueForLogicalExpression(node: DynamicNode): Hand
   return { type: "emitInlineStyleValueFromProps" };
 }
 
+function tryResolveThemeDependentTemplateLiteral(node: DynamicNode): HandlerResult | null {
+  // Detect theme-dependent template literals and return keepOriginal with a warning.
+  // This catches cases like: ${props => `${props.theme.color.bg}px`}
+  // StyleX output does not have `props.theme` at runtime.
+  if (!node.css.property) {
+    return null;
+  }
+  const expr = node.expr;
+  if (!isArrowFunctionExpression(expr)) {
+    return null;
+  }
+  const body = getFunctionBodyExpr(expr);
+  if (!body || (body as { type?: string }).type !== "TemplateLiteral") {
+    return null;
+  }
+  // Use existing utility to check for theme access
+  if (hasThemeAccessInArrowFn(expr)) {
+    return {
+      type: "keepOriginal",
+      reason:
+        "Theme-dependent template literals require a project-specific theme source (e.g. useTheme())",
+    };
+  }
+  return null;
+}
+
 function tryResolveStyleFunctionFromTemplateLiteral(node: DynamicNode): HandlerResult | null {
   if (!node.css.property) {
     return null;
@@ -1962,7 +1989,13 @@ function tryResolveStyleFunctionFromTemplateLiteral(node: DynamicNode): HandlerR
       props,
     };
   })();
-  if (!hasUsableProps || hasNonTransientProps) {
+  if (!hasUsableProps) {
+    return null;
+  }
+  // For non-transient props: if shouldForwardProp is configured, let the fallback in
+  // lower-rules.ts handle it (creates style functions that take props as argument).
+  // Otherwise, emit style functions here.
+  if (hasNonTransientProps && node.component.withConfig?.shouldForwardProp) {
     return null;
   }
   return { type: "emitStyleFunctionFromPropsObject", props };
@@ -2093,6 +2126,8 @@ export function resolveDynamicNode(
     tryResolveConditionalCssBlockTernary(node) ??
     tryResolveConditionalCssBlock(node, ctx) ??
     tryResolveArrowFnCallWithSinglePropArg(node) ??
+    // Detect theme-dependent template literals before trying to emit style functions
+    tryResolveThemeDependentTemplateLiteral(node) ??
     tryResolveStyleFunctionFromTemplateLiteral(node) ??
     tryResolveInlineStyleValueForNestedPropAccess(node) ??
     tryResolvePropAccess(node) ??

@@ -766,10 +766,21 @@ export function lowerRules(args: {
     };
 
     // Build component info for resolveDynamicNode calls
+    const withConfig = decl.shouldForwardProp ? { shouldForwardProp: true } : undefined;
     const componentInfo =
       decl.base.kind === "intrinsic"
-        ? { localName: decl.localName, base: "intrinsic" as const, tagOrIdent: decl.base.tagName }
-        : { localName: decl.localName, base: "component" as const, tagOrIdent: decl.base.ident };
+        ? {
+            localName: decl.localName,
+            base: "intrinsic" as const,
+            tagOrIdent: decl.base.tagName,
+            withConfig,
+          }
+        : {
+            localName: decl.localName,
+            base: "component" as const,
+            tagOrIdent: decl.base.ident,
+            withConfig,
+          };
 
     // (helpers imported from `./lower-rules/*`)
 

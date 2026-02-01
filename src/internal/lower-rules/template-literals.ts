@@ -30,8 +30,18 @@ type ImportMeta = { importedName: string; source: ImportSource };
 type ResolveImportInScope = (localName: string, identNode?: unknown) => ImportMeta | null;
 
 type ComponentInfo =
-  | { localName: string; base: "intrinsic"; tagOrIdent: string }
-  | { localName: string; base: "component"; tagOrIdent: string };
+  | {
+      localName: string;
+      base: "intrinsic";
+      tagOrIdent: string;
+      withConfig?: { shouldForwardProp?: boolean };
+    }
+  | {
+      localName: string;
+      base: "component";
+      tagOrIdent: string;
+      withConfig?: { shouldForwardProp?: boolean };
+    };
 
 export type TemplateDynamicEntry = {
   jsxProp: string;

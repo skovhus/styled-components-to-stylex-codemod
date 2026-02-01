@@ -74,8 +74,8 @@ const styles = stylex.create({
     padding: "8px",
   },
   containerPositionFixedSidebarCollapsed: {
-    left: `${0}px`,
-    right: `${0}px`,
+    left: "0px",
+    right: "0px",
   },
   containerPositionFixed: {
     position: "absolute",
