@@ -78,6 +78,14 @@ Use the Playwright MCP to inspect test case rendering.
 
 Skills are located in `.claude/skills/`.
 
-## Agent Workflow
+## Post-Implementation Workflow
 
-See [.claude/agents.md](.claude/agents.md) for the required post-implementation workflow. All agents MUST run the `refactor-code-quality` skill after implementing features to remove code duplication and ensure type safety.
+After implementing any feature or fix, agents MUST:
+
+1. **Validate changes**: Run `pnpm check` to ensure all linting, type checking, and tests pass
+2. **Run code quality refactoring**: Use the [refactor-code-quality](.claude/skills/refactor-code-quality/SKILL.md) skill to:
+   - Remove code duplication and extract shared patterns
+   - Eliminate `any` types
+   - Remove type assertions (`as Type`) and non-null assertions (`!`)
+3. **Validate again**: Run `pnpm check` after refactoring
+4. **Commit and push**: Make atomic commits with descriptive messages
