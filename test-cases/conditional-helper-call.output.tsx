@@ -1,0 +1,46 @@
+import * as React from "react";
+import * as stylex from "@stylexjs/stylex";
+import { helpers } from "./lib/helpers.stylex";
+
+type TextProps = Omit<React.ComponentProps<"p">, "className" | "style"> & {
+  $truncate?: boolean;
+};
+
+// Helper call in conditional - should apply truncation when truthy
+function Text(props: TextProps) {
+  const { children, $truncate } = props;
+  return <p {...stylex.props(styles.text, $truncate ? helpers.truncate : undefined)}>{children}</p>;
+}
+
+type TextAltProps = Omit<React.ComponentProps<"p">, "className" | "style"> & {
+  $noTruncate?: boolean;
+};
+
+// Helper call in alternate - should apply truncation when falsy
+function TextAlt(props: TextAltProps) {
+  const { children, $noTruncate } = props;
+  return <p {...stylex.props(styles.textAlt, !$noTruncate && helpers.truncate)}>{children}</p>;
+}
+
+export const App = () => (
+  <div style={{ width: 200, border: "1px solid #ccc", padding: 8 }}>
+    <Text>Normal text without truncation that can wrap to multiple lines</Text>
+    <Text $truncate>
+      Truncated text that will have ellipsis when it overflows the container width
+    </Text>
+    <TextAlt $noTruncate>Normal text without truncation that can wrap to multiple lines</TextAlt>
+    <TextAlt>Truncated text that will have ellipsis when it overflows</TextAlt>
+  </div>
+);
+
+const styles = stylex.create({
+  // Helper call in conditional - should apply truncation when truthy
+  text: {
+    fontSize: "14px",
+  },
+
+  // Helper call in alternate - should apply truncation when falsy
+  textAlt: {
+    fontSize: "14px",
+  },
+});

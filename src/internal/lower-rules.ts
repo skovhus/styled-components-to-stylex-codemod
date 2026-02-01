@@ -1487,7 +1487,13 @@ export function lowerRules(args: {
       const consIsEmpty = isEmptyCssBranch(cons);
       const altIsEmpty = isEmptyCssBranch(alt);
 
-      if (!(consIsCss || altIsCss || consIsTpl || altIsTpl)) {
+      // Check for CallExpression branches (e.g., truncate() helpers)
+      const consIsCall = isCallExpressionNode(cons);
+      const altIsCall = isCallExpressionNode(alt);
+
+      // Note: String literal branches (StringLiteral CSS values) are NOT handled here.
+      // They fall through to tryResolveConditionalCssBlockTernary in builtin-handlers.ts.
+      if (!(consIsCss || altIsCss || consIsTpl || altIsTpl || consIsCall || altIsCall)) {
         return false;
       }
 
@@ -1697,6 +1703,66 @@ export function lowerRules(args: {
         if (altResolved.inlineEntries.length > 0) {
           applyInlineEntries(altResolved.inlineEntries, invertedWhen);
         }
+        return true;
+      }
+
+      // Note: String literal CSS branches (consIsStr && altIsEmpty, consIsEmpty && altIsStr,
+      // and consIsStr && altIsStr) are NOT handled here - they fall through to
+      // tryResolveConditionalCssBlockTernary in builtin-handlers.ts, which handles them
+      // correctly with proper component type generation.
+
+      // Handle CallExpression branches: props.$x ? truncate() : ""
+      // These are helpers that return StyleX style objects (usage: "props")
+      const tryResolveCallExpressionBranch = (
+        callNode: ExpressionKind,
+      ): { expr: string; imports: ImportSpec[] } | null => {
+        const dynamicNode = {
+          slotId: 0,
+          expr: callNode,
+          css: { kind: "declaration" as const, selector: "&", atRuleStack: [] as string[] },
+          component: componentInfo,
+          usage: { jsxUsages: 1, hasPropsSpread: false },
+        };
+        const res = resolveDynamicNode(dynamicNode, handlerContext);
+        if (res && res.type === "resolvedStyles") {
+          return { expr: res.expr, imports: res.imports ?? [] };
+        }
+        return null;
+      };
+
+      // Handle CallExpression in either branch with empty in the other
+      if ((consIsCall && altIsEmpty) || (consIsEmpty && altIsCall)) {
+        const callBranch = consIsCall ? cons : alt;
+        const resolved = tryResolveCallExpressionBranch(callBranch);
+        if (!resolved) {
+          return false;
+        }
+
+        // Determine the when condition: original for truthy branch, inverted for falsy branch
+        let when: string;
+        if (consIsCall) {
+          when = testInfo.when;
+        } else {
+          const invertedWhen = invertWhen(testInfo.when);
+          if (!invertedWhen) {
+            return false;
+          }
+          when = invertedWhen;
+        }
+
+        if (testInfo.propName) {
+          ensureShouldForwardPropDrop(decl, testInfo.propName);
+        }
+        for (const imp of resolved.imports) {
+          resolverImports.set(JSON.stringify(imp), imp);
+        }
+        const exprAst = parseExpr(resolved.expr);
+        if (!exprAst) {
+          return false;
+        }
+        decl.extraStylexPropsArgs ??= [];
+        decl.extraStylexPropsArgs.push({ when, expr: exprAst });
+        decl.needsWrapperComponent = true;
         return true;
       }
 
