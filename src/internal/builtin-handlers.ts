@@ -1786,7 +1786,15 @@ function tryResolveInlineStyleValueForConditionalExpression(
   if (!isArrowFunctionExpression(expr)) {
     return null;
   }
-  if (expr.body?.type !== "ConditionalExpression") {
+  // Use getFunctionBodyExpr to handle both expression-body and block-body arrow functions.
+  // Block bodies with a single return statement (possibly with comments) are supported.
+  const body = getFunctionBodyExpr(expr) as {
+    type?: string;
+    test?: unknown;
+    consequent?: unknown;
+    alternate?: unknown;
+  } | null;
+  if (!body || body.type !== "ConditionalExpression") {
     return null;
   }
   // IMPORTANT: do not attempt to preserve `props.theme.* ? ... : ...` via inline styles.
@@ -1796,7 +1804,7 @@ function tryResolveInlineStyleValueForConditionalExpression(
   // Treat these as unsupported so the caller can bail and surface a warning.
   {
     const paramName = getArrowFnSingleParamName(expr);
-    const test = expr.body.test as any;
+    const test = body.test as any;
     const testPath =
       paramName && test?.type === "MemberExpression"
         ? getMemberPathFromIdentifier(test, paramName)
@@ -1813,21 +1821,20 @@ function tryResolveInlineStyleValueForConditionalExpression(
   // In styled-components, falsy interpolations like `false` mean "omit this declaration",
   // so we should bail rather than emitting invalid CSS like `cursor: false`.
   {
-    const cond = expr.body as { consequent?: unknown; alternate?: unknown };
-    const consType = (cond.consequent as { type?: string } | undefined)?.type;
-    const altType = (cond.alternate as { type?: string } | undefined)?.type;
+    const consType = (body.consequent as { type?: string } | undefined)?.type;
+    const altType = (body.alternate as { type?: string } | undefined)?.type;
     if (consType === "BooleanLiteral" || altType === "BooleanLiteral") {
       return null;
     }
     // Also check estree-style Literal with boolean value
     if (consType === "Literal") {
-      const v = (cond.consequent as { value?: unknown }).value;
+      const v = (body.consequent as { value?: unknown }).value;
       if (typeof v === "boolean") {
         return null;
       }
     }
     if (altType === "Literal") {
-      const v = (cond.alternate as { value?: unknown }).value;
+      const v = (body.alternate as { value?: unknown }).value;
       if (typeof v === "boolean") {
         return null;
       }

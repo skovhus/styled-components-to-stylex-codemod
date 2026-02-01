@@ -4860,8 +4860,12 @@ export function lowerRules(args: {
                 : null;
             }
             if (expr.type === "ArrowFunctionExpression" || expr.type === "FunctionExpression") {
-              // Provide more specific warning based on arrow function body type
-              const body = (expr as { body?: { type?: string; operator?: string } }).body;
+              // Provide more specific warning based on arrow function body type.
+              // Use getFunctionBodyExpr to handle block bodies with single return statements.
+              const body = getFunctionBodyExpr(expr as { body?: unknown }) as {
+                type?: string;
+                operator?: string;
+              } | null;
               const bodyType = body?.type;
               if (bodyType === "ConditionalExpression") {
                 return {
