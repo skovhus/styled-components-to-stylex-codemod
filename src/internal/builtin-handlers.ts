@@ -23,6 +23,7 @@ import {
   resolveIdentifierToPropName,
 } from "./utilities/jscodeshift-utils.js";
 import { escapeRegex, sanitizeIdentifier } from "./utilities/string-utils.js";
+import { hasThemeAccessInArrowFn } from "./lower-rules/inline-styles.js";
 
 type ExpressionKind = Parameters<JSCodeshift["expressionStatement"]>[0];
 import {
@@ -283,6 +284,17 @@ export type InternalHandlerContext = {
 type ThemeParamInfo =
   | { kind: "propsParam"; propsName: string }
   | { kind: "themeBinding"; themeName: string };
+
+/**
+ * Narrow type for extracted function body when checking for conditional expressions.
+ * Used with `getFunctionBodyExpr` results when we need to access ConditionalExpression properties.
+ */
+type ConditionalExpressionBody = {
+  type?: string;
+  test?: unknown;
+  consequent?: unknown;
+  alternate?: unknown;
+};
 
 function getArrowFnThemeParamInfo(fn: any): ThemeParamInfo | null {
   if (!fn || fn.params?.length !== 1) {
@@ -826,7 +838,10 @@ function tryResolveConditionalValue(
   const info = getArrowFnThemeParamInfo(expr);
   const paramName = info?.kind === "propsParam" ? info.propsName : null;
 
-  if (expr.body.type !== "ConditionalExpression") {
+  // Use getFunctionBodyExpr to handle both expression-body and block-body arrow functions.
+  // Block bodies with a single return statement (possibly with comments) are supported.
+  const body = getFunctionBodyExpr(expr) as ConditionalExpressionBody | null;
+  if (!body || body.type !== "ConditionalExpression") {
     return null;
   }
 
@@ -1109,7 +1124,11 @@ function tryResolveConditionalValue(
     return resolved ? { expr: resolved.expr, imports: resolved.imports } : null;
   };
 
-  const { test, consequent, alternate } = expr.body;
+  const { test, consequent, alternate } = body as {
+    test: any;
+    consequent: any;
+    alternate: any;
+  };
 
   // 1) props.foo ? a : b (simple boolean test)
   const testPath =
@@ -1582,12 +1601,7 @@ function tryResolveConditionalCssBlockTernary(node: DynamicNode): HandlerResult 
     if (!condExpr || typeof condExpr !== "object") {
       return null;
     }
-    const ce = condExpr as {
-      type?: string;
-      test?: unknown;
-      consequent?: unknown;
-      alternate?: unknown;
-    };
+    const ce = condExpr as ConditionalExpressionBody;
 
     // Base case: not a conditional, this is the default value (a CSS string)
     if (ce.type !== "ConditionalExpression") {
@@ -1800,7 +1814,10 @@ function tryResolveInlineStyleValueForConditionalExpression(
   if (!isArrowFunctionExpression(expr)) {
     return null;
   }
-  if (expr.body?.type !== "ConditionalExpression") {
+  // Use getFunctionBodyExpr to handle both expression-body and block-body arrow functions.
+  // Block bodies with a single return statement (possibly with comments) are supported.
+  const body = getFunctionBodyExpr(expr) as ConditionalExpressionBody | null;
+  if (!body || body.type !== "ConditionalExpression") {
     return null;
   }
   // IMPORTANT: do not attempt to preserve `props.theme.* ? ... : ...` via inline styles.
@@ -1810,7 +1827,7 @@ function tryResolveInlineStyleValueForConditionalExpression(
   // Treat these as unsupported so the caller can bail and surface a warning.
   {
     const paramName = getArrowFnSingleParamName(expr);
-    const test = expr.body.test as any;
+    const test = body.test as any;
     const testPath =
       paramName && test?.type === "MemberExpression"
         ? getMemberPathFromIdentifier(test, paramName)
@@ -1827,21 +1844,20 @@ function tryResolveInlineStyleValueForConditionalExpression(
   // In styled-components, falsy interpolations like `false` mean "omit this declaration",
   // so we should bail rather than emitting invalid CSS like `cursor: false`.
   {
-    const cond = expr.body as { consequent?: unknown; alternate?: unknown };
-    const consType = (cond.consequent as { type?: string } | undefined)?.type;
-    const altType = (cond.alternate as { type?: string } | undefined)?.type;
+    const consType = (body.consequent as { type?: string } | undefined)?.type;
+    const altType = (body.alternate as { type?: string } | undefined)?.type;
     if (consType === "BooleanLiteral" || altType === "BooleanLiteral") {
       return null;
     }
     // Also check estree-style Literal with boolean value
     if (consType === "Literal") {
-      const v = (cond.consequent as { value?: unknown }).value;
+      const v = (body.consequent as { value?: unknown }).value;
       if (typeof v === "boolean") {
         return null;
       }
     }
     if (altType === "Literal") {
-      const v = (cond.alternate as { value?: unknown }).value;
+      const v = (body.alternate as { value?: unknown }).value;
       if (typeof v === "boolean") {
         return null;
       }
@@ -1886,6 +1902,32 @@ function tryResolveInlineStyleValueForLogicalExpression(node: DynamicNode): Hand
   }
   // Signal to the caller that we can preserve this declaration as an inline style
   return { type: "emitInlineStyleValueFromProps" };
+}
+
+function tryResolveThemeDependentTemplateLiteral(node: DynamicNode): HandlerResult | null {
+  // Detect theme-dependent template literals and return keepOriginal with a warning.
+  // This catches cases like: ${props => `${props.theme.color.bg}px`}
+  // StyleX output does not have `props.theme` at runtime.
+  if (!node.css.property) {
+    return null;
+  }
+  const expr = node.expr;
+  if (!isArrowFunctionExpression(expr)) {
+    return null;
+  }
+  const body = getFunctionBodyExpr(expr);
+  if (!body || (body as { type?: string }).type !== "TemplateLiteral") {
+    return null;
+  }
+  // Use existing utility to check for theme access
+  if (hasThemeAccessInArrowFn(expr)) {
+    return {
+      type: "keepOriginal",
+      reason:
+        "Theme-dependent template literals require a project-specific theme source (e.g. useTheme())",
+    };
+  }
+  return null;
 }
 
 function tryResolveStyleFunctionFromTemplateLiteral(node: DynamicNode): HandlerResult | null {
@@ -1957,7 +1999,13 @@ function tryResolveStyleFunctionFromTemplateLiteral(node: DynamicNode): HandlerR
       props,
     };
   })();
-  if (!hasUsableProps || hasNonTransientProps) {
+  if (!hasUsableProps) {
+    return null;
+  }
+  // For non-transient props: if shouldForwardProp is configured, let the fallback in
+  // lower-rules.ts handle it (creates style functions that take props as argument).
+  // Otherwise, emit style functions here.
+  if (hasNonTransientProps && node.component.withConfig?.shouldForwardProp) {
     return null;
   }
   return { type: "emitStyleFunctionFromPropsObject", props };
@@ -2088,6 +2136,8 @@ export function resolveDynamicNode(
     tryResolveConditionalCssBlockTernary(node) ??
     tryResolveConditionalCssBlock(node, ctx) ??
     tryResolveArrowFnCallWithSinglePropArg(node) ??
+    // Detect theme-dependent template literals before trying to emit style functions
+    tryResolveThemeDependentTemplateLiteral(node) ??
     tryResolveStyleFunctionFromTemplateLiteral(node) ??
     tryResolveInlineStyleValueForNestedPropAccess(node) ??
     tryResolvePropAccess(node) ??
@@ -2135,12 +2185,7 @@ function parseCssTemplateLiteralWithTernary(node: unknown): {
   const suffix = n.quasis[1]?.value?.cooked ?? n.quasis[1]?.value?.raw ?? "";
 
   // The expression must be a ConditionalExpression
-  const expr = n.expressions[0] as {
-    type?: string;
-    test?: unknown;
-    consequent?: unknown;
-    alternate?: unknown;
-  };
+  const expr = n.expressions[0] as ConditionalExpressionBody;
   if (!expr || expr.type !== "ConditionalExpression") {
     return null;
   }

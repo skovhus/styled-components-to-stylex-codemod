@@ -3,12 +3,15 @@ import {
   cloneAstNode,
   getArrowFnParamBindings,
   getFunctionBodyExpr,
+  literalToStaticValue,
 } from "../utilities/jscodeshift-utils.js";
 
 type ExpressionKind = Parameters<JSCodeshift["expressionStatement"]>[0];
 
 // Build a template literal with static prefix/suffix around a dynamic expression.
 // e.g., prefix="" suffix="ms" expr=<call> -> `${<call>}ms`
+// If the expression is a static literal, returns a simple string literal instead.
+// e.g., prefix="" suffix="px" expr=34 -> "34px" (not `${34}px`)
 export function buildTemplateWithStaticParts(
   j: JSCodeshift,
   expr: ExpressionKind,
@@ -17,6 +20,11 @@ export function buildTemplateWithStaticParts(
 ): ExpressionKind {
   if (!prefix && !suffix) {
     return expr;
+  }
+  // If the expression is a static literal, return a simple string literal
+  const staticValue = literalToStaticValue(expr);
+  if (staticValue !== null) {
+    return j.stringLiteral(prefix + String(staticValue) + suffix);
   }
   return j.templateLiteral(
     [

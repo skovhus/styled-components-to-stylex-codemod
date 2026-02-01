@@ -45,6 +45,7 @@ export type WarningType =
   | "Styled-components specificity hacks like `&&` / `&&&` are not representable in StyleX"
   | "Theme-dependent conditional values require a project-specific theme source (e.g. useTheme())"
   | "Theme-dependent nested prop access requires a project-specific theme source (e.g. useTheme())"
+  | "Theme-dependent template literals require a project-specific theme source (e.g. useTheme())"
   | "ThemeProvider conversion needs to be handled manually"
   | "Universal selectors (`*`) are currently unsupported"
   | "Unsupported call expression (expected imported helper(...) or imported helper(...)(...))"

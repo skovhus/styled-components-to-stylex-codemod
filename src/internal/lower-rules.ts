@@ -843,10 +843,21 @@ export function lowerRules(args: {
     };
 
     // Build component info for resolveDynamicNode calls
+    const withConfig = decl.shouldForwardProp ? { shouldForwardProp: true } : undefined;
     const componentInfo =
       decl.base.kind === "intrinsic"
-        ? { localName: decl.localName, base: "intrinsic" as const, tagOrIdent: decl.base.tagName }
-        : { localName: decl.localName, base: "component" as const, tagOrIdent: decl.base.ident };
+        ? {
+            localName: decl.localName,
+            base: "intrinsic" as const,
+            tagOrIdent: decl.base.tagName,
+            withConfig,
+          }
+        : {
+            localName: decl.localName,
+            base: "component" as const,
+            tagOrIdent: decl.base.ident,
+            withConfig,
+          };
 
     // (helpers imported from `./lower-rules/*`)
 
@@ -5085,8 +5096,12 @@ export function lowerRules(args: {
                 : null;
             }
             if (expr.type === "ArrowFunctionExpression" || expr.type === "FunctionExpression") {
-              // Provide more specific warning based on arrow function body type
-              const body = (expr as { body?: { type?: string; operator?: string } }).body;
+              // Provide more specific warning based on arrow function body type.
+              // Use getFunctionBodyExpr to handle block bodies with single return statements.
+              const body = getFunctionBodyExpr(expr as { body?: unknown }) as {
+                type?: string;
+                operator?: string;
+              } | null;
               const bodyType = body?.type;
               if (bodyType === "ConditionalExpression") {
                 return {

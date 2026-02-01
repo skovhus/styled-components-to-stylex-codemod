@@ -64,6 +64,13 @@ export function wrapExprWithStaticParts(expr: string, prefix: string, suffix: st
     return JSON.stringify(prefix + stringMatch[1] + suffix);
   }
 
+  // Check if expr is a numeric literal (e.g., 34, 3.14, -42)
+  // This avoids creating template literals like `${34}px` instead of "34px"
+  const numericMatch = expr.match(/^-?\d+(\.\d+)?$/);
+  if (numericMatch) {
+    return JSON.stringify(prefix + expr + suffix);
+  }
+
   // Use template literal for non-literal expressions
   return `\`${prefix}\${${expr}}${suffix}\``;
 }
