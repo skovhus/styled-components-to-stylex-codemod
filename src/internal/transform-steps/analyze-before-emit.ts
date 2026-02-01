@@ -1,4 +1,4 @@
-import type { JSXAttribute, JSXSpreadAttribute } from "jscodeshift";
+import type { JSXAttribute, JSXMemberExpression, JSXSpreadAttribute } from "jscodeshift";
 import { CONTINUE, type StepResult } from "../transform-types.js";
 import type { StyledDecl } from "../transform-types.js";
 import { TransformContext, type ExportInfo } from "../transform-context.js";
@@ -111,9 +111,24 @@ export function analyzeBeforeEmitStep(ctx: TransformContext): StepResult {
     if (obj?.type !== "Identifier") {
       return;
     }
-    const styledNames = new Set(styledDecls.map((d) => d.localName));
-    if (styledNames.has(obj.name)) {
+    if (styledDeclNames.has(obj.name)) {
       componentsWithStaticProps.add(obj.name);
+    }
+  });
+
+  // Track styled components referenced via JSX member expressions (e.g. <Styled.Option />)
+  const componentsWithStaticMemberUsage = new Set<string>();
+  const getRootJsxMemberName = (node: JSXMemberExpression): string | null => {
+    let current = node.object;
+    while (current?.type === "JSXMemberExpression") {
+      current = current.object;
+    }
+    return current?.type === "JSXIdentifier" ? current.name : null;
+  };
+  root.find(j.JSXMemberExpression).forEach((p) => {
+    const rootName = getRootJsxMemberName(p.node);
+    if (rootName && styledDeclNames.has(rootName)) {
+      componentsWithStaticMemberUsage.add(rootName);
     }
   });
 
@@ -140,6 +155,10 @@ export function analyzeBeforeEmitStep(ctx: TransformContext): StepResult {
     // Components with static properties that are extended need wrappers
     // (for static property inheritance). Delegation case is handled later.
     if (extendedBy.has(decl.localName) && componentsWithStaticProps.has(decl.localName)) {
+      decl.needsWrapperComponent = true;
+    }
+    // Components referenced via JSX member expressions need wrappers so static members remain valid.
+    if (componentsWithStaticMemberUsage.has(decl.localName)) {
       decl.needsWrapperComponent = true;
     }
     // Exported components must keep a wrapper to preserve the module's public API.
