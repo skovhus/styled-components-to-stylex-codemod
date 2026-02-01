@@ -30,6 +30,7 @@ export type WarningType =
   | "Conditional `css` block: missing interpolation expression"
   | "Conditional `css` block: mixed static/dynamic values with non-theme expressions cannot be safely transformed"
   | "Conditional `css` block: multiple interpolation slots in a single property value"
+  | "Conditional `css` block: ternary branch value could not be resolved (imported values require adapter support)"
   | "Conditional `css` block: ternary expressions inside pseudo selectors are not supported"
   | "Conditional `css` block: unsupported selector"
   | "createGlobalStyle is not supported in StyleX. Global styles should be handled separately (e.g., in a CSS file or using CSS reset libraries)"

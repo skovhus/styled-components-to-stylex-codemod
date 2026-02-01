@@ -461,6 +461,13 @@ export function createCssHelperResolver(args: {
           if (propName) {
             const consResolved = resolveTernaryBranchToAst(ternaryExpr.consequent);
             const altResolved = resolveTernaryBranchToAst(ternaryExpr.alternate);
+            // If resolution failed (e.g., unresolved import), bail with specific message
+            if (!consResolved || !altResolved) {
+              return bail(
+                "Conditional `css` block: ternary branch value could not be resolved (imported values require adapter support)",
+                { property: d.property },
+              );
+            }
             if (consResolved && altResolved) {
               const { prefix, suffix } = extractPrefixSuffix(parts);
 
