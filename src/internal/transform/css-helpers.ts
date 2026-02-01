@@ -240,6 +240,29 @@ function getCssHelperTemplateLoc(template: any): Loc {
   return { line: start.line, column: start.column ?? 0 };
 }
 
+function parseCssHelperTemplate(args: {
+  template: TemplateLiteral;
+  noteUniversalSelector: (template: TemplateLiteral, rawCss: string) => void;
+}): {
+  rules: CssRuleIR[];
+  rawCss: string;
+  templateExpressions: unknown[];
+} {
+  const { template, noteUniversalSelector } = args;
+  const parsed = parseStyledTemplateLiteral(template);
+  const rawCss = `& { ${parsed.rawCss} }`;
+  const stylisAst = compile(rawCss);
+  const rules = normalizeStylisAstToIR(stylisAst, parsed.slots, { rawCss });
+  if (hasUniversalSelectorInRules(rules)) {
+    noteUniversalSelector(template, parsed.rawCss);
+  }
+  return {
+    rules,
+    rawCss,
+    templateExpressions: parsed.slots.map((s) => s.expression),
+  };
+}
+
 function isStyledCallExpression(node: any, styledLocalNames: Set<string>): boolean {
   // styled.div(...) or styled("div")(...) pattern
   if (node?.type !== "CallExpression") {
@@ -284,11 +307,7 @@ function isNodeInsideStyledTemplate(
       if (isStyledTag(styledLocalNames, node.tag)) {
         return true;
       }
-      if (
-        cssLocal &&
-        node.tag?.type === "Identifier" &&
-        node.tag.name === cssLocal
-      ) {
+      if (cssLocal && node.tag?.type === "Identifier" && node.tag.name === cssLocal) {
         return true;
       }
     }
@@ -707,15 +726,11 @@ export function extractAndRemoveCssHelpers(args: {
       const styleKey = toStyleKey(localName);
       const placementHints = getCssHelperPlacementHints(root, p);
 
-      const template = init.quasi;
-      const parsed = parseStyledTemplateLiteral(template);
-      // `css\`...\`` snippets are not attached to a selector; parse by wrapping in `& { ... }`.
-      const rawCss = `& { ${parsed.rawCss} }`;
-      const stylisAst = compile(rawCss);
-      const rules = normalizeStylisAstToIR(stylisAst, parsed.slots, { rawCss });
-      if (hasUniversalSelectorInRules(rules)) {
-        noteCssHelperUniversalSelector(template, parsed.rawCss);
-      }
+      const template = init.quasi as TemplateLiteral;
+      const { rules, rawCss, templateExpressions } = parseCssHelperTemplate({
+        template,
+        noteUniversalSelector: noteCssHelperUniversalSelector,
+      });
 
       cssHelperDecls.push({
         ...placementHints,
@@ -724,7 +739,7 @@ export function extractAndRemoveCssHelpers(args: {
         styleKey,
         isCssHelper: true,
         rules,
-        templateExpressions: parsed.slots.map((s) => s.expression),
+        templateExpressions,
         rawCss,
       });
 
@@ -1017,10 +1032,7 @@ export function extractAndRemoveCssHelpers(args: {
       if (cur?.node?.type === "ArrowFunctionExpression") {
         return true;
       }
-      if (
-        cur?.node?.type === "FunctionDeclaration" ||
-        cur?.node?.type === "FunctionExpression"
-      ) {
+      if (cur?.node?.type === "FunctionDeclaration" || cur?.node?.type === "FunctionExpression") {
         return false;
       }
     }
@@ -1055,14 +1067,11 @@ export function extractAndRemoveCssHelpers(args: {
 
       const localName = getStandaloneCssHelperName(p);
       const styleKey = toStyleKey(localName);
-      const template = p.node.quasi;
-      const parsed = parseStyledTemplateLiteral(template);
-      const rawCss = `& { ${parsed.rawCss} }`;
-      const stylisAst = compile(rawCss);
-      const rules = normalizeStylisAstToIR(stylisAst, parsed.slots, { rawCss });
-      if (rules.some((r) => typeof r.selector === "string" && r.selector.includes("*"))) {
-        noteCssHelperUniversalSelector(template);
-      }
+      const template = p.node.quasi as TemplateLiteral;
+      const { rules, rawCss, templateExpressions } = parseCssHelperTemplate({
+        template,
+        noteUniversalSelector: noteCssHelperUniversalSelector,
+      });
 
       cssHelperDecls.push({
         localName,
@@ -1070,7 +1079,7 @@ export function extractAndRemoveCssHelpers(args: {
         styleKey,
         isCssHelper: true,
         rules,
-        templateExpressions: parsed.slots.map((s) => s.expression),
+        templateExpressions,
         rawCss,
       });
       cssHelperTemplateReplacements.push({ node: p.node, styleKey });
