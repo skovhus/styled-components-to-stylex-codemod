@@ -3,7 +3,7 @@ import type { StyledDecl } from "../transform-types.js";
 import { buildStyleFnConditionExpr } from "../utilities/jscodeshift-utils.js";
 import { emitStyleMerging } from "./style-merger.js";
 import { collectInlineStylePropNames, type ExpressionKind, type InlineStyleProp } from "./types.js";
-import { VOID_TAGS } from "./type-helpers.js";
+import { sortVariantEntriesBySpecificity, VOID_TAGS } from "./type-helpers.js";
 import { withLeadingComments, withLeadingCommentsOnFirstFunction } from "./comments.js";
 import type { JsxAttr, StatementKind, WrapperEmitter } from "./wrapper-emitter.js";
 
@@ -655,7 +655,8 @@ export function emitIntrinsicWrappers(emitter: WrapperEmitter): {
 
       // Add variant style arguments if this component has variants
       if (d.variantStyleKeys) {
-        for (const [when, variantKey] of Object.entries(d.variantStyleKeys)) {
+        const sortedEntries = sortVariantEntriesBySpecificity(Object.entries(d.variantStyleKeys));
+        for (const [when, variantKey] of sortedEntries) {
           // Skip keys handled by compound variants
           if (compoundVariantKeys.has(when)) {
             continue;
@@ -1103,7 +1104,8 @@ export function emitIntrinsicWrappers(emitter: WrapperEmitter): {
     }
 
     if (d.variantStyleKeys) {
-      for (const [when, variantKey] of Object.entries(d.variantStyleKeys)) {
+      const sortedEntries = sortVariantEntriesBySpecificity(Object.entries(d.variantStyleKeys));
+      for (const [when, variantKey] of sortedEntries) {
         // Skip keys handled by compound variants
         if (compoundVariantKeys.has(when)) {
           continue;
@@ -2044,7 +2046,8 @@ export function emitIntrinsicWrappers(emitter: WrapperEmitter): {
     }
 
     if (d.variantStyleKeys) {
-      for (const [when, variantKey] of Object.entries(d.variantStyleKeys)) {
+      const sortedEntries = sortVariantEntriesBySpecificity(Object.entries(d.variantStyleKeys));
+      for (const [when, variantKey] of sortedEntries) {
         // Skip keys handled by compound variants
         if (compoundVariantKeys.has(when)) {
           continue;

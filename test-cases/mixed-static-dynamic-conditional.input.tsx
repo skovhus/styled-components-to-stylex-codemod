@@ -1,4 +1,3 @@
-// @expected-warning: Conditional `css` block: mixed static/dynamic values with non-theme expressions cannot be safely transformed
 import styled, { css } from "styled-components";
 
 // Mixed static/dynamic values in conditional css block

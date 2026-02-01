@@ -3,9 +3,13 @@ import type { StyledDecl } from "../transform-types.js";
 import { emitStyleMerging } from "./style-merger.js";
 import { withLeadingComments } from "./comments.js";
 import { collectInlineStylePropNames, type ExpressionKind, type InlineStyleProp } from "./types.js";
-import { TAG_TO_HTML_ELEMENT } from "./type-helpers.js";
 import type { JsxAttr, JsxTagName, StatementKind, WrapperEmitter } from "./wrapper-emitter.js";
-import { getAttrsAsString, injectRefPropIntoTypeLiteralString } from "./type-helpers.js";
+import {
+  getAttrsAsString,
+  injectRefPropIntoTypeLiteralString,
+  sortVariantEntriesBySpecificity,
+  TAG_TO_HTML_ELEMENT,
+} from "./type-helpers.js";
 
 export function emitComponentWrappers(emitter: WrapperEmitter): {
   emitted: ASTNode[];
@@ -147,7 +151,8 @@ export function emitComponentWrappers(emitter: WrapperEmitter): {
 
     // Add variant style arguments if this component has variants
     if (d.variantStyleKeys) {
-      for (const [when, variantKey] of Object.entries(d.variantStyleKeys)) {
+      const sortedEntries = sortVariantEntriesBySpecificity(Object.entries(d.variantStyleKeys));
+      for (const [when, variantKey] of sortedEntries) {
         const { cond } = emitter.collectConditionProps({ when, destructureProps });
         const styleExpr = j.memberExpression(
           j.identifier(stylesIdentifier),

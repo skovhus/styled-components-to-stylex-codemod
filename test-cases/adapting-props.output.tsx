@@ -36,9 +36,9 @@ function Badge(props: BadgeProps) {
     <span
       {...stylex.props(
         styles.badge,
+        size === "small" && styles.badgeSizeSmall,
         size !== "small" && size === "large" && styles.badgeSizeNotSmallSizeLarge,
         size !== "small" && size !== "large" && styles.badgeSizeNotSmallSizeNotLarge,
-        size === "small" && styles.badgeSizeSmall,
       )}
     >
       {children}
