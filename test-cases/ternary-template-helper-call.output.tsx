@@ -2,7 +2,7 @@ import * as React from "react";
 import * as stylex from "@stylexjs/stylex";
 import { $colors } from "./tokens.stylex";
 
-type StepLineProps = Omit<React.ComponentProps<"div">, "style" | "className"> & {
+type StepLineProps = Omit<React.ComponentProps<"div">, "className" | "style"> & {
   $faded: boolean;
 };
 

@@ -3,7 +3,7 @@ import * as stylex from "@stylexjs/stylex";
 import { $colors } from "./tokens.stylex";
 import type { Colors } from "./lib/colors";
 
-export interface BadgeProps extends Omit<React.ComponentProps<"div">, "style" | "className"> {
+export interface BadgeProps extends Omit<React.ComponentProps<"div">, "className" | "style"> {
   textColor?: Colors;
 }
 

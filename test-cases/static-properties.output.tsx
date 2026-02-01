@@ -38,7 +38,7 @@ export function ExtendedButton(props: ExtendedButtonProps) {
 ExtendedButton.HEIGHT = (BaseButton as any).HEIGHT;
 type CommandMenuTextDividerProps = Omit<
   React.ComponentPropsWithRef<typeof ActionMenuTextDivider>,
-  "style" | "className"
+  "className" | "style"
 >;
 
 // Pattern 3: styled(ImportedComponent) should inherit static properties
@@ -50,7 +50,7 @@ export function CommandMenuTextDivider(props: CommandMenuTextDividerProps) {
 CommandMenuTextDivider.HEIGHT = ActionMenuTextDivider.HEIGHT;
 type CommandMenuGroupHeaderProps = Omit<
   React.ComponentPropsWithRef<typeof ActionMenuGroupHeader>,
-  "style" | "className"
+  "className" | "style"
 >;
 
 // Pattern 4: Another imported component with static property

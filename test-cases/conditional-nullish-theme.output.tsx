@@ -2,7 +2,7 @@ import React from "react";
 import * as stylex from "@stylexjs/stylex";
 import { pixelVars, $colors } from "./tokens.stylex";
 
-type LineProps = Omit<React.ComponentProps<"div">, "style" | "className"> & {
+type LineProps = Omit<React.ComponentProps<"div">, "className" | "style"> & {
   $isRemoval?: boolean;
   $deletionColor?: string;
 };

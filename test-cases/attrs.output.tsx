@@ -7,7 +7,7 @@ const Flex = (props: React.ComponentProps<"div"> & { column?: boolean; center?: 
   return <div {...rest} />;
 };
 
-type InputProps = Omit<React.ComponentProps<"input">, "style" | "className"> & {
+type InputProps = Omit<React.ComponentProps<"input">, "className" | "style"> & {
   $padding?: string;
   $small?: boolean;
 };
@@ -26,7 +26,7 @@ function Input(props: InputProps) {
 }
 
 // Pattern 2: styled("input").attrs (function call + attrs)
-export interface TextInputProps extends Omit<React.ComponentProps<"input">, "style" | "className"> {
+export interface TextInputProps extends Omit<React.ComponentProps<"input">, "className" | "style"> {
   allowPMAutofill?: boolean;
   // Data attribute used by 1Password to control autofill behavior
   "data-1p-ignore"?: boolean;
@@ -47,7 +47,7 @@ export function TextInput(props: TextInputProps) {
 // This pattern passes static attrs as an object
 interface BackgroundProps extends Omit<
   React.ComponentPropsWithRef<typeof Flex>,
-  "style" | "className"
+  "className" | "style"
 > {
   loaded: boolean;
 }
@@ -70,7 +70,7 @@ export function Background(props: BackgroundProps) {
 // This pattern computes attrs from props
 interface ScrollableProps extends Omit<
   React.ComponentPropsWithRef<typeof Flex>,
-  "style" | "className"
+  "className" | "style"
 > {
   gutter?: string;
 }
@@ -82,7 +82,7 @@ export function Scrollable(props: ScrollableProps) {
 // Pattern 5: styled(Component).attrs with TYPE ALIAS (not interface)
 // Bug: type aliases might not get `extends React.ComponentProps<...>` added
 // This is the exact pattern from a design system's Scrollable.tsx
-type TypeAliasProps = Omit<React.ComponentPropsWithRef<typeof Flex>, "style" | "className"> & {
+type TypeAliasProps = Omit<React.ComponentPropsWithRef<typeof Flex>, "className" | "style"> & {
   /** Whether scrollbar gutter should be stable */
   gutter?: "auto" | "stable" | string;
   /** Whether to apply background color */

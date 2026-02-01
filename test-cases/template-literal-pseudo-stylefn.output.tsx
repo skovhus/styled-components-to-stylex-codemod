@@ -1,7 +1,7 @@
 import * as React from "react";
 import * as stylex from "@stylexjs/stylex";
 
-type HoverSwatchProps = Omit<React.ComponentProps<"div">, "style" | "className"> & {
+type HoverSwatchProps = Omit<React.ComponentProps<"div">, "className" | "style"> & {
   $tone: string;
 };
 
@@ -25,7 +25,7 @@ function HoverSwatch(props: HoverSwatchProps) {
   );
 }
 
-type HoverMediaSwatchProps = Omit<React.ComponentProps<"div">, "style" | "className"> & {
+type HoverMediaSwatchProps = Omit<React.ComponentProps<"div">, "className" | "style"> & {
   $tone: string;
 };
 

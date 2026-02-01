@@ -1,7 +1,7 @@
 import * as React from "react";
 import * as stylex from "@stylexjs/stylex";
 
-type ColumnContainerProps = Omit<React.ComponentProps<"div">, "style" | "className"> & {
+type ColumnContainerProps = Omit<React.ComponentProps<"div">, "className" | "style"> & {
   $noGrowOrShrink?: boolean;
   $basis?: number;
 };

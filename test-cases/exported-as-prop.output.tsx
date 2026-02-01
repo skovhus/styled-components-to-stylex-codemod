@@ -3,7 +3,7 @@ import * as stylex from "@stylexjs/stylex";
 
 type ContentViewContainerProps<C extends React.ElementType = "div"> = Omit<
   React.ComponentPropsWithoutRef<C>,
-  "style" | "className"
+  "className" | "style"
 > & { as?: C };
 
 export function ContentViewContainer<C extends React.ElementType = "div">(

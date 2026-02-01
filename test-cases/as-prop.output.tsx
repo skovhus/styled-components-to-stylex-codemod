@@ -4,7 +4,7 @@ import { Text } from "./lib/text";
 
 type ButtonProps<C extends React.ElementType = "button"> = Omit<
   React.ComponentPropsWithoutRef<C>,
-  "style" | "className"
+  "className" | "style"
 > & { as?: C };
 
 function Button<C extends React.ElementType = "button">(props: ButtonProps<C>) {

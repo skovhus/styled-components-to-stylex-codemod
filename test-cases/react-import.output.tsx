@@ -25,7 +25,7 @@ export function Button(props: ButtonProps) {
 
 // Pattern 2: Component with theme access (like TextColor.tsx in a design system)
 // Uses props.theme.color which the adapter resolves to $colors
-interface ThemeSpanProps extends Omit<React.ComponentProps<"span">, "style" | "className"> {
+interface ThemeSpanProps extends Omit<React.ComponentProps<"span">, "className" | "style"> {
   variant: "labelBase" | "labelMuted" | "labelTitle";
 }
 

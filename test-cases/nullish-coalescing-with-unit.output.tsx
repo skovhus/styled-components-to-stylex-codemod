@@ -1,7 +1,7 @@
 import React from "react";
 import * as stylex from "@stylexjs/stylex";
 
-type BoxProps = Omit<React.ComponentProps<"div">, "style" | "className"> & {
+type BoxProps = Omit<React.ComponentProps<"div">, "className" | "style"> & {
   $delay?: number;
   children?: React.ReactNode;
 };

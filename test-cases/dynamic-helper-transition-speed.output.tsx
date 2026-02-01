@@ -3,7 +3,7 @@ import * as stylex from "@stylexjs/stylex";
 import { transitionSpeed } from "./tokens.stylex";
 import "./css-variables.css";
 
-type AnimatedPathProps = Omit<React.ComponentProps<"path">, "style" | "className"> & {
+type AnimatedPathProps = Omit<React.ComponentProps<"path">, "className" | "style"> & {
   $width: number;
 };
 

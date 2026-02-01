@@ -4,7 +4,7 @@ import * as stylex from "@stylexjs/stylex";
 // Bug 2: When codemod generates wrapper functions, it must include
 // proper type annotations for all parameters to avoid implicit 'any'.
 
-interface BoxProps extends Omit<React.ComponentProps<"div">, "style" | "className"> {
+interface BoxProps extends Omit<React.ComponentProps<"div">, "className" | "style"> {
   /** Whether the box has a border */
   bordered?: boolean;
   /** Background color override */
@@ -28,7 +28,7 @@ export function Box(props: BoxProps) {
   );
 }
 
-type InputProps = Omit<React.ComponentProps<"input">, "style" | "className">;
+type InputProps = Omit<React.ComponentProps<"input">, "className" | "style">;
 
 // Component with callback that receives event
 export function Input(props: InputProps) {

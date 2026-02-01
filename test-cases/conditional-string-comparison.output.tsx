@@ -5,7 +5,7 @@ const IconButton = (props: React.ComponentProps<"button">) => <button {...props}
 
 type StyledIconButtonProps = Omit<
   React.ComponentPropsWithRef<typeof IconButton>,
-  "style" | "className"
+  "className" | "style"
 > & {
   useRoundStyle?: boolean;
 };

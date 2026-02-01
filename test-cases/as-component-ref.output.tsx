@@ -22,7 +22,7 @@ const animated = {
 
 type AnimatedTextProps<C extends React.ElementType = "span"> = Omit<
   React.ComponentPropsWithRef<C>,
-  "style" | "className"
+  "className"
 > & { as?: C };
 
 function AnimatedText<C extends React.ElementType = "span">(props: AnimatedTextProps<C>) {
@@ -50,14 +50,18 @@ export function AnimatedNumber(props: Props) {
     // This should work: animated.span accepts SpringValue<number> for width
     // The ref should also be accepted since animated.span forwards refs
     return (
-      <AnimatedText as={animated.span} ref={spanRef}>
+      <AnimatedText as={animated.span} ref={spanRef} style={{ width }}>
         {children}
       </AnimatedText>
     );
   }
 
   // ref should work on the default span element too
-  return <AnimatedText ref={spanRef}>{children}</AnimatedText>;
+  return (
+    <AnimatedText ref={spanRef} style={{ width }}>
+      {children}
+    </AnimatedText>
+  );
 }
 
 export const App = () => <AnimatedNumber width={100}>42</AnimatedNumber>;

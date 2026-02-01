@@ -24,7 +24,7 @@ function Flex(props: FlexProps) {
   );
 }
 
-type ContainerProps = Omit<React.ComponentPropsWithRef<typeof Flex>, "style" | "className"> & {
+type ContainerProps = Omit<React.ComponentPropsWithRef<typeof Flex>, "className" | "style"> & {
   $color?: string;
 };
 

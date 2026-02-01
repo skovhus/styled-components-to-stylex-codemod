@@ -32,7 +32,7 @@ function StyledButton(props: StyledButtonProps) {
 
 type ClickableTextProps = Omit<
   React.ComponentPropsWithRef<typeof StyledButton>,
-  "style" | "className"
+  "className" | "style"
 >;
 
 // A extends B - this MUST preserve B's as="button" semantics

@@ -272,19 +272,40 @@ export function analyzeBeforeEmitStep(ctx: TransformContext): StepResult {
     return { className: foundClassName, style: foundStyle };
   };
 
+  // Helper to check if a component is used with `as` prop in JSX.
+  // Components with `as` prop usage generate polymorphic wrappers that pass style through via {...rest}.
+  const hasAsUsageInJsx = (name: string): boolean => {
+    const el = root.find(j.JSXElement, {
+      openingElement: { name: { type: "JSXIdentifier", name } },
+    });
+    const hasAs =
+      el.find(j.JSXAttribute, { name: { type: "JSXIdentifier", name: "as" } }).size() > 0;
+    const hasForwardedAs =
+      el.find(j.JSXAttribute, { name: { type: "JSXIdentifier", name: "forwardedAs" } }).size() > 0;
+    return hasAs || hasForwardedAs;
+  };
+
   // Check for external style prop usage - this is NOT supported and must bail.
   // External style props would be silently dropped since StyleX manages styles internally.
+  // Exception: Components with `as` prop usage can pass style through via {...rest}.
   for (const decl of styledDecls) {
     const { className, style } = receivesClassNameOrStyleInJsx(decl.localName);
     if (style) {
-      // Bail: external style props cannot be preserved
-      ctx.warnings.push({
-        severity: "error",
-        type: "External style prop usage: styled component is used with a `style` prop in JSX which cannot be preserved",
-        loc: null,
-        context: { componentName: decl.localName },
-      });
-      return returnResult({ code: null, warnings: ctx.warnings }, "bail");
+      // Allow style prop if the component is used with `as` prop (polymorphic wrapper)
+      // because those wrappers use {...rest} which passes the style prop through.
+      if (!hasAsUsageInJsx(decl.localName)) {
+        // Bail: external style props cannot be preserved
+        ctx.warnings.push({
+          severity: "error",
+          type: "External style prop usage: styled component is used with a `style` prop in JSX which cannot be preserved",
+          loc: null,
+          context: { componentName: decl.localName },
+        });
+        return returnResult({ code: null, warnings: ctx.warnings }, "bail");
+      }
+      // Mark that this polymorphic component receives style props in JSX.
+      // The emit phase will NOT omit style from the props type so it passes through.
+      (decl as any).allowStylePropPassthrough = true;
     }
     // Styled components that receive className props in JSX need wrappers to merge them.
     // Without a wrapper, passing `className` would replace the stylex className instead of merging.

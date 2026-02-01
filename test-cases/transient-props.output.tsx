@@ -15,7 +15,7 @@ const Link = ({ className, text, ...props }: { className?: string; text: string 
   </a>
 );
 
-type StyledLinkProps = Omit<React.ComponentPropsWithRef<typeof Link>, "style" | "className"> & {
+type StyledLinkProps = Omit<React.ComponentPropsWithRef<typeof Link>, "className" | "style"> & {
   $red?: boolean;
 };
 
@@ -50,7 +50,7 @@ function ArrowIcon(props: IconProps & ArrowIconProps) {
 
 type CollapseArrowIconProps = Omit<
   React.ComponentPropsWithRef<typeof ArrowIcon>,
-  "style" | "className"
+  "className" | "style"
 >;
 
 // The wrapper uses $isOpen for styling; ArrowIcon declares it in props but filters before spreading

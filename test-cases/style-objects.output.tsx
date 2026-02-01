@@ -1,7 +1,7 @@
 import * as React from "react";
 import * as stylex from "@stylexjs/stylex";
 
-type DynamicBoxProps = Omit<React.ComponentProps<"div">, "style" | "className"> & {
+type DynamicBoxProps = Omit<React.ComponentProps<"div">, "className" | "style"> & {
   $background?: string;
   $size?: string;
 };

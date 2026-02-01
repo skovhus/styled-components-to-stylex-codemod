@@ -16,7 +16,7 @@ function Button<C extends React.ElementType = "button">(props: ButtonProps<C>) {
   );
 }
 
-type ButtonWrapperProps = Omit<React.ComponentPropsWithRef<typeof Button>, "style" | "className">;
+type ButtonWrapperProps = Omit<React.ComponentPropsWithRef<typeof Button>, "className" | "style">;
 
 // Wrapper that always renders as a specific element but passes `as` through
 function ButtonWrapper(props: ButtonWrapperProps) {

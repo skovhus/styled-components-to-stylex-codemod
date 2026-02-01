@@ -245,10 +245,11 @@ export function emitIntrinsicWrappers(emitter: WrapperEmitter): {
         (() => {
           const base = "React.InputHTMLAttributes<HTMLInputElement>";
           // Always omit "style" - external style props are not supported
-          const omitted: string[] = ['"style"'];
+          const omitted: string[] = [];
           if (!allowClassNameProp) {
             omitted.push('"className"');
           }
+          omitted.push('"style"');
           return `Omit<${base}, ${omitted.join(" | ")}>`;
         })();
       emitPropsType(d.localName, baseTypeText, allowAsProp);
@@ -384,10 +385,11 @@ export function emitIntrinsicWrappers(emitter: WrapperEmitter): {
           (() => {
             const base = "React.AnchorHTMLAttributes<HTMLAnchorElement>";
             // Always omit "style" - external style props are not supported
-            const omitted: string[] = ['"style"'];
+            const omitted: string[] = [];
             if (!allowClassNameProp) {
               omitted.push('"className"');
             }
+            omitted.push('"style"');
             return `Omit<${base}, ${omitted.join(" | ")}>`;
           })(),
         );
@@ -603,12 +605,18 @@ export function emitIntrinsicWrappers(emitter: WrapperEmitter): {
         const base = hasRef
           ? "React.ComponentPropsWithRef<C>"
           : "React.ComponentPropsWithoutRef<C>";
-        // Always omit "style" - external style props are not supported
-        const omitted: string[] = ['"style"'];
+        // Omit className/style from props type (style can pass through for polymorphic components)
+        const omitted: string[] = [];
         if (!allowClassNameProp) {
           omitted.push('"className"');
         }
-        const baseMaybeOmitted = `Omit<${base}, ${omitted.join(" | ")}>`;
+        // Don't omit style if the component is polymorphic and receives style props in JSX.
+        // In that case, style passes through via {...rest}.
+        if (!(d as any).allowStylePropPassthrough) {
+          omitted.push('"style"');
+        }
+        const baseMaybeOmitted =
+          omitted.length > 0 ? `Omit<${base}, ${omitted.join(" | ")}>` : base;
         if (!allowAsProp) {
           return baseMaybeOmitted;
         }
@@ -1003,19 +1011,21 @@ export function emitIntrinsicWrappers(emitter: WrapperEmitter): {
         if (VOID_TAGS.has(tagName)) {
           const base = emitter.reactIntrinsicAttrsType(tagName);
           // Always omit "style" - external style props are not supported
-          const omitted: string[] = ['"style"'];
+          const omitted: string[] = [];
           if (!allowClassNameProp) {
             omitted.push('"className"');
           }
+          omitted.push('"style"');
           const baseWithOmit = `Omit<${base}, ${omitted.join(" | ")}>`;
           return emitter.joinIntersection(baseWithOmit, extrasTypeText);
         }
         const base = `React.ComponentProps<"${tagName}">`;
         // Always omit "style" - external style props are not supported
-        const omitted: string[] = ['"style"'];
+        const omitted: string[] = [];
         if (!allowClassNameProp) {
           omitted.push('"className"');
         }
+        omitted.push('"style"');
         const baseWithOmit = `Omit<${base}, ${omitted.join(" | ")}>`;
         return emitter.joinIntersection(baseWithOmit, extrasTypeText);
       }
@@ -1036,10 +1046,11 @@ export function emitIntrinsicWrappers(emitter: WrapperEmitter): {
         // are typed like real JSX usage (and so we can reliably omit className/style).
         const base = `React.ComponentProps<"${tagName}">`;
         // Always omit "style" - external style props are not supported
-        const omitted: string[] = ['"style"'];
+        const omitted: string[] = [];
         if (!allowClassNameProp) {
           omitted.push('"className"');
         }
+        omitted.push('"style"');
         return `Omit<${base}, ${omitted.join(" | ")}>`;
       })();
       const interfaceExtended = emitter.extendExistingInterface(propsTypeName, extendBaseTypeText);
@@ -1860,10 +1871,11 @@ export function emitIntrinsicWrappers(emitter: WrapperEmitter): {
         // are typed like real JSX usage (and so we can reliably omit className/style).
         const base = `React.ComponentProps<"${tagName}">`;
         // Always omit "style" - external style props are not supported
-        const omitted: string[] = ['"style"'];
+        const omitted: string[] = [];
         if (!allowClassNameProp) {
           omitted.push('"className"');
         }
+        omitted.push('"style"');
         return `Omit<${base}, ${omitted.join(" | ")}>`;
       })();
 

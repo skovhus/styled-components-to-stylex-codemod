@@ -9,7 +9,7 @@ function Card(props: CardProps) {
   return <div {...stylex.props(styles.card)}>{children}</div>;
 }
 
-type InputProps = Omit<React.ComponentProps<"input">, "style" | "className"> & {
+type InputProps = Omit<React.ComponentProps<"input">, "className" | "style"> & {
   hasError?: boolean;
 };
 

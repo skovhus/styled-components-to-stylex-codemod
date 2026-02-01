@@ -703,10 +703,11 @@ export class WrapperEmitter {
       if (VOID_TAGS.has(tagName)) {
         const base = this.reactIntrinsicAttrsType(tagName);
         // Always omit "style" - external style props are not supported
-        const omitted: string[] = ['"style"'];
+        const omitted: string[] = [];
         if (!allowClassNameProp) {
           omitted.push('"className"');
         }
+        omitted.push('"style"');
         return `Omit<${base}, ${omitted.join(" | ")}>`;
       }
       return this.withChildren(literal);
@@ -714,10 +715,11 @@ export class WrapperEmitter {
 
     const base = this.reactIntrinsicAttrsType(tagName);
     // Always omit "style" - external style props are not supported
-    const omitted: string[] = ['"style"'];
+    const omitted: string[] = [];
     if (!allowClassNameProp) {
       omitted.push('"className"');
     }
+    omitted.push('"style"');
     const baseMaybeOmitted = `Omit<${base}, ${omitted.join(" | ")}>`;
     const composed = this.joinIntersection(baseMaybeOmitted, literal);
     return VOID_TAGS.has(tagName) ? composed : this.withChildren(composed);
@@ -737,10 +739,11 @@ export class WrapperEmitter {
     const literal = lines.length > 0 ? `{\n${lines.join("\n")}\n}` : "{}";
     const base = `React.ComponentPropsWithRef<typeof ${(d.base as any).ident}>`;
     // Always omit "style" - external style props are not supported
-    const omitted: string[] = ['"style"'];
+    const omitted: string[] = [];
     if (!allowClassNameProp) {
       omitted.push('"className"');
     }
+    omitted.push('"style"');
     const baseMaybeOmitted = `Omit<${base}, ${omitted.join(" | ")}>`;
     return literal !== "{}" ? this.joinIntersection(baseMaybeOmitted, literal) : baseMaybeOmitted;
   }

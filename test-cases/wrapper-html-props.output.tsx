@@ -1,7 +1,7 @@
 import * as React from "react";
 import * as stylex from "@stylexjs/stylex";
 
-type OptionLabelProps = Omit<React.ComponentProps<"label">, "style" | "className"> & {
+type OptionLabelProps = Omit<React.ComponentProps<"label">, "className" | "style"> & {
   $disabled?: boolean;
 };
 

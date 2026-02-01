@@ -1,7 +1,7 @@
 import * as stylex from "@stylexjs/stylex";
 import React, { useCallback, useEffect } from "react";
 
-interface ButtonProps extends Omit<React.ComponentProps<"button">, "style" | "className"> {
+interface ButtonProps extends Omit<React.ComponentProps<"button">, "className" | "style"> {
   variant: "primary" | "secondary";
 }
 

@@ -60,10 +60,11 @@ export function emitComponentWrappers(emitter: WrapperEmitter): {
         const baseTypeText = (() => {
           const base = `React.ComponentPropsWithRef<typeof ${wrappedComponent}>`;
           // Always omit "style" - external style props are not supported
-          const omitted: string[] = ['"style"'];
+          const omitted: string[] = [];
           if (!allowClassNameProp) {
             omitted.push('"className"');
           }
+          omitted.push('"style"');
           return `Omit<${base}, ${omitted.join(" | ")}>`;
         })();
         // Extend the existing type in-place so the wrapper can reuse it.
@@ -81,10 +82,11 @@ export function emitComponentWrappers(emitter: WrapperEmitter): {
         if (isPolymorphicComponentWrapper) {
           const baseProps = `React.ComponentPropsWithRef<typeof ${wrappedComponent}>`;
           // Always omit "style" - external style props are not supported
-          const omitted: string[] = ['"style"'];
+          const omitted: string[] = [];
           if (!allowClassNameProp) {
             omitted.push('"className"');
           }
+          omitted.push('"style"');
           const typeText = [
             baseProps,
             `Omit<React.ComponentPropsWithoutRef<C>, keyof ${baseProps} | "className" | "style">`,

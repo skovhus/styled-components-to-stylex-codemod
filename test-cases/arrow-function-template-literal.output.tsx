@@ -1,7 +1,7 @@
 import * as React from "react";
 import * as stylex from "@stylexjs/stylex";
 
-type BoxProps = Omit<React.ComponentProps<"div">, "style" | "className"> & {
+type BoxProps = Omit<React.ComponentProps<"div">, "className" | "style"> & {
   $width: string;
   $height: string;
 };
@@ -14,7 +14,7 @@ function Box(props: BoxProps) {
   );
 }
 
-type MixedBoxProps = Omit<React.ComponentProps<"div">, "style" | "className"> & {
+type MixedBoxProps = Omit<React.ComponentProps<"div">, "className" | "style"> & {
   $padding: string;
 };
 
@@ -36,7 +36,7 @@ function MixedBox(props: MixedBoxProps) {
   );
 }
 
-type MultiPropBoxProps = Omit<React.ComponentProps<"div">, "style" | "className"> & {
+type MultiPropBoxProps = Omit<React.ComponentProps<"div">, "className" | "style"> & {
   $margin: string;
   $border: string;
   $padding: string;
