@@ -27,8 +27,8 @@ pnpm check       # Run lint + tsc + test
 - **Unify and abstract**: Use existing primitives/helpers whenever possible. Extend or generalize shared utilities instead of adding parallel logic so the codebase uses the same primitives consistently.
 - **Centralize common logic**: When adding new functionality, look for existing helper functions that can be extended rather than duplicating patterns. Key utilities like `literalToStaticValue` in `builtin-handlers.ts` handle AST node extraction and should be enhanced to support new node types rather than adding ad-hoc checks elsewhere.
 - **keep all exports at the top of each file** (after imports), and keep **non-exported helpers further down**
-- TypeScript: Never use "any".
-- Prefer type definitions; avoid type assertions (as, !).
+- TypeScript: Avoid `any`; use proper types. (Some jscodeshift AST patterns are hard to type precisely—minimal, justified assertions are acceptable there.)
+- Prefer type definitions; avoid type assertions (as, !) where feasible.
 - Use descriptive names for variables & functions
 
 ## StyleX Constraints
@@ -77,3 +77,15 @@ Use the Playwright MCP to inspect test case rendering.
 ## Skills
 
 Skills are located in `.claude/skills/`.
+
+## Post-Implementation Workflow
+
+After implementing any feature or fix, agents MUST:
+
+1. **Validate changes**: Run `pnpm check` to ensure all linting, type checking, and tests pass
+2. **Run code quality refactoring**: Use the [refactor-code-quality](.claude/skills/refactor-code-quality/SKILL.md) skill to:
+   - Remove code duplication and extract shared patterns
+   - Minimize `any` types (some jscodeshift patterns may require them)
+   - Minimize type assertions (`as Type`) and non-null assertions (`!`)
+3. **Validate again**: Run `pnpm check` after refactoring
+4. **Commit and push**: Make atomic commits with descriptive messages
