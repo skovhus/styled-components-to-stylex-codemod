@@ -13,6 +13,7 @@ import { collectStyledDeclsStep } from "./internal/transform-steps/collect-style
 import { convertKeyframesStep } from "./internal/transform-steps/convert-keyframes.js";
 import { detectStringMappingFnsStep } from "./internal/transform-steps/detect-string-mapping-fns.js";
 import { detectUnsupportedPatternsStep } from "./internal/transform-steps/detect-unsupported-patterns.js";
+import { rewriteCssHelpersStep } from "./internal/transform-steps/rewrite-css-helpers.js";
 import { emitStylesStep } from "./internal/transform-steps/emit-styles.js";
 import { emitWrappersStep } from "./internal/transform-steps/emit-wrappers.js";
 import { ensureMergerImportStep } from "./internal/transform-steps/ensure-merger-import.js";
@@ -66,6 +67,7 @@ export function transformWithWarnings(
     collectStyledDeclsStep,
     lowerRulesStep,
     analyzeBeforeEmitStep,
+    rewriteCssHelpersStep,
     emitStylesStep,
     analyzeAfterEmitStep,
     collectStaticPropsStep,

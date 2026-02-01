@@ -14,7 +14,10 @@ export function rewriteJsxStep(ctx: TransformContext): StepResult {
   }
 
   for (const decl of styledDecls) {
-    if (decl.isCssHelper && ctx.exportedComponents?.has(decl.localName)) {
+    if (
+      decl.isCssHelper &&
+      (ctx.exportedComponents?.has(decl.localName) || decl.preserveCssHelperDeclaration)
+    ) {
       continue;
     }
     // Skip removal for declarations with wrappers - they're already replaced in-place by emitWrappers

@@ -203,6 +203,7 @@ export type StyledDecl = {
   rawCss?: string;
   preResolvedStyle?: Record<string, unknown>;
   isCssHelper?: boolean;
+  preserveCssHelperDeclaration?: boolean;
   isExported?: boolean;
   preResolvedFnDecls?: Record<string, unknown>;
   inlineStyleProps?: Array<{ prop: string; expr: ExpressionKind; jsxProp?: string }>;
