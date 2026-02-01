@@ -284,6 +284,17 @@ type ThemeParamInfo =
   | { kind: "propsParam"; propsName: string }
   | { kind: "themeBinding"; themeName: string };
 
+/**
+ * Narrow type for extracted function body when checking for conditional expressions.
+ * Used with `getFunctionBodyExpr` results when we need to access ConditionalExpression properties.
+ */
+type ConditionalExpressionBody = {
+  type?: string;
+  test?: unknown;
+  consequent?: unknown;
+  alternate?: unknown;
+};
+
 function getArrowFnThemeParamInfo(fn: any): ThemeParamInfo | null {
   if (!fn || fn.params?.length !== 1) {
     return null;
@@ -828,12 +839,7 @@ function tryResolveConditionalValue(
 
   // Use getFunctionBodyExpr to handle both expression-body and block-body arrow functions.
   // Block bodies with a single return statement (possibly with comments) are supported.
-  const body = getFunctionBodyExpr(expr) as {
-    type?: string;
-    test?: unknown;
-    consequent?: unknown;
-    alternate?: unknown;
-  } | null;
+  const body = getFunctionBodyExpr(expr) as ConditionalExpressionBody | null;
   if (!body || body.type !== "ConditionalExpression") {
     return null;
   }
@@ -1594,12 +1600,7 @@ function tryResolveConditionalCssBlockTernary(node: DynamicNode): HandlerResult 
     if (!condExpr || typeof condExpr !== "object") {
       return null;
     }
-    const ce = condExpr as {
-      type?: string;
-      test?: unknown;
-      consequent?: unknown;
-      alternate?: unknown;
-    };
+    const ce = condExpr as ConditionalExpressionBody;
 
     // Base case: not a conditional, this is the default value (a CSS string)
     if (ce.type !== "ConditionalExpression") {
@@ -1801,12 +1802,7 @@ function tryResolveInlineStyleValueForConditionalExpression(
   }
   // Use getFunctionBodyExpr to handle both expression-body and block-body arrow functions.
   // Block bodies with a single return statement (possibly with comments) are supported.
-  const body = getFunctionBodyExpr(expr) as {
-    type?: string;
-    test?: unknown;
-    consequent?: unknown;
-    alternate?: unknown;
-  } | null;
+  const body = getFunctionBodyExpr(expr) as ConditionalExpressionBody | null;
   if (!body || body.type !== "ConditionalExpression") {
     return null;
   }
@@ -2175,12 +2171,7 @@ function parseCssTemplateLiteralWithTernary(node: unknown): {
   const suffix = n.quasis[1]?.value?.cooked ?? n.quasis[1]?.value?.raw ?? "";
 
   // The expression must be a ConditionalExpression
-  const expr = n.expressions[0] as {
-    type?: string;
-    test?: unknown;
-    consequent?: unknown;
-    alternate?: unknown;
-  };
+  const expr = n.expressions[0] as ConditionalExpressionBody;
   if (!expr || expr.type !== "ConditionalExpression") {
     return null;
   }
