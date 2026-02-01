@@ -202,7 +202,7 @@ export function createCssHelperResolver(args: {
    * Supports:
    * - Numeric literals (0, 24)
    * - String literals ("value")
-   * - Identifiers (CONSTANT_NAME)
+   * - Identifiers (local constants or resolved imports)
    */
   const resolveTernaryBranchToAst = (branch: any): { ast: any; exprString: string } | null => {
     if (!branch || typeof branch !== "object") {
@@ -223,9 +223,32 @@ export function createCssHelperResolver(args: {
         return { ast: branch, exprString: JSON.stringify(v) };
       }
     }
-    // Allow identifiers (constants like MAIN_PAGE_MARGIN)
+    // Handle identifiers (local constants or imports)
     if (branch.type === "Identifier" && typeof branch.name === "string") {
-      return { ast: branch, exprString: branch.name };
+      const name = branch.name;
+      const imp = importMap.get(name);
+      if (imp) {
+        // Identifier is an import - try to resolve via adapter
+        const res = resolveValue({
+          kind: "importedValue",
+          importedName: imp.importedName,
+          source: imp.source,
+          filePath,
+          loc: getNodeLocStart(branch) ?? undefined,
+        });
+        if (!res) {
+          // Adapter couldn't resolve - return null to trigger bail
+          return null;
+        }
+        // Track the import for the resolver
+        for (const impSpec of res.imports ?? []) {
+          resolverImports.set(JSON.stringify(impSpec), impSpec);
+        }
+        const exprAst = parseExpr(res.expr);
+        return exprAst ? { ast: exprAst, exprString: res.expr } : null;
+      }
+      // Local identifier (not an import) - use as-is
+      return { ast: branch, exprString: name };
     }
     return null;
   };
