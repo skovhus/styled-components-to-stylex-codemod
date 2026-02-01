@@ -65,7 +65,7 @@ import {
   groupVariantBucketsIntoDimensions,
 } from "./lower-rules/variants.js";
 import { mergeStyleObjects, toKebab } from "./lower-rules/utils.js";
-import { normalizeStylisAstToIR } from "./css-ir.js";
+import { computeSelectorWarningLoc, normalizeStylisAstToIR } from "./css-ir.js";
 import {
   normalizeSelectorForInputAttributePseudos,
   normalizeInterpolatedSelector,
@@ -2443,7 +2443,7 @@ export function lowerRules(args: {
           warnings.push({
             severity: "warning",
             type: "Unsupported selector: interpolated pseudo selector",
-            loc: decl.loc,
+            loc: computeSelectorWarningLoc(decl.loc, decl.rawCss, rule.selector),
           });
           break;
         }
@@ -2472,7 +2472,7 @@ export function lowerRules(args: {
           warnings.push({
             severity: "warning",
             type: "Unsupported selector: descendant pseudo selector (space before pseudo)",
-            loc: decl.loc,
+            loc: computeSelectorWarningLoc(decl.loc, decl.rawCss, rule.selector),
           });
           break;
         }
@@ -2485,7 +2485,7 @@ export function lowerRules(args: {
             warnings.push({
               severity: "warning",
               type: "Unsupported selector: comma-separated selectors must all be simple pseudos",
-              loc: decl.loc,
+              loc: computeSelectorWarningLoc(decl.loc, decl.rawCss, rule.selector),
             });
             break;
           }
@@ -2496,7 +2496,7 @@ export function lowerRules(args: {
           warnings.push({
             severity: "warning",
             type: "Unsupported selector: class selector",
-            loc: decl.loc,
+            loc: computeSelectorWarningLoc(decl.loc, decl.rawCss, rule.selector),
           });
           break;
         } else if (/\s+[a-zA-Z.#]/.test(s) && !isHandledComponentPattern) {
@@ -2506,7 +2506,7 @@ export function lowerRules(args: {
           warnings.push({
             severity: "warning",
             type: "Unsupported selector: descendant/child/sibling selector",
-            loc: decl.loc,
+            loc: computeSelectorWarningLoc(decl.loc, decl.rawCss, rule.selector),
           });
           break;
         }
@@ -2588,7 +2588,7 @@ export function lowerRules(args: {
             warnings.push({
               severity: "warning",
               type: "Unsupported selector: unknown component selector",
-              loc: decl.loc,
+              loc: computeSelectorWarningLoc(decl.loc, decl.rawCss, rule.selector),
             });
             break;
           }
@@ -2740,7 +2740,7 @@ export function lowerRules(args: {
             warnings.push({
               severity: "error",
               type: "Unsupported selector interpolation: imported value in selector position",
-              loc: decl.loc,
+              loc: computeSelectorWarningLoc(decl.loc, decl.rawCss, rule.selector),
               context: { selector: rule.selector, expression: identifierDesc },
             });
             break;
@@ -2774,7 +2774,7 @@ export function lowerRules(args: {
         warnings.push({
           severity: "warning",
           type: "Unsupported selector: descendant/child/sibling selector",
-          loc: decl.loc,
+          loc: computeSelectorWarningLoc(decl.loc, decl.rawCss, rule.selector),
         });
         break;
       }

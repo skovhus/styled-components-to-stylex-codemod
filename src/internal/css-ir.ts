@@ -489,3 +489,92 @@ export function findUniversalSelectorLineOffset(rawCss: string): number {
   // Fallback: selector not found in raw CSS
   return 0;
 }
+
+/**
+ * Find the line offset (0-indexed) of a specific selector within the raw CSS.
+ * Returns the line number relative to the start of the CSS string.
+ *
+ * The selector may be normalized by Stylis (spaces removed, etc.), so we search
+ * for key patterns from the selector that should still be present in the raw CSS.
+ */
+function findSelectorLineOffset(rawCss: string, selector: string): number {
+  // Try to find a distinctive pattern from the selector in the raw CSS.
+  // Selectors like "&:hover", "& > *", "&.active" should be findable.
+
+  // First, try finding the selector directly (it may be present as-is)
+  const directMatch = rawCss.match(new RegExp(escapeRegExp(selector)));
+  if (directMatch) {
+    return countNewlinesBefore(rawCss, directMatch.index!);
+  }
+
+  // Try finding key parts of the selector:
+  // 1. Pseudo-classes like :hover, :focus, :active, :not(...)
+  // 2. Pseudo-elements like ::before, ::after
+  // 3. Class selectors like .active
+  // 4. Combinators with context like > *, + span
+
+  // Extract pseudo-class/element patterns
+  const pseudoMatch = selector.match(/::?[a-z-]+(?:\([^)]*\))?/i);
+  if (pseudoMatch) {
+    const pattern = pseudoMatch[0];
+    // Search for this pseudo pattern followed by whitespace or {
+    const idx = rawCss.indexOf(pattern);
+    if (idx !== -1) {
+      return countNewlinesBefore(rawCss, idx);
+    }
+  }
+
+  // For interpolated selectors (__SC_EXPR_N__), try to find them
+  const exprMatch = selector.match(/__SC_EXPR_\d+__/);
+  if (exprMatch) {
+    const idx = rawCss.indexOf(exprMatch[0]);
+    if (idx !== -1) {
+      return countNewlinesBefore(rawCss, idx);
+    }
+  }
+
+  // For class selectors, look for .className pattern
+  const classMatch = selector.match(/\.[a-zA-Z0-9_-]+/);
+  if (classMatch) {
+    const idx = rawCss.indexOf(classMatch[0]);
+    if (idx !== -1) {
+      return countNewlinesBefore(rawCss, idx);
+    }
+  }
+
+  // Fallback: not found
+  return 0;
+}
+
+/**
+ * Compute the location for a warning based on the template location and selector.
+ * Returns an adjusted location that points to the selector's line in the raw CSS.
+ */
+export function computeSelectorWarningLoc(
+  templateLoc: { line: number; column: number } | undefined,
+  rawCss: string | undefined,
+  selector: string,
+): { line: number; column: number } | undefined {
+  if (!templateLoc) {
+    return undefined;
+  }
+  if (!rawCss) {
+    return templateLoc;
+  }
+  const lineOffset = findSelectorLineOffset(rawCss, selector);
+  return { line: templateLoc.line + lineOffset, column: 0 };
+}
+
+function countNewlinesBefore(str: string, position: number): number {
+  let count = 0;
+  for (let i = 0; i < position && i < str.length; i++) {
+    if (str[i] === "\n") {
+      count++;
+    }
+  }
+  return count;
+}
+
+function escapeRegExp(str: string): string {
+  return str.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
