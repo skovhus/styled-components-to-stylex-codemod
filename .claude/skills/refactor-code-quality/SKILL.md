@@ -16,14 +16,14 @@ After implementing a feature, review the changes to remove code duplication, ext
 
 ## Process
 
-### Step 1: Identify Changed Files
+### Step 1: Identify All Changed Files on Branch
 
 ```bash
-# See all files changed compared to main
+# See all files changed on this branch compared to main
 git diff origin/main --name-only
 
-# Or see recent changes in current branch
-git diff HEAD~5 --name-only
+# See the full diff of all changes on the branch
+git diff origin/main
 ```
 
 ### Step 2: Analyze for Code Duplication
@@ -54,8 +54,8 @@ rg "if.*===.*null" --type ts -C 2
 Check if new code duplicates existing helpers:
 
 ```bash
-# Find existing utility functions
-rg "^export (function|const)" src/internal/ --type ts
+# Find existing utility functions in src/
+rg "^export (function|const)" src/ --type ts
 
 # Check for similar patterns to what you just added
 rg "<pattern-from-your-code>" src/
@@ -116,124 +116,15 @@ When you find duplicated logic:
    - `src/internal/` for internal utilities
    - Near the code that uses it if only used in one area
 
-**Example refactoring:**
-
-```typescript
-// BEFORE: Duplicated logic
-function handleBorder(node: Node) {
-  if (node.type === "Literal" && typeof node.value === "string") {
-    return parseBorder(node.value);
-  }
-  return null;
-}
-
-function handleMargin(node: Node) {
-  if (node.type === "Literal" && typeof node.value === "string") {
-    return parseMargin(node.value);
-  }
-  return null;
-}
-
-// AFTER: Shared helper
-function extractStringValue(node: Node): string | null {
-  if (node.type === "Literal" && typeof node.value === "string") {
-    return node.value;
-  }
-  return null;
-}
-
-function handleBorder(node: Node) {
-  const value = extractStringValue(node);
-  return value ? parseBorder(value) : null;
-}
-
-function handleMargin(node: Node) {
-  const value = extractStringValue(node);
-  return value ? parseMargin(value) : null;
-}
-```
-
 #### 4b. Use Data-Driven Approaches
 
-Replace repetitive conditionals with lookup tables:
-
-```typescript
-// BEFORE: Repetitive switch
-switch (prop) {
-  case "marginTop":
-    return "mt";
-  case "marginBottom":
-    return "mb";
-  case "marginLeft":
-    return "ml";
-  case "marginRight":
-    return "mr";
-  // ... many more cases
-}
-
-// AFTER: Data-driven
-const PROP_TO_ABBREVIATION: Record<string, string> = {
-  marginTop: "mt",
-  marginBottom: "mb",
-  marginLeft: "ml",
-  marginRight: "mr",
-  // ... more mappings
-};
-
-return PROP_TO_ABBREVIATION[prop];
-```
+Replace repetitive conditionals (switch statements, if-chains) with lookup tables or maps.
 
 ### Step 5: Ensure Proper Type Definitions
 
-#### 5a. Replace `any` with Proper Types
-
-```typescript
-// BEFORE
-function process(data: any): any {
-  return data.value;
-}
-
-// AFTER
-interface ProcessInput {
-  value: string;
-}
-
-function process(data: ProcessInput): string {
-  return data.value;
-}
-```
-
-#### 5b. Replace Type Assertions with Type Guards
-
-```typescript
-// BEFORE: Unsafe assertion
-const element = node as Element;
-element.setAttribute("class", "foo");
-
-// AFTER: Safe type guard
-function isElement(node: Node): node is Element {
-  return node.nodeType === Node.ELEMENT_NODE;
-}
-
-if (isElement(node)) {
-  node.setAttribute("class", "foo");
-}
-```
-
-#### 5c. Replace Non-null Assertions with Proper Checks
-
-```typescript
-// BEFORE: Unsafe non-null assertion
-const parent = node.parent!;
-processParent(parent);
-
-// AFTER: Safe null check
-const parent = node.parent;
-if (!parent) {
-  return; // or throw with a clear error message
-}
-processParent(parent);
-```
+- **Replace `any`** with proper interfaces, type aliases, or generics
+- **Replace type assertions (`as`)** with type guards that narrow types safely
+- **Replace non-null assertions (`!`)** with proper null checks and early returns
 
 ### Step 6: Verify Changes
 
@@ -252,26 +143,7 @@ This ensures:
 
 ### Step 7: Review Export Organization
 
-Ensure exports are at the top of files (after imports):
-
-```typescript
-// imports first
-import { something } from "./somewhere";
-
-// exports immediately after
-export { publicFunction, PublicType };
-export type { PublicInterface };
-
-// then implementations
-function publicFunction() {
-  // ...
-}
-
-// private helpers at the bottom
-function privateHelper() {
-  // ...
-}
-```
+Ensure exports are at the top of files (after imports), with non-exported helpers further down.
 
 ### Step 8: Commit Refactoring Separately
 
