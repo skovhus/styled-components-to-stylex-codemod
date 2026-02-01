@@ -18,10 +18,20 @@ function Box(props: BoxProps) {
   );
 }
 
+type BorderedBoxProps = React.PropsWithChildren<{
+  ref?: React.Ref<HTMLDivElement>;
+}>;
+
+function BorderedBox(props: BorderedBoxProps) {
+  const { children } = props;
+  return <div {...stylex.props(borders.labelMuted)}>{children}</div>;
+}
+
 export const App = () => (
   <div style={{ margin: "10px", padding: "10px", height: "100px" }}>
     <Box position="top">Top box with themed border</Box>
     <Box position="bottom">Bottom box without border</Box>
+    <BorderedBox>Bordered box</BorderedBox>
   </div>
 );
 

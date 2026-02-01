@@ -2741,6 +2741,8 @@ export function lowerRules(args: {
               filePath,
               decl,
               d,
+              selector: rule.selector,
+              atRuleStack: rule.atRuleStack ?? [],
               extraStyleObjects,
               hasLocalThemeBinding,
               resolveValue,
