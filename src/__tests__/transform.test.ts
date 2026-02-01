@@ -528,7 +528,7 @@ export const App = () => <Container />;
 });
 
 describe("import cleanup safety", () => {
-  it("should not remove `css` import when `css` is still referenced (even if no transforms apply)", () => {
+  it("should rewrite standalone css helpers even without styled components", () => {
     const source = `
 import styled, { css } from "styled-components";
 
@@ -542,7 +542,23 @@ export function helper() {
 export const x = 1;
 `;
     const result = runTransform(source, {}, "css-import-safety.tsx");
-    expect(result).toBe(source);
+    const expected = `import * as stylex from "@stylexjs/stylex";
+import { mergedSx } from "./lib/mergedSx";
+
+export function helper() {
+  return styles.helper;
+}
+
+// No styled declarations we currently transform in this snippet.
+export const x = 1;
+
+const styles = stylex.create({
+  helper: {
+    color: "red",
+  },
+});
+`;
+    expect(result.trim()).toBe(expected.trim());
   });
 });
 
