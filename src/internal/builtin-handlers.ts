@@ -362,8 +362,9 @@ function resolveTemplateLiteralExpressions(
     const quasi = quasis[i];
     const raw = quasi?.value?.raw ?? quasi?.value?.cooked ?? "";
     parts.push(raw);
-    if (i < resolvedExprs.length) {
-      parts.push("${" + resolvedExprs[i]!.expr + "}");
+    const resolvedExpr = resolvedExprs[i];
+    if (i < resolvedExprs.length && resolvedExpr) {
+      parts.push("${" + resolvedExpr.expr + "}");
     }
   }
 
@@ -471,8 +472,9 @@ function extractIndexedThemeLookupInfo(
   } else if (p?.type === "MemberExpression") {
     // Member expression: props.theme.color[props.textColor]
     const path = getMemberPathFromIdentifier(p as any, paramName);
-    if (path && path.length === 1) {
-      indexPropName = path[0]!;
+    const firstPathPart = path?.[0];
+    if (path && path.length === 1 && firstPathPart) {
+      indexPropName = firstPathPart;
     }
   }
 
@@ -982,10 +984,11 @@ function tryResolveConditionalValue(
       return null;
     }
     const leftPath = getMemberPathFromIdentifier(test.left, paramName);
-    if (!leftPath || leftPath.length !== 1) {
+    const firstLeftPath = leftPath?.[0];
+    if (!leftPath || leftPath.length !== 1 || !firstLeftPath) {
       return null;
     }
-    const propName = leftPath[0]!;
+    const propName = firstLeftPath;
     const rhsRaw = literalToStaticValue(test.right as any);
     if (rhsRaw === null) {
       return null;
@@ -1112,7 +1115,8 @@ function tryResolveConditionalValue(
     paramName && test.type === "MemberExpression"
       ? getMemberPathFromIdentifier(test, paramName)
       : null;
-  if (testPath && testPath.length === 1) {
+  const outerProp = testPath?.[0];
+  if (testPath && testPath.length === 1 && outerProp) {
     const cons = getBranch(consequent);
     if (cons === "invalid") {
       return { type: "keepOriginal", reason: invalidCurriedError, context: invalidCurriedContext };
@@ -1121,18 +1125,18 @@ function tryResolveConditionalValue(
     if (alt === "invalid") {
       return { type: "keepOriginal", reason: invalidCurriedError, context: invalidCurriedContext };
     }
-    const outerProp = testPath[0]!;
 
     // Check for multi-prop nested ternary: outerProp ? A : innerProp ? B : C
     // where alternate is a conditional testing a different boolean prop
-    if (cons && !alt && alternate.type === "ConditionalExpression") {
+    if (cons && !alt && alternate.type === "ConditionalExpression" && paramName) {
       const innerTest = (alternate as any).test;
       const innerTestPath =
         innerTest?.type === "MemberExpression"
-          ? getMemberPathFromIdentifier(innerTest, paramName!)
+          ? getMemberPathFromIdentifier(innerTest, paramName)
           : null;
+      const innerProp = innerTestPath?.[0];
       // Only handle when inner tests a different single-level prop
-      if (innerTestPath && innerTestPath.length === 1 && innerTestPath[0] !== outerProp) {
+      if (innerTestPath && innerTestPath.length === 1 && innerProp && innerProp !== outerProp) {
         const innerCons = getBranch((alternate as any).consequent);
         const innerAlt = getBranch((alternate as any).alternate);
         if (innerCons && innerCons !== "invalid" && innerAlt && innerAlt !== "invalid") {
@@ -1146,7 +1150,7 @@ function tryResolveConditionalValue(
               type: "splitMultiPropVariantsResolvedValue",
               outerProp,
               outerTruthyBranch: { expr: cons.expr, imports: cons.imports },
-              innerProp: innerTestPath[0]!,
+              innerProp,
               innerTruthyBranch: { expr: innerCons.expr, imports: innerCons.imports },
               innerFalsyBranch: { expr: innerAlt.expr, imports: innerAlt.imports },
             };
@@ -1326,10 +1330,10 @@ function tryResolveIndexedThemeWithPropFallback(
 
   // Right side must be a simple prop access: props.propName
   const rightPath = getMemberPathFromIdentifier(body.right as any, paramName);
-  if (!rightPath || rightPath.length !== 1) {
+  const fallbackPropName = rightPath?.[0];
+  if (!rightPath || rightPath.length !== 1 || !fallbackPropName) {
     return null;
   }
-  const fallbackPropName = rightPath[0]!;
 
   // Left side must be an indexed theme lookup: props.theme.color[props.propName]
   const indexedResult = extractIndexedThemeLookupInfo(body.left, paramName);
@@ -1397,7 +1401,8 @@ function tryResolveConditionalCssBlock(
           paramName,
         )
       : null;
-  if (!testPath || testPath.length !== 1) {
+  const testProp = testPath?.[0];
+  if (!testPath || testPath.length !== 1 || !testProp) {
     return null;
   }
 
@@ -1410,7 +1415,7 @@ function tryResolveConditionalCssBlock(
     }
     return {
       type: "splitVariants",
-      variants: [{ nameHint: "truthy", when: testPath[0]!, style }],
+      variants: [{ nameHint: "truthy", when: testProp, style }],
     };
   }
 
@@ -1430,7 +1435,7 @@ function tryResolveConditionalCssBlock(
       variants: [
         {
           nameHint: "truthy",
-          when: testPath[0]!,
+          when: testProp,
           style: parsed.styleObj,
           imports: templateResult.imports,
         },
@@ -1482,10 +1487,11 @@ function tryResolveConditionalCssBlockTernary(node: DynamicNode): HandlerResult 
     // Simple prop access: props.$dim
     if (t.type === "MemberExpression") {
       const testPath = getMemberPathFromIdentifier(t as any, paramName);
-      if (!testPath || testPath.length !== 1) {
+      const firstProp = testPath?.[0];
+      if (!testPath || testPath.length !== 1 || !firstProp) {
         return null;
       }
-      return { kind: "boolean", propName: testPath[0]!, isNegated: false };
+      return { kind: "boolean", propName: firstProp, isNegated: false };
     }
 
     // Negated prop access: !props.$open
@@ -1493,10 +1499,11 @@ function tryResolveConditionalCssBlockTernary(node: DynamicNode): HandlerResult 
       const arg = t.argument as { type?: string } | undefined;
       if (arg?.type === "MemberExpression") {
         const testPath = getMemberPathFromIdentifier(arg as any, paramName);
-        if (!testPath || testPath.length !== 1) {
+        const firstProp = testPath?.[0];
+        if (!testPath || testPath.length !== 1 || !firstProp) {
           return null;
         }
-        return { kind: "boolean", propName: testPath[0]!, isNegated: true };
+        return { kind: "boolean", propName: firstProp, isNegated: true };
       }
       return null;
     }
@@ -1508,7 +1515,8 @@ function tryResolveConditionalCssBlockTernary(node: DynamicNode): HandlerResult 
         return null;
       }
       const testPath = getMemberPathFromIdentifier(left as any, paramName);
-      if (!testPath || testPath.length !== 1) {
+      const firstProp = testPath?.[0];
+      if (!testPath || testPath.length !== 1 || !firstProp) {
         return null;
       }
       const rhsRaw = literalToStaticValue(t.right);
@@ -1517,7 +1525,7 @@ function tryResolveConditionalCssBlockTernary(node: DynamicNode): HandlerResult 
       }
       return {
         kind: "comparison",
-        propName: testPath[0]!,
+        propName: firstProp,
         operator: t.operator as "===" | "!==",
         rhsValue: JSON.stringify(rhsRaw),
         rhsRaw,
@@ -1694,8 +1702,9 @@ function tryResolveConditionalCssBlockTernary(node: DynamicNode): HandlerResult 
       // This happens when the original test was negated: !props.$x ? A : B
       // Without this, both variants would start with "!" and fall through the
       // lower-rules processing logic, silently dropping the styles.
-      if (variants.length === 1) {
-        const singleWhen = variants[0]!.when;
+      const firstVariant = variants[0];
+      if (variants.length === 1 && firstVariant) {
+        const singleWhen = firstVariant.when;
         // Check for simple negated prop (e.g., "!$open") without operators
         if (singleWhen.startsWith("!") && !singleWhen.includes(" ")) {
           defaultWhen = singleWhen.slice(1); // "!$open" → "$open"
@@ -1747,10 +1756,10 @@ function tryResolveArrowFnCallWithSinglePropArg(node: DynamicNode): HandlerResul
     return null;
   }
   const path = getMemberPathFromIdentifier(arg0, paramName);
-  if (!path || path.length !== 1) {
+  const propName = path?.[0];
+  if (!path || path.length !== 1 || !propName) {
     return null;
   }
-  const propName = path[0]!;
 
   return {
     type: "emitStyleFunction",
@@ -1911,8 +1920,9 @@ function tryResolveStyleFunctionFromTemplateLiteral(node: DynamicNode): HandlerR
       const n = node as { type?: string };
       if (n.type === "MemberExpression" || n.type === "OptionalMemberExpression") {
         const path = getMemberPathFromIdentifier(node as any, paramName);
-        if (path && path.length > 0) {
-          addProp(path[0]!);
+        const firstPathPart = path?.[0];
+        if (path && path.length > 0 && firstPathPart) {
+          addProp(firstPathPart);
           // Keep walking to collect other props.
         }
       }
@@ -2164,11 +2174,11 @@ function parseCssDeclarationBlock(cssText: string): Record<string, unknown> | nu
   const style: Record<string, unknown> = {};
   for (const chunk of chunks) {
     const m = chunk.match(/^([^:]+):([\s\S]+)$/);
-    if (!m) {
+    if (!m || !m[1] || !m[2]) {
       return null;
     }
-    const property = m[1]!.trim();
-    const valueRaw = m[2]!.trim();
+    const property = m[1].trim();
+    const valueRaw = m[2].trim();
     const decl = {
       property,
       value: { kind: "static" as const, value: valueRaw },
@@ -2233,11 +2243,11 @@ function parseCssDeclarationBlockWithTemplateExpr(
 
   for (const chunk of chunks) {
     const m = chunk.match(/^([^:]+):([\s\S]+)$/);
-    if (!m) {
+    if (!m || !m[1] || !m[2]) {
       return null;
     }
-    const property = m[1]!.trim();
-    const valueRaw = m[2]!.trim();
+    const property = m[1].trim();
+    const valueRaw = m[2].trim();
 
     // Check if value contains template expressions
     if (valueRaw.includes("${")) {
@@ -2324,7 +2334,7 @@ function expandBorderShorthandWithTemplateExpr(
       prefix = valueRaw.slice(0, match.index);
     }
     expressions.push({
-      text: match[1]!.trim(),
+      text: (match[1] ?? "").trim(),
       start: match.index,
       end: regex.lastIndex,
     });
@@ -2387,8 +2397,9 @@ function parseValueAsTemplateLiteralForColor(
   // Find the start of the dynamic part
   let dynamicStart = 0;
   for (let i = 0; i < prefixTokens.length && i < fullTokens.length; i++) {
-    if (fullTokens[i] === prefixTokens[i]) {
-      dynamicStart += fullTokens[i]!.length + 1; // +1 for space
+    const fullToken = fullTokens[i];
+    if (fullToken && fullToken === prefixTokens[i]) {
+      dynamicStart += fullToken.length + 1; // +1 for space
     }
   }
 
@@ -2408,7 +2419,7 @@ function parseValueAsTemplateLiteralForColor(
     const beforeExpr = dynamicPart.slice(lastIndex, match.index);
     quasis.push({ raw: beforeExpr, cooked: beforeExpr });
 
-    const exprText = match[1]!.trim();
+    const exprText = (match[1] ?? "").trim();
     const exprAst = parseSimpleExpression(exprText, j);
     if (!exprAst) {
       return null;
@@ -2455,7 +2466,7 @@ function parseValueAsTemplateLiteral(value: string, j: JSCodeshift): TemplateLit
     quasis.push({ raw, cooked: raw });
 
     // Add the expression (as an identifier for now - will be parsed later if needed)
-    const exprText = match[1]!.trim();
+    const exprText = (match[1] ?? "").trim();
     // Parse the expression text into AST
     // For simple cases like "$colors.primaryColor", create a member expression
     const exprAst = parseSimpleExpression(exprText, j);
@@ -2497,7 +2508,10 @@ function parseSimpleExpression(exprText: string, j: JSCodeshift): ExpressionKind
 
   let ast: ExpressionKind = j.identifier(parts[0]);
   for (let i = 1; i < parts.length; i++) {
-    ast = j.memberExpression(ast, j.identifier(parts[i]!));
+    const part = parts[i];
+    if (part) {
+      ast = j.memberExpression(ast, j.identifier(part));
+    }
   }
 
   return ast;

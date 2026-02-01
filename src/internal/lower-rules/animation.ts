@@ -96,7 +96,7 @@ export function tryHandleAnimation(args: {
     if (!kf) {
       return false;
     }
-    (styleObj as any).animationName = j.identifier(kf) as any;
+    styleObj.animationName = j.identifier(kf);
     return true;
   }
 
@@ -214,10 +214,11 @@ export function tryHandleAnimation(args: {
       iterations.push(iter ?? null);
     }
 
-    if (animNames.length === 1 && animNames[0]!.kind === "ident") {
-      (styleObj as any).animationName = j.identifier(animNames[0]!.name) as any;
+    const firstAnim = animNames[0];
+    if (animNames.length === 1 && firstAnim && firstAnim.kind === "ident") {
+      styleObj.animationName = j.identifier(firstAnim.name);
     } else {
-      (styleObj as any).animationName = buildCommaTemplate(animNames) as any;
+      styleObj.animationName = buildCommaTemplate(animNames);
     }
     const anyValues = (values: Array<string | null>): boolean =>
       values.some((value) => value !== null);
@@ -225,28 +226,28 @@ export function tryHandleAnimation(args: {
       values.map((value) => value ?? fallback).join(", ");
 
     if (anyValues(durations)) {
-      (styleObj as any).animationDuration = joinWithDefaults(durations, "0s");
+      styleObj.animationDuration = joinWithDefaults(durations, "0s");
     }
     if (anyValues(timings)) {
-      (styleObj as any).animationTimingFunction = joinWithDefaults(timings, "ease");
+      styleObj.animationTimingFunction = joinWithDefaults(timings, "ease");
     }
     if (anyValues(delays)) {
-      (styleObj as any).animationDelay = joinWithDefaults(delays, "0s");
+      styleObj.animationDelay = joinWithDefaults(delays, "0s");
     }
     if (anyValues(iterations)) {
-      (styleObj as any).animationIterationCount = joinWithDefaults(iterations, "1");
+      styleObj.animationIterationCount = joinWithDefaults(iterations, "1");
     }
     if (anyValues(directions)) {
-      (styleObj as any).animationDirection = joinWithDefaults(directions, "normal");
+      styleObj.animationDirection = joinWithDefaults(directions, "normal");
     }
     if (anyValues(fillModes)) {
-      (styleObj as any).animationFillMode = joinWithDefaults(fillModes, "none");
+      styleObj.animationFillMode = joinWithDefaults(fillModes, "none");
     }
     if (anyValues(playStates)) {
-      (styleObj as any).animationPlayState = joinWithDefaults(playStates, "running");
+      styleObj.animationPlayState = joinWithDefaults(playStates, "running");
     }
     if (anyValues(timelines)) {
-      (styleObj as any).animationTimeline = joinWithDefaults(timelines, "auto");
+      styleObj.animationTimeline = joinWithDefaults(timelines, "auto");
     }
     return true;
   }

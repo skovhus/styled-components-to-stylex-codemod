@@ -27,12 +27,12 @@ function parseVariantCondition(when: string): ParsedVariantCondition {
 
   // Equality: propName === "value" or propName !== "value"
   const eqMatch = trimmed.match(/^([a-zA-Z_$][a-zA-Z0-9_$]*)\s*(===|!==)\s*"([^"]*)"$/);
-  if (eqMatch) {
+  if (eqMatch && eqMatch[1] && eqMatch[2] && eqMatch[3] !== undefined) {
     return {
       type: "equality",
-      propName: eqMatch[1]!,
+      propName: eqMatch[1],
       operator: eqMatch[2] as "===" | "!==",
-      value: eqMatch[3]!,
+      value: eqMatch[3],
     };
   }
 
@@ -174,8 +174,9 @@ export function groupVariantBucketsIntoDimensions(
     const unionValues = extractUnionLiteralValues(propType);
 
     // For single-condition variants, check if we can create a dimension
-    if (variants.length === 1) {
-      const explicitValue = variants[0]!.value;
+    const firstVariant = variants[0];
+    if (variants.length === 1 && firstVariant) {
+      const explicitValue = firstVariant.value;
 
       // Only create dimension if: variants-recipe pattern AND union has exactly 2 values
       if (
@@ -241,7 +242,11 @@ export function groupVariantBucketsIntoDimensions(
     }
 
     // Check if this prop has boolean overlap (needs namespace dimensions)
-    const variantCssProps = new Set(Object.keys(variants[0]!.styles));
+    const firstVariantForProps = variants[0];
+    if (!firstVariantForProps) {
+      continue;
+    }
+    const variantCssProps = new Set(Object.keys(firstVariantForProps.styles));
     let overlappingBoolProp: string | undefined;
     let overlappingBoolStyles: Record<string, unknown> | undefined;
     for (const [boolProp, boolData] of booleanBuckets) {

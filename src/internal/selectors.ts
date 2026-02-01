@@ -49,19 +49,24 @@ export function parseSelector(selector: string): ParsedSelector {
       const pseudos: string[] = [];
       for (const sel of selectors) {
         const result = parseSingleSelector(sel);
-        if (result.kind !== "pseudo" || result.pseudos.length !== 1) {
+        const firstPseudo = result.kind === "pseudo" ? result.pseudos[0] : undefined;
+        if (result.kind !== "pseudo" || result.pseudos.length !== 1 || !firstPseudo) {
           return {
             kind: "unsupported",
             reason: "comma-separated selectors must all be simple pseudos",
           };
         }
-        pseudos.push(result.pseudos[0]!);
+        pseudos.push(firstPseudo);
       }
       return { kind: "pseudo", pseudos };
     }
 
     // Single selector
-    return parseSingleSelector(selectors[0]!);
+    const firstSelector = selectors[0];
+    if (!firstSelector) {
+      return { kind: "base" };
+    }
+    return parseSingleSelector(firstSelector);
   } catch {
     return { kind: "unsupported", reason: "failed to parse selector" };
   }
@@ -154,7 +159,11 @@ function parseSingleSelector(selector: selectorParser.Selector): ParsedSelector 
       // Pseudo-classes with pseudo-elements is complex
       return { kind: "unsupported", reason: "pseudo-class with pseudo-element" };
     }
-    return { kind: "pseudoElement", element: pseudoElements[0]!.value };
+    const firstPseudoEl = pseudoElements[0];
+    if (!firstPseudoEl) {
+      return { kind: "unsupported", reason: "pseudo-element access error" };
+    }
+    return { kind: "pseudoElement", element: firstPseudoEl.value };
   }
 
   // Handle pseudo-classes
@@ -191,8 +200,8 @@ function buildPseudoString(pseudos: selectorParser.Pseudo[]): string {
 function parseAttributeSelectorInternal(selector: string): ParsedAttributeSelector | null {
   // &[… ]::after (used for link external indicator)
   const afterSel = selector.match(/^&\[(.+)\](::after)$/) ?? selector.match(/^\[(.+)\](::after)$/);
-  if (afterSel) {
-    const inside = afterSel[1]!;
+  if (afterSel && afterSel[1]) {
+    const inside = afterSel[1];
     if (inside.replace(/\s+/g, "") === 'target="_blank"') {
       return {
         type: "targetBlankAfter",
@@ -204,10 +213,10 @@ function parseAttributeSelectorInternal(selector: string): ParsedAttributeSelect
 
   // &[…]
   const m = selector.match(/^&\[(.+)\]$/) ?? selector.match(/^\[(.+)\]$/);
-  if (!m) {
+  if (!m || !m[1]) {
     return null;
   }
-  const inside = m[1]!;
+  const inside = m[1];
 
   // type="checkbox" / type="radio"
   const typeEq = inside.match(/^type\s*=\s*"(checkbox|radio)"$/);
@@ -289,10 +298,10 @@ export function normalizeSelectorForInputAttributePseudos(
   // - &[readonly]  -> &:read-only
   // - &[readOnly]  -> &:read-only (defensive)
   const m = selector.match(/^&\[(.+)\]$/) ?? selector.match(/^\[(.+)\]$/);
-  if (!m) {
+  if (!m || !m[1]) {
     return selector;
   }
-  const inside = m[1]!.replace(/\s+/g, "");
+  const inside = m[1].replace(/\s+/g, "");
   if (inside === "disabled") {
     return "&:disabled";
   }

@@ -65,7 +65,8 @@ function collectStyledDeclsImpl(args: {
     if (!arg0) {
       return undefined;
     }
-    const out: StyledDecl["attrsInfo"] = {
+    // Use Required to narrow the type since we're initializing all fields
+    const out: Required<NonNullable<StyledDecl["attrsInfo"]>> = {
       staticAttrs: {},
       defaultAttrs: [],
       conditionalAttrs: [],
@@ -114,7 +115,7 @@ function collectStyledDeclsImpl(args: {
               right?.type === "NumericLiteral" ||
               right?.type === "BooleanLiteral")
           ) {
-            out.defaultAttrs!.push({
+            out.defaultAttrs.push({
               jsxProp: left.property.name,
               attrName: key,
               value: right.value,
@@ -158,7 +159,7 @@ function collectStyledDeclsImpl(args: {
           (v.left.object.name === "props" || v.left.object.name === "p") &&
           v.left.property?.type === "Identifier"
         ) {
-          out.invertedBoolAttrs!.push({
+          out.invertedBoolAttrs.push({
             jsxProp: v.left.property.name,
             attrName: key,
           });
@@ -1263,7 +1264,12 @@ function collectStyledDeclsImpl(args: {
               return wrapExprInArrowFn(s.expression, destructuredParams, propsParam);
             }
             // Non-destructured case: wrap in arrow fn, renaming param if needed
-            return wrapExprInArrowFnWithPropsRename(s.expression, propsParam!);
+            // At this point propsParam is guaranteed non-null because needsWrapping is true
+            // and destructuredParams.size is 0
+            if (!propsParam) {
+              return s.expression;
+            }
+            return wrapExprInArrowFnWithPropsRename(s.expression, propsParam);
           });
 
           styledDecls.push({

@@ -37,10 +37,9 @@ export function finalize(ctx: TransformContext): TransformResult {
           }
         }
       }
+      const errorMessage = e instanceof Error ? e.message : String(e);
       throw new Error(
-        `Failed to print transformed output for ${ctx.file.path}: ${
-          (e as any)?.message ?? String(e)
-        }${failing ? `\nFirst failing statement: ${failing}` : ""}`,
+        `Failed to print transformed output for ${ctx.file.path}: ${errorMessage}${failing ? `\nFirst failing statement: ${failing}` : ""}`,
       );
     }
   }

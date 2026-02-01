@@ -362,11 +362,15 @@ export function emitComponentWrappers(emitter: WrapperEmitter): {
         return j.identifier(wrappedComponent);
       }
       const parts = wrappedComponent.split(".");
+      const firstPart = parts[0];
+      if (!firstPart) {
+        return j.identifier(wrappedComponent);
+      }
       return parts
         .slice(1)
         .reduce<ExpressionKind>(
           (expr, part) => j.memberExpression(expr, j.identifier(part)),
-          j.identifier(parts[0]!),
+          j.identifier(firstPart),
         );
     };
 
@@ -376,10 +380,15 @@ export function emitComponentWrappers(emitter: WrapperEmitter): {
       jsxTagName = j.jsxIdentifier("Component");
     } else if (wrappedComponent.includes(".")) {
       const parts = wrappedComponent.split(".");
-      jsxTagName = j.jsxMemberExpression(
-        j.jsxIdentifier(parts[0]!),
-        j.jsxIdentifier(parts.slice(1).join(".")),
-      );
+      const firstPart = parts[0];
+      if (!firstPart) {
+        jsxTagName = j.jsxIdentifier(wrappedComponent);
+      } else {
+        jsxTagName = j.jsxMemberExpression(
+          j.jsxIdentifier(firstPart),
+          j.jsxIdentifier(parts.slice(1).join(".")),
+        );
+      }
     } else {
       jsxTagName = j.jsxIdentifier(wrappedComponent);
     }

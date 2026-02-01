@@ -124,9 +124,9 @@ Replace repetitive conditionals (switch statements, if-chains) with lookup table
 
 ### Step 5: Ensure Proper Type Definitions
 
-- **Replace `any`** with proper interfaces, type aliases, or generics where feasible
-- **Replace type assertions (`as`)** with type guards that narrow types safely
-- **Replace non-null assertions (`!`)** with proper null checks and early returns
+- **Replace any types** with proper interfaces, type aliases, or generics where feasible
+- **Replace type assertions** (using "as") with type guards that narrow types safely
+- **Replace non-null assertions** (the ! operator) with proper null checks and early returns
 
 Note: Some jscodeshift AST patterns are difficult to type precisely. Accept minimal, well-placed assertions when they improve clarity over convoluted type gymnastics.
 
@@ -169,9 +169,9 @@ Before considering the refactoring complete:
 
 - [ ] No duplicated logic blocks across files
 - [ ] Similar patterns use shared helpers
-- [ ] No unnecessary `any` types (some jscodeshift patterns may require them)
+- [ ] No unnecessary "any" types (some jscodeshift patterns may require them)
 - [ ] Type assertions minimized and justified (AST manipulation may need some)
-- [ ] No unnecessary non-null assertions (`!`)
+- [ ] No unnecessary non-null assertions (the ! operator)
 - [ ] Exports are at the top of each file
-- [ ] `pnpm check` passes
+- [ ] pnpm check passes
 - [ ] Helper functions have descriptive names

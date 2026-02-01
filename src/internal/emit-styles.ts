@@ -221,8 +221,8 @@ export function emitStylesAndImports(args: {
   // Re-attach preserved header comments to the first statement (preferably the stylex import).
   if (preservedHeaderComments.length > 0) {
     const body = root.get().node.program.body as any[];
-    if (body.length > 0) {
-      const firstStmt = body[0]!;
+    const firstStmt = body[0];
+    if (body.length > 0 && firstStmt) {
       const existingLeading = (firstStmt as any).leadingComments;
       const existingComments = (firstStmt as any).comments;
       const merged = [

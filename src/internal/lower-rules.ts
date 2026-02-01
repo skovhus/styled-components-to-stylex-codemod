@@ -1765,10 +1765,11 @@ export function lowerRules(args: {
         valueRaw: valueRawFromTemplate,
         important: false,
       });
-      if (stylexProps.length === 0) {
+      const firstStylexProp = stylexProps[0];
+      if (stylexProps.length === 0 || !firstStylexProp) {
         return false;
       }
-      const stylexProp = stylexProps[0]!.prop;
+      const stylexProp = firstStylexProp.prop;
 
       // Add the "false" branch value to the base style
       styleObj[stylexProp] = altValue;
@@ -2048,10 +2049,11 @@ export function lowerRules(args: {
             // Also check for member expression CSS helpers (e.g., buttonStyles.rootCss)
             else if (expr && typeof expr === "object" && "type" in expr) {
               const rootInfo = extractRootAndPath(expr);
-              if (rootInfo && rootInfo.path.length === 1) {
+              const firstPathPart = rootInfo?.path[0];
+              if (rootInfo && rootInfo.path.length === 1 && firstPathPart) {
                 const objectMemberMap = cssHelperObjectMembers.get(rootInfo.rootName);
                 if (objectMemberMap) {
-                  const memberDecl = objectMemberMap.get(rootInfo.path[0]!);
+                  const memberDecl = objectMemberMap.get(firstPathPart);
                   if (memberDecl) {
                     const helperValues = cssHelperValuesByKey.get(memberDecl.styleKey);
                     if (helperValues) {
@@ -2533,27 +2535,27 @@ export function lowerRules(args: {
       let attrTarget: Record<string, unknown> | null = null;
       let attrPseudoElement: string | null = null;
 
-      if (isAttrRule) {
+      if (isAttrRule && attrSel && attrWrapperKind) {
         decl.needsWrapperComponent = true;
-        decl.attrWrapper ??= { kind: attrWrapperKind! };
-        const suffix = attrSel!.suffix;
+        decl.attrWrapper ??= { kind: attrWrapperKind };
+        const suffix = attrSel.suffix;
         const attrTargetStyleKey = `${decl.styleKey}${suffix}`;
         attrTarget = attrBuckets.get(attrTargetStyleKey) ?? {};
         attrBuckets.set(attrTargetStyleKey, attrTarget);
-        attrPseudoElement = attrSel!.pseudoElement ?? null;
+        attrPseudoElement = attrSel.pseudoElement ?? null;
 
         if (attrWrapperKind === "input") {
-          if (attrSel!.kind === "typeCheckbox") {
+          if (attrSel.kind === "typeCheckbox") {
             decl.attrWrapper.checkboxKey = attrTargetStyleKey;
-          } else if (attrSel!.kind === "typeRadio") {
+          } else if (attrSel.kind === "typeRadio") {
             decl.attrWrapper.radioKey = attrTargetStyleKey;
           }
         } else if (attrWrapperKind === "link") {
-          if (attrSel!.kind === "targetBlankAfter") {
+          if (attrSel.kind === "targetBlankAfter") {
             decl.attrWrapper.externalKey = attrTargetStyleKey;
-          } else if (attrSel!.kind === "hrefStartsHttps") {
+          } else if (attrSel.kind === "hrefStartsHttps") {
             decl.attrWrapper.httpsKey = attrTargetStyleKey;
-          } else if (attrSel!.kind === "hrefEndsPdf") {
+          } else if (attrSel.kind === "hrefEndsPdf") {
             decl.attrWrapper.pdfKey = attrTargetStyleKey;
           }
         }
@@ -2686,12 +2688,15 @@ export function lowerRules(args: {
 
         if (pseudoElement) {
           nestedSelectors[pseudoElement] ??= {};
-          nestedSelectors[pseudoElement]![prop] = value;
-          if (commentSource) {
-            addPropComments(nestedSelectors[pseudoElement]!, prop, {
-              leading: commentSource.leading,
-              trailingLine: commentSource.trailingLine,
-            });
+          const pseudoSelector = nestedSelectors[pseudoElement];
+          if (pseudoSelector) {
+            pseudoSelector[prop] = value;
+            if (commentSource) {
+              addPropComments(pseudoSelector, prop, {
+                leading: commentSource.leading,
+                trailingLine: commentSource.trailingLine,
+              });
+            }
           }
           return;
         }
@@ -3034,10 +3039,11 @@ export function lowerRules(args: {
               }
               // Handle member expression CSS helpers (e.g., buttonStyles.rootCss)
               const rootInfo = extractRootAndPath(expr);
-              if (rootInfo && rootInfo.path.length === 1) {
+              const firstRootInfoPath = rootInfo?.path[0];
+              if (rootInfo && rootInfo.path.length === 1 && firstRootInfoPath) {
                 const objectMemberMap = cssHelperObjectMembers.get(rootInfo.rootName);
                 if (objectMemberMap) {
-                  const memberDecl = objectMemberMap.get(rootInfo.path[0]!);
+                  const memberDecl = objectMemberMap.get(firstRootInfoPath);
                   if (memberDecl) {
                     const extras = decl.extraStyleKeys ?? [];
                     if (!extras.includes(memberDecl.styleKey)) {
@@ -3388,9 +3394,11 @@ export function lowerRules(args: {
                 return cleaned || "Pseudo";
               };
 
-              const fnKey = pseudos?.length
-                ? `${decl.styleKey}${toSuffixFromProp(out.prop)}${pseudoSuffix(pseudos[0]!)}`
-                : `${decl.styleKey}${toSuffixFromProp(out.prop)}`;
+              const firstPseudo = pseudos?.[0];
+              const fnKey =
+                pseudos?.length && firstPseudo
+                  ? `${decl.styleKey}${toSuffixFromProp(out.prop)}${pseudoSuffix(firstPseudo)}`
+                  : `${decl.styleKey}${toSuffixFromProp(out.prop)}`;
               styleFnFromProps.push({ fnKey, jsxProp: indexPropName });
 
               if (!styleFnDecls.has(fnKey)) {
@@ -5028,11 +5036,11 @@ export function lowerRules(args: {
           .filter(Boolean);
         for (const line of declLines) {
           const m = line.match(/^([^:]+):([\s\S]+)$/);
-          if (!m) {
+          if (!m || !m[1] || !m[2]) {
             continue;
           }
-          const prop = m[1]!.trim();
-          const value = m[2]!.trim();
+          const prop = m[1].trim();
+          const value = m[2].trim();
           // Skip values that contain unresolved interpolation placeholders - these should
           // be handled by the IR handler which has proper theme resolution
           if (/__SC_EXPR_\d+__/.test(value)) {
@@ -5060,15 +5068,18 @@ export function lowerRules(args: {
       // Match any pseudo selector pattern: &:hover, &:focus-visible, &:active, etc.
       const pseudoRe = /&(:[a-z-]+(?:\([^)]*\))?)\s+__SC_EXPR_(\d+)__\s*\{([\s\S]*?)\}/gi;
       while ((m = pseudoRe.exec(decl.rawCss))) {
-        const pseudo = m[1]!;
+        if (!m[1]) {
+          continue;
+        }
+        const pseudo = m[1];
         applyBlock(Number(m[2]), m[3] ?? "", pseudo);
       }
 
       if (didApply) {
-        delete (styleObj as any).width;
-        delete (styleObj as any).height;
-        delete (styleObj as any).opacity;
-        delete (styleObj as any).transform;
+        delete styleObj.width;
+        delete styleObj.height;
+        delete styleObj.opacity;
+        delete styleObj.transform;
       }
     }
 

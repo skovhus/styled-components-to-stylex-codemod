@@ -16,7 +16,11 @@ import { emitStyleMerging } from "./style-merger.js";
 import type { ExportInfo, ExpressionKind, InlineStyleProp } from "./types.js";
 import { TAG_TO_HTML_ELEMENT, VOID_TAGS } from "./type-helpers.js";
 import type { VariantDimension } from "../transform-types.js";
-import { buildStyleFnConditionExpr, collectIdentifiers } from "../utilities/jscodeshift-utils.js";
+import {
+  buildStyleFnConditionExpr,
+  collectIdentifiers,
+  isIdentifierNode,
+} from "../utilities/jscodeshift-utils.js";
 
 type TsTypeAnnotationInput = Parameters<JSCodeshift["tsTypeAnnotation"]>[0];
 type BlockStatementBody = Parameters<JSCodeshift["blockStatement"]>[0];
@@ -230,8 +234,8 @@ export class WrapperEmitter {
     if (!n) {
       return null;
     }
-    if (n.type === "Identifier") {
-      return (n as any).name ?? null;
+    if (isIdentifierNode(n)) {
+      return n.name;
     }
     if (n.type === "TSQualifiedName") {
       const left = this.stringifyTsTypeName((n as any).left);
@@ -468,7 +472,7 @@ export class WrapperEmitter {
           `Failed to parse emitted props type for ${localName} (${this.filePath}).`,
           `Type name: ${typeNameWithParams}`,
           `Type expr: ${typeExprText}`,
-          `Error: ${(e as any)?.message ?? String(e)}`,
+          `Error: ${e instanceof Error ? e.message : String(e)}`,
         ].join("\n"),
       );
     }
@@ -491,7 +495,7 @@ export class WrapperEmitter {
           [
             `Failed to parse inline props param type for ${localName} (${this.filePath}).`,
             `Inline type: ${inlineTypeText}`,
-            `Error: ${(e as any)?.message ?? String(e)}`,
+            `Error: ${e instanceof Error ? e.message : String(e)}`,
           ].join("\n"),
         );
       }
@@ -545,8 +549,8 @@ export class WrapperEmitter {
     if (xs.length === 0) {
       return "{}";
     }
-    if (xs.length === 1) {
-      return xs[0]!;
+    if (xs.length === 1 && xs[0]) {
+      return xs[0];
     }
     return xs.join(" & ");
   }
@@ -875,8 +879,8 @@ export class WrapperEmitter {
       if (!node) {
         return;
       }
-      if (node.type === "Identifier") {
-        expandedDestructureProps.add((node as any).name);
+      if (isIdentifierNode(node)) {
+        expandedDestructureProps.add(node.name);
         return;
       }
       if (
@@ -927,7 +931,7 @@ export class WrapperEmitter {
             [
               `Failed to parse inline wrapper props type for ${localName} (${tagName}).`,
               `Inline type: ${inlineTypeText}`,
-              `Error: ${(e as any)?.message ?? String(e)}`,
+              `Error: ${e instanceof Error ? e.message : String(e)}`,
             ].join("\n"),
           );
         }
@@ -1166,9 +1170,13 @@ export class WrapperEmitter {
         .map((s) => s.trim())
         .filter(Boolean);
       const parsed = parts.map((p) => this.parseVariantWhenToAst(p));
+      const firstParsed = parsed[0];
+      if (!firstParsed) {
+        return { cond: j.identifier("true"), props: [], isBoolean: true };
+      }
       const cond = parsed
         .slice(1)
-        .reduce((acc, cur) => j.logicalExpression("&&", acc, cur.cond), parsed[0]!.cond);
+        .reduce((acc, cur) => j.logicalExpression("&&", acc, cur.cond), firstParsed.cond);
       const props = [...new Set(parsed.flatMap((x) => x.props))];
       // Combined && is boolean only if all parts are boolean
       const isBoolean = parsed.every((p) => p.isBoolean);
@@ -1182,9 +1190,13 @@ export class WrapperEmitter {
         .map((s) => s.trim())
         .filter(Boolean);
       const parsed = parts.map((p) => this.parseVariantWhenToAst(p));
+      const firstParsedOr = parsed[0];
+      if (!firstParsedOr) {
+        return { cond: j.identifier("true"), props: [], isBoolean: true };
+      }
       const cond = parsed
         .slice(1)
-        .reduce((acc, cur) => j.logicalExpression("||", acc, cur.cond), parsed[0]!.cond);
+        .reduce((acc, cur) => j.logicalExpression("||", acc, cur.cond), firstParsedOr.cond);
       const props = [...new Set(parsed.flatMap((x) => x.props))];
       // Combined || is boolean only if all parts are boolean
       const isBoolean = parsed.every((p) => p.isBoolean);
@@ -1581,7 +1593,10 @@ export class WrapperEmitter {
       const { enabled, disabled } = pair;
       if (!enabled || !disabled) {
         // Incomplete pair - emit each dimension separately as fallback
-        for (const dim of [enabled, disabled].filter(Boolean) as VariantDimension[]) {
+        for (const dim of [enabled, disabled]) {
+          if (!dim) {
+            continue;
+          }
           if (destructureProps && !destructureProps.includes(dim.propName)) {
             destructureProps.push(dim.propName);
           }
@@ -1595,17 +1610,23 @@ export class WrapperEmitter {
         continue;
       }
 
+      const namespaceBooleanProp = enabled.namespaceBooleanProp;
+      if (!namespaceBooleanProp) {
+        // Skip if namespace boolean prop is not set
+        continue;
+      }
+
       if (destructureProps) {
         if (!destructureProps.includes(enabled.propName)) {
           destructureProps.push(enabled.propName);
         }
-        if (!destructureProps.includes(enabled.namespaceBooleanProp!)) {
-          destructureProps.push(enabled.namespaceBooleanProp!);
+        if (!destructureProps.includes(namespaceBooleanProp)) {
+          destructureProps.push(namespaceBooleanProp);
         }
       }
 
-      if (namespaceBooleanProps && !namespaceBooleanProps.includes(enabled.namespaceBooleanProp!)) {
-        namespaceBooleanProps.push(enabled.namespaceBooleanProp!);
+      if (namespaceBooleanProps && !namespaceBooleanProps.includes(namespaceBooleanProp)) {
+        namespaceBooleanProps.push(namespaceBooleanProp);
       }
 
       if (
@@ -1617,7 +1638,7 @@ export class WrapperEmitter {
         propDefaults.set(enabled.propName, enabled.defaultValue);
       }
 
-      const boolPropId = j.identifier(enabled.namespaceBooleanProp!);
+      const boolPropId = j.identifier(namespaceBooleanProp);
       const propId = j.identifier(enabled.propName);
 
       const enabledLookup = j.memberExpression(

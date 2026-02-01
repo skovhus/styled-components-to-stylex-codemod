@@ -137,7 +137,9 @@ function emitWithMerger(args: {
   // Build the styles argument
   // - Single style: pass directly
   // - Multiple styles: wrap in array
-  const stylesArg = styleArgs.length === 1 ? styleArgs[0]! : j.arrayExpression(styleArgs);
+  const firstStyleArg = styleArgs[0];
+  const stylesArg =
+    styleArgs.length === 1 && firstStyleArg ? firstStyleArg : j.arrayExpression(styleArgs);
 
   // Build the merger function call arguments
   // Signature: merger(styles, className?, style?)

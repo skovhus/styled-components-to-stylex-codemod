@@ -8,9 +8,15 @@ export type CssSwitchParseResult = {
   defaultCssTemplate: { quasi: any };
 };
 
-function getSingleReturnStmt(
-  consequent: any[],
-): { type: "ReturnStatement"; argument: unknown } | null {
+type ReturnStatementNode = { type: "ReturnStatement"; argument: unknown };
+
+function isReturnStatement(node: unknown): node is ReturnStatementNode {
+  return (
+    !!node && typeof node === "object" && (node as { type?: string }).type === "ReturnStatement"
+  );
+}
+
+function getSingleReturnStmt(consequent: any[]): ReturnStatementNode | null {
   if (!Array.isArray(consequent) || consequent.length !== 1) {
     return null;
   }
@@ -18,8 +24,8 @@ function getSingleReturnStmt(
   if (!only || typeof only !== "object") {
     return null;
   }
-  if (only.type === "ReturnStatement") {
-    return only as any;
+  if (isReturnStatement(only)) {
+    return only;
   }
   // Support `case "x": { return css`...`; }`
   if (only.type === "BlockStatement") {
@@ -28,8 +34,8 @@ function getSingleReturnStmt(
       return null;
     }
     const inner = body[0];
-    if (inner?.type === "ReturnStatement") {
-      return inner as any;
+    if (isReturnStatement(inner)) {
+      return inner;
     }
   }
   return null;
@@ -123,7 +129,10 @@ export function parseSwitchReturningCssTemplates(args: {
     }
 
     // Case label with a return also covers any prior fall-through labels.
-    pendingLabels.push(label!);
+    // At this point isDefault is false, and we already returned at line 80-88 if !label
+    if (label) {
+      pendingLabels.push(label);
+    }
     assignToPending(tpl);
   }
 

@@ -191,8 +191,12 @@ export function rewriteJsxStep(ctx: TransformContext): StepResult {
         const createJsxName = (tag: string) => {
           if (tag.includes(".")) {
             const parts = tag.split(".");
+            const firstPart = parts[0];
+            if (!firstPart) {
+              return j.jsxIdentifier(tag);
+            }
             return j.jsxMemberExpression(
-              j.jsxIdentifier(parts[0]!),
+              j.jsxIdentifier(firstPart),
               j.jsxIdentifier(parts.slice(1).join(".")),
             );
           }
@@ -473,7 +477,8 @@ export function rewriteJsxStep(ctx: TransformContext): StepResult {
         // Recalculate insert index after filtering (some attrs may have been removed)
         let finalInsertIndex = keptRestAfterVariants.length;
         for (let i = keptRestAfterVariants.length - 1; i >= 0; i--) {
-          if (keptRestAfterVariants[i]!.type === "JSXSpreadAttribute") {
+          const attr = keptRestAfterVariants[i];
+          if (attr && attr.type === "JSXSpreadAttribute") {
             finalInsertIndex = i + 1;
             break;
           }
