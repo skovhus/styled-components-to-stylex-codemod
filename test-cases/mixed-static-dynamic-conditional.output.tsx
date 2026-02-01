@@ -28,13 +28,50 @@ function Container(props: ContainerProps) {
   );
 }
 
-export const App = () => <Container $sidebarCollapsed={false} $position="fixed" />;
+export const App = () => (
+  <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
+    <div>
+      <div>Position fixed + sidebar expanded (24px margins):</div>
+      <div {...stylex.props(styles.wrapper)}>
+        <Container $sidebarCollapsed={false} $position="fixed">
+          Content
+        </Container>
+      </div>
+    </div>
+    <div>
+      <div>Position fixed + sidebar collapsed (0px margins):</div>
+      <div {...stylex.props(styles.wrapper)}>
+        <Container $sidebarCollapsed={true} $position="fixed">
+          Content
+        </Container>
+      </div>
+    </div>
+    <div>
+      <div>Position relative (no absolute positioning, normal flow):</div>
+      <div {...stylex.props(styles.wrapper)}>
+        <Container $sidebarCollapsed={false} $position="relative">
+          Content
+        </Container>
+      </div>
+    </div>
+  </div>
+);
 
 const styles = stylex.create({
+  wrapper: {
+    position: "relative",
+    height: "80px",
+    backgroundColor: "#f0f0f0",
+    borderWidth: "1px",
+    borderStyle: "solid",
+    borderColor: "#ccc",
+  },
   container: {
     display: "flex",
     justifyContent: "center",
-    pointerEvents: "none",
+    alignItems: "center",
+    backgroundColor: "paleturquoise",
+    padding: "8px",
   },
   containerPositionFixedSidebarCollapsed: {
     left: `${0}px`,

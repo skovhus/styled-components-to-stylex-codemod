@@ -12,10 +12,19 @@ interface ContainerProps {
   $position?: Position;
 }
 
+const Wrapper = styled.div`
+  position: relative;
+  height: 80px;
+  background: #f0f0f0;
+  border: 1px solid #ccc;
+`;
+
 const Container = styled.div<ContainerProps>`
   display: flex;
   justify-content: center;
-  pointer-events: none;
+  align-items: center;
+  background: paleturquoise;
+  padding: 8px;
 
   ${(props) =>
     props.$position === "fixed"
@@ -28,4 +37,31 @@ const Container = styled.div<ContainerProps>`
       : ""}
 `;
 
-export const App = () => <Container $sidebarCollapsed={false} $position="fixed" />;
+export const App = () => (
+  <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
+    <div>
+      <div>Position fixed + sidebar expanded (24px margins):</div>
+      <Wrapper>
+        <Container $sidebarCollapsed={false} $position="fixed">
+          Content
+        </Container>
+      </Wrapper>
+    </div>
+    <div>
+      <div>Position fixed + sidebar collapsed (0px margins):</div>
+      <Wrapper>
+        <Container $sidebarCollapsed={true} $position="fixed">
+          Content
+        </Container>
+      </Wrapper>
+    </div>
+    <div>
+      <div>Position relative (no absolute positioning, normal flow):</div>
+      <Wrapper>
+        <Container $sidebarCollapsed={false} $position="relative">
+          Content
+        </Container>
+      </Wrapper>
+    </div>
+  </div>
+);
