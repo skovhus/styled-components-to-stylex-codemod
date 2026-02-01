@@ -84,6 +84,8 @@ rg "<any>" --type ts
 - Using generics for flexible but type-safe code
 - Using `unknown` with type guards when type is truly unknown
 
+**Note:** jscodeshift's AST types can make some patterns difficult to type precisely. In cases where jscodeshift's type definitions are incomplete or overly broad, a well-placed type assertion may be acceptable if it improves code clarity. Prefer narrowing with type guards when possible, but don't contort the code just to avoid a single assertion in AST manipulation code.
+
 #### 3b. Find Type Assertions
 
 ```bash
@@ -122,9 +124,11 @@ Replace repetitive conditionals (switch statements, if-chains) with lookup table
 
 ### Step 5: Ensure Proper Type Definitions
 
-- **Replace `any`** with proper interfaces, type aliases, or generics
+- **Replace `any`** with proper interfaces, type aliases, or generics where feasible
 - **Replace type assertions (`as`)** with type guards that narrow types safely
 - **Replace non-null assertions (`!`)** with proper null checks and early returns
+
+Note: Some jscodeshift AST patterns are difficult to type precisely. Accept minimal, well-placed assertions when they improve clarity over convoluted type gymnastics.
 
 ### Step 6: Verify Changes
 
@@ -165,9 +169,9 @@ Before considering the refactoring complete:
 
 - [ ] No duplicated logic blocks across files
 - [ ] Similar patterns use shared helpers
-- [ ] No `any` types in changed code
-- [ ] No type assertions (`as Type`) in changed code
-- [ ] No non-null assertions (`!`) in changed code
+- [ ] No unnecessary `any` types (some jscodeshift patterns may require them)
+- [ ] Type assertions minimized and justified (AST manipulation may need some)
+- [ ] No unnecessary non-null assertions (`!`)
 - [ ] Exports are at the top of each file
 - [ ] `pnpm check` passes
 - [ ] Helper functions have descriptive names
