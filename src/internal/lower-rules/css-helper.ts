@@ -14,6 +14,38 @@ type ImportMapEntry = {
   source: ImportSource;
 };
 
+export type ConditionalVariant = {
+  when: string;
+  propName: string;
+  style: Record<string, unknown>;
+};
+
+type ValuePart = { kind: string; value?: string; slotId?: number };
+
+/**
+ * Extracts prefix and suffix static parts from a value parts array.
+ * Given parts like ["static:1px", "slot", "static:solid"], returns { prefix: "1px", suffix: "solid" }
+ */
+function extractPrefixSuffix(parts: ValuePart[]): { prefix: string; suffix: string } {
+  let prefix = "";
+  let suffix = "";
+  let foundSlot = false;
+  for (const part of parts) {
+    if (part.kind === "slot") {
+      foundSlot = true;
+      continue;
+    }
+    if (part.kind === "static") {
+      if (foundSlot) {
+        suffix += part.value ?? "";
+      } else {
+        prefix += part.value ?? "";
+      }
+    }
+  }
+  return { prefix, suffix };
+}
+
 export function createCssHelperResolver(args: {
   importMap: Map<string, ImportMapEntry>;
   filePath: string;
@@ -31,6 +63,7 @@ export function createCssHelperResolver(args: {
   ) => {
     style: Record<string, unknown>;
     dynamicProps: Array<{ jsxProp: string; stylexProp: string }>;
+    conditionalVariants: ConditionalVariant[];
   } | null;
 } {
   const { importMap, filePath, resolveValue, parseExpr, resolverImports, cssValueToJs, warnings } =
@@ -164,6 +197,83 @@ export function createCssHelperResolver(args: {
     return found;
   };
 
+  /**
+   * Resolves a ternary branch expression to an AST node and string representation.
+   * Supports:
+   * - Numeric literals (0, 24)
+   * - String literals ("value")
+   * - Identifiers (local constants or resolved imports)
+   */
+  const resolveTernaryBranchToAst = (branch: any): { ast: any; exprString: string } | null => {
+    if (!branch || typeof branch !== "object") {
+      return null;
+    }
+    if (branch.type === "NumericLiteral") {
+      return { ast: branch, exprString: String(branch.value) };
+    }
+    if (branch.type === "StringLiteral") {
+      return { ast: branch, exprString: JSON.stringify(branch.value) };
+    }
+    if (branch.type === "Literal") {
+      const v = branch.value;
+      if (typeof v === "number") {
+        return { ast: branch, exprString: String(v) };
+      }
+      if (typeof v === "string") {
+        return { ast: branch, exprString: JSON.stringify(v) };
+      }
+    }
+    // Handle identifiers (local constants or imports)
+    if (branch.type === "Identifier" && typeof branch.name === "string") {
+      const name = branch.name;
+      const imp = importMap.get(name);
+      if (imp) {
+        // Identifier is an import - try to resolve via adapter
+        const res = resolveValue({
+          kind: "importedValue",
+          importedName: imp.importedName,
+          source: imp.source,
+          filePath,
+          loc: getNodeLocStart(branch) ?? undefined,
+        });
+        if (!res) {
+          // Adapter couldn't resolve - return null to trigger bail
+          return null;
+        }
+        // Track the import for the resolver
+        for (const impSpec of res.imports ?? []) {
+          resolverImports.set(JSON.stringify(impSpec), impSpec);
+        }
+        const exprAst = parseExpr(res.expr);
+        return exprAst ? { ast: exprAst, exprString: res.expr } : null;
+      }
+      // Local identifier (not an import) - use as-is
+      return { ast: branch, exprString: name };
+    }
+    return null;
+  };
+
+  /**
+   * Parses a ternary test expression to extract the prop name.
+   * Supports:
+   * - Simple prop access: props.x
+   * - Member expression: props.$collapsed
+   */
+  const parseTernaryTestPropName = (test: any, paramName: string | null): string | null => {
+    if (!test || !paramName) {
+      return null;
+    }
+    const propPath = getMemberPathFromIdentifier(test, paramName);
+    if (propPath && propPath.length === 1) {
+      const propName = propPath[0]!;
+      // Don't treat theme access as a prop-based condition
+      if (propName !== "theme") {
+        return propName;
+      }
+    }
+    return null;
+  };
+
   const resolveCssHelperTemplate = (
     template: any,
     paramName: string | null,
@@ -171,6 +281,7 @@ export function createCssHelperResolver(args: {
   ): {
     style: Record<string, unknown>;
     dynamicProps: Array<{ jsxProp: string; stylexProp: string }>;
+    conditionalVariants: ConditionalVariant[];
   } | null => {
     const bail = (type: WarningType, context?: { property?: string }): null => {
       warnings.push({
@@ -194,6 +305,7 @@ export function createCssHelperResolver(args: {
     const out: Record<string, unknown> = {};
     const dynamicProps: Array<{ jsxProp: string; stylexProp: string }> = [];
     const dynamicPropKeys = new Set<string>();
+    const conditionalVariants: ConditionalVariant[] = [];
 
     const normalizePseudoElement = (pseudo: string | null): string | null => {
       if (!pseudo) {
@@ -306,23 +418,7 @@ export function createCssHelperResolver(args: {
         }
         if (resolved) {
           if (hasStaticParts) {
-            // Extract prefix and suffix static parts
-            let prefix = "";
-            let suffix = "";
-            let foundSlot = false;
-            for (const part of parts) {
-              if (part.kind === "slot") {
-                foundSlot = true;
-                continue;
-              }
-              if (part.kind === "static") {
-                if (foundSlot) {
-                  suffix += part.value ?? "";
-                } else {
-                  prefix += part.value ?? "";
-                }
-              }
-            }
+            const { prefix, suffix } = extractPrefixSuffix(parts);
             // Create a template literal string using the shared helper (same logic as top-level)
             const wrappedExpr = wrapExprWithStaticParts(resolved.exprString, prefix, suffix);
             const templateAst = parseExpr(wrappedExpr);
@@ -341,6 +437,78 @@ export function createCssHelperResolver(args: {
               (target as any)[mapped.prop] = resolved.ast as any;
             }
             continue;
+          }
+        }
+
+        // Handle ConditionalExpression with static parts: ${prop ? val1 : val2}px
+        // We can create variants for each branch
+        // Note: only allowed at root selector level; variants inside pseudo selectors would lose nesting
+        if (hasStaticParts && expr && (expr as any).type === "ConditionalExpression") {
+          if (!allowDynamicValues) {
+            // Bail: ternary inside pseudo selector would lose the selector nesting in the variant
+            return bail(
+              "Conditional `css` block: ternary expressions inside pseudo selectors are not supported",
+              { property: d.property },
+            );
+          }
+          const ternaryExpr = expr as {
+            type: "ConditionalExpression";
+            test: any;
+            consequent: any;
+            alternate: any;
+          };
+          const propName = parseTernaryTestPropName(ternaryExpr.test, paramName);
+          if (propName) {
+            const consResolved = resolveTernaryBranchToAst(ternaryExpr.consequent);
+            const altResolved = resolveTernaryBranchToAst(ternaryExpr.alternate);
+            // If resolution failed (e.g., unresolved import), bail with specific message
+            if (!consResolved || !altResolved) {
+              return bail(
+                "Conditional `css` block: ternary branch value could not be resolved (imported values require adapter support)",
+                { property: d.property },
+              );
+            }
+            if (consResolved && altResolved) {
+              const { prefix, suffix } = extractPrefixSuffix(parts);
+
+              // Create AST for false branch (alternate) as base value
+              const altWrappedExpr = wrapExprWithStaticParts(
+                altResolved.exprString,
+                prefix,
+                suffix,
+              );
+              const altAst = parseExpr(altWrappedExpr);
+
+              // Create AST for true branch (consequent) as variant value
+              const consWrappedExpr = wrapExprWithStaticParts(
+                consResolved.exprString,
+                prefix,
+                suffix,
+              );
+              const consAst = parseExpr(consWrappedExpr);
+
+              if (altAst && consAst) {
+                // Add false branch to base style
+                for (const mapped of cssDeclarationToStylexDeclarations(d)) {
+                  (target as any)[mapped.prop] = altAst as any;
+                }
+
+                // Build variant style for true branch
+                const variantStyle: Record<string, unknown> = {};
+                for (const mapped of cssDeclarationToStylexDeclarations(d)) {
+                  variantStyle[mapped.prop] = consAst;
+                }
+
+                // Add to conditional variants
+                conditionalVariants.push({
+                  when: propName,
+                  propName,
+                  style: variantStyle,
+                });
+
+                continue;
+              }
+            }
           }
         }
 
@@ -374,7 +542,7 @@ export function createCssHelperResolver(args: {
       }
     }
 
-    return { style: out, dynamicProps };
+    return { style: out, dynamicProps, conditionalVariants };
   };
 
   return { isCssHelperTaggedTemplate, resolveCssHelperTemplate };

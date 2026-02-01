@@ -50,7 +50,7 @@ import {
   unwrapArrowFunctionToPropsExpr,
 } from "./lower-rules/inline-styles.js";
 import { addPropComments } from "./lower-rules/comments.js";
-import { createCssHelperResolver } from "./lower-rules/css-helper.js";
+import { createCssHelperResolver, type ConditionalVariant } from "./lower-rules/css-helper.js";
 import { parseSwitchReturningCssTemplates } from "./lower-rules/switch-variants.js";
 import { createThemeResolvers } from "./lower-rules/theme.js";
 import {
@@ -1240,7 +1240,7 @@ export function lowerRules(args: {
             bail = true;
             return true;
           }
-          const { style: consStyle, dynamicProps } = resolved;
+          const { style: consStyle, dynamicProps, conditionalVariants } = resolved;
 
           if (dynamicProps.length > 0) {
             const propName = testInfo.propName;
@@ -1278,6 +1278,15 @@ export function lowerRules(args: {
           if (Object.keys(consStyle).length > 0) {
             applyVariant(testInfo, consStyle);
           }
+
+          // Apply conditional variants from nested ternaries within the css block
+          for (const cv of conditionalVariants) {
+            // Compose the outer condition with the inner condition
+            const composedWhen = `${testInfo.when} && ${cv.when}`;
+            applyVariant({ when: composedWhen, propName: cv.propName }, cv.style);
+            ensureShouldForwardPropDrop(decl, cv.propName);
+          }
+
           return true;
         }
 
@@ -1487,12 +1496,25 @@ export function lowerRules(args: {
       ): {
         style: Record<string, unknown>;
         dynamicProps: Array<{ jsxProp: string; stylexProp: string }>;
+        conditionalVariants: ConditionalVariant[];
       } | null => {
         if (!isCssHelperTaggedTemplate(node)) {
           return null;
         }
         const tplNode = node as { quasi: ExpressionKind };
         return resolveCssHelperTemplate(tplNode.quasi, paramName, decl.loc);
+      };
+
+      // Helper to apply conditional variants from a resolved branch
+      const applyConditionalVariants = (
+        conditionalVariants: ConditionalVariant[],
+        outerCondition: string,
+      ): void => {
+        for (const cv of conditionalVariants) {
+          const composedWhen = `${outerCondition} && ${cv.when}`;
+          applyVariant({ when: composedWhen, propName: cv.propName }, cv.style);
+          ensureShouldForwardPropDrop(decl, cv.propName);
+        }
       };
 
       if (consIsCss && altIsCss) {
@@ -1507,6 +1529,12 @@ export function lowerRules(args: {
         }
         mergeStyleObjects(styleObj, altResolved.style);
         applyVariant(testInfo, consResolved.style);
+        // Apply conditional variants from both branches
+        applyConditionalVariants(consResolved.conditionalVariants, testInfo.when);
+        const invertedWhen = invertWhen(testInfo.when);
+        if (invertedWhen && altResolved.conditionalVariants.length > 0) {
+          applyConditionalVariants(altResolved.conditionalVariants, invertedWhen);
+        }
         return true;
       }
 
@@ -1520,6 +1548,7 @@ export function lowerRules(args: {
           return false;
         }
         applyVariant(testInfo, consResolved.style);
+        applyConditionalVariants(consResolved.conditionalVariants, testInfo.when);
         return true;
       }
 
@@ -1537,6 +1566,7 @@ export function lowerRules(args: {
           return false;
         }
         applyVariant({ ...testInfo, when: invertedWhen }, altResolved.style);
+        applyConditionalVariants(altResolved.conditionalVariants, invertedWhen);
         return true;
       }
 

@@ -1,5 +1,17 @@
 import type { StyledDecl } from "../transform-types.js";
 
+/**
+ * Sorts variant style entries by condition specificity.
+ * Less specific conditions (fewer && operators) come before more specific ones.
+ * This ensures base styles are applied before override styles in stylex.props.
+ */
+export function sortVariantEntriesBySpecificity<T>(
+  entries: Array<[string, T]>,
+): Array<[string, T]> {
+  const countAndOps = (s: string): number => (s.match(/&&/g) || []).length;
+  return entries.slice().sort(([a], [b]) => countAndOps(a) - countAndOps(b));
+}
+
 export const VOID_TAGS = new Set([
   "area",
   "base",

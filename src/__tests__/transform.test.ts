@@ -231,6 +231,19 @@ describe("test case file pairing", () => {
     // getTestCases() throws if there are mismatched files
     expect(fixtureCases.length).toBeGreaterThan(0);
   });
+
+  it("supported test cases should not have @expected-warning annotation", () => {
+    // @expected-warning is only for _unsupported fixtures that are expected to bail
+    // Supported test cases should transform successfully without warnings
+    for (const { inputPath, inputFile } of fixtureCases) {
+      const content = readFileSync(inputPath, "utf-8");
+      const firstLine = content.split(/\r?\n/, 1)[0] ?? "";
+      const hasExpectedWarning = /^\/\/\s*@expected-warning:/.test(firstLine);
+      expect(hasExpectedWarning, `${inputFile} should not have @expected-warning annotation`).toBe(
+        false,
+      );
+    }
+  });
 });
 
 describe("_unsupported fixtures", () => {
