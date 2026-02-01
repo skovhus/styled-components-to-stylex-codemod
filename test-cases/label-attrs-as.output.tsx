@@ -10,15 +10,15 @@ type TextProps = React.PropsWithChildren<{
 }>;
 
 function Text(props: TextProps) {
-  const { as: Component = "span", className, children, style, ...rest } = props;
+  const { as: Component = "span", className, children, ...rest } = props;
   return (
-    <Component {...rest} {...mergedSx(styles.text, className, style)}>
+    <Component {...rest} {...mergedSx(styles.text, className)}>
       {children}
     </Component>
   );
 }
 
-type LabelProps = Omit<React.ComponentPropsWithRef<typeof Text>, "className" | "style"> & {
+type LabelProps = Omit<React.ComponentPropsWithRef<typeof Text>, "style" | "className"> & {
   htmlFor?: string;
   ref?: React.Ref<HTMLLabelElement>;
 };

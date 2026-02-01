@@ -3,20 +3,19 @@ import * as stylex from "@stylexjs/stylex";
 import { mergedSx } from "./lib/mergedSx";
 import { ExternalComponent } from "./lib/external-component";
 
-type StyledExternalProps = React.ComponentPropsWithRef<typeof ExternalComponent> & {
+type StyledExternalProps = Omit<React.ComponentPropsWithRef<typeof ExternalComponent>, "style"> & {
   $color?: string;
 };
 
 // Spread props require wrapper - styleFn values can't be extracted at transform time
 function StyledExternal(props: StyledExternalProps) {
-  const { className, style, $color, ...rest } = props;
+  const { className, $color, ...rest } = props;
   return (
     <ExternalComponent
       {...rest}
       {...mergedSx(
         [styles.styledExternal, props.$color != null && styles.styledExternalColor(props.$color)],
         className,
-        style,
       )}
     />
   );

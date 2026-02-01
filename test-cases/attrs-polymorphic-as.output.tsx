@@ -23,7 +23,7 @@ function Text(props: TextProps & { as?: React.ElementType }) {
   );
 }
 
-type LabelProps = React.ComponentPropsWithRef<typeof Text> & {
+type LabelProps = Omit<React.ComponentPropsWithRef<typeof Text>, "style"> & {
   htmlFor?: string;
   ref?: React.Ref<HTMLLabelElement>;
 };
@@ -33,9 +33,9 @@ type LabelProps = React.ComponentPropsWithRef<typeof Text> & {
  * The wrapper should use label-specific props (htmlFor)
  */
 export function Label(props: LabelProps) {
-  const { className, children, style, ...rest } = props;
+  const { className, children, ...rest } = props;
   return (
-    <Text as="label" {...rest} {...mergedSx(styles.label, className, style)}>
+    <Text as="label" {...rest} {...mergedSx(styles.label, className)}>
       {children}
     </Text>
   );

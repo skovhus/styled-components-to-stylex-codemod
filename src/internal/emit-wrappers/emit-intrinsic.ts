@@ -38,7 +38,6 @@ export function emitIntrinsicWrappers(emitter: WrapperEmitter): {
       destructureProps: args.destructureProps,
       propDefaults: args.propDefaults,
       allowClassNameProp: args.allowClassNameProp,
-      allowStyleProp: args.allowStyleProp,
       includeRest: args.includeRest,
       defaultAttrs: args.defaultAttrs,
       conditionalAttrs: args.conditionalAttrs,
@@ -239,21 +238,18 @@ export function emitIntrinsicWrappers(emitter: WrapperEmitter): {
   if (inputWrapperDecls.length > 0) {
     for (const d of inputWrapperDecls) {
       const allowClassNameProp = emitter.shouldAllowClassNameProp(d);
-      const allowStyleProp = emitter.shouldAllowStyleProp(d);
       const allowAsProp = shouldAllowAsProp(d, "input");
       const explicit = emitter.stringifyTsType(d.propsType);
       const baseTypeText =
         explicit ??
         (() => {
           const base = "React.InputHTMLAttributes<HTMLInputElement>";
-          const omitted: string[] = [];
+          // Always omit "style" - external style props are not supported
+          const omitted: string[] = ['"style"'];
           if (!allowClassNameProp) {
             omitted.push('"className"');
           }
-          if (!allowStyleProp) {
-            omitted.push('"style"');
-          }
-          return omitted.length > 0 ? `Omit<${base}, ${omitted.join(" | ")}>` : base;
+          return `Omit<${base}, ${omitted.join(" | ")}>`;
         })();
       emitPropsType(d.localName, baseTypeText, allowAsProp);
 
@@ -380,7 +376,6 @@ export function emitIntrinsicWrappers(emitter: WrapperEmitter): {
   if (linkWrapperDecls.length > 0) {
     for (const d of linkWrapperDecls) {
       const allowClassNameProp = emitter.shouldAllowClassNameProp(d);
-      const allowStyleProp = emitter.shouldAllowStyleProp(d);
       const allowAsProp = shouldAllowAsProp(d, "a");
       const explicit = emitter.stringifyTsType(d.propsType);
       const baseTypeText =
@@ -388,14 +383,12 @@ export function emitIntrinsicWrappers(emitter: WrapperEmitter): {
         emitter.withChildren(
           (() => {
             const base = "React.AnchorHTMLAttributes<HTMLAnchorElement>";
-            const omitted: string[] = [];
+            // Always omit "style" - external style props are not supported
+            const omitted: string[] = ['"style"'];
             if (!allowClassNameProp) {
               omitted.push('"className"');
             }
-            if (!allowStyleProp) {
-              omitted.push('"style"');
-            }
-            return omitted.length > 0 ? `Omit<${base}, ${omitted.join(" | ")}>` : base;
+            return `Omit<${base}, ${omitted.join(" | ")}>`;
           })(),
         );
       emitPropsType(d.localName, baseTypeText, allowAsProp);
@@ -589,7 +582,6 @@ export function emitIntrinsicWrappers(emitter: WrapperEmitter): {
       }
       const tagName = d.base.tagName;
       const allowClassNameProp = emitter.shouldAllowClassNameProp(d);
-      const allowStyleProp = emitter.shouldAllowStyleProp(d);
       const allowAsProp = shouldAllowAsProp(d, tagName);
       const explicit = emitter.stringifyTsType(d.propsType);
 
@@ -611,16 +603,12 @@ export function emitIntrinsicWrappers(emitter: WrapperEmitter): {
         const base = hasRef
           ? "React.ComponentPropsWithRef<C>"
           : "React.ComponentPropsWithoutRef<C>";
-        // Omit className/style only when we don't want to support them.
-        const omitted: string[] = [];
+        // Always omit "style" - external style props are not supported
+        const omitted: string[] = ['"style"'];
         if (!allowClassNameProp) {
           omitted.push('"className"');
         }
-        if (!allowStyleProp) {
-          omitted.push('"style"');
-        }
-        const baseMaybeOmitted =
-          omitted.length > 0 ? `Omit<${base}, ${omitted.join(" | ")}>` : base;
+        const baseMaybeOmitted = `Omit<${base}, ${omitted.join(" | ")}>`;
         if (!allowAsProp) {
           return baseMaybeOmitted;
         }
@@ -742,7 +730,6 @@ export function emitIntrinsicWrappers(emitter: WrapperEmitter): {
       const childrenId = j.identifier("children");
       const restId = j.identifier("rest");
       const classNameId = j.identifier("className");
-      const styleId = j.identifier("style");
 
       const declStmt = j.variableDeclaration("const", [
         j.variableDeclarator(
@@ -759,7 +746,7 @@ export function emitIntrinsicWrappers(emitter: WrapperEmitter): {
               : []),
             ...(allowClassNameProp ? [patternProp("className", classNameId)] : []),
             ...(includeChildren ? [patternProp("children", childrenId)] : []),
-            ...(allowStyleProp ? [patternProp("style", styleId)] : []),
+            // External style props are NOT supported - omitted intentionally
             // Add variant props to destructuring (with defaults when available)
             ...destructureProps.filter(Boolean).map((name) => {
               const defaultVal = propDefaults.get(name);
@@ -785,9 +772,7 @@ export function emitIntrinsicWrappers(emitter: WrapperEmitter): {
         styleMerger,
         styleArgs,
         classNameId,
-        styleId,
         allowClassNameProp,
-        allowStyleProp,
         inlineStyleProps: [],
       });
 
@@ -928,7 +913,6 @@ export function emitIntrinsicWrappers(emitter: WrapperEmitter): {
     }
     const tagName = d.base.tagName;
     const allowClassNameProp = emitter.shouldAllowClassNameProp(d);
-    const allowStyleProp = emitter.shouldAllowStyleProp(d);
     const allowAsProp = shouldAllowAsProp(d, tagName);
 
     const extraProps = new Set<string>();
@@ -1018,32 +1002,27 @@ export function emitIntrinsicWrappers(emitter: WrapperEmitter): {
       if (explicit) {
         if (VOID_TAGS.has(tagName)) {
           const base = emitter.reactIntrinsicAttrsType(tagName);
-          const omitted: string[] = [];
+          // Always omit "style" - external style props are not supported
+          const omitted: string[] = ['"style"'];
           if (!allowClassNameProp) {
             omitted.push('"className"');
           }
-          if (!allowStyleProp) {
-            omitted.push('"style"');
-          }
-          const baseWithOmit = omitted.length ? `Omit<${base}, ${omitted.join(" | ")}>` : base;
+          const baseWithOmit = `Omit<${base}, ${omitted.join(" | ")}>`;
           return emitter.joinIntersection(baseWithOmit, extrasTypeText);
         }
         const base = `React.ComponentProps<"${tagName}">`;
-        const omitted: string[] = [];
+        // Always omit "style" - external style props are not supported
+        const omitted: string[] = ['"style"'];
         if (!allowClassNameProp) {
           omitted.push('"className"');
         }
-        if (!allowStyleProp) {
-          omitted.push('"style"');
-        }
-        const baseWithOmit = omitted.length ? `Omit<${base}, ${omitted.join(" | ")}>` : base;
+        const baseWithOmit = `Omit<${base}, ${omitted.join(" | ")}>`;
         return emitter.joinIntersection(baseWithOmit, extrasTypeText);
       }
       const inferred = emitter.inferredIntrinsicPropsTypeText({
         d,
         tagName,
         allowClassNameProp,
-        allowStyleProp,
         skipProps: explicitPropNames,
       });
       return VOID_TAGS.has(tagName) ? inferred : emitter.withChildren(inferred);
@@ -1056,14 +1035,12 @@ export function emitIntrinsicWrappers(emitter: WrapperEmitter): {
         // Prefer ComponentProps for intrinsic wrappers so event handlers/attrs
         // are typed like real JSX usage (and so we can reliably omit className/style).
         const base = `React.ComponentProps<"${tagName}">`;
-        const omitted: string[] = [];
+        // Always omit "style" - external style props are not supported
+        const omitted: string[] = ['"style"'];
         if (!allowClassNameProp) {
           omitted.push('"className"');
         }
-        if (!allowStyleProp) {
-          omitted.push('"style"');
-        }
-        return omitted.length ? `Omit<${base}, ${omitted.join(" | ")}>` : base;
+        return `Omit<${base}, ${omitted.join(" | ")}>`;
       })();
       const interfaceExtended = emitter.extendExistingInterface(propsTypeName, extendBaseTypeText);
       if (!interfaceExtended) {
@@ -1219,7 +1196,6 @@ export function emitIntrinsicWrappers(emitter: WrapperEmitter): {
     const propsId = j.identifier("props");
     const classNameId = j.identifier("className");
     const childrenId = j.identifier("children");
-    const styleId = j.identifier("style");
     const restId = j.identifier("rest");
     const isVoidTag = tagName === "input";
     const { hasAny: hasLocalUsage } = emitter.getJsxCallsites(d.localName);
@@ -1252,7 +1228,8 @@ export function emitIntrinsicWrappers(emitter: WrapperEmitter): {
       [...usedAttrs].every((n) => n === "children" || dropProps.includes(n));
     const includeRest = !shouldOmitRestSpread && shouldIncludeRest;
 
-    if (!allowClassNameProp && !allowStyleProp) {
+    // External style props are NOT supported, so only check className
+    if (!allowClassNameProp) {
       const isVoid = VOID_TAGS.has(tagName);
       // When allowAsProp is true, include children support even for void tags
       // because the user might use `as="textarea"` which requires children
@@ -1302,9 +1279,7 @@ export function emitIntrinsicWrappers(emitter: WrapperEmitter): {
         styleMerger,
         styleArgs,
         classNameId,
-        styleId,
         allowClassNameProp,
-        allowStyleProp,
         inlineStyleProps: (d.inlineStyleProps ?? []) as InlineStyleProp[],
       });
 
@@ -1354,7 +1329,7 @@ export function emitIntrinsicWrappers(emitter: WrapperEmitter): {
         ...(allowAsProp ? [asDestructureProp(tagName)] : []),
         ...(allowClassNameProp ? [patternProp("className", classNameId)] : []),
         ...(includeChildrenOuter ? [patternProp("children", childrenId)] : []),
-        ...(allowStyleProp ? [patternProp("style", styleId)] : []),
+        // External style props are NOT supported - omitted intentionally
       ],
       destructureProps: destructureParts,
       propDefaults,
@@ -1393,9 +1368,7 @@ export function emitIntrinsicWrappers(emitter: WrapperEmitter): {
       styleMerger,
       styleArgs,
       classNameId,
-      styleId,
       allowClassNameProp,
-      allowStyleProp,
       inlineStyleProps: (d.inlineStyleProps ?? []) as InlineStyleProp[],
     });
 
@@ -1474,7 +1447,6 @@ export function emitIntrinsicWrappers(emitter: WrapperEmitter): {
     const tagName = d.base.tagName;
     const supportsExternalStyles = d.supportsExternalStyles ?? false;
     const allowClassNameProp = emitter.shouldAllowClassNameProp(d);
-    const allowStyleProp = emitter.shouldAllowStyleProp(d);
     const allowAsProp = shouldAllowAsProp(d, tagName);
     {
       const explicit = emitter.stringifyTsType(d.propsType);
@@ -1494,7 +1466,6 @@ export function emitIntrinsicWrappers(emitter: WrapperEmitter): {
             d,
             tagName,
             allowClassNameProp,
-            allowStyleProp,
           })
         : "{}";
       // For non-void tags without explicit type, wrap in PropsWithChildren
@@ -1516,13 +1487,13 @@ export function emitIntrinsicWrappers(emitter: WrapperEmitter): {
     const propsId = j.identifier("props");
     const classNameId = j.identifier("className");
     const childrenId = j.identifier("children");
-    const styleId = j.identifier("style");
     const restId = j.identifier("rest");
 
     const isVoidTag = VOID_TAGS.has(tagName);
 
-    // For local-only wrappers with no external `className`/`style` usage, keep the wrapper minimal.
-    if (!allowClassNameProp && !allowStyleProp) {
+    // For local-only wrappers with no external `className` usage, keep the wrapper minimal.
+    // External style props are NOT supported.
+    if (!allowClassNameProp) {
       const usedAttrs = emitter.getUsedAttrs(d.localName);
       const includeRest =
         usedAttrs.has("*") ||
@@ -1590,7 +1561,6 @@ export function emitIntrinsicWrappers(emitter: WrapperEmitter): {
             destructureProps,
             allowAsProp,
             allowClassNameProp: false,
-            allowStyleProp: false,
             includeRest,
             patternProp,
             defaultAttrs: d.attrsInfo?.defaultAttrs ?? [],
@@ -1611,7 +1581,7 @@ export function emitIntrinsicWrappers(emitter: WrapperEmitter): {
         ...(allowAsProp ? [asDestructureProp(tagName)] : []),
         patternProp("className", classNameId),
         ...(isVoidTag ? [] : [patternProp("children", childrenId)]),
-        patternProp("style", styleId),
+        // External style props are NOT supported - omitted intentionally
       ],
       destructureProps: [],
       includeRest: true,
@@ -1627,9 +1597,7 @@ export function emitIntrinsicWrappers(emitter: WrapperEmitter): {
       styleMerger,
       styleArgs,
       classNameId,
-      styleId,
       allowClassNameProp,
-      allowStyleProp,
       inlineStyleProps: [],
     });
 
@@ -1697,12 +1665,10 @@ export function emitIntrinsicWrappers(emitter: WrapperEmitter): {
       }
       const extraType = `{ ${extras.join(" ")} }`;
       const allowClassNameProp = emitter.shouldAllowClassNameProp(d);
-      const allowStyleProp = emitter.shouldAllowStyleProp(d);
       const baseTypeText = emitter.inferredIntrinsicPropsTypeText({
         d,
         tagName: "div",
         allowClassNameProp,
-        allowStyleProp,
       });
       const typeText = explicit ?? emitter.joinIntersection(baseTypeText, extraType);
       emitPropsType(d.localName, typeText, allowAsProp);
@@ -1752,7 +1718,6 @@ export function emitIntrinsicWrappers(emitter: WrapperEmitter): {
     ];
 
     const allowClassNameProp = emitter.shouldAllowClassNameProp(d);
-    const allowStyleProp = emitter.shouldAllowStyleProp(d);
 
     // Use the style merger helper
     const merging = emitStyleMerging({
@@ -1760,9 +1725,7 @@ export function emitIntrinsicWrappers(emitter: WrapperEmitter): {
       styleMerger,
       styleArgs,
       classNameId,
-      styleId: j.identifier("style"),
       allowClassNameProp,
-      allowStyleProp,
       inlineStyleProps: [],
     });
 
@@ -1828,7 +1791,6 @@ export function emitIntrinsicWrappers(emitter: WrapperEmitter): {
     }
     const tagName = d.base.tagName;
     const allowClassNameProp = emitter.shouldAllowClassNameProp(d);
-    const allowStyleProp = emitter.shouldAllowStyleProp(d);
     const usedAttrsForType = emitter.getUsedAttrs(d.localName);
     const allowAsProp = shouldAllowAsProp(d, tagName);
     let inlineTypeText: string | undefined;
@@ -1841,7 +1803,6 @@ export function emitIntrinsicWrappers(emitter: WrapperEmitter): {
         d,
         tagName,
         allowClassNameProp,
-        allowStyleProp,
         skipProps: explicitPropNames,
       });
 
@@ -1898,14 +1859,12 @@ export function emitIntrinsicWrappers(emitter: WrapperEmitter): {
         // Prefer ComponentProps for intrinsic wrappers so event handlers/attrs
         // are typed like real JSX usage (and so we can reliably omit className/style).
         const base = `React.ComponentProps<"${tagName}">`;
-        const omitted: string[] = [];
+        // Always omit "style" - external style props are not supported
+        const omitted: string[] = ['"style"'];
         if (!allowClassNameProp) {
           omitted.push('"className"');
         }
-        if (!allowStyleProp) {
-          omitted.push('"style"');
-        }
-        return omitted.length ? `Omit<${base}, ${omitted.join(" | ")}>` : base;
+        return `Omit<${base}, ${omitted.join(" | ")}>`;
       })();
 
       const customStyleDrivingPropsTypeText = (() => {
@@ -1962,15 +1921,9 @@ export function emitIntrinsicWrappers(emitter: WrapperEmitter): {
         if (needsRestForType) {
           return emitter.joinIntersection(extendBaseTypeText, explicit);
         }
-        if (allowClassNameProp || allowStyleProp) {
-          const extras: string[] = [];
-          if (allowClassNameProp) {
-            extras.push("className?: string");
-          }
-          if (allowStyleProp) {
-            extras.push("style?: React.CSSProperties");
-          }
-          extras.push("children?: React.ReactNode");
+        // External style props are NOT supported
+        if (allowClassNameProp) {
+          const extras: string[] = ["className?: string", "children?: React.ReactNode"];
           return emitter.joinIntersection(explicit, `{ ${extras.join("; ")} }`);
         }
         return emitter.withChildren(explicit);
@@ -2157,7 +2110,8 @@ export function emitIntrinsicWrappers(emitter: WrapperEmitter): {
           return !destructureProps.includes(n);
         }));
 
-    if (allowAsProp || allowClassNameProp || allowStyleProp) {
+    // External style props are NOT supported
+    if (allowAsProp || allowClassNameProp) {
       const isVoidTag = VOID_TAGS.has(tagName);
       // When allowAsProp is true, include children support even for void tags
       // because the user might use `as="textarea"` which requires children
@@ -2168,7 +2122,6 @@ export function emitIntrinsicWrappers(emitter: WrapperEmitter): {
       const componentId = j.identifier("Component");
       const classNameId = j.identifier("className");
       const childrenId = j.identifier("children");
-      const styleId = j.identifier("style");
       const restId = shouldIncludeRest ? j.identifier("rest") : null;
 
       const patternProps = emitter.buildDestructurePatternProps({
@@ -2185,7 +2138,7 @@ export function emitIntrinsicWrappers(emitter: WrapperEmitter): {
             : []),
           ...(allowClassNameProp ? [patternProp("className", classNameId)] : []),
           ...(includeChildren ? [patternProp("children", childrenId)] : []),
-          ...(allowStyleProp ? [patternProp("style", styleId)] : []),
+          // External style props are NOT supported - omitted intentionally
         ],
         destructureProps,
         propDefaults,
@@ -2202,9 +2155,7 @@ export function emitIntrinsicWrappers(emitter: WrapperEmitter): {
         styleMerger,
         styleArgs,
         classNameId,
-        styleId,
         allowClassNameProp,
-        allowStyleProp,
         inlineStyleProps: (d.inlineStyleProps ?? []) as InlineStyleProp[],
       });
 
@@ -2259,7 +2210,6 @@ export function emitIntrinsicWrappers(emitter: WrapperEmitter): {
           propDefaults,
           allowAsProp,
           allowClassNameProp: false,
-          allowStyleProp: false,
           includeRest: shouldIncludeRest,
           patternProp,
           defaultAttrs: d.attrsInfo?.defaultAttrs ?? [],

@@ -681,7 +681,7 @@ export const App = () => <Button>Click</Button>;
 describe("styleMerger configuration", () => {
   const mergerAdapter = {
     externalInterface() {
-      return { styles: true } as const;
+      return { className: true } as const;
     },
     resolveValue() {
       return undefined;
@@ -790,7 +790,7 @@ export const App = () => <Extended>Click</Extended>;
     expect(result.code).toMatch(/stylexProps\s*\(\s*\[/);
   });
 
-  it("should pass className and style arguments to merger", async () => {
+  it("should pass className argument to merger", async () => {
     const source = `
 import styled from 'styled-components';
 
@@ -808,9 +808,11 @@ export const App = () => <Button>Click</Button>;
     );
 
     expect(result.code).not.toBeNull();
-    // The merger should be called with styles, className, style
-    // Pattern: stylexProps(styles.button, className, style)
-    expect(result.code).toMatch(/stylexProps\s*\([^)]*className[^)]*style/);
+    // The merger should be called with styles and className (no style arg)
+    // Pattern: stylexProps(styles.button, className)
+    expect(result.code).toMatch(/stylexProps\s*\([^)]*className/);
+    // External style props are NOT supported
+    expect(result.code).not.toMatch(/stylexProps\s*\([^)]*,\s*className\s*,\s*style/);
   });
 
   it("should not use merger when external styles are disabled", async () => {
@@ -868,7 +870,7 @@ export const App = () => <Box $delay={100} />;
     const adapterWithoutMerger = {
       styleMerger: null,
       externalInterface() {
-        return { styles: true } as const;
+        return { className: true } as const;
       },
       resolveValue() {
         return undefined;
@@ -902,8 +904,8 @@ export const App = () => <Button>Click</Button>;
     expect(result.code).toMatch(/const\s+sx\s*=\s*stylex\.props/);
     // Should have the verbose className merging
     expect(result.code).toContain(".filter(Boolean).join");
-    // Should have style spread
-    expect(result.code).toContain("...sx.style");
+    // External style props are NOT supported - no style spread
+    expect(result.code).not.toContain("...sx.style");
   });
 });
 

@@ -26,7 +26,7 @@ function Flex(props: FlexProps) {
   );
 }
 
-type ContainerProps = Omit<React.ComponentPropsWithRef<typeof Flex>, "className" | "style">;
+type ContainerProps = Omit<React.ComponentPropsWithRef<typeof Flex>, "style" | "className">;
 
 // When styled(Component) is used without explicit children handling,
 // the wrapper should still accept children since they are passed through via ...rest

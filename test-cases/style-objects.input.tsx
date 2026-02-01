@@ -17,6 +17,6 @@ const DynamicBox = styled.div<{ $background?: string; $size?: string }>((props) 
 export const App = () => (
   <div>
     <StaticBox />
-    <DynamicBox $background="mediumseagreen" $size="100px" style={{ border: "1px solid red" }} />
+    <DynamicBox $background="mediumseagreen" $size="100px" />
   </div>
 );

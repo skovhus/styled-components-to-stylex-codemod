@@ -1,7 +1,7 @@
 import * as React from "react";
 import * as stylex from "@stylexjs/stylex";
 
-type IconWithTeamColorProps = Omit<React.ComponentProps<"svg">, "className" | "style"> & {
+type IconWithTeamColorProps = Omit<React.ComponentProps<"svg">, "style" | "className"> & {
   $color?: string;
 };
 

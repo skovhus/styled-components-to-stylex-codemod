@@ -31,7 +31,7 @@ export const Highlight = styled(BaseText)<HighlightProps>`
 export function App() {
   return (
     <>
-      <TextColor color="red" className="custom" style={{ fontSize: 14 }}>
+      <TextColor color="red" className="custom">
         Red text
       </TextColor>
       <Highlight highlighted className="highlight">

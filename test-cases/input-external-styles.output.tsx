@@ -2,14 +2,15 @@ import React from "react";
 import * as stylex from "@stylexjs/stylex";
 import { mergedSx } from "./lib/mergedSx";
 
-type StyledInputProps<C extends React.ElementType = "input"> = React.ComponentPropsWithoutRef<C> & {
-  as?: C;
-};
+type StyledInputProps<C extends React.ElementType = "input"> = Omit<
+  React.ComponentPropsWithoutRef<C>,
+  "style"
+> & { as?: C };
 
 export function StyledInput<C extends React.ElementType = "input">(props: StyledInputProps<C>) {
-  const { as: Component = "input", className, children, style, ...rest } = props;
+  const { as: Component = "input", className, children, ...rest } = props;
   return (
-    <Component {...rest} {...mergedSx(styles.styledInput, className, style)}>
+    <Component {...rest} {...mergedSx(styles.styledInput, className)}>
       {children}
     </Component>
   );

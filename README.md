@@ -144,14 +144,14 @@ Adapters are the main extension point. They let you control:
 - how theme paths, CSS variables, and imported values are turned into StyleX-compatible JS values (`resolveValue`)
 - what extra imports to inject into transformed files (returned from `resolveValue`)
 - how helper calls are resolved (via `resolveCall({ ... })` returning `usage: "props" | "create"`; `null`/`undefined` now bails)
-- which exported components should support external className/style extension and/or polymorphic `as` prop (`externalInterface`)
-- how className/style merging is handled for components accepting external styling (`styleMerger`)
+- which exported components should support external className extension and/or polymorphic `as` prop (`externalInterface`)
+- how className merging is handled for components accepting external className props (`styleMerger`)
 
 #### Style Merger
 
-When a component accepts external `className` and/or `style` props (e.g., via `shouldSupportExternalStyling`, or when wrapping a base component that already accepts these props), the generated code needs to merge StyleX styles with externally passed values.
+When a component accepts external `className` props (e.g., via `externalInterface({ className: true })`), the generated code needs to merge StyleX styles with externally passed className values.
 
-> **Note:** Allowing external className/style props is generally discouraged in StyleX as it bypasses the type-safe styling system. However, it can be useful during migration to maintain compatibility with existing code that passes these props.
+> **Note:** External `style` props are NOT supported. StyleX manages styles internally, and allowing external style props would bypass the type-safe styling system. Dynamic styles should be handled via StyleX's inline style props mechanism instead.
 
 By default, this generates verbose inline merging code. You can provide a `styleMerger` to use a helper function instead for cleaner output:
 
@@ -168,7 +168,7 @@ const adapter = defineAdapter({
 
   externalInterface(ctx) {
     if (ctx.filePath.includes("/shared/components/")) {
-      return { styles: true };
+      return { className: true };
     }
     return null;
   },
@@ -186,16 +186,15 @@ The merger function should have this signature:
 ```ts
 function mergedSx(
   styles: StyleXStyles,
-  className?: string,
-  style?: React.CSSProperties
+  className?: string
 ): ReturnType<typeof stylex.props>;
 ```
 
 See [`test-cases/lib/mergedSx.ts`](./test-cases/lib/mergedSx.ts) for a reference implementation.
 
-#### External Interface (Styles and Polymorphic `as` Support)
+#### External Interface (className and Polymorphic `as` Support)
 
-Transformed components are "closed" by default — they don't accept external `className` or `style` props, and exported components only get `as` support when it is used inside the file. Use `externalInterface` to control which exported components should support these features:
+Transformed components are "closed" by default — they don't accept external `className` props, and exported components only get `as` support when it is used inside the file. Use `externalInterface` to control which exported components should support these features:
 
 ```ts
 const adapter = defineAdapter({
@@ -211,14 +210,14 @@ const adapter = defineAdapter({
   externalInterface(ctx) {
     // ctx: { filePath, componentName, exportName, isDefaultExport }
 
-    // Example: Enable styles (and `as`) for all exports in shared components folder
+    // Example: Enable className (and `as`) for all exports in shared components folder
     if (ctx.filePath.includes("/shared/components/")) {
-      return { styles: true };
+      return { className: true };
     }
 
-    // Example: Enable only `as` prop (no style merging)
+    // Example: Enable only `as` prop (no className merging)
     if (ctx.componentName === "Typography") {
-      return { styles: false, as: true };
+      return { className: false, as: true };
     }
 
     // Disable both (default)
@@ -231,19 +230,21 @@ const adapter = defineAdapter({
 
 The `externalInterface` method returns:
 
-- `null` — no external interface (neither className/style nor `as` prop)
-- `{ styles: true }` — accept className/style props AND polymorphic `as` prop
-- `{ styles: false, as: true }` — accept only polymorphic `as` prop (no style merging)
-- `{ styles: false, as: false }` — equivalent to `null`
+- `null` — no external interface (neither className nor `as` prop)
+- `{ className: true }` — accept className prop AND polymorphic `as` prop
+- `{ className: false, as: true }` — accept only polymorphic `as` prop (no className merging)
+- `{ className: false, as: false }` — equivalent to `null`
 
-When `styles: true`, the generated component will:
+> **Note:** External `style` props are NOT supported. Dynamic styles should be handled via StyleX's inline style props mechanism instead.
 
-- Accept `className` and `style` props
-- Merge them with the StyleX-generated styles
+When `className: true`, the generated component will:
+
+- Accept `className` prop
+- Merge it with the StyleX-generated className
 - Forward remaining props via `...rest`
-- Accept polymorphic `as` prop (required for style merging to work correctly)
+- Accept polymorphic `as` prop (required for className merging to work correctly)
 
-When `{ styles: false, as: true }`, the generated component will accept a polymorphic `as` prop but won't include className/style merging.
+When `{ className: false, as: true }`, the generated component will accept a polymorphic `as` prop but won't include className merging.
 
 #### Dynamic interpolations
 

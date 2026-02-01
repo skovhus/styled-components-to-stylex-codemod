@@ -1,6 +1,5 @@
 import * as React from "react";
 import * as stylex from "@stylexjs/stylex";
-import { mergedSx } from "./lib/mergedSx";
 
 // SpringValue simulates react-spring's animated value type
 type SpringValue<T> = { get(): T };
@@ -23,13 +22,13 @@ const animated = {
 
 type AnimatedTextProps<C extends React.ElementType = "span"> = Omit<
   React.ComponentPropsWithRef<C>,
-  "className"
+  "style" | "className"
 > & { as?: C };
 
 function AnimatedText<C extends React.ElementType = "span">(props: AnimatedTextProps<C>) {
-  const { as: Component = "span", children, style, ...rest } = props;
+  const { as: Component = "span", children, ...rest } = props;
   return (
-    <Component {...rest} {...mergedSx(styles.animatedText, undefined, style)}>
+    <Component {...rest} {...stylex.props(styles.animatedText)}>
       {children}
     </Component>
   );
@@ -51,23 +50,21 @@ export function AnimatedNumber(props: Props) {
     // This should work: animated.span accepts SpringValue<number> for width
     // The ref should also be accepted since animated.span forwards refs
     return (
-      <AnimatedText as={animated.span} ref={spanRef} style={{ width }}>
+      <AnimatedText as={animated.span} ref={spanRef}>
         {children}
       </AnimatedText>
     );
   }
 
   // ref should work on the default span element too
-  return (
-    <AnimatedText ref={spanRef} style={{ width }}>
-      {children}
-    </AnimatedText>
-  );
+  return <AnimatedText ref={spanRef}>{children}</AnimatedText>;
 }
 
 export const App = () => <AnimatedNumber width={100}>42</AnimatedNumber>;
 
 const styles = stylex.create({
+  // When as={animated.span} is used, the component should render as animated.span
+  // This pattern is common with animation libraries like react-spring
   animatedText: {
     fontVariantNumeric: "tabular-nums",
     overflow: "visible",

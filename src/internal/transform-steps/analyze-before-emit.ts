@@ -352,10 +352,10 @@ export function analyzeBeforeEmitStep(ctx: TransformContext): StepResult {
       exportName: exportInfo.exportName,
       isDefaultExport: exportInfo.isDefault,
     });
-    decl.supportsExternalStyles = extResult?.styles === true;
-    // When styles: true, `as` is implicitly enabled (no `as` property in that branch)
-    // When styles: false, check the explicit `as` property
-    decl.supportsAsProp = extResult?.styles === false && extResult.as === true;
+    decl.supportsExternalStyles = extResult?.className === true;
+    // When className: true, `as` is implicitly enabled (no `as` property in that branch)
+    // When className: false, check the explicit `as` property
+    decl.supportsAsProp = extResult?.className === false && extResult.as === true;
   }
 
   // Early detection of components used as values (before emitStylesAndImports for merger import)

@@ -11,18 +11,7 @@ export const ColumnContainer = styled.div<{ $noGrowOrShrink?: boolean; $basis?: 
 `;
 
 export const App = () => (
-  <ColumnContainer
-    $noGrowOrShrink
-    $basis={1}
-    style={{
-      display: "flex",
-      gap: 8,
-      width: 260,
-      border: "1px solid #ccc",
-      padding: 8,
-      background: "#f8f8f8",
-    }}
-  >
+  <ColumnContainer $noGrowOrShrink $basis={1}>
     <div style={{ width: 40, height: 24, background: "#BF4F74" }} />
     <div style={{ width: 120, height: 24, background: "#4F74BF" }} />
     <div style={{ width: 80, height: 24, background: "#74BF4F" }} />

@@ -29,33 +29,36 @@ export interface StyleMergingResult {
   classNameAttr: ExpressionKind | null;
 
   /**
-   * The style attribute expression, or null if using merger.
+   * The style attribute expression for inline style props, or null if none.
+   * Note: This is for StyleX's inline style props (dynamic values), NOT external style props.
    */
   styleAttr: ExpressionKind | null;
 }
 
 /**
- * Generates either a merger function call or the verbose className/style pattern.
+ * Generates either a merger function call or the verbose className pattern.
  *
- * When a merger is configured and external className/style merging is needed, generates:
- *   `{...stylexProps([styles.a, styles.b], className, style)}`
+ * When a merger is configured and external className merging is needed, generates:
+ *   `{...stylexProps([styles.a, styles.b], className)}`
  *
  * When no merger is configured (default), generates:
  *   ```
  *   const sx = stylex.props(styles.a, styles.b);
  *   {...sx}
  *   className={[sx.className, className].filter(Boolean).join(" ")}
- *   style={{...sx.style, ...style}}
  *   ```
+ *
+ * Inline style props (for dynamic values) are handled separately via styleAttr.
+ *
+ * Note: External `style` props are NOT supported. Dynamic styles should be
+ * handled via StyleX's inline style props mechanism instead.
  */
 export function emitStyleMerging(args: {
   j: JSCodeshift;
   styleMerger: StyleMergerConfig | null;
   styleArgs: ExpressionKind[];
   classNameId: Identifier;
-  styleId: Identifier;
   allowClassNameProp: boolean;
-  allowStyleProp: boolean;
   inlineStyleProps?: Array<{ prop: string; expr: ExpressionKind }>;
 }): StyleMergingResult {
   const {
@@ -63,14 +66,12 @@ export function emitStyleMerging(args: {
     styleMerger,
     styleArgs,
     classNameId,
-    styleId,
     allowClassNameProp,
-    allowStyleProp,
     inlineStyleProps = [],
   } = args;
 
-  // If neither className nor style merging is needed, just use stylex.props directly
-  if (!allowClassNameProp && !allowStyleProp && inlineStyleProps.length === 0) {
+  // If neither className merging nor inline style props are needed, just use stylex.props directly
+  if (!allowClassNameProp && inlineStyleProps.length === 0) {
     const stylexPropsCall = j.callExpression(
       j.memberExpression(j.identifier("stylex"), j.identifier("props")),
       styleArgs,
@@ -84,16 +85,14 @@ export function emitStyleMerging(args: {
     };
   }
 
-  // If a merger function is configured and external className/style merging is needed, use it
-  if (styleMerger && (allowClassNameProp || allowStyleProp)) {
+  // If a merger function is configured and external className merging is needed, use it
+  if (styleMerger && allowClassNameProp) {
     return emitWithMerger({
       j,
       styleMerger,
       styleArgs,
       classNameId,
-      styleId,
       allowClassNameProp,
-      allowStyleProp,
       inlineStyleProps,
     });
   }
@@ -103,36 +102,26 @@ export function emitStyleMerging(args: {
     j,
     styleArgs,
     classNameId,
-    styleId,
     allowClassNameProp,
-    allowStyleProp,
     inlineStyleProps,
   });
 }
 
 /**
  * Generates the merger function call pattern.
+ *
+ * Signature: merger(styles, className?)
+ * Note: External style props are NOT supported.
  */
 function emitWithMerger(args: {
   j: JSCodeshift;
   styleMerger: StyleMergerConfig;
   styleArgs: ExpressionKind[];
   classNameId: Identifier;
-  styleId: Identifier;
   allowClassNameProp: boolean;
-  allowStyleProp: boolean;
   inlineStyleProps: Array<{ prop: string; expr: ExpressionKind }>;
 }): StyleMergingResult {
-  const {
-    j,
-    styleMerger,
-    styleArgs,
-    classNameId,
-    styleId,
-    allowClassNameProp,
-    allowStyleProp,
-    inlineStyleProps,
-  } = args;
+  const { j, styleMerger, styleArgs, classNameId, allowClassNameProp, inlineStyleProps } = args;
 
   // Build the styles argument
   // - Single style: pass directly
@@ -142,73 +131,46 @@ function emitWithMerger(args: {
     styleArgs.length === 1 && firstStyleArg ? firstStyleArg : j.arrayExpression(styleArgs);
 
   // Build the merger function call arguments
-  // Signature: merger(styles, className?, style?)
+  // Signature: merger(styles, className?)
   const mergerArgs: ExpressionKind[] = [stylesArg];
 
-  if (allowClassNameProp || allowStyleProp) {
-    // Add className argument (or undefined if not needed but style is)
-    if (allowClassNameProp) {
-      mergerArgs.push(classNameId);
-    } else if (allowStyleProp) {
-      mergerArgs.push(j.identifier("undefined"));
-    }
-
-    // Add style argument if needed
-    if (allowStyleProp) {
-      if (inlineStyleProps.length > 0) {
-        // Merge inline style props with the style parameter
-        mergerArgs.push(
-          j.objectExpression([
-            j.spreadElement(styleId),
-            ...inlineStyleProps.map((p) => j.property("init", j.identifier(p.prop), p.expr)),
-          ]),
-        );
-      } else {
-        mergerArgs.push(styleId);
-      }
-    } else if (inlineStyleProps.length > 0) {
-      // Only inline style props, no external style
-      mergerArgs.push(j.identifier("undefined"));
-      mergerArgs.push(
-        j.objectExpression(
-          inlineStyleProps.map((p) => j.property("init", j.identifier(p.prop), p.expr)),
-        ),
-      );
-    }
+  if (allowClassNameProp) {
+    mergerArgs.push(classNameId);
   }
 
   const mergerCall = j.callExpression(j.identifier(styleMerger.functionName), mergerArgs);
+
+  // Build inline style props attribute if needed (for dynamic values, NOT external style props)
+  let styleAttr: ExpressionKind | null = null;
+  if (inlineStyleProps.length > 0) {
+    styleAttr = j.objectExpression(
+      inlineStyleProps.map((p) => j.property("init", j.identifier(p.prop), p.expr)),
+    );
+  }
 
   return {
     needsSxVar: false,
     sxDecl: null,
     jsxSpreadExpr: mergerCall,
     classNameAttr: null,
-    styleAttr: null,
+    styleAttr,
   };
 }
 
 /**
- * Generates the verbose className/style merging pattern.
+ * Generates the verbose className merging pattern.
+ *
+ * Note: External style props are NOT supported. Only inline style props
+ * (for dynamic values) are included in the styleAttr.
  */
 function emitVerbosePattern(args: {
-  j: any;
-  styleArgs: any[];
-  classNameId: any;
-  styleId: any;
+  j: JSCodeshift;
+  styleArgs: ExpressionKind[];
+  classNameId: Identifier;
   allowClassNameProp: boolean;
-  allowStyleProp: boolean;
-  inlineStyleProps: Array<{ prop: string; expr: any }>;
+  inlineStyleProps: Array<{ prop: string; expr: ExpressionKind }>;
 }): StyleMergingResult {
-  const {
-    j,
-    styleArgs,
-    classNameId,
-    styleId,
-    allowClassNameProp,
-    allowStyleProp,
-    inlineStyleProps,
-  } = args;
+  const { j, styleArgs, classNameId, allowClassNameProp, inlineStyleProps } = args;
 
   // Create the stylex.props() call
   const stylexPropsCall = j.callExpression(
@@ -222,7 +184,7 @@ function emitVerbosePattern(args: {
   ]);
 
   // Create className merging expression if needed
-  let classNameAttr: any = null;
+  let classNameAttr: ExpressionKind | null = null;
   if (allowClassNameProp) {
     classNameAttr = j.callExpression(
       j.memberExpression(
@@ -242,15 +204,14 @@ function emitVerbosePattern(args: {
     );
   }
 
-  // Create style merging expression if needed
-  let styleAttr: any = null;
-  if (allowStyleProp || inlineStyleProps.length > 0) {
-    const spreads: any[] = [
+  // Create style attribute for inline style props if needed (for dynamic values only)
+  // Note: External style props are NOT supported
+  let styleAttr: ExpressionKind | null = null;
+  if (inlineStyleProps.length > 0) {
+    styleAttr = j.objectExpression([
       j.spreadElement(j.memberExpression(j.identifier("sx"), j.identifier("style"))),
-      ...(allowStyleProp ? [j.spreadElement(styleId)] : []),
       ...inlineStyleProps.map((p) => j.property("init", j.identifier(p.prop), p.expr)),
-    ];
-    styleAttr = j.objectExpression(spreads);
+    ]);
   }
 
   return {

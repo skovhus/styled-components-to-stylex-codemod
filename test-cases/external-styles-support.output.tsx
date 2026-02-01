@@ -4,7 +4,6 @@ import { mergedSx } from "./lib/mergedSx";
 
 type ExportedButtonProps = React.PropsWithChildren<{
   className?: string;
-  style?: React.CSSProperties;
   ref?: React.Ref<HTMLButtonElement>;
   as?: React.ElementType;
 }>;
@@ -14,8 +13,8 @@ type ExportedButtonProps = React.PropsWithChildren<{
  * className/style/rest merging for external style extension support.
  **/
 export function ExportedButton(props: ExportedButtonProps) {
-  const { as: Component = "button", className, children, style } = props;
-  return <Component {...mergedSx(styles.exportedButton, className, style)}>{children}</Component>;
+  const { as: Component = "button", className, children } = props;
+  return <Component {...mergedSx(styles.exportedButton, className)}>{children}</Component>;
 }
 
 export const App = () => (

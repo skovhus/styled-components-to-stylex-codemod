@@ -1,7 +1,7 @@
 import * as React from "react";
 import * as stylex from "@stylexjs/stylex";
 
-type ButtonProps = Omit<React.ComponentProps<"button">, "className" | "style"> & {
+type ButtonProps = Omit<React.ComponentProps<"button">, "style" | "className"> & {
   $primary?: boolean;
   hollow?: boolean;
 };
@@ -23,7 +23,7 @@ function Button(props: ButtonProps) {
   );
 }
 
-type BadgeProps = Omit<React.ComponentProps<"span">, "className" | "style"> & {
+type BadgeProps = Omit<React.ComponentProps<"span">, "style" | "className"> & {
   size?: "small" | "medium" | "large";
 };
 

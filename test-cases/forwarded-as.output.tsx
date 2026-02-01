@@ -2,20 +2,21 @@ import * as React from "react";
 import * as stylex from "@stylexjs/stylex";
 import { mergedSx } from "./lib/mergedSx";
 
-type ButtonProps<C extends React.ElementType = "button"> = React.ComponentPropsWithoutRef<C> & {
-  as?: C;
-};
+type ButtonProps<C extends React.ElementType = "button"> = Omit<
+  React.ComponentPropsWithoutRef<C>,
+  "style"
+> & { as?: C };
 
 function Button<C extends React.ElementType = "button">(props: ButtonProps<C>) {
-  const { as: Component = "button", className, children, style, ...rest } = props;
+  const { as: Component = "button", className, children, ...rest } = props;
   return (
-    <Component {...rest} {...mergedSx(styles.button, className, style)}>
+    <Component {...rest} {...mergedSx(styles.button, className)}>
       {children}
     </Component>
   );
 }
 
-type ButtonWrapperProps = Omit<React.ComponentPropsWithRef<typeof Button>, "className" | "style">;
+type ButtonWrapperProps = Omit<React.ComponentPropsWithRef<typeof Button>, "style" | "className">;
 
 // Wrapper that always renders as a specific element but passes `as` through
 function ButtonWrapper(props: ButtonWrapperProps) {

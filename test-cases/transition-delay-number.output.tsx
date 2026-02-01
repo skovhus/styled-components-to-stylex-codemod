@@ -2,7 +2,7 @@ import React from "react";
 import * as stylex from "@stylexjs/stylex";
 import { mergedSx } from "./lib/mergedSx";
 
-type ContainerProps = React.ComponentProps<"div"> & {
+type ContainerProps = Omit<React.ComponentProps<"div">, "style"> & {
   $open?: boolean;
   $delay?: number;
   children?: React.ReactNode;
@@ -13,14 +13,14 @@ type ContainerProps = React.ComponentProps<"div"> & {
  * The codemod should convert number 0 to "0ms" string for CSS properties.
  */
 function Container(props: ContainerProps) {
-  const { className, children, style, $open, $delay, ...rest } = props;
+  const { className, children, $open, $delay, ...rest } = props;
   return (
     <div
       {...rest}
-      {...mergedSx([styles.container, $open && styles.containerOpen], className, {
-        ...style,
+      {...mergedSx([styles.container, $open && styles.containerOpen], className)}
+      style={{
         transitionDelay: `${$open ? $delay : 0}ms`,
-      })}
+      }}
     >
       {children}
     </div>

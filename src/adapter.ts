@@ -243,15 +243,22 @@ export interface ExternalInterfaceContext {
 /**
  * Result type for `adapter.externalInterface(...)`.
  *
- * - `null` → no external interface support (neither styles nor `as`)
- * - `{ styles: true }` → enable className/style support AND polymorphic `as` prop
- * - `{ styles: false, as: true }` → enable only polymorphic `as` prop (no style merging)
- * - `{ styles: false, as: false }` → equivalent to `null`
+ * - `null` → no external interface support (neither className nor `as`)
+ * - `{ className: true }` → enable className support AND polymorphic `as` prop
+ * - `{ className: false, as: true }` → enable only polymorphic `as` prop (no className merging)
+ * - `{ className: false, as: false }` → equivalent to `null`
  *
- * Note: When `styles: true`, the `as` prop is always enabled because the style
+ * Note: External `style` props are NOT supported. StyleX manages styles internally,
+ * and allowing external style props would bypass the type-safe styling system.
+ * Dynamic styles should be handled via StyleX's inline style props mechanism instead.
+ *
+ * Note: When `className: true`, the `as` prop is always enabled because the className
  * merging implementation requires polymorphic rendering support.
  */
-export type ExternalInterfaceResult = { styles: true } | { styles: false; as: boolean } | null;
+export type ExternalInterfaceResult =
+  | { className: true }
+  | { className: false; as: boolean }
+  | null;
 
 // ────────────────────────────────────────────────────────────────────────────
 // Style Merger Configuration
@@ -259,12 +266,15 @@ export type ExternalInterfaceResult = { styles: true } | { styles: false; as: bo
 
 /**
  * Configuration for a custom style merger function that combines stylex.props()
- * results with external className/style props.
+ * results with external className props.
  *
  * When configured, generates cleaner output:
- *   `{...stylexProps(styles.foo, className, style)}`
+ *   `{...stylexProps(styles.foo, className)}`
  * instead of the verbose pattern:
- *   `{...sx} className={[sx.className, className].filter(Boolean).join(" ")} style={{...sx.style, ...style}}`
+ *   `{...sx} className={[sx.className, className].filter(Boolean).join(" ")}`
+ *
+ * Note: External `style` props are NOT supported. Dynamic styles should be handled
+ * via StyleX's inline style props mechanism instead.
  */
 export interface StyleMergerConfig {
   /**
@@ -322,27 +332,32 @@ export interface Adapter {
    * Called for exported styled components to determine their external interface.
    *
    * Return:
-   * - `null` → no external interface (neither styles nor `as`)
-   * - `{ styles: true }` → accept className/style props AND polymorphic `as` prop
-   * - `{ styles: false, as: true }` → accept only polymorphic `as` prop
-   * - `{ styles: false, as: false }` → equivalent to `null`
+   * - `null` → no external interface (neither className nor `as`)
+   * - `{ className: true }` → accept className prop AND polymorphic `as` prop
+   * - `{ className: false, as: true }` → accept only polymorphic `as` prop
+   * - `{ className: false, as: false }` → equivalent to `null`
+   *
+   * Note: External `style` props are NOT supported. Dynamic styles should be
+   * handled via StyleX's inline style props mechanism instead.
    */
   externalInterface: (context: ExternalInterfaceContext) => ExternalInterfaceResult;
 
   /**
-   * Custom merger function for className/style combining.
+   * Custom merger function for className combining.
    * When provided, generates cleaner output using this function instead of
-   * the verbose className/style merging pattern.
+   * the verbose className merging pattern.
    * Set to `null` to use the verbose pattern (default).
    *
    * Expected merger function signature:
    * ```typescript
    * function merger(
    *   styles: StyleXStyles | StyleXStyles[],
-   *   className?: string,
-   *   style?: React.CSSProperties
+   *   className?: string
    * ): { className?: string; style?: React.CSSProperties }
    * ```
+   *
+   * Note: External `style` props are NOT supported. Dynamic styles should be
+   * handled via StyleX's inline style props mechanism instead.
    */
   styleMerger: StyleMergerConfig | null;
 }
@@ -390,9 +405,9 @@ export interface Adapter {
  *
  *     // Configure external interface for exported components
  *     externalInterface(ctx) {
- *       // Example: Enable styles (and `as`) for shared components folder
+ *       // Example: Enable className (and `as`) for shared components folder
  *       if (ctx.filePath.includes("/shared/components/")) {
- *         return { styles: true };
+ *         return { className: true };
  *       }
  *       return null;
  *     },

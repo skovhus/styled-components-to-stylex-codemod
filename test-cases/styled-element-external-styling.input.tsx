@@ -21,10 +21,10 @@ export const ColorBadge = styled("span")<Props>`
   border-radius: 50%;
 `;
 
-// Usage: ColorBadge should accept className and style from external code
+// Usage: ColorBadge should accept className from external code
 export const App = () => (
   <div>
-    <ColorBadge color="red" className="custom-class" style={{ opacity: 0.5 }}>
+    <ColorBadge color="red" className="custom-class">
       Badge
     </ColorBadge>
   </div>

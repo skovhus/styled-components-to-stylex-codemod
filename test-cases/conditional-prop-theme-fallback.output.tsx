@@ -10,7 +10,7 @@ type Props = {
   size?: Size;
 };
 
-type ColorBadgeProps = Omit<React.ComponentProps<"div">, "className" | "style"> & Props;
+type ColorBadgeProps = Omit<React.ComponentProps<"div">, "style" | "className"> & Props;
 
 export function ColorBadge(props: ColorBadgeProps) {
   const { children, hollow, color, size: size = "normal" } = props;

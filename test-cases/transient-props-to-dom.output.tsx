@@ -25,7 +25,7 @@ export function Box(props: BoxProps) {
   );
 }
 
-type ImageProps = Omit<React.ComponentProps<"img">, "className" | "style"> & {
+type ImageProps = Omit<React.ComponentProps<"img">, "style" | "className"> & {
   $isInactive?: boolean;
 };
 
@@ -34,7 +34,7 @@ export function Image(props: ImageProps) {
   return <img {...rest} {...stylex.props(styles.image, $isInactive && styles.imageInactive)} />;
 }
 
-type SliderProps = Omit<React.ComponentProps<"div">, "className" | "style"> & {
+type SliderProps = Omit<React.ComponentProps<"div">, "style" | "className"> & {
   $height: number;
 };
 

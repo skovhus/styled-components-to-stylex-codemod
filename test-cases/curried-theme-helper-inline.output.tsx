@@ -3,7 +3,7 @@ import * as stylex from "@stylexjs/stylex";
 import { borders } from "./lib/helpers.stylex";
 import { $colors } from "./tokens.stylex";
 
-type BoxProps = Omit<React.ComponentProps<"div">, "className" | "style"> & {
+type BoxProps = Omit<React.ComponentProps<"div">, "style" | "className"> & {
   position: "top" | "bottom";
 };
 

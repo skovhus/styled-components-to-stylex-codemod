@@ -18,8 +18,8 @@ export const fixtureAdapter = defineAdapter({
 
   // Configure external interface for exported components
   externalInterface(ctx): ExternalInterfaceResult {
-    // Enable external styles for exported components in specific test cases where the expected
-    // output includes className/style prop support and HTMLAttributes extension.
+    // Enable external className for exported components in specific test cases where the expected
+    // output includes className prop support and HTMLAttributes extension.
     if (
       [
         "attrs-polymorphic-as",
@@ -30,20 +30,20 @@ export const fixtureAdapter = defineAdapter({
         "transient-prop-not-forwarded",
       ].some((filePath) => ctx.filePath.includes(filePath))
     ) {
-      return { styles: true };
+      return { className: true };
     }
 
     // wrapper-props-incomplete - TextColor and ThemeText should extend HTMLAttributes
-    // Highlight wraps a component and shouldn't support external styles
+    // Highlight wraps a component and shouldn't support external className
     if (ctx.filePath.includes("wrapper-props-incomplete")) {
       if (ctx.componentName === "TextColor" || ctx.componentName === "ThemeText") {
-        return { styles: true };
+        return { className: true };
       }
     }
 
-    // Enable `as` prop support (without styles) for exported components in selected fixtures.
+    // Enable `as` prop support (without className) for exported components in selected fixtures.
     if (["exported-as-prop"].some((filePath) => ctx.filePath.includes(filePath))) {
-      return { styles: false, as: true };
+      return { className: false, as: true };
     }
 
     return null;

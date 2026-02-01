@@ -33,7 +33,7 @@ export const App = () => {
           background: "white",
         }}
       >
-        <AnimatedPath d="M10 30 L130 30" style={{ opacity: on ? 1 : 0.2 }} $width={6} />
+        <AnimatedPath d="M10 30 L130 30" $width={6} />
       </svg>
     </div>
   );

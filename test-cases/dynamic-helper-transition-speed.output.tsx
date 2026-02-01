@@ -1,20 +1,16 @@
 import React from "react";
 import * as stylex from "@stylexjs/stylex";
-import { mergedSx } from "./lib/mergedSx";
 import { transitionSpeed } from "./tokens.stylex";
 import "./css-variables.css";
 
-type AnimatedPathProps = Omit<React.ComponentProps<"path">, "className"> & {
+type AnimatedPathProps = Omit<React.ComponentProps<"path">, "style" | "className"> & {
   $width: number;
 };
 
 function AnimatedPath(props: AnimatedPathProps) {
-  const { children, style, $width, ...rest } = props;
+  const { children, $width, ...rest } = props;
   return (
-    <path
-      {...rest}
-      {...mergedSx([styles.animatedPath, styles.animatedPathStrokeWidth($width)], undefined, style)}
-    >
+    <path {...rest} {...stylex.props(styles.animatedPath, styles.animatedPathStrokeWidth($width))}>
       {children}
     </path>
   );
@@ -39,7 +35,7 @@ export const App = () => {
           background: "white",
         }}
       >
-        <AnimatedPath d="M10 30 L130 30" style={{ opacity: on ? 1 : 0.2 }} $width={6} />
+        <AnimatedPath d="M10 30 L130 30" $width={6} />
       </svg>
     </div>
   );

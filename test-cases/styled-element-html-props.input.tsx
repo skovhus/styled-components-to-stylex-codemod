@@ -13,9 +13,9 @@ export const TextColor = styled("span")<TextColorProps>`
   color: ${(props) => props.color};
 `;
 
-// Usage should work with children, className, style
+// Usage should work with children, className
 export const App = () => (
-  <TextColor color="red" className="my-class" style={{ fontSize: 16 }}>
+  <TextColor color="red" className="my-class">
     Hello World
   </TextColor>
 );

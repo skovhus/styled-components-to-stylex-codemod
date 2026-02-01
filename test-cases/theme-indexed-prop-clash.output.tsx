@@ -4,7 +4,7 @@ import { $colors } from "./tokens.stylex";
 
 type Colors = "labelBase" | "labelMuted";
 
-type DotProps = Omit<React.ComponentProps<"div">, "className" | "style"> & {
+type DotProps = Omit<React.ComponentProps<"div">, "style" | "className"> & {
   $colors: Colors;
 };
 

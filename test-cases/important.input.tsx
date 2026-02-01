@@ -37,13 +37,9 @@ const ImportantHover = styled.a`
 
 export const App = () => (
   <div>
-    <OverrideButton style={{ background: "blue" }}>
-      Should be pink despite inline style
-    </OverrideButton>
+    <OverrideButton>Should have !important styles</OverrideButton>
     <ForceWidth>Full width content</ForceWidth>
-    <MixedStyles style={{ color: "red", margin: "20px" }}>
-      Color and margin should be overridden
-    </MixedStyles>
+    <MixedStyles>Color and margin have !important</MixedStyles>
     <ImportantHover href="#">Hover me</ImportantHover>
   </div>
 );

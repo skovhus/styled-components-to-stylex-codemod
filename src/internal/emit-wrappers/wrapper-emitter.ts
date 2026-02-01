@@ -203,15 +203,16 @@ export class WrapperEmitter {
     return used.has("*") || used.has("className");
   }
 
-  shouldAllowStyleProp(d: StyledDecl): boolean {
-    if (d.supportsExternalStyles) {
-      return true;
-    }
-    if ((d as any).usedAsValue) {
-      return true;
-    }
-    const used = this.getUsedAttrs(d.localName);
-    return used.has("*") || used.has("style");
+  /**
+   * External `style` props are NOT supported - always returns false.
+   * Dynamic styles should be handled via StyleX's inline style props mechanism
+   * (inlineStyleProps) instead of external style props.
+   */
+  shouldAllowStyleProp(_d: StyledDecl): boolean {
+    // External style props are never permitted. StyleX manages styles internally,
+    // and allowing external style props would bypass the type-safe styling system.
+    // Dynamic styles are handled via inlineStyleProps mechanism instead.
+    return false;
   }
 
   shouldAllowAsPropForIntrinsic(d: StyledDecl, tagName: string): boolean {
@@ -660,18 +661,10 @@ export class WrapperEmitter {
     d: StyledDecl;
     tagName: string;
     allowClassNameProp: boolean;
-    allowStyleProp: boolean;
     includeAsProp?: boolean;
     skipProps?: Set<string>;
   }): string {
-    const {
-      d,
-      tagName,
-      allowClassNameProp,
-      allowStyleProp,
-      includeAsProp = false,
-      skipProps,
-    } = args;
+    const { d, tagName, allowClassNameProp, includeAsProp = false, skipProps } = args;
     const used = this.getUsedAttrs(d.localName);
     const needsBroadAttrs = used.has("*") || !!(d as any).usedAsValue;
 
@@ -683,9 +676,7 @@ export class WrapperEmitter {
       if (allowClassNameProp) {
         lines.push(`  className?: string;`);
       }
-      if (allowStyleProp) {
-        lines.push(`  style?: React.CSSProperties;`);
-      }
+      // External style props are NOT supported - omitted intentionally
       const elementType = TAG_TO_HTML_ELEMENT[tagName] ?? "HTMLElement";
       lines.push(`  ref?: React.Ref<${elementType}>;`);
     }
@@ -711,27 +702,23 @@ export class WrapperEmitter {
     if (!needsBroadAttrs) {
       if (VOID_TAGS.has(tagName)) {
         const base = this.reactIntrinsicAttrsType(tagName);
-        const omitted: string[] = [];
+        // Always omit "style" - external style props are not supported
+        const omitted: string[] = ['"style"'];
         if (!allowClassNameProp) {
           omitted.push('"className"');
         }
-        if (!allowStyleProp) {
-          omitted.push('"style"');
-        }
-        return omitted.length ? `Omit<${base}, ${omitted.join(" | ")}>` : base;
+        return `Omit<${base}, ${omitted.join(" | ")}>`;
       }
       return this.withChildren(literal);
     }
 
     const base = this.reactIntrinsicAttrsType(tagName);
-    const omitted: string[] = [];
+    // Always omit "style" - external style props are not supported
+    const omitted: string[] = ['"style"'];
     if (!allowClassNameProp) {
       omitted.push('"className"');
     }
-    if (!allowStyleProp) {
-      omitted.push('"style"');
-    }
-    const baseMaybeOmitted = omitted.length ? `Omit<${base}, ${omitted.join(" | ")}>` : base;
+    const baseMaybeOmitted = `Omit<${base}, ${omitted.join(" | ")}>`;
     const composed = this.joinIntersection(baseMaybeOmitted, literal);
     return VOID_TAGS.has(tagName) ? composed : this.withChildren(composed);
   }
@@ -739,25 +726,22 @@ export class WrapperEmitter {
   inferredComponentWrapperPropsTypeText(args: {
     d: StyledDecl;
     allowClassNameProp: boolean;
-    allowStyleProp: boolean;
     includeAsProp?: boolean;
     skipProps?: Set<string>;
   }): string {
-    const { d, allowClassNameProp, allowStyleProp, includeAsProp = false } = args;
+    const { d, allowClassNameProp, includeAsProp = false } = args;
     const lines: string[] = [];
     if (includeAsProp) {
       lines.push(`  as?: React.ElementType;`);
     }
     const literal = lines.length > 0 ? `{\n${lines.join("\n")}\n}` : "{}";
     const base = `React.ComponentPropsWithRef<typeof ${(d.base as any).ident}>`;
-    const omitted: string[] = [];
+    // Always omit "style" - external style props are not supported
+    const omitted: string[] = ['"style"'];
     if (!allowClassNameProp) {
       omitted.push('"className"');
     }
-    if (!allowStyleProp) {
-      omitted.push('"style"');
-    }
-    const baseMaybeOmitted = omitted.length ? `Omit<${base}, ${omitted.join(" | ")}>` : base;
+    const baseMaybeOmitted = `Omit<${base}, ${omitted.join(" | ")}>`;
     return literal !== "{}" ? this.joinIntersection(baseMaybeOmitted, literal) : baseMaybeOmitted;
   }
 
@@ -845,7 +829,6 @@ export class WrapperEmitter {
     destructureProps: string[];
     propDefaults?: Map<string, string>;
     allowClassNameProp?: boolean;
-    allowStyleProp?: boolean;
     allowAsProp?: boolean;
     includeRest?: boolean;
     defaultAttrs?: Array<{ jsxProp: string; attrName: string; value: unknown }>;
@@ -863,7 +846,6 @@ export class WrapperEmitter {
       destructureProps,
       propDefaults,
       allowClassNameProp = false,
-      allowStyleProp = false,
       allowAsProp = false,
       includeRest = true,
       defaultAttrs = [],
@@ -969,9 +951,7 @@ export class WrapperEmitter {
     if (allowClassNameProp) {
       patternProps.push(this.patternProp("className"));
     }
-    if (allowStyleProp) {
-      patternProps.push(this.patternProp("style"));
-    }
+    // External style props are NOT supported - omitted intentionally
     for (const name of expandedDestructureProps) {
       if (name !== "children" && name !== "style" && name !== "className") {
         const defaultVal = propDefaults?.get(name);
@@ -1001,15 +981,12 @@ export class WrapperEmitter {
     }
 
     const classNameId = j.identifier("className");
-    const styleId = j.identifier("style");
     const merging = emitStyleMerging({
       j,
       styleMerger: this.styleMerger,
       styleArgs,
       classNameId,
-      styleId,
       allowClassNameProp,
-      allowStyleProp,
       inlineStyleProps,
     });
 

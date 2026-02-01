@@ -9,19 +9,15 @@ import type { Colors } from "./lib/colors";
 // Otherwise: "Property 'className' does not exist on type 'MyProps'"
 
 // Pattern 1: styled("span") with custom props - wrapper needs span attributes
-interface TextColorProps extends React.ComponentProps<"span"> {
+interface TextColorProps extends Omit<React.ComponentProps<"span">, "style"> {
   /** Custom color prop */
   color: string;
   as?: React.ElementType;
 }
 
 export function TextColor(props: TextColorProps) {
-  const { as: Component = "span", className, children, style, color } = props;
-  return (
-    <Component {...mergedSx([styles.textColorColor(color)], className, style)}>
-      {children}
-    </Component>
-  );
+  const { as: Component = "span", className, children, color } = props;
+  return <Component {...mergedSx([styles.textColorColor(color)], className)}>{children}</Component>;
 }
 
 // Pattern 2: styled(Component) - wrapper needs component's props + HTML attributes
@@ -47,7 +43,7 @@ export function Highlight(props: HighlightProps) {
 export function App() {
   return (
     <>
-      <TextColor color="red" className="custom" style={{ fontSize: 14 }}>
+      <TextColor color="red" className="custom">
         Red text
       </TextColor>
       <Highlight highlighted className="highlight">
@@ -59,7 +55,7 @@ export function App() {
 
 // Pattern 3: styled("span") with NO local usage - wrapper props should still be extended
 // This matches TextColor.tsx in a design system which doesn't use the component in the same file
-interface ThemeTextProps extends React.ComponentProps<"span"> {
+interface ThemeTextProps extends Omit<React.ComponentProps<"span">, "style"> {
   /** Theme color name */
   themeColor: Colors;
   as?: React.ElementType;
@@ -67,11 +63,9 @@ interface ThemeTextProps extends React.ComponentProps<"span"> {
 
 /** A text span that gets color from theme */
 export function ThemeText(props: ThemeTextProps) {
-  const { as: Component = "span", className, children, style, themeColor } = props;
+  const { as: Component = "span", className, children, themeColor } = props;
   return (
-    <Component {...mergedSx([styles.themeTextColor(themeColor)], className, style)}>
-      {children}
-    </Component>
+    <Component {...mergedSx([styles.themeTextColor(themeColor)], className)}>{children}</Component>
   );
 }
 

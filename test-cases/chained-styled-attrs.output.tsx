@@ -18,7 +18,7 @@ function Text(props: TextProps & { as?: React.ElementType }) {
   );
 }
 
-type StyledButtonProps = React.ComponentPropsWithRef<typeof Text> & {
+type StyledButtonProps = Omit<React.ComponentPropsWithRef<typeof Text>, "style"> & {
   ref?: React.Ref<HTMLButtonElement>;
 };
 
@@ -26,13 +26,13 @@ type StyledButtonProps = React.ComponentPropsWithRef<typeof Text> & {
 // The chain-flattening logic must NOT flatten A to Text, because
 // B's wrapper semantics (as="button") would be lost.
 function StyledButton(props: StyledButtonProps) {
-  const { className, style, ...rest } = props;
-  return <Text as="button" {...rest} {...mergedSx(styles.styledButton, className, style)} />;
+  const { className, ...rest } = props;
+  return <Text as="button" {...rest} {...mergedSx(styles.styledButton, className)} />;
 }
 
 type ClickableTextProps = Omit<
   React.ComponentPropsWithRef<typeof StyledButton>,
-  "className" | "style"
+  "style" | "className"
 >;
 
 // A extends B - this MUST preserve B's as="button" semantics

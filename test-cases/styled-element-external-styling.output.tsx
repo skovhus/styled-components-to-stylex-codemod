@@ -14,21 +14,21 @@ export type Props = {
   size?: Size;
 };
 
-type ColorBadgeProps = React.ComponentProps<"span"> & Props;
+type ColorBadgeProps = Omit<React.ComponentProps<"span">, "style"> & Props;
 
 export function ColorBadge(props: ColorBadgeProps) {
-  const { className, children, style, ...rest } = props;
+  const { className, children, ...rest } = props;
   return (
-    <span {...rest} {...mergedSx(styles.colorBadge, className, style)}>
+    <span {...rest} {...mergedSx(styles.colorBadge, className)}>
       {children}
     </span>
   );
 }
 
-// Usage: ColorBadge should accept className and style from external code
+// Usage: ColorBadge should accept className from external code
 export const App = () => (
   <div>
-    <ColorBadge color="red" className="custom-class" style={{ opacity: 0.5 }}>
+    <ColorBadge color="red" className="custom-class">
       Badge
     </ColorBadge>
   </div>

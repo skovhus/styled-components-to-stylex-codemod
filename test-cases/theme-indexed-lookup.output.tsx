@@ -4,7 +4,7 @@ import { $colors } from "./tokens.stylex";
 
 type Color = "labelBase" | "labelMuted";
 
-type BoxProps = Omit<React.ComponentProps<"div">, "className" | "style"> & {
+type BoxProps = Omit<React.ComponentProps<"div">, "style" | "className"> & {
   $bg: Color;
   $hoverColor: Color;
 };
@@ -35,7 +35,7 @@ export const App = () => (
 // The codemod should preserve the imported type, not convert to `string`
 import type { Colors } from "./lib/colors";
 
-interface TextColorProps extends Omit<React.ComponentProps<"span">, "className" | "style"> {
+interface TextColorProps extends Omit<React.ComponentProps<"span">, "style" | "className"> {
   /** The color from the theme */
   color: Colors;
 }

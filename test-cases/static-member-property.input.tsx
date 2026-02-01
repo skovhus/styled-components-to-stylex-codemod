@@ -1,8 +1,8 @@
 import React from "react";
 import styled from "styled-components";
 
-export const Divider = (props: { style?: React.CSSProperties }) => {
-  return <DividerContainer role="separator" style={props.style} />;
+export const Divider = () => {
+  return <DividerContainer role="separator" />;
 };
 
 // Multiple static properties on the same component

@@ -10,7 +10,7 @@ type Props = {
   disabled?: boolean;
 };
 
-type ButtonProps = Omit<React.ComponentProps<"button">, "className" | "style"> & Props;
+type ButtonProps = Omit<React.ComponentProps<"button">, "style" | "className"> & Props;
 
 function Button(props: ButtonProps) {
   const { children, size: size = "small", color: color = "secondary", disabled } = props;
@@ -30,7 +30,7 @@ function Button(props: ButtonProps) {
 
 // Second component with same "color" prop but different styles
 // This tests that conflicting variant names get per-component prefixes
-type LinkProps = Omit<React.ComponentProps<"a">, "className" | "style"> & {
+type LinkProps = Omit<React.ComponentProps<"a">, "style" | "className"> & {
   color?: "primary" | "secondary";
   disabled?: boolean;
 };

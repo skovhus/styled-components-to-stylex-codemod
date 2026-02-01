@@ -15,7 +15,7 @@ function BaseButton(props: BaseButtonProps) {
   return <button disabled={disabled} {...rest} />;
 }
 
-type ButtonProps = Omit<React.ComponentPropsWithRef<typeof BaseButton>, "className" | "style"> & {
+type ButtonProps = Omit<React.ComponentPropsWithRef<typeof BaseButton>, "style" | "className"> & {
   color?: "primary" | "secondary";
   disabled?: boolean;
 };

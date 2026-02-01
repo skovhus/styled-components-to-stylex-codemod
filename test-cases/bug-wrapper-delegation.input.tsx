@@ -5,7 +5,7 @@ export function App() {
   return (
     <>
       <Sentence>Test</Sentence>
-      <PaddedMutedSentence style={{ marginBottom: 0 }}>Test</PaddedMutedSentence>
+      <PaddedMutedSentence>Test</PaddedMutedSentence>
       <PaddedSentence>Okay</PaddedSentence>
     </>
   );

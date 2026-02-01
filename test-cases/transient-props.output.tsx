@@ -1,5 +1,4 @@
 import * as stylex from "@stylexjs/stylex";
-import { mergedSx } from "./lib/mergedSx";
 
 type CompProps = React.PropsWithChildren<{
   $draggable?: boolean;
@@ -16,24 +15,13 @@ const Link = ({ className, text, ...props }: { className?: string; text: string 
   </a>
 );
 
-type StyledLinkProps = Omit<React.ComponentPropsWithRef<typeof Link>, "className" | "style"> & {
+type StyledLinkProps = Omit<React.ComponentPropsWithRef<typeof Link>, "style" | "className"> & {
   $red?: boolean;
 };
 
 function StyledLink(props: StyledLinkProps) {
   const { $red, ...rest } = props;
   return <Link {...rest} {...stylex.props(styles.link, $red && styles.linkRed)} />;
-}
-
-type PointProps = {
-  $size?: number;
-} & { style?: React.CSSProperties; children?: React.ReactNode };
-
-// Pattern 3: Transient prop with dynamic value passed to inlined component
-// The prop is declared in type but not used in styles - must be stripped when inlined
-function Point(props: PointProps) {
-  const { children, style, $size } = props;
-  return <div {...mergedSx(styles.point, undefined, style)}>{children}</div>;
 }
 
 // Pattern 4: styled(Component) where base component declares the transient prop
@@ -62,7 +50,7 @@ function ArrowIcon(props: IconProps & ArrowIconProps) {
 
 type CollapseArrowIconProps = Omit<
   React.ComponentPropsWithRef<typeof ArrowIcon>,
-  "className" | "style"
+  "style" | "className"
 >;
 
 // The wrapper uses $isOpen for styling; ArrowIcon declares it in props but filters before spreading
@@ -83,7 +71,7 @@ export const App = () => (
     <Comp>Not Draggable</Comp>
     <StyledLink text="Click" $red />
     <StyledLink text="Click" />
-    <Point $size={100} style={{ top: "10px" }} />
+    <div {...stylex.props(styles.point)} />
     <CollapseArrowIcon $isOpen />
     <CollapseArrowIcon $isOpen={false} />
     <AnimatedContainer $direction="up" $delay={0.4} {...stylex.props(styles.animatedContainer)} />
@@ -118,6 +106,9 @@ const styles = stylex.create({
   linkRed: {
     color: "red",
   },
+
+  // Pattern 3: Transient prop with dynamic value passed to inlined component
+  // The prop is declared in type but not used in styles - must be stripped when inlined
   point: {
     position: "absolute",
     width: "12px",

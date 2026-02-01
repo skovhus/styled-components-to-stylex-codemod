@@ -2,7 +2,7 @@ import * as React from "react";
 import * as stylex from "@stylexjs/stylex";
 import { mergedSx } from "./lib/mergedSx";
 
-interface TextColorProps extends React.ComponentProps<"span"> {
+interface TextColorProps extends Omit<React.ComponentProps<"span">, "style"> {
   /** The color of the text. */
   color: string;
   as?: React.ElementType;
@@ -13,17 +13,13 @@ interface TextColorProps extends React.ComponentProps<"span"> {
  * When exported, should include HTML span props (className, children, style).
  */
 export function TextColor(props: TextColorProps) {
-  const { as: Component = "span", className, children, style, color } = props;
-  return (
-    <Component {...mergedSx([styles.textColorColor(color)], className, style)}>
-      {children}
-    </Component>
-  );
+  const { as: Component = "span", className, children, color } = props;
+  return <Component {...mergedSx([styles.textColorColor(color)], className)}>{children}</Component>;
 }
 
-// Usage should work with children, className, style
+// Usage should work with children, className
 export const App = () => (
-  <TextColor color="red" className="my-class" style={{ fontSize: 16 }}>
+  <TextColor color="red" className="my-class">
     Hello World
   </TextColor>
 );

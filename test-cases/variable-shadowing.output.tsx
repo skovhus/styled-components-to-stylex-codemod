@@ -1,31 +1,13 @@
 import * as React from "react";
 import * as stylex from "@stylexjs/stylex";
-import { mergedSx } from "./lib/mergedSx";
-
-type ContainerProps = Omit<React.ComponentProps<"div">, "className"> & {
-  align: string;
-};
-
-// When a local variable named `styles` exists, the generated stylex constant
-// should use a different name to avoid shadowing.
-
-function Container(props: ContainerProps) {
-  const { children, style, ...rest } = props;
-  return (
-    <div {...rest} {...mergedSx(stylexStyles.container, undefined, style)}>
-      {children}
-    </div>
-  );
-}
 
 interface Props {
   containerStyles?: React.CSSProperties;
-  align?: "top" | "center" | "bottom";
   children: React.ReactNode;
 }
 
 export function CollapsingContainer(props: Props) {
-  const { containerStyles, align = "top", children } = props;
+  const { containerStyles, children } = props;
 
   // Local variable named "styles" - common pattern in animation components
   const styles = containerStyles
@@ -34,11 +16,7 @@ export function CollapsingContainer(props: Props) {
         ...containerStyles,
       }
     : { overflow: "hidden" };
-  return (
-    <Container align={align} style={styles}>
-      {children}
-    </Container>
-  );
+  return <div {...stylex.props(stylexStyles.container)}>{children}</div>;
 }
 
 export const App = () => (
@@ -46,6 +24,9 @@ export const App = () => (
 );
 
 const stylexStyles = stylex.create({
+  // When a local variable named `styles` exists, the generated stylex constant
+  // should use a different name to avoid shadowing.
+
   container: {
     position: "relative",
     flexShrink: 0,

@@ -15,18 +15,17 @@ function Text(props: TextProps) {
     as: Component = "span",
     className,
     children,
-    style,
     variant: variant = "regular",
     ...rest
   } = props;
   return (
-    <Component {...rest} {...mergedSx([styles.text, variants[variant]], className, style)}>
+    <Component {...rest} {...mergedSx([styles.text, variants[variant]], className)}>
       {children}
     </Component>
   );
 }
 
-type LabelProps = Omit<React.ComponentPropsWithRef<typeof Text>, "className" | "style"> & {
+type LabelProps = Omit<React.ComponentPropsWithRef<typeof Text>, "style" | "className"> & {
   htmlFor?: string;
   ref?: React.Ref<HTMLLabelElement>;
 };

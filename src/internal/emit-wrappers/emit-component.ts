@@ -40,7 +40,6 @@ export function emitComponentWrappers(emitter: WrapperEmitter): {
     const shouldAllowAsProp = wrapperNames.has(d.localName) || supportsAsProp;
     const isPolymorphicComponentWrapper = shouldAllowAsProp && !wrappedComponentHasAs;
     const allowClassNameProp = emitter.shouldAllowClassNameProp(d);
-    const allowStyleProp = emitter.shouldAllowStyleProp(d);
     const propsIdForExpr = j.identifier("props");
     // Track which type name to use for the function parameter
     let functionParamTypeName: string | null = null;
@@ -60,14 +59,12 @@ export function emitComponentWrappers(emitter: WrapperEmitter): {
       if (explicitTypeExists && explicit && explicitTypeName && !isPolymorphicComponentWrapper) {
         const baseTypeText = (() => {
           const base = `React.ComponentPropsWithRef<typeof ${wrappedComponent}>`;
-          const omitted: string[] = [];
+          // Always omit "style" - external style props are not supported
+          const omitted: string[] = ['"style"'];
           if (!allowClassNameProp) {
             omitted.push('"className"');
           }
-          if (!allowStyleProp) {
-            omitted.push('"style"');
-          }
-          return omitted.length ? `Omit<${base}, ${omitted.join(" | ")}>` : base;
+          return `Omit<${base}, ${omitted.join(" | ")}>`;
         })();
         // Extend the existing type in-place so the wrapper can reuse it.
         const interfaceExtended = emitter.extendExistingInterface(explicitTypeName, baseTypeText);
@@ -83,12 +80,10 @@ export function emitComponentWrappers(emitter: WrapperEmitter): {
 
         if (isPolymorphicComponentWrapper) {
           const baseProps = `React.ComponentPropsWithRef<typeof ${wrappedComponent}>`;
-          const omitted: string[] = [];
+          // Always omit "style" - external style props are not supported
+          const omitted: string[] = ['"style"'];
           if (!allowClassNameProp) {
             omitted.push('"className"');
-          }
-          if (!allowStyleProp) {
-            omitted.push('"style"');
           }
           const typeText = [
             baseProps,
@@ -106,7 +101,6 @@ export function emitComponentWrappers(emitter: WrapperEmitter): {
           const inferred = emitter.inferredComponentWrapperPropsTypeText({
             d,
             allowClassNameProp,
-            allowStyleProp,
             includeAsProp: false,
             skipProps: explicitPropNames,
           });
@@ -395,7 +389,7 @@ export function emitComponentWrappers(emitter: WrapperEmitter): {
 
     const defaultAttrs = d.attrsInfo?.defaultAttrs ?? [];
     const staticAttrs = d.attrsInfo?.staticAttrs ?? {};
-    const needsSxVar = allowClassNameProp || allowStyleProp || !!d.inlineStyleProps?.length;
+    const needsSxVar = allowClassNameProp || !!d.inlineStyleProps?.length;
     // Only destructure when we have specific reasons: variant props or className/style support
     // Children flows through naturally via {...props} spread, no explicit handling needed
     // Attrs are handled separately (added as JSX attributes before/after the props spread)
@@ -407,7 +401,6 @@ export function emitComponentWrappers(emitter: WrapperEmitter): {
     if (needsDestructure) {
       const childrenId = j.identifier("children");
       const classNameId = j.identifier("className");
-      const styleId = j.identifier("style");
       const restId = j.identifier("rest");
       const componentId = j.identifier("Component");
       const wrappedComponentExpr = buildWrappedComponentExpr();
@@ -425,7 +418,6 @@ export function emitComponentWrappers(emitter: WrapperEmitter): {
             : []),
           ...(allowClassNameProp ? [patternProp("className", classNameId)] : []),
           ...(includeChildren ? [patternProp("children", childrenId)] : []),
-          ...(allowStyleProp ? [patternProp("style", styleId)] : []),
         ],
         destructureProps,
         propDefaults,
@@ -443,9 +435,7 @@ export function emitComponentWrappers(emitter: WrapperEmitter): {
         styleMerger,
         styleArgs,
         classNameId,
-        styleId,
         allowClassNameProp,
-        allowStyleProp,
         inlineStyleProps: (d.inlineStyleProps ?? []) as InlineStyleProp[],
       });
 
