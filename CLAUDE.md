@@ -85,7 +85,7 @@ After implementing any feature or fix, agents MUST:
 1. **Validate changes**: Run `pnpm check` to ensure all linting, type checking, and tests pass
 2. **Run code quality refactoring**: Use the [refactor-code-quality](.claude/skills/refactor-code-quality/SKILL.md) skill to:
    - Remove code duplication and extract shared patterns
-   - Eliminate `any` types
-   - Remove type assertions (`as Type`) and non-null assertions (`!`)
+   - Minimize `any` types (some jscodeshift patterns may require them)
+   - Minimize type assertions (`as Type`) and non-null assertions (`!`)
 3. **Validate again**: Run `pnpm check` after refactoring
 4. **Commit and push**: Make atomic commits with descriptive messages
