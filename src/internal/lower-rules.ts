@@ -3699,22 +3699,21 @@ export function lowerRules(args: {
 
             const cssProp = (d.property ?? "").trim();
             let stylexProp: string;
+            // For heterogeneous backgrounds, we'll determine the prop per-variant
+            let isHeterogeneousBackground = false;
             if (cssProp === "background") {
               const variantValues = res.variants
                 .filter((v: any) => typeof v.expr === "string")
                 .map((v: any) => v.expr as string);
               const resolved = resolveBackgroundStylexPropForVariants(variantValues);
               if (!resolved) {
-                // Heterogeneous - can't safely transform
-                warnings.push({
-                  severity: "warning",
-                  type: "Heterogeneous background values (mix of gradients and colors) not currently supported",
-                  loc: decl.loc,
-                });
-                bail = true;
-                break;
+                // Heterogeneous - each variant gets its own StyleX property
+                isHeterogeneousBackground = true;
+                // Use a placeholder; actual prop is determined per-variant
+                stylexProp = "backgroundColor";
+              } else {
+                stylexProp = resolved;
               }
-              stylexProp = resolved;
             } else {
               stylexProp = cssPropertyToStylexProp(cssProp);
             }
@@ -3820,7 +3819,9 @@ export function lowerRules(args: {
             const applyParsed = (
               target: Record<string, unknown>,
               parsed: { exprAst: unknown; imports: any[] },
+              stylexPropOverride?: string,
             ): void => {
+              const effectiveStylexProp = stylexPropOverride ?? stylexProp;
               for (const imp of parsed.imports) {
                 resolverImports.set(JSON.stringify(imp), imp);
               }
@@ -3838,7 +3839,7 @@ export function lowerRules(args: {
               // Preserve media/pseudo selectors by writing a per-prop map instead of
               // overwriting the base/default value.
               if (media) {
-                const existing = target[stylexProp];
+                const existing = target[effectiveStylexProp];
                 const map =
                   existing &&
                   typeof existing === "object" &&
@@ -3849,15 +3850,15 @@ export function lowerRules(args: {
                 // Set default from target first, then fall back to base styleObj.
                 // Only use null if neither has a value (for properties like outlineStyle that need explicit null).
                 if (!("default" in map)) {
-                  const baseValue = existing ?? styleObj[stylexProp];
+                  const baseValue = existing ?? styleObj[effectiveStylexProp];
                   map.default = baseValue ?? null;
                 }
                 map[media] = parsed.exprAst as any;
-                target[stylexProp] = map;
+                target[effectiveStylexProp] = map;
                 return;
               }
               if (pseudos?.length) {
-                const existing = target[stylexProp];
+                const existing = target[effectiveStylexProp];
                 // `existing` may be:
                 // - a scalar (string/number)
                 // - an AST node (e.g. { type: "StringLiteral", ... })
@@ -3874,18 +3875,18 @@ export function lowerRules(args: {
                 // Set default from target first, then fall back to base styleObj.
                 // Only use null if neither has a value (for properties like outlineStyle that need explicit null).
                 if (!("default" in map)) {
-                  const baseValue = existing ?? styleObj[stylexProp];
+                  const baseValue = existing ?? styleObj[effectiveStylexProp];
                   map.default = baseValue ?? null;
                 }
                 // Apply to all pseudos (e.g., both :hover and :focus for "&:hover, &:focus")
                 for (const ps of pseudos) {
                   map[ps] = parsed.exprAst as any;
                 }
-                target[stylexProp] = map;
+                target[effectiveStylexProp] = map;
                 return;
               }
 
-              target[stylexProp] = parsed.exprAst as any;
+              target[effectiveStylexProp] = parsed.exprAst as any;
             };
 
             // IMPORTANT: stage parsing first. If either branch fails to parse, skip this declaration entirely
@@ -3919,6 +3920,44 @@ export function lowerRules(args: {
                 `Adapter resolveCall returned an unparseable styles expression`,
               );
               break;
+            }
+
+            // For heterogeneous backgrounds, we need each variant to go to its own bucket
+            // with its own StyleX property (backgroundImage for gradients, backgroundColor for colors)
+            if (isHeterogeneousBackground) {
+              // Each variant gets its own StyleX property based on its value
+              // All branches go to variant buckets (no base style for heterogeneous backgrounds)
+              const isNestedTernary = allPosParsed.length > 1;
+
+              // Apply negative (falsy) variant to its own bucket
+              if (neg && negParsed) {
+                const negStylexProp = resolveBackgroundStylexProp(neg.expr);
+                // Use the negated condition name for the bucket (e.g., "!$useGradient" -> "!$useGradient")
+                const bucket = { ...variantBuckets.get(neg.when) } as Record<string, unknown>;
+                applyParsed(bucket, negParsed, negStylexProp);
+                variantBuckets.set(neg.when, bucket);
+                const suffix = toSuffixFromProp(neg.when);
+                variantStyleKeys[neg.when] ??= `${decl.styleKey}${suffix}`;
+              }
+
+              // Apply positive variants to their own buckets
+              for (let i = 0; i < allPosParsed.length; i++) {
+                const { when, nameHint, parsed } = allPosParsed[i]!;
+                const posV = allPos[i]!;
+                const posStylexProp = resolveBackgroundStylexProp(posV.expr);
+                const whenClean = when.replace(/^!/, "");
+                const bucket = { ...variantBuckets.get(whenClean) } as Record<string, unknown>;
+                applyParsed(bucket, parsed, posStylexProp);
+                variantBuckets.set(whenClean, bucket);
+                const genericHints = new Set(["truthy", "falsy", "default", "match"]);
+                const useMeaningfulHint =
+                  isNestedTernary && nameHint && !genericHints.has(nameHint);
+                const suffix = useMeaningfulHint
+                  ? nameHint.charAt(0).toUpperCase() + nameHint.slice(1)
+                  : toSuffixFromProp(whenClean);
+                variantStyleKeys[whenClean] ??= `${decl.styleKey}${suffix}`;
+              }
+              continue;
             }
 
             if (negParsed) {
