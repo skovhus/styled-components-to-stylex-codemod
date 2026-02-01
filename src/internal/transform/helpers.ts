@@ -199,6 +199,17 @@ export function toSuffixFromProp(propName: string): string {
   //   `!isActive` -> `NotActive`
   const trimmed = raw.trim();
 
+  // Handle negation first to avoid incorrect splitting on || inside negated expressions
+  // e.g., `!($mode === "gradient" || $mode === "pattern")` -> `NotModeGradientOrModePattern`
+  if (trimmed.startsWith("!")) {
+    const inner = trimmed
+      .slice(1)
+      .trim()
+      .replace(/^\(|\)$/g, "");
+    const base = toSuffixFromProp(inner);
+    return `Not${base}`;
+  }
+
   // Handle simple compound expressions (used for compound variant buckets), e.g.:
   //   `disabled && color === "primary"` -> `DisabledColorPrimary`
   if (trimmed.includes("&&")) {
@@ -211,13 +222,16 @@ export function toSuffixFromProp(propName: string): string {
     }
   }
 
-  if (trimmed.startsWith("!")) {
-    const inner = trimmed
-      .slice(1)
-      .trim()
-      .replace(/^\(|\)$/g, "");
-    const base = toSuffixFromProp(inner);
-    return `Not${base}`;
+  // Handle || conditions (e.g., for nested ternary default branches):
+  //   `mode === "gradient" || mode === "pattern"` -> `ModeGradientOrModePattern`
+  if (trimmed.includes(" || ")) {
+    const parts = trimmed
+      .split(" || ")
+      .map((s) => s.trim())
+      .filter(Boolean);
+    if (parts.length) {
+      return parts.map((p) => toSuffixFromProp(p)).join("Or");
+    }
   }
   const eq = trimmed.includes("!==") ? "!==" : trimmed.includes("===") ? "===" : null;
   if (eq) {

@@ -1147,6 +1147,19 @@ export class WrapperEmitter {
       return { cond: j.identifier("true"), props: [], isBoolean: true };
     }
 
+    // Handle negation with parentheses first: !(A || B) should strip outer negation
+    // before checking for || to avoid incorrect splitting
+    if (trimmed.startsWith("!(") && trimmed.endsWith(")")) {
+      const inner = trimmed.slice(2, -1).trim();
+      const innerParsed = this.parseVariantWhenToAst(inner);
+      // Negation always produces boolean
+      return {
+        cond: j.unaryExpression("!", innerParsed.cond),
+        props: innerParsed.props,
+        isBoolean: true,
+      };
+    }
+
     if (trimmed.includes("&&")) {
       const parts = trimmed
         .split("&&")
@@ -1162,16 +1175,23 @@ export class WrapperEmitter {
       return { cond, props, isBoolean };
     }
 
-    if (trimmed.startsWith("!(") && trimmed.endsWith(")")) {
-      const inner = trimmed.slice(2, -1).trim();
-      const innerParsed = this.parseVariantWhenToAst(inner);
-      // Negation always produces boolean
-      return {
-        cond: j.unaryExpression("!", innerParsed.cond),
-        props: innerParsed.props,
-        isBoolean: true,
-      };
+    // Handle || conditions (e.g., for nested ternary default branches after negation stripped)
+    if (trimmed.includes(" || ")) {
+      const parts = trimmed
+        .split(" || ")
+        .map((s) => s.trim())
+        .filter(Boolean);
+      const parsed = parts.map((p) => this.parseVariantWhenToAst(p));
+      const cond = parsed
+        .slice(1)
+        .reduce((acc, cur) => j.logicalExpression("||", acc, cur.cond), parsed[0]!.cond);
+      const props = [...new Set(parsed.flatMap((x) => x.props))];
+      // Combined || is boolean only if all parts are boolean
+      const isBoolean = parsed.every((p) => p.isBoolean);
+      return { cond, props, isBoolean };
     }
+
+    // Handle simple negation without parentheses: !prop
     if (trimmed.startsWith("!")) {
       const inner = trimmed.slice(1).trim();
       const innerParsed = this.parseVariantWhenToAst(inner);

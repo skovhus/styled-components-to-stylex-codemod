@@ -120,3 +120,18 @@ Addresses review comment: <brief summary>
 "
 git push
 ```
+
+### Step 8: Run Code Quality Refactoring
+
+After addressing review feedback, run the [refactor-code-quality](.claude/skills/refactor-code-quality/SKILL.md) skill to:
+
+- Remove any code duplication introduced by the fix
+- Extract shared patterns if applicable
+- Ensure type safety (minimize `any` and type assertions)
+
+This is especially important if the fix required changes across multiple files or added new helper functions.
+
+```bash
+# Run full validation again after refactoring
+pnpm check
+```
