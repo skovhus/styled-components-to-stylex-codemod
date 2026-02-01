@@ -7,9 +7,19 @@ const MixedBackground = styled.div<{ $useGradient: boolean }>`
   background: ${(props) => (props.$useGradient ? "linear-gradient(90deg, red, blue)" : "green")};
 `;
 
+// Nested ternary with all colors (homogeneous) but using || in the default condition
+// Tests that "!(A || B)" condition parsing produces valid identifier suffixes
+const NestedColorBackground = styled.div<{ $color: "red" | "blue" | "default" }>`
+  background: ${(props) =>
+    props.$color === "red" ? "crimson" : props.$color === "blue" ? "navy" : "gray"};
+`;
+
 export const App = () => (
   <div>
     <MixedBackground $useGradient={false}>Solid Color</MixedBackground>
     <MixedBackground $useGradient={true}>Gradient</MixedBackground>
+    <NestedColorBackground $color="red">Red</NestedColorBackground>
+    <NestedColorBackground $color="blue">Blue</NestedColorBackground>
+    <NestedColorBackground $color="default">Default</NestedColorBackground>
   </div>
 );
