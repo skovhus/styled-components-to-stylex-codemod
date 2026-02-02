@@ -195,7 +195,7 @@ export function cssPropertyToStylexProp(prop: string): string {
 
 // --- Non-exported helpers ---
 
-const BORDER_STYLES = new Set([
+export const BORDER_STYLES = new Set([
   "none",
   "solid",
   "dashed",
