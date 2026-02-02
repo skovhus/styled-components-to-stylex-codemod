@@ -219,6 +219,12 @@ export type StyledDecl = {
    * inside `stylex.create(...)`.
    */
   extraStylexPropsArgs?: Array<{ when?: string; expr: ExpressionKind }>;
+  /**
+   * Tracks the interleaved order of extra mixins. Each entry indicates which array
+   * to take the next item from: 'styleKey' for extraStyleKeys, 'propsArg' for extraStylexPropsArgs.
+   * Used to preserve correct style precedence when combining local and imported mixins.
+   */
+  mixinOrder?: Array<"styleKey" | "propsArg">;
   enumVariant?: {
     propName: string;
     baseKey: string;

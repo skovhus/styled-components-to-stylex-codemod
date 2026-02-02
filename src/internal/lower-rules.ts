@@ -3359,12 +3359,14 @@ export function lowerRules(args: {
                 if (mixinDecl && !mixinDecl.isCssHelper && mixinDecl.localName !== decl.localName) {
                   if (isSimpleMixin(mixinDecl)) {
                     const extras = decl.extraStyleKeys ?? [];
+                    const order = decl.mixinOrder ?? [];
 
                     // First propagate recursive mixins' extraStyleKeys (lower precedence)
                     if (mixinDecl.extraStyleKeys) {
                       for (const extraKey of mixinDecl.extraStyleKeys) {
                         if (!extras.includes(extraKey)) {
                           extras.push(extraKey);
+                          order.push("styleKey");
                         }
                       }
                     }
@@ -3372,8 +3374,10 @@ export function lowerRules(args: {
                     // Then add mixin's styleKey (higher precedence than its dependencies)
                     if (!extras.includes(mixinDecl.styleKey)) {
                       extras.push(mixinDecl.styleKey);
+                      order.push("styleKey");
                     }
                     decl.extraStyleKeys = extras;
+                    decl.mixinOrder = order;
 
                     // Track properties for pseudo-selector defaults
                     const mixinValues = mixinValuesByKey.get(mixinDecl.styleKey);
@@ -3412,10 +3416,13 @@ export function lowerRules(args: {
                   if (resolved?.usage === "props") {
                     // Add as an extra stylex.props argument
                     const extras = decl.extraStylexPropsArgs ?? [];
+                    const order = decl.mixinOrder ?? [];
                     const parsedExpr = parseExpr(resolved.expr);
                     if (parsedExpr) {
                       extras.push({ expr: parsedExpr });
+                      order.push("propsArg");
                       decl.extraStylexPropsArgs = extras;
+                      decl.mixinOrder = order;
                       // Merge imports
                       for (const imp of resolved.imports) {
                         resolverImports.set(JSON.stringify(imp), imp);

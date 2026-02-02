@@ -362,13 +362,48 @@ export function rewriteJsxStep(ctx: TransformContext): StepResult {
         }
 
         // Insert {...stylex.props(styles.key)} after structural attrs like href/type/size (matches fixtures).
-        const extraStyleArgs = (decl.extraStyleKeys ?? []).map((key) =>
-          j.memberExpression(j.identifier(ctx.stylesIdentifier ?? "styles"), j.identifier(key)),
-        );
-        // Add adapter-resolved StyleX styles (external style references like helpers.truncate)
-        const extraStylexPropsExprs = (decl.extraStylexPropsArgs ?? [])
-          .filter((arg) => !arg.when) // Only include unconditional args for JSX inlining
-          .map((arg) => arg.expr);
+        // Build extra style args in the correct order (preserving template mixin order).
+        const extraStyleKeys = decl.extraStyleKeys ?? [];
+        const extraStylexPropsArgs = (decl.extraStylexPropsArgs ?? []).filter((arg) => !arg.when);
+        const mixinOrder = decl.mixinOrder;
+
+        // Build interleaved extra args based on mixinOrder (if available)
+        const extraMixinArgs: any[] = [];
+        if (mixinOrder && mixinOrder.length > 0) {
+          let styleKeyIdx = 0;
+          let propsArgIdx = 0;
+          for (const entry of mixinOrder) {
+            if (entry === "styleKey" && styleKeyIdx < extraStyleKeys.length) {
+              const key = extraStyleKeys[styleKeyIdx];
+              styleKeyIdx++;
+              if (key) {
+                extraMixinArgs.push(
+                  j.memberExpression(
+                    j.identifier(ctx.stylesIdentifier ?? "styles"),
+                    j.identifier(key),
+                  ),
+                );
+              }
+            } else if (entry === "propsArg" && propsArgIdx < extraStylexPropsArgs.length) {
+              const arg = extraStylexPropsArgs[propsArgIdx];
+              propsArgIdx++;
+              if (arg) {
+                extraMixinArgs.push(arg.expr);
+              }
+            }
+          }
+        } else {
+          // Fallback: no order tracking, use legacy behavior (propsArgs first, then styleKeys)
+          for (const arg of extraStylexPropsArgs) {
+            extraMixinArgs.push(arg.expr);
+          }
+          for (const key of extraStyleKeys) {
+            extraMixinArgs.push(
+              j.memberExpression(j.identifier(ctx.stylesIdentifier ?? "styles"), j.identifier(key)),
+            );
+          }
+        }
+
         const styleArgs: any[] = [
           ...(decl.extendsStyleKey
             ? [
@@ -378,8 +413,7 @@ export function rewriteJsxStep(ctx: TransformContext): StepResult {
                 ),
               ]
             : []),
-          ...extraStylexPropsExprs,
-          ...extraStyleArgs,
+          ...extraMixinArgs,
           j.memberExpression(
             j.identifier(ctx.stylesIdentifier ?? "styles"),
             j.identifier(decl.styleKey),
