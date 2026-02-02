@@ -365,6 +365,10 @@ export function rewriteJsxStep(ctx: TransformContext): StepResult {
         const extraStyleArgs = (decl.extraStyleKeys ?? []).map((key) =>
           j.memberExpression(j.identifier(ctx.stylesIdentifier ?? "styles"), j.identifier(key)),
         );
+        // Add adapter-resolved StyleX styles (external style references like helpers.truncate)
+        const extraStylexPropsExprs = (decl.extraStylexPropsArgs ?? [])
+          .filter((arg) => !arg.when) // Only include unconditional args for JSX inlining
+          .map((arg) => arg.expr);
         const styleArgs: any[] = [
           ...(decl.extendsStyleKey
             ? [
@@ -374,6 +378,7 @@ export function rewriteJsxStep(ctx: TransformContext): StepResult {
                 ),
               ]
             : []),
+          ...extraStylexPropsExprs,
           ...extraStyleArgs,
           j.memberExpression(
             j.identifier(ctx.stylesIdentifier ?? "styles"),

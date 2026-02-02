@@ -113,7 +113,7 @@ export type ResolveValueContext =
   | ImportedValueResolveContext;
 
 /**
- * Result for `adapter.resolveValue(...)` (theme + css variables).
+ * Result for `adapter.resolveValue(...)` (theme + css variables + imported values).
  */
 export type ResolveValueResult = {
   /**
@@ -133,6 +133,15 @@ export type ResolveValueResult = {
    * Note: Only meaningful for `{ kind: "cssVariable" }`.
    */
   dropDefinition?: boolean;
+  /**
+   * Disambiguates how the resolved expression is used:
+   * - "props": a StyleX style object suitable for passing to `stylex.props(...)`.
+   *   Use this when resolving imported styled component mixins to their StyleX equivalent.
+   * - undefined (default): a value that can be used inside `stylex.create(...)`.
+   *
+   * Note: Only meaningful for `{ kind: "importedValue" }`.
+   */
+  usage?: "props";
 };
 
 export type CallResolveResult = {

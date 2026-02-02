@@ -183,6 +183,20 @@ export const fixtureAdapter = defineAdapter({
           ],
         };
       }
+      // Handle imported styled components used as mixins
+      // TruncateText -> helpers.truncate (a StyleX style object)
+      if (ctx.importedName === "TruncateText") {
+        return {
+          usage: "props",
+          expr: "helpers.truncate",
+          imports: [
+            {
+              from: { kind: "specifier", value: "./lib/helpers.stylex" },
+              names: [{ imported: "helpers" }],
+            },
+          ],
+        };
+      }
     }
 
     // Return undefined to bail/skip the file
