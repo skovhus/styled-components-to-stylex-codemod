@@ -1005,6 +1005,27 @@ export class WrapperEmitter {
       defaultAttrsMap.set(a.jsxProp, a.value);
     }
 
+    // Helper to create a property with an assignment pattern default value
+    const makePatternPropWithDefault = (name: string, value: unknown): Property | null => {
+      if (typeof value === "boolean") {
+        return j.property.from({
+          kind: "init",
+          key: j.identifier(name),
+          value: j.assignmentPattern(j.identifier(name), j.booleanLiteral(value)),
+          shorthand: false,
+        }) as Property;
+      }
+      if (typeof value === "string" || typeof value === "number") {
+        return j.property.from({
+          kind: "init",
+          key: j.identifier(name),
+          value: j.assignmentPattern(j.identifier(name), j.literal(value)),
+          shorthand: false,
+        }) as Property;
+      }
+      return null;
+    };
+
     for (const name of expandedDestructureProps) {
       if (name !== "children" && name !== "style" && name !== "className") {
         const defaultVal = propDefaults?.get(name);
@@ -1019,26 +1040,13 @@ export class WrapperEmitter {
               shorthand: false,
             }) as Property,
           );
-        } else if (
-          defaultAttrVal !== undefined &&
-          (typeof defaultAttrVal === "boolean" ||
-            typeof defaultAttrVal === "string" ||
-            typeof defaultAttrVal === "number")
-        ) {
-          const defaultLiteral =
-            typeof defaultAttrVal === "boolean"
-              ? j.booleanLiteral(defaultAttrVal)
-              : j.literal(defaultAttrVal);
-          patternProps.push(
-            j.property.from({
-              kind: "init",
-              key: j.identifier(name),
-              value: j.assignmentPattern(j.identifier(name), defaultLiteral),
-              shorthand: false,
-            }) as Property,
-          );
         } else {
-          patternProps.push(this.patternProp(name));
+          const propWithDefault = makePatternPropWithDefault(name, defaultAttrVal);
+          if (propWithDefault) {
+            patternProps.push(propWithDefault);
+          } else {
+            patternProps.push(this.patternProp(name));
+          }
         }
       }
     }
@@ -1047,18 +1055,10 @@ export class WrapperEmitter {
     // This ensures they're extracted from rest and we can use the identifier directly in JSX
     for (const a of defaultAttrs) {
       if (!expandedDestructureProps.has(a.jsxProp)) {
-        const defaultLiteral =
-          typeof a.value === "boolean"
-            ? j.booleanLiteral(a.value)
-            : j.literal(a.value as string | number);
-        patternProps.push(
-          j.property.from({
-            kind: "init",
-            key: j.identifier(a.jsxProp),
-            value: j.assignmentPattern(j.identifier(a.jsxProp), defaultLiteral),
-            shorthand: false,
-          }) as Property,
-        );
+        const propWithDefault = makePatternPropWithDefault(a.jsxProp, a.value);
+        if (propWithDefault) {
+          patternProps.push(propWithDefault);
+        }
       }
     }
 
