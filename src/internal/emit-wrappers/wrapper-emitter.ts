@@ -366,6 +366,33 @@ export class WrapperEmitter {
     return interfaces.size() > 0;
   }
 
+  /**
+   * Check if propsType is a simple type reference (e.g., `Props`) that exists in the file.
+   * Returns the type name if it exists, null otherwise.
+   *
+   * This is used to determine if we should extend an existing user-defined type
+   * rather than creating a new wrapper props type.
+   */
+  getExplicitTypeNameIfExists(propsType: ASTNode | undefined): string | null {
+    if (!propsType) {
+      return null;
+    }
+    const typedPropsType = propsType as ASTNode & {
+      type?: string;
+      typeName?: { type?: string; name?: string };
+    };
+    const isSimpleTypeRef =
+      typedPropsType.type === "TSTypeReference" && typedPropsType.typeName?.type === "Identifier";
+    if (!isSimpleTypeRef) {
+      return null;
+    }
+    const typeName = typedPropsType.typeName?.name;
+    if (!typeName) {
+      return null;
+    }
+    return this.typeExistsInFile(typeName) ? typeName : null;
+  }
+
   extendExistingInterface(typeName: string, baseTypeText: string): boolean {
     const { root, j } = this;
     if (!this.emitTypes) {
@@ -441,6 +468,18 @@ export class WrapperEmitter {
       }
     });
     return true;
+  }
+
+  /**
+   * Extend an existing type (interface or type alias) with additional type text.
+   * Tries interface first, then falls back to type alias.
+   * Returns true if the type was extended successfully.
+   */
+  extendExistingType(typeName: string, baseTypeText: string): boolean {
+    if (this.extendExistingInterface(typeName, baseTypeText)) {
+      return true;
+    }
+    return this.extendExistingTypeAlias(typeName, baseTypeText);
   }
 
   emitNamedPropsType(args: {
@@ -972,9 +1011,38 @@ export class WrapperEmitter {
     if (allowStyleProp) {
       patternProps.push(this.patternProp("style"));
     }
+    // Build a map of default values from defaultAttrs for quick lookup
+    const defaultAttrsMap = new Map<string, unknown>();
+    for (const a of defaultAttrs) {
+      defaultAttrsMap.set(a.jsxProp, a.value);
+    }
+
+    // Helper to create a property with an assignment pattern default value
+    const makePatternPropWithDefault = (name: string, value: unknown): Property | null => {
+      if (typeof value === "boolean") {
+        return j.property.from({
+          kind: "init",
+          key: j.identifier(name),
+          value: j.assignmentPattern(j.identifier(name), j.booleanLiteral(value)),
+          shorthand: false,
+        }) as Property;
+      }
+      if (typeof value === "string" || typeof value === "number") {
+        return j.property.from({
+          kind: "init",
+          key: j.identifier(name),
+          value: j.assignmentPattern(j.identifier(name), j.literal(value)),
+          shorthand: false,
+        }) as Property;
+      }
+      return null;
+    };
+
     for (const name of expandedDestructureProps) {
       if (name !== "children" && name !== "style" && name !== "className") {
         const defaultVal = propDefaults?.get(name);
+        // Also check defaultAttrs for default values (e.g., tabIndex: props.tabIndex ?? 0)
+        const defaultAttrVal = defaultAttrsMap.get(name);
         if (defaultVal) {
           patternProps.push(
             j.property.from({
@@ -985,7 +1053,23 @@ export class WrapperEmitter {
             }) as Property,
           );
         } else {
-          patternProps.push(this.patternProp(name));
+          const propWithDefault = makePatternPropWithDefault(name, defaultAttrVal);
+          if (propWithDefault) {
+            patternProps.push(propWithDefault);
+          } else {
+            patternProps.push(this.patternProp(name));
+          }
+        }
+      }
+    }
+
+    // Add defaultAttrs props to destructuring with their default values
+    // This ensures they're extracted from rest and we can use the identifier directly in JSX
+    for (const a of defaultAttrs) {
+      if (!expandedDestructureProps.has(a.jsxProp)) {
+        const propWithDefault = makePatternPropWithDefault(a.jsxProp, a.value);
+        if (propWithDefault) {
+          patternProps.push(propWithDefault);
         }
       }
     }
@@ -1015,20 +1099,13 @@ export class WrapperEmitter {
 
     const jsxAttrs: Array<JSXAttribute | JSXSpreadAttribute> = [];
 
+    // For defaultAttrs, use the destructured identifier directly since we added it
+    // with a default value in the destructuring above
     for (const a of defaultAttrs) {
-      const propExpr = j.memberExpression(propsId, j.identifier(a.jsxProp));
-      const fallback =
-        typeof a.value === "string"
-          ? j.literal(a.value)
-          : typeof a.value === "number"
-            ? j.literal(a.value)
-            : typeof a.value === "boolean"
-              ? j.booleanLiteral(a.value)
-              : j.literal(String(a.value));
       jsxAttrs.push(
         j.jsxAttribute(
           j.jsxIdentifier(a.attrName),
-          j.jsxExpressionContainer(j.logicalExpression("??", propExpr, fallback)),
+          j.jsxExpressionContainer(j.identifier(a.jsxProp)),
         ),
       );
     }
