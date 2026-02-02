@@ -2235,7 +2235,7 @@ export function emitIntrinsicWrappers(emitter: WrapperEmitter): {
     if (hasElementPropsInDefaultAttrs(d)) {
       shouldIncludeRest = true;
     }
-    if (usedAttrs.has("style") || usedAttrs.has("className") || usedAttrs.has("*")) {
+    if (shouldIncludeRest) {
       for (const name of explicitTransientProps) {
         if (!destructureProps.includes(name)) {
           destructureProps.push(name);
