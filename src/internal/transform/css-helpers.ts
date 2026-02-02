@@ -2,7 +2,11 @@ import type { Collection, JSCodeshift, TemplateLiteral } from "jscodeshift";
 import { compile } from "stylis";
 
 import type { CssRuleIR } from "../css-ir.js";
-import { normalizeStylisAstToIR } from "../css-ir.js";
+import {
+  computeUniversalSelectorLoc,
+  hasUniversalSelectorInRules,
+  normalizeStylisAstToIR,
+} from "../css-ir.js";
 import { parseStyledTemplateLiteral } from "../styled-css.js";
 import type { StyledDecl } from "../transform-types.js";
 
@@ -600,12 +604,15 @@ export function extractAndRemoveCssHelpers(args: {
     };
   }
 
-  const noteCssHelperUniversalSelector = (template: any): void => {
+  const noteCssHelperUniversalSelector = (template: any, rawCss: string): void => {
     cssHelperHasUniversalSelectors = true;
     if (cssHelperUniversalSelectorLoc) {
       return;
     }
-    cssHelperUniversalSelectorLoc = getCssHelperTemplateLoc(template);
+    cssHelperUniversalSelectorLoc = computeUniversalSelectorLoc(
+      getCssHelperTemplateLoc(template),
+      rawCss,
+    );
   };
 
   const isStillReferenced = (): boolean =>
@@ -640,8 +647,8 @@ export function extractAndRemoveCssHelpers(args: {
       const rawCss = `& { ${parsed.rawCss} }`;
       const stylisAst = compile(rawCss);
       const rules = normalizeStylisAstToIR(stylisAst, parsed.slots, { rawCss });
-      if (rules.some((r) => typeof r.selector === "string" && r.selector.includes("*"))) {
-        noteCssHelperUniversalSelector(template);
+      if (hasUniversalSelectorInRules(rules)) {
+        noteCssHelperUniversalSelector(template, parsed.rawCss);
       }
 
       cssHelperDecls.push({
@@ -792,8 +799,8 @@ export function extractAndRemoveCssHelpers(args: {
         const stylisAst = compile(rawCss);
         const rules = normalizeStylisAstToIR(stylisAst, parsed.slots, { rawCss });
 
-        if (rules.some((r) => typeof r.selector === "string" && r.selector.includes("*"))) {
-          noteCssHelperUniversalSelector(template);
+        if (hasUniversalSelectorInRules(rules)) {
+          noteCssHelperUniversalSelector(template, parsed.rawCss);
         }
 
         // Create a qualified name for the style key: objectName + PropName

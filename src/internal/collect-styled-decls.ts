@@ -1,6 +1,9 @@
 import type { Collection } from "jscodeshift";
-import type { CssRuleIR } from "./css-ir.js";
-import { normalizeStylisAstToIR } from "./css-ir.js";
+import {
+  computeUniversalSelectorLoc,
+  hasUniversalSelectorInRules,
+  normalizeStylisAstToIR,
+} from "./css-ir.js";
 import { cloneAstNode, getFunctionBodyExpr } from "./utilities/jscodeshift-utils.js";
 import { resolveBackgroundStylexProp } from "./css-prop-mapping.js";
 import { parseStyledTemplateLiteral } from "./styled-css.js";
@@ -53,12 +56,12 @@ function collectStyledDeclsImpl(args: {
     return { line: start.line, column: start.column ?? 0 };
   };
 
-  const noteUniversalSelector = (template: any): void => {
+  const noteUniversalSelector = (template: any, rawCss: string): void => {
     hasUniversalSelectors = true;
     if (universalSelectorLoc) {
       return;
     }
-    universalSelectorLoc = getTemplateLoc(template);
+    universalSelectorLoc = computeUniversalSelectorLoc(getTemplateLoc(template), rawCss);
   };
 
   const parseAttrsArg = (arg0: any): StyledDecl["attrsInfo"] | undefined => {
@@ -586,7 +589,7 @@ function collectStyledDeclsImpl(args: {
           rawCss: parsed.rawCss,
         });
         if (hasUniversalSelectorInRules(rules)) {
-          noteUniversalSelector(template);
+          noteUniversalSelector(template, parsed.rawCss);
         }
 
         styledDecls.push({
@@ -624,7 +627,7 @@ function collectStyledDeclsImpl(args: {
           rawCss: parsed.rawCss,
         });
         if (hasUniversalSelectorInRules(rules)) {
-          noteUniversalSelector(template);
+          noteUniversalSelector(template, parsed.rawCss);
         }
         const attrsInfo =
           tag.callee.property.name === "attrs" ? parseAttrsArg(tag.arguments[0]) : undefined;
@@ -681,7 +684,7 @@ function collectStyledDeclsImpl(args: {
           rawCss: parsed.rawCss,
         });
         if (hasUniversalSelectorInRules(rules)) {
-          noteUniversalSelector(template);
+          noteUniversalSelector(template, parsed.rawCss);
         }
         const attrsInfo = parseAttrsArg(tag.arguments[0]);
 
@@ -724,7 +727,7 @@ function collectStyledDeclsImpl(args: {
           rawCss: parsed.rawCss,
         });
         if (hasUniversalSelectorInRules(rules)) {
-          noteUniversalSelector(template);
+          noteUniversalSelector(template, parsed.rawCss);
         }
         const attrsInfo = parseAttrsArg(tag.arguments[0]);
 
@@ -763,7 +766,7 @@ function collectStyledDeclsImpl(args: {
           rawCss: parsed.rawCss,
         });
         if (hasUniversalSelectorInRules(rules)) {
-          noteUniversalSelector(template);
+          noteUniversalSelector(template, parsed.rawCss);
         }
 
         styledDecls.push({
@@ -805,7 +808,7 @@ function collectStyledDeclsImpl(args: {
           rawCss: parsed.rawCss,
         });
         if (hasUniversalSelectorInRules(rules)) {
-          noteUniversalSelector(template);
+          noteUniversalSelector(template, parsed.rawCss);
         }
 
         styledDecls.push({
@@ -842,7 +845,7 @@ function collectStyledDeclsImpl(args: {
           rawCss: parsed.rawCss,
         });
         if (hasUniversalSelectorInRules(rules)) {
-          noteUniversalSelector(template);
+          noteUniversalSelector(template, parsed.rawCss);
         }
 
         styledDecls.push({
@@ -880,7 +883,7 @@ function collectStyledDeclsImpl(args: {
           rawCss: parsed.rawCss,
         });
         if (hasUniversalSelectorInRules(rules)) {
-          noteUniversalSelector(template);
+          noteUniversalSelector(template, parsed.rawCss);
         }
         const shouldForwardProp = parseShouldForwardProp(tag.arguments[0]);
         const withConfigMeta = parseWithConfigMeta(tag.arguments[0]);
@@ -926,7 +929,7 @@ function collectStyledDeclsImpl(args: {
           rawCss: parsed.rawCss,
         });
         if (hasUniversalSelectorInRules(rules)) {
-          noteUniversalSelector(template);
+          noteUniversalSelector(template, parsed.rawCss);
         }
         const shouldForwardProp = parseShouldForwardProp(tag.arguments[0]);
         const withConfigMeta = parseWithConfigMeta(tag.arguments[0]);
@@ -1241,7 +1244,7 @@ function collectStyledDeclsImpl(args: {
             rawCss: parsed.rawCss,
           });
           if (hasUniversalSelectorInRules(rules)) {
-            noteUniversalSelector(cssTemplate);
+            noteUniversalSelector(cssTemplate, parsed.rawCss);
           }
 
           // Extract destructured params and transform expressions
@@ -1320,11 +1323,4 @@ function collectStyledDeclsImpl(args: {
     });
 
   return { styledDecls, hasUniversalSelectors, universalSelectorLoc };
-}
-
-function hasUniversalSelectorInRules(rules: CssRuleIR[]): boolean {
-  // Rule selectors come from Stylis output (not from JS), so a literal `*` here
-  // always indicates a CSS universal selector (descendant/direct-child/etc).
-  // We currently treat ANY universal selector usage as unsupported and skip the file.
-  return rules.some((r) => typeof r.selector === "string" && r.selector.includes("*"));
 }

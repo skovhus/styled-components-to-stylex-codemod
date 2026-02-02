@@ -418,9 +418,80 @@ export const App = () => <Box><span /></Box>;
     );
 
     expect(result.code).toBeNull();
-    expect(
-      result.warnings.some((w) => w.type === "Universal selectors (`*`) are currently unsupported"),
-    ).toBe(true);
+    const warning = result.warnings.find(
+      (w) => w.type === "Universal selectors (`*`) are currently unsupported",
+    );
+    expect(warning).toBeDefined();
+    // Line 5 is where `& * {` appears (line 4 is the template start, line 5 has the selector)
+    expect(warning?.loc?.line).toBe(5);
+  });
+
+  it("should warn with correct line number for universal selector on a later line", () => {
+    const source = `
+import styled from 'styled-components';
+
+const Container = styled.div\`
+  display: flex;
+  gap: 16px;
+
+  & > * {
+    flex: 1;
+  }
+\`;
+
+export const App = () => <Container />;
+`;
+
+    const result = transformWithWarnings(
+      { source, path: "test.tsx" },
+      { jscodeshift: j, j, stats: () => {}, report: () => {} },
+      { adapter: fixtureAdapter },
+    );
+
+    expect(result.code).toBeNull();
+    const warning = result.warnings.find(
+      (w) => w.type === "Universal selectors (`*`) are currently unsupported",
+    );
+    expect(warning).toBeDefined();
+    // The selector `& > *` appears on a line later in the template.
+    // Line 4: template start (`const Container = styled.div\``)
+    // The `& > *` selector is 4 lines into the template content (display, gap, empty, & > *)
+    // So expected line = 4 + 4 = 8
+    // But note: the first line of template content starts on line 5, and `& > *` is on line 8
+    expect(warning?.loc?.line).toBe(8);
+  });
+
+  it("should warn with correct line number when calc() with * appears before universal selector", () => {
+    const source = `
+import styled from 'styled-components';
+
+const Container = styled.div\`
+  width: calc(100% * 2);
+  height: 100px;
+
+  & > * {
+    flex: 1;
+  }
+\`;
+
+export const App = () => <Container />;
+`;
+
+    const result = transformWithWarnings(
+      { source, path: "test.tsx" },
+      { jscodeshift: j, j, stats: () => {}, report: () => {} },
+      { adapter: fixtureAdapter },
+    );
+
+    expect(result.code).toBeNull();
+    const warning = result.warnings.find(
+      (w) => w.type === "Universal selectors (`*`) are currently unsupported",
+    );
+    expect(warning).toBeDefined();
+    // Line 4 is the template start (`const Container = styled.div\``)
+    // The `& > *` selector is on line 8 (4 lines into template content: width, height, empty, & > *)
+    // The `*` in `calc(100% * 2)` on line 5 should NOT be matched as a selector
+    expect(warning?.loc?.line).toBe(8);
   });
 
   it("should bail on unsupported conditional with theme access in test expressions in shouldForwardProp wrappers", () => {
