@@ -1,5 +1,4 @@
 import * as stylex from "@stylexjs/stylex";
-import { $colors } from "../tokens.stylex";
 
 // CSS snippet helpers converted to StyleX create objects
 export const helpers = stylex.create({
@@ -16,13 +15,5 @@ export const helpers = stylex.create({
   gradient: {
     backgroundImage: "linear-gradient(90deg, #ff6b6b, #5f6cff)",
     color: "transparent",
-  },
-});
-
-export const borders = stylex.create({
-  labelMuted: {
-    borderWidth: "1px",
-    borderStyle: "solid",
-    borderColor: $colors.labelMuted,
   },
 });

@@ -100,6 +100,12 @@ export type CallResolveContext = {
    * Useful for error reporting.
    */
   loc?: { line: number; column: number };
+  /**
+   * CSS property being set (when available).
+   * Useful for adapters to return different results for directional properties.
+   * Example: "border-left", "border", "color"
+   */
+  cssProperty?: string;
 };
 
 /**
@@ -146,15 +152,16 @@ export type ResolveValueResult = {
 
 export type CallResolveResult = {
   /**
-   * Disambiguates how the resolved expression is used:
-   * - "props": a StyleX style object suitable for passing to `stylex.props(...)`.
-   * - "create": a value that can be used inside `stylex.create(...)` (e.g. tokens/vars).
-   */
-  usage: "props" | "create";
-  /**
    * JS expression string to inline into generated output.
-   * Example (value): `vars.spacingSm`
-   * Example (styles): `borders.labelMuted`
+   *
+   * The codemod determines how to use this expression based on context:
+   * - If called with a CSS property (e.g., `border: ${helper()}`) → used as a CSS value
+   * - If called without a CSS property (e.g., `${helper()}`) → used as a StyleX style object
+   *
+   * Use `ctx.cssProperty` to check the context and return the appropriate expression.
+   *
+   * Example (CSS value): `\`1px solid \${$colors.labelMuted}\``
+   * Example (StyleX reference): `helpers.truncate`
    */
   expr: string;
   /**
@@ -162,6 +169,20 @@ export type CallResolveResult = {
    * These are rendered and merged into the file by the codemod.
    */
   imports: ImportSpec[];
+  /**
+   * Optional: Explicitly specify how the expression should be used.
+   *
+   * - `"cssValue"`: Use as a CSS value in `stylex.create()` property values
+   * - `"stylexStyles"`: Use as a StyleX styles reference in `stylex.props()`
+   *
+   * When not specified, the codemod infers from context:
+   * - If `cssProperty` exists → treated as `"cssValue"`
+   * - If `cssProperty` doesn't exist → treated as `"stylexStyles"`
+   *
+   * Use this field when the default inference is incorrect, such as when a helper
+   * returns a StyleX styles object even when used with a CSS property like `border:`.
+   */
+  kind?: "cssValue" | "stylexStyles";
 };
 
 // Note: we intentionally do NOT expose “unified” ResolveContext/ResolveResult types anymore.
@@ -306,11 +327,14 @@ export interface Adapter {
   /**
    * Resolver for helper calls found inside template interpolations.
    *
+   * The codemod determines how to use the result based on context:
+   * - If `ctx.cssProperty` exists (e.g., `border: ${helper()}`) → result is used as a CSS value
+   * - If `ctx.cssProperty` is undefined (e.g., `${helper()}`) → result is used as a StyleX style object
+   *
+   * Use `ctx.cssProperty` to return the appropriate expression for the context.
+   *
    * Return:
-   * - `{ usage: "props", expr, imports }` when the call resolves to a StyleX style object
-   *   (usable as an argument to `stylex.props(...)`).
-   * - `{ usage: "create", expr, imports }` when the call resolves to a single CSS value
-   *   (usable inside `stylex.create(...)` declarations).
+   * - `{ expr, imports }` with the resolved expression
    * - `undefined` to bail/skip the file
    */
   resolveCall: (context: CallResolveContext) => CallResolveResult | undefined;
@@ -382,10 +406,10 @@ export interface Adapter {
  *
  *     resolveCall(ctx) {
  *       // Resolve helper calls inside template interpolations.
- *       // Return:
- *       // - { usage: "props", expr, imports } for StyleX styles (usable in stylex.props)
- *       // - { usage: "create", expr, imports } for a single value (usable in stylex.create)
- *       // - undefined to bail/skip the file
+ *       // Use ctx.cssProperty to determine context:
+ *       // - If ctx.cssProperty exists → return a CSS value expression
+ *       // - If ctx.cssProperty is undefined → return a StyleX style object reference
+ *       // Return { expr, imports } or undefined to bail/skip the file
  *       void ctx;
  *     },
  *

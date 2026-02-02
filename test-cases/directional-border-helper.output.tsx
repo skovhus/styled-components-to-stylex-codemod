@@ -1,40 +1,39 @@
 import * as React from "react";
 import * as stylex from "@stylexjs/stylex";
-import { $colors, pixelVars } from "./tokens.stylex";
+import { pixelVars, $colors } from "./tokens.stylex";
 
-type BoxProps = React.PropsWithChildren<{
+type BorderedLeftProps = React.PropsWithChildren<{
   ref?: React.Ref<HTMLDivElement>;
 }>;
 
-function Box(props: BoxProps) {
+// Directional border: expands to borderLeftWidth, borderLeftStyle, borderLeftColor
+function BorderedLeft(props: BorderedLeftProps) {
   const { children } = props;
-  return <div {...stylex.props(styles.box, styles.borderBottom)}>{children}</div>;
+  return <div {...stylex.props(styles.borderLeft)}>{children}</div>;
 }
 
 type BorderedBoxProps = React.PropsWithChildren<{
   ref?: React.Ref<HTMLDivElement>;
 }>;
 
+// Non-directional border: expands to borderWidth, borderStyle, borderColor
 function BorderedBox(props: BorderedBoxProps) {
   const { children } = props;
   return <div {...stylex.props(styles.border)}>{children}</div>;
 }
 
 export const App = () => (
-  <div style={{ margin: "10px", padding: "10px", height: "100px" }}>
-    <Box>Box with themed border</Box>
+  <>
+    <BorderedLeft>Bordered left</BorderedLeft>
     <BorderedBox>Bordered box</BorderedBox>
-  </div>
+  </>
 );
 
 const styles = stylex.create({
-  box: {
-    padding: "8px",
-  },
-  borderBottom: {
-    borderBottomWidth: "1px",
-    borderBottomStyle: "solid",
-    borderBottomColor: $colors.bgSub,
+  borderLeft: {
+    borderLeftWidth: pixelVars.thin,
+    borderLeftStyle: "solid",
+    borderLeftColor: $colors.labelMuted,
   },
   border: {
     borderWidth: pixelVars.thin,

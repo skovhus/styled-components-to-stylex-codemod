@@ -581,6 +581,10 @@ function resolveStaticTemplateExpressionAst(args: {
             return { kind: "unknown" as const };
           });
           const callLoc = innerCall.loc?.start;
+          // Template literals always need CSS values (not StyleX style references).
+          // Note: cssProperty is not passed here because this function doesn't have
+          // access to the CSS property context. Adapters should return CSS values
+          // by default when cssProperty is undefined and the call is within a template literal.
           const callRes = resolveCall({
             callSiteFilePath: filePath,
             calleeImportedName: imp.importedName,
@@ -588,7 +592,7 @@ function resolveStaticTemplateExpressionAst(args: {
             args: innerArgs,
             ...(callLoc ? { loc: { line: callLoc.line, column: callLoc.column } } : {}),
           });
-          if (callRes && callRes.usage === "create") {
+          if (callRes) {
             for (const callImp of callRes.imports ?? []) {
               resolverImports.set(JSON.stringify(callImp), callImp);
             }
