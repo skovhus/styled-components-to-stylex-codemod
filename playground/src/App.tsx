@@ -1,27 +1,134 @@
 // oxlint-disable no-console
-import { useState, useEffect, useCallback, useRef } from "react";
+import { useState, useEffect, useCallback, useRef, Component } from "react";
 import CodeMirror from "@uiw/react-codemirror";
 import { javascript } from "@codemirror/lang-javascript";
-import { testCases } from "./lib/test-cases";
+import { ThemeProvider } from "styled-components";
+import { loadTestCaseModule, testCases } from "./lib/test-cases";
 import { runTransform, type WarningLog } from "./lib/browser-transform";
 import { DEFAULT_ADAPTER_CODE } from "./lib/default-adapter";
 import { evalAdapter } from "./lib/eval-adapter";
 import type { Adapter } from "../../src/adapter";
 import { fixtureAdapter } from "../../src/__tests__/fixture-adapters";
+import { testCaseTheme } from "../../test-cases/tokens.stylex";
 
 const jsxExtension = javascript({ jsx: true, typescript: true });
+
+type RenderState = {
+  input: React.ComponentType<Record<string, never>> | null;
+  output: React.ComponentType<Record<string, never>> | null;
+  inputError: string | null;
+  outputError: string | null;
+  loading: boolean;
+};
+
+const initialRenderState: RenderState = {
+  input: null,
+  output: null,
+  inputError: null,
+  outputError: null,
+  loading: false,
+};
+
+const formatErrorMessage = (error: unknown): string =>
+  error instanceof Error ? error.message : String(error);
+
+type RenderErrorBoundaryProps = {
+  resetKey: string;
+  fallback: (error: Error) => React.ReactNode;
+  children: React.ReactNode;
+};
+
+type RenderErrorBoundaryState = {
+  error: Error | null;
+};
+
+class RenderErrorBoundary extends Component<RenderErrorBoundaryProps, RenderErrorBoundaryState> {
+  state: RenderErrorBoundaryState = { error: null };
+
+  static getDerivedStateFromError(error: Error): RenderErrorBoundaryState {
+    return { error };
+  }
+
+  componentDidUpdate(prevProps: RenderErrorBoundaryProps): void {
+    if (prevProps.resetKey !== this.props.resetKey && this.state.error) {
+      this.setState({ error: null });
+    }
+  }
+
+  componentDidCatch(error: Error, info: React.ErrorInfo): void {
+    console.error("Render preview error", error, info);
+  }
+
+  render(): React.ReactNode {
+    if (this.state.error) {
+      return this.props.fallback(this.state.error);
+    }
+    return this.props.children;
+  }
+}
+
+type PreviewPaneProps = {
+  title: string;
+  component: React.ComponentType<Record<string, never>> | null;
+  error: string | null;
+  loading: boolean;
+  emptyMessage: string;
+  resetKey: string;
+  isLast?: boolean;
+};
+
+function PreviewPane({
+  title,
+  component,
+  error,
+  loading,
+  emptyMessage,
+  resetKey,
+  isLast = false,
+}: PreviewPaneProps) {
+  const ComponentToRender = component;
+  const paneStyle = isLast ? { ...styles.renderPane, borderRight: "none" } : styles.renderPane;
+
+  return (
+    <div style={paneStyle}>
+      <div style={styles.renderPaneHeader}>{title}</div>
+      <div style={styles.renderPaneBody}>
+        {loading ? (
+          <div style={styles.renderPlaceholder}>Loading preview...</div>
+        ) : error ? (
+          <pre style={styles.renderError}>{error}</pre>
+        ) : ComponentToRender ? (
+          <RenderErrorBoundary
+            resetKey={resetKey}
+            fallback={(renderError) => (
+              <pre style={styles.renderError}>{formatErrorMessage(renderError)}</pre>
+            )}
+          >
+            <ThemeProvider theme={testCaseTheme}>
+              <ComponentToRender />
+            </ThemeProvider>
+          </RenderErrorBoundary>
+        ) : (
+          <div style={styles.renderPlaceholder}>{emptyMessage}</div>
+        )}
+      </div>
+    </div>
+  );
+}
 
 function App() {
   const [selectedTestCase, setSelectedTestCase] = useState(testCases[0]?.name ?? "");
   const [input, setInput] = useState(testCases[0]?.content ?? "");
   const [adapterCode, setAdapterCode] = useState(DEFAULT_ADAPTER_CODE);
   const [showConfig, setShowConfig] = useState(false);
+  const [showRendering, setShowRendering] = useState(false);
   const [output, setOutput] = useState("");
   const [warnings, setWarnings] = useState<WarningLog[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [adapterError, setAdapterError] = useState<string | null>(null);
   const lastValidAdapterRef = useRef<Adapter>(fixtureAdapter);
   const isUsingDefaultAdapter = adapterCode === DEFAULT_ADAPTER_CODE;
+  const [renderState, setRenderState] = useState<RenderState>(initialRenderState);
 
   // Parse adapter whenever adapterCode changes
   useEffect(() => {
@@ -56,6 +163,49 @@ function App() {
       setError(e instanceof Error ? e.message : String(e));
     }
   }, [input, adapterError, adapterCode]);
+
+  useEffect(() => {
+    if (!showRendering || !selectedTestCase) {
+      setRenderState(initialRenderState);
+      return;
+    }
+
+    let cancelled = false;
+    setRenderState((prevState) => ({
+      ...prevState,
+      loading: true,
+      inputError: null,
+      outputError: null,
+    }));
+
+    const loadModules = async () => {
+      const [inputResult, outputResult] = await Promise.allSettled([
+        loadTestCaseModule(selectedTestCase, "input"),
+        loadTestCaseModule(selectedTestCase, "output"),
+      ]);
+
+      if (cancelled) {
+        return;
+      }
+
+      const inputModule = inputResult.status === "fulfilled" ? inputResult.value : null;
+      const outputModule = outputResult.status === "fulfilled" ? outputResult.value : null;
+
+      setRenderState({
+        input: inputModule?.App ?? null,
+        output: outputModule?.App ?? null,
+        inputError: inputResult.status === "rejected" ? formatErrorMessage(inputResult.reason) : null,
+        outputError: outputResult.status === "rejected" ? formatErrorMessage(outputResult.reason) : null,
+        loading: false,
+      });
+    };
+
+    void loadModules();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [showRendering, selectedTestCase]);
 
   // Handle test case selection
   const handleTestCaseChange = useCallback((e: React.ChangeEvent<HTMLSelectElement>) => {
@@ -184,9 +334,22 @@ function App() {
             </button>
           </div>
         </div>
-        <button onClick={() => setShowConfig(!showConfig)} style={styles.button}>
-          {showConfig ? "Hide" : "Show"} Configuration
-        </button>
+        <div style={styles.headerRight}>
+          <button
+            onClick={() => setShowRendering((prev) => !prev)}
+            style={styles.button}
+            aria-pressed={showRendering}
+          >
+            {showRendering ? "Hide" : "Show"} Rendering
+          </button>
+          <button
+            onClick={() => setShowConfig((prev) => !prev)}
+            style={styles.button}
+            aria-pressed={showConfig}
+          >
+            {showConfig ? "Hide" : "Show"} Configuration
+          </button>
+        </div>
       </header>
 
       {/* Configuration Panel (collapsible) */}
@@ -274,6 +437,39 @@ function App() {
           </div>
         </div>
       </div>
+      {showRendering && (
+        <div style={styles.renderPanel}>
+          <div style={styles.renderPanelHeader}>
+            <span>Rendered preview</span>
+            <span style={styles.renderPanelNote}>
+              Fixture components only (editor changes are not rendered)
+            </span>
+          </div>
+          <div style={styles.renderPanelBody}>
+            <PreviewPane
+              title="Input (styled-components)"
+              component={renderState.input}
+              error={renderState.inputError}
+              loading={renderState.loading}
+              emptyMessage={
+                selectedTestCase ? "No input fixture found for this test case." : "Select a test case."
+              }
+              resetKey={`${selectedTestCase}-input`}
+            />
+            <PreviewPane
+              title="Output (StyleX)"
+              component={renderState.output}
+              error={renderState.outputError}
+              loading={renderState.loading}
+              emptyMessage={
+                selectedTestCase ? "No output fixture found for this test case." : "Select a test case."
+              }
+              resetKey={`${selectedTestCase}-output`}
+              isLast
+            />
+          </div>
+        </div>
+      )}
     </div>
   );
 }
@@ -298,6 +494,11 @@ const styles: Record<string, React.CSSProperties> = {
     display: "flex",
     alignItems: "center",
     gap: "12px",
+  },
+  headerRight: {
+    display: "flex",
+    alignItems: "center",
+    gap: "8px",
   },
   issueBar: {
     display: "flex",
@@ -368,6 +569,75 @@ const styles: Record<string, React.CSSProperties> = {
     backgroundColor: "white",
     cursor: "pointer",
     color: "#333",
+  },
+  renderPanel: {
+    borderTop: "1px solid #e0e0e0",
+    backgroundColor: "#fff",
+    display: "flex",
+    flexDirection: "column",
+    height: "280px",
+  },
+  renderPanelHeader: {
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "space-between",
+    padding: "8px 12px",
+    fontSize: "12px",
+    fontWeight: 600,
+    color: "#666",
+    textTransform: "uppercase",
+    letterSpacing: "0.5px",
+    backgroundColor: "#f0f0f0",
+    borderBottom: "1px solid #e0e0e0",
+  },
+  renderPanelNote: {
+    fontSize: "11px",
+    fontWeight: 400,
+    color: "#888",
+    textTransform: "none",
+    letterSpacing: "normal",
+  },
+  renderPanelBody: {
+    display: "flex",
+    flex: 1,
+    minHeight: 0,
+    overflow: "hidden",
+  },
+  renderPane: {
+    flex: 1,
+    display: "flex",
+    flexDirection: "column",
+    borderRight: "1px solid #e0e0e0",
+    minWidth: 0,
+  },
+  renderPaneHeader: {
+    padding: "6px 12px",
+    fontSize: "11px",
+    fontWeight: 600,
+    color: "#666",
+    textTransform: "uppercase",
+    letterSpacing: "0.5px",
+    backgroundColor: "#fafafa",
+    borderBottom: "1px solid #e0e0e0",
+  },
+  renderPaneBody: {
+    flex: 1,
+    padding: "12px",
+    overflow: "auto",
+    backgroundColor: "#fafafa",
+  },
+  renderPlaceholder: {
+    fontSize: "12px",
+    color: "#888",
+  },
+  renderError: {
+    color: "#c00",
+    padding: 0,
+    margin: 0,
+    fontFamily: "monospace",
+    fontSize: "12px",
+    whiteSpace: "pre-wrap",
+    wordBreak: "break-word",
   },
   configPanel: {
     borderBottom: "1px solid #e0e0e0",
