@@ -16,6 +16,7 @@ const MixedBox = styled.div<{ $padding: string }>`
 `;
 
 // Multiple dynamic properties in a single template literal
+// Note: dynamic shorthand values should be preserved via inline styles.
 const MultiPropBox = styled.div<{
   $margin: string;
   $border: string;

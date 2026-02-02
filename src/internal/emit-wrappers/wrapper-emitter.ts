@@ -40,6 +40,8 @@ export type WrapperEmitterArgs = {
   exportedComponents: Map<string, ExportInfo>;
   stylesIdentifier: string;
   styleMerger: StyleMergerConfig | null;
+  emptyStyleKeys?: Set<string>;
+  ancestorSelectorParents?: Set<string>;
 };
 
 export class WrapperEmitter {
@@ -52,6 +54,8 @@ export class WrapperEmitter {
   readonly exportedComponents: Map<string, ExportInfo>;
   readonly stylesIdentifier: string;
   readonly styleMerger: StyleMergerConfig | null;
+  readonly emptyStyleKeys: Set<string>;
+  readonly ancestorSelectorParents: Set<string>;
 
   // For plain JS/JSX and Flow transforms, skip emitting TS syntax entirely for now.
   readonly emitTypes: boolean;
@@ -72,6 +76,8 @@ export class WrapperEmitter {
     this.exportedComponents = args.exportedComponents;
     this.stylesIdentifier = args.stylesIdentifier;
     this.styleMerger = args.styleMerger;
+    this.emptyStyleKeys = args.emptyStyleKeys ?? new Set<string>();
+    this.ancestorSelectorParents = args.ancestorSelectorParents ?? new Set<string>();
     this.emitTypes = this.filePath.endsWith(".ts") || this.filePath.endsWith(".tsx");
   }
 
@@ -1088,7 +1094,7 @@ export class WrapperEmitter {
     const styleId = j.identifier("style");
     const merging = emitStyleMerging({
       j,
-      styleMerger: this.styleMerger,
+      emitter: this,
       styleArgs,
       classNameId,
       styleId,
@@ -1174,7 +1180,9 @@ export class WrapperEmitter {
       );
     }
 
-    jsxAttrs.push(j.jsxSpreadAttribute(merging.jsxSpreadExpr));
+    if (merging.jsxSpreadExpr) {
+      jsxAttrs.push(j.jsxSpreadAttribute(merging.jsxSpreadExpr));
+    }
 
     if (merging.classNameAttr) {
       jsxAttrs.push(
@@ -1505,7 +1513,9 @@ export class WrapperEmitter {
 
   appendMergingAttrs(attrs: JsxAttr[], merging: ReturnType<typeof emitStyleMerging>): void {
     const { j } = this;
-    attrs.push(j.jsxSpreadAttribute(merging.jsxSpreadExpr));
+    if (merging.jsxSpreadExpr) {
+      attrs.push(j.jsxSpreadAttribute(merging.jsxSpreadExpr));
+    }
     if (merging.classNameAttr) {
       attrs.push(
         j.jsxAttribute(

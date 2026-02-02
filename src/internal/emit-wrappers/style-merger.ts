@@ -1,5 +1,6 @@
 import type { Identifier, JSCodeshift } from "jscodeshift";
 import type { StyleMergerConfig } from "../../adapter.js";
+import type { WrapperEmitter } from "./wrapper-emitter.js";
 
 /**
  * Result of emitting style merging logic.
@@ -21,7 +22,7 @@ export interface StyleMergingResult {
   /**
    * The expression to spread in JSX (either `sx` or the merger call).
    */
-  jsxSpreadExpr: ExpressionKind;
+  jsxSpreadExpr: ExpressionKind | null;
 
   /**
    * The className attribute expression, or null if using merger.
@@ -50,7 +51,10 @@ export interface StyleMergingResult {
  */
 export function emitStyleMerging(args: {
   j: JSCodeshift;
-  styleMerger: StyleMergerConfig | null;
+  emitter: Pick<
+    WrapperEmitter,
+    "styleMerger" | "stylesIdentifier" | "emptyStyleKeys" | "ancestorSelectorParents"
+  >;
   styleArgs: ExpressionKind[];
   classNameId: Identifier;
   styleId: Identifier;
@@ -60,14 +64,34 @@ export function emitStyleMerging(args: {
 }): StyleMergingResult {
   const {
     j,
-    styleMerger,
-    styleArgs,
+    emitter,
+    styleArgs: rawStyleArgs,
     classNameId,
     styleId,
     allowClassNameProp,
     allowStyleProp,
     inlineStyleProps = [],
   } = args;
+
+  const { styleMerger, emptyStyleKeys, stylesIdentifier, ancestorSelectorParents } = emitter;
+
+  const styleArgs = filterEmptyStyleArgs({
+    styleArgs: rawStyleArgs,
+    emptyStyleKeys,
+    stylesIdentifier,
+    ancestorSelectorParents,
+  });
+
+  if (styleArgs.length === 0) {
+    return emitWithoutStylex({
+      j,
+      classNameId,
+      styleId,
+      allowClassNameProp,
+      allowStyleProp,
+      inlineStyleProps,
+    });
+  }
 
   // If neither className nor style merging is needed, just use stylex.props directly
   if (!allowClassNameProp && !allowStyleProp && inlineStyleProps.length === 0) {
@@ -108,6 +132,79 @@ export function emitStyleMerging(args: {
     allowStyleProp,
     inlineStyleProps,
   });
+}
+
+function filterEmptyStyleArgs(args: {
+  styleArgs: ExpressionKind[];
+  emptyStyleKeys?: Set<string>;
+  stylesIdentifier?: string;
+  ancestorSelectorParents?: Set<string>;
+}): ExpressionKind[] {
+  const { styleArgs, emptyStyleKeys, stylesIdentifier = "styles", ancestorSelectorParents } = args;
+  if (!emptyStyleKeys || emptyStyleKeys.size === 0) {
+    return styleArgs;
+  }
+
+  const isEmptyStyleRef = (node: any): boolean =>
+    !!(
+      node &&
+      node.type === "MemberExpression" &&
+      node.object?.type === "Identifier" &&
+      node.object.name === stylesIdentifier &&
+      node.property?.type === "Identifier" &&
+      emptyStyleKeys.has(node.property.name) &&
+      !ancestorSelectorParents?.has(node.property.name)
+    );
+
+  const isEmptyStyleArg = (node: any): boolean => {
+    if (isEmptyStyleRef(node)) {
+      return true;
+    }
+    if (node?.type === "LogicalExpression" && node.operator === "&&") {
+      return isEmptyStyleRef(node.right);
+    }
+    return false;
+  };
+
+  const filtered = styleArgs.filter((arg) => !isEmptyStyleArg(arg));
+  return filtered;
+}
+
+function emitWithoutStylex(args: {
+  j: JSCodeshift;
+  classNameId: Identifier;
+  styleId: Identifier;
+  allowClassNameProp: boolean;
+  allowStyleProp: boolean;
+  inlineStyleProps: Array<{ prop: string; expr: ExpressionKind }>;
+}): StyleMergingResult {
+  const { j, classNameId, styleId, allowClassNameProp, allowStyleProp, inlineStyleProps } = args;
+
+  const classNameAttr = allowClassNameProp ? classNameId : null;
+  let styleAttr: ExpressionKind | null = null;
+
+  if (allowStyleProp) {
+    if (inlineStyleProps.length > 0) {
+      styleAttr = j.objectExpression([
+        j.spreadElement(styleId),
+        ...inlineStyleProps.map((p) => j.property("init", j.identifier(p.prop), p.expr)),
+      ]);
+    } else {
+      styleAttr = styleId;
+    }
+  } else if (inlineStyleProps.length > 0) {
+    styleAttr = j.objectExpression(
+      inlineStyleProps.map((p) => j.property("init", j.identifier(p.prop), p.expr)),
+    );
+  }
+
+  return {
+    needsSxVar: false,
+    sxDecl: null,
+    jsxSpreadExpr: null,
+    classNameAttr,
+    styleAttr,
+  };
 }
 
 /**

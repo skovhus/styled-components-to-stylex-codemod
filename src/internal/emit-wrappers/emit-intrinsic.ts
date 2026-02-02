@@ -835,7 +835,7 @@ export function emitIntrinsicWrappers(emitter: WrapperEmitter): {
 
       const merging = emitStyleMerging({
         j,
-        styleMerger,
+        emitter,
         styleArgs,
         classNameId,
         styleId,
@@ -1341,7 +1341,7 @@ export function emitIntrinsicWrappers(emitter: WrapperEmitter): {
 
       const merging = emitStyleMerging({
         j,
-        styleMerger,
+        emitter,
         styleArgs,
         classNameId,
         styleId,
@@ -1432,7 +1432,7 @@ export function emitIntrinsicWrappers(emitter: WrapperEmitter): {
     // Use the style merger helper
     const merging = emitStyleMerging({
       j,
-      styleMerger,
+      emitter,
       styleArgs,
       classNameId,
       styleId,
@@ -1693,7 +1693,7 @@ export function emitIntrinsicWrappers(emitter: WrapperEmitter): {
     // Use the style merger helper
     const merging = emitStyleMerging({
       j,
-      styleMerger,
+      emitter,
       styleArgs,
       classNameId,
       styleId,
@@ -1826,7 +1826,7 @@ export function emitIntrinsicWrappers(emitter: WrapperEmitter): {
     // Use the style merger helper
     const merging = emitStyleMerging({
       j,
-      styleMerger,
+      emitter,
       styleArgs,
       classNameId,
       styleId: j.identifier("style"),
@@ -2285,7 +2285,7 @@ export function emitIntrinsicWrappers(emitter: WrapperEmitter): {
       // Use the style merger helper
       const merging = emitStyleMerging({
         j,
-        styleMerger,
+        emitter,
         styleArgs,
         classNameId,
         styleId,

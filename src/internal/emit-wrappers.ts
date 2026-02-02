@@ -17,6 +17,8 @@ export function emitWrappers(args: {
   exportedComponents: Map<string, ExportInfo>;
   stylesIdentifier: string;
   styleMerger: StyleMergerConfig | null;
+  emptyStyleKeys?: Set<string>;
+  ancestorSelectorParents?: Set<string>;
 }): void {
   const {
     root,
@@ -28,6 +30,8 @@ export function emitWrappers(args: {
     exportedComponents,
     stylesIdentifier,
     styleMerger,
+    emptyStyleKeys,
+    ancestorSelectorParents,
   } = args;
 
   const wrapperDecls = styledDecls.filter((d) => d.needsWrapperComponent && !d.isCssHelper);
@@ -45,6 +49,8 @@ export function emitWrappers(args: {
     exportedComponents,
     stylesIdentifier,
     styleMerger,
+    emptyStyleKeys,
+    ancestorSelectorParents,
   });
 
   const emitted: ASTNode[] = [];

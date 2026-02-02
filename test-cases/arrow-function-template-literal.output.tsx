@@ -45,15 +45,12 @@ type MultiPropBoxProps = Omit<React.ComponentProps<"div">, "className" | "style"
 };
 
 // Multiple dynamic properties in a single template literal
+// Note: dynamic shorthand values should be preserved via inline styles.
 function MultiPropBox(props: MultiPropBoxProps) {
   const { children, $margin, $border, $padding, $background, $scrollMargin } = props;
-
-  const sx = stylex.props();
   return (
     <div
-      {...sx}
       style={{
-        ...sx.style,
         margin: $margin,
         border: $border,
         padding: $padding,
