@@ -221,7 +221,9 @@ export const fixtureAdapter = defineAdapter({
     })();
     if (helperStyleKey) {
       // These helpers return StyleX style objects (for standalone interpolations)
+      // Explicitly mark as stylexStyles so the codemod knows not to use them as CSS values
       return {
+        kind: "stylexStyles",
         expr: `helpers.${helperStyleKey}`,
         imports: [
           {
