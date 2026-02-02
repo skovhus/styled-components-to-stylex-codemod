@@ -366,6 +366,33 @@ export class WrapperEmitter {
     return interfaces.size() > 0;
   }
 
+  /**
+   * Check if propsType is a simple type reference (e.g., `Props`) that exists in the file.
+   * Returns the type name if it exists, null otherwise.
+   *
+   * This is used to determine if we should extend an existing user-defined type
+   * rather than creating a new wrapper props type.
+   */
+  getExplicitTypeNameIfExists(propsType: ASTNode | undefined): string | null {
+    if (!propsType) {
+      return null;
+    }
+    const typedPropsType = propsType as ASTNode & {
+      type?: string;
+      typeName?: { type?: string; name?: string };
+    };
+    const isSimpleTypeRef =
+      typedPropsType.type === "TSTypeReference" && typedPropsType.typeName?.type === "Identifier";
+    if (!isSimpleTypeRef) {
+      return null;
+    }
+    const typeName = typedPropsType.typeName?.name;
+    if (!typeName) {
+      return null;
+    }
+    return this.typeExistsInFile(typeName) ? typeName : null;
+  }
+
   extendExistingInterface(typeName: string, baseTypeText: string): boolean {
     const { root, j } = this;
     if (!this.emitTypes) {
@@ -990,6 +1017,25 @@ export class WrapperEmitter {
       }
     }
 
+    // Add defaultAttrs props to destructuring with their default values
+    // This ensures they're extracted from rest and we can use the identifier directly in JSX
+    for (const a of defaultAttrs) {
+      if (!expandedDestructureProps.has(a.jsxProp)) {
+        const defaultLiteral =
+          typeof a.value === "boolean"
+            ? j.booleanLiteral(a.value)
+            : j.literal(a.value as string | number);
+        patternProps.push(
+          j.property.from({
+            kind: "init",
+            key: j.identifier(a.jsxProp),
+            value: j.assignmentPattern(j.identifier(a.jsxProp), defaultLiteral),
+            shorthand: false,
+          }) as Property,
+        );
+      }
+    }
+
     let restId: Identifier | null = includeRest ? j.identifier("rest") : null;
     if (includeRest && restId) {
       patternProps.push(j.restElement(restId));
@@ -1015,20 +1061,13 @@ export class WrapperEmitter {
 
     const jsxAttrs: Array<JSXAttribute | JSXSpreadAttribute> = [];
 
+    // For defaultAttrs, use the destructured identifier directly since we added it
+    // with a default value in the destructuring above
     for (const a of defaultAttrs) {
-      const propExpr = j.memberExpression(propsId, j.identifier(a.jsxProp));
-      const fallback =
-        typeof a.value === "string"
-          ? j.literal(a.value)
-          : typeof a.value === "number"
-            ? j.literal(a.value)
-            : typeof a.value === "boolean"
-              ? j.booleanLiteral(a.value)
-              : j.literal(String(a.value));
       jsxAttrs.push(
         j.jsxAttribute(
           j.jsxIdentifier(a.attrName),
-          j.jsxExpressionContainer(j.logicalExpression("??", propExpr, fallback)),
+          j.jsxExpressionContainer(j.identifier(a.jsxProp)),
         ),
       );
     }

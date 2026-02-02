@@ -102,6 +102,16 @@ export function emitIntrinsicWrappers(emitter: WrapperEmitter): {
     }
   };
 
+  /**
+   * Check if defaultAttrs references element props (non-$-prefixed props).
+   * When attrs like `tabIndex: props.tabIndex ?? 0` are used, the jsxProp is "tabIndex"
+   * which is an element prop that needs to be included in the type.
+   */
+  const hasElementPropsInDefaultAttrs = (d: StyledDecl): boolean => {
+    const defaultAttrs = d.attrsInfo?.defaultAttrs ?? [];
+    return defaultAttrs.some((a) => a.jsxProp && !a.jsxProp.startsWith("$"));
+  };
+
   const mergeAsIntoPropsWithChildren = (typeText: string): string | null => {
     const prefix = "React.PropsWithChildren<";
     if (!typeText.trim().startsWith(prefix) || !typeText.trim().endsWith(">")) {
@@ -1499,11 +1509,37 @@ export function emitIntrinsicWrappers(emitter: WrapperEmitter): {
             allowStyleProp,
           })
         : "{}";
-      // For non-void tags without explicit type, wrap in PropsWithChildren
-      const typeWithChildren =
-        !explicit && !VOID_TAGS.has(tagName) ? emitter.withChildren(baseTypeText) : baseTypeText;
-      const typeText = explicit ?? typeWithChildren;
-      emitPropsType(d.localName, typeText, allowAsProp);
+
+      // Check if explicit type is a simple type reference that exists in the file
+      // and if defaultAttrs reference element props - if so, extend the type with intrinsic props
+      const explicitTypeName = emitter.getExplicitTypeNameIfExists(d.propsType);
+      const needsElementProps = hasElementPropsInDefaultAttrs(d);
+
+      if (explicitTypeName && explicit && needsElementProps) {
+        // Extend the existing type with intrinsic element props so that element props
+        // like tabIndex are available (when used in defaultAttrs like `tabIndex: props.tabIndex ?? 0`)
+        const intrinsicBaseType = emitter.inferredIntrinsicPropsTypeText({
+          d,
+          tagName,
+          allowClassNameProp,
+          allowStyleProp,
+        });
+        const interfaceExtended = emitter.extendExistingInterface(
+          explicitTypeName,
+          intrinsicBaseType,
+        );
+        if (!interfaceExtended) {
+          emitter.extendExistingTypeAlias(explicitTypeName, intrinsicBaseType);
+        }
+        needsReactTypeImport = true;
+        emitPropsType(d.localName, explicit, allowAsProp);
+      } else {
+        // For non-void tags without explicit type, wrap in PropsWithChildren
+        const typeWithChildren =
+          !explicit && !VOID_TAGS.has(tagName) ? emitter.withChildren(baseTypeText) : baseTypeText;
+        const typeText = explicit ?? typeWithChildren;
+        emitPropsType(d.localName, typeText, allowAsProp);
+      }
     }
     const styleArgs: ExpressionKind[] = [
       ...(d.extendsStyleKey
@@ -1526,10 +1562,17 @@ export function emitIntrinsicWrappers(emitter: WrapperEmitter): {
     // For local-only wrappers with no external `className`/`style` usage, keep the wrapper minimal.
     if (!allowClassNameProp && !allowStyleProp) {
       const usedAttrs = emitter.getUsedAttrs(d.localName);
+      // Include rest spread when:
+      // - Component is used with spread (usedAttrs.has("*"))
+      // - Component is used as a value
+      // - Component is not exported and has used attrs
+      // - defaultAttrs reference element props (like tabIndex: props.tabIndex ?? 0)
+      //   which means user should be able to pass/override these props
       const includeRest =
         usedAttrs.has("*") ||
         !!(d as any).usedAsValue ||
-        (!((d as any).isExported ?? false) && usedAttrs.size > 0);
+        (!((d as any).isExported ?? false) && usedAttrs.size > 0) ||
+        hasElementPropsInDefaultAttrs(d);
       const variantProps = new Set<string>();
       if (d.variantStyleKeys) {
         for (const [when] of Object.entries(d.variantStyleKeys)) {
@@ -1882,6 +1925,9 @@ export function emitIntrinsicWrappers(emitter: WrapperEmitter): {
       const needsRestForType =
         !!(d as any).usedAsValue ||
         usedAttrsForType.has("*") ||
+        // When defaultAttrs reference element props (like tabIndex: props.tabIndex ?? 0),
+        // include element props in type so those props are available
+        hasElementPropsInDefaultAttrs(d) ||
         [...usedAttrsForType].some((n) => {
           if (
             n === "children" ||
@@ -1984,22 +2030,52 @@ export function emitIntrinsicWrappers(emitter: WrapperEmitter): {
         : asPropTypeText
           ? emitter.joinIntersection(typeText, asPropTypeText)
           : typeText;
-      const typeAliasEmitted = emitNamedPropsType(d.localName, typeWithAs);
-      if (!typeAliasEmitted && explicit) {
-        const propsTypeName = emitter.propsTypeNameFor(d.localName);
+      // Check if explicit type is a simple type reference (e.g., `Props`) that exists in the file
+      const explicitTypeName = emitter.getExplicitTypeNameIfExists(d.propsType);
+
+      let typeAliasEmitted = false;
+      const needsElementPropsForAttrs = hasElementPropsInDefaultAttrs(d);
+      // When the explicit type exists and defaultAttrs reference element props
+      // (like tabIndex: props.tabIndex ?? 0), extend the explicit type directly
+      if (explicitTypeName && needsElementPropsForAttrs) {
         const interfaceExtended = emitter.extendExistingInterface(
-          propsTypeName,
+          explicitTypeName,
           extendBaseTypeText,
         );
         if (!interfaceExtended) {
-          const typeAliasExtended = emitter.extendExistingTypeAlias(
+          emitter.extendExistingTypeAlias(explicitTypeName, extendBaseTypeText);
+        }
+        // Also extend with as prop if needed
+        if (asPropTypeText) {
+          const asAdded = emitter.extendExistingInterface(explicitTypeName, asPropTypeText);
+          if (!asAdded) {
+            emitter.extendExistingTypeAlias(explicitTypeName, asPropTypeText);
+          }
+        }
+        // Use the explicit type wrapped in PropsWithChildren for the function parameter
+        // explicit is guaranteed to be truthy here since explicitTypeExists is true
+        inlineTypeText = VOID_TAGS.has(tagName)
+          ? (explicit ?? undefined)
+          : emitter.withChildren(explicit!);
+        // Note: Don't add asPropTypeText to inlineTypeText since it's already in the explicit type
+      } else {
+        typeAliasEmitted = emitNamedPropsType(d.localName, typeWithAs);
+        if (!typeAliasEmitted && explicit) {
+          const propsTypeName = emitter.propsTypeNameFor(d.localName);
+          const interfaceExtended = emitter.extendExistingInterface(
             propsTypeName,
             extendBaseTypeText,
           );
-          if (!typeAliasExtended) {
-            inlineTypeText = VOID_TAGS.has(tagName) ? explicit : emitter.withChildren(explicit);
-            if (asPropTypeText) {
-              inlineTypeText = emitter.joinIntersection(inlineTypeText, asPropTypeText);
+          if (!interfaceExtended) {
+            const typeAliasExtended = emitter.extendExistingTypeAlias(
+              propsTypeName,
+              extendBaseTypeText,
+            );
+            if (!typeAliasExtended) {
+              inlineTypeText = VOID_TAGS.has(tagName) ? explicit : emitter.withChildren(explicit);
+              if (asPropTypeText) {
+                inlineTypeText = emitter.joinIntersection(inlineTypeText, asPropTypeText);
+              }
             }
           }
         }
@@ -2145,6 +2221,9 @@ export function emitIntrinsicWrappers(emitter: WrapperEmitter): {
     const shouldIncludeRest =
       emitter.isUsedAsValueInFile(d.localName) ||
       hasExplicitPropsToPassThrough ||
+      // When defaultAttrs reference element props (like tabIndex: props.tabIndex ?? 0),
+      // include rest spread so user can pass/override these props
+      hasElementPropsInDefaultAttrs(d) ||
       (hasLocalUsage && usedAttrs.has("*")) ||
       (hasLocalUsage &&
         [...usedAttrs].some((n) => {
