@@ -514,13 +514,7 @@ export function findUniversalSelectorLineOffset(rawCss: string): number {
 
     if (validPrev && validNext) {
       // Found a universal selector - count newlines before this position
-      let lineOffset = 0;
-      for (let j = 0; j < i; j++) {
-        if (rawCss[j] === "\n") {
-          lineOffset++;
-        }
-      }
-      return lineOffset;
+      return countNewlinesBefore(rawCss, i);
     }
   }
 
