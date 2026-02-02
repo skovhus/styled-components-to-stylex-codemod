@@ -296,6 +296,73 @@ type ConditionalExpressionBody = {
   alternate?: unknown;
 };
 
+/**
+ * Determines if an adapter's CallResolveResult should be treated as a CSS value.
+ *
+ * Resolution priority:
+ * 1. Adapter's explicit `kind` field takes precedence
+ * 2. Otherwise, infer from context: cssProperty present → CSS value, absent → StyleX reference
+ */
+function isAdapterResultCssValue(result: CallResolveResult, cssProperty?: string): boolean {
+  return result.kind === "cssValue" || (result.kind === undefined && Boolean(cssProperty));
+}
+
+/**
+ * Builds a HandlerResult from an adapter's resolved call expression.
+ *
+ * Returns "resolvedValue" for CSS values (to be used in stylex.create property values)
+ * or "resolvedStyles" for StyleX references (to be used in stylex.props arguments).
+ */
+function buildResolvedHandlerResult(
+  result: CallResolveResult,
+  cssProperty: string | undefined,
+  payload: { resolveCallContext: CallResolveContext; resolveCallResult: CallResolveResult },
+): HandlerResult {
+  const isCssValue = isAdapterResultCssValue(result, cssProperty);
+  return isCssValue
+    ? {
+        type: "resolvedValue",
+        expr: result.expr,
+        imports: result.imports,
+        ...payload,
+      }
+    : {
+        type: "resolvedStyles",
+        expr: result.expr,
+        imports: result.imports,
+        ...payload,
+      };
+}
+
+/**
+ * Extracts the identifier name from a call expression's callee.
+ * Returns null if the callee is not a simple identifier.
+ */
+function getCalleeIdentName(callee: unknown): string | null {
+  if (!callee || typeof callee !== "object") {
+    return null;
+  }
+  if ((callee as { type?: string }).type !== "Identifier") {
+    return null;
+  }
+  return (callee as { name?: string }).name ?? null;
+}
+
+/**
+ * Builds a "keepOriginal" HandlerResult for when the adapter returns undefined for a helper call.
+ * Resolves the import name for better error context.
+ */
+function buildUnresolvedHelperResult(callee: unknown, ctx: InternalHandlerContext): HandlerResult {
+  const calleeIdent = getCalleeIdentName(callee);
+  const imp = typeof calleeIdent === "string" ? ctx.resolveImport(calleeIdent, callee) : null;
+  const importedName = imp?.importedName ?? calleeIdent ?? "unknown";
+  return {
+    type: "keepOriginal",
+    reason: `Adapter resolveCall returned undefined for helper call`,
+    context: { importedName },
+  };
+}
+
 function getArrowFnThemeParamInfo(fn: any): ThemeParamInfo | null {
   if (!fn || fn.params?.length !== 1) {
     return null;
@@ -611,6 +678,7 @@ function resolveImportedHelperCall(
   callExpr: CallExpressionNode,
   ctx: InternalHandlerContext,
   propsParamName?: string,
+  cssProperty?: string,
 ): ResolveImportedHelperCallResult {
   const callee = callExpr.callee;
   if (!callee || typeof callee !== "object") {
@@ -638,6 +706,7 @@ function resolveImportedHelperCall(
     calleeSource,
     args,
     ...(loc ? { loc: { line: loc.line, column: loc.column } } : {}),
+    ...(cssProperty ? { cssProperty } : {}),
   };
   const res = ctx.resolveCall(resolveCallContext);
   return res
@@ -659,85 +728,38 @@ function tryResolveCallExpression(
     return null;
   }
 
-  const simple = resolveImportedHelperCall(expr, ctx);
+  const simple = resolveImportedHelperCall(expr, ctx, undefined, node.css.property);
   if (simple.kind === "resolved") {
-    const payload = {
+    return buildResolvedHandlerResult(simple.result, node.css.property, {
       resolveCallContext: simple.resolveCallContext,
       resolveCallResult: simple.resolveCallResult,
-    };
-    return simple.result.usage === "props"
-      ? {
-          type: "resolvedStyles",
-          expr: simple.result.expr,
-          imports: simple.result.imports,
-          ...payload,
-        }
-      : {
-          type: "resolvedValue",
-          expr: simple.result.expr,
-          imports: simple.result.imports,
-          ...payload,
-        };
+    });
   }
 
   // Support helper calls that return a function which is immediately invoked with the props param:
   //   helper("key")(props)
-  // We treat this as equivalent to `helper("key")` when the adapter returns usage:"props" or "create".
-  //
-  // This is intentionally narrow and only used when the adapter explicitly opts in with usage:"props".
+  // The adapter receives cssProperty context and decides what to return:
+  // - With CSS property context: returns a CSS value expression
+  // - Without CSS property context: returns a StyleX style reference
   if (isCallExpressionNode(expr.callee)) {
     const outerArgs = expr.arguments ?? [];
     if (outerArgs.length === 1) {
       const innerCall = expr.callee;
-      const innerRes = resolveImportedHelperCall(innerCall, ctx);
+      const innerRes = resolveImportedHelperCall(innerCall, ctx, undefined, node.css.property);
       if (innerRes.kind === "resolved") {
-        if (innerRes.result.usage === "create") {
-          return {
-            type: "keepOriginal",
-            reason:
-              "Curried helper call resolved to usage 'create', use usage 'props' when the helper returns a StyleX style object",
-            context: {
-              help: [
-                'Use usage "props" when the helper returns a StyleX style object (for stylex.props).',
-                'usage "create" is only valid for single CSS property values (non-curried calls).',
-              ].join(" "),
-            },
-          };
-        }
-        return {
-          type: "resolvedStyles",
-          expr: innerRes.result.expr,
-          imports: innerRes.result.imports,
+        return buildResolvedHandlerResult(innerRes.result, node.css.property, {
           resolveCallContext: innerRes.resolveCallContext,
           resolveCallResult: innerRes.resolveCallResult,
-        };
+        });
       }
     }
   }
 
   if (simple.kind === "unresolved") {
-    // This is a supported helper-call shape but the adapter chose not to resolve it.
-    // Treat as unsupported so the caller can bail and surface a warning.
-    const callee = expr.callee;
-    const calleeIdent = (() => {
-      if (!callee || typeof callee !== "object") {
-        return null;
-      }
-      if ((callee as { type?: string }).type !== "Identifier") {
-        return null;
-      }
-      return (callee as { name?: string }).name ?? null;
-    })();
-    const imp = typeof calleeIdent === "string" ? ctx.resolveImport(calleeIdent, callee) : null;
-    const importedName = imp?.importedName ?? calleeIdent ?? "unknown";
-    return {
-      type: "keepOriginal",
-      reason: `Adapter resolveCall returned undefined for helper call`,
-      context: { importedName },
-    };
+    return buildUnresolvedHelperResult(expr.callee, ctx);
   }
 
-  // If we got here, it’s a call expression we don’t understand.
+  // If we got here, it's a call expression we don't understand.
   return {
     type: "keepOriginal",
     reason:
@@ -777,48 +799,16 @@ function tryResolveArrowFnHelperCallWithThemeArg(
     return null;
   }
 
-  const simple = resolveImportedHelperCall(body, ctx, propsParamName);
+  const simple = resolveImportedHelperCall(body, ctx, propsParamName, node.css.property);
   if (simple.kind === "resolved") {
-    const payload = {
+    return buildResolvedHandlerResult(simple.result, node.css.property, {
       resolveCallContext: simple.resolveCallContext,
       resolveCallResult: simple.resolveCallResult,
-    };
-    return simple.result.usage === "props"
-      ? {
-          type: "resolvedStyles",
-          expr: simple.result.expr,
-          imports: simple.result.imports,
-          ...payload,
-        }
-      : {
-          type: "resolvedValue",
-          expr: simple.result.expr,
-          imports: simple.result.imports,
-          ...payload,
-        };
+    });
   }
 
   if (simple.kind === "unresolved") {
-    // This is a supported helper-call shape but the adapter chose not to resolve it.
-    // Treat as unsupported so the caller can bail and surface a warning.
-    const callee = body.callee;
-    const calleeIdent = (() => {
-      if (!callee || typeof callee !== "object") {
-        return null;
-      }
-      if ((callee as { type?: string }).type !== "Identifier") {
-        return null;
-      }
-      return (callee as { name?: string }).name ?? null;
-    })();
-    const imp =
-      typeof calleeIdent === "string" ? ctx.resolveImport(calleeIdent, callee as any) : null;
-    const importedName = imp?.importedName ?? calleeIdent ?? "unknown";
-    return {
-      type: "keepOriginal",
-      reason: `Adapter resolveCall returned undefined for helper call`,
-      context: { importedName },
-    };
+    return buildUnresolvedHelperResult(body.callee, ctx);
   }
 
   return null;
@@ -848,16 +838,11 @@ function tryResolveConditionalValue(
   type BranchUsage = "props" | "create";
   type Branch = { usage: BranchUsage; expr: string; imports: ImportSpec[] } | null;
 
-  const invalidCurriedError: WarningType =
-    "Curried helper call resolved to usage 'create', use usage 'props' when the helper returns a StyleX style object";
-  const invalidCurriedContext = {
-    help: [
-      'Use usage "props" when the helper returns a StyleX style object (for stylex.props).',
-      'usage "create" is only valid for single CSS property values (non-curried calls).',
-    ].join(" "),
-  };
+  // Determine expected usage from context:
+  // - Has CSS property → "create" (CSS value)
+  // - No CSS property → "props" (StyleX reference)
+  const expectedUsage: BranchUsage = node.css.property ? "create" : "props";
 
-  let invalidCurriedValue: boolean = false;
   // Helper to resolve a MemberExpression as a theme path
   const resolveThemeFromMemberExpr = (node: unknown): { path: string } | null => {
     if (
@@ -909,57 +894,68 @@ function tryResolveConditionalValue(
       return null;
     }
 
-    // Handle template literals with theme interpolations
-    // e.g., `inset 0 0 0 1px ${props.theme.color.primaryColor}, 0px 1px 2px rgba(0, 0, 0, 0.06)`
-    const templateResult = resolveTemplateLiteralExpressions(b, (expr) => {
-      const themeInfo = resolveThemeFromMemberExpr(expr);
-      if (!themeInfo) {
-        return null;
+    // Helper to resolve call expressions (simple or curried) via adapter.
+    // Preserves the full CallResolveResult including `kind` for proper CSS value vs StyleX ref detection.
+    const resolveCallExpr = (
+      call: CallExpressionNode,
+      cssProperty: string | undefined,
+    ): CallResolveResult | null => {
+      const res = resolveImportedHelperCall(call, ctx, undefined, cssProperty);
+      if (res.kind === "resolved") {
+        return res.result;
       }
-      const res = ctx.resolveValue({
-        kind: "theme",
-        path: themeInfo.path,
-        filePath: ctx.filePath,
-        loc: getNodeLocStart(expr) ?? undefined,
-      });
-      return res ?? null;
+      // Try curried pattern: helper(...)(propsParam)
+      if (isCallExpressionNode(call.callee)) {
+        const inner = call.callee;
+        const outerArgs = call.arguments ?? [];
+        if (outerArgs.length === 1 && outerArgs[0] && typeof outerArgs[0] === "object") {
+          const innerRes = resolveImportedHelperCall(inner, ctx, undefined, cssProperty);
+          if (innerRes.kind === "resolved") {
+            return innerRes.result;
+          }
+        }
+      }
+      return null;
+    };
+
+    // Handle template literals with theme or call interpolations
+    // e.g., `inset 0 0 0 1px ${props.theme.color.primaryColor}, 0px 1px 2px rgba(0, 0, 0, 0.06)`
+    // e.g., `linear-gradient(to bottom, ${color("bgSub")(props)} 70%, rgba(0, 0, 0, 0) 100%)`
+    // Template literals always need CSS values, so always pass cssProperty
+    const templateResult = resolveTemplateLiteralExpressions(b, (expr) => {
+      // First try theme member expression
+      const themeInfo = resolveThemeFromMemberExpr(expr);
+      if (themeInfo) {
+        const res = ctx.resolveValue({
+          kind: "theme",
+          path: themeInfo.path,
+          filePath: ctx.filePath,
+          loc: getNodeLocStart(expr) ?? undefined,
+        });
+        return res ?? null;
+      }
+      // Then try call expression (simple or curried)
+      // Template literals need CSS values, so pass cssProperty
+      if (isCallExpressionNode(expr)) {
+        const callRes = resolveCallExpr(expr, node.css.property);
+        return callRes ? { expr: callRes.expr, imports: callRes.imports } : null;
+      }
+      return null;
     });
     if (templateResult) {
       return { usage: "create", ...templateResult };
     }
 
     if (isCallExpressionNode(b)) {
-      const call = b;
-      const resolveAdapterCall = (c: CallExpressionNode): CallResolveResult | undefined => {
-        const res = resolveImportedHelperCall(c, ctx);
-        if (res.kind !== "resolved") {
-          return undefined;
-        }
-        return res.result;
-      };
-
-      // helper(...)
-      const simple = resolveAdapterCall(call);
-      if (simple) {
-        return { usage: simple.usage, expr: simple.expr, imports: simple.imports };
+      // helper(...) or helper(...)(props)
+      // Pass cssProperty to let the adapter decide based on context
+      const resolved = resolveCallExpr(b, node.css.property);
+      if (resolved) {
+        // Use adapter's explicit `kind` if provided, otherwise infer from cssProperty context
+        const isCssValue = isAdapterResultCssValue(resolved, node.css.property);
+        const usage: BranchUsage = isCssValue ? "create" : "props";
+        return { usage, expr: resolved.expr, imports: resolved.imports };
       }
-
-      // helper(...)(propsParam)
-      if (isCallExpressionNode(call.callee)) {
-        const inner = call.callee;
-        const outerArgs = call.arguments ?? [];
-        if (outerArgs.length === 1 && outerArgs[0] && typeof outerArgs[0] === "object") {
-          const innerRes = resolveAdapterCall(inner);
-          if (innerRes) {
-            if (innerRes.usage === "create") {
-              invalidCurriedValue = true;
-              return null;
-            }
-            return { usage: "props", expr: innerRes.expr, imports: innerRes.imports };
-          }
-        }
-      }
-
       return null;
     }
 
@@ -977,15 +973,11 @@ function tryResolveConditionalValue(
     if (!res) {
       return null;
     }
-    return { usage: "create", expr: res.expr, imports: res.imports };
+    return { usage: expectedUsage, expr: res.expr, imports: res.imports };
   };
 
-  const getBranch = (value: unknown): Branch | "invalid" => {
-    const branch = branchToExpr(value);
-    if (invalidCurriedValue) {
-      return "invalid";
-    }
-    return branch;
+  const getBranch = (value: unknown): Branch => {
+    return branchToExpr(value);
   };
 
   // Helper to extract condition info from a binary expression test
@@ -1030,9 +1022,6 @@ function tryResolveConditionalValue(
     if (condExpr.type !== "ConditionalExpression") {
       // Base case: not a conditional, this is the default value
       const branch = getBranch(condExpr);
-      if (branch === "invalid") {
-        return null;
-      }
       if (!branch) {
         return null;
       }
@@ -1051,9 +1040,6 @@ function tryResolveConditionalValue(
     }
 
     const consExpr = getBranch(consequent);
-    if (consExpr === "invalid") {
-      return null;
-    }
     if (!consExpr) {
       return null;
     }
@@ -1138,13 +1124,7 @@ function tryResolveConditionalValue(
   const outerProp = testPath?.[0];
   if (testPath && testPath.length === 1 && outerProp) {
     const cons = getBranch(consequent);
-    if (cons === "invalid") {
-      return { type: "keepOriginal", reason: invalidCurriedError, context: invalidCurriedContext };
-    }
     const alt = getBranch(alternate);
-    if (alt === "invalid") {
-      return { type: "keepOriginal", reason: invalidCurriedError, context: invalidCurriedContext };
-    }
 
     // Check for multi-prop nested ternary: outerProp ? A : innerProp ? B : C
     // where alternate is a conditional testing a different boolean prop
@@ -1159,7 +1139,7 @@ function tryResolveConditionalValue(
       if (innerTestPath && innerTestPath.length === 1 && innerProp && innerProp !== outerProp) {
         const innerCons = getBranch((alternate as any).consequent);
         const innerAlt = getBranch((alternate as any).alternate);
-        if (innerCons && innerCons !== "invalid" && innerAlt && innerAlt !== "invalid") {
+        if (innerCons && innerAlt) {
           // All branches must use "create" usage (not "props")
           if (
             cons.usage === "create" &&
@@ -1232,9 +1212,6 @@ function tryResolveConditionalValue(
   const condInfo = extractConditionInfo(test);
   if (condInfo) {
     const consExpr = getBranch(consequent);
-    if (consExpr === "invalid") {
-      return { type: "keepOriginal", reason: invalidCurriedError, context: invalidCurriedContext };
-    }
     if (!consExpr) {
       return null;
     }

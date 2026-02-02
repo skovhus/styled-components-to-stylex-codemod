@@ -581,6 +581,9 @@ function resolveStaticTemplateExpressionAst(args: {
             return { kind: "unknown" as const };
           });
           const callLoc = innerCall.loc?.start;
+          // Template literals always need CSS values (not StyleX style references).
+          // Reject results that explicitly set kind: "stylexStyles" since StyleX objects
+          // cannot be concatenated into CSS strings.
           const callRes = resolveCall({
             callSiteFilePath: filePath,
             calleeImportedName: imp.importedName,
@@ -588,7 +591,7 @@ function resolveStaticTemplateExpressionAst(args: {
             args: innerArgs,
             ...(callLoc ? { loc: { line: callLoc.line, column: callLoc.column } } : {}),
           });
-          if (callRes && callRes.usage === "create") {
+          if (callRes && callRes.kind !== "stylexStyles") {
             for (const callImp of callRes.imports ?? []) {
               resolverImports.set(JSON.stringify(callImp), callImp);
             }

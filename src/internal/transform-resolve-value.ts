@@ -15,7 +15,7 @@ export function createResolveAdapterSafe(args: { adapter: Adapter; warnings: War
   resolveSelectorSafe: (ctx: SelectorResolveContext) => SelectorResolveResult | undefined;
   bailRef: { value: boolean };
 } {
-  const { adapter, warnings } = args;
+  const { adapter } = args;
   const bailRef = { value: false };
 
   const resolveValueSafe = (ctx: ResolveValueContext): ResolveValueResult | undefined => {
@@ -40,19 +40,6 @@ export function createResolveAdapterSafe(args: { adapter: Adapter; warnings: War
     if (res === undefined) {
       bailRef.value = true;
       return undefined;
-    }
-    if (res && typeof res === "object") {
-      const usage = res.usage;
-      if (usage !== "create" && usage !== "props") {
-        bailRef.value = true;
-        warnings.push({
-          severity: "error",
-          type: "Adapter.resolveCall must return { usage: 'props' | 'create', expr, imports }",
-          loc: undefined,
-          context: ctx,
-        });
-        return undefined;
-      }
     }
     return res;
   };

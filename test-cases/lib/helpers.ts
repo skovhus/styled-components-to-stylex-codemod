@@ -110,7 +110,7 @@ export const screenSize = {
  * A helper function that returns a curried function that returns a CSS string for a themed border.
  */
 export function themedBorder(colorKey: ThemeColor) {
-  return (props: ThemedStyledProps) => `1px solid ${props.theme.color[colorKey]}`;
+  return (props: ThemedStyledProps) => `${thinPixel()} solid ${props.theme.color[colorKey]}`;
 }
 
 /**

@@ -3,8 +3,10 @@ import { compile } from "stylis";
 import { resolveDynamicNode } from "./builtin-handlers.js";
 import type { InternalHandlerContext } from "./builtin-handlers.js";
 import {
+  BORDER_STYLES,
   cssDeclarationToStylexDeclarations,
   parseBorderShorthandParts,
+  parseInterpolatedBorderStaticParts,
   cssPropertyToStylexProp,
   resolveBackgroundStylexProp,
   resolveBackgroundStylexPropForVariants,
@@ -4145,39 +4147,100 @@ export function lowerRules(args: {
             };
 
             // Helper to expand border shorthand from a string literal like "2px solid blue"
+            // or a template literal like `1px solid ${color}` or `${width} solid ${color}`
             const expandBorderShorthand = (
               target: Record<string, unknown>,
               exprAst: any,
+              direction: string = "", // "Top", "Right", "Bottom", "Left", or ""
             ): boolean => {
+              const widthProp = `border${direction}Width`;
+              const styleProp = `border${direction}Style`;
+              const colorProp = `border${direction}Color`;
+
               // Handle various AST wrapper structures
               let node = exprAst;
               // Unwrap ExpressionStatement if present
               if (node?.type === "ExpressionStatement") {
                 node = node.expression;
               }
-              // Only expand if it's a string literal
-              if (node?.type !== "StringLiteral" && node?.type !== "Literal") {
-                return false;
+
+              // Handle string literals: "2px solid blue"
+              if (node?.type === "StringLiteral" || node?.type === "Literal") {
+                const value = node.value;
+                if (typeof value !== "string") {
+                  return false;
+                }
+                const parsed = parseBorderShorthandParts(value);
+                if (!parsed) {
+                  return false;
+                }
+                const { width, style, color } = parsed;
+                if (width) {
+                  target[widthProp] = j.literal(width);
+                }
+                if (style) {
+                  target[styleProp] = j.literal(style);
+                }
+                if (color) {
+                  target[colorProp] = j.literal(color);
+                }
+                return true;
               }
-              const value = node.value;
-              if (typeof value !== "string") {
-                return false;
+
+              // Handle template literals: `1px solid ${color}` or `${width} solid ${color}`
+              if (node?.type === "TemplateLiteral") {
+                const quasis = node.quasis ?? [];
+                const exprs = node.expressions ?? [];
+
+                // Format 1: `1px solid ${color}` - static width/style, dynamic color
+                // quasis: ["1px solid ", ""], exprs: [colorExpr]
+                if (quasis.length === 2 && exprs.length === 1) {
+                  const prefix = quasis[0]?.value?.cooked ?? quasis[0]?.value?.raw ?? "";
+                  const suffix = quasis[1]?.value?.cooked ?? quasis[1]?.value?.raw ?? "";
+                  if (suffix.trim() !== "") {
+                    return false;
+                  }
+                  const parsed = parseInterpolatedBorderStaticParts({
+                    prop: direction ? `border-${direction.toLowerCase()}` : "border",
+                    prefix,
+                    suffix,
+                  });
+                  if (!parsed?.width || !parsed?.style) {
+                    return false;
+                  }
+                  target[widthProp] = j.literal(parsed.width);
+                  target[styleProp] = j.literal(parsed.style);
+                  target[colorProp] = exprs[0];
+                  return true;
+                }
+
+                // Format 2: `${width} solid ${color}` - dynamic width, static style, dynamic color
+                // quasis: ["", " solid ", ""], exprs: [widthExpr, colorExpr]
+                if (quasis.length === 3 && exprs.length === 2) {
+                  const prefix = quasis[0]?.value?.cooked ?? quasis[0]?.value?.raw ?? "";
+                  const middle = quasis[1]?.value?.cooked ?? quasis[1]?.value?.raw ?? "";
+                  const suffix = quasis[2]?.value?.cooked ?? quasis[2]?.value?.raw ?? "";
+                  // First quasi should be empty (width is the first expression)
+                  if (prefix.trim() !== "") {
+                    return false;
+                  }
+                  // Last quasi should be empty (color is the last expression)
+                  if (suffix.trim() !== "") {
+                    return false;
+                  }
+                  // Middle quasi should contain only the border style
+                  const middleTrimmed = middle.trim();
+                  if (!BORDER_STYLES.has(middleTrimmed)) {
+                    return false;
+                  }
+                  target[widthProp] = exprs[0];
+                  target[styleProp] = j.literal(middleTrimmed);
+                  target[colorProp] = exprs[1];
+                  return true;
+                }
               }
-              const parsed = parseBorderShorthandParts(value);
-              if (!parsed) {
-                return false;
-              }
-              const { width, style, color } = parsed;
-              if (width) {
-                target["borderWidth"] = j.literal(width);
-              }
-              if (style) {
-                target["borderStyle"] = j.literal(style);
-              }
-              if (color) {
-                target["borderColor"] = j.literal(color);
-              }
-              return true;
+
+              return false;
             };
 
             const expandBoxShorthand = (
@@ -4226,9 +4289,15 @@ export function lowerRules(args: {
               for (const imp of parsed.imports) {
                 resolverImports.set(JSON.stringify(imp), imp);
               }
-              // Special handling for border shorthand with string literal values
-              if (cssProp === "border" && expandBorderShorthand(target, parsed.exprAst)) {
-                return;
+              // Special handling for border shorthand (including directional borders)
+              const borderMatch = cssProp.match(/^border(-top|-right|-bottom|-left)?$/);
+              if (borderMatch) {
+                const direction = borderMatch[1]
+                  ? borderMatch[1].slice(1).charAt(0).toUpperCase() + borderMatch[1].slice(2)
+                  : "";
+                if (expandBorderShorthand(target, parsed.exprAst, direction)) {
+                  return;
+                }
               }
               if (
                 (cssProp === "padding" || cssProp === "margin") &&

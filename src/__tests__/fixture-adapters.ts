@@ -220,8 +220,10 @@ export const fixtureAdapter = defineAdapter({
       }
     })();
     if (helperStyleKey) {
+      // These helpers return StyleX style objects (for standalone interpolations)
+      // Explicitly mark as stylexStyles so the codemod knows not to use them as CSS values
       return {
-        usage: "props",
+        kind: "stylexStyles",
         expr: `helpers.${helperStyleKey}`,
         imports: [
           {
@@ -234,7 +236,6 @@ export const fixtureAdapter = defineAdapter({
 
     if (ctx.calleeImportedName === "thinPixel") {
       return {
-        usage: "create",
         expr: "pixelVars.thin",
         imports: [
           {
@@ -263,7 +264,6 @@ export const fixtureAdapter = defineAdapter({
     // borderByColor(props.theme.color.bgSub) -> `1px solid ${$colors.bgSub}`
     if (ctx.calleeImportedName === "borderByColor" && themeColorKey) {
       return {
-        usage: "create",
         expr: `\`1px solid \${$colors.${themeColorKey}}\``,
         imports: [
           {
@@ -282,7 +282,6 @@ export const fixtureAdapter = defineAdapter({
     // color("bgBase") -> $colors.bgBase
     if (ctx.calleeImportedName === "color") {
       return {
-        usage: "create",
         expr: `$colors.${key}`,
         imports: [
           {
@@ -297,7 +296,6 @@ export const fixtureAdapter = defineAdapter({
     // fontWeight("medium") -> fontWeightVars.medium
     if (ctx.calleeImportedName === "fontWeight") {
       return {
-        usage: "create",
         expr: `fontWeightVars.${key}`,
         imports: [
           {
@@ -312,7 +310,6 @@ export const fixtureAdapter = defineAdapter({
     // fontSize("medium") -> fontSizeVars.medium
     if (ctx.calleeImportedName === "fontSize") {
       return {
-        usage: "create",
         expr: `fontSizeVars.${key}`,
         imports: [
           {
@@ -326,7 +323,6 @@ export const fixtureAdapter = defineAdapter({
     // Handle transitionSpeed() helper from ./lib/helpers.ts
     if (ctx.calleeImportedName === "transitionSpeed") {
       return {
-        usage: "create",
         expr: `transitionSpeed.${key}`,
         imports: [
           {
@@ -338,14 +334,15 @@ export const fixtureAdapter = defineAdapter({
     }
 
     // Handle themedBorder() helper from ./lib/helpers.ts
-    if (ctx.calleeImportedName === "themedBorder") {
+    // Returns undefined (bails) if key is missing, e.g. themedBorder() without argument
+    // Returns a CSS value expression that gets expanded to borderWidth/Style/Color properties
+    if (ctx.calleeImportedName === "themedBorder" && key) {
       return {
-        usage: "props",
-        expr: `borders.${key}`,
+        expr: `\`\${pixelVars.thin} solid \${$colors.${key}}\``,
         imports: [
           {
-            from: { kind: "specifier", value: "./lib/helpers.stylex" },
-            names: [{ imported: "borders" }],
+            from: { kind: "specifier", value: "./tokens.stylex" },
+            names: [{ imported: "pixelVars" }, { imported: "$colors" }],
           },
         ],
       };
