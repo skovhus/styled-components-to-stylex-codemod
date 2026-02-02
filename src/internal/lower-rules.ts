@@ -53,7 +53,7 @@ import {
   hasThemeAccessInArrowFn,
   hasUnsupportedConditionalTest,
   inlineArrowFunctionBody,
-  replaceDollarPropsWithParams,
+  replacePropsWithParams,
   unwrapArrowFunctionToPropsExpr,
 } from "./lower-rules/inline-styles.js";
 import { addPropComments } from "./lower-rules/comments.js";
@@ -2004,14 +2004,8 @@ export function lowerRules(args: {
             const propsUsed = collectPropsFromArrowFn(expr);
             collectPropsFromExpressions(styleMap.values(), propsUsed);
 
-            // Filter to $-prefixed props used in value expressions
-            const valuePropParams = Array.from(propsUsed).filter((p) => p.startsWith("$"));
-
-            // Bail if non-$-prefixed props are used - they would create unbound variable references
-            const nonDollarProps = Array.from(propsUsed).filter((p) => !p.startsWith("$"));
-            if (nonDollarProps.length > 0) {
-              return false;
-            }
+            // All props used in value expressions become parameters
+            const valuePropParams = Array.from(propsUsed);
 
             if (valuePropParams.length === 0) {
               // No dynamic props - add styles directly to base object
@@ -2022,15 +2016,17 @@ export function lowerRules(args: {
             }
 
             // Create parameterized StyleX style function
+            // Parameter names: strip $ prefix if present (e.g., $size -> size, myProp -> myProp)
             const params = valuePropParams.map((p) => {
-              const param = j.identifier(p.slice(1)); // Strip $ prefix
+              const paramName = p.startsWith("$") ? p.slice(1) : p;
+              const param = j.identifier(paramName);
               (param as { typeAnnotation?: unknown }).typeAnnotation = j.tsTypeAnnotation(
                 j.tsNumberKeyword(),
               );
               return param;
             });
             const properties = Array.from(styleMap.entries()).map(([prop, propExpr]) => {
-              const replacedExpr = replaceDollarPropsWithParams(j, propExpr);
+              const replacedExpr = replacePropsWithParams(j, propExpr);
               return j.property("init", j.identifier(prop), replacedExpr);
             });
             const styleFn = j.arrowFunctionExpression(params, j.objectExpression(properties));
@@ -2040,6 +2036,7 @@ export function lowerRules(args: {
             resolvedStyleObjects.set(fnKey, styleFn);
 
             // Create function call expression for stylex.props
+            // Call args use original prop names (they exist in the component's destructured props)
             const args = valuePropParams.map((p) => j.identifier(p));
             const styleCall = j.callExpression(
               j.memberExpression(j.identifier("styles"), j.identifier(fnKey)),
@@ -2101,31 +2098,26 @@ export function lowerRules(args: {
         const propsUsed = collectPropsFromArrowFn(expr);
         collectPropsFromExpressions([...consMap.values(), ...altMap.values()], propsUsed);
 
-        // Filter to $-prefixed props used in value expressions
-        const valuePropParams = Array.from(propsUsed).filter((p) => p.startsWith("$"));
-
-        // Bail if non-$-prefixed props are used - they would create unbound variable references
-        const nonDollarProps = Array.from(propsUsed).filter((p) => !p.startsWith("$"));
-        if (nonDollarProps.length > 0) {
-          return false;
-        }
+        // All props used in value expressions become parameters
+        const valuePropParams = Array.from(propsUsed);
 
         if (consMap.size === 0 && altMap.size === 0) {
           return true;
         }
 
         // Create parameterized StyleX style function
+        // Parameter names: strip $ prefix if present (e.g., $size -> size, myProp -> myProp)
         const createStyleFn = (map: Map<string, ExpressionKind>) => {
-          // Use number type for params - StyleX parameterized functions typically work with numeric values
           const params = valuePropParams.map((p) => {
-            const param = j.identifier(p.slice(1)); // Strip $ prefix
+            const paramName = p.startsWith("$") ? p.slice(1) : p;
+            const param = j.identifier(paramName);
             (param as { typeAnnotation?: unknown }).typeAnnotation = j.tsTypeAnnotation(
               j.tsNumberKeyword(),
             );
             return param;
           });
           const properties = Array.from(map.entries()).map(([prop, propExpr]) => {
-            const replacedExpr = replaceDollarPropsWithParams(j, propExpr);
+            const replacedExpr = replacePropsWithParams(j, propExpr);
             return j.property("init", j.identifier(prop), replacedExpr);
           });
           return j.arrowFunctionExpression(params, j.objectExpression(properties));
@@ -2146,6 +2138,7 @@ export function lowerRules(args: {
         }
 
         // Create function call expressions
+        // Call args use original prop names (they exist in the component's destructured props)
         const makeStyleCall = (key: string) => {
           const args = valuePropParams.map((p) => j.identifier(p));
           return j.callExpression(

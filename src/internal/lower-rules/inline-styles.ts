@@ -408,13 +408,11 @@ export function collectPropsFromExpressions(
 }
 
 /**
- * Replaces `$propName` identifiers with stripped param names (e.g., `$size` -> `size`).
- * Used when creating StyleX parameterized style functions.
+ * Replaces prop references with parameter names for StyleX parameterized style functions:
+ * - `$propName` identifiers -> `propName` (strips $ prefix)
+ * - `props.propName` member expressions -> `propName`
  */
-export function replaceDollarPropsWithParams(
-  j: JSCodeshift,
-  exprNode: ExpressionKind,
-): ExpressionKind {
+export function replacePropsWithParams(j: JSCodeshift, exprNode: ExpressionKind): ExpressionKind {
   const cloned = cloneAstNode(exprNode);
   const replace = (node: unknown): unknown => {
     if (!node || typeof node !== "object") {
@@ -424,6 +422,19 @@ export function replaceDollarPropsWithParams(
       return node.map((child) => replace(child));
     }
     const n = node as ASTNodeRecord;
+    // Handle props.X member expressions -> X
+    if (
+      (n.type === "MemberExpression" || n.type === "OptionalMemberExpression") &&
+      (n.object as ASTNodeRecord)?.type === "Identifier" &&
+      (n.object as { name?: string })?.name === "props" &&
+      (n.property as ASTNodeRecord)?.type === "Identifier" &&
+      n.computed === false
+    ) {
+      const propName = (n.property as { name: string }).name;
+      // For $-prefixed props accessed via props.$foo, strip the $
+      return j.identifier(propName.startsWith("$") ? propName.slice(1) : propName);
+    }
+    // Handle $propName identifiers -> propName
     if (n.type === "Identifier") {
       const identName = n.name as string | undefined;
       if (identName?.startsWith("$")) {
