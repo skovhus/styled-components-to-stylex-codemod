@@ -470,6 +470,18 @@ export class WrapperEmitter {
     return true;
   }
 
+  /**
+   * Extend an existing type (interface or type alias) with additional type text.
+   * Tries interface first, then falls back to type alias.
+   * Returns true if the type was extended successfully.
+   */
+  extendExistingType(typeName: string, baseTypeText: string): boolean {
+    if (this.extendExistingInterface(typeName, baseTypeText)) {
+      return true;
+    }
+    return this.extendExistingTypeAlias(typeName, baseTypeText);
+  }
+
   emitNamedPropsType(args: {
     localName: string;
     typeExprText: string;

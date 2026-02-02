@@ -1076,10 +1076,7 @@ export function emitIntrinsicWrappers(emitter: WrapperEmitter): {
         }
         return omitted.length ? `Omit<${base}, ${omitted.join(" | ")}>` : base;
       })();
-      const interfaceExtended = emitter.extendExistingInterface(propsTypeName, extendBaseTypeText);
-      if (!interfaceExtended) {
-        emitter.extendExistingTypeAlias(propsTypeName, extendBaseTypeText);
-      }
+      emitter.extendExistingType(propsTypeName, extendBaseTypeText);
     }
     needsReactTypeImport = true;
 
@@ -1524,13 +1521,7 @@ export function emitIntrinsicWrappers(emitter: WrapperEmitter): {
           allowClassNameProp,
           allowStyleProp,
         });
-        const interfaceExtended = emitter.extendExistingInterface(
-          explicitTypeName,
-          intrinsicBaseType,
-        );
-        if (!interfaceExtended) {
-          emitter.extendExistingTypeAlias(explicitTypeName, intrinsicBaseType);
-        }
+        emitter.extendExistingType(explicitTypeName, intrinsicBaseType);
         needsReactTypeImport = true;
         emitPropsType(d.localName, explicit, allowAsProp);
       } else {
@@ -1570,8 +1561,8 @@ export function emitIntrinsicWrappers(emitter: WrapperEmitter): {
       //   which means user should be able to pass/override these props
       const includeRest =
         usedAttrs.has("*") ||
-        !!(d as any).usedAsValue ||
-        (!((d as any).isExported ?? false) && usedAttrs.size > 0) ||
+        !!d.usedAsValue ||
+        (!(d.isExported ?? false) && usedAttrs.size > 0) ||
         hasElementPropsInDefaultAttrs(d);
       const variantProps = new Set<string>();
       if (d.variantStyleKeys) {
@@ -1923,7 +1914,7 @@ export function emitIntrinsicWrappers(emitter: WrapperEmitter): {
         ...staticAttrNames,
       ]);
       const needsRestForType =
-        !!(d as any).usedAsValue ||
+        !!d.usedAsValue ||
         usedAttrsForType.has("*") ||
         // When defaultAttrs reference element props (like tabIndex: props.tabIndex ?? 0),
         // include element props in type so those props are available
@@ -2038,19 +2029,10 @@ export function emitIntrinsicWrappers(emitter: WrapperEmitter): {
       // When the explicit type exists and defaultAttrs reference element props
       // (like tabIndex: props.tabIndex ?? 0), extend the explicit type directly
       if (explicitTypeName && needsElementPropsForAttrs) {
-        const interfaceExtended = emitter.extendExistingInterface(
-          explicitTypeName,
-          extendBaseTypeText,
-        );
-        if (!interfaceExtended) {
-          emitter.extendExistingTypeAlias(explicitTypeName, extendBaseTypeText);
-        }
+        emitter.extendExistingType(explicitTypeName, extendBaseTypeText);
         // Also extend with as prop if needed
         if (asPropTypeText) {
-          const asAdded = emitter.extendExistingInterface(explicitTypeName, asPropTypeText);
-          if (!asAdded) {
-            emitter.extendExistingTypeAlias(explicitTypeName, asPropTypeText);
-          }
+          emitter.extendExistingType(explicitTypeName, asPropTypeText);
         }
         // Use the explicit type wrapped in PropsWithChildren for the function parameter
         // explicit is guaranteed to be truthy here since explicitTypeExists is true
@@ -2062,20 +2044,11 @@ export function emitIntrinsicWrappers(emitter: WrapperEmitter): {
         typeAliasEmitted = emitNamedPropsType(d.localName, typeWithAs);
         if (!typeAliasEmitted && explicit) {
           const propsTypeName = emitter.propsTypeNameFor(d.localName);
-          const interfaceExtended = emitter.extendExistingInterface(
-            propsTypeName,
-            extendBaseTypeText,
-          );
-          if (!interfaceExtended) {
-            const typeAliasExtended = emitter.extendExistingTypeAlias(
-              propsTypeName,
-              extendBaseTypeText,
-            );
-            if (!typeAliasExtended) {
-              inlineTypeText = VOID_TAGS.has(tagName) ? explicit : emitter.withChildren(explicit);
-              if (asPropTypeText) {
-                inlineTypeText = emitter.joinIntersection(inlineTypeText, asPropTypeText);
-              }
+          const typeExtended = emitter.extendExistingType(propsTypeName, extendBaseTypeText);
+          if (!typeExtended) {
+            inlineTypeText = VOID_TAGS.has(tagName) ? explicit : emitter.withChildren(explicit);
+            if (asPropTypeText) {
+              inlineTypeText = emitter.joinIntersection(inlineTypeText, asPropTypeText);
             }
           }
         }
