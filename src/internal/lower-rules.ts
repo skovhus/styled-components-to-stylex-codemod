@@ -2007,6 +2007,12 @@ export function lowerRules(args: {
             // Filter to $-prefixed props used in value expressions
             const valuePropParams = Array.from(propsUsed).filter((p) => p.startsWith("$"));
 
+            // Bail if non-$-prefixed props are used - they would create unbound variable references
+            const nonDollarProps = Array.from(propsUsed).filter((p) => !p.startsWith("$"));
+            if (nonDollarProps.length > 0) {
+              return false;
+            }
+
             if (valuePropParams.length === 0) {
               // No dynamic props - add styles directly to base object
               for (const [prop, valueExpr] of styleMap.entries()) {
@@ -2097,6 +2103,12 @@ export function lowerRules(args: {
 
         // Filter to $-prefixed props used in value expressions
         const valuePropParams = Array.from(propsUsed).filter((p) => p.startsWith("$"));
+
+        // Bail if non-$-prefixed props are used - they would create unbound variable references
+        const nonDollarProps = Array.from(propsUsed).filter((p) => !p.startsWith("$"));
+        if (nonDollarProps.length > 0) {
+          return false;
+        }
 
         if (consMap.size === 0 && altMap.size === 0) {
           return true;
