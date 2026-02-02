@@ -65,6 +65,7 @@ export class TransformContext {
   ancestorSelectorParents?: Set<string>;
   emptyStyleKeys?: Set<string>;
   stylesIdentifier?: string;
+  stylesInsertPosition?: "end" | "afterImports";
   declByLocal?: Map<string, any>;
   extendedBy?: Map<string, string[]>;
   exportedComponents?: Map<string, ExportInfo>;

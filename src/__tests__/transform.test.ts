@@ -545,18 +545,18 @@ export const x = 1;
     const expected = `import * as stylex from "@stylexjs/stylex";
 import { mergedSx } from "./lib/mergedSx";
 
+const styles = stylex.create({
+  helper: {
+    color: "red",
+  },
+});
+
 export function helper() {
   return styles.helper;
 }
 
 // No styled declarations we currently transform in this snippet.
 export const x = 1;
-
-const styles = stylex.create({
-  helper: {
-    color: "red",
-  },
-});
 `;
     expect(result.trim()).toBe(expected.trim());
   });

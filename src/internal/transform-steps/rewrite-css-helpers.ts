@@ -29,13 +29,9 @@ export function rewriteCssHelpersStep(ctx: TransformContext): StepResult {
         const init = p.node.init as any;
         if (
           init?.type === "TaggedTemplateExpression" &&
-          (!cssLocal ||
-            (init.tag?.type === "Identifier" && init.tag.name === cssLocal))
+          (!cssLocal || (init.tag?.type === "Identifier" && init.tag.name === cssLocal))
         ) {
-          p.node.init = j.memberExpression(
-            j.identifier(stylesIdentifier),
-            j.identifier(styleKey),
-          );
+          p.node.init = j.memberExpression(j.identifier(stylesIdentifier), j.identifier(styleKey));
           changed = true;
         }
       });
@@ -51,14 +47,17 @@ export function rewriteCssHelpersStep(ctx: TransformContext): StepResult {
       if (!styleKey) {
         return;
       }
-      j(p).replaceWith(
-        j.memberExpression(j.identifier(stylesIdentifier), j.identifier(styleKey)),
-      );
+      j(p).replaceWith(j.memberExpression(j.identifier(stylesIdentifier), j.identifier(styleKey)));
       changed = true;
     });
   }
 
   if (changed) {
+    if (!ctx.stylesInsertPosition) {
+      // Standalone css helpers can be referenced during module initialization.
+      // Hoist styles after imports to avoid TDZ access to `styles`.
+      ctx.stylesInsertPosition = "afterImports";
+    }
     ctx.markChanged();
   }
 

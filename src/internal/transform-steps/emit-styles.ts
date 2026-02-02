@@ -26,6 +26,7 @@ export function emitStylesStep(ctx: TransformContext): StepResult {
     literalToAst,
     stylesIdentifier: ctx.stylesIdentifier ?? "styles",
     styleMerger: ctx.adapter.styleMerger,
+    stylesInsertPosition: ctx.stylesInsertPosition ?? "end",
   });
   ctx.emptyStyleKeys = emptyStyleKeys;
   ctx.markChanged();
