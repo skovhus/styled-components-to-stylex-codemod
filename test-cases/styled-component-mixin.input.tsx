@@ -1,4 +1,3 @@
-// @expected-warning: Using styled-components components as mixins is not supported; use css`` mixins or strings instead
 import styled from "styled-components";
 
 const HiddenOnMobile = styled.div`

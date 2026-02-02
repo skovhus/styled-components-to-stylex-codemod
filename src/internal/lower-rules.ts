@@ -264,6 +264,88 @@ export function lowerRules(args: {
     return propValues;
   };
 
+  /**
+   * Determines if a styled component is simple enough to be used as a mixin.
+   * Returns true only for components with static styles and no complex features.
+   */
+  const isSimpleMixin = (decl: StyledDecl): boolean => {
+    // Bail if it has dynamic styles dependent on props
+    if (decl.styleFnFromProps && decl.styleFnFromProps.length > 0) {
+      return false;
+    }
+    // Bail if it has variant dimensions (prop-based variants)
+    if (decl.variantDimensions && decl.variantDimensions.length > 0) {
+      return false;
+    }
+    // Bail if it has enum variants
+    if (decl.enumVariant) {
+      return false;
+    }
+    // Bail if it has compound variants
+    if (decl.compoundVariants && decl.compoundVariants.length > 0) {
+      return false;
+    }
+    // Bail if it needs a wrapper component
+    if (decl.needsWrapperComponent) {
+      return false;
+    }
+    // Bail if it has attrs that affect styling
+    if (decl.attrsInfo) {
+      const { staticAttrs, conditionalAttrs, defaultAttrs } = decl.attrsInfo;
+      if (
+        Object.keys(staticAttrs).length > 0 ||
+        conditionalAttrs.length > 0 ||
+        (defaultAttrs && defaultAttrs.length > 0)
+      ) {
+        return false;
+      }
+    }
+    // Bail if it has inline style props
+    if (decl.inlineStyleProps && decl.inlineStyleProps.length > 0) {
+      return false;
+    }
+    // Bail if it has variant style keys
+    if (decl.variantStyleKeys && Object.keys(decl.variantStyleKeys).length > 0) {
+      return false;
+    }
+    // Bail if it has extra stylex props args
+    if (decl.extraStylexPropsArgs && decl.extraStylexPropsArgs.length > 0) {
+      return false;
+    }
+    return true;
+  };
+
+  /**
+   * Adds a style key to decl.extraStyleKeys and tracks order in decl.mixinOrder.
+   * Returns true if the key was added (not already present).
+   */
+  const addStyleKeyMixin = (decl: StyledDecl, styleKey: string): boolean => {
+    const extras = decl.extraStyleKeys ?? [];
+    const order = decl.mixinOrder ?? [];
+    if (extras.includes(styleKey)) {
+      return false;
+    }
+    extras.push(styleKey);
+    order.push("styleKey");
+    decl.extraStyleKeys = extras;
+    decl.mixinOrder = order;
+    return true;
+  };
+
+  /**
+   * Copies property values from a values map to the tracking map.
+   */
+  const trackMixinPropertyValues = (
+    valuesMap: Map<string, unknown> | undefined,
+    targetMap: Map<string, unknown>,
+  ): void => {
+    if (valuesMap) {
+      for (const [prop, value] of valuesMap) {
+        targetMap.set(prop, value);
+      }
+    }
+  };
+
   // Pre-compute properties and values defined by each css helper and mixin from their rules.
   // This allows us to know what properties they provide (and their values) before styled
   // components that use them are processed, which is needed for correct pseudo selector
@@ -2303,8 +2385,23 @@ export function lowerRules(args: {
                   }
                 }
               } else if (declByLocalName.has(expr.name)) {
-                // Local styled component mixin - handled later (unsupported, will bail).
+                // Local styled component mixin - handled later in rule processing.
               } else {
+                // Check if this is an imported styled component mixin that the adapter can resolve
+                const importEntry = importMap?.get(expr.name);
+                if (importEntry) {
+                  const resolved = resolveValue({
+                    kind: "importedValue",
+                    importedName: importEntry.importedName,
+                    source: importEntry.source,
+                    filePath,
+                    loc: getNodeLocStart(expr as ASTNode) ?? undefined,
+                  });
+                  if (resolved?.usage === "props") {
+                    // Adapter resolved it as a style object - will be handled later
+                    continue;
+                  }
+                }
                 // This might be an imported css helper - we can't determine its properties.
                 // Mark for bail to avoid generating incorrect default values.
                 hasImportedCssHelper = true;
@@ -3272,24 +3369,31 @@ export function lowerRules(args: {
               const expr = decl.templateExpressions[slot.slotId] as any;
               if (expr?.type === "Identifier" && cssHelperNames.has(expr.name)) {
                 const helperKey = toStyleKey(expr.name);
-                const extras = decl.extraStyleKeys ?? [];
-                if (!extras.includes(helperKey)) {
-                  extras.push(helperKey);
-                }
-                decl.extraStyleKeys = extras;
-                // Track properties and values defined by this css helper so we can
-                // set proper default values for pseudo selectors on these properties.
-                const helperValues = cssHelperValuesByKey.get(helperKey);
-                if (helperValues) {
-                  for (const [prop, value] of helperValues) {
-                    cssHelperPropValues.set(prop, value);
-                  }
-                }
+                addStyleKeyMixin(decl, helperKey);
+                trackMixinPropertyValues(cssHelperValuesByKey.get(helperKey), cssHelperPropValues);
                 continue;
               }
               if (expr?.type === "Identifier") {
+                // Case 1: Local styled component mixin
                 const mixinDecl = declByLocalName.get(expr.name);
                 if (mixinDecl && !mixinDecl.isCssHelper && mixinDecl.localName !== decl.localName) {
+                  if (isSimpleMixin(mixinDecl)) {
+                    // First propagate recursive mixins' extraStyleKeys (lower precedence)
+                    if (mixinDecl.extraStyleKeys) {
+                      for (const extraKey of mixinDecl.extraStyleKeys) {
+                        addStyleKeyMixin(decl, extraKey);
+                      }
+                    }
+                    // Then add mixin's styleKey (higher precedence than its dependencies)
+                    addStyleKeyMixin(decl, mixinDecl.styleKey);
+                    trackMixinPropertyValues(
+                      mixinValuesByKey.get(mixinDecl.styleKey),
+                      cssHelperPropValues,
+                    );
+                    continue;
+                  }
+
+                  // Complex mixin - still bail
                   bail = true;
                   warnings.push({
                     severity: "warning",
@@ -3302,6 +3406,36 @@ export function lowerRules(args: {
                   });
                   continue;
                 }
+
+                // Case 2: Imported styled component mixin (resolved via adapter)
+                const importEntry = importMap?.get(expr.name);
+                if (importEntry && !cssHelperNames.has(expr.name)) {
+                  const resolved = resolveValue({
+                    kind: "importedValue",
+                    importedName: importEntry.importedName,
+                    source: importEntry.source,
+                    filePath,
+                    loc: getNodeLocStart(expr) ?? undefined,
+                  });
+                  if (resolved?.usage === "props") {
+                    // Add as an extra stylex.props argument
+                    const extras = decl.extraStylexPropsArgs ?? [];
+                    const order = decl.mixinOrder ?? [];
+                    const parsedExpr = parseExpr(resolved.expr);
+                    if (parsedExpr) {
+                      extras.push({ expr: parsedExpr });
+                      order.push("propsArg");
+                      decl.extraStylexPropsArgs = extras;
+                      decl.mixinOrder = order;
+                      // Merge imports
+                      for (const imp of resolved.imports) {
+                        resolverImports.set(JSON.stringify(imp), imp);
+                      }
+                      continue;
+                    }
+                  }
+                  // If adapter returns undefined or usage !== "props", fall through
+                }
               }
               // Handle member expression CSS helpers (e.g., buttonStyles.rootCss)
               const rootInfo = extractRootAndPath(expr);
@@ -3311,18 +3445,11 @@ export function lowerRules(args: {
                 if (objectMemberMap) {
                   const memberDecl = objectMemberMap.get(firstRootInfoPath);
                   if (memberDecl) {
-                    const extras = decl.extraStyleKeys ?? [];
-                    if (!extras.includes(memberDecl.styleKey)) {
-                      extras.push(memberDecl.styleKey);
-                    }
-                    decl.extraStyleKeys = extras;
-                    // Track properties and values defined by this css helper
-                    const helperValues = cssHelperValuesByKey.get(memberDecl.styleKey);
-                    if (helperValues) {
-                      for (const [prop, value] of helperValues) {
-                        cssHelperPropValues.set(prop, value);
-                      }
-                    }
+                    addStyleKeyMixin(decl, memberDecl.styleKey);
+                    trackMixinPropertyValues(
+                      cssHelperValuesByKey.get(memberDecl.styleKey),
+                      cssHelperPropValues,
+                    );
                     continue;
                   }
                 }

@@ -1,9 +1,17 @@
-import type { DefaultTheme } from "styled-components";
+import styled, { type DefaultTheme } from "styled-components";
 import type { ThemeColor } from "../tokens.stylex";
 
 interface ThemedStyledProps {
   theme: DefaultTheme;
 }
+
+// Styled component export for testing imported styled component mixins.
+// The adapter resolves this to helpers.truncate from helpers.stylex.
+export const TruncateText = styled.span`
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+`;
 
 // Theme accessor helper - returns a function that extracts a color from the theme
 export const color =

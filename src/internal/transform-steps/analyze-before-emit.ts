@@ -165,7 +165,9 @@ export function analyzeBeforeEmitStep(ctx: TransformContext): StepResult {
     if (decl.inlineStyleProps && decl.inlineStyleProps.length > 0) {
       return false;
     }
-    if (decl.extraStylexPropsArgs && decl.extraStylexPropsArgs.length > 0) {
+    // extraStylexPropsArgs with a `when` condition need a wrapper for conditional logic,
+    // but unconditional ones can be inlined directly.
+    if (decl.extraStylexPropsArgs && decl.extraStylexPropsArgs.some((arg) => arg.when)) {
       return false;
     }
     if (decl.extraStyleKeys && decl.extraStyleKeys.length > 0) {
