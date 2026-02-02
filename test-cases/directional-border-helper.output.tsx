@@ -23,10 +23,10 @@ function BorderedBox(props: BorderedBoxProps) {
 }
 
 export const App = () => (
-  <>
+  <div style={{ padding: "10px" }}>
     <BorderedLeft>Bordered left</BorderedLeft>
     <BorderedBox>Bordered box</BorderedBox>
-  </>
+  </div>
 );
 
 const styles = stylex.create({
