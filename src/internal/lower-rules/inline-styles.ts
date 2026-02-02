@@ -8,6 +8,10 @@ import {
 
 type ExpressionKind = Parameters<JSCodeshift["expressionStatement"]>[0];
 
+// Helper type for flexible AST node property access - jscodeshift types are complex
+// and generic AST traversal requires flexibility (per CLAUDE.md guidelines)
+type ASTNodeRecord = Record<string, unknown> & { type: string };
+
 // Build a template literal with static prefix/suffix around a dynamic expression.
 // e.g., prefix="" suffix="ms" expr=<call> -> `${<call>}ms`
 // If the expression is a static literal, returns a simple string literal instead.
@@ -351,4 +355,91 @@ export function hasUnsupportedConditionalTest(expr: any): boolean {
   };
   visit(bodyExpr);
   return found;
+}
+
+/**
+ * Collects prop names from AST expressions by finding:
+ * - Member expressions accessing `props.X` (non-computed)
+ * - Identifiers starting with `$` (transient props)
+ */
+export function collectPropsFromExpressions(
+  expressions: Iterable<unknown>,
+  propsUsed: Set<string>,
+): void {
+  const visit = (node: unknown): void => {
+    if (!node || typeof node !== "object") {
+      return;
+    }
+    if (Array.isArray(node)) {
+      for (const child of node) {
+        visit(child);
+      }
+      return;
+    }
+    const n = node as ASTNodeRecord;
+    if (
+      (n.type === "MemberExpression" || n.type === "OptionalMemberExpression") &&
+      (n.object as ASTNodeRecord)?.type === "Identifier" &&
+      (n.object as { name?: string })?.name === "props" &&
+      (n.property as ASTNodeRecord)?.type === "Identifier" &&
+      n.computed === false
+    ) {
+      propsUsed.add((n.property as { name: string }).name);
+    }
+    if (n.type === "Identifier") {
+      const identName = n.name as string | undefined;
+      if (identName?.startsWith("$")) {
+        propsUsed.add(identName);
+      }
+    }
+    for (const key of Object.keys(n)) {
+      if (key === "loc" || key === "comments") {
+        continue;
+      }
+      const child = n[key];
+      if (child && typeof child === "object") {
+        visit(child);
+      }
+    }
+  };
+  for (const expr of expressions) {
+    visit(expr);
+  }
+}
+
+/**
+ * Replaces `$propName` identifiers with stripped param names (e.g., `$size` -> `size`).
+ * Used when creating StyleX parameterized style functions.
+ */
+export function replaceDollarPropsWithParams(
+  j: JSCodeshift,
+  exprNode: ExpressionKind,
+): ExpressionKind {
+  const cloned = cloneAstNode(exprNode);
+  const replace = (node: unknown): unknown => {
+    if (!node || typeof node !== "object") {
+      return node;
+    }
+    if (Array.isArray(node)) {
+      return node.map((child) => replace(child));
+    }
+    const n = node as ASTNodeRecord;
+    if (n.type === "Identifier") {
+      const identName = n.name as string | undefined;
+      if (identName?.startsWith("$")) {
+        return j.identifier(identName.slice(1));
+      }
+    }
+    for (const key of Object.keys(n)) {
+      if (key === "loc" || key === "comments") {
+        continue;
+      }
+      const child = n[key];
+      if (child && typeof child === "object") {
+        n[key] = replace(child);
+      }
+    }
+    return n;
+  };
+  return replace(cloned) as ExpressionKind;
 }

@@ -48,14 +48,20 @@ import {
 import {
   buildTemplateWithStaticParts,
   collectPropsFromArrowFn,
+  collectPropsFromExpressions,
   countConditionalExpressions,
   hasThemeAccessInArrowFn,
   hasUnsupportedConditionalTest,
   inlineArrowFunctionBody,
+  replaceDollarPropsWithParams,
   unwrapArrowFunctionToPropsExpr,
 } from "./lower-rules/inline-styles.js";
 import { addPropComments } from "./lower-rules/comments.js";
-import { createCssHelperResolver, type ConditionalVariant } from "./lower-rules/css-helper.js";
+import {
+  createCssHelperResolver,
+  parseCssTemplateToRules,
+  type ConditionalVariant,
+} from "./lower-rules/css-helper.js";
 import { parseSwitchReturningCssTemplates } from "./lower-rules/switch-variants.js";
 import { createThemeResolvers } from "./lower-rules/theme.js";
 import {
@@ -67,6 +73,7 @@ import {
   groupVariantBucketsIntoDimensions,
 } from "./lower-rules/variants.js";
 import { mergeStyleObjects, toKebab } from "./lower-rules/utils.js";
+import { extractConditionName } from "./lower-rules/condition-name.js";
 import { computeSelectorWarningLoc, normalizeStylisAstToIR } from "./css-ir.js";
 import {
   normalizeSelectorForInputAttributePseudos,
@@ -1400,6 +1407,256 @@ export function lowerRules(args: {
         return false;
       };
 
+      const readReturnExpr = (stmt: ASTNode | null | undefined): ExpressionKind | null => {
+        if (!stmt || typeof stmt !== "object") {
+          return null;
+        }
+        if (stmt.type === "ReturnStatement") {
+          const arg = (stmt as { argument?: ASTNode }).argument ?? null;
+          return arg && typeof arg === "object" ? (arg as ExpressionKind) : null;
+        }
+        if (stmt.type === "BlockStatement") {
+          const body = (stmt as { body?: ASTNode[] }).body ?? [];
+          if (!Array.isArray(body)) {
+            return null;
+          }
+          const ret = body.find((s) => s?.type === "ReturnStatement");
+          if (!ret) {
+            return null;
+          }
+          const arg = (ret as { argument?: ASTNode }).argument ?? null;
+          return arg && typeof arg === "object" ? (arg as ExpressionKind) : null;
+        }
+        return null;
+      };
+
+      type IfStatementNode = {
+        type: "IfStatement";
+        test: ExpressionKind;
+        consequent: ASTNode;
+        alternate?: ASTNode | null;
+      };
+
+      const extractConditionalFromIfBlock = (
+        block: ASTNode | null | undefined,
+      ): { test: ExpressionKind; consequent: ExpressionKind; alternate: ExpressionKind } | null => {
+        if (!block || block.type !== "BlockStatement") {
+          return null;
+        }
+        const stmts = Array.isArray((block as { body?: ASTNode[] }).body)
+          ? (block as { body: ASTNode[] }).body
+          : [];
+        if (stmts.length === 1 && stmts[0]?.type === "IfStatement") {
+          const ifStmt = stmts[0] as IfStatementNode;
+          const consExpr = readReturnExpr(ifStmt.consequent);
+          if (!consExpr) {
+            return null;
+          }
+          const altExpr = ifStmt.alternate ? readReturnExpr(ifStmt.alternate) : null;
+          if (ifStmt.alternate && !altExpr) {
+            return null;
+          }
+          return {
+            test: ifStmt.test,
+            consequent: consExpr,
+            alternate: altExpr ?? (j.identifier("undefined") as ExpressionKind),
+          };
+        }
+        if (
+          stmts.length === 2 &&
+          stmts[0]?.type === "IfStatement" &&
+          !(stmts[0] as IfStatementNode).alternate &&
+          stmts[1]?.type === "ReturnStatement"
+        ) {
+          const ifStmt = stmts[0] as IfStatementNode;
+          const consExpr = readReturnExpr(ifStmt.consequent);
+          const altExpr = readReturnExpr(stmts[1]);
+          if (!consExpr || !altExpr) {
+            return null;
+          }
+          return {
+            test: ifStmt.test,
+            consequent: consExpr,
+            alternate: altExpr,
+          };
+        }
+        return null;
+      };
+
+      // Helper type for AST node property access - jscodeshift types are complex
+      // and generic AST traversal requires flexibility (per CLAUDE.md guidelines)
+      type ASTNodeRecord = Record<string, unknown> & { type: string };
+
+      const replaceParamWithProps = (exprNode: ExpressionKind): ExpressionKind => {
+        const cloned = cloneAstNode(exprNode);
+        // AST traversal requires flexible typing due to jscodeshift's complex type system
+        const replace = (node: unknown, parent?: unknown): unknown => {
+          if (!node || typeof node !== "object") {
+            return node;
+          }
+          if (Array.isArray(node)) {
+            return node.map((child) => replace(child, parent));
+          }
+          const n = node as ASTNodeRecord;
+          if (
+            bindings.kind === "simple" &&
+            (n.type === "MemberExpression" || n.type === "OptionalMemberExpression") &&
+            (n.object as ASTNodeRecord)?.type === "Identifier" &&
+            (n.object as { name?: string })?.name === bindings.paramName &&
+            (n.property as ASTNodeRecord)?.type === "Identifier" &&
+            ((n.property as { name?: string })?.name ?? "").startsWith("$") &&
+            n.computed === false
+          ) {
+            return j.identifier((n.property as { name: string }).name);
+          }
+          if (n.type === "Identifier") {
+            const nodeName = (n as { name?: string }).name ?? "";
+            if (bindings.kind === "simple" && nodeName === bindings.paramName) {
+              const p = parent as ASTNodeRecord | undefined;
+              const isMemberProp =
+                p &&
+                (p.type === "MemberExpression" || p.type === "OptionalMemberExpression") &&
+                p.property === n &&
+                p.computed === false;
+              const isObjectKey = p && p.type === "Property" && p.key === n && p.shorthand !== true;
+              if (!isMemberProp && !isObjectKey) {
+                return j.identifier("props");
+              }
+            }
+            if (bindings.kind === "destructured" && bindings.bindings.has(nodeName)) {
+              const propName = bindings.bindings.get(nodeName)!;
+              const defaultValue = bindings.defaults?.get(propName);
+              if (propName.startsWith("$")) {
+                const base = j.identifier(propName);
+                if (defaultValue) {
+                  return j.logicalExpression(
+                    "??",
+                    base,
+                    cloneAstNode(defaultValue) as ExpressionKind,
+                  );
+                }
+                return base;
+              }
+              const memberExpr = j.memberExpression(j.identifier("props"), j.identifier(propName));
+              if (defaultValue) {
+                return j.logicalExpression(
+                  "??",
+                  memberExpr,
+                  cloneAstNode(defaultValue) as ExpressionKind,
+                );
+              }
+              return memberExpr;
+            }
+          }
+          if (n.type === "MemberExpression" || n.type === "OptionalMemberExpression") {
+            n.object = replace(n.object, n);
+            if (n.computed) {
+              n.property = replace(n.property, n);
+            }
+            return n;
+          }
+          if (n.type === "Property") {
+            if (n.computed) {
+              n.key = replace(n.key, n);
+            }
+            n.value = replace(n.value, n);
+            return n;
+          }
+          for (const key of Object.keys(n)) {
+            if (key === "loc" || key === "comments") {
+              continue;
+            }
+            const child = n[key];
+            if (child && typeof child === "object") {
+              n[key] = replace(child, n);
+            }
+          }
+          return n;
+        };
+        return replace(cloned, undefined) as ExpressionKind;
+      };
+
+      const resolveCssBranchToInlineMap = (
+        node: ExpressionKind,
+      ): Map<string, ExpressionKind> | null => {
+        let tpl: ASTNode | null = null;
+        if (isCssHelperTaggedTemplate(node)) {
+          tpl = (node as { quasi: ASTNode }).quasi;
+        } else if (node?.type === "TemplateLiteral") {
+          tpl = node;
+        }
+        if (!tpl || tpl.type !== "TemplateLiteral") {
+          return null;
+        }
+
+        const { rules, slotExprById } = parseCssTemplateToRules(tpl);
+        const out = new Map<string, ExpressionKind>();
+
+        for (const rule of rules) {
+          if (rule.atRuleStack.length > 0) {
+            return null;
+          }
+          const selector = (rule.selector ?? "").trim();
+          if (selector !== "&") {
+            return null;
+          }
+          for (const d of rule.declarations) {
+            if (!d.property) {
+              return null;
+            }
+            if (d.important) {
+              return null;
+            }
+            if (d.value.kind === "static") {
+              for (const mapped of cssDeclarationToStylexDeclarations(d)) {
+                let value = cssValueToJs(mapped.value, d.important, mapped.prop);
+                if (mapped.prop === "content" && typeof value === "string") {
+                  const m = value.match(/^['"]([\s\S]*)['"]$/);
+                  if (m) {
+                    value = `"${m[1]}"`;
+                  } else if (!value.startsWith('"') && !value.endsWith('"')) {
+                    value = `"${value}"`;
+                  }
+                }
+                if (
+                  typeof value === "string" ||
+                  typeof value === "number" ||
+                  typeof value === "boolean"
+                ) {
+                  out.set(mapped.prop, staticValueToLiteral(j, value) as ExpressionKind);
+                } else {
+                  return null;
+                }
+              }
+              continue;
+            }
+            if (d.value.kind !== "interpolated") {
+              return null;
+            }
+            const parts = d.value.parts ?? [];
+            const slotParts = parts.filter(
+              (p): p is { kind: "slot"; slotId: number } => p.kind === "slot",
+            );
+            if (slotParts.length !== 1) {
+              return null;
+            }
+            // Safe: length check above guarantees slotParts[0] exists
+            const slotExpr = slotExprById.get(slotParts[0]!.slotId);
+            if (!slotExpr || typeof slotExpr !== "object") {
+              return null;
+            }
+            const rawExpr = replaceParamWithProps(slotExpr as ExpressionKind);
+            const { prefix, suffix } = extractStaticParts(d.value);
+            const valueExpr =
+              prefix || suffix ? buildTemplateWithStaticParts(j, rawExpr, prefix, suffix) : rawExpr;
+            for (const mapped of cssDeclarationToStylexDeclarations(d)) {
+              out.set(mapped.prop, valueExpr);
+            }
+          }
+        }
+        return out;
+      };
+
       // Handle LogicalExpression: props.$x && css`...` or chained: props.$x && props.$y && css`...`
       const body = expr.body;
       if (body?.type === "LogicalExpression" && body.operator === "&&") {
@@ -1722,24 +1979,188 @@ export function lowerRules(args: {
         return true;
       }
 
+      // Handle BlockStatement with simple return of css`...` (no condition)
+      // Pattern: (props) => { return css`font-size: ${props.$size}px;`; }
+      if (body?.type === "BlockStatement") {
+        const stmts = Array.isArray((body as { body?: ASTNode[] }).body)
+          ? (body as { body: ASTNode[] }).body
+          : [];
+        // Only handle single ReturnStatement (not if blocks - those go to conditional handling below)
+        if (stmts.length === 1 && stmts[0]?.type === "ReturnStatement") {
+          const returnArg = (stmts[0] as { argument?: ASTNode }).argument;
+          if (returnArg && isCssHelperTaggedTemplate(returnArg)) {
+            // Use resolveCssBranchToInlineMap (same as conditional handling)
+            // since it properly preserves expressions like ${props.$size - 3}px
+            const styleMap = resolveCssBranchToInlineMap(returnArg as ExpressionKind);
+            if (!styleMap) {
+              return false;
+            }
+
+            if (styleMap.size === 0) {
+              return true;
+            }
+
+            // Collect props used in value expressions
+            const propsUsed = collectPropsFromArrowFn(expr);
+            collectPropsFromExpressions(styleMap.values(), propsUsed);
+
+            // Filter to $-prefixed props used in value expressions
+            const valuePropParams = Array.from(propsUsed).filter((p) => p.startsWith("$"));
+
+            if (valuePropParams.length === 0) {
+              // No dynamic props - add styles directly to base object
+              for (const [prop, valueExpr] of styleMap.entries()) {
+                styleObj[prop] = valueExpr;
+              }
+              return true;
+            }
+
+            // Create parameterized StyleX style function
+            const params = valuePropParams.map((p) => {
+              const param = j.identifier(p.slice(1)); // Strip $ prefix
+              (param as { typeAnnotation?: unknown }).typeAnnotation = j.tsTypeAnnotation(
+                j.tsNumberKeyword(),
+              );
+              return param;
+            });
+            const properties = Array.from(styleMap.entries()).map(([prop, propExpr]) => {
+              const replacedExpr = replaceDollarPropsWithParams(j, propExpr);
+              return j.property("init", j.identifier(prop), replacedExpr);
+            });
+            const styleFn = j.arrowFunctionExpression(params, j.objectExpression(properties));
+
+            // Add to resolved style objects
+            const fnKey = `${decl.styleKey}Styles`;
+            resolvedStyleObjects.set(fnKey, styleFn);
+
+            // Create function call expression for stylex.props
+            const args = valuePropParams.map((p) => j.identifier(p));
+            const styleCall = j.callExpression(
+              j.memberExpression(j.identifier("styles"), j.identifier(fnKey)),
+              args,
+            );
+
+            if (!decl.extraStylexPropsArgs) {
+              decl.extraStylexPropsArgs = [];
+            }
+            decl.extraStylexPropsArgs.push({ expr: styleCall });
+
+            decl.needsWrapperComponent = true;
+            for (const propName of propsUsed) {
+              ensureShouldForwardPropDrop(decl, propName);
+            }
+            return true;
+          }
+        }
+      }
+
       // Handle ConditionalExpression: props.$x ? css`...` : css`...`
-      if (body?.type !== "ConditionalExpression") {
+      const conditional =
+        body?.type === "ConditionalExpression"
+          ? body
+          : body?.type === "BlockStatement"
+            ? extractConditionalFromIfBlock(body)
+            : null;
+      if (!conditional) {
         return false;
       }
 
-      const testInfo = parseTestInfo(body.test);
-      if (!testInfo) {
-        return false;
-      }
+      const testInfo = parseTestInfo(conditional.test);
 
-      const cons = body.consequent;
-      const alt = body.alternate;
+      const cons = conditional.consequent;
+      const alt = conditional.alternate;
       const consIsCss = isCssHelperTaggedTemplate(cons);
       const altIsCss = isCssHelperTaggedTemplate(alt);
       const consIsTpl = isPlainTemplateLiteral(cons);
       const altIsTpl = isPlainTemplateLiteral(alt);
       const consIsEmpty = isEmptyCssBranch(cons);
       const altIsEmpty = isEmptyCssBranch(alt);
+
+      if (!testInfo) {
+        // Non-prop conditional: generate StyleX parameterized style functions.
+        // Only support css`` or template-literal CSS branches.
+        const consMap =
+          consIsCss || consIsTpl
+            ? resolveCssBranchToInlineMap(cons)
+            : consIsEmpty
+              ? new Map()
+              : null;
+        const altMap =
+          altIsCss || altIsTpl ? resolveCssBranchToInlineMap(alt) : altIsEmpty ? new Map() : null;
+        if (!consMap || !altMap) {
+          return false;
+        }
+
+        // Collect props used in value expressions
+        const propsUsed = collectPropsFromArrowFn(expr);
+        collectPropsFromExpressions([...consMap.values(), ...altMap.values()], propsUsed);
+
+        // Filter to $-prefixed props used in value expressions
+        const valuePropParams = Array.from(propsUsed).filter((p) => p.startsWith("$"));
+
+        if (consMap.size === 0 && altMap.size === 0) {
+          return true;
+        }
+
+        // Create parameterized StyleX style function
+        const createStyleFn = (map: Map<string, ExpressionKind>) => {
+          // Use number type for params - StyleX parameterized functions typically work with numeric values
+          const params = valuePropParams.map((p) => {
+            const param = j.identifier(p.slice(1)); // Strip $ prefix
+            (param as { typeAnnotation?: unknown }).typeAnnotation = j.tsTypeAnnotation(
+              j.tsNumberKeyword(),
+            );
+            return param;
+          });
+          const properties = Array.from(map.entries()).map(([prop, propExpr]) => {
+            const replacedExpr = replaceDollarPropsWithParams(j, propExpr);
+            return j.property("init", j.identifier(prop), replacedExpr);
+          });
+          return j.arrowFunctionExpression(params, j.objectExpression(properties));
+        };
+
+        // Generate style function keys with descriptive names when possible
+        const conditionName = extractConditionName(conditional.test);
+        const consKey = conditionName
+          ? `${decl.styleKey}${conditionName}`
+          : `${decl.styleKey}CondTruthy`;
+        const altKey = conditionName ? `${decl.styleKey}Default` : `${decl.styleKey}CondFalsy`;
+
+        if (consMap.size > 0) {
+          resolvedStyleObjects.set(consKey, createStyleFn(consMap));
+        }
+        if (altMap.size > 0) {
+          resolvedStyleObjects.set(altKey, createStyleFn(altMap));
+        }
+
+        // Create function call expressions
+        const makeStyleCall = (key: string) => {
+          const args = valuePropParams.map((p) => j.identifier(p));
+          return j.callExpression(
+            j.memberExpression(j.identifier("styles"), j.identifier(key)),
+            args,
+          );
+        };
+
+        // Create conditional expression for stylex.props
+        const condExpr = j.conditionalExpression(
+          cloneAstNode(conditional.test) as ExpressionKind,
+          consMap.size > 0 ? makeStyleCall(consKey) : (j.identifier("undefined") as ExpressionKind),
+          altMap.size > 0 ? makeStyleCall(altKey) : (j.identifier("undefined") as ExpressionKind),
+        );
+
+        // Add to extraStylexPropsArgs
+        if (!decl.extraStylexPropsArgs) {
+          decl.extraStylexPropsArgs = [];
+        }
+        decl.extraStylexPropsArgs.push({ expr: condExpr });
+
+        decl.needsWrapperComponent = true;
+        for (const propName of propsUsed) {
+          ensureShouldForwardPropDrop(decl, propName);
+        }
+        return true;
+      }
 
       // Check for CallExpression branches (e.g., truncate() helpers)
       const consIsCall = isCallExpressionNode(cons);

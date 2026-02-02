@@ -23,6 +23,24 @@ export type ConditionalVariant = {
 type ValuePart = { kind: string; value?: string; slotId?: number };
 
 /**
+ * Parses a CSS template literal to IR rules and slot expression map.
+ * This is the shared parsing logic used by both resolveCssHelperTemplate and resolveCssBranchToInlineMap.
+ */
+export function parseCssTemplateToRules(template: any): {
+  rules: ReturnType<typeof normalizeStylisAstToIR>;
+  slotExprById: Map<number, unknown>;
+  rawCss: string;
+} {
+  const parsed = parseStyledTemplateLiteral(template);
+  const rawCss = parsed.rawCss;
+  const wrappedRawCss = `& { ${rawCss} }`;
+  const stylisAst = compile(wrappedRawCss);
+  const rules = normalizeStylisAstToIR(stylisAst, parsed.slots, { rawCss: wrappedRawCss });
+  const slotExprById = new Map(parsed.slots.map((s) => [s.index, s.expression]));
+  return { rules, slotExprById, rawCss };
+}
+
+/**
  * Extracts prefix and suffix static parts from a value parts array.
  * Given parts like ["static:1px", "slot", "static:solid"], returns { prefix: "1px", suffix: "solid" }
  */
@@ -293,14 +311,7 @@ export function createCssHelperResolver(args: {
       return null;
     };
 
-    const parsed = parseStyledTemplateLiteral(template);
-    const rawCss = parsed.rawCss;
-    const wrappedRawCss = `& { ${rawCss} }`;
-    const stylisAst = compile(wrappedRawCss);
-    const rules = normalizeStylisAstToIR(stylisAst, parsed.slots, {
-      rawCss: wrappedRawCss,
-    });
-    const slotExprById = new Map(parsed.slots.map((s) => [s.index, s.expression]));
+    const { rules, slotExprById } = parseCssTemplateToRules(template);
 
     const out: Record<string, unknown> = {};
     const dynamicProps: Array<{ jsxProp: string; stylexProp: string }> = [];
