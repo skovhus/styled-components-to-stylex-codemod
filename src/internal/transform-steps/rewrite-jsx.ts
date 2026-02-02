@@ -1,6 +1,7 @@
 import { CONTINUE, type StepResult } from "../transform-types.js";
 import type { StyledDecl } from "../transform-types.js";
 import { TransformContext } from "../transform-context.js";
+import type { ExpressionKind } from "../utilities/jscodeshift-utils.js";
 
 /**
  * Rewrites JSX usages and removes styled declarations when wrappers are not required.
@@ -368,7 +369,7 @@ export function rewriteJsxStep(ctx: TransformContext): StepResult {
         const mixinOrder = decl.mixinOrder;
 
         // Build interleaved extra args based on mixinOrder (if available)
-        const extraMixinArgs: any[] = [];
+        const extraMixinArgs: ExpressionKind[] = [];
         if (mixinOrder && mixinOrder.length > 0) {
           let styleKeyIdx = 0;
           let propsArgIdx = 0;
@@ -404,7 +405,7 @@ export function rewriteJsxStep(ctx: TransformContext): StepResult {
           }
         }
 
-        const styleArgs: any[] = [
+        const styleArgs: ExpressionKind[] = [
           ...(decl.extendsStyleKey
             ? [
                 j.memberExpression(

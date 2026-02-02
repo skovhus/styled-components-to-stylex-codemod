@@ -3339,10 +3339,13 @@ export function lowerRules(args: {
               if (expr?.type === "Identifier" && cssHelperNames.has(expr.name)) {
                 const helperKey = toStyleKey(expr.name);
                 const extras = decl.extraStyleKeys ?? [];
+                const order = decl.mixinOrder ?? [];
                 if (!extras.includes(helperKey)) {
                   extras.push(helperKey);
+                  order.push("styleKey");
                 }
                 decl.extraStyleKeys = extras;
+                decl.mixinOrder = order;
                 // Track properties and values defined by this css helper so we can
                 // set proper default values for pseudo selectors on these properties.
                 const helperValues = cssHelperValuesByKey.get(helperKey);
@@ -3442,10 +3445,13 @@ export function lowerRules(args: {
                   const memberDecl = objectMemberMap.get(firstRootInfoPath);
                   if (memberDecl) {
                     const extras = decl.extraStyleKeys ?? [];
+                    const order = decl.mixinOrder ?? [];
                     if (!extras.includes(memberDecl.styleKey)) {
                       extras.push(memberDecl.styleKey);
+                      order.push("styleKey");
                     }
                     decl.extraStyleKeys = extras;
+                    decl.mixinOrder = order;
                     // Track properties and values defined by this css helper
                     const helperValues = cssHelperValuesByKey.get(memberDecl.styleKey);
                     if (helperValues) {
