@@ -300,11 +300,11 @@ type ConditionalExpressionBody = {
  * Determines if an adapter's CallResolveResult should be treated as a CSS value.
  *
  * Resolution priority:
- * 1. Adapter's explicit `kind` field takes precedence
+ * 1. Adapter's explicit `usage` field takes precedence
  * 2. Otherwise, infer from context: cssProperty present → CSS value, absent → StyleX reference
  */
 function isAdapterResultCssValue(result: CallResolveResult, cssProperty?: string): boolean {
-  return result.kind === "cssValue" || (result.kind === undefined && Boolean(cssProperty));
+  return result.usage === "create" || (result.usage === undefined && Boolean(cssProperty));
 }
 
 /**

@@ -260,7 +260,7 @@ When the codemod encounters an interpolation inside a styled template literal, i
 - helper calls (`transitionSpeed("slowTransition")`) via `resolveCall({ ... })` — the codemod infers usage from context:
   - With `ctx.cssProperty` (e.g., `color: ${helper()}`) → result used as CSS value in `stylex.create()`
   - Without `ctx.cssProperty` (e.g., `${helper()}`) → result used as StyleX styles in `stylex.props()`
-  - Use the optional `kind: "cssValue" | "stylexStyles"` field to override the default inference
+  - Use the optional `usage: "create" | "props"` field to override the default inference
 - if `resolveCall` returns `null` or `undefined`, the transform **bails the file** and logs a warning
 - helper calls applied to prop values (e.g. `shadow(props.shadow)`) by emitting a StyleX style function that calls the helper at runtime
 - conditional CSS blocks via ternary (e.g. `props.$dim ? "opacity: 0.5;" : ""`)
