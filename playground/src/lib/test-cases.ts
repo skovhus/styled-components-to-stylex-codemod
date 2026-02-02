@@ -40,15 +40,6 @@ export const testCases: TestCase[] = Object.entries(inputs)
     return a.name.localeCompare(b.name);
   });
 
-const getModulePath = (name: string, type: "input" | "output"): string =>
-  `../../../test-cases/${name}.${type}.tsx`;
-
-const getModuleLoader = (
-  modules: Record<string, TestCaseModuleLoader>,
-  name: string,
-  type: "input" | "output",
-): TestCaseModuleLoader | undefined => modules[getModulePath(name, type)];
-
 export async function loadTestCaseModule(
   name: string,
   type: "input" | "output",
@@ -64,4 +55,16 @@ export async function loadTestCaseModule(
   }
 
   return loader();
+}
+
+function getModulePath(name: string, type: "input" | "output"): string {
+  return `../../../test-cases/${name}.${type}.tsx`;
+}
+
+function getModuleLoader(
+  modules: Record<string, TestCaseModuleLoader>,
+  name: string,
+  type: "input" | "output",
+): TestCaseModuleLoader | undefined {
+  return modules[getModulePath(name, type)];
 }

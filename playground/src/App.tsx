@@ -11,112 +11,7 @@ import type { Adapter } from "../../src/adapter";
 import { fixtureAdapter } from "../../src/__tests__/fixture-adapters";
 import { testCaseTheme } from "../../test-cases/tokens.stylex";
 
-const jsxExtension = javascript({ jsx: true, typescript: true });
-
-type RenderState = {
-  input: React.ComponentType<Record<string, never>> | null;
-  output: React.ComponentType<Record<string, never>> | null;
-  inputError: string | null;
-  outputError: string | null;
-  loading: boolean;
-};
-
-const initialRenderState: RenderState = {
-  input: null,
-  output: null,
-  inputError: null,
-  outputError: null,
-  loading: false,
-};
-
-const formatErrorMessage = (error: unknown): string =>
-  error instanceof Error ? error.message : String(error);
-
-type RenderErrorBoundaryProps = {
-  resetKey: string;
-  fallback: (error: Error) => React.ReactNode;
-  children: React.ReactNode;
-};
-
-type RenderErrorBoundaryState = {
-  error: Error | null;
-};
-
-class RenderErrorBoundary extends Component<RenderErrorBoundaryProps, RenderErrorBoundaryState> {
-  state: RenderErrorBoundaryState = { error: null };
-
-  static getDerivedStateFromError(error: Error): RenderErrorBoundaryState {
-    return { error };
-  }
-
-  componentDidUpdate(prevProps: RenderErrorBoundaryProps): void {
-    if (prevProps.resetKey !== this.props.resetKey && this.state.error) {
-      this.setState({ error: null });
-    }
-  }
-
-  componentDidCatch(error: Error, info: React.ErrorInfo): void {
-    console.error("Render preview error", error, info);
-  }
-
-  render(): React.ReactNode {
-    if (this.state.error) {
-      return this.props.fallback(this.state.error);
-    }
-    return this.props.children;
-  }
-}
-
-type PreviewPaneProps = {
-  title: string;
-  component: React.ComponentType<Record<string, never>> | null;
-  error: string | null;
-  loading: boolean;
-  emptyMessage: string;
-  resetKey: string;
-  isLast?: boolean;
-};
-
-function PreviewPane({
-  title,
-  component,
-  error,
-  loading,
-  emptyMessage,
-  resetKey,
-  isLast = false,
-}: PreviewPaneProps) {
-  const ComponentToRender = component;
-  const paneStyle = isLast ? { ...styles.renderPane, borderRight: "none" } : styles.renderPane;
-
-  return (
-    <div style={paneStyle}>
-      <div style={styles.renderPaneHeader}>{title}</div>
-      <div style={styles.renderPaneBody}>
-        {loading ? (
-          <div style={styles.renderPlaceholder}>Loading preview...</div>
-        ) : error ? (
-          <pre style={styles.renderError}>{error}</pre>
-        ) : ComponentToRender ? (
-          <RenderErrorBoundary
-            resetKey={resetKey}
-            fallback={(renderError) => (
-              <pre style={styles.renderError}>{formatErrorMessage(renderError)}</pre>
-            )}
-          >
-            <ThemeProvider theme={testCaseTheme}>
-              <ComponentToRender />
-            </ThemeProvider>
-          </RenderErrorBoundary>
-        ) : (
-          <div style={styles.renderPlaceholder}>{emptyMessage}</div>
-        )}
-      </div>
-    </div>
-  );
-}
-
-function App() {
+export default function App() {
   const [selectedTestCase, setSelectedTestCase] = useState(testCases[0]?.name ?? "");
   const [input, setInput] = useState(testCases[0]?.content ?? "");
   const [adapterCode, setAdapterCode] = useState(DEFAULT_ADAPTER_CODE);
@@ -194,8 +89,10 @@ function App() {
       setRenderState({
         input: inputModule?.App ?? null,
         output: outputModule?.App ?? null,
-        inputError: inputResult.status === "rejected" ? formatErrorMessage(inputResult.reason) : null,
-        outputError: outputResult.status === "rejected" ? formatErrorMessage(outputResult.reason) : null,
+        inputError:
+          inputResult.status === "rejected" ? formatErrorMessage(inputResult.reason) : null,
+        outputError:
+          outputResult.status === "rejected" ? formatErrorMessage(outputResult.reason) : null,
         loading: false,
       });
     };
@@ -452,7 +349,9 @@ function App() {
               error={renderState.inputError}
               loading={renderState.loading}
               emptyMessage={
-                selectedTestCase ? "No input fixture found for this test case." : "Select a test case."
+                selectedTestCase
+                  ? "No input fixture found for this test case."
+                  : "Select a test case."
               }
               resetKey={`${selectedTestCase}-input`}
             />
@@ -462,7 +361,9 @@ function App() {
               error={renderState.outputError}
               loading={renderState.loading}
               emptyMessage={
-                selectedTestCase ? "No output fixture found for this test case." : "Select a test case."
+                selectedTestCase
+                  ? "No output fixture found for this test case."
+                  : "Select a test case."
               }
               resetKey={`${selectedTestCase}-output`}
               isLast
@@ -470,6 +371,111 @@ function App() {
           </div>
         </div>
       )}
+    </div>
+  );
+}
+
+const jsxExtension = javascript({ jsx: true, typescript: true });
+
+type RenderState = {
+  input: React.ComponentType<Record<string, never>> | null;
+  output: React.ComponentType<Record<string, never>> | null;
+  inputError: string | null;
+  outputError: string | null;
+  loading: boolean;
+};
+
+const initialRenderState: RenderState = {
+  input: null,
+  output: null,
+  inputError: null,
+  outputError: null,
+  loading: false,
+};
+
+const formatErrorMessage = (error: unknown): string =>
+  error instanceof Error ? error.message : String(error);
+
+type RenderErrorBoundaryProps = {
+  resetKey: string;
+  fallback: (error: Error) => React.ReactNode;
+  children: React.ReactNode;
+};
+
+type RenderErrorBoundaryState = {
+  error: Error | null;
+};
+
+class RenderErrorBoundary extends Component<RenderErrorBoundaryProps, RenderErrorBoundaryState> {
+  state: RenderErrorBoundaryState = { error: null };
+
+  static getDerivedStateFromError(error: Error): RenderErrorBoundaryState {
+    return { error };
+  }
+
+  componentDidUpdate(prevProps: RenderErrorBoundaryProps): void {
+    if (prevProps.resetKey !== this.props.resetKey && this.state.error) {
+      this.setState({ error: null });
+    }
+  }
+
+  componentDidCatch(error: Error, info: React.ErrorInfo): void {
+    console.error("Render preview error", error, info);
+  }
+
+  render(): React.ReactNode {
+    if (this.state.error) {
+      return this.props.fallback(this.state.error);
+    }
+    return this.props.children;
+  }
+}
+
+type PreviewPaneProps = {
+  title: string;
+  component: React.ComponentType<Record<string, never>> | null;
+  error: string | null;
+  loading: boolean;
+  emptyMessage: string;
+  resetKey: string;
+  isLast?: boolean;
+};
+
+function PreviewPane({
+  title,
+  component,
+  error,
+  loading,
+  emptyMessage,
+  resetKey,
+  isLast = false,
+}: PreviewPaneProps) {
+  const ComponentToRender = component;
+  const paneStyle = isLast ? { ...styles.renderPane, borderRight: "none" } : styles.renderPane;
+
+  return (
+    <div style={paneStyle}>
+      <div style={styles.renderPaneHeader}>{title}</div>
+      <div style={styles.renderPaneBody}>
+        {loading ? (
+          <div style={styles.renderPlaceholder}>Loading preview...</div>
+        ) : error ? (
+          <pre style={styles.renderError}>{error}</pre>
+        ) : ComponentToRender ? (
+          <RenderErrorBoundary
+            resetKey={resetKey}
+            fallback={(renderError) => (
+              <pre style={styles.renderError}>{formatErrorMessage(renderError)}</pre>
+            )}
+          >
+            <ThemeProvider theme={testCaseTheme}>
+              <ComponentToRender />
+            </ThemeProvider>
+          </RenderErrorBoundary>
+        ) : (
+          <div style={styles.renderPlaceholder}>{emptyMessage}</div>
+        )}
+      </div>
     </div>
   );
 }
@@ -736,5 +742,3 @@ const styles: Record<string, React.CSSProperties> = {
     fontSize: "11px",
   },
 };
-
-export default App;
