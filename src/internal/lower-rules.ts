@@ -53,7 +53,7 @@ import {
   hasThemeAccessInArrowFn,
   hasUnsupportedConditionalTest,
   inlineArrowFunctionBody,
-  replaceDollarPropsOnly,
+  normalizeDollarProps,
   unwrapArrowFunctionToPropsExpr,
 } from "./lower-rules/inline-styles.js";
 import { addPropComments } from "./lower-rules/comments.js";
@@ -2032,7 +2032,7 @@ export function lowerRules(args: {
 
             // Keep expressions as-is (props.X stays as props.X), just handle $-prefixed props
             const properties = Array.from(styleMap.entries()).map(([prop, propExpr]) => {
-              const replacedExpr = replaceDollarPropsOnly(j, propExpr);
+              const replacedExpr = normalizeDollarProps(j, propExpr);
               return j.property("init", j.identifier(prop), replacedExpr);
             });
             const styleFn = j.arrowFunctionExpression([propsParam], j.objectExpression(properties));
@@ -2134,7 +2134,7 @@ export function lowerRules(args: {
           );
 
           const properties = Array.from(map.entries()).map(([prop, propExpr]) => {
-            const replacedExpr = replaceDollarPropsOnly(j, propExpr);
+            const replacedExpr = normalizeDollarProps(j, propExpr);
             return j.property("init", j.identifier(prop), replacedExpr);
           });
           return j.arrowFunctionExpression([propsParam], j.objectExpression(properties));

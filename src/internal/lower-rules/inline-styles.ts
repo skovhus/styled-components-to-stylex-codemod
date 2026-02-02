@@ -408,12 +408,12 @@ export function collectPropsFromExpressions(
 }
 
 /**
- * Handles $-prefixed prop references for StyleX parameterized style functions:
- * - `props.$foo` -> `props.foo` (strip $ from property name, keep props.)
- * - `$foo` identifier -> `props.foo` (wrap in props member expression)
- * - `props.foo` -> unchanged (no transformation needed)
+ * Normalizes $-prefixed prop references to props.X format for StyleX style functions:
+ * - `$foo` identifier -> `props.foo` (wrap in member expression)
+ * - `props.$foo` -> `props.foo` (strip $ prefix)
+ * - `props.foo` -> unchanged
  */
-export function replaceDollarPropsOnly(j: JSCodeshift, exprNode: ExpressionKind): ExpressionKind {
+export function normalizeDollarProps(j: JSCodeshift, exprNode: ExpressionKind): ExpressionKind {
   const cloned = cloneAstNode(exprNode);
   const replace = (node: unknown): unknown => {
     if (!node || typeof node !== "object") {
