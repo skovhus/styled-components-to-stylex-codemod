@@ -315,6 +315,37 @@ export function lowerRules(args: {
     return true;
   };
 
+  /**
+   * Adds a style key to decl.extraStyleKeys and tracks order in decl.mixinOrder.
+   * Returns true if the key was added (not already present).
+   */
+  const addStyleKeyMixin = (decl: StyledDecl, styleKey: string): boolean => {
+    const extras = decl.extraStyleKeys ?? [];
+    const order = decl.mixinOrder ?? [];
+    if (extras.includes(styleKey)) {
+      return false;
+    }
+    extras.push(styleKey);
+    order.push("styleKey");
+    decl.extraStyleKeys = extras;
+    decl.mixinOrder = order;
+    return true;
+  };
+
+  /**
+   * Copies property values from a values map to the tracking map.
+   */
+  const trackMixinPropertyValues = (
+    valuesMap: Map<string, unknown> | undefined,
+    targetMap: Map<string, unknown>,
+  ): void => {
+    if (valuesMap) {
+      for (const [prop, value] of valuesMap) {
+        targetMap.set(prop, value);
+      }
+    }
+  };
+
   // Pre-compute properties and values defined by each css helper and mixin from their rules.
   // This allows us to know what properties they provide (and their values) before styled
   // components that use them are processed, which is needed for correct pseudo selector
@@ -3338,22 +3369,8 @@ export function lowerRules(args: {
               const expr = decl.templateExpressions[slot.slotId] as any;
               if (expr?.type === "Identifier" && cssHelperNames.has(expr.name)) {
                 const helperKey = toStyleKey(expr.name);
-                const extras = decl.extraStyleKeys ?? [];
-                const order = decl.mixinOrder ?? [];
-                if (!extras.includes(helperKey)) {
-                  extras.push(helperKey);
-                  order.push("styleKey");
-                }
-                decl.extraStyleKeys = extras;
-                decl.mixinOrder = order;
-                // Track properties and values defined by this css helper so we can
-                // set proper default values for pseudo selectors on these properties.
-                const helperValues = cssHelperValuesByKey.get(helperKey);
-                if (helperValues) {
-                  for (const [prop, value] of helperValues) {
-                    cssHelperPropValues.set(prop, value);
-                  }
-                }
+                addStyleKeyMixin(decl, helperKey);
+                trackMixinPropertyValues(cssHelperValuesByKey.get(helperKey), cssHelperPropValues);
                 continue;
               }
               if (expr?.type === "Identifier") {
@@ -3361,34 +3378,18 @@ export function lowerRules(args: {
                 const mixinDecl = declByLocalName.get(expr.name);
                 if (mixinDecl && !mixinDecl.isCssHelper && mixinDecl.localName !== decl.localName) {
                   if (isSimpleMixin(mixinDecl)) {
-                    const extras = decl.extraStyleKeys ?? [];
-                    const order = decl.mixinOrder ?? [];
-
                     // First propagate recursive mixins' extraStyleKeys (lower precedence)
                     if (mixinDecl.extraStyleKeys) {
                       for (const extraKey of mixinDecl.extraStyleKeys) {
-                        if (!extras.includes(extraKey)) {
-                          extras.push(extraKey);
-                          order.push("styleKey");
-                        }
+                        addStyleKeyMixin(decl, extraKey);
                       }
                     }
-
                     // Then add mixin's styleKey (higher precedence than its dependencies)
-                    if (!extras.includes(mixinDecl.styleKey)) {
-                      extras.push(mixinDecl.styleKey);
-                      order.push("styleKey");
-                    }
-                    decl.extraStyleKeys = extras;
-                    decl.mixinOrder = order;
-
-                    // Track properties for pseudo-selector defaults
-                    const mixinValues = mixinValuesByKey.get(mixinDecl.styleKey);
-                    if (mixinValues) {
-                      for (const [prop, value] of mixinValues) {
-                        cssHelperPropValues.set(prop, value);
-                      }
-                    }
+                    addStyleKeyMixin(decl, mixinDecl.styleKey);
+                    trackMixinPropertyValues(
+                      mixinValuesByKey.get(mixinDecl.styleKey),
+                      cssHelperPropValues,
+                    );
                     continue;
                   }
 
@@ -3444,21 +3445,11 @@ export function lowerRules(args: {
                 if (objectMemberMap) {
                   const memberDecl = objectMemberMap.get(firstRootInfoPath);
                   if (memberDecl) {
-                    const extras = decl.extraStyleKeys ?? [];
-                    const order = decl.mixinOrder ?? [];
-                    if (!extras.includes(memberDecl.styleKey)) {
-                      extras.push(memberDecl.styleKey);
-                      order.push("styleKey");
-                    }
-                    decl.extraStyleKeys = extras;
-                    decl.mixinOrder = order;
-                    // Track properties and values defined by this css helper
-                    const helperValues = cssHelperValuesByKey.get(memberDecl.styleKey);
-                    if (helperValues) {
-                      for (const [prop, value] of helperValues) {
-                        cssHelperPropValues.set(prop, value);
-                      }
-                    }
+                    addStyleKeyMixin(decl, memberDecl.styleKey);
+                    trackMixinPropertyValues(
+                      cssHelperValuesByKey.get(memberDecl.styleKey),
+                      cssHelperPropValues,
+                    );
                     continue;
                   }
                 }
