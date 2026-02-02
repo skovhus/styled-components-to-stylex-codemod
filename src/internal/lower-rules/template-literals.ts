@@ -1,11 +1,7 @@
 import type { Expression, JSCodeshift, TemplateLiteral } from "jscodeshift";
 import { compile } from "stylis";
 import type { Adapter, ImportSource, ImportSpec } from "../../adapter.js";
-import {
-  assertNoLegacyKindField,
-  resolveDynamicNode,
-  type InternalHandlerContext,
-} from "../builtin-handlers.js";
+import { resolveDynamicNode, type InternalHandlerContext } from "../builtin-handlers.js";
 import {
   cssDeclarationToStylexDeclarations,
   cssPropertyToStylexProp,
@@ -595,9 +591,6 @@ function resolveStaticTemplateExpressionAst(args: {
             args: innerArgs,
             ...(callLoc ? { loc: { line: callLoc.line, column: callLoc.column } } : {}),
           });
-          if (callRes) {
-            assertNoLegacyKindField(callRes);
-          }
           if (callRes && callRes.usage !== "props") {
             for (const callImp of callRes.imports ?? []) {
               resolverImports.set(JSON.stringify(callImp), callImp);
