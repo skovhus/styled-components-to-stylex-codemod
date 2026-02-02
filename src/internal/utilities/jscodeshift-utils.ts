@@ -33,6 +33,12 @@ export type AstPath = {
 };
 
 /**
+ * Helper type for flexible AST node property access.
+ * jscodeshift types are complex and generic AST traversal requires flexibility.
+ */
+export type ASTNodeRecord = Record<string, unknown> & { type: string };
+
+/**
  * Result of extracting root identifier and member path from an expression.
  */
 export type RootIdentifierInfo = {

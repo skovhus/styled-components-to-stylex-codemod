@@ -13,6 +13,7 @@ import {
 } from "./css-prop-mapping.js";
 import {
   type AstPath,
+  type ASTNodeRecord,
   type ArrowFnParamBindings,
   type IdentifierNode,
   cloneAstNode,
@@ -1482,10 +1483,6 @@ export function lowerRules(args: {
         }
         return null;
       };
-
-      // Helper type for AST node property access - jscodeshift types are complex
-      // and generic AST traversal requires flexibility (per CLAUDE.md guidelines)
-      type ASTNodeRecord = Record<string, unknown> & { type: string };
 
       const replaceParamWithProps = (exprNode: ExpressionKind): ExpressionKind => {
         const cloned = cloneAstNode(exprNode);

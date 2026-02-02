@@ -1,5 +1,6 @@
 import type { JSCodeshift } from "jscodeshift";
 import {
+  type ASTNodeRecord,
   cloneAstNode,
   getArrowFnParamBindings,
   getFunctionBodyExpr,
@@ -7,10 +8,6 @@ import {
 } from "../utilities/jscodeshift-utils.js";
 
 type ExpressionKind = Parameters<JSCodeshift["expressionStatement"]>[0];
-
-// Helper type for flexible AST node property access - jscodeshift types are complex
-// and generic AST traversal requires flexibility (per CLAUDE.md guidelines)
-type ASTNodeRecord = Record<string, unknown> & { type: string };
 
 // Build a template literal with static prefix/suffix around a dynamic expression.
 // e.g., prefix="" suffix="ms" expr=<call> -> `${<call>}ms`
