@@ -12,7 +12,13 @@ export function Container(props: ContainerProps) {
     <div
       {...stylex.props(
         styles.container,
-        Browser.isSafari ? styles.containerBrowserIsSafari(size) : styles.containerDefault(size),
+        Browser.isSafari
+          ? styles.containerBrowserIsSafari({
+              size,
+            })
+          : styles.containerDefault({
+              size,
+            }),
       )}
     >
       {children}
@@ -23,13 +29,13 @@ export function Container(props: ContainerProps) {
 export const App = () => <Container size={16}>Hello World</Container>;
 
 const styles = stylex.create({
-  containerBrowserIsSafari: (size: number) => ({
-    fontSize: `${size - 4}px`,
+  containerBrowserIsSafari: (props: { size: number }) => ({
+    fontSize: `${props.size - 4}px`,
     lineHeight: 1,
   }),
-  containerDefault: (size: number) => ({
-    fontSize: `${size - 3}px`,
-    lineHeight: `${size}px`,
+  containerDefault: (props: { size: number }) => ({
+    fontSize: `${props.size - 3}px`,
+    lineHeight: `${props.size}px`,
   }),
   container: {
     display: "inline-flex",

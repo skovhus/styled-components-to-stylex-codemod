@@ -53,7 +53,7 @@ import {
   hasThemeAccessInArrowFn,
   hasUnsupportedConditionalTest,
   inlineArrowFunctionBody,
-  replacePropsWithParams,
+  replaceDollarPropsOnly,
   unwrapArrowFunctionToPropsExpr,
 } from "./lower-rules/inline-styles.js";
 import { addPropComments } from "./lower-rules/comments.js";
@@ -2015,32 +2015,45 @@ export function lowerRules(args: {
               return true;
             }
 
-            // Create parameterized StyleX style function
-            // Parameter names: strip $ prefix if present (e.g., $size -> size, myProp -> myProp)
-            const params = valuePropParams.map((p) => {
-              const paramName = p.startsWith("$") ? p.slice(1) : p;
-              const param = j.identifier(paramName);
-              (param as { typeAnnotation?: unknown }).typeAnnotation = j.tsTypeAnnotation(
-                j.tsNumberKeyword(),
+            // Create parameterized StyleX style function with props object parameter
+            // Type: { size: number; padding: number }
+            const propsTypeProperties = valuePropParams.map((p) => {
+              const propName = p.startsWith("$") ? p.slice(1) : p;
+              const prop = j.tsPropertySignature(
+                j.identifier(propName),
+                j.tsTypeAnnotation(j.tsNumberKeyword()),
               );
-              return param;
+              return prop;
             });
+            const propsParam = j.identifier("props");
+            (propsParam as { typeAnnotation?: unknown }).typeAnnotation = j.tsTypeAnnotation(
+              j.tsTypeLiteral(propsTypeProperties),
+            );
+
+            // Keep expressions as-is (props.X stays as props.X), just handle $-prefixed props
             const properties = Array.from(styleMap.entries()).map(([prop, propExpr]) => {
-              const replacedExpr = replacePropsWithParams(j, propExpr);
+              const replacedExpr = replaceDollarPropsOnly(j, propExpr);
               return j.property("init", j.identifier(prop), replacedExpr);
             });
-            const styleFn = j.arrowFunctionExpression(params, j.objectExpression(properties));
+            const styleFn = j.arrowFunctionExpression([propsParam], j.objectExpression(properties));
 
             // Add to resolved style objects
             const fnKey = `${decl.styleKey}Styles`;
             resolvedStyleObjects.set(fnKey, styleFn);
 
-            // Create function call expression for stylex.props
-            // Call args use original prop names (they exist in the component's destructured props)
-            const args = valuePropParams.map((p) => j.identifier(p));
+            // Create function call expression with props object: { size, padding }
+            const callArgProperties = valuePropParams.map((p) => {
+              const propName = p.startsWith("$") ? p.slice(1) : p;
+              return j.property.from({
+                kind: "init",
+                key: j.identifier(propName),
+                value: j.identifier(p),
+                shorthand: propName === p,
+              });
+            });
             const styleCall = j.callExpression(
               j.memberExpression(j.identifier("styles"), j.identifier(fnKey)),
-              args,
+              [j.objectExpression(callArgProperties)],
             );
 
             if (!decl.extraStylexPropsArgs) {
@@ -2105,22 +2118,26 @@ export function lowerRules(args: {
           return true;
         }
 
-        // Create parameterized StyleX style function
-        // Parameter names: strip $ prefix if present (e.g., $size -> size, myProp -> myProp)
+        // Create parameterized StyleX style function with props object parameter
         const createStyleFn = (map: Map<string, ExpressionKind>) => {
-          const params = valuePropParams.map((p) => {
-            const paramName = p.startsWith("$") ? p.slice(1) : p;
-            const param = j.identifier(paramName);
-            (param as { typeAnnotation?: unknown }).typeAnnotation = j.tsTypeAnnotation(
-              j.tsNumberKeyword(),
+          const propsTypeProperties = valuePropParams.map((p) => {
+            const propName = p.startsWith("$") ? p.slice(1) : p;
+            const prop = j.tsPropertySignature(
+              j.identifier(propName),
+              j.tsTypeAnnotation(j.tsNumberKeyword()),
             );
-            return param;
+            return prop;
           });
+          const propsParam = j.identifier("props");
+          (propsParam as { typeAnnotation?: unknown }).typeAnnotation = j.tsTypeAnnotation(
+            j.tsTypeLiteral(propsTypeProperties),
+          );
+
           const properties = Array.from(map.entries()).map(([prop, propExpr]) => {
-            const replacedExpr = replacePropsWithParams(j, propExpr);
+            const replacedExpr = replaceDollarPropsOnly(j, propExpr);
             return j.property("init", j.identifier(prop), replacedExpr);
           });
-          return j.arrowFunctionExpression(params, j.objectExpression(properties));
+          return j.arrowFunctionExpression([propsParam], j.objectExpression(properties));
         };
 
         // Generate style function keys with descriptive names when possible
@@ -2137,14 +2154,20 @@ export function lowerRules(args: {
           resolvedStyleObjects.set(altKey, createStyleFn(altMap));
         }
 
-        // Create function call expressions
-        // Call args use original prop names (they exist in the component's destructured props)
+        // Create function call expressions with props object: { size, padding }
         const makeStyleCall = (key: string) => {
-          const args = valuePropParams.map((p) => j.identifier(p));
-          return j.callExpression(
-            j.memberExpression(j.identifier("styles"), j.identifier(key)),
-            args,
-          );
+          const callArgProperties = valuePropParams.map((p) => {
+            const propName = p.startsWith("$") ? p.slice(1) : p;
+            return j.property.from({
+              kind: "init",
+              key: j.identifier(propName),
+              value: j.identifier(p),
+              shorthand: propName === p,
+            });
+          });
+          return j.callExpression(j.memberExpression(j.identifier("styles"), j.identifier(key)), [
+            j.objectExpression(callArgProperties),
+          ]);
         };
 
         // Create conditional expression for stylex.props

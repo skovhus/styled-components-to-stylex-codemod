@@ -9,7 +9,17 @@ type ContainerProps = Omit<React.ComponentProps<"div">, "className" | "style"> &
 export function Container(props: ContainerProps) {
   const { children, size, padding } = props;
   return (
-    <div {...stylex.props(styles.container, styles.containerStyles(size, padding))}>{children}</div>
+    <div
+      {...stylex.props(
+        styles.container,
+        styles.containerStyles({
+          size,
+          padding,
+        }),
+      )}
+    >
+      {children}
+    </div>
   );
 }
 
@@ -20,9 +30,9 @@ export const App = () => (
 );
 
 const styles = stylex.create({
-  containerStyles: (size: number, padding: number) => ({
-    fontSize: `${size + padding}px`,
-    lineHeight: `${size}px`,
+  containerStyles: (props: { size: number; padding: number }) => ({
+    fontSize: `${props.size + props.padding}px`,
+    lineHeight: `${props.size}px`,
   }),
   container: {
     display: "inline-flex",

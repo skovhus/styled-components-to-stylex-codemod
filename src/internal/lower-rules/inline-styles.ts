@@ -408,11 +408,12 @@ export function collectPropsFromExpressions(
 }
 
 /**
- * Replaces prop references with parameter names for StyleX parameterized style functions:
- * - `$propName` identifiers -> `propName` (strips $ prefix)
- * - `props.propName` member expressions -> `propName`
+ * Handles $-prefixed prop references for StyleX parameterized style functions:
+ * - `props.$foo` -> `props.foo` (strip $ from property name, keep props.)
+ * - `$foo` identifier -> `props.foo` (wrap in props member expression)
+ * - `props.foo` -> unchanged (no transformation needed)
  */
-export function replacePropsWithParams(j: JSCodeshift, exprNode: ExpressionKind): ExpressionKind {
+export function replaceDollarPropsOnly(j: JSCodeshift, exprNode: ExpressionKind): ExpressionKind {
   const cloned = cloneAstNode(exprNode);
   const replace = (node: unknown): unknown => {
     if (!node || typeof node !== "object") {
@@ -422,7 +423,7 @@ export function replacePropsWithParams(j: JSCodeshift, exprNode: ExpressionKind)
       return node.map((child) => replace(child));
     }
     const n = node as ASTNodeRecord;
-    // Handle props.X member expressions -> X
+    // Handle props.$foo -> props.foo (strip $ from property name)
     if (
       (n.type === "MemberExpression" || n.type === "OptionalMemberExpression") &&
       (n.object as ASTNodeRecord)?.type === "Identifier" &&
@@ -431,14 +432,17 @@ export function replacePropsWithParams(j: JSCodeshift, exprNode: ExpressionKind)
       n.computed === false
     ) {
       const propName = (n.property as { name: string }).name;
-      // For $-prefixed props accessed via props.$foo, strip the $
-      return j.identifier(propName.startsWith("$") ? propName.slice(1) : propName);
+      if (propName.startsWith("$")) {
+        return j.memberExpression(j.identifier("props"), j.identifier(propName.slice(1)));
+      }
+      // props.foo stays as props.foo - no change needed
+      return n;
     }
-    // Handle $propName identifiers -> propName
+    // Handle $foo identifier -> props.foo
     if (n.type === "Identifier") {
       const identName = n.name as string | undefined;
       if (identName?.startsWith("$")) {
-        return j.identifier(identName.slice(1));
+        return j.memberExpression(j.identifier("props"), j.identifier(identName.slice(1)));
       }
     }
     for (const key of Object.keys(n)) {
