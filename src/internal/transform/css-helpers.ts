@@ -319,18 +319,6 @@ function isNodeInsideStyledTemplate(
 }
 
 /**
- * Checks if a MemberExpression node is inside a styled template literal.
- * This is used to verify that CSS helper object members are only used
- * in places where we can safely inline them.
- */
-function isMemberExpressionInsideStyledTemplate(
-  memberPath: any,
-  styledLocalNames: Set<string>,
-): boolean {
-  return isNodeInsideStyledTemplate(memberPath, styledLocalNames);
-}
-
-/**
  * Check if all usages of specific object member CSS helpers are inside styled templates.
  * Returns true if all usages are safe, false if any usage is outside styled templates.
  */
@@ -369,7 +357,7 @@ function areObjectMemberCssHelpersOnlyUsedInStyledTemplates(args: {
       return;
     }
     // Check if this usage is inside a styled template
-    if (!isMemberExpressionInsideStyledTemplate(p, styledLocalNames)) {
+    if (!isNodeInsideStyledTemplate(p, styledLocalNames)) {
       allSafe = false;
     }
   });
