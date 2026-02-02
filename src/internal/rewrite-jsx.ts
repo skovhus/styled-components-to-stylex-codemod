@@ -234,12 +234,21 @@ export function postProcessTransformedAst(args: {
       }
 
       // Handle style merger calls (e.g., mergedSx([styles.foo, styles.bar], className, style))
-      // The first argument is an array of style references
-      if (call?.callee?.type === "Identifier" && call.arguments?.[0]?.type === "ArrayExpression") {
-        const arr = call.arguments[0];
-        const originalLength = (arr.elements ?? []).length;
-        arr.elements = (arr.elements ?? []).filter((e: any) => !isEmptyStyleRef(e));
-        if (arr.elements.length !== originalLength) {
+      // or mergedSx(styles.foo, className, style)
+      if (call?.callee?.type === "Identifier") {
+        const firstArg = call.arguments?.[0];
+        // Handle array of style references
+        if (firstArg?.type === "ArrayExpression") {
+          const arr = firstArg;
+          const originalLength = (arr.elements ?? []).length;
+          arr.elements = (arr.elements ?? []).filter((e: any) => !isEmptyStyleRef(e));
+          if (arr.elements.length !== originalLength) {
+            changed = true;
+          }
+        }
+        // Handle single empty style reference - replace with undefined
+        if (isEmptyStyleRef(firstArg)) {
+          call.arguments[0] = j.identifier("undefined");
           changed = true;
         }
       }

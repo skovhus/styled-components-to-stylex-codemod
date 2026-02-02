@@ -25,6 +25,6 @@ const styles = stylex.create({
     width: "50px",
   },
   boxBoxShadow: (boxShadow: string) => ({
-    boxShadow: `${shadow(boxShadow)}`,
+    boxShadow: shadow(boxShadow),
   }),
 });

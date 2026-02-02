@@ -279,6 +279,8 @@ export type InternalHandlerContext = {
     importedName: string;
     source: ImportSource;
   } | null;
+  /** Check if an import exists for localName, ignoring shadowing. Used to detect shadowed imports. */
+  hasImportIgnoringShadowing?: (localName: string) => boolean;
 };
 
 type ThemeParamInfo =
@@ -757,6 +759,16 @@ function tryResolveCallExpression(
 
   if (simple.kind === "unresolved") {
     return buildUnresolvedHelperResult(expr.callee, ctx);
+  }
+
+  // For shadowed imports (import exists but is overridden by a local variable in a nested scope),
+  // we must use inline styles because StyleX styles are at module level and can't access
+  // the shadowed local function. Emit as inline style to preserve the local function call.
+  if (simple.kind === "keepOriginal" && node.css.property) {
+    const calleeIdent = getCalleeIdentName(expr.callee);
+    if (typeof calleeIdent === "string" && ctx.hasImportIgnoringShadowing?.(calleeIdent)) {
+      return { type: "emitInlineStyleValueFromProps" };
+    }
   }
 
   // If we got here, it's a call expression we don't understand.
@@ -1773,9 +1785,6 @@ function tryResolveArrowFnCallWithSinglePropArg(node: DynamicNode): HandlerResul
     body: `{ ${Object.keys(styleFromSingleDeclaration(node.css.property, "value"))[0]}: value }`,
     call: propName,
     valueTransform: { kind: "call", calleeIdent },
-    ...(node.css.property === "box-shadow" || node.css.property === "boxShadow"
-      ? { wrapValueInTemplateLiteral: true }
-      : {}),
   };
 }
 
