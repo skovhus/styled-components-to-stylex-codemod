@@ -999,15 +999,41 @@ export class WrapperEmitter {
     if (allowStyleProp) {
       patternProps.push(this.patternProp("style"));
     }
+    // Build a map of default values from defaultAttrs for quick lookup
+    const defaultAttrsMap = new Map<string, unknown>();
+    for (const a of defaultAttrs) {
+      defaultAttrsMap.set(a.jsxProp, a.value);
+    }
+
     for (const name of expandedDestructureProps) {
       if (name !== "children" && name !== "style" && name !== "className") {
         const defaultVal = propDefaults?.get(name);
+        // Also check defaultAttrs for default values (e.g., tabIndex: props.tabIndex ?? 0)
+        const defaultAttrVal = defaultAttrsMap.get(name);
         if (defaultVal) {
           patternProps.push(
             j.property.from({
               kind: "init",
               key: j.identifier(name),
               value: j.assignmentPattern(j.identifier(name), j.literal(defaultVal)),
+              shorthand: false,
+            }) as Property,
+          );
+        } else if (
+          defaultAttrVal !== undefined &&
+          (typeof defaultAttrVal === "boolean" ||
+            typeof defaultAttrVal === "string" ||
+            typeof defaultAttrVal === "number")
+        ) {
+          const defaultLiteral =
+            typeof defaultAttrVal === "boolean"
+              ? j.booleanLiteral(defaultAttrVal)
+              : j.literal(defaultAttrVal);
+          patternProps.push(
+            j.property.from({
+              kind: "init",
+              key: j.identifier(name),
+              value: j.assignmentPattern(j.identifier(name), defaultLiteral),
               shorthand: false,
             }) as Property,
           );
