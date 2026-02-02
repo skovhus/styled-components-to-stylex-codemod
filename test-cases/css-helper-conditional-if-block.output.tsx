@@ -3,16 +3,16 @@ import * as stylex from "@stylexjs/stylex";
 import { Browser } from "./lib/helpers";
 
 type ContainerProps = Omit<React.ComponentProps<"div">, "className" | "style"> & {
-  $size: number;
+  size: number;
 };
 
 export function Container(props: ContainerProps) {
-  const { children, $size } = props;
+  const { children, size } = props;
   return (
     <div
       {...stylex.props(
         styles.container,
-        Browser.isSafari ? styles.containerBrowserIsSafari($size) : styles.containerDefault($size),
+        Browser.isSafari ? styles.containerBrowserIsSafari(size) : styles.containerDefault(size),
       )}
     >
       {children}
@@ -20,7 +20,7 @@ export function Container(props: ContainerProps) {
   );
 }
 
-export const App = () => <Container $size={16} />;
+export const App = () => <Container size={16} />;
 
 const styles = stylex.create({
   containerBrowserIsSafari: (size: number) => ({
