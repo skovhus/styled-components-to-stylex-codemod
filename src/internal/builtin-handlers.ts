@@ -2020,6 +2020,26 @@ function tryResolveInlineStyleValueForNestedPropAccess(node: DynamicNode): Handl
   return { type: "emitInlineStyleValueFromProps" };
 }
 
+function tryResolveInlineStyleValueFromArrowFn(node: DynamicNode): HandlerResult | null {
+  if (!node.css.property) {
+    return null;
+  }
+  const hasMediaAtRule = (node.css.atRuleStack ?? []).some((rule) => rule.startsWith("@media"));
+  const isMediaSelector = (node.css.selector ?? "").trim().startsWith("@media");
+  if (!hasMediaAtRule && !isMediaSelector) {
+    return null;
+  }
+  const expr = node.expr;
+  if (!isArrowFunctionExpression(expr)) {
+    return null;
+  }
+  const body = getFunctionBodyExpr(expr);
+  if (!body) {
+    return null;
+  }
+  return { type: "emitInlineStyleValueFromProps" };
+}
+
 /**
  * Handles simple prop access patterns in interpolations.
  *
@@ -2119,7 +2139,8 @@ export function resolveDynamicNode(
     tryResolveInlineStyleValueForNestedPropAccess(node) ??
     tryResolvePropAccess(node) ??
     tryResolveInlineStyleValueForConditionalExpression(node) ??
-    tryResolveInlineStyleValueForLogicalExpression(node)
+    tryResolveInlineStyleValueForLogicalExpression(node) ??
+    tryResolveInlineStyleValueFromArrowFn(node)
   );
 }
 

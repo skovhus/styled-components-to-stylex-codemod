@@ -139,6 +139,11 @@ const config: StorybookConfig = {
       },
     };
 
+    config.build = {
+      ...config.build,
+      chunkSizeWarningLimit: 2000,
+    };
+
     return config;
   },
 };

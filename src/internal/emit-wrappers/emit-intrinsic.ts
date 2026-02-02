@@ -52,6 +52,48 @@ export function emitIntrinsicWrappers(emitter: WrapperEmitter): {
       j.memberExpression(j.identifier(stylesIdentifier), j.identifier(key)),
     );
 
+  const shouldIncludeRestForProps = (args: {
+    usedAsValue: boolean;
+    hasLocalUsage: boolean;
+    usedAttrs: Set<string>;
+    destructureProps: string[];
+    hasExplicitPropsToPassThrough?: boolean;
+    ignoreTransientAttrs?: boolean;
+  }): boolean => {
+    const {
+      usedAsValue,
+      hasLocalUsage,
+      usedAttrs,
+      destructureProps,
+      hasExplicitPropsToPassThrough,
+      ignoreTransientAttrs = false,
+    } = args;
+    let shouldIncludeRest =
+      usedAsValue ||
+      Boolean(hasExplicitPropsToPassThrough) ||
+      (hasLocalUsage && usedAttrs.has("*")) ||
+      (hasLocalUsage &&
+        [...usedAttrs].some((n) => {
+          if (
+            n === "children" ||
+            n === "className" ||
+            n === "style" ||
+            n === "as" ||
+            n === "forwardedAs" ||
+            (ignoreTransientAttrs && n.startsWith("$"))
+          ) {
+            return false;
+          }
+          return !destructureProps.includes(n);
+        }));
+    const hasOnlyTransientAttrs =
+      !usedAttrs.has("*") && usedAttrs.size > 0 && [...usedAttrs].every((n) => n.startsWith("$"));
+    if (!usedAsValue && hasOnlyTransientAttrs) {
+      shouldIncludeRest = false;
+    }
+    return shouldIncludeRest;
+  };
+
   /**
    * Build compound variant expressions for multi-prop nested ternaries.
    * Generates: outerProp ? styles.outerKey : innerProp ? styles.innerTrueKey : styles.innerFalseKey
@@ -1233,22 +1275,13 @@ export function emitIntrinsicWrappers(emitter: WrapperEmitter): {
     const isVoidTag = tagName === "input";
     const { hasAny: hasLocalUsage } = emitter.getJsxCallsites(d.localName);
 
-    const shouldIncludeRest =
-      emitter.isUsedAsValueInFile(d.localName) ||
-      (hasLocalUsage && usedAttrs.has("*")) ||
-      (hasLocalUsage &&
-        [...usedAttrs].some((n) => {
-          if (
-            n === "children" ||
-            n === "className" ||
-            n === "style" ||
-            n === "as" ||
-            n === "forwardedAs"
-          ) {
-            return false;
-          }
-          return !destructureParts.includes(n);
-        }));
+    const shouldIncludeRest = shouldIncludeRestForProps({
+      usedAsValue: emitter.isUsedAsValueInFile(d.localName),
+      hasLocalUsage,
+      usedAttrs,
+      destructureProps: destructureParts,
+      ignoreTransientAttrs: true,
+    });
 
     // Skip rest spread omission for exported components - external consumers may pass additional props
     const isExportedComponent = d.isExported || emitter.exportedComponents.has(d.localName);
@@ -2155,22 +2188,20 @@ export function emitIntrinsicWrappers(emitter: WrapperEmitter): {
       }
     }
 
-    // Extract transient props (starting with $) from the explicit type and add to destructureProps
-    // so they get stripped from the rest spread (styled-components transient props should never reach DOM)
+    // Extract transient props (starting with $) from the explicit type.
+    // Only destructure them when we actually spread `rest` into the element.
+    const explicitTransientProps: string[] = [];
     const explicit = d.propsType;
     if (explicit?.type === "TSTypeLiteral" && explicit.members) {
       for (const member of explicit.members as any[]) {
-        if (
-          member.type === "TSPropertySignature" &&
-          member.key?.type === "Identifier" &&
-          member.key.name.startsWith("$") &&
-          !destructureProps.includes(member.key.name)
-        ) {
-          destructureProps.push(member.key.name);
+        if (member.type === "TSPropertySignature" && member.key?.type === "Identifier") {
+          const name = member.key.name;
+          if (name.startsWith("$")) {
+            explicitTransientProps.push(name);
+          }
         }
       }
     }
-
     const usedAttrs = emitter.getUsedAttrs(d.localName);
     const { hasAny: hasLocalUsage } = emitter.getJsxCallsites(d.localName);
     const explicitPropsNames = d.propsType
@@ -2191,26 +2222,26 @@ export function emitIntrinsicWrappers(emitter: WrapperEmitter): {
         }
         return !destructureProps.includes(n);
       });
-    const shouldIncludeRest =
-      emitter.isUsedAsValueInFile(d.localName) ||
-      hasExplicitPropsToPassThrough ||
-      // When defaultAttrs reference element props (like tabIndex: props.tabIndex ?? 0),
-      // include rest spread so user can pass/override these props
-      hasElementPropsInDefaultAttrs(d) ||
-      (hasLocalUsage && usedAttrs.has("*")) ||
-      (hasLocalUsage &&
-        [...usedAttrs].some((n) => {
-          if (
-            n === "children" ||
-            n === "className" ||
-            n === "style" ||
-            n === "as" ||
-            n === "forwardedAs"
-          ) {
-            return false;
-          }
-          return !destructureProps.includes(n);
-        }));
+    let shouldIncludeRest = shouldIncludeRestForProps({
+      usedAsValue: emitter.isUsedAsValueInFile(d.localName),
+      hasLocalUsage,
+      usedAttrs,
+      destructureProps,
+      hasExplicitPropsToPassThrough,
+      ignoreTransientAttrs: true,
+    });
+    // When defaultAttrs reference element props (like tabIndex: props.tabIndex ?? 0),
+    // include rest spread so user can pass/override these props
+    if (hasElementPropsInDefaultAttrs(d)) {
+      shouldIncludeRest = true;
+    }
+    if (shouldIncludeRest) {
+      for (const name of explicitTransientProps) {
+        if (!destructureProps.includes(name)) {
+          destructureProps.push(name);
+        }
+      }
+    }
 
     if (allowAsProp || allowClassNameProp || allowStyleProp) {
       const isVoidTag = VOID_TAGS.has(tagName);
