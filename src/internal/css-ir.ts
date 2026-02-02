@@ -445,6 +445,22 @@ export function hasUniversalSelectorInRules(rules: CssRuleIR[]): boolean {
 }
 
 /**
+ * Compute the source location for a universal selector warning.
+ * Combines the template's starting location with the line offset where the
+ * universal selector appears in the raw CSS.
+ */
+export function computeUniversalSelectorLoc(
+  templateLoc: { line: number; column: number } | null,
+  rawCss: string,
+): { line: number; column: number } | null {
+  if (!templateLoc) {
+    return null;
+  }
+  const lineOffset = findUniversalSelectorLineOffset(rawCss);
+  return { line: templateLoc.line + lineOffset, column: 0 };
+}
+
+/**
  * Find the line offset (0-indexed) of a universal selector (`*`) within the raw CSS.
  * Returns the line number relative to the start of the CSS string.
  *
@@ -453,7 +469,7 @@ export function hasUniversalSelectorInRules(rules: CssRuleIR[]): boolean {
  * a universal selector in CSS: `*` followed by whitespace, `{`, or preceded by
  * combinator characters.
  */
-export function findUniversalSelectorLineOffset(rawCss: string): number {
+function findUniversalSelectorLineOffset(rawCss: string): number {
   // Stylis normalizes selectors by removing spaces, so we need to search flexibly.
   // Look for the `*` character in a selector context (not inside a value like "100*2").
   // Universal selectors appear as: `& *`, `> *`, `+ *`, `~ *`, or just `*` at start

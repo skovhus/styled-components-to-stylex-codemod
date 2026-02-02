@@ -1,7 +1,6 @@
 import type { Collection } from "jscodeshift";
-import type { CssRuleIR } from "./css-ir.js";
 import {
-  findUniversalSelectorLineOffset,
+  computeUniversalSelectorLoc,
   hasUniversalSelectorInRules,
   normalizeStylisAstToIR,
 } from "./css-ir.js";
@@ -57,22 +56,12 @@ function collectStyledDeclsImpl(args: {
     return { line: start.line, column: start.column ?? 0 };
   };
 
-  const noteUniversalSelector = (template: any, rawCss: string, rules: CssRuleIR[]): void => {
+  const noteUniversalSelector = (template: any, rawCss: string): void => {
     hasUniversalSelectors = true;
     if (universalSelectorLoc) {
       return;
     }
-    const templateLoc = getTemplateLoc(template);
-    if (!templateLoc) {
-      return;
-    }
-    // Find the line offset of the first universal selector in the raw CSS
-    if (hasUniversalSelectorInRules(rules)) {
-      const lineOffset = findUniversalSelectorLineOffset(rawCss);
-      universalSelectorLoc = { line: templateLoc.line + lineOffset, column: 0 };
-    } else {
-      universalSelectorLoc = templateLoc;
-    }
+    universalSelectorLoc = computeUniversalSelectorLoc(getTemplateLoc(template), rawCss);
   };
 
   const parseAttrsArg = (arg0: any): StyledDecl["attrsInfo"] | undefined => {
@@ -600,7 +589,7 @@ function collectStyledDeclsImpl(args: {
           rawCss: parsed.rawCss,
         });
         if (hasUniversalSelectorInRules(rules)) {
-          noteUniversalSelector(template, parsed.rawCss, rules);
+          noteUniversalSelector(template, parsed.rawCss);
         }
 
         styledDecls.push({
@@ -638,7 +627,7 @@ function collectStyledDeclsImpl(args: {
           rawCss: parsed.rawCss,
         });
         if (hasUniversalSelectorInRules(rules)) {
-          noteUniversalSelector(template, parsed.rawCss, rules);
+          noteUniversalSelector(template, parsed.rawCss);
         }
         const attrsInfo =
           tag.callee.property.name === "attrs" ? parseAttrsArg(tag.arguments[0]) : undefined;
@@ -695,7 +684,7 @@ function collectStyledDeclsImpl(args: {
           rawCss: parsed.rawCss,
         });
         if (hasUniversalSelectorInRules(rules)) {
-          noteUniversalSelector(template, parsed.rawCss, rules);
+          noteUniversalSelector(template, parsed.rawCss);
         }
         const attrsInfo = parseAttrsArg(tag.arguments[0]);
 
@@ -738,7 +727,7 @@ function collectStyledDeclsImpl(args: {
           rawCss: parsed.rawCss,
         });
         if (hasUniversalSelectorInRules(rules)) {
-          noteUniversalSelector(template, parsed.rawCss, rules);
+          noteUniversalSelector(template, parsed.rawCss);
         }
         const attrsInfo = parseAttrsArg(tag.arguments[0]);
 
@@ -777,7 +766,7 @@ function collectStyledDeclsImpl(args: {
           rawCss: parsed.rawCss,
         });
         if (hasUniversalSelectorInRules(rules)) {
-          noteUniversalSelector(template, parsed.rawCss, rules);
+          noteUniversalSelector(template, parsed.rawCss);
         }
 
         styledDecls.push({
@@ -819,7 +808,7 @@ function collectStyledDeclsImpl(args: {
           rawCss: parsed.rawCss,
         });
         if (hasUniversalSelectorInRules(rules)) {
-          noteUniversalSelector(template, parsed.rawCss, rules);
+          noteUniversalSelector(template, parsed.rawCss);
         }
 
         styledDecls.push({
@@ -856,7 +845,7 @@ function collectStyledDeclsImpl(args: {
           rawCss: parsed.rawCss,
         });
         if (hasUniversalSelectorInRules(rules)) {
-          noteUniversalSelector(template, parsed.rawCss, rules);
+          noteUniversalSelector(template, parsed.rawCss);
         }
 
         styledDecls.push({
@@ -894,7 +883,7 @@ function collectStyledDeclsImpl(args: {
           rawCss: parsed.rawCss,
         });
         if (hasUniversalSelectorInRules(rules)) {
-          noteUniversalSelector(template, parsed.rawCss, rules);
+          noteUniversalSelector(template, parsed.rawCss);
         }
         const shouldForwardProp = parseShouldForwardProp(tag.arguments[0]);
         const withConfigMeta = parseWithConfigMeta(tag.arguments[0]);
@@ -940,7 +929,7 @@ function collectStyledDeclsImpl(args: {
           rawCss: parsed.rawCss,
         });
         if (hasUniversalSelectorInRules(rules)) {
-          noteUniversalSelector(template, parsed.rawCss, rules);
+          noteUniversalSelector(template, parsed.rawCss);
         }
         const shouldForwardProp = parseShouldForwardProp(tag.arguments[0]);
         const withConfigMeta = parseWithConfigMeta(tag.arguments[0]);
@@ -1255,7 +1244,7 @@ function collectStyledDeclsImpl(args: {
             rawCss: parsed.rawCss,
           });
           if (hasUniversalSelectorInRules(rules)) {
-            noteUniversalSelector(cssTemplate, parsed.rawCss, rules);
+            noteUniversalSelector(cssTemplate, parsed.rawCss);
           }
 
           // Extract destructured params and transform expressions
