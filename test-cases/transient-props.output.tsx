@@ -32,12 +32,8 @@ type PointProps = {
 // Pattern 3: Transient prop with dynamic value passed to inlined component
 // The prop is declared in type but not used in styles - must be stripped when inlined
 function Point(props: PointProps) {
-  const { children, style, $size, ...rest } = props;
-  return (
-    <div {...rest} {...mergedSx(styles.point, undefined, style)}>
-      {children}
-    </div>
-  );
+  const { children, style, $size } = props;
+  return <div {...mergedSx(styles.point, undefined, style)}>{children}</div>;
 }
 
 // Pattern 4: styled(Component) where base component declares the transient prop

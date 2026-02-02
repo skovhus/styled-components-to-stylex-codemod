@@ -2202,7 +2202,6 @@ export function emitIntrinsicWrappers(emitter: WrapperEmitter): {
         }
       }
     }
-
     const usedAttrs = emitter.getUsedAttrs(d.localName);
     const { hasAny: hasLocalUsage } = emitter.getJsxCallsites(d.localName);
     const explicitPropsNames = d.propsType
@@ -2229,13 +2228,14 @@ export function emitIntrinsicWrappers(emitter: WrapperEmitter): {
       usedAttrs,
       destructureProps,
       hasExplicitPropsToPassThrough,
+      ignoreTransientAttrs: true,
     });
     // When defaultAttrs reference element props (like tabIndex: props.tabIndex ?? 0),
     // include rest spread so user can pass/override these props
     if (hasElementPropsInDefaultAttrs(d)) {
       shouldIncludeRest = true;
     }
-    if (shouldIncludeRest && (usedAttrs.has("style") || usedAttrs.has("className") || usedAttrs.has("*"))) {
+    if (usedAttrs.has("style") || usedAttrs.has("className") || usedAttrs.has("*")) {
       for (const name of explicitTransientProps) {
         if (!destructureProps.includes(name)) {
           destructureProps.push(name);
