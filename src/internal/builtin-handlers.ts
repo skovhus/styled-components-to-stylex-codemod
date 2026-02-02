@@ -297,6 +297,20 @@ type ConditionalExpressionBody = {
 };
 
 /**
+ * Validates that a CallResolveResult doesn't use the legacy `kind` field.
+ * Throws an error if the deprecated field is detected to prevent silent behavior changes.
+ */
+export function assertNoLegacyKindField(result: CallResolveResult): void {
+  if ("kind" in result) {
+    throw new Error(
+      `CallResolveResult.kind has been renamed to 'usage' with values "create" | "props". ` +
+        `Please update your adapter to use 'usage' instead of 'kind'. ` +
+        `Mapping: "cssValue" → "create", "stylexStyles" → "props".`,
+    );
+  }
+}
+
+/**
  * Determines if an adapter's CallResolveResult should be treated as a CSS value.
  *
  * Resolution priority:
@@ -304,6 +318,7 @@ type ConditionalExpressionBody = {
  * 2. Otherwise, infer from context: cssProperty present → CSS value, absent → StyleX reference
  */
 function isAdapterResultCssValue(result: CallResolveResult, cssProperty?: string): boolean {
+  assertNoLegacyKindField(result);
   return result.usage === "create" || (result.usage === undefined && Boolean(cssProperty));
 }
 

@@ -1,6 +1,8 @@
 import { describe, it, expect } from "vitest";
+import jscodeshift from "jscodeshift";
 import { defineAdapter } from "../adapter.js";
 import { runTransform } from "../run.js";
+import { transformWithWarnings } from "../transform.js";
 
 describe("public API runtime validation (DX)", () => {
   it("defineAdapter: throws a helpful message when adapter is missing", () => {
@@ -78,5 +80,35 @@ describe("public API runtime validation (DX)", () => {
     await expect(runTransform({ files: "src/**/*.tsx" } as any)).rejects.toThrowError(
       /expected an adapter object/i,
     );
+  });
+
+  it("transform: throws when resolveCall returns legacy 'kind' field", () => {
+    const legacyAdapter = defineAdapter({
+      styleMerger: null,
+      externalInterface: () => null,
+      resolveValue: () => undefined,
+      resolveSelector: () => undefined,
+      resolveCall: () => ({
+        // Legacy field that should cause an error
+        kind: "stylexStyles",
+        expr: "helpers.truncate",
+        imports: [],
+      }),
+    });
+
+    const source = `
+import styled from "styled-components";
+import { truncate } from "./helpers";
+const Text = styled.div\`\${truncate()}\`;
+`;
+
+    const j = jscodeshift.withParser("tsx");
+    expect(() =>
+      transformWithWarnings(
+        { source, path: "test.tsx" },
+        { jscodeshift: j, j, stats: () => {}, report: () => {} },
+        { adapter: legacyAdapter },
+      ),
+    ).toThrowError(/kind.*renamed.*usage/i);
   });
 });
