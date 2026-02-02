@@ -290,7 +290,10 @@ export function tryHandleInterpolatedBorder(args: {
             kind: "declaration",
             selector: "&",
             atRuleStack: [],
-            property: colorProp,
+            // Pass original CSS property (e.g., "border-left") rather than expanded property
+            // (e.g., "borderLeftColor") so adapters can detect directional borders and return
+            // appropriate CSS values vs StyleX style objects
+            property: prop,
             valueRaw: d.valueRaw,
           },
           component:
@@ -364,28 +367,66 @@ export function tryHandleInterpolatedBorder(args: {
     const parseTemplateLiteralBorderShorthand = (
       value: any,
     ): {
-      width?: string;
+      width?: unknown; // string for static width, AST node for dynamic
       style?: string;
-      colorExpr: any;
+      colorExpr: unknown;
     } | null => {
       if (!value || value.type !== "TemplateLiteral") {
         return null;
       }
       const quasis = value.quasis ?? [];
       const exprs = value.expressions ?? [];
-      if (quasis.length !== 2 || exprs.length !== 1) {
-        return null;
+
+      // Format 1: `1px solid ${color}` - static width/style, dynamic color
+      // quasis: ["1px solid ", ""], exprs: [colorExpr]
+      if (quasis.length === 2 && exprs.length === 1) {
+        const prefix = quasis[0]?.value?.cooked ?? quasis[0]?.value?.raw ?? "";
+        const suffix = quasis[1]?.value?.cooked ?? quasis[1]?.value?.raw ?? "";
+        if (suffix.trim() !== "") {
+          return null;
+        }
+        const parsed = parseInterpolatedBorderStaticParts({ prop, prefix, suffix });
+        if (!parsed?.width || !parsed?.style) {
+          return null;
+        }
+        return { width: parsed.width, style: parsed.style, colorExpr: exprs[0] };
       }
-      const prefix = quasis[0]?.value?.cooked ?? quasis[0]?.value?.raw ?? "";
-      const suffix = quasis[1]?.value?.cooked ?? quasis[1]?.value?.raw ?? "";
-      if (suffix.trim() !== "") {
-        return null;
+
+      // Format 2: `${width} solid ${color}` - dynamic width, static style, dynamic color
+      // quasis: ["", " solid ", ""], exprs: [widthExpr, colorExpr]
+      if (quasis.length === 3 && exprs.length === 2) {
+        const prefix = quasis[0]?.value?.cooked ?? quasis[0]?.value?.raw ?? "";
+        const middle = quasis[1]?.value?.cooked ?? quasis[1]?.value?.raw ?? "";
+        const suffix = quasis[2]?.value?.cooked ?? quasis[2]?.value?.raw ?? "";
+        // First quasi should be empty (width is the first expression)
+        if (prefix.trim() !== "") {
+          return null;
+        }
+        // Last quasi should be empty (color is the last expression)
+        if (suffix.trim() !== "") {
+          return null;
+        }
+        // Middle quasi should contain only the border style (e.g., " solid ")
+        const middleTrimmed = middle.trim();
+        const validStyles = [
+          "solid",
+          "dashed",
+          "dotted",
+          "double",
+          "groove",
+          "ridge",
+          "inset",
+          "outset",
+          "none",
+          "hidden",
+        ];
+        if (!validStyles.includes(middleTrimmed)) {
+          return null;
+        }
+        return { width: exprs[0], style: middleTrimmed, colorExpr: exprs[1] };
       }
-      const parsed = parseInterpolatedBorderStaticParts({ prop, prefix, suffix });
-      if (!parsed?.width || !parsed?.style) {
-        return null;
-      }
-      return { width: parsed.width, style: parsed.style, colorExpr: exprs[0] };
+
+      return null;
     };
 
     const bumpResolverImportToEnd = (predicate: (spec: unknown) => boolean): void => {
