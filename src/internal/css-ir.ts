@@ -209,7 +209,12 @@ export function normalizeStylisAstToIR(
     }
 
     if (typeof node.type === "string" && node.type.startsWith("@")) {
-      const at = String(node.value ?? node.type);
+      const atType = String(node.type);
+      const atValue = node.value !== undefined && node.value !== null ? String(node.value) : "";
+      const at =
+        atValue && !atValue.trim().startsWith(atType)
+          ? `${atType} ${atValue}`.trim()
+          : atValue || atType;
       atRuleStack.push(at);
       visit(node.children as Element[] | undefined);
       atRuleStack.pop();
