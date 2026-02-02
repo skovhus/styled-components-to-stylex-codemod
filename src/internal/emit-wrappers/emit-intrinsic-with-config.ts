@@ -273,7 +273,7 @@ export function emitSimpleWithConfigWrappers(ctx: EmitIntrinsicContext): void {
     bodyStmts.push(j.returnStatement(jsx as any));
 
     emitted.push(
-      withLeadingCommentsOnFirstFunction(
+      ...withLeadingCommentsOnFirstFunction(
         [
           emitter.buildWrapperFunction({
             localName: d.localName,

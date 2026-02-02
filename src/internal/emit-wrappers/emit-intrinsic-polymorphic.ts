@@ -1,6 +1,6 @@
 import type { StyledDecl } from "../transform-types.js";
 import type { EmitIntrinsicContext } from "./emit-intrinsic-context.js";
-import type { ExpressionKind, InlineStyleProp } from "./types.js";
+import type { ExpressionKind } from "./types.js";
 import type { JsxAttr, StatementKind } from "./wrapper-emitter.js";
 import { emitStyleMerging } from "./style-merger.js";
 import { sortVariantEntriesBySpecificity, VOID_TAGS } from "./type-helpers.js";
@@ -51,9 +51,7 @@ export function emitIntrinsicPolymorphicWrappers(ctx: EmitIntrinsicContext): voi
       const used = emitter.getUsedAttrs(d.localName);
       // Use ComponentPropsWithRef when ref is used on the component
       const hasRef = used.has("ref");
-      const base = hasRef
-        ? "React.ComponentPropsWithRef<C>"
-        : "React.ComponentPropsWithoutRef<C>";
+      const base = hasRef ? "React.ComponentPropsWithRef<C>" : "React.ComponentPropsWithoutRef<C>";
       // Omit className/style only when we don't want to support them.
       const omitted: string[] = [];
       if (!allowClassNameProp) {
