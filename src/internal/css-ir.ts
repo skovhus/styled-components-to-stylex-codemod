@@ -474,6 +474,24 @@ function findUniversalSelectorLineOffset(rawCss: string): number {
   // Look for the `*` character in a selector context (not inside a value like "100*2").
   // Universal selectors appear as: `& *`, `> *`, `+ *`, `~ *`, or just `*` at start
 
+  // Helper to find non-whitespace character before/after a position
+  const findNonWhitespaceBefore = (pos: number): string => {
+    for (let j = pos - 1; j >= 0; j--) {
+      if (!/\s/.test(rawCss[j]!)) {
+        return rawCss[j]!;
+      }
+    }
+    return "";
+  };
+  const findNonWhitespaceAfter = (pos: number): string => {
+    for (let j = pos + 1; j < rawCss.length; j++) {
+      if (!/\s/.test(rawCss[j]!)) {
+        return rawCss[j]!;
+      }
+    }
+    return "";
+  };
+
   // Find all occurrences of `*` and check if they're in a selector context
   for (let i = 0; i < rawCss.length; i++) {
     const char = rawCss[i];
@@ -483,9 +501,24 @@ function findUniversalSelectorLineOffset(rawCss: string): number {
 
     // Check if this `*` looks like a universal selector:
     // - preceded by whitespace, combinator, or start of line/string
+    // - NOT preceded by value tokens like `%`, digits (which indicate calc/multiplication)
     // - followed by whitespace, `{`, `:`, `[`, or end of string
+    // - NOT followed by digits (which indicate multiplication like `2 * 3`)
     const prevChar = i > 0 ? rawCss[i - 1]! : " ";
     const nextChar = i < rawCss.length - 1 ? rawCss[i + 1]! : " ";
+
+    // Look at non-whitespace chars to detect value context (e.g., `calc(100% * 2)`)
+    const prevNonWs = findNonWhitespaceBefore(i);
+    const nextNonWs = findNonWhitespaceAfter(i);
+
+    // Exclude `*` that appears to be multiplication in calc() or other expressions:
+    // - `%` before (even with spaces): calc(100% * 2)
+    // - digit before: calc(2 * 3)
+    // - digit after: 2 * 3 or *2
+    const isValueContext = /[%0-9]/.test(prevNonWs) || /[0-9]/.test(nextNonWs);
+    if (isValueContext) {
+      continue;
+    }
 
     const validPrev = /[\s>&+~(,]/.test(prevChar) || i === 0;
     const validNext = /[\s{:[\],)]/.test(nextChar) || i === rawCss.length - 1;
