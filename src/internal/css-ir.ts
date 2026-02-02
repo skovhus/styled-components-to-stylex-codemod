@@ -425,23 +425,10 @@ function sameArray(a: readonly string[], b: readonly string[]): boolean {
 }
 
 /**
- * Find the first rule with a universal selector (`*`) in its selector string.
- * Returns the selector string, or null if none found.
- */
-function findFirstUniversalSelector(rules: CssRuleIR[]): string | null {
-  for (const r of rules) {
-    if (typeof r.selector === "string" && r.selector.includes("*")) {
-      return r.selector;
-    }
-  }
-  return null;
-}
-
-/**
- * Check if any rule has a universal selector.
+ * Check if any rule has a universal selector (`*`) in its selector string.
  */
 export function hasUniversalSelectorInRules(rules: CssRuleIR[]): boolean {
-  return findFirstUniversalSelector(rules) !== null;
+  return rules.some((r) => typeof r.selector === "string" && r.selector.includes("*"));
 }
 
 /**
@@ -468,8 +455,10 @@ export function computeUniversalSelectorLoc(
  * match the exact selector string. Instead, we search for patterns that indicate
  * a universal selector in CSS: `*` followed by whitespace, `{`, or preceded by
  * combinator characters.
+ *
+ * @internal Exported for testing
  */
-function findUniversalSelectorLineOffset(rawCss: string): number {
+export function findUniversalSelectorLineOffset(rawCss: string): number {
   // Stylis normalizes selectors by removing spaces, so we need to search flexibly.
   // Look for the `*` character in a selector context (not inside a value like "100*2").
   // Universal selectors appear as: `& *`, `> *`, `+ *`, `~ *`, or just `*` at start
@@ -545,12 +534,15 @@ function findUniversalSelectorLineOffset(rawCss: string): number {
  *
  * The selector may be normalized by Stylis (spaces removed, etc.), so we search
  * for key patterns from the selector that should still be present in the raw CSS.
+ *
+ * @internal Exported for testing
  */
-function findSelectorLineOffset(rawCss: string, selector: string): number {
+export function findSelectorLineOffset(rawCss: string, selector: string): number {
   // Try to find a distinctive pattern from the selector in the raw CSS.
   // Selectors like "&:hover", "& > *", "&.active" should be findable.
 
   // First, try finding the selector directly (it may be present as-is)
+  // Escape regex metacharacters since selectors contain `.`, `*`, `+` etc.
   const directMatch = rawCss.match(new RegExp(escapeRegExp(selector)));
   if (directMatch) {
     return countNewlinesBefore(rawCss, directMatch.index!);
