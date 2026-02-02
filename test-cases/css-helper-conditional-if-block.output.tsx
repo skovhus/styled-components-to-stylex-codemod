@@ -20,7 +20,7 @@ export function Container(props: ContainerProps) {
   );
 }
 
-export const App = () => <Container size={16} />;
+export const App = () => <Container size={16}>Hello World</Container>;
 
 const styles = stylex.create({
   containerBrowserIsSafari: (size: number) => ({

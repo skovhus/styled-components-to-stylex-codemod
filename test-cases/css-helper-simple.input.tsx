@@ -11,4 +11,8 @@ export const Container = styled.div<{ size: number; padding: number }>`
   }}
 `;
 
-export const App = () => <Container size={16} padding={4} />;
+export const App = () => (
+  <Container size={16} padding={4}>
+    Hello World
+  </Container>
+);

@@ -19,4 +19,4 @@ export const Container = styled.div<{ size: number }>`
   }}
 `;
 
-export const App = () => <Container size={16} />;
+export const App = () => <Container size={16}>Hello World</Container>;

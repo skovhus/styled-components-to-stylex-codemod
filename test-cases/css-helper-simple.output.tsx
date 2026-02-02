@@ -13,7 +13,11 @@ export function Container(props: ContainerProps) {
   );
 }
 
-export const App = () => <Container size={16} padding={4} />;
+export const App = () => (
+  <Container size={16} padding={4}>
+    Hello World
+  </Container>
+);
 
 const styles = stylex.create({
   containerStyles: (size: number, padding: number) => ({
