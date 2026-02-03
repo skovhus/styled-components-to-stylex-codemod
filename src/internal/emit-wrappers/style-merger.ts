@@ -380,7 +380,8 @@ function emitVerbosePattern(args: {
     sxDecl,
     jsxSpreadExpr: j.identifier("sx"),
     classNameAttr,
-    classNameBeforeSpread: !!staticClassNameExpr,
+    // Always emit the merged className AFTER `{...sx}` so it cannot be overwritten by `sx.className`.
+    classNameBeforeSpread: false,
     styleAttr,
   };
 }

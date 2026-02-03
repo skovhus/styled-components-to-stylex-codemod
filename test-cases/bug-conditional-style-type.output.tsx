@@ -22,7 +22,7 @@ export function IconWithTeamColor(props: IconWithTeamColorProps) {
   const { children, $color } = props;
   const sx = stylex.props($color ? styles.iconWithTeamColorFill($color) : undefined);
   return (
-    <svg className={["color-override", sx.className].filter(Boolean).join(" ")} {...sx}>
+    <svg {...sx} className={["color-override", sx.className].filter(Boolean).join(" ")}>
       {children}
     </svg>
   );
