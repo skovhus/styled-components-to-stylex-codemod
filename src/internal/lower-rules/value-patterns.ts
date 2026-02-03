@@ -1,3 +1,6 @@
+/**
+ * Pattern handlers for specific dynamic value shapes.
+ */
 import type { API, JSCodeshift } from "jscodeshift";
 import type { Adapter, ImportSpec } from "../adapter.js";
 import type { StyledDecl } from "../transform-types.js";

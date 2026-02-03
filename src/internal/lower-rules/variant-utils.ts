@@ -1,3 +1,6 @@
+/**
+ * Shared helpers for variant condition parsing and application.
+ */
 import type { JSCodeshift } from "jscodeshift";
 import type { ArrowFnParamBindings } from "../utilities/jscodeshift-utils.js";
 import { extractRootAndPath, resolveIdentifierToPropName } from "../utilities/jscodeshift-utils.js";

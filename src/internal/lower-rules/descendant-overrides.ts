@@ -1,3 +1,6 @@
+/**
+ * Builds descendant override style objects from pseudo buckets.
+ */
 import type { JSCodeshift } from "jscodeshift";
 import { isAstNode } from "../utilities/jscodeshift-utils.js";
 import type { ExpressionKind } from "./decl-types.js";

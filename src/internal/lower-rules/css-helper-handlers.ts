@@ -1,3 +1,6 @@
+/**
+ * CSS helper-specific handlers extracted from lower-rules.
+ */
 import type { JSCodeshift } from "jscodeshift";
 
 import type { Adapter, ImportSpec } from "../adapter.js";

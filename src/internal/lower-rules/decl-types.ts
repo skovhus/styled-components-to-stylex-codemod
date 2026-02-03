@@ -1,3 +1,6 @@
+/**
+ * Shared type aliases used across lower-rules helpers.
+ */
 import type { JSCodeshift } from "jscodeshift";
 
 export type ExpressionKind = Parameters<JSCodeshift["expressionStatement"]>[0];
