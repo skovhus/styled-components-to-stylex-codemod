@@ -1,0 +1,147 @@
+name: Deploy Playground Preview
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened]
+
+permissions:
+  contents: write
+  pages: write
+  id-token: write
+  issues: write
+  pull-requests: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  build:
+    if: github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+
+      - uses: pnpm/action-setup@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install
+
+      - name: Build playground
+        run: pnpm build:playground
+
+      - name: Move playground index to PR path
+        run: |
+          pr_number="${{ github.event.pull_request.number }}"
+          pr_dir="pr-${pr_number}"
+          mkdir -p "dist-playground/${pr_dir}"
+          mv dist-playground/index.html "dist-playground/${pr_dir}/index.html"
+
+      - name: Prepare gh-pages worktree
+        run: |
+          git fetch origin gh-pages || true
+          if git show-ref --verify --quiet refs/remotes/origin/gh-pages; then
+            git worktree add -B gh-pages gh-pages origin/gh-pages
+          else
+            git worktree add -B gh-pages gh-pages
+            git -C gh-pages rm -rf .
+          fi
+
+      - name: Merge preview into gh-pages
+        run: |
+          cp -a dist-playground/. gh-pages/
+
+      - name: Commit gh-pages update
+        run: |
+          cd gh-pages
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add .
+          if git diff --cached --quiet; then
+            echo "No changes to commit"
+          else
+            git commit -m "Add playground preview for PR #${{ github.event.pull_request.number }}"
+            git push origin gh-pages
+          fi
+
+      - name: Prepare upload directory
+        run: |
+          rm -rf site
+          mkdir site
+          cp -a gh-pages/. site/
+          rm -rf site/.git
+
+      - name: Setup Pages
+        uses: actions/configure-pages@v5
+
+      - name: Upload artifact
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: site
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    outputs:
+      page_url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4
+
+  comment:
+    needs: deploy
+    if: github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: ubuntu-latest
+    steps:
+      - name: Comment PR with preview link
+        uses: actions/github-script@v7
+        env:
+          PREVIEW_URL: ${{ needs.deploy.outputs.page_url }}pr-${{ github.event.pull_request.number }}/
+        with:
+          script: |
+            const marker = "<!-- playground-preview -->";
+            const previewUrl = process.env.PREVIEW_URL;
+            const body = `${marker}\nPlayground preview: ${previewUrl}`;
+
+            const { owner, repo } = context.repo;
+            const issue_number = context.payload.pull_request.number;
+
+            const { data: comments } = await github.rest.issues.listComments({
+              owner,
+              repo,
+              issue_number,
+            });
+
+            const existing = comments.find(
+              (comment) =>
+                comment.user?.login === "github-actions[bot]" &&
+                comment.body?.includes(marker)
+            );
+
+            if (existing) {
+              await github.rest.issues.updateComment({
+                owner,
+                repo,
+                comment_id: existing.id,
+                body,
+              });
+            } else {
+              await github.rest.issues.createComment({
+                owner,
+                repo,
+                issue_number,
+                body,
+              });
+            }
