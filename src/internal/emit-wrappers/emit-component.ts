@@ -404,8 +404,12 @@ export function emitComponentWrappers(emitter: WrapperEmitter): {
     // Only destructure when we have specific reasons: variant props or className/style support
     // Children flows through naturally via {...props} spread, no explicit handling needed
     // Attrs are handled separately (added as JSX attributes before/after the props spread)
+    // Also need to destructure when defaultAttrs exist, to properly handle nullish coalescing
     const needsDestructure =
-      destructureProps.length > 0 || needsSxVar || isPolymorphicComponentWrapper;
+      destructureProps.length > 0 ||
+      needsSxVar ||
+      isPolymorphicComponentWrapper ||
+      defaultAttrs.length > 0;
     const includeChildren =
       !isPolymorphicComponentWrapper && emitter.hasJsxChildrenUsage(d.localName);
 
@@ -416,6 +420,14 @@ export function emitComponentWrappers(emitter: WrapperEmitter): {
       const restId = j.identifier("rest");
       const componentId = j.identifier("Component");
       const wrappedComponentExpr = buildWrappedComponentExpr();
+
+      // Add defaultAttrs props to destructureProps for nullish coalescing patterns
+      // (e.g., tabIndex: props.tabIndex ?? 0 needs tabIndex destructured)
+      for (const attr of defaultAttrs) {
+        if (!destructureProps.includes(attr.jsxProp)) {
+          destructureProps.push(attr.jsxProp);
+        }
+      }
 
       const patternProps = emitter.buildDestructurePatternProps({
         baseProps: [
@@ -462,7 +474,13 @@ export function emitComponentWrappers(emitter: WrapperEmitter): {
       const openingAttrs: JsxAttr[] = [];
       // Add attrs in order: defaultAttrs, staticAttrs, then {...rest}
       // This allows props passed to the component to override attrs (styled-components semantics)
-      openingAttrs.push(...emitter.buildStaticValueAttrs({ attrs: defaultAttrs }));
+      // Use buildDefaultAttrsFromProps to preserve nullish coalescing (e.g., tabIndex ?? 0)
+      openingAttrs.push(
+        ...emitter.buildDefaultAttrsFromProps({
+          defaultAttrs,
+          propExprFor: (prop) => j.identifier(prop),
+        }),
+      );
       // Add staticAttrs from .attrs({...}) before {...rest} so they can be overridden
       openingAttrs.push(
         ...emitter.buildStaticAttrsFromRecord(staticAttrs, { booleanTrueAsShorthand: false }),
@@ -482,6 +500,19 @@ export function emitComponentWrappers(emitter: WrapperEmitter): {
             j.jsxAttribute(
               j.jsxIdentifier(propName),
               j.jsxExpressionContainer(j.identifier(propName)),
+            ),
+          );
+        }
+      }
+      // Re-forward non-transient defaultAttrs props when jsxProp !== attrName.
+      // In styled-components, normal props are passed through unless transient ($-prefixed).
+      // E.g., { tabIndex: props.focusIndex ?? 0 } should still forward focusIndex to the wrapped component.
+      for (const attr of defaultAttrs) {
+        if (attr.jsxProp !== attr.attrName && !attr.jsxProp.startsWith("$")) {
+          openingAttrs.push(
+            j.jsxAttribute(
+              j.jsxIdentifier(attr.jsxProp),
+              j.jsxExpressionContainer(j.identifier(attr.jsxProp)),
             ),
           );
         }
