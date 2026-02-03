@@ -355,6 +355,21 @@ export class WrapperEmitter {
     if (t.type === "TSAnyKeyword") {
       return "any";
     }
+    if (t.type === "TSUndefinedKeyword") {
+      return "undefined";
+    }
+    if (t.type === "TSNullKeyword") {
+      return "null";
+    }
+    if (t.type === "TSVoidKeyword") {
+      return "void";
+    }
+    if (t.type === "TSNeverKeyword") {
+      return "never";
+    }
+    if (t.type === "TSUnknownKeyword") {
+      return "unknown";
+    }
     return null;
   }
 

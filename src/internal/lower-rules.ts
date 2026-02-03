@@ -131,6 +131,19 @@ function invertWhen(when: string): string | null {
   return null;
 }
 
+/**
+ * Creates an AST key node for a CSS property name.
+ * For CSS variables (e.g., --component-width), returns a string literal.
+ * For regular property names (e.g., backgroundColor), returns an identifier.
+ */
+function makeCssPropKey(j: JSCodeshift, prop: string): ExpressionKind {
+  // CSS variables and other non-identifier keys need to be string literals
+  if (!prop.match(/^[a-zA-Z_$][a-zA-Z0-9_$]*$/)) {
+    return j.literal(prop);
+  }
+  return j.identifier(prop);
+}
+
 function buildPseudoMediaPropValue(args: {
   j: JSCodeshift;
   valueExpr: ExpressionKind;
@@ -2096,7 +2109,7 @@ export function lowerRules(args: {
             // Keep expressions as-is (props.X stays as props.X), just handle $-prefixed props
             const properties = Array.from(styleMap.entries()).map(([prop, propExpr]) => {
               const replacedExpr = normalizeDollarProps(j, propExpr);
-              return j.property("init", j.identifier(prop), replacedExpr);
+              return j.property("init", makeCssPropKey(j, prop), replacedExpr);
             });
             const styleFn = j.arrowFunctionExpression([propsParam], j.objectExpression(properties));
 
@@ -2198,7 +2211,7 @@ export function lowerRules(args: {
 
           const properties = Array.from(map.entries()).map(([prop, propExpr]) => {
             const replacedExpr = normalizeDollarProps(j, propExpr);
-            return j.property("init", j.identifier(prop), replacedExpr);
+            return j.property("init", makeCssPropKey(j, prop), replacedExpr);
           });
           return j.arrowFunctionExpression([propsParam], j.objectExpression(properties));
         };
@@ -6501,12 +6514,12 @@ export function lowerRules(args: {
             objProps.push(propNode);
           }
           const mapExpr = j.objectExpression(objProps);
-          props.push(j.property("init", j.identifier(prop), mapExpr));
+          props.push(j.property("init", makeCssPropKey(j, prop), mapExpr));
         } else if (baseVal !== undefined) {
           props.push(
             j.property(
               "init",
-              j.identifier(prop),
+              makeCssPropKey(j, prop),
               isExpressionNode(baseVal) ? baseVal : literalToAst(j, baseVal),
             ),
           );
