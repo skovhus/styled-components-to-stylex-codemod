@@ -18,7 +18,7 @@ function Box(props: BoxProps) {
 }
 
 export const App = () => (
-  <div>
+  <div style={{ position: "relative", height: "200px" }}>
     <Box $large>Large Box (bottom: 80px)</Box>
     <Box style={{ left: 200 }}>Small Box (bottom: 20px)</Box>
   </div>
@@ -26,7 +26,7 @@ export const App = () => (
 
 const styles = stylex.create({
   box: {
-    position: "fixed",
+    position: "absolute",
     left: "10px",
     bottom: "20px",
     paddingBlock: "12px",
