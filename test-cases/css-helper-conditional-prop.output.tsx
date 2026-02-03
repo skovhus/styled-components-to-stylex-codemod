@@ -35,7 +35,7 @@ export function Container(props: ContainerProps) {
       {...rest}
       {...stylex.props(
         styles.container,
-        !!props.$color && styles.containerBackgroundColor(props.$color),
+        props.$color ? styles.containerBackgroundColor(props.$color) : undefined,
       )}
     >
       {children}

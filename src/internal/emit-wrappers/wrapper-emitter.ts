@@ -1231,6 +1231,61 @@ export class WrapperEmitter {
     isBoolean: boolean;
   } {
     const { j } = this;
+    const isValidIdentifier = (name: string): boolean => /^[$A-Z_][0-9A-Z_$]*$/i.test(name);
+    const buildMemberExpr = (raw: string): ExpressionKind | null => {
+      if (!raw.includes(".")) {
+        return null;
+      }
+      const parts = raw
+        .split(".")
+        .map((part) => part.trim())
+        .filter(Boolean);
+      if (parts.length < 2 || parts.some((part) => !isValidIdentifier(part))) {
+        return null;
+      }
+      return parts
+        .slice(1)
+        .reduce<ExpressionKind>(
+          (acc, part) => j.memberExpression(acc, j.identifier(part)),
+          j.identifier(parts[0]!),
+        );
+    };
+    const parsePropRef = (raw: string): { propName: string | null; expr: ExpressionKind } => {
+      const trimmedRaw = raw.trim();
+      if (!trimmedRaw) {
+        return { propName: null, expr: j.identifier("undefined") };
+      }
+      if (trimmedRaw.includes(".")) {
+        const parts = trimmedRaw
+          .split(".")
+          .map((part) => part.trim())
+          .filter(Boolean);
+        const last = parts[parts.length - 1];
+        if (!last || !isValidIdentifier(last)) {
+          return { propName: null, expr: j.identifier(trimmedRaw) };
+        }
+        const root = parts[0];
+        if (root === "props" || root === "p") {
+          const propRoot = parts[1];
+          if (!propRoot || !isValidIdentifier(propRoot)) {
+            return { propName: null, expr: j.identifier(trimmedRaw) };
+          }
+          const expr = parts
+            .slice(2)
+            .reduce<ExpressionKind>(
+              (acc, part) => j.memberExpression(acc, j.identifier(part)),
+              j.identifier(propRoot),
+            );
+          return { propName: propRoot, expr };
+        }
+        const memberExpr = buildMemberExpr(trimmedRaw);
+        if (memberExpr) {
+          return { propName: null, expr: memberExpr };
+        }
+        return { propName: null, expr: j.identifier(trimmedRaw) };
+      }
+      return { propName: trimmedRaw, expr: j.identifier(trimmedRaw) };
+    };
     const trimmed = String(when ?? "").trim();
     if (!trimmed) {
       return { cond: j.identifier("true"), props: [], isBoolean: true };
@@ -1304,23 +1359,29 @@ export class WrapperEmitter {
       const op = trimmed.includes("!==") ? "!==" : "===";
       const [lhs, rhsRaw0] = trimmed.split(op).map((s) => s.trim());
       const rhsRaw = rhsRaw0 ?? "";
+      const lhsInfo = parsePropRef(lhs ?? "");
       const rhs =
         rhsRaw?.startsWith('"') || rhsRaw?.startsWith("'")
           ? j.literal(JSON.parse(rhsRaw.replace(/^'/, '"').replace(/'$/, '"')))
           : /^-?\d+(\.\d+)?$/.test(rhsRaw)
             ? j.literal(Number(rhsRaw))
-            : j.identifier(rhsRaw);
-      const propName = lhs ?? "";
+            : (buildMemberExpr(rhsRaw) ?? j.identifier(rhsRaw));
+      const propName = lhsInfo.propName ?? "";
       // Comparison always produces boolean
       return {
-        cond: j.binaryExpression(op as any, j.identifier(propName), rhs),
+        cond: j.binaryExpression(op as any, lhsInfo.expr, rhs),
         props: propName ? [propName] : [],
         isBoolean: true,
       };
     }
 
     // Simple identifier - NOT guaranteed to be boolean (could be "" or 0)
-    return { cond: j.identifier(trimmed), props: [trimmed], isBoolean: false };
+    const simple = parsePropRef(trimmed);
+    return {
+      cond: simple.expr,
+      props: simple.propName ? [simple.propName] : [],
+      isBoolean: false,
+    };
   }
 
   collectConditionProps(args: { when: string; destructureProps?: string[] }): {

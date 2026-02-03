@@ -1,6 +1,11 @@
 import * as React from "react";
 import * as stylex from "@stylexjs/stylex";
 
+export enum Status {
+  active = "active",
+  inactive = "inactive",
+}
+
 type IconWithTeamColorProps = Omit<React.ComponentProps<"svg">, "className" | "style"> & {
   $color?: string;
 };
@@ -26,9 +31,8 @@ export function IconWithTeamColor(props: IconWithTeamColorProps) {
 }
 
 interface Props extends React.SVGProps<SVGSVGElement> {
-  /** No target date */
+  status: Status;
   noDate?: boolean;
-  /** Render a selected border */
   selected?: boolean;
 }
 
@@ -41,11 +45,16 @@ type IconWithTransformProps = Omit<
  * Renders a diamond shaped icon for the timeline
  */
 export function IconWithTransform(props: IconWithTransformProps) {
-  const { noDate, selected, ...rest } = props;
+  const { noDate, selected, status, ...rest } = props;
   return (
     <Icon_
+      status={status}
       {...rest}
-      {...stylex.props(noDate && !selected ? styles.iconWithTransformNoDateNotSelected : undefined)}
+      {...stylex.props(
+        noDate && !selected && status === Status.active
+          ? styles.iconWithTransformCondTruthy
+          : undefined,
+      )}
     />
   );
 }
@@ -65,8 +74,9 @@ export function App() {
       <IconWithTeamColor $color="red">
         <circle cx="50" cy="50" r="40" stroke="green" strokeWidth="4" />
       </IconWithTeamColor>
-      <IconWithTransform noDate selected />
-      <IconWithTransform noDate />
+      <IconWithTransform noDate selected status={Status.active} />
+      <IconWithTransform noDate selected status={Status.inactive} />
+      <IconWithTransform noDate status={Status.active} />
     </div>
   );
 }
@@ -75,7 +85,7 @@ const styles = stylex.create({
   iconWithTeamColorFill: (fill: string) => ({
     fill,
   }),
-  iconWithTransformNoDateNotSelected: {
+  iconWithTransformCondTruthy: {
     transform: "scale(0.66)",
   },
 });

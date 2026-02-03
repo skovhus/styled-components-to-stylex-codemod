@@ -1,6 +1,11 @@
 import * as React from "react";
 import styled from "styled-components";
 
+export enum Status {
+  active = "active",
+  inactive = "inactive",
+}
+
 // Styled component with conditional CSS based on prop
 // Uses ternary: props.$color ? `fill: ${props.$color};` : ""
 // Bug: Codemod generates `$color && styles.fill($color)` which:
@@ -16,9 +21,8 @@ export const IconWithTeamColor = styled.svg.attrs({
 `;
 
 interface Props extends React.SVGProps<SVGSVGElement> {
-  /** No target date */
+  status: Status;
   noDate?: boolean;
-  /** Render a selected border */
   selected?: boolean;
 }
 
@@ -27,7 +31,7 @@ interface Props extends React.SVGProps<SVGSVGElement> {
  */
 export const IconWithTransform = styled(Icon_)`
   ${(p) =>
-    p.noDate && !p.selected
+    p.noDate && !p.selected && p.status === Status.active
       ? `
     transform: scale(0.66);
   `
@@ -49,8 +53,9 @@ export function App() {
       <IconWithTeamColor $color="red">
         <circle cx="50" cy="50" r="40" stroke="green" strokeWidth="4" />
       </IconWithTeamColor>
-      <IconWithTransform noDate selected />
-      <IconWithTransform noDate />
+      <IconWithTransform noDate selected status={Status.active} />
+      <IconWithTransform noDate selected status={Status.inactive} />
+      <IconWithTransform noDate status={Status.active} />
     </div>
   );
 }
