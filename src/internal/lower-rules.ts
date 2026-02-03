@@ -17,6 +17,7 @@ import {
   type ArrowFnParamBindings,
   type IdentifierNode,
   cloneAstNode,
+  collectIdentifiers,
   extractRootAndPath,
   getArrowFnParamBindings,
   getFunctionBodyExpr,
@@ -2262,17 +2263,31 @@ export function lowerRules(args: {
         }
 
         // Create function call expressions with props object: { size, padding }
-        // Use props.X instead of destructured X to preserve TypeScript type narrowing
+        // Use props.X only when the prop is referenced in the condition (to preserve type narrowing)
+        // Use shorthand when the prop is not referenced in the condition
+        const conditionIdentifiers = new Set<string>();
+        collectIdentifiers(conditional.test, conditionIdentifiers);
+
         const makeStyleCall = (key: string) => {
           const callArgProperties = valuePropParams.map((p) => {
             const propName = p.startsWith("$") ? p.slice(1) : p;
-            // Use props.X to maintain type narrowing from the condition check
-            const propAccess = j.memberExpression(j.identifier("props"), j.identifier(p));
+            // Only use props.X when the prop is referenced in the condition (for type narrowing)
+            // Otherwise use shorthand for cleaner output
+            const propIsInCondition = conditionIdentifiers.has(p);
+            if (propIsInCondition) {
+              const propAccess = j.memberExpression(j.identifier("props"), j.identifier(p));
+              return j.property.from({
+                kind: "init",
+                key: j.identifier(propName),
+                value: propAccess,
+                shorthand: false,
+              });
+            }
             return j.property.from({
               kind: "init",
               key: j.identifier(propName),
-              value: propAccess,
-              shorthand: false,
+              value: j.identifier(p),
+              shorthand: propName === p,
             });
           });
           return j.callExpression(j.memberExpression(j.identifier("styles"), j.identifier(key)), [

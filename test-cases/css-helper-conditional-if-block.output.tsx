@@ -14,10 +14,10 @@ export function Container(props: ContainerProps) {
         styles.container,
         Browser.isSafari
           ? styles.containerBrowserIsSafari({
-              size: props.size,
+              size,
             })
           : styles.containerDefault({
-              size: props.size,
+              size,
             }),
       )}
     >
