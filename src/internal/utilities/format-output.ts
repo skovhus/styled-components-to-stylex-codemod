@@ -38,6 +38,14 @@ export function formatOutput(code: string): string {
   // More generally, if there's an empty line immediately before a `return`, remove it.
   // This keeps wrapper components compact and matches our fixture formatting.
   out = out.replace(/\n[ \t]*\n(\s*return\b)/g, "\n$1");
+  // When we emit sx.className merging for static attrs, keep the `const sx` directly
+  // after the props destructure (fixtures expect no blank line here).
+  if (out.includes("sx.className")) {
+    out = out.replace(
+      /\n(\s*const\s+\{[^}]+\}\s*=\s*props;\n)\s*\n(\s*const\s+sx\s*=\s*stylex\.props)/g,
+      "\n$1$2",
+    );
+  }
 
   // Normalize import spacing at the top of the file:
   // - Keep React and StyleX imports adjacent (no blank line between them).

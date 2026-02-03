@@ -181,12 +181,12 @@ export function emitComponentWrappers(emitter: WrapperEmitter): {
     }
     // For component wrappers, don't include extendsStyleKey because
     // the wrapped component already applies its own styles.
-    const extraStyleArgs = (d.extraStyleKeys ?? []).map((key) =>
-      j.memberExpression(j.identifier(stylesIdentifier), j.identifier(key)),
-    );
+    const { beforeBase: extraStyleArgs, afterBase: extraStyleArgsAfterBase } =
+      emitter.splitExtraStyleArgs(d);
     const styleArgs: ExpressionKind[] = [
       ...extraStyleArgs,
       j.memberExpression(j.identifier(stylesIdentifier), j.identifier(d.styleKey)),
+      ...extraStyleArgsAfterBase,
     ];
 
     // Track props that need to be destructured for conditional styles
@@ -446,9 +446,11 @@ export function emitComponentWrappers(emitter: WrapperEmitter): {
       jsxTagName = j.jsxIdentifier(wrappedComponent);
     }
 
-    const defaultAttrs = d.attrsInfo?.defaultAttrs ?? [];
-    const staticAttrs = d.attrsInfo?.staticAttrs ?? {};
-    const needsSxVar = allowClassNameProp || allowStyleProp || !!d.inlineStyleProps?.length;
+    const { attrsInfo, staticClassNameExpr } = emitter.splitAttrsInfo(d.attrsInfo);
+    const defaultAttrs = attrsInfo?.defaultAttrs ?? [];
+    const staticAttrs = attrsInfo?.staticAttrs ?? {};
+    const needsSxVar =
+      allowClassNameProp || allowStyleProp || !!d.inlineStyleProps?.length || !!staticClassNameExpr;
     // Only destructure when we have specific reasons: variant props or className/style support
     // Children flows through naturally via {...props} spread, no explicit handling needed
     // Attrs are handled separately (added as JSX attributes before/after the props spread)
@@ -512,6 +514,7 @@ export function emitComponentWrappers(emitter: WrapperEmitter): {
         allowClassNameProp,
         allowStyleProp,
         inlineStyleProps: (d.inlineStyleProps ?? []) as InlineStyleProp[],
+        staticClassNameExpr,
       });
 
       const stmts: StatementKind[] = [declStmt];

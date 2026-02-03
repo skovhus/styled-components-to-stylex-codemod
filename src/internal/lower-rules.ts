@@ -337,61 +337,14 @@ export function lowerRules(args: {
   };
 
   /**
-   * Determines if a styled component is simple enough to be used as a mixin.
-   * Returns true only for components with static styles and no complex features.
-   */
-  const isSimpleMixin = (decl: StyledDecl): boolean => {
-    // Bail if it has dynamic styles dependent on props
-    if (decl.styleFnFromProps && decl.styleFnFromProps.length > 0) {
-      return false;
-    }
-    // Bail if it has variant dimensions (prop-based variants)
-    if (decl.variantDimensions && decl.variantDimensions.length > 0) {
-      return false;
-    }
-    // Bail if it has enum variants
-    if (decl.enumVariant) {
-      return false;
-    }
-    // Bail if it has compound variants
-    if (decl.compoundVariants && decl.compoundVariants.length > 0) {
-      return false;
-    }
-    // Bail if it needs a wrapper component
-    if (decl.needsWrapperComponent) {
-      return false;
-    }
-    // Bail if it has attrs that affect styling
-    if (decl.attrsInfo) {
-      const { staticAttrs, conditionalAttrs, defaultAttrs } = decl.attrsInfo;
-      if (
-        Object.keys(staticAttrs).length > 0 ||
-        conditionalAttrs.length > 0 ||
-        (defaultAttrs && defaultAttrs.length > 0)
-      ) {
-        return false;
-      }
-    }
-    // Bail if it has inline style props
-    if (decl.inlineStyleProps && decl.inlineStyleProps.length > 0) {
-      return false;
-    }
-    // Bail if it has variant style keys
-    if (decl.variantStyleKeys && Object.keys(decl.variantStyleKeys).length > 0) {
-      return false;
-    }
-    // Bail if it has extra stylex props args
-    if (decl.extraStylexPropsArgs && decl.extraStylexPropsArgs.length > 0) {
-      return false;
-    }
-    return true;
-  };
-
-  /**
    * Adds a style key to decl.extraStyleKeys and tracks order in decl.mixinOrder.
    * Returns true if the key was added (not already present).
    */
-  const addStyleKeyMixin = (decl: StyledDecl, styleKey: string): boolean => {
+  const addStyleKeyMixin = (
+    decl: StyledDecl,
+    styleKey: string,
+    options?: { afterBase?: boolean },
+  ): boolean => {
     const extras = decl.extraStyleKeys ?? [];
     const order = decl.mixinOrder ?? [];
     if (extras.includes(styleKey)) {
@@ -401,6 +354,13 @@ export function lowerRules(args: {
     order.push("styleKey");
     decl.extraStyleKeys = extras;
     decl.mixinOrder = order;
+    if (options?.afterBase) {
+      const afterBase = decl.extraStyleKeysAfterBase ?? [];
+      if (!afterBase.includes(styleKey)) {
+        afterBase.push(styleKey);
+      }
+      decl.extraStyleKeysAfterBase = afterBase;
+    }
     return true;
   };
 
@@ -428,7 +388,10 @@ export function lowerRules(args: {
     cssHelperPropValues: Map<string, unknown>,
     inlineStyleProps: Array<{ prop: string; expr: ExpressionKind }>,
   ): void => {
-    addStyleKeyMixin(decl, helperDecl.styleKey);
+    const hasBaseRule = helperDecl.rules.some(
+      (rule) => rule.selector.trim() === "&" && rule.declarations.length > 0,
+    );
+    addStyleKeyMixin(decl, helperDecl.styleKey, { afterBase: !hasBaseRule });
     trackMixinPropertyValues(cssHelperValuesByKey.get(helperDecl.styleKey), cssHelperPropValues);
     if (helperDecl.inlineStyleProps?.length) {
       for (const p of helperDecl.inlineStyleProps) {
@@ -436,6 +399,32 @@ export function lowerRules(args: {
           prop: p.prop,
           expr: cloneAstNode(p.expr),
         });
+      }
+    }
+    if (helperDecl.extraStyleKeys?.length) {
+      for (const key of helperDecl.extraStyleKeys) {
+        const afterBase = helperDecl.extraStyleKeysAfterBase?.includes(key) ?? false;
+        addStyleKeyMixin(decl, key, { afterBase });
+        trackMixinPropertyValues(cssHelperValuesByKey.get(key), cssHelperPropValues);
+      }
+    }
+    if (helperDecl.templateExpressions?.length) {
+      for (const expr of helperDecl.templateExpressions as any[]) {
+        if (expr?.type !== "Identifier" || !cssHelperNames.has(expr.name)) {
+          continue;
+        }
+        const nestedDecl = declByLocalName.get(expr.name);
+        if (!nestedDecl?.isCssHelper) {
+          continue;
+        }
+        const nestedHasBaseRule = nestedDecl.rules.some(
+          (rule) => rule.selector.trim() === "&" && rule.declarations.length > 0,
+        );
+        addStyleKeyMixin(decl, nestedDecl.styleKey, { afterBase: !nestedHasBaseRule });
+        trackMixinPropertyValues(
+          cssHelperValuesByKey.get(nestedDecl.styleKey),
+          cssHelperPropValues,
+        );
       }
     }
   };
@@ -2954,7 +2943,7 @@ export function lowerRules(args: {
                   }
                 }
               } else if (declByLocalName.has(expr.name)) {
-                // Local styled component mixin - handled later in rule processing.
+                // Local styled component interpolation - handled later in rule processing.
               } else {
                 // Check if this is an imported styled component mixin that the adapter can resolve
                 const importEntry = importMap?.get(expr.name);
@@ -4005,23 +3994,6 @@ export function lowerRules(args: {
                 // Case 1: Local styled component mixin
                 const mixinDecl = declByLocalName.get(expr.name);
                 if (mixinDecl && !mixinDecl.isCssHelper && mixinDecl.localName !== decl.localName) {
-                  if (isSimpleMixin(mixinDecl)) {
-                    // First propagate recursive mixins' extraStyleKeys (lower precedence)
-                    if (mixinDecl.extraStyleKeys) {
-                      for (const extraKey of mixinDecl.extraStyleKeys) {
-                        addStyleKeyMixin(decl, extraKey);
-                      }
-                    }
-                    // Then add mixin's styleKey (higher precedence than its dependencies)
-                    addStyleKeyMixin(decl, mixinDecl.styleKey);
-                    trackMixinPropertyValues(
-                      mixinValuesByKey.get(mixinDecl.styleKey),
-                      cssHelperPropValues,
-                    );
-                    continue;
-                  }
-
-                  // Complex mixin - still bail
                   bail = true;
                   warnings.push({
                     severity: "warning",

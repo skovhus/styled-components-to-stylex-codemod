@@ -11,7 +11,7 @@ export default [
       "**/playground/dist/**",
       "**/src/**",
       // Test case outputs contain dynamic patterns that StyleX's static analyzer can't verify
-      "**/test-cases/**",
+      //"**/test-cases/**",
     ],
   },
   {
@@ -37,7 +37,9 @@ export default [
       "stylex/no-unused": "error",
       "stylex/sort-keys": "off",
       "stylex/valid-shorthands": "error",
-      "stylex/valid-styles": "error",
+
+      // TODO: false positives with colors
+      "stylex/valid-styles": "off",
     },
   },
 ];

@@ -47,11 +47,6 @@ export function emitIntrinsicWrappers(emitter: WrapperEmitter): {
       inlineStyleProps: args.inlineStyleProps,
     });
 
-  const extraStyleArgsFor = (d: StyledDecl): ExpressionKind[] =>
-    (d.extraStyleKeys ?? []).map((key) =>
-      j.memberExpression(j.identifier(stylesIdentifier), j.identifier(key)),
-    );
-
   /**
    * Check if a component can use simpler PropsWithChildren type instead of
    * verbose intersection type with element props. This is true when:
@@ -330,9 +325,12 @@ export function emitIntrinsicWrappers(emitter: WrapperEmitter): {
       emitPropsType(d.localName, baseTypeText, allowAsProp);
 
       const aw = d.attrWrapper!;
+      const { beforeBase: extraStyleArgs, afterBase: extraStyleArgsAfterBase } =
+        emitter.splitExtraStyleArgs(d);
       const styleArgs: ExpressionKind[] = [
-        ...extraStyleArgsFor(d),
+        ...extraStyleArgs,
         j.memberExpression(j.identifier(stylesIdentifier), j.identifier(d.styleKey)),
+        ...extraStyleArgsAfterBase,
         ...(aw.checkboxKey
           ? [
               j.logicalExpression(
@@ -473,10 +471,13 @@ export function emitIntrinsicWrappers(emitter: WrapperEmitter): {
       emitPropsType(d.localName, baseTypeText, allowAsProp);
 
       const aw = d.attrWrapper!;
+      const { beforeBase: extraStyleArgs, afterBase: extraStyleArgsAfterBase } =
+        emitter.splitExtraStyleArgs(d);
       const base = j.memberExpression(j.identifier(stylesIdentifier), j.identifier(d.styleKey));
       const styleArgs: ExpressionKind[] = [
-        ...extraStyleArgsFor(d),
+        ...extraStyleArgs,
         base,
+        ...extraStyleArgsAfterBase,
         ...(aw.externalKey
           ? [
               j.logicalExpression(
@@ -704,12 +705,15 @@ export function emitIntrinsicWrappers(emitter: WrapperEmitter): {
       }
       needsReactTypeImport = true;
 
+      const { beforeBase: extraStyleArgs, afterBase: extraStyleArgsAfterBase } =
+        emitter.splitExtraStyleArgs(d);
       const styleArgs: ExpressionKind[] = [
         ...(d.extendsStyleKey
           ? [j.memberExpression(j.identifier(stylesIdentifier), j.identifier(d.extendsStyleKey))]
           : []),
-        ...extraStyleArgsFor(d),
+        ...extraStyleArgs,
         j.memberExpression(j.identifier(stylesIdentifier), j.identifier(d.styleKey)),
+        ...extraStyleArgsAfterBase,
       ];
 
       // Track props that need to be destructured for variant styles
@@ -854,6 +858,7 @@ export function emitIntrinsicWrappers(emitter: WrapperEmitter): {
         ),
       ]);
 
+      const { attrsInfo, staticClassNameExpr } = emitter.splitAttrsInfo(d.attrsInfo);
       const merging = emitStyleMerging({
         j,
         emitter,
@@ -863,11 +868,12 @@ export function emitIntrinsicWrappers(emitter: WrapperEmitter): {
         allowClassNameProp,
         allowStyleProp,
         inlineStyleProps: [],
+        staticClassNameExpr,
       });
 
       const attrs: JsxAttr[] = [
         ...emitter.buildAttrsFromAttrsInfo({
-          attrsInfo: d.attrsInfo,
+          attrsInfo,
           propExprFor: (prop) => j.identifier(prop),
         }),
         j.jsxSpreadAttribute(restId),
@@ -1154,12 +1160,15 @@ export function emitIntrinsicWrappers(emitter: WrapperEmitter): {
     }
     needsReactTypeImport = true;
 
+    const { beforeBase: extraStyleArgs, afterBase: extraStyleArgsAfterBase } =
+      emitter.splitExtraStyleArgs(d);
     const styleArgs: ExpressionKind[] = [
       ...(d.extendsStyleKey
         ? [j.memberExpression(j.identifier(stylesIdentifier), j.identifier(d.extendsStyleKey))]
         : []),
-      ...extraStyleArgsFor(d),
+      ...extraStyleArgs,
       j.memberExpression(j.identifier(stylesIdentifier), j.identifier(d.styleKey)),
+      ...extraStyleArgsAfterBase,
     ];
 
     // Add adapter-resolved StyleX styles (emitted directly into stylex.props args).
@@ -1387,6 +1396,7 @@ export function emitIntrinsicWrappers(emitter: WrapperEmitter): {
             ) as any)
           : null;
 
+      const { attrsInfo, staticClassNameExpr } = emitter.splitAttrsInfo(d.attrsInfo);
       const merging = emitStyleMerging({
         j,
         emitter,
@@ -1396,11 +1406,12 @@ export function emitIntrinsicWrappers(emitter: WrapperEmitter): {
         allowClassNameProp,
         allowStyleProp,
         inlineStyleProps: (d.inlineStyleProps ?? []) as InlineStyleProp[],
+        staticClassNameExpr,
       });
 
       const openingAttrs: JsxAttr[] = [
         ...emitter.buildAttrsFromAttrsInfo({
-          attrsInfo: d.attrsInfo,
+          attrsInfo,
           propExprFor: (prop) => j.identifier(prop),
         }),
         ...(includeRest ? [j.jsxSpreadAttribute(restId)] : []),
@@ -1613,12 +1624,15 @@ export function emitIntrinsicWrappers(emitter: WrapperEmitter): {
         emitPropsType(d.localName, typeText, allowAsProp);
       }
     }
+    const { beforeBase: extraStyleArgs, afterBase: extraStyleArgsAfterBase } =
+      emitter.splitExtraStyleArgs(d);
     const styleArgs: ExpressionKind[] = [
       ...(d.extendsStyleKey
         ? [j.memberExpression(j.identifier(stylesIdentifier), j.identifier(d.extendsStyleKey))]
         : []),
-      ...extraStyleArgsFor(d),
+      ...extraStyleArgs,
       j.memberExpression(j.identifier(stylesIdentifier), j.identifier(d.styleKey)),
+      ...extraStyleArgsAfterBase,
     ];
 
     const propsParamId = j.identifier("props");
@@ -1739,6 +1753,7 @@ export function emitIntrinsicWrappers(emitter: WrapperEmitter): {
     ]);
 
     // Use the style merger helper
+    const { attrsInfo, staticClassNameExpr } = emitter.splitAttrsInfo(d.attrsInfo);
     const merging = emitStyleMerging({
       j,
       emitter,
@@ -1748,11 +1763,12 @@ export function emitIntrinsicWrappers(emitter: WrapperEmitter): {
       allowClassNameProp,
       allowStyleProp,
       inlineStyleProps: [],
+      staticClassNameExpr,
     });
 
     const openingAttrs: JsxAttr[] = [
       ...emitter.buildAttrsFromAttrsInfo({
-        attrsInfo: d.attrsInfo,
+        attrsInfo,
         propExprFor: (prop) => j.identifier(prop),
       }),
       j.jsxSpreadAttribute(restId),
@@ -1849,9 +1865,12 @@ export function emitIntrinsicWrappers(emitter: WrapperEmitter): {
     ]);
 
     // Build styleArgs for sibling selectors
+    const { beforeBase: extraStyleArgs, afterBase: extraStyleArgsAfterBase } =
+      emitter.splitExtraStyleArgs(d);
     const styleArgs: ExpressionKind[] = [
-      ...extraStyleArgsFor(d),
+      ...extraStyleArgs,
       j.memberExpression(j.identifier(stylesIdentifier), j.identifier(d.styleKey)),
+      ...extraStyleArgsAfterBase,
       j.logicalExpression(
         "&&",
         adjId as any,
@@ -2149,12 +2168,15 @@ export function emitIntrinsicWrappers(emitter: WrapperEmitter): {
       }
       needsReactTypeImport = true;
     }
+    const { beforeBase: extraStyleArgs, afterBase: extraStyleArgsAfterBase } =
+      emitter.splitExtraStyleArgs(d);
     const styleArgs: ExpressionKind[] = [
       ...(d.extendsStyleKey
         ? [j.memberExpression(j.identifier(stylesIdentifier), j.identifier(d.extendsStyleKey))]
         : []),
-      ...extraStyleArgsFor(d),
+      ...extraStyleArgs,
       j.memberExpression(j.identifier(stylesIdentifier), j.identifier(d.styleKey)),
+      ...extraStyleArgsAfterBase,
     ];
 
     const destructureProps: string[] = [];
@@ -2342,6 +2364,7 @@ export function emitIntrinsicWrappers(emitter: WrapperEmitter): {
       ]);
 
       // Use the style merger helper
+      const { attrsInfo, staticClassNameExpr } = emitter.splitAttrsInfo(d.attrsInfo);
       const merging = emitStyleMerging({
         j,
         emitter,
@@ -2351,11 +2374,12 @@ export function emitIntrinsicWrappers(emitter: WrapperEmitter): {
         allowClassNameProp,
         allowStyleProp,
         inlineStyleProps: (d.inlineStyleProps ?? []) as InlineStyleProp[],
+        staticClassNameExpr,
       });
 
       const openingAttrs: JsxAttr[] = [
         ...emitter.buildAttrsFromAttrsInfo({
-          attrsInfo: d.attrsInfo,
+          attrsInfo,
           propExprFor: (prop) => j.identifier(prop),
         }),
         ...(restId ? [j.jsxSpreadAttribute(restId)] : []),

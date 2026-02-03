@@ -370,9 +370,11 @@ export function rewriteJsxStep(ctx: TransformContext): StepResult {
         const extraStyleKeys = decl.extraStyleKeys ?? [];
         const extraStylexPropsArgs = (decl.extraStylexPropsArgs ?? []).filter((arg) => !arg.when);
         const mixinOrder = decl.mixinOrder;
+        const afterBaseKeys = new Set(decl.extraStyleKeysAfterBase ?? []);
 
         // Build interleaved extra args based on mixinOrder (if available)
         const extraMixinArgs: ExpressionKind[] = [];
+        const extraAfterBaseArgs: ExpressionKind[] = [];
         if (mixinOrder && mixinOrder.length > 0) {
           let styleKeyIdx = 0;
           let propsArgIdx = 0;
@@ -381,12 +383,15 @@ export function rewriteJsxStep(ctx: TransformContext): StepResult {
               const key = extraStyleKeys[styleKeyIdx];
               styleKeyIdx++;
               if (key) {
-                extraMixinArgs.push(
-                  j.memberExpression(
-                    j.identifier(ctx.stylesIdentifier ?? "styles"),
-                    j.identifier(key),
-                  ),
+                const expr = j.memberExpression(
+                  j.identifier(ctx.stylesIdentifier ?? "styles"),
+                  j.identifier(key),
                 );
+                if (afterBaseKeys.has(key)) {
+                  extraAfterBaseArgs.push(expr);
+                } else {
+                  extraMixinArgs.push(expr);
+                }
               }
             } else if (entry === "propsArg" && propsArgIdx < extraStylexPropsArgs.length) {
               const arg = extraStylexPropsArgs[propsArgIdx];
@@ -402,9 +407,15 @@ export function rewriteJsxStep(ctx: TransformContext): StepResult {
             extraMixinArgs.push(arg.expr);
           }
           for (const key of extraStyleKeys) {
-            extraMixinArgs.push(
-              j.memberExpression(j.identifier(ctx.stylesIdentifier ?? "styles"), j.identifier(key)),
+            const expr = j.memberExpression(
+              j.identifier(ctx.stylesIdentifier ?? "styles"),
+              j.identifier(key),
             );
+            if (afterBaseKeys.has(key)) {
+              extraAfterBaseArgs.push(expr);
+            } else {
+              extraMixinArgs.push(expr);
+            }
           }
         }
 
@@ -422,6 +433,7 @@ export function rewriteJsxStep(ctx: TransformContext): StepResult {
             j.identifier(ctx.stylesIdentifier ?? "styles"),
             j.identifier(decl.styleKey),
           ),
+          ...extraAfterBaseArgs,
         ];
 
         const variantKeys = decl.variantStyleKeys ?? {};

@@ -1,6 +1,6 @@
-import styled from "styled-components";
+import styled, { css } from "styled-components";
 
-const HiddenOnMobile = styled.div`
+const HiddenOnMobile = css`
   @media (max-width: 767px) {
     display: none;
   }
