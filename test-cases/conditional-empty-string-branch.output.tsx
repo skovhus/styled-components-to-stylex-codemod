@@ -31,9 +31,9 @@ function BoxAlt(props: BoxAltProps) {
   );
 }
 
-type ContainerProps = Omit<React.ComponentProps<"div">, "className" | "style"> & {
+type ContainerProps = React.PropsWithChildren<{
   $compact?: boolean;
-};
+}>;
 
 // Multiple CSS declarations in string
 function Container(props: ContainerProps) {
@@ -73,8 +73,6 @@ const styles = stylex.create({
   boxAltEnableMinWidth: {
     minWidth: "500px",
   },
-
-  // Multiple CSS declarations in string
   container: {
     padding: "16px",
     backgroundColor: "#f0e0d0",
