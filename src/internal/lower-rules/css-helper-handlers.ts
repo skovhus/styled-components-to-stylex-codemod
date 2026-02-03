@@ -44,6 +44,7 @@ export type CssHelperHandlersContext = {
     conditionalVariants: ConditionalVariant[];
   } | null;
   applyVariant: (testInfo: TestInfo, consStyle: Record<string, unknown>) => void;
+  dropAllTestInfoProps: (testInfo: TestInfo) => void;
   toSuffixFromProp: (propName: string) => string;
   componentInfo: any;
   handlerContext: InternalHandlerContext;
@@ -69,6 +70,7 @@ export const createCssHelperHandlers = (ctx: CssHelperHandlersContext) => {
     isCssHelperTaggedTemplate,
     resolveCssHelperTemplate,
     applyVariant,
+    dropAllTestInfoProps,
     toSuffixFromProp,
     componentInfo,
     handlerContext,
@@ -178,9 +180,7 @@ export const createCssHelperHandlers = (ctx: CssHelperHandlersContext) => {
     // Add the "true" branch value as a variant
     applyVariant(testInfo, { [stylexProp]: consValue });
 
-    if (testInfo.propName) {
-      ensureShouldForwardPropDrop(decl, testInfo.propName);
-    }
+    dropAllTestInfoProps(testInfo);
 
     return true;
   };
