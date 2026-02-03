@@ -128,3 +128,11 @@ export function wrapComponent<P extends object>(
 ): React.ComponentType<P> {
   return Component;
 }
+
+/**
+ * Browser detection helpers - used for browser-specific styling
+ */
+export const Browser = {
+  isSafari:
+    typeof navigator !== "undefined" && /^((?!chrome|android).)*safari/i.test(navigator.userAgent),
+};

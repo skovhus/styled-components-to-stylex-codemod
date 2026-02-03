@@ -1,5 +1,6 @@
 import type { JSCodeshift } from "jscodeshift";
 import {
+  type ASTNodeRecord,
   cloneAstNode,
   getArrowFnParamBindings,
   getFunctionBodyExpr,
@@ -351,4 +352,106 @@ export function hasUnsupportedConditionalTest(expr: any): boolean {
   };
   visit(bodyExpr);
   return found;
+}
+
+/**
+ * Collects prop names from AST expressions by finding:
+ * - Member expressions accessing `props.X` (non-computed)
+ * - Identifiers starting with `$` (transient props)
+ */
+export function collectPropsFromExpressions(
+  expressions: Iterable<unknown>,
+  propsUsed: Set<string>,
+): void {
+  const visit = (node: unknown): void => {
+    if (!node || typeof node !== "object") {
+      return;
+    }
+    if (Array.isArray(node)) {
+      for (const child of node) {
+        visit(child);
+      }
+      return;
+    }
+    const n = node as ASTNodeRecord;
+    if (
+      (n.type === "MemberExpression" || n.type === "OptionalMemberExpression") &&
+      (n.object as ASTNodeRecord)?.type === "Identifier" &&
+      (n.object as { name?: string })?.name === "props" &&
+      (n.property as ASTNodeRecord)?.type === "Identifier" &&
+      n.computed === false
+    ) {
+      propsUsed.add((n.property as { name: string }).name);
+    }
+    if (n.type === "Identifier") {
+      const identName = n.name as string | undefined;
+      if (identName?.startsWith("$")) {
+        propsUsed.add(identName);
+      }
+    }
+    for (const key of Object.keys(n)) {
+      if (key === "loc" || key === "comments") {
+        continue;
+      }
+      const child = n[key];
+      if (child && typeof child === "object") {
+        visit(child);
+      }
+    }
+  };
+  for (const expr of expressions) {
+    visit(expr);
+  }
+}
+
+/**
+ * Normalizes $-prefixed prop references to props.X format for StyleX style functions:
+ * - `$foo` identifier -> `props.foo` (wrap in member expression)
+ * - `props.$foo` -> `props.foo` (strip $ prefix)
+ * - `props.foo` -> unchanged
+ */
+export function normalizeDollarProps(j: JSCodeshift, exprNode: ExpressionKind): ExpressionKind {
+  const cloned = cloneAstNode(exprNode);
+  const replace = (node: unknown): unknown => {
+    if (!node || typeof node !== "object") {
+      return node;
+    }
+    if (Array.isArray(node)) {
+      return node.map((child) => replace(child));
+    }
+    const n = node as ASTNodeRecord;
+    // Handle props.$foo -> props.foo (strip $ from property name)
+    if (
+      (n.type === "MemberExpression" || n.type === "OptionalMemberExpression") &&
+      (n.object as ASTNodeRecord)?.type === "Identifier" &&
+      (n.object as { name?: string })?.name === "props" &&
+      (n.property as ASTNodeRecord)?.type === "Identifier" &&
+      n.computed === false
+    ) {
+      const propName = (n.property as { name: string }).name;
+      if (propName.startsWith("$")) {
+        return j.memberExpression(j.identifier("props"), j.identifier(propName.slice(1)));
+      }
+      // props.foo stays as props.foo - no change needed
+      return n;
+    }
+    // Handle $foo identifier -> props.foo
+    if (n.type === "Identifier") {
+      const identName = n.name as string | undefined;
+      if (identName?.startsWith("$")) {
+        return j.memberExpression(j.identifier("props"), j.identifier(identName.slice(1)));
+      }
+    }
+    for (const key of Object.keys(n)) {
+      if (key === "loc" || key === "comments") {
+        continue;
+      }
+      const child = n[key];
+      if (child && typeof child === "object") {
+        n[key] = replace(child);
+      }
+    }
+    return n;
+  };
+  return replace(cloned) as ExpressionKind;
 }
