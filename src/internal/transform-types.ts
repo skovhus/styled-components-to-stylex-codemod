@@ -213,6 +213,11 @@ export type StyledDecl = {
    */
   extraStyleKeys?: string[];
   /**
+   * Extra style keys that should be applied after the base style key.
+   * Used for pseudo-only mixins where base styles should remain primary.
+   */
+  extraStyleKeysAfterBase?: string[];
+  /**
    * Additional `stylex.props(...)` arguments derived from resolved helper calls that
    * produce StyleX style objects (adapter resolveCall(...) -> { usage: "props", ... }).
    *

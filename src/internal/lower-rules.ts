@@ -340,7 +340,11 @@ export function lowerRules(args: {
    * Adds a style key to decl.extraStyleKeys and tracks order in decl.mixinOrder.
    * Returns true if the key was added (not already present).
    */
-  const addStyleKeyMixin = (decl: StyledDecl, styleKey: string): boolean => {
+  const addStyleKeyMixin = (
+    decl: StyledDecl,
+    styleKey: string,
+    options?: { afterBase?: boolean },
+  ): boolean => {
     const extras = decl.extraStyleKeys ?? [];
     const order = decl.mixinOrder ?? [];
     if (extras.includes(styleKey)) {
@@ -350,6 +354,13 @@ export function lowerRules(args: {
     order.push("styleKey");
     decl.extraStyleKeys = extras;
     decl.mixinOrder = order;
+    if (options?.afterBase) {
+      const afterBase = decl.extraStyleKeysAfterBase ?? [];
+      if (!afterBase.includes(styleKey)) {
+        afterBase.push(styleKey);
+      }
+      decl.extraStyleKeysAfterBase = afterBase;
+    }
     return true;
   };
 
@@ -377,7 +388,10 @@ export function lowerRules(args: {
     cssHelperPropValues: Map<string, unknown>,
     inlineStyleProps: Array<{ prop: string; expr: ExpressionKind }>,
   ): void => {
-    addStyleKeyMixin(decl, helperDecl.styleKey);
+    const hasBaseRule = helperDecl.rules.some(
+      (rule) => rule.selector.trim() === "&" && rule.declarations.length > 0,
+    );
+    addStyleKeyMixin(decl, helperDecl.styleKey, { afterBase: !hasBaseRule });
     trackMixinPropertyValues(cssHelperValuesByKey.get(helperDecl.styleKey), cssHelperPropValues);
     if (helperDecl.inlineStyleProps?.length) {
       for (const p of helperDecl.inlineStyleProps) {
@@ -385,6 +399,32 @@ export function lowerRules(args: {
           prop: p.prop,
           expr: cloneAstNode(p.expr),
         });
+      }
+    }
+    if (helperDecl.extraStyleKeys?.length) {
+      for (const key of helperDecl.extraStyleKeys) {
+        const afterBase = helperDecl.extraStyleKeysAfterBase?.includes(key) ?? false;
+        addStyleKeyMixin(decl, key, { afterBase });
+        trackMixinPropertyValues(cssHelperValuesByKey.get(key), cssHelperPropValues);
+      }
+    }
+    if (helperDecl.templateExpressions?.length) {
+      for (const expr of helperDecl.templateExpressions as any[]) {
+        if (expr?.type !== "Identifier" || !cssHelperNames.has(expr.name)) {
+          continue;
+        }
+        const nestedDecl = declByLocalName.get(expr.name);
+        if (!nestedDecl?.isCssHelper) {
+          continue;
+        }
+        const nestedHasBaseRule = nestedDecl.rules.some(
+          (rule) => rule.selector.trim() === "&" && rule.declarations.length > 0,
+        );
+        addStyleKeyMixin(decl, nestedDecl.styleKey, { afterBase: !nestedHasBaseRule });
+        trackMixinPropertyValues(
+          cssHelperValuesByKey.get(nestedDecl.styleKey),
+          cssHelperPropValues,
+        );
       }
     }
   };
