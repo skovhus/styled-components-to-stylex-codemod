@@ -924,6 +924,7 @@ export function lowerRules(args: {
       resolveValue,
       resolveCall,
       resolveImport: resolveImportInScope,
+      hasImportIgnoringShadowing: (localName: string) => importMap.has(localName),
     };
 
     // Build component info for resolveDynamicNode calls
@@ -3373,6 +3374,15 @@ export function lowerRules(args: {
                 const helperKey = toStyleKey(expr.name);
                 addStyleKeyMixin(decl, helperKey);
                 trackMixinPropertyValues(cssHelperValuesByKey.get(helperKey), cssHelperPropValues);
+                const helperDecl = declByLocalName.get(expr.name);
+                if (helperDecl?.inlineStyleProps?.length) {
+                  for (const p of helperDecl.inlineStyleProps) {
+                    inlineStyleProps.push({
+                      prop: p.prop,
+                      expr: cloneAstNode(p.expr),
+                    });
+                  }
+                }
                 continue;
               }
               if (expr?.type === "Identifier") {
@@ -4987,6 +4997,98 @@ export function lowerRules(args: {
                   prefix || suffix
                     ? buildTemplateWithStaticParts(j, baseExpr, prefix, suffix)
                     : baseExpr;
+                for (const out of cssDeclarationToStylexDeclarations(d)) {
+                  if (!out.prop) {
+                    continue;
+                  }
+                  inlineStyleProps.push({ prop: out.prop, expr: valueExpr });
+                }
+                continue;
+              }
+              if (e) {
+                const buildRuntimeValueExpr = (expr: ExpressionKind): ExpressionKind => {
+                  const valueId = j.identifier("__scValue");
+                  const exprClone = cloneAstNode(expr);
+                  const declStmt = j.variableDeclaration("const", [
+                    j.variableDeclarator(valueId, exprClone),
+                  ]);
+                  const isFn = j.binaryExpression(
+                    "===",
+                    j.unaryExpression("typeof", valueId),
+                    j.literal("function"),
+                  );
+                  // Cast to any to avoid TS error when the value type is narrowed to never
+                  // Wrap in parentheses: (__scValue as any)(props)
+                  const asAny = j.tsAsExpression(valueId, j.tsAnyKeyword());
+                  (asAny as any).extra = { parenthesized: true };
+                  const callValue = j.callExpression(asAny, [j.identifier("props")]);
+                  const valueExpr = j.conditionalExpression(isFn, callValue, valueId);
+                  return j.callExpression(
+                    j.arrowFunctionExpression(
+                      [],
+                      j.blockStatement([declStmt, j.returnStatement(valueExpr)]),
+                    ),
+                    [],
+                  );
+                };
+
+                if (pseudos?.length || media) {
+                  const baseExpr = buildRuntimeValueExpr(e as ExpressionKind);
+                  const { prefix, suffix } = extractStaticParts(d.value);
+                  const valueExprRaw =
+                    prefix || suffix
+                      ? buildTemplateWithStaticParts(j, baseExpr, prefix, suffix)
+                      : baseExpr;
+                  const propsParam = j.identifier("props");
+                  for (const out of cssDeclarationToStylexDeclarations(d)) {
+                    const wrapValue = (expr: ExpressionKind): ExpressionKind => {
+                      const needsString =
+                        out.prop === "boxShadow" ||
+                        out.prop === "backgroundColor" ||
+                        out.prop.toLowerCase().endsWith("color");
+                      if (!needsString) {
+                        return expr;
+                      }
+                      return j.templateLiteral(
+                        [
+                          j.templateElement({ raw: "", cooked: "" }, false),
+                          j.templateElement({ raw: "", cooked: "" }, true),
+                        ],
+                        [expr],
+                      );
+                    };
+                    const valueExpr = wrapValue(valueExprRaw);
+                    const fnKey = `${decl.styleKey}${toSuffixFromProp(out.prop)}FromProps`;
+                    if (!styleFnDecls.has(fnKey)) {
+                      const p = j.property(
+                        "init",
+                        j.identifier(out.prop),
+                        buildPseudoMediaPropValue({ j, valueExpr, pseudos, media }),
+                      ) as any;
+                      const body = j.objectExpression([p]);
+                      styleFnDecls.set(fnKey, j.arrowFunctionExpression([propsParam], body));
+                    }
+                    if (!styleFnFromProps.some((p) => p.fnKey === fnKey)) {
+                      styleFnFromProps.push({ fnKey, jsxProp: "__props" });
+                    }
+                  }
+                  continue;
+                }
+
+                // For static expressions (not ArrowFunction/FunctionExpression),
+                // use the expression directly without the IIFE wrapper.
+                // The IIFE with __scValue is only needed for props-dependent expressions.
+                const isStaticExpr =
+                  e.type !== "ArrowFunctionExpression" && e.type !== "FunctionExpression";
+                const baseExpr = isStaticExpr
+                  ? cloneAstNode(e as ExpressionKind)
+                  : buildRuntimeValueExpr(e as ExpressionKind);
+                const { prefix, suffix } = extractStaticParts(d.value);
+                const valueExpr =
+                  prefix || suffix
+                    ? buildTemplateWithStaticParts(j, baseExpr, prefix, suffix)
+                    : baseExpr;
+                decl.needsWrapperComponent = true;
                 for (const out of cssDeclarationToStylexDeclarations(d)) {
                   if (!out.prop) {
                     continue;
