@@ -1199,6 +1199,21 @@ export function emitIntrinsicWrappers(emitter: WrapperEmitter): {
       destructureParts.push(p);
     }
 
+    // Collect props from extraStylexPropsArgs.when conditions
+    // (extraStylexPropsArgs is processed earlier for styleArgs, but destructureParts wasn't available yet)
+    if (d.extraStylexPropsArgs) {
+      for (const extra of d.extraStylexPropsArgs) {
+        if (extra.when) {
+          const { props } = emitter.collectConditionProps({ when: extra.when });
+          for (const p of props) {
+            if (p && !destructureParts.includes(p)) {
+              destructureParts.push(p);
+            }
+          }
+        }
+      }
+    }
+
     // Add variant dimension lookups (StyleX variants recipe pattern)
     if (d.variantDimensions) {
       // Pass destructureParts and propDefaults to track props and their defaults
