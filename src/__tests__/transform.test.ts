@@ -1298,6 +1298,33 @@ export { helper };
     expect(result.warnings[0]?.context).toEqual({ variable: "size" });
   });
 
+  it("should bail on local variable used as member expression object", () => {
+    // This is a regression test for a false negative where local variables
+    // used as objects (e.g., theme.primary) were incorrectly treated as safe.
+    // Only function parameters should be allowed in member expression patterns.
+    const source = `
+import { css } from "styled-components";
+
+export function helper() {
+  const theme = getTheme();
+  return css\`
+    color: \${theme.primary};
+  \`;
+}
+`;
+
+    const result = transformWithWarnings(
+      { source, path: "test.tsx" },
+      { jscodeshift: j, j, stats: () => {}, report: () => {} },
+      { adapter: fixtureAdapter },
+    );
+
+    expect(result.code).toBeNull();
+    expect(result.warnings).toHaveLength(1);
+    expect(result.warnings[0]?.type).toBe(closureVarWarning);
+    expect(result.warnings[0]?.context).toEqual({ variable: "theme" });
+  });
+
   it("should NOT generate closure variable warning for props.X member access pattern", () => {
     const source = `
 import styled from "styled-components";
