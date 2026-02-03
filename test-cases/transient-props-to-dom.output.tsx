@@ -39,9 +39,9 @@ export function Image(props: ImageProps) {
   );
 }
 
-type SliderProps = Omit<React.ComponentProps<"div">, "className" | "style"> & {
+type SliderProps = React.PropsWithChildren<{
   $height: number;
-};
+}>;
 
 function Slider(props: SliderProps) {
   const { children, $height } = props;
