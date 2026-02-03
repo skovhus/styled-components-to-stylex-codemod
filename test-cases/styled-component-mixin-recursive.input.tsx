@@ -1,10 +1,10 @@
-import styled from "styled-components";
+import styled, { css } from "styled-components";
 
-const BaseStyles = styled.div`
+const BaseStyles = css`
   color: red;
 `;
 
-const MiddleStyles = styled.div`
+const MiddleStyles = css`
   ${BaseStyles}
   background: blue;
 `;

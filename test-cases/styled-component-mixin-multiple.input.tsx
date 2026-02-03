@@ -1,10 +1,10 @@
-import styled from "styled-components";
+import styled, { css } from "styled-components";
 
-const ColorMixin = styled.div`
+const ColorMixin = css`
   color: red;
 `;
 
-const BackgroundMixin = styled.div`
+const BackgroundMixin = css`
   background: blue;
 `;
 

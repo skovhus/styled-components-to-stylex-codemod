@@ -1,8 +1,8 @@
-import styled from "styled-components";
+import styled, { css } from "styled-components";
 import { TruncateText } from "./lib/helpers";
 
-// Local mixin
-const LocalMixin = styled.span`
+// Local CSS mixin (using css`` helper for direct style injection)
+const LocalMixin = css`
   font-weight: bold;
 `;
 

@@ -13,15 +13,13 @@ export const App = () => (
 );
 
 const styles = stylex.create({
-  // Local mixin
-  localMixin: {
-    fontWeight: "bold",
-  },
-
   // Test case 1: Local first, then imported
   // Order should be: localMixin, helpers.truncate, combined
   localThenImported: {
     color: "red",
+  },
+  localMixin: {
+    fontWeight: "bold",
   },
 
   // Test case 2: Imported first, then local
