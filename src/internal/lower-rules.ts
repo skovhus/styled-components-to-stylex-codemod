@@ -2231,14 +2231,17 @@ export function lowerRules(args: {
         }
 
         // Create function call expressions with props object: { size, padding }
+        // Use props.X instead of destructured X to preserve TypeScript type narrowing
         const makeStyleCall = (key: string) => {
           const callArgProperties = valuePropParams.map((p) => {
             const propName = p.startsWith("$") ? p.slice(1) : p;
+            // Use props.X to maintain type narrowing from the condition check
+            const propAccess = j.memberExpression(j.identifier("props"), j.identifier(p));
             return j.property.from({
               kind: "init",
               key: j.identifier(propName),
-              value: j.identifier(p),
-              shorthand: propName === p,
+              value: propAccess,
+              shorthand: false,
             });
           });
           return j.callExpression(j.memberExpression(j.identifier("styles"), j.identifier(key)), [
