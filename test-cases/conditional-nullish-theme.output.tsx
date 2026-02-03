@@ -36,6 +36,6 @@ const styles = stylex.create({
     margin: "10px",
   },
   lineBackgroundColor: (backgroundColor: string) => ({
-    backgroundColor: backgroundColor,
+    backgroundColor,
   }),
 });

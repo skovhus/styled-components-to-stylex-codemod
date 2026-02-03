@@ -144,6 +144,42 @@ function makeCssPropKey(j: JSCodeshift, prop: string): ExpressionKind {
   return j.identifier(prop);
 }
 
+/**
+ * Converts a CSS property name to a valid JavaScript identifier.
+ * For CSS variables (e.g., --component-width), converts to camelCase (componentWidth).
+ * For regular property names (e.g., backgroundColor), returns as-is.
+ */
+function cssPropertyToIdentifier(prop: string): string {
+  // CSS variables: --component-width -> componentWidth
+  if (prop.startsWith("--")) {
+    const withoutDashes = prop.slice(2);
+    // Convert kebab-case to camelCase
+    return withoutDashes.replace(/-([a-z])/g, (_, letter) => letter.toUpperCase());
+  }
+  return prop;
+}
+
+/**
+ * Creates an object property for a CSS property with shorthand support.
+ * Uses shorthand ({ color }) for regular properties when key matches value,
+ * but never for CSS variables (which need string literal keys).
+ */
+function makeCssProperty(
+  j: JSCodeshift,
+  cssProp: string,
+  valueIdentifierName: string,
+): ReturnType<typeof j.property> {
+  const key = makeCssPropKey(j, cssProp);
+  const p = j.property("init", key, j.identifier(valueIdentifierName)) as ReturnType<
+    typeof j.property
+  > & { shorthand?: boolean };
+  // Use shorthand only when key is an identifier (not a string literal) and names match
+  if (key.type === "Identifier" && key.name === valueIdentifierName) {
+    p.shorthand = true;
+  }
+  return p;
+}
+
 function buildPseudoMediaPropValue(args: {
   j: JSCodeshift;
   valueExpr: ExpressionKind;
@@ -1190,15 +1226,15 @@ export function lowerRules(args: {
         }
 
         if (!styleFnDecls.has(fnKey)) {
-          const param = j.identifier(out.prop);
+          const paramName = cssPropertyToIdentifier(out.prop);
+          const param = j.identifier(paramName);
           // When there are static parts, the param type should be string (since we pass template literal)
           if (hasStaticParts) {
             setIdentifierTypeAnnotation(param, j.tsTypeAnnotation(j.tsStringKeyword()));
           } else {
             annotateParamFromJsxProp(param, jsxProp);
           }
-          const p = j.property("init", j.identifier(out.prop), j.identifier(out.prop)) as any;
-          p.shorthand = true;
+          const p = makeCssProperty(j, out.prop, paramName);
           styleFnDecls.set(fnKey, j.arrowFunctionExpression([param], j.objectExpression([p])));
         }
       }
@@ -1335,12 +1371,10 @@ export function lowerRules(args: {
           fnKey = `${baseFnKey}Alt${idx}`;
         }
         if (!styleFnDecls.has(fnKey)) {
-          const param = j.identifier(out.prop);
-          const valueId = j.identifier(out.prop);
+          const paramName = cssPropertyToIdentifier(out.prop);
+          const param = j.identifier(paramName);
           annotateParamFromJsxProp(param, nullishPropName);
-          const bodyExpr = j.objectExpression([
-            j.property("init", j.identifier(out.prop), valueId as any),
-          ]);
+          const bodyExpr = j.objectExpression([makeCssProperty(j, out.prop, paramName)]);
           styleFnDecls.set(fnKey, j.arrowFunctionExpression([param], bodyExpr));
         }
         if (!styleFnFromProps.some((p) => p.fnKey === fnKey)) {
@@ -1760,11 +1794,10 @@ export function lowerRules(args: {
             for (const dyn of dynamicProps) {
               const fnKey = `${decl.styleKey}${toSuffixFromProp(dyn.stylexProp)}`;
               if (!styleFnDecls.has(fnKey)) {
-                const param = j.identifier(dyn.stylexProp);
+                const dynParamName = cssPropertyToIdentifier(dyn.stylexProp);
+                const param = j.identifier(dynParamName);
                 annotateParamFromJsxProp(param, dyn.jsxProp);
-                const valueId = j.identifier(dyn.stylexProp);
-                const p = j.property("init", valueId, valueId) as any;
-                p.shorthand = true;
+                const p = makeCssProperty(j, dyn.stylexProp, dynParamName);
                 const bodyExpr = j.objectExpression([p]);
                 styleFnDecls.set(fnKey, j.arrowFunctionExpression([param], bodyExpr));
               }
@@ -1860,11 +1893,10 @@ export function lowerRules(args: {
               for (const entry of dynamicEntries) {
                 const fnKey = `${decl.styleKey}${toSuffixFromProp(entry.stylexProp)}`;
                 if (!styleFnDecls.has(fnKey)) {
-                  const param = j.identifier(entry.stylexProp);
+                  const entryParamName = cssPropertyToIdentifier(entry.stylexProp);
+                  const param = j.identifier(entryParamName);
                   annotateParamFromJsxProp(param, entry.jsxProp);
-                  const valueId = j.identifier(entry.stylexProp);
-                  const p = j.property("init", valueId, valueId) as any;
-                  p.shorthand = true;
+                  const p = makeCssProperty(j, entry.stylexProp, entryParamName);
                   const bodyExpr = j.objectExpression([p]);
                   styleFnDecls.set(fnKey, j.arrowFunctionExpression([param], bodyExpr));
                 }
@@ -1929,11 +1961,10 @@ export function lowerRules(args: {
         for (const entry of entries) {
           const fnKey = `${decl.styleKey}${toSuffixFromProp(entry.stylexProp)}`;
           if (!styleFnDecls.has(fnKey)) {
-            const param = j.identifier(entry.stylexProp);
-            const valueId = j.identifier(entry.stylexProp);
+            const entryParamName = cssPropertyToIdentifier(entry.stylexProp);
+            const param = j.identifier(entryParamName);
             annotateParamFromJsxProp(param, entry.jsxProp);
-            const p = j.property("init", valueId, valueId) as any;
-            p.shorthand = true;
+            const p = makeCssProperty(j, entry.stylexProp, entryParamName);
             const bodyExpr = j.objectExpression([p]);
             styleFnDecls.set(fnKey, j.arrowFunctionExpression([param], bodyExpr));
           }
@@ -4443,14 +4474,14 @@ export function lowerRules(args: {
                     j.arrowFunctionExpression(
                       [param],
                       j.objectExpression([
-                        j.property("init", j.identifier(out.prop), propValue) as any,
+                        j.property("init", makeCssPropKey(j, out.prop), propValue) as any,
                       ]),
                     ),
                   );
                 } else {
                   const p = j.property(
                     "init",
-                    j.identifier(out.prop),
+                    makeCssPropKey(j, out.prop),
                     indexedExprAst as any,
                   ) as any;
                   styleFnDecls.set(
@@ -5250,7 +5281,7 @@ export function lowerRules(args: {
                 );
 
                 const body = j.objectExpression([
-                  j.property("init", j.identifier(out.prop), valueExpr),
+                  j.property("init", makeCssPropKey(j, out.prop), valueExpr),
                 ]);
 
                 styleFnDecls.set(fnKey, j.arrowFunctionExpression([param], body));
@@ -5336,7 +5367,7 @@ export function lowerRules(args: {
                 const valueExpr = j.logicalExpression(res.operator, indexedLookup, fallbackExpr);
 
                 const body = j.objectExpression([
-                  j.property("init", j.identifier(out.prop), valueExpr),
+                  j.property("init", makeCssPropKey(j, out.prop), valueExpr),
                 ]);
 
                 styleFnDecls.set(fnKey, j.arrowFunctionExpression([param], body));
@@ -5403,7 +5434,7 @@ export function lowerRules(args: {
                   const body = j.objectExpression([
                     j.property(
                       "init",
-                      j.identifier(out.prop),
+                      makeCssPropKey(j, out.prop),
                       buildPseudoMediaPropValue({ j, valueExpr, pseudos, media }),
                     ),
                   ]);
@@ -5511,7 +5542,7 @@ export function lowerRules(args: {
                     if (!styleFnDecls.has(fnKey)) {
                       const p = j.property(
                         "init",
-                        j.identifier(out.prop),
+                        makeCssPropKey(j, out.prop),
                         buildPseudoMediaPropValue({ j, valueExpr, pseudos, media }),
                       ) as any;
                       const body = j.objectExpression([p]);
@@ -5632,7 +5663,7 @@ export function lowerRules(args: {
                     if (!styleFnDecls.has(fnKey)) {
                       const p = j.property(
                         "init",
-                        j.identifier(out.prop),
+                        makeCssPropKey(j, out.prop),
                         buildPseudoMediaPropValue({ j, valueExpr, pseudos, media }),
                       ) as any;
                       const body = j.objectExpression([p]);
@@ -5691,8 +5722,8 @@ export function lowerRules(args: {
               styleFnFromProps.push({ fnKey, jsxProp });
 
               if (!styleFnDecls.has(fnKey)) {
-                const param = j.identifier(out.prop);
-                const valueId = j.identifier(out.prop);
+                const outParamName = cssPropertyToIdentifier(out.prop);
+                const param = j.identifier(outParamName);
                 if (jsxProp !== "__props") {
                   annotateParamFromJsxProp(param, jsxProp);
                 }
@@ -5700,8 +5731,7 @@ export function lowerRules(args: {
                   ensureShouldForwardPropDrop(decl, jsxProp);
                 }
 
-                const p = j.property("init", j.identifier(out.prop), valueId) as any;
-                p.shorthand = true;
+                const p = makeCssProperty(j, out.prop, outParamName);
                 const body = j.objectExpression([p]);
                 styleFnDecls.set(fnKey, j.arrowFunctionExpression([param], body));
               }
@@ -5722,8 +5752,9 @@ export function lowerRules(args: {
                   // IMPORTANT: don't reuse the same Identifier node for both the function param and
                   // expression positions. If the param identifier has a TS annotation, reusing it
                   // in expression positions causes printers to emit `value: any` inside templates.
-                  const param = j.identifier(out.prop);
-                  const valueId = j.identifier(out.prop);
+                  const outParamName = cssPropertyToIdentifier(out.prop);
+                  const param = j.identifier(outParamName);
+                  const valueId = j.identifier(outParamName);
                   // Be permissive: callers might pass numbers (e.g. `${props => props.$width}px`)
                   // or strings (e.g. `${props => props.$color}`).
                   if (jsxProp !== "__props") {
@@ -5839,8 +5870,14 @@ export function lowerRules(args: {
                       j.property("init", j.literal(media), valueExpr),
                     ]);
                   };
-                  const p = j.property("init", j.identifier(out.prop), getPropValue()) as any;
-                  p.shorthand = valueExpr?.type === "Identifier" && valueExpr.name === out.prop;
+                  const propKey = makeCssPropKey(j, out.prop);
+                  const p = j.property("init", propKey, getPropValue()) as any;
+                  // Only use shorthand if the key is an identifier (not a string literal for CSS vars)
+                  const paramName = cssPropertyToIdentifier(out.prop);
+                  p.shorthand =
+                    propKey.type === "Identifier" &&
+                    valueExpr?.type === "Identifier" &&
+                    valueExpr.name === paramName;
                   const body = j.objectExpression([p]);
                   styleFnDecls.set(fnKey, j.arrowFunctionExpression([param], body));
                 }
@@ -5924,7 +5961,7 @@ export function lowerRules(args: {
                 const body = j.objectExpression([
                   j.property(
                     "init",
-                    j.identifier(out.prop),
+                    makeCssPropKey(j, out.prop),
                     buildPseudoMediaPropValue({ j, valueExpr: expr, pseudos, media }),
                   ),
                 ]);

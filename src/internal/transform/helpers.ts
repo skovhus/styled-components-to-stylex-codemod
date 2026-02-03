@@ -193,6 +193,16 @@ export function toSuffixFromProp(propName: string): string {
     return "Variant";
   }
 
+  // Handle CSS variable names: `--component-width` => `ComponentWidth`
+  if (raw.startsWith("--")) {
+    const withoutDashes = raw
+      .slice(2)
+      .split("-")
+      .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
+      .join("");
+    return withoutDashes || "Var";
+  }
+
   // Handle simple expression keys coming from the dynamic resolution pipeline, e.g.:
   //   `size === "large"` -> `SizeLarge`
   //   `variant === "primary"` -> `VariantPrimary`
