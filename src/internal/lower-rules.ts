@@ -356,6 +356,28 @@ export function lowerRules(args: {
     }
   };
 
+  /**
+   * Applies a css helper mixin to a declaration: adds the style key, tracks property values,
+   * and copies inline style props.
+   */
+  const applyCssHelperMixin = (
+    decl: StyledDecl,
+    helperDecl: StyledDecl,
+    cssHelperPropValues: Map<string, unknown>,
+    inlineStyleProps: Array<{ prop: string; expr: ExpressionKind }>,
+  ): void => {
+    addStyleKeyMixin(decl, helperDecl.styleKey);
+    trackMixinPropertyValues(cssHelperValuesByKey.get(helperDecl.styleKey), cssHelperPropValues);
+    if (helperDecl.inlineStyleProps?.length) {
+      for (const p of helperDecl.inlineStyleProps) {
+        inlineStyleProps.push({
+          prop: p.prop,
+          expr: cloneAstNode(p.expr),
+        });
+      }
+    }
+  };
+
   // Pre-compute properties and values defined by each css helper and mixin from their rules.
   // This allows us to know what properties they provide (and their values) before styled
   // components that use them are processed, which is needed for correct pseudo selector
@@ -2856,6 +2878,49 @@ export function lowerRules(args: {
                 hasImportedCssHelper = true;
               }
             }
+            // Check for css helper function calls: ${getPrimaryStyles()}
+            else if (
+              expr &&
+              typeof expr === "object" &&
+              "type" in expr &&
+              expr.type === "CallExpression" &&
+              "callee" in expr &&
+              expr.callee &&
+              typeof expr.callee === "object" &&
+              "type" in expr.callee &&
+              expr.callee.type === "Identifier" &&
+              "name" in expr.callee &&
+              typeof expr.callee.name === "string" &&
+              "arguments" in expr &&
+              Array.isArray(expr.arguments) &&
+              expr.arguments.length === 0
+            ) {
+              const calleeName = expr.callee.name;
+              const helperDecl = declByLocalName.get(calleeName);
+              if (helperDecl?.isCssHelper) {
+                const helperValues = cssHelperValuesByKey.get(helperDecl.styleKey);
+                if (helperValues) {
+                  for (const [prop, value] of helperValues) {
+                    cssHelperPropValues.set(prop, value);
+                  }
+                }
+              } else {
+                // Check for imported function call - try resolveCall first
+                const importEntry = importMap?.get(calleeName);
+                if (importEntry) {
+                  const resolved = resolveCall({
+                    callSiteFilePath: filePath,
+                    calleeImportedName: importEntry.importedName,
+                    calleeSource: importEntry.source,
+                    args: [],
+                  });
+                  if (!resolved) {
+                    // Can't resolve this imported function call - bail for safety
+                    hasImportedCssHelper = true;
+                  }
+                }
+              }
+            }
             // Also check for member expression CSS helpers (e.g., buttonStyles.rootCss)
             else if (expr && typeof expr === "object" && "type" in expr) {
               const rootInfo = extractRootAndPath(expr);
@@ -3816,20 +3881,27 @@ export function lowerRules(args: {
             );
             if (slot) {
               const expr = decl.templateExpressions[slot.slotId] as any;
+              // Handle css helper identifier: ${primaryStyles}
               if (expr?.type === "Identifier" && cssHelperNames.has(expr.name)) {
-                const helperKey = toStyleKey(expr.name);
-                addStyleKeyMixin(decl, helperKey);
-                trackMixinPropertyValues(cssHelperValuesByKey.get(helperKey), cssHelperPropValues);
                 const helperDecl = declByLocalName.get(expr.name);
-                if (helperDecl?.inlineStyleProps?.length) {
-                  for (const p of helperDecl.inlineStyleProps) {
-                    inlineStyleProps.push({
-                      prop: p.prop,
-                      expr: cloneAstNode(p.expr),
-                    });
-                  }
+                if (helperDecl) {
+                  applyCssHelperMixin(decl, helperDecl, cssHelperPropValues, inlineStyleProps);
+                  continue;
                 }
-                continue;
+              }
+              // Handle css helper function calls: ${getPrimaryStyles()}
+              if (
+                expr?.type === "CallExpression" &&
+                expr.callee?.type === "Identifier" &&
+                (expr.arguments ?? []).length === 0
+              ) {
+                const calleeName = expr.callee.name as string;
+                const helperDecl = declByLocalName.get(calleeName);
+                if (helperDecl?.isCssHelper) {
+                  applyCssHelperMixin(decl, helperDecl, cssHelperPropValues, inlineStyleProps);
+                  continue;
+                }
+                // Imported function calls fall through to be handled via resolveCall
               }
               if (expr?.type === "Identifier") {
                 // Case 1: Local styled component mixin
