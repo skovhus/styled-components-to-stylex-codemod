@@ -1107,6 +1107,9 @@ export class WrapperEmitter {
 
     const classNameId = j.identifier("className");
     const styleId = j.identifier("style");
+    const staticClassName =
+      typeof staticAttrs.className === "string" ? staticAttrs.className : undefined;
+    const { className: _omit, ...filteredStaticAttrs } = staticAttrs;
     const merging = emitStyleMerging({
       j,
       emitter: this,
@@ -1116,6 +1119,7 @@ export class WrapperEmitter {
       allowClassNameProp,
       allowStyleProp,
       inlineStyleProps,
+      staticClassNameExpr: staticClassName ? j.literal(staticClassName) : undefined,
     });
 
     const jsxAttrs: Array<JSXAttribute | JSXSpreadAttribute> = [];
@@ -1169,7 +1173,7 @@ export class WrapperEmitter {
       jsxAttrs.push(j.jsxSpreadAttribute(restId));
     }
 
-    for (const [key, value] of Object.entries(staticAttrs)) {
+    for (const [key, value] of Object.entries(filteredStaticAttrs)) {
       if (typeof value === "string") {
         jsxAttrs.push(j.jsxAttribute(j.jsxIdentifier(key), j.literal(value)));
       } else if (typeof value === "boolean") {
@@ -1235,8 +1239,15 @@ export class WrapperEmitter {
     }
     bodyStmts.push(j.returnStatement(jsx));
 
+    const filteredBody = bodyStmts.filter(
+      (stmt) => stmt && (stmt as any).type !== "EmptyStatement",
+    );
     return [
-      j.functionDeclaration(j.identifier(localName), [propsParamId], j.blockStatement(bodyStmts)),
+      j.functionDeclaration(
+        j.identifier(localName),
+        [propsParamId],
+        j.blockStatement(filteredBody),
+      ),
     ];
   }
 
@@ -1589,10 +1600,18 @@ export class WrapperEmitter {
 
   appendMergingAttrs(attrs: JsxAttr[], merging: ReturnType<typeof emitStyleMerging>): void {
     const { j } = this;
+    if (merging.classNameBeforeSpread && merging.classNameAttr) {
+      attrs.push(
+        j.jsxAttribute(
+          j.jsxIdentifier("className"),
+          j.jsxExpressionContainer(merging.classNameAttr),
+        ),
+      );
+    }
     if (merging.jsxSpreadExpr) {
       attrs.push(j.jsxSpreadAttribute(merging.jsxSpreadExpr));
     }
-    if (merging.classNameAttr) {
+    if (merging.classNameAttr && !merging.classNameBeforeSpread) {
       attrs.push(
         j.jsxAttribute(
           j.jsxIdentifier("className"),
@@ -1633,7 +1652,14 @@ export class WrapperEmitter {
   }): ASTNode {
     const { j } = this;
     const { localName, params, bodyStmts, typeParameters, moveTypeParamsFromParam } = args;
-    const fn = j.functionDeclaration(j.identifier(localName), params, j.blockStatement(bodyStmts));
+    const filteredBody = bodyStmts.filter(
+      (stmt) => stmt && (stmt as any).type !== "EmptyStatement",
+    );
+    const fn = j.functionDeclaration(
+      j.identifier(localName),
+      params,
+      j.blockStatement(filteredBody),
+    );
     if (typeParameters) {
       (fn as any).typeParameters = typeParameters;
     }
@@ -1676,6 +1702,52 @@ export class WrapperEmitter {
     }
 
     return patternProps;
+  }
+
+  splitExtraStyleArgs(d: StyledDecl): {
+    beforeBase: ExpressionKind[];
+    afterBase: ExpressionKind[];
+  } {
+    const { j, stylesIdentifier } = this;
+    const afterBaseKeys = new Set(d.extraStyleKeysAfterBase ?? []);
+    const beforeBase: ExpressionKind[] = [];
+    const afterBase: ExpressionKind[] = [];
+    for (const key of d.extraStyleKeys ?? []) {
+      const expr = j.memberExpression(j.identifier(stylesIdentifier), j.identifier(key));
+      if (afterBaseKeys.has(key)) {
+        afterBase.push(expr);
+      } else {
+        beforeBase.push(expr);
+      }
+    }
+    return { beforeBase, afterBase };
+  }
+
+  splitAttrsInfo(attrsInfo: StyledDecl["attrsInfo"]): {
+    attrsInfo: StyledDecl["attrsInfo"];
+    staticClassNameExpr?: ExpressionKind;
+  } {
+    const { j } = this;
+    const className = attrsInfo?.staticAttrs?.className;
+    if (!attrsInfo) {
+      return { attrsInfo, staticClassNameExpr: undefined };
+    }
+    const normalized = {
+      ...attrsInfo,
+      staticAttrs: attrsInfo.staticAttrs ?? {},
+      conditionalAttrs: attrsInfo.conditionalAttrs ?? [],
+    };
+    if (typeof className !== "string") {
+      return { attrsInfo: normalized, staticClassNameExpr: undefined };
+    }
+    const { className: _omit, ...rest } = normalized.staticAttrs;
+    return {
+      attrsInfo: {
+        ...normalized,
+        staticAttrs: rest,
+      },
+      staticClassNameExpr: j.literal(className) as ExpressionKind,
+    };
   }
 
   /**

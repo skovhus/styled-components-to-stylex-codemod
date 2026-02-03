@@ -1,6 +1,6 @@
-import styled from "styled-components";
+import styled, { css } from "styled-components";
 
-const HoverStyles = styled.div`
+const HoverStyles = css`
   &:hover {
     color: blue;
   }

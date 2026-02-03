@@ -2,12 +2,17 @@ import * as stylex from "@stylexjs/stylex";
 
 export const App = () => (
   <div>
-    <div {...stylex.props(styles.cssMixin, styles.styledMixin, styles.cssFirst)}>CSS first</div>
-    <div {...stylex.props(styles.styledMixin, styles.cssMixin, styles.styledFirst)}>
+    <div {...stylex.props(styles.cssMixin, styles.backgroundMixin, styles.cssFirst)}>CSS first</div>
+    <div {...stylex.props(styles.backgroundMixin, styles.cssMixin, styles.styledFirst)}>
       Styled first
     </div>
     <div
-      {...stylex.props(styles.cssMixin, styles.styledMixin, styles.cssMixin2, styles.interleaved)}
+      {...stylex.props(
+        styles.cssMixin,
+        styles.backgroundMixin,
+        styles.cssMixin2,
+        styles.interleaved,
+      )}
     >
       Interleaved
     </div>
@@ -15,22 +20,20 @@ export const App = () => (
 );
 
 const styles = stylex.create({
-  // Styled component mixin
-  styledMixin: {
-    backgroundColor: "blue",
+  // Test case 1: Color mixin first, then background mixin
+  // Order should be: cssMixin, backgroundMixin, cssFirst
+  cssFirst: {
+    padding: "10px",
   },
   cssMixin: {
     color: "red",
   },
-
-  // Test case 1: CSS helper first, then styled-component mixin
-  // Order should be: cssMixin, styledMixin, combined
-  cssFirst: {
-    padding: "10px",
+  backgroundMixin: {
+    backgroundColor: "blue",
   },
 
-  // Test case 2: Styled-component mixin first, then css helper
-  // Order should be: styledMixin, cssMixin, combined2
+  // Test case 2: Background mixin first, then color mixin
+  // Order should be: backgroundMixin, cssMixin, styledFirst
   styledFirst: {
     margin: "10px",
   },
