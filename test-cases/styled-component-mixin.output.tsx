@@ -5,13 +5,13 @@ export const App = () => (
 );
 
 const styles = stylex.create({
+  elementWithMixin: {
+    color: "red",
+  },
   hiddenOnMobile: {
     display: {
       default: null,
       "@media (max-width: 767px)": "none",
     },
-  },
-  elementWithMixin: {
-    color: "red",
   },
 });

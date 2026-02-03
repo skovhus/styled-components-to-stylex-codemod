@@ -5,13 +5,13 @@ export const App = () => (
 );
 
 const styles = stylex.create({
+  button: {
+    color: "red",
+  },
   hoverStyles: {
     color: {
       default: null,
       ":hover": "blue",
     },
-  },
-  button: {
-    color: "red",
   },
 });

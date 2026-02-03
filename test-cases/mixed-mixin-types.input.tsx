@@ -1,33 +1,33 @@
 import styled, { css } from "styled-components";
 
-// CSS helper mixin
+// CSS helper mixin for color
 const cssMixin = css`
   color: red;
 `;
 
-// Styled component mixin
-const StyledMixin = styled.span`
+// CSS helper mixin for background
+const backgroundMixin = css`
   background-color: blue;
 `;
 
-// Test case 1: CSS helper first, then styled-component mixin
-// Order should be: cssMixin, styledMixin, combined
+// Test case 1: Color mixin first, then background mixin
+// Order should be: cssMixin, backgroundMixin, cssFirst
 const CssFirst = styled.div`
   padding: 10px;
   ${cssMixin}
-  ${StyledMixin}
+  ${backgroundMixin}
 `;
 
-// Test case 2: Styled-component mixin first, then css helper
-// Order should be: styledMixin, cssMixin, combined2
+// Test case 2: Background mixin first, then color mixin
+// Order should be: backgroundMixin, cssMixin, styledFirst
 const StyledFirst = styled.div`
   margin: 10px;
-  ${StyledMixin}
+  ${backgroundMixin}
   ${cssMixin}
 `;
 
 // Test case 3: Multiple interleaved mixins
-// Order should be: cssMixin, styledMixin, cssMixin2, combined3
+// Order should be: cssMixin, backgroundMixin, cssMixin2, interleaved
 const cssMixin2 = css`
   font-weight: bold;
 `;
@@ -35,7 +35,7 @@ const cssMixin2 = css`
 const Interleaved = styled.div`
   padding: 5px;
   ${cssMixin}
-  ${StyledMixin}
+  ${backgroundMixin}
   ${cssMixin2}
 `;
 

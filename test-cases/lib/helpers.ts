@@ -1,13 +1,13 @@
-import styled, { type DefaultTheme } from "styled-components";
+import { css, type DefaultTheme } from "styled-components";
 import type { ThemeColor } from "../tokens.stylex";
 
 interface ThemedStyledProps {
   theme: DefaultTheme;
 }
 
-// Styled component export for testing imported styled component mixins.
+// CSS helper export for testing imported css`` mixins.
 // The adapter resolves this to helpers.truncate from helpers.stylex.
-export const TruncateText = styled.span`
+export const TruncateText = css`
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
