@@ -2904,8 +2904,22 @@ export function lowerRules(args: {
                     cssHelperPropValues.set(prop, value);
                   }
                 }
+              } else {
+                // Check for imported function call - try resolveCall first
+                const importEntry = importMap?.get(calleeName);
+                if (importEntry) {
+                  const resolved = resolveCall({
+                    callSiteFilePath: filePath,
+                    calleeImportedName: importEntry.importedName,
+                    calleeSource: importEntry.source,
+                    args: [],
+                  });
+                  if (!resolved) {
+                    // Can't resolve this imported function call - bail for safety
+                    hasImportedCssHelper = true;
+                  }
+                }
               }
-              // Imported function calls are handled later via resolveCall, not as css helpers
             }
             // Also check for member expression CSS helpers (e.g., buttonStyles.rootCss)
             else if (expr && typeof expr === "object" && "type" in expr) {

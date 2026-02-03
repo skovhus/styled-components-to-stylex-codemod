@@ -1051,6 +1051,101 @@ export const App = () => <Button $active>Click</Button>;
   });
 });
 
+describe("imported css helper function calls", () => {
+  it("should bail on imported function call with pseudo selectors when adapter cannot resolve", () => {
+    // When an imported function is called in a styled component with pseudo selectors,
+    // we can't determine what properties it sets. If the adapter can't resolve it,
+    // we should bail to avoid generating incorrect pseudo selector handling.
+    const source = `
+import styled from "styled-components";
+import { getPrimaryStyles } from "./external-helpers";
+
+const Button = styled.button\`
+  padding: 8px 16px;
+  \${getPrimaryStyles()}
+  &:hover {
+    opacity: 0.8;
+  }
+\`;
+
+export const App = () => <Button>Click me</Button>;
+`;
+
+    const resolveCallCalls: unknown[] = [];
+    const adapterWithCallTracking = {
+      externalInterface() {
+        return { styles: false, as: false } as const;
+      },
+      resolveValue() {
+        return undefined;
+      },
+      resolveCall(args: unknown) {
+        resolveCallCalls.push(args);
+        return undefined; // Can't resolve this call
+      },
+      resolveSelector() {
+        return undefined;
+      },
+      styleMerger: null,
+    } satisfies Adapter;
+
+    const result = transformWithWarnings(
+      { source, path: "imported-helper-call.tsx" },
+      { jscodeshift: j, j, stats: () => {}, report: () => {} },
+      { adapter: adapterWithCallTracking },
+    );
+
+    // Should bail because we can't determine properties for pseudo selector handling
+    expect(result.code).toBeNull();
+    expect(result.warnings.length).toBeGreaterThan(0);
+  });
+
+  it("should work when adapter resolves imported function call", () => {
+    // When the adapter CAN resolve the call, it should work fine
+    const source = `
+import styled from "styled-components";
+import { getPrimaryStyles } from "./external-helpers";
+
+const Button = styled.button\`
+  padding: 8px 16px;
+  \${getPrimaryStyles()}
+\`;
+
+export const App = () => <Button>Click me</Button>;
+`;
+
+    const adapterThatResolves = {
+      externalInterface() {
+        return { styles: false, as: false } as const;
+      },
+      resolveValue() {
+        return undefined;
+      },
+      resolveCall() {
+        // Return a valid styles resolution (usage: "props" means use as StyleX styles in stylex.props())
+        return {
+          usage: "props" as const,
+          expr: "styles.primary",
+          imports: [],
+        };
+      },
+      resolveSelector() {
+        return undefined;
+      },
+      styleMerger: null,
+    } satisfies Adapter;
+
+    const result = transformWithWarnings(
+      { source, path: "imported-helper-call.tsx" },
+      { jscodeshift: j, j, stats: () => {}, report: () => {} },
+      { adapter: adapterThatResolves },
+    );
+
+    // Should succeed because adapter resolved the call
+    expect(result.code).not.toBeNull();
+  });
+});
+
 describe("destructured param defaults", () => {
   it("should preserve destructured defaults when inlining arrow functions", () => {
     // Regression test: Previously ({ color = "hotpink" }) => color || "blue"
