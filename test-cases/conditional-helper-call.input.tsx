@@ -13,8 +13,17 @@ const TextAlt = styled.p<{ $noTruncate?: boolean }>`
   ${(props) => (props.$noTruncate ? "" : truncate())}
 `;
 
+const Title = styled("div")<{ maxWidth?: number; $truncateTitle?: boolean }>`
+  font-size: 50px;
+  ${(props) => (props.$truncateTitle ? truncate() : "")}
+  ${(props) => props.maxWidth && `max-width: ${props.maxWidth}px;`}
+`;
+
 export const App = () => (
   <div style={{ width: 200, border: "1px solid #ccc", padding: 8 }}>
+    <Title $truncateTitle maxWidth={200}>
+      Truncated title
+    </Title>
     <Text>Normal text without truncation that can wrap to multiple lines</Text>
     <Text $truncate>
       Truncated text that will have ellipsis when it overflows the container width

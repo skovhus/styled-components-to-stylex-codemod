@@ -22,8 +22,31 @@ function TextAlt(props: TextAltProps) {
   return <p {...stylex.props(styles.textAlt, !$noTruncate && helpers.truncate)}>{children}</p>;
 }
 
+type TitleProps = Omit<React.ComponentProps<"div">, "className" | "style"> & {
+  maxWidth?: number;
+  $truncateTitle?: boolean;
+};
+
+function Title(props: TitleProps) {
+  const { children, maxWidth, $truncateTitle } = props;
+  return (
+    <div
+      {...stylex.props(
+        styles.title,
+        $truncateTitle ? helpers.truncate : undefined,
+        maxWidth ? styles.titleMaxWidth(maxWidth) : undefined,
+      )}
+    >
+      {children}
+    </div>
+  );
+}
+
 export const App = () => (
   <div style={{ width: 200, border: "1px solid #ccc", padding: 8 }}>
+    <Title $truncateTitle maxWidth={200}>
+      Truncated title
+    </Title>
     <Text>Normal text without truncation that can wrap to multiple lines</Text>
     <Text $truncate>
       Truncated text that will have ellipsis when it overflows the container width
@@ -40,4 +63,10 @@ const styles = stylex.create({
   textAlt: {
     fontSize: "14px",
   },
+  title: {
+    fontSize: "50px",
+  },
+  titleMaxWidth: (maxWidth: number) => ({
+    maxWidth,
+  }),
 });
