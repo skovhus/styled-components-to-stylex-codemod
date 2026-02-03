@@ -2,10 +2,10 @@ import React from "react";
 import * as stylex from "@stylexjs/stylex";
 import { pixelVars, $colors } from "./tokens.stylex";
 
-type LineProps = Omit<React.ComponentProps<"div">, "className" | "style"> & {
+type LineProps = React.PropsWithChildren<{
   $isRemoval?: boolean;
   $deletionColor?: string;
-};
+}>;
 
 function Line(props: LineProps) {
   const { children, $isRemoval, $deletionColor } = props;

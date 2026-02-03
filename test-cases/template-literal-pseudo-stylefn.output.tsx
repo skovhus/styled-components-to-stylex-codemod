@@ -1,9 +1,9 @@
 import * as React from "react";
 import * as stylex from "@stylexjs/stylex";
 
-type HoverSwatchProps = Omit<React.ComponentProps<"div">, "className" | "style"> & {
+type HoverSwatchProps = React.PropsWithChildren<{
   $tone: string;
-};
+}>;
 
 /**
  * Template literal interpolation inside pseudo/media should stay scoped
@@ -25,9 +25,9 @@ function HoverSwatch(props: HoverSwatchProps) {
   );
 }
 
-type HoverMediaSwatchProps = Omit<React.ComponentProps<"div">, "className" | "style"> & {
+type HoverMediaSwatchProps = React.PropsWithChildren<{
   $tone: string;
-};
+}>;
 
 function HoverMediaSwatch(props: HoverMediaSwatchProps) {
   const { children, $tone } = props;

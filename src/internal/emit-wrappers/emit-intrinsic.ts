@@ -1070,6 +1070,14 @@ export function emitIntrinsicWrappers(emitter: WrapperEmitter): {
     })();
     const finalTypeText = (() => {
       if (explicit) {
+        // For non-exported components that only use transient props ($-prefixed),
+        // use simple PropsWithChildren instead of verbose intersection type
+        const isExported = d.isExported ?? false;
+        const hasOnlyTransientCustomProps =
+          !usedAttrs.has("*") && [...usedAttrs].every((n) => n === "children" || n.startsWith("$"));
+        if (!isExported && hasOnlyTransientCustomProps && !VOID_TAGS.has(tagName)) {
+          return emitter.withChildren(extrasTypeText);
+        }
         if (VOID_TAGS.has(tagName)) {
           const base = emitter.reactIntrinsicAttrsType(tagName);
           const omitted: string[] = [];
@@ -2049,6 +2057,15 @@ export function emitIntrinsicWrappers(emitter: WrapperEmitter): {
           return emitter.joinIntersection(extendBaseTypeText, explicit);
         }
         if (needsRestForType) {
+          // For non-exported components that only use transient props ($-prefixed),
+          // use simple PropsWithChildren instead of verbose intersection type
+          const isExported = d.isExported ?? false;
+          const hasOnlyTransientCustomProps =
+            !usedAttrsForType.has("*") &&
+            [...usedAttrsForType].every((n) => n === "children" || n.startsWith("$"));
+          if (!isExported && hasOnlyTransientCustomProps) {
+            return emitter.withChildren(explicit);
+          }
           return emitter.joinIntersection(extendBaseTypeText, explicit);
         }
         if (allowClassNameProp || allowStyleProp) {

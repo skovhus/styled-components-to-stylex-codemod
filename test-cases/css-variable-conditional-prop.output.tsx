@@ -1,9 +1,9 @@
 import * as React from "react";
 import * as stylex from "@stylexjs/stylex";
 
-type ContainerWrapperProps = Omit<React.ComponentProps<"div">, "className" | "style"> & {
+type ContainerWrapperProps = React.PropsWithChildren<{
   $width: number | undefined;
-};
+}>;
 
 // A wrapper that conditionally sets a CSS custom property based on prop
 function ContainerWrapper(props: ContainerWrapperProps) {

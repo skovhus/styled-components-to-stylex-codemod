@@ -1,9 +1,9 @@
 import * as React from "react";
 import * as stylex from "@stylexjs/stylex";
 
-type LayeredBoxProps = Omit<React.ComponentProps<"div">, "className" | "style"> & {
+type LayeredBoxProps = React.PropsWithChildren<{
   $zIndex?: number;
-};
+}>;
 
 // Pattern 1: props.$zIndex !== undefined && template literal with interpolation
 function LayeredBox(props: LayeredBoxProps) {
