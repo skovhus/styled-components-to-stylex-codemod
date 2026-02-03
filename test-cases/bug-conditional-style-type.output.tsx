@@ -20,11 +20,9 @@ type IconWithTeamColorProps = Omit<React.ComponentProps<"svg">, "className" | "s
 //              is not assignable to parameter of type 'StyleXArray<...>'
 export function IconWithTeamColor(props: IconWithTeamColorProps) {
   const { children, $color } = props;
+  const sx = stylex.props($color ? styles.iconWithTeamColorFill($color) : undefined);
   return (
-    <svg
-      className="color-override"
-      {...stylex.props($color ? styles.iconWithTeamColorFill($color) : undefined)}
-    >
+    <svg className={["color-override", sx.className].filter(Boolean).join(" ")} {...sx}>
       {children}
     </svg>
   );

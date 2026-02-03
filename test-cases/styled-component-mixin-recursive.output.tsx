@@ -1,7 +1,9 @@
 import * as stylex from "@stylexjs/stylex";
 
 export const App = () => (
-  <div {...stylex.props(styles.middleStyles, styles.finalComponent)}>Recursive mixins</div>
+  <div {...stylex.props(styles.middleStyles, styles.baseStyles, styles.finalComponent)}>
+    Recursive mixins
+  </div>
 );
 
 const styles = stylex.create({
