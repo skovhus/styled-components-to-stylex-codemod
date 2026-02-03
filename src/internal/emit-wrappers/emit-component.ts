@@ -10,6 +10,11 @@ import {
   sortVariantEntriesBySpecificity,
   TAG_TO_HTML_ELEMENT,
 } from "./type-helpers.js";
+import {
+  getDeclaratorId,
+  isFunctionNode,
+  isIdentifierNode,
+} from "../utilities/jscodeshift-utils.js";
 
 export function emitComponentWrappers(emitter: WrapperEmitter): {
   emitted: ASTNode[];
@@ -31,26 +36,42 @@ export function emitComponentWrappers(emitter: WrapperEmitter): {
     emitter.emitNamedPropsType({ localName, typeExprText, genericParams, emitted });
 
   const findComponentPropsType = (componentName: string): ASTNode | null => {
-    const firstParamType = (node: { params?: Array<{ typeAnnotation?: any }> }): ASTNode | null => {
-      const param = node.params?.[0];
-      return param?.typeAnnotation?.typeAnnotation ?? null;
+    const firstParamType = (node: unknown): ASTNode | null => {
+      if (!node || typeof node !== "object") {
+        return null;
+      }
+      const params = (node as { params?: unknown }).params;
+      if (!Array.isArray(params) || params.length === 0) {
+        return null;
+      }
+      const param = params[0];
+      if (!param || typeof param !== "object") {
+        return null;
+      }
+      const typeAnnotation = (
+        param as {
+          typeAnnotation?: { typeAnnotation?: ASTNode | null } | null;
+        }
+      ).typeAnnotation;
+      return typeAnnotation?.typeAnnotation ?? null;
     };
     const funcDecl = root
       .find(j.FunctionDeclaration)
-      .filter((p) => (p.node as any).id?.name === componentName);
+      .filter((p) => isIdentifierNode(p.node.id) && p.node.id.name === componentName);
     if (funcDecl.size() > 0) {
-      const typeNode = firstParamType(funcDecl.get().node as any);
+      const typeNode = firstParamType(funcDecl.get().node);
       if (typeNode) {
         return typeNode;
       }
     }
-    const varDecl = root
-      .find(j.VariableDeclarator)
-      .filter((p) => (p.node as any).id?.name === componentName);
+    const varDecl = root.find(j.VariableDeclarator).filter((p) => {
+      const id = getDeclaratorId(p.node);
+      return isIdentifierNode(id) && id.name === componentName;
+    });
     if (varDecl.size() > 0) {
-      const init = (varDecl.get().node as any).init;
-      if (init?.type === "ArrowFunctionExpression" || init?.type === "FunctionExpression") {
-        return firstParamType(init as any);
+      const init = (varDecl.get().node as { init?: unknown }).init;
+      if (isFunctionNode(init)) {
+        return firstParamType(init);
       }
     }
     return null;

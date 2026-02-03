@@ -1266,7 +1266,17 @@ export class WrapperEmitter {
         }
         const root = parts[0];
         if (root === "props" || root === "p") {
-          return { propName: last, expr: j.identifier(last) };
+          const propRoot = parts[1];
+          if (!propRoot || !isValidIdentifier(propRoot)) {
+            return { propName: null, expr: j.identifier(trimmedRaw) };
+          }
+          const expr = parts
+            .slice(2)
+            .reduce<ExpressionKind>(
+              (acc, part) => j.memberExpression(acc, j.identifier(part)),
+              j.identifier(propRoot),
+            );
+          return { propName: propRoot, expr };
         }
         const memberExpr = buildMemberExpr(trimmedRaw);
         if (memberExpr) {

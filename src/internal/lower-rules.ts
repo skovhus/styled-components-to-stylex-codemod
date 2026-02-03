@@ -100,6 +100,17 @@ type ExpressionKind = Parameters<JSCodeshift["expressionStatement"]>[0];
  */
 type TestInfo = { when: string; propName: string; allPropNames?: string[] };
 
+const getMemberExpressionSource = (node: ExpressionKind): string | null => {
+  const info = extractRootAndPath(node);
+  if (!info) {
+    return null;
+  }
+  if (info.path.length === 0) {
+    return info.rootName;
+  }
+  return `${info.rootName}.${info.path.join(".")}`;
+};
+
 /**
  * Inverts a "when" condition string for the opposite variant branch.
  * E.g., "!$active" -> "$active", "$x === true" -> "$x !== true"
@@ -839,42 +850,36 @@ export function lowerRules(args: {
     const createPropTestHelpers = (
       bindings: ArrowFnParamBindings,
     ): {
-      readPropName: (node: ExpressionKind) => string | null;
       parseTestInfo: (test: ExpressionKind) => TestInfo | null;
       parseChainedTestInfo: (test: ExpressionKind) => TestInfo | null;
     } => {
       const paramName = bindings.kind === "simple" ? bindings.paramName : null;
 
-      const readPropName = (node: ExpressionKind): string | null => {
-        // For simple params, use member path extraction
-        if (paramName) {
-          const path = getMemberPathFromIdentifier(node, paramName);
-          if (path && path.length === 1) {
-            return path[0]!;
-          }
-        }
-        // For destructured params, check if it's a bare identifier from destructuring
-        if (bindings.kind === "destructured") {
-          const propName = resolveIdentifierToPropName(node, bindings);
-          if (propName) {
-            return propName;
-          }
-        }
-        return null;
-      };
-
-      const getMemberExpressionSource = (node: ExpressionKind): string | null => {
-        if (!node || typeof node !== "object") {
+      const readPropAccess = (
+        node: ExpressionKind,
+      ): { propName: string; whenName: string } | null => {
+        const info = extractRootAndPath(node);
+        if (!info) {
           return null;
         }
-        if (node.type === "Identifier") {
-          return node.name ?? null;
+        if (paramName && info.rootName === paramName) {
+          if (info.path.length === 0) {
+            return null;
+          }
+          const [propRoot, ...rest] = info.path;
+          if (!propRoot) {
+            return null;
+          }
+          const whenName = [propRoot, ...rest].join(".");
+          return { propName: propRoot, whenName };
         }
-        if (node.type === "MemberExpression" && !node.computed) {
-          const obj = getMemberExpressionSource(node.object as ExpressionKind);
-          const prop =
-            node.property?.type === "Identifier" ? node.property.name : (null as string | null);
-          return obj && prop ? `${obj}.${prop}` : null;
+        if (bindings.kind === "destructured") {
+          const propName = resolveIdentifierToPropName(info.rootNode, bindings);
+          if (!propName) {
+            return null;
+          }
+          const whenName = info.path.length > 0 ? `${propName}.${info.path.join(".")}` : propName;
+          return { propName, whenName };
         }
         return null;
       };
@@ -885,16 +890,18 @@ export function lowerRules(args: {
         }
         // Handle bare Identifier from destructured params: ({ isBw }) => isBw && ...
         if (test.type === "Identifier" && bindings.kind === "destructured") {
-          const propName = resolveIdentifierToPropName(test, bindings);
-          return propName ? { when: propName, propName } : null;
+          const propAccess = readPropAccess(test);
+          return propAccess ? { when: propAccess.whenName, propName: propAccess.propName } : null;
         }
         if (test.type === "MemberExpression" || test.type === "OptionalMemberExpression") {
-          const propName = readPropName(test);
-          return propName ? { when: propName, propName } : null;
+          const propAccess = readPropAccess(test);
+          return propAccess ? { when: propAccess.whenName, propName: propAccess.propName } : null;
         }
         if (test.type === "UnaryExpression" && test.operator === "!" && test.argument) {
-          const propName = readPropName(test.argument);
-          return propName ? { when: `!${propName}`, propName } : null;
+          const propAccess = readPropAccess(test.argument as ExpressionKind);
+          return propAccess
+            ? { when: `!${propAccess.whenName}`, propName: propAccess.propName }
+            : null;
         }
         if (
           test.type === "BinaryExpression" &&
@@ -918,20 +925,26 @@ export function lowerRules(args: {
 
           // Handle destructured identifier on left side
           if (bindings.kind === "destructured" && left.type === "Identifier") {
-            const propName = resolveIdentifierToPropName(left, bindings);
+            const propAccess = readPropAccess(left as ExpressionKind);
             const rhsValue = getRhsValue();
-            if (!propName || rhsValue === null) {
+            if (!propAccess || rhsValue === null) {
               return null;
             }
-            return { when: `${propName} ${test.operator} ${rhsValue}`, propName };
+            return {
+              when: `${propAccess.whenName} ${test.operator} ${rhsValue}`,
+              propName: propAccess.propName,
+            };
           }
           if (left.type === "MemberExpression" || left.type === "OptionalMemberExpression") {
-            const propName = readPropName(left);
+            const propAccess = readPropAccess(left as ExpressionKind);
             const rhsValue = getRhsValue();
-            if (!propName || rhsValue === null) {
+            if (!propAccess || rhsValue === null) {
               return null;
             }
-            return { when: `${propName} ${test.operator} ${rhsValue}`, propName };
+            return {
+              when: `${propAccess.whenName} ${test.operator} ${rhsValue}`,
+              propName: propAccess.propName,
+            };
           }
         }
         return null;
@@ -975,7 +988,7 @@ export function lowerRules(args: {
         return null;
       };
 
-      return { readPropName, parseTestInfo, parseChainedTestInfo };
+      return { parseTestInfo, parseChainedTestInfo };
     };
 
     // Build reusable handler context for resolveDynamicNode calls
