@@ -274,12 +274,22 @@ export function toSuffixFromProp(propName: string): string {
 }
 
 export function buildUnsupportedCssWarnings(usages: UnsupportedCssUsage[]): WarningLog[] {
-  return usages.map((usage) => ({
-    severity: "warning" as const,
-    type:
-      usage.reason === "call-expression"
-        ? ("`css` helper usage as a function call (css(...)) is not supported" as const)
-        : ("`css` helper used outside of a styled component template cannot be statically transformed" as const),
-    loc: usage.loc ?? undefined,
-  }));
+  return usages.map((usage) => {
+    let type: WarningLog["type"];
+    if (usage.reason === "call-expression") {
+      type = "`css` helper usage as a function call (css(...)) is not supported";
+    } else if (usage.reason === "closure-variable") {
+      type =
+        "css`` helper function interpolation references closure variable that cannot be hoisted";
+    } else {
+      type =
+        "`css` helper used outside of a styled component template cannot be statically transformed";
+    }
+    return {
+      severity: "warning" as const,
+      type,
+      loc: usage.loc ?? undefined,
+      context: usage.closureVariable ? { variable: usage.closureVariable } : undefined,
+    };
+  });
 }
