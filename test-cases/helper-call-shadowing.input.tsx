@@ -21,5 +21,5 @@ function createThemedComponents() {
 
 export const App = () => {
   const ThemedBox = createThemedComponents();
-  return <ThemedBox />;
+  return <ThemedBox>Colored text</ThemedBox>;
 };
