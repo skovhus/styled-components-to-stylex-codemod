@@ -2,9 +2,11 @@ import * as React from "react";
 import * as stylex from "@stylexjs/stylex";
 
 // Simulated imported component
-const Flex = (props: React.ComponentProps<"div"> & { column?: boolean; center?: boolean }) => {
-  const { column, center, ...rest } = props;
-  return <div {...rest} />;
+const Flex = (
+  props: React.ComponentProps<"div"> & { column?: boolean; center?: boolean; focusIndex?: number },
+) => {
+  const { column, center, focusIndex, ...rest } = props;
+  return <div data-focus-index={focusIndex} {...rest} />;
 };
 
 type InputProps = Omit<React.ComponentProps<"input">, "className" | "style"> & {
@@ -103,6 +105,30 @@ export function ScrollableWithType(props: TypeAliasProps) {
   );
 }
 
+// Pattern 6: defaultAttrs with different prop name than attr name
+// When jsxProp !== attrName, the source prop must still be forwarded to the wrapped component
+// E.g., tabIndex: props.focusIndex ?? 0 means focusIndex should still be passed through
+interface FocusableProps extends Omit<
+  React.ComponentPropsWithRef<typeof Flex>,
+  "className" | "style"
+> {
+  focusIndex?: number;
+}
+
+export function FocusableScroll(props: FocusableProps) {
+  const { children, focusIndex, ...rest } = props;
+  return (
+    <Flex
+      tabIndex={focusIndex ?? 0}
+      focusIndex={focusIndex}
+      {...rest}
+      {...stylex.props(styles.focusableScroll)}
+    >
+      {children}
+    </Flex>
+  );
+}
+
 export const App = () => (
   <>
     <Input $small placeholder="Small" />
@@ -112,6 +138,7 @@ export const App = () => (
     <Background loaded={false}>Content</Background>
     <Scrollable>Scrollable content</Scrollable>
     <ScrollableWithType gutter="stable">Type alias scrollable</ScrollableWithType>
+    <FocusableScroll focusIndex={5}>Focus content</FocusableScroll>
   </>
 );
 
@@ -156,5 +183,8 @@ const styles = stylex.create({
     overflowY: "auto",
     position: "relative",
     flexGrow: 1,
+  },
+  focusableScroll: {
+    overflowY: "auto",
   },
 });

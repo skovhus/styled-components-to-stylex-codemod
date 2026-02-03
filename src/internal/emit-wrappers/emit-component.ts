@@ -504,6 +504,19 @@ export function emitComponentWrappers(emitter: WrapperEmitter): {
           );
         }
       }
+      // Re-forward non-transient defaultAttrs props when jsxProp !== attrName.
+      // In styled-components, normal props are passed through unless transient ($-prefixed).
+      // E.g., { tabIndex: props.focusIndex ?? 0 } should still forward focusIndex to the wrapped component.
+      for (const attr of defaultAttrs) {
+        if (attr.jsxProp !== attr.attrName && !attr.jsxProp.startsWith("$")) {
+          openingAttrs.push(
+            j.jsxAttribute(
+              j.jsxIdentifier(attr.jsxProp),
+              j.jsxExpressionContainer(j.identifier(attr.jsxProp)),
+            ),
+          );
+        }
+      }
       // Pass namespace boolean props (like 'disabled') to the wrapped component.
       // These are destructured for the enabled/disabled styling ternary but also need
       // to be forwarded as they may be valid HTML attributes on the underlying element.

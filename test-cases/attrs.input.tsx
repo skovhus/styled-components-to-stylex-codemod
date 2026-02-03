@@ -2,9 +2,11 @@ import * as React from "react";
 import styled from "styled-components";
 
 // Simulated imported component
-const Flex = (props: React.ComponentProps<"div"> & { column?: boolean; center?: boolean }) => {
-  const { column, center, ...rest } = props;
-  return <div {...rest} />;
+const Flex = (
+  props: React.ComponentProps<"div"> & { column?: boolean; center?: boolean; focusIndex?: number },
+) => {
+  const { column, center, focusIndex, ...rest } = props;
+  return <div data-focus-index={focusIndex} {...rest} />;
 };
 
 // Pattern 1: styled.input.attrs (dot notation)
@@ -85,6 +87,19 @@ export const ScrollableWithType = styled(Flex).attrs((props) => ({
   flex-grow: 1;
 `;
 
+// Pattern 6: defaultAttrs with different prop name than attr name
+// When jsxProp !== attrName, the source prop must still be forwarded to the wrapped component
+// E.g., tabIndex: props.focusIndex ?? 0 means focusIndex should still be passed through
+interface FocusableProps {
+  focusIndex?: number;
+}
+
+export const FocusableScroll = styled(Flex).attrs((props) => ({
+  tabIndex: props.focusIndex ?? 0,
+}))<FocusableProps>`
+  overflow-y: auto;
+`;
+
 export const App = () => (
   <>
     <Input $small placeholder="Small" />
@@ -94,5 +109,6 @@ export const App = () => (
     <Background loaded={false}>Content</Background>
     <Scrollable>Scrollable content</Scrollable>
     <ScrollableWithType gutter="stable">Type alias scrollable</ScrollableWithType>
+    <FocusableScroll focusIndex={5}>Focus content</FocusableScroll>
   </>
 );
