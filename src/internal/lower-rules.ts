@@ -54,12 +54,8 @@ import {
   parseCssTemplateToRules,
   type ConditionalVariant,
 } from "./lower-rules/css-helper.js";
-import { parseSwitchReturningCssTemplates } from "./lower-rules/switch-variants.js";
 import { createThemeResolvers } from "./lower-rules/theme.js";
-import {
-  resolveTemplateLiteralBranch,
-  resolveTemplateLiteralValue,
-} from "./lower-rules/template-literals.js";
+import { resolveTemplateLiteralBranch } from "./lower-rules/template-literals.js";
 import {
   extractUnionLiteralValues,
   groupVariantBucketsIntoDimensions,
@@ -67,6 +63,7 @@ import {
 import { mergeStyleObjects, toKebab } from "./lower-rules/utils.js";
 import { extractConditionName } from "./lower-rules/condition-name.js";
 import { computeSelectorWarningLoc, normalizeStylisAstToIR } from "./css-ir.js";
+import { createCssHelperHandlers } from "./lower-rules/css-helper-handlers.js";
 import { finalizeDescendantOverrides } from "./lower-rules/descendant-overrides.js";
 import type { ExpressionKind, TestInfo } from "./lower-rules/decl-types.js";
 import {
@@ -554,6 +551,34 @@ export function lowerRules(args: {
     // (helpers imported from `./lower-rules/*`)
 
     // (animation + interpolated-string helpers extracted to `./lower-rules/*`)
+
+    const {
+      tryHandlePropertyTernaryTemplateLiteral,
+      tryHandleCssHelperFunctionSwitchBlock,
+    } = createCssHelperHandlers({
+      j,
+      filePath,
+      decl,
+      warnings,
+      styleObj,
+      variantBuckets,
+      variantStyleKeys,
+      cssHelperFunctions,
+      usedCssHelperFunctions,
+      cssValueToJs,
+      parseExpr,
+      resolveCall,
+      resolveImportInScope,
+      resolverImports,
+      isCssHelperTaggedTemplate,
+      resolveCssHelperTemplate,
+      applyVariant,
+      toSuffixFromProp,
+      annotateParamFromJsxProp,
+      componentInfo,
+      handlerContext,
+      markBail,
+    });
 
     const resolveStaticCssBlock = (rawCss: string): Record<string, unknown> | null => {
       const wrappedRawCss = `& { ${rawCss} }`;
