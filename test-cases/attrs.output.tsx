@@ -76,7 +76,12 @@ interface ScrollableProps extends Omit<
 }
 
 export function Scrollable(props: ScrollableProps) {
-  return <Flex tabIndex={0} {...props} {...stylex.props(styles.scrollable)} />;
+  const { children, tabIndex, ...rest } = props;
+  return (
+    <Flex tabIndex={tabIndex ?? 0} {...rest} {...stylex.props(styles.scrollable)}>
+      {children}
+    </Flex>
+  );
 }
 
 // Pattern 5: styled(Component).attrs with TYPE ALIAS (not interface)
@@ -90,9 +95,9 @@ type TypeAliasProps = Omit<React.ComponentPropsWithRef<typeof Flex>, "className"
 };
 
 export function ScrollableWithType(props: TypeAliasProps) {
-  const { children, $applyBackground, ...rest } = props;
+  const { children, $applyBackground, tabIndex, ...rest } = props;
   return (
-    <Flex tabIndex={0} {...rest} {...stylex.props(styles.scrollableWithType)}>
+    <Flex tabIndex={tabIndex ?? 0} {...rest} {...stylex.props(styles.scrollableWithType)}>
       {children}
     </Flex>
   );
