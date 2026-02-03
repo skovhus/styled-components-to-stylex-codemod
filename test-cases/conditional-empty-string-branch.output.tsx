@@ -23,7 +23,9 @@ type BoxAltProps = React.PropsWithChildren<{
 function BoxAlt(props: BoxAltProps) {
   const { children, $enableMinWidth } = props;
   return (
-    <div {...stylex.props(styles.boxAlt, $enableMinWidth && styles.boxAltEnableMinWidth)}>
+    <div
+      {...stylex.props(styles.boxAlt, $enableMinWidth ? styles.boxAltEnableMinWidth : undefined)}
+    >
       {children}
     </div>
   );

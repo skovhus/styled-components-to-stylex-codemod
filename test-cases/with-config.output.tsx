@@ -16,7 +16,9 @@ type InputProps = Omit<React.ComponentProps<"input">, "className" | "style"> & {
 // Combining withConfig options
 function Input(props: InputProps) {
   const { hasError, ...rest } = props;
-  return <input {...rest} {...stylex.props(styles.input, hasError && styles.inputHasError)} />;
+  return (
+    <input {...rest} {...stylex.props(styles.input, hasError ? styles.inputHasError : undefined)} />
+  );
 }
 
 export const App = () => (

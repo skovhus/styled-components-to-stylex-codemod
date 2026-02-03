@@ -1371,7 +1371,7 @@ export function lowerRules(args: {
       }
       const paramName = bindings.kind === "simple" ? bindings.paramName : null;
 
-      const { parseTestInfo, parseChainedTestInfo } = createPropTestHelpers(bindings);
+      const { parseChainedTestInfo } = createPropTestHelpers(bindings);
 
       const isTriviallyPureVoidArg = (arg: any): boolean => {
         if (!arg || typeof arg !== "object") {
@@ -2100,7 +2100,7 @@ export function lowerRules(args: {
         return false;
       }
 
-      const testInfo = parseTestInfo(conditional.test);
+      const testInfo = parseChainedTestInfo(conditional.test);
 
       const cons = conditional.consequent;
       const alt = conditional.alternate;
@@ -2298,6 +2298,41 @@ export function lowerRules(args: {
         return true;
       }
 
+      // Check altIsEmpty BEFORE altIsTpl since empty templates are also template literals
+      // and the altIsEmpty case doesn't require invertWhen (which fails for compound conditions)
+      if (consIsTpl && altIsEmpty) {
+        if (testInfo.propName) {
+          ensureShouldForwardPropDrop(decl, testInfo.propName);
+        }
+        const consResolved = resolveTemplateLiteralBranch({
+          j,
+          node: cons as any,
+          paramName,
+          filePath,
+          parseExpr,
+          cssValueToJs,
+          resolveValue,
+          resolveCall,
+          resolveImportInScope,
+          resolverImports,
+          componentInfo,
+          handlerContext,
+        });
+        if (!consResolved) {
+          return false;
+        }
+        if (Object.keys(consResolved.style).length > 0) {
+          applyVariant(testInfo, consResolved.style);
+        }
+        if (consResolved.dynamicEntries.length > 0) {
+          applyDynamicEntries(consResolved.dynamicEntries, testInfo.when);
+        }
+        if (consResolved.inlineEntries.length > 0) {
+          applyInlineEntries(consResolved.inlineEntries, testInfo.when);
+        }
+        return true;
+      }
+
       if (consIsTpl && altIsTpl) {
         if (testInfo.propName) {
           ensureShouldForwardPropDrop(decl, testInfo.propName);
@@ -2354,39 +2389,6 @@ export function lowerRules(args: {
         }
         if (altResolved.inlineEntries.length > 0) {
           applyInlineEntries(altResolved.inlineEntries, invertedWhen);
-        }
-        return true;
-      }
-
-      if (consIsTpl && altIsEmpty) {
-        if (testInfo.propName) {
-          ensureShouldForwardPropDrop(decl, testInfo.propName);
-        }
-        const consResolved = resolveTemplateLiteralBranch({
-          j,
-          node: cons as any,
-          paramName,
-          filePath,
-          parseExpr,
-          cssValueToJs,
-          resolveValue,
-          resolveCall,
-          resolveImportInScope,
-          resolverImports,
-          componentInfo,
-          handlerContext,
-        });
-        if (!consResolved) {
-          return false;
-        }
-        if (Object.keys(consResolved.style).length > 0) {
-          applyVariant(testInfo, consResolved.style);
-        }
-        if (consResolved.dynamicEntries.length > 0) {
-          applyDynamicEntries(consResolved.dynamicEntries, testInfo.when);
-        }
-        if (consResolved.inlineEntries.length > 0) {
-          applyInlineEntries(consResolved.inlineEntries, testInfo.when);
         }
         return true;
       }

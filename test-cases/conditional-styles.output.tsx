@@ -7,7 +7,11 @@ type TitleProps = React.PropsWithChildren<{
 
 function Title(props: TitleProps) {
   const { children, $upsideDown } = props;
-  return <h1 {...stylex.props(styles.title, $upsideDown && styles.titleUpsideDown)}>{children}</h1>;
+  return (
+    <h1 {...stylex.props(styles.title, $upsideDown ? styles.titleUpsideDown : undefined)}>
+      {children}
+    </h1>
+  );
 }
 
 type BoxProps = React.PropsWithChildren<{
@@ -21,8 +25,8 @@ function Box(props: BoxProps) {
     <div
       {...stylex.props(
         styles.box,
-        $isActive && styles.boxActive,
-        $isDisabled && styles.boxDisabled,
+        $isActive ? styles.boxActive : undefined,
+        $isDisabled ? styles.boxDisabled : undefined,
       )}
     >
       {children}

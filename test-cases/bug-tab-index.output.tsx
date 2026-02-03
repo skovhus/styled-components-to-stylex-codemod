@@ -12,7 +12,10 @@ export function Component(props: React.PropsWithChildren<Props>) {
     <div
       tabIndex={tabIndex}
       {...rest}
-      {...stylex.props(styles.component, $applyBackground && styles.componentApplyBackground)}
+      {...stylex.props(
+        styles.component,
+        $applyBackground ? styles.componentApplyBackground : undefined,
+      )}
     >
       {children}
     </div>

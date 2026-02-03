@@ -18,7 +18,7 @@ export function ColumnContainer(props: ColumnContainerProps) {
       {...mergedSx(
         [
           styles.columnContainer,
-          $noGrowOrShrink && styles.columnContainerNoGrowOrShrink,
+          $noGrowOrShrink ? styles.columnContainerNoGrowOrShrink : undefined,
           styles.columnContainerFlexShrink({
             $noGrowOrShrink,
             $basis,

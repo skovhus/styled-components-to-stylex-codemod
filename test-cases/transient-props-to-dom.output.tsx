@@ -16,7 +16,7 @@ export function Box(props: BoxProps) {
     <div
       {...stylex.props(
         styles.box,
-        $isActive && styles.boxActive,
+        $isActive ? styles.boxActive : undefined,
         $size === "large" && styles.boxSizeLarge,
       )}
     >
@@ -31,7 +31,12 @@ type ImageProps = Omit<React.ComponentProps<"img">, "className" | "style"> & {
 
 export function Image(props: ImageProps) {
   const { $isInactive, ...rest } = props;
-  return <img {...rest} {...stylex.props(styles.image, $isInactive && styles.imageInactive)} />;
+  return (
+    <img
+      {...rest}
+      {...stylex.props(styles.image, $isInactive ? styles.imageInactive : undefined)}
+    />
+  );
 }
 
 type SliderProps = Omit<React.ComponentProps<"div">, "className" | "style"> & {

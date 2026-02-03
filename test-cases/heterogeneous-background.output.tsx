@@ -14,7 +14,7 @@ function MixedBackground(props: MixedBackgroundProps) {
     <div
       {...stylex.props(
         !$useGradient && styles.mixedBackgroundNotUseGradient,
-        $useGradient && styles.mixedBackgroundUseGradient,
+        $useGradient ? styles.mixedBackgroundUseGradient : undefined,
       )}
     >
       {children}

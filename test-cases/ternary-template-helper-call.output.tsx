@@ -8,7 +8,11 @@ type StepLineProps = Omit<React.ComponentProps<"div">, "className" | "style"> & 
 
 function StepLine(props: StepLineProps) {
   const { children, $faded } = props;
-  return <div {...stylex.props(styles.stepLine, $faded && styles.stepLineFaded)}>{children}</div>;
+  return (
+    <div {...stylex.props(styles.stepLine, $faded ? styles.stepLineFaded : undefined)}>
+      {children}
+    </div>
+  );
 }
 
 export const App = () => <StepLine $faded />;

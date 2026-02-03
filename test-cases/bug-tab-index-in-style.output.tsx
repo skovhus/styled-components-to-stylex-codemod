@@ -16,7 +16,7 @@ export function Component(props: React.PropsWithChildren<Props>) {
       {...rest}
       {...stylex.props(
         styles.component,
-        $applyBackground && styles.componentApplyBackground,
+        $applyBackground ? styles.componentApplyBackground : undefined,
         tabIndex === 0 && styles.componentTabIndex0,
       )}
     >

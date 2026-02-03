@@ -7,7 +7,11 @@ type CompProps = React.PropsWithChildren<{
 
 function Comp(props: CompProps) {
   const { children, $draggable } = props;
-  return <div {...stylex.props(styles.comp, $draggable && styles.compDraggable)}>{children}</div>;
+  return (
+    <div {...stylex.props(styles.comp, $draggable ? styles.compDraggable : undefined)}>
+      {children}
+    </div>
+  );
 }
 
 const Link = ({ className, text, ...props }: { className?: string; text: string }) => (
@@ -22,7 +26,7 @@ type StyledLinkProps = Omit<React.ComponentPropsWithRef<typeof Link>, "className
 
 function StyledLink(props: StyledLinkProps) {
   const { $red, ...rest } = props;
-  return <Link {...rest} {...stylex.props(styles.link, $red && styles.linkRed)} />;
+  return <Link {...rest} {...stylex.props(styles.link, $red ? styles.linkRed : undefined)} />;
 }
 
 type PointProps = Omit<React.ComponentProps<"div">, "className"> & {
@@ -76,7 +80,10 @@ export function CollapseArrowIcon(props: CollapseArrowIconProps) {
     <ArrowIcon
       $isOpen={$isOpen}
       {...rest}
-      {...stylex.props(styles.collapseArrowIcon, $isOpen && styles.collapseArrowIconOpen)}
+      {...stylex.props(
+        styles.collapseArrowIcon,
+        $isOpen ? styles.collapseArrowIconOpen : undefined,
+      )}
     />
   );
 }

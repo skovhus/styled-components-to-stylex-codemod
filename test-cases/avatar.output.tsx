@@ -14,8 +14,8 @@ function Img(props: ImgProps) {
       {...rest}
       {...stylex.props(
         styles.img,
-        $disabled && styles.imgDisabled,
-        $isInactive && styles.imgInactive,
+        $disabled ? styles.imgDisabled : undefined,
+        $isInactive ? styles.imgInactive : undefined,
       )}
     />
   );
