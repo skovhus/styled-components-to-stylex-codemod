@@ -6,7 +6,7 @@ on:
   workflow_dispatch:
 
 permissions:
-  contents: read
+  contents: write
   pages: write
   id-token: write
 
@@ -33,13 +33,47 @@ jobs:
       - name: Build playground
         run: pnpm build:playground
 
+      - name: Prepare gh-pages worktree
+        run: |
+          git fetch origin gh-pages || true
+          if git show-ref --verify --quiet refs/remotes/origin/gh-pages; then
+            git worktree add -B gh-pages gh-pages origin/gh-pages
+          else
+            git worktree add -B gh-pages gh-pages
+            git -C gh-pages rm -rf .
+          fi
+
+      - name: Merge playground into gh-pages
+        run: |
+          cp -a dist-playground/. gh-pages/
+
+      - name: Commit gh-pages update
+        run: |
+          cd gh-pages
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add .
+          if git diff --cached --quiet; then
+            echo "No changes to commit"
+          else
+            git commit -m "Update playground site"
+            git push origin gh-pages
+          fi
+
+      - name: Prepare upload directory
+        run: |
+          rm -rf site
+          mkdir site
+          cp -a gh-pages/. site/
+          rm -rf site/.git
+
       - name: Setup Pages
         uses: actions/configure-pages@v5
 
       - name: Upload artifact
         uses: actions/upload-pages-artifact@v3
         with:
-          path: dist-playground
+          path: site
 
   deploy:
     needs: build
