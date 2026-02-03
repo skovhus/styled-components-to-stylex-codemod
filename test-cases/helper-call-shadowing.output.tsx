@@ -19,10 +19,11 @@ function createThemedComponents() {
     const { className, children, style } = props;
     return (
       <div
-        {...mergedSx(undefined, className, {
+        className={className}
+        style={{
           ...style,
           backgroundColor: color("ff0000"),
-        })}
+        }}
       >
         {children}
       </div>
