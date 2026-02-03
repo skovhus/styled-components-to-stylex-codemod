@@ -17,6 +17,7 @@ export function emitStylesAndImports(args: {
   literalToAst: (j: any, v: unknown) => any;
   stylesIdentifier: string;
   styleMerger: StyleMergerConfig | null;
+  stylesInsertPosition?: "end" | "afterImports";
 }): { emptyStyleKeys: Set<string> } {
   const {
     root,
@@ -30,6 +31,7 @@ export function emitStylesAndImports(args: {
     literalToAst,
     stylesIdentifier,
     styleMerger,
+    stylesInsertPosition = "end",
   } = args;
 
   // Preserve file header directives (e.g. `// oxlint-disable ...`). Depending on the parser/printer,
@@ -567,10 +569,24 @@ export function emitStylesAndImports(args: {
     (stylesDecl as any).comments = deduped;
   }
 
-  // Place `styles` at the very end of the file.
-  // This keeps component logic first, styles last for better readability.
   const programBody = root.get().node.program.body as any[];
-  programBody.push(stylesDecl as any);
+  if (stylesInsertPosition === "afterImports") {
+    const lastImportIdx = (() => {
+      let last = -1;
+      for (let i = 0; i < programBody.length; i++) {
+        if (programBody[i]?.type === "ImportDeclaration") {
+          last = i;
+        }
+      }
+      return last;
+    })();
+    const insertAt = lastImportIdx >= 0 ? lastImportIdx + 1 : 0;
+    programBody.splice(insertAt, 0, stylesDecl as any);
+  } else {
+    // Place `styles` at the very end of the file.
+    // This keeps component logic first, styles last for better readability.
+    programBody.push(stylesDecl as any);
+  }
 
   // Emit separate stylex.create declarations for variant dimensions
   // This implements the StyleX "variants recipe" pattern where each variant
