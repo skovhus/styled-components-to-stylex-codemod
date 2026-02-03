@@ -397,7 +397,237 @@ function isIdentifierUsedOutsideStyledTemplates(args: {
 
 interface UnsupportedCssUsage {
   loc: Loc;
-  reason: "call-expression" | "outside-styled-template";
+  reason: "call-expression" | "outside-styled-template" | "closure-variable";
+  /** The name of the closure variable that caused the issue (for closure-variable reason) */
+  closureVariable?: string;
+}
+
+/**
+ * Detects if any template expression references a closure variable that cannot be hoisted
+ * to module scope. Returns the name of the first offending variable, or null if none found.
+ *
+ * A closure variable is:
+ * - A function parameter used directly (not as `param.X` member access)
+ * - A local variable defined inside the function
+ *
+ * Supported patterns (NOT closure variables):
+ * - `props.X` member access (param used as object, property accessed)
+ * - Literals (strings, numbers, booleans)
+ * - Member expressions rooted at imports
+ */
+function findClosureVariableInExpressions(
+  expressions: unknown[],
+  paramNames: Set<string>,
+): string | null {
+  for (const expr of expressions) {
+    const found = findClosureVariableInExpr(expr, paramNames);
+    if (found) {
+      return found;
+    }
+  }
+  return null;
+}
+
+function findClosureVariableInExpr(node: unknown, paramNames: Set<string>): string | null {
+  if (!node || typeof node !== "object") {
+    return null;
+  }
+
+  const n = node as Record<string, unknown>;
+
+  // Skip non-AST properties
+  if (n.type === undefined) {
+    return null;
+  }
+
+  // Skip nested functions (ArrowFunctionExpression, FunctionExpression)
+  // Variables used inside nested functions are captured by closure and will
+  // be available at runtime when the IIFE/callback is executed.
+  // This is a supported pattern: `(param) => css\`${() => { switch(param) {...} }}\``
+  if (n.type === "ArrowFunctionExpression" || n.type === "FunctionExpression") {
+    return null;
+  }
+
+  // Identifier used directly (not as object in member expression)
+  if (n.type === "Identifier") {
+    const name = n.name as string;
+    // Check if this is a function parameter used directly
+    if (paramNames.has(name)) {
+      return name;
+    }
+    // Other identifiers could be imports or globals - we'll be conservative
+    // and only flag function parameters for now
+    return null;
+  }
+
+  // Member expression: check if root is a param used as object (which is OK)
+  // e.g., `props.size` is OK, but `props` alone is not
+  if (n.type === "MemberExpression") {
+    // The object part being a param is OK (e.g., props.size)
+    // We only need to recurse into computed properties
+    const computed = n.computed as boolean;
+    if (computed) {
+      const propResult = findClosureVariableInExpr(n.property, paramNames);
+      if (propResult) {
+        return propResult;
+      }
+    }
+    // For the object part: if it's a direct param identifier, that's OK
+    // (it's being used as an object to access properties, which is supported)
+    const obj = n.object as Record<string, unknown>;
+    if (obj?.type === "Identifier" && paramNames.has(obj.name as string)) {
+      // This is param.something - OK pattern
+      return null;
+    }
+    // Otherwise, recurse into the object
+    return findClosureVariableInExpr(n.object, paramNames);
+  }
+
+  // For call expressions, check arguments and callee
+  if (n.type === "CallExpression") {
+    const callee = n.callee;
+    // If the callee is a direct param identifier, that's a closure variable
+    if (
+      callee &&
+      typeof callee === "object" &&
+      (callee as Record<string, unknown>).type === "Identifier"
+    ) {
+      const name = (callee as Record<string, unknown>).name as string;
+      if (paramNames.has(name)) {
+        return name;
+      }
+    }
+    // Check callee recursively
+    const calleeResult = findClosureVariableInExpr(callee, paramNames);
+    if (calleeResult) {
+      return calleeResult;
+    }
+    // Check arguments
+    const args = n.arguments as unknown[];
+    if (Array.isArray(args)) {
+      for (const arg of args) {
+        const argResult = findClosureVariableInExpr(arg, paramNames);
+        if (argResult) {
+          return argResult;
+        }
+      }
+    }
+    return null;
+  }
+
+  // For other node types, recurse into children
+  for (const key of Object.keys(n)) {
+    if (key === "loc" || key === "comments" || key === "type") {
+      continue;
+    }
+    const value = n[key];
+    if (Array.isArray(value)) {
+      for (const item of value) {
+        const result = findClosureVariableInExpr(item, paramNames);
+        if (result) {
+          return result;
+        }
+      }
+    } else if (value && typeof value === "object") {
+      const result = findClosureVariableInExpr(value, paramNames);
+      if (result) {
+        return result;
+      }
+    }
+  }
+
+  return null;
+}
+
+/**
+ * Collects all closure variable names from an enclosing function scope.
+ * This includes:
+ * - Function parameters (used directly, not as param.X)
+ * - Local variables defined in the function body
+ */
+function collectClosureVariables(funcPath: any): Set<string> {
+  const names = new Set<string>();
+
+  const funcNode = funcPath?.node;
+  if (!funcNode) {
+    return names;
+  }
+
+  // Collect parameter names
+  const params = funcNode.params ?? [];
+  for (const param of params) {
+    if (param?.type === "Identifier" && param.name) {
+      names.add(param.name);
+    }
+    // Handle rest parameters: (...rest)
+    if (param?.type === "RestElement" && param.argument?.type === "Identifier") {
+      names.add(param.argument.name);
+    }
+    // Handle default parameters: (x = default)
+    if (param?.type === "AssignmentPattern" && param.left?.type === "Identifier") {
+      names.add(param.left.name);
+    }
+  }
+
+  // Collect local variable names from the function body
+  const body = funcNode.body;
+  if (body?.type === "BlockStatement") {
+    for (const stmt of body.body ?? []) {
+      if (stmt?.type === "VariableDeclaration") {
+        for (const decl of stmt.declarations ?? []) {
+          if (decl?.type === "VariableDeclarator" && decl.id?.type === "Identifier") {
+            names.add(decl.id.name);
+          }
+        }
+      }
+    }
+  }
+
+  return names;
+}
+
+/**
+ * Finds the enclosing function (FunctionDeclaration, FunctionExpression, or ArrowFunctionExpression)
+ * from a given path.
+ */
+function findEnclosingFunction(path: any): any {
+  let cur: any = path;
+  while (cur && cur.parentPath) {
+    cur = cur.parentPath;
+    const node = cur?.node;
+    if (!node) {
+      break;
+    }
+    if (
+      node.type === "FunctionDeclaration" ||
+      node.type === "FunctionExpression" ||
+      node.type === "ArrowFunctionExpression"
+    ) {
+      return cur;
+    }
+  }
+  return null;
+}
+
+/**
+ * Checks a CSS template for closure variable references and returns an UnsupportedCssUsage
+ * if any are found. Returns null if no closure variables are detected.
+ */
+function detectClosureVariableInTemplate(
+  template: TemplateLiteral,
+  closureVarNames: Set<string>,
+): UnsupportedCssUsage | null {
+  const parsed = parseStyledTemplateLiteral(template);
+  const templateExpressions = parsed.slots.map((s) => s.expression);
+  const closureVar = findClosureVariableInExpressions(templateExpressions, closureVarNames);
+  if (closureVar) {
+    return {
+      loc: getCssHelperTemplateLoc(template),
+      reason: "closure-variable",
+      closureVariable: closureVar,
+    };
+  }
+  return null;
 }
 
 function detectUnsupportedCssHelperUsage(args: {
@@ -636,6 +866,7 @@ export function extractAndRemoveCssHelpers(args: {
   const cssHelperDecls: StyledDecl[] = [];
   const cssHelperReplacements: CssHelperReplacement[] = [];
   const cssHelperTemplateReplacements: CssHelperTemplateReplacement[] = [];
+  const closureVariableUsages: UnsupportedCssUsage[] = [];
   let cssHelperHasUniversalSelectors = false;
   let cssHelperUniversalSelectorLoc: Loc = null;
   let changed = false;
@@ -786,6 +1017,14 @@ export function extractAndRemoveCssHelpers(args: {
       const paramName = param0.name;
       const paramType = (param0 as any).typeAnnotation;
 
+      // Collect all parameter names for closure variable detection
+      const allParamNames = new Set<string>();
+      for (const param of init.params ?? []) {
+        if (param?.type === "Identifier" && param.name) {
+          allParamNames.add(param.name);
+        }
+      }
+
       const body = init.body as any;
       if (
         !body ||
@@ -796,7 +1035,16 @@ export function extractAndRemoveCssHelpers(args: {
         return;
       }
       const template = body.quasi;
+
+      // Check for closure variable references in template expressions
+      const closureUsage = detectClosureVariableInTemplate(template, allParamNames);
+      if (closureUsage) {
+        closureVariableUsages.push(closureUsage);
+        return; // Skip adding to cssHelperFunctions
+      }
+
       const parsed = parseStyledTemplateLiteral(template);
+      const templateExpressions = parsed.slots.map((s) => s.expression);
       // Compile with an `& { ... }` wrapper so Stylis emits declarations under `&`,
       // but pass the *unwrapped* raw template CSS for placeholder recovery heuristics.
       const wrappedRawCss = `& { ${parsed.rawCss} }`;
@@ -811,7 +1059,7 @@ export function extractAndRemoveCssHelpers(args: {
         paramType,
         loc: getCssHelperTemplateLoc(template),
         rules,
-        templateExpressions: parsed.slots.map((s) => s.expression),
+        templateExpressions,
         rawCss: parsed.rawCss,
       });
     });
@@ -1053,6 +1301,22 @@ export function extractAndRemoveCssHelpers(args: {
         return;
       }
 
+      // Check for closure variable references in standalone css templates
+      // that are inside regular function declarations
+      const enclosingFunc = findEnclosingFunction(p);
+      if (enclosingFunc) {
+        const closureVars = collectClosureVariables(enclosingFunc);
+        if (closureVars.size > 0) {
+          const template = p.node.quasi as TemplateLiteral;
+          const closureUsage = detectClosureVariableInTemplate(template, closureVars);
+          if (closureUsage) {
+            closureVariableUsages.push(closureUsage);
+            seenStandaloneTemplates.add(p.node);
+            return; // Skip adding to cssHelperDecls
+          }
+        }
+      }
+
       const localName = getStandaloneCssHelperName(p);
       const styleKey = toStyleKey(localName);
       const template = p.node.quasi as TemplateLiteral;
@@ -1100,7 +1364,7 @@ export function extractAndRemoveCssHelpers(args: {
   }
 
   return {
-    unsupportedCssUsages: [],
+    unsupportedCssUsages: closureVariableUsages,
     cssHelperFunctions,
     cssHelperNames,
     cssHelperObjectMembers,
