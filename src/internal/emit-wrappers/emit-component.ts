@@ -30,6 +30,32 @@ export function emitComponentWrappers(emitter: WrapperEmitter): {
   const emitNamedPropsType = (localName: string, typeExprText: string, genericParams?: string) =>
     emitter.emitNamedPropsType({ localName, typeExprText, genericParams, emitted });
 
+  const findComponentPropsType = (componentName: string): ASTNode | null => {
+    const firstParamType = (node: { params?: Array<{ typeAnnotation?: any }> }): ASTNode | null => {
+      const param = node.params?.[0];
+      return param?.typeAnnotation?.typeAnnotation ?? null;
+    };
+    const funcDecl = root
+      .find(j.FunctionDeclaration)
+      .filter((p) => (p.node as any).id?.name === componentName);
+    if (funcDecl.size() > 0) {
+      const typeNode = firstParamType(funcDecl.get().node as any);
+      if (typeNode) {
+        return typeNode;
+      }
+    }
+    const varDecl = root
+      .find(j.VariableDeclarator)
+      .filter((p) => (p.node as any).id?.name === componentName);
+    if (varDecl.size() > 0) {
+      const init = (varDecl.get().node as any).init;
+      if (init?.type === "ArrowFunctionExpression" || init?.type === "FunctionExpression") {
+        return firstParamType(init as any);
+      }
+    }
+    return null;
+  };
+
   // Component wrappers (styled(Component)) - these wrap another component
   const componentWrappers = wrapperDecls.filter((d: StyledDecl) => d.base.kind === "component");
 
@@ -38,6 +64,7 @@ export function emitComponentWrappers(emitter: WrapperEmitter): {
       continue;
     }
     const wrappedComponent = d.base.ident;
+    const baseComponentPropsType = findComponentPropsType(wrappedComponent);
     const wrappedComponentHasAs = wrapperNames.has(wrappedComponent);
     const supportsAsProp = d.supportsAsProp ?? false;
     const shouldAllowAsProp = wrapperNames.has(d.localName) || supportsAsProp;
@@ -485,6 +512,20 @@ export function emitComponentWrappers(emitter: WrapperEmitter): {
       openingAttrs.push(
         ...emitter.buildStaticAttrsFromRecord(staticAttrs, { booleanTrueAsShorthand: false }),
       );
+      const forwardedProps = new Set<string>();
+      const pushForwardedProp = (propName: string) => {
+        if (forwardedProps.has(propName)) {
+          return;
+        }
+        forwardedProps.add(propName);
+        openingAttrs.push(
+          j.jsxAttribute(
+            j.jsxIdentifier(propName),
+            j.jsxExpressionContainer(j.identifier(propName)),
+          ),
+        );
+      };
+
       // Pass transient props used for styling back to the base component.
       // These props were destructured for styling but the base component might also need them.
       // Filter out:
@@ -496,12 +537,19 @@ export function emitComponentWrappers(emitter: WrapperEmitter): {
           !filterOnlyTransientProps.includes(propName) &&
           !wrapperOnlyTransientProps.includes(propName)
         ) {
-          openingAttrs.push(
-            j.jsxAttribute(
-              j.jsxIdentifier(propName),
-              j.jsxExpressionContainer(j.identifier(propName)),
-            ),
-          );
+          pushForwardedProp(propName);
+        }
+      }
+      // Forward required base-component props that were destructured for styling.
+      for (const propName of destructureProps) {
+        if (
+          propName &&
+          propName !== "children" &&
+          !propName.startsWith("$") &&
+          baseComponentPropsType &&
+          emitter.isPropRequiredInPropsTypeLiteral(baseComponentPropsType, propName)
+        ) {
+          pushForwardedProp(propName);
         }
       }
       // Re-forward non-transient defaultAttrs props when jsxProp !== attrName.
@@ -509,24 +557,14 @@ export function emitComponentWrappers(emitter: WrapperEmitter): {
       // E.g., { tabIndex: props.focusIndex ?? 0 } should still forward focusIndex to the wrapped component.
       for (const attr of defaultAttrs) {
         if (attr.jsxProp !== attr.attrName && !attr.jsxProp.startsWith("$")) {
-          openingAttrs.push(
-            j.jsxAttribute(
-              j.jsxIdentifier(attr.jsxProp),
-              j.jsxExpressionContainer(j.identifier(attr.jsxProp)),
-            ),
-          );
+          pushForwardedProp(attr.jsxProp);
         }
       }
       // Pass namespace boolean props (like 'disabled') to the wrapped component.
       // These are destructured for the enabled/disabled styling ternary but also need
       // to be forwarded as they may be valid HTML attributes on the underlying element.
       for (const propName of namespaceBooleanProps) {
-        openingAttrs.push(
-          j.jsxAttribute(
-            j.jsxIdentifier(propName),
-            j.jsxExpressionContainer(j.identifier(propName)),
-          ),
-        );
+        pushForwardedProp(propName);
       }
       openingAttrs.push(j.jsxSpreadAttribute(restId));
       emitter.appendMergingAttrs(openingAttrs, merging);

@@ -596,7 +596,7 @@ export function setIdentifierTypeAnnotation(
  * Builds the appropriate expression for a style function call based on condition type.
  *
  * Handles three cases:
- * - "truthy": wraps with `!!prop && call` to guard against falsy values
+ * - "truthy": wraps with `prop ? call : undefined` to avoid passing false/"" into stylex.props
  * - "always": returns call directly (the callArg already handles null, e.g., `${$prop ?? 0}ms`)
  * - undefined (default): wraps with `prop != null && call` for optional props, or returns call for required props
  */
@@ -608,10 +608,8 @@ export function buildStyleFnConditionExpr(args: {
   isRequired: boolean;
 }): ExpressionKind {
   const { j, condition, propExpr, call, isRequired } = args;
-  // !!prop is always boolean, so && is safe
   if (condition === "truthy") {
-    const truthy = j.unaryExpression("!", j.unaryExpression("!", propExpr));
-    return j.logicalExpression("&&", truthy, call);
+    return j.conditionalExpression(propExpr, call, j.identifier("undefined"));
   }
   // callArg handles null case internally (e.g., `${$prop ?? 0}ms`)
   if (condition === "always" || isRequired) {

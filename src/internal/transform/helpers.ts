@@ -218,7 +218,11 @@ export function toSuffixFromProp(propName: string): string {
       .map((s) => s.trim())
       .filter(Boolean);
     if (parts.length) {
-      return parts.map((p) => toSuffixFromProp(p)).join("");
+      const suffixes = parts.map((p) => toSuffixFromProp(p));
+      if (suffixes.includes("CondTruthy")) {
+        return "CondTruthy";
+      }
+      return suffixes.join("");
     }
   }
 
@@ -230,7 +234,11 @@ export function toSuffixFromProp(propName: string): string {
       .map((s) => s.trim())
       .filter(Boolean);
     if (parts.length) {
-      return parts.map((p) => toSuffixFromProp(p)).join("Or");
+      const suffixes = parts.map((p) => toSuffixFromProp(p));
+      if (suffixes.includes("CondTruthy")) {
+        return "CondTruthy";
+      }
+      return suffixes.join("Or");
     }
   }
   const eq = trimmed.includes("!==") ? "!==" : trimmed.includes("===") ? "===" : null;
@@ -238,6 +246,10 @@ export function toSuffixFromProp(propName: string): string {
     const [lhs0, rhs0] = trimmed.split(eq).map((s) => s.trim());
     const lhs = lhs0 ?? "Variant";
     const rhsRaw = (rhs0 ?? "").replace(/^['"]|['"]$/g, "");
+    const isSimpleRhs = /^[A-Za-z_$][0-9A-Za-z_$]*$/.test(rhsRaw) || /^-?\d+(\.\d+)?$/.test(rhsRaw);
+    if (rhsRaw && !isSimpleRhs) {
+      return "CondTruthy";
+    }
     const rhs = rhsRaw || (eq === "!==" ? "NotMatch" : "Match");
     const lhsSuffix = lhs.charAt(0).toUpperCase() + lhs.slice(1);
     const rhsSuffix = rhs.charAt(0).toUpperCase() + rhs.slice(1);

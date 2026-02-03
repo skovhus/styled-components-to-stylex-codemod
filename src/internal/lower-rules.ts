@@ -863,6 +863,22 @@ export function lowerRules(args: {
         return null;
       };
 
+      const getMemberExpressionSource = (node: ExpressionKind): string | null => {
+        if (!node || typeof node !== "object") {
+          return null;
+        }
+        if (node.type === "Identifier") {
+          return node.name ?? null;
+        }
+        if (node.type === "MemberExpression" && !node.computed) {
+          const obj = getMemberExpressionSource(node.object as ExpressionKind);
+          const prop =
+            node.property?.type === "Identifier" ? node.property.name : (null as string | null);
+          return obj && prop ? `${obj}.${prop}` : null;
+        }
+        return null;
+      };
+
       const parseTestInfo = (test: ExpressionKind): TestInfo | null => {
         if (!test || typeof test !== "object") {
           return null;
@@ -895,7 +911,7 @@ export function lowerRules(args: {
             }
             const rhs = literalToStaticValue(test.right);
             if (rhs === null) {
-              return null;
+              return getMemberExpressionSource(test.right as ExpressionKind);
             }
             return JSON.stringify(rhs);
           };
@@ -1942,7 +1958,7 @@ export function lowerRules(args: {
           try {
             rhs = j.literal(JSON.parse(rhsRaw));
           } catch {
-            rhs = j.identifier(rhsRaw);
+            rhs = parseExpr(rhsRaw) ?? j.identifier(rhsRaw);
           }
           return {
             cond: j.binaryExpression(op as any, j.identifier(lhs), rhs),
