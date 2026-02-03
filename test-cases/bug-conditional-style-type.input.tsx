@@ -1,3 +1,4 @@
+import * as React from "react";
 import styled from "styled-components";
 
 // Styled component with conditional CSS based on prop
@@ -14,10 +15,42 @@ export const IconWithTeamColor = styled.svg.attrs({
   ${(props) => (props.$color ? `fill: ${props.$color};` : "")};
 `;
 
+interface Props extends React.SVGProps<SVGSVGElement> {
+  /** No target date */
+  noDate?: boolean;
+  /** Render a selected border */
+  selected?: boolean;
+}
+
+/**
+ * Renders a diamond shaped icon for the timeline
+ */
+export const IconWithTransform = styled(Icon_)`
+  ${(p) =>
+    p.noDate && !p.selected
+      ? `
+    transform: scale(0.66);
+  `
+      : ``}
+`;
+
+function Icon_(props: Props) {
+  const { selected, noDate, ...etc } = props;
+  return (
+    <svg {...etc}>
+      <circle cx="50" cy="50" r="40" stroke="green" strokeWidth="4" />
+    </svg>
+  );
+}
+
 export function App() {
   return (
-    <IconWithTeamColor $color="red">
-      <circle cx="50" cy="50" r="40" stroke="green" strokeWidth="4" />
-    </IconWithTeamColor>
+    <div>
+      <IconWithTeamColor $color="red">
+        <circle cx="50" cy="50" r="40" stroke="green" strokeWidth="4" />
+      </IconWithTeamColor>
+      <IconWithTransform noDate selected />
+      <IconWithTransform noDate />
+    </div>
   );
 }

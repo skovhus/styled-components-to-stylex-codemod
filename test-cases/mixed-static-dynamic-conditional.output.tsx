@@ -20,7 +20,9 @@ function Container(props: ContainerProps) {
       {...stylex.props(
         styles.container,
         $position === "fixed" && styles.containerPositionFixed,
-        $position === "fixed" && $sidebarCollapsed && styles.containerPositionFixedSidebarCollapsed,
+        $position === "fixed" && $sidebarCollapsed
+          ? styles.containerPositionFixedSidebarCollapsed
+          : undefined,
       )}
     >
       {children}

@@ -713,13 +713,14 @@ export function emitIntrinsicWrappers(emitter: WrapperEmitter): {
           if (compoundVariantKeys.has(when)) {
             continue;
           }
-          const { cond } = emitter.collectConditionProps({ when, destructureProps });
+          const { cond, isBoolean } = emitter.collectConditionProps({ when, destructureProps });
           const styleExpr = j.memberExpression(
             j.identifier(stylesIdentifier),
             j.identifier(variantKey),
           );
-          // Simple style lookups always use && (falsy values like false/undefined are valid for stylex.props)
-          styleArgs.push(j.logicalExpression("&&", cond, styleExpr));
+          // Use makeConditionalStyleExpr to handle boolean vs non-boolean conditions correctly.
+          // For boolean conditions, && is used. For non-boolean (could be "" or 0), ternary is used.
+          styleArgs.push(emitter.makeConditionalStyleExpr({ cond, expr: styleExpr, isBoolean }));
         }
       }
 
@@ -1159,13 +1160,14 @@ export function emitIntrinsicWrappers(emitter: WrapperEmitter): {
         if (compoundVariantKeys.has(when)) {
           continue;
         }
-        const { cond } = emitter.collectConditionProps({ when });
+        const { cond, isBoolean } = emitter.collectConditionProps({ when });
         const styleExpr = j.memberExpression(
           j.identifier(stylesIdentifier),
           j.identifier(variantKey),
         );
-        // Simple style lookups always use && (falsy values like false/undefined are valid for stylex.props)
-        styleArgs.push(j.logicalExpression("&&", cond, styleExpr));
+        // Use makeConditionalStyleExpr to handle boolean vs non-boolean conditions correctly.
+        // For boolean conditions, && is used. For non-boolean (could be "" or 0), ternary is used.
+        styleArgs.push(emitter.makeConditionalStyleExpr({ cond, expr: styleExpr, isBoolean }));
       }
     }
 
@@ -2134,13 +2136,14 @@ export function emitIntrinsicWrappers(emitter: WrapperEmitter): {
         if (compoundVariantKeys.has(when)) {
           continue;
         }
-        const { cond } = emitter.collectConditionProps({ when, destructureProps });
+        const { cond, isBoolean } = emitter.collectConditionProps({ when, destructureProps });
         const styleExpr = j.memberExpression(
           j.identifier(stylesIdentifier),
           j.identifier(variantKey),
         );
-        // Simple style lookups always use && (falsy values like false/undefined are valid for stylex.props)
-        styleArgs.push(j.logicalExpression("&&", cond, styleExpr));
+        // Use makeConditionalStyleExpr to handle boolean vs non-boolean conditions correctly.
+        // For boolean conditions, && is used. For non-boolean (could be "" or 0), ternary is used.
+        styleArgs.push(emitter.makeConditionalStyleExpr({ cond, expr: styleExpr, isBoolean }));
       }
     }
 

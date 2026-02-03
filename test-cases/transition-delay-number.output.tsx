@@ -17,7 +17,7 @@ function Container(props: ContainerProps) {
   return (
     <div
       {...rest}
-      {...mergedSx([styles.container, $open && styles.containerOpen], className, {
+      {...mergedSx([styles.container, $open ? styles.containerOpen : undefined], className, {
         ...style,
         transitionDelay: `${$open ? $delay : 0}ms`,
       })}

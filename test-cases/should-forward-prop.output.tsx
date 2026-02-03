@@ -30,7 +30,7 @@ type LinkProps = Omit<React.ComponentProps<"a">, "className" | "style"> & {
 function Link(props: LinkProps) {
   const { children, isActive, ...rest } = props;
   return (
-    <a {...rest} {...stylex.props(styles.link, isActive && styles.linkActive)}>
+    <a {...rest} {...stylex.props(styles.link, isActive ? styles.linkActive : undefined)}>
       {children}
     </a>
   );
@@ -70,7 +70,7 @@ function Card(props: CardProps) {
     <div
       {...stylex.props(
         styles.card,
-        rounded && styles.cardRounded,
+        rounded ? styles.cardRounded : undefined,
         variant === "primary" && styles.cardVariantPrimary,
         styles.cardBoxShadow(props),
       )}

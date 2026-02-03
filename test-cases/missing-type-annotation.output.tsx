@@ -19,7 +19,7 @@ export function Box(props: BoxProps) {
       {...stylex.props(
         styles.box,
         !bordered && styles.boxNotBordered,
-        bordered && styles.boxBordered,
+        bordered ? styles.boxBordered : undefined,
         bg != null && styles.boxBackgroundColor(bg),
       )}
     >

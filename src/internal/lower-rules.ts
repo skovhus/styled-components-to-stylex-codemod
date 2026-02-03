@@ -95,9 +95,10 @@ export type DescendantOverride = {
 type ExpressionKind = Parameters<JSCodeshift["expressionStatement"]>[0];
 
 /**
- * Type for variant test condition info
+ * Type for variant test condition info.
+ * For chained conditions like `a && b`, allPropNames contains all prop names.
  */
-type TestInfo = { when: string; propName: string };
+type TestInfo = { when: string; propName: string; allPropNames?: string[] };
 
 /**
  * Inverts a "when" condition string for the opposite variant branch.
@@ -812,6 +813,16 @@ export function lowerRules(args: {
       decl,
     });
 
+    // Helper to drop all props from a TestInfo (handles both simple and chained conditions)
+    const dropAllTestInfoProps = (testInfo: TestInfo): void => {
+      const propsToCheck = testInfo.allPropNames ?? (testInfo.propName ? [testInfo.propName] : []);
+      for (const prop of propsToCheck) {
+        if (prop && !prop.startsWith("$")) {
+          ensureShouldForwardPropDrop(decl, prop);
+        }
+      }
+    };
+
     // Shared helper to apply a style variant for a given test condition
     const applyVariant = (testInfo: TestInfo, consStyle: Record<string, unknown>): void => {
       const when = testInfo.when;
@@ -820,9 +831,8 @@ export function lowerRules(args: {
       mergeStyleObjects(nextBucket, consStyle);
       variantBuckets.set(when, nextBucket);
       variantStyleKeys[when] ??= `${decl.styleKey}${toSuffixFromProp(when)}`;
-      if (testInfo.propName && !testInfo.propName.startsWith("$")) {
-        ensureShouldForwardPropDrop(decl, testInfo.propName);
-      }
+      // Drop all props used in the condition (for chained conditions, allPropNames has them all)
+      dropAllTestInfoProps(testInfo);
     };
 
     // Factory to create prop test helpers given the arrow function parameter bindings
@@ -914,7 +924,7 @@ export function lowerRules(args: {
       /**
        * Parse chained && conditions, returning a combined TestInfo.
        * For: props.a === "x" && props.b === 1
-       * Returns: { when: 'a === "x" && b === 1', propName: null (multiple props) }
+       * Returns: { when: 'a === "x" && b === 1', propName: 'b', allPropNames: ['a', 'b'] }
        */
       const parseChainedTestInfo = (test: ExpressionKind): TestInfo | null => {
         // First try parsing as a simple test
@@ -935,9 +945,14 @@ export function lowerRules(args: {
           if (leftInfo && rightInfo) {
             // Combine conditions with &&
             const combinedWhen = `${leftInfo.when} && ${rightInfo.when}`;
+            // Collect all prop names from both sides of the chain
+            const leftProps =
+              leftInfo.allPropNames ?? (leftInfo.propName ? [leftInfo.propName] : []);
+            const rightProps = rightInfo.propName ? [rightInfo.propName] : [];
+            const allPropNames = [...new Set([...leftProps, ...rightProps])];
             // For chained conditions, we use the last propName as the primary
             // (this matches how variants are typically keyed)
-            return { when: combinedWhen, propName: rightInfo.propName };
+            return { when: combinedWhen, propName: rightInfo.propName, allPropNames };
           }
         }
 
@@ -1371,7 +1386,7 @@ export function lowerRules(args: {
       }
       const paramName = bindings.kind === "simple" ? bindings.paramName : null;
 
-      const { parseTestInfo, parseChainedTestInfo } = createPropTestHelpers(bindings);
+      const { parseChainedTestInfo } = createPropTestHelpers(bindings);
 
       const isTriviallyPureVoidArg = (arg: any): boolean => {
         if (!arg || typeof arg !== "object") {
@@ -2100,7 +2115,7 @@ export function lowerRules(args: {
         return false;
       }
 
-      const testInfo = parseTestInfo(conditional.test);
+      const testInfo = parseChainedTestInfo(conditional.test);
 
       const cons = conditional.consequent;
       const alt = conditional.alternate;
@@ -2298,10 +2313,41 @@ export function lowerRules(args: {
         return true;
       }
 
-      if (consIsTpl && altIsTpl) {
-        if (testInfo.propName) {
-          ensureShouldForwardPropDrop(decl, testInfo.propName);
+      // Check altIsEmpty BEFORE altIsTpl since empty templates are also template literals
+      // and the altIsEmpty case doesn't require invertWhen (which fails for compound conditions)
+      if (consIsTpl && altIsEmpty) {
+        dropAllTestInfoProps(testInfo);
+        const consResolved = resolveTemplateLiteralBranch({
+          j,
+          node: cons as any,
+          paramName,
+          filePath,
+          parseExpr,
+          cssValueToJs,
+          resolveValue,
+          resolveCall,
+          resolveImportInScope,
+          resolverImports,
+          componentInfo,
+          handlerContext,
+        });
+        if (!consResolved) {
+          return false;
         }
+        if (Object.keys(consResolved.style).length > 0) {
+          applyVariant(testInfo, consResolved.style);
+        }
+        if (consResolved.dynamicEntries.length > 0) {
+          applyDynamicEntries(consResolved.dynamicEntries, testInfo.when);
+        }
+        if (consResolved.inlineEntries.length > 0) {
+          applyInlineEntries(consResolved.inlineEntries, testInfo.when);
+        }
+        return true;
+      }
+
+      if (consIsTpl && altIsTpl) {
+        dropAllTestInfoProps(testInfo);
         const consResolved = resolveTemplateLiteralBranch({
           j,
           node: cons as any,
@@ -2358,43 +2404,8 @@ export function lowerRules(args: {
         return true;
       }
 
-      if (consIsTpl && altIsEmpty) {
-        if (testInfo.propName) {
-          ensureShouldForwardPropDrop(decl, testInfo.propName);
-        }
-        const consResolved = resolveTemplateLiteralBranch({
-          j,
-          node: cons as any,
-          paramName,
-          filePath,
-          parseExpr,
-          cssValueToJs,
-          resolveValue,
-          resolveCall,
-          resolveImportInScope,
-          resolverImports,
-          componentInfo,
-          handlerContext,
-        });
-        if (!consResolved) {
-          return false;
-        }
-        if (Object.keys(consResolved.style).length > 0) {
-          applyVariant(testInfo, consResolved.style);
-        }
-        if (consResolved.dynamicEntries.length > 0) {
-          applyDynamicEntries(consResolved.dynamicEntries, testInfo.when);
-        }
-        if (consResolved.inlineEntries.length > 0) {
-          applyInlineEntries(consResolved.inlineEntries, testInfo.when);
-        }
-        return true;
-      }
-
       if (consIsEmpty && altIsTpl) {
-        if (testInfo.propName) {
-          ensureShouldForwardPropDrop(decl, testInfo.propName);
-        }
+        dropAllTestInfoProps(testInfo);
         const altResolved = resolveTemplateLiteralBranch({
           j,
           node: alt as any,
@@ -2472,9 +2483,7 @@ export function lowerRules(args: {
           when = invertedWhen;
         }
 
-        if (testInfo.propName) {
-          ensureShouldForwardPropDrop(decl, testInfo.propName);
-        }
+        dropAllTestInfoProps(testInfo);
         for (const imp of resolved.imports) {
           resolverImports.set(JSON.stringify(imp), imp);
         }
@@ -2594,9 +2603,7 @@ export function lowerRules(args: {
       // Add the "true" branch value as a variant
       applyVariant(testInfo, { [stylexProp]: consValue });
 
-      if (testInfo.propName) {
-        ensureShouldForwardPropDrop(decl, testInfo.propName);
-      }
+      dropAllTestInfoProps(testInfo);
 
       return true;
     };

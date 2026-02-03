@@ -12,9 +12,9 @@ function Button(props: ButtonProps) {
     <button
       {...stylex.props(
         styles.button,
-        $primary && styles.buttonPrimary,
-        hollow && styles.buttonHollow,
-        !hollow && $primary && styles.buttonNotHollowPrimary,
+        $primary ? styles.buttonPrimary : undefined,
+        hollow ? styles.buttonHollow : undefined,
+        !hollow && $primary ? styles.buttonNotHollowPrimary : undefined,
         !hollow && !$primary && styles.buttonNotHollowNotPrimary,
       )}
     >

@@ -152,13 +152,14 @@ export function emitComponentWrappers(emitter: WrapperEmitter): {
     if (d.variantStyleKeys) {
       const sortedEntries = sortVariantEntriesBySpecificity(Object.entries(d.variantStyleKeys));
       for (const [when, variantKey] of sortedEntries) {
-        const { cond } = emitter.collectConditionProps({ when, destructureProps });
+        const { cond, isBoolean } = emitter.collectConditionProps({ when, destructureProps });
         const styleExpr = j.memberExpression(
           j.identifier(stylesIdentifier),
           j.identifier(variantKey),
         );
-        // Simple style lookups always use && (falsy values like false/undefined are valid for stylex.props)
-        styleArgs.push(j.logicalExpression("&&", cond, styleExpr));
+        // Use makeConditionalStyleExpr to handle boolean vs non-boolean conditions correctly.
+        // For boolean conditions, && is used. For non-boolean (could be "" or 0), ternary is used.
+        styleArgs.push(emitter.makeConditionalStyleExpr({ cond, expr: styleExpr, isBoolean }));
       }
     }
 

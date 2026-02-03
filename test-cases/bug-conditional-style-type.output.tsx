@@ -25,11 +25,49 @@ export function IconWithTeamColor(props: IconWithTeamColorProps) {
   );
 }
 
+interface Props extends React.SVGProps<SVGSVGElement> {
+  /** No target date */
+  noDate?: boolean;
+  /** Render a selected border */
+  selected?: boolean;
+}
+
+type IconWithTransformProps = Omit<
+  React.ComponentPropsWithRef<typeof Icon_>,
+  "className" | "style"
+>;
+
+/**
+ * Renders a diamond shaped icon for the timeline
+ */
+export function IconWithTransform(props: IconWithTransformProps) {
+  const { noDate, selected, ...rest } = props;
+  return (
+    <Icon_
+      {...rest}
+      {...stylex.props(noDate && !selected ? styles.iconWithTransformNoDateNotSelected : undefined)}
+    />
+  );
+}
+
+function Icon_(props: Props) {
+  const { selected, noDate, ...etc } = props;
+  return (
+    <svg {...etc}>
+      <circle cx="50" cy="50" r="40" stroke="green" strokeWidth="4" />
+    </svg>
+  );
+}
+
 export function App() {
   return (
-    <IconWithTeamColor $color="red">
-      <circle cx="50" cy="50" r="40" stroke="green" strokeWidth="4" />
-    </IconWithTeamColor>
+    <div>
+      <IconWithTeamColor $color="red">
+        <circle cx="50" cy="50" r="40" stroke="green" strokeWidth="4" />
+      </IconWithTeamColor>
+      <IconWithTransform noDate selected />
+      <IconWithTransform noDate />
+    </div>
   );
 }
 
@@ -37,4 +75,7 @@ const styles = stylex.create({
   iconWithTeamColorFill: (fill: string) => ({
     fill,
   }),
+  iconWithTransformNoDateNotSelected: {
+    transform: "scale(0.66)",
+  },
 });

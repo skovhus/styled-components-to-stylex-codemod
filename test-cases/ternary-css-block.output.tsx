@@ -10,7 +10,11 @@ type HighlightProps = React.PropsWithChildren<{
 
 export function Highlight(props: HighlightProps) {
   const { children, $dim } = props;
-  return <span {...stylex.props(styles.highlight, $dim && styles.highlightDim)}>{children}</span>;
+  return (
+    <span {...stylex.props(styles.highlight, $dim ? styles.highlightDim : undefined)}>
+      {children}
+    </span>
+  );
 }
 
 export const App = () => (

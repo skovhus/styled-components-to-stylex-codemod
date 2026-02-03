@@ -32,7 +32,7 @@ function TabItem(props: TabItemProps) {
       {...stylex.props(
         styles.tabItem,
         !$isActive && styles.tabItemNotActive,
-        $isActive && styles.tabItemActive,
+        $isActive ? styles.tabItemActive : undefined,
       )}
     >
       {children}

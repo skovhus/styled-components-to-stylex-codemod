@@ -28,7 +28,10 @@ type GrayscaleImageProps = Omit<React.ComponentProps<"img">, "className" | "styl
 function GrayscaleImage(props: GrayscaleImageProps) {
   const { $isBw, ...rest } = props;
   return (
-    <img {...rest} {...stylex.props(styles.grayscaleImage, $isBw && styles.grayscaleImageBw)} />
+    <img
+      {...rest}
+      {...stylex.props(styles.grayscaleImage, $isBw ? styles.grayscaleImageBw : undefined)}
+    />
   );
 }
 

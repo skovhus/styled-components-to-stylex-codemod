@@ -26,7 +26,7 @@ export function Card(props: CardProps) {
         [
           styles.card,
           !highlighted && styles.cardNotHighlighted,
-          highlighted && styles.cardHighlighted,
+          highlighted ? styles.cardHighlighted : undefined,
         ],
         className,
       )}

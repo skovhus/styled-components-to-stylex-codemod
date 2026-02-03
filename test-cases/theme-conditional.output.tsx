@@ -9,7 +9,9 @@ type OptionLabelProps = React.PropsWithChildren<{
 function OptionLabel(props: OptionLabelProps) {
   const { children, $disabled } = props;
   return (
-    <label {...stylex.props(styles.optionLabel, $disabled && styles.optionLabelDisabled)}>
+    <label
+      {...stylex.props(styles.optionLabel, $disabled ? styles.optionLabelDisabled : undefined)}
+    >
       {children}
     </label>
   );

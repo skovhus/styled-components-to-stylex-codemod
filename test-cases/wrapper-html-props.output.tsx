@@ -11,7 +11,10 @@ type OptionLabelProps = Omit<React.ComponentProps<"label">, "className" | "style
 function OptionLabel(props: OptionLabelProps) {
   const { children, $disabled, ...rest } = props;
   return (
-    <label {...rest} {...stylex.props(styles.optionLabel, $disabled && styles.optionLabelDisabled)}>
+    <label
+      {...rest}
+      {...stylex.props(styles.optionLabel, $disabled ? styles.optionLabelDisabled : undefined)}
+    >
       {children}
     </label>
   );
