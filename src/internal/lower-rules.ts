@@ -41,6 +41,7 @@ import {
   wrapExprWithStaticParts,
 } from "./lower-rules/interpolations.js";
 import { splitDirectionalProperty } from "./stylex-shorthands.js";
+import { patternProp } from "./transform-utils.js";
 import {
   createTypeInferenceHelpers,
   ensureShouldForwardPropDrop,
@@ -1133,9 +1134,10 @@ export function lowerRules(args: {
           } else {
             annotateParamFromJsxProp(param, jsxProp);
           }
-          const p = j.property("init", j.identifier(out.prop), j.identifier(out.prop)) as any;
-          p.shorthand = true;
-          styleFnDecls.set(fnKey, j.arrowFunctionExpression([param], j.objectExpression([p])));
+          styleFnDecls.set(
+            fnKey,
+            j.arrowFunctionExpression([param], j.objectExpression([patternProp(j, out.prop)])),
+          );
         }
       }
       return true;
@@ -1698,10 +1700,7 @@ export function lowerRules(args: {
               if (!styleFnDecls.has(fnKey)) {
                 const param = j.identifier(dyn.stylexProp);
                 annotateParamFromJsxProp(param, dyn.jsxProp);
-                const valueId = j.identifier(dyn.stylexProp);
-                const p = j.property("init", valueId, valueId) as any;
-                p.shorthand = true;
-                const bodyExpr = j.objectExpression([p]);
+                const bodyExpr = j.objectExpression([patternProp(j, dyn.stylexProp)]);
                 styleFnDecls.set(fnKey, j.arrowFunctionExpression([param], bodyExpr));
               }
               if (
@@ -1798,10 +1797,7 @@ export function lowerRules(args: {
                 if (!styleFnDecls.has(fnKey)) {
                   const param = j.identifier(entry.stylexProp);
                   annotateParamFromJsxProp(param, entry.jsxProp);
-                  const valueId = j.identifier(entry.stylexProp);
-                  const p = j.property("init", valueId, valueId) as any;
-                  p.shorthand = true;
-                  const bodyExpr = j.objectExpression([p]);
+                  const bodyExpr = j.objectExpression([patternProp(j, entry.stylexProp)]);
                   styleFnDecls.set(fnKey, j.arrowFunctionExpression([param], bodyExpr));
                 }
                 // Track as conditional: apply when test is truthy
@@ -1866,11 +1862,8 @@ export function lowerRules(args: {
           const fnKey = `${decl.styleKey}${toSuffixFromProp(entry.stylexProp)}`;
           if (!styleFnDecls.has(fnKey)) {
             const param = j.identifier(entry.stylexProp);
-            const valueId = j.identifier(entry.stylexProp);
             annotateParamFromJsxProp(param, entry.jsxProp);
-            const p = j.property("init", valueId, valueId) as any;
-            p.shorthand = true;
-            const bodyExpr = j.objectExpression([p]);
+            const bodyExpr = j.objectExpression([patternProp(j, entry.stylexProp)]);
             styleFnDecls.set(fnKey, j.arrowFunctionExpression([param], bodyExpr));
           }
           if (
@@ -5327,15 +5320,7 @@ export function lowerRules(args: {
                 }
                 if (!styleFnFromProps.some((p) => p.fnKey === fnKey)) {
                   const callArg = j.objectExpression(
-                    (res.props ?? []).map((propName) => {
-                      const prop = j.property(
-                        "init",
-                        j.identifier(propName),
-                        j.identifier(propName),
-                      ) as any;
-                      prop.shorthand = true;
-                      return prop;
-                    }),
+                    (res.props ?? []).map((propName) => patternProp(j, propName)),
                   );
                   styleFnFromProps.push({
                     fnKey,
@@ -5608,7 +5593,6 @@ export function lowerRules(args: {
 
               if (!styleFnDecls.has(fnKey)) {
                 const param = j.identifier(out.prop);
-                const valueId = j.identifier(out.prop);
                 if (jsxProp !== "__props") {
                   annotateParamFromJsxProp(param, jsxProp);
                 }
@@ -5616,9 +5600,7 @@ export function lowerRules(args: {
                   ensureShouldForwardPropDrop(decl, jsxProp);
                 }
 
-                const p = j.property("init", j.identifier(out.prop), valueId) as any;
-                p.shorthand = true;
-                const body = j.objectExpression([p]);
+                const body = j.objectExpression([patternProp(j, out.prop)]);
                 styleFnDecls.set(fnKey, j.arrowFunctionExpression([param], body));
               }
             }
