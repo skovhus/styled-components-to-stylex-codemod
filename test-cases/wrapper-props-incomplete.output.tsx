@@ -18,9 +18,7 @@ interface TextColorProps extends React.ComponentProps<"span"> {
 export function TextColor(props: TextColorProps) {
   const { as: Component = "span", className, children, style, color } = props;
   return (
-    <Component {...mergedSx([styles.textColorColor(color)], className, style)}>
-      {children}
-    </Component>
+    <Component {...mergedSx(styles.textColorColor(color), className, style)}>{children}</Component>
   );
 }
 
@@ -69,7 +67,7 @@ interface ThemeTextProps extends React.ComponentProps<"span"> {
 export function ThemeText(props: ThemeTextProps) {
   const { as: Component = "span", className, children, style, themeColor } = props;
   return (
-    <Component {...mergedSx([styles.themeTextColor(themeColor)], className, style)}>
+    <Component {...mergedSx(styles.themeTextColor(themeColor), className, style)}>
       {children}
     </Component>
   );

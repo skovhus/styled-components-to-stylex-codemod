@@ -170,19 +170,18 @@ export type CallResolveResult = {
    */
   imports: ImportSpec[];
   /**
-   * Optional: Explicitly specify how the expression should be used.
-   *
-   * - `"cssValue"`: Use as a CSS value in `stylex.create()` property values
-   * - `"stylexStyles"`: Use as a StyleX styles reference in `stylex.props()`
+   * Disambiguates how the resolved expression is used:
+   * - `"create"`: Use as a CSS value in `stylex.create()` property values
+   * - `"props"`: Use as a StyleX styles reference in `stylex.props()`
    *
    * When not specified, the codemod infers from context:
-   * - If `cssProperty` exists → treated as `"cssValue"`
-   * - If `cssProperty` doesn't exist → treated as `"stylexStyles"`
+   * - If `cssProperty` exists → treated as `"create"`
+   * - If `cssProperty` doesn't exist → treated as `"props"`
    *
    * Use this field when the default inference is incorrect, such as when a helper
    * returns a StyleX styles object even when used with a CSS property like `border:`.
    */
-  kind?: "cssValue" | "stylexStyles";
+  usage?: "create" | "props";
 };
 
 // Note: we intentionally do NOT expose “unified” ResolveContext/ResolveResult types anymore.

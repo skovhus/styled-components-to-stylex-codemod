@@ -52,6 +52,48 @@ export function emitIntrinsicWrappers(emitter: WrapperEmitter): {
       j.memberExpression(j.identifier(stylesIdentifier), j.identifier(key)),
     );
 
+  const shouldIncludeRestForProps = (args: {
+    usedAsValue: boolean;
+    hasLocalUsage: boolean;
+    usedAttrs: Set<string>;
+    destructureProps: string[];
+    hasExplicitPropsToPassThrough?: boolean;
+    ignoreTransientAttrs?: boolean;
+  }): boolean => {
+    const {
+      usedAsValue,
+      hasLocalUsage,
+      usedAttrs,
+      destructureProps,
+      hasExplicitPropsToPassThrough,
+      ignoreTransientAttrs = false,
+    } = args;
+    let shouldIncludeRest =
+      usedAsValue ||
+      Boolean(hasExplicitPropsToPassThrough) ||
+      (hasLocalUsage && usedAttrs.has("*")) ||
+      (hasLocalUsage &&
+        [...usedAttrs].some((n) => {
+          if (
+            n === "children" ||
+            n === "className" ||
+            n === "style" ||
+            n === "as" ||
+            n === "forwardedAs" ||
+            (ignoreTransientAttrs && n.startsWith("$"))
+          ) {
+            return false;
+          }
+          return !destructureProps.includes(n);
+        }));
+    const hasOnlyTransientAttrs =
+      !usedAttrs.has("*") && usedAttrs.size > 0 && [...usedAttrs].every((n) => n.startsWith("$"));
+    if (!usedAsValue && hasOnlyTransientAttrs) {
+      shouldIncludeRest = false;
+    }
+    return shouldIncludeRest;
+  };
+
   /**
    * Build compound variant expressions for multi-prop nested ternaries.
    * Generates: outerProp ? styles.outerKey : innerProp ? styles.innerTrueKey : styles.innerFalseKey
@@ -100,6 +142,16 @@ export function emitIntrinsicWrappers(emitter: WrapperEmitter): {
 
       styleArgs.push(outerTernary);
     }
+  };
+
+  /**
+   * Check if defaultAttrs references element props (non-$-prefixed props).
+   * When attrs like `tabIndex: props.tabIndex ?? 0` are used, the jsxProp is "tabIndex"
+   * which is an element prop that needs to be included in the type.
+   */
+  const hasElementPropsInDefaultAttrs = (d: StyledDecl): boolean => {
+    const defaultAttrs = d.attrsInfo?.defaultAttrs ?? [];
+    return defaultAttrs.some((a) => a.jsxProp && !a.jsxProp.startsWith("$"));
   };
 
   const mergeAsIntoPropsWithChildren = (typeText: string): string | null => {
@@ -783,7 +835,7 @@ export function emitIntrinsicWrappers(emitter: WrapperEmitter): {
 
       const merging = emitStyleMerging({
         j,
-        styleMerger,
+        emitter,
         styleArgs,
         classNameId,
         styleId,
@@ -1066,10 +1118,7 @@ export function emitIntrinsicWrappers(emitter: WrapperEmitter): {
         }
         return omitted.length ? `Omit<${base}, ${omitted.join(" | ")}>` : base;
       })();
-      const interfaceExtended = emitter.extendExistingInterface(propsTypeName, extendBaseTypeText);
-      if (!interfaceExtended) {
-        emitter.extendExistingTypeAlias(propsTypeName, extendBaseTypeText);
-      }
+      emitter.extendExistingType(propsTypeName, extendBaseTypeText);
     }
     needsReactTypeImport = true;
 
@@ -1226,22 +1275,13 @@ export function emitIntrinsicWrappers(emitter: WrapperEmitter): {
     const isVoidTag = tagName === "input";
     const { hasAny: hasLocalUsage } = emitter.getJsxCallsites(d.localName);
 
-    const shouldIncludeRest =
-      emitter.isUsedAsValueInFile(d.localName) ||
-      (hasLocalUsage && usedAttrs.has("*")) ||
-      (hasLocalUsage &&
-        [...usedAttrs].some((n) => {
-          if (
-            n === "children" ||
-            n === "className" ||
-            n === "style" ||
-            n === "as" ||
-            n === "forwardedAs"
-          ) {
-            return false;
-          }
-          return !destructureParts.includes(n);
-        }));
+    const shouldIncludeRest = shouldIncludeRestForProps({
+      usedAsValue: emitter.isUsedAsValueInFile(d.localName),
+      hasLocalUsage,
+      usedAttrs,
+      destructureProps: destructureParts,
+      ignoreTransientAttrs: true,
+    });
 
     // Skip rest spread omission for exported components - external consumers may pass additional props
     const isExportedComponent = d.isExported || emitter.exportedComponents.has(d.localName);
@@ -1301,7 +1341,7 @@ export function emitIntrinsicWrappers(emitter: WrapperEmitter): {
 
       const merging = emitStyleMerging({
         j,
-        styleMerger,
+        emitter,
         styleArgs,
         classNameId,
         styleId,
@@ -1392,7 +1432,7 @@ export function emitIntrinsicWrappers(emitter: WrapperEmitter): {
     // Use the style merger helper
     const merging = emitStyleMerging({
       j,
-      styleMerger,
+      emitter,
       styleArgs,
       classNameId,
       styleId,
@@ -1499,11 +1539,31 @@ export function emitIntrinsicWrappers(emitter: WrapperEmitter): {
             allowStyleProp,
           })
         : "{}";
-      // For non-void tags without explicit type, wrap in PropsWithChildren
-      const typeWithChildren =
-        !explicit && !VOID_TAGS.has(tagName) ? emitter.withChildren(baseTypeText) : baseTypeText;
-      const typeText = explicit ?? typeWithChildren;
-      emitPropsType(d.localName, typeText, allowAsProp);
+
+      // Check if explicit type is a simple type reference that exists in the file
+      // and if defaultAttrs reference element props - if so, extend the type with intrinsic props
+      const explicitTypeName = emitter.getExplicitTypeNameIfExists(d.propsType);
+      const needsElementProps = hasElementPropsInDefaultAttrs(d);
+
+      if (explicitTypeName && explicit && needsElementProps) {
+        // Extend the existing type with intrinsic element props so that element props
+        // like tabIndex are available (when used in defaultAttrs like `tabIndex: props.tabIndex ?? 0`)
+        const intrinsicBaseType = emitter.inferredIntrinsicPropsTypeText({
+          d,
+          tagName,
+          allowClassNameProp,
+          allowStyleProp,
+        });
+        emitter.extendExistingType(explicitTypeName, intrinsicBaseType);
+        needsReactTypeImport = true;
+        emitPropsType(d.localName, explicit, allowAsProp);
+      } else {
+        // For non-void tags without explicit type, wrap in PropsWithChildren
+        const typeWithChildren =
+          !explicit && !VOID_TAGS.has(tagName) ? emitter.withChildren(baseTypeText) : baseTypeText;
+        const typeText = explicit ?? typeWithChildren;
+        emitPropsType(d.localName, typeText, allowAsProp);
+      }
     }
     const styleArgs: ExpressionKind[] = [
       ...(d.extendsStyleKey
@@ -1526,10 +1586,17 @@ export function emitIntrinsicWrappers(emitter: WrapperEmitter): {
     // For local-only wrappers with no external `className`/`style` usage, keep the wrapper minimal.
     if (!allowClassNameProp && !allowStyleProp) {
       const usedAttrs = emitter.getUsedAttrs(d.localName);
+      // Include rest spread when:
+      // - Component is used with spread (usedAttrs.has("*"))
+      // - Component is used as a value
+      // - Component is not exported and has used attrs
+      // - defaultAttrs reference element props (like tabIndex: props.tabIndex ?? 0)
+      //   which means user should be able to pass/override these props
       const includeRest =
         usedAttrs.has("*") ||
-        !!(d as any).usedAsValue ||
-        (!((d as any).isExported ?? false) && usedAttrs.size > 0);
+        !!d.usedAsValue ||
+        (!(d.isExported ?? false) && usedAttrs.size > 0) ||
+        hasElementPropsInDefaultAttrs(d);
       const variantProps = new Set<string>();
       if (d.variantStyleKeys) {
         for (const [when] of Object.entries(d.variantStyleKeys)) {
@@ -1626,7 +1693,7 @@ export function emitIntrinsicWrappers(emitter: WrapperEmitter): {
     // Use the style merger helper
     const merging = emitStyleMerging({
       j,
-      styleMerger,
+      emitter,
       styleArgs,
       classNameId,
       styleId,
@@ -1759,7 +1826,7 @@ export function emitIntrinsicWrappers(emitter: WrapperEmitter): {
     // Use the style merger helper
     const merging = emitStyleMerging({
       j,
-      styleMerger,
+      emitter,
       styleArgs,
       classNameId,
       styleId: j.identifier("style"),
@@ -1880,8 +1947,11 @@ export function emitIntrinsicWrappers(emitter: WrapperEmitter): {
         ...staticAttrNames,
       ]);
       const needsRestForType =
-        !!(d as any).usedAsValue ||
+        !!d.usedAsValue ||
         usedAttrsForType.has("*") ||
+        // When defaultAttrs reference element props (like tabIndex: props.tabIndex ?? 0),
+        // include element props in type so those props are available
+        hasElementPropsInDefaultAttrs(d) ||
         [...usedAttrsForType].some((n) => {
           if (
             n === "children" ||
@@ -1984,19 +2054,31 @@ export function emitIntrinsicWrappers(emitter: WrapperEmitter): {
         : asPropTypeText
           ? emitter.joinIntersection(typeText, asPropTypeText)
           : typeText;
-      const typeAliasEmitted = emitNamedPropsType(d.localName, typeWithAs);
-      if (!typeAliasEmitted && explicit) {
-        const propsTypeName = emitter.propsTypeNameFor(d.localName);
-        const interfaceExtended = emitter.extendExistingInterface(
-          propsTypeName,
-          extendBaseTypeText,
-        );
-        if (!interfaceExtended) {
-          const typeAliasExtended = emitter.extendExistingTypeAlias(
-            propsTypeName,
-            extendBaseTypeText,
-          );
-          if (!typeAliasExtended) {
+      // Check if explicit type is a simple type reference (e.g., `Props`) that exists in the file
+      const explicitTypeName = emitter.getExplicitTypeNameIfExists(d.propsType);
+
+      let typeAliasEmitted = false;
+      const needsElementPropsForAttrs = hasElementPropsInDefaultAttrs(d);
+      // When the explicit type exists and defaultAttrs reference element props
+      // (like tabIndex: props.tabIndex ?? 0), extend the explicit type directly
+      if (explicitTypeName && needsElementPropsForAttrs) {
+        emitter.extendExistingType(explicitTypeName, extendBaseTypeText);
+        // Also extend with as prop if needed
+        if (asPropTypeText) {
+          emitter.extendExistingType(explicitTypeName, asPropTypeText);
+        }
+        // Use the explicit type wrapped in PropsWithChildren for the function parameter
+        // explicit is guaranteed to be truthy here since explicitTypeExists is true
+        inlineTypeText = VOID_TAGS.has(tagName)
+          ? (explicit ?? undefined)
+          : emitter.withChildren(explicit!);
+        // Note: Don't add asPropTypeText to inlineTypeText since it's already in the explicit type
+      } else {
+        typeAliasEmitted = emitNamedPropsType(d.localName, typeWithAs);
+        if (!typeAliasEmitted && explicit) {
+          const propsTypeName = emitter.propsTypeNameFor(d.localName);
+          const typeExtended = emitter.extendExistingType(propsTypeName, extendBaseTypeText);
+          if (!typeExtended) {
             inlineTypeText = VOID_TAGS.has(tagName) ? explicit : emitter.withChildren(explicit);
             if (asPropTypeText) {
               inlineTypeText = emitter.joinIntersection(inlineTypeText, asPropTypeText);
@@ -2106,22 +2188,20 @@ export function emitIntrinsicWrappers(emitter: WrapperEmitter): {
       }
     }
 
-    // Extract transient props (starting with $) from the explicit type and add to destructureProps
-    // so they get stripped from the rest spread (styled-components transient props should never reach DOM)
+    // Extract transient props (starting with $) from the explicit type.
+    // Only destructure them when we actually spread `rest` into the element.
+    const explicitTransientProps: string[] = [];
     const explicit = d.propsType;
     if (explicit?.type === "TSTypeLiteral" && explicit.members) {
       for (const member of explicit.members as any[]) {
-        if (
-          member.type === "TSPropertySignature" &&
-          member.key?.type === "Identifier" &&
-          member.key.name.startsWith("$") &&
-          !destructureProps.includes(member.key.name)
-        ) {
-          destructureProps.push(member.key.name);
+        if (member.type === "TSPropertySignature" && member.key?.type === "Identifier") {
+          const name = member.key.name;
+          if (name.startsWith("$")) {
+            explicitTransientProps.push(name);
+          }
         }
       }
     }
-
     const usedAttrs = emitter.getUsedAttrs(d.localName);
     const { hasAny: hasLocalUsage } = emitter.getJsxCallsites(d.localName);
     const explicitPropsNames = d.propsType
@@ -2142,23 +2222,26 @@ export function emitIntrinsicWrappers(emitter: WrapperEmitter): {
         }
         return !destructureProps.includes(n);
       });
-    const shouldIncludeRest =
-      emitter.isUsedAsValueInFile(d.localName) ||
-      hasExplicitPropsToPassThrough ||
-      (hasLocalUsage && usedAttrs.has("*")) ||
-      (hasLocalUsage &&
-        [...usedAttrs].some((n) => {
-          if (
-            n === "children" ||
-            n === "className" ||
-            n === "style" ||
-            n === "as" ||
-            n === "forwardedAs"
-          ) {
-            return false;
-          }
-          return !destructureProps.includes(n);
-        }));
+    let shouldIncludeRest = shouldIncludeRestForProps({
+      usedAsValue: emitter.isUsedAsValueInFile(d.localName),
+      hasLocalUsage,
+      usedAttrs,
+      destructureProps,
+      hasExplicitPropsToPassThrough,
+      ignoreTransientAttrs: true,
+    });
+    // When defaultAttrs reference element props (like tabIndex: props.tabIndex ?? 0),
+    // include rest spread so user can pass/override these props
+    if (hasElementPropsInDefaultAttrs(d)) {
+      shouldIncludeRest = true;
+    }
+    if (shouldIncludeRest) {
+      for (const name of explicitTransientProps) {
+        if (!destructureProps.includes(name)) {
+          destructureProps.push(name);
+        }
+      }
+    }
 
     if (allowAsProp || allowClassNameProp || allowStyleProp) {
       const isVoidTag = VOID_TAGS.has(tagName);
@@ -2202,7 +2285,7 @@ export function emitIntrinsicWrappers(emitter: WrapperEmitter): {
       // Use the style merger helper
       const merging = emitStyleMerging({
         j,
-        styleMerger,
+        emitter,
         styleArgs,
         classNameId,
         styleId,

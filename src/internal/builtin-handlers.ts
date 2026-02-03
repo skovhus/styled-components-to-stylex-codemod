@@ -300,11 +300,11 @@ type ConditionalExpressionBody = {
  * Determines if an adapter's CallResolveResult should be treated as a CSS value.
  *
  * Resolution priority:
- * 1. Adapter's explicit `kind` field takes precedence
+ * 1. Adapter's explicit `usage` field takes precedence
  * 2. Otherwise, infer from context: cssProperty present → CSS value, absent → StyleX reference
  */
 function isAdapterResultCssValue(result: CallResolveResult, cssProperty?: string): boolean {
-  return result.kind === "cssValue" || (result.kind === undefined && Boolean(cssProperty));
+  return result.usage === "create" || (result.usage === undefined && Boolean(cssProperty));
 }
 
 /**
@@ -2020,6 +2020,26 @@ function tryResolveInlineStyleValueForNestedPropAccess(node: DynamicNode): Handl
   return { type: "emitInlineStyleValueFromProps" };
 }
 
+function tryResolveInlineStyleValueFromArrowFn(node: DynamicNode): HandlerResult | null {
+  if (!node.css.property) {
+    return null;
+  }
+  const hasMediaAtRule = (node.css.atRuleStack ?? []).some((rule) => rule.startsWith("@media"));
+  const isMediaSelector = (node.css.selector ?? "").trim().startsWith("@media");
+  if (!hasMediaAtRule && !isMediaSelector) {
+    return null;
+  }
+  const expr = node.expr;
+  if (!isArrowFunctionExpression(expr)) {
+    return null;
+  }
+  const body = getFunctionBodyExpr(expr);
+  if (!body) {
+    return null;
+  }
+  return { type: "emitInlineStyleValueFromProps" };
+}
+
 /**
  * Handles simple prop access patterns in interpolations.
  *
@@ -2119,7 +2139,8 @@ export function resolveDynamicNode(
     tryResolveInlineStyleValueForNestedPropAccess(node) ??
     tryResolvePropAccess(node) ??
     tryResolveInlineStyleValueForConditionalExpression(node) ??
-    tryResolveInlineStyleValueForLogicalExpression(node)
+    tryResolveInlineStyleValueForLogicalExpression(node) ??
+    tryResolveInlineStyleValueFromArrowFn(node)
   );
 }
 

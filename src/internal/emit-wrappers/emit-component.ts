@@ -21,7 +21,6 @@ export function emitComponentWrappers(emitter: WrapperEmitter): {
   const wrapperDecls = emitter.wrapperDecls;
   const wrapperNames = emitter.wrapperNames;
   const stylesIdentifier = emitter.stylesIdentifier;
-  const styleMerger = emitter.styleMerger;
   const patternProp = emitter.patternProp;
   // Use emitter methods directly throughout this file to avoid threading helper lambdas.
 
@@ -445,7 +444,7 @@ export function emitComponentWrappers(emitter: WrapperEmitter): {
       // Use the style merger helper
       const merging = emitStyleMerging({
         j,
-        styleMerger,
+        emitter,
         styleArgs,
         classNameId,
         styleId,

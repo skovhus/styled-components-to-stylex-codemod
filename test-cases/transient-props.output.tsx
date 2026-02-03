@@ -25,15 +25,19 @@ function StyledLink(props: StyledLinkProps) {
   return <Link {...rest} {...stylex.props(styles.link, $red && styles.linkRed)} />;
 }
 
-type PointProps = {
+type PointProps = Omit<React.ComponentProps<"div">, "className"> & {
   $size?: number;
-} & { style?: React.CSSProperties; children?: React.ReactNode };
+};
 
 // Pattern 3: Transient prop with dynamic value passed to inlined component
 // The prop is declared in type but not used in styles - must be stripped when inlined
 function Point(props: PointProps) {
-  const { children, style, $size } = props;
-  return <div {...mergedSx(styles.point, undefined, style)}>{children}</div>;
+  const { children, style, $size, ...rest } = props;
+  return (
+    <div {...rest} {...mergedSx(styles.point, undefined, style)}>
+      {children}
+    </div>
+  );
 }
 
 // Pattern 4: styled(Component) where base component declares the transient prop
@@ -83,7 +87,7 @@ export const App = () => (
     <Comp>Not Draggable</Comp>
     <StyledLink text="Click" $red />
     <StyledLink text="Click" />
-    <Point $size={100} style={{ top: "10px" }} />
+    <Point $size={100} style={{ top: "10px" }} data-testid="point" />
     <CollapseArrowIcon $isOpen />
     <CollapseArrowIcon $isOpen={false} />
     <AnimatedContainer $direction="up" $delay={0.4} {...stylex.props(styles.animatedContainer)} />

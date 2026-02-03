@@ -59,7 +59,7 @@ export const App = () => (
     <Comp>Not Draggable</Comp>
     <StyledLink text="Click" $red />
     <StyledLink text="Click" />
-    <Point $size={100} style={{ top: "10px" }} />
+    <Point $size={100} style={{ top: "10px" }} data-testid="point" />
     <CollapseArrowIcon $isOpen />
     <CollapseArrowIcon $isOpen={false} />
     <StyledAnimatedContainer $direction="up" $delay={0.4} />

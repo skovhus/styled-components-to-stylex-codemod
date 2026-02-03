@@ -8,14 +8,10 @@ type ButtonProps = Omit<React.ComponentProps<"button">, "className" | "style"> &
 // Simple renamed destructured prop
 function Button(props: ButtonProps) {
   const { children, ...rest } = props;
-
-  const sx = stylex.props();
   return (
     <button
       {...rest}
-      {...sx}
       style={{
-        ...sx.style,
         color: props.color || "hotpink",
       }}
     >

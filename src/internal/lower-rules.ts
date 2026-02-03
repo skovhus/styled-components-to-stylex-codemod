@@ -4872,8 +4872,13 @@ export function lowerRules(args: {
                     break;
                   }
                   const propsParam = j.identifier("props");
+                  if (/\.(ts|tsx)$/.test(filePath)) {
+                    const typeName = `${decl.localName}Props`;
+                    (propsParam as any).typeAnnotation = j.tsTypeAnnotation(
+                      j.tsTypeReference(j.identifier(typeName)),
+                    );
+                  }
                   const valueExprRaw = (() => {
-                    const unwrapped = unwrapArrowFunctionToPropsExpr(j, e);
                     if (hasThemeAccessInArrowFn(e)) {
                       warnPropInlineStyle(
                         decl,
@@ -4884,7 +4889,7 @@ export function lowerRules(args: {
                       bail = true;
                       return null;
                     }
-                    const inlineExpr = unwrapped?.expr ?? inlineArrowFunctionBody(j, e);
+                    const inlineExpr = inlineArrowFunctionBody(j, e);
                     if (!inlineExpr) {
                       warnPropInlineStyle(
                         decl,
