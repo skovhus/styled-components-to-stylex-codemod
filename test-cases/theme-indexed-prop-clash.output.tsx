@@ -4,9 +4,9 @@ import { $colors } from "./tokens.stylex";
 
 type Colors = "labelBase" | "labelMuted";
 
-type DotProps = Omit<React.ComponentProps<"div">, "className" | "style"> & {
+type DotProps = React.PropsWithChildren<{
   $colors: Colors;
-};
+}>;
 
 function Dot(props: DotProps) {
   const { children, $colors } = props;

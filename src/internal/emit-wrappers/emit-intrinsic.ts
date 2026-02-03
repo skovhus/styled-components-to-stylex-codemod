@@ -52,6 +52,26 @@ export function emitIntrinsicWrappers(emitter: WrapperEmitter): {
       j.memberExpression(j.identifier(stylesIdentifier), j.identifier(key)),
     );
 
+  /**
+   * Check if a component can use simpler PropsWithChildren type instead of
+   * verbose intersection type with element props. This is true when:
+   * - Component is not exported
+   * - Only uses transient props ($-prefixed) and children
+   */
+  const canUseSimplePropsType = (args: {
+    isExported: boolean;
+    usedAttrs: Set<string>;
+    isVoidTag?: boolean;
+  }): boolean => {
+    const { isExported, usedAttrs, isVoidTag = false } = args;
+    if (isExported || isVoidTag) {
+      return false;
+    }
+    const hasOnlyTransientCustomProps =
+      !usedAttrs.has("*") && [...usedAttrs].every((n) => n === "children" || n.startsWith("$"));
+    return hasOnlyTransientCustomProps;
+  };
+
   const shouldIncludeRestForProps = (args: {
     usedAsValue: boolean;
     hasLocalUsage: boolean;
@@ -1070,6 +1090,17 @@ export function emitIntrinsicWrappers(emitter: WrapperEmitter): {
     })();
     const finalTypeText = (() => {
       if (explicit) {
+        // For non-exported components that only use transient props ($-prefixed),
+        // use simple PropsWithChildren instead of verbose intersection type
+        if (
+          canUseSimplePropsType({
+            isExported: d.isExported ?? false,
+            usedAttrs,
+            isVoidTag: VOID_TAGS.has(tagName),
+          })
+        ) {
+          return emitter.withChildren(extrasTypeText);
+        }
         if (VOID_TAGS.has(tagName)) {
           const base = emitter.reactIntrinsicAttrsType(tagName);
           const omitted: string[] = [];
@@ -2049,6 +2080,16 @@ export function emitIntrinsicWrappers(emitter: WrapperEmitter): {
           return emitter.joinIntersection(extendBaseTypeText, explicit);
         }
         if (needsRestForType) {
+          // For non-exported components that only use transient props ($-prefixed),
+          // use simple PropsWithChildren instead of verbose intersection type
+          if (
+            canUseSimplePropsType({
+              isExported: d.isExported ?? false,
+              usedAttrs: usedAttrsForType,
+            })
+          ) {
+            return emitter.withChildren(explicit);
+          }
           return emitter.joinIntersection(extendBaseTypeText, explicit);
         }
         if (allowClassNameProp || allowStyleProp) {

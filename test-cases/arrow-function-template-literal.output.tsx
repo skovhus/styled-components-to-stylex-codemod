@@ -1,10 +1,10 @@
 import * as React from "react";
 import * as stylex from "@stylexjs/stylex";
 
-type BoxProps = Omit<React.ComponentProps<"div">, "className" | "style"> & {
+type BoxProps = React.PropsWithChildren<{
   $width: string;
   $height: string;
-};
+}>;
 
 // Direct template literal body with string props (values used directly in CSS)
 function Box(props: BoxProps) {
@@ -14,9 +14,9 @@ function Box(props: BoxProps) {
   );
 }
 
-type MixedBoxProps = Omit<React.ComponentProps<"div">, "className" | "style"> & {
+type MixedBoxProps = React.PropsWithChildren<{
   $padding: string;
-};
+}>;
 
 // Mixed static and dynamic styles
 function MixedBox(props: MixedBoxProps) {
@@ -36,13 +36,13 @@ function MixedBox(props: MixedBoxProps) {
   );
 }
 
-type MultiPropBoxProps = Omit<React.ComponentProps<"div">, "className" | "style"> & {
+type MultiPropBoxProps = React.PropsWithChildren<{
   $margin: string;
   $border: string;
   $padding: string;
   $background: string;
   $scrollMargin: string;
-};
+}>;
 
 // Multiple dynamic properties in a single template literal
 // Note: dynamic shorthand values should be preserved via inline styles.

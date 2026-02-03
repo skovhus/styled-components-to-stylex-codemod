@@ -36,10 +36,10 @@ function Link(props: LinkProps) {
   );
 }
 
-type BoxProps = Omit<React.ComponentProps<"div">, "className" | "style"> & {
+type BoxProps = React.PropsWithChildren<{
   $background?: string;
   $padding?: string;
-};
+}>;
 
 // Custom prop filtering logic (transient props pattern)
 function Box(props: BoxProps) {
