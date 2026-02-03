@@ -64,6 +64,9 @@ export type WarningType =
   | "Unsupported selector: descendant/child/sibling selector"
   | "Unsupported selector: interpolated pseudo selector"
   | "Unsupported selector: unknown component selector"
+  | "Unsupported css`` mixin: after-base mixin style is not a plain object"
+  | "Unsupported css`` mixin: nested contextual conditions in after-base mixin"
+  | "Unsupported css`` mixin: cannot infer base default for after-base contextual override (base value is non-literal)"
   | "Using styled-components components as mixins is not supported; use css`` mixins or strings instead";
 
 export interface WarningLog {
