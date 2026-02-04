@@ -240,10 +240,46 @@ export function upgradePolymorphicAsPropTypesStep(ctx: TransformContext): StepRe
     processFunction(init, firstParam);
   });
 
-  // Remove unused type declarations
+  // Remove unused type declarations, but only if they're not exported or referenced elsewhere
   for (const typeName of typesToRemove) {
-    root.find(j.TSInterfaceDeclaration, { id: { type: "Identifier", name: typeName } }).remove();
-    root.find(j.TSTypeAliasDeclaration, { id: { type: "Identifier", name: typeName } }).remove();
+    // Check if the type is exported
+    const isExported = (decl: any): boolean => {
+      // Check for `export interface/type`
+      if (decl.parent?.node?.type === "ExportNamedDeclaration") {
+        return true;
+      }
+      // Check for standalone `export { TypeName }`
+      const exportSpecifiers = root.find(j.ExportSpecifier, {
+        local: { type: "Identifier", name: typeName },
+      } as any);
+      if (exportSpecifiers.size() > 0) {
+        return true;
+      }
+      return false;
+    };
+
+    // Check if the type is referenced elsewhere (not just in the function we upgraded)
+    const isReferencedElsewhere = (): boolean => {
+      // Count all references to this type name as a type
+      const typeRefs = root.find(j.TSTypeReference, {
+        typeName: { type: "Identifier", name: typeName },
+      } as any);
+      // If there are more than 0 references (since we already replaced the function param),
+      // the type is still used elsewhere
+      return typeRefs.size() > 0;
+    };
+
+    // Remove interfaces
+    root
+      .find(j.TSInterfaceDeclaration, { id: { type: "Identifier", name: typeName } } as any)
+      .filter((p: any) => !isExported(p) && !isReferencedElsewhere())
+      .remove();
+
+    // Remove type aliases
+    root
+      .find(j.TSTypeAliasDeclaration, { id: { type: "Identifier", name: typeName } } as any)
+      .filter((p: any) => !isExported(p) && !isReferencedElsewhere())
+      .remove();
   }
 
   return CONTINUE;

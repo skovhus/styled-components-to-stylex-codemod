@@ -208,13 +208,24 @@ export function emitIntrinsicWrappers(emitter: WrapperEmitter): {
     allowStyleProp: boolean;
     extra?: string | null;
   }): { typeExprText: string; genericParams: string } => {
-    const { tagName, extra } = args;
+    const { tagName, allowClassNameProp, allowStyleProp, extra } = args;
     const genericParams = `C extends React.ElementType = "${tagName}"`;
 
     // Simple polymorphic pattern:
     // React.ComponentPropsWithRef<C> & { customProps; as?: C }
     // Note: Custom props come AFTER base to ensure they override any conflicting types
-    const base = "React.ComponentPropsWithRef<C>";
+    // Omit className/style when not allowed
+    const omitted: string[] = [];
+    if (!allowClassNameProp) {
+      omitted.push('"className"');
+    }
+    if (!allowStyleProp) {
+      omitted.push('"style"');
+    }
+    const base =
+      omitted.length > 0
+        ? `Omit<React.ComponentPropsWithRef<C>, ${omitted.join(" | ")}>`
+        : "React.ComponentPropsWithRef<C>";
     if (extra) {
       // Omit as from extra since we're adding our own as?: C
       const extraWithoutAs = `Omit<${extra}, "as">`;
