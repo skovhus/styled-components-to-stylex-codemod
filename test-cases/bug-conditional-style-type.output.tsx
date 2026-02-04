@@ -50,7 +50,7 @@ export function IconWithTransform(
       {...rest}
       {...stylex.props(
         noDate && !selected && status === Status.active
-          ? styles.iconWithTransformCondTruthy
+          ? styles.iconWithTransformNoDateNotSelectedStatusActive
           : undefined,
       )}
     />
@@ -83,7 +83,7 @@ const styles = stylex.create({
   iconWithTeamColorFill: (fill: string) => ({
     fill,
   }),
-  iconWithTransformCondTruthy: {
+  iconWithTransformNoDateNotSelectedStatusActive: {
     transform: "scale(0.66)",
   },
 });

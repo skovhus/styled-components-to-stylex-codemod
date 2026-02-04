@@ -193,6 +193,33 @@ export function toSuffixFromProp(propName: string): string {
     return "Variant";
   }
 
+  // Helper to convert dotted paths to PascalCase: `config.enabled` => `ConfigEnabled`
+  const dottedToPascal = (s: string): string => {
+    if (!s.includes(".")) {
+      return s;
+    }
+    return s
+      .split(".")
+      .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
+      .join("");
+  };
+
+  // Helper to remove consecutive duplicate words in PascalCase:
+  // `UserRoleRoleAdmin` => `UserRoleAdmin`, `StatusStatusActive` => `StatusActive`
+  const dedupeWords = (s: string): string => {
+    // Split PascalCase into words: "UserRoleRoleAdmin" => ["User", "Role", "Role", "Admin"]
+    const words = s.split(/(?=[A-Z])/).filter(Boolean);
+    // Remove consecutive duplicates (case-insensitive comparison)
+    const deduped: string[] = [];
+    for (const word of words) {
+      const last = deduped[deduped.length - 1];
+      if (!last || last.toLowerCase() !== word.toLowerCase()) {
+        deduped.push(word);
+      }
+    }
+    return deduped.join("");
+  };
+
   // Handle CSS variable names: `--component-width` => `ComponentWidth`
   if (raw.startsWith("--")) {
     const withoutDashes = raw
@@ -207,7 +234,7 @@ export function toSuffixFromProp(propName: string): string {
   //   `size === "large"` -> `SizeLarge`
   //   `variant === "primary"` -> `VariantPrimary`
   //   `!isActive` -> `NotActive`
-  const trimmed = raw.trim();
+  const trimmed = dottedToPascal(raw.trim());
 
   // Handle negation first to avoid incorrect splitting on || inside negated expressions
   // e.g., `!($mode === "gradient" || $mode === "pattern")` -> `NotModeGradientOrModePattern`
@@ -263,14 +290,15 @@ export function toSuffixFromProp(propName: string): string {
     const rhs = rhsRaw || (eq === "!==" ? "NotMatch" : "Match");
     const lhsSuffix = lhs.charAt(0).toUpperCase() + lhs.slice(1);
     const rhsSuffix = rhs.charAt(0).toUpperCase() + rhs.slice(1);
-    return eq === "!==" ? `${lhsSuffix}Not${rhsSuffix}` : `${lhsSuffix}${rhsSuffix}`;
+    const combined = eq === "!==" ? `${lhsSuffix}Not${rhsSuffix}` : `${lhsSuffix}${rhsSuffix}`;
+    return dedupeWords(combined);
   }
 
   // Common boolean convention: `$isActive` -> `Active` (matches existing fixtures)
-  if (raw.startsWith("is") && raw.length > 2 && /[A-Z]/.test(raw.charAt(2))) {
-    return raw.slice(2);
+  if (trimmed.startsWith("is") && trimmed.length > 2 && /[A-Z]/.test(trimmed.charAt(2))) {
+    return trimmed.slice(2);
   }
-  return raw.charAt(0).toUpperCase() + raw.slice(1);
+  return trimmed.charAt(0).toUpperCase() + trimmed.slice(1);
 }
 
 export function buildUnsupportedCssWarnings(usages: UnsupportedCssUsage[]): WarningLog[] {

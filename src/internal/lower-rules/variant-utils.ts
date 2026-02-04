@@ -104,6 +104,11 @@ export const createPropTestHelpers = (
       if (!propRoot) {
         return null;
       }
+      // theme.* paths are not supported - StyleX doesn't have runtime theme access.
+      // Bail out so the transform can emit the appropriate warning.
+      if (propRoot === "theme") {
+        return null;
+      }
       const whenName = [propRoot, ...rest].join(".");
       return { propName: propRoot, whenName };
     }
