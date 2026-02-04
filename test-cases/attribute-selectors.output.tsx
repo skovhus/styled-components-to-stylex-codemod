@@ -51,7 +51,6 @@ const styles = stylex.create({
     paddingBlock: "8px",
     paddingInline: "12px",
     borderWidth: "2px",
-
     borderStyle: {
       default: "solid",
       ":read-only": "dashed",
@@ -62,7 +61,6 @@ const styles = stylex.create({
     },
     borderRadius: "4px",
     fontSize: "14px",
-
     outline: {
       default: null,
       ":focus": "none",

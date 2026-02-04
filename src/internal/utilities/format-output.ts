@@ -5,6 +5,9 @@ export function formatOutput(code: string): string {
     /(\n\s*\},)\n\n(\s+(?:[a-zA-Z_$][a-zA-Z0-9_$]*|["'].*?["']|::[a-zA-Z-]+|@[a-zA-Z-]+|:[a-zA-Z-]+)\s*:)/g,
     "$1\n$2",
   );
+  // Remove blank lines between style properties inside stylex.create objects.
+  // Matches: comma + blank line(s) + indented property/comment (4+ spaces indent suggests object interior)
+  out = out.replace(/,\n\n+(    +(?:[a-zA-Z_$"']|\/\/|\/\*))/g, ",\n$1");
 
   // Normalize `content` strings: prefer `'\"...\"'` form (matches fixtures) over escaped double-quotes.
   // Case 1: content: "\"X\""  (double-quoted with escapes)

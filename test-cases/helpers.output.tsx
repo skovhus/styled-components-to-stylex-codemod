@@ -52,7 +52,6 @@ const styles = stylex.create({
   button: {
     paddingBlock: "0.5em",
     paddingInline: "1em",
-
     backgroundColor: {
       default: $colors.primaryColor,
       ":hover": $colors.bgSub,

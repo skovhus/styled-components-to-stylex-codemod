@@ -75,7 +75,6 @@ const styles = stylex.create({
   hoverMediaSwatchColor: (props) => ({
     color: {
       default: null,
-
       ":hover": {
         default: null,
         "@media (hover: hover)": `var(--tone, ${props.$tone})`,

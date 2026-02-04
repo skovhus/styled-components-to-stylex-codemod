@@ -29,10 +29,8 @@ const styles = stylex.create({
   groupHeaderRow: {
     position: "sticky",
     top: "var(--sticky-top, 0px)",
-
     // above regular rows
     zIndex: 3,
-
     borderTopWidth: "1px",
     borderTopStyle: "solid",
     borderTopColor: $colors.bgBorderFaint,

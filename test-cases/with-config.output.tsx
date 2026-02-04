@@ -59,14 +59,12 @@ const styles = stylex.create({
     paddingInline: "12px",
     borderWidth: "2px",
     borderStyle: "solid",
-
     borderColor: {
       default: "#ccc",
       ":focus": "#BF4F74",
     },
     borderRadius: "4px",
     fontSize: "14px",
-
     outline: {
       default: null,
       ":focus": "none",

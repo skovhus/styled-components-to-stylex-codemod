@@ -16,14 +16,12 @@ const styles = stylex.create({
     paddingInline: "12px",
     borderWidth: "1px",
     borderStyle: "solid",
-
     borderColor: {
       default: "#ccc",
       ":focus:not(:disabled)": "#bf4f74",
       ":hover:not(:disabled):not(:focus)": "#999",
     },
     borderRadius: "4px",
-
     backgroundColor: {
       default: "white",
       ":disabled": "#f5f5f5",
@@ -43,7 +41,6 @@ const styles = stylex.create({
     width: "20px",
     height: "20px",
     cursor: "pointer",
-
     accentColor: {
       default: null,
       ":checked:not(:disabled)": "#bf4f74",

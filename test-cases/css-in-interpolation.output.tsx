@@ -36,7 +36,6 @@ const styles = stylex.create({
   buttonPrimary: {
     backgroundColor: "blue",
     color: "white",
-
     "::after": {
       content: '""',
       position: "absolute",

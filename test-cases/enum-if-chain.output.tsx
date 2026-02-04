@@ -31,10 +31,8 @@ export const App = () => (
 const styles = stylex.create({
   topArrowStem: {
     opacity: 1,
-
     // Top of stem - where it connects to arrow head
     transformOrigin: "8px 4.5px",
-
     transition: "opacity 150ms ease,transform 150ms ease",
     transform: "scaleY(1)",
   },

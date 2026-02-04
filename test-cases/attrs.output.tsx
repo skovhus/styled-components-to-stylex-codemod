@@ -162,7 +162,6 @@ const styles = stylex.create({
     marginRight: 0,
     marginBottom: "1em",
     marginLeft: 0,
-
     "::placeholder": {
       color: "#bf4f74",
     },

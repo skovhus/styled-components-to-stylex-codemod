@@ -13,7 +13,6 @@ const styles = stylex.create({
   button: {
     paddingBlock: vars.spacingSm,
     paddingInline: vars.spacingMd,
-
     backgroundColor: {
       default: vars.colorPrimary,
       ":hover": vars.colorSecondary,

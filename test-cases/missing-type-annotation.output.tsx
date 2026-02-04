@@ -67,7 +67,6 @@ const styles = stylex.create({
 
   input: {
     padding: "8px",
-
     outline: {
       default: null,
       ":focus": "2px solid blue",

@@ -21,10 +21,8 @@ const styles = stylex.create({
   wrapper: {
     /* A height of 10 */
     height: "10px",
-
     /* Fixed width */
     width: "50px",
-
     // This is important
     overflowY: "scroll",
   },
