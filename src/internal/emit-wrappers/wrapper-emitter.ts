@@ -729,13 +729,13 @@ export class WrapperEmitter {
     const lines: string[] = [];
     if (!needsBroadAttrs) {
       if (allowClassNameProp) {
-        lines.push(`  className?: string;`);
+        lines.push(`className?: string`);
       }
       if (allowStyleProp) {
-        lines.push(`  style?: React.CSSProperties;`);
+        lines.push(`style?: React.CSSProperties`);
       }
       const elementType = TAG_TO_HTML_ELEMENT[tagName] ?? "HTMLElement";
-      lines.push(`  ref?: React.Ref<${elementType}>;`);
+      lines.push(`ref?: React.Ref<${elementType}>`);
     }
 
     for (const attr of [...used].sort((a, b) => a.localeCompare(b))) {
@@ -751,10 +751,15 @@ export class WrapperEmitter {
       if (skipProps?.has(attr)) {
         continue;
       }
-      lines.push(`  ${this.toTypeKey(attr)}?: any;`);
+      lines.push(`${this.toTypeKey(attr)}?: any`);
     }
 
-    const literal = lines.length > 0 ? `{\n${lines.join("\n")}\n}` : "{}";
+    const literal =
+      lines.length > 1
+        ? `{\n  ${lines.join(";\n  ")};\n}`
+        : lines.length === 1
+          ? `{ ${lines[0]} }`
+          : "{}";
 
     if (!needsBroadAttrs) {
       if (VOID_TAGS.has(tagName)) {
