@@ -55,7 +55,7 @@ const makeCssProperty = (
   return p;
 };
 
-export type ValuePatternContext = {
+type ValuePatternContext = {
   api: API;
   j: JSCodeshift;
   filePath: string;

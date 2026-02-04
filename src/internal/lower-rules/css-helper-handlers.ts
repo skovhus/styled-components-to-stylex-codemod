@@ -22,7 +22,7 @@ type ImportMeta = { importedName: string; source: ImportSource };
 
 type ResolveImportInScope = (localName: string, identNode?: unknown) => ImportMeta | null;
 
-export type CssHelperHandlersContext = {
+type CssHelperHandlersContext = {
   j: JSCodeshift;
   filePath: string;
   decl: StyledDecl;

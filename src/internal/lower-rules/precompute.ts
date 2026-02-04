@@ -36,57 +36,6 @@ export const computeDeclBasePropValues = (
 };
 
 /**
- * Determines if a styled component is simple enough to be used as a mixin.
- * Returns true only for components with static styles and no complex features.
- */
-export const isSimpleMixin = (decl: StyledDecl): boolean => {
-  // Bail if it has dynamic styles dependent on props
-  if (decl.styleFnFromProps && decl.styleFnFromProps.length > 0) {
-    return false;
-  }
-  // Bail if it has variant dimensions (prop-based variants)
-  if (decl.variantDimensions && decl.variantDimensions.length > 0) {
-    return false;
-  }
-  // Bail if it has enum variants
-  if (decl.enumVariant) {
-    return false;
-  }
-  // Bail if it has compound variants
-  if (decl.compoundVariants && decl.compoundVariants.length > 0) {
-    return false;
-  }
-  // Bail if it needs a wrapper component
-  if (decl.needsWrapperComponent) {
-    return false;
-  }
-  // Bail if it has attrs that affect styling
-  if (decl.attrsInfo) {
-    const { staticAttrs, conditionalAttrs, defaultAttrs } = decl.attrsInfo;
-    if (
-      Object.keys(staticAttrs).length > 0 ||
-      conditionalAttrs.length > 0 ||
-      (defaultAttrs && defaultAttrs.length > 0)
-    ) {
-      return false;
-    }
-  }
-  // Bail if it has inline style props
-  if (decl.inlineStyleProps && decl.inlineStyleProps.length > 0) {
-    return false;
-  }
-  // Bail if it has variant style keys
-  if (decl.variantStyleKeys && Object.keys(decl.variantStyleKeys).length > 0) {
-    return false;
-  }
-  // Bail if it has extra stylex props args
-  if (decl.extraStylexPropsArgs && decl.extraStylexPropsArgs.length > 0) {
-    return false;
-  }
-  return true;
-};
-
-/**
  * Adds a style key to decl.extraStyleKeys and tracks order in decl.mixinOrder.
  * Returns true if the key was added (not already present).
  */
