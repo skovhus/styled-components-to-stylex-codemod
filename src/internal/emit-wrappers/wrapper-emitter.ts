@@ -720,18 +720,9 @@ export class WrapperEmitter {
     tagName: string;
     allowClassNameProp: boolean;
     allowStyleProp: boolean;
-    includeAsProp?: boolean;
     skipProps?: Set<string>;
   }): string {
-    const {
-      d,
-      tagName,
-      allowClassNameProp,
-      allowStyleProp,
-      includeAsProp = false,
-      skipProps,
-    } = args;
-    void includeAsProp;
+    const { d, tagName, allowClassNameProp, allowStyleProp, skipProps } = args;
     const used = this.getUsedAttrs(d.localName);
     const needsBroadAttrs = used.has("*") || !!(d as any).usedAsValue;
 
@@ -797,12 +788,9 @@ export class WrapperEmitter {
     d: StyledDecl;
     allowClassNameProp: boolean;
     allowStyleProp: boolean;
-    includeAsProp?: boolean;
-    skipProps?: Set<string>;
   }): string {
-    const { d, allowClassNameProp, allowStyleProp, includeAsProp = false } = args;
+    const { d, allowClassNameProp, allowStyleProp } = args;
     const lines: string[] = [];
-    void includeAsProp;
     const literal = lines.length > 0 ? `{\n${lines.join("\n")}\n}` : "{}";
     const base = `React.ComponentPropsWithRef<typeof ${(d.base as any).ident}>`;
     const omitted: string[] = [];
