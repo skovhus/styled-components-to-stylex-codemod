@@ -756,7 +756,7 @@ export class WrapperEmitter {
 
     const literal =
       lines.length > 1
-        ? `{\n  ${lines.join(";\n  ")};\n}`
+        ? `{\n  ${lines.join(",\n  ")}\n}`
         : lines.length === 1
           ? `{ ${lines[0]} }`
           : "{}";

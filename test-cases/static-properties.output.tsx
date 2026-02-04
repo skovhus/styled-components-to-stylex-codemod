@@ -3,13 +3,11 @@ import * as stylex from "@stylexjs/stylex";
 import { mergedSx } from "./lib/mergedSx";
 import { ActionMenuTextDivider, ActionMenuGroupHeader } from "./lib/action-menu-divider";
 
-type ListItemProps = React.ComponentProps<"div">;
-
 // Static properties on styled components should be preserved when
 // they become wrapper functions.
 
 // Pattern 1: Static properties defined directly on styled component
-export function ListItem(props: ListItemProps) {
+export function ListItem(props: React.ComponentProps<"div">) {
   const { className, children, style } = props;
 
   return <div {...mergedSx(styles.listItem, className, style)}>{children}</div>;
@@ -18,10 +16,10 @@ export function ListItem(props: ListItemProps) {
 ListItem.HEIGHT = 42;
 ListItem.PADDING = 8;
 
-type BaseButtonProps = React.ComponentProps<"button"> & { as?: React.ElementType };
-
 // Pattern 2: styled(BaseComponent) with static props defined in same file
-function BaseButton(props: BaseButtonProps) {
+function BaseButton<C extends React.ElementType = "button">(
+  props: React.ComponentProps<"button"> & { as?: C },
+) {
   const { as: Component = "button", className, children, style } = props;
 
   return <Component {...mergedSx(styles.baseButton, className, style)}>{children}</Component>;
@@ -29,10 +27,8 @@ function BaseButton(props: BaseButtonProps) {
 
 BaseButton.HEIGHT = 36;
 
-type ExtendedButtonProps = React.ComponentProps<"button">;
-
 // ExtendedButton should have HEIGHT from BaseButton
-export function ExtendedButton(props: ExtendedButtonProps) {
+export function ExtendedButton(props: React.ComponentProps<"button">) {
   const { className, children, style } = props;
 
   return (
@@ -44,25 +40,20 @@ export function ExtendedButton(props: ExtendedButtonProps) {
 
 ExtendedButton.HEIGHT = (BaseButton as any).HEIGHT;
 
-type CommandMenuTextDividerProps = Omit<
-  React.ComponentPropsWithRef<typeof ActionMenuTextDivider>,
-  "className" | "style"
->;
-
 // Pattern 3: styled(ImportedComponent) should inherit static properties
 // ActionMenuTextDivider.HEIGHT is defined in another file
-export function CommandMenuTextDivider(props: CommandMenuTextDividerProps) {
+export function CommandMenuTextDivider(
+  props: Omit<React.ComponentPropsWithRef<typeof ActionMenuTextDivider>, "className" | "style">,
+) {
   return <ActionMenuTextDivider {...props} {...stylex.props(styles.commandMenuTextDivider)} />;
 }
 
 CommandMenuTextDivider.HEIGHT = ActionMenuTextDivider.HEIGHT;
-type CommandMenuGroupHeaderProps = Omit<
-  React.ComponentPropsWithRef<typeof ActionMenuGroupHeader>,
-  "className" | "style"
->;
 
 // Pattern 4: Another imported component with static property
-export function CommandMenuGroupHeader(props: CommandMenuGroupHeaderProps) {
+export function CommandMenuGroupHeader(
+  props: Omit<React.ComponentPropsWithRef<typeof ActionMenuGroupHeader>, "className" | "style">,
+) {
   return <ActionMenuGroupHeader {...props} {...stylex.props(styles.commandMenuGroupHeader)} />;
 }
 
