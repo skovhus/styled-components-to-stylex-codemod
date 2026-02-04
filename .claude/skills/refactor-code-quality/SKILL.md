@@ -106,6 +106,19 @@ rg "!;" --type ts
 - Narrowing types with type guards
 - Fixing the source of the type uncertainty
 
+#### 3c. Find Linter Warning Suppression Hacks
+
+```bash
+# Search for void used to suppress unused variable warnings
+rg "^\s*void \w+;" --type ts
+```
+
+**Never use `void variable;` to suppress unused variable warnings.** This is a code smell that hides the real problem. Instead:
+
+- **Remove the parameter** if it's not needed
+- **Prefix with underscore** (`_unusedParam`) if intentionally unused
+- **Actually use it** if it should be doing something
+
 ### Step 4: Refactor to Remove Duplication
 
 #### 4a. Extract Shared Functions
@@ -172,6 +185,7 @@ Before considering the refactoring complete:
 - [ ] No unnecessary "any" types (some jscodeshift patterns may require them)
 - [ ] Type assertions minimized and justified (AST manipulation may need some)
 - [ ] No unnecessary non-null assertions (the ! operator)
+- [ ] No `void variable;` hacks to suppress linter warnings
 - [ ] Exports are at the top of each file
 - [ ] pnpm check passes
 - [ ] Helper functions have descriptive names
