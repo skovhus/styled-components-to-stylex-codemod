@@ -633,6 +633,14 @@ export function lowerRules(args: {
         if (node.type === "UnaryExpression" && node.operator === "!" && node.argument) {
           return check(node.argument as ExpressionKind);
         }
+        // Check BinaryExpression: props.theme.mode === "dark"
+        if (node.type === "BinaryExpression") {
+          return check(node.left as ExpressionKind) || check(node.right as ExpressionKind);
+        }
+        // Check LogicalExpression: props.theme.isDark && props.enabled
+        if (node.type === "LogicalExpression") {
+          return check(node.left as ExpressionKind) || check(node.right as ExpressionKind);
+        }
         return false;
       };
       return check(test);
