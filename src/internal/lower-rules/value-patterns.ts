@@ -413,12 +413,10 @@ export const createValuePatternHandlers = (ctx: ValuePatternContext) => {
         fnKey = `${baseFnKey}Alt${idx}`;
       }
       if (!styleFnDecls.has(fnKey)) {
-        const param = j.identifier(out.prop);
-        const valueId = j.identifier(out.prop);
+        const paramName = cssPropertyToIdentifier(out.prop);
+        const param = j.identifier(paramName);
         annotateParamFromJsxProp(param, nullishPropName);
-        const bodyExpr = j.objectExpression([
-          j.property("init", j.identifier(out.prop), valueId as any),
-        ]);
+        const bodyExpr = j.objectExpression([makeCssProperty(j, out.prop, paramName)]);
         styleFnDecls.set(fnKey, j.arrowFunctionExpression([param], bodyExpr));
       }
       if (!styleFnFromProps.some((p) => p.fnKey === fnKey)) {
