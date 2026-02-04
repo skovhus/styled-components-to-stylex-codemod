@@ -21,6 +21,7 @@ function PositionBase<C extends React.ElementType = "div">(
   props: PositionProps & React.ComponentPropsWithRef<C> & { as?: C },
 ) {
   const { as: Component = "div", className, children, style, top, right, bottom, left } = props;
+
   return (
     <Component
       {...mergedSx(
@@ -70,15 +71,19 @@ const styles = stylex.create({
   positionBaseTop: (top: string) => ({
     top,
   }),
+
   positionBaseRight: (right: string) => ({
     right,
   }),
+
   positionBaseBottom: (bottom: string) => ({
     bottom,
   }),
+
   positionBaseLeft: (left: string) => ({
     left,
   }),
+
   relative: {
     position: "relative",
   },

@@ -9,11 +9,11 @@ type Props = {
   hollow?: boolean;
   size?: Size;
 };
-
 type ColorBadgeProps = Omit<React.ComponentProps<"div">, "className" | "style"> & Props;
 
 export function ColorBadge(props: ColorBadgeProps) {
   const { children, hollow, color, size: size = "normal" } = props;
+
   return (
     <div
       {...stylex.props(
@@ -55,6 +55,7 @@ const styles = stylex.create({
   colorBadgeBorderColor: (borderColor: string) => ({
     borderColor,
   }),
+
   colorBadgeBackgroundColor: (backgroundColor: string) => ({
     backgroundColor,
   }),

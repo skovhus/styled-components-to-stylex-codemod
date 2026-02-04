@@ -14,6 +14,7 @@ type ContainerLinkProps = Omit<React.ComponentProps<"a">, "className" | "style">
 
 export function ContainerLink(props: ContainerLinkProps) {
   const { children, ...rest } = props;
+
   return (
     <a {...rest} {...stylex.props(stylex.defaultMarker())}>
       {children}

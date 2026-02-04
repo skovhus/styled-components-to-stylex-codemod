@@ -17,6 +17,7 @@ function Text(
   },
 ) {
   const { className, children, style } = props;
+
   return <span {...mergedSx(styles.text, className, style)}>{children}</span>;
 }
 
@@ -36,6 +37,7 @@ export function Label(props: LabelProps) {
 export function FormField() {
   // When .attrs({ as: "label" }) is used, ref should be typed as HTMLLabelElement
   const labelRef = React.useRef<HTMLLabelElement>(null);
+
   return (
     <div>
       <Label ref={labelRef} htmlFor="input-id">

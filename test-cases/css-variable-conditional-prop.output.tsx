@@ -8,6 +8,7 @@ type ContainerWrapperProps = React.PropsWithChildren<{
 // A wrapper that conditionally sets a CSS custom property based on prop
 function ContainerWrapper(props: ContainerWrapperProps) {
   const { children, $width } = props;
+
   return (
     <div
       {...stylex.props(

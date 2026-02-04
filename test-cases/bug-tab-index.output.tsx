@@ -8,6 +8,7 @@ type Props = {
 
 export function Component(props: Omit<React.ComponentProps<"div">, "className" | "style"> & Props) {
   const { children, $applyBackground, tabIndex: tabIndex = 0, ...rest } = props;
+
   return (
     <div
       tabIndex={tabIndex}

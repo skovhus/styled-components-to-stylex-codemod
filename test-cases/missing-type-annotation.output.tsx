@@ -14,6 +14,7 @@ interface BoxProps {
 // Component with props that affect styles
 export function Box(props: React.PropsWithChildren<BoxProps>) {
   const { children, bordered, bg } = props;
+
   return (
     <div
       {...stylex.props(
@@ -63,8 +64,10 @@ const styles = stylex.create({
   boxBackgroundColor: (backgroundColor: string) => ({
     backgroundColor,
   }),
+
   input: {
     padding: "8px",
+
     outline: {
       default: null,
       ":focus": "2px solid blue",

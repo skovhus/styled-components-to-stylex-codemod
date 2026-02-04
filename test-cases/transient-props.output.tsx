@@ -7,6 +7,7 @@ type CompProps = React.PropsWithChildren<{
 
 function Comp(props: CompProps) {
   const { children, $draggable } = props;
+
   return (
     <div {...stylex.props(styles.comp, $draggable ? styles.compDraggable : undefined)}>
       {children}
@@ -26,6 +27,7 @@ type StyledLinkProps = Omit<React.ComponentPropsWithRef<typeof Link>, "className
 
 function StyledLink(props: StyledLinkProps) {
   const { $red, ...rest } = props;
+
   return <Link {...rest} {...stylex.props(styles.link, $red ? styles.linkRed : undefined)} />;
 }
 
@@ -37,6 +39,7 @@ type PointProps = Omit<React.ComponentProps<"div">, "className"> & {
 // The prop is declared in type but not used in styles - must be stripped when inlined
 function Point(props: PointProps) {
   const { children, style, $size, ...rest } = props;
+
   return (
     <div {...rest} {...mergedSx(styles.point, undefined, style)}>
       {children}
@@ -48,7 +51,6 @@ function Point(props: PointProps) {
 // The transient prop is used for styling by the wrapper
 // CollapseArrowIcon pattern - ArrowIcon declares $isOpen in props, wrapper uses it for styling
 import * as React from "react";
-
 import { Icon, type IconProps } from "./lib/icon";
 
 /** Props for the ArrowIcon component. */
@@ -76,6 +78,7 @@ type CollapseArrowIconProps = Omit<
 // The wrapper uses $isOpen for styling; ArrowIcon declares it in props but filters before spreading
 export function CollapseArrowIcon(props: CollapseArrowIconProps) {
   const { $isOpen, ...rest } = props;
+
   return (
     <ArrowIcon
       $isOpen={$isOpen}

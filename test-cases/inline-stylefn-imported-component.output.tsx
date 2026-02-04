@@ -26,6 +26,7 @@ const styles = stylex.create({
   styledExternalColor: (color: string) => ({
     color,
   }),
+
   styledExternalPadding: (padding: string) => ({
     padding,
   }),

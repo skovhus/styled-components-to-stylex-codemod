@@ -7,6 +7,7 @@ const styles = stylex.create({
     borderRightWidth: "1px",
     borderRightStyle: "solid",
     borderRightColor: "hotpink",
+
     color: {
       default: "blue",
       ":hover": "red",

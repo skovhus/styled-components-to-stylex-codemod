@@ -6,6 +6,7 @@ function Button<C extends React.ElementType = "button">(
   props: React.ComponentPropsWithRef<C> & { as?: C },
 ) {
   const { as: Component = "button", className, children, style, ...rest } = props;
+
   return (
     <Component {...rest} {...mergedSx(styles.button, className, style)}>
       {children}

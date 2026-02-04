@@ -9,6 +9,7 @@ type ButtonProps = Omit<React.ComponentProps<"button">, "className" | "style"> &
 // Using shouldForwardProp to filter props (v5 pattern)
 function Button(props: ButtonProps) {
   const { children, color, size } = props;
+
   return (
     <button
       {...stylex.props(
@@ -29,6 +30,7 @@ type LinkProps = Omit<React.ComponentProps<"a">, "className" | "style"> & {
 // Using isPropValid from @emotion
 function Link(props: LinkProps) {
   const { children, isActive, ...rest } = props;
+
   return (
     <a {...rest} {...stylex.props(styles.link, isActive ? styles.linkActive : undefined)}>
       {children}
@@ -44,6 +46,7 @@ type BoxProps = React.PropsWithChildren<{
 // Custom prop filtering logic (transient props pattern)
 function Box(props: BoxProps) {
   const { children, $background, $padding } = props;
+
   return (
     <div
       {...stylex.props(
@@ -66,6 +69,7 @@ type CardProps = Omit<React.ComponentProps<"div">, "className" | "style"> & {
 // Filter multiple custom props
 function Card(props: CardProps) {
   const { children, variant, elevation, rounded } = props;
+
   return (
     <div
       {...stylex.props(
@@ -149,6 +153,7 @@ const styles = stylex.create({
   boxBackgroundColor: (backgroundColor: string) => ({
     backgroundColor,
   }),
+
   boxPadding: (padding: string) => ({
     padding,
   }),

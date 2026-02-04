@@ -9,6 +9,7 @@ type CardContainerProps = React.PropsWithChildren<{
 
 function CardContainer(props: CardContainerProps) {
   const { children, disabled, checked } = props;
+
   return (
     <label
       {...stylex.props(
@@ -50,6 +51,7 @@ const styles = stylex.create({
     borderWidth: "1px",
     borderStyle: "solid",
     borderColor: $colors.bgSub,
+
     outlineStyle: {
       default: null,
       ":focus-within:has(:focus-visible)": "solid",
@@ -57,6 +59,7 @@ const styles = stylex.create({
   },
   cardContainerDisabled: {
     opacity: 0.5,
+
     borderColor: {
       default: $colors.bgSub,
       ":hover": $colors.bgBase,

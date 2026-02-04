@@ -9,6 +9,7 @@ type ImgProps = Omit<React.ComponentProps<"img">, "className" | "style"> & {
 
 function Img(props: ImgProps) {
   const { $disabled, $isInactive, ...rest } = props;
+
   return (
     <img
       {...rest}

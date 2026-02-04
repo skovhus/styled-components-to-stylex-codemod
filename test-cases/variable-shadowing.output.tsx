@@ -11,6 +11,7 @@ type ContainerProps = Omit<React.ComponentProps<"div">, "className"> & {
 
 function Container(props: ContainerProps) {
   const { children, style, ...rest } = props;
+
   return (
     <div {...rest} {...mergedSx(stylexStyles.container, undefined, style)}>
       {children}
@@ -34,6 +35,7 @@ export function CollapsingContainer(props: Props) {
         ...containerStyles,
       }
     : { overflow: "hidden" };
+
   return (
     <Container align={align} style={styles}>
       {children}

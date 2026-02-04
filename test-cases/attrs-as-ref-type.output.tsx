@@ -21,6 +21,7 @@ function Text<C extends React.ElementType = "span">(
     style,
     variant: variant = "regular",
   } = props;
+
   return (
     <Component {...mergedSx([styles.text, variants[variant]], className, style)}>
       {children}
@@ -42,6 +43,7 @@ function Label(props: LabelProps) {
 
 export function FormField() {
   const labelRef = React.useRef<HTMLLabelElement>(null);
+
   return (
     <div>
       {/* ref should be typed as HTMLLabelElement since as="label" is set via attrs */}

@@ -25,6 +25,7 @@ const styles = stylex.create({
   link: {
     color: "#BF4F74",
     fontWeight: "bold",
+
     textDecoration: {
       default: "none",
       ":hover": "underline",

@@ -46,6 +46,7 @@ const styles = stylex.create({
     },
     borderRadius: "12px",
     boxShadow: "0 4px 6px rgba(0, 0, 0, 0.1)",
+
     marginBlock: {
       default: null,
       "@media (min-width: 768px)": 0,
@@ -60,6 +61,7 @@ const styles = stylex.create({
     marginRight: 0,
     marginBottom: "1rem",
     marginLeft: 0,
+
     fontSize: {
       default: "1.5rem",
       "@media (min-width: 768px)": "2rem",
@@ -69,6 +71,7 @@ const styles = stylex.create({
   },
   grid: {
     display: "grid",
+
     gridTemplateColumns: {
       default: "1fr",
       "@media (min-width: 768px)": "repeat(2, 1fr)",
@@ -84,16 +87,20 @@ const styles = stylex.create({
     padding: "1rem",
     backgroundColor: "white",
     borderRadius: "8px",
+
     boxShadow: {
       default: "0 2px 4px rgba(0, 0, 0, 0.1)",
+
       ":hover": {
         default: null,
         "@media (hover: hover)": "0 8px 16px rgba(0, 0, 0, 0.15)",
       },
     },
     transition: "transform 0.2s ease,box-shadow 0.2s ease",
+
     transform: {
       default: null,
+
       ":hover": {
         default: null,
         "@media (hover: hover)": "translateY(-4px)",
@@ -116,6 +123,7 @@ const styles = stylex.create({
   },
   button: {
     display: "block",
+
     width: {
       default: "100%",
       "@media (min-width: 768px)": "auto",
@@ -131,8 +139,10 @@ const styles = stylex.create({
     fontSize: "1rem",
     fontWeight: 600,
     transition: "transform 0.2s ease,box-shadow 0.2s ease",
+
     transform: {
       default: null,
+
       ":hover": {
         default: null,
         "@media (hover: hover)": "scale(1.05)",
@@ -141,6 +151,7 @@ const styles = stylex.create({
     },
     boxShadow: {
       default: null,
+
       ":hover": {
         default: null,
         "@media (hover: hover)": "0 4px 12px rgba(65, 105, 225, 0.4)",

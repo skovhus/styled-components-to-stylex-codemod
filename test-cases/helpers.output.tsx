@@ -10,6 +10,7 @@ type TruncatedTextProps = React.PropsWithChildren<{
 // Using CSS snippet helper for truncation
 function TruncatedText(props: TruncatedTextProps) {
   const { children } = props;
+
   return <p {...stylex.props(styles.truncatedText, helpers.truncate)}>{children}</p>;
 }
 
@@ -20,6 +21,7 @@ type CenteredContainerProps = React.PropsWithChildren<{
 // Using CSS snippet helper for flex centering
 function CenteredContainer(props: CenteredContainerProps) {
   const { children } = props;
+
   return <div {...stylex.props(styles.centeredContainer, helpers.flexCenter)}>{children}</div>;
 }
 
@@ -29,6 +31,7 @@ type CardTitleProps = React.PropsWithChildren<{
 
 function CardTitle(props: CardTitleProps) {
   const { children } = props;
+
   return <h3 {...stylex.props(styles.cardTitle, helpers.truncate)}>{children}</h3>;
 }
 
@@ -49,6 +52,7 @@ const styles = stylex.create({
   button: {
     paddingBlock: "0.5em",
     paddingInline: "1em",
+
     backgroundColor: {
       default: $colors.primaryColor,
       ":hover": $colors.bgSub,

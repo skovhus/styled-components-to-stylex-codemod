@@ -23,6 +23,7 @@ type StyledButtonProps = React.ComponentPropsWithRef<typeof Text> & {
 // B's wrapper semantics (as="button") would be lost.
 function StyledButton(props: StyledButtonProps) {
   const { className, style, ...rest } = props;
+
   return <Text as="button" {...rest} {...mergedSx(styles.styledButton, className, style)} />;
 }
 

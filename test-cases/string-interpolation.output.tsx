@@ -5,13 +5,11 @@ import * as stylex from "@stylexjs/stylex";
 
 // String interpolation for dynamic values
 const dynamicColor = "#BF4F74";
-
 const spacing = 16;
 const borderRadius = "4px";
 
 // Template literal with expressions
 const fontSize = 14;
-
 const lineHeight = 1.5;
 
 // Conditional string interpolation
@@ -44,6 +42,7 @@ function DynamicBox(props: DynamicBoxProps) {
     $variant === "primary" && styles.dynamicBoxPrimary,
     $variant !== "primary" && styles.dynamicBoxSecondary,
   );
+
   return <div {...sx}>{children}</div>;
 }
 

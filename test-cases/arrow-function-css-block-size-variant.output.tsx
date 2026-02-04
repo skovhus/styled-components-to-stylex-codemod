@@ -2,10 +2,12 @@ import * as React from "react";
 import * as stylex from "@stylexjs/stylex";
 
 type Props = { size: "tiny" | "small" | "medium" };
+
 type IndicatorProps = Omit<React.ComponentProps<"div">, "className" | "style"> & Props;
 
 function Indicator(props: IndicatorProps) {
   const { children, size } = props;
+
   return <div {...stylex.props(styles.indicator, sizeVariants[size])}>{children}</div>;
 }
 

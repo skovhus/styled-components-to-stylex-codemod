@@ -10,6 +10,7 @@ type FlexContainerProps = React.PropsWithChildren<{
 // Function call form returning a css template literal (not object syntax)
 function FlexContainer(props: FlexContainerProps) {
   const { children, $align } = props;
+
   return (
     <div
       {...stylex.props(styles.flexContainer, $align === "left" && styles.flexContainerAlignLeft)}

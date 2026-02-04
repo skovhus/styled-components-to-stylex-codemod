@@ -8,6 +8,7 @@ type BoxProps = React.PropsWithChildren<{
 
 function Box(props: BoxProps) {
   const { children } = props;
+
   return <div {...stylex.props(styles.borderBottom)}>{children}</div>;
 }
 

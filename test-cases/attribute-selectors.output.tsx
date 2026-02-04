@@ -2,7 +2,6 @@ import * as React from "react";
 import * as stylex from "@stylexjs/stylex";
 
 type InputProps = Omit<React.InputHTMLAttributes<HTMLInputElement>, "className" | "style">;
-
 function Input(props: InputProps) {
   const { type, ...rest } = props;
   const sx = stylex.props(
@@ -12,9 +11,7 @@ function Input(props: InputProps) {
   );
   return <input type={type} {...rest} {...sx} />;
 }
-
 type LinkProps = Omit<React.AnchorHTMLAttributes<HTMLAnchorElement>, "className" | "style">;
-
 function Link(props: LinkProps) {
   const { href, target, children, ...rest } = props;
   const isHttps = href?.startsWith("https");
@@ -54,6 +51,7 @@ const styles = stylex.create({
     paddingBlock: "8px",
     paddingInline: "12px",
     borderWidth: "2px",
+
     borderStyle: {
       default: "solid",
       ":read-only": "dashed",
@@ -64,6 +62,7 @@ const styles = stylex.create({
     },
     borderRadius: "4px",
     fontSize: "14px",
+
     outline: {
       default: null,
       ":focus": "none",

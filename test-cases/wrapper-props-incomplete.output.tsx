@@ -18,6 +18,7 @@ export function TextColor<C extends React.ElementType = "span">(
   props: TextColorProps & React.ComponentPropsWithRef<C> & { as?: C },
 ) {
   const { as: Component = "span", className, children, style, color } = props;
+
   return (
     <Component {...mergedSx(styles.textColorColor(color), className, style)}>{children}</Component>
   );
@@ -33,6 +34,7 @@ interface HighlightProps extends Omit<React.ComponentPropsWithRef<typeof BaseTex
 
 export function Highlight(props: HighlightProps) {
   const { className, children, highlighted, ...rest } = props;
+
   return (
     <BaseText
       {...rest}
@@ -71,6 +73,7 @@ export function ThemeText<C extends React.ElementType = "span">(
   props: ThemeTextProps & React.ComponentPropsWithRef<C> & { as?: C },
 ) {
   const { as: Component = "span", className, children, style, themeColor } = props;
+
   return (
     <Component {...mergedSx(styles.themeTextColor(themeColor), className, style)}>
       {children}
@@ -82,6 +85,7 @@ const styles = stylex.create({
   textColorColor: (color: string) => ({
     color,
   }),
+
   highlight: {
     backgroundColor: "transparent",
   },

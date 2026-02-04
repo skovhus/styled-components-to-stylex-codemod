@@ -10,6 +10,7 @@ type ButtonProps = Omit<React.ComponentProps<"button">, "className" | "style"> &
 // When color is falsy but defined (e.g., ""), should use "blue" (|| fallback)
 function Button(props: ButtonProps) {
   const { children, ...rest } = props;
+
   return (
     <button
       {...rest}
@@ -30,6 +31,7 @@ type CardProps = Omit<React.ComponentProps<"div">, "className" | "style"> & {
 // When size is undefined, should use 16 (default), then check if it equals 16
 function Card(props: CardProps) {
   const { children, ...rest } = props;
+
   return (
     <div
       {...rest}
@@ -49,6 +51,7 @@ type BoxProps = Omit<React.ComponentProps<"div">, "className" | "style"> & {
 // Renamed destructured prop with default AND fallback
 function Box(props: BoxProps) {
   const { children, ...rest } = props;
+
   return (
     <div
       {...rest}
@@ -74,5 +77,4 @@ export const App = () => (
     <Box margin={20}>20px</Box>
   </>
 );
-
 const styles = stylex.create({});

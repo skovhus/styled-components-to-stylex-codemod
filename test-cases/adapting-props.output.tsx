@@ -8,6 +8,7 @@ type ButtonProps = Omit<React.ComponentProps<"button">, "className" | "style"> &
 
 function Button(props: ButtonProps) {
   const { children, hollow, $primary } = props;
+
   return (
     <button
       {...stylex.props(
@@ -32,6 +33,7 @@ type BadgeProps = Omit<React.ComponentProps<"span">, "className" | "style"> & {
 // to prevent the "medium" background from leaking into size === "small"
 function Badge(props: BadgeProps) {
   const { children, size } = props;
+
   return (
     <span
       {...stylex.props(

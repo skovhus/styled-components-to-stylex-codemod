@@ -9,6 +9,7 @@ type TopArrowStemProps = React.PropsWithChildren<{
 
 function TopArrowStem(props: TopArrowStemProps) {
   const { children, $state } = props;
+
   return <g {...stylex.props(styles.topArrowStem, $stateVariants[$state])}>{children}</g>;
 }
 
@@ -30,7 +31,10 @@ export const App = () => (
 const styles = stylex.create({
   topArrowStem: {
     opacity: 1,
-    transformOrigin: "8px 4.5px", // Top of stem - where it connects to arrow head
+
+    // Top of stem - where it connects to arrow head
+    transformOrigin: "8px 4.5px",
+
     transition: "opacity 150ms ease,transform 150ms ease",
     transform: "scaleY(1)",
   },

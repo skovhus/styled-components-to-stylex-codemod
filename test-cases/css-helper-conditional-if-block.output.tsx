@@ -8,6 +8,7 @@ type ContainerProps = Omit<React.ComponentProps<"div">, "className" | "style"> &
 
 export function Container(props: ContainerProps) {
   const { children, size } = props;
+
   return (
     <div
       {...stylex.props(
@@ -33,10 +34,12 @@ const styles = stylex.create({
     fontSize: `${props.size - 4}px`,
     lineHeight: 1,
   }),
+
   containerDefault: (props: { size: number }) => ({
     fontSize: `${props.size - 3}px`,
     lineHeight: `${props.size}px`,
   }),
+
   container: {
     display: "inline-flex",
   },

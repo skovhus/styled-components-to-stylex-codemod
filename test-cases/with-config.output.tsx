@@ -6,6 +6,7 @@ type CardProps = React.PropsWithChildren<{}>;
 // withConfig for componentId (stable class names)
 function Card(props: CardProps) {
   const { children } = props;
+
   return <div {...stylex.props(styles.card)}>{children}</div>;
 }
 
@@ -16,6 +17,7 @@ type InputProps = Omit<React.ComponentProps<"input">, "className" | "style"> & {
 // Combining withConfig options
 function Input(props: InputProps) {
   const { hasError, ...rest } = props;
+
   return (
     <input {...rest} {...stylex.props(styles.input, hasError ? styles.inputHasError : undefined)} />
   );
@@ -57,12 +59,14 @@ const styles = stylex.create({
     paddingInline: "12px",
     borderWidth: "2px",
     borderStyle: "solid",
+
     borderColor: {
       default: "#ccc",
       ":focus": "#BF4F74",
     },
     borderRadius: "4px",
     fontSize: "14px",
+
     outline: {
       default: null,
       ":focus": "none",

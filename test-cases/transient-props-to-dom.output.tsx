@@ -12,6 +12,7 @@ type BoxProps = React.PropsWithChildren<{
 
 export function Box(props: BoxProps) {
   const { children, $isActive, $size } = props;
+
   return (
     <div
       {...stylex.props(
@@ -31,6 +32,7 @@ type ImageProps = Omit<React.ComponentProps<"img">, "className" | "style"> & {
 
 export function Image(props: ImageProps) {
   const { $isInactive, ...rest } = props;
+
   return (
     <img
       {...rest}
@@ -45,6 +47,7 @@ type SliderProps = React.PropsWithChildren<{
 
 function Slider(props: SliderProps) {
   const { children, $height } = props;
+
   return <div {...stylex.props(styles.slider, styles.sliderHeight($height))}>{children}</div>;
 }
 

@@ -32,68 +32,72 @@ const __dirname = dirname(fileURLToPath(import.meta.url));
 const repoRoot = join(__dirname, "..");
 const testCasesDir = join(repoRoot, "test-cases");
 
-async function normalizeCode(code: string) {
-  const { code: formatted } = await format("test.tsx", code);
-  // Remove extra blank line before return statements in tiny wrapper components:
-  //   const { ... } = props;
-  //
-  //   return (...)
-  const cleaned = formatted.replace(
-    /\n(\s*(?:const|let|var)\s+[^\n]+;\n)\n(\s*return\b)/g,
-    "\n$1$2",
-  );
-  return cleaned.trimEnd() + "\n";
+async function normalizeCode(code: string, ext: string) {
+  const { code: formatted } = await format(`test.${ext}`, code);
+  return formatted.trimEnd() + "\n";
 }
 
-async function listFixtureNames() {
+function parseFixtureName(filename: string): { name: string; ext: string } | null {
+  // Match patterns like "foo.input.tsx", "foo.flow.input.jsx"
+  const match = filename.match(/^(.+)\.input\.(tsx|jsx)$/);
+  if (!match) {
+    return null;
+  }
+  return { name: match[1], ext: match[2] };
+}
+
+async function listFixtureNames(): Promise<Array<{ name: string; ext: string }>> {
   const files = await readdir(testCasesDir);
-  const inputNames = files
-    .filter(
-      (f) =>
-        f.endsWith(".input.tsx") && !f.startsWith("_unsupported.") && !f.startsWith("unsupported-"),
-    )
-    .map((f) => f.replace(".input.tsx", ""));
-  return inputNames.sort();
+  return files
+    .filter((f) => !f.startsWith("_unsupported.") && !f.startsWith("unsupported-"))
+    .map(parseFixtureName)
+    .filter((x): x is { name: string; ext: string } => x !== null)
+    .sort((a, b) => a.name.localeCompare(b.name));
 }
 
-async function updateFixture(name: string) {
-  const inputPath = join(testCasesDir, `${name}.input.tsx`);
-  const outputPath = join(testCasesDir, `${name}.output.tsx`);
+async function updateFixture(name: string, ext: string) {
+  const inputPath = join(testCasesDir, `${name}.input.${ext}`);
+  const outputPath = join(testCasesDir, `${name}.output.${ext}`);
   const input = await readFile(inputPath, "utf-8");
+
+  // Determine parser based on filename pattern
+  const parser = name.includes(".flow") ? "flow" : (ext === "jsx" ? "babel" : "tsx");
 
   const result = applyTransform(
     transform,
     { adapter: fixtureAdapter },
     { source: input, path: inputPath },
-    { parser: "tsx" },
+    { parser },
   );
   const out = result || input;
-  await writeFile(outputPath, await normalizeCode(out), "utf-8");
+  await writeFile(outputPath, await normalizeCode(out, ext), "utf-8");
   return outputPath;
 }
 
 const args = new Set(process.argv.slice(2));
 const only = args.has("--only") ? process.argv[process.argv.indexOf("--only") + 1] : null;
 
-const targetNames = (() => {
+const allFixtures = await listFixtureNames();
+
+const targetFixtures = (() => {
   if (only) {
-    return only
+    const names = only
       .split(",")
       .map((s) => s.trim())
       .filter(Boolean);
+    return allFixtures.filter((f) => names.some((n) => f.name === n || f.name.startsWith(n)));
   }
   // Default: update all fixtures that have outputs (excluding unsupported).
-  return null;
+  return allFixtures;
 })();
 
-const names = targetNames ?? (await listFixtureNames());
-for (const name of names) {
+for (const { name, ext } of targetFixtures) {
   // Skip when output file doesn't exist (should only happen for unsupported fixtures).
-  const outPath = join(testCasesDir, `${name}.output.tsx`);
+  const outPath = join(testCasesDir, `${name}.output.${ext}`);
   try {
     await readFile(outPath, "utf-8");
   } catch {
     continue;
   }
-  await updateFixture(name);
+  await updateFixture(name, ext);
 }

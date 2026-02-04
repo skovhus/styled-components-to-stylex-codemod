@@ -18,6 +18,7 @@ type ColorBadgeProps = React.ComponentProps<"span"> & Props;
 
 export function ColorBadge(props: ColorBadgeProps) {
   const { className, children, style, ...rest } = props;
+
   return (
     <span {...rest} {...mergedSx(styles.colorBadge, className, style)}>
       {children}

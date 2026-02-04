@@ -22,6 +22,7 @@ type ButtonProps = Omit<React.ComponentPropsWithRef<typeof BaseButton>, "classNa
 
 function Button(props: ButtonProps) {
   const { children, color: color = "secondary", disabled, ...rest } = props;
+
   return (
     <BaseButton
       disabled={disabled}

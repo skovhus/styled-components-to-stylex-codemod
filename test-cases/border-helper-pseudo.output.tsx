@@ -8,6 +8,7 @@ type StyledHeaderProps = React.PropsWithChildren<{
 
 export function StyledHeader(props: StyledHeaderProps) {
   const { children } = props;
+
   return <header {...stylex.props(styles.styledHeader)}>{children}</header>;
 }
 
@@ -26,6 +27,7 @@ const styles = stylex.create({
     display: "flex",
     padding: "16px",
     backgroundColor: "#f0f0f0",
+
     borderBottomStyle: {
       default: null,
       ":not(:only-child)": "solid",

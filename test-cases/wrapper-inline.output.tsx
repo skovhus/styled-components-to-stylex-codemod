@@ -1,5 +1,6 @@
 import * as React from "react";
 import * as stylex from "@stylexjs/stylex";
+
 import { ExternalComponent } from "./lib/external-component";
 
 export function App() {

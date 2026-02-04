@@ -9,6 +9,7 @@ type BorderedLeftProps = React.PropsWithChildren<{
 // Directional border: expands to borderLeftWidth, borderLeftStyle, borderLeftColor
 function BorderedLeft(props: BorderedLeftProps) {
   const { children } = props;
+
   return <div {...stylex.props(styles.borderLeft)}>{children}</div>;
 }
 
@@ -19,6 +20,7 @@ type BorderedBoxProps = React.PropsWithChildren<{
 // Non-directional border: expands to borderWidth, borderStyle, borderColor
 function BorderedBox(props: BorderedBoxProps) {
   const { children } = props;
+
   return <div {...stylex.props(styles.border)}>{children}</div>;
 }
 

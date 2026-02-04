@@ -9,6 +9,7 @@ type TitleProps = React.PropsWithChildren<{
 // Test logical AND with static template literal
 function Title(props: TitleProps) {
   const { children, $upsideDown } = props;
+
   return (
     <h1 {...stylex.props(styles.title, $upsideDown ? styles.titleUpsideDown : undefined)}>
       {children}
@@ -23,6 +24,7 @@ type DropZoneProps = React.PropsWithChildren<{
 // Test logical AND with template literal containing theme expression
 export function DropZone(props: DropZoneProps) {
   const { children, $isDraggingOver } = props;
+
   return (
     <div
       {...stylex.props(styles.dropZone, $isDraggingOver ? styles.dropZoneDraggingOver : undefined)}
@@ -39,6 +41,7 @@ type CardProps = React.PropsWithChildren<{
 // Test logical AND with template literal containing multiple theme expressions
 export function Card(props: CardProps) {
   const { children, $isHighlighted } = props;
+
   return (
     <div {...stylex.props(styles.card, $isHighlighted ? styles.cardHighlighted : undefined)}>
       {children}

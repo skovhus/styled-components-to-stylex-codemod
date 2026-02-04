@@ -8,6 +8,7 @@ type ButtonProps = React.PropsWithChildren<{
 
 export function Button(props: ButtonProps) {
   const { children, $primary } = props;
+
   return (
     <button {...stylex.props(styles.button, $primary ? styles.buttonPrimary : undefined)}>
       {children}
@@ -35,6 +36,7 @@ const styles = stylex.create({
   buttonPrimary: {
     backgroundColor: "blue",
     color: "white",
+
     "::after": {
       content: '""',
       position: "absolute",

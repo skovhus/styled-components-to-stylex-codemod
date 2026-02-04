@@ -8,6 +8,7 @@ type LayeredBoxProps = React.PropsWithChildren<{
 // Pattern 1: props.$zIndex !== undefined && template literal with interpolation
 function LayeredBox(props: LayeredBoxProps) {
   const { children, $zIndex } = props;
+
   return (
     <div
       {...stylex.props(
@@ -27,6 +28,7 @@ type GrayscaleImageProps = Omit<React.ComponentProps<"img">, "className" | "styl
 // Pattern 2: Simple logical AND with css helper (using destructured props)
 function GrayscaleImage(props: GrayscaleImageProps) {
   const { $isBw, ...rest } = props;
+
   return (
     <img
       {...rest}
@@ -43,6 +45,7 @@ type DialogTextProps = React.PropsWithChildren<{
 // Pattern 3: Chained logical expressions with multiple conditions
 function DialogText(props: DialogTextProps) {
   const { children, $renderingContext, $lines } = props;
+
   return (
     <p
       {...stylex.props(
@@ -89,6 +92,7 @@ const styles = stylex.create({
   layeredBoxZIndex: (zIndex: number) => ({
     zIndex,
   }),
+
   grayscaleImage: {
     width: "100px",
   },

@@ -20,7 +20,9 @@ type IconWithTeamColorProps = Omit<React.ComponentProps<"svg">, "className" | "s
 //              is not assignable to parameter of type 'StyleXArray<...>'
 export function IconWithTeamColor(props: IconWithTeamColorProps) {
   const { children, $color } = props;
+
   const sx = stylex.props($color ? styles.iconWithTeamColorFill($color) : undefined);
+
   return (
     <svg {...sx} className={["color-override", sx.className].filter(Boolean).join(" ")}>
       {children}
@@ -44,6 +46,7 @@ type IconWithTransformProps = Omit<
  */
 export function IconWithTransform(props: IconWithTransformProps) {
   const { noDate, selected, status, ...rest } = props;
+
   return (
     <Icon_
       status={status}
@@ -83,6 +86,7 @@ const styles = stylex.create({
   iconWithTeamColorFill: (fill: string) => ({
     fill,
   }),
+
   iconWithTransformCondTruthy: {
     transform: "scale(0.66)",
   },

@@ -29,6 +29,7 @@ type OuterWrapperProps = React.ComponentProps<"div">;
 // These styled components are passed as values, not just rendered
 function OuterWrapper(props: OuterWrapperProps) {
   const { className, children, style, ...rest } = props;
+
   return (
     <div {...rest} {...mergedSx(styles.outerWrapper, className, style)}>
       {children}
@@ -40,6 +41,7 @@ type InnerWrapperProps = React.ComponentProps<"div">;
 
 function InnerWrapper(props: InnerWrapperProps) {
   const { className, children, style, ...rest } = props;
+
   return (
     <div {...rest} {...mergedSx(styles.innerWrapper, className, style)}>
       {children}

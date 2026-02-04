@@ -8,6 +8,7 @@ type ButtonProps = Omit<React.ComponentProps<"button">, "className" | "style"> &
 // Simple renamed destructured prop
 function Button(props: ButtonProps) {
   const { children, ...rest } = props;
+
   return (
     <button
       {...rest}
@@ -55,9 +56,11 @@ const styles = stylex.create({
   boxMargin: (margin: string) => ({
     margin,
   }),
+
   textFontWeight: (fontWeight: string) => ({
     fontWeight,
   }),
+
   textFontSize: (fontSize: string) => ({
     fontSize,
   }),

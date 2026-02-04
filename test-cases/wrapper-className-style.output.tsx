@@ -21,6 +21,7 @@ type StyledBadgeProps = Props & {
 
 function StyledBadge(props: StyledBadgeProps) {
   const { className, children, style, ...rest } = props;
+
   return (
     <span {...rest} {...mergedSx(styles.styledBadge, className, style)}>
       {children}
@@ -37,6 +38,7 @@ type BadgeProps = Props & {
 export function ColorBadge(props: BadgeProps) {
   // className and style should be available from the styled component
   const { className, children, style } = props;
+
   return (
     <StyledBadge className={className} style={style}>
       {children}
