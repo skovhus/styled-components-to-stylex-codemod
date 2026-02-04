@@ -1,5 +1,9 @@
 /**
  * Shared helper utilities and context types for emitting intrinsic wrappers.
+ *
+ * Intrinsic wrappers are wrappers around intrinsic elements (e.g. div, a, input)
+ * generated from styled-components usage. Emission builds AST nodes for these
+ * wrappers and their props types.
  */
 import type { ASTNode, Collection, JSCodeshift, Property } from "jscodeshift";
 import type { StyledDecl } from "../transform-types.js";

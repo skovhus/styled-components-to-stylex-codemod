@@ -1,5 +1,8 @@
 /**
  * Emits specialized intrinsic wrappers (input/link/enum/sibling variants).
+ *
+ * These handle attribute-driven behavior or wrapper-specific style conditions
+ * that need bespoke AST output rather than the generic wrapper paths.
  */
 import type { StyledDecl } from "../transform-types.js";
 import type { ExpressionKind } from "./types.js";

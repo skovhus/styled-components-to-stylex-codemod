@@ -1,5 +1,8 @@
 /**
  * Emits intrinsic wrappers for shouldForwardProp configurations.
+ *
+ * These wrappers filter props before forwarding and generate stylex merge
+ * AST for the remaining props.
  */
 import type { StyledDecl } from "../transform-types.js";
 import { buildStyleFnConditionExpr } from "../utilities/jscodeshift-utils.js";

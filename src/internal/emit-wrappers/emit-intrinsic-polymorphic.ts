@@ -1,5 +1,8 @@
 /**
  * Emits intrinsic wrappers that require polymorphic `as` support.
+ *
+ * These wrappers generate AST for polymorphic props types and `as`-aware
+ * wrapper functions so the chosen element type drives allowed props.
  */
 import type { StyledDecl } from "../transform-types.js";
 import { collectInlineStylePropNames, type ExpressionKind } from "./types.js";

@@ -1,5 +1,8 @@
 /**
  * Emits simple intrinsic wrappers (withConfig and basic exported cases).
+ *
+ * These are the low-complexity paths that still need wrapper boundaries
+ * but do not require specialized or polymorphic handling.
  */
 import type { StyledDecl } from "../transform-types.js";
 import { collectInlineStylePropNames, type ExpressionKind, type InlineStyleProp } from "./types.js";

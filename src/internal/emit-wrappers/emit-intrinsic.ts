@@ -1,5 +1,8 @@
 /**
- * Entry point that orchestrates intrinsic wrapper emission.
+ * Entry point for emitting intrinsic wrappers (styled.div / styled("a") / etc).
+ *
+ * "Emit" here means building AST nodes for wrapper functions and props types
+ * that will be printed into the transformed output.
  */
 import type { ASTNode } from "jscodeshift";
 import type { WrapperEmitter } from "./wrapper-emitter.js";
