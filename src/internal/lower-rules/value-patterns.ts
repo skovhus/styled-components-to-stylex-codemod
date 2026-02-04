@@ -351,7 +351,9 @@ export const createValuePatternHandlers = (ctx: ValuePatternContext) => {
       return path[0]!;
     };
 
-    const parseNullishBranch = (node: any): { propName: string; fallback: ExpressionKind } | null => {
+    const parseNullishBranch = (
+      node: any,
+    ): { propName: string; fallback: ExpressionKind } | null => {
       if (!node || node.type !== "LogicalExpression" || node.operator !== "??") {
         return null;
       }
@@ -623,7 +625,8 @@ export const createValuePatternHandlers = (ctx: ValuePatternContext) => {
     if (!expr || expr.type !== "ArrowFunctionExpression") {
       return false;
     }
-    const paramName = expr.params?.[0]?.type === "Identifier" ? (expr.params[0].name as string) : null;
+    const paramName =
+      expr.params?.[0]?.type === "Identifier" ? (expr.params[0].name as string) : null;
     if (!paramName) {
       return false;
     }

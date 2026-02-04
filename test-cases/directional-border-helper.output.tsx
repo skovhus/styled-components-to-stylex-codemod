@@ -1,24 +1,24 @@
-import * as React from "react";
+import React from "react";
 import * as stylex from "@stylexjs/stylex";
 import { pixelVars, $colors } from "./tokens.stylex";
 
-type BorderedLeftProps = React.PropsWithChildren<{
-  ref?: React.Ref<HTMLDivElement>;
-}>;
-
 // Directional border: expands to borderLeftWidth, borderLeftStyle, borderLeftColor
-function BorderedLeft(props: BorderedLeftProps) {
+function BorderedLeft(
+  props: React.PropsWithChildren<{
+    ref?: React.Ref<HTMLDivElement>;
+  }>,
+) {
   const { children } = props;
 
   return <div {...stylex.props(styles.borderLeft)}>{children}</div>;
 }
 
-type BorderedBoxProps = React.PropsWithChildren<{
-  ref?: React.Ref<HTMLDivElement>;
-}>;
-
 // Non-directional border: expands to borderWidth, borderStyle, borderColor
-function BorderedBox(props: BorderedBoxProps) {
+function BorderedBox(
+  props: React.PropsWithChildren<{
+    ref?: React.Ref<HTMLDivElement>;
+  }>,
+) {
   const { children } = props;
 
   return <div {...stylex.props(styles.border)}>{children}</div>;

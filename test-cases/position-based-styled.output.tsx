@@ -40,17 +40,17 @@ function PositionBase<C extends React.ElementType = "div">(
   );
 }
 
-type RelativeProps = Omit<React.ComponentPropsWithRef<typeof PositionBase>, "className" | "style">;
-
 /** A relatively positioned container. */
-export function Relative(props: RelativeProps) {
+export function Relative(
+  props: Omit<React.ComponentPropsWithRef<typeof PositionBase>, "className" | "style">,
+) {
   return <PositionBase {...props} {...stylex.props(styles.relative)} />;
 }
 
-type AbsoluteProps = Omit<React.ComponentPropsWithRef<typeof PositionBase>, "className" | "style">;
-
 /** An absolutely positioned container. */
-export function Absolute(props: AbsoluteProps) {
+export function Absolute(
+  props: Omit<React.ComponentPropsWithRef<typeof PositionBase>, "className" | "style">,
+) {
   return <PositionBase {...props} {...stylex.props(styles.absolute)} />;
 }
 

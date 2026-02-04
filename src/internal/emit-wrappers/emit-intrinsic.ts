@@ -2342,8 +2342,10 @@ export function emitIntrinsicWrappers(emitter: WrapperEmitter): {
           allowStyleProp,
           hasNoCustomProps,
         });
-      } else {
+      } else if (!hasNoCustomProps) {
         typeAliasEmitted = emitSimplePropsType(d.localName, typeText, allowAsProp);
+      } else {
+        typeAliasEmitted = false;
       }
 
       // If we couldn't emit the named `${localName}Props` type (because it already exists in-file

@@ -71,7 +71,10 @@ import {
   computeDeclBasePropValues,
   trackMixinPropertyValues,
 } from "./lower-rules/precompute.js";
-import { buildSafeIndexedParamName, createImportResolver } from "./lower-rules/import-resolution.js";
+import {
+  buildSafeIndexedParamName,
+  createImportResolver,
+} from "./lower-rules/import-resolution.js";
 import {
   buildPseudoMediaPropValue,
   createPropTestHelpers,
@@ -482,8 +485,7 @@ export function lowerRules(args: {
     });
 
     const dropAllTestInfoProps = (testInfo: TestInfo): void => {
-      const propsToCheck =
-        testInfo.allPropNames ?? (testInfo.propName ? [testInfo.propName] : []);
+      const propsToCheck = testInfo.allPropNames ?? (testInfo.propName ? [testInfo.propName] : []);
       for (const prop of propsToCheck) {
         if (prop && !prop.startsWith("$")) {
           ensureShouldForwardPropDrop(decl, prop);
@@ -551,33 +553,31 @@ export function lowerRules(args: {
 
     // (animation + interpolated-string helpers extracted to `./lower-rules/*`)
 
-    const {
-      tryHandlePropertyTernaryTemplateLiteral,
-      tryHandleCssHelperFunctionSwitchBlock,
-    } = createCssHelperHandlers({
-      j,
-      filePath,
-      decl,
-      warnings,
-      styleObj,
-      variantBuckets,
-      variantStyleKeys,
-      cssHelperFunctions,
-      usedCssHelperFunctions,
-      cssValueToJs,
-      parseExpr,
-      resolveCall,
-      resolveImportInScope,
-      resolverImports,
-      isCssHelperTaggedTemplate,
-      resolveCssHelperTemplate,
-      applyVariant,
-      dropAllTestInfoProps,
-      toSuffixFromProp,
-      componentInfo,
-      handlerContext,
-      markBail,
-    });
+    const { tryHandlePropertyTernaryTemplateLiteral, tryHandleCssHelperFunctionSwitchBlock } =
+      createCssHelperHandlers({
+        j,
+        filePath,
+        decl,
+        warnings,
+        styleObj,
+        variantBuckets,
+        variantStyleKeys,
+        cssHelperFunctions,
+        usedCssHelperFunctions,
+        cssValueToJs,
+        parseExpr,
+        resolveCall,
+        resolveImportInScope,
+        resolverImports,
+        isCssHelperTaggedTemplate,
+        resolveCssHelperTemplate,
+        applyVariant,
+        dropAllTestInfoProps,
+        toSuffixFromProp,
+        componentInfo,
+        handlerContext,
+        markBail,
+      });
 
     const resolveStaticCssBlock = (rawCss: string): Record<string, unknown> | null => {
       const wrappedRawCss = `& { ${rawCss} }`;

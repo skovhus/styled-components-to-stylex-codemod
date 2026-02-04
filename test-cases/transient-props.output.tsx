@@ -70,13 +70,10 @@ function ArrowIcon(props: IconProps & ArrowIconProps) {
   );
 }
 
-type CollapseArrowIconProps = Omit<
-  React.ComponentPropsWithRef<typeof ArrowIcon>,
-  "className" | "style"
->;
-
 // The wrapper uses $isOpen for styling; ArrowIcon declares it in props but filters before spreading
-export function CollapseArrowIcon(props: CollapseArrowIconProps) {
+export function CollapseArrowIcon(
+  props: Omit<React.ComponentPropsWithRef<typeof ArrowIcon>, "className" | "style">,
+) {
   const { $isOpen, ...rest } = props;
 
   return (

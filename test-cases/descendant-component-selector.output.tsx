@@ -10,9 +10,7 @@ import * as React from "react";
 import * as stylex from "@stylexjs/stylex";
 import { $colors } from "./tokens.stylex";
 
-type ContainerLinkProps = Omit<React.ComponentProps<"a">, "className" | "style">;
-
-export function ContainerLink(props: ContainerLinkProps) {
+export function ContainerLink(props: Omit<React.ComponentProps<"a">, "className" | "style">) {
   const { children, ...rest } = props;
 
   return (

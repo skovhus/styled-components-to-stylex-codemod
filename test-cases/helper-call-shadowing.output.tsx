@@ -11,11 +11,9 @@ function createThemedComponents() {
   // Local function shadows the imported `color` helper
   const color = (hex: string) => `#${hex}`;
 
-  type ThemedBoxProps = React.ComponentProps<"div">;
-
   // This uses the LOCAL color function, not the imported helper.
   // The codemod should preserve the shadowed call via inline style fallback.
-  function ThemedBox(props: ThemedBoxProps) {
+  function ThemedBox(props: React.ComponentProps<"div">) {
     const { className, children, style } = props;
 
     return (

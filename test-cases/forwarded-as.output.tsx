@@ -14,10 +14,10 @@ function Button<C extends React.ElementType = "button">(
   );
 }
 
-type ButtonWrapperProps = Omit<React.ComponentPropsWithRef<typeof Button>, "className" | "style">;
-
 // Wrapper that always renders as a specific element but passes `as` through
-function ButtonWrapper(props: ButtonWrapperProps) {
+function ButtonWrapper(
+  props: Omit<React.ComponentPropsWithRef<typeof Button>, "className" | "style">,
+) {
   return <Button {...props} {...stylex.props(styles.buttonWrapper)} />;
 }
 

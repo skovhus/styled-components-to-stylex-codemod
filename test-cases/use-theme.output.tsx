@@ -19,12 +19,12 @@ export function Input(props: InputProps) {
   return <ColorPickerWrapper style={{ backgroundColor: someCustomColor }} />;
 }
 
-type ColorPickerWrapperProps = React.PropsWithChildren<{
-  style?: React.CSSProperties;
-  ref?: React.Ref<HTMLDivElement>;
-}>;
-
-function ColorPickerWrapper(props: ColorPickerWrapperProps) {
+function ColorPickerWrapper(
+  props: React.PropsWithChildren<{
+    style?: React.CSSProperties;
+    ref?: React.Ref<HTMLDivElement>;
+  }>,
+) {
   const { children, style } = props;
 
   return <div {...mergedSx(styles.colorPickerWrapper, undefined, style)}>{children}</div>;
