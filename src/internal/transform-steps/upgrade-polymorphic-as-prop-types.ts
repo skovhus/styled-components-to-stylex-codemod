@@ -1,6 +1,9 @@
 import { CONTINUE, type StepResult } from "../transform-types.js";
 import { TransformContext } from "../transform-context.js";
-import { isReactElementTypeRef } from "../utilities/polymorphic-as-detection.js";
+import {
+  extractDefaultAsTagFromDestructure,
+  isReactElementTypeRef,
+} from "../utilities/polymorphic-as-detection.js";
 
 // Standard props that are already in React.ComponentPropsWithRef<C>
 const STANDARD_PROPS = new Set(["className", "style", "children", "ref"]);
@@ -56,45 +59,6 @@ const typeOnlyHasStandardProps = (root: any, j: any, typeName: string): boolean 
   }
 
   return false;
-};
-
-const extractDefaultAsTagFromDestructure = (fn: any): string | null => {
-  const bodyStmts: any[] = fn?.body?.body ?? [];
-  for (const stmt of bodyStmts) {
-    if (stmt?.type !== "VariableDeclaration") {
-      continue;
-    }
-    for (const dcl of stmt.declarations ?? []) {
-      const id = dcl?.id;
-      if (id?.type !== "ObjectPattern") {
-        continue;
-      }
-      for (const prop of id.properties ?? []) {
-        if (prop?.type !== "Property" && prop?.type !== "ObjectProperty") {
-          continue;
-        }
-        const key = prop.key;
-        if (key?.type !== "Identifier" || key.name !== "as") {
-          continue;
-        }
-        const value = prop.value;
-        // { as: Component = "span" }
-        if (
-          value?.type === "AssignmentPattern" &&
-          value.left?.type === "Identifier" &&
-          value.left.name === "Component" &&
-          value.right?.type === "Literal" &&
-          typeof value.right.value === "string"
-        ) {
-          return value.right.value;
-        }
-        if (value?.type === "AssignmentPattern" && value.right?.type === "StringLiteral") {
-          return value.right.value;
-        }
-      }
-    }
-  }
-  return null;
 };
 
 const rewriteAsPropTypeInTypeNode = (j: any, typeNode: any): { changed: boolean } => {

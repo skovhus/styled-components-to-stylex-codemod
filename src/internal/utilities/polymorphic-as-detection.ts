@@ -1,6 +1,52 @@
 import type { ASTNode, Collection, JSCodeshift } from "jscodeshift";
 
 /**
+ * Extract the default tag name from a function's destructuring pattern.
+ * Looks for: `const { as: Component = "tag", ... } = props;`
+ *
+ * @param fn - A function AST node (FunctionDeclaration, FunctionExpression, ArrowFunctionExpression)
+ * @returns The default tag name string, or null if not found
+ */
+export const extractDefaultAsTagFromDestructure = (fn: any): string | null => {
+  const bodyStmts: any[] = fn?.body?.body ?? [];
+  for (const stmt of bodyStmts) {
+    if (stmt?.type !== "VariableDeclaration") {
+      continue;
+    }
+    for (const dcl of stmt.declarations ?? []) {
+      const id = dcl?.id;
+      if (id?.type !== "ObjectPattern") {
+        continue;
+      }
+      for (const prop of id.properties ?? []) {
+        if (prop?.type !== "Property" && prop?.type !== "ObjectProperty") {
+          continue;
+        }
+        const key = prop.key;
+        if (key?.type !== "Identifier" || key.name !== "as") {
+          continue;
+        }
+        const value = prop.value;
+        // { as: Component = "span" }
+        if (
+          value?.type === "AssignmentPattern" &&
+          value.left?.type === "Identifier" &&
+          value.left.name === "Component" &&
+          value.right?.type === "Literal" &&
+          typeof value.right.value === "string"
+        ) {
+          return value.right.value;
+        }
+        if (value?.type === "AssignmentPattern" && value.right?.type === "StringLiteral") {
+          return value.right.value;
+        }
+      }
+    }
+  }
+  return null;
+};
+
+/**
  * Check if a type node is a reference to React.ElementType or ElementType.
  */
 export const isReactElementTypeRef = (typeNode: any): boolean => {

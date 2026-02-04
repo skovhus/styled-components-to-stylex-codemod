@@ -1,6 +1,7 @@
 import type { ASTNode, Comment } from "jscodeshift";
 import type { WrapperEmitter } from "./wrapper-emitter.js";
 import { ensureReactBinding } from "../utilities/ensure-react-binding.js";
+import { extractDefaultAsTagFromDestructure } from "../utilities/polymorphic-as-detection.js";
 
 export function insertEmittedWrappers(args: {
   emitter: WrapperEmitter;
@@ -88,42 +89,7 @@ export function insertEmittedWrappers(args: {
         })();
 
         if (propsTypeUsesGeneric) {
-          const defaultTag = (() => {
-            // Look for: const { as: Component = "tag", ... } = props;
-            const decls = (node as any).body?.body ?? [];
-            for (const stmt of decls) {
-              if (stmt?.type !== "VariableDeclaration") {
-                continue;
-              }
-              for (const dcl of stmt.declarations ?? []) {
-                const id = dcl?.id;
-                if (id?.type !== "ObjectPattern") {
-                  continue;
-                }
-                for (const prop of id.properties ?? []) {
-                  if (prop?.type !== "Property") {
-                    continue;
-                  }
-                  const key = prop.key;
-                  if (key?.type !== "Identifier" || key.name !== "as") {
-                    continue;
-                  }
-                  const value = prop.value;
-                  if (
-                    value?.type === "AssignmentPattern" &&
-                    value.left?.type === "Identifier" &&
-                    value.left.name === "Component" &&
-                    value.right?.type === "Literal" &&
-                    typeof value.right.value === "string"
-                  ) {
-                    return value.right.value as string;
-                  }
-                }
-              }
-            }
-            return null;
-          })();
-
+          const defaultTag = extractDefaultAsTagFromDestructure(node);
           if (defaultTag) {
             (node as any).typeParameters = j(
               `function _<C extends React.ElementType = "${defaultTag}">() { return null }`,
