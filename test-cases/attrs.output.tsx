@@ -137,6 +137,19 @@ export function FocusableScroll(props: FocusableProps) {
   );
 }
 
+// Pattern 7: styled.div.attrs with prop reference (native element)
+// When an intrinsic element has defaultAttrs, it generates a wrapper component
+// that destructures the referenced prop and applies the default value
+function Box(props: Omit<React.ComponentProps<"div">, "className" | "style">) {
+  const { children, tabIndex, ...rest } = props;
+
+  return (
+    <div tabIndex={tabIndex ?? 0} {...rest} {...stylex.props(styles.box)}>
+      {children}
+    </div>
+  );
+}
+
 export const App = () => (
   <>
     <Input $small placeholder="Small" />
@@ -147,6 +160,7 @@ export const App = () => (
     <Scrollable>Scrollable content</Scrollable>
     <ScrollableWithType gutter="stable">Type alias scrollable</ScrollableWithType>
     <FocusableScroll focusIndex={5}>Focus content</FocusableScroll>
+    <Box>Box content</Box>
   </>
 );
 
@@ -194,5 +208,8 @@ const styles = stylex.create({
   },
   focusableScroll: {
     overflowY: "auto",
+  },
+  box: {
+    overflow: "auto",
   },
 });

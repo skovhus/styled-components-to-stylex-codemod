@@ -1411,3 +1411,36 @@ export const App = () => <Box>Test</Box>;
     expect(closureWarning).toBeUndefined();
   });
 });
+
+describe("attrs defaultAttrs nullish coalescing", () => {
+  it("should preserve nullish-coalescing semantics for intrinsic element attrs", () => {
+    // Regression test: styled.div.attrs with props.X ?? defaultValue should
+    // use nullish coalescing (??) in the output, not destructuring defaults.
+    // Destructuring defaults only apply on undefined, but ?? also handles null.
+    const source = `
+import styled from "styled-components";
+
+const Box = styled.div.attrs((props) => ({
+  tabIndex: props.tabIndex ?? 0,
+}))\`
+  overflow: auto;
+\`;
+
+export const App = () => <Box />;
+`;
+
+    const result = transformWithWarnings(
+      { source, path: "attrs-nullish-coalescing.tsx" },
+      { jscodeshift: j, j, stats: () => {}, report: () => {} },
+      { adapter: fixtureAdapter },
+    );
+
+    expect(result.code).not.toBeNull();
+    // Should use nullish coalescing in JSX attribute, not destructuring default
+    // Bad: const { tabIndex: tabIndex = 0, ...rest } = props; ... tabIndex={tabIndex}
+    // Good: const { tabIndex, ...rest } = props; ... tabIndex={tabIndex ?? 0}
+    expect(result.code).toContain("tabIndex ?? 0");
+    // Should NOT use destructuring default for this pattern
+    expect(result.code).not.toMatch(/tabIndex:\s*tabIndex\s*=\s*0/);
+  });
+});

@@ -130,6 +130,11 @@ export function analyzeBeforeEmitStep(ctx: TransformContext): StepResult {
     if (decl.base.kind === "intrinsic" && (decl.attrsInfo?.conditionalAttrs?.length ?? 0) > 0) {
       decl.needsWrapperComponent = true;
     }
+    // Intrinsic components with default attrs (e.g. `tabIndex: props.tabIndex ?? 0`)
+    // need a wrapper to destructure the prop and apply the default value.
+    if (decl.base.kind === "intrinsic" && (decl.attrsInfo?.defaultAttrs?.length ?? 0) > 0) {
+      decl.needsWrapperComponent = true;
+    }
     // shouldForwardProp needs wrapper
     if (decl.shouldForwardProp) {
       decl.needsWrapperComponent = true;
