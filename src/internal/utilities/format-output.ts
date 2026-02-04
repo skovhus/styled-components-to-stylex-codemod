@@ -55,7 +55,7 @@ function removeBlankLinesInStylexCreate(code: string): string {
       }
     }
 
-    // Extract the block content and remove blank lines between properties
+    // Extract the block content and normalize it
     const blockContent = code.slice(markerIdx, blockEnd + 1);
     const cleaned = blockContent
       // Remove blank lines after closing braces followed by property
@@ -64,7 +64,10 @@ function removeBlankLinesInStylexCreate(code: string): string {
         "$1\n$2",
       )
       // Remove blank lines after commas followed by property or comment
-      .replace(/,\n\n+(\s+(?:[a-zA-Z_$"']|\/\/|\/\*))/g, ",\n$1");
+      .replace(/,\n\n+(\s+(?:[a-zA-Z_$"']|\/\/|\/\*))/g, ",\n$1")
+      // Normalize `content` strings: prefer `'\"...\"'` form over escaped double-quotes
+      .replace(/content:\s+"\\"([\s\S]*?)\\""/g, "content: '\"$1\"'")
+      .replace(/content:\s+"'\s*([\s\S]*?)\s*'"/g, "content: '\"$1\"'");
 
     result += cleaned;
     pos = blockEnd + 1;
@@ -74,14 +77,8 @@ function removeBlankLinesInStylexCreate(code: string): string {
 }
 
 export function formatOutput(code: string): string {
-  // Remove blank lines inside stylex.create blocks (targeted, defensive approach)
+  // Normalize stylex.create blocks (targeted, defensive approach)
   let out = removeBlankLinesInStylexCreate(code);
-
-  // Normalize `content` strings: prefer `'\"...\"'` form (matches fixtures) over escaped double-quotes.
-  // Case 1: content: "\"X\""  (double-quoted with escapes)
-  out = out.replace(/content:\s+"\\"([\s\S]*?)\\""/g, "content: '\"$1\"'");
-  // Case 2: content: \"'X'\"   (double-quoted string that includes single quotes)
-  out = out.replace(/content:\s+"'\s*([\s\S]*?)\s*'"/g, "content: '\"$1\"'");
 
   // Normalize import spacing at the top of the file:
   // - Keep React and StyleX imports adjacent (no blank line between them).
