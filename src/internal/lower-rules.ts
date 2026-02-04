@@ -18,7 +18,6 @@ import {
   extractRootAndPath,
   getArrowFnParamBindings,
   getFunctionBodyExpr,
-  getMemberPathFromIdentifier,
   getNodeLocStart,
   isAstNode,
   staticValueToLiteral,
@@ -69,7 +68,6 @@ import type { ExpressionKind, TestInfo } from "./lower-rules/decl-types.js";
 import {
   addStyleKeyMixin,
   computeDeclBasePropValues,
-  isSimpleMixin,
   trackMixinPropertyValues,
 } from "./lower-rules/precompute.js";
 import { buildSafeIndexedParamName, createImportResolver } from "./lower-rules/import-resolution.js";
