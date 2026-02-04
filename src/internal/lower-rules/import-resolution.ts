@@ -2,7 +2,7 @@
  * Import resolution and shadowing detection utilities.
  */
 import type { ASTNode, Collection, JSCodeshift } from "jscodeshift";
-import type { ImportSource } from "../adapter.js";
+import type { ImportSource } from "../../adapter.js";
 import type { ExpressionKind } from "./decl-types.js";
 import {
   type AstPath,

@@ -2,7 +2,7 @@
  * Pattern handlers for specific dynamic value shapes.
  */
 import type { API, JSCodeshift } from "jscodeshift";
-import type { Adapter, ImportSpec } from "../adapter.js";
+import type { Adapter, ImportSpec } from "../../adapter.js";
 import type { StyledDecl } from "../transform-types.js";
 import type { WarningLog } from "../logger.js";
 import type { ExpressionKind } from "./decl-types.js";
@@ -442,7 +442,11 @@ export const createValuePatternHandlers = (ctx: ValuePatternContext) => {
 
   const tryHandleEnumIfChainValue = (
     d: any,
-    opts: { media?: string | null; attrTarget?: string | null; pseudos?: string[] | null },
+    opts: {
+      media?: string | null;
+      attrTarget?: Record<string, unknown> | null;
+      pseudos?: string[] | null;
+    },
   ): boolean => {
     if (d.value.kind !== "interpolated") {
       return false;
@@ -595,7 +599,11 @@ export const createValuePatternHandlers = (ctx: ValuePatternContext) => {
 
   const tryHandleThemeIndexedLookup = (
     d: any,
-    opts: { media?: string | null; attrTarget?: string | null; pseudos?: string[] | null },
+    opts: {
+      media?: string | null;
+      attrTarget?: Record<string, unknown> | null;
+      pseudos?: string[] | null;
+    },
   ): boolean => {
     if (d.value.kind !== "interpolated") {
       return false;

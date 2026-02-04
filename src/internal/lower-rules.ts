@@ -20,6 +20,7 @@ import {
   getFunctionBodyExpr,
   getNodeLocStart,
   isAstNode,
+  isCallExpressionNode,
   staticValueToLiteral,
 } from "./utilities/jscodeshift-utils.js";
 import type { Adapter, ImportSource, ImportSpec, ResolveValueContext } from "../adapter.js";

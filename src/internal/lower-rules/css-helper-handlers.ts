@@ -3,7 +3,7 @@
  */
 import type { JSCodeshift } from "jscodeshift";
 
-import type { Adapter, ImportSpec } from "../adapter.js";
+import type { Adapter, ImportSpec, ImportSource } from "../../adapter.js";
 import type { WarningLog } from "../logger.js";
 import type { StyledDecl } from "../transform-types.js";
 import type { CssHelperFunction } from "../transform/css-helpers.js";
@@ -18,6 +18,10 @@ import { parseSwitchReturningCssTemplates } from "./switch-variants.js";
 import { resolveTemplateLiteralValue } from "./template-literals.js";
 import type { ConditionalVariant } from "./css-helper.js";
 
+type ImportMeta = { importedName: string; source: ImportSource };
+
+type ResolveImportInScope = (localName: string, identNode?: unknown) => ImportMeta | null;
+
 export type CssHelperHandlersContext = {
   j: JSCodeshift;
   filePath: string;
@@ -31,7 +35,7 @@ export type CssHelperHandlersContext = {
   cssValueToJs: (value: unknown, important?: boolean, propName?: string) => unknown;
   parseExpr: (exprSource: string) => ExpressionKind | null;
   resolveCall: Adapter["resolveCall"];
-  resolveImportInScope: (localName: string, identNode?: unknown) => unknown;
+  resolveImportInScope: ResolveImportInScope;
   resolverImports: Map<string, ImportSpec>;
   isCssHelperTaggedTemplate: (expr: any) => expr is { quasi: any };
   resolveCssHelperTemplate: (
