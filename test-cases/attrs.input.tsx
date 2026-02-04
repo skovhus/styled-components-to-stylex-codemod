@@ -100,6 +100,15 @@ export const FocusableScroll = styled(Flex).attrs((props) => ({
   overflow-y: auto;
 `;
 
+// Pattern 7: styled.div.attrs with prop reference (native element)
+// When an intrinsic element has defaultAttrs, it generates a wrapper component
+// that destructures the referenced prop and applies the default value
+const Box = styled.div.attrs((props) => ({
+  tabIndex: props.tabIndex ?? 0,
+}))`
+  overflow: auto;
+`;
+
 export const App = () => (
   <>
     <Input $small placeholder="Small" />
@@ -110,5 +119,6 @@ export const App = () => (
     <Scrollable>Scrollable content</Scrollable>
     <ScrollableWithType gutter="stable">Type alias scrollable</ScrollableWithType>
     <FocusableScroll focusIndex={5}>Focus content</FocusableScroll>
+    <Box>Box content</Box>
   </>
 );
