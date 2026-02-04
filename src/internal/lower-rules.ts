@@ -61,7 +61,7 @@ import {
   groupVariantBucketsIntoDimensions,
 } from "./lower-rules/variants.js";
 import { mergeStyleObjects, toKebab } from "./lower-rules/utils.js";
-import { extractConditionName } from "./lower-rules/condition-name.js";
+import { extractConditionName } from "./utilities/style-key-naming.js";
 import { computeSelectorWarningLoc, normalizeStylisAstToIR } from "./css-ir.js";
 import { createCssHelperHandlers } from "./lower-rules/css-helper-handlers.js";
 import { finalizeDescendantOverrides } from "./lower-rules/descendant-overrides.js";

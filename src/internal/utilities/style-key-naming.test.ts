@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { toSuffixFromProp } from "./condition-name";
+import { toSuffixFromProp } from "./style-key-naming";
 
 describe("toSuffixFromProp", () => {
   describe("simple prop names", () => {

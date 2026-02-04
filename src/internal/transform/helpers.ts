@@ -186,8 +186,8 @@ export function cssValueToJs(value: any, important = false, propName?: string): 
   return "";
 }
 
-// Re-export from condition-name.ts for backwards compatibility
-export { toSuffixFromProp } from "../lower-rules/condition-name.js";
+// Re-export from style-key-naming.ts for backwards compatibility
+export { toSuffixFromProp } from "../utilities/style-key-naming.js";
 
 export function buildUnsupportedCssWarnings(usages: UnsupportedCssUsage[]): WarningLog[] {
   return usages.map((usage) => {

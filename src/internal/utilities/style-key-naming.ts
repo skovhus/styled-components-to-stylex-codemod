@@ -1,4 +1,4 @@
-import { capitalize } from "../utilities/string-utils.js";
+import { capitalize } from "./string-utils.js";
 
 type ExpressionKind = Parameters<import("jscodeshift").JSCodeshift["expressionStatement"]>[0];
 

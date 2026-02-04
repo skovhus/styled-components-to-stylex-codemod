@@ -1,6 +1,6 @@
 import { describe, it, expect } from "vitest";
 import jscodeshift from "jscodeshift";
-import { extractConditionName } from "./condition-name";
+import { extractConditionName } from "./style-key-naming";
 
 const j = jscodeshift.withParser("tsx");
 
