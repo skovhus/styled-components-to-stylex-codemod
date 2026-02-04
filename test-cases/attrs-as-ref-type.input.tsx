@@ -3,14 +3,12 @@ import styled from "styled-components";
 
 // A polymorphic Text component that defaults to span
 type TextProps = React.PropsWithChildren<{
-  as?: React.ElementType;
-  className?: string;
-  style?: React.CSSProperties;
   variant?: "small" | "regular" | "large";
 }>;
 
 const Text = styled.span<TextProps>`
-  font-size: ${(props) => (props.variant === "large" ? "18px" : props.variant === "small" ? "12px" : "14px")};
+  font-size: ${(props) =>
+    props.variant === "large" ? "18px" : props.variant === "small" ? "12px" : "14px"};
 `;
 
 // When .attrs({ as: "label" }) is used, the component should accept:

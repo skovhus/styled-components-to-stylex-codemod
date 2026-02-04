@@ -169,6 +169,8 @@ export function emitIntrinsicWrappers(emitter: WrapperEmitter): {
     return defaultAttrs.some((a) => a.jsxProp && !a.jsxProp.startsWith("$"));
   };
 
+  // Simple (non-polymorphic) `as` prop support: just adds `as?: React.ElementType`
+  // without generics. Used for non-exported components and simple wrappers.
   const mergeAsIntoPropsWithChildren = (typeText: string): string | null => {
     const prefix = "React.PropsWithChildren<";
     if (!typeText.trim().startsWith(prefix) || !typeText.trim().endsWith(">")) {
@@ -189,76 +191,7 @@ export function emitIntrinsicWrappers(emitter: WrapperEmitter): {
     return null;
   };
 
-  const addAsPropToExistingType = (typeName: string): boolean => {
-    if (!emitTypes) {
-      return false;
-    }
-    let didUpdate = false;
-    const interfaces = root.find(j.TSInterfaceDeclaration, {
-      id: { type: "Identifier", name: typeName },
-    } as any);
-    interfaces.forEach((path: any) => {
-      const iface = path.node;
-      const members = iface.body?.body ?? [];
-      const hasAs = members.some(
-        (m: any) =>
-          m.type === "TSPropertySignature" && m.key?.type === "Identifier" && m.key.name === "as",
-      );
-      if (hasAs) {
-        didUpdate = true;
-        return;
-      }
-      const parsed = j(`interface X { as?: React.ElementType }`).get().node.program.body[0] as any;
-      const prop = parsed.body?.body?.[0];
-      if (prop) {
-        members.push(prop);
-        didUpdate = true;
-      }
-    });
-    if (didUpdate) {
-      return true;
-    }
-    const typeAliases = root.find(j.TSTypeAliasDeclaration, {
-      id: { type: "Identifier", name: typeName },
-    } as any);
-    typeAliases.forEach((path: any) => {
-      const alias = path.node;
-      const existing = alias.typeAnnotation;
-      if (!existing) {
-        return;
-      }
-      const existingStr = j(existing).toSource();
-      if (existingStr.includes("as?:") || existingStr.includes("as :")) {
-        didUpdate = true;
-        return;
-      }
-      const parsed = j(`type X = { as?: React.ElementType };`).get().node.program.body[0] as any;
-      const asType = parsed.typeAnnotation;
-      if (!asType) {
-        return;
-      }
-      if (existing.type === "TSIntersectionType") {
-        existing.types = [...(existing.types ?? []), asType];
-      } else {
-        alias.typeAnnotation = j.tsIntersectionType([existing, asType]);
-      }
-      didUpdate = true;
-    });
-    return didUpdate;
-  };
-
-  const shouldAllowAsProp = (d: StyledDecl, tagName: string): boolean =>
-    emitter.shouldAllowAsPropForIntrinsic(d, tagName);
-
-  const asDestructureProp = (tagName: string) =>
-    j.property.from({
-      kind: "init",
-      key: j.identifier("as"),
-      value: j.assignmentPattern(j.identifier("Component"), j.literal(tagName)),
-      shorthand: false,
-    });
-
-  const withAsPropType = (typeText: string, allowAsProp: boolean): string => {
+  const withSimpleAsPropType = (typeText: string, allowAsProp: boolean): string => {
     if (!allowAsProp) {
       return typeText;
     }
@@ -269,11 +202,138 @@ export function emitIntrinsicWrappers(emitter: WrapperEmitter): {
     return emitter.joinIntersection(typeText, "{ as?: React.ElementType }");
   };
 
-  const emitPropsType = (localName: string, typeText: string, allowAsProp: boolean): boolean => {
-    const typeAliasEmitted = emitNamedPropsType(localName, withAsPropType(typeText, allowAsProp));
-    if (!typeAliasEmitted && allowAsProp) {
-      addAsPropToExistingType(emitter.propsTypeNameFor(localName));
+  const polymorphicIntrinsicPropsTypeText = (args: {
+    tagName: string;
+    allowClassNameProp: boolean;
+    allowStyleProp: boolean;
+    extra?: string | null;
+  }): { typeExprText: string; genericParams: string } => {
+    const { tagName, allowClassNameProp, allowStyleProp, extra } = args;
+    const genericParams = `C extends React.ElementType = "${tagName}"`;
+
+    // Simple polymorphic pattern:
+    // React.ComponentPropsWithRef<C> & { customProps; as?: C }
+    // Note: Custom props come AFTER base to ensure they override any conflicting types
+    // Omit className/style when not allowed
+    const omitted: string[] = [];
+    if (!allowClassNameProp) {
+      omitted.push('"className"');
     }
+    if (!allowStyleProp) {
+      omitted.push('"style"');
+    }
+    const base =
+      omitted.length > 0
+        ? `Omit<React.ComponentPropsWithRef<C>, ${omitted.join(" | ")}>`
+        : "React.ComponentPropsWithRef<C>";
+    if (extra) {
+      // Omit as from extra since we're adding our own as?: C
+      const extraWithoutAs = `Omit<${extra}, "as">`;
+      // Combine: base props, then custom props (overriding), then polymorphic as
+      const typeExprText = `${base} & ${extraWithoutAs} & { as?: C }`;
+      return { typeExprText, genericParams };
+    }
+    // Just element props with as?: C
+    const typeExprText = `${base} & { as?: C }`;
+    return { typeExprText, genericParams };
+  };
+
+  // Helper to check if a props type already has `as?: React.ElementType` which means
+  // it was designed for polymorphism and shouldn't be upgraded to our generic pattern
+  // (doing so can cause TypeScript inference issues with custom props)
+  const propsTypeHasExistingPolymorphicAs = (d: StyledDecl): boolean => {
+    if (!d.propsType) {
+      return false;
+    }
+    const typeName = emitter.propsTypeNameFor(d.localName);
+    // Check type aliases in the file
+    let hasExistingAs = false;
+    root
+      .find(j.TSTypeAliasDeclaration, { id: { type: "Identifier", name: typeName } } as any)
+      .forEach((p: any) => {
+        const alias = p.node as any;
+        const existingText = alias.typeAnnotation ? j(alias.typeAnnotation).toSource() : "";
+        // Look for `as?:` or `as:` pattern in the type text
+        if (/\bas\s*[?:]/.test(existingText)) {
+          hasExistingAs = true;
+        }
+      });
+    return hasExistingAs;
+  };
+
+  const shouldAllowAsProp = (d: StyledDecl, tagName: string): boolean => {
+    // Don't make polymorphic if the props type already has its own `as?: React.ElementType`
+    // because upgrading to our generic pattern can cause TypeScript inference issues
+    if (propsTypeHasExistingPolymorphicAs(d)) {
+      return false;
+    }
+    return emitter.shouldAllowAsPropForIntrinsic(d, tagName);
+  };
+
+  const asDestructureProp = (tagName: string) =>
+    j.property.from({
+      kind: "init",
+      key: j.identifier("as"),
+      value: j.assignmentPattern(j.identifier("Component"), j.literal(tagName)),
+      shorthand: false,
+    });
+
+  const emitPropsType = (args: {
+    localName: string;
+    tagName: string;
+    typeText: string;
+    allowAsProp: boolean;
+    allowClassNameProp: boolean;
+    allowStyleProp: boolean;
+    /** When true, there are no custom user-defined props. Skip generating a named type for polymorphic wrappers. */
+    hasNoCustomProps?: boolean;
+  }): boolean => {
+    const {
+      localName,
+      tagName,
+      typeText,
+      allowAsProp,
+      allowClassNameProp,
+      allowStyleProp,
+      hasNoCustomProps,
+    } = args;
+    if (!allowAsProp) {
+      const typeAliasEmitted = emitNamedPropsType(localName, typeText);
+      needsReactTypeImport = true;
+      return typeAliasEmitted;
+    }
+
+    // When there are no custom props, skip generating a named type.
+    // The function parameter will use inline `React.ComponentPropsWithRef<C> & { as?: C }`.
+    if (hasNoCustomProps) {
+      needsReactTypeImport = true;
+      return false; // No type alias emitted - caller should use inline type
+    }
+
+    const poly = polymorphicIntrinsicPropsTypeText({
+      tagName,
+      allowClassNameProp,
+      allowStyleProp,
+      extra: typeText,
+    });
+    // Try to emit a named props type. If it already exists (user-defined), the inline
+    // function parameter will use the intersection pattern instead.
+    const typeAliasEmitted = emitNamedPropsType(localName, poly.typeExprText, poly.genericParams);
+    needsReactTypeImport = true;
+    return typeAliasEmitted;
+  };
+
+  // Simple (non-polymorphic) props type emission - adds `as?: React.ElementType` without generics.
+  // Used for non-exported wrappers that support `as` but don't need the full polymorphic pattern.
+  // Note: We do NOT modify existing user-defined types to add `as`. The `as` prop should only
+  // be part of the inline function parameter type, not the original type definition.
+  const emitSimplePropsType = (
+    localName: string,
+    typeText: string,
+    allowAsProp: boolean,
+  ): boolean => {
+    const finalTypeText = withSimpleAsPropType(typeText, allowAsProp);
+    const typeAliasEmitted = emitNamedPropsType(localName, finalTypeText);
     needsReactTypeImport = true;
     return typeAliasEmitted;
   };
@@ -286,12 +346,19 @@ export function emitIntrinsicWrappers(emitter: WrapperEmitter): {
     (d: StyledDecl) =>
       d.base.kind === "intrinsic" && d.base.tagName === "a" && d.attrWrapper?.kind === "link",
   );
+
   const intrinsicPolymorphicWrapperDecls = wrapperDecls.filter((d: StyledDecl) => {
     if (d.base.kind !== "intrinsic") {
       return false;
     }
     // Skip specialized wrappers (input/link with attrWrapper) - they have their own handlers
     if (d.attrWrapper) {
+      return false;
+    }
+    // Skip components whose props type already has `as?: React.ElementType` -
+    // these are designed for runtime polymorphism and upgrading them to our generic
+    // pattern can cause TypeScript inference issues with custom props
+    if (propsTypeHasExistingPolymorphicAs(d)) {
       return false;
     }
     // Use wrapperNames (includes props type check and JSX usage) OR supportsAsProp (adapter opt-in)
@@ -322,7 +389,14 @@ export function emitIntrinsicWrappers(emitter: WrapperEmitter): {
           }
           return omitted.length > 0 ? `Omit<${base}, ${omitted.join(" | ")}>` : base;
         })();
-      emitPropsType(d.localName, baseTypeText, allowAsProp);
+      emitPropsType({
+        localName: d.localName,
+        tagName: "input",
+        typeText: baseTypeText,
+        allowAsProp,
+        allowClassNameProp,
+        allowStyleProp,
+      });
 
       const aw = d.attrWrapper!;
       const { beforeBase: extraStyleArgs, afterBase: extraStyleArgsAfterBase } =
@@ -356,7 +430,7 @@ export function emitIntrinsicWrappers(emitter: WrapperEmitter): {
           ? allowAsProp
             ? emitTypes
               ? (j.template.statement`
-                  function ${j.identifier(d.localName)}(props: ${j.identifier(emitter.propsTypeNameFor(d.localName))}) {
+                  function ${j.identifier(d.localName)}<C extends React.ElementType = "input">(props: ${j.identifier(emitter.propsTypeNameFor(d.localName))}<C>) {
                   const { as: Component = "input", type, className, ...rest } = props;
                   const sx = stylex.props(${styleArgs});
                   return (
@@ -415,7 +489,7 @@ export function emitIntrinsicWrappers(emitter: WrapperEmitter): {
           : allowAsProp
             ? emitTypes
               ? (j.template.statement`
-                  function ${j.identifier(d.localName)}(props: ${j.identifier(emitter.propsTypeNameFor(d.localName))}) {
+                  function ${j.identifier(d.localName)}<C extends React.ElementType = "input">(props: ${j.identifier(emitter.propsTypeNameFor(d.localName))}<C>) {
                     const { as: Component = "input", type, ...rest } = props;
                     const sx = stylex.props(${styleArgs});
                     return <Component type={type} {...rest} {...sx} />;
@@ -468,7 +542,14 @@ export function emitIntrinsicWrappers(emitter: WrapperEmitter): {
             return omitted.length > 0 ? `Omit<${base}, ${omitted.join(" | ")}>` : base;
           })(),
         );
-      emitPropsType(d.localName, baseTypeText, allowAsProp);
+      emitPropsType({
+        localName: d.localName,
+        tagName: "a",
+        typeText: baseTypeText,
+        allowAsProp,
+        allowClassNameProp,
+        allowStyleProp,
+      });
 
       const aw = d.attrWrapper!;
       const { beforeBase: extraStyleArgs, afterBase: extraStyleArgsAfterBase } =
@@ -512,7 +593,7 @@ export function emitIntrinsicWrappers(emitter: WrapperEmitter): {
           ? allowAsProp
             ? emitTypes
               ? (j.template.statement`
-                  function ${j.identifier(d.localName)}(props: ${j.identifier(emitter.propsTypeNameFor(d.localName))}) {
+                  function ${j.identifier(d.localName)}<C extends React.ElementType = "a">(props: ${j.identifier(emitter.propsTypeNameFor(d.localName))}<C>) {
                     const { as: Component = "a", href, target, className, children, ...rest } = props;
                   const isHttps = href?.startsWith("https");
                   const isPdf = href?.endsWith(".pdf");
@@ -595,7 +676,7 @@ export function emitIntrinsicWrappers(emitter: WrapperEmitter): {
           : allowAsProp
             ? emitTypes
               ? (j.template.statement`
-                  function ${j.identifier(d.localName)}(props: ${j.identifier(emitter.propsTypeNameFor(d.localName))}) {
+                  function ${j.identifier(d.localName)}<C extends React.ElementType = "a">(props: ${j.identifier(emitter.propsTypeNameFor(d.localName))}<C>) {
                     const { as: Component = "a", href, target, children, ...rest } = props;
                     const isHttps = href?.startsWith("https");
                     const isPdf = href?.endsWith(".pdf");
@@ -666,24 +747,13 @@ export function emitIntrinsicWrappers(emitter: WrapperEmitter): {
       const allowAsProp = shouldAllowAsProp(d, tagName);
       const explicit = emitter.stringifyTsType(d.propsType);
 
-      // Check if the explicit props type is a simple (non-generic) type reference.
-      // If so, we should NOT make the wrapper function generic - just use the existing type directly.
-      const isExplicitNonGenericType =
-        explicit && d.propsType?.type === "TSTypeReference" && !d.propsType.typeParameters;
-
       // Polymorphic `as` wrappers: type the wrapper generically so the chosen `as` value
       // influences allowed props (e.g. htmlFor when as="label", react-spring style props when as={animated.span}).
-      // Exception: if the original props type is already defined and non-generic, use it directly.
+      // Detect if there are no custom user-defined props (just intrinsic element props)
+      const hasNoCustomProps = !explicit;
+
       const typeText = (() => {
-        if (explicit) {
-          return explicit;
-        }
-        const used = emitter.getUsedAttrs(d.localName);
-        // Use ComponentPropsWithRef when ref is used on the component
-        const hasRef = used.has("ref");
-        const base = hasRef
-          ? "React.ComponentPropsWithRef<C>"
-          : "React.ComponentPropsWithoutRef<C>";
+        const base = "React.ComponentPropsWithRef<C>";
         // Omit className/style only when we don't want to support them.
         const omitted: string[] = [];
         if (!allowClassNameProp) {
@@ -694,14 +764,23 @@ export function emitIntrinsicWrappers(emitter: WrapperEmitter): {
         }
         const baseMaybeOmitted =
           omitted.length > 0 ? `Omit<${base}, ${omitted.join(" | ")}>` : base;
-        if (!allowAsProp) {
-          return baseMaybeOmitted;
-        }
-        return emitter.joinIntersection(baseMaybeOmitted, "{ as?: C }");
+        const withAs = allowAsProp
+          ? emitter.joinIntersection(baseMaybeOmitted, "{ as?: C }")
+          : baseMaybeOmitted;
+        return explicit ? emitter.joinIntersection(withAs, explicit) : withAs;
       })();
 
-      if (!isExplicitNonGenericType) {
-        emitNamedPropsType(d.localName, typeText, `C extends React.ElementType = "${tagName}"`);
+      // When there are no custom props, skip generating a named type.
+      // The function parameter will use inline `React.ComponentPropsWithRef<C> & { as?: C }`.
+      // When there ARE custom props but a user-defined type already exists, the inline
+      // function parameter will use the intersection pattern instead.
+      let typeAliasEmitted = false;
+      if (!hasNoCustomProps) {
+        typeAliasEmitted = emitNamedPropsType(
+          d.localName,
+          typeText,
+          `C extends React.ElementType = "${tagName}"`,
+        );
       }
       needsReactTypeImport = true;
 
@@ -800,21 +879,15 @@ export function emitIntrinsicWrappers(emitter: WrapperEmitter): {
       const includeChildren = allowAsProp || !isVoidTag;
       const propsParamId = j.identifier("props");
       if (emitTypes) {
-        if (isExplicitNonGenericType) {
-          // Use the existing non-generic type directly without making the function generic
-          (propsParamId as any).typeAnnotation = j(
-            `const x: ${explicit} = null`,
-          ).get().node.program.body[0].declarations[0].id.typeAnnotation;
-        } else {
-          // Make the wrapper function generic so `as` can influence props.
-          const tp = j(
-            `function _<C extends React.ElementType = "${tagName}">() { return null }`,
-          ).get().node.program.body[0].typeParameters;
-          (propsParamId as any).typeAnnotation = j(
-            `const x: ${emitter.propsTypeNameFor(d.localName)}<C> = null`,
-          ).get().node.program.body[0].declarations[0].id.typeAnnotation;
-          (propsParamId as any).typeParameters = tp;
-        }
+        // When no type alias was emitted (either because there are no custom props OR
+        // because the user-defined type already exists), use the inline typeText which
+        // already contains the full intersection (explicit & React.ComponentPropsWithRef<C> & { as?: C })
+        const propsTypeText = typeAliasEmitted
+          ? `${emitter.propsTypeNameFor(d.localName)}<C>`
+          : typeText;
+        (propsParamId as any).typeAnnotation = j(
+          `const x: ${propsTypeText} = null`,
+        ).get().node.program.body[0].declarations[0].id.typeAnnotation;
       }
       const propsId = j.identifier("props");
       const childrenId = j.identifier("children");
@@ -892,12 +965,18 @@ export function emitIntrinsicWrappers(emitter: WrapperEmitter): {
       }
       fnBodyStmts.push(j.returnStatement(jsx as any));
 
+      const polymorphicFnTypeParams =
+        emitTypes && allowAsProp
+          ? j(`function _<C extends React.ElementType = "${tagName}">() { return null }`).get().node
+              .program.body[0].typeParameters
+          : undefined;
+
       emitted.push(
         emitter.buildWrapperFunction({
           localName: d.localName,
           params: [propsParamId],
           bodyStmts: fnBodyStmts,
-          moveTypeParamsFromParam: propsParamId,
+          typeParameters: polymorphicFnTypeParams,
         }),
       );
     }
@@ -910,7 +989,10 @@ export function emitIntrinsicWrappers(emitter: WrapperEmitter): {
       if (!d.enumVariant) {
         continue;
       }
-      const allowAsProp = shouldAllowAsProp(d, "div");
+      const tagName = "div";
+      const allowClassNameProp = false;
+      const allowStyleProp = false;
+      const allowAsProp = shouldAllowAsProp(d, tagName);
       const { propName, baseKey, cases } = d.enumVariant;
       const primary = cases[0];
       const secondary = cases[1];
@@ -919,7 +1001,14 @@ export function emitIntrinsicWrappers(emitter: WrapperEmitter): {
       }
       const explicit = emitter.stringifyTsType(d.propsType);
       if (explicit) {
-        emitPropsType(d.localName, emitter.withChildren(explicit), allowAsProp);
+        emitPropsType({
+          localName: d.localName,
+          tagName,
+          typeText: emitter.withChildren(explicit),
+          allowAsProp,
+          allowClassNameProp,
+          allowStyleProp,
+        });
       } else {
         // Best-effort: treat enum variant prop as a string-literal union.
         const hasNeq = cases.some((c) => c.kind === "neq");
@@ -932,10 +1021,25 @@ export function emitIntrinsicWrappers(emitter: WrapperEmitter): {
         const typeText = emitter.withChildren(
           `React.HTMLAttributes<HTMLDivElement> & { ${propName}?: ${union} }`,
         );
-        emitPropsType(d.localName, typeText, allowAsProp);
+        emitPropsType({
+          localName: d.localName,
+          tagName,
+          typeText,
+          allowAsProp,
+          allowClassNameProp,
+          allowStyleProp,
+        });
       }
       const propsParamId = j.identifier("props");
-      emitter.annotatePropsParam(propsParamId, d.localName);
+      if (allowAsProp && emitTypes) {
+        emitter.annotatePropsParam(
+          propsParamId,
+          d.localName,
+          `${emitter.propsTypeNameFor(d.localName)}<C>`,
+        );
+      } else {
+        emitter.annotatePropsParam(propsParamId, d.localName);
+      }
       const propsId = j.identifier("props");
       const variantId = j.identifier(propName);
       const childrenId = j.identifier("children");
@@ -990,11 +1094,19 @@ export function emitIntrinsicWrappers(emitter: WrapperEmitter): {
 
       emitted.push(
         withLeadingComments(
-          j.functionDeclaration(
-            j.identifier(d.localName),
-            [propsParamId],
-            j.blockStatement([declStmt, sxDecl, j.returnStatement(jsx as any)]),
-          ),
+          (() => {
+            const fn = j.functionDeclaration(
+              j.identifier(d.localName),
+              [propsParamId],
+              j.blockStatement([declStmt, sxDecl, j.returnStatement(jsx as any)]),
+            );
+            if (allowAsProp && emitTypes) {
+              (fn as any).typeParameters = j(
+                `function _<C extends React.ElementType = "${tagName}">() { return null }`,
+              ).get().node.program.body[0].typeParameters;
+            }
+            return fn;
+          })(),
           d,
         ),
       );
@@ -1140,8 +1252,24 @@ export function emitIntrinsicWrappers(emitter: WrapperEmitter): {
       return VOID_TAGS.has(tagName) ? inferred : emitter.withChildren(inferred);
     })();
 
-    const typeAliasEmitted = emitPropsType(d.localName, finalTypeText, allowAsProp);
-    if (!typeAliasEmitted && explicit) {
+    // Detect if there are no custom user-defined props (just intrinsic element props)
+    const hasNoCustomProps = !explicit && extraProps.size === 0;
+
+    // Emit props type (result not used - inline type is always used in function parameter)
+    emitPropsType({
+      localName: d.localName,
+      tagName,
+      typeText: finalTypeText,
+      allowAsProp,
+      allowClassNameProp,
+      allowStyleProp,
+      hasNoCustomProps,
+    });
+    // For NON-POLYMORPHIC components (without `as` support), extend user-defined types
+    // to include element props like children, className, style.
+    // For POLYMORPHIC components (with `as` support), we don't modify the type -
+    // instead we add element props as an inline intersection in the function parameter.
+    if (!allowAsProp && explicit) {
       const propsTypeName = emitter.propsTypeNameFor(d.localName);
       const extendBaseTypeText = (() => {
         // Prefer ComponentProps for intrinsic wrappers so event handlers/attrs
@@ -1323,7 +1451,18 @@ export function emitIntrinsicWrappers(emitter: WrapperEmitter): {
     }
 
     const propsParamId = j.identifier("props");
-    emitter.annotatePropsParam(propsParamId, d.localName);
+    if (allowAsProp && emitTypes) {
+      // When there are no custom props, use inline type
+      // When there ARE custom props (explicit), use inline intersection with user-defined type
+      const propsTypeText = hasNoCustomProps
+        ? "React.ComponentPropsWithRef<C> & { as?: C }"
+        : explicit
+          ? `${explicit} & React.ComponentPropsWithRef<C> & { as?: C }`
+          : `${emitter.propsTypeNameFor(d.localName)}<C>`;
+      emitter.annotatePropsParam(propsParamId, d.localName, propsTypeText);
+    } else {
+      emitter.annotatePropsParam(propsParamId, d.localName);
+    }
     const propsId = j.identifier("props");
     const classNameId = j.identifier("className");
     const childrenId = j.identifier("children");
@@ -1440,6 +1579,12 @@ export function emitIntrinsicWrappers(emitter: WrapperEmitter): {
             localName: d.localName,
             params: [propsParamId],
             bodyStmts: fnBodyStmts,
+            typeParameters:
+              allowAsProp && emitTypes
+                ? j(
+                    `function _<C extends React.ElementType = "${tagName}">() { return null }`,
+                  ).get().node.program.body[0].typeParameters
+                : undefined,
           }),
           d,
         ),
@@ -1523,13 +1668,19 @@ export function emitIntrinsicWrappers(emitter: WrapperEmitter): {
     }
     fnBodyStmts.push(j.returnStatement(jsx as any));
 
+    // Add type parameters when allowAsProp is true
     emitted.push(
       withLeadingComments(
-        j.functionDeclaration(
-          j.identifier(d.localName),
-          [propsParamId],
-          j.blockStatement(fnBodyStmts),
-        ),
+        emitter.buildWrapperFunction({
+          localName: d.localName,
+          params: [propsParamId],
+          bodyStmts: fnBodyStmts,
+          typeParameters:
+            allowAsProp && emitTypes
+              ? j(`function _<C extends React.ElementType = "${tagName}">() { return null }`).get()
+                  .node.program.body[0].typeParameters
+              : undefined,
+        }),
         d,
       ),
     );
@@ -1599,30 +1750,37 @@ export function emitIntrinsicWrappers(emitter: WrapperEmitter): {
           })
         : "{}";
 
-      // Check if explicit type is a simple type reference that exists in the file
-      // and if defaultAttrs reference element props - if so, extend the type with intrinsic props
-      const explicitTypeName = emitter.getExplicitTypeNameIfExists(d.propsType);
+      // For non-void tags without explicit type, wrap in PropsWithChildren
+      const typeWithChildren =
+        !explicit && !VOID_TAGS.has(tagName) ? emitter.withChildren(baseTypeText) : baseTypeText;
+      // When there's an explicit user type, create a wrapper type that combines element props
+      // with the user type (don't modify the user type)
       const needsElementProps = hasElementPropsInDefaultAttrs(d);
-
-      if (explicitTypeName && explicit && needsElementProps) {
-        // Extend the existing type with intrinsic element props so that element props
-        // like tabIndex are available (when used in defaultAttrs like `tabIndex: props.tabIndex ?? 0`)
-        const intrinsicBaseType = emitter.inferredIntrinsicPropsTypeText({
-          d,
-          tagName,
-          allowClassNameProp,
-          allowStyleProp,
-        });
-        emitter.extendExistingType(explicitTypeName, intrinsicBaseType);
-        needsReactTypeImport = true;
-        emitPropsType(d.localName, explicit, allowAsProp);
-      } else {
-        // For non-void tags without explicit type, wrap in PropsWithChildren
-        const typeWithChildren =
-          !explicit && !VOID_TAGS.has(tagName) ? emitter.withChildren(baseTypeText) : baseTypeText;
-        const typeText = explicit ?? typeWithChildren;
-        emitPropsType(d.localName, typeText, allowAsProp);
-      }
+      const typeText = (() => {
+        if (explicit) {
+          // Check if we need to include element props (for defaultAttrs like `tabIndex: props.tabIndex ?? 0`)
+          if (needsElementProps) {
+            const intrinsicBaseType = emitter.inferredIntrinsicPropsTypeText({
+              d,
+              tagName,
+              allowClassNameProp,
+              allowStyleProp,
+            });
+            needsReactTypeImport = true;
+            return emitter.joinIntersection(intrinsicBaseType, explicit);
+          }
+          return explicit;
+        }
+        return typeWithChildren;
+      })();
+      emitPropsType({
+        localName: d.localName,
+        tagName,
+        typeText,
+        allowAsProp,
+        allowClassNameProp,
+        allowStyleProp,
+      });
     }
     const { beforeBase: extraStyleArgs, afterBase: extraStyleArgsAfterBase } =
       emitter.splitExtraStyleArgs(d);
@@ -1636,7 +1794,15 @@ export function emitIntrinsicWrappers(emitter: WrapperEmitter): {
     ];
 
     const propsParamId = j.identifier("props");
-    emitter.annotatePropsParam(propsParamId, d.localName);
+    if (allowAsProp && emitTypes) {
+      emitter.annotatePropsParam(
+        propsParamId,
+        d.localName,
+        `${emitter.propsTypeNameFor(d.localName)}<C>`,
+      );
+    } else {
+      emitter.annotatePropsParam(propsParamId, d.localName);
+    }
     const propsId = j.identifier("props");
     const classNameId = j.identifier("className");
     const childrenId = j.identifier("children");
@@ -1806,6 +1972,11 @@ export function emitIntrinsicWrappers(emitter: WrapperEmitter): {
           localName: d.localName,
           params: [propsParamId],
           bodyStmts,
+          typeParameters:
+            allowAsProp && emitTypes
+              ? j(`function _<C extends React.ElementType = "${tagName}">() { return null }`).get()
+                  .node.program.body[0].typeParameters
+              : undefined,
         }),
         d,
       ),
@@ -1819,6 +1990,7 @@ export function emitIntrinsicWrappers(emitter: WrapperEmitter): {
       continue;
     }
     const sw = d.siblingWrapper!;
+    const tagName = "div";
     const allowAsProp = shouldAllowAsProp(d, "div");
 
     {
@@ -1838,11 +2010,26 @@ export function emitIntrinsicWrappers(emitter: WrapperEmitter): {
         allowStyleProp,
       });
       const typeText = explicit ?? emitter.joinIntersection(baseTypeText, extraType);
-      emitPropsType(d.localName, typeText, allowAsProp);
+      emitPropsType({
+        localName: d.localName,
+        tagName,
+        typeText,
+        allowAsProp,
+        allowClassNameProp,
+        allowStyleProp,
+      });
     }
 
     const propsParamId = j.identifier("props");
-    emitter.annotatePropsParam(propsParamId, d.localName);
+    if (allowAsProp && emitTypes) {
+      emitter.annotatePropsParam(
+        propsParamId,
+        d.localName,
+        `${emitter.propsTypeNameFor(d.localName)}<C>`,
+      );
+    } else {
+      emitter.annotatePropsParam(propsParamId, d.localName);
+    }
     const propsId = j.identifier("props");
     const childrenId = j.identifier("children");
     const classNameId = j.identifier("className");
@@ -1924,6 +2111,11 @@ export function emitIntrinsicWrappers(emitter: WrapperEmitter): {
         localName: d.localName,
         params: [propsParamId],
         bodyStmts,
+        typeParameters:
+          allowAsProp && emitTypes
+            ? j(`function _<C extends React.ElementType = "div">() { return null }`).get().node
+                .program.body[0].typeParameters
+            : undefined,
       }),
     );
   }
@@ -1951,7 +2143,13 @@ export function emitIntrinsicWrappers(emitter: WrapperEmitter): {
       return false;
     }
     // Skip specialized wrapper categories (polymorphic intrinsic wrappers)
-    if (wrapperNames.has(d.localName) || (d.supportsAsProp ?? false)) {
+    // Exception: components with existing `as?: React.ElementType` in their props type
+    // are handled here (non-polymorphic) because upgrading them to our generic pattern
+    // can cause TypeScript inference issues
+    if (
+      (wrapperNames.has(d.localName) || (d.supportsAsProp ?? false)) &&
+      !propsTypeHasExistingPolymorphicAs(d)
+    ) {
       return false;
     }
     // Note: input/a tags without attrWrapper (e.g., simple .attrs() cases) are now
@@ -1968,6 +2166,8 @@ export function emitIntrinsicWrappers(emitter: WrapperEmitter): {
     const usedAttrsForType = emitter.getUsedAttrs(d.localName);
     const allowAsProp = shouldAllowAsProp(d, tagName);
     let inlineTypeText: string | undefined;
+    const isExportedComponent = d.isExported || emitter.exportedComponents.has(d.localName);
+    const usePolymorphicPattern = allowAsProp && isExportedComponent;
     {
       const explicit = emitter.stringifyTsType(d.propsType);
       const explicitPropNames = d.propsType
@@ -2122,51 +2322,50 @@ export function emitIntrinsicWrappers(emitter: WrapperEmitter): {
           extras.push("children?: React.ReactNode");
           return emitter.joinIntersection(explicit, `{ ${extras.join("; ")} }`);
         }
+        // Wrap the explicit type with PropsWithChildren since the wrapper may need children
         return emitter.withChildren(explicit);
       })();
-      const asPropTypeText = allowAsProp ? "{ as?: React.ElementType }" : null;
-      const mergedPropsWithChildren = allowAsProp ? mergeAsIntoPropsWithChildren(typeText) : null;
-      const typeWithAs = mergedPropsWithChildren
-        ? mergedPropsWithChildren
-        : asPropTypeText
-          ? emitter.joinIntersection(typeText, asPropTypeText)
-          : typeText;
-      // Check if explicit type is a simple type reference (e.g., `Props`) that exists in the file
-      const explicitTypeName = emitter.getExplicitTypeNameIfExists(d.propsType);
 
-      let typeAliasEmitted = false;
-      const needsElementPropsForAttrs = hasElementPropsInDefaultAttrs(d);
-      // When the explicit type exists and defaultAttrs reference element props
-      // (like tabIndex: props.tabIndex ?? 0), extend the explicit type directly
-      if (explicitTypeName && needsElementPropsForAttrs) {
-        emitter.extendExistingType(explicitTypeName, extendBaseTypeText);
-        // Also extend with as prop if needed
-        if (asPropTypeText) {
-          emitter.extendExistingType(explicitTypeName, asPropTypeText);
-        }
-        // Use the explicit type wrapped in PropsWithChildren for the function parameter
-        // explicit is guaranteed to be truthy here since explicitTypeExists is true
-        inlineTypeText = VOID_TAGS.has(tagName)
-          ? (explicit ?? undefined)
-          : emitter.withChildren(explicit!);
-        // Note: Don't add asPropTypeText to inlineTypeText since it's already in the explicit type
+      // Emit the public props type.
+      // For exported components that support `as`, use the full polymorphic pattern.
+      // For non-exported components, use simple `as?: React.ElementType` without generics.
+      // Detect if there are no custom user-defined props (just intrinsic element props)
+      const hasNoCustomProps = !explicit && customStyleDrivingPropsTypeText === "{}";
+      let typeAliasEmitted: boolean;
+      if (usePolymorphicPattern) {
+        typeAliasEmitted = emitPropsType({
+          localName: d.localName,
+          tagName,
+          typeText,
+          allowAsProp,
+          allowClassNameProp,
+          allowStyleProp,
+          hasNoCustomProps,
+        });
       } else {
-        typeAliasEmitted = emitNamedPropsType(d.localName, typeWithAs);
-        if (!typeAliasEmitted && explicit) {
-          const propsTypeName = emitter.propsTypeNameFor(d.localName);
-          const typeExtended = emitter.extendExistingType(propsTypeName, extendBaseTypeText);
-          if (!typeExtended) {
-            inlineTypeText = VOID_TAGS.has(tagName) ? explicit : emitter.withChildren(explicit);
-            if (asPropTypeText) {
-              inlineTypeText = emitter.joinIntersection(inlineTypeText, asPropTypeText);
-            }
+        typeAliasEmitted = emitSimplePropsType(d.localName, typeText, allowAsProp);
+      }
+
+      // If we couldn't emit the named `${localName}Props` type (because it already exists in-file
+      // or there are no custom props), ensure the wrapper function param is still typed correctly
+      // by using an inline type.
+      if (!typeAliasEmitted && emitTypes) {
+        if (usePolymorphicPattern) {
+          // When there are no custom props, use inline type instead of referencing a named type
+          if (hasNoCustomProps) {
+            inlineTypeText = "React.ComponentPropsWithRef<C> & { as?: C }";
+          } else if (explicit) {
+            // Use the user-defined type in an inline intersection - don't modify the original type
+            inlineTypeText = `${explicit} & React.ComponentPropsWithRef<C> & { as?: C }`;
+          } else {
+            // Fallback: use the polymorphic props type with generic (shouldn't happen often)
+            inlineTypeText = `${emitter.propsTypeNameFor(d.localName)}<C>`;
           }
+        } else {
+          // Use the computed typeText (which may be an intersection) as the inline type.
+          inlineTypeText = withSimpleAsPropType(typeText, allowAsProp);
         }
       }
-      if (!typeAliasEmitted && asPropTypeText) {
-        addAsPropToExistingType(emitter.propsTypeNameFor(d.localName));
-      }
-      needsReactTypeImport = true;
     }
     const { beforeBase: extraStyleArgs, afterBase: extraStyleArgsAfterBase } =
       emitter.splitExtraStyleArgs(d);
@@ -2399,6 +2598,9 @@ export function emitIntrinsicWrappers(emitter: WrapperEmitter): {
       }
       bodyStmts.push(j.returnStatement(jsx as any));
 
+      // For exported components with polymorphic as support, add generic type parameters
+      // For non-exported components, don't add generics
+      const shouldAddTypeParams = usePolymorphicPattern && emitTypes;
       emitted.push(
         ...withLeadingCommentsOnFirstFunction(
           [
@@ -2406,6 +2608,11 @@ export function emitIntrinsicWrappers(emitter: WrapperEmitter): {
               localName: d.localName,
               params: [propsParamId],
               bodyStmts,
+              typeParameters: shouldAddTypeParams
+                ? j(
+                    `function _<C extends React.ElementType = "${tagName}">() { return null }`,
+                  ).get().node.program.body[0].typeParameters
+                : undefined,
             }),
           ],
           d,

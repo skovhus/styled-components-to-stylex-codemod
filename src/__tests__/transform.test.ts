@@ -1198,3 +1198,216 @@ export const App = () => <Box>Test</Box>;
     expect(result.code).toContain("|| 5");
   });
 });
+
+describe("css helper closure variable detection", () => {
+  const closureVarWarning =
+    "css`` helper function interpolation references closure variable that cannot be hoisted";
+
+  it("should bail on function parameter in interpolation", () => {
+    const source = `
+import { css } from "styled-components";
+
+export function helper(size: number) {
+  return css\`
+    width: \${size}px;
+  \`;
+}
+`;
+
+    const result = transformWithWarnings(
+      { source, path: "test.tsx" },
+      { jscodeshift: j, j, stats: () => {}, report: () => {} },
+      { adapter: fixtureAdapter },
+    );
+
+    expect(result.code).toBeNull();
+    expect(result.warnings).toHaveLength(1);
+    expect(result.warnings[0]?.type).toBe(closureVarWarning);
+    expect(result.warnings[0]?.context).toEqual({ variable: "size" });
+  });
+
+  it("should bail on local variable in interpolation", () => {
+    const source = `
+import { css } from "styled-components";
+
+export function helper() {
+  const color = getColor();
+  return css\`
+    color: \${color};
+  \`;
+}
+`;
+
+    const result = transformWithWarnings(
+      { source, path: "test.tsx" },
+      { jscodeshift: j, j, stats: () => {}, report: () => {} },
+      { adapter: fixtureAdapter },
+    );
+
+    expect(result.code).toBeNull();
+    expect(result.warnings).toHaveLength(1);
+    expect(result.warnings[0]?.type).toBe(closureVarWarning);
+    expect(result.warnings[0]?.context).toEqual({ variable: "color" });
+  });
+
+  it("should bail on multiple closure variables", () => {
+    const source = `
+import { css } from "styled-components";
+
+export function helper(height: number) {
+  const transition = getTransition();
+  return css\`
+    height: \${height}px;
+    transition: \${transition};
+  \`;
+}
+`;
+
+    const result = transformWithWarnings(
+      { source, path: "test.tsx" },
+      { jscodeshift: j, j, stats: () => {}, report: () => {} },
+      { adapter: fixtureAdapter },
+    );
+
+    expect(result.code).toBeNull();
+    expect(result.warnings).toHaveLength(1);
+    expect(result.warnings[0]?.type).toBe(closureVarWarning);
+    // Should report the first closure variable found
+  });
+
+  it("should bail on arrow function css helper with closure variable", () => {
+    const source = `
+import { css } from "styled-components";
+
+const helper = (size: number) => css\`
+  width: \${size}px;
+\`;
+
+export { helper };
+`;
+
+    const result = transformWithWarnings(
+      { source, path: "test.tsx" },
+      { jscodeshift: j, j, stats: () => {}, report: () => {} },
+      { adapter: fixtureAdapter },
+    );
+
+    expect(result.code).toBeNull();
+    expect(result.warnings).toHaveLength(1);
+    expect(result.warnings[0]?.type).toBe(closureVarWarning);
+    expect(result.warnings[0]?.context).toEqual({ variable: "size" });
+  });
+
+  it("should bail on local variable used as member expression object", () => {
+    // This is a regression test for a false negative where local variables
+    // used as objects (e.g., theme.primary) were incorrectly treated as safe.
+    // Only function parameters should be allowed in member expression patterns.
+    const source = `
+import { css } from "styled-components";
+
+export function helper() {
+  const theme = getTheme();
+  return css\`
+    color: \${theme.primary};
+  \`;
+}
+`;
+
+    const result = transformWithWarnings(
+      { source, path: "test.tsx" },
+      { jscodeshift: j, j, stats: () => {}, report: () => {} },
+      { adapter: fixtureAdapter },
+    );
+
+    expect(result.code).toBeNull();
+    expect(result.warnings).toHaveLength(1);
+    expect(result.warnings[0]?.type).toBe(closureVarWarning);
+    expect(result.warnings[0]?.context).toEqual({ variable: "theme" });
+  });
+
+  it("should NOT generate closure variable warning for props.X member access pattern", () => {
+    const source = `
+import styled from "styled-components";
+import { css } from "styled-components";
+
+const helper = (props: { size: number }) => css\`
+  width: \${props.size}px;
+\`;
+
+const Box = styled.div\`
+  \${helper}
+\`;
+
+export const App = () => <Box>Test</Box>;
+`;
+
+    const result = transformWithWarnings(
+      { source, path: "test.tsx" },
+      { jscodeshift: j, j, stats: () => {}, report: () => {} },
+      { adapter: fixtureAdapter },
+    );
+
+    // props.X is not a closure variable (it's a supported member access pattern)
+    // The transform may bail for other reasons, but NOT due to closure variable detection
+    const closureWarning = result.warnings.find((w) => w.type === closureVarWarning);
+    expect(closureWarning).toBeUndefined();
+  });
+
+  it("should NOT generate closure variable warning for static values only", () => {
+    const source = `
+import { css } from "styled-components";
+import styled from "styled-components";
+
+const helper = () => css\`
+  width: 100px;
+  color: red;
+\`;
+
+const Box = styled.div\`
+  \${helper}
+\`;
+
+export const App = () => <Box>Test</Box>;
+`;
+
+    const result = transformWithWarnings(
+      { source, path: "test.tsx" },
+      { jscodeshift: j, j, stats: () => {}, report: () => {} },
+      { adapter: fixtureAdapter },
+    );
+
+    // No interpolations means no closure variables to detect
+    // The transform may bail for other reasons, but NOT due to closure variable detection
+    const closureWarning = result.warnings.find((w) => w.type === closureVarWarning);
+    expect(closureWarning).toBeUndefined();
+  });
+
+  it("should NOT generate closure variable warning for module-level imports in interpolation", () => {
+    const source = `
+import { css } from "styled-components";
+import styled from "styled-components";
+import { colors } from "./theme";
+
+const helper = () => css\`
+  color: \${colors.primary};
+\`;
+
+const Box = styled.div\`
+  \${helper}
+\`;
+
+export const App = () => <Box>Test</Box>;
+`;
+
+    const result = transformWithWarnings(
+      { source, path: "test.tsx" },
+      { jscodeshift: j, j, stats: () => {}, report: () => {} },
+      { adapter: fixtureAdapter },
+    );
+
+    // colors is a module-level import, not a closure variable
+    // The transform may bail for other reasons, but NOT due to closure variable detection
+    const closureWarning = result.warnings.find((w) => w.type === closureVarWarning);
+    expect(closureWarning).toBeUndefined();
+  });
+});

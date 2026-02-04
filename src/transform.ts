@@ -25,6 +25,7 @@ import { postProcessStep } from "./internal/transform-steps/post-process.js";
 import { preflight } from "./internal/transform-steps/preflight.js";
 import { reinsertStaticPropsStep } from "./internal/transform-steps/reinsert-static-props.js";
 import { rewriteJsxStep } from "./internal/transform-steps/rewrite-jsx.js";
+import { upgradePolymorphicAsPropTypesStep } from "./internal/transform-steps/upgrade-polymorphic-as-prop-types.js";
 import type { TransformStep } from "./internal/transform-types.js";
 
 export type { TransformOptions, TransformResult } from "./internal/transform-types.js";
@@ -73,6 +74,7 @@ export function transformWithWarnings(
     collectStaticPropsStep,
     rewriteJsxStep,
     emitWrappersStep,
+    upgradePolymorphicAsPropTypesStep,
     ensureMergerImportStep,
     reinsertStaticPropsStep,
     postProcessStep,

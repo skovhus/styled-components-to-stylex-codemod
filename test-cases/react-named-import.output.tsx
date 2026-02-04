@@ -1,12 +1,12 @@
 import * as stylex from "@stylexjs/stylex";
 import React, { useCallback, useEffect } from "react";
 
-interface ButtonProps extends Omit<React.ComponentProps<"button">, "className" | "style"> {
+interface ButtonProps {
   variant: "primary" | "secondary";
 }
 
 // This styled component has props which will generate React.PropsWithChildren
-function Button(props: ButtonProps) {
+function Button(props: Omit<React.ComponentProps<"button">, "className" | "style"> & ButtonProps) {
   const { children, variant } = props;
   return (
     <button {...stylex.props(styles.button, variant === "primary" && styles.buttonVariantPrimary)}>

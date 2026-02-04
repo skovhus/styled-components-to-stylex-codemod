@@ -9,13 +9,14 @@ import type { Colors } from "./lib/colors";
 // Otherwise: "Property 'className' does not exist on type 'MyProps'"
 
 // Pattern 1: styled("span") with custom props - wrapper needs span attributes
-interface TextColorProps extends React.ComponentProps<"span"> {
+interface TextColorProps {
   /** Custom color prop */
   color: string;
-  as?: React.ElementType;
 }
 
-export function TextColor(props: TextColorProps) {
+export function TextColor<C extends React.ElementType = "span">(
+  props: TextColorProps & React.ComponentPropsWithRef<C> & { as?: C },
+) {
   const { as: Component = "span", className, children, style, color } = props;
   return (
     <Component {...mergedSx(styles.textColorColor(color), className, style)}>{children}</Component>
@@ -60,14 +61,15 @@ export function App() {
 
 // Pattern 3: styled("span") with NO local usage - wrapper props should still be extended
 // This matches TextColor.tsx in a design system which doesn't use the component in the same file
-interface ThemeTextProps extends React.ComponentProps<"span"> {
+interface ThemeTextProps {
   /** Theme color name */
   themeColor: Colors;
-  as?: React.ElementType;
 }
 
 /** A text span that gets color from theme */
-export function ThemeText(props: ThemeTextProps) {
+export function ThemeText<C extends React.ElementType = "span">(
+  props: ThemeTextProps & React.ComponentPropsWithRef<C> & { as?: C },
+) {
   const { as: Component = "span", className, children, style, themeColor } = props;
   return (
     <Component {...mergedSx(styles.themeTextColor(themeColor), className, style)}>

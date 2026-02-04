@@ -6,6 +6,7 @@ import {
   isComponentUsedInJsx,
   propagateDelegationWrapperRequirements,
 } from "../utilities/delegation-utils.js";
+import { typeContainsPolymorphicAs } from "../utilities/polymorphic-as-detection.js";
 
 type JsxAttr = JSXAttribute | JSXSpreadAttribute;
 
@@ -431,96 +432,10 @@ export function analyzeBeforeEmitStep(ctx: TransformContext): StepResult {
   // so delegation doesn't reference a base that was inlined/removed.
   propagateDelegationWrapperRequirements({ root, j, styledDecls, declByLocal });
 
-  // Helper to check if a type member is `as?: React.ElementType`.
-  const isAsElementTypeMember = (member: any): boolean => {
-    if (
-      member.type !== "TSPropertySignature" ||
-      member.key?.type !== "Identifier" ||
-      member.key.name !== "as"
-    ) {
-      return false;
-    }
-    const memberType = member.typeAnnotation?.typeAnnotation;
-    if (memberType?.type === "TSTypeReference") {
-      const memberTypeName = memberType.typeName;
-      // Check for React.ElementType
-      if (
-        memberTypeName?.type === "TSQualifiedName" &&
-        memberTypeName.left?.name === "React" &&
-        memberTypeName.right?.name === "ElementType"
-      ) {
-        return true;
-      }
-      // Check for ElementType (without React. prefix)
-      if (memberTypeName?.type === "Identifier" && memberTypeName.name === "ElementType") {
-        return true;
-      }
-    }
-    return false;
-  };
-
-  // Helper to check if a type contains `as?: React.ElementType` property.
-  // This handles both inline type literals and type references.
-  const typeContainsAsElementType = (typeNode: any): boolean => {
-    if (!typeNode) {
-      return false;
-    }
-    // Handle intersection types: A & B & C
-    if (typeNode.type === "TSIntersectionType") {
-      return (typeNode.types ?? []).some((t: any) => typeContainsAsElementType(t));
-    }
-    // Handle parenthesized types: (A & B)
-    if (typeNode.type === "TSParenthesizedType") {
-      return typeContainsAsElementType(typeNode.typeAnnotation);
-    }
-    // Handle type references (e.g., TextProps, React.PropsWithChildren<{...}>)
-    if (typeNode.type === "TSTypeReference") {
-      // Check type parameters (e.g., React.PropsWithChildren<{ as?: ... }>)
-      const typeParams = typeNode.typeParameters?.params ?? [];
-      for (const tp of typeParams) {
-        if (typeContainsAsElementType(tp)) {
-          return true;
-        }
-      }
-      // If it's a simple identifier, look it up
-      if (typeNode.typeName?.type === "Identifier") {
-        const typeName = typeNode.typeName.name;
-        // Look up type alias
-        const typeAlias = root
-          .find(j.TSTypeAliasDeclaration)
-          .filter((p) => (p.node as any).id?.name === typeName);
-        if (typeAlias.size() > 0) {
-          return typeContainsAsElementType(typeAlias.get().node.typeAnnotation);
-        }
-        // Look up interface
-        const iface = root
-          .find(j.TSInterfaceDeclaration)
-          .filter((p) => (p.node as any).id?.name === typeName);
-        if (iface.size() > 0) {
-          const body = iface.get().node.body?.body ?? [];
-          for (const member of body) {
-            if (isAsElementTypeMember(member)) {
-              return true;
-            }
-          }
-        }
-      }
-      return false;
-    }
-    // Handle type literals: { as?: React.ElementType; ... }
-    if (typeNode.type === "TSTypeLiteral") {
-      for (const member of typeNode.members ?? []) {
-        if (isAsElementTypeMember(member)) {
-          return true;
-        }
-      }
-    }
-    return false;
-  };
-
   // Detection of polymorphic intrinsic wrappers (before emitStylesAndImports for merger import)
   // These are intrinsic styled components (styled.tag) used with as={} in JSX OR whose props type
-  // includes as?: React.ElementType. They pass style through directly instead of merging.
+  // includes polymorphic `as` (either `as?: React.ElementType` or `as?: C` where C extends React.ElementType).
+  // They pass style through directly instead of merging.
   for (const decl of styledDecls) {
     if (decl.base.kind === "intrinsic") {
       // Check for as/forwardedAs usage in JSX
@@ -532,8 +447,9 @@ export function analyzeBeforeEmitStep(ctx: TransformContext): StepResult {
       const hasForwardedAs =
         el.find(j.JSXAttribute, { name: { type: "JSXIdentifier", name: "forwardedAs" } }).size() >
         0;
-      // Also check if props type contains as?: React.ElementType
-      const propsTypeHasAs = decl.propsType && typeContainsAsElementType(decl.propsType);
+      // Also check if props type contains polymorphic `as`
+      const propsTypeHasAs =
+        decl.propsType && typeContainsPolymorphicAs({ root, j, typeNode: decl.propsType });
       if (hasAs || hasForwardedAs || propsTypeHasAs) {
         (decl as any).isPolymorphicIntrinsicWrapper = true;
       }
