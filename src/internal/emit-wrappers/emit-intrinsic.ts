@@ -2354,11 +2354,24 @@ export function emitIntrinsicWrappers(emitter: WrapperEmitter): {
       if (!typeAliasEmitted && emitTypes) {
         if (usePolymorphicPattern) {
           // When there are no custom props, use inline type instead of referencing a named type
+          // Use polymorphicIntrinsicPropsTypeText to properly omit className/style when not allowed
           if (hasNoCustomProps) {
-            inlineTypeText = "React.ComponentPropsWithRef<C> & { as?: C }";
+            const poly = polymorphicIntrinsicPropsTypeText({
+              tagName,
+              allowClassNameProp,
+              allowStyleProp,
+            });
+            inlineTypeText = poly.typeExprText;
           } else if (explicit) {
             // Use the user-defined type in an inline intersection - don't modify the original type
-            inlineTypeText = `${explicit} & React.ComponentPropsWithRef<C> & { as?: C }`;
+            // Also respect allowClassNameProp/allowStyleProp in the base type
+            const poly = polymorphicIntrinsicPropsTypeText({
+              tagName,
+              allowClassNameProp,
+              allowStyleProp,
+              extra: explicit,
+            });
+            inlineTypeText = poly.typeExprText;
           } else {
             // Fallback: use the polymorphic props type with generic (shouldn't happen often)
             inlineTypeText = `${emitter.propsTypeNameFor(d.localName)}<C>`;
