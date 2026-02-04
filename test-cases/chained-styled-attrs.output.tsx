@@ -2,14 +2,10 @@ import * as React from "react";
 import * as stylex from "@stylexjs/stylex";
 import { mergedSx } from "./lib/mergedSx";
 
-interface TextProps {
-  className?: string;
-  style?: React.CSSProperties;
-  children?: React.ReactNode;
-}
-
 /** A polymorphic Text component that accepts "as" prop */
-function Text(props: TextProps & { as?: React.ElementType }) {
+function Text<C extends React.ElementType = "span">(
+  props: React.ComponentPropsWithRef<C> & { as?: C },
+) {
   const { as: Component = "span", children, className, style } = props;
   return (
     <Component className={className} style={style}>

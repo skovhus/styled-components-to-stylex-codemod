@@ -2,18 +2,13 @@ import * as React from "react";
 import * as stylex from "@stylexjs/stylex";
 import { mergedSx } from "./lib/mergedSx";
 
-type ExportedButtonProps = React.PropsWithChildren<{
-  className?: string;
-  style?: React.CSSProperties;
-  ref?: React.Ref<HTMLButtonElement>;
-  as?: React.ElementType;
-}>;
-
 /**
  *  This component is exported and will use shouldSupportExternalStyling to enable
  * className/style/rest merging for external style extension support.
  **/
-export function ExportedButton(props: ExportedButtonProps) {
+export function ExportedButton<C extends React.ElementType = "button">(
+  props: React.ComponentPropsWithRef<C> & { as?: C },
+) {
   const { as: Component = "button", className, children, style } = props;
   return <Component {...mergedSx(styles.exportedButton, className, style)}>{children}</Component>;
 }

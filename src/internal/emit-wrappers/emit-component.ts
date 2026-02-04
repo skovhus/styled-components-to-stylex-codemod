@@ -127,11 +127,6 @@ export function emitComponentWrappers(emitter: WrapperEmitter): {
         }
         functionParamTypeName = explicitTypeName;
       } else {
-        // Extract prop names from explicit type to avoid duplicating them in inferred type
-        const explicitPropNames = d.propsType
-          ? emitter.getExplicitPropNames(d.propsType)
-          : new Set<string>();
-
         if (isPolymorphicComponentWrapper) {
           const baseProps = `React.ComponentPropsWithRef<typeof ${wrappedComponent}>`;
           const omitted: string[] = [];
@@ -143,7 +138,7 @@ export function emitComponentWrappers(emitter: WrapperEmitter): {
           }
           const typeText = [
             baseProps,
-            `Omit<React.ComponentPropsWithoutRef<C>, keyof ${baseProps} | "className" | "style">`,
+            `Omit<React.ComponentPropsWithRef<C>, keyof ${baseProps} | "className" | "style">`,
             "{\n  as?: C;\n}",
             // Include user's explicit props type if it exists
             ...(explicit ? [explicit] : []),
@@ -158,8 +153,6 @@ export function emitComponentWrappers(emitter: WrapperEmitter): {
             d,
             allowClassNameProp,
             allowStyleProp,
-            includeAsProp: false,
-            skipProps: explicitPropNames,
           });
           // Add ref support when .attrs({ as: "element" }) is used
           const attrsAs = getAttrsAsString(d);

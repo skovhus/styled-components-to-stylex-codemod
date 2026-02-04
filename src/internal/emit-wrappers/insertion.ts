@@ -1,6 +1,7 @@
 import type { ASTNode, Comment } from "jscodeshift";
 import type { WrapperEmitter } from "./wrapper-emitter.js";
 import { ensureReactBinding } from "../utilities/ensure-react-binding.js";
+import { extractDefaultAsTagFromDestructure } from "../utilities/polymorphic-as-detection.js";
 
 export function insertEmittedWrappers(args: {
   emitter: WrapperEmitter;
@@ -59,6 +60,44 @@ export function insertEmittedWrappers(args: {
       if (node?.type !== "FunctionDeclaration") {
         return node;
       }
+
+      // Safety net: if a wrapper destructures `as: Component = "<tag>"` AND has a props
+      // type that uses generics (e.g., `Props<C>`), add the missing type parameters.
+      //
+      // This protects against emitter paths that annotate props as `<C>` but forget to
+      // attach the function's `typeParameters`.
+      //
+      // Note: We only add generics if the props type reference uses generics. For simple
+      // `as?: React.ElementType` support (non-exported components), we don't add generics.
+      if (!(node as any).typeParameters) {
+        // Check if the props type annotation uses generics (e.g., `Props<C>`)
+        const propsTypeUsesGeneric = (() => {
+          const params = (node as any).params ?? [];
+          if (!Array.isArray(params) || params.length === 0) {
+            return false;
+          }
+          const firstParam = params[0];
+          const typeAnn = firstParam?.typeAnnotation?.typeAnnotation;
+          if (!typeAnn) {
+            return false;
+          }
+          // Check for `Props<C>` pattern
+          if (typeAnn.type === "TSTypeReference" && typeAnn.typeParameters?.params?.length > 0) {
+            return true;
+          }
+          return false;
+        })();
+
+        if (propsTypeUsesGeneric) {
+          const defaultTag = extractDefaultAsTagFromDestructure(node);
+          if (defaultTag) {
+            (node as any).typeParameters = j(
+              `function _<C extends React.ElementType = "${defaultTag}">() { return null }`,
+            ).get().node.program.body[0].typeParameters;
+          }
+        }
+      }
+
       const fnName = typeof node.id?.name === "string" ? node.id.name : null;
       if (!fnName) {
         return node;

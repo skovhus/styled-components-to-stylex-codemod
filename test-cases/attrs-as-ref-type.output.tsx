@@ -4,23 +4,25 @@ import { mergedSx } from "./lib/mergedSx";
 
 // A polymorphic Text component that defaults to span
 type TextProps = React.PropsWithChildren<{
-  as?: React.ElementType;
-  className?: string;
-  style?: React.CSSProperties;
   variant?: "small" | "regular" | "large";
 }>;
 
-function Text(props: TextProps) {
+function Text<C extends React.ElementType = "span">(
+  props: TextProps & {
+    className?: string;
+    style?: React.CSSProperties;
+    children?: React.ReactNode;
+  } & { as?: C },
+) {
   const {
     as: Component = "span",
     className,
     children,
     style,
     variant: variant = "regular",
-    ...rest
   } = props;
   return (
-    <Component {...rest} {...mergedSx([styles.text, variants[variant]], className, style)}>
+    <Component {...mergedSx([styles.text, variants[variant]], className, style)}>
       {children}
     </Component>
   );

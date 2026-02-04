@@ -28,13 +28,15 @@ function Input(props: InputProps) {
 }
 
 // Pattern 2: styled("input").attrs (function call + attrs)
-export interface TextInputProps extends Omit<React.ComponentProps<"input">, "className" | "style"> {
+export interface TextInputProps {
   allowPMAutofill?: boolean;
   // Data attribute used by 1Password to control autofill behavior
   "data-1p-ignore"?: boolean;
 }
 
-export function TextInput(props: TextInputProps) {
+export function TextInput(
+  props: Omit<React.ComponentProps<"input">, "className" | "style"> & TextInputProps,
+) {
   const { allowPMAutofill, ...rest } = props;
   return (
     <input

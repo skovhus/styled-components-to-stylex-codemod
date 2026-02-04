@@ -9,13 +9,15 @@ type TextProps = React.PropsWithChildren<{
   style?: React.CSSProperties;
 }>;
 
-function Text(props: TextProps) {
-  const { as: Component = "span", className, children, style, ...rest } = props;
-  return (
-    <Component {...rest} {...mergedSx(styles.text, className, style)}>
-      {children}
-    </Component>
-  );
+function Text(
+  props: TextProps & {
+    className?: string;
+    style?: React.CSSProperties;
+    children?: React.ReactNode;
+  },
+) {
+  const { className, children, style } = props;
+  return <span {...mergedSx(styles.text, className, style)}>{children}</span>;
 }
 
 type LabelProps = Omit<React.ComponentPropsWithRef<typeof Text>, "className" | "style"> & {

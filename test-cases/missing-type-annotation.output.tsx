@@ -4,7 +4,7 @@ import * as stylex from "@stylexjs/stylex";
 // Bug 2: When codemod generates wrapper functions, it must include
 // proper type annotations for all parameters to avoid implicit 'any'.
 
-interface BoxProps extends Omit<React.ComponentProps<"div">, "className" | "style"> {
+interface BoxProps {
   /** Whether the box has a border */
   bordered?: boolean;
   /** Background color override */
@@ -12,7 +12,7 @@ interface BoxProps extends Omit<React.ComponentProps<"div">, "className" | "styl
 }
 
 // Component with props that affect styles
-export function Box(props: BoxProps) {
+export function Box(props: React.PropsWithChildren<BoxProps>) {
   const { children, bordered, bg } = props;
   return (
     <div

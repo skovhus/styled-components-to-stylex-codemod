@@ -9,7 +9,7 @@ import { mergedSx } from "./lib/mergedSx";
 /**
  * Card props
  */
-export interface CardProps extends Omit<React.ComponentProps<"div">, "style"> {
+export interface CardProps {
   /** Title of the card */
   title: string;
   /** Whether the card is highlighted */
@@ -17,7 +17,7 @@ export interface CardProps extends Omit<React.ComponentProps<"div">, "style"> {
 }
 
 // The styled component uses the existing props interface
-export function Card(props: CardProps) {
+export function Card(props: Omit<React.ComponentProps<"div">, "style"> & CardProps) {
   const { className, children, highlighted, ...rest } = props;
   return (
     <div

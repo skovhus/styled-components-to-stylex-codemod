@@ -5,14 +5,14 @@ import { mergedSx } from "./lib/mergedSx";
 // Bug 7: When styled components are transformed, related type exports
 // and component exports should be preserved properly.
 
-export interface ButtonProps extends React.ComponentProps<"button"> {
+export interface ButtonProps {
   variant?: "primary" | "secondary";
   size?: "small" | "large";
 }
 
 export type ButtonVariant = ButtonProps["variant"];
 
-function Button(props: ButtonProps) {
+function Button(props: React.ComponentProps<"button"> & ButtonProps) {
   const { className, children, style, size, variant, ...rest } = props;
   return (
     <button
