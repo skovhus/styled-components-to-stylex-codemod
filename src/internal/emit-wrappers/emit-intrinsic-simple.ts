@@ -1,9 +1,5 @@
 import type { StyledDecl } from "../transform-types.js";
-import {
-  collectInlineStylePropNames,
-  type ExpressionKind,
-  type InlineStyleProp,
-} from "./types.js";
+import { collectInlineStylePropNames, type ExpressionKind, type InlineStyleProp } from "./types.js";
 import type { JsxAttr, StatementKind } from "./wrapper-emitter.js";
 import { emitStyleMerging } from "./style-merger.js";
 import { sortVariantEntriesBySpecificity, VOID_TAGS } from "./type-helpers.js";
@@ -296,7 +292,7 @@ export function emitSimpleWithConfigWrappers(ctx: EmitIntrinsicContext): void {
     bodyStmts.push(j.returnStatement(jsx as any));
 
     emitted.push(
-      withLeadingCommentsOnFirstFunction(
+      ...withLeadingCommentsOnFirstFunction(
         [
           emitter.buildWrapperFunction({
             localName: d.localName,
@@ -304,8 +300,9 @@ export function emitSimpleWithConfigWrappers(ctx: EmitIntrinsicContext): void {
             bodyStmts,
             typeParameters:
               allowAsProp && emitTypes
-                ? j(`function _<C extends React.ElementType = "${tagName}">() { return null }`).get()
-                    .node.program.body[0].typeParameters
+                ? j(
+                    `function _<C extends React.ElementType = "${tagName}">() { return null }`,
+                  ).get().node.program.body[0].typeParameters
                 : undefined,
           }),
         ],
@@ -834,8 +831,9 @@ export function emitSimpleExportedIntrinsicWrappers(ctx: EmitIntrinsicContext): 
               params: [propsParamId],
               bodyStmts,
               typeParameters: shouldAddTypeParams
-                ? j(`function _<C extends React.ElementType = "${tagName}">() { return null }`).get()
-                    .node.program.body[0].typeParameters
+                ? j(
+                    `function _<C extends React.ElementType = "${tagName}">() { return null }`,
+                  ).get().node.program.body[0].typeParameters
                 : undefined,
             }),
           ],

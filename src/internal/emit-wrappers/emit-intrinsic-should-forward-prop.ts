@@ -15,7 +15,6 @@ export function emitShouldForwardPropWrappers(ctx: EmitIntrinsicContext): void {
     buildCompoundVariantExpressions,
     emitPropsType,
     asDestructureProp,
-    hasElementPropsInDefaultAttrs,
     shouldAllowAsProp,
   } = ctx.helpers;
   // Generic wrappers for `withConfig({ shouldForwardProp })` cases.
