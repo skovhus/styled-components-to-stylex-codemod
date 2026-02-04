@@ -61,7 +61,7 @@ import {
   groupVariantBucketsIntoDimensions,
 } from "./lower-rules/variants.js";
 import { mergeStyleObjects, toKebab } from "./lower-rules/utils.js";
-import { extractConditionName } from "./lower-rules/condition-name.js";
+import { extractConditionName } from "./utilities/style-key-naming.js";
 import { computeSelectorWarningLoc, normalizeStylisAstToIR } from "./css-ir.js";
 import { createCssHelperHandlers } from "./lower-rules/css-helper-handlers.js";
 import { finalizeDescendantOverrides } from "./lower-rules/descendant-overrides.js";
@@ -620,6 +620,31 @@ export function lowerRules(args: {
 
     const isPlainTemplateLiteral = (node: ExpressionKind | null | undefined): boolean =>
       !!node && typeof node === "object" && (node as { type?: string }).type === "TemplateLiteral";
+
+    // Helper to detect if a conditional test expression accesses theme.* (e.g., props.theme.isDark)
+    // StyleX doesn't have runtime theme access, so we need to bail out with a warning.
+    const isThemeAccessTest = (test: ExpressionKind, paramName: string | null): boolean => {
+      const check = (node: ExpressionKind): boolean => {
+        const info = extractRootAndPath(node);
+        if (info && paramName && info.rootName === paramName && info.path[0] === "theme") {
+          return true;
+        }
+        // Check UnaryExpression: !props.theme.isDark
+        if (node.type === "UnaryExpression" && node.operator === "!" && node.argument) {
+          return check(node.argument as ExpressionKind);
+        }
+        // Check BinaryExpression: props.theme.mode === "dark"
+        if (node.type === "BinaryExpression") {
+          return check(node.left as ExpressionKind) || check(node.right as ExpressionKind);
+        }
+        // Check LogicalExpression: props.theme.isDark && props.enabled
+        if (node.type === "LogicalExpression") {
+          return check(node.left as ExpressionKind) || check(node.right as ExpressionKind);
+        }
+        return false;
+      };
+      return check(test);
+    };
 
     const tryHandleCssHelperConditionalBlock = (d: any): boolean => {
       if (d.value.kind !== "interpolated") {
@@ -1370,6 +1395,20 @@ export function lowerRules(args: {
       }
 
       const testInfo = parseChainedTestInfo(conditional.test);
+
+      // Check if the condition tests theme.* (e.g., props.theme.isDark) which is not supported.
+      // StyleX doesn't have runtime theme access - bail out with a warning.
+      if (isThemeAccessTest(conditional.test, paramName)) {
+        const loc = getNodeLocStart(conditional.test);
+        warnings.push({
+          severity: "warning",
+          type: "Theme-dependent conditional values require a project-specific theme source (e.g. useTheme())",
+          loc: loc ?? decl.loc,
+          context: {},
+        });
+        bail = true;
+        return true;
+      }
 
       const cons = conditional.consequent;
       const alt = conditional.alternate;
