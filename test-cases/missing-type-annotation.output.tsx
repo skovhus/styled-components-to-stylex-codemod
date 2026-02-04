@@ -29,10 +29,8 @@ export function Box(props: React.PropsWithChildren<BoxProps>) {
   );
 }
 
-type InputProps = Omit<React.ComponentProps<"input">, "className" | "style">;
-
 // Component with callback that receives event
-export function Input(props: InputProps) {
+export function Input(props: Omit<React.ComponentProps<"input">, "className" | "style">) {
   return <input {...props} {...stylex.props(styles.input)} />;
 }
 

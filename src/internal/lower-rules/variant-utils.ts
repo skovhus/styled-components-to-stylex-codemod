@@ -91,9 +91,7 @@ export const createPropTestHelpers = (
     return `${info.rootName}.${info.path.join(".")}`;
   };
 
-  const readPropAccess = (
-    node: ExpressionKind,
-  ): { propName: string; whenName: string } | null => {
+  const readPropAccess = (node: ExpressionKind): { propName: string; whenName: string } | null => {
     const info = extractRootAndPath(node);
     if (!info) {
       return null;
@@ -135,14 +133,9 @@ export const createPropTestHelpers = (
     }
     if (test.type === "UnaryExpression" && test.operator === "!" && test.argument) {
       const propAccess = readPropAccess(test.argument as ExpressionKind);
-      return propAccess
-        ? { when: `!${propAccess.whenName}`, propName: propAccess.propName }
-        : null;
+      return propAccess ? { when: `!${propAccess.whenName}`, propName: propAccess.propName } : null;
     }
-    if (
-      test.type === "BinaryExpression" &&
-      (test.operator === "===" || test.operator === "!==")
-    ) {
+    if (test.type === "BinaryExpression" && (test.operator === "===" || test.operator === "!==")) {
       const left = test.left;
 
       // Helper to get rhs value, including special handling for undefined Identifier
@@ -211,8 +204,7 @@ export const createPropTestHelpers = (
         // Combine conditions with &&
         const combinedWhen = `${leftInfo.when} && ${rightInfo.when}`;
         // Collect all prop names from both sides of the chain
-        const leftProps =
-          leftInfo.allPropNames ?? (leftInfo.propName ? [leftInfo.propName] : []);
+        const leftProps = leftInfo.allPropNames ?? (leftInfo.propName ? [leftInfo.propName] : []);
         const rightProps = rightInfo.propName ? [rightInfo.propName] : [];
         const allPropNames = [...new Set([...leftProps, ...rightProps])];
         // For chained conditions, we use the last propName as the primary

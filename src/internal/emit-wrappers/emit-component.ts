@@ -95,6 +95,8 @@ export function emitComponentWrappers(emitter: WrapperEmitter): {
     const propsIdForExpr = j.identifier("props");
     // Track which type name to use for the function parameter
     let functionParamTypeName: string | null = null;
+    // Track inline type text for when we skip emitting a named type (no custom props)
+    let inlineTypeText: string | undefined;
     {
       const explicit = emitter.stringifyTsType(d.propsType);
 
@@ -167,7 +169,13 @@ export function emitComponentWrappers(emitter: WrapperEmitter): {
           const typeText = explicitWithRef
             ? emitter.joinIntersection(inferred, explicitWithRef)
             : inferred;
-          emitNamedPropsType(d.localName, typeText);
+          // When there are no custom props, skip emitting named type and use inline type instead
+          const hasNoCustomProps = !explicitWithRef;
+          if (hasNoCustomProps) {
+            inlineTypeText = typeText;
+          } else {
+            emitNamedPropsType(d.localName, typeText);
+          }
         }
       }
       needsReactTypeImport = true;
@@ -395,7 +403,8 @@ export function emitComponentWrappers(emitter: WrapperEmitter): {
         j.tsTypeReference(j.identifier(functionParamTypeName)),
       );
     } else if (!isPolymorphicComponentWrapper) {
-      emitter.annotatePropsParam(propsParamId, d.localName);
+      // When there are no custom props, use inline type instead of named type
+      emitter.annotatePropsParam(propsParamId, d.localName, inlineTypeText);
     }
     const propsId = j.identifier("props");
     const stylexPropsCall = j.callExpression(

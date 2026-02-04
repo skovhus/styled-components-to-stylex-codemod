@@ -36,15 +36,12 @@ interface Props extends React.SVGProps<SVGSVGElement> {
   selected?: boolean;
 }
 
-type IconWithTransformProps = Omit<
-  React.ComponentPropsWithRef<typeof Icon_>,
-  "className" | "style"
->;
-
 /**
  * Renders a diamond shaped icon for the timeline
  */
-export function IconWithTransform(props: IconWithTransformProps) {
+export function IconWithTransform(
+  props: Omit<React.ComponentPropsWithRef<typeof Icon_>, "className" | "style">,
+) {
   const { noDate, selected, status, ...rest } = props;
 
   return (

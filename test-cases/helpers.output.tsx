@@ -1,35 +1,23 @@
-import * as React from "react";
+import React from "react";
 import * as stylex from "@stylexjs/stylex";
 import { helpers } from "./lib/helpers.stylex";
 import { $colors } from "./tokens.stylex";
 
-type TruncatedTextProps = React.PropsWithChildren<{
-  ref?: React.Ref<HTMLParagraphElement>;
-}>;
-
 // Using CSS snippet helper for truncation
-function TruncatedText(props: TruncatedTextProps) {
+function TruncatedText(props: React.PropsWithChildren<{ ref?: React.Ref<HTMLParagraphElement> }>) {
   const { children } = props;
 
   return <p {...stylex.props(styles.truncatedText, helpers.truncate)}>{children}</p>;
 }
 
-type CenteredContainerProps = React.PropsWithChildren<{
-  ref?: React.Ref<HTMLDivElement>;
-}>;
-
 // Using CSS snippet helper for flex centering
-function CenteredContainer(props: CenteredContainerProps) {
+function CenteredContainer(props: React.PropsWithChildren<{ ref?: React.Ref<HTMLDivElement> }>) {
   const { children } = props;
 
   return <div {...stylex.props(styles.centeredContainer, helpers.flexCenter)}>{children}</div>;
 }
 
-type CardTitleProps = React.PropsWithChildren<{
-  ref?: React.Ref<HTMLHeadingElement>;
-}>;
-
-function CardTitle(props: CardTitleProps) {
+function CardTitle(props: React.PropsWithChildren<{ ref?: React.Ref<HTMLHeadingElement> }>) {
   const { children } = props;
 
   return <h3 {...stylex.props(styles.cardTitle, helpers.truncate)}>{children}</h3>;

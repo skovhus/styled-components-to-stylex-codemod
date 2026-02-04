@@ -8,7 +8,10 @@ import type { WarningLog } from "../logger.js";
 import type { StyledDecl } from "../transform-types.js";
 import type { CssHelperFunction } from "../transform/css-helpers.js";
 import { cssDeclarationToStylexDeclarations } from "../css-prop-mapping.js";
-import { getArrowFnParamBindings, getMemberPathFromIdentifier } from "../utilities/jscodeshift-utils.js";
+import {
+  getArrowFnParamBindings,
+  getMemberPathFromIdentifier,
+} from "../utilities/jscodeshift-utils.js";
 import { createPropTestHelpers, invertWhen } from "./variant-utils.js";
 import { ensureShouldForwardPropDrop } from "./types.js";
 import { mergeStyleObjects } from "./utils.js";

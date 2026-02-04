@@ -1,9 +1,7 @@
 import React from "react";
 import * as stylex from "@stylexjs/stylex";
 
-type SelectProps = Omit<React.ComponentProps<"select">, "className" | "style">;
-
-export function Select(props: SelectProps) {
+export function Select(props: Omit<React.ComponentProps<"select">, "className" | "style">) {
   const { children, ...rest } = props;
 
   return (

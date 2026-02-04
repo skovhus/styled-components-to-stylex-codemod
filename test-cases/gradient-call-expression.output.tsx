@@ -1,12 +1,8 @@
-import * as React from "react";
+import React from "react";
 import * as stylex from "@stylexjs/stylex";
 import { helpers } from "./lib/helpers.stylex";
 
-type GradientTextProps = React.PropsWithChildren<{
-  ref?: React.Ref<HTMLSpanElement>;
-}>;
-
-export function GradientText(props: GradientTextProps) {
+export function GradientText(props: React.PropsWithChildren<{ ref?: React.Ref<HTMLSpanElement> }>) {
   const { children } = props;
 
   return <span {...stylex.props(styles.gradientText, helpers.gradient)}>{children}</span>;

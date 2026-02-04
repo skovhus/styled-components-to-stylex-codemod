@@ -15,7 +15,7 @@ interface TextColorProps {
 }
 
 export function TextColor<C extends React.ElementType = "span">(
-  props: TextColorProps & React.ComponentPropsWithRef<C> & { as?: C },
+  props: React.ComponentPropsWithRef<C> & Omit<TextColorProps, "as"> & { as?: C },
 ) {
   const { as: Component = "span", className, children, style, color } = props;
 

@@ -1,26 +1,26 @@
-import * as React from "react";
+import React from "react";
 import * as stylex from "@stylexjs/stylex";
 import { mergedSx } from "./lib/mergedSx";
 
-type OverrideButtonProps = React.PropsWithChildren<{
-  style?: React.CSSProperties;
-  ref?: React.Ref<HTMLButtonElement>;
-}>;
-
 // Using !important to override inline styles or third-party CSS
-function OverrideButton(props: OverrideButtonProps) {
+function OverrideButton(
+  props: React.PropsWithChildren<{
+    style?: React.CSSProperties;
+    ref?: React.Ref<HTMLButtonElement>;
+  }>,
+) {
   const { children, style } = props;
 
   return <button {...mergedSx(styles.overrideButton, undefined, style)}>{children}</button>;
 }
 
-type MixedStylesProps = React.PropsWithChildren<{
-  style?: React.CSSProperties;
-  ref?: React.Ref<HTMLParagraphElement>;
-}>;
-
 // Mixed important and normal
-function MixedStyles(props: MixedStylesProps) {
+function MixedStyles(
+  props: React.PropsWithChildren<{
+    style?: React.CSSProperties;
+    ref?: React.Ref<HTMLParagraphElement>;
+  }>,
+) {
   const { children, style } = props;
 
   return <p {...mergedSx(styles.mixedStyles, undefined, style)}>{children}</p>;
