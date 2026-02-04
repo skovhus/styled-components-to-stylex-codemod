@@ -227,22 +227,6 @@ export function emitIntrinsicWrappers(emitter: WrapperEmitter): {
     return { typeExprText, genericParams };
   };
 
-  // NOTE: We no longer modify user-defined types to add polymorphic support.
-  // User-defined interfaces/types should remain unchanged.
-  // The polymorphic pattern is added only in the function parameter as an intersection:
-  // `UserProps & React.ComponentPropsWithRef<C> & { as?: C }`
-  // This function now returns false to indicate no type was modified, and the caller
-  // should use an inline intersection type in the function parameter.
-  const ensureExistingPolymorphicPropsType = (_args: {
-    localName: string;
-    tagName: string;
-    allowClassNameProp: boolean;
-    allowStyleProp: boolean;
-  }): boolean => {
-    // Don't modify user-defined types - return false to signal that an inline type should be used
-    return false;
-  };
-
   // Helper to check if a props type already has `as?: React.ElementType` which means
   // it was designed for polymorphism and shouldn't be upgraded to our generic pattern
   // (doing so can cause TypeScript inference issues with custom props)
@@ -321,17 +305,9 @@ export function emitIntrinsicWrappers(emitter: WrapperEmitter): {
       allowStyleProp,
       extra: typeText,
     });
+    // Try to emit a named props type. If it already exists (user-defined), the inline
+    // function parameter will use the intersection pattern instead.
     const typeAliasEmitted = emitNamedPropsType(localName, poly.typeExprText, poly.genericParams);
-    if (!typeAliasEmitted) {
-      // If the props type name already exists (e.g. user-defined `interface FooProps { ... }`),
-      // upgrade it in-place to support polymorphic `as` with a constrained type parameter.
-      ensureExistingPolymorphicPropsType({
-        localName,
-        tagName,
-        allowClassNameProp,
-        allowStyleProp,
-      });
-    }
     needsReactTypeImport = true;
     return typeAliasEmitted;
   };
@@ -785,6 +761,8 @@ export function emitIntrinsicWrappers(emitter: WrapperEmitter): {
 
       // When there are no custom props, skip generating a named type.
       // The function parameter will use inline `React.ComponentPropsWithRef<C> & { as?: C }`.
+      // When there ARE custom props but a user-defined type already exists, the inline
+      // function parameter will use the intersection pattern instead.
       let typeAliasEmitted = false;
       if (!hasNoCustomProps) {
         typeAliasEmitted = emitNamedPropsType(
@@ -792,14 +770,6 @@ export function emitIntrinsicWrappers(emitter: WrapperEmitter): {
           typeText,
           `C extends React.ElementType = "${tagName}"`,
         );
-        if (!typeAliasEmitted && allowAsProp) {
-          ensureExistingPolymorphicPropsType({
-            localName: d.localName,
-            tagName,
-            allowClassNameProp,
-            allowStyleProp,
-          });
-        }
       }
       needsReactTypeImport = true;
 
@@ -2187,8 +2157,6 @@ export function emitIntrinsicWrappers(emitter: WrapperEmitter): {
     let inlineTypeText: string | undefined;
     const isExportedComponent = d.isExported || emitter.exportedComponents.has(d.localName);
     const usePolymorphicPattern = allowAsProp && isExportedComponent;
-    // Track whether we need polymorphic type parameters on the function
-    let needsPolymorphicTypeParams = false;
     {
       const explicit = emitter.stringifyTsType(d.propsType);
       const explicitPropNames = d.propsType
@@ -2382,8 +2350,6 @@ export function emitIntrinsicWrappers(emitter: WrapperEmitter): {
             // Fallback: use the polymorphic props type with generic (shouldn't happen often)
             inlineTypeText = `${emitter.propsTypeNameFor(d.localName)}<C>`;
           }
-          // When using polymorphic inline type with C, we need type parameters on the function
-          needsPolymorphicTypeParams = true;
         } else {
           // Use the computed typeText (which may be an intersection) as the inline type.
           inlineTypeText = withSimpleAsPropType(typeText, allowAsProp);
@@ -2623,9 +2589,7 @@ export function emitIntrinsicWrappers(emitter: WrapperEmitter): {
 
       // For exported components with polymorphic as support, add generic type parameters
       // For non-exported components, don't add generics
-      // needsPolymorphicTypeParams ensures we add type params when inlineTypeText uses C
-      const shouldAddTypeParams =
-        (usePolymorphicPattern || needsPolymorphicTypeParams) && emitTypes;
+      const shouldAddTypeParams = usePolymorphicPattern && emitTypes;
       emitted.push(
         ...withLeadingCommentsOnFirstFunction(
           [

@@ -1,5 +1,6 @@
 import { CONTINUE, type StepResult } from "../transform-types.js";
 import { TransformContext } from "../transform-context.js";
+import { isReactElementTypeRef } from "../utilities/polymorphic-as-detection.js";
 
 // Standard props that are already in React.ComponentPropsWithRef<C>
 const STANDARD_PROPS = new Set(["className", "style", "children", "ref"]);
@@ -54,24 +55,6 @@ const typeOnlyHasStandardProps = (root: any, j: any, typeName: string): boolean 
     }
   }
 
-  return false;
-};
-
-const isReactElementTypeRef = (typeNode: any): boolean => {
-  if (!typeNode || typeNode.type !== "TSTypeReference") {
-    return false;
-  }
-  const typeName = typeNode.typeName;
-  if (
-    typeName?.type === "TSQualifiedName" &&
-    typeName.left?.name === "React" &&
-    typeName.right?.name === "ElementType"
-  ) {
-    return true;
-  }
-  if (typeName?.type === "Identifier" && typeName.name === "ElementType") {
-    return true;
-  }
   return false;
 };
 

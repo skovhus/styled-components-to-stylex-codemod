@@ -1,6 +1,9 @@
 import type { ASTNode, Collection, JSCodeshift } from "jscodeshift";
 
-const isReactElementTypeRef = (typeNode: any): boolean => {
+/**
+ * Check if a type node is a reference to React.ElementType or ElementType.
+ */
+export const isReactElementTypeRef = (typeNode: any): boolean => {
   if (!typeNode || typeNode.type !== "TSTypeReference") {
     return false;
   }
