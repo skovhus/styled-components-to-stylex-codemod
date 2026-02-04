@@ -9,6 +9,27 @@ import {
 const STANDARD_PROPS = new Set(["className", "style", "children", "ref"]);
 
 /**
+ * Check if all members in an array are standard props (className, style, children, ref).
+ * Returns true if members array is empty or only contains standard props.
+ */
+const membersAreAllStandardProps = (members: unknown[]): boolean => {
+  if (members.length === 0) {
+    return true;
+  }
+  return members.every((m: unknown) => {
+    const member = m as { type?: string; key?: { type?: string; name?: string } };
+    if (member?.type !== "TSPropertySignature") {
+      return false;
+    }
+    const key = member.key;
+    if (key?.type !== "Identifier" || !key.name) {
+      return false;
+    }
+    return STANDARD_PROPS.has(key.name);
+  });
+};
+
+/**
  * Check if an interface/type only contains standard props (className, style, children, ref).
  * If so, it can be replaced with React.ComponentPropsWithRef<C>.
  */
@@ -18,20 +39,7 @@ const typeOnlyHasStandardProps = (root: any, j: any, typeName: string): boolean 
     .find(j.TSInterfaceDeclaration, { id: { type: "Identifier", name: typeName } })
     .nodes()[0];
   if (iface) {
-    const members = iface.body?.body ?? [];
-    if (members.length === 0) {
-      return true;
-    }
-    return members.every((m: any) => {
-      if (m?.type !== "TSPropertySignature") {
-        return false;
-      }
-      const key = m.key;
-      if (key?.type !== "Identifier") {
-        return false;
-      }
-      return STANDARD_PROPS.has(key.name);
-    });
+    return membersAreAllStandardProps(iface.body?.body ?? []);
   }
 
   // Check type aliases
@@ -41,20 +49,7 @@ const typeOnlyHasStandardProps = (root: any, j: any, typeName: string): boolean 
   if (typeAlias) {
     const typeAnn = typeAlias.typeAnnotation;
     if (typeAnn?.type === "TSTypeLiteral") {
-      const members = typeAnn.members ?? [];
-      if (members.length === 0) {
-        return true;
-      }
-      return members.every((m: any) => {
-        if (m?.type !== "TSPropertySignature") {
-          return false;
-        }
-        const key = m.key;
-        if (key?.type !== "Identifier") {
-          return false;
-        }
-        return STANDARD_PROPS.has(key.name);
-      });
+      return membersAreAllStandardProps(typeAnn.members ?? []);
     }
   }
 
