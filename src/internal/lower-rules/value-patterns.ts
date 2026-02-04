@@ -25,6 +25,36 @@ type StyleFnFromPropsEntry = {
   callArg?: ExpressionKind;
 };
 
+const makeCssPropKey = (j: JSCodeshift, prop: string): ExpressionKind => {
+  if (!prop.match(/^[a-zA-Z_$][a-zA-Z0-9_$]*$/)) {
+    return j.literal(prop);
+  }
+  return j.identifier(prop);
+};
+
+const cssPropertyToIdentifier = (prop: string): string => {
+  if (prop.startsWith("--")) {
+    const withoutDashes = prop.slice(2);
+    return withoutDashes.replace(/-([a-z])/g, (_, letter) => letter.toUpperCase());
+  }
+  return prop;
+};
+
+const makeCssProperty = (
+  j: JSCodeshift,
+  cssProp: string,
+  valueIdentifierName: string,
+): ReturnType<typeof j.property> => {
+  const key = makeCssPropKey(j, cssProp);
+  const p = j.property("init", key, j.identifier(valueIdentifierName)) as ReturnType<
+    typeof j.property
+  > & { shorthand?: boolean };
+  if (key.type === "Identifier" && key.name === valueIdentifierName) {
+    p.shorthand = true;
+  }
+  return p;
+};
+
 export type ValuePatternContext = {
   api: API;
   j: JSCodeshift;
@@ -236,15 +266,15 @@ export const createValuePatternHandlers = (ctx: ValuePatternContext) => {
       }
 
       if (!styleFnDecls.has(fnKey)) {
-        const param = j.identifier(out.prop);
+        const paramName = cssPropertyToIdentifier(out.prop);
+        const param = j.identifier(paramName);
         // When there are static parts, the param type should be string (since we pass template literal)
         if (hasStaticParts) {
           setIdentifierTypeAnnotation(param, j.tsTypeAnnotation(j.tsStringKeyword()));
         } else {
           annotateParamFromJsxProp(param, jsxProp);
         }
-        const p = j.property("init", j.identifier(out.prop), j.identifier(out.prop)) as any;
-        p.shorthand = true;
+        const p = makeCssProperty(j, out.prop, paramName);
         styleFnDecls.set(fnKey, j.arrowFunctionExpression([param], j.objectExpression([p])));
       }
     }
