@@ -143,7 +143,7 @@ export function emitComponentWrappers(emitter: WrapperEmitter): {
           }
           const typeText = [
             baseProps,
-            `Omit<React.ComponentPropsWithoutRef<C>, keyof ${baseProps} | "className" | "style">`,
+            `Omit<React.ComponentPropsWithRef<C>, keyof ${baseProps} | "className" | "style">`,
             "{\n  as?: C;\n}",
             // Include user's explicit props type if it exists
             ...(explicit ? [explicit] : []),

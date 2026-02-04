@@ -5,6 +5,7 @@ import {
   isComponentUsedInJsx,
   propagateDelegationWrapperRequirements,
 } from "../utilities/delegation-utils.js";
+import { typeContainsPolymorphicAs } from "../utilities/polymorphic-as-detection.js";
 
 /**
  * Finalizes wrapper decisions, polymorphic handling, and base flattening after style emission.
@@ -20,87 +21,14 @@ export function analyzeAfterEmitStep(ctx: TransformContext): StepResult {
   const extendedBy = ctx.extendedBy;
   const exportedComponents = ctx.exportedComponents;
 
-  const isAsElementTypeMember = (member: any): boolean => {
-    if (
-      member.type !== "TSPropertySignature" ||
-      member.key?.type !== "Identifier" ||
-      member.key.name !== "as"
-    ) {
-      return false;
-    }
-    const memberType = member.typeAnnotation?.typeAnnotation;
-    if (memberType?.type === "TSTypeReference") {
-      const memberTypeName = memberType.typeName;
-      if (
-        memberTypeName?.type === "TSQualifiedName" &&
-        memberTypeName.left?.name === "React" &&
-        memberTypeName.right?.name === "ElementType"
-      ) {
-        return true;
-      }
-      if (memberTypeName?.type === "Identifier" && memberTypeName.name === "ElementType") {
-        return true;
-      }
-    }
-    return false;
-  };
-
-  const typeContainsAsElementType = (typeNode: any): boolean => {
-    if (!typeNode) {
-      return false;
-    }
-    if (typeNode.type === "TSIntersectionType") {
-      return (typeNode.types ?? []).some((t: any) => typeContainsAsElementType(t));
-    }
-    if (typeNode.type === "TSParenthesizedType") {
-      return typeContainsAsElementType(typeNode.typeAnnotation);
-    }
-    if (typeNode.type === "TSTypeReference") {
-      const typeParams = typeNode.typeParameters?.params ?? [];
-      for (const tp of typeParams) {
-        if (typeContainsAsElementType(tp)) {
-          return true;
-        }
-      }
-      if (typeNode.typeName?.type === "Identifier") {
-        const typeName = typeNode.typeName.name;
-        const typeAlias = root
-          .find(j.TSTypeAliasDeclaration)
-          .filter((p) => (p.node as any).id?.name === typeName);
-        if (typeAlias.size() > 0) {
-          return typeContainsAsElementType(typeAlias.get().node.typeAnnotation);
-        }
-        const iface = root
-          .find(j.TSInterfaceDeclaration)
-          .filter((p) => (p.node as any).id?.name === typeName);
-        if (iface.size() > 0) {
-          const body = iface.get().node.body?.body ?? [];
-          for (const member of body) {
-            if (isAsElementTypeMember(member)) {
-              return true;
-            }
-          }
-        }
-      }
-      return false;
-    }
-    if (typeNode.type === "TSTypeLiteral") {
-      for (const member of typeNode.members ?? []) {
-        if (isAsElementTypeMember(member)) {
-          return true;
-        }
-      }
-    }
-    return false;
-  };
-
   const wrapperNames = new Set<string>();
-  // Detect styled components whose props type includes `as?: React.ElementType`.
+  // Detect styled components whose props type includes polymorphic `as`
+  // (either `as?: React.ElementType` or `as?: C` where C extends React.ElementType).
   // These need polymorphic wrapper generation.
   // Note: Don't automatically add children - they may use .attrs({ as: "element" })
   // to specify a fixed element type instead of inheriting polymorphism.
   for (const decl of styledDecls) {
-    if (decl.propsType && typeContainsAsElementType(decl.propsType)) {
+    if (decl.propsType && typeContainsPolymorphicAs({ root, j, typeNode: decl.propsType })) {
       wrapperNames.add(decl.localName);
     }
   }

@@ -59,6 +59,79 @@ export function insertEmittedWrappers(args: {
       if (node?.type !== "FunctionDeclaration") {
         return node;
       }
+
+      // Safety net: if a wrapper destructures `as: Component = "<tag>"` AND has a props
+      // type that uses generics (e.g., `Props<C>`), add the missing type parameters.
+      //
+      // This protects against emitter paths that annotate props as `<C>` but forget to
+      // attach the function's `typeParameters`.
+      //
+      // Note: We only add generics if the props type reference uses generics. For simple
+      // `as?: React.ElementType` support (non-exported components), we don't add generics.
+      if (!(node as any).typeParameters) {
+        // Check if the props type annotation uses generics (e.g., `Props<C>`)
+        const propsTypeUsesGeneric = (() => {
+          const params = (node as any).params ?? [];
+          if (!Array.isArray(params) || params.length === 0) {
+            return false;
+          }
+          const firstParam = params[0];
+          const typeAnn = firstParam?.typeAnnotation?.typeAnnotation;
+          if (!typeAnn) {
+            return false;
+          }
+          // Check for `Props<C>` pattern
+          if (typeAnn.type === "TSTypeReference" && typeAnn.typeParameters?.params?.length > 0) {
+            return true;
+          }
+          return false;
+        })();
+
+        if (propsTypeUsesGeneric) {
+          const defaultTag = (() => {
+            // Look for: const { as: Component = "tag", ... } = props;
+            const decls = (node as any).body?.body ?? [];
+            for (const stmt of decls) {
+              if (stmt?.type !== "VariableDeclaration") {
+                continue;
+              }
+              for (const dcl of stmt.declarations ?? []) {
+                const id = dcl?.id;
+                if (id?.type !== "ObjectPattern") {
+                  continue;
+                }
+                for (const prop of id.properties ?? []) {
+                  if (prop?.type !== "Property") {
+                    continue;
+                  }
+                  const key = prop.key;
+                  if (key?.type !== "Identifier" || key.name !== "as") {
+                    continue;
+                  }
+                  const value = prop.value;
+                  if (
+                    value?.type === "AssignmentPattern" &&
+                    value.left?.type === "Identifier" &&
+                    value.left.name === "Component" &&
+                    value.right?.type === "Literal" &&
+                    typeof value.right.value === "string"
+                  ) {
+                    return value.right.value as string;
+                  }
+                }
+              }
+            }
+            return null;
+          })();
+
+          if (defaultTag) {
+            (node as any).typeParameters = j(
+              `function _<C extends React.ElementType = "${defaultTag}">() { return null }`,
+            ).get().node.program.body[0].typeParameters;
+          }
+        }
+      }
+
       const fnName = typeof node.id?.name === "string" ? node.id.name : null;
       if (!fnName) {
         return node;

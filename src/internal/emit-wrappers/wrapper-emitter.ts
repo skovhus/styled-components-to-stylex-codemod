@@ -580,7 +580,6 @@ export class WrapperEmitter {
     if (
       t.startsWith("React.ComponentProps<") ||
       t.startsWith("React.ComponentPropsWithRef<") ||
-      t.startsWith("React.ComponentPropsWithoutRef<") ||
       t.startsWith("React.HTMLAttributes<") ||
       t.startsWith("React.AnchorHTMLAttributes<") ||
       t.startsWith("React.ButtonHTMLAttributes<") ||
@@ -589,7 +588,7 @@ export class WrapperEmitter {
       t.startsWith("React.LabelHTMLAttributes<") ||
       t.startsWith("React.SelectHTMLAttributes<") ||
       t.startsWith("React.TextareaHTMLAttributes<") ||
-      /^(Omit|Pick|Partial|Required|Readonly|ReadonlyArray|NonNullable|Extract|Exclude)<\s*React\.ComponentProps(?:With(?:out)?Ref)?</.test(
+      /^(Omit|Pick|Partial|Required|Readonly|ReadonlyArray|NonNullable|Extract|Exclude)<\s*React\.ComponentProps(?:WithRef)?</.test(
         t,
       ) ||
       /^(Omit|Pick|Partial|Required|Readonly|ReadonlyArray|NonNullable|Extract|Exclude)<\s*React\..*HTMLAttributes</.test(
@@ -732,13 +731,11 @@ export class WrapperEmitter {
       includeAsProp = false,
       skipProps,
     } = args;
+    void includeAsProp;
     const used = this.getUsedAttrs(d.localName);
     const needsBroadAttrs = used.has("*") || !!(d as any).usedAsValue;
 
     const lines: string[] = [];
-    if (includeAsProp) {
-      lines.push(`  as?: React.ElementType;`);
-    }
     if (!needsBroadAttrs) {
       if (allowClassNameProp) {
         lines.push(`  className?: string;`);
@@ -805,9 +802,7 @@ export class WrapperEmitter {
   }): string {
     const { d, allowClassNameProp, allowStyleProp, includeAsProp = false } = args;
     const lines: string[] = [];
-    if (includeAsProp) {
-      lines.push(`  as?: React.ElementType;`);
-    }
+    void includeAsProp;
     const literal = lines.length > 0 ? `{\n${lines.join("\n")}\n}` : "{}";
     const base = `React.ComponentPropsWithRef<typeof ${(d.base as any).ident}>`;
     const omitted: string[] = [];
@@ -980,6 +975,8 @@ export class WrapperEmitter {
 
     const isVoidTag = VOID_TAGS.has(tagName);
     const propsParamId = j.identifier("props");
+    const needsPolymorphicTypeParams =
+      this.emitTypes && (allowAsProp || Boolean(inlineTypeText?.includes("<C")));
     if (this.emitTypes) {
       if (inlineTypeText) {
         let typeNode: TsTypeAnnotationInput | null = null;
@@ -1005,9 +1002,15 @@ export class WrapperEmitter {
         if (!propsTypeName) {
           throw new Error(`Missing propsTypeName for ${localName} (${tagName}).`);
         }
-        (propsParamId as any).typeAnnotation = j.tsTypeAnnotation(
-          j.tsTypeReference(j.identifier(propsTypeName)),
-        );
+        if (needsPolymorphicTypeParams) {
+          (propsParamId as any).typeAnnotation = j(
+            `const x: ${propsTypeName}<C> = null`,
+          ).get().node.program.body[0].declarations[0].id.typeAnnotation;
+        } else {
+          (propsParamId as any).typeAnnotation = j.tsTypeAnnotation(
+            j.tsTypeReference(j.identifier(propsTypeName)),
+          );
+        }
       }
     }
     const propsId = j.identifier("props");
@@ -1242,13 +1245,17 @@ export class WrapperEmitter {
     const filteredBody = bodyStmts.filter(
       (stmt) => stmt && (stmt as any).type !== "EmptyStatement",
     );
-    return [
-      j.functionDeclaration(
-        j.identifier(localName),
-        [propsParamId],
-        j.blockStatement(filteredBody),
-      ),
-    ];
+    const fn = j.functionDeclaration(
+      j.identifier(localName),
+      [propsParamId],
+      j.blockStatement(filteredBody),
+    );
+    if (needsPolymorphicTypeParams) {
+      (fn as any).typeParameters = j(
+        `function _<C extends React.ElementType = "${tagName}">() { return null }`,
+      ).get().node.program.body[0].typeParameters;
+    }
+    return [fn];
   }
 
   parseVariantWhenToAst(when: string): {

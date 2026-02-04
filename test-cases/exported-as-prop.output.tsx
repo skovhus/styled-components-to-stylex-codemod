@@ -1,13 +1,8 @@
 import * as React from "react";
 import * as stylex from "@stylexjs/stylex";
 
-type ContentViewContainerProps<C extends React.ElementType = "div"> = Omit<
-  React.ComponentPropsWithoutRef<C>,
-  "className" | "style"
-> & { as?: C };
-
 export function ContentViewContainer<C extends React.ElementType = "div">(
-  props: ContentViewContainerProps<C>,
+  props: Omit<React.ComponentPropsWithRef<C>, "className" | "style"> & { as?: C },
 ) {
   const { as: Component = "div", children, ...rest } = props;
   return (
@@ -32,7 +27,7 @@ interface CustomProps {
 type StyledWrapperProps<C extends React.ElementType = typeof BaseComponent> =
   React.ComponentPropsWithRef<typeof BaseComponent> &
     Omit<
-      React.ComponentPropsWithoutRef<C>,
+      React.ComponentPropsWithRef<C>,
       keyof React.ComponentPropsWithRef<typeof BaseComponent> | "className" | "style"
     > & {
       as?: C;

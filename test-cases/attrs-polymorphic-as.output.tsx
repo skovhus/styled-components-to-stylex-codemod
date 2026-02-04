@@ -14,7 +14,7 @@ interface TextProps {
 }
 
 /** A polymorphic Text component that accepts "as" prop */
-function Text(props: TextProps & { as?: React.ElementType }) {
+function Text<C extends React.ElementType = "span">(props: TextProps & { as?: C }) {
   const { as: Component = "span", children, className, style } = props;
   return (
     <Component className={className} style={style}>
