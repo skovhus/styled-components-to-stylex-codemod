@@ -1,3 +1,6 @@
+/**
+ * Emits simple intrinsic wrappers (withConfig and basic exported cases).
+ */
 import type { StyledDecl } from "../transform-types.js";
 import { collectInlineStylePropNames, type ExpressionKind, type InlineStyleProp } from "./types.js";
 import type { JsxAttr, StatementKind } from "./wrapper-emitter.js";

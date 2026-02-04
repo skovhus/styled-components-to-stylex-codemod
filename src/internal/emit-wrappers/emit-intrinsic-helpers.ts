@@ -1,3 +1,6 @@
+/**
+ * Shared helper utilities and context types for emitting intrinsic wrappers.
+ */
 import type { ASTNode, Collection, JSCodeshift, Property } from "jscodeshift";
 import type { StyledDecl } from "../transform-types.js";
 import type { ExpressionKind } from "./types.js";

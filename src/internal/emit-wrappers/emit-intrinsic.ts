@@ -1,9 +1,9 @@
+/**
+ * Entry point that orchestrates intrinsic wrapper emission.
+ */
 import type { ASTNode } from "jscodeshift";
 import type { WrapperEmitter } from "./wrapper-emitter.js";
-import {
-  createEmitIntrinsicHelpers,
-  type EmitIntrinsicContext,
-} from "./emit-intrinsic-helpers.js";
+import { createEmitIntrinsicHelpers, type EmitIntrinsicContext } from "./emit-intrinsic-helpers.js";
 import {
   emitEnumVariantWrappers,
   emitInputWrappers,

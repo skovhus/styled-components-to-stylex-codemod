@@ -1,3 +1,6 @@
+/**
+ * Emits specialized intrinsic wrappers (input/link/enum/sibling variants).
+ */
 import type { StyledDecl } from "../transform-types.js";
 import type { ExpressionKind } from "./types.js";
 import type { JsxAttr, StatementKind } from "./wrapper-emitter.js";

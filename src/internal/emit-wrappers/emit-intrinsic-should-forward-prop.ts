@@ -1,3 +1,6 @@
+/**
+ * Emits intrinsic wrappers for shouldForwardProp configurations.
+ */
 import type { StyledDecl } from "../transform-types.js";
 import { buildStyleFnConditionExpr } from "../utilities/jscodeshift-utils.js";
 import { type ExpressionKind, type InlineStyleProp } from "./types.js";

@@ -1,3 +1,6 @@
+/**
+ * Emits intrinsic wrappers that require polymorphic `as` support.
+ */
 import type { StyledDecl } from "../transform-types.js";
 import { collectInlineStylePropNames, type ExpressionKind } from "./types.js";
 import type { JsxAttr, StatementKind } from "./wrapper-emitter.js";
