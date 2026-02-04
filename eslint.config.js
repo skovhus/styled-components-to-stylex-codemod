@@ -1,3 +1,6 @@
+// For more info, see https://github.com/storybookjs/eslint-plugin-storybook#configuration-flat-config-format
+import storybook from "eslint-plugin-storybook";
+
 import stylex from "@stylexjs/eslint-plugin";
 import tsParser from "@typescript-eslint/parser";
 
@@ -42,4 +45,5 @@ export default [
       "stylex/valid-styles": "off",
     },
   },
+  ...storybook.configs["flat/recommended"],
 ];

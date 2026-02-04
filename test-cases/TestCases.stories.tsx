@@ -1,4 +1,4 @@
-import type { Meta, StoryObj } from "@storybook/react";
+import type { Meta, StoryObj } from "@storybook/react-vite";
 import React from "react";
 import { ThemeProvider } from "styled-components";
 import { testCaseTheme } from "./tokens.stylex";
@@ -358,6 +358,7 @@ export const All: Story = {
 
 // Helper to create a story for a specific test case
 // Exported for use by the Vite plugin that injects individual story exports
+// eslint-disable-next-line storybook/prefer-pascal-case -- This is a factory function, not a story
 export const createTestCaseStory = (name: string): Story => ({
   render: () => <Comparison testCase={name} />,
 });
