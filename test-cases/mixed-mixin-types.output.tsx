@@ -31,7 +31,6 @@ const styles = stylex.create({
   backgroundMixin: {
     backgroundColor: "blue",
   },
-
   // Test case 2: Background mixin first, then color mixin
   // Order should be: backgroundMixin, cssMixin, styledFirst
   styledFirst: {

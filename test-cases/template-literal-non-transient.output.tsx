@@ -54,7 +54,6 @@ const styles = stylex.create({
   boxWidth: (props) => ({
     width: `${props.size ?? 100}px`,
   }),
-
   boxHeight: (props) => ({
     height: `${props.size ?? 100}px`,
   }),

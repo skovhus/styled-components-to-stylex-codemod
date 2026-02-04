@@ -43,12 +43,10 @@ const styles = stylex.create({
   containerWrapperCondTruthy: (props: { width: number }) => ({
     "--component-width": `${props.width}px`,
   }),
-
   // A wrapper that conditionally sets a CSS custom property based on prop
   containerWrapper: {
     overflow: "hidden",
   },
-
   // A container that uses the CSS custom property with calc()
   container: {
     backgroundColor: "coral",

@@ -59,11 +59,9 @@ const styles = stylex.create({
       ":hover": $colors[$hoverColor],
     },
   }),
-
   boxBackgroundColor: ($bg: Color) => ({
     backgroundColor: $colors[$bg],
   }),
-
   textColorColor: (color: Colors) => ({
     color: $colors[color],
   }),

@@ -86,7 +86,6 @@ const styles = stylex.create({
   imageInactive: {
     opacity: 0.5,
   },
-
   // Pattern 2: Non-exported internal components with transient props
   // These are used inline but still must NOT pass $-prefixed props to DOM
   // (from ColorPicker.tsx - Point component with $pickerHeight)

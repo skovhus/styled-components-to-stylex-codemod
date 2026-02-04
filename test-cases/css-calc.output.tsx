@@ -36,13 +36,11 @@ const styles = stylex.create({
     flex: "0 0 calc(50% - 1rem)",
     padding: "calc(1rem / 2)",
   },
-
   // Nested calc
   complexCalc: {
     width: "calc(100% - calc(20px + 2rem))",
     margin: "calc(10px + calc(5px * 2))",
   },
-
   // Calc with CSS variables
   withVariables: {
     width: `calc(${calcVars.baseSize} * 10)`,

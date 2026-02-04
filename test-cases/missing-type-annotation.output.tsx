@@ -64,7 +64,6 @@ const styles = stylex.create({
   boxBackgroundColor: (backgroundColor: string) => ({
     backgroundColor,
   }),
-
   input: {
     padding: "8px",
     outline: {

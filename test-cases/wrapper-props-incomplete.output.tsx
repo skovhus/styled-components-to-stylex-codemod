@@ -85,7 +85,6 @@ const styles = stylex.create({
   textColorColor: (color: string) => ({
     color,
   }),
-
   highlight: {
     backgroundColor: "transparent",
   },

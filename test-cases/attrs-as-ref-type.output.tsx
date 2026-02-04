@@ -61,7 +61,6 @@ const styles = stylex.create({
   text: {
     fontSize: "14px",
   },
-
   // When .attrs({ as: "label" }) is used, the component should accept:
   // 1. HTMLLabelElement-specific props like htmlFor
   // 2. ref with type RefObject<HTMLLabelElement>

@@ -68,7 +68,6 @@ const styles = stylex.create({
       ":hover": `var(--tone, ${props.$tone})`,
     },
   }),
-
   hoverMediaSwatch: {
     display: "inline-block",
   },

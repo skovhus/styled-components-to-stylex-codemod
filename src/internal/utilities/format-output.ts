@@ -1,13 +1,81 @@
+/**
+ * Remove blank lines inside stylex.create({...}) blocks.
+ * Finds each `stylex.create({` and tracks brace depth to the matching `})`,
+ * then removes blank lines between properties within that region.
+ */
+function removeBlankLinesInStylexCreate(code: string): string {
+  const marker = "stylex.create({";
+  let result = "";
+  let pos = 0;
+
+  while (pos < code.length) {
+    const markerIdx = code.indexOf(marker, pos);
+    if (markerIdx === -1) {
+      result += code.slice(pos);
+      break;
+    }
+
+    // Copy everything before the marker
+    result += code.slice(pos, markerIdx);
+
+    // Find the matching closing brace by tracking depth
+    const blockStart = markerIdx + marker.length;
+    let depth = 1;
+    let blockEnd = blockStart;
+    let inString: string | null = null;
+    let escaped = false;
+
+    for (let i = blockStart; i < code.length && depth > 0; i++) {
+      const ch = code[i];
+      if (escaped) {
+        escaped = false;
+        continue;
+      }
+      if (ch === "\\") {
+        escaped = true;
+        continue;
+      }
+      if (inString) {
+        if (ch === inString) {
+          inString = null;
+        }
+        continue;
+      }
+      if (ch === '"' || ch === "'" || ch === "`") {
+        inString = ch;
+        continue;
+      }
+      if (ch === "{") {
+        depth++;
+      } else if (ch === "}") {
+        depth--;
+        if (depth === 0) {
+          blockEnd = i;
+        }
+      }
+    }
+
+    // Extract the block content and remove blank lines between properties
+    const blockContent = code.slice(markerIdx, blockEnd + 1);
+    const cleaned = blockContent
+      // Remove blank lines after closing braces followed by property
+      .replace(
+        /(\n\s*\},)\n\n+(\s+(?:[a-zA-Z_$][a-zA-Z0-9_$]*|["'].*?["']|::[a-zA-Z-]+|@[a-zA-Z-]+|:[a-zA-Z-]+)\s*:)/g,
+        "$1\n$2",
+      )
+      // Remove blank lines after commas followed by property or comment
+      .replace(/,\n\n+(\s+(?:[a-zA-Z_$"']|\/\/|\/\*))/g, ",\n$1");
+
+    result += cleaned;
+    pos = blockEnd + 1;
+  }
+
+  return result;
+}
+
 export function formatOutput(code: string): string {
-  // Recast sometimes inserts blank lines between object properties when values are multiline.
-  // Our fixtures are formatted without those blank lines; normalize conservatively.
-  let out = code.replace(
-    /(\n\s*\},)\n\n(\s+(?:[a-zA-Z_$][a-zA-Z0-9_$]*|["'].*?["']|::[a-zA-Z-]+|@[a-zA-Z-]+|:[a-zA-Z-]+)\s*:)/g,
-    "$1\n$2",
-  );
-  // Remove blank lines between style properties inside stylex.create objects.
-  // Matches: comma + blank line(s) + indented property/comment (4+ spaces indent suggests object interior)
-  out = out.replace(/,\n\n+(    +(?:[a-zA-Z_$"']|\/\/|\/\*))/g, ",\n$1");
+  // Remove blank lines inside stylex.create blocks (targeted, defensive approach)
+  let out = removeBlankLinesInStylexCreate(code);
 
   // Normalize `content` strings: prefer `'\"...\"'` form (matches fixtures) over escaped double-quotes.
   // Case 1: content: "\"X\""  (double-quoted with escapes)

@@ -75,7 +75,6 @@ const styles = stylex.create({
     borderStyle: "solid",
     borderColor: $colors.bgSub,
   },
-
   // Combining multiple helpers
   card: {
     padding: "1em",

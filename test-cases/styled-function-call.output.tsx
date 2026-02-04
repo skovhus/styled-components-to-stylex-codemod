@@ -25,7 +25,6 @@ const styles = stylex.create({
     borderStyle: "solid",
     borderColor: "#ccc",
   },
-
   // Pattern 2: styled(Component) - imported component (e.g., from react-spring)
   animatedBox: {
     padding: "16px",

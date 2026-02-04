@@ -35,7 +35,6 @@ const styles = stylex.create({
     fontSize: `${props.size + props.padding}px`,
     lineHeight: `${props.size}px`,
   }),
-
   container: {
     display: "inline-flex",
   },

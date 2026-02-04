@@ -4,6 +4,7 @@ const fadeIn = stylex.keyframes({
   from: {
     opacity: 0,
   },
+
   to: {
     opacity: 1,
   },
@@ -13,6 +14,7 @@ const slideIn = stylex.keyframes({
   from: {
     transform: "translateX(-100%)",
   },
+
   to: {
     transform: "translateX(0)",
   },
@@ -22,9 +24,11 @@ const scaleUp = stylex.keyframes({
   "0%": {
     transform: "scale(0.5)",
   },
+
   "50%": {
     transform: "scale(1.1)",
   },
+
   "100%": {
     transform: "scale(1)",
   },
@@ -49,7 +53,6 @@ const styles = stylex.create({
     animationTimingFunction: "cubic-bezier(0.165, 0.84, 0.44, 1)",
     animationFillMode: "both",
   },
-
   // Multiple animations combined
   animatedCard: {
     animationName: `${fadeIn}, ${slideIn}`,
@@ -60,7 +63,6 @@ const styles = stylex.create({
     borderRadius: "8px",
     boxShadow: "0 2px 8px rgba(0, 0, 0, 0.1)",
   },
-
   // Animation with multiple properties
   bounceIn: {
     animationName: scaleUp,
@@ -68,7 +70,6 @@ const styles = stylex.create({
     animationTimingFunction: "cubic-bezier(0.68, -0.55, 0.265, 1.55)",
     animationFillMode: "both",
   },
-
   // Chained animations with delay
   sequentialAnimation: {
     animationName: `${fadeIn}, ${slideIn}`,
@@ -76,7 +77,6 @@ const styles = stylex.create({
     animationTimingFunction: "ease-out, ease-out",
     animationDelay: "0s, 0.3s",
   },
-
   // Shorthand with full property coverage
   fullAnimation: {
     animationName: fadeIn,
@@ -88,7 +88,6 @@ const styles = stylex.create({
     animationFillMode: "both",
     animationPlayState: "running",
   },
-
   // Mixed play-state, direction, fill-mode across segments
   mixedStates: {
     animationName: `${fadeIn}, ${slideIn}`,

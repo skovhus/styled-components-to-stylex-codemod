@@ -50,6 +50,7 @@ const styles = stylex.create({
   styledButton: {
     cursor: "pointer",
   },
+
   clickableText: {
     color: "blue",
   },

@@ -71,19 +71,15 @@ const styles = stylex.create({
   positionBaseTop: (top: string) => ({
     top,
   }),
-
   positionBaseRight: (right: string) => ({
     right,
   }),
-
   positionBaseBottom: (bottom: string) => ({
     bottom,
   }),
-
   positionBaseLeft: (left: string) => ({
     left,
   }),
-
   relative: {
     position: "relative",
   },

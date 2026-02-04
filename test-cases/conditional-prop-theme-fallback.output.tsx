@@ -55,7 +55,6 @@ const styles = stylex.create({
   colorBadgeBorderColor: (borderColor: string) => ({
     borderColor,
   }),
-
   colorBadgeBackgroundColor: (backgroundColor: string) => ({
     backgroundColor,
   }),

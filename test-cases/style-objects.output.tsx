@@ -51,11 +51,9 @@ const styles = stylex.create({
   dynamicBoxBackgroundColor: (backgroundColor: string) => ({
     backgroundColor,
   }),
-
   dynamicBoxHeight: (height: string) => ({
     height,
   }),
-
   dynamicBoxWidth: (width: string) => ({
     width,
   }),

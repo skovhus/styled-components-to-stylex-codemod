@@ -51,7 +51,6 @@ const styles = stylex.create({
     paddingInline: "16px",
     borderRadius: "4px",
   },
-
   // Overriding specific properties
   forceWidth: {
     width: "100% !important",
@@ -68,7 +67,6 @@ const styles = stylex.create({
     marginBottom: "0 !important",
     marginLeft: "0 !important",
   },
-
   // Important in pseudo-selectors
   importantHover: {
     color: {

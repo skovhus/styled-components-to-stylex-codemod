@@ -128,7 +128,6 @@ const styles = stylex.create({
   buttonBackgroundColor: (backgroundColor: string) => ({
     backgroundColor,
   }),
-
   // Using isPropValid from @emotion
   link: {
     color: {
@@ -142,7 +141,6 @@ const styles = stylex.create({
     color: "#BF4F74",
     fontWeight: "bold",
   },
-
   // Custom prop filtering logic (transient props pattern)
   box: {
     backgroundColor: "white",
@@ -153,11 +151,9 @@ const styles = stylex.create({
   boxBackgroundColor: (backgroundColor: string) => ({
     backgroundColor,
   }),
-
   boxPadding: (padding: string) => ({
     padding,
   }),
-
   // Using nullish coalescing operator for fallbacks
   colorBox: {
     backgroundColor: "#e0e0e0",
@@ -166,7 +162,6 @@ const styles = stylex.create({
   colorBoxBackgroundColor: (backgroundColor: string) => ({
     backgroundColor,
   }),
-
   // Filter multiple custom props
   card: {
     backgroundColor: "#4F74BF",

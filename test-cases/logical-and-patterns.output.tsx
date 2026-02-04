@@ -92,7 +92,6 @@ const styles = stylex.create({
   layeredBoxZIndex: (zIndex: number) => ({
     zIndex,
   }),
-
   grayscaleImage: {
     width: "100px",
   },

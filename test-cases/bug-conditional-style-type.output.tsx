@@ -86,7 +86,6 @@ const styles = stylex.create({
   iconWithTeamColorFill: (fill: string) => ({
     fill,
   }),
-
   iconWithTransformCondTruthy: {
     transform: "scale(0.66)",
   },

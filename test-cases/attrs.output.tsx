@@ -169,7 +169,6 @@ const styles = stylex.create({
   inputPadding: (padding: string) => ({
     padding,
   }),
-
   textInput: {
     height: "32px",
     padding: "8px",

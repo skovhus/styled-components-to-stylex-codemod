@@ -87,7 +87,6 @@ const styles = stylex.create({
   buttonNotHollowNotPrimary: {
     backgroundColor: "white",
   },
-
   // Test case: inner ternary tests the same prop as outer
   // The inner variants must be guarded by the outer falsy condition
   // to prevent the "medium" background from leaking into size === "small"

@@ -45,7 +45,6 @@ const styles = stylex.create({
       ":focus-visible": "2px",
     },
   },
-
   // Three pseudo-selectors combined
   link: {
     color: {
@@ -61,7 +60,6 @@ const styles = stylex.create({
       ":active": "underline",
     },
   },
-
   // Mixed with regular styles
   input: {
     paddingBlock: "8px",

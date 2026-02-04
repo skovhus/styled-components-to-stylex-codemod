@@ -40,7 +40,6 @@ const styles = stylex.create({
   linkFontSize: (fontSize: string) => ({
     fontSize,
   }),
-
   // Destructured prop with default value
   card: {
     padding: "16px",
@@ -48,7 +47,6 @@ const styles = stylex.create({
   cardPadding: (padding: string) => ({
     padding,
   }),
-
   // Renamed destructured prop with default value
   box: {
     margin: "8px",
@@ -56,11 +54,9 @@ const styles = stylex.create({
   boxMargin: (margin: string) => ({
     margin,
   }),
-
   textFontWeight: (fontWeight: string) => ({
     fontWeight,
   }),
-
   textFontSize: (fontSize: string) => ({
     fontSize,
   }),

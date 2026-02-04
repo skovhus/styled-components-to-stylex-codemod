@@ -84,11 +84,9 @@ const styles = stylex.create({
   boxWidth: (width: string) => ({
     width,
   }),
-
   boxHeight: (height: string) => ({
     height,
   }),
-
   // Mixed static and dynamic styles
   mixedBox: {
     backgroundColor: "blue",
