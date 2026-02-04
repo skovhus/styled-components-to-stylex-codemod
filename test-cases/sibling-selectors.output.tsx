@@ -11,6 +11,7 @@ type ThingProps = React.PropsWithChildren<{
 
 function Thing(props: ThingProps) {
   const { children, className, isAdjacentSibling, isSiblingAfterSomething, ...rest } = props;
+
   return (
     <div
       {...rest}

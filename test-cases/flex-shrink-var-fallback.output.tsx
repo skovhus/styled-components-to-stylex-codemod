@@ -13,6 +13,7 @@ type ColumnContainerProps = Omit<React.ComponentProps<"div">, "className"> & {
  */
 export function ColumnContainer(props: ColumnContainerProps) {
   const { children, style, $noGrowOrShrink, $basis } = props;
+
   return (
     <div
       {...mergedSx(

@@ -35,7 +35,6 @@ const styles = stylex.create({
       ":disabled": "not-allowed",
     },
   },
-
   // Checkbox with chained pseudos
   checkbox: {
     width: "20px",

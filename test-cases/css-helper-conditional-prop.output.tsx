@@ -30,6 +30,7 @@ type ContainerProps = Omit<React.ComponentPropsWithRef<typeof Flex>, "className"
 
 export function Container(props: ContainerProps) {
   const { children, $color, ...rest } = props;
+
   return (
     <Flex
       {...rest}

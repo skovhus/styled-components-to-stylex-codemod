@@ -9,6 +9,7 @@ export interface BadgeProps extends Omit<React.ComponentProps<"div">, "className
 
 export function Badge(props: BadgeProps) {
   const { children, textColor } = props;
+
   return (
     <div {...stylex.props(styles.badge, textColor ? styles.badgeColor(textColor) : undefined)}>
       {children}

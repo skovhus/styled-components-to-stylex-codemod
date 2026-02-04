@@ -11,6 +11,7 @@ type BoxProps = React.PropsWithChildren<{
 
 function Box(props: BoxProps) {
   const { children, $hoverColor, $bg } = props;
+
   return (
     <div
       {...stylex.props(
@@ -42,6 +43,7 @@ interface TextColorProps extends Omit<React.ComponentProps<"span">, "className" 
 
 export function TextColor(props: TextColorProps) {
   const { children, color } = props;
+
   return <span {...stylex.props(styles.textColorColor(color))}>{children}</span>;
 }
 

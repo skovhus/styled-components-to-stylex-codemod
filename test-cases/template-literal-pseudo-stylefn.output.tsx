@@ -11,6 +11,7 @@ type HoverSwatchProps = React.PropsWithChildren<{
  */
 function HoverSwatch(props: HoverSwatchProps) {
   const { children, $tone } = props;
+
   return (
     <div
       {...stylex.props(
@@ -31,6 +32,7 @@ type HoverMediaSwatchProps = React.PropsWithChildren<{
 
 function HoverMediaSwatch(props: HoverMediaSwatchProps) {
   const { children, $tone } = props;
+
   return (
     <div
       {...stylex.props(

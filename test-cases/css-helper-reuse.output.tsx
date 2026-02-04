@@ -8,6 +8,7 @@ type CheckMarkProps = React.PropsWithChildren<{
 
 function CheckMark(props: CheckMarkProps) {
   const { children, $opaque } = props;
+
   return (
     <div {...stylex.props(styles.checkMark, $opaque ? styles.checkMarkOpaque : undefined)}>
       {children}
@@ -28,7 +29,8 @@ const styles = stylex.create({
   groupHeaderRow: {
     position: "sticky",
     top: "var(--sticky-top, 0px)",
-    zIndex: 3, // above regular rows
+    // above regular rows
+    zIndex: 3,
     borderTopWidth: "1px",
     borderTopStyle: "solid",
     borderTopColor: $colors.bgBorderFaint,

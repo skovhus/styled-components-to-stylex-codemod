@@ -8,13 +8,14 @@ export const Divider = (props: { style?: React.CSSProperties }) => {
 
 // Multiple static properties on the same component
 Divider.HEIGHT = 10;
-
 Divider.WIDTH = 200;
 Divider.BG_COLOR = "#e0e0e0";
+
 type DividerContainerProps = Omit<React.ComponentProps<"div">, "className">;
 
 function DividerContainer(props: DividerContainerProps) {
   const { children, style, ...rest } = props;
+
   return (
     <div {...rest} {...mergedSx(styles.dividerContainer, undefined, style)}>
       {children}

@@ -14,6 +14,7 @@ type ButtonProps = Omit<React.ComponentProps<"button">, "className" | "style"> &
 
 function Button(props: ButtonProps) {
   const { children, size: size = "small", color: color = "secondary", disabled } = props;
+
   return (
     <button
       disabled={disabled}
@@ -37,6 +38,7 @@ type LinkProps = Omit<React.ComponentProps<"a">, "className" | "style"> & {
 
 function Link(props: LinkProps) {
   const { children, disabled, color: color = "secondary", ...rest } = props;
+
   return (
     <a
       {...rest}

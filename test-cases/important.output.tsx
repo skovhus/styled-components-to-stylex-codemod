@@ -10,6 +10,7 @@ type OverrideButtonProps = React.PropsWithChildren<{
 // Using !important to override inline styles or third-party CSS
 function OverrideButton(props: OverrideButtonProps) {
   const { children, style } = props;
+
   return <button {...mergedSx(styles.overrideButton, undefined, style)}>{children}</button>;
 }
 
@@ -21,6 +22,7 @@ type MixedStylesProps = React.PropsWithChildren<{
 // Mixed important and normal
 function MixedStyles(props: MixedStylesProps) {
   const { children, style } = props;
+
   return <p {...mergedSx(styles.mixedStyles, undefined, style)}>{children}</p>;
 }
 
@@ -49,7 +51,6 @@ const styles = stylex.create({
     paddingInline: "16px",
     borderRadius: "4px",
   },
-
   // Overriding specific properties
   forceWidth: {
     width: "100% !important",
@@ -66,7 +67,6 @@ const styles = stylex.create({
     marginBottom: "0 !important",
     marginLeft: "0 !important",
   },
-
   // Important in pseudo-selectors
   importantHover: {
     color: {

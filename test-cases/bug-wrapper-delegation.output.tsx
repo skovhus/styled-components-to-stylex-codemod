@@ -12,7 +12,6 @@ export function App() {
     </>
   );
 }
-
 App.displayName = "App";
 
 type SentenceProps = React.PropsWithChildren<{
@@ -24,6 +23,7 @@ type SentenceProps = React.PropsWithChildren<{
 
 function Sentence(props: SentenceProps) {
   const { as: Component = "div", className, children, style } = props;
+
   return <Component {...mergedSx(styles.sentence, className, style)}>{children}</Component>;
 }
 
@@ -31,6 +31,7 @@ type PaddedSentenceProps = React.ComponentPropsWithRef<typeof Sentence>;
 
 function PaddedSentence(props: PaddedSentenceProps) {
   const { className, children, style, ...rest } = props;
+
   return (
     <Sentence {...rest} {...mergedSx(styles.paddedSentence, className, style)}>
       {children}
@@ -45,6 +46,7 @@ type PaddedMutedSentenceProps = Omit<
 
 function PaddedMutedSentence(props: PaddedMutedSentenceProps) {
   const { children, style, ...rest } = props;
+
   return (
     <PaddedSentence {...rest} {...mergedSx(styles.paddedMutedSentence, undefined, style)}>
       {children}

@@ -34,6 +34,7 @@ type LabelProps = React.ComponentPropsWithRef<typeof Text> & {
  */
 export function Label(props: LabelProps) {
   const { className, children, style, ...rest } = props;
+
   return (
     <Text as="label" {...rest} {...mergedSx(styles.label, className, style)}>
       {children}

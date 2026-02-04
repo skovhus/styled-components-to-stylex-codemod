@@ -6,6 +6,7 @@ function Button<C extends React.ElementType = "button">(
   props: React.ComponentPropsWithRef<C> & { as?: C },
 ) {
   const { as: Component = "button", className, children, style, ...rest } = props;
+
   return (
     <Component {...rest} {...mergedSx(styles.button, className, style)}>
       {children}
@@ -45,7 +46,6 @@ const styles = stylex.create({
     textDecoration: "none",
     cursor: "pointer",
   },
-
   // Wrapper that always renders as a specific element but passes `as` through
   buttonWrapper: {
     boxShadow: "0 2px 4px rgba(0, 0, 0, 0.2)",

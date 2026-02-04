@@ -1,51 +1,84 @@
-export function formatOutput(code: string): string {
-  // Recast sometimes inserts blank lines between object properties when values are multiline.
-  // Our fixtures are formatted without those blank lines; normalize conservatively.
-  let out = code.replace(
-    /(\n\s*\},)\n\n(\s+(?:[a-zA-Z_$][a-zA-Z0-9_$]*|["'].*?["']|::[a-zA-Z-]+|@[a-zA-Z-]+|:[a-zA-Z-]+)\s*:)/g,
-    "$1\n$2",
-  );
-  // General: remove blank lines after commas (prettier-style objects don't use them).
-  out = out.replace(/,\n\n(\s+(?:[a-zA-Z_$]|["']|::|@|:))/g, ",\n$1");
-  // Also remove blank lines after commas when the next line is a leading block comment.
-  out = out.replace(/,\n\n(\s*\/\*)/g, ",\n$1");
+/**
+ * Remove blank lines inside stylex.create({...}) blocks.
+ * Finds each `stylex.create({` and tracks brace depth to the matching `})`,
+ * then removes blank lines between properties within that region.
+ */
+function removeBlankLinesInStylexCreate(code: string): string {
+  const marker = "stylex.create({";
+  let result = "";
+  let pos = 0;
 
-  // If a trailing line comment got detached onto its own line immediately above an object property,
-  // re-attach it inline after the property's comma:
-  //
-  //   // comment
-  //   prop: value,
-  //
-  // -> prop: value, // comment
-  out = out.replace(
-    /\n\n?(\s*)\/\/\s*([^\n]+)\n\1((?:[a-zA-Z_$][a-zA-Z0-9_$]*|["'][^"']+["']))\s*:\s*([^\n]*?),/g,
-    (_m, indent, comment, key, value) => `\n${indent}${key}: ${value}, // ${comment}`,
-  );
-  // Normalize `content` strings: prefer `'\"...\"'` form (matches fixtures) over escaped double-quotes.
-  // Case 1: content: "\"X\""  (double-quoted with escapes)
-  out = out.replace(/content:\s+"\\"([\s\S]*?)\\""/g, "content: '\"$1\"'");
-  // Case 2: content: \"'X'\"   (double-quoted string that includes single quotes)
-  out = out.replace(/content:\s+"'\s*([\s\S]*?)\s*'"/g, "content: '\"$1\"'");
+  while (pos < code.length) {
+    const markerIdx = code.indexOf(marker, pos);
+    if (markerIdx === -1) {
+      result += code.slice(pos);
+      break;
+    }
 
-  // Avoid extra blank line before a return in tiny wrapper components:
-  //   const { ... } = props;
-  //
-  //   return (...)
-  // ->
-  //   const { ... } = props;
-  //   return (...)
-  out = out.replace(/\n(\s*(?:const|let|var)\s+[^\n]+;\n)\s*\n(\s*return\b)/g, "\n$1$2");
-  // More generally, if there's an empty line immediately before a `return`, remove it.
-  // This keeps wrapper components compact and matches our fixture formatting.
-  out = out.replace(/\n[ \t]*\n(\s*return\b)/g, "\n$1");
-  // When we emit sx.className merging for static attrs, keep the `const sx` directly
-  // after the props destructure (fixtures expect no blank line here).
-  if (out.includes("sx.className")) {
-    out = out.replace(
-      /\n(\s*const\s+\{[^}]+\}\s*=\s*props;\n)\s*\n(\s*const\s+sx\s*=\s*stylex\.props)/g,
-      "\n$1$2",
-    );
+    // Copy everything before the marker
+    result += code.slice(pos, markerIdx);
+
+    // Find the matching closing brace by tracking depth
+    const blockStart = markerIdx + marker.length;
+    let depth = 1;
+    let blockEnd = blockStart;
+    let inString: string | null = null;
+    let escaped = false;
+
+    for (let i = blockStart; i < code.length && depth > 0; i++) {
+      const ch = code[i];
+      if (escaped) {
+        escaped = false;
+        continue;
+      }
+      if (ch === "\\") {
+        escaped = true;
+        continue;
+      }
+      if (inString) {
+        if (ch === inString) {
+          inString = null;
+        }
+        continue;
+      }
+      if (ch === '"' || ch === "'" || ch === "`") {
+        inString = ch;
+        continue;
+      }
+      if (ch === "{") {
+        depth++;
+      } else if (ch === "}") {
+        depth--;
+        if (depth === 0) {
+          blockEnd = i;
+        }
+      }
+    }
+
+    // Extract the block content and normalize it
+    const blockContent = code.slice(markerIdx, blockEnd + 1);
+    const cleaned = blockContent
+      // Remove blank lines after closing braces followed by property
+      .replace(
+        /(\n\s*\},)\n\n+(\s+(?:[a-zA-Z_$][a-zA-Z0-9_$]*|["'].*?["']|::[a-zA-Z-]+|@[a-zA-Z-]+|:[a-zA-Z-]+)\s*:)/g,
+        "$1\n$2",
+      )
+      // Remove blank lines after commas followed by property or comment
+      .replace(/,\n\n+(\s+(?:[a-zA-Z_$"']|\/\/|\/\*))/g, ",\n$1")
+      // Normalize `content` strings: prefer `'\"...\"'` form over escaped double-quotes
+      .replace(/content:\s+"\\"([\s\S]*?)\\""/g, "content: '\"$1\"'")
+      .replace(/content:\s+"'\s*([\s\S]*?)\s*'"/g, "content: '\"$1\"'");
+
+    result += cleaned;
+    pos = blockEnd + 1;
   }
+
+  return result;
+}
+
+export function formatOutput(code: string): string {
+  // Normalize stylex.create blocks (targeted, defensive approach)
+  let out = removeBlankLinesInStylexCreate(code);
 
   // Normalize import spacing at the top of the file:
   // - Keep React and StyleX imports adjacent (no blank line between them).

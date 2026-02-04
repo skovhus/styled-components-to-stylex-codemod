@@ -8,6 +8,7 @@ type BoxProps = Omit<React.ComponentProps<"div">, "className" | "style"> & {
 
 function Box(props: BoxProps) {
   const { children, $delay } = props;
+
   return (
     <div {...stylex.props(styles.box, styles.boxTransitionDelay(`${$delay ?? 0}ms`))}>
       {children}

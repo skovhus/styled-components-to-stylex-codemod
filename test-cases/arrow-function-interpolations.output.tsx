@@ -8,6 +8,7 @@ type GradientBoxProps = React.PropsWithChildren<{
 // Arrow function in background (10 occurrences)
 function GradientBox(props: GradientBoxProps) {
   const { children, $direction } = props;
+
   return (
     <div
       {...stylex.props(
@@ -27,6 +28,7 @@ type TabItemProps = React.PropsWithChildren<{
 // Arrow function in border-bottom (6 occurrences)
 function TabItem(props: TabItemProps) {
   const { children, $isActive } = props;
+
   return (
     <div
       {...stylex.props(

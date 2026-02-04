@@ -23,7 +23,6 @@ const styles = stylex.create({
   colorMixin: {
     color: "red",
   },
-
   // Using shared mixins within components
   elementWithMixin: {
     color: "red",

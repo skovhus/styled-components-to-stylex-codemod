@@ -15,7 +15,7 @@ export function finalize(ctx: TransformContext): TransformResult {
         ctx.root.toSource({
           quote: "double",
           trailingComma: true,
-          reuseWhitespace: false,
+          reuseWhitespace: true,
         }),
       );
     } catch (e) {

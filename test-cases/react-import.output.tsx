@@ -10,6 +10,7 @@ type CardProps = React.PropsWithChildren<{
 // (modern JSX transform doesn't require it for styled-components)
 export function Card(props: CardProps) {
   const { children } = props;
+
   return <div {...stylex.props(styles.card)}>{children}</div>;
 }
 
@@ -20,6 +21,7 @@ type ButtonProps = React.PropsWithChildren<{
 // Another component to ensure multiple components work
 export function Button(props: ButtonProps) {
   const { children } = props;
+
   return <button {...stylex.props(styles.button)}>{children}</button>;
 }
 
@@ -31,6 +33,7 @@ interface ThemeSpanProps extends Omit<React.ComponentProps<"span">, "className" 
 
 export function ThemeSpan(props: ThemeSpanProps) {
   const { children, variant } = props;
+
   return <span {...stylex.props(styles.themeSpanColor(variant))}>{children}</span>;
 }
 

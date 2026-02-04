@@ -9,6 +9,7 @@ type DynamicBoxProps = Omit<React.ComponentProps<"div">, "className"> & {
 
 function DynamicBox(props: DynamicBoxProps) {
   const { children, style, $background, $size } = props;
+
   return (
     <div
       {...mergedSx(

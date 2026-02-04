@@ -3,7 +3,9 @@ import * as stylex from "@stylexjs/stylex";
 import { wrapComponent } from "./lib/helpers";
 
 const BaseComponent = (props: React.ComponentProps<"div">) => <div {...props} />;
+
 const ComponentBaseComponent = wrapComponent(BaseComponent);
+
 export const App = () => (
   <ComponentBaseComponent {...stylex.props(styles.wrappedStyled)}>Hello</ComponentBaseComponent>
 );

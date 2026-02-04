@@ -10,6 +10,7 @@ type FlexContainerProps = React.PropsWithChildren<{
 // Function call form returning a css template literal (not object syntax)
 function FlexContainer(props: FlexContainerProps) {
   const { children, $align } = props;
+
   return (
     <div
       {...stylex.props(styles.flexContainer, $align === "left" && styles.flexContainerAlignLeft)}
@@ -62,7 +63,6 @@ const styles = stylex.create({
   coloredBoxBackgroundColor: (backgroundColor: string) => ({
     backgroundColor,
   }),
-
   // Non-destructured props pattern: (props) => css`...${props.color}...`
   borderBox: {
     padding: "8px",
@@ -74,7 +74,6 @@ const styles = stylex.create({
   borderBoxBorderColor: (borderColor: string) => ({
     borderColor,
   }),
-
   // Non-destructured props with different param name: (p) => css`...${p.color}...`
   shadowBox: {
     padding: "12px",
@@ -83,7 +82,6 @@ const styles = stylex.create({
   shadowBoxBoxShadow: (boxShadow: string) => ({
     boxShadow,
   }),
-
   // Block body with return statement: (props) => { return css`...`; }
   blockBox: {
     display: "block",

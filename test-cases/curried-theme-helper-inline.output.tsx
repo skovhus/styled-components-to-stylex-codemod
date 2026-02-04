@@ -8,6 +8,7 @@ type BoxProps = Omit<React.ComponentProps<"div">, "className" | "style"> & {
 
 function Box(props: BoxProps) {
   const { children, position } = props;
+
   return (
     <div
       {...stylex.props(
@@ -27,6 +28,7 @@ type BorderedBoxProps = React.PropsWithChildren<{
 
 function BorderedBox(props: BorderedBoxProps) {
   const { children } = props;
+
   return <div {...stylex.props(styles.border)}>{children}</div>;
 }
 

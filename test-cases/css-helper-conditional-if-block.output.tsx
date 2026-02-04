@@ -8,6 +8,7 @@ type ContainerProps = Omit<React.ComponentProps<"div">, "className" | "style"> &
 
 export function Container(props: ContainerProps) {
   const { children, size } = props;
+
   return (
     <div
       {...stylex.props(

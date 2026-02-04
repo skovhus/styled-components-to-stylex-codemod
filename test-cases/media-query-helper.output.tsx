@@ -14,6 +14,7 @@ const styles = stylex.create({
    */
   container: {
     width: "100%",
+
     padding: {
       default: "1rem",
       "@media (min-width: 1024px)": "2rem",

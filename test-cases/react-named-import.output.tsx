@@ -8,6 +8,7 @@ interface ButtonProps {
 // This styled component has props which will generate React.PropsWithChildren
 function Button(props: Omit<React.ComponentProps<"button">, "className" | "style"> & ButtonProps) {
   const { children, variant } = props;
+
   return (
     <button {...stylex.props(styles.button, variant === "primary" && styles.buttonVariantPrimary)}>
       {children}
@@ -23,6 +24,7 @@ export const App = () => {
   useEffect(() => {
     console.log("mounted");
   }, []);
+
   return (
     <div onClick={handleClick} {...stylex.props(styles.card)}>
       <Button variant="primary">Click me</Button>

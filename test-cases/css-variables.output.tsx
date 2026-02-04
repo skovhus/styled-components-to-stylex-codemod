@@ -31,7 +31,6 @@ const styles = stylex.create({
     borderRadius: vars.borderRadius,
     margin: vars.spacingMd,
   },
-
   // Using CSS variables with fallbacks
   text: {
     color: textVars.textColor,

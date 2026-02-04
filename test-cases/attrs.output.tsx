@@ -17,6 +17,7 @@ type InputProps = Omit<React.ComponentProps<"input">, "className" | "style"> & {
 // Pattern 1: styled.input.attrs (dot notation)
 function Input(props: InputProps) {
   const { $padding, $small, ...rest } = props;
+
   return (
     <input
       size={$small ? 5 : undefined}
@@ -38,6 +39,7 @@ export function TextInput(
   props: Omit<React.ComponentProps<"input">, "className" | "style"> & TextInputProps,
 ) {
   const { allowPMAutofill, ...rest } = props;
+
   return (
     <input
       data-1p-ignore={allowPMAutofill !== true}
@@ -58,6 +60,7 @@ interface BackgroundProps extends Omit<
 
 export function Background(props: BackgroundProps) {
   const { children, loaded, ...rest } = props;
+
   return (
     <Flex
       column={true}
@@ -81,6 +84,7 @@ interface ScrollableProps extends Omit<
 
 export function Scrollable(props: ScrollableProps) {
   const { children, tabIndex, ...rest } = props;
+
   return (
     <Flex tabIndex={tabIndex ?? 0} {...rest} {...stylex.props(styles.scrollable)}>
       {children}
@@ -100,6 +104,7 @@ type TypeAliasProps = Omit<React.ComponentPropsWithRef<typeof Flex>, "className"
 
 export function ScrollableWithType(props: TypeAliasProps) {
   const { children, $applyBackground, tabIndex, ...rest } = props;
+
   return (
     <Flex tabIndex={tabIndex ?? 0} {...rest} {...stylex.props(styles.scrollableWithType)}>
       {children}
@@ -119,6 +124,7 @@ interface FocusableProps extends Omit<
 
 export function FocusableScroll(props: FocusableProps) {
   const { children, focusIndex, ...rest } = props;
+
   return (
     <Flex
       tabIndex={focusIndex ?? 0}

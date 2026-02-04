@@ -14,6 +14,7 @@ type ContainerProps = React.ComponentProps<"div"> & {
  */
 function Container(props: ContainerProps) {
   const { className, children, style, $open, $delay, ...rest } = props;
+
   return (
     <div
       {...rest}

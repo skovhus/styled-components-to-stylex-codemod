@@ -10,6 +10,7 @@ type BoxProps = Omit<React.ComponentProps<"div">, "className" | "style"> & {
 
 function Box(props: BoxProps) {
   const { children, size } = props;
+
   return (
     <div
       {...stylex.props(

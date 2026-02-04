@@ -15,6 +15,7 @@ type InputProps = {
 export function Input(props: InputProps) {
   const theme = useTheme();
   const someCustomColor = theme.color.bgBase;
+
   return <ColorPickerWrapper style={{ backgroundColor: someCustomColor }} />;
 }
 
@@ -25,6 +26,7 @@ type ColorPickerWrapperProps = React.PropsWithChildren<{
 
 function ColorPickerWrapper(props: ColorPickerWrapperProps) {
   const { children, style } = props;
+
   return <div {...mergedSx(styles.colorPickerWrapper, undefined, style)}>{children}</div>;
 }
 

@@ -14,6 +14,7 @@ type ContainerLinkProps = Omit<React.ComponentProps<"a">, "className" | "style">
 
 export function ContainerLink(props: ContainerLinkProps) {
   const { children, ...rest } = props;
+
   return (
     <a {...rest} {...stylex.props(stylex.defaultMarker())}>
       {children}
@@ -46,7 +47,6 @@ const styles = stylex.create({
     width: "100px",
     height: "100px",
   },
-
   // Test: interpolation with static suffix (e.g., `0 4px 8px ${color}`)
   shadowBox: {
     width: "50px",

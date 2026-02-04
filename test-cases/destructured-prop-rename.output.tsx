@@ -8,6 +8,7 @@ type ButtonProps = Omit<React.ComponentProps<"button">, "className" | "style"> &
 // Simple renamed destructured prop
 function Button(props: ButtonProps) {
   const { children, ...rest } = props;
+
   return (
     <button
       {...rest}
@@ -39,7 +40,6 @@ const styles = stylex.create({
   linkFontSize: (fontSize: string) => ({
     fontSize,
   }),
-
   // Destructured prop with default value
   card: {
     padding: "16px",
@@ -47,7 +47,6 @@ const styles = stylex.create({
   cardPadding: (padding: string) => ({
     padding,
   }),
-
   // Renamed destructured prop with default value
   box: {
     margin: "8px",

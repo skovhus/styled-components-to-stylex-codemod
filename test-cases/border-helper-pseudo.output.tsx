@@ -8,6 +8,7 @@ type StyledHeaderProps = React.PropsWithChildren<{
 
 export function StyledHeader(props: StyledHeaderProps) {
   const { children } = props;
+
   return <header {...stylex.props(styles.styledHeader)}>{children}</header>;
 }
 

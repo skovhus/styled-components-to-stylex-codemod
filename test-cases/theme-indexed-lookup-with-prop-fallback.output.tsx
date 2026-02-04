@@ -11,6 +11,7 @@ type ViewProps = Omit<React.ComponentProps<"div">, "className" | "style"> & {
 
 function View(props: ViewProps) {
   const { children, backgroundColor } = props;
+
   return <div {...stylex.props(styles.viewBackgroundColor(backgroundColor))}>{children}</div>;
 }
 

@@ -43,6 +43,7 @@ interface ScrollableProps extends React.ComponentPropsWithRef<typeof Flex> {
  */
 export function Scrollable(props: ScrollableProps) {
   const { className, children, style, $applyBackground, ...rest } = props;
+
   return (
     <Flex
       {...rest}

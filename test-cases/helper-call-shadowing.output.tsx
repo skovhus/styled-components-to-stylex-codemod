@@ -17,6 +17,7 @@ function createThemedComponents() {
   // The codemod should preserve the shadowed call via inline style fallback.
   function ThemedBox(props: ThemedBoxProps) {
     const { className, children, style } = props;
+
     return (
       <div
         className={className}
@@ -29,6 +30,7 @@ function createThemedComponents() {
       </div>
     );
   }
+
   return ThemedBox;
 }
 
@@ -36,5 +38,4 @@ export const App = () => {
   const ThemedBox = createThemedComponents();
   return <ThemedBox>Colored text</ThemedBox>;
 };
-
 const styles = stylex.create({});

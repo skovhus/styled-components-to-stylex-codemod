@@ -10,6 +10,7 @@ type AnimatedPathProps = Omit<React.ComponentProps<"path">, "className"> & {
 
 function AnimatedPath(props: AnimatedPathProps) {
   const { children, style, $width, ...rest } = props;
+
   return (
     <path
       {...rest}
@@ -27,6 +28,7 @@ export const App = () => {
     const id = window.setInterval(() => setOn((v) => !v), 650);
     return () => window.clearInterval(id);
   }, []);
+
   return (
     <div style={{ fontFamily: "system-ui" }}>
       <svg

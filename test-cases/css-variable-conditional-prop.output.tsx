@@ -8,6 +8,7 @@ type ContainerWrapperProps = React.PropsWithChildren<{
 // A wrapper that conditionally sets a CSS custom property based on prop
 function ContainerWrapper(props: ContainerWrapperProps) {
   const { children, $width } = props;
+
   return (
     <div
       {...stylex.props(
@@ -42,12 +43,10 @@ const styles = stylex.create({
   containerWrapperCondTruthy: (props: { width: number }) => ({
     "--component-width": `${props.width}px`,
   }),
-
   // A wrapper that conditionally sets a CSS custom property based on prop
   containerWrapper: {
     overflow: "hidden",
   },
-
   // A container that uses the CSS custom property with calc()
   container: {
     backgroundColor: "coral",

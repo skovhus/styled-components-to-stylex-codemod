@@ -12,6 +12,7 @@ type BadgeProps = React.PropsWithChildren<{
 
 export function Badge(props: BadgeProps) {
   const { children, $size } = props;
+
   return (
     <span {...stylex.props(styles.badge, $size === "micro" && styles.badgeSizeMicro)}>
       {children}

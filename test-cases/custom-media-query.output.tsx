@@ -7,6 +7,7 @@ type ConditionalContainerProps = React.PropsWithChildren<{
 
 export function ConditionalContainer(props: ConditionalContainerProps) {
   const { children } = props;
+
   return (
     <div {...stylex.props(styles.conditionalContainerFontSizeFromProps(props))}>{children}</div>
   );

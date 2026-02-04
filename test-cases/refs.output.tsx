@@ -7,6 +7,7 @@ export const App = () => {
   useEffect(() => {
     inputRef.current?.focus();
   }, []);
+
   return <input ref={inputRef} placeholder="Focus me on mount!" {...stylex.props(styles.input)} />;
 };
 

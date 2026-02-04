@@ -21,7 +21,6 @@ const styles = stylex.create({
   localMixin: {
     fontWeight: "bold",
   },
-
   // Test case 2: Imported first, then local
   // Order should be: helpers.truncate, localMixin, combined2
   importedThenLocal: {

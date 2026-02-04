@@ -8,6 +8,7 @@ type BoxProps = React.PropsWithChildren<{
 // Empty string in conditional - should omit property when truthy
 function Box(props: BoxProps) {
   const { children, $disableMinWidth } = props;
+
   return (
     <div {...stylex.props(styles.box, !$disableMinWidth && styles.boxNotDisableMinWidth)}>
       {children}
@@ -22,6 +23,7 @@ type BoxAltProps = React.PropsWithChildren<{
 // Empty string alternate - should apply property when truthy
 function BoxAlt(props: BoxAltProps) {
   const { children, $enableMinWidth } = props;
+
   return (
     <div
       {...stylex.props(styles.boxAlt, $enableMinWidth ? styles.boxAltEnableMinWidth : undefined)}
@@ -38,6 +40,7 @@ type ContainerProps = React.PropsWithChildren<{
 // Multiple CSS declarations in string
 function Container(props: ContainerProps) {
   const { children, $compact } = props;
+
   return (
     <div {...stylex.props(styles.container, !$compact && styles.containerNotCompact)}>
       {children}

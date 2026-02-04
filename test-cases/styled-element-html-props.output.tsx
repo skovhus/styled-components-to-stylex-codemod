@@ -15,6 +15,7 @@ export function TextColor<C extends React.ElementType = "span">(
   props: TextColorProps & React.ComponentPropsWithRef<C> & { as?: C },
 ) {
   const { as: Component = "span", className, children, style, color } = props;
+
   return (
     <Component {...mergedSx(styles.textColorColor(color), className, style)}>{children}</Component>
   );

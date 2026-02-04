@@ -15,6 +15,7 @@ interface ContainerProps extends Omit<React.ComponentProps<"div">, "className" |
 
 function Container(props: ContainerProps) {
   const { children, $sidebarCollapsed, $position } = props;
+
   return (
     <div
       {...stylex.props(

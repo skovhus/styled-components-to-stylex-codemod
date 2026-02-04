@@ -5,6 +5,7 @@ type SelectProps = Omit<React.ComponentProps<"select">, "className" | "style">;
 
 export function Select(props: SelectProps) {
   const { children, ...rest } = props;
+
   return (
     <select {...rest} {...stylex.props(styles.select)}>
       {children}
@@ -28,7 +29,6 @@ const styles = stylex.create({
     textAlign: "center",
     color: "#bf4f74",
   },
-
   // Page wrapper with padding
   wrapper: {
     padding: "4em",

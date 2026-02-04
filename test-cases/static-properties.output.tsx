@@ -11,25 +11,30 @@ type ListItemProps = React.ComponentProps<"div">;
 // Pattern 1: Static properties defined directly on styled component
 export function ListItem(props: ListItemProps) {
   const { className, children, style } = props;
+
   return <div {...mergedSx(styles.listItem, className, style)}>{children}</div>;
 }
 
 ListItem.HEIGHT = 42;
 ListItem.PADDING = 8;
+
 type BaseButtonProps = React.ComponentProps<"button"> & { as?: React.ElementType };
 
 // Pattern 2: styled(BaseComponent) with static props defined in same file
 function BaseButton(props: BaseButtonProps) {
   const { as: Component = "button", className, children, style } = props;
+
   return <Component {...mergedSx(styles.baseButton, className, style)}>{children}</Component>;
 }
 
 BaseButton.HEIGHT = 36;
+
 type ExtendedButtonProps = React.ComponentProps<"button">;
 
 // ExtendedButton should have HEIGHT from BaseButton
 export function ExtendedButton(props: ExtendedButtonProps) {
   const { className, children, style } = props;
+
   return (
     <button {...mergedSx([styles.baseButton, styles.extendedButton], className, style)}>
       {children}
@@ -38,6 +43,7 @@ export function ExtendedButton(props: ExtendedButtonProps) {
 }
 
 ExtendedButton.HEIGHT = (BaseButton as any).HEIGHT;
+
 type CommandMenuTextDividerProps = Omit<
   React.ComponentPropsWithRef<typeof ActionMenuTextDivider>,
   "className" | "style"
