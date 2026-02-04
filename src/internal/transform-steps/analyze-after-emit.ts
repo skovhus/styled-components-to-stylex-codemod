@@ -33,22 +33,34 @@ export function analyzeAfterEmitStep(ctx: TransformContext): StepResult {
     }
   }
 
+  // Helper to check if a component has `as` or `forwardedAs` on its own opening tag
+  const hasPolymorphicAttrOnOpeningTag = (componentName: string): boolean => {
+    let hasAs = false;
+    let hasForwardedAs = false;
+    root
+      .find(j.JSXElement, {
+        openingElement: { name: { type: "JSXIdentifier", name: componentName } },
+      })
+      .forEach((p: any) => {
+        const opening = p.node.openingElement;
+        for (const attr of opening.attributes ?? []) {
+          if (attr?.type !== "JSXAttribute" || attr.name?.type !== "JSXIdentifier") {
+            continue;
+          }
+          if (attr.name.name === "as") {
+            hasAs = true;
+          }
+          if (attr.name.name === "forwardedAs") {
+            hasForwardedAs = true;
+          }
+        }
+      });
+    return hasAs || hasForwardedAs;
+  };
+
   for (const [baseName, children] of extendedBy.entries()) {
     const names = [baseName, ...children];
-    const hasPolymorphicUsage = names.some((nm) => {
-      const el = root.find(j.JSXElement, {
-        openingElement: { name: { type: "JSXIdentifier", name: nm } },
-      });
-      const hasAs =
-        el.find(j.JSXAttribute, { name: { type: "JSXIdentifier", name: "as" } }).size() > 0;
-      const hasForwardedAs =
-        el
-          .find(j.JSXAttribute, {
-            name: { type: "JSXIdentifier", name: "forwardedAs" },
-          })
-          .size() > 0;
-      return hasAs || hasForwardedAs;
-    });
+    const hasPolymorphicUsage = names.some((nm) => hasPolymorphicAttrOnOpeningTag(nm));
     if (hasPolymorphicUsage) {
       wrapperNames.add(baseName);
       for (const c of children) {
@@ -61,18 +73,7 @@ export function analyzeAfterEmitStep(ctx: TransformContext): StepResult {
   // (not in extendedBy because they don't extend other styled components)
   for (const decl of styledDecls) {
     if (decl.base.kind === "component" && !declByLocal.has(decl.base.ident)) {
-      const el = root.find(j.JSXElement, {
-        openingElement: { name: { type: "JSXIdentifier", name: decl.localName } },
-      });
-      const hasAs =
-        el.find(j.JSXAttribute, { name: { type: "JSXIdentifier", name: "as" } }).size() > 0;
-      const hasForwardedAs =
-        el
-          .find(j.JSXAttribute, {
-            name: { type: "JSXIdentifier", name: "forwardedAs" },
-          })
-          .size() > 0;
-      if (hasAs || hasForwardedAs) {
+      if (hasPolymorphicAttrOnOpeningTag(decl.localName)) {
         wrapperNames.add(decl.localName);
       }
     }
@@ -82,18 +83,7 @@ export function analyzeAfterEmitStep(ctx: TransformContext): StepResult {
   // (e.g., styled.span with as={animated.span})
   for (const decl of styledDecls) {
     if (decl.base.kind === "intrinsic" && !wrapperNames.has(decl.localName)) {
-      const el = root.find(j.JSXElement, {
-        openingElement: { name: { type: "JSXIdentifier", name: decl.localName } },
-      });
-      const asAttrs = el.find(j.JSXAttribute, { name: { type: "JSXIdentifier", name: "as" } });
-      const hasAs = asAttrs.size() > 0;
-      const hasForwardedAs =
-        el
-          .find(j.JSXAttribute, {
-            name: { type: "JSXIdentifier", name: "forwardedAs" },
-          })
-          .size() > 0;
-      if (hasAs || hasForwardedAs) {
+      if (hasPolymorphicAttrOnOpeningTag(decl.localName)) {
         wrapperNames.add(decl.localName);
       }
     }
