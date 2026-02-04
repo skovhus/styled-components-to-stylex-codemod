@@ -141,10 +141,10 @@ export function FocusableScroll(props: FocusableProps) {
 // When an intrinsic element has defaultAttrs, it generates a wrapper component
 // that destructures the referenced prop and applies the default value
 function Box(props: Omit<React.ComponentProps<"div">, "className" | "style">) {
-  const { children, tabIndex: tabIndex = 0, ...rest } = props;
+  const { children, tabIndex, ...rest } = props;
 
   return (
-    <div tabIndex={tabIndex} {...rest} {...stylex.props(styles.box)}>
+    <div tabIndex={tabIndex ?? 0} {...rest} {...stylex.props(styles.box)}>
       {children}
     </div>
   );

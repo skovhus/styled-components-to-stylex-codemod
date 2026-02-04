@@ -7,11 +7,11 @@ type Props = {
 };
 
 export function Component(props: Omit<React.ComponentProps<"div">, "className" | "style"> & Props) {
-  const { children, $applyBackground, tabIndex: tabIndex = 0, ...rest } = props;
+  const { children, $applyBackground, tabIndex, ...rest } = props;
 
   return (
     <div
-      tabIndex={tabIndex}
+      tabIndex={tabIndex ?? 0}
       {...rest}
       {...stylex.props(
         styles.component,

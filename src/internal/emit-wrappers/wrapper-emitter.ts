@@ -1028,39 +1028,16 @@ export class WrapperEmitter {
     if (allowStyleProp) {
       patternProps.push(this.patternProp("style"));
     }
-    // Build a map of default values from defaultAttrs for quick lookup
-    const defaultAttrsMap = new Map<string, unknown>();
-    for (const a of defaultAttrs) {
-      defaultAttrsMap.set(a.jsxProp, a.value);
-    }
-
-    // Helper to create a property with an assignment pattern default value
-    const makePatternPropWithDefault = (name: string, value: unknown): Property | null => {
-      if (typeof value === "boolean") {
-        return j.property.from({
-          kind: "init",
-          key: j.identifier(name),
-          value: j.assignmentPattern(j.identifier(name), j.booleanLiteral(value)),
-          shorthand: false,
-        }) as Property;
-      }
-      if (typeof value === "string" || typeof value === "number") {
-        return j.property.from({
-          kind: "init",
-          key: j.identifier(name),
-          value: j.assignmentPattern(j.identifier(name), j.literal(value)),
-          shorthand: false,
-        }) as Property;
-      }
-      return null;
-    };
+    // Build a set of defaultAttrs prop names to check if we should skip destructuring defaults
+    const defaultAttrsSet = new Set(defaultAttrs.map((a) => a.jsxProp));
 
     for (const name of expandedDestructureProps) {
       if (name !== "children" && name !== "style" && name !== "className") {
         const defaultVal = propDefaults?.get(name);
-        // Also check defaultAttrs for default values (e.g., tabIndex: props.tabIndex ?? 0)
-        const defaultAttrVal = defaultAttrsMap.get(name);
-        if (defaultVal) {
+        // Don't add destructuring defaults for defaultAttrs props - we use ?? in JSX instead
+        // to preserve nullish coalescing semantics (handles both undefined AND null)
+        const isDefaultAttr = defaultAttrsSet.has(name);
+        if (defaultVal && !isDefaultAttr) {
           patternProps.push(
             j.property.from({
               kind: "init",
@@ -1070,24 +1047,17 @@ export class WrapperEmitter {
             }) as Property,
           );
         } else {
-          const propWithDefault = makePatternPropWithDefault(name, defaultAttrVal);
-          if (propWithDefault) {
-            patternProps.push(propWithDefault);
-          } else {
-            patternProps.push(this.patternProp(name));
-          }
+          patternProps.push(this.patternProp(name));
         }
       }
     }
 
-    // Add defaultAttrs props to destructuring with their default values
-    // This ensures they're extracted from rest and we can use the identifier directly in JSX
+    // Add defaultAttrs props to destructuring WITHOUT default values.
+    // We use nullish coalescing (??) in the JSX attribute instead of destructuring
+    // defaults because destructuring only defaults on undefined, while ?? also handles null.
     for (const a of defaultAttrs) {
       if (!expandedDestructureProps.has(a.jsxProp)) {
-        const propWithDefault = makePatternPropWithDefault(a.jsxProp, a.value);
-        if (propWithDefault) {
-          patternProps.push(propWithDefault);
-        }
+        patternProps.push(this.patternProp(a.jsxProp));
       }
     }
 
@@ -1120,13 +1090,16 @@ export class WrapperEmitter {
 
     const jsxAttrs: Array<JSXAttribute | JSXSpreadAttribute> = [];
 
-    // For defaultAttrs, use the destructured identifier directly since we added it
-    // with a default value in the destructuring above
+    // For defaultAttrs, use nullish coalescing (??) to apply the default value.
+    // This preserves the original semantics of `props.X ?? defaultValue` which
+    // defaults both undefined AND null, unlike destructuring defaults.
     for (const a of defaultAttrs) {
       jsxAttrs.push(
         j.jsxAttribute(
           j.jsxIdentifier(a.attrName),
-          j.jsxExpressionContainer(j.identifier(a.jsxProp)),
+          j.jsxExpressionContainer(
+            j.logicalExpression("??", j.identifier(a.jsxProp), this.literalExpr(a.value)),
+          ),
         ),
       );
     }
