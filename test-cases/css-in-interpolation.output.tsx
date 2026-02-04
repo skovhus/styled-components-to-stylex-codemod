@@ -7,10 +7,10 @@ type ButtonProps = React.PropsWithChildren<{
 }>;
 
 export function Button(props: ButtonProps) {
-  const { children, $primary } = props;
+  const { children, $primary, ...rest } = props;
 
   return (
-    <button {...stylex.props(styles.button, $primary ? styles.buttonPrimary : undefined)}>
+    <button {...rest} {...stylex.props(styles.button, $primary ? styles.buttonPrimary : undefined)}>
       {children}
     </button>
   );

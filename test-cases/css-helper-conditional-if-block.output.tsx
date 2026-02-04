@@ -7,10 +7,11 @@ type ContainerProps = Omit<React.ComponentProps<"div">, "className" | "style"> &
 };
 
 export function Container(props: ContainerProps) {
-  const { children, size } = props;
+  const { children, size, ...rest } = props;
 
   return (
     <div
+      {...rest}
       {...stylex.props(
         styles.container,
         Browser.isSafari

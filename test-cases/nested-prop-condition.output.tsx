@@ -16,10 +16,12 @@ type BadgeProps = Omit<React.ComponentProps<"div">, "className" | "style"> & {
 };
 
 export function Badge(props: BadgeProps) {
-  const { children, user } = props;
+  const { children, user, ...rest } = props;
 
   return (
-    <div {...stylex.props(user.role === Role.admin && styles.badgeUserRoleAdmin)}>{children}</div>
+    <div {...rest} {...stylex.props(user.role === Role.admin && styles.badgeUserRoleAdmin)}>
+      {children}
+    </div>
   );
 }
 

@@ -3,9 +3,13 @@ import * as stylex from "@stylexjs/stylex";
 import { pixelVars } from "./tokens.stylex";
 
 export function StyledHeader(props: React.PropsWithChildren<{ ref?: React.Ref<HTMLElement> }>) {
-  const { children } = props;
+  const { children, ...rest } = props;
 
-  return <header {...stylex.props(styles.styledHeader)}>{children}</header>;
+  return (
+    <header {...rest} {...stylex.props(styles.styledHeader)}>
+      {children}
+    </header>
+  );
 }
 
 export const App = () => (

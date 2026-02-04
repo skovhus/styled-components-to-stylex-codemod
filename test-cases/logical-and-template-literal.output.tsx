@@ -23,10 +23,11 @@ type DropZoneProps = React.PropsWithChildren<{
 
 // Test logical AND with template literal containing theme expression
 export function DropZone(props: DropZoneProps) {
-  const { children, $isDraggingOver } = props;
+  const { children, $isDraggingOver, ...rest } = props;
 
   return (
     <div
+      {...rest}
       {...stylex.props(styles.dropZone, $isDraggingOver ? styles.dropZoneDraggingOver : undefined)}
     >
       {children}
@@ -40,10 +41,13 @@ type CardProps = React.PropsWithChildren<{
 
 // Test logical AND with template literal containing multiple theme expressions
 export function Card(props: CardProps) {
-  const { children, $isHighlighted } = props;
+  const { children, $isHighlighted, ...rest } = props;
 
   return (
-    <div {...stylex.props(styles.card, $isHighlighted ? styles.cardHighlighted : undefined)}>
+    <div
+      {...rest}
+      {...stylex.props(styles.card, $isHighlighted ? styles.cardHighlighted : undefined)}
+    >
       {children}
     </div>
   );

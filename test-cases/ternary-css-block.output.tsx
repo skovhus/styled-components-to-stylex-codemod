@@ -9,10 +9,10 @@ type HighlightProps = React.PropsWithChildren<{
 // Support ternary CSS blocks that return declaration text (or empty string).
 
 export function Highlight(props: HighlightProps) {
-  const { children, $dim } = props;
+  const { children, $dim, ...rest } = props;
 
   return (
-    <span {...stylex.props(styles.highlight, $dim ? styles.highlightDim : undefined)}>
+    <span {...rest} {...stylex.props(styles.highlight, $dim ? styles.highlightDim : undefined)}>
       {children}
     </span>
   );

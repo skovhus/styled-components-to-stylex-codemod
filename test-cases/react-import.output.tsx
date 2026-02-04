@@ -5,16 +5,24 @@ import { $colors } from "./tokens.stylex";
 // This component uses JSX but has no explicit React import
 // (modern JSX transform doesn't require it for styled-components)
 export function Card(props: React.PropsWithChildren<{ ref?: React.Ref<HTMLDivElement> }>) {
-  const { children } = props;
+  const { children, ...rest } = props;
 
-  return <div {...stylex.props(styles.card)}>{children}</div>;
+  return (
+    <div {...rest} {...stylex.props(styles.card)}>
+      {children}
+    </div>
+  );
 }
 
 // Another component to ensure multiple components work
 export function Button(props: React.PropsWithChildren<{ ref?: React.Ref<HTMLButtonElement> }>) {
-  const { children } = props;
+  const { children, ...rest } = props;
 
-  return <button {...stylex.props(styles.button)}>{children}</button>;
+  return (
+    <button {...rest} {...stylex.props(styles.button)}>
+      {children}
+    </button>
+  );
 }
 
 // Pattern 2: Component with theme access (like TextColor.tsx in a design system)
@@ -24,9 +32,13 @@ interface ThemeSpanProps extends Omit<React.ComponentProps<"span">, "className" 
 }
 
 export function ThemeSpan(props: ThemeSpanProps) {
-  const { children, variant } = props;
+  const { children, variant, ...rest } = props;
 
-  return <span {...stylex.props(styles.themeSpanColor(variant))}>{children}</span>;
+  return (
+    <span {...rest} {...stylex.props(styles.themeSpanColor(variant))}>
+      {children}
+    </span>
+  );
 }
 
 export function App() {

@@ -9,9 +9,13 @@ import { mergedSx } from "./lib/mergedSx";
 export function ExportedButton<C extends React.ElementType = "button">(
   props: React.ComponentPropsWithRef<C> & { as?: C },
 ) {
-  const { as: Component = "button", className, children, style } = props;
+  const { as: Component = "button", className, children, style, ...rest } = props;
 
-  return <Component {...mergedSx(styles.exportedButton, className, style)}>{children}</Component>;
+  return (
+    <Component {...rest} {...mergedSx(styles.exportedButton, className, style)}>
+      {children}
+    </Component>
+  );
 }
 
 export const App = () => (

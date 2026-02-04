@@ -152,13 +152,15 @@ export function emitSimpleWithConfigWrappers(ctx: EmitIntrinsicContext): void {
       // Include rest spread when:
       // - Component is used with spread (usedAttrs.has("*"))
       // - Component is used as a value
-      // - Component is not exported and has used attrs
+      // - Component is exported (external callers may pass any element props)
+      // - Component has local usage that passes attrs
       // - defaultAttrs reference element props (like tabIndex: props.tabIndex ?? 0)
       //   which means user should be able to pass/override these props
       const includeRest =
         usedAttrs.has("*") ||
         !!d.usedAsValue ||
-        (!(d.isExported ?? false) && usedAttrs.size > 0) ||
+        (d.isExported ?? false) ||
+        usedAttrs.size > 0 ||
         hasElementPropsInDefaultAttrs(d);
       const variantProps = new Set<string>();
       if (d.variantStyleKeys) {
@@ -741,6 +743,11 @@ export function emitSimpleExportedIntrinsicWrappers(ctx: EmitIntrinsicContext): 
     // When defaultAttrs reference element props (like tabIndex: props.tabIndex ?? 0),
     // include rest spread so user can pass/override these props
     if (hasElementPropsInDefaultAttrs(d)) {
+      shouldIncludeRest = true;
+    }
+    // Exported components should always include rest spread so that all element props
+    // (id, onClick, aria-*, etc.) are forwarded to the element.
+    if (isExportedComponent) {
       shouldIncludeRest = true;
     }
     if (shouldIncludeRest) {
