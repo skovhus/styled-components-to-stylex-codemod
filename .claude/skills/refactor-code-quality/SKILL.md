@@ -116,7 +116,6 @@ rg "^\s*void \w+;" --type ts
 **Never use `void variable;` to suppress unused variable warnings.** This is a code smell that hides the real problem. Instead:
 
 - **Remove the parameter** if it's not needed
-- **Prefix with underscore** (`_unusedParam`) if intentionally unused
 - **Actually use it** if it should be doing something
 
 ### Step 4: Refactor to Remove Duplication
