@@ -6,7 +6,6 @@ import type { CssRuleIR } from "../css-ir.js";
 import type { DeclProcessingState } from "./decl-setup.js";
 import { cssDeclarationToStylexDeclarations } from "../css-prop-mapping.js";
 import { cssValueToJs } from "../transform/helpers.js";
-import { addPropComments } from "./comments.js";
 import { handleInterpolatedDeclaration } from "./rule-interpolated-declaration.js";
 
 type CommentSource = { leading?: string; trailingLine?: string } | null;

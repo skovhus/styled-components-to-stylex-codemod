@@ -9,13 +9,9 @@ import type { WarningType } from "../logger.js";
 import type { ExpressionKind } from "./decl-types.js";
 import type { DeclProcessingState } from "./decl-setup.js";
 import { resolveDynamicNode } from "../builtin-handlers.js";
-import {
-  cssDeclarationToStylexDeclarations,
-  cssPropertyToStylexProp,
-} from "../css-prop-mapping.js";
+import { cssDeclarationToStylexDeclarations } from "../css-prop-mapping.js";
 import {
   cloneAstNode,
-  collectIdentifiers,
   extractRootAndPath,
   getFunctionBodyExpr,
   getNodeLocStart,
@@ -45,8 +41,7 @@ import {
 } from "./interpolated-variant-resolvers.js";
 import { handleInlineStyleValueFromProps } from "./inline-style-props.js";
 import { buildPseudoMediaPropValue } from "./variant-utils.js";
-import { capitalize } from "../utilities/string-utils.js";
-import { cssValueToJs, toStyleKey, toSuffixFromProp } from "../transform/helpers.js";
+import { toStyleKey, toSuffixFromProp } from "../transform/helpers.js";
 import { cssPropertyToIdentifier, makeCssProperty, makeCssPropKey } from "./shared.js";
 type CommentSource = { leading?: string; trailingLine?: string } | null;
 
@@ -75,8 +70,6 @@ export function handleInterpolatedDeclaration(args: InterpolatedDeclarationConte
     styleFnDecls,
     inlineStyleProps,
     cssHelperPropValues,
-    getComposedDefaultValue,
-    resolveComposedDefaultValue,
     tryHandleMappedFunctionColor,
     tryHandleLogicalOrDefault,
     tryHandleConditionalPropCoalesceWithTheme,
@@ -86,7 +79,6 @@ export function handleInterpolatedDeclaration(args: InterpolatedDeclarationConte
     componentInfo,
     tryHandlePropertyTernaryTemplateLiteral,
     tryHandleCssHelperFunctionSwitchBlock,
-    resolveStaticCssBlock,
     tryHandleCssHelperConditionalBlock,
     findJsxPropTsType,
     annotateParamFromJsxProp,
@@ -106,7 +98,6 @@ export function handleInterpolatedDeclaration(args: InterpolatedDeclarationConte
     cssHelperObjectMembers,
     declByLocalName,
     cssHelperValuesByKey,
-    mixinValuesByKey,
     staticPropertyValues,
     warnPropInlineStyle,
     applyCssHelperMixin,
@@ -214,7 +205,11 @@ export function handleInterpolatedDeclaration(args: InterpolatedDeclarationConte
           } else if (cssHelperPropValues.has(out.prop)) {
             // Use the css helper's value as the default
             const helperVal = cssHelperPropValues.get(out.prop);
-            if (helperVal && typeof helperVal === "object" && "__cssHelperDynamicValue" in helperVal) {
+            if (
+              helperVal &&
+              typeof helperVal === "object" &&
+              "__cssHelperDynamicValue" in helperVal
+            ) {
               // Dynamic value - need to resolve from already-processed css helper
               const helperDecl = (helperVal as { decl?: StyledDecl }).decl;
               if (helperDecl) {
@@ -222,8 +217,7 @@ export function handleInterpolatedDeclaration(args: InterpolatedDeclarationConte
                   toStyleKey(helperDecl.localName),
                 );
                 if (resolvedHelper && typeof resolvedHelper === "object") {
-                  existing.default =
-                    (resolvedHelper as Record<string, unknown>)[out.prop] ?? null;
+                  existing.default = (resolvedHelper as Record<string, unknown>)[out.prop] ?? null;
                 } else {
                   existing.default = null;
                 }
@@ -350,7 +344,10 @@ export function handleInterpolatedDeclaration(args: InterpolatedDeclarationConte
           expr?.type === "ArrowFunctionExpression" || expr?.type === "FunctionExpression"
             ? (expr.body as any)
             : (expr as any);
-        if (baseExpr?.type !== "MemberExpression" && baseExpr?.type !== "OptionalMemberExpression") {
+        if (
+          baseExpr?.type !== "MemberExpression" &&
+          baseExpr?.type !== "OptionalMemberExpression"
+        ) {
           continue;
         }
         const obj = baseExpr.object;
@@ -368,10 +365,7 @@ export function handleInterpolatedDeclaration(args: InterpolatedDeclarationConte
         const resolvedValue = propName ? ownerMap.get(propName) : undefined;
         if (resolvedValue !== undefined) {
           // Replace the template expression with a literal value
-          decl.templateExpressions[part.slotId] = staticValueToLiteral(
-            j,
-            resolvedValue,
-          ) as any;
+          decl.templateExpressions[part.slotId] = staticValueToLiteral(j, resolvedValue) as any;
           // Add a comment documenting the inlined value for maintainability
           const memberExprStr = `${ownerName}.${propName}`;
           (d as any).leadingComment =
@@ -967,7 +961,11 @@ export function handleInterpolatedDeclaration(args: InterpolatedDeclarationConte
 
           // Build: themeObj[propName] ?? `${propName}`
           // The template literal wrapper satisfies StyleX's static analyzer for the fallback
-          const indexedLookup = j.memberExpression(themeObjAst as any, j.identifier(paramName), true);
+          const indexedLookup = j.memberExpression(
+            themeObjAst as any,
+            j.identifier(paramName),
+            true,
+          );
           const fallbackExpr = j.templateLiteral(
             [
               j.templateElement({ raw: "", cooked: "" }, false),
@@ -1372,7 +1370,10 @@ export function handleInterpolatedDeclaration(args: InterpolatedDeclarationConte
       continue;
     }
 
-    const describeInterpolation = (): { type: WarningType; context?: Record<string, unknown> } | null => {
+    const describeInterpolation = (): {
+      type: WarningType;
+      context?: Record<string, unknown>;
+    } | null => {
       type SlotPart = { kind: "slot"; slotId: number };
       const valueParts = (d.value as { parts?: unknown[] }).parts ?? [];
       const slotPart = valueParts.find(

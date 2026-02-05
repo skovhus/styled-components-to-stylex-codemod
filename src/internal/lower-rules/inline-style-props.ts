@@ -36,7 +36,7 @@ export type InlineStyleFromPropsContext = {
   loc: { line: number; column: number } | null | undefined;
   warnings: Array<{
     severity: "warning" | "error";
-    type: WarningType | string;
+    type: WarningType;
     loc?: { line: number; column: number } | null;
     context?: Record<string, unknown>;
   }>;
@@ -135,7 +135,9 @@ export function handleInlineStyleValueFromProps(ctx: InlineStyleFromPropsContext
         }
         const baseExpr = inlineExpr;
         const { prefix, suffix } = extractStaticParts(d.value);
-        return prefix || suffix ? buildTemplateWithStaticParts(j, baseExpr, prefix, suffix) : baseExpr;
+        return prefix || suffix
+          ? buildTemplateWithStaticParts(j, baseExpr, prefix, suffix)
+          : baseExpr;
       })();
       if (!valueExprRaw) {
         return true;
@@ -150,7 +152,10 @@ export function handleInlineStyleValueFromProps(ctx: InlineStyleFromPropsContext
             return expr;
           }
           return j.templateLiteral(
-            [j.templateElement({ raw: "", cooked: "" }, false), j.templateElement({ raw: "", cooked: "" }, true)],
+            [
+              j.templateElement({ raw: "", cooked: "" }, false),
+              j.templateElement({ raw: "", cooked: "" }, true),
+            ],
             [expr],
           );
         };
@@ -258,7 +263,10 @@ export function handleInlineStyleValueFromProps(ctx: InlineStyleFromPropsContext
             return expr;
           }
           return j.templateLiteral(
-            [j.templateElement({ raw: "", cooked: "" }, false), j.templateElement({ raw: "", cooked: "" }, true)],
+            [
+              j.templateElement({ raw: "", cooked: "" }, false),
+              j.templateElement({ raw: "", cooked: "" }, true),
+            ],
             [expr],
           );
         };
@@ -283,8 +291,7 @@ export function handleInlineStyleValueFromProps(ctx: InlineStyleFromPropsContext
     // For static expressions (not ArrowFunction/FunctionExpression),
     // use the expression directly without the IIFE wrapper.
     // The IIFE with __scValue is only needed for props-dependent expressions.
-    const isStaticExpr =
-      e.type !== "ArrowFunctionExpression" && e.type !== "FunctionExpression";
+    const isStaticExpr = e.type !== "ArrowFunctionExpression" && e.type !== "FunctionExpression";
     const baseExpr = isStaticExpr
       ? cloneAstNode(e as ExpressionKind)
       : buildRuntimeValueExpr(e as ExpressionKind);

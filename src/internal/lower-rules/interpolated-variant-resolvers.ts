@@ -33,7 +33,12 @@ type SplitVariantsContext = {
   media: string | undefined;
   parseExpr: (expr: string) => ExpressionKind | null;
   resolverImports: Map<string, any>;
-  warnings: Array<{ severity: "warning" | "error"; type: WarningType | string; loc?: any; context?: any }>;
+  warnings: Array<{
+    severity: "warning" | "error";
+    type: WarningType;
+    loc?: any;
+    context?: any;
+  }>;
   setBail: () => void;
   bailUnsupported: (decl: StyledDecl, type: WarningType) => void;
 };
@@ -263,7 +268,10 @@ export function handleSplitVariantsResolvedValue(ctx: SplitVariantsContext): boo
         return;
       }
     }
-    if ((cssProp === "padding" || cssProp === "margin") && expandBoxShorthand(target, parsed.exprAst, cssProp)) {
+    if (
+      (cssProp === "padding" || cssProp === "margin") &&
+      expandBoxShorthand(target, parsed.exprAst, cssProp)
+    ) {
       return;
     }
     // Default: use the property from cssDeclarationToStylexDeclarations.
@@ -407,7 +415,6 @@ export function handleSplitVariantsResolvedValue(ctx: SplitVariantsContext): boo
 
 export function handleSplitMultiPropVariantsResolvedValue(ctx: SplitVariantsContext): boolean {
   const {
-    j,
     decl,
     d,
     res,
@@ -475,7 +482,10 @@ export function handleSplitMultiPropVariantsResolvedValue(ctx: SplitVariantsCont
     return { exprAst, imports: imports ?? [] };
   };
 
-  const applyParsed = (target: Record<string, unknown>, parsed: { exprAst: unknown; imports: any[] }): void => {
+  const applyParsed = (
+    target: Record<string, unknown>,
+    parsed: { exprAst: unknown; imports: any[] },
+  ): void => {
     for (const imp of parsed.imports) {
       resolverImports.set(JSON.stringify(imp), imp);
     }

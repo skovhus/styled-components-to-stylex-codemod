@@ -36,6 +36,7 @@ export function processDeclRules(ctx: DeclProcessingState): void {
     warnings,
     resolverImports,
     resolveSelector,
+    parseExpr,
     cssHelperNames,
     resolvedStyleObjects,
     declByLocalName,

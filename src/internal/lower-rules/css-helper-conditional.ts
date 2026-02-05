@@ -50,7 +50,7 @@ export type CssHelperConditionalContext = {
   filePath: string;
   warnings: Array<{
     severity: "warning" | "error";
-    type: WarningType | string;
+    type: WarningType;
     loc?: { line: number; column: number } | null;
     context?: Record<string, unknown>;
   }>;
@@ -62,8 +62,6 @@ export type CssHelperConditionalContext = {
   componentInfo: any;
   handlerContext: InternalHandlerContext;
   styleObj: Record<string, unknown>;
-  variantBuckets: Map<string, Record<string, unknown>>;
-  variantStyleKeys: Record<string, string>;
   styleFnFromProps: StyleFnFromPropsEntry[];
   styleFnDecls: Map<string, any>;
   inlineStyleProps: Array<{ prop: string; expr: ExpressionKind; jsxProp?: string }>;
@@ -101,8 +99,6 @@ export function createCssHelperConditionalHandler(ctx: CssHelperConditionalConte
     componentInfo,
     handlerContext,
     styleObj,
-    variantBuckets,
-    variantStyleKeys,
     styleFnFromProps,
     styleFnDecls,
     inlineStyleProps,
@@ -611,8 +607,7 @@ export function createCssHelperConditionalHandler(ctx: CssHelperConditionalConte
         }
 
         // Handle static template literals (no interpolations)
-        const rawCss =
-          tpl.quasis?.map((q) => q.value?.cooked ?? q.value?.raw ?? "").join("") ?? "";
+        const rawCss = tpl.quasis?.map((q) => q.value?.cooked ?? q.value?.raw ?? "").join("") ?? "";
         if (!rawCss.trim()) {
           return true; // Empty template literal is valid (no styles to apply)
         }
@@ -648,9 +643,7 @@ export function createCssHelperConditionalHandler(ctx: CssHelperConditionalConte
         if (
           !styleFnFromProps.some(
             (p) =>
-              p.fnKey === fnKey &&
-              p.jsxProp === entry.jsxProp &&
-              p.conditionWhen === conditionWhen,
+              p.fnKey === fnKey && p.jsxProp === entry.jsxProp && p.conditionWhen === conditionWhen,
           )
         ) {
           styleFnFromProps.push({
@@ -893,11 +886,7 @@ export function createCssHelperConditionalHandler(ctx: CssHelperConditionalConte
       // Non-prop conditional: generate StyleX parameterized style functions.
       // Only support css`` or template-literal CSS branches.
       const consMap =
-        consIsCss || consIsTpl
-          ? resolveCssBranchToInlineMap(cons)
-          : consIsEmpty
-            ? new Map()
-            : null;
+        consIsCss || consIsTpl ? resolveCssBranchToInlineMap(cons) : consIsEmpty ? new Map() : null;
       const altMap =
         altIsCss || altIsTpl ? resolveCssBranchToInlineMap(alt) : altIsEmpty ? new Map() : null;
       if (!consMap || !altMap) {
@@ -939,7 +928,9 @@ export function createCssHelperConditionalHandler(ctx: CssHelperConditionalConte
 
       // Generate style function keys with descriptive names when possible
       const conditionName = extractConditionName(conditional.test);
-      const consKey = conditionName ? `${decl.styleKey}${conditionName}` : `${decl.styleKey}CondTruthy`;
+      const consKey = conditionName
+        ? `${decl.styleKey}${conditionName}`
+        : `${decl.styleKey}CondTruthy`;
       const altKey = conditionName ? `${decl.styleKey}Default` : `${decl.styleKey}CondFalsy`;
 
       if (consMap.size > 0) {
