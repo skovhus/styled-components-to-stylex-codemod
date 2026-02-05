@@ -1,0 +1,37 @@
+import styled, { keyframes } from "styled-components";
+
+// Bug: `styled(LoaderCaret)` wrapping produces a generic component type that causes
+// TS2590 ("union type too complex") when computing `ComponentPropsWithRef<typeof LoaderCaret>`.
+// Also, the base component's styles (width, height, animation, etc.) are lost in the output.
+
+const pulse = keyframes`
+  0%, 40%, 100% {
+    opacity: 1;
+  }
+  50%, 90% {
+    opacity: 0.2;
+  }
+`;
+
+export const LoaderCaret = styled.div<{ $delay?: number }>`
+  width: 8px;
+  height: 16px;
+  border-radius: 2px;
+  background-color: blue;
+  opacity: 0;
+  animation: ${pulse} 2000ms infinite;
+  animation-timing-function: cubic-bezier(0.25, 0.46, 0.45, 0.94);
+  animation-delay: ${(props) => props.$delay ?? 1000}ms;
+`;
+
+const StyledLoaderCaret = styled(LoaderCaret)<{ $noPadding?: boolean }>`
+  position: absolute;
+  top: 11px;
+  left: ${(props) => (props.$noPadding ? "0" : "10px")};
+`;
+
+export const App = () => (
+  <div>
+    <StyledLoaderCaret $delay={500} />
+  </div>
+);

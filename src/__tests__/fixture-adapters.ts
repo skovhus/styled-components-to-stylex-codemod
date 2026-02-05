@@ -214,6 +214,23 @@ export const fixtureAdapter = defineAdapter({
       throw new Error(`Unknown helper: ${src} ${ctx.calleeImportedName}`);
     }
 
+    // BUG DEMO: scrollFadeMaskStyles returns a RuleSet<object> from css`` helper,
+    // but the adapter resolves it without usage: "props", so the codemod treats
+    // it as a CSS value and passes the raw call into stylex.props() -> TS2345.
+    if (ctx.calleeImportedName === "scrollFadeMaskStyles") {
+      return {
+        // Missing usage: "props" — this is the bug.
+        // The expression still evaluates to RuleSet<object> at runtime.
+        expr: "scrollFadeMaskStyles(18)",
+        imports: [
+          {
+            from: { kind: "specifier", value: "./lib/helpers" },
+            names: [{ imported: "scrollFadeMaskStyles" }],
+          },
+        ],
+      };
+    }
+
     const helperStyleKey = (() => {
       switch (ctx.calleeImportedName) {
         case "gradient":
