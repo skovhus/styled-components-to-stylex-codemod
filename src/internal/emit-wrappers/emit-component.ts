@@ -566,14 +566,7 @@ export function emitComponentWrappers(emitter: WrapperEmitter): {
 
       const stmts: StatementKind[] = [declStmt];
       if (d.needsThemeHook) {
-        const themeHookName = emitter.ensureThemeHookName({
-          d,
-          reservedNames: emitter.buildThemeHookReservedNames({
-            d,
-            destructureProps,
-            additional: ["children", "className", "style", "rest", "Component"],
-          }),
-        });
+        const themeHookName = emitter.getThemeHookName({ d, destructureProps });
         stmts.push(emitter.buildThemeHookStatement(themeHookName));
       }
       if (merging.sxDecl) {
@@ -687,13 +680,7 @@ export function emitComponentWrappers(emitter: WrapperEmitter): {
       });
       const bodyStmts: StatementKind[] = [];
       if (d.needsThemeHook) {
-        const themeHookName = emitter.ensureThemeHookName({
-          d,
-          reservedNames: emitter.buildThemeHookReservedNames({
-            d,
-            additional: ["children", "className", "style", "rest", "Component"],
-          }),
-        });
+        const themeHookName = emitter.getThemeHookName({ d });
         bodyStmts.push(emitter.buildThemeHookStatement(themeHookName));
       }
       bodyStmts.push(j.returnStatement(jsx as any));

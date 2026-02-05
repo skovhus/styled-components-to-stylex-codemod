@@ -408,14 +408,7 @@ export function emitShouldForwardPropWrappers(ctx: EmitIntrinsicContext): void {
     }
 
     const themeHookName = d.needsThemeHook
-      ? emitter.ensureThemeHookName({
-          d,
-          reservedNames: emitter.buildThemeHookReservedNames({
-            d,
-            destructureProps: destructureParts,
-            additional: ["children", "className", "style", "rest", "Component"],
-          }),
-        })
+      ? emitter.getThemeHookName({ d, destructureProps: destructureParts })
       : undefined;
 
     const propsParamId = j.identifier("props");

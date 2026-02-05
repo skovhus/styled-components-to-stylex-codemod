@@ -30,6 +30,8 @@ export type JsxTagName = JSXIdentifier | JSXMemberExpression;
 type LogicalExpressionOperand = Parameters<JSCodeshift["logicalExpression"]>[1];
 type AstNodeOrNull = ASTNode | null | undefined;
 
+const THEME_HOOK_RESERVED_NAMES = ["children", "className", "style", "rest", "Component"];
+
 export type WrapperEmitterArgs = {
   root: Collection<ASTNode>;
   j: JSCodeshift;
@@ -1706,6 +1708,17 @@ export class WrapperEmitter {
       }
     }
     return reserved;
+  }
+
+  getThemeHookName(args: { d: StyledDecl; destructureProps?: string[] }): string {
+    return this.ensureThemeHookName({
+      d: args.d,
+      reservedNames: this.buildThemeHookReservedNames({
+        d: args.d,
+        destructureProps: args.destructureProps,
+        additional: THEME_HOOK_RESERVED_NAMES,
+      }),
+    });
   }
 
   ensureThemeHookName(args: { d: StyledDecl; reservedNames: Set<string> }): string {

@@ -213,14 +213,7 @@ export function emitSimpleWithConfigWrappers(ctx: EmitIntrinsicContext): void {
         ]),
       ];
       const themeHookName = d.needsThemeHook
-        ? emitter.ensureThemeHookName({
-            d,
-            reservedNames: emitter.buildThemeHookReservedNames({
-              d,
-              destructureProps,
-              additional: ["children", "className", "style", "rest", "Component"],
-            }),
-          })
+        ? emitter.getThemeHookName({ d, destructureProps })
         : undefined;
       emitted.push(
         ...withLeadingCommentsOnFirstFunction(
@@ -307,13 +300,7 @@ export function emitSimpleWithConfigWrappers(ctx: EmitIntrinsicContext): void {
 
     const bodyStmts: StatementKind[] = [declStmt];
     if (d.needsThemeHook) {
-      const themeHookName = emitter.ensureThemeHookName({
-        d,
-        reservedNames: emitter.buildThemeHookReservedNames({
-          d,
-          additional: ["children", "className", "style", "rest", "Component"],
-        }),
-      });
+      const themeHookName = emitter.getThemeHookName({ d });
       bodyStmts.push(emitter.buildThemeHookStatement(themeHookName));
     }
     if (merging.sxDecl) {
@@ -705,14 +692,7 @@ export function emitSimpleExportedIntrinsicWrappers(ctx: EmitIntrinsicContext): 
       destructureProps,
     });
     const themeHookName = d.needsThemeHook
-      ? emitter.ensureThemeHookName({
-          d,
-          reservedNames: emitter.buildThemeHookReservedNames({
-            d,
-            destructureProps,
-            additional: ["children", "className", "style", "rest", "Component"],
-          }),
-        })
+      ? emitter.getThemeHookName({ d, destructureProps })
       : undefined;
     emitter.collectDestructurePropsFromStyleFns({ d, styleArgs, destructureProps });
 

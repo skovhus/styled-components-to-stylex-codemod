@@ -173,14 +173,7 @@ export function emitIntrinsicPolymorphicWrappers(ctx: EmitIntrinsicContext): voi
         destructureProps,
       });
       const themeHookName = d.needsThemeHook
-        ? emitter.ensureThemeHookName({
-            d,
-            reservedNames: emitter.buildThemeHookReservedNames({
-              d,
-              destructureProps,
-              additional: ["children", "className", "style", "rest", "Component"],
-            }),
-          })
+        ? emitter.getThemeHookName({ d, destructureProps })
         : undefined;
       emitter.collectDestructurePropsFromStyleFns({ d, styleArgs, destructureProps });
 
