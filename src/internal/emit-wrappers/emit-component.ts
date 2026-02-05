@@ -78,73 +78,19 @@ export function emitComponentWrappers(emitter: WrapperEmitter): {
     return null;
   };
 
-  // Helper to check if a locally-defined component's props include a specific prop
-  // This is used to avoid adding className/style when the wrapped component already has them
+  // Helper to check if a locally-defined component's props include a specific prop.
+  // This is used to avoid adding className/style when the wrapped component already has them.
+  // Uses findComponentPropsType (which returns null for imported components) and
+  // emitter.getExplicitPropNames (which extracts prop names from type literals, interfaces,
+  // and type aliases, including through intersections).
   const localComponentHasProp = (componentName: string, propName: string): boolean => {
-    // Check if the component is defined in this file (not imported)
-    const funcDecl = root
-      .find(j.FunctionDeclaration)
-      .filter((p) => isIdentifierNode(p.node.id) && p.node.id.name === componentName);
-    const varDecl = root.find(j.VariableDeclarator).filter((p) => {
-      const id = getDeclaratorId(p.node);
-      return isIdentifierNode(id) && id.name === componentName;
-    });
-    if (funcDecl.size() === 0 && varDecl.size() === 0) {
-      // Component is not defined locally - assume it doesn't have the prop
-      return false;
-    }
-    // Check if the component's props interface/type includes the prop
-    const checkTypeLiteral = (node: any): boolean => {
-      if (node?.type === "TSTypeLiteral" && node.members) {
-        for (const member of node.members) {
-          if (
-            member.type === "TSPropertySignature" &&
-            member.key?.type === "Identifier" &&
-            member.key.name === propName
-          ) {
-            return true;
-          }
-        }
-      }
-      return false;
-    };
-    const checkTypeReference = (node: any): boolean => {
-      if (node?.type === "TSTypeReference" && node.typeName?.type === "Identifier") {
-        const typeName = node.typeName.name;
-        // Look up interface
-        const interfaceDecl = root
-          .find(j.TSInterfaceDeclaration)
-          .filter((p: any) => p.node.id?.name === typeName);
-        if (interfaceDecl.size() > 0) {
-          const body = interfaceDecl.get().node.body?.body ?? [];
-          for (const member of body) {
-            if (
-              member.type === "TSPropertySignature" &&
-              member.key?.type === "Identifier" &&
-              member.key.name === propName
-            ) {
-              return true;
-            }
-          }
-        }
-      }
-      return false;
-    };
-    const checkIntersection = (node: any): boolean => {
-      if (node?.type === "TSIntersectionType" && node.types) {
-        return node.types.some(
-          (t: any) => checkTypeLiteral(t) || checkTypeReference(t) || checkIntersection(t),
-        );
-      }
-      return false;
-    };
     const propsType = findComponentPropsType(componentName);
     if (!propsType) {
+      // Component is not defined locally or has no typed props - assume it doesn't have the prop
       return false;
     }
-    return (
-      checkTypeLiteral(propsType) || checkTypeReference(propsType) || checkIntersection(propsType)
-    );
+    const explicitProps = emitter.getExplicitPropNames(propsType);
+    return explicitProps.has(propName);
   };
 
   // Component wrappers (styled(Component)) - these wrap another component
