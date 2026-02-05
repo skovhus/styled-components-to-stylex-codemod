@@ -23,6 +23,7 @@ export const fixtureAdapter = defineAdapter({
     if (
       [
         "attrs-polymorphic-as",
+        "bug-external-styles-missing-classname",
         "external-styles-support",
         "input-external-styles",
         "styled-element-html-props",

@@ -84,3 +84,38 @@ export function injectRefPropIntoTypeLiteralString(
   // Fallback: intersect with a minimal ref prop type.
   return `${typeText} & { ref?: React.Ref<${refElementType}> }`;
 }
+
+/**
+ * Injects className and/or style props at the start of a type literal string.
+ * Used when wrapping external components that may not have these props in their type.
+ */
+export function injectStylePropsIntoTypeLiteralString(
+  typeText: string,
+  options: { className?: boolean; style?: boolean },
+): string {
+  const propsToAdd: string[] = [];
+  if (options.className && !/\bclassName\s*\?\s*:/.test(typeText)) {
+    propsToAdd.push("className?: string");
+  }
+  if (options.style && !/\bstyle\s*\?\s*:/.test(typeText)) {
+    propsToAdd.push("style?: React.CSSProperties");
+  }
+  if (propsToAdd.length === 0) {
+    return typeText;
+  }
+  const trimmed = typeText.trim();
+  // Best-effort: if this is a type literal (`{ ... }`), inject at the start.
+  if (trimmed.startsWith("{") && trimmed.endsWith("}")) {
+    const injection = propsToAdd.join(", ");
+    // Check if the literal has content (not just `{}`)
+    const innerContent = trimmed.slice(1, -1).trim();
+    if (innerContent) {
+      // Insert after opening brace, before existing content
+      return typeText.replace(/^\{\s*/, `{ ${injection}; `);
+    }
+    // Empty literal - just add the props
+    return `{ ${injection} }`;
+  }
+  // Fallback: intersect with a minimal props type.
+  return `${typeText} & { ${propsToAdd.join(", ")} }`;
+}
