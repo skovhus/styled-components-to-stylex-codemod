@@ -12,6 +12,47 @@ import { emitStyleMerging } from "./style-merger.js";
 import { sortVariantEntriesBySpecificity, VOID_TAGS } from "./type-helpers.js";
 import { withLeadingComments } from "./comments.js";
 import type { EmitIntrinsicContext } from "./emit-intrinsic-helpers.js";
+import type { JSCodeshift, Identifier } from "jscodeshift";
+
+/**
+ * Generates statements to filter props with a given prefix from the rest object.
+ * Used for exported components with shouldForwardProp/dropPrefix to ensure
+ * unknown transient props (like $unknown) don't leak to the DOM.
+ */
+function buildPrefixCleanupStatements(
+  j: JSCodeshift,
+  restId: Identifier,
+  dropPrefix: string,
+): StatementKind[] {
+  const restRecordId = j.identifier("restRecord");
+  const restRecordDecl = j.variableDeclaration("const", [
+    j.variableDeclarator(
+      restRecordId,
+      j.tsAsExpression(
+        restId,
+        j.tsTypeReference(
+          j.identifier("Record"),
+          j.tsTypeParameterInstantiation([j.tsStringKeyword(), j.tsUnknownKeyword()]),
+        ),
+      ),
+    ),
+  ]);
+  const forLoop = j.forOfStatement(
+    j.variableDeclaration("const", [j.variableDeclarator(j.identifier("k"), null as any)]),
+    j.callExpression(j.memberExpression(j.identifier("Object"), j.identifier("keys")), [restId]),
+    j.blockStatement([
+      j.ifStatement(
+        j.callExpression(j.memberExpression(j.identifier("k"), j.identifier("startsWith")), [
+          j.literal(dropPrefix),
+        ]),
+        j.expressionStatement(
+          j.unaryExpression("delete", j.memberExpression(restRecordId, j.identifier("k"), true)),
+        ),
+      ),
+    ]),
+  );
+  return [restRecordDecl, forLoop];
+}
 
 export function emitShouldForwardPropWrappers(ctx: EmitIntrinsicContext): void {
   const { emitter, j, emitTypes, wrapperDecls, stylesIdentifier, emitted } = ctx;
@@ -434,46 +475,8 @@ export function emitShouldForwardPropWrappers(ctx: EmitIntrinsicContext): void {
       // - Rest spread is included
       const needsCleanupLoop =
         dropPrefix && (isExportedComponent || shouldAllowAnyPrefixProps) && includeRest;
-      // Create a typed variable for delete with dynamic string key
-      const restRecordId = j.identifier("restRecord");
-      const restRecordDecl = j.variableDeclaration("const", [
-        j.variableDeclarator(
-          restRecordId,
-          j.tsAsExpression(
-            restId,
-            j.tsTypeReference(
-              j.identifier("Record"),
-              j.tsTypeParameterInstantiation([j.tsStringKeyword(), j.tsUnknownKeyword()]),
-            ),
-          ),
-        ),
-      ]);
       const cleanupPrefixStmt = needsCleanupLoop
-        ? [
-            restRecordDecl,
-            j.forOfStatement(
-              j.variableDeclaration("const", [
-                j.variableDeclarator(j.identifier("k"), null as any),
-              ]),
-              j.callExpression(j.memberExpression(j.identifier("Object"), j.identifier("keys")), [
-                restId,
-              ]),
-              j.blockStatement([
-                j.ifStatement(
-                  j.callExpression(
-                    j.memberExpression(j.identifier("k"), j.identifier("startsWith")),
-                    [j.literal(dropPrefix)],
-                  ),
-                  j.expressionStatement(
-                    j.unaryExpression(
-                      "delete",
-                      j.memberExpression(restRecordId, j.identifier("k"), true),
-                    ),
-                  ),
-                ),
-              ]),
-            ),
-          ]
+        ? buildPrefixCleanupStatements(j, restId, dropPrefix)
         : null;
 
       const { attrsInfo, staticClassNameExpr } = emitter.splitAttrsInfo(d.attrsInfo);
@@ -559,44 +562,8 @@ export function emitShouldForwardPropWrappers(ctx: EmitIntrinsicContext): void {
     // - Rest spread is included
     const needsCleanupLoopOuter =
       dropPrefix && (isExportedComponent || shouldAllowAnyPrefixProps) && includeRest;
-    // Create a typed variable for delete with dynamic string key
-    const restRecordOuterId = j.identifier("restRecord");
-    const restRecordOuterDecl = j.variableDeclaration("const", [
-      j.variableDeclarator(
-        restRecordOuterId,
-        j.tsAsExpression(
-          restId,
-          j.tsTypeReference(
-            j.identifier("Record"),
-            j.tsTypeParameterInstantiation([j.tsStringKeyword(), j.tsUnknownKeyword()]),
-          ),
-        ),
-      ),
-    ]);
     const cleanupPrefixStmt = needsCleanupLoopOuter
-      ? [
-          restRecordOuterDecl,
-          j.forOfStatement(
-            j.variableDeclaration("const", [j.variableDeclarator(j.identifier("k"), null as any)]),
-            j.callExpression(j.memberExpression(j.identifier("Object"), j.identifier("keys")), [
-              restId,
-            ]),
-            j.blockStatement([
-              j.ifStatement(
-                j.callExpression(
-                  j.memberExpression(j.identifier("k"), j.identifier("startsWith")),
-                  [j.literal(dropPrefix)],
-                ),
-                j.expressionStatement(
-                  j.unaryExpression(
-                    "delete",
-                    j.memberExpression(restRecordOuterId, j.identifier("k"), true),
-                  ),
-                ),
-              ),
-            ]),
-          ),
-        ]
+      ? buildPrefixCleanupStatements(j, restId, dropPrefix)
       : null;
 
     // Use the style merger helper
