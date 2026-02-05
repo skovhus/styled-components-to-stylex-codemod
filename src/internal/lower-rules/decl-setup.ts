@@ -2,60 +2,20 @@
  * Builds per-declaration processing context for lower-rules.
  * Core concepts: per-component style buckets, helper factories, and resolver wiring.
  */
-import type { JSCodeshift } from "jscodeshift";
 import { compile } from "stylis";
-import type { CssHelperFunction } from "../transform/css-helpers.js";
 import type { StyledDecl } from "../transform-types.js";
-import { resolveDynamicNode } from "../builtin-handlers.js";
 import type { InternalHandlerContext } from "../builtin-handlers.js";
-import {
-  cssDeclarationToStylexDeclarations,
-  resolveBackgroundStylexProp,
-} from "../css-prop-mapping.js";
-import { computeSelectorWarningLoc, normalizeStylisAstToIR } from "../css-ir.js";
-import { addPropComments } from "./comments.js";
-import {
-  createCssHelperResolver,
-  parseCssTemplateToRules,
-  type ConditionalVariant,
-} from "./css-helper.js";
+import { cssDeclarationToStylexDeclarations } from "../css-prop-mapping.js";
+import { normalizeStylisAstToIR } from "../css-ir.js";
 import { createCssHelperHandlers } from "./css-helper-handlers.js";
 import type { ExpressionKind, TestInfo } from "./decl-types.js";
-import { extractStaticParts } from "./interpolations.js";
-import {
-  buildTemplateWithStaticParts,
-  collectPropsFromArrowFn,
-  collectPropsFromExpressions,
-  countConditionalExpressions,
-  hasThemeAccessInArrowFn,
-  hasUnsupportedConditionalTest,
-  inlineArrowFunctionBody,
-  normalizeDollarProps,
-  unwrapArrowFunctionToPropsExpr,
-} from "./inline-styles.js";
 import { createTypeInferenceHelpers, ensureShouldForwardPropDrop } from "./types.js";
 import { createCssHelperConditionalHandler } from "./css-helper-conditional.js";
-import { resolveTemplateLiteralBranch } from "./template-literals.js";
-import { extractUnionLiteralValues, groupVariantBucketsIntoDimensions } from "./variants.js";
-import { mergeStyleObjects, toKebab } from "./utils.js";
 import { createValuePatternHandlers } from "./value-patterns.js";
-import { createVariantApplier, invertWhen } from "./variant-utils.js";
+import { createVariantApplier } from "./variant-utils.js";
 import type { LowerRulesState } from "./state.js";
-import { cssPropertyToIdentifier, makeCssProperty } from "./shared.js";
-import {
-  cloneAstNode,
-  collectIdentifiers,
-  extractRootAndPath,
-  getArrowFnParamBindings,
-  getFunctionBodyExpr,
-  getNodeLocStart,
-  isAstNode,
-  isCallExpressionNode,
-  staticValueToLiteral,
-} from "../utilities/jscodeshift-utils.js";
-import { buildSafeIndexedParamName } from "./import-resolution.js";
-import { capitalize } from "../utilities/string-utils.js";
-import { cssValueToJs, toStyleKey, toSuffixFromProp, type ComputedKeyEntry } from "../transform/helpers.js";
+import { extractRootAndPath } from "../utilities/jscodeshift-utils.js";
+import { cssValueToJs, toStyleKey, type ComputedKeyEntry } from "../transform/helpers.js";
 
 export type DeclProcessingState = ReturnType<typeof createDeclProcessingState>;
 
@@ -71,23 +31,13 @@ export function createDeclProcessingState(state: LowerRulesState, decl: StyledDe
     resolveValue,
     resolveCall,
     importMap,
-    cssHelperNames,
-    cssHelperObjectMembers,
     cssHelperFunctions,
     stringMappingFns,
-    declByLocalName,
-    cssHelperValuesByKey,
-    mixinValuesByKey,
     hasLocalThemeBinding,
-    resolveThemeValue,
-    resolveThemeValueFromFn,
     isCssHelperTaggedTemplate,
     resolveCssHelperTemplate,
     resolveImportInScope,
-    resolveImportForExpr,
-    applyCssHelperMixin,
     usedCssHelperFunctions,
-    warnPropInlineStyle,
     markBail,
   } = state;
 
@@ -96,7 +46,10 @@ export function createDeclProcessingState(state: LowerRulesState, decl: StyledDe
   const perPropMedia: Record<string, Record<string, unknown>> = {};
   // Track computed media keys (from adapter.resolveSelector) separately
   // Map<prop, { defaultValue: unknown, entries: ComputedKeyEntry[] }>
-  const perPropComputedMedia = new Map<string, { defaultValue: unknown; entries: ComputedKeyEntry[] }>();
+  const perPropComputedMedia = new Map<
+    string,
+    { defaultValue: unknown; entries: ComputedKeyEntry[] }
+  >();
   const nestedSelectors: Record<string, Record<string, unknown>> = {};
   const variantBuckets = new Map<string, Record<string, unknown>>();
   const variantStyleKeys: Record<string, string> = {};

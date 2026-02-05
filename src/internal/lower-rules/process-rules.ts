@@ -4,15 +4,15 @@
  */
 import type { DeclProcessingState } from "./decl-setup.js";
 import { computeSelectorWarningLoc } from "../css-ir.js";
-import {
-  cssDeclarationToStylexDeclarations,
-  cssPropertyToStylexProp,
-  resolveBackgroundStylexProp,
-} from "../css-prop-mapping.js";
+import { cssDeclarationToStylexDeclarations } from "../css-prop-mapping.js";
 import { addPropComments } from "./comments.js";
 import { processRuleDeclarations } from "./process-rule-declarations.js";
 import { toKebab } from "./utils.js";
-import { normalizeSelectorForInputAttributePseudos, normalizeInterpolatedSelector, parseSelector } from "../selectors.js";
+import {
+  normalizeSelectorForInputAttributePseudos,
+  normalizeInterpolatedSelector,
+  parseSelector,
+} from "../selectors.js";
 import { extractRootAndPath, getNodeLocStart } from "../utilities/jscodeshift-utils.js";
 import { cssValueToJs, toStyleKey, toSuffixFromProp } from "../transform/helpers.js";
 
@@ -25,13 +25,7 @@ export function processDeclRules(ctx: DeclProcessingState): void {
     perPropMedia,
     perPropComputedMedia,
     nestedSelectors,
-    variantBuckets,
-    variantStyleKeys,
-    extraStyleObjects,
-    styleFnFromProps,
-    styleFnDecls,
     attrBuckets,
-    inlineStyleProps,
     localVarValues,
     cssHelperPropValues,
     getComposedDefaultValue,
@@ -42,9 +36,7 @@ export function processDeclRules(ctx: DeclProcessingState): void {
     warnings,
     resolverImports,
     resolveSelector,
-    importMap,
     cssHelperNames,
-    cssHelperObjectMembers,
     resolvedStyleObjects,
     declByLocalName,
     cssHelperValuesByKey,
@@ -54,6 +46,7 @@ export function processDeclRules(ctx: DeclProcessingState): void {
     ancestorSelectorParents,
     resolveThemeValue,
     resolveThemeValueFromFn,
+    resolveImportInScope,
   } = state;
 
   for (const rule of decl.rules) {
@@ -271,7 +264,10 @@ export function processDeclRules(ctx: DeclProcessingState): void {
                 const parentValues = parentDecl.isCssHelper
                   ? cssHelperValuesByKey.get(parentDecl.styleKey)
                   : mixinValuesByKey.get(parentDecl.styleKey);
-                const parentValue = resolveComposedDefaultValue(parentValues?.get(out.prop), out.prop);
+                const parentValue = resolveComposedDefaultValue(
+                  parentValues?.get(out.prop),
+                  out.prop,
+                );
                 if (typeof parentValue === "string" || typeof parentValue === "number") {
                   baseValue = String(parentValue);
                 }
@@ -339,12 +335,14 @@ export function processDeclRules(ctx: DeclProcessingState): void {
               }
             } else if (d.value.kind === "interpolated" && d.property) {
               // Handle interpolated theme values (e.g., ${props => props.theme.color.labelBase})
-              const slotPart = (d.value as { parts?: Array<{ kind: string; slotId?: number }> })
-                .parts?.find((p) => p.kind === "slot");
+              const slotPart = (
+                d.value as { parts?: Array<{ kind: string; slotId?: number }> }
+              ).parts?.find((p) => p.kind === "slot");
               if (slotPart && slotPart.slotId !== undefined) {
                 const expr = decl.templateExpressions[slotPart.slotId] as unknown;
                 const resolved =
-                  expr && typeof expr === "object" &&
+                  expr &&
+                  typeof expr === "object" &&
                   ((expr as { type?: string }).type === "ArrowFunctionExpression" ||
                     (expr as { type?: string }).type === "FunctionExpression")
                     ? resolveThemeValueFromFn(expr)
@@ -581,11 +579,15 @@ export function processDeclRules(ctx: DeclProcessingState): void {
         for (const ps of pseudos) {
           const current = existing[ps];
           if (!current || typeof current !== "object") {
-            const fallbackDefault = cssHelperPropValues.has(prop) ? getComposedDefaultValue(prop) : null;
+            const fallbackDefault = cssHelperPropValues.has(prop)
+              ? getComposedDefaultValue(prop)
+              : null;
             const preservedDefault = current !== undefined ? current : fallbackDefault;
             existing[ps] = { default: preservedDefault };
           } else if (!("default" in (current as Record<string, unknown>))) {
-            const fallbackDefault = cssHelperPropValues.has(prop) ? getComposedDefaultValue(prop) : null;
+            const fallbackDefault = cssHelperPropValues.has(prop)
+              ? getComposedDefaultValue(prop)
+              : null;
             (current as Record<string, unknown>).default = fallbackDefault;
           }
           (existing[ps] as Record<string, unknown>)[media] = value;
