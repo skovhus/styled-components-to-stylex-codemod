@@ -45,8 +45,6 @@ export type WarningType =
   | "Imported CSS helper mixins: cannot determine inherited properties for correct pseudo selector handling"
   | "Static properties on styled components (e.g. Styled.Component) are not supported"
   | "Styled-components specificity hacks like `&&` / `&&&` are not representable in StyleX"
-
-  // TODO: can we remove this?
   | "Theme-dependent conditional values require a project-specific theme source (e.g. useTheme())"
   | "Theme-dependent nested prop access requires a project-specific theme source (e.g. useTheme())"
   | "Theme-dependent template literals require a project-specific theme source (e.g. useTheme())"

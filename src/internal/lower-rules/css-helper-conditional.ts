@@ -1387,25 +1387,27 @@ function extractThemeConditionInfo(
   return null;
 }
 
-type BlockThemeConditionalArgs = {
+type BlockThemeConditionalArgs = Pick<
+  CssHelperConditionalContext,
+  | "decl"
+  | "extraStyleObjects"
+  | "j"
+  | "filePath"
+  | "parseExpr"
+  | "resolveValue"
+  | "resolveCall"
+  | "resolveImportInScope"
+  | "resolverImports"
+  | "handlerContext"
+  | "isCssHelperTaggedTemplate"
+  | "isPlainTemplateLiteral"
+  | "resolveStaticCssBlock"
+> & {
   conditional: { test: ExpressionKind; consequent: ExpressionKind; alternate: ExpressionKind };
   paramName: string | null;
   replaceParamWithProps: (exprNode: ExpressionKind) => ExpressionKind;
   isEmptyCssBranch: (node: ExpressionKind) => boolean;
-  isPlainTemplateLiteral: (node: ExpressionKind | null | undefined) => boolean;
-  isCssHelperTaggedTemplate: (node: unknown) => boolean;
-  resolveStaticCssBlock: (rawCss: string) => Record<string, unknown> | null;
-  decl: StyledDecl;
-  extraStyleObjects: Map<string, Record<string, unknown>>;
-  j: JSCodeshift;
-  filePath: string;
-  parseExpr: (exprSource: string) => ExpressionKind | null;
-  resolveValue: (...args: any[]) => any;
-  resolveCall: (...args: any[]) => any;
-  resolveImportInScope: (...args: any[]) => any;
-  resolverImports: Map<string, any>;
   componentInfo: { localName: string; base: string; tagOrIdent: string };
-  handlerContext: InternalHandlerContext;
 };
 
 /**
