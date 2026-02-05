@@ -8,30 +8,26 @@ import type {
   Identifier,
   JSCodeshift,
   JSXAttribute,
-  JSXMemberExpression,
   JSXSpreadAttribute,
-  JSXIdentifier,
   Property,
   RestElement,
 } from "jscodeshift";
 import type { StyleMergerConfig } from "../../adapter.js";
-import type { StyledDecl } from "../transform-types.js";
+import type { StyledDecl, VariantDimension } from "../transform-types.js";
 import { emitStyleMerging } from "./style-merger.js";
 import type { ExportInfo, ExpressionKind, InlineStyleProp } from "./types.js";
 import { TAG_TO_HTML_ELEMENT, VOID_TAGS } from "./type-helpers.js";
-import type { VariantDimension } from "../transform-types.js";
-import {
-  buildStyleFnConditionExpr,
-  collectIdentifiers,
-  isIdentifierNode,
-} from "../utilities/jscodeshift-utils.js";
+import { isIdentifierNode } from "../utilities/jscodeshift-utils.js";
+import type { JsxAttr, JsxTagName, StatementKind } from "./jsx-builders.js";
+import * as jb from "./jsx-builders.js";
+import type { LogicalExpressionOperand } from "./variant-condition.js";
+import * as vc from "./variant-condition.js";
+import * as seb from "./style-expr-builders.js";
+
+export type { JsxAttr, JsxTagName, StatementKind };
 
 type TsTypeAnnotationInput = Parameters<JSCodeshift["tsTypeAnnotation"]>[0];
 type BlockStatementBody = Parameters<JSCodeshift["blockStatement"]>[0];
-export type StatementKind = Parameters<JSCodeshift["blockStatement"]>[0][number];
-export type JsxAttr = JSXAttribute | JSXSpreadAttribute;
-export type JsxTagName = JSXIdentifier | JSXMemberExpression;
-type LogicalExpressionOperand = Parameters<JSCodeshift["logicalExpression"]>[1];
 type AstNodeOrNull = ASTNode | null | undefined;
 
 export type WrapperEmitterArgs = {
@@ -1252,379 +1248,67 @@ export class WrapperEmitter {
     return [fn];
   }
 
-  parseVariantWhenToAst(when: string): {
-    cond: LogicalExpressionOperand;
-    props: string[];
-    isBoolean: boolean;
-  } {
-    const { j } = this;
-    const isValidIdentifier = (name: string): boolean => /^[$A-Z_][0-9A-Z_$]*$/i.test(name);
-    const buildMemberExpr = (raw: string): ExpressionKind | null => {
-      if (!raw.includes(".")) {
-        return null;
-      }
-      const parts = raw
-        .split(".")
-        .map((part) => part.trim())
-        .filter(Boolean);
-      if (parts.length < 2 || parts.some((part) => !isValidIdentifier(part))) {
-        return null;
-      }
-      return parts
-        .slice(1)
-        .reduce<ExpressionKind>(
-          (acc, part) => j.memberExpression(acc, j.identifier(part)),
-          j.identifier(parts[0]!),
-        );
-    };
-    const parsePropRef = (raw: string): { propName: string | null; expr: ExpressionKind } => {
-      const trimmedRaw = raw.trim();
-      if (!trimmedRaw) {
-        return { propName: null, expr: j.identifier("undefined") };
-      }
-      if (trimmedRaw.includes(".")) {
-        const parts = trimmedRaw
-          .split(".")
-          .map((part) => part.trim())
-          .filter(Boolean);
-        const last = parts[parts.length - 1];
-        if (!last || !isValidIdentifier(last)) {
-          return { propName: null, expr: j.identifier(trimmedRaw) };
-        }
-        const root = parts[0];
-        if (root === "props" || root === "p") {
-          const propRoot = parts[1];
-          if (!propRoot || !isValidIdentifier(propRoot)) {
-            return { propName: null, expr: j.identifier(trimmedRaw) };
-          }
-          const expr = parts
-            .slice(2)
-            .reduce<ExpressionKind>(
-              (acc, part) => j.memberExpression(acc, j.identifier(part)),
-              j.identifier(propRoot),
-            );
-          return { propName: propRoot, expr };
-        }
-        const memberExpr = buildMemberExpr(trimmedRaw);
-        if (memberExpr) {
-          return { propName: null, expr: memberExpr };
-        }
-        return { propName: null, expr: j.identifier(trimmedRaw) };
-      }
-      return { propName: trimmedRaw, expr: j.identifier(trimmedRaw) };
-    };
-    const trimmed = String(when ?? "").trim();
-    if (!trimmed) {
-      return { cond: j.identifier("true"), props: [], isBoolean: true };
-    }
-
-    // Handle negation with parentheses first: !(A || B) should strip outer negation
-    // before checking for || to avoid incorrect splitting
-    if (trimmed.startsWith("!(") && trimmed.endsWith(")")) {
-      const inner = trimmed.slice(2, -1).trim();
-      const innerParsed = this.parseVariantWhenToAst(inner);
-      // Negation always produces boolean
-      return {
-        cond: j.unaryExpression("!", innerParsed.cond),
-        props: innerParsed.props,
-        isBoolean: true,
-      };
-    }
-
-    if (trimmed.includes("&&")) {
-      const parts = trimmed
-        .split("&&")
-        .map((s) => s.trim())
-        .filter(Boolean);
-      const parsed = parts.map((p) => this.parseVariantWhenToAst(p));
-      const firstParsed = parsed[0];
-      if (!firstParsed) {
-        return { cond: j.identifier("true"), props: [], isBoolean: true };
-      }
-      const cond = parsed
-        .slice(1)
-        .reduce((acc, cur) => j.logicalExpression("&&", acc, cur.cond), firstParsed.cond);
-      const props = [...new Set(parsed.flatMap((x) => x.props))];
-      // Combined && is boolean only if all parts are boolean
-      const isBoolean = parsed.every((p) => p.isBoolean);
-      return { cond, props, isBoolean };
-    }
-
-    // Handle || conditions (e.g., for nested ternary default branches after negation stripped)
-    if (trimmed.includes(" || ")) {
-      const parts = trimmed
-        .split(" || ")
-        .map((s) => s.trim())
-        .filter(Boolean);
-      const parsed = parts.map((p) => this.parseVariantWhenToAst(p));
-      const firstParsedOr = parsed[0];
-      if (!firstParsedOr) {
-        return { cond: j.identifier("true"), props: [], isBoolean: true };
-      }
-      const cond = parsed
-        .slice(1)
-        .reduce((acc, cur) => j.logicalExpression("||", acc, cur.cond), firstParsedOr.cond);
-      const props = [...new Set(parsed.flatMap((x) => x.props))];
-      // Combined || is boolean only if all parts are boolean
-      const isBoolean = parsed.every((p) => p.isBoolean);
-      return { cond, props, isBoolean };
-    }
-
-    // Handle simple negation without parentheses: !prop
-    if (trimmed.startsWith("!")) {
-      const inner = trimmed.slice(1).trim();
-      const innerParsed = this.parseVariantWhenToAst(inner);
-      // Negation always produces boolean
-      return {
-        cond: j.unaryExpression("!", innerParsed.cond),
-        props: innerParsed.props,
-        isBoolean: true,
-      };
-    }
-
-    if (trimmed.includes("===") || trimmed.includes("!==")) {
-      const op = trimmed.includes("!==") ? "!==" : "===";
-      const [lhs, rhsRaw0] = trimmed.split(op).map((s) => s.trim());
-      const rhsRaw = rhsRaw0 ?? "";
-      const lhsInfo = parsePropRef(lhs ?? "");
-      const rhs =
-        rhsRaw?.startsWith('"') || rhsRaw?.startsWith("'")
-          ? j.literal(JSON.parse(rhsRaw.replace(/^'/, '"').replace(/'$/, '"')))
-          : /^-?\d+(\.\d+)?$/.test(rhsRaw)
-            ? j.literal(Number(rhsRaw))
-            : (buildMemberExpr(rhsRaw) ?? j.identifier(rhsRaw));
-      const propName = lhsInfo.propName ?? "";
-      // Comparison always produces boolean
-      return {
-        cond: j.binaryExpression(op as any, lhsInfo.expr, rhs),
-        props: propName ? [propName] : [],
-        isBoolean: true,
-      };
-    }
-
-    // Simple identifier - NOT guaranteed to be boolean (could be "" or 0)
-    const simple = parsePropRef(trimmed);
-    return {
-      cond: simple.expr,
-      props: simple.propName ? [simple.propName] : [],
-      isBoolean: false,
-    };
+  parseVariantWhenToAst(when: string) {
+    return vc.parseVariantWhenToAst(this.j, when);
   }
 
-  collectConditionProps(args: { when: string; destructureProps?: string[] }): {
-    cond: LogicalExpressionOperand;
-    props: string[];
-    isBoolean: boolean;
-  } {
-    const { when, destructureProps } = args;
-    const parsed = this.parseVariantWhenToAst(when);
-    if (destructureProps) {
-      for (const p of parsed.props) {
-        if (p && !destructureProps.includes(p)) {
-          destructureProps.push(p);
-        }
-      }
-    }
-    return parsed;
+  collectConditionProps(args: { when: string; destructureProps?: string[] }) {
+    return vc.collectConditionProps(this.j, args);
   }
 
-  /**
-   * Creates a conditional style expression that's safe for stylex.props().
-   * For boolean conditions, uses && (since false is valid for stylex.props).
-   * For non-boolean conditions (could be "" or 0), uses ternary with undefined fallback.
-   */
   makeConditionalStyleExpr(args: {
     cond: LogicalExpressionOperand;
     expr: ExpressionKind;
     isBoolean: boolean;
   }): ExpressionKind {
-    const { j } = this;
-    const { cond, expr, isBoolean } = args;
-    if (isBoolean) {
-      return j.logicalExpression("&&", cond, expr);
-    }
-    return j.conditionalExpression(cond, expr, j.identifier("undefined"));
+    return vc.makeConditionalStyleExpr(this.j, args);
   }
 
   private literalExpr(value: unknown): ExpressionKind {
-    const { j } = this;
-    if (typeof value === "boolean") {
-      return j.booleanLiteral(value);
-    }
-    if (typeof value === "number") {
-      return j.literal(value);
-    }
-    if (typeof value === "string") {
-      return j.literal(value);
-    }
-    return j.literal(String(value));
+    return jb.literalExpr(this.j, value);
   }
 
   buildDefaultAttrsFromProps(args: {
     defaultAttrs: Array<{ jsxProp: string; attrName: string; value: unknown }>;
     propExprFor: (jsxProp: string) => ExpressionKind;
   }): JsxAttr[] {
-    const { j } = this;
-    const { defaultAttrs, propExprFor } = args;
-    return defaultAttrs.map((a) =>
-      j.jsxAttribute(
-        j.jsxIdentifier(a.attrName),
-        j.jsxExpressionContainer(
-          j.logicalExpression("??", propExprFor(a.jsxProp), this.literalExpr(a.value) as any),
-        ),
-      ),
-    );
+    return jb.buildDefaultAttrsFromProps(this.j, args);
   }
 
   buildStaticValueAttrs(args: { attrs: Array<{ attrName: string; value: unknown }> }): JsxAttr[] {
-    const { j } = this;
-    const { attrs } = args;
-    return attrs.map((a) => {
-      if (typeof a.value === "string") {
-        return j.jsxAttribute(j.jsxIdentifier(a.attrName), j.literal(a.value));
-      }
-      if (typeof a.value === "number") {
-        return j.jsxAttribute(
-          j.jsxIdentifier(a.attrName),
-          j.jsxExpressionContainer(j.literal(a.value)),
-        );
-      }
-      if (typeof a.value === "boolean") {
-        return j.jsxAttribute(
-          j.jsxIdentifier(a.attrName),
-          j.jsxExpressionContainer(j.booleanLiteral(a.value)),
-        );
-      }
-      return j.jsxAttribute(
-        j.jsxIdentifier(a.attrName),
-        j.jsxExpressionContainer(this.literalExpr(a.value)),
-      );
-    });
+    return jb.buildStaticValueAttrs(this.j, args);
   }
 
   buildConditionalAttrs(args: {
     conditionalAttrs: Array<{ jsxProp: string; attrName: string; value: unknown }>;
     testExprFor: (jsxProp: string) => ExpressionKind;
   }): JsxAttr[] {
-    const { j } = this;
-    const { conditionalAttrs, testExprFor } = args;
-    return conditionalAttrs.map((cond) =>
-      j.jsxAttribute(
-        j.jsxIdentifier(cond.attrName),
-        j.jsxExpressionContainer(
-          j.conditionalExpression(
-            testExprFor(cond.jsxProp),
-            this.literalExpr(cond.value),
-            j.identifier("undefined"),
-          ),
-        ),
-      ),
-    );
+    return jb.buildConditionalAttrs(this.j, args);
   }
 
   buildInvertedBoolAttrs(args: {
     invertedBoolAttrs: Array<{ jsxProp: string; attrName: string }>;
     testExprFor: (jsxProp: string) => ExpressionKind;
   }): JsxAttr[] {
-    const { j } = this;
-    const { invertedBoolAttrs, testExprFor } = args;
-    return invertedBoolAttrs.map((inv) =>
-      j.jsxAttribute(
-        j.jsxIdentifier(inv.attrName),
-        j.jsxExpressionContainer(
-          j.binaryExpression("!==", testExprFor(inv.jsxProp), j.booleanLiteral(true)),
-        ),
-      ),
-    );
+    return jb.buildInvertedBoolAttrs(this.j, args);
   }
 
   buildStaticAttrsFromRecord(
     staticAttrs: Record<string, unknown>,
     options?: { booleanTrueAsShorthand?: boolean },
   ): JsxAttr[] {
-    const { j } = this;
-    const booleanTrueAsShorthand = options?.booleanTrueAsShorthand ?? true;
-    const attrs: JsxAttr[] = [];
-    for (const [key, value] of Object.entries(staticAttrs)) {
-      if (typeof value === "string") {
-        attrs.push(j.jsxAttribute(j.jsxIdentifier(key), j.literal(value)));
-      } else if (typeof value === "boolean") {
-        if (value) {
-          attrs.push(
-            j.jsxAttribute(
-              j.jsxIdentifier(key),
-              booleanTrueAsShorthand ? null : j.jsxExpressionContainer(j.booleanLiteral(true)),
-            ),
-          );
-        } else {
-          attrs.push(
-            j.jsxAttribute(j.jsxIdentifier(key), j.jsxExpressionContainer(j.literal(false))),
-          );
-        }
-      } else if (typeof value === "number") {
-        attrs.push(
-          j.jsxAttribute(j.jsxIdentifier(key), j.jsxExpressionContainer(j.literal(value))),
-        );
-      }
-    }
-    return attrs;
+    return jb.buildStaticAttrsFromRecord(this.j, staticAttrs, options);
   }
 
-  /**
-   * Build all attrs from attrsInfo in the correct order:
-   * defaultAttrs, conditionalAttrs, invertedBoolAttrs, staticAttrs
-   */
   buildAttrsFromAttrsInfo(args: {
     attrsInfo: StyledDecl["attrsInfo"];
     propExprFor: (prop: string) => ExpressionKind;
   }): JsxAttr[] {
-    const { attrsInfo, propExprFor } = args;
-    if (!attrsInfo) {
-      return [];
-    }
-    return [
-      ...this.buildDefaultAttrsFromProps({
-        defaultAttrs: attrsInfo.defaultAttrs ?? [],
-        propExprFor,
-      }),
-      ...this.buildConditionalAttrs({
-        conditionalAttrs: attrsInfo.conditionalAttrs ?? [],
-        testExprFor: propExprFor,
-      }),
-      ...this.buildInvertedBoolAttrs({
-        invertedBoolAttrs: attrsInfo.invertedBoolAttrs ?? [],
-        testExprFor: propExprFor,
-      }),
-      ...this.buildStaticAttrsFromRecord(attrsInfo.staticAttrs ?? {}),
-    ];
+    return jb.buildAttrsFromAttrsInfo(this.j, args);
   }
 
   appendMergingAttrs(attrs: JsxAttr[], merging: ReturnType<typeof emitStyleMerging>): void {
-    const { j } = this;
-    if (merging.classNameBeforeSpread && merging.classNameAttr) {
-      attrs.push(
-        j.jsxAttribute(
-          j.jsxIdentifier("className"),
-          j.jsxExpressionContainer(merging.classNameAttr),
-        ),
-      );
-    }
-    if (merging.jsxSpreadExpr) {
-      attrs.push(j.jsxSpreadAttribute(merging.jsxSpreadExpr));
-    }
-    if (merging.classNameAttr && !merging.classNameBeforeSpread) {
-      attrs.push(
-        j.jsxAttribute(
-          j.jsxIdentifier("className"),
-          j.jsxExpressionContainer(merging.classNameAttr),
-        ),
-      );
-    }
-    if (merging.styleAttr) {
-      attrs.push(
-        j.jsxAttribute(j.jsxIdentifier("style"), j.jsxExpressionContainer(merging.styleAttr)),
-      );
-    }
+    jb.appendMergingAttrs(this.j, attrs, merging);
   }
 
   buildJsxElement(args: {
@@ -1633,15 +1317,7 @@ export class WrapperEmitter {
     includeChildren: boolean;
     childrenExpr?: ExpressionKind;
   }): ASTNode {
-    const { j } = this;
-    const { tagName, attrs, includeChildren, childrenExpr } = args;
-    const jsxTag = typeof tagName === "string" ? j.jsxIdentifier(tagName) : (tagName as JsxTagName);
-    const openingEl = j.jsxOpeningElement(jsxTag, attrs, !includeChildren);
-    if (!includeChildren) {
-      return j.jsxElement(openingEl, null, []);
-    }
-    const children = childrenExpr ? [j.jsxExpressionContainer(childrenExpr)] : [];
-    return j.jsxElement(openingEl, j.jsxClosingElement(jsxTag), children);
+    return jb.buildJsxElement(this.j, args);
   }
 
   buildWrapperFunction(args: {
@@ -1651,24 +1327,7 @@ export class WrapperEmitter {
     typeParameters?: unknown;
     moveTypeParamsFromParam?: Identifier;
   }): ASTNode {
-    const { j } = this;
-    const { localName, params, bodyStmts, typeParameters, moveTypeParamsFromParam } = args;
-    const filteredBody = bodyStmts.filter(
-      (stmt) => stmt && (stmt as any).type !== "EmptyStatement",
-    );
-    const fn = j.functionDeclaration(
-      j.identifier(localName),
-      params,
-      j.blockStatement(filteredBody),
-    );
-    if (typeParameters) {
-      (fn as any).typeParameters = typeParameters;
-    }
-    if (moveTypeParamsFromParam && (moveTypeParamsFromParam as any).typeParameters) {
-      (fn as any).typeParameters = (moveTypeParamsFromParam as any).typeParameters;
-      (moveTypeParamsFromParam as any).typeParameters = undefined;
-    }
-    return fn;
+    return jb.buildWrapperFunction(this.j, args);
   }
 
   buildDestructurePatternProps(args: {
@@ -1678,90 +1337,17 @@ export class WrapperEmitter {
     includeRest?: boolean;
     restId?: Identifier;
   }): Array<Property | RestElement> {
-    const { j } = this;
-    const { baseProps, destructureProps, propDefaults, includeRest = false, restId } = args;
-    const patternProps: Array<Property | RestElement> = [...baseProps];
-
-    for (const name of destructureProps.filter((n): n is string => Boolean(n))) {
-      const defaultVal = propDefaults?.get(name);
-      if (defaultVal) {
-        patternProps.push(
-          j.property.from({
-            kind: "init",
-            key: j.identifier(name),
-            value: j.assignmentPattern(j.identifier(name), j.literal(defaultVal)),
-            shorthand: false,
-          }) as Property,
-        );
-      } else {
-        patternProps.push(this.patternProp(name));
-      }
-    }
-
-    if (includeRest && restId) {
-      patternProps.push(j.restElement(restId));
-    }
-
-    return patternProps;
+    return jb.buildDestructurePatternProps(this.j, this.patternProp, args);
   }
 
-  splitExtraStyleArgs(d: StyledDecl): {
-    beforeBase: ExpressionKind[];
-    afterBase: ExpressionKind[];
-  } {
-    const { j, stylesIdentifier } = this;
-    const afterBaseKeys = new Set(d.extraStyleKeysAfterBase ?? []);
-    const beforeBase: ExpressionKind[] = [];
-    const afterBase: ExpressionKind[] = [];
-    for (const key of d.extraStyleKeys ?? []) {
-      const expr = j.memberExpression(j.identifier(stylesIdentifier), j.identifier(key));
-      if (afterBaseKeys.has(key)) {
-        afterBase.push(expr);
-      } else {
-        beforeBase.push(expr);
-      }
-    }
-    return { beforeBase, afterBase };
+  splitExtraStyleArgs(d: StyledDecl) {
+    return seb.splitExtraStyleArgs(this.j, this.stylesIdentifier, d);
   }
 
-  splitAttrsInfo(attrsInfo: StyledDecl["attrsInfo"]): {
-    attrsInfo: StyledDecl["attrsInfo"];
-    staticClassNameExpr?: ExpressionKind;
-  } {
-    const { j } = this;
-    const className = attrsInfo?.staticAttrs?.className;
-    if (!attrsInfo) {
-      return { attrsInfo, staticClassNameExpr: undefined };
-    }
-    const normalized = {
-      ...attrsInfo,
-      staticAttrs: attrsInfo.staticAttrs ?? {},
-      conditionalAttrs: attrsInfo.conditionalAttrs ?? [],
-    };
-    if (typeof className !== "string") {
-      return { attrsInfo: normalized, staticClassNameExpr: undefined };
-    }
-    const { className: _omit, ...rest } = normalized.staticAttrs;
-    return {
-      attrsInfo: {
-        ...normalized,
-        staticAttrs: rest,
-      },
-      staticClassNameExpr: j.literal(className) as ExpressionKind,
-    };
+  splitAttrsInfo(attrsInfo: StyledDecl["attrsInfo"]) {
+    return seb.splitAttrsInfo(this.j, attrsInfo);
   }
 
-  /**
-   * Build variant dimension lookup expressions for StyleX variants recipe pattern.
-   * Generates:
-   * - regular: variantsObj[prop] OR variantsObj[prop as keyof typeof variantsObj] ?? variantsObj.default
-   * - namespace pair: boolProp ? disabledVariants[prop] : enabledVariants[prop]
-   *
-   * Optionally collects:
-   * - `destructureProps`: props that must be destructured to use in expressions
-   * - `propDefaults`: defaults for optional props (safe destructuring defaults)
-   * - `namespaceBooleanProps`: boolean props that should be forwarded to wrapped components
-   */
   buildVariantDimensionLookups(args: {
     dimensions: VariantDimension[];
     styleArgs: ExpressionKind[];
@@ -1769,140 +1355,9 @@ export class WrapperEmitter {
     propDefaults?: Map<string, string>;
     namespaceBooleanProps?: string[];
   }): void {
-    const { j } = this;
-    const { dimensions, styleArgs, destructureProps, propDefaults, namespaceBooleanProps } = args;
-
-    // Group namespace dimensions by their boolean prop and propName
-    const namespacePairs = new Map<
-      string,
-      { enabled?: VariantDimension; disabled?: VariantDimension }
-    >();
-    const regularDimensions: VariantDimension[] = [];
-
-    for (const dim of dimensions) {
-      if (dim.namespaceBooleanProp) {
-        const key = `${dim.namespaceBooleanProp}:${dim.propName}`;
-        const pair = namespacePairs.get(key) ?? {};
-        if (dim.isDisabledNamespace) {
-          pair.disabled = dim;
-        } else {
-          pair.enabled = dim;
-        }
-        namespacePairs.set(key, pair);
-      } else {
-        regularDimensions.push(dim);
-      }
-    }
-
-    // Process regular (non-namespace) dimensions first
-    for (const dim of regularDimensions) {
-      if (destructureProps && !destructureProps.includes(dim.propName)) {
-        destructureProps.push(dim.propName);
-      }
-      const variantsId = j.identifier(dim.variantObjectName);
-      const propId = j.identifier(dim.propName);
-
-      if (dim.defaultValue === "default") {
-        const keyofExpr = {
-          type: "TSTypeOperator",
-          operator: "keyof",
-          typeAnnotation: j.tsTypeQuery(j.identifier(dim.variantObjectName)),
-        };
-        const castProp = j.tsAsExpression(propId, keyofExpr as any);
-        const lookup = j.memberExpression(variantsId, castProp, true /* computed */);
-        const defaultAccess = j.memberExpression(
-          j.identifier(dim.variantObjectName),
-          j.identifier("default"),
-        );
-        styleArgs.push(j.logicalExpression("??", lookup, defaultAccess));
-      } else {
-        if (dim.defaultValue && dim.isOptional && propDefaults) {
-          propDefaults.set(dim.propName, dim.defaultValue);
-        }
-        const lookup = j.memberExpression(variantsId, propId, true /* computed */);
-        styleArgs.push(lookup);
-      }
-    }
-
-    // Process namespace dimension pairs
-    for (const [, pair] of namespacePairs) {
-      const { enabled, disabled } = pair;
-      if (!enabled || !disabled) {
-        // Incomplete pair - emit each dimension separately as fallback
-        for (const dim of [enabled, disabled]) {
-          if (!dim) {
-            continue;
-          }
-          if (destructureProps && !destructureProps.includes(dim.propName)) {
-            destructureProps.push(dim.propName);
-          }
-          const lookup = j.memberExpression(
-            j.identifier(dim.variantObjectName),
-            j.identifier(dim.propName),
-            true,
-          );
-          styleArgs.push(lookup);
-        }
-        continue;
-      }
-
-      const namespaceBooleanProp = enabled.namespaceBooleanProp;
-      if (!namespaceBooleanProp) {
-        // Skip if namespace boolean prop is not set
-        continue;
-      }
-
-      if (destructureProps) {
-        if (!destructureProps.includes(enabled.propName)) {
-          destructureProps.push(enabled.propName);
-        }
-        if (!destructureProps.includes(namespaceBooleanProp)) {
-          destructureProps.push(namespaceBooleanProp);
-        }
-      }
-
-      if (namespaceBooleanProps && !namespaceBooleanProps.includes(namespaceBooleanProp)) {
-        namespaceBooleanProps.push(namespaceBooleanProp);
-      }
-
-      if (
-        enabled.defaultValue &&
-        enabled.defaultValue !== "default" &&
-        enabled.isOptional &&
-        propDefaults
-      ) {
-        propDefaults.set(enabled.propName, enabled.defaultValue);
-      }
-
-      const boolPropId = j.identifier(namespaceBooleanProp);
-      const propId = j.identifier(enabled.propName);
-
-      const enabledLookup = j.memberExpression(
-        j.identifier(enabled.variantObjectName),
-        propId,
-        true,
-      );
-      const disabledLookup = j.memberExpression(
-        j.identifier(disabled.variantObjectName),
-        propId,
-        true,
-      );
-
-      styleArgs.push(j.conditionalExpression(boolPropId, disabledLookup, enabledLookup));
-    }
+    seb.buildVariantDimensionLookups(this.j, args);
   }
 
-  /**
-   * Build style function call expressions for dynamic prop-based styles.
-   * This is a shared helper for handling `styleFnFromProps` consistently across
-   * different wrapper types (component wrappers, intrinsic wrappers, etc.).
-   *
-   * @param args.d - The styled component declaration
-   * @param args.styleArgs - Array to push generated style expressions into
-   * @param args.destructureProps - Optional array to track props that need destructuring
-   * @param args.propExprBuilder - Function to build the expression for accessing a prop
-   * @param args.propsIdentifier - Identifier to use for "props" in __props case (defaults to "props")
-   */
   buildStyleFnExpressions(args: {
     d: StyledDecl;
     styleArgs: ExpressionKind[];
@@ -1910,151 +1365,14 @@ export class WrapperEmitter {
     propExprBuilder?: (jsxProp: string) => ExpressionKind;
     propsIdentifier?: ExpressionKind;
   }): void {
-    const { j, stylesIdentifier } = this;
-    const { d, styleArgs, destructureProps } = args;
-    const propsId = args.propsIdentifier ?? j.identifier("props");
-    const propExprBuilder = args.propExprBuilder ?? ((prop: string) => j.identifier(prop));
-
-    const styleFnPairs = d.styleFnFromProps ?? [];
-    const explicitPropNames = d.propsType ? this.getExplicitPropNames(d.propsType) : null;
-    const inferPropFromCallArg = (expr: ExpressionKind | null | undefined): string | null => {
-      if (!expr || typeof expr !== "object") {
-        return null;
-      }
-      const unwrap = (node: ExpressionKind): ExpressionKind => {
-        let cur = node;
-        while (cur && typeof cur === "object") {
-          const t = (cur as { type?: string }).type;
-          if (t === "ParenthesizedExpression") {
-            cur = (cur as any).expression as ExpressionKind;
-            continue;
-          }
-          if (t === "TSAsExpression" || t === "TSNonNullExpression") {
-            cur = (cur as any).expression as ExpressionKind;
-            continue;
-          }
-          if (t === "TemplateLiteral") {
-            const exprs = (cur as any).expressions ?? [];
-            if (exprs.length === 1) {
-              cur = exprs[0] as ExpressionKind;
-              continue;
-            }
-          }
-          break;
-        }
-        return cur;
-      };
-      const unwrapped = unwrap(expr);
-      if (unwrapped?.type === "Identifier") {
-        return unwrapped.name;
-      }
-      if (unwrapped?.type === "ConditionalExpression") {
-        const test = (unwrapped as any).test as ExpressionKind;
-        if (test?.type === "Identifier") {
-          return test.name;
-        }
-      }
-      return null;
-    };
-    for (const p of styleFnPairs) {
-      const propExpr = p.jsxProp === "__props" ? propsId : propExprBuilder(p.jsxProp);
-      const callArg = p.callArg ?? propExpr;
-      const call = j.callExpression(
-        j.memberExpression(j.identifier(stylesIdentifier), j.identifier(p.fnKey)),
-        [callArg],
-      );
-
-      // Track call arg identifier for destructuring if needed
-      if (p.callArg?.type === "Identifier") {
-        const name = p.callArg.name;
-        if (name && destructureProps && !destructureProps.includes(name)) {
-          destructureProps.push(name);
-        }
-      }
-      if (p.callArg && destructureProps) {
-        const inferred = inferPropFromCallArg(p.callArg);
-        if (inferred && !destructureProps.includes(inferred)) {
-          destructureProps.push(inferred);
-        }
-      }
-      if (p.callArg && destructureProps && explicitPropNames && explicitPropNames.size > 0) {
-        const names = new Set<string>();
-        collectIdentifiers(p.callArg, names);
-        for (const name of names) {
-          if (explicitPropNames.has(name) && !destructureProps.includes(name)) {
-            destructureProps.push(name);
-          }
-        }
-      }
-
-      // Track prop for destructuring
-      if (p.jsxProp !== "__props" && destructureProps && !destructureProps.includes(p.jsxProp)) {
-        destructureProps.push(p.jsxProp);
-      }
-
-      // Handle conditional style based on conditionWhen
-      if (p.conditionWhen) {
-        const { cond, isBoolean } = this.collectConditionProps({
-          when: p.conditionWhen,
-          destructureProps,
-        });
-        styleArgs.push(this.makeConditionalStyleExpr({ cond, expr: call, isBoolean }));
-        continue;
-      }
-
-      const isRequired =
-        p.jsxProp === "__props" || this.isPropRequiredInPropsTypeLiteral(d.propsType, p.jsxProp);
-      styleArgs.push(
-        buildStyleFnConditionExpr({ j, condition: p.condition, propExpr, call, isRequired }),
-      );
-    }
+    seb.buildStyleFnExpressions(this, args);
   }
 
-  /**
-   * Collects all props that need to be destructured based on styleFnFromProps,
-   * explicit prop names used in styleArgs, and shouldForwardProp.dropProps.
-   *
-   * This is called after buildStyleFnExpressions to ensure all referenced
-   * identifiers are properly destructured in the wrapper function.
-   */
   collectDestructurePropsFromStyleFns(args: {
     d: StyledDecl;
     styleArgs: ExpressionKind[];
     destructureProps: string[];
   }): void {
-    const { d, styleArgs, destructureProps } = args;
-
-    // Collect jsxProp and conditionWhen props from styleFnFromProps
-    for (const p of d.styleFnFromProps ?? []) {
-      if (p.jsxProp && p.jsxProp !== "__props" && !destructureProps.includes(p.jsxProp)) {
-        destructureProps.push(p.jsxProp);
-      }
-      if (p.conditionWhen) {
-        this.collectConditionProps({ when: p.conditionWhen, destructureProps });
-      }
-    }
-
-    // Collect identifiers from styleArgs that match explicit prop names
-    if (d.propsType) {
-      const explicitProps = this.getExplicitPropNames(d.propsType);
-      if (explicitProps.size > 0) {
-        const used = new Set<string>();
-        for (const arg of styleArgs) {
-          collectIdentifiers(arg, used);
-        }
-        for (const name of used) {
-          if (explicitProps.has(name) && !destructureProps.includes(name)) {
-            destructureProps.push(name);
-          }
-        }
-      }
-    }
-
-    // Collect props that should be dropped (not forwarded to the element)
-    for (const prop of d.shouldForwardProp?.dropProps ?? []) {
-      if (prop && !destructureProps.includes(prop)) {
-        destructureProps.push(prop);
-      }
-    }
+    seb.collectDestructurePropsFromStyleFns(this, args);
   }
 }
