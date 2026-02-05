@@ -3,11 +3,9 @@
  */
 import { cssDeclarationToStylexDeclarations } from "../css-prop-mapping.js";
 import type { StyledDecl } from "../transform-types.js";
+import { cssValueToJs } from "../transform/helpers.js";
 
-export const computeDeclBasePropValues = (
-  decl: StyledDecl,
-  cssValueToJs: (value: unknown, important?: boolean, propName?: string) => unknown,
-): Map<string, unknown> => {
+export const computeDeclBasePropValues = (decl: StyledDecl): Map<string, unknown> => {
   const propValues = new Map<string, unknown>();
   for (const rule of decl.rules) {
     // Only process top-level rules (selector "&") for base values

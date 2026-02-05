@@ -1,33 +1,16 @@
 import { emitStylesAndImports } from "../emit-styles.js";
 import { CONTINUE, type StepResult } from "../transform-types.js";
-import type { StyledDecl } from "../transform-types.js";
 import { TransformContext } from "../transform-context.js";
-import { literalToAst, objectToAst } from "../transform/helpers.js";
 
 /**
  * Emits stylex.create objects and required imports, applying resolver import aliasing.
  */
 export function emitStylesStep(ctx: TransformContext): StepResult {
-  const styledDecls = ctx.styledDecls as StyledDecl[] | undefined;
-  const styledImports = ctx.styledImports;
-  if (!styledDecls || !styledImports) {
+  if (!ctx.styledDecls || !ctx.styledImports) {
     return CONTINUE;
   }
 
-  const { emptyStyleKeys } = emitStylesAndImports({
-    root: ctx.root,
-    j: ctx.j,
-    filePath: ctx.file.path,
-    styledImports,
-    resolverImports: ctx.resolverImports,
-    resolvedStyleObjects: ctx.resolvedStyleObjects ?? new Map(),
-    styledDecls,
-    objectToAst,
-    literalToAst,
-    stylesIdentifier: ctx.stylesIdentifier ?? "styles",
-    styleMerger: ctx.adapter.styleMerger,
-    stylesInsertPosition: ctx.stylesInsertPosition ?? "end",
-  });
+  const { emptyStyleKeys } = emitStylesAndImports(ctx);
   ctx.emptyStyleKeys = emptyStyleKeys;
   ctx.markChanged();
 

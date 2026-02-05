@@ -8,6 +8,7 @@ import { cloneAstNode, getFunctionBodyExpr } from "./utilities/jscodeshift-utils
 import { resolveBackgroundStylexProp } from "./css-prop-mapping.js";
 import { parseStyledTemplateLiteral } from "./styled-css.js";
 import type { StyledDecl } from "./transform-types.js";
+import { toStyleKey, toSuffixFromProp } from "./transform/helpers.js";
 
 /**
  * Collect styled component declarations and pre-resolved object-style decls.
@@ -20,8 +21,6 @@ export function collectStyledDecls(args: {
   j: any;
   styledDefaultImport: string | undefined;
   cssLocal?: string;
-  toStyleKey: (localName: string) => string;
-  toSuffixFromProp: (propName: string) => string;
 }): {
   styledDecls: StyledDecl[];
   hasUniversalSelectors: boolean;
@@ -35,14 +34,12 @@ function collectStyledDeclsImpl(args: {
   j: any;
   styledDefaultImport: string | undefined;
   cssLocal?: string;
-  toStyleKey: (localName: string) => string;
-  toSuffixFromProp: (propName: string) => string;
 }): {
   styledDecls: StyledDecl[];
   hasUniversalSelectors: boolean;
   universalSelectorLoc: { line: number; column: number } | null;
 } {
-  const { root, j, styledDefaultImport, cssLocal, toStyleKey, toSuffixFromProp } = args;
+  const { root, j, styledDefaultImport, cssLocal } = args;
 
   const styledDecls: StyledDecl[] = [];
   let hasUniversalSelectors = false;

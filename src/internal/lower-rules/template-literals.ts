@@ -22,6 +22,7 @@ import { parseStyledTemplateLiteral } from "../styled-css.js";
 import { extractStaticParts } from "./interpolations.js";
 import { buildTemplateWithStaticParts } from "./inline-styles.js";
 import { literalToStaticValue } from "./types.js";
+import { cssValueToJs } from "../transform/helpers.js";
 
 type ExpressionKind = Parameters<JSCodeshift["expressionStatement"]>[0];
 
@@ -67,7 +68,6 @@ export type TemplateLiteralBranchArgs = {
   paramName: string | null;
   filePath: string;
   parseExpr: (exprSource: string) => ExpressionKind | null;
-  cssValueToJs: (value: unknown, important?: boolean, propName?: string) => unknown;
   resolveValue: Adapter["resolveValue"];
   resolveCall: Adapter["resolveCall"];
   resolveImportInScope: ResolveImportInScope;
@@ -98,7 +98,6 @@ export function resolveTemplateLiteralBranch(
     paramName,
     filePath,
     parseExpr,
-    cssValueToJs,
     resolveValue,
     resolveCall,
     resolveImportInScope,

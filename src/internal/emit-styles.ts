@@ -1,38 +1,20 @@
-import type { Collection } from "jscodeshift";
 import type { StyledDecl, VariantDimension } from "./transform-types.js";
 import path from "node:path";
-import type { ImportSource, ImportSpec, StyleMergerConfig } from "../adapter.js";
+import type { ImportSource, ImportSpec } from "../adapter.js";
 import { isAstNode } from "./utilities/jscodeshift-utils.js";
 import { lowerFirst } from "./utilities/string-utils.js";
+import { literalToAst, objectToAst } from "./transform/helpers.js";
+import type { TransformContext } from "./transform-context.js";
 
-export function emitStylesAndImports(args: {
-  root: Collection<any>;
-  j: any;
-  filePath: string;
-  styledImports: Collection<any>;
-  resolverImports: Map<string, any>;
-  resolvedStyleObjects: Map<string, any>;
-  styledDecls: StyledDecl[];
-  objectToAst: (j: any, v: Record<string, unknown>) => any;
-  literalToAst: (j: any, v: unknown) => any;
-  stylesIdentifier: string;
-  styleMerger: StyleMergerConfig | null;
-  stylesInsertPosition?: "end" | "afterImports";
-}): { emptyStyleKeys: Set<string> } {
-  const {
-    root,
-    j,
-    filePath,
-    styledImports,
-    resolverImports,
-    resolvedStyleObjects,
-    styledDecls,
-    objectToAst,
-    literalToAst,
-    stylesIdentifier,
-    styleMerger,
-    stylesInsertPosition = "end",
-  } = args;
+export function emitStylesAndImports(ctx: TransformContext): { emptyStyleKeys: Set<string> } {
+  const { root, j, file, resolverImports, adapter } = ctx;
+  const filePath = file.path;
+  const styledImports = ctx.styledImports!;
+  const resolvedStyleObjects = ctx.resolvedStyleObjects ?? new Map();
+  const styledDecls = ctx.styledDecls as StyledDecl[];
+  const stylesIdentifier = ctx.stylesIdentifier ?? "styles";
+  const styleMerger = adapter.styleMerger;
+  const stylesInsertPosition = ctx.stylesInsertPosition ?? "end";
 
   // Preserve file header directives (e.g. `// oxlint-disable ...`). Depending on the parser/printer,
   // the comment can be stored on `program.comments`, `node.comments`, or `node.leadingComments`.
@@ -647,7 +629,7 @@ export function emitStylesAndImports(args: {
       }
       emittedDimensions.set(name, contentKey);
 
-      const variantDecl = emitVariantDimensionDecl(j, dimension, objectToAst, literalToAst);
+      const variantDecl = emitVariantDimensionDecl(j, dimension);
       programBody.push(variantDecl as any);
     }
   }
@@ -659,12 +641,7 @@ export function emitStylesAndImports(args: {
  * Emit a variant dimension as a separate `const <name>Variants = stylex.create({...})` call.
  * Includes eslint-disable comment for stylex/no-unused since variant styles are accessed dynamically.
  */
-function emitVariantDimensionDecl(
-  j: any,
-  dimension: VariantDimension,
-  objectToAst: (j: any, v: Record<string, unknown>) => any,
-  literalToAst: (j: any, v: unknown) => any,
-): any {
+function emitVariantDimensionDecl(j: any, dimension: VariantDimension): any {
   const properties = Object.entries(dimension.variants).map(([variantValue, styles]) => {
     return j.property(
       "init",

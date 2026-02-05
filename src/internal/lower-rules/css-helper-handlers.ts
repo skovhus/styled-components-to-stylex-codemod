@@ -20,6 +20,7 @@ import type { ExpressionKind, TestInfo } from "./decl-types.js";
 import { parseSwitchReturningCssTemplates } from "./switch-variants.js";
 import { resolveTemplateLiteralValue } from "./template-literals.js";
 import type { ConditionalVariant } from "./css-helper.js";
+import { cssValueToJs, toSuffixFromProp } from "../transform/helpers.js";
 
 type ImportMeta = { importedName: string; source: ImportSource };
 
@@ -35,7 +36,6 @@ type CssHelperHandlersContext = {
   variantStyleKeys: Record<string, string>;
   cssHelperFunctions: Map<string, CssHelperFunction>;
   usedCssHelperFunctions: Set<string>;
-  cssValueToJs: (value: unknown, important?: boolean, propName?: string) => unknown;
   parseExpr: (exprSource: string) => ExpressionKind | null;
   resolveCall: Adapter["resolveCall"];
   resolveImportInScope: ResolveImportInScope;
@@ -52,7 +52,6 @@ type CssHelperHandlersContext = {
   } | null;
   applyVariant: (testInfo: TestInfo, consStyle: Record<string, unknown>) => void;
   dropAllTestInfoProps: (testInfo: TestInfo) => void;
-  toSuffixFromProp: (propName: string) => string;
   componentInfo: any;
   handlerContext: InternalHandlerContext;
   markBail: () => void;
@@ -69,7 +68,6 @@ export const createCssHelperHandlers = (ctx: CssHelperHandlersContext) => {
     variantStyleKeys,
     cssHelperFunctions,
     usedCssHelperFunctions,
-    cssValueToJs,
     parseExpr,
     resolveCall,
     resolveImportInScope,
@@ -78,7 +76,6 @@ export const createCssHelperHandlers = (ctx: CssHelperHandlersContext) => {
     resolveCssHelperTemplate,
     applyVariant,
     dropAllTestInfoProps,
-    toSuffixFromProp,
     componentInfo,
     handlerContext,
     markBail,
