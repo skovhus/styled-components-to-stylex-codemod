@@ -273,8 +273,6 @@ export function createDeclProcessingState(state: LowerRulesState, decl: StyledDe
     componentInfo,
     handlerContext,
     styleObj,
-    variantBuckets,
-    variantStyleKeys,
     styleFnFromProps,
     styleFnDecls,
     inlineStyleProps,
