@@ -27,6 +27,7 @@
     "node_modules/**",
     "coverage/**",
     "test-cases/**",
+    "test-cases-next-to-tackle/**",
     "storybook-static/**"
   ]
 }
