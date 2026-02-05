@@ -38,3 +38,12 @@ export const RegexFilter = styled.button.withConfig({
 })`
   background: #bf4f74;
 `;
+
+// UNSUPPORTED: Two-argument form with elementToBeCreated
+// The second argument allows element-dependent logic we can't transform
+export const ElementDependentFilter = styled.button.withConfig({
+  shouldForwardProp: (prop, elementToBeCreated) =>
+    !prop.startsWith("$") && elementToBeCreated !== "button",
+})`
+  background: #bf4f74;
+`;

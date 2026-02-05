@@ -252,6 +252,11 @@ function collectStyledDeclsImpl(args: {
       // Function has no identifiable parameter - can't parse
       return { unparseable: true };
     }
+    // shouldForwardProp can take a second argument: (prop, elementToBeCreated)
+    // If the function uses a second parameter, it may have element-dependent logic we can't transform
+    if (fn.params?.length > 1) {
+      return { unparseable: true };
+    }
 
     const dropProps = new Set<string>();
     let dropPrefix: string | undefined;
