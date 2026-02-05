@@ -115,6 +115,21 @@ export function createDeclProcessingState(state: LowerRulesState, decl: StyledDe
     }
   };
 
+  // Shared fields from LowerRulesState used by multiple handler factories
+  const sharedFromState = {
+    j,
+    filePath,
+    warnings,
+    parseExpr,
+    resolveValue,
+    resolveCall,
+    resolveImportInScope,
+    resolverImports,
+    isCssHelperTaggedTemplate,
+    resolveCssHelperTemplate,
+    markBail,
+  };
+
   const {
     tryHandleMappedFunctionColor,
     tryHandleLogicalOrDefault,
@@ -122,24 +137,18 @@ export function createDeclProcessingState(state: LowerRulesState, decl: StyledDe
     tryHandleEnumIfChainValue,
     tryHandleThemeIndexedLookup,
   } = createValuePatternHandlers({
+    ...sharedFromState,
     api,
-    j,
-    filePath,
     decl,
     styleObj,
     variantBuckets,
     variantStyleKeys,
     styleFnFromProps,
     styleFnDecls,
-    warnings,
-    resolveValue,
-    parseExpr,
-    resolverImports,
     stringMappingFns,
     hasLocalThemeBinding,
     annotateParamFromJsxProp,
     findJsxPropTsType,
-    markBail,
   });
 
   // Build reusable handler context for resolveDynamicNode calls
@@ -171,27 +180,17 @@ export function createDeclProcessingState(state: LowerRulesState, decl: StyledDe
 
   const { tryHandlePropertyTernaryTemplateLiteral, tryHandleCssHelperFunctionSwitchBlock } =
     createCssHelperHandlers({
-      j,
-      filePath,
+      ...sharedFromState,
       decl,
-      warnings,
       styleObj,
       variantBuckets,
       variantStyleKeys,
       cssHelperFunctions,
       usedCssHelperFunctions,
-      parseExpr,
-      resolveValue,
-      resolveCall,
-      resolveImportInScope,
-      resolverImports,
-      isCssHelperTaggedTemplate,
-      resolveCssHelperTemplate,
       applyVariant,
       dropAllTestInfoProps,
       componentInfo,
       handlerContext,
-      markBail,
     });
 
   const resolveStaticCssBlock = (rawCss: string): Record<string, unknown> | null => {
@@ -262,32 +261,21 @@ export function createDeclProcessingState(state: LowerRulesState, decl: StyledDe
   };
 
   const tryHandleCssHelperConditionalBlock = createCssHelperConditionalHandler({
-    j,
+    ...sharedFromState,
     decl,
-    filePath,
-    warnings,
-    parseExpr,
-    resolveValue,
-    resolveCall,
-    resolveImportInScope,
-    resolverImports,
     componentInfo,
     handlerContext,
     styleObj,
     styleFnFromProps,
     styleFnDecls,
     inlineStyleProps,
-    isCssHelperTaggedTemplate,
-    resolveCssHelperTemplate,
     resolveStaticCssBlock,
     isPlainTemplateLiteral,
     isThemeAccessTest,
     applyVariant,
     dropAllTestInfoProps,
     annotateParamFromJsxProp,
-    findJsxPropTsType,
-    isJsxPropOptional,
-    markBail,
+    findJsxPropTsType, isJsxPropOptional,
     extraStyleObjects,
     resolvedStyleObjects: state.resolvedStyleObjects,
   });

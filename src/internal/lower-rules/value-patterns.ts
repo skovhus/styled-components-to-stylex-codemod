@@ -2,10 +2,7 @@
  * Pattern handlers for specific dynamic value shapes.
  * Core concepts: adapter-resolved values and prop-driven style functions.
  */
-import type { API, JSCodeshift } from "jscodeshift";
-import type { Adapter, ImportSpec } from "../../adapter.js";
 import type { StyledDecl } from "../transform-types.js";
-import type { WarningLog } from "../logger.js";
 import type { ExpressionKind } from "./decl-types.js";
 import { cssDeclarationToStylexDeclarations } from "../css-prop-mapping.js";
 import { extractStaticParts } from "./interpolations.js";
@@ -18,6 +15,8 @@ import {
 } from "../utilities/jscodeshift-utils.js";
 import { buildSafeIndexedParamName } from "./import-resolution.js";
 import { cssValueToJs, toSuffixFromProp } from "../transform/helpers.js";
+import { cssPropertyToIdentifier, makeCssProperty } from "./shared.js";
+import type { LowerRulesState } from "./state.js";
 
 type StyleFnFromPropsEntry = {
   fnKey: string;
@@ -27,64 +26,27 @@ type StyleFnFromPropsEntry = {
   callArg?: ExpressionKind;
 };
 
-const makeCssPropKey = (j: JSCodeshift, prop: string): ExpressionKind => {
-  if (!prop.match(/^[a-zA-Z_$][a-zA-Z0-9_$]*$/)) {
-    return j.literal(prop);
-  }
-  return j.identifier(prop);
-};
-
-const cssPropertyToIdentifier = (prop: string): string => {
-  if (prop.startsWith("--")) {
-    const withoutDashes = prop.slice(2);
-    return withoutDashes.replace(/-([a-z])/g, (_, letter) => letter.toUpperCase());
-  }
-  return prop;
-};
-
-const makeCssProperty = (
-  j: JSCodeshift,
-  cssProp: string,
-  valueIdentifierName: string,
-): ReturnType<typeof j.property> => {
-  const key = makeCssPropKey(j, cssProp);
-  const p = j.property("init", key, j.identifier(valueIdentifierName)) as ReturnType<
-    typeof j.property
-  > & { shorthand?: boolean };
-  if (key.type === "Identifier" && key.name === valueIdentifierName) {
-    p.shorthand = true;
-  }
-  return p;
-};
-
-type ValuePatternContext = {
-  api: API;
-  j: JSCodeshift;
-  filePath: string;
+type ValuePatternContext = Pick<
+  LowerRulesState,
+  | "api"
+  | "j"
+  | "filePath"
+  | "warnings"
+  | "parseExpr"
+  | "resolveValue"
+  | "resolverImports"
+  | "stringMappingFns"
+  | "hasLocalThemeBinding"
+  | "markBail"
+> & {
   decl: StyledDecl;
   styleObj: Record<string, unknown>;
   variantBuckets: Map<string, Record<string, unknown>>;
   variantStyleKeys: Record<string, string>;
   styleFnFromProps: StyleFnFromPropsEntry[];
-  styleFnDecls: Map<string, any>;
-  warnings: WarningLog[];
-  resolveValue: Adapter["resolveValue"];
-  parseExpr: (exprSource: string) => ExpressionKind | null;
-  resolverImports: Map<string, ImportSpec>;
-  stringMappingFns: Map<
-    string,
-    {
-      param: string;
-      testParam: string;
-      whenValue: string;
-      thenValue: string;
-      elseValue: string;
-    }
-  >;
-  hasLocalThemeBinding: boolean;
-  annotateParamFromJsxProp: (param: any, propName: string) => void;
+  styleFnDecls: Map<string, unknown>;
+  annotateParamFromJsxProp: (param: unknown, propName: string) => void;
   findJsxPropTsType: (propName: string) => unknown;
-  markBail: () => void;
 };
 
 export const createValuePatternHandlers = (ctx: ValuePatternContext) => {

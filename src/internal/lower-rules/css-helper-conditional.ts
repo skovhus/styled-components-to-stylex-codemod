@@ -3,12 +3,12 @@
  * Core concepts: analyzing conditional branches, extracting variant conditions,
  * and emitting StyleX-compatible style objects or style functions.
  */
-import type { ASTNode, JSCodeshift } from "jscodeshift";
+import type { ASTNode } from "jscodeshift";
 import type { ImportSpec } from "../../adapter.js";
 import type { StyledDecl } from "../transform-types.js";
-import type { WarningLog } from "../logger.js";
 import type { ExpressionKind, TestInfo } from "./decl-types.js";
 import type { InternalHandlerContext } from "../builtin-handlers.js";
+import type { LowerRulesState } from "./state.js";
 import { resolveDynamicNode } from "../builtin-handlers.js";
 import { cssDeclarationToStylexDeclarations } from "../css-prop-mapping.js";
 import { parseCssTemplateToRules, type ConditionalVariant } from "./css-helper.js";
@@ -50,41 +50,35 @@ type StyleFnFromPropsEntry = {
   callArg?: ExpressionKind;
 };
 
-export type CssHelperConditionalContext = {
-  j: JSCodeshift;
+export type CssHelperConditionalContext = Pick<
+  LowerRulesState,
+  | "j"
+  | "filePath"
+  | "warnings"
+  | "parseExpr"
+  | "resolveValue"
+  | "resolveCall"
+  | "resolveImportInScope"
+  | "resolverImports"
+  | "isCssHelperTaggedTemplate"
+  | "resolveCssHelperTemplate"
+  | "markBail"
+> & {
   decl: StyledDecl;
-  filePath: string;
-  warnings: WarningLog[];
-  parseExpr: (value: string) => ExpressionKind | null;
-  resolveValue: (...args: any[]) => any;
-  resolveCall: (...args: any[]) => any;
-  resolveImportInScope: (...args: any[]) => any;
-  resolverImports: Map<string, any>;
-  componentInfo: any;
   handlerContext: InternalHandlerContext;
+  componentInfo: TemplateLiteralContext["componentInfo"];
   styleObj: Record<string, unknown>;
   styleFnFromProps: StyleFnFromPropsEntry[];
-  styleFnDecls: Map<string, any>;
+  styleFnDecls: Map<string, unknown>;
   inlineStyleProps: Array<{ prop: string; expr: ExpressionKind; jsxProp?: string }>;
-  isCssHelperTaggedTemplate: (node: unknown) => boolean;
-  resolveCssHelperTemplate: (
-    template: any,
-    paramName: string | null,
-    loc: { line: number; column: number } | null | undefined,
-  ) => {
-    style: Record<string, unknown>;
-    dynamicProps: Array<{ jsxProp: string; stylexProp: string }>;
-    conditionalVariants: ConditionalVariant[];
-  } | null;
   resolveStaticCssBlock: (rawCss: string) => Record<string, unknown> | null;
   isPlainTemplateLiteral: (node: ExpressionKind | null | undefined) => boolean;
   isThemeAccessTest: (test: ExpressionKind, paramName: string | null) => boolean;
   applyVariant: (testInfo: TestInfo, styleObj: Record<string, unknown>) => void;
   dropAllTestInfoProps: (testInfo: TestInfo) => void;
-  annotateParamFromJsxProp: (paramId: any, jsxProp: string) => void;
+  annotateParamFromJsxProp: (paramId: unknown, jsxProp: string) => void;
   findJsxPropTsType: (jsxProp: string) => unknown;
   isJsxPropOptional: (jsxProp: string) => boolean;
-  markBail: () => void;
   extraStyleObjects: Map<string, Record<string, unknown>>;
   resolvedStyleObjects: Map<string, unknown>;
 };
