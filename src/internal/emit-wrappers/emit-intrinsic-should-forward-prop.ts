@@ -396,7 +396,8 @@ export function emitShouldForwardPropWrappers(ctx: EmitIntrinsicContext): void {
     });
 
     // Skip rest spread omission for exported components - external consumers may pass additional props
-    const isExportedComponent = d.isExported || emitter.exportedComponents.has(d.localName);
+    // d.isExported is already set from exportedComponents during analyze-before-emit
+    const isExportedComponent = d.isExported ?? false;
     const shouldOmitRestSpread =
       !isExportedComponent &&
       !dropPrefix &&

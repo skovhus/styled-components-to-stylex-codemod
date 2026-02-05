@@ -381,7 +381,8 @@ export function emitSimpleExportedIntrinsicWrappers(ctx: EmitIntrinsicContext): 
     const usedAttrsForType = emitter.getUsedAttrs(d.localName);
     const allowAsProp = shouldAllowAsProp(d, tagName);
     let inlineTypeText: string | undefined;
-    const isExportedComponent = d.isExported || emitter.exportedComponents.has(d.localName);
+    // d.isExported is already set from exportedComponents during analyze-before-emit
+    const isExportedComponent = d.isExported ?? false;
     const usePolymorphicPattern = allowAsProp && isExportedComponent;
     {
       const explicit = emitter.stringifyTsType(d.propsType);
