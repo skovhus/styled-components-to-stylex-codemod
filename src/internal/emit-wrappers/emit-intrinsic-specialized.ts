@@ -650,9 +650,18 @@ export function emitSiblingWrappers(ctx: EmitIntrinsicContext): void {
       childrenExpr: childrenId,
     });
 
+    const themeHookName = d.needsThemeHook
+      ? emitter.ensureThemeHookName({
+          d,
+          reservedNames: emitter.buildThemeHookReservedNames({
+            d,
+            additional: ["children", "className", "style", "rest", "Component"],
+          }),
+        })
+      : undefined;
     const bodyStmts: StatementKind[] = [declStmt];
     if (d.needsThemeHook) {
-      bodyStmts.push(emitter.buildThemeHookStatement());
+      bodyStmts.push(emitter.buildThemeHookStatement(themeHookName));
     }
     if (merging.sxDecl) {
       bodyStmts.push(merging.sxDecl);

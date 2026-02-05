@@ -917,6 +917,7 @@ export class WrapperEmitter {
     destructureProps: string[];
     propDefaults?: Map<string, string>;
     needsThemeHook?: boolean;
+    themeHookName?: string;
     allowClassNameProp?: boolean;
     allowStyleProp?: boolean;
     allowAsProp?: boolean;
@@ -936,6 +937,7 @@ export class WrapperEmitter {
       destructureProps,
       propDefaults,
       needsThemeHook = false,
+      themeHookName,
       allowClassNameProp = false,
       allowStyleProp = false,
       allowAsProp = false,
@@ -1230,7 +1232,7 @@ export class WrapperEmitter {
       );
     }
     if (needsThemeHook) {
-      bodyStmts.push(this.buildThemeHookStatement());
+      bodyStmts.push(this.buildThemeHookStatement(themeHookName));
     }
     if (merging.sxDecl) {
       bodyStmts.push(merging.sxDecl);
@@ -1672,11 +1674,116 @@ export class WrapperEmitter {
     return fn;
   }
 
-  buildThemeHookStatement(): StatementKind {
+  buildThemeHookStatement(themeHookName: string = "theme"): StatementKind {
     const { j } = this;
     return j.variableDeclaration("const", [
-      j.variableDeclarator(j.identifier("theme"), j.callExpression(j.identifier("useTheme"), [])),
+      j.variableDeclarator(
+        j.identifier(themeHookName),
+        j.callExpression(j.identifier("useTheme"), []),
+      ),
     ]);
+  }
+
+  buildThemeHookReservedNames(args: {
+    d: StyledDecl;
+    destructureProps?: string[];
+    additional?: string[];
+  }): Set<string> {
+    const reserved = new Set<string>();
+    for (const prop of args.destructureProps ?? []) {
+      if (prop) {
+        reserved.add(prop);
+      }
+    }
+    for (const name of args.additional ?? []) {
+      if (name) {
+        reserved.add(name);
+      }
+    }
+    if (args.d.propsType) {
+      for (const name of this.getExplicitPropNames(args.d.propsType)) {
+        reserved.add(name);
+      }
+    }
+    return reserved;
+  }
+
+  ensureThemeHookName(args: { d: StyledDecl; reservedNames: Set<string> }): string {
+    const { d, reservedNames } = args;
+    const baseName = "theme";
+    if (!d.needsThemeHook) {
+      return baseName;
+    }
+    const currentName = d.themeHookName ?? baseName;
+    if (!reservedNames.has(currentName)) {
+      d.themeHookName = currentName;
+      return currentName;
+    }
+    const nextName = this.pickUniqueThemeHookName(baseName, reservedNames);
+    if (nextName !== currentName) {
+      this.renameThemeHookIdentifier(d, currentName, nextName);
+    }
+    d.themeHookName = nextName;
+    return nextName;
+  }
+
+  private pickUniqueThemeHookName(baseName: string, reserved: Set<string>): string {
+    if (!reserved.has(baseName)) {
+      return baseName;
+    }
+    const candidates = [`${baseName}FromContext`, `${baseName}Hook`, `${baseName}Value`];
+    for (const candidate of candidates) {
+      if (!reserved.has(candidate)) {
+        return candidate;
+      }
+    }
+    let idx = 2;
+    let name = `${baseName}Hook${idx}`;
+    while (reserved.has(name)) {
+      idx += 1;
+      name = `${baseName}Hook${idx}`;
+    }
+    return name;
+  }
+
+  private renameThemeHookIdentifier(d: StyledDecl, fromName: string, toName: string): void {
+    if (fromName === toName) {
+      return;
+    }
+    for (const extra of d.extraStylexPropsArgs ?? []) {
+      if (!extra.themeHook) {
+        continue;
+      }
+      this.renameIdentifierInExpr(extra.expr, fromName, toName);
+    }
+  }
+
+  private renameIdentifierInExpr(expr: ExpressionKind, fromName: string, toName: string): void {
+    const visit = (node: unknown): void => {
+      if (!node || typeof node !== "object") {
+        return;
+      }
+      if (Array.isArray(node)) {
+        for (const entry of node) {
+          visit(entry);
+        }
+        return;
+      }
+      const typed = node as { type?: string };
+      if (typed.type === "Identifier" && (node as { name?: string }).name === fromName) {
+        (node as { name?: string }).name = toName;
+      }
+      for (const key of Object.keys(node as Record<string, unknown>)) {
+        if (key === "loc" || key === "comments") {
+          continue;
+        }
+        const child = (node as Record<string, unknown>)[key];
+        if (child && typeof child === "object") {
+          visit(child);
+        }
+      }
+    };
+    visit(expr);
   }
 
   buildDestructurePatternProps(args: {
@@ -2049,6 +2156,10 @@ export class WrapperEmitter {
         const used = new Set<string>();
         for (const arg of styleArgs) {
           collectIdentifiers(arg, used);
+        }
+        if (d.needsThemeHook) {
+          const themeName = d.themeHookName ?? "theme";
+          used.delete(themeName);
         }
         for (const name of used) {
           if (explicitProps.has(name) && !destructureProps.includes(name)) {

@@ -407,6 +407,17 @@ export function emitShouldForwardPropWrappers(ctx: EmitIntrinsicContext): void {
       }
     }
 
+    const themeHookName = d.needsThemeHook
+      ? emitter.ensureThemeHookName({
+          d,
+          reservedNames: emitter.buildThemeHookReservedNames({
+            d,
+            destructureProps: destructureParts,
+            additional: ["children", "className", "style", "rest", "Component"],
+          }),
+        })
+      : undefined;
+
     const propsParamId = j.identifier("props");
     if (allowAsProp && emitTypes) {
       // When there are no custom props, use inline type
@@ -510,7 +521,7 @@ export function emitShouldForwardPropWrappers(ctx: EmitIntrinsicContext): void {
 
       const fnBodyStmts: StatementKind[] = [declStmt];
       if (d.needsThemeHook) {
-        fnBodyStmts.push(emitter.buildThemeHookStatement());
+        fnBodyStmts.push(emitter.buildThemeHookStatement(themeHookName));
       }
       if (cleanupPrefixStmt) {
         fnBodyStmts.push(...cleanupPrefixStmt);
@@ -597,7 +608,7 @@ export function emitShouldForwardPropWrappers(ctx: EmitIntrinsicContext): void {
 
     const fnBodyStmts: StatementKind[] = [declStmt];
     if (d.needsThemeHook) {
-      fnBodyStmts.push(emitter.buildThemeHookStatement());
+      fnBodyStmts.push(emitter.buildThemeHookStatement(themeHookName));
     }
     if (cleanupPrefixStmt) {
       fnBodyStmts.push(...cleanupPrefixStmt);

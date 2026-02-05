@@ -172,6 +172,16 @@ export function emitIntrinsicPolymorphicWrappers(ctx: EmitIntrinsicContext): voi
         styleArgs,
         destructureProps,
       });
+      const themeHookName = d.needsThemeHook
+        ? emitter.ensureThemeHookName({
+            d,
+            reservedNames: emitter.buildThemeHookReservedNames({
+              d,
+              destructureProps,
+              additional: ["children", "className", "style", "rest", "Component"],
+            }),
+          })
+        : undefined;
       emitter.collectDestructurePropsFromStyleFns({ d, styleArgs, destructureProps });
 
       const isVoidTag = VOID_TAGS.has(tagName);
@@ -262,7 +272,7 @@ export function emitIntrinsicPolymorphicWrappers(ctx: EmitIntrinsicContext): voi
 
       const fnBodyStmts: StatementKind[] = [declStmt];
       if (d.needsThemeHook) {
-        fnBodyStmts.push(emitter.buildThemeHookStatement());
+        fnBodyStmts.push(emitter.buildThemeHookStatement(themeHookName));
       }
       if (merging.sxDecl) {
         fnBodyStmts.push(merging.sxDecl);

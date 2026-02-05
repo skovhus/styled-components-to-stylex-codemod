@@ -478,7 +478,7 @@ export function lowerRules(ctx: TransformContext): {
           j.memberExpression(j.identifier("styles"), j.identifier(lightKey)),
         );
         decl.extraStylexPropsArgs ??= [];
-        decl.extraStylexPropsArgs.push({ expr: condExpr });
+        decl.extraStylexPropsArgs.push({ expr: condExpr, themeHook: true });
       }
 
       decl.needsWrapperComponent = true;
@@ -5119,7 +5119,11 @@ export function lowerRules(ctx: TransformContext): {
             j.memberExpression(j.identifier("styles"), j.identifier(key)),
           );
           const entry = decl.extraStylexPropsArgs[themeArgIndex];
-          decl.extraStylexPropsArgs[themeArgIndex] = { ...entry, expr: nextExpr };
+          decl.extraStylexPropsArgs[themeArgIndex] = {
+            ...entry,
+            expr: nextExpr,
+            themeHook: true,
+          };
           if (darkEmpty) {
             extraStyleObjects.delete(dark);
           }

@@ -229,7 +229,7 @@ export type StyledDecl = {
    * These are emitted as extra args (optionally guarded by `when`) rather than being placed
    * inside `stylex.create(...)`.
    */
-  extraStylexPropsArgs?: Array<{ when?: string; expr: ExpressionKind }>;
+  extraStylexPropsArgs?: Array<{ when?: string; expr: ExpressionKind; themeHook?: boolean }>;
   /**
    * Style keys for theme.isDark conditional styles.
    */
@@ -238,6 +238,10 @@ export type StyledDecl = {
    * Whether this component wrapper should call useTheme().
    */
   needsThemeHook?: boolean;
+  /**
+   * Local identifier name used for the theme hook binding.
+   */
+  themeHookName?: string;
   /**
    * Tracks the interleaved order of extra mixins. Each entry indicates which array
    * to take the next item from: 'styleKey' for extraStyleKeys, 'propsArg' for extraStylexPropsArgs.

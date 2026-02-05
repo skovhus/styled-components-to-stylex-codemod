@@ -212,6 +212,16 @@ export function emitSimpleWithConfigWrappers(ctx: EmitIntrinsicContext): void {
           ...(d.attrsInfo?.invertedBoolAttrs ?? []).map((inv: any) => inv.jsxProp).filter(Boolean),
         ]),
       ];
+      const themeHookName = d.needsThemeHook
+        ? emitter.ensureThemeHookName({
+            d,
+            reservedNames: emitter.buildThemeHookReservedNames({
+              d,
+              destructureProps,
+              additional: ["children", "className", "style", "rest", "Component"],
+            }),
+          })
+        : undefined;
       emitted.push(
         ...withLeadingCommentsOnFirstFunction(
           emitMinimalWrapper({
@@ -220,6 +230,7 @@ export function emitSimpleWithConfigWrappers(ctx: EmitIntrinsicContext): void {
             propsTypeName: emitter.propsTypeNameFor(d.localName),
             styleArgs,
             destructureProps,
+            themeHookName,
             needsThemeHook: d.needsThemeHook,
             allowAsProp,
             allowClassNameProp: false,
@@ -296,7 +307,14 @@ export function emitSimpleWithConfigWrappers(ctx: EmitIntrinsicContext): void {
 
     const bodyStmts: StatementKind[] = [declStmt];
     if (d.needsThemeHook) {
-      bodyStmts.push(emitter.buildThemeHookStatement());
+      const themeHookName = emitter.ensureThemeHookName({
+        d,
+        reservedNames: emitter.buildThemeHookReservedNames({
+          d,
+          additional: ["children", "className", "style", "rest", "Component"],
+        }),
+      });
+      bodyStmts.push(emitter.buildThemeHookStatement(themeHookName));
     }
     if (merging.sxDecl) {
       bodyStmts.push(merging.sxDecl);
@@ -686,6 +704,16 @@ export function emitSimpleExportedIntrinsicWrappers(ctx: EmitIntrinsicContext): 
       styleArgs,
       destructureProps,
     });
+    const themeHookName = d.needsThemeHook
+      ? emitter.ensureThemeHookName({
+          d,
+          reservedNames: emitter.buildThemeHookReservedNames({
+            d,
+            destructureProps,
+            additional: ["children", "className", "style", "rest", "Component"],
+          }),
+        })
+      : undefined;
     emitter.collectDestructurePropsFromStyleFns({ d, styleArgs, destructureProps });
 
     if (d.attrsInfo?.conditionalAttrs?.length) {
@@ -834,7 +862,7 @@ export function emitSimpleExportedIntrinsicWrappers(ctx: EmitIntrinsicContext): 
 
       const bodyStmts: StatementKind[] = [declStmt];
       if (d.needsThemeHook) {
-        bodyStmts.push(emitter.buildThemeHookStatement());
+        bodyStmts.push(emitter.buildThemeHookStatement(themeHookName));
       }
       if (merging.sxDecl) {
         bodyStmts.push(merging.sxDecl);
@@ -874,6 +902,7 @@ export function emitSimpleExportedIntrinsicWrappers(ctx: EmitIntrinsicContext): 
           styleArgs,
           destructureProps,
           propDefaults,
+          themeHookName,
           needsThemeHook: d.needsThemeHook,
           allowAsProp,
           allowClassNameProp: false,
