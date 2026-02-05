@@ -6,6 +6,7 @@ import {
   isComponentUsedInJsx,
   propagateDelegationWrapperRequirements,
 } from "../utilities/delegation-utils.js";
+import { isFunctionNode } from "../utilities/jscodeshift-utils.js";
 import { typeContainsPolymorphicAs } from "../utilities/polymorphic-as-detection.js";
 
 type JsxAttr = JSXAttribute | JSXSpreadAttribute;
@@ -531,6 +532,65 @@ export function analyzeBeforeEmitStep(ctx: TransformContext): StepResult {
   }
 
   ctx.resolverImportAliases = resolverImportAliases;
+
+  // Detect if any styled component is used in JSX at module level (not inside a function).
+  // This causes TDZ issues if styles are placed at the end of the file, so we hoist them.
+  const isUsedAtModuleLevel = (): boolean => {
+    const styledNames = new Set(styledDecls.map((d) => d.localName));
+    let foundModuleLevelUsage = false;
+
+    // Helper to check if a path is inside a function-like scope
+    const isInsideFunctionScope = (p: any): boolean => {
+      let cur = p.parentPath;
+      while (cur) {
+        const node = cur.node;
+        // Check for function-like nodes (includes class/object methods which execute at runtime)
+        if (
+          isFunctionNode(node) ||
+          node?.type === "ClassMethod" ||
+          node?.type === "MethodDefinition" ||
+          node?.type === "ObjectMethod"
+        ) {
+          return true;
+        }
+        cur = cur.parentPath;
+      }
+      return false;
+    };
+
+    // Check JSX elements (opening tags)
+    root.find(j.JSXElement).forEach((p: any) => {
+      if (foundModuleLevelUsage) {
+        return;
+      }
+      const openingName = p.node.openingElement?.name;
+      if (openingName?.type === "JSXIdentifier" && styledNames.has(openingName.name)) {
+        if (!isInsideFunctionScope(p)) {
+          foundModuleLevelUsage = true;
+        }
+      }
+    });
+
+    // Check self-closing JSX elements
+    root.find(j.JSXSelfClosingElement).forEach((p: any) => {
+      if (foundModuleLevelUsage) {
+        return;
+      }
+      const name = p.node.name;
+      if (name?.type === "JSXIdentifier" && styledNames.has(name.name)) {
+        if (!isInsideFunctionScope(p)) {
+          foundModuleLevelUsage = true;
+        }
+      }
+    });
+
+    return foundModuleLevelUsage;
+  };
+
+  // If any styled component is used at module level, hoist styles to avoid TDZ errors.
+  if (!ctx.stylesInsertPosition && isUsedAtModuleLevel()) {
+    ctx.stylesInsertPosition = "afterImports";
+  }
 
   return CONTINUE;
 }
