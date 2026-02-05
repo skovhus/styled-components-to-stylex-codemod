@@ -12,6 +12,47 @@ import { emitStyleMerging } from "./style-merger.js";
 import { sortVariantEntriesBySpecificity, VOID_TAGS } from "./type-helpers.js";
 import { withLeadingComments } from "./comments.js";
 import type { EmitIntrinsicContext } from "./emit-intrinsic-helpers.js";
+import type { JSCodeshift, Identifier } from "jscodeshift";
+
+/**
+ * Generates statements to filter props with a given prefix from the rest object.
+ * Used for exported components with shouldForwardProp/dropPrefix to ensure
+ * unknown transient props (like $unknown) don't leak to the DOM.
+ */
+function buildPrefixCleanupStatements(
+  j: JSCodeshift,
+  restId: Identifier,
+  dropPrefix: string,
+): StatementKind[] {
+  const restRecordId = j.identifier("restRecord");
+  const restRecordDecl = j.variableDeclaration("const", [
+    j.variableDeclarator(
+      restRecordId,
+      j.tsAsExpression(
+        restId,
+        j.tsTypeReference(
+          j.identifier("Record"),
+          j.tsTypeParameterInstantiation([j.tsStringKeyword(), j.tsUnknownKeyword()]),
+        ),
+      ),
+    ),
+  ]);
+  const forLoop = j.forOfStatement(
+    j.variableDeclaration("const", [j.variableDeclarator(j.identifier("k"), null as any)]),
+    j.callExpression(j.memberExpression(j.identifier("Object"), j.identifier("keys")), [restId]),
+    j.blockStatement([
+      j.ifStatement(
+        j.callExpression(j.memberExpression(j.identifier("k"), j.identifier("startsWith")), [
+          j.literal(dropPrefix),
+        ]),
+        j.expressionStatement(
+          j.unaryExpression("delete", j.memberExpression(restRecordId, j.identifier("k"), true)),
+        ),
+      ),
+    ]),
+  );
+  return [restRecordDecl, forLoop];
+}
 
 export function emitShouldForwardPropWrappers(ctx: EmitIntrinsicContext): void {
   const { emitter, j, emitTypes, wrapperDecls, stylesIdentifier, emitted } = ctx;
@@ -396,7 +437,8 @@ export function emitShouldForwardPropWrappers(ctx: EmitIntrinsicContext): void {
     });
 
     // Skip rest spread omission for exported components - external consumers may pass additional props
-    const isExportedComponent = d.isExported || emitter.exportedComponents.has(d.localName);
+    // d.isExported is already set from exportedComponents during analyze-before-emit
+    const isExportedComponent = d.isExported ?? false;
     const shouldOmitRestSpread =
       !isExportedComponent &&
       !dropPrefix &&
@@ -404,7 +446,9 @@ export function emitShouldForwardPropWrappers(ctx: EmitIntrinsicContext): void {
       dropProps.every((p: string) => p.startsWith("$")) &&
       !usedAttrs.has("*") &&
       [...usedAttrs].every((n) => n === "children" || dropProps.includes(n));
-    const includeRest = !shouldOmitRestSpread && shouldIncludeRest;
+    // Exported components should always include rest spread so that all element props
+    // (id, onClick, aria-*, etc.) are forwarded to the element.
+    const includeRest = isExportedComponent || (!shouldOmitRestSpread && shouldIncludeRest);
 
     if (!allowClassNameProp && !allowStyleProp) {
       const isVoid = VOID_TAGS.has(tagName);
@@ -425,31 +469,15 @@ export function emitShouldForwardPropWrappers(ctx: EmitIntrinsicContext): void {
         j.variableDeclarator(j.objectPattern(patternProps as any), propsId),
       ]);
 
-      const cleanupPrefixStmt =
-        dropPrefix && shouldAllowAnyPrefixProps && includeRest
-          ? (j.forOfStatement(
-              j.variableDeclaration("const", [
-                j.variableDeclarator(j.identifier("k"), null as any),
-              ]),
-              j.callExpression(j.memberExpression(j.identifier("Object"), j.identifier("keys")), [
-                restId,
-              ]),
-              j.blockStatement([
-                j.ifStatement(
-                  j.callExpression(
-                    j.memberExpression(j.identifier("k"), j.identifier("startsWith")),
-                    [j.literal(dropPrefix)],
-                  ),
-                  j.expressionStatement(
-                    j.unaryExpression(
-                      "delete",
-                      j.memberExpression(restId, j.identifier("k"), true),
-                    ),
-                  ),
-                ),
-              ]),
-            ) as any)
-          : null;
+      // Generate cleanup loop for prefix props when:
+      // - There's a dropPrefix (like "$" for transient props)
+      // - Either: local usage of unknown prefix props, OR exported component (external callers may pass unknown prefix props)
+      // - Rest spread is included
+      const needsCleanupLoop =
+        dropPrefix && (isExportedComponent || shouldAllowAnyPrefixProps) && includeRest;
+      const cleanupPrefixStmt = needsCleanupLoop
+        ? buildPrefixCleanupStatements(j, restId, dropPrefix)
+        : null;
 
       const { attrsInfo, staticClassNameExpr } = emitter.splitAttrsInfo(d.attrsInfo);
       const merging = emitStyleMerging({
@@ -482,7 +510,7 @@ export function emitShouldForwardPropWrappers(ctx: EmitIntrinsicContext): void {
 
       const fnBodyStmts: StatementKind[] = [declStmt];
       if (cleanupPrefixStmt) {
-        fnBodyStmts.push(cleanupPrefixStmt);
+        fnBodyStmts.push(...cleanupPrefixStmt);
       }
       if (merging.sxDecl) {
         fnBodyStmts.push(merging.sxDecl);
@@ -528,26 +556,15 @@ export function emitShouldForwardPropWrappers(ctx: EmitIntrinsicContext): void {
       j.variableDeclarator(j.objectPattern(patternProps as any), propsId),
     ]);
 
-    const cleanupPrefixStmt =
-      dropPrefix && shouldAllowAnyPrefixProps && includeRest
-        ? (j.forOfStatement(
-            j.variableDeclaration("const", [j.variableDeclarator(j.identifier("k"), null as any)]),
-            j.callExpression(j.memberExpression(j.identifier("Object"), j.identifier("keys")), [
-              restId,
-            ]),
-            j.blockStatement([
-              j.ifStatement(
-                j.callExpression(
-                  j.memberExpression(j.identifier("k"), j.identifier("startsWith")),
-                  [j.literal(dropPrefix)],
-                ),
-                j.expressionStatement(
-                  j.unaryExpression("delete", j.memberExpression(restId, j.identifier("k"), true)),
-                ),
-              ),
-            ]),
-          ) as any)
-        : null;
+    // Generate cleanup loop for prefix props when:
+    // - There's a dropPrefix (like "$" for transient props)
+    // - Either: local usage of unknown prefix props, OR exported component (external callers may pass unknown prefix props)
+    // - Rest spread is included
+    const needsCleanupLoopOuter =
+      dropPrefix && (isExportedComponent || shouldAllowAnyPrefixProps) && includeRest;
+    const cleanupPrefixStmt = needsCleanupLoopOuter
+      ? buildPrefixCleanupStatements(j, restId, dropPrefix)
+      : null;
 
     // Use the style merger helper
     const merging = emitStyleMerging({
@@ -577,7 +594,7 @@ export function emitShouldForwardPropWrappers(ctx: EmitIntrinsicContext): void {
 
     const fnBodyStmts: StatementKind[] = [declStmt];
     if (cleanupPrefixStmt) {
-      fnBodyStmts.push(cleanupPrefixStmt);
+      fnBodyStmts.push(...cleanupPrefixStmt);
     }
     if (merging.sxDecl) {
       fnBodyStmts.push(merging.sxDecl);

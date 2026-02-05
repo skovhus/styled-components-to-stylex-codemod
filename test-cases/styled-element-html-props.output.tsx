@@ -14,10 +14,12 @@ interface TextColorProps {
 export function TextColor<C extends React.ElementType = "span">(
   props: React.ComponentPropsWithRef<C> & Omit<TextColorProps, "as"> & { as?: C },
 ) {
-  const { as: Component = "span", className, children, style, color } = props;
+  const { as: Component = "span", className, children, style, color, ...rest } = props;
 
   return (
-    <Component {...mergedSx(styles.textColorColor(color), className, style)}>{children}</Component>
+    <Component {...rest} {...mergedSx(styles.textColorColor(color), className, style)}>
+      {children}
+    </Component>
   );
 }
 

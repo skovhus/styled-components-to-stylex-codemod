@@ -8,9 +8,13 @@ import { ActionMenuTextDivider, ActionMenuGroupHeader } from "./lib/action-menu-
 
 // Pattern 1: Static properties defined directly on styled component
 export function ListItem(props: React.ComponentProps<"div">) {
-  const { className, children, style } = props;
+  const { className, children, style, ...rest } = props;
 
-  return <div {...mergedSx(styles.listItem, className, style)}>{children}</div>;
+  return (
+    <div {...rest} {...mergedSx(styles.listItem, className, style)}>
+      {children}
+    </div>
+  );
 }
 
 ListItem.HEIGHT = 42;
@@ -29,10 +33,10 @@ BaseButton.HEIGHT = 36;
 
 // ExtendedButton should have HEIGHT from BaseButton
 export function ExtendedButton(props: React.ComponentProps<"button">) {
-  const { className, children, style } = props;
+  const { className, children, style, ...rest } = props;
 
   return (
-    <button {...mergedSx([styles.baseButton, styles.extendedButton], className, style)}>
+    <button {...rest} {...mergedSx([styles.baseButton, styles.extendedButton], className, style)}>
       {children}
     </button>
   );

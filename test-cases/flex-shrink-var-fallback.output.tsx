@@ -12,10 +12,11 @@ type ColumnContainerProps = Omit<React.ComponentProps<"div">, "className"> & {
  * The codemod should preserve this via a stylex function.
  */
 export function ColumnContainer(props: ColumnContainerProps) {
-  const { children, style, $noGrowOrShrink, $basis } = props;
+  const { children, style, $noGrowOrShrink, $basis, ...rest } = props;
 
   return (
     <div
+      {...rest}
       {...mergedSx(
         [
           styles.columnContainer,

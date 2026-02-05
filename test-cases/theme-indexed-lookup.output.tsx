@@ -42,9 +42,13 @@ interface TextColorProps extends Omit<React.ComponentProps<"span">, "className" 
 }
 
 export function TextColor(props: TextColorProps) {
-  const { children, color } = props;
+  const { children, color, ...rest } = props;
 
-  return <span {...stylex.props(styles.textColorColor(color))}>{children}</span>;
+  return (
+    <span {...rest} {...stylex.props(styles.textColorColor(color))}>
+      {children}
+    </span>
+  );
 }
 
 const styles = stylex.create({

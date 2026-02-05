@@ -48,6 +48,7 @@ export type WarningType =
   | "Universal selectors (`*`) are currently unsupported"
   | "Unsupported call expression (expected imported helper(...) or imported helper(...)(...))"
   | "Unsupported conditional test in shouldForwardProp"
+  | "Unsupported shouldForwardProp pattern (only !prop.startsWith(), ![].includes(prop), and prop !== are supported)"
   | "Unsupported interpolation: arrow function"
   | "Unsupported interpolation: call expression"
   | "Unsupported interpolation: identifier"

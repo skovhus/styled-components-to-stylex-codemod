@@ -147,6 +147,11 @@ export type StyledDecl = {
   }>;
   shouldForwardProp?: { dropProps: string[]; dropPrefix?: string };
   /**
+   * True when `withConfig({ shouldForwardProp })` is present but uses an unsupported pattern
+   * that we cannot safely transform. When set, the transform should bail to avoid semantic changes.
+   */
+  hasUnparseableShouldForwardProp?: boolean;
+  /**
    * True when `shouldForwardProp` came from `styled.*.withConfig({ shouldForwardProp })`.
    * When false/undefined, `shouldForwardProp` may have been inferred internally (e.g. enum if-chain
    * or theme-indexed lookup) just to prevent forwarding styling props to the DOM.
