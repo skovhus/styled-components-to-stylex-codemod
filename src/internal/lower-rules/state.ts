@@ -2,13 +2,17 @@
  * Builds shared state for the lower-rules pipeline.
  * Core concepts: resolver wiring, precomputed mixin values, and shared tracking maps.
  */
-import type { ImportSource } from "../adapter.js";
+import type { ImportSource } from "../../adapter.js";
 import type { TransformContext } from "../transform-context.js";
 import type { StyledDecl } from "../transform-types.js";
 import type { WarningType } from "../logger.js";
 import { createCssHelperResolver } from "./css-helper.js";
 import { createThemeResolvers } from "./theme.js";
-import { addStyleKeyMixin, computeDeclBasePropValues, trackMixinPropertyValues } from "./precompute.js";
+import {
+  addStyleKeyMixin,
+  computeDeclBasePropValues,
+  trackMixinPropertyValues,
+} from "./precompute.js";
 import { createImportResolver } from "./import-resolution.js";
 import { literalToStaticValue } from "./types.js";
 import { cloneAstNode } from "../utilities/jscodeshift-utils.js";
@@ -121,7 +125,10 @@ export function createLowerRulesState(ctx: TransformContext) {
           (rule) => rule.selector.trim() === "&" && rule.declarations.length > 0,
         );
         addStyleKeyMixin(decl, nestedDecl.styleKey, { afterBase: !nestedHasBaseRule });
-        trackMixinPropertyValues(cssHelperValuesByKey.get(nestedDecl.styleKey), cssHelperPropValues);
+        trackMixinPropertyValues(
+          cssHelperValuesByKey.get(nestedDecl.styleKey),
+          cssHelperPropValues,
+        );
       }
     }
   };

@@ -3,7 +3,7 @@
  * Core concepts: parse resolved expressions and emit variant buckets safely.
  */
 import type { CssDeclarationIR } from "../css-ir.js";
-import type { WarningType } from "../logger.js";
+import type { WarningLog, WarningType } from "../logger.js";
 import type { StyledDecl } from "../transform-types.js";
 import type { ExpressionKind } from "./decl-types.js";
 import type { JSCodeshift } from "jscodeshift";
@@ -33,12 +33,7 @@ type SplitVariantsContext = {
   media: string | undefined;
   parseExpr: (expr: string) => ExpressionKind | null;
   resolverImports: Map<string, any>;
-  warnings: Array<{
-    severity: "warning" | "error";
-    type: WarningType;
-    loc?: any;
-    context?: any;
-  }>;
+  warnings: WarningLog[];
   setBail: () => void;
   bailUnsupported: (decl: StyledDecl, type: WarningType) => void;
 };

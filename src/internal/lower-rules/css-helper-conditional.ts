@@ -6,7 +6,7 @@
 import type { ASTNode, JSCodeshift } from "jscodeshift";
 import type { ImportSpec } from "../../adapter.js";
 import type { StyledDecl } from "../transform-types.js";
-import type { WarningType } from "../logger.js";
+import type { WarningLog } from "../logger.js";
 import type { ExpressionKind, TestInfo } from "./decl-types.js";
 import type { InternalHandlerContext } from "../builtin-handlers.js";
 import { resolveDynamicNode } from "../builtin-handlers.js";
@@ -48,12 +48,7 @@ export type CssHelperConditionalContext = {
   j: JSCodeshift;
   decl: StyledDecl;
   filePath: string;
-  warnings: Array<{
-    severity: "warning" | "error";
-    type: WarningType;
-    loc?: { line: number; column: number } | null;
-    context?: Record<string, unknown>;
-  }>;
+  warnings: WarningLog[];
   parseExpr: (value: string) => ExpressionKind | null;
   resolveValue: (...args: any[]) => any;
   resolveCall: (...args: any[]) => any;

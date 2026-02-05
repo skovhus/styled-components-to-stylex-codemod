@@ -4,7 +4,7 @@
  */
 import type { JSCodeshift } from "jscodeshift";
 import type { CssDeclarationIR } from "../css-ir.js";
-import type { WarningType } from "../logger.js";
+import type { WarningLog, WarningType } from "../logger.js";
 import type { StyledDecl } from "../transform-types.js";
 import type { ExpressionKind } from "./decl-types.js";
 import {
@@ -34,12 +34,7 @@ export type InlineStyleFromPropsContext = {
   media: string | undefined;
   filePath: string;
   loc: { line: number; column: number } | null | undefined;
-  warnings: Array<{
-    severity: "warning" | "error";
-    type: WarningType;
-    loc?: { line: number; column: number } | null;
-    context?: Record<string, unknown>;
-  }>;
+  warnings: WarningLog[];
   styleFnDecls: Map<string, unknown>;
   styleFnFromProps: Array<{
     fnKey: string;

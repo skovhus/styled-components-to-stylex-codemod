@@ -111,6 +111,9 @@ export function handleInterpolatedDeclaration(args: InterpolatedDeclarationConte
   if (state.bail) {
     return;
   }
+  if (d.value.kind !== "interpolated") {
+    return;
+  }
 
   let bail = false;
   const getRootIdentifierInfo = extractRootAndPath;
