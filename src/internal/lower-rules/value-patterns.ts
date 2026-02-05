@@ -1,5 +1,6 @@
 /**
  * Pattern handlers for specific dynamic value shapes.
+ * Core concepts: adapter-resolved values and prop-driven style functions.
  */
 import type { API, JSCodeshift } from "jscodeshift";
 import type { Adapter, ImportSpec } from "../../adapter.js";

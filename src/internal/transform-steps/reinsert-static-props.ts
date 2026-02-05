@@ -1,3 +1,7 @@
+/**
+ * Step: reinsert static property assignments after wrapper emission.
+ * Core concepts: static metadata preservation and insertion order.
+ */
 import { CONTINUE, type StepResult } from "../transform-types.js";
 import { TransformContext } from "../transform-context.js";
 

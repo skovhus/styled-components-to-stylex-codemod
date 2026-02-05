@@ -1,3 +1,7 @@
+/**
+ * Tests for Logger warning collection and report formatting.
+ * Core concepts: warning grouping and output formatting.
+ */
 import { describe, it, expect, beforeEach, vi } from "vitest";
 import { Logger } from "../internal/logger.js";
 

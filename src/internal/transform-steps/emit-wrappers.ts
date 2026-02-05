@@ -1,3 +1,7 @@
+/**
+ * Step: emit wrapper components for eligible styled declarations.
+ * Core concepts: wrapper generation and export tracking.
+ */
 import { emitWrappers } from "../emit-wrappers.js";
 import { CONTINUE, type StepResult } from "../transform-types.js";
 import type { StyledDecl } from "../transform-types.js";

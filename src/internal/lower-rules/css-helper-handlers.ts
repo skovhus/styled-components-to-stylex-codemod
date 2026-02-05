@@ -1,5 +1,6 @@
 /**
  * CSS helper-specific handlers extracted from lower-rules.
+ * Core concepts: css`` helper parsing and variant/test handling.
  */
 import type { JSCodeshift } from "jscodeshift";
 

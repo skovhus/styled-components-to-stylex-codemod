@@ -1,3 +1,7 @@
+/**
+ * Tests for member-expression utilities in jscodeshift helpers.
+ * Core concepts: root/path extraction and literal conversions.
+ */
 import { describe, it, expect } from "vitest";
 import jscodeshift, { type Expression } from "jscodeshift";
 import {

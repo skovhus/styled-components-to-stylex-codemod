@@ -1,3 +1,7 @@
+/**
+ * Main jscodeshift transform pipeline for styled-components to StyleX.
+ * Core concepts: ordered transform steps, context orchestration, and logging.
+ */
 import type { API, FileInfo, Options } from "jscodeshift";
 
 import { Logger } from "./internal/logger.js";

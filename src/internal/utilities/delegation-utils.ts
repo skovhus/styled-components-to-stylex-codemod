@@ -1,3 +1,7 @@
+/**
+ * Utilities for wrapper delegation and component usage checks.
+ * Core concepts: JSX usage detection and wrapper propagation.
+ */
 import type { ASTNode, Collection, JSCodeshift } from "jscodeshift";
 import type { StyledDecl } from "../transform-types.js";
 

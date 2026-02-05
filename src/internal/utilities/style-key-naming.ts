@@ -1,3 +1,7 @@
+/**
+ * Generates stable style key suffixes from prop/condition strings.
+ * Core concepts: suffix normalization and readable naming.
+ */
 import { capitalize } from "./string-utils.js";
 
 type ExpressionKind = Parameters<import("jscodeshift").JSCodeshift["expressionStatement"]>[0];

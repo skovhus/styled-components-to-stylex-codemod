@@ -1,3 +1,7 @@
+/**
+ * Tests for CSS IR selector offset helpers.
+ * Core concepts: line offset detection and selector parsing.
+ */
 import { describe, it, expect } from "vitest";
 import { findUniversalSelectorLineOffset, findSelectorLineOffset } from "../internal/css-ir.js";
 

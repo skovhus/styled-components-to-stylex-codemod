@@ -1,3 +1,7 @@
+/**
+ * Groups variant buckets into dimensions for StyleX variants.
+ * Core concepts: condition parsing and dimension construction.
+ */
 import type { VariantDimension } from "../transform-types.js";
 
 type ParsedVariantCondition =

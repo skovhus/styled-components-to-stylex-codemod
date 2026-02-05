@@ -1,3 +1,7 @@
+/**
+ * Shared transform helpers for property patterns and static metadata.
+ * Core concepts: AST property helpers and static import inspection.
+ */
 import { existsSync, readFileSync } from "node:fs";
 import type { JSCodeshift, Property } from "jscodeshift";
 type ExpressionKind = Parameters<JSCodeshift["expressionStatement"]>[0];

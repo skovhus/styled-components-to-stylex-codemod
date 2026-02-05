@@ -1,3 +1,7 @@
+/**
+ * Rewrites CSS variable entries inside style objects.
+ * Core concepts: var() replacement and AST value normalization.
+ */
 import type { JSCodeshift } from "jscodeshift";
 import type { Adapter, ImportSpec } from "../adapter.js";
 import { rewriteCssVarsInString } from "./css-vars.js";

@@ -1,3 +1,7 @@
+/**
+ * Tests for style key naming helpers.
+ * Core concepts: suffix generation and condition name extraction.
+ */
 import { describe, it, expect } from "vitest";
 import jscodeshift from "jscodeshift";
 import { extractConditionName, toSuffixFromProp } from "./style-key-naming";

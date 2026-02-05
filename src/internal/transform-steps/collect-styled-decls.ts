@@ -1,3 +1,7 @@
+/**
+ * Step: collect styled declarations and helper mixins.
+ * Core concepts: declaration extraction and helper normalization.
+ */
 import { assertNoNullNodesInArrays } from "../utilities/ast-safety.js";
 import { collectStyledDecls } from "../collect-styled-decls.js";
 import { extractStyledCallArgs } from "../extract-styled-call-args.js";

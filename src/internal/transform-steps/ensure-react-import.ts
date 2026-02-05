@@ -1,3 +1,7 @@
+/**
+ * Step: ensure React import when JSX requires it.
+ * Core concepts: React binding insertion and change tracking.
+ */
 import { CONTINUE, type StepResult } from "../transform-types.js";
 import { TransformContext } from "../transform-context.js";
 import { ensureReactBinding } from "../utilities/ensure-react-binding.js";

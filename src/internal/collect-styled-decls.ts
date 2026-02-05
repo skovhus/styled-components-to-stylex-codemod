@@ -1,3 +1,7 @@
+/**
+ * Collects styled declarations and metadata from the AST.
+ * Core concepts: template parsing and pre-resolved style detection.
+ */
 import type { Collection } from "jscodeshift";
 import {
   computeUniversalSelectorLoc,

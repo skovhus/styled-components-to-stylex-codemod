@@ -1,3 +1,7 @@
+/**
+ * End-to-end tests for runTransform output fixtures.
+ * Core concepts: temp workspace execution and output normalization.
+ */
 import { describe, it, expect } from "vitest";
 import { mkdtemp, copyFile, mkdir, readFile } from "node:fs/promises";
 import { tmpdir } from "node:os";

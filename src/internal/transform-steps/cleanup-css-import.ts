@@ -1,3 +1,7 @@
+/**
+ * Step: remove unused css helper imports after transform.
+ * Core concepts: identifier reference scanning and import cleanup.
+ */
 import { CONTINUE, type StepResult } from "../transform-types.js";
 import { isIdentifierReference } from "../transform/css-helpers.js";
 import { TransformContext } from "../transform-context.js";

@@ -1,3 +1,7 @@
+/**
+ * Emits style merging logic for wrapper components.
+ * Core concepts: stylex.props composition and adapter merger hooks.
+ */
 import type { Identifier, JSCodeshift } from "jscodeshift";
 import type { StyleMergerConfig } from "../../adapter.js";
 import type { WrapperEmitter } from "./wrapper-emitter.js";

@@ -1,3 +1,7 @@
+/**
+ * Parses styled-components template literals into raw CSS + slots.
+ * Core concepts: Stylis AST generation and interpolation slot tracking.
+ */
 import type { Expression, TemplateLiteral } from "jscodeshift";
 import { compile } from "stylis";
 import type { Element } from "stylis";

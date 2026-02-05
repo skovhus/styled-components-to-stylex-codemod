@@ -1,3 +1,7 @@
+/**
+ * Creates resolvers for theme value lookups used in inline styles.
+ * Core concepts: theme binding detection and adapter value resolution.
+ */
 import type { ASTNode, Collection, JSCodeshift } from "jscodeshift";
 
 import type { Adapter, ImportSpec } from "../../adapter.js";

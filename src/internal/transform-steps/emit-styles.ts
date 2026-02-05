@@ -1,3 +1,7 @@
+/**
+ * Step: emit stylex.create objects and resolver imports.
+ * Core concepts: style emission and import aliasing.
+ */
 import { emitStylesAndImports } from "../emit-styles.js";
 import { CONTINUE, type StepResult } from "../transform-types.js";
 import { TransformContext } from "../transform-context.js";

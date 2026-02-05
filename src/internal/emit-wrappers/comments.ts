@@ -1,3 +1,7 @@
+/**
+ * Preserves leading comments on emitted wrapper components.
+ * Core concepts: comment normalization and attachment.
+ */
 import type { ASTNode, Comment } from "jscodeshift";
 import type { StyledDecl } from "../transform-types.js";
 

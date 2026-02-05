@@ -1,3 +1,7 @@
+/**
+ * Step: lower CSS rules into StyleX-ready objects.
+ * Core concepts: rule lowering, adapter resolution, and bailout handling.
+ */
 import { lowerRules } from "../lower-rules.js";
 import { CONTINUE, returnResult, type StepResult } from "../transform-types.js";
 import { removeInlinedCssHelperFunctions } from "../transform/css-helpers.js";

@@ -1,3 +1,7 @@
+/**
+ * Handles animation declarations that reference keyframes.
+ * Core concepts: parsing animation values and mapping keyframes names.
+ */
 import valueParser from "postcss-value-parser";
 import type { StyledDecl } from "../transform-types.js";
 import { cssDeclarationToStylexDeclarations } from "../css-prop-mapping.js";

@@ -1,3 +1,7 @@
+/**
+ * Shared type definitions for the transform pipeline.
+ * Core concepts: step results, styled declarations, and options.
+ */
 import type { ASTNode, Comment, JSCodeshift, Options } from "jscodeshift";
 import type { Adapter } from "../adapter.js";
 import type { CssRuleIR } from "./css-ir.js";

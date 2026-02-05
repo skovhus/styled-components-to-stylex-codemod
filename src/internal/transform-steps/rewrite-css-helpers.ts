@@ -1,3 +1,7 @@
+/**
+ * Step: rewrite standalone css helper usages into StyleX references.
+ * Core concepts: helper replacement and style key resolution.
+ */
 import { CONTINUE, type StepResult } from "../transform-types.js";
 import { TransformContext } from "../transform-context.js";
 

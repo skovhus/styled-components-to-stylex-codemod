@@ -1,3 +1,7 @@
+/**
+ * Step: collect static property assignments on styled components.
+ * Core concepts: static metadata capture and inheritance generation.
+ */
 import { CONTINUE, type StepResult } from "../transform-types.js";
 import type { StyledDecl } from "../transform-types.js";
 import { TransformContext } from "../transform-context.js";

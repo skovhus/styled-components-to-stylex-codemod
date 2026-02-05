@@ -1,3 +1,7 @@
+/**
+ * Parses switch statements that return css templates for variant handling.
+ * Core concepts: case extraction and default branch detection.
+ */
 import type { WarningLog } from "../logger.js";
 import { literalToString } from "../utilities/jscodeshift-utils.js";
 

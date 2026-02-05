@@ -1,3 +1,7 @@
+/**
+ * Shared string formatting utilities.
+ * Core concepts: casing conversions and whitespace normalization.
+ */
 export function toKebab(s: string): string {
   return s
     .replace(/([a-z0-9])([A-Z])/g, "$1-$2")

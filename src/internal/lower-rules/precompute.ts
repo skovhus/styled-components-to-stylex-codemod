@@ -1,5 +1,6 @@
 /**
  * Precompute helpers for mixins and base property values.
+ * Core concepts: base style extraction and mixin value tracking.
  */
 import { cssDeclarationToStylexDeclarations } from "../css-prop-mapping.js";
 import type { StyledDecl } from "../transform-types.js";

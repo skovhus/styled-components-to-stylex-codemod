@@ -1,3 +1,7 @@
+/**
+ * Step: ensure style merger import exists when referenced.
+ * Core concepts: identifier usage scanning and import injection.
+ */
 import { CONTINUE, type StepResult } from "../transform-types.js";
 import { isIdentifierReference } from "../transform/css-helpers.js";
 import { TransformContext } from "../transform-context.js";

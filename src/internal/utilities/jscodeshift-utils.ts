@@ -1,3 +1,7 @@
+/**
+ * Shared jscodeshift AST helpers and type guards.
+ * Core concepts: AST traversal, cloning, and node extraction.
+ */
 import type {
   ArrowFunctionExpression,
   ASTNode,

@@ -1,3 +1,7 @@
+/**
+ * Built-in resolution handlers for dynamic interpolations.
+ * Core concepts: adapter hooks, conditional splitting, and StyleX emission.
+ */
 import type { API, JSCodeshift, TemplateLiteral } from "jscodeshift";
 import type {
   CallResolveContext,

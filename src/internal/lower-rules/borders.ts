@@ -1,3 +1,7 @@
+/**
+ * Resolves interpolated border shorthand values into StyleX properties.
+ * Core concepts: border parsing, dynamic value handling, and adapter resolution.
+ */
 import type { API, Expression, JSCodeshift } from "jscodeshift";
 import type { Adapter, ImportSource } from "../../adapter.js";
 import { resolveDynamicNode, type InternalHandlerContext } from "../builtin-handlers.js";

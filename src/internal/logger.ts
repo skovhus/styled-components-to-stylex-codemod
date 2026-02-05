@@ -1,3 +1,7 @@
+/**
+ * Logger and warning types for transform diagnostics.
+ * Core concepts: severity classification and source context reporting.
+ */
 import { readFileSync } from "node:fs";
 
 type Severity = "info" | "warning" | "error";

@@ -1,3 +1,7 @@
+/**
+ * Post-processes the transformed JSX tree after style emission.
+ * Core concepts: descendant overrides and stylex.props cleanup.
+ */
 import type { Collection } from "jscodeshift";
 import type { DescendantOverride } from "./lower-rules.js";
 

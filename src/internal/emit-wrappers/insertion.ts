@@ -1,3 +1,7 @@
+/**
+ * Inserts emitted wrapper nodes into the AST and preserves comments.
+ * Core concepts: wrapper ordering and React type import management.
+ */
 import type { ASTNode, Comment } from "jscodeshift";
 import type { WrapperEmitter } from "./wrapper-emitter.js";
 import { ensureReactBinding } from "../utilities/ensure-react-binding.js";

@@ -1,3 +1,7 @@
+/**
+ * Wraps adapter resolution hooks with safety checks and warnings.
+ * Core concepts: guarded adapter calls and bail signaling.
+ */
 import type {
   Adapter,
   CallResolveContext,

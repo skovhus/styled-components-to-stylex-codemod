@@ -1,5 +1,6 @@
 /**
- * Adapter - Single user entry point for customizing the codemod.
+ * Adapter entry point for customizing the codemod.
+ * Core concepts: value resolution hooks and adapter validation.
  */
 
 import { assertValidAdapter } from "./internal/public-api-validation.js";
