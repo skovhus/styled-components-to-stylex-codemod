@@ -1,3 +1,7 @@
+/**
+ * Helper utilities for transform naming and AST conversions.
+ * Core concepts: style key naming and literal serialization.
+ */
 import type { API } from "jscodeshift";
 
 import { isAstNode } from "../utilities/jscodeshift-utils.js";

@@ -1,3 +1,7 @@
+/**
+ * Step: detect unsupported styled-components patterns and bail early.
+ * Core concepts: selector validation and warning reporting.
+ */
 import { CONTINUE, returnResult, type StepResult } from "../transform-types.js";
 import { TransformContext } from "../transform-context.js";
 import { isStyledTag } from "../transform/css-helpers.js";

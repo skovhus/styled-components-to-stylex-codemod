@@ -1,3 +1,7 @@
+/**
+ * Parses css`` helper templates into IR and resolves helper styles.
+ * Core concepts: Stylis parsing, selector normalization, and dynamic slots.
+ */
 import { compile } from "stylis";
 
 import type { Adapter, ImportSource, ImportSpec } from "../../adapter.js";

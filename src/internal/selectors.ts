@@ -1,3 +1,7 @@
+/**
+ * Parses and normalizes selectors for StyleX compatibility checks.
+ * Core concepts: pseudo/attribute parsing and selector normalization.
+ */
 import selectorParser from "postcss-selector-parser";
 
 /**

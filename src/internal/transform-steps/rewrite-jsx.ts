@@ -1,3 +1,7 @@
+/**
+ * Step: rewrite JSX usage and remove unused styled declarations.
+ * Core concepts: wrapper substitution and prop argument updates.
+ */
 import { CONTINUE, type StepResult } from "../transform-types.js";
 import type { StyledDecl } from "../transform-types.js";
 import { TransformContext } from "../transform-context.js";

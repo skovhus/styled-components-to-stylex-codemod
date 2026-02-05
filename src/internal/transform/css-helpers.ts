@@ -1,3 +1,7 @@
+/**
+ * Collects and normalizes css`` helper functions for reuse.
+ * Core concepts: template parsing, rule normalization, and helper metadata.
+ */
 import type { Collection, JSCodeshift, TemplateLiteral } from "jscodeshift";
 import { compile } from "stylis";
 

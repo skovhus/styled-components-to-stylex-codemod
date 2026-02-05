@@ -1,3 +1,7 @@
+/**
+ * Step: extract css helper blocks into reusable style objects.
+ * Core concepts: helper discovery and usage validation.
+ */
 import { CONTINUE, returnResult, type StepResult } from "../transform-types.js";
 import { extractAndRemoveCssHelpers } from "../transform/css-helpers.js";
 import { TransformContext } from "../transform-context.js";

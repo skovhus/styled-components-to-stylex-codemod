@@ -1,3 +1,7 @@
+/**
+ * AST safety checks for null nodes and structural issues.
+ * Core concepts: recursive validation and error reporting.
+ */
 export function assertNoNullNodesInArrays(node: unknown): void {
   const seen = new WeakSet<object>();
   const visit = (cur: unknown, path: string) => {

@@ -1,5 +1,6 @@
 /**
  * Import resolution and shadowing detection utilities.
+ * Core concepts: local binding inspection and safe identifier generation.
  */
 import type { ASTNode, Collection, JSCodeshift } from "jscodeshift";
 import type { ImportSource } from "../../adapter.js";

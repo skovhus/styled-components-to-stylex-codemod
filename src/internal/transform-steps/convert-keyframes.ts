@@ -1,3 +1,7 @@
+/**
+ * Step: convert styled-components keyframes to stylex.keyframes.
+ * Core concepts: keyframes detection and import updates.
+ */
 import { convertStyledKeyframes } from "../keyframes.js";
 import { CONTINUE, type StepResult } from "../transform-types.js";
 import { TransformContext } from "../transform-context.js";

@@ -1,3 +1,7 @@
+/**
+ * Maps CSS declarations to StyleX properties and expands shorthands.
+ * Core concepts: background resolution and shorthand splitting.
+ */
 import type { CssDeclarationIR, CssValue } from "./css-ir.js";
 import { splitDirectionalProperty } from "./stylex-shorthands.js";
 import { isBackgroundImageValue, looksLikeLength } from "./utilities/string-utils.js";

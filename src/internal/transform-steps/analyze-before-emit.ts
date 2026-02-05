@@ -1,3 +1,7 @@
+/**
+ * Step: analyze declarations before emitting styles and wrappers.
+ * Core concepts: wrapper decisions, export mapping, and styles identifier selection.
+ */
 import type { JSXAttribute, JSXSpreadAttribute } from "jscodeshift";
 import { CONTINUE, type StepResult } from "../transform-types.js";
 import type { StyledDecl } from "../transform-types.js";

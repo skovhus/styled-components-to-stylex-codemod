@@ -1,3 +1,7 @@
+/**
+ * Fixture adapters used by tests and e2e runs.
+ * Core concepts: adapter hooks and test-specific resolution.
+ */
 import {
   defineAdapter,
   type ExternalInterfaceResult,

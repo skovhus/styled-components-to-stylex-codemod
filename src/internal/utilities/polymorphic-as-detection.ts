@@ -1,3 +1,7 @@
+/**
+ * Utilities for detecting polymorphic `as` prop patterns.
+ * Core concepts: destructured defaults and React.ElementType checks.
+ */
 import type { ASTNode, Collection, JSCodeshift } from "jscodeshift";
 
 /**

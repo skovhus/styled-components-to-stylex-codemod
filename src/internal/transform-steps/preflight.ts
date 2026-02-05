@@ -1,3 +1,7 @@
+/**
+ * Preflight step to normalize JSX and gather transform context.
+ * Core concepts: import detection and JSX attribute normalization.
+ */
 import type { ASTPath, ImportDeclaration, JSXAttribute } from "jscodeshift";
 import { CONTINUE, returnResult, type StepResult } from "../transform-types.js";
 import { isStyledTag as isStyledTagImpl } from "../transform/css-helpers.js";

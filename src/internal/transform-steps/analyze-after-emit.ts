@@ -1,3 +1,7 @@
+/**
+ * Step: analyze post-emit wrappers and delegation needs.
+ * Core concepts: wrapper decisions and polymorphic-as handling.
+ */
 import { CONTINUE, type StepResult } from "../transform-types.js";
 import type { StyledDecl } from "../transform-types.js";
 import { TransformContext } from "../transform-context.js";

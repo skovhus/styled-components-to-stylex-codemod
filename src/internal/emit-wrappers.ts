@@ -1,3 +1,7 @@
+/**
+ * Emits wrapper components and updates exports for transformed styles.
+ * Core concepts: intrinsic vs component wrappers and insertion ordering.
+ */
 import type { ASTNode, Collection, JSCodeshift, Property } from "jscodeshift";
 import type { StyleMergerConfig } from "../adapter.js";
 import type { StyledDecl } from "./transform-types.js";

@@ -1,3 +1,7 @@
+/**
+ * Ensures React binding imports exist when JSX needs them.
+ * Core concepts: import inspection and React binding insertion.
+ */
 import type { ASTNode, Collection, JSCodeshift } from "jscodeshift";
 
 /**

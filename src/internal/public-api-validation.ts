@@ -1,3 +1,7 @@
+/**
+ * Validates adapter/public API inputs and formats errors.
+ * Core concepts: shape checks and readable diagnostics.
+ */
 import type { Adapter } from "../adapter.js";
 
 export function describeValue(value: unknown): string {

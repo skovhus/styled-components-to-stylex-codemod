@@ -1,3 +1,7 @@
+/**
+ * Shared transform context passed through pipeline steps.
+ * Core concepts: adapter wiring, parsing helpers, and shared state.
+ */
 import type { API, FileInfo } from "jscodeshift";
 
 import type { Adapter, ImportSource, ImportSpec } from "../adapter.js";

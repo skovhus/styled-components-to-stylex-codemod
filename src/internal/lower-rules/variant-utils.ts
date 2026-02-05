@@ -1,5 +1,6 @@
 /**
  * Shared helpers for variant condition parsing and application.
+ * Core concepts: test normalization, variant buckets, and prop stripping.
  */
 import type { JSCodeshift } from "jscodeshift";
 import type { ArrowFnParamBindings } from "../utilities/jscodeshift-utils.js";

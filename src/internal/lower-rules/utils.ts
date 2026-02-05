@@ -1,3 +1,7 @@
+/**
+ * Shared lower-rules helpers for merging and formatting style objects.
+ * Core concepts: deep merge semantics and AST node detection.
+ */
 import { isAstNode } from "../utilities/jscodeshift-utils.js";
 
 export { toKebab } from "../utilities/string-utils.js";

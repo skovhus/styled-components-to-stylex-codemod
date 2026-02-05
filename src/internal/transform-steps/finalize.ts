@@ -1,3 +1,7 @@
+/**
+ * Step: finalize output formatting and error handling.
+ * Core concepts: AST serialization and formatter integration.
+ */
 import { assertNoNullNodesInArrays } from "../utilities/ast-safety.js";
 import { formatOutput } from "../utilities/format-output.js";
 import type { TransformResult } from "../transform-types.js";

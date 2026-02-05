@@ -1,3 +1,7 @@
+/**
+ * Step: build import map for adapter resolution.
+ * Core concepts: identifier mapping and import source tracking.
+ */
 import { CONTINUE, type StepResult } from "../transform-types.js";
 import { buildImportMap } from "../transform-import-map.js";
 import { TransformContext } from "../transform-context.js";

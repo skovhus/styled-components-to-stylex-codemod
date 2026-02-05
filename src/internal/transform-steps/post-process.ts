@@ -1,3 +1,7 @@
+/**
+ * Step: post-process transformed AST and cleanup imports.
+ * Core concepts: descendant overrides and import reconciliation.
+ */
 import path from "node:path";
 import { postProcessTransformedAst } from "../rewrite-jsx.js";
 import { CONTINUE, type StepResult } from "../transform-types.js";

@@ -1,3 +1,7 @@
+/**
+ * Helpers for extracting and handling interpolation parts in CSS templates.
+ * Core concepts: static prefix/suffix extraction and value wrapping.
+ */
 import type { StyledDecl } from "../transform-types.js";
 import { cssDeclarationToStylexDeclarations } from "../css-prop-mapping.js";
 import {

@@ -1,3 +1,7 @@
+/**
+ * Builds a map of local identifiers to their import sources.
+ * Core concepts: import collection and file-relative resolution.
+ */
 import { dirname, resolve as pathResolve } from "node:path";
 import type { ASTNode, Collection, JSCodeshift } from "jscodeshift";
 import type { ImportSource } from "../adapter.js";

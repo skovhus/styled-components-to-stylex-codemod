@@ -1,3 +1,7 @@
+/**
+ * Normalized CSS IR extracted from stylis output.
+ * Core concepts: declaration/value modeling and selector normalization.
+ */
 import type { Element } from "stylis";
 import type { StyledInterpolationSlot } from "./styled-css.js";
 

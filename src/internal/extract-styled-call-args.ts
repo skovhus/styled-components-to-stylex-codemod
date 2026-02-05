@@ -1,3 +1,7 @@
+/**
+ * Extracts complex styled() call arguments into named variables.
+ * Core concepts: call argument normalization and helper declaration insertion.
+ */
 import type { Collection } from "jscodeshift";
 import { capitalize } from "./utilities/string-utils.js";
 

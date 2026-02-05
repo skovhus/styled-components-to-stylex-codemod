@@ -1,3 +1,7 @@
+/**
+ * Policy checks for opt-out conditions and rule gating.
+ * Core concepts: ThemeProvider detection and warning emission.
+ */
 import type {
   ASTNode,
   Collection,

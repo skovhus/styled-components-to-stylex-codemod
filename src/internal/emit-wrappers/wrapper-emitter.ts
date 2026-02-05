@@ -1,3 +1,7 @@
+/**
+ * Emits wrapper component implementations and stylex.props usage.
+ * Core concepts: JSX construction, prop forwarding, and style merging.
+ */
 import type {
   ASTNode,
   Collection,

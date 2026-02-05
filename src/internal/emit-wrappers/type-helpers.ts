@@ -1,3 +1,7 @@
+/**
+ * Helper utilities for wrapper typing and element metadata.
+ * Core concepts: variant sorting and intrinsic tag classification.
+ */
 import type { StyledDecl } from "../transform-types.js";
 
 /**

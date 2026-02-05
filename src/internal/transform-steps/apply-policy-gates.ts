@@ -1,3 +1,7 @@
+/**
+ * Step: apply policy-based skip gates and warnings.
+ * Core concepts: ThemeProvider detection and createGlobalStyle handling.
+ */
 import {
   collectCreateGlobalStyleWarnings,
   collectThemeProviderSkipWarnings,

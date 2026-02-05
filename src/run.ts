@@ -1,3 +1,7 @@
+/**
+ * Runs the codemod over input files with an adapter.
+ * Core concepts: jscodeshift execution, globs, and adapter hooks.
+ */
 import { run as jscodeshiftRun } from "jscodeshift/src/Runner.js";
 import { fileURLToPath } from "node:url";
 import { dirname, join } from "node:path";

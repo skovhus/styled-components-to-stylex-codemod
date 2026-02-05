@@ -1,3 +1,7 @@
+/**
+ * Utilities for analyzing inline style arrow functions and templates.
+ * Core concepts: prop extraction, conditional detection, and template assembly.
+ */
 import type { JSCodeshift } from "jscodeshift";
 import {
   type ASTNodeRecord,

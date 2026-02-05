@@ -1,5 +1,6 @@
 /**
  * Shared type aliases used across lower-rules helpers.
+ * Core concepts: common expression and test metadata types.
  */
 import type { JSCodeshift } from "jscodeshift";
 

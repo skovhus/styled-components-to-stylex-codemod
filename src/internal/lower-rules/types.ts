@@ -1,3 +1,7 @@
+/**
+ * Shared type and prop-helper utilities for lower-rules.
+ * Core concepts: shouldForwardProp management and TS type inference hooks.
+ */
 import type { StyledDecl } from "../transform-types.js";
 
 export { literalToStaticValue } from "../utilities/jscodeshift-utils.js";

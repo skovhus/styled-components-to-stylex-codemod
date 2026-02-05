@@ -1,3 +1,7 @@
+/**
+ * Parses expression strings into AST nodes with TSX support.
+ * Core concepts: safe parsing and parenthesis normalization.
+ */
 import type { API, JSCodeshift } from "jscodeshift";
 
 type ExpressionKind = Parameters<JSCodeshift["expressionStatement"]>[0];

@@ -1,3 +1,7 @@
+/**
+ * Step: upgrade polymorphic `as` prop types for wrappers.
+ * Core concepts: prop type normalization and React.ElementType detection.
+ */
 import { CONTINUE, type StepResult } from "../transform-types.js";
 import { TransformContext } from "../transform-context.js";
 import {

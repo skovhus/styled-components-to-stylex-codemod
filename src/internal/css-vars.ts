@@ -1,3 +1,7 @@
+/**
+ * Rewrites CSS variable usages into StyleX-compatible expressions.
+ * Core concepts: var() parsing, adapter resolution, and import injection.
+ */
 import type { JSCodeshift } from "jscodeshift";
 import type { Adapter, ImportSpec } from "../adapter.js";
 

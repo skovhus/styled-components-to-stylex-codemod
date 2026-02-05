@@ -1,3 +1,7 @@
+/**
+ * Emits wrapper components for non-intrinsic styled declarations.
+ * Core concepts: prop mapping, style merging, and JSX construction.
+ */
 import type { ASTNode, Property } from "jscodeshift";
 import type { StyledDecl } from "../transform-types.js";
 import { emitStyleMerging } from "./style-merger.js";

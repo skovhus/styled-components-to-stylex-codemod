@@ -1,3 +1,7 @@
+/**
+ * Wrapper emission types and inline prop utilities.
+ * Core concepts: export metadata and inline style prop collection.
+ */
 import type { ASTNode, JSCodeshift } from "jscodeshift";
 
 export type ExportInfo = { exportName: string; isDefault: boolean; isSpecifier: boolean };

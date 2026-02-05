@@ -1,3 +1,7 @@
+/**
+ * Emits StyleX style objects and required imports into the AST.
+ * Core concepts: style object serialization and import management.
+ */
 import type { StyledDecl, VariantDimension } from "./transform-types.js";
 import path from "node:path";
 import type { ImportSource, ImportSpec } from "../adapter.js";

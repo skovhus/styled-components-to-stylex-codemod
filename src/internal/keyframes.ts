@@ -1,3 +1,7 @@
+/**
+ * Converts styled-components keyframes into StyleX keyframes objects.
+ * Core concepts: Stylis parsing and keyframes extraction.
+ */
 import type { ASTNode, Collection, ImportDeclaration, JSCodeshift } from "jscodeshift";
 import { compile } from "stylis";
 import { cssPropertyToStylexProp, resolveBackgroundStylexProp } from "./css-prop-mapping.js";

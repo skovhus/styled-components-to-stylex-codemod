@@ -1,3 +1,7 @@
+/**
+ * Tracks leading/trailing comments for StyleX properties.
+ * Core concepts: comment metadata propagation and property mapping.
+ */
 export function addPropComments(
   target: any,
   prop: string,

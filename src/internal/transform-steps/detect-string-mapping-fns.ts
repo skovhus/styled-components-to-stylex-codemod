@@ -1,3 +1,7 @@
+/**
+ * Step: detect string-mapping helper functions for value resolution.
+ * Core concepts: simple function pattern recognition.
+ */
 import { CONTINUE, type StepResult } from "../transform-types.js";
 import { TransformContext } from "../transform-context.js";
 

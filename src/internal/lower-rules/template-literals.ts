@@ -1,3 +1,7 @@
+/**
+ * Resolves template literal CSS into StyleX styles and dynamic entries.
+ * Core concepts: Stylis parsing, interpolation handling, and variant extraction.
+ */
 import type { Expression, JSCodeshift, TemplateLiteral } from "jscodeshift";
 import { compile } from "stylis";
 import type { Adapter, ImportSource, ImportSpec } from "../../adapter.js";

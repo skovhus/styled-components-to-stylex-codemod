@@ -1,3 +1,7 @@
+/**
+ * Utilities for expanding CSS shorthands to StyleX longhands.
+ * Core concepts: directional expansion and longhand-only enforcement.
+ */
 import valueParser from "postcss-value-parser";
 
 export type DirectionalEntry = { prop: string; value: string };
