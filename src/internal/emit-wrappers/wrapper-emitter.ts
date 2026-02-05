@@ -793,10 +793,34 @@ export class WrapperEmitter {
     d: StyledDecl;
     allowClassNameProp: boolean;
     allowStyleProp: boolean;
+    wrappedComponentIsInternalWrapper?: boolean;
+    hasExplicitPropsType?: boolean;
   }): string {
-    const { d, allowClassNameProp, allowStyleProp } = args;
+    const {
+      d,
+      allowClassNameProp,
+      allowStyleProp,
+      wrappedComponentIsInternalWrapper,
+      hasExplicitPropsType,
+    } = args;
     const lines: string[] = [];
-    const literal = lines.length > 0 ? `{\n${lines.join("\n")}\n}` : "{}";
+    // When external styles are EXPLICITLY enabled via adapter (d.supportsExternalStyles) and
+    // the wrapped component is NOT one of our generated wrappers, add className/style to the type.
+    // External components may not include these props in their type definition, so we need to
+    // explicitly add them to avoid TypeScript errors when destructuring.
+    // Note: We only add these when supportsExternalStyles is true, not when allowClassNameProp
+    // is true for other reasons (like spread props usage), because in those cases the wrapped
+    // component likely already has className/style in its props.
+    // Skip adding here if there's an explicit props type - it will be merged there instead.
+    const shouldAddStyleProps =
+      d.supportsExternalStyles && !wrappedComponentIsInternalWrapper && !hasExplicitPropsType;
+    if (shouldAddStyleProps && allowClassNameProp) {
+      lines.push("className?: string");
+    }
+    if (shouldAddStyleProps && allowStyleProp) {
+      lines.push("style?: React.CSSProperties");
+    }
+    const literal = lines.length > 0 ? `{ ${lines.join(", ")} }` : "{}";
     const base = `React.ComponentPropsWithRef<typeof ${(d.base as any).ident}>`;
     const omitted: string[] = [];
     if (!allowClassNameProp) {

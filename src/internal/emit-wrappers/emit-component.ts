@@ -7,6 +7,7 @@ import type { JsxAttr, JsxTagName, StatementKind, WrapperEmitter } from "./wrapp
 import {
   getAttrsAsString,
   injectRefPropIntoTypeLiteralString,
+  injectStylePropsIntoTypeLiteralString,
   sortVariantEntriesBySpecificity,
   TAG_TO_HTML_ELEMENT,
 } from "./type-helpers.js";
@@ -75,6 +76,21 @@ export function emitComponentWrappers(emitter: WrapperEmitter): {
       }
     }
     return null;
+  };
+
+  // Helper to check if a locally-defined component's props include a specific prop.
+  // This is used to avoid adding className/style when the wrapped component already has them.
+  // Uses findComponentPropsType (which returns null for imported components) and
+  // emitter.getExplicitPropNames (which extracts prop names from type literals, interfaces,
+  // and type aliases, including through intersections).
+  const localComponentHasProp = (componentName: string, propName: string): boolean => {
+    const propsType = findComponentPropsType(componentName);
+    if (!propsType) {
+      // Component is not defined locally or has no typed props - assume it doesn't have the prop
+      return false;
+    }
+    const explicitProps = emitter.getExplicitPropNames(propsType);
+    return explicitProps.has(propName);
   };
 
   // Component wrappers (styled(Component)) - these wrap another component
@@ -151,18 +167,47 @@ export function emitComponentWrappers(emitter: WrapperEmitter): {
             `C extends React.ElementType = typeof ${wrappedComponent}`,
           );
         } else {
+          // Check if the wrapped component is one of our styled component wrappers.
+          // If so, it already has className/style in its props and we don't need to add them.
+          const wrappedComponentIsStyledWrapper = wrapperDecls.some(
+            (decl) => decl.localName === wrappedComponent,
+          );
+          // Check if the wrapped component is a local React component that already has className/style.
+          // This avoids adding redundant props for components that already accept them.
+          const wrappedHasClassName = localComponentHasProp(wrappedComponent, "className");
+          const wrappedHasStyle = localComponentHasProp(wrappedComponent, "style");
+          const skipStyleProps =
+            wrappedComponentIsStyledWrapper || (wrappedHasClassName && wrappedHasStyle);
+          const hasExplicitPropsType = !!explicit;
           const inferred = emitter.inferredComponentWrapperPropsTypeText({
             d,
             allowClassNameProp,
             allowStyleProp,
+            wrappedComponentIsInternalWrapper: skipStyleProps,
+            hasExplicitPropsType,
           });
           // Add ref support when .attrs({ as: "element" }) is used
           const attrsAs = getAttrsAsString(d);
           const refElementType = attrsAs ? TAG_TO_HTML_ELEMENT[attrsAs] : undefined;
+          // Build explicit props type with ref and className/style injected
+          let explicitWithExtras = explicit;
+          if (explicitWithExtras && refElementType) {
+            explicitWithExtras = injectRefPropIntoTypeLiteralString(
+              explicitWithExtras,
+              refElementType,
+            );
+          }
+          // Inject className/style into explicit props when external styles are explicitly enabled
+          // via adapter (d.supportsExternalStyles) and the wrapped component doesn't already have them
+          if (explicitWithExtras && d.supportsExternalStyles && !skipStyleProps) {
+            explicitWithExtras = injectStylePropsIntoTypeLiteralString(explicitWithExtras, {
+              className: allowClassNameProp && !wrappedHasClassName,
+              style: allowStyleProp && !wrappedHasStyle,
+            });
+          }
           const explicitWithRef =
-            refElementType && explicit
-              ? injectRefPropIntoTypeLiteralString(explicit, refElementType)
-              : (explicit ?? (refElementType ? `{ ref?: React.Ref<${refElementType}>; }` : null));
+            explicitWithExtras ??
+            (refElementType ? `{ ref?: React.Ref<${refElementType}>; }` : null);
           // NOTE: `inferred` already includes `React.ComponentProps<typeof WrappedComponent>`,
           // which carries `children` when the wrapped component accepts them. Wrapping the
           // explicit extra props in `PropsWithChildren` is redundant and can cause extra churn.
