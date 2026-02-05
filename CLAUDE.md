@@ -79,6 +79,11 @@ Use the Playwright MCP to inspect test case rendering.
 
 Skills are located in `.claude/skills/`.
 
+## Plans
+
+- Store implementation plans in `plans/` as markdown files
+- Name format: `YYYY-MM-DD-feature-name.md`
+
 ## Post-Implementation Workflow
 
 After implementing any feature or fix, agents MUST:
