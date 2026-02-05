@@ -118,7 +118,7 @@ export function emitStylesAndImports(ctx: TransformContext): { emptyStyleKeys: S
   for (const importNode of styledImports.nodes()) {
     const specifiers = (importNode as any).specifiers ?? [];
     for (const spec of specifiers) {
-      // Skip default import (styled) and namespace imports
+      // Skip default import (styled) and namespace imports - handled separately above
       if (spec.type !== "ImportSpecifier") {
         continue;
       }

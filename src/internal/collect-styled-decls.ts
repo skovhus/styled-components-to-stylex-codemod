@@ -61,6 +61,21 @@ function collectStyledDeclsImpl(args: {
     universalSelectorLoc = computeUniversalSelectorLoc(getTemplateLoc(template), rawCss);
   };
 
+  /**
+   * Convert a MemberExpression AST node to a string like "animated.div".
+   * Returns null if the expression doesn't match the expected pattern.
+   */
+  const memberExprToIdent = (expr: any): string | null => {
+    if (
+      expr?.type === "MemberExpression" &&
+      expr.object?.type === "Identifier" &&
+      expr.property?.type === "Identifier"
+    ) {
+      return `${expr.object.name}.${expr.property.name}`;
+    }
+    return null;
+  };
+
   const parseAttrsArg = (arg0: any): StyledDecl["attrsInfo"] | undefined => {
     if (!arg0) {
       return undefined;
@@ -719,7 +734,7 @@ function collectStyledDeclsImpl(args: {
         return;
       }
 
-      // styled(Component).attrs(...)`...` - component with attrs
+      // styled(Component).attrs(...)`...` - component with attrs (Identifier)
       if (
         tag.type === "CallExpression" &&
         tag.callee.type === "MemberExpression" &&
@@ -750,6 +765,51 @@ function collectStyledDeclsImpl(args: {
           localName,
           base: { kind: "component", ident },
           styleKey,
+          rules,
+          templateExpressions: parsed.slots.map((s) => s.expression),
+          rawCss: parsed.rawCss,
+          ...(templateLoc ? { loc: templateLoc } : {}),
+          ...(attrsInfo ? { attrsInfo } : {}),
+          ...(shouldForceWrapperForAttrs(attrsInfo) ? { needsWrapperComponent: true } : {}),
+          ...(propsType ? { propsType } : {}),
+          ...(leadingComments ? { leadingComments } : {}),
+        });
+        return;
+      }
+
+      // styled(Component.sub).attrs(...)`...` - MemberExpression component with attrs (e.g., animated.div)
+      if (
+        tag.type === "CallExpression" &&
+        tag.callee.type === "MemberExpression" &&
+        tag.callee.property.type === "Identifier" &&
+        tag.callee.property.name === "attrs" &&
+        tag.callee.object.type === "CallExpression" &&
+        tag.callee.object.callee.type === "Identifier" &&
+        tag.callee.object.callee.name === styledDefaultImport &&
+        tag.callee.object.arguments.length === 1 &&
+        tag.callee.object.arguments[0]?.type === "MemberExpression"
+      ) {
+        const localName = id.name;
+        const ident = memberExprToIdent(tag.callee.object.arguments[0]);
+        if (!ident) {
+          return;
+        }
+        const template = init.quasi;
+        const templateLoc = getTemplateLoc(template);
+        const parsed = parseStyledTemplateLiteral(template);
+        const rules = normalizeStylisAstToIR(parsed.stylisAst, parsed.slots, {
+          rawCss: parsed.rawCss,
+        });
+        if (hasUniversalSelectorInRules(rules)) {
+          noteUniversalSelector(template, parsed.rawCss);
+        }
+        const attrsInfo = parseAttrsArg(tag.arguments[0]);
+
+        styledDecls.push({
+          ...placementHints,
+          localName,
+          base: { kind: "component", ident },
+          styleKey: toStyleKey(localName),
           rules,
           templateExpressions: parsed.slots.map((s) => s.expression),
           rawCss: parsed.rawCss,
@@ -806,12 +866,7 @@ function collectStyledDeclsImpl(args: {
         tag.arguments[0]?.type === "MemberExpression"
       ) {
         const localName = id.name;
-        const memberExpr = tag.arguments[0] as any;
-        // Convert MemberExpression to string like "animated.div"
-        const ident =
-          memberExpr.object?.type === "Identifier" && memberExpr.property?.type === "Identifier"
-            ? `${memberExpr.object.name}.${memberExpr.property.name}`
-            : null;
+        const ident = memberExprToIdent(tag.arguments[0]);
         if (!ident) {
           return;
         }
