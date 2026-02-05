@@ -1,7 +1,3 @@
-/**
- * Tests for public API runtime validation errors.
- * Core concepts: adapter contract checks and DX messaging.
- */
 import { describe, it, expect } from "vitest";
 import { defineAdapter } from "../adapter.js";
 import { runTransform } from "../run.js";

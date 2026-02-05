@@ -1,7 +1,3 @@
-/**
- * Snapshot and behavior tests for the main transform pipeline.
- * Core concepts: fixture transforms, warnings, and adapter behavior.
- */
 import { describe, it, expect, vi } from "vitest";
 import { applyTransform } from "jscodeshift/src/testUtils.js";
 import jscodeshift from "jscodeshift";
