@@ -576,6 +576,7 @@ export function lowerRules(ctx: TransformContext): {
       target: Record<string, unknown>,
       exprAst: unknown,
       propName: "padding" | "margin",
+      important: boolean,
     ): boolean => {
       const unwrapNode = (
         value: unknown,
@@ -598,7 +599,7 @@ export function lowerRules(ctx: TransformContext): {
       const entries = splitDirectionalProperty({
         prop: propName,
         rawValue,
-        important: d.important,
+        important,
       });
       if (!entries.length) {
         return false;
@@ -3579,7 +3580,7 @@ export function lowerRules(ctx: TransformContext): {
               }
               if (
                 (cssProp === "padding" || cssProp === "margin") &&
-                expandBoxShorthand(target, parsed.exprAst, cssProp)
+                expandBoxShorthand(target, parsed.exprAst, cssProp, d.important)
               ) {
                 return;
               }
@@ -3663,7 +3664,7 @@ export function lowerRules(ctx: TransformContext): {
               }
               if (
                 (cssProp === "padding" || cssProp === "margin") &&
-                expandBoxShorthand(target, parsed.exprAst, cssProp)
+                expandBoxShorthand(target, parsed.exprAst, cssProp, d.important)
               ) {
                 return;
               }
@@ -5065,6 +5066,67 @@ export function lowerRules(ctx: TransformContext): {
         delete styleObj.height;
         delete styleObj.opacity;
         delete styleObj.transform;
+      }
+    }
+
+    if (decl.themeConditionalStyleKeys && decl.extraStylexPropsArgs?.length) {
+      const { dark, light } = decl.themeConditionalStyleKeys;
+      const darkStyle = extraStyleObjects.get(dark);
+      const lightStyle = extraStyleObjects.get(light);
+      const isEmptyStyle = (obj: Record<string, unknown> | undefined): boolean =>
+        !obj || Object.keys(obj).length === 0;
+      const darkEmpty = isEmptyStyle(darkStyle);
+      const lightEmpty = isEmptyStyle(lightStyle);
+
+      const isStyleKeyMember = (node: any, key: string): boolean =>
+        node?.type === "MemberExpression" &&
+        node.object?.type === "Identifier" &&
+        node.object.name === "styles" &&
+        node.property?.type === "Identifier" &&
+        node.property.name === key;
+      const isThemeIsDarkTest = (node: any): boolean =>
+        node?.type === "MemberExpression" &&
+        node.object?.type === "Identifier" &&
+        node.object.name === "theme" &&
+        node.property?.type === "Identifier" &&
+        node.property.name === "isDark";
+      const isThemeConditional = (expr: any): boolean =>
+        expr?.type === "ConditionalExpression" &&
+        isThemeIsDarkTest(expr.test) &&
+        isStyleKeyMember(expr.consequent, dark) &&
+        isStyleKeyMember(expr.alternate, light);
+
+      const themeArgIndex = decl.extraStylexPropsArgs.findIndex((arg) =>
+        isThemeConditional(arg.expr),
+      );
+      if (themeArgIndex !== -1) {
+        if (darkEmpty && lightEmpty) {
+          decl.extraStylexPropsArgs.splice(themeArgIndex, 1);
+          if (decl.extraStylexPropsArgs.length === 0) {
+            decl.extraStylexPropsArgs = undefined;
+          }
+          decl.needsThemeHook = false;
+          decl.themeConditionalStyleKeys = undefined;
+          extraStyleObjects.delete(dark);
+          extraStyleObjects.delete(light);
+        } else if (darkEmpty || lightEmpty) {
+          const themeTest = j.memberExpression(j.identifier("theme"), j.identifier("isDark"));
+          const key = darkEmpty ? light : dark;
+          const test = darkEmpty ? j.unaryExpression("!", themeTest) : themeTest;
+          const nextExpr = j.logicalExpression(
+            "&&",
+            test,
+            j.memberExpression(j.identifier("styles"), j.identifier(key)),
+          );
+          const entry = decl.extraStylexPropsArgs[themeArgIndex];
+          decl.extraStylexPropsArgs[themeArgIndex] = { ...entry, expr: nextExpr };
+          if (darkEmpty) {
+            extraStyleObjects.delete(dark);
+          }
+          if (lightEmpty) {
+            extraStyleObjects.delete(light);
+          }
+        }
       }
     }
 
