@@ -94,10 +94,11 @@ export function injectStylePropsIntoTypeLiteralString(
   options: { className?: boolean; style?: boolean },
 ): string {
   const propsToAdd: string[] = [];
-  if (options.className && !/\bclassName\s*\?\s*:/.test(typeText)) {
+  // Match both optional (className?:) and required (className:) declarations
+  if (options.className && !/\bclassName\s*\??\s*:/.test(typeText)) {
     propsToAdd.push("className?: string");
   }
-  if (options.style && !/\bstyle\s*\?\s*:/.test(typeText)) {
+  if (options.style && !/\bstyle\s*\??\s*:/.test(typeText)) {
     propsToAdd.push("style?: React.CSSProperties");
   }
   if (propsToAdd.length === 0) {
