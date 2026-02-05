@@ -261,6 +261,9 @@ export function emitIntrinsicPolymorphicWrappers(ctx: EmitIntrinsicContext): voi
       });
 
       const fnBodyStmts: StatementKind[] = [declStmt];
+      if (d.needsThemeHook) {
+        fnBodyStmts.push(emitter.buildThemeHookStatement());
+      }
       if (merging.sxDecl) {
         fnBodyStmts.push(merging.sxDecl);
       }

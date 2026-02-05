@@ -231,6 +231,14 @@ export type StyledDecl = {
    */
   extraStylexPropsArgs?: Array<{ when?: string; expr: ExpressionKind }>;
   /**
+   * Style keys for theme.isDark conditional styles.
+   */
+  themeConditionalStyleKeys?: { dark: string; light: string };
+  /**
+   * Whether this component wrapper should call useTheme().
+   */
+  needsThemeHook?: boolean;
+  /**
    * Tracks the interleaved order of extra mixins. Each entry indicates which array
    * to take the next item from: 'styleKey' for extraStyleKeys, 'propsArg' for extraStylexPropsArgs.
    * Used to preserve correct style precedence when combining local and imported mixins.

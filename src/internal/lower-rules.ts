@@ -62,6 +62,7 @@ import {
 } from "./lower-rules/variants.js";
 import { mergeStyleObjects, toKebab } from "./lower-rules/utils.js";
 import { extractConditionName } from "./utilities/style-key-naming.js";
+import { matchThemeIsDarkTest } from "./utilities/theme-conditional.js";
 import { computeSelectorWarningLoc, normalizeStylisAstToIR } from "./css-ir.js";
 import { createCssHelperHandlers } from "./lower-rules/css-helper-handlers.js";
 import { finalizeDescendantOverrides } from "./lower-rules/descendant-overrides.js";
@@ -432,6 +433,182 @@ export function lowerRules(ctx: TransformContext): {
     const getComposedDefaultValue = (propName: string): unknown =>
       resolveComposedDefaultValue(cssHelperPropValues.get(propName), propName);
 
+    const getThemeBindingName = (
+      bindings: ReturnType<typeof getArrowFnParamBindings>,
+    ): string | null => {
+      if (!bindings || bindings.kind !== "destructured") {
+        return null;
+      }
+      for (const [localName, propName] of bindings.bindings.entries()) {
+        if (propName === "theme") {
+          return localName;
+        }
+      }
+      return null;
+    };
+
+    const ensureThemeConditionalStyles = (): {
+      darkStyle: Record<string, unknown>;
+      lightStyle: Record<string, unknown>;
+    } => {
+      if (!decl.themeConditionalStyleKeys) {
+        const usedKeys = new Set<string>([
+          ...resolvedStyleObjects.keys(),
+          ...extraStyleObjects.keys(),
+        ]);
+        const makeUniqueKey = (suffix: string): string => {
+          const base = `${decl.styleKey}${suffix}`;
+          let key = base;
+          let idx = 1;
+          while (usedKeys.has(key)) {
+            key = `${base}${idx}`;
+            idx += 1;
+          }
+          usedKeys.add(key);
+          return key;
+        };
+        const darkKey = makeUniqueKey("Dark");
+        const lightKey = makeUniqueKey("Light");
+        decl.themeConditionalStyleKeys = { dark: darkKey, light: lightKey };
+        extraStyleObjects.set(darkKey, {});
+        extraStyleObjects.set(lightKey, {});
+        const condExpr = j.conditionalExpression(
+          j.memberExpression(j.identifier("theme"), j.identifier("isDark")),
+          j.memberExpression(j.identifier("styles"), j.identifier(darkKey)),
+          j.memberExpression(j.identifier("styles"), j.identifier(lightKey)),
+        );
+        decl.extraStylexPropsArgs ??= [];
+        decl.extraStylexPropsArgs.push({ expr: condExpr });
+      }
+
+      decl.needsWrapperComponent = true;
+      decl.needsThemeHook = true;
+
+      const keys = decl.themeConditionalStyleKeys;
+      const darkStyle = extraStyleObjects.get(keys.dark) ?? {};
+      const lightStyle = extraStyleObjects.get(keys.light) ?? {};
+      extraStyleObjects.set(keys.dark, darkStyle);
+      extraStyleObjects.set(keys.light, lightStyle);
+      return { darkStyle, lightStyle };
+    };
+
+    const expandBorderShorthand = (
+      target: Record<string, unknown>,
+      exprAst: unknown,
+      direction: string = "",
+    ): boolean => {
+      const widthProp = `border${direction}Width`;
+      const styleProp = `border${direction}Style`;
+      const colorProp = `border${direction}Color`;
+
+      let node = exprAst as any;
+      if (node?.type === "ExpressionStatement") {
+        node = node.expression;
+      }
+
+      if (node?.type === "StringLiteral" || node?.type === "Literal") {
+        const value = node.value;
+        if (typeof value !== "string") {
+          return false;
+        }
+        const parsed = parseBorderShorthandParts(value);
+        if (!parsed) {
+          return false;
+        }
+        const { width, style, color } = parsed;
+        if (width) {
+          target[widthProp] = j.literal(width);
+        }
+        if (style) {
+          target[styleProp] = j.literal(style);
+        }
+        if (color) {
+          target[colorProp] = j.literal(color);
+        }
+        return true;
+      }
+
+      if (node?.type === "TemplateLiteral") {
+        const quasis = node.quasis ?? [];
+        const exprs = node.expressions ?? [];
+        if (quasis.length === 2 && exprs.length === 1) {
+          const prefix = quasis[0]?.value?.cooked ?? quasis[0]?.value?.raw ?? "";
+          const suffix = quasis[1]?.value?.cooked ?? quasis[1]?.value?.raw ?? "";
+          if (suffix.trim() !== "") {
+            return false;
+          }
+          const parsed = parseInterpolatedBorderStaticParts({
+            prop: direction ? `border-${direction.toLowerCase()}` : "border",
+            prefix,
+            suffix,
+          });
+          if (!parsed?.width || !parsed?.style) {
+            return false;
+          }
+          target[widthProp] = j.literal(parsed.width);
+          target[styleProp] = j.literal(parsed.style);
+          target[colorProp] = exprs[0];
+          return true;
+        }
+
+        if (quasis.length === 3 && exprs.length === 2) {
+          const prefix = quasis[0]?.value?.cooked ?? quasis[0]?.value?.raw ?? "";
+          const middle = quasis[1]?.value?.cooked ?? quasis[1]?.value?.raw ?? "";
+          const suffix = quasis[2]?.value?.cooked ?? quasis[2]?.value?.raw ?? "";
+          if (prefix.trim() !== "" || suffix.trim() !== "") {
+            return false;
+          }
+          const middleTrimmed = middle.trim();
+          if (!BORDER_STYLES.has(middleTrimmed)) {
+            return false;
+          }
+          target[widthProp] = exprs[0];
+          target[styleProp] = j.literal(middleTrimmed);
+          target[colorProp] = exprs[1];
+          return true;
+        }
+      }
+
+      return false;
+    };
+
+    const expandBoxShorthand = (
+      target: Record<string, unknown>,
+      exprAst: unknown,
+      propName: "padding" | "margin",
+    ): boolean => {
+      const unwrapNode = (
+        value: unknown,
+      ): { type?: string; value?: unknown; expression?: unknown } | null => {
+        return value && typeof value === "object"
+          ? (value as { type?: string; value?: unknown; expression?: unknown })
+          : null;
+      };
+      let node = unwrapNode(exprAst);
+      if (node?.type === "ExpressionStatement") {
+        node = unwrapNode(node.expression);
+      }
+      if (node?.type !== "StringLiteral" && node?.type !== "Literal") {
+        return false;
+      }
+      const rawValue = node.value;
+      if (typeof rawValue !== "string") {
+        return false;
+      }
+      const entries = splitDirectionalProperty({
+        prop: propName,
+        rawValue,
+        important: d.important,
+      });
+      if (!entries.length) {
+        return false;
+      }
+      for (const entry of entries) {
+        target[entry.prop] = j.literal(entry.value);
+      }
+      return true;
+    };
+
     const {
       findJsxPropTsType,
       findJsxPropTsTypeForVariantExtraction,
@@ -584,11 +761,20 @@ export function lowerRules(ctx: TransformContext): {
 
     // Helper to detect if a conditional test expression accesses theme.* (e.g., props.theme.isDark)
     // StyleX doesn't have runtime theme access, so we need to bail out with a warning.
-    const isThemeAccessTest = (test: ExpressionKind, paramName: string | null): boolean => {
+    const isThemeAccessTest = (
+      test: ExpressionKind,
+      paramName: string | null,
+      themeBindingName: string | null,
+    ): boolean => {
       const check = (node: ExpressionKind): boolean => {
         const info = extractRootAndPath(node);
-        if (info && paramName && info.rootName === paramName && info.path[0] === "theme") {
-          return true;
+        if (info) {
+          if (paramName && info.rootName === paramName && info.path[0] === "theme") {
+            return true;
+          }
+          if (themeBindingName && info.rootName === themeBindingName && info.path.length > 0) {
+            return true;
+          }
         }
         // Check UnaryExpression: !props.theme.isDark
         if (node.type === "UnaryExpression" && node.operator === "!" && node.argument) {
@@ -628,6 +814,7 @@ export function lowerRules(ctx: TransformContext): {
         return false;
       }
       const paramName = bindings.kind === "simple" ? bindings.paramName : null;
+      const themeBindingName = getThemeBindingName(bindings);
 
       const { parseChainedTestInfo } = createPropTestHelpers(bindings);
 
@@ -1355,9 +1542,95 @@ export function lowerRules(ctx: TransformContext): {
 
       const testInfo = parseChainedTestInfo(conditional.test);
 
+      const cons = conditional.consequent;
+      const alt = conditional.alternate;
+      const consIsCss = isCssHelperTaggedTemplate(cons);
+      const altIsCss = isCssHelperTaggedTemplate(alt);
+      const consIsTpl = isPlainTemplateLiteral(cons);
+      const altIsTpl = isPlainTemplateLiteral(alt);
+      const consIsEmpty = isEmptyCssBranch(cons);
+      const altIsEmpty = isEmptyCssBranch(alt);
+
+      const themeTest = matchThemeIsDarkTest(conditional.test, {
+        propsParamName: paramName,
+        themeBindingName,
+      });
+      if (themeTest) {
+        const darkBranch = themeTest.isNegated ? alt : cons;
+        const lightBranch = themeTest.isNegated ? cons : alt;
+        const darkIsEmpty = themeTest.isNegated ? altIsEmpty : consIsEmpty;
+        const lightIsEmpty = themeTest.isNegated ? consIsEmpty : altIsEmpty;
+        const resolveThemeBranch = (
+          node: ExpressionKind,
+          isEmpty: boolean,
+        ): { style: Record<string, unknown> } | null => {
+          if (isEmpty) {
+            return { style: {} };
+          }
+          if (!node || typeof node !== "object") {
+            return null;
+          }
+          if (isCssHelperTaggedTemplate(node)) {
+            const tplNode = node as { quasi: ExpressionKind };
+            const resolved = resolveCssHelperTemplate(tplNode.quasi, paramName, decl.loc);
+            if (
+              !resolved ||
+              resolved.dynamicProps.length > 0 ||
+              resolved.conditionalVariants.length
+            ) {
+              return null;
+            }
+            return { style: resolved.style };
+          }
+          if (isPlainTemplateLiteral(node)) {
+            const resolved = resolveTemplateLiteralBranch({
+              j,
+              node: node as any,
+              paramName,
+              filePath,
+              parseExpr,
+              resolveValue,
+              resolveCall,
+              resolveImportInScope,
+              resolverImports,
+              componentInfo,
+              handlerContext,
+            });
+            if (
+              !resolved ||
+              resolved.dynamicEntries.length > 0 ||
+              resolved.inlineEntries.length > 0
+            ) {
+              return null;
+            }
+            return { style: resolved.style };
+          }
+          return null;
+        };
+
+        const darkResolved = resolveThemeBranch(darkBranch, darkIsEmpty);
+        const lightResolved = resolveThemeBranch(lightBranch, lightIsEmpty);
+        if (!darkResolved || !lightResolved) {
+          const loc = getNodeLocStart(conditional.test);
+          warnings.push({
+            severity: "warning",
+            type: "Theme-dependent conditional values require a project-specific theme source (e.g. useTheme())",
+            loc: loc ?? decl.loc,
+            context: {},
+          });
+          bail = true;
+          return true;
+        }
+
+        const { darkStyle, lightStyle } = ensureThemeConditionalStyles();
+        mergeStyleObjects(darkStyle, darkResolved.style);
+        mergeStyleObjects(lightStyle, lightResolved.style);
+        return true;
+      }
+
       // Check if the condition tests theme.* (e.g., props.theme.isDark) which is not supported.
       // StyleX doesn't have runtime theme access - bail out with a warning.
-      if (isThemeAccessTest(conditional.test, paramName)) {
+      if (isThemeAccessTest(conditional.test, paramName, themeBindingName)) {
         const loc = getNodeLocStart(conditional.test);
         warnings.push({
           severity: "warning",
@@ -1368,15 +1641,6 @@ export function lowerRules(ctx: TransformContext): {
         bail = true;
         return true;
       }
-
-      const cons = conditional.consequent;
-      const alt = conditional.alternate;
-      const consIsCss = isCssHelperTaggedTemplate(cons);
-      const altIsCss = isCssHelperTaggedTemplate(alt);
-      const consIsTpl = isPlainTemplateLiteral(cons);
-      const altIsTpl = isPlainTemplateLiteral(alt);
-      const consIsEmpty = isEmptyCssBranch(cons);
-      const altIsEmpty = isEmptyCssBranch(alt);
 
       if (!testInfo) {
         // Non-prop conditional: generate StyleX parameterized style functions.
@@ -3191,6 +3455,142 @@ export function lowerRules(ctx: TransformContext): {
             continue;
           }
 
+          if (res && res.type === "splitThemeVariantsResolvedStyles") {
+            if (rule.selector.trim() !== "&" || (rule.atRuleStack ?? []).length) {
+              warnings.push({
+                severity: "warning",
+                type: "Adapter resolved StyleX styles cannot be applied under nested selectors/at-rules",
+                loc,
+                context: { selector: rule.selector },
+              });
+              bail = true;
+              break;
+            }
+            for (const imp of res.dark.imports ?? []) {
+              resolverImports.set(JSON.stringify(imp), imp);
+            }
+            for (const imp of res.light.imports ?? []) {
+              resolverImports.set(JSON.stringify(imp), imp);
+            }
+            const darkExprAst = parseExpr(res.dark.expr);
+            const lightExprAst = parseExpr(res.light.expr);
+            if (!darkExprAst || !lightExprAst) {
+              warnings.push({
+                severity: "error",
+                type: "Adapter resolveCall returned an unparseable styles expression",
+                loc,
+                context: { localName: decl.localName, res },
+              });
+              bail = true;
+              break;
+            }
+            const condExpr = j.conditionalExpression(
+              j.memberExpression(j.identifier("theme"), j.identifier("isDark")),
+              darkExprAst as any,
+              lightExprAst as any,
+            );
+            decl.extraStylexPropsArgs ??= [];
+            decl.extraStylexPropsArgs.push({ expr: condExpr });
+            decl.needsWrapperComponent = true;
+            decl.needsThemeHook = true;
+            continue;
+          }
+
+          if (res && res.type === "splitThemeVariantsResolvedValue") {
+            if (rule.selector.trim() !== "&" || (rule.atRuleStack ?? []).length) {
+              warnings.push({
+                severity: "warning",
+                type: "Adapter resolved StyleX styles cannot be applied under nested selectors/at-rules",
+                loc,
+                context: { selector: rule.selector },
+              });
+              bail = true;
+              break;
+            }
+
+            const cssProp = (d.property ?? "").trim();
+            const { prefix: staticPrefix, suffix: staticSuffix } = extractStaticParts(d.value, {
+              skipForProperty: /^border(-top|-right|-bottom|-left)?-color$/,
+              property: cssProp,
+            });
+
+            const parseResolved = (
+              expr: string,
+              imports: any[],
+            ): { exprAst: unknown; imports: any[] } | null => {
+              const wrappedExpr = wrapExprWithStaticParts(expr, staticPrefix, staticSuffix);
+              const exprAst = parseExpr(wrappedExpr);
+              if (!exprAst) {
+                warnings.push({
+                  severity: "error",
+                  type: "Adapter resolveCall returned an unparseable styles expression",
+                  loc: decl.loc,
+                  context: { localName: decl.localName, expr },
+                });
+                return null;
+              }
+              return { exprAst, imports: imports ?? [] };
+            };
+
+            const darkParsed = parseResolved(res.dark.expr, res.dark.imports);
+            const lightParsed = parseResolved(res.light.expr, res.light.imports);
+            if (!darkParsed || !lightParsed) {
+              bailUnsupported(
+                decl,
+                "Adapter resolveCall returned an unparseable styles expression",
+              );
+              break;
+            }
+
+            const { darkStyle, lightStyle } = ensureThemeConditionalStyles();
+
+            let darkStylexProp = cssPropertyToStylexProp(cssProp);
+            let lightStylexProp = cssPropertyToStylexProp(cssProp);
+            if (cssProp === "background") {
+              const resolved = resolveBackgroundStylexPropForVariants([
+                res.dark.expr,
+                res.light.expr,
+              ]);
+              if (resolved) {
+                darkStylexProp = resolved;
+                lightStylexProp = resolved;
+              } else {
+                darkStylexProp = resolveBackgroundStylexProp(res.dark.expr);
+                lightStylexProp = resolveBackgroundStylexProp(res.light.expr);
+              }
+            }
+
+            const applyThemeParsed = (
+              target: Record<string, unknown>,
+              parsed: { exprAst: unknown; imports: any[] },
+              stylexProp: string,
+            ): void => {
+              for (const imp of parsed.imports) {
+                resolverImports.set(JSON.stringify(imp), imp);
+              }
+              const borderMatch = cssProp.match(/^border(-top|-right|-bottom|-left)?$/);
+              if (borderMatch) {
+                const direction = borderMatch[1]
+                  ? borderMatch[1].slice(1).charAt(0).toUpperCase() + borderMatch[1].slice(2)
+                  : "";
+                if (expandBorderShorthand(target, parsed.exprAst, direction)) {
+                  return;
+                }
+              }
+              if (
+                (cssProp === "padding" || cssProp === "margin") &&
+                expandBoxShorthand(target, parsed.exprAst, cssProp)
+              ) {
+                return;
+              }
+              target[stylexProp] = parsed.exprAst as any;
+            };
+
+            applyThemeParsed(darkStyle, darkParsed, darkStylexProp);
+            applyThemeParsed(lightStyle, lightParsed, lightStylexProp);
+            continue;
+          }
+
           if (res && res.type === "splitVariantsResolvedValue") {
             const neg = res.variants.find((v: any) => v.when.startsWith("!"));
             // Get ALL positive variants (not just one) for nested ternaries
@@ -3240,140 +3640,6 @@ export function lowerRules(ctx: TransformContext): {
                 return null;
               }
               return { exprAst, imports: imports ?? [] };
-            };
-
-            // Helper to expand border shorthand from a string literal like "2px solid blue"
-            // or a template literal like `1px solid ${color}` or `${width} solid ${color}`
-            const expandBorderShorthand = (
-              target: Record<string, unknown>,
-              exprAst: any,
-              direction: string = "", // "Top", "Right", "Bottom", "Left", or ""
-            ): boolean => {
-              const widthProp = `border${direction}Width`;
-              const styleProp = `border${direction}Style`;
-              const colorProp = `border${direction}Color`;
-
-              // Handle various AST wrapper structures
-              let node = exprAst;
-              // Unwrap ExpressionStatement if present
-              if (node?.type === "ExpressionStatement") {
-                node = node.expression;
-              }
-
-              // Handle string literals: "2px solid blue"
-              if (node?.type === "StringLiteral" || node?.type === "Literal") {
-                const value = node.value;
-                if (typeof value !== "string") {
-                  return false;
-                }
-                const parsed = parseBorderShorthandParts(value);
-                if (!parsed) {
-                  return false;
-                }
-                const { width, style, color } = parsed;
-                if (width) {
-                  target[widthProp] = j.literal(width);
-                }
-                if (style) {
-                  target[styleProp] = j.literal(style);
-                }
-                if (color) {
-                  target[colorProp] = j.literal(color);
-                }
-                return true;
-              }
-
-              // Handle template literals: `1px solid ${color}` or `${width} solid ${color}`
-              if (node?.type === "TemplateLiteral") {
-                const quasis = node.quasis ?? [];
-                const exprs = node.expressions ?? [];
-
-                // Format 1: `1px solid ${color}` - static width/style, dynamic color
-                // quasis: ["1px solid ", ""], exprs: [colorExpr]
-                if (quasis.length === 2 && exprs.length === 1) {
-                  const prefix = quasis[0]?.value?.cooked ?? quasis[0]?.value?.raw ?? "";
-                  const suffix = quasis[1]?.value?.cooked ?? quasis[1]?.value?.raw ?? "";
-                  if (suffix.trim() !== "") {
-                    return false;
-                  }
-                  const parsed = parseInterpolatedBorderStaticParts({
-                    prop: direction ? `border-${direction.toLowerCase()}` : "border",
-                    prefix,
-                    suffix,
-                  });
-                  if (!parsed?.width || !parsed?.style) {
-                    return false;
-                  }
-                  target[widthProp] = j.literal(parsed.width);
-                  target[styleProp] = j.literal(parsed.style);
-                  target[colorProp] = exprs[0];
-                  return true;
-                }
-
-                // Format 2: `${width} solid ${color}` - dynamic width, static style, dynamic color
-                // quasis: ["", " solid ", ""], exprs: [widthExpr, colorExpr]
-                if (quasis.length === 3 && exprs.length === 2) {
-                  const prefix = quasis[0]?.value?.cooked ?? quasis[0]?.value?.raw ?? "";
-                  const middle = quasis[1]?.value?.cooked ?? quasis[1]?.value?.raw ?? "";
-                  const suffix = quasis[2]?.value?.cooked ?? quasis[2]?.value?.raw ?? "";
-                  // First quasi should be empty (width is the first expression)
-                  if (prefix.trim() !== "") {
-                    return false;
-                  }
-                  // Last quasi should be empty (color is the last expression)
-                  if (suffix.trim() !== "") {
-                    return false;
-                  }
-                  // Middle quasi should contain only the border style
-                  const middleTrimmed = middle.trim();
-                  if (!BORDER_STYLES.has(middleTrimmed)) {
-                    return false;
-                  }
-                  target[widthProp] = exprs[0];
-                  target[styleProp] = j.literal(middleTrimmed);
-                  target[colorProp] = exprs[1];
-                  return true;
-                }
-              }
-
-              return false;
-            };
-
-            const expandBoxShorthand = (
-              target: Record<string, unknown>,
-              exprAst: unknown,
-              propName: "padding" | "margin",
-            ): boolean => {
-              const unwrapNode = (
-                value: unknown,
-              ): { type?: string; value?: unknown; expression?: unknown } | null => {
-                return value && typeof value === "object"
-                  ? (value as { type?: string; value?: unknown; expression?: unknown })
-                  : null;
-              };
-              let node = unwrapNode(exprAst);
-              if (node?.type === "ExpressionStatement") {
-                node = unwrapNode(node.expression);
-              }
-              if (node?.type !== "StringLiteral" && node?.type !== "Literal") {
-                return false;
-              }
-              const rawValue = node.value;
-              if (typeof rawValue !== "string") {
-                return false;
-              }
-              const entries = splitDirectionalProperty({
-                prop: propName,
-                rawValue,
-                important: d.important,
-              });
-              if (!entries.length) {
-                return false;
-              }
-              for (const entry of entries) {
-                target[entry.prop] = j.literal(entry.value);
-              }
-              return true;
             };
 
             const applyParsed = (

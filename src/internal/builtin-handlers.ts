@@ -24,6 +24,7 @@ import {
 } from "./utilities/jscodeshift-utils.js";
 import { escapeRegex, sanitizeIdentifier } from "./utilities/string-utils.js";
 import { hasThemeAccessInArrowFn } from "./lower-rules/inline-styles.js";
+import { replaceThemeIsDarkConditionals } from "./utilities/theme-conditional.js";
 
 type ExpressionKind = Parameters<JSCodeshift["expressionStatement"]>[0];
 import {
@@ -198,6 +199,22 @@ export type HandlerResult =
     }
   | {
       /**
+       * Split a theme.isDark conditional into dark/light resolved values.
+       */
+      type: "splitThemeVariantsResolvedValue";
+      dark: { expr: string; imports: ImportSpec[] };
+      light: { expr: string; imports: ImportSpec[] };
+    }
+  | {
+      /**
+       * Split a theme.isDark conditional into dark/light resolved StyleX styles.
+       */
+      type: "splitThemeVariantsResolvedStyles";
+      dark: { expr: string; imports: ImportSpec[] };
+      light: { expr: string; imports: ImportSpec[] };
+    }
+  | {
+      /**
        * Split a multi-prop nested ternary like `outer ? A : inner ? B : C` where
        * outer and inner test different boolean props.
        *
@@ -297,6 +314,9 @@ type ConditionalExpressionBody = {
   consequent?: unknown;
   alternate?: unknown;
 };
+
+type BranchUsage = "props" | "create";
+type Branch = { usage: BranchUsage; expr: string; imports: ImportSpec[] } | null;
 
 /**
  * Determines if an adapter's CallResolveResult should be treated as a CSS value.
@@ -721,6 +741,131 @@ function resolveImportedHelperCall(
     : { kind: "unresolved", resolveCallContext, resolveCallResult: undefined };
 }
 
+function createBranchResolver(args: {
+  node: DynamicNode;
+  ctx: InternalHandlerContext;
+  info: ThemeParamInfo | null;
+}): (value: unknown) => Branch {
+  const { node, ctx, info } = args;
+  const paramName = info?.kind === "propsParam" ? info.propsName : null;
+  const expectedUsage: BranchUsage = node.css.property ? "create" : "props";
+
+  const resolveThemeFromMemberExpr = (nodeExpr: unknown): { path: string } | null => {
+    if (
+      !nodeExpr ||
+      typeof nodeExpr !== "object" ||
+      (nodeExpr as { type?: string }).type !== "MemberExpression"
+    ) {
+      return null;
+    }
+    if (info?.kind === "propsParam" && paramName) {
+      const parts = getMemberPathFromIdentifier(
+        nodeExpr as Parameters<typeof getMemberPathFromIdentifier>[0],
+        paramName,
+      );
+      if (!parts || parts[0] !== "theme") {
+        return null;
+      }
+      return { path: parts.slice(1).join(".") };
+    }
+    if (info?.kind === "themeBinding") {
+      const parts = getMemberPathFromIdentifier(
+        nodeExpr as Parameters<typeof getMemberPathFromIdentifier>[0],
+        info.themeName,
+      );
+      if (!parts) {
+        return null;
+      }
+      return { path: parts.join(".") };
+    }
+    return null;
+  };
+
+  const resolveCallExpr = (
+    call: CallExpressionNode,
+    cssProperty: string | undefined,
+  ): CallResolveResult | null => {
+    const res = resolveImportedHelperCall(call, ctx, undefined, cssProperty);
+    if (res.kind === "resolved") {
+      return res.result;
+    }
+    if (isCallExpressionNode(call.callee)) {
+      const inner = call.callee;
+      const outerArgs = call.arguments ?? [];
+      if (outerArgs.length === 1 && outerArgs[0] && typeof outerArgs[0] === "object") {
+        const innerRes = resolveImportedHelperCall(inner, ctx, undefined, cssProperty);
+        if (innerRes.kind === "resolved") {
+          return innerRes.result;
+        }
+      }
+    }
+    return null;
+  };
+
+  return (b: unknown): Branch => {
+    const v = literalToStaticValue(b);
+    if (v !== null) {
+      if (typeof v === "boolean") {
+        return null;
+      }
+      return {
+        usage: "create",
+        expr: typeof v === "string" ? JSON.stringify(v) : String(v),
+        imports: [],
+      };
+    }
+    if (!b || typeof b !== "object") {
+      return null;
+    }
+
+    const templateResult = resolveTemplateLiteralExpressions(b, (expr) => {
+      const themeInfo = resolveThemeFromMemberExpr(expr);
+      if (themeInfo) {
+        const res = ctx.resolveValue({
+          kind: "theme",
+          path: themeInfo.path,
+          filePath: ctx.filePath,
+          loc: getNodeLocStart(expr) ?? undefined,
+        });
+        return res ?? null;
+      }
+      if (isCallExpressionNode(expr)) {
+        const callRes = resolveCallExpr(expr, node.css.property);
+        return callRes ? { expr: callRes.expr, imports: callRes.imports } : null;
+      }
+      return null;
+    });
+    if (templateResult) {
+      return { usage: "create", ...templateResult };
+    }
+
+    if (isCallExpressionNode(b)) {
+      const resolved = resolveCallExpr(b, node.css.property);
+      if (resolved) {
+        const isCssValue = isAdapterResultCssValue(resolved, node.css.property);
+        const usage: BranchUsage = isCssValue ? "create" : "props";
+        return { usage, expr: resolved.expr, imports: resolved.imports };
+      }
+      return null;
+    }
+
+    const themeInfo = resolveThemeFromMemberExpr(b);
+    if (!themeInfo) {
+      return null;
+    }
+    const res = ctx.resolveValue({
+      kind: "theme",
+      path: themeInfo.path,
+      filePath: ctx.filePath,
+      loc: getNodeLocStart(b) ?? undefined,
+    });
+    if (!res) {
+      return null;
+    }
+    return { usage: expectedUsage, expr: res.expr, imports: res.imports };
+  };
+}
+
 function tryResolveCallExpression(
   node: DynamicNode,
   ctx: InternalHandlerContext,
@@ -826,6 +971,71 @@ function tryResolveArrowFnHelperCallWithThemeArg(
   return null;
 }
 
+function tryResolveThemeIsDarkConditionalValue(
+  node: DynamicNode,
+  ctx: InternalHandlerContext,
+): HandlerResult | null {
+  if (!node.css.property) {
+    return null;
+  }
+  const expr = node.expr;
+  if (!isArrowFunctionExpression(expr)) {
+    return null;
+  }
+  const info = getArrowFnThemeParamInfo(expr);
+  const propsParamName = info?.kind === "propsParam" ? info.propsName : null;
+  const themeBindingName = info?.kind === "themeBinding" ? info.themeName : null;
+  if (!propsParamName && !themeBindingName) {
+    return null;
+  }
+
+  const body = getFunctionBodyExpr(expr);
+  if (!body) {
+    return null;
+  }
+
+  const darkReplace = replaceThemeIsDarkConditionals({
+    expr: body as ExpressionKind,
+    preferDark: true,
+    propsParamName,
+    themeBindingName,
+  });
+  if (!darkReplace.replaced || darkReplace.hasNonThemeConditional) {
+    return null;
+  }
+  const lightReplace = replaceThemeIsDarkConditionals({
+    expr: body as ExpressionKind,
+    preferDark: false,
+    propsParamName,
+    themeBindingName,
+  });
+  if (lightReplace.hasNonThemeConditional) {
+    return null;
+  }
+
+  const branchToExpr = createBranchResolver({ node, ctx, info });
+  const darkBranch = branchToExpr(darkReplace.expr);
+  const lightBranch = branchToExpr(lightReplace.expr);
+  if (!darkBranch || !lightBranch) {
+    return null;
+  }
+  if (darkBranch.usage !== lightBranch.usage) {
+    return null;
+  }
+  if (darkBranch.usage === "props") {
+    return {
+      type: "splitThemeVariantsResolvedStyles",
+      dark: { expr: darkBranch.expr, imports: darkBranch.imports },
+      light: { expr: lightBranch.expr, imports: lightBranch.imports },
+    };
+  }
+  return {
+    type: "splitThemeVariantsResolvedValue",
+    dark: { expr: darkBranch.expr, imports: darkBranch.imports },
+    light: { expr: lightBranch.expr, imports: lightBranch.imports },
+  };
+}
+
 function tryResolveConditionalValue(
   node: DynamicNode,
   ctx: InternalHandlerContext,
@@ -846,147 +1056,7 @@ function tryResolveConditionalValue(
   if (!body || body.type !== "ConditionalExpression") {
     return null;
   }
-
-  type BranchUsage = "props" | "create";
-  type Branch = { usage: BranchUsage; expr: string; imports: ImportSpec[] } | null;
-
-  // Determine expected usage from context:
-  // - Has CSS property → "create" (CSS value)
-  // - No CSS property → "props" (StyleX reference)
-  const expectedUsage: BranchUsage = node.css.property ? "create" : "props";
-
-  // Helper to resolve a MemberExpression as a theme path
-  const resolveThemeFromMemberExpr = (node: unknown): { path: string } | null => {
-    if (
-      !node ||
-      typeof node !== "object" ||
-      (node as { type?: string }).type !== "MemberExpression"
-    ) {
-      return null;
-    }
-    if (info?.kind === "propsParam" && paramName) {
-      const parts = getMemberPathFromIdentifier(
-        node as Parameters<typeof getMemberPathFromIdentifier>[0],
-        paramName,
-      );
-      if (!parts || parts[0] !== "theme") {
-        return null;
-      }
-      return { path: parts.slice(1).join(".") };
-    }
-    if (info?.kind === "themeBinding") {
-      const parts = getMemberPathFromIdentifier(
-        node as Parameters<typeof getMemberPathFromIdentifier>[0],
-        info.themeName,
-      );
-      if (!parts) {
-        return null;
-      }
-      return { path: parts.join(".") };
-    }
-    return null;
-  };
-
-  const branchToExpr = (b: unknown): Branch => {
-    const v = literalToStaticValue(b);
-    if (v !== null) {
-      // Booleans are not valid CSS values; styled-components treats falsy
-      // interpolations as "omit this declaration", so bail instead of emitting
-      // invalid CSS like `cursor: false`.
-      if (typeof v === "boolean") {
-        return null;
-      }
-      return {
-        usage: "create",
-        expr: typeof v === "string" ? JSON.stringify(v) : String(v),
-        imports: [],
-      };
-    }
-    if (!b || typeof b !== "object") {
-      return null;
-    }
-
-    // Helper to resolve call expressions (simple or curried) via adapter.
-    // Preserves the full CallResolveResult including `kind` for proper CSS value vs StyleX ref detection.
-    const resolveCallExpr = (
-      call: CallExpressionNode,
-      cssProperty: string | undefined,
-    ): CallResolveResult | null => {
-      const res = resolveImportedHelperCall(call, ctx, undefined, cssProperty);
-      if (res.kind === "resolved") {
-        return res.result;
-      }
-      // Try curried pattern: helper(...)(propsParam)
-      if (isCallExpressionNode(call.callee)) {
-        const inner = call.callee;
-        const outerArgs = call.arguments ?? [];
-        if (outerArgs.length === 1 && outerArgs[0] && typeof outerArgs[0] === "object") {
-          const innerRes = resolveImportedHelperCall(inner, ctx, undefined, cssProperty);
-          if (innerRes.kind === "resolved") {
-            return innerRes.result;
-          }
-        }
-      }
-      return null;
-    };
-
-    // Handle template literals with theme or call interpolations
-    // e.g., `inset 0 0 0 1px ${props.theme.color.primaryColor}, 0px 1px 2px rgba(0, 0, 0, 0.06)`
-    // e.g., `linear-gradient(to bottom, ${color("bgSub")(props)} 70%, rgba(0, 0, 0, 0) 100%)`
-    // Template literals always need CSS values, so always pass cssProperty
-    const templateResult = resolveTemplateLiteralExpressions(b, (expr) => {
-      // First try theme member expression
-      const themeInfo = resolveThemeFromMemberExpr(expr);
-      if (themeInfo) {
-        const res = ctx.resolveValue({
-          kind: "theme",
-          path: themeInfo.path,
-          filePath: ctx.filePath,
-          loc: getNodeLocStart(expr) ?? undefined,
-        });
-        return res ?? null;
-      }
-      // Then try call expression (simple or curried)
-      // Template literals need CSS values, so pass cssProperty
-      if (isCallExpressionNode(expr)) {
-        const callRes = resolveCallExpr(expr, node.css.property);
-        return callRes ? { expr: callRes.expr, imports: callRes.imports } : null;
-      }
-      return null;
-    });
-    if (templateResult) {
-      return { usage: "create", ...templateResult };
-    }
-
-    if (isCallExpressionNode(b)) {
-      // helper(...) or helper(...)(props)
-      // Pass cssProperty to let the adapter decide based on context
-      const resolved = resolveCallExpr(b, node.css.property);
-      if (resolved) {
-        // Use adapter's explicit `kind` if provided, otherwise infer from cssProperty context
-        const isCssValue = isAdapterResultCssValue(resolved, node.css.property);
-        const usage: BranchUsage = isCssValue ? "create" : "props";
-        return { usage, expr: resolved.expr, imports: resolved.imports };
-      }
-      return null;
-    }
-
-    // Handle direct MemberExpression theme access (reuse the helper)
-    const themeInfo = resolveThemeFromMemberExpr(b);
-    if (!themeInfo) {
-      return null;
-    }
-    const res = ctx.resolveValue({
-      kind: "theme",
-      path: themeInfo.path,
-      filePath: ctx.filePath,
-      loc: getNodeLocStart(b) ?? undefined,
-    });
-    if (!res) {
-      return null;
-    }
-    return { usage: expectedUsage, expr: res.expr, imports: res.imports };
-  };
+  const branchToExpr = createBranchResolver({ node, ctx, info });
 
   const getBranch = (value: unknown): Branch => {
     return branchToExpr(value);
@@ -2137,6 +2207,7 @@ export function resolveDynamicNode(
     tryResolveThemeAccess(node, ctx) ??
     tryResolveCallExpression(node, ctx) ??
     tryResolveArrowFnHelperCallWithThemeArg(node, ctx) ??
+    tryResolveThemeIsDarkConditionalValue(node, ctx) ??
     tryResolveConditionalValue(node, ctx) ??
     tryResolveIndexedThemeWithPropFallback(node, ctx) ??
     tryResolveConditionalCssBlockTernary(node) ??

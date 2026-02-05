@@ -111,10 +111,11 @@ export function emitStylesAndImports(ctx: TransformContext): { emptyStyleKeys: S
   };
 
   const hasExportedCssHelper = styledDecls.some((d) => d.isCssHelper && d.isExported);
+  const needsThemeHook = styledDecls.some((d) => d.needsThemeHook);
 
   // Remove styled-components import(s), but preserve any named imports that are still referenced
   // (e.g. useTheme, withTheme, ThemeProvider if they're still used in the code)
-  const preservedSpecifiers: string[] = [];
+  const preservedSpecifiers = new Set<string>();
   for (const importNode of styledImports.nodes()) {
     const specifiers = (importNode as any).specifiers ?? [];
     for (const spec of specifiers) {
@@ -145,9 +146,12 @@ export function emitStylesAndImports(ctx: TransformContext): { emptyStyleKeys: S
         return !(parent?.type === "ImportSpecifier");
       });
       if (realUsages.size() > 0) {
-        preservedSpecifiers.push(localName);
+        preservedSpecifiers.add(localName);
       }
     }
+  }
+  if (needsThemeHook) {
+    preservedSpecifiers.add("useTheme");
   }
 
   // We want to insert the StyleX import where the styled-components import used to be,
@@ -185,9 +189,9 @@ export function emitStylesAndImports(ctx: TransformContext): { emptyStyleKeys: S
   }
 
   // Re-add preserved imports from styled-components if any (AFTER stylex import)
-  if (preservedSpecifiers.length > 0) {
+  if (preservedSpecifiers.size > 0) {
     const preservedImport = j.importDeclaration(
-      preservedSpecifiers.map((name) => j.importSpecifier(j.identifier(name))),
+      Array.from(preservedSpecifiers).map((name) => j.importSpecifier(j.identifier(name))),
       j.literal("styled-components"),
     );
     // Insert after stylex import

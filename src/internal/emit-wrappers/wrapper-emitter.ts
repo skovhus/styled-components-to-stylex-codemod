@@ -916,6 +916,7 @@ export class WrapperEmitter {
     styleArgs: ExpressionKind[];
     destructureProps: string[];
     propDefaults?: Map<string, string>;
+    needsThemeHook?: boolean;
     allowClassNameProp?: boolean;
     allowStyleProp?: boolean;
     allowAsProp?: boolean;
@@ -934,6 +935,7 @@ export class WrapperEmitter {
       styleArgs,
       destructureProps,
       propDefaults,
+      needsThemeHook = false,
       allowClassNameProp = false,
       allowStyleProp = false,
       allowAsProp = false,
@@ -1226,6 +1228,9 @@ export class WrapperEmitter {
           j.variableDeclarator(j.objectPattern(patternProps), propsId),
         ]),
       );
+    }
+    if (needsThemeHook) {
+      bodyStmts.push(this.buildThemeHookStatement());
     }
     if (merging.sxDecl) {
       bodyStmts.push(merging.sxDecl);
@@ -1665,6 +1670,13 @@ export class WrapperEmitter {
       (moveTypeParamsFromParam as any).typeParameters = undefined;
     }
     return fn;
+  }
+
+  buildThemeHookStatement(): StatementKind {
+    const { j } = this;
+    return j.variableDeclaration("const", [
+      j.variableDeclarator(j.identifier("theme"), j.callExpression(j.identifier("useTheme"), [])),
+    ]);
   }
 
   buildDestructurePatternProps(args: {

@@ -509,6 +509,9 @@ export function emitShouldForwardPropWrappers(ctx: EmitIntrinsicContext): void {
       });
 
       const fnBodyStmts: StatementKind[] = [declStmt];
+      if (d.needsThemeHook) {
+        fnBodyStmts.push(emitter.buildThemeHookStatement());
+      }
       if (cleanupPrefixStmt) {
         fnBodyStmts.push(...cleanupPrefixStmt);
       }
@@ -593,6 +596,9 @@ export function emitShouldForwardPropWrappers(ctx: EmitIntrinsicContext): void {
     });
 
     const fnBodyStmts: StatementKind[] = [declStmt];
+    if (d.needsThemeHook) {
+      fnBodyStmts.push(emitter.buildThemeHookStatement());
+    }
     if (cleanupPrefixStmt) {
       fnBodyStmts.push(...cleanupPrefixStmt);
     }

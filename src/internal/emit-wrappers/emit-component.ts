@@ -565,6 +565,9 @@ export function emitComponentWrappers(emitter: WrapperEmitter): {
       });
 
       const stmts: StatementKind[] = [declStmt];
+      if (d.needsThemeHook) {
+        stmts.push(emitter.buildThemeHookStatement());
+      }
       if (merging.sxDecl) {
         stmts.push(merging.sxDecl);
       }
@@ -674,12 +677,17 @@ export function emitComponentWrappers(emitter: WrapperEmitter): {
         attrs: openingAttrs,
         includeChildren: false,
       });
+      const bodyStmts: StatementKind[] = [];
+      if (d.needsThemeHook) {
+        bodyStmts.push(emitter.buildThemeHookStatement());
+      }
+      bodyStmts.push(j.returnStatement(jsx as any));
       emitted.push(
         withLeadingComments(
           emitter.buildWrapperFunction({
             localName: d.localName,
             params: [propsParamId],
-            bodyStmts: [j.returnStatement(jsx as any)],
+            bodyStmts,
             typeParameters: polymorphicFnTypeParams,
           }),
           d,

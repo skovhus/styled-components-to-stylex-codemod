@@ -220,6 +220,7 @@ export function emitSimpleWithConfigWrappers(ctx: EmitIntrinsicContext): void {
             propsTypeName: emitter.propsTypeNameFor(d.localName),
             styleArgs,
             destructureProps,
+            needsThemeHook: d.needsThemeHook,
             allowAsProp,
             allowClassNameProp: false,
             allowStyleProp: false,
@@ -294,6 +295,9 @@ export function emitSimpleWithConfigWrappers(ctx: EmitIntrinsicContext): void {
         );
 
     const bodyStmts: StatementKind[] = [declStmt];
+    if (d.needsThemeHook) {
+      bodyStmts.push(emitter.buildThemeHookStatement());
+    }
     if (merging.sxDecl) {
       bodyStmts.push(merging.sxDecl);
     }
@@ -829,6 +833,9 @@ export function emitSimpleExportedIntrinsicWrappers(ctx: EmitIntrinsicContext): 
       });
 
       const bodyStmts: StatementKind[] = [declStmt];
+      if (d.needsThemeHook) {
+        bodyStmts.push(emitter.buildThemeHookStatement());
+      }
       if (merging.sxDecl) {
         bodyStmts.push(merging.sxDecl);
       }
@@ -867,6 +874,7 @@ export function emitSimpleExportedIntrinsicWrappers(ctx: EmitIntrinsicContext): 
           styleArgs,
           destructureProps,
           propDefaults,
+          needsThemeHook: d.needsThemeHook,
           allowAsProp,
           allowClassNameProp: false,
           allowStyleProp: false,

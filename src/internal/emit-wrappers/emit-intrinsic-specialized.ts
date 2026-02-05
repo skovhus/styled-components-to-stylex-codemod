@@ -651,6 +651,9 @@ export function emitSiblingWrappers(ctx: EmitIntrinsicContext): void {
     });
 
     const bodyStmts: StatementKind[] = [declStmt];
+    if (d.needsThemeHook) {
+      bodyStmts.push(emitter.buildThemeHookStatement());
+    }
     if (merging.sxDecl) {
       bodyStmts.push(merging.sxDecl);
     }
