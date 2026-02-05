@@ -61,6 +61,17 @@ export function collectStyledDeclsStep(ctx: TransformContext): StepResult {
 
   ctx.styledDecls = styledDecls;
 
+  // Check for unparseable shouldForwardProp - bail to avoid semantic changes
+  const unparseableSfpDecl = styledDecls.find((d) => d.hasUnparseableShouldForwardProp);
+  if (unparseableSfpDecl) {
+    ctx.warnings.push({
+      severity: "warning",
+      type: "Unsupported shouldForwardProp pattern (only !prop.startsWith(), ![].includes(prop), and prop !== are supported)",
+      loc: unparseableSfpDecl.loc,
+    });
+    return returnResult({ code: null, warnings: ctx.warnings }, "bail");
+  }
+
   // If we didn't find any styled declarations but performed other edits (e.g. keyframes conversion),
   // we'll still emit output without injecting StyleX styles.
   if (styledDecls.length === 0) {

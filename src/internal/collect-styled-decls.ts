@@ -219,7 +219,11 @@ function collectStyledDeclsImpl(args: {
     return [...props].some((p) => p.startsWith("$"));
   };
 
-  const parseShouldForwardProp = (arg0: any): StyledDecl["shouldForwardProp"] | undefined => {
+  type ShouldForwardPropResult =
+    | { parsed: StyledDecl["shouldForwardProp"]; unparseable?: false }
+    | { parsed?: undefined; unparseable: true };
+
+  const parseShouldForwardProp = (arg0: any): ShouldForwardPropResult | undefined => {
     if (!arg0 || arg0.type !== "ObjectExpression") {
       return undefined;
     }
@@ -240,11 +244,13 @@ function collectStyledDeclsImpl(args: {
     }
     const fn = prop.value;
     if (!fn || (fn.type !== "ArrowFunctionExpression" && fn.type !== "FunctionExpression")) {
-      return undefined;
+      // shouldForwardProp is present but not a function - can't parse
+      return { unparseable: true };
     }
     const paramName = fn.params?.[0]?.type === "Identifier" ? fn.params[0].name : null;
     if (!paramName) {
-      return undefined;
+      // Function has no identifiable parameter - can't parse
+      return { unparseable: true };
     }
 
     const dropProps = new Set<string>();
@@ -328,11 +334,14 @@ function collectStyledDeclsImpl(args: {
 
     const dropPropsArr = [...dropProps];
     if (!dropPropsArr.length && !dropPrefix) {
-      return undefined;
+      // shouldForwardProp is present but uses an unsupported pattern
+      return { unparseable: true };
     }
     return {
-      dropProps: dropPropsArr,
-      ...(dropPrefix ? { dropPrefix } : {}),
+      parsed: {
+        dropProps: dropPropsArr,
+        ...(dropPrefix ? { dropPrefix } : {}),
+      },
     };
   };
 
@@ -631,10 +640,12 @@ function collectStyledDeclsImpl(args: {
         }
         const attrsInfo =
           tag.callee.property.name === "attrs" ? parseAttrsArg(tag.arguments[0]) : undefined;
-        const shouldForwardProp =
+        const sfpResult =
           tag.callee.property.name === "withConfig"
             ? parseShouldForwardProp(tag.arguments[0])
             : undefined;
+        const shouldForwardProp = sfpResult?.parsed;
+        const hasUnparseableShouldForwardProp = sfpResult?.unparseable;
         const withConfigMeta =
           tag.callee.property.name === "withConfig"
             ? parseWithConfigMeta(tag.arguments[0])
@@ -653,6 +664,7 @@ function collectStyledDeclsImpl(args: {
           ...(shouldForceWrapperForAttrs(attrsInfo) ? { needsWrapperComponent: true } : {}),
           ...(shouldForwardProp ? { shouldForwardProp } : {}),
           ...(shouldForwardProp ? { shouldForwardPropFromWithConfig: true } : {}),
+          ...(hasUnparseableShouldForwardProp ? { hasUnparseableShouldForwardProp } : {}),
           ...(withConfigMeta ? { withConfig: withConfigMeta } : {}),
           ...(propsType ? { propsType } : {}),
           ...(leadingComments ? { leadingComments } : {}),
@@ -885,7 +897,9 @@ function collectStyledDeclsImpl(args: {
         if (hasUniversalSelectorInRules(rules)) {
           noteUniversalSelector(template, parsed.rawCss);
         }
-        const shouldForwardProp = parseShouldForwardProp(tag.arguments[0]);
+        const sfpResult = parseShouldForwardProp(tag.arguments[0]);
+        const shouldForwardProp = sfpResult?.parsed;
+        const hasUnparseableShouldForwardProp = sfpResult?.unparseable;
         const withConfigMeta = parseWithConfigMeta(tag.arguments[0]);
 
         styledDecls.push({
@@ -899,6 +913,7 @@ function collectStyledDeclsImpl(args: {
           ...(templateLoc ? { loc: templateLoc } : {}),
           ...(shouldForwardProp ? { shouldForwardProp } : {}),
           ...(shouldForwardProp ? { shouldForwardPropFromWithConfig: true } : {}),
+          ...(hasUnparseableShouldForwardProp ? { hasUnparseableShouldForwardProp } : {}),
           ...(withConfigMeta ? { withConfig: withConfigMeta } : {}),
           ...(propsType ? { propsType } : {}),
           ...(leadingComments ? { leadingComments } : {}),
@@ -931,7 +946,9 @@ function collectStyledDeclsImpl(args: {
         if (hasUniversalSelectorInRules(rules)) {
           noteUniversalSelector(template, parsed.rawCss);
         }
-        const shouldForwardProp = parseShouldForwardProp(tag.arguments[0]);
+        const sfpResult = parseShouldForwardProp(tag.arguments[0]);
+        const shouldForwardProp = sfpResult?.parsed;
+        const hasUnparseableShouldForwardProp = sfpResult?.unparseable;
         const withConfigMeta = parseWithConfigMeta(tag.arguments[0]);
 
         styledDecls.push({
@@ -945,6 +962,7 @@ function collectStyledDeclsImpl(args: {
           ...(templateLoc ? { loc: templateLoc } : {}),
           ...(shouldForwardProp ? { shouldForwardProp } : {}),
           ...(shouldForwardProp ? { shouldForwardPropFromWithConfig: true } : {}),
+          ...(hasUnparseableShouldForwardProp ? { hasUnparseableShouldForwardProp } : {}),
           ...(withConfigMeta ? { withConfig: withConfigMeta } : {}),
           ...(propsType ? { propsType } : {}),
           ...(leadingComments ? { leadingComments } : {}),
