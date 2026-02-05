@@ -428,9 +428,30 @@ export function emitShouldForwardPropWrappers(ctx: EmitIntrinsicContext): void {
         j.variableDeclarator(j.objectPattern(patternProps as any), propsId),
       ]);
 
-      const cleanupPrefixStmt =
-        dropPrefix && shouldAllowAnyPrefixProps && includeRest
-          ? (j.forOfStatement(
+      // Generate cleanup loop for prefix props when:
+      // - There's a dropPrefix (like "$" for transient props)
+      // - Either: local usage of unknown prefix props, OR exported component (external callers may pass unknown prefix props)
+      // - Rest spread is included
+      const needsCleanupLoop =
+        dropPrefix && (isExportedComponent || shouldAllowAnyPrefixProps) && includeRest;
+      // Create a typed variable for delete with dynamic string key
+      const restRecordId = j.identifier("restRecord");
+      const restRecordDecl = j.variableDeclaration("const", [
+        j.variableDeclarator(
+          restRecordId,
+          j.tsAsExpression(
+            restId,
+            j.tsTypeReference(
+              j.identifier("Record"),
+              j.tsTypeParameterInstantiation([j.tsStringKeyword(), j.tsUnknownKeyword()]),
+            ),
+          ),
+        ),
+      ]);
+      const cleanupPrefixStmt = needsCleanupLoop
+        ? [
+            restRecordDecl,
+            j.forOfStatement(
               j.variableDeclaration("const", [
                 j.variableDeclarator(j.identifier("k"), null as any),
               ]),
@@ -446,13 +467,14 @@ export function emitShouldForwardPropWrappers(ctx: EmitIntrinsicContext): void {
                   j.expressionStatement(
                     j.unaryExpression(
                       "delete",
-                      j.memberExpression(restId, j.identifier("k"), true),
+                      j.memberExpression(restRecordId, j.identifier("k"), true),
                     ),
                   ),
                 ),
               ]),
-            ) as any)
-          : null;
+            ),
+          ]
+        : null;
 
       const { attrsInfo, staticClassNameExpr } = emitter.splitAttrsInfo(d.attrsInfo);
       const merging = emitStyleMerging({
@@ -485,7 +507,7 @@ export function emitShouldForwardPropWrappers(ctx: EmitIntrinsicContext): void {
 
       const fnBodyStmts: StatementKind[] = [declStmt];
       if (cleanupPrefixStmt) {
-        fnBodyStmts.push(cleanupPrefixStmt);
+        fnBodyStmts.push(...cleanupPrefixStmt);
       }
       if (merging.sxDecl) {
         fnBodyStmts.push(merging.sxDecl);
@@ -531,9 +553,30 @@ export function emitShouldForwardPropWrappers(ctx: EmitIntrinsicContext): void {
       j.variableDeclarator(j.objectPattern(patternProps as any), propsId),
     ]);
 
-    const cleanupPrefixStmt =
-      dropPrefix && shouldAllowAnyPrefixProps && includeRest
-        ? (j.forOfStatement(
+    // Generate cleanup loop for prefix props when:
+    // - There's a dropPrefix (like "$" for transient props)
+    // - Either: local usage of unknown prefix props, OR exported component (external callers may pass unknown prefix props)
+    // - Rest spread is included
+    const needsCleanupLoopOuter =
+      dropPrefix && (isExportedComponent || shouldAllowAnyPrefixProps) && includeRest;
+    // Create a typed variable for delete with dynamic string key
+    const restRecordOuterId = j.identifier("restRecord");
+    const restRecordOuterDecl = j.variableDeclaration("const", [
+      j.variableDeclarator(
+        restRecordOuterId,
+        j.tsAsExpression(
+          restId,
+          j.tsTypeReference(
+            j.identifier("Record"),
+            j.tsTypeParameterInstantiation([j.tsStringKeyword(), j.tsUnknownKeyword()]),
+          ),
+        ),
+      ),
+    ]);
+    const cleanupPrefixStmt = needsCleanupLoopOuter
+      ? [
+          restRecordOuterDecl,
+          j.forOfStatement(
             j.variableDeclaration("const", [j.variableDeclarator(j.identifier("k"), null as any)]),
             j.callExpression(j.memberExpression(j.identifier("Object"), j.identifier("keys")), [
               restId,
@@ -545,12 +588,16 @@ export function emitShouldForwardPropWrappers(ctx: EmitIntrinsicContext): void {
                   [j.literal(dropPrefix)],
                 ),
                 j.expressionStatement(
-                  j.unaryExpression("delete", j.memberExpression(restId, j.identifier("k"), true)),
+                  j.unaryExpression(
+                    "delete",
+                    j.memberExpression(restRecordOuterId, j.identifier("k"), true),
+                  ),
                 ),
               ),
             ]),
-          ) as any)
-        : null;
+          ),
+        ]
+      : null;
 
     // Use the style merger helper
     const merging = emitStyleMerging({
@@ -580,7 +627,7 @@ export function emitShouldForwardPropWrappers(ctx: EmitIntrinsicContext): void {
 
     const fnBodyStmts: StatementKind[] = [declStmt];
     if (cleanupPrefixStmt) {
-      fnBodyStmts.push(cleanupPrefixStmt);
+      fnBodyStmts.push(...cleanupPrefixStmt);
     }
     if (merging.sxDecl) {
       fnBodyStmts.push(merging.sxDecl);
