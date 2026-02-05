@@ -181,6 +181,7 @@ export function createDeclProcessingState(state: LowerRulesState, decl: StyledDe
       cssHelperFunctions,
       usedCssHelperFunctions,
       parseExpr,
+      resolveValue,
       resolveCall,
       resolveImportInScope,
       resolverImports,

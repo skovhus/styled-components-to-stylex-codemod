@@ -19,7 +19,7 @@ import { mergeStyleObjects } from "./utils.js";
 import type { InternalHandlerContext } from "../builtin-handlers.js";
 import type { ExpressionKind, TestInfo } from "./decl-types.js";
 import { parseSwitchReturningCssTemplates } from "./switch-variants.js";
-import { resolveTemplateLiteralValue } from "./template-literals.js";
+import { resolveTemplateLiteralValue, type TemplateLiteralContext } from "./template-literals.js";
 import type { ConditionalVariant } from "./css-helper.js";
 import { cssValueToJs, toSuffixFromProp } from "../transform/helpers.js";
 
@@ -38,6 +38,7 @@ type CssHelperHandlersContext = {
   cssHelperFunctions: Map<string, CssHelperFunction>;
   usedCssHelperFunctions: Set<string>;
   parseExpr: (exprSource: string) => ExpressionKind | null;
+  resolveValue: Adapter["resolveValue"];
   resolveCall: Adapter["resolveCall"];
   resolveImportInScope: ResolveImportInScope;
   resolverImports: Map<string, ImportSpec>;
@@ -70,6 +71,7 @@ export const createCssHelperHandlers = (ctx: CssHelperHandlersContext) => {
     cssHelperFunctions,
     usedCssHelperFunctions,
     parseExpr,
+    resolveValue,
     resolveCall,
     resolveImportInScope,
     resolverImports,
@@ -81,6 +83,18 @@ export const createCssHelperHandlers = (ctx: CssHelperHandlersContext) => {
     handlerContext,
     markBail,
   } = ctx;
+
+  const tplCtx: TemplateLiteralContext = {
+    j,
+    filePath,
+    parseExpr,
+    resolveValue,
+    resolveCall,
+    resolveImportInScope,
+    resolverImports,
+    componentInfo,
+    handlerContext,
+  };
 
   // Handle property-level ternary with template literal branches containing helper calls:
   //   background: ${(props) => props.$faded
@@ -127,29 +141,13 @@ export const createCssHelperHandlers = (ctx: CssHelperHandlersContext) => {
       return false;
     }
 
-    const consValue = resolveTemplateLiteralValue({
-      j,
+    const consValue = resolveTemplateLiteralValue(tplCtx, {
       tpl: cons as any,
       property: d.property,
-      filePath,
-      parseExpr,
-      resolveCall,
-      resolveImportInScope,
-      resolverImports,
-      componentInfo,
-      handlerContext,
     });
-    const altValue = resolveTemplateLiteralValue({
-      j,
+    const altValue = resolveTemplateLiteralValue(tplCtx, {
       tpl: alt as any,
       property: d.property,
-      filePath,
-      parseExpr,
-      resolveCall,
-      resolveImportInScope,
-      resolverImports,
-      componentInfo,
-      handlerContext,
     });
 
     if (!consValue || !altValue) {

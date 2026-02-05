@@ -66,10 +66,8 @@ export type TemplateLiteralBranchResult = {
   inlineEntries: TemplateInlineEntry[];
 };
 
-export type TemplateLiteralBranchArgs = {
+export type TemplateLiteralContext = {
   j: JSCodeshift;
-  node: TemplateLiteral;
-  paramName: string | null;
   filePath: string;
   parseExpr: (exprSource: string) => ExpressionKind | null;
   resolveValue: Adapter["resolveValue"];
@@ -80,26 +78,12 @@ export type TemplateLiteralBranchArgs = {
   handlerContext: InternalHandlerContext;
 };
 
-export type TemplateLiteralValueArgs = {
-  j: JSCodeshift;
-  tpl: TemplateLiteral;
-  property: string;
-  filePath: string;
-  parseExpr: (exprSource: string) => ExpressionKind | null;
-  resolveCall: Adapter["resolveCall"];
-  resolveImportInScope: ResolveImportInScope;
-  resolverImports: Map<string, ImportSpec>;
-  componentInfo: ComponentInfo;
-  handlerContext: InternalHandlerContext;
-};
-
 export function resolveTemplateLiteralBranch(
-  args: TemplateLiteralBranchArgs,
+  ctx: TemplateLiteralContext,
+  args: { node: TemplateLiteral; paramName: string | null },
 ): TemplateLiteralBranchResult | null {
   const {
     j,
-    node,
-    paramName,
     filePath,
     parseExpr,
     resolveValue,
@@ -108,7 +92,8 @@ export function resolveTemplateLiteralBranch(
     resolverImports,
     componentInfo,
     handlerContext,
-  } = args;
+  } = ctx;
+  const { node, paramName } = args;
 
   const parsed = parseStyledTemplateLiteral(node);
   const wrappedRawCss = `& { ${parsed.rawCss} }`;
@@ -305,11 +290,12 @@ export function resolveTemplateLiteralBranch(
   return { style, dynamicEntries, inlineEntries };
 }
 
-export function resolveTemplateLiteralValue(args: TemplateLiteralValueArgs): ExpressionKind | null {
+export function resolveTemplateLiteralValue(
+  ctx: TemplateLiteralContext,
+  args: { tpl: TemplateLiteral; property: string },
+): ExpressionKind | null {
   const {
     j,
-    tpl,
-    property,
     filePath,
     parseExpr,
     resolveCall,
@@ -317,7 +303,8 @@ export function resolveTemplateLiteralValue(args: TemplateLiteralValueArgs): Exp
     resolverImports,
     componentInfo,
     handlerContext,
-  } = args;
+  } = ctx;
+  const { tpl, property } = args;
   const quasis = tpl.quasis ?? [];
   const expressions = tpl.expressions ?? [];
 
