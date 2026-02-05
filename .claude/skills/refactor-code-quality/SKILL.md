@@ -130,7 +130,44 @@ When you find duplicated logic:
    - `src/internal/` for internal utilities
    - Near the code that uses it if only used in one area
 
-#### 4b. Use Data-Driven Approaches
+#### 4b. Prefer Shared Context Objects Over Large Argument Bags
+
+When helper functions need many of the same parameters (e.g., `j`, `filePath`, `warnings`, `parseExpr`, `resolveValue`), avoid constructing large inline argument objects at each call site. Instead, pass a shared context object plus only the call-specific arguments:
+
+**Bad** — duplicates the same fields at every call site and bloats the type:
+
+```typescript
+tryResolveBlockLevel({
+  j,
+  filePath,
+  warnings,
+  parseExpr,
+  resolveValue,
+  resolveCall,
+  resolveImportInScope,
+  resolverImports,
+  handlerContext,
+  // ...10 more shared fields
+  conditional,  // ← the only call-specific field
+});
+```
+
+**Good** — pass the shared context and only spell out what's unique:
+
+```typescript
+tryResolveBlockLevel(ctx, { conditional });
+```
+
+Where `ctx` is a commonly defined context type (e.g., `DeclProcessingState`, `CssHelperConditionalContext`) that bundles the shared fields. The helper's type can use `Pick<Context, ...>` if it only needs a subset.
+
+This pattern:
+
+- Eliminates repetitive field listings at call sites
+- Makes it obvious which arguments are call-specific vs shared
+- Keeps types in sync automatically (use `Pick` from the source type)
+- Reduces the chance of forgetting to pass a new field when the context grows
+
+#### 4c. Use Data-Driven Approaches
 
 Replace repetitive conditionals (switch statements, if-chains) with lookup tables or maps.
 
@@ -181,6 +218,7 @@ Before considering the refactoring complete:
 
 - [ ] No duplicated logic blocks across files
 - [ ] Similar patterns use shared helpers
+- [ ] Helper functions use shared context objects instead of large argument bags
 - [ ] No unnecessary "any" types (some jscodeshift patterns may require them)
 - [ ] Type assertions minimized and justified (AST manipulation may need some)
 - [ ] No unnecessary non-null assertions (the ! operator)
