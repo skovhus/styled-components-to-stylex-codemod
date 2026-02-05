@@ -1977,7 +1977,7 @@ function tryResolveInlineStyleValueForConditionalExpression(
       return {
         type: "keepOriginal",
         reason:
-          "Theme-dependent conditional ternary could not be resolved to inline style (props.theme is not available at runtime in StyleX)",
+          "Theme-dependant call expression could not be resolved (e.g. theme helper calls like theme.highlight() are not supported)",
       };
     }
   }
@@ -2038,7 +2038,7 @@ function tryResolveInlineStyleValueForLogicalExpression(node: DynamicNode): Hand
     return {
       type: "keepOriginal",
       reason:
-        "Theme-dependent logical expression (??/||) cannot be preserved as inline style (props.theme is not available at runtime in StyleX)",
+        "Theme value with fallback (props.theme.X ?? / || default) cannot be resolved statically — use adapter.resolveValue to map theme paths to StyleX tokens",
     };
   }
   // Signal to the caller that we can preserve this declaration as an inline style
