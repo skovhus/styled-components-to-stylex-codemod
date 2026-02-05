@@ -3,7 +3,7 @@
  * Core concepts: adapter-resolved values and prop-driven style functions.
  */
 import type { StyledDecl } from "../transform-types.js";
-import type { ExpressionKind } from "./decl-types.js";
+import type { ExpressionKind, StyleFnFromPropsEntry } from "./decl-types.js";
 import { cssDeclarationToStylexDeclarations } from "../css-prop-mapping.js";
 import { extractStaticParts } from "./interpolations.js";
 import { buildTemplateWithStaticParts } from "./inline-styles.js";
@@ -17,14 +17,6 @@ import { buildSafeIndexedParamName } from "./import-resolution.js";
 import { cssValueToJs, toSuffixFromProp } from "../transform/helpers.js";
 import { cssPropertyToIdentifier, makeCssProperty } from "./shared.js";
 import type { LowerRulesState } from "./state.js";
-
-type StyleFnFromPropsEntry = {
-  fnKey: string;
-  jsxProp: string;
-  condition?: "truthy" | "always";
-  conditionWhen?: string;
-  callArg?: ExpressionKind;
-};
 
 type ValuePatternContext = Pick<
   LowerRulesState,

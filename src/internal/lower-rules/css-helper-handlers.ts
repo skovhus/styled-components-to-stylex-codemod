@@ -14,7 +14,11 @@ import { mergeStyleObjects } from "./utils.js";
 import type { InternalHandlerContext } from "../builtin-handlers.js";
 import type { TestInfo } from "./decl-types.js";
 import { parseSwitchReturningCssTemplates } from "./switch-variants.js";
-import { resolveTemplateLiteralValue, type TemplateLiteralContext } from "./template-literals.js";
+import {
+  resolveTemplateLiteralValue,
+  type ComponentInfo,
+  type TemplateLiteralContext,
+} from "./template-literals.js";
 import { cssValueToJs, toSuffixFromProp } from "../transform/helpers.js";
 import type { LowerRulesState } from "./state.js";
 
@@ -40,7 +44,7 @@ type CssHelperHandlersContext = Pick<
   variantStyleKeys: Record<string, string>;
   applyVariant: (testInfo: TestInfo, consStyle: Record<string, unknown>) => void;
   dropAllTestInfoProps: (testInfo: TestInfo) => void;
-  componentInfo: TemplateLiteralContext["componentInfo"];
+  componentInfo: ComponentInfo;
   handlerContext: InternalHandlerContext;
 };
 

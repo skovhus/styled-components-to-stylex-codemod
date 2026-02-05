@@ -10,8 +10,7 @@ import {
   getFunctionBodyExpr,
   literalToStaticValue,
 } from "../utilities/jscodeshift-utils.js";
-
-type ExpressionKind = Parameters<JSCodeshift["expressionStatement"]>[0];
+import type { ExpressionKind } from "./decl-types.js";
 
 // Build a template literal with static prefix/suffix around a dynamic expression.
 // e.g., prefix="" suffix="ms" expr=<call> -> `${<call>}ms`

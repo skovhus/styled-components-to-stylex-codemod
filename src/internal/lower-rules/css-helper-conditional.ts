@@ -6,7 +6,7 @@
 import type { ASTNode } from "jscodeshift";
 import type { ImportSpec } from "../../adapter.js";
 import type { StyledDecl } from "../transform-types.js";
-import type { ExpressionKind, TestInfo } from "./decl-types.js";
+import type { ExpressionKind, StyleFnFromPropsEntry, TestInfo } from "./decl-types.js";
 import type { InternalHandlerContext } from "../builtin-handlers.js";
 import type { LowerRulesState } from "./state.js";
 import { resolveDynamicNode } from "../builtin-handlers.js";
@@ -33,7 +33,11 @@ import {
 import { cssValueToJs, toSuffixFromProp } from "../transform/helpers.js";
 import { createPropTestHelpers, invertWhen } from "./variant-utils.js";
 import { cssPropertyToIdentifier, makeCssProperty, makeCssPropKey } from "./shared.js";
-import { resolveTemplateLiteralBranch, type TemplateLiteralContext } from "./template-literals.js";
+import {
+  resolveTemplateLiteralBranch,
+  type ComponentInfo,
+  type TemplateLiteralContext,
+} from "./template-literals.js";
 import {
   ensureShouldForwardPropDrop,
   literalToStaticValue,
@@ -41,14 +45,6 @@ import {
 } from "./types.js";
 import { buildThemeStyleKeys } from "../utilities/style-key-naming.js";
 import { capitalize } from "../utilities/string-utils.js";
-
-type StyleFnFromPropsEntry = {
-  fnKey: string;
-  jsxProp: string;
-  condition?: "truthy" | "always";
-  conditionWhen?: string;
-  callArg?: ExpressionKind;
-};
 
 export type CssHelperConditionalContext = Pick<
   LowerRulesState,
@@ -66,7 +62,7 @@ export type CssHelperConditionalContext = Pick<
 > & {
   decl: StyledDecl;
   handlerContext: InternalHandlerContext;
-  componentInfo: TemplateLiteralContext["componentInfo"];
+  componentInfo: ComponentInfo;
   styleObj: Record<string, unknown>;
   styleFnFromProps: StyleFnFromPropsEntry[];
   styleFnDecls: Map<string, unknown>;

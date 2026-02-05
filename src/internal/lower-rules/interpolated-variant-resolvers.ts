@@ -3,10 +3,9 @@
  * Core concepts: parse resolved expressions and emit variant buckets safely.
  */
 import type { CssDeclarationIR } from "../css-ir.js";
-import type { WarningLog, WarningType } from "../logger.js";
+import type { WarningType } from "../logger.js";
 import type { StyledDecl } from "../transform-types.js";
-import type { ExpressionKind } from "./decl-types.js";
-import type { JSCodeshift } from "jscodeshift";
+import type { LowerRulesState } from "./state.js";
 import {
   BORDER_STYLES,
   cssPropertyToStylexProp,
@@ -21,8 +20,10 @@ import { isAstNode } from "../utilities/jscodeshift-utils.js";
 import { toSuffixFromProp } from "../transform/helpers.js";
 import { capitalize } from "../utilities/string-utils.js";
 
-type SplitVariantsContext = {
-  j: JSCodeshift;
+type SplitVariantsContext = Pick<
+  LowerRulesState,
+  "j" | "warnings" | "parseExpr" | "resolverImports"
+> & {
   decl: StyledDecl;
   d: CssDeclarationIR;
   res: any;
@@ -31,9 +32,6 @@ type SplitVariantsContext = {
   variantStyleKeys: Record<string, string>;
   pseudos: string[] | null;
   media: string | undefined;
-  parseExpr: (expr: string) => ExpressionKind | null;
-  resolverImports: Map<string, any>;
-  warnings: WarningLog[];
   setBail: () => void;
   bailUnsupported: (decl: StyledDecl, type: WarningType) => void;
 };

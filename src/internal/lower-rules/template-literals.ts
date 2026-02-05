@@ -27,14 +27,13 @@ import { extractStaticParts } from "./interpolations.js";
 import { buildTemplateWithStaticParts } from "./inline-styles.js";
 import { literalToStaticValue } from "./types.js";
 import { cssValueToJs } from "../transform/helpers.js";
-
-type ExpressionKind = Parameters<JSCodeshift["expressionStatement"]>[0];
+import type { ExpressionKind } from "./decl-types.js";
 
 type ImportMeta = { importedName: string; source: ImportSource };
 
-type ResolveImportInScope = (localName: string, identNode?: unknown) => ImportMeta | null;
+export type ResolveImportInScope = (localName: string, identNode?: unknown) => ImportMeta | null;
 
-type ComponentInfo =
+export type ComponentInfo =
   | {
       localName: string;
       base: "intrinsic";

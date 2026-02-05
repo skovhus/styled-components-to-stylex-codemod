@@ -2,23 +2,19 @@
  * Creates resolvers for theme value lookups used in inline styles.
  * Core concepts: theme binding detection and adapter value resolution.
  */
-import type { ASTNode, Collection, JSCodeshift } from "jscodeshift";
-
-import type { Adapter, ImportSpec } from "../../adapter.js";
 import {
   getFunctionBodyExpr,
   getMemberPathFromIdentifier,
   getNodeLocStart,
 } from "../utilities/jscodeshift-utils.js";
+import type { LowerRulesState } from "./state.js";
 
-export function createThemeResolvers(args: {
-  root: Collection<ASTNode>;
-  j: JSCodeshift;
-  filePath: string;
-  resolveValue: Adapter["resolveValue"];
-  parseExpr: (exprSource: string) => any;
-  resolverImports: Map<string, ImportSpec>;
-}): {
+export function createThemeResolvers(
+  args: Pick<
+    LowerRulesState,
+    "root" | "j" | "filePath" | "resolveValue" | "parseExpr" | "resolverImports"
+  >,
+): {
   hasLocalThemeBinding: boolean;
   resolveThemeValue: (expr: any) => unknown;
   resolveThemeValueFromFn: (expr: any) => unknown;

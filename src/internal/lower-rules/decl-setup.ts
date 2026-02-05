@@ -8,7 +8,7 @@ import type { InternalHandlerContext } from "../builtin-handlers.js";
 import { cssDeclarationToStylexDeclarations } from "../css-prop-mapping.js";
 import { normalizeStylisAstToIR } from "../css-ir.js";
 import { createCssHelperHandlers } from "./css-helper-handlers.js";
-import type { ExpressionKind, TestInfo } from "./decl-types.js";
+import type { ExpressionKind, StyleFnFromPropsEntry, TestInfo } from "./decl-types.js";
 import { createTypeInferenceHelpers, ensureShouldForwardPropDrop } from "./types.js";
 import { createCssHelperConditionalHandler } from "./css-helper-conditional.js";
 import { createValuePatternHandlers } from "./value-patterns.js";
@@ -54,13 +54,7 @@ export function createDeclProcessingState(state: LowerRulesState, decl: StyledDe
   const variantBuckets = new Map<string, Record<string, unknown>>();
   const variantStyleKeys: Record<string, string> = {};
   const extraStyleObjects = new Map<string, Record<string, unknown>>();
-  const styleFnFromProps: Array<{
-    fnKey: string;
-    jsxProp: string;
-    condition?: "truthy" | "always";
-    conditionWhen?: string;
-    callArg?: ExpressionKind;
-  }> = [];
+  const styleFnFromProps: StyleFnFromPropsEntry[] = [];
   const styleFnDecls = new Map<string, any>();
   const attrBuckets = new Map<string, Record<string, unknown>>();
   const inlineStyleProps: Array<{ prop: string; expr: ExpressionKind; jsxProp?: string }> = [];
