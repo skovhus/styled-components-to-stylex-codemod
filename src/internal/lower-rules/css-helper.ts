@@ -8,6 +8,7 @@ import type { WarningLog, WarningType } from "../logger.js";
 import { parseStyledTemplateLiteral } from "../styled-css.js";
 import { parseSelector } from "../selectors.js";
 import { wrapExprWithStaticParts } from "./interpolations.js";
+import { cssValueToJs } from "../transform/helpers.js";
 
 type ImportMapEntry = {
   importedName: string;
@@ -70,7 +71,6 @@ export function createCssHelperResolver(args: {
   resolveValue: Adapter["resolveValue"];
   parseExpr: (exprSource: string) => any;
   resolverImports: Map<string, ImportSpec>;
-  cssValueToJs: (value: unknown, important?: boolean, propName?: string) => unknown;
   warnings: WarningLog[];
 }): {
   isCssHelperTaggedTemplate: (expr: any) => expr is { quasi: any };
@@ -84,8 +84,7 @@ export function createCssHelperResolver(args: {
     conditionalVariants: ConditionalVariant[];
   } | null;
 } {
-  const { importMap, filePath, resolveValue, parseExpr, resolverImports, cssValueToJs, warnings } =
-    args;
+  const { importMap, filePath, resolveValue, parseExpr, resolverImports, warnings } = args;
 
   const isCssHelperTaggedTemplate = (expr: any): expr is { quasi: any } => {
     if (!expr || expr.type !== "TaggedTemplateExpression") {

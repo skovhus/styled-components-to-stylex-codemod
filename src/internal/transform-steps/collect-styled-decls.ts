@@ -4,7 +4,6 @@ import { extractStyledCallArgs } from "../extract-styled-call-args.js";
 import { formatOutput } from "../utilities/format-output.js";
 import { CONTINUE, returnResult, type StepResult } from "../transform-types.js";
 import { TransformContext } from "../transform-context.js";
-import { toStyleKey, toSuffixFromProp } from "../transform/helpers.js";
 
 /**
  * Collects styled declarations and merges extracted css helper declarations.
@@ -38,8 +37,6 @@ export function collectStyledDeclsStep(ctx: TransformContext): StepResult {
     j,
     styledDefaultImport,
     cssLocal,
-    toStyleKey,
-    toSuffixFromProp,
   });
 
   const styledDecls = collected.styledDecls;

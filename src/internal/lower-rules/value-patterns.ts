@@ -16,6 +16,7 @@ import {
   setIdentifierTypeAnnotation,
 } from "../utilities/jscodeshift-utils.js";
 import { buildSafeIndexedParamName } from "./import-resolution.js";
+import { cssValueToJs, toSuffixFromProp } from "../transform/helpers.js";
 
 type StyleFnFromPropsEntry = {
   fnKey: string;
@@ -79,8 +80,6 @@ type ValuePatternContext = {
       elseValue: string;
     }
   >;
-  toSuffixFromProp: (propName: string) => string;
-  cssValueToJs: (value: unknown, important?: boolean, propName?: string) => unknown;
   hasLocalThemeBinding: boolean;
   annotateParamFromJsxProp: (param: any, propName: string) => void;
   findJsxPropTsType: (propName: string) => unknown;
@@ -103,8 +102,6 @@ export const createValuePatternHandlers = (ctx: ValuePatternContext) => {
     parseExpr,
     resolverImports,
     stringMappingFns,
-    toSuffixFromProp,
-    cssValueToJs,
     hasLocalThemeBinding,
     annotateParamFromJsxProp,
     findJsxPropTsType,

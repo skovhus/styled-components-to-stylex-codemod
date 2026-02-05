@@ -1,4 +1,4 @@
-import type { API, ASTNode, Collection, JSCodeshift } from "jscodeshift";
+import type { ASTNode, JSCodeshift } from "jscodeshift";
 import { compile } from "stylis";
 import { resolveDynamicNode } from "./builtin-handlers.js";
 import type { InternalHandlerContext } from "./builtin-handlers.js";
@@ -23,7 +23,7 @@ import {
   isCallExpressionNode,
   staticValueToLiteral,
 } from "./utilities/jscodeshift-utils.js";
-import type { Adapter, ImportSource, ImportSpec, ResolveValueContext } from "../adapter.js";
+import type { ImportSource, ImportSpec, ResolveValueContext } from "../adapter.js";
 import { tryHandleAnimation } from "./lower-rules/animation.js";
 import { tryHandleInterpolatedBorder } from "./lower-rules/borders.js";
 import {
@@ -89,9 +89,15 @@ import {
 } from "./selectors.js";
 import { capitalize } from "./utilities/string-utils.js";
 import type { StyledDecl } from "./transform-types.js";
-import type { WarningLog, WarningType } from "./logger.js";
-import type { CssHelperFunction, CssHelperObjectMembers } from "./transform/css-helpers.js";
-import type { ComputedKeyEntry } from "./transform/helpers.js";
+import type { WarningType } from "./logger.js";
+import type { CssHelperFunction } from "./transform/css-helpers.js";
+import {
+  cssValueToJs,
+  toStyleKey,
+  toSuffixFromProp,
+  type ComputedKeyEntry,
+} from "./transform/helpers.js";
+import type { TransformContext } from "./transform-context.js";
 
 export type DescendantOverride = {
   parentStyleKey: string;
@@ -146,49 +152,7 @@ function makeCssProperty(
   }
   return p;
 }
-export function lowerRules(args: {
-  api: API;
-  j: JSCodeshift;
-  root: Collection<ASTNode>;
-  filePath: string;
-  resolveValue: Adapter["resolveValue"];
-  resolveCall: Adapter["resolveCall"];
-  resolveSelector: Adapter["resolveSelector"];
-  importMap: Map<
-    string,
-    {
-      importedName: string;
-      source: ImportSource;
-    }
-  >;
-  warnings: WarningLog[];
-  resolverImports: Map<string, ImportSpec>;
-  styledDecls: StyledDecl[];
-  keyframesNames: Set<string>;
-  cssHelperNames: Set<string>;
-  cssHelperObjectMembers: CssHelperObjectMembers;
-  cssHelperFunctions: Map<string, CssHelperFunction>;
-  stringMappingFns: Map<
-    string,
-    {
-      param: string;
-      testParam: string;
-      whenValue: string;
-      thenValue: string;
-      elseValue: string;
-    }
-  >;
-  toStyleKey: (name: string) => string;
-  toSuffixFromProp: (propName: string) => string;
-  parseExpr: (exprSource: string) => ExpressionKind | null;
-  cssValueToJs: (value: unknown, important?: boolean, propName?: string) => unknown;
-  rewriteCssVarsInStyleObject: (
-    obj: Record<string, unknown>,
-    definedVars: Map<string, string>,
-    varsToDrop: Set<string>,
-  ) => void;
-  literalToAst: (j: JSCodeshift, v: unknown) => ExpressionKind;
-}): {
+export function lowerRules(ctx: TransformContext): {
   resolvedStyleObjects: Map<string, unknown>;
   descendantOverrides: DescendantOverride[];
   ancestorSelectorParents: Set<string>;
@@ -199,26 +163,29 @@ export function lowerRules(args: {
     api,
     j,
     root,
-    filePath,
-    resolveValue,
-    resolveCall,
-    resolveSelector,
-    importMap,
+    file,
     warnings,
     resolverImports,
-    styledDecls,
     keyframesNames,
-    cssHelperNames,
-    cssHelperObjectMembers,
-    cssHelperFunctions,
-    stringMappingFns,
-    toStyleKey,
-    toSuffixFromProp,
     parseExpr,
-    cssValueToJs,
     rewriteCssVarsInStyleObject,
-    literalToAst,
-  } = args;
+  } = ctx;
+  const filePath = file.path;
+  const resolveValue = ctx.resolveValueSafe;
+  const resolveCall = ctx.resolveCallSafe;
+  const resolveSelector = ctx.resolveSelectorSafe;
+  const importMap =
+    ctx.importMap ?? new Map<string, { importedName: string; source: ImportSource }>();
+  const styledDecls = ctx.styledDecls as StyledDecl[];
+  const cssHelpers = ctx.cssHelpers ?? {
+    cssHelperNames: new Set<string>(),
+    cssHelperObjectMembers: new Map<string, Map<string, StyledDecl>>(),
+    cssHelperFunctions: new Map<string, CssHelperFunction>(),
+  };
+  const cssHelperNames = cssHelpers.cssHelperNames;
+  const cssHelperObjectMembers = cssHelpers.cssHelperObjectMembers;
+  const cssHelperFunctions = cssHelpers.cssHelperFunctions;
+  const stringMappingFns = ctx.stringMappingFns ?? new Map();
 
   const resolvedStyleObjects = new Map<string, unknown>();
   const declByLocalName = new Map(styledDecls.map((d) => [d.localName, d]));
@@ -289,7 +256,7 @@ export function lowerRules(args: {
   const cssHelperValuesByKey = new Map<string, Map<string, unknown>>();
   const mixinValuesByKey = new Map<string, Map<string, unknown>>();
   for (const decl of styledDecls) {
-    const propValues = computeDeclBasePropValues(decl, cssValueToJs);
+    const propValues = computeDeclBasePropValues(decl);
     if (decl.isCssHelper) {
       cssHelperValuesByKey.set(decl.styleKey, propValues);
       continue;
@@ -382,7 +349,6 @@ export function lowerRules(args: {
     resolveValue,
     parseExpr,
     resolverImports,
-    cssValueToJs,
     warnings,
   });
 
@@ -481,7 +447,6 @@ export function lowerRules(args: {
       decl,
       variantBuckets,
       variantStyleKeys,
-      toSuffixFromProp,
     });
 
     const dropAllTestInfoProps = (testInfo: TestInfo): void => {
@@ -514,8 +479,6 @@ export function lowerRules(args: {
       parseExpr,
       resolverImports,
       stringMappingFns,
-      toSuffixFromProp,
-      cssValueToJs,
       hasLocalThemeBinding,
       annotateParamFromJsxProp,
       findJsxPropTsType,
@@ -564,7 +527,6 @@ export function lowerRules(args: {
         variantStyleKeys,
         cssHelperFunctions,
         usedCssHelperFunctions,
-        cssValueToJs,
         parseExpr,
         resolveCall,
         resolveImportInScope,
@@ -573,7 +535,6 @@ export function lowerRules(args: {
         resolveCssHelperTemplate,
         applyVariant,
         dropAllTestInfoProps,
-        toSuffixFromProp,
         componentInfo,
         handlerContext,
         markBail,
@@ -1068,7 +1029,6 @@ export function lowerRules(args: {
               paramName,
               filePath,
               parseExpr,
-              cssValueToJs,
               resolveValue,
               resolveCall,
               resolveImportInScope,
@@ -1258,7 +1218,6 @@ export function lowerRules(args: {
           paramName,
           filePath,
           parseExpr,
-          cssValueToJs,
           resolveValue,
           resolveCall,
           resolveImportInScope,
@@ -1633,7 +1592,6 @@ export function lowerRules(args: {
           paramName,
           filePath,
           parseExpr,
-          cssValueToJs,
           resolveValue,
           resolveCall,
           resolveImportInScope,
@@ -1664,7 +1622,6 @@ export function lowerRules(args: {
           paramName,
           filePath,
           parseExpr,
-          cssValueToJs,
           resolveValue,
           resolveCall,
           resolveImportInScope,
@@ -1678,7 +1635,6 @@ export function lowerRules(args: {
           paramName,
           filePath,
           parseExpr,
-          cssValueToJs,
           resolveValue,
           resolveCall,
           resolveImportInScope,
@@ -1722,7 +1678,6 @@ export function lowerRules(args: {
           paramName,
           filePath,
           parseExpr,
-          cssValueToJs,
           resolveValue,
           resolveCall,
           resolveImportInScope,
@@ -2620,7 +2575,6 @@ export function lowerRules(args: {
                 });
                 bail = true;
               },
-              toSuffixFromProp,
               variantBuckets,
               variantStyleKeys,
               inlineStyleProps,
@@ -5268,7 +5222,6 @@ export function lowerRules(args: {
     j,
     descendantOverridePseudoBuckets,
     resolvedStyleObjects,
-    literalToAst,
     makeCssPropKey,
   });
 

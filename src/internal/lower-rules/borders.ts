@@ -9,6 +9,7 @@ import {
   parseInterpolatedBorderStaticParts,
 } from "../css-prop-mapping.js";
 import { extractStaticParts } from "./interpolations.js";
+import { toSuffixFromProp } from "../transform/helpers.js";
 
 type ExpressionKind = Parameters<JSCodeshift["expressionStatement"]>[0];
 
@@ -40,7 +41,6 @@ export function tryHandleInterpolatedBorder(args: {
     context?: Record<string, unknown>,
     loc?: { line: number; column: number } | null,
   ) => void;
-  toSuffixFromProp: (propName: string) => string;
   variantBuckets: Map<string, Record<string, unknown>>;
   variantStyleKeys: Record<string, string>;
   inlineStyleProps: Array<{ prop: string; expr: any }>;
@@ -62,7 +62,6 @@ export function tryHandleInterpolatedBorder(args: {
     applyResolvedPropValue,
     bailUnsupported,
     bailUnsupportedWithContext,
-    toSuffixFromProp,
     variantBuckets,
     variantStyleKeys,
     inlineStyleProps,

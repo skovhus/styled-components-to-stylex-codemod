@@ -9,6 +9,7 @@ import type { ExpressionKind, TestInfo } from "./decl-types.js";
 import type { StyledDecl } from "../transform-types.js";
 import { ensureShouldForwardPropDrop } from "./types.js";
 import { mergeStyleObjects } from "./utils.js";
+import { toSuffixFromProp } from "../transform/helpers.js";
 
 /**
  * Inverts a "when" condition string for the opposite variant branch.
@@ -228,9 +229,8 @@ export const createVariantApplier = (args: {
   decl: StyledDecl;
   variantBuckets: Map<string, Record<string, unknown>>;
   variantStyleKeys: Record<string, string>;
-  toSuffixFromProp: (name: string) => string;
 }) => {
-  const { decl, variantBuckets, variantStyleKeys, toSuffixFromProp } = args;
+  const { decl, variantBuckets, variantStyleKeys } = args;
   const dropAllTestInfoProps = (testInfo: TestInfo): void => {
     const propsToCheck = testInfo.allPropNames ?? (testInfo.propName ? [testInfo.propName] : []);
     for (const prop of propsToCheck) {

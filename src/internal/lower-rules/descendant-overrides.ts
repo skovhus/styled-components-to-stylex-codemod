@@ -4,16 +4,15 @@
 import type { JSCodeshift } from "jscodeshift";
 import { isAstNode } from "../utilities/jscodeshift-utils.js";
 import type { ExpressionKind } from "./decl-types.js";
+import { literalToAst } from "../transform/helpers.js";
 
 export const finalizeDescendantOverrides = (args: {
   j: JSCodeshift;
   descendantOverridePseudoBuckets: Map<string, Map<string | null, Record<string, unknown>>>;
   resolvedStyleObjects: Map<string, unknown>;
-  literalToAst: (j: JSCodeshift, v: unknown) => ExpressionKind;
   makeCssPropKey: (j: JSCodeshift, prop: string) => ExpressionKind;
 }): void => {
-  const { j, descendantOverridePseudoBuckets, resolvedStyleObjects, literalToAst, makeCssPropKey } =
-    args;
+  const { j, descendantOverridePseudoBuckets, resolvedStyleObjects, makeCssPropKey } = args;
   if (descendantOverridePseudoBuckets.size === 0) {
     return;
   }
