@@ -1977,7 +1977,7 @@ function tryResolveInlineStyleValueForConditionalExpression(
       return {
         type: "keepOriginal",
         reason:
-          "Theme-dependent conditional values require a project-specific theme source (e.g. useTheme())",
+          "Theme-dependent conditional ternary could not be resolved to inline style (props.theme is not available at runtime in StyleX)",
       };
     }
   }
@@ -2038,7 +2038,7 @@ function tryResolveInlineStyleValueForLogicalExpression(node: DynamicNode): Hand
     return {
       type: "keepOriginal",
       reason:
-        "Theme-dependent conditional values require a project-specific theme source (e.g. useTheme())",
+        "Theme-dependent logical expression (??/||) cannot be preserved as inline style (props.theme is not available at runtime in StyleX)",
     };
   }
   // Signal to the caller that we can preserve this declaration as an inline style

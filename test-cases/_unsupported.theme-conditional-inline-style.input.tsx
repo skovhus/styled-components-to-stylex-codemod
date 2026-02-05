@@ -1,4 +1,4 @@
-// @expected-warning: Theme-dependent conditional values require a project-specific theme source (e.g. useTheme())
+// @expected-warning: Theme-dependent conditional ternary could not be resolved to inline style (props.theme is not available at runtime in StyleX)
 import * as React from "react";
 import styled from "styled-components";
 

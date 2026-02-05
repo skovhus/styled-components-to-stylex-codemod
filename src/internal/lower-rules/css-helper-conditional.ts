@@ -887,7 +887,7 @@ export function createCssHelperConditionalHandler(ctx: CssHelperConditionalConte
       const loc = getNodeLocStart(conditional.test);
       warnings.push({
         severity: "warning",
-        type: "Theme-dependent conditional values require a project-specific theme source (e.g. useTheme())",
+        type: "Theme-dependent block-level conditional could not be fully resolved (branches may contain dynamic interpolations)",
         loc: loc ?? decl.loc,
         context: {},
       });
