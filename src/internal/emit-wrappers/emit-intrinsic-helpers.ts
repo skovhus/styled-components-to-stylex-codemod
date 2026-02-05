@@ -74,6 +74,7 @@ export type EmitIntrinsicContext = {
   patternProp: WrapperEmitter["patternProp"];
   emitted: ASTNode[];
   markNeedsReactTypeImport: () => void;
+  markNeedsUseThemeImport: () => void;
   helpers: EmitIntrinsicHelpers;
 };
 

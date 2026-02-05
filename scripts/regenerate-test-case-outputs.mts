@@ -61,7 +61,7 @@ async function updateFixture(name: string, ext: string) {
   const input = await readFile(inputPath, "utf-8");
 
   // Determine parser based on filename pattern
-  const parser = name.includes(".flow") ? "flow" : (ext === "jsx" ? "babel" : "tsx");
+  const parser = name.includes(".flow") ? "flow" : ext === "jsx" ? "babel" : "tsx";
 
   const result = applyTransform(
     transform,

@@ -9,7 +9,8 @@ import type { WarningType } from "../logger.js";
 import type { ExpressionKind } from "./decl-types.js";
 import type { DeclProcessingState } from "./decl-setup.js";
 import { resolveDynamicNode } from "../builtin-handlers.js";
-import { cssDeclarationToStylexDeclarations } from "../css-prop-mapping.js";
+import { cssDeclarationToStylexDeclarations, cssPropertyToStylexProp } from "../css-prop-mapping.js";
+import { buildThemeStyleKeys } from "../utilities/style-key-naming.js";
 import {
   cloneAstNode,
   extractRootAndPath,
@@ -692,6 +693,58 @@ export function handleInterpolatedDeclaration(args: InterpolatedDeclarationConte
             : null;
         applyResolvedPropValue(out.prop, exprAst as any, commentSource);
       }
+      continue;
+    }
+
+    // Handle theme boolean conditional patterns (e.g., theme.isDark, theme.isHighContrast)
+    if (res && res.type === "splitThemeBooleanVariants") {
+      // Add imports if present
+      for (const imp of res.trueImports ?? []) {
+        resolverImports.set(JSON.stringify(imp), imp);
+      }
+      for (const imp of res.falseImports ?? []) {
+        resolverImports.set(JSON.stringify(imp), imp);
+      }
+
+      // Map CSS prop to StyleX prop
+      const stylexProp = cssPropertyToStylexProp(res.cssProp);
+
+      const { trueKey: trueStyleKey, falseKey: falseStyleKey } = buildThemeStyleKeys(
+        decl.styleKey,
+        res.themeProp,
+      );
+
+      // Initialize the array if needed
+      if (!decl.needsUseThemeHook) {
+        decl.needsUseThemeHook = [];
+      }
+
+      // Check if we already have an entry for this theme prop
+      let entry = decl.needsUseThemeHook.find((e) => e.themeProp === res.themeProp);
+      if (!entry) {
+        entry = {
+          themeProp: res.themeProp,
+          trueStyleKey,
+          falseStyleKey,
+        };
+        decl.needsUseThemeHook.push(entry);
+
+        // Initialize the style objects
+        extraStyleObjects.set(trueStyleKey, {});
+        extraStyleObjects.set(falseStyleKey, {});
+      }
+
+      // Add the property to the true/false style objects
+      const trueStyle = extraStyleObjects.get(trueStyleKey) ?? {};
+      const falseStyle = extraStyleObjects.get(falseStyleKey) ?? {};
+
+      trueStyle[stylexProp] = res.trueValue;
+      falseStyle[stylexProp] = res.falseValue;
+
+      extraStyleObjects.set(trueStyleKey, trueStyle);
+      extraStyleObjects.set(falseStyleKey, falseStyle);
+
+      decl.needsWrapperComponent = true;
       continue;
     }
 

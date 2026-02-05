@@ -23,6 +23,7 @@ import {
 export function emitIntrinsicWrappers(emitter: WrapperEmitter): {
   emitted: ASTNode[];
   needsReactTypeImport: boolean;
+  needsUseThemeImport: boolean;
 } {
   const root = emitter.root;
   const j = emitter.j;
@@ -34,12 +35,17 @@ export function emitIntrinsicWrappers(emitter: WrapperEmitter): {
 
   const emitted: ASTNode[] = [];
   let needsReactTypeImport = false;
+  let needsUseThemeImport = false;
 
   const emitNamedPropsType = (localName: string, typeExprText: string, genericParams?: string) =>
     emitter.emitNamedPropsType({ localName, typeExprText, genericParams, emitted });
 
   const markNeedsReactTypeImport = () => {
     needsReactTypeImport = true;
+  };
+
+  const markNeedsUseThemeImport = () => {
+    needsUseThemeImport = true;
   };
 
   const helpers = createEmitIntrinsicHelpers({
@@ -61,6 +67,7 @@ export function emitIntrinsicWrappers(emitter: WrapperEmitter): {
     patternProp,
     emitted,
     markNeedsReactTypeImport,
+    markNeedsUseThemeImport,
     helpers,
   };
 
@@ -73,5 +80,5 @@ export function emitIntrinsicWrappers(emitter: WrapperEmitter): {
   emitSiblingWrappers(ctx);
   emitSimpleExportedIntrinsicWrappers(ctx);
 
-  return { emitted, needsReactTypeImport };
+  return { emitted, needsReactTypeImport, needsUseThemeImport };
 }

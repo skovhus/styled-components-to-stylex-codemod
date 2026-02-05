@@ -11,8 +11,9 @@ export function insertEmittedWrappers(args: {
   emitter: WrapperEmitter;
   emitted: ASTNode[];
   needsReactTypeImport: boolean;
+  needsUseThemeImport?: boolean;
 }): void {
-  const { emitter, emitted, needsReactTypeImport } = args;
+  const { emitter, emitted, needsReactTypeImport, needsUseThemeImport } = args;
   const { root, j, wrapperDecls, exportedComponents, emitTypes } = emitter;
 
   if (emitted.length > 0) {
@@ -229,5 +230,44 @@ export function insertEmittedWrappers(args: {
 
   if (emitTypes && needsReactTypeImport) {
     ensureReactBinding({ root, j, useNamespaceStyle: true });
+  }
+
+  // Add useTheme import from styled-components when needed for theme boolean conditionals
+  if (needsUseThemeImport) {
+    // Check if useTheme is already imported from styled-components
+    // Filter out type-only imports (import type) since we need a runtime binding
+    const existingImport = root
+      .find(j.ImportDeclaration, {
+        source: { value: "styled-components" },
+      } as any)
+      .filter((path: any) => path.node.importKind !== "type");
+
+    if (existingImport.size() > 0) {
+      // Check if useTheme is already in the import
+      const hasUseTheme = existingImport.find(j.ImportSpecifier, {
+        imported: { name: "useTheme" },
+      } as any);
+
+      if (hasUseTheme.size() === 0) {
+        // Add useTheme to existing import (only the first non-type import)
+        existingImport.at(0).forEach((path: any) => {
+          const specifiers = path.node.specifiers ?? [];
+          specifiers.push(j.importSpecifier(j.identifier("useTheme")));
+        });
+      }
+    } else {
+      // No runtime import from styled-components exists, create a new one
+      const useThemeImport = j.importDeclaration(
+        [j.importSpecifier(j.identifier("useTheme"))],
+        j.literal("styled-components"),
+      );
+      // Insert after the first import
+      const firstImport = root.find(j.ImportDeclaration).at(0);
+      if (firstImport.size() > 0) {
+        firstImport.insertAfter(useThemeImport);
+      } else {
+        root.get().node.program.body.unshift(useThemeImport);
+      }
+    }
   }
 }

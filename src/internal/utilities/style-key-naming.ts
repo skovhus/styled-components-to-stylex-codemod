@@ -7,6 +7,59 @@ import { capitalize } from "./string-utils.js";
 type ExpressionKind = Parameters<import("jscodeshift").JSCodeshift["expressionStatement"]>[0];
 
 /**
+ * Builds camelCase style keys for theme-conditional style objects.
+ *
+ * Naming convention:
+ * - Boolean `isDark` → `{base}Dark` / `{base}Light`
+ * - Boolean `isX` → `{base}X` / `{base}NotX`
+ * - Other boolean → `{base}Theme{Prop}` / `{base}ThemeNot{Prop}`
+ * - Binary `mode === "dark"` → `{base}ThemeModeDark` / `{base}ThemeModeNotDark`
+ *
+ * @param baseKey - The base style key (e.g., "box", "text")
+ * @param themeProp - The theme property name (e.g., "isDark", "mode")
+ * @param comparisonValue - Optional comparison value for binary expressions (e.g., "dark")
+ */
+export function buildThemeStyleKeys(
+  baseKey: string,
+  themeProp: string,
+  comparisonValue?: string,
+): { trueKey: string; falseKey: string } {
+  // Special case: isDark → Dark / Light
+  if (themeProp === "isDark") {
+    return {
+      trueKey: `${baseKey}Dark`,
+      falseKey: `${baseKey}Light`,
+    };
+  }
+
+  // Binary comparison: mode === "dark" → ThemeModeDark / ThemeModeNotDark
+  if (comparisonValue) {
+    const propPart = capitalize(themeProp);
+    const valuePart = capitalize(comparisonValue);
+    return {
+      trueKey: `${baseKey}Theme${propPart}${valuePart}`,
+      falseKey: `${baseKey}Theme${propPart}Not${valuePart}`,
+    };
+  }
+
+  // Boolean isX → X / NotX (strip "is" prefix)
+  if (themeProp.startsWith("is") && themeProp.length > 2 && /[A-Z]/.test(themeProp.charAt(2))) {
+    const suffix = themeProp.slice(2);
+    return {
+      trueKey: `${baseKey}${suffix}`,
+      falseKey: `${baseKey}Not${suffix}`,
+    };
+  }
+
+  // General theme prop: Theme{Prop} / ThemeNot{Prop}
+  const propPart = capitalize(themeProp);
+  return {
+    trueKey: `${baseKey}Theme${propPart}`,
+    falseKey: `${baseKey}ThemeNot${propPart}`,
+  };
+}
+
+/**
  * Converts a prop/condition string to a PascalCase suffix for style keys.
  *
  * @example
