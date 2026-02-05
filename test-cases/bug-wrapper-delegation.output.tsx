@@ -19,7 +19,7 @@ function Sentence<C extends React.ElementType = "div">(
     className?: string;
     style?: React.CSSProperties;
     ref?: React.Ref<HTMLDivElement>;
-    as?: React.ElementType;
+    as?: C;
   }>,
 ) {
   const { as: Component = "div", className, children, style } = props;

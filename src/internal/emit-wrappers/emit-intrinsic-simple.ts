@@ -834,9 +834,9 @@ export function emitSimpleExportedIntrinsicWrappers(ctx: EmitIntrinsicContext): 
       }
       bodyStmts.push(j.returnStatement(jsx as any));
 
-      // For exported components with polymorphic as support, add generic type parameters
-      // For non-exported components, don't add generics
-      const shouldAddTypeParams = usePolymorphicPattern && emitTypes;
+      // Add generic type parameters when as prop support is enabled.
+      // This is needed because the props type uses `as?: C` which requires C to be defined.
+      const shouldAddTypeParams = allowAsProp && emitTypes;
       emitted.push(
         ...withLeadingCommentsOnFirstFunction(
           [

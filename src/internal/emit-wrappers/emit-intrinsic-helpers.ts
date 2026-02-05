@@ -202,8 +202,8 @@ export function createEmitIntrinsicHelpers(env: EmitIntrinsicHelpersEnv): EmitIn
     return defaultAttrs.some((a) => a.jsxProp && !a.jsxProp.startsWith("$"));
   };
 
-  // Simple (non-polymorphic) `as` prop support: just adds `as?: React.ElementType`
-  // without generics. Used for non-exported components and simple wrappers.
+  // Simple `as` prop support: adds `as?: C` where C is the generic type parameter.
+  // Used for non-exported components and simple wrappers with polymorphic as support.
   const mergeAsIntoPropsWithChildren = (typeText: string): string | null => {
     const prefix = "React.PropsWithChildren<";
     if (!typeText.trim().startsWith(prefix) || !typeText.trim().endsWith(">")) {
@@ -211,14 +211,14 @@ export function createEmitIntrinsicHelpers(env: EmitIntrinsicHelpersEnv): EmitIn
     }
     const inner = typeText.trim().slice(prefix.length, -1).trim();
     if (inner === "{}") {
-      return `${prefix}{ as?: React.ElementType }>`;
+      return `${prefix}{ as?: C }>`;
     }
     if (inner.startsWith("{") && inner.endsWith("}")) {
       let body = inner.slice(1, -1).trim();
       if (body.endsWith(";")) {
         body = body.slice(0, -1).trim();
       }
-      const withAs = body.length > 0 ? `${body}; as?: React.ElementType` : "as?: React.ElementType";
+      const withAs = body.length > 0 ? `${body}; as?: C` : "as?: C";
       return `${prefix}{ ${withAs} }>`;
     }
     return null;
@@ -232,7 +232,7 @@ export function createEmitIntrinsicHelpers(env: EmitIntrinsicHelpersEnv): EmitIn
     if (merged) {
       return merged;
     }
-    return emitter.joinIntersection(typeText, "{ as?: React.ElementType }");
+    return emitter.joinIntersection(typeText, "{ as?: C }");
   };
 
   const polymorphicIntrinsicPropsTypeText = (args: {
@@ -373,24 +373,7 @@ export function createEmitIntrinsicHelpers(env: EmitIntrinsicHelpersEnv): EmitIn
 
   const emitMinimalWrapper = (
     args: Parameters<WrapperEmitter["emitMinimalWrapper"]>[0],
-  ): ASTNode[] =>
-    emitter.emitMinimalWrapper({
-      localName: args.localName,
-      tagName: args.tagName,
-      propsTypeName: args.propsTypeName,
-      inlineTypeText: args.inlineTypeText,
-      styleArgs: args.styleArgs,
-      destructureProps: args.destructureProps,
-      propDefaults: args.propDefaults,
-      allowClassNameProp: args.allowClassNameProp,
-      allowStyleProp: args.allowStyleProp,
-      includeRest: args.includeRest,
-      defaultAttrs: args.defaultAttrs,
-      conditionalAttrs: args.conditionalAttrs,
-      invertedBoolAttrs: args.invertedBoolAttrs,
-      staticAttrs: args.staticAttrs,
-      inlineStyleProps: args.inlineStyleProps,
-    });
+  ): ASTNode[] => emitter.emitMinimalWrapper(args);
 
   return {
     emitNamedPropsType,
