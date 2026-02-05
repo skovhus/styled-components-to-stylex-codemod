@@ -6,6 +6,7 @@ import {
   isComponentUsedInJsx,
   propagateDelegationWrapperRequirements,
 } from "../utilities/delegation-utils.js";
+import { isFunctionNode } from "../utilities/jscodeshift-utils.js";
 import { typeContainsPolymorphicAs } from "../utilities/polymorphic-as-detection.js";
 
 type JsxAttr = JSXAttribute | JSXSpreadAttribute;
@@ -542,13 +543,12 @@ export function analyzeBeforeEmitStep(ctx: TransformContext): StepResult {
     const isInsideFunctionScope = (p: any): boolean => {
       let cur = p.parentPath;
       while (cur) {
-        const type = cur.node?.type;
+        const node = cur.node;
+        // Check for function-like nodes (includes class methods which also execute at runtime)
         if (
-          type === "FunctionDeclaration" ||
-          type === "FunctionExpression" ||
-          type === "ArrowFunctionExpression" ||
-          type === "ClassMethod" ||
-          type === "MethodDefinition"
+          isFunctionNode(node) ||
+          node?.type === "ClassMethod" ||
+          node?.type === "MethodDefinition"
         ) {
           return true;
         }
