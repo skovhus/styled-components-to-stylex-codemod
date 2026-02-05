@@ -4,6 +4,7 @@
  * These are the low-complexity paths that still need wrapper boundaries
  * but do not require specialized or polymorphic handling.
  */
+import type { JSCodeshift } from "jscodeshift";
 import type { StyledDecl } from "../transform-types.js";
 import { collectInlineStylePropNames, type ExpressionKind, type InlineStyleProp } from "./types.js";
 import type { JsxAttr, StatementKind } from "./wrapper-emitter.js";
@@ -11,6 +12,7 @@ import { emitStyleMerging } from "./style-merger.js";
 import { sortVariantEntriesBySpecificity, VOID_TAGS } from "./type-helpers.js";
 import { withLeadingCommentsOnFirstFunction } from "./comments.js";
 import type { EmitIntrinsicContext } from "./emit-intrinsic-helpers.js";
+import { cloneAstNode } from "../utilities/jscodeshift-utils.js";
 
 export function emitSimpleWithConfigWrappers(ctx: EmitIntrinsicContext): void {
   const { emitter, j, emitTypes, wrapperDecls, wrapperNames, stylesIdentifier, emitted } = ctx;
@@ -128,6 +130,15 @@ export function emitSimpleWithConfigWrappers(ctx: EmitIntrinsicContext): void {
       ...extraStyleArgsAfterBase,
     ];
 
+    // Handle theme boolean conditionals for withConfig wrappers
+    const needsUseThemeWithConfig = appendThemeBooleanStyleArgs(
+      d.needsUseThemeHook,
+      styleArgs,
+      j,
+      stylesIdentifier,
+      ctx,
+    );
+
     const propsParamId = j.identifier("props");
     if (allowAsProp && emitTypes) {
       emitter.annotatePropsParam(
@@ -147,7 +158,8 @@ export function emitSimpleWithConfigWrappers(ctx: EmitIntrinsicContext): void {
     const isVoidTag = VOID_TAGS.has(tagName);
 
     // For local-only wrappers with no external `className`/`style` usage, keep the wrapper minimal.
-    if (!allowClassNameProp && !allowStyleProp) {
+    // Skip minimal path if theme hooks are needed (requires useTheme() call in wrapper body)
+    if (!allowClassNameProp && !allowStyleProp && !needsUseThemeWithConfig) {
       const usedAttrs = emitter.getUsedAttrs(d.localName);
       // Include rest spread when:
       // - Component is used with spread (usedAttrs.has("*"))
@@ -294,6 +306,9 @@ export function emitSimpleWithConfigWrappers(ctx: EmitIntrinsicContext): void {
         );
 
     const bodyStmts: StatementKind[] = [declStmt];
+    if (needsUseThemeWithConfig) {
+      bodyStmts.push(buildUseThemeDeclaration(j));
+    }
     if (merging.sxDecl) {
       bodyStmts.push(merging.sxDecl);
     }
@@ -629,6 +644,16 @@ export function emitSimpleExportedIntrinsicWrappers(ctx: EmitIntrinsicContext): 
         }
       }
     }
+
+    // Handle theme boolean conditionals - add conditional true/false style args
+    const needsUseTheme = appendThemeBooleanStyleArgs(
+      d.needsUseThemeHook,
+      styleArgs,
+      j,
+      stylesIdentifier,
+      ctx,
+    );
+
     // Collect keys used by compound variants (they're handled separately)
     const compoundVariantKeys = new Set<string>();
     for (const cv of d.compoundVariants ?? []) {
@@ -759,7 +784,7 @@ export function emitSimpleExportedIntrinsicWrappers(ctx: EmitIntrinsicContext): 
       }
     }
 
-    if (allowAsProp || allowClassNameProp || allowStyleProp) {
+    if (allowAsProp || allowClassNameProp || allowStyleProp || needsUseTheme) {
       const isVoidTag = VOID_TAGS.has(tagName);
       // When allowAsProp is true, include children support even for void tags
       // because the user might use `as="textarea"` which requires children
@@ -829,6 +854,9 @@ export function emitSimpleExportedIntrinsicWrappers(ctx: EmitIntrinsicContext): 
       });
 
       const bodyStmts: StatementKind[] = [declStmt];
+      if (needsUseTheme) {
+        bodyStmts.push(buildUseThemeDeclaration(j));
+      }
       if (merging.sxDecl) {
         bodyStmts.push(merging.sxDecl);
       }
@@ -881,4 +909,42 @@ export function emitSimpleExportedIntrinsicWrappers(ctx: EmitIntrinsicContext): 
       ),
     );
   }
+}
+
+// ---------------------------------------------------------------------------
+// Shared helpers for theme boolean conditional handling
+// ---------------------------------------------------------------------------
+
+/** Appends theme boolean conditional style args (e.g., `theme.isDark ? styles.boxDark : styles.boxLight`) to `styleArgs`. */
+function appendThemeBooleanStyleArgs(
+  hooks: StyledDecl["needsUseThemeHook"],
+  styleArgs: ExpressionKind[],
+  j: JSCodeshift,
+  stylesIdentifier: string,
+  ctx: EmitIntrinsicContext,
+): boolean {
+  if (!hooks || hooks.length === 0) {
+    return false;
+  }
+  ctx.markNeedsUseThemeImport();
+  for (const entry of hooks) {
+    const trueExpr = entry.trueStyleKey
+      ? j.memberExpression(j.identifier(stylesIdentifier), j.identifier(entry.trueStyleKey))
+      : (j.identifier("undefined") as ExpressionKind);
+    const falseExpr = entry.falseStyleKey
+      ? j.memberExpression(j.identifier(stylesIdentifier), j.identifier(entry.falseStyleKey))
+      : (j.identifier("undefined") as ExpressionKind);
+    const condition = entry.conditionExpr
+      ? (cloneAstNode(entry.conditionExpr) as ExpressionKind)
+      : j.memberExpression(j.identifier("theme"), j.identifier(entry.themeProp));
+    styleArgs.push(j.conditionalExpression(condition, trueExpr, falseExpr));
+  }
+  return true;
+}
+
+/** Builds a `const theme = useTheme();` variable declaration. */
+function buildUseThemeDeclaration(j: JSCodeshift): StatementKind {
+  return j.variableDeclaration("const", [
+    j.variableDeclarator(j.identifier("theme"), j.callExpression(j.identifier("useTheme"), [])),
+  ]);
 }

@@ -59,12 +59,16 @@ export function emitWrappers(args: {
 
   const emitted: ASTNode[] = [];
   let needsReactTypeImport = false;
+  let needsUseThemeImport = false;
 
   {
     const out = emitIntrinsicWrappers(emitter);
     emitted.push(...out.emitted);
     if (out.needsReactTypeImport) {
       needsReactTypeImport = true;
+    }
+    if (out.needsUseThemeImport) {
+      needsUseThemeImport = true;
     }
   }
 
@@ -80,5 +84,6 @@ export function emitWrappers(args: {
     emitter,
     emitted,
     needsReactTypeImport,
+    needsUseThemeImport,
   });
 }

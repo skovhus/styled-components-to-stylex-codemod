@@ -1444,3 +1444,200 @@ export const App = () => <Box />;
     expect(result.code).not.toMatch(/tabIndex:\s*tabIndex\s*=\s*0/);
   });
 });
+
+describe("theme boolean conditionals", () => {
+  it("should handle negated !theme.isDark conditional", () => {
+    const source = `
+import styled from "styled-components";
+
+const Box = styled.div\`
+  opacity: \${(props) => !props.theme.isDark ? 0.9 : 0.7};
+\`;
+
+export const App = () => <Box>Hello</Box>;
+`;
+
+    const result = transformWithWarnings(
+      { source, path: "theme-isdark-negated.tsx" },
+      { jscodeshift: j, j, stats: () => {}, report: () => {} },
+      { adapter: fixtureAdapter },
+    );
+
+    expect(result.code).toMatchInlineSnapshot(`
+      "
+      import React from "react";
+      import * as stylex from "@stylexjs/stylex";
+      import { useTheme } from "styled-components";
+
+      function Box(props: React.PropsWithChildren<{ ref?: React.Ref<HTMLDivElement> }>) {
+        const {
+          children,
+        } = props;
+
+        const theme = useTheme();
+        return <div {...stylex.props(theme.isDark ? styles.boxDark : styles.boxLight)}>{children}</div>;
+      }
+
+      export const App = () => <Box>Hello</Box>;
+
+      const styles = stylex.create({
+        boxDark: {
+          opacity: 0.7,
+        },
+        boxLight: {
+          opacity: 0.9,
+        },
+      });
+      "
+    `);
+  });
+
+  it("should support any boolean theme property, not just isDark", () => {
+    const source = `
+import styled from "styled-components";
+
+const Box = styled.div\`
+  font-weight: \${(props) => props.theme.isHighContrast ? 700 : 400};
+\`;
+
+export const App = () => <Box>Hello</Box>;
+`;
+
+    const result = transformWithWarnings(
+      { source, path: "theme-isHighContrast.tsx" },
+      { jscodeshift: j, j, stats: () => {}, report: () => {} },
+      { adapter: fixtureAdapter },
+    );
+
+    expect(result.code).toMatchInlineSnapshot(`
+      "
+      import React from "react";
+      import * as stylex from "@stylexjs/stylex";
+      import { useTheme } from "styled-components";
+
+      function Box(props: React.PropsWithChildren<{ ref?: React.Ref<HTMLDivElement> }>) {
+        const {
+          children,
+        } = props;
+
+        const theme = useTheme();
+
+        return (
+          <div
+            {...stylex.props(theme.isHighContrast ? styles.boxHighContrast : styles.boxNotHighContrast)}>{children}</div>
+        );
+      }
+
+      export const App = () => <Box>Hello</Box>;
+
+      const styles = stylex.create({
+        boxHighContrast: {
+          fontWeight: 700,
+        },
+        boxNotHighContrast: {
+          fontWeight: 400,
+        },
+      });
+      "
+    `);
+  });
+
+  it("should support multiple different theme boolean properties in the same component", () => {
+    // This tests that each theme prop gets its own style buckets
+    const source = `
+import styled from "styled-components";
+
+const Box = styled.div\`
+  mix-blend-mode: \${(props) => props.theme.isDark ? "lighten" : "darken"};
+  font-weight: \${(props) => props.theme.isHighContrast ? 700 : 400};
+\`;
+
+export const App = () => <Box>Hello</Box>;
+`;
+
+    const result = transformWithWarnings(
+      { source, path: "theme-multiple-props.tsx" },
+      { jscodeshift: j, j, stats: () => {}, report: () => {} },
+      { adapter: fixtureAdapter },
+    );
+
+    expect(result.code).toMatchInlineSnapshot(`
+      "
+      import React from "react";
+      import * as stylex from "@stylexjs/stylex";
+      import { useTheme } from "styled-components";
+
+      function Box(props: React.PropsWithChildren<{ ref?: React.Ref<HTMLDivElement> }>) {
+        const {
+          children,
+        } = props;
+
+        const theme = useTheme();
+
+        return (
+          <div
+            {...stylex.props(
+              theme.isDark ? styles.boxDark : styles.boxLight,
+              theme.isHighContrast ? styles.boxHighContrast : styles.boxNotHighContrast,
+            )}>{children}</div>
+        );
+      }
+
+      export const App = () => <Box>Hello</Box>;
+
+      const styles = stylex.create({
+        boxDark: {
+          mixBlendMode: "lighten",
+        },
+        boxLight: {
+          mixBlendMode: "darken",
+        },
+        boxHighContrast: {
+          fontWeight: 700,
+        },
+        boxNotHighContrast: {
+          fontWeight: 400,
+        },
+      });
+      "
+    `);
+  });
+
+  it("should bail on complex conditions combining theme boolean with other expressions", () => {
+    // This tests that we bail when the condition is more complex than just theme.prop
+    const source = `
+import styled from "styled-components";
+
+const Box = styled.div\`
+  color: \${(props) => props.theme.isDark && props.isActive ? "red" : "blue"};
+\`;
+
+export const App = () => <Box isActive>Hello</Box>;
+`;
+
+    const result = transformWithWarnings(
+      { source, path: "theme-isdark-complex.tsx" },
+      { jscodeshift: j, j, stats: () => {}, report: () => {} },
+      { adapter: fixtureAdapter },
+    );
+
+    // Should bail out - complex conditions are not supported
+    expect(result.code).toBeNull();
+    expect(result.warnings).toMatchInlineSnapshot(`
+      [
+        {
+          "context": {
+            "localName": "Box",
+            "propLabel": "color",
+          },
+          "loc": {
+            "column": 11,
+            "line": 5,
+          },
+          "severity": "warning",
+          "type": "Unsupported prop-based inline style props.theme access is not supported",
+        },
+      ]
+    `);
+  });
+});

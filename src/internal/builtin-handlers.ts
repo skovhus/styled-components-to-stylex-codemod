@@ -28,6 +28,7 @@ import {
 } from "./utilities/jscodeshift-utils.js";
 import { escapeRegex, sanitizeIdentifier } from "./utilities/string-utils.js";
 import { hasThemeAccessInArrowFn } from "./lower-rules/inline-styles.js";
+import { parseExpr } from "./transform-parse-expr.js";
 
 type ExpressionKind = Parameters<JSCodeshift["expressionStatement"]>[0];
 import {
@@ -269,6 +270,34 @@ export type HandlerResult =
       themeObjectImports: ImportSpec[];
       /** The original operator from the input ("||" or "??") */
       operator: "||" | "??";
+    }
+  | {
+      /**
+       * Emit split styles for theme boolean conditionals.
+       *
+       * Pattern: `props.theme.<boolProp> ? trueValue : falseValue`
+       *
+       * Example with theme.isDark:
+       * - boxIsDarkTrue: { mixBlendMode: "lighten" }
+       * - boxIsDarkFalse: { mixBlendMode: "darken" }
+       *
+       * And the wrapper uses `theme.isDark ? styles.boxIsDarkTrue : styles.boxIsDarkFalse`
+       *
+       * Works with any boolean theme property (isDark, isHighContrast, isCompact, etc.)
+       */
+      type: "splitThemeBooleanVariants";
+      /** The CSS property name (e.g., "mixBlendMode") */
+      cssProp: string;
+      /** The theme property name being tested (e.g., "isDark", "isHighContrast") */
+      themeProp: string;
+      /** The resolved value when theme property is true */
+      trueValue: unknown;
+      /** The resolved value when theme property is false */
+      falseValue: unknown;
+      /** Imports required for true branch value */
+      trueImports: ImportSpec[];
+      /** Imports required for false branch value */
+      falseImports: ImportSpec[];
     };
 
 export type InternalHandlerContext = {
@@ -851,13 +880,57 @@ function tryResolveConditionalValue(
     return null;
   }
 
-  type BranchUsage = "props" | "create";
-  type Branch = { usage: BranchUsage; expr: string; imports: ImportSpec[] } | null;
-
-  // Determine expected usage from context:
-  // - Has CSS property → "create" (CSS value)
-  // - No CSS property → "props" (StyleX reference)
-  const expectedUsage: BranchUsage = node.css.property ? "create" : "props";
+  // Check for theme boolean conditional patterns (e.g., theme.isDark, theme.isHighContrast)
+  // Supports: props.theme.<prop>, theme.<prop> (destructured), !props.theme.<prop>
+  // Returns the property name and negation status if found
+  const checkThemeBooleanTest = (
+    test: unknown,
+  ): { isNegated: boolean; themeProp: string } | null => {
+    const check = (node: unknown): string | null => {
+      if (
+        !node ||
+        typeof node !== "object" ||
+        (node as { type?: string }).type !== "MemberExpression"
+      ) {
+        return null;
+      }
+      // Check props.theme.<prop> pattern
+      if (info?.kind === "propsParam" && paramName) {
+        const parts = getMemberPathFromIdentifier(
+          node as Parameters<typeof getMemberPathFromIdentifier>[0],
+          paramName,
+        );
+        const themeProp = parts?.[1];
+        if (parts && parts[0] === "theme" && parts.length === 2 && themeProp) {
+          return themeProp; // Return the property name (e.g., "isDark", "isHighContrast")
+        }
+      }
+      // Check destructured theme.<prop> pattern: ({ theme }) => theme.<prop>
+      if (info?.kind === "themeBinding") {
+        const parts = getMemberPathFromIdentifier(
+          node as Parameters<typeof getMemberPathFromIdentifier>[0],
+          info.themeName,
+        );
+        const themeProp = parts?.[0];
+        if (parts && parts.length === 1 && themeProp) {
+          return themeProp; // Return the property name
+        }
+      }
+      return null;
+    };
+    const t = test as { type?: string; operator?: string; argument?: unknown };
+    const directProp = check(test);
+    if (directProp) {
+      return { isNegated: false, themeProp: directProp };
+    }
+    if (t.type === "UnaryExpression" && t.operator === "!") {
+      const negatedProp = check(t.argument);
+      if (negatedProp) {
+        return { isNegated: true, themeProp: negatedProp };
+      }
+    }
+    return null;
+  };
 
   // Helper to resolve a MemberExpression as a theme path
   const resolveThemeFromMemberExpr = (node: unknown): { path: string } | null => {
@@ -890,6 +963,84 @@ function tryResolveConditionalValue(
     }
     return null;
   };
+
+  // Helper to resolve a theme member expression branch to an AST node with imports
+  const resolveThemeBranchValue = (
+    branch: unknown,
+  ): { astNode: ExpressionKind; imports: ImportSpec[] } | null => {
+    const themeInfo = resolveThemeFromMemberExpr(branch);
+    if (!themeInfo) {
+      return null;
+    }
+    const res = ctx.resolveValue({
+      kind: "theme",
+      path: themeInfo.path,
+      filePath: ctx.filePath,
+      loc: getNodeLocStart(branch) ?? undefined,
+    });
+    if (!res) {
+      return null;
+    }
+    const astNode = parseExpr(ctx.api, res.expr);
+    if (!astNode) {
+      return null;
+    }
+    return { astNode, imports: res.imports };
+  };
+
+  const themeBoolInfo = checkThemeBooleanTest(body.test);
+  if (themeBoolInfo && node.css.property) {
+    const { consequent, alternate } = body;
+    // Determine true/false branches based on negation
+    const trueBranch = themeBoolInfo.isNegated ? alternate : consequent;
+    const falseBranch = themeBoolInfo.isNegated ? consequent : alternate;
+
+    // Resolve both branches as static values (excluding booleans, which aren't valid CSS values)
+    const trueRaw = literalToStaticValue(trueBranch);
+    const falseRaw = literalToStaticValue(falseBranch);
+    let trueValue: unknown = trueRaw !== null && typeof trueRaw !== "boolean" ? trueRaw : null;
+    let falseValue: unknown = falseRaw !== null && typeof falseRaw !== "boolean" ? falseRaw : null;
+    const trueImports: ImportSpec[] = [];
+    const falseImports: ImportSpec[] = [];
+
+    // Fallback: resolve theme member expressions (e.g., props.theme.color.labelBase)
+    if (trueValue === null) {
+      const resolved = resolveThemeBranchValue(trueBranch);
+      if (resolved) {
+        trueValue = resolved.astNode;
+        trueImports.push(...resolved.imports);
+      }
+    }
+    if (falseValue === null) {
+      const resolved = resolveThemeBranchValue(falseBranch);
+      if (resolved) {
+        falseValue = resolved.astNode;
+        falseImports.push(...resolved.imports);
+      }
+    }
+
+    if (trueValue !== null && falseValue !== null) {
+      return {
+        type: "splitThemeBooleanVariants",
+        cssProp: node.css.property,
+        themeProp: themeBoolInfo.themeProp,
+        trueValue,
+        falseValue,
+        trueImports,
+        falseImports,
+      };
+    }
+    // Can't resolve branches as static values - fall through to other handlers
+    // which may bail with a warning
+  }
+
+  type BranchUsage = "props" | "create";
+  type Branch = { usage: BranchUsage; expr: string; imports: ImportSpec[] } | null;
+
+  // Determine expected usage from context:
+  // - Has CSS property → "create" (CSS value)
+  // - No CSS property → "props" (StyleX reference)
+  const expectedUsage: BranchUsage = node.css.property ? "create" : "props";
 
   const branchToExpr = (b: unknown): Branch => {
     const v = literalToStaticValue(b);
@@ -1826,7 +1977,7 @@ function tryResolveInlineStyleValueForConditionalExpression(
       return {
         type: "keepOriginal",
         reason:
-          "Theme-dependent conditional values require a project-specific theme source (e.g. useTheme())",
+          "Theme-dependant call expression could not be resolved (e.g. theme helper calls like theme.highlight() are not supported)",
       };
     }
   }
@@ -1887,7 +2038,7 @@ function tryResolveInlineStyleValueForLogicalExpression(node: DynamicNode): Hand
     return {
       type: "keepOriginal",
       reason:
-        "Theme-dependent conditional values require a project-specific theme source (e.g. useTheme())",
+        "Theme value with fallback (props.theme.X ?? / || default) cannot be resolved statically — use adapter.resolveValue to map theme paths to StyleX tokens",
     };
   }
   // Signal to the caller that we can preserve this declaration as an inline style

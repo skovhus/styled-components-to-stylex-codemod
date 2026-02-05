@@ -125,6 +125,29 @@ export type StyledDecl = {
   }>;
   needsWrapperComponent?: boolean;
   /**
+   * When set, the wrapper needs to call `useTheme()` from styled-components
+   * to access runtime theme boolean values (e.g., theme.isDark, theme.isHighContrast).
+   *
+   * Supports multiple theme boolean properties in the same component.
+   * Each entry generates a conditional style arg in the wrapper.
+   *
+   * Style keys use camelCase theme suffixes (e.g., boxDark/boxLight for isDark).
+   * See `buildThemeStyleKeys` for naming conventions.
+   */
+  needsUseThemeHook?: Array<{
+    /** The theme property name (e.g., "isDark", "isHighContrast") — used for style key naming */
+    themeProp: string;
+    /**
+     * AST node for the full condition expression (e.g., `theme.mode === "dark"`).
+     * If absent, defaults to `theme.<themeProp>` (backward compat with simple boolean).
+     */
+    conditionExpr?: unknown;
+    /** Style key for when condition is true. null → emit `undefined` (empty branch). */
+    trueStyleKey: string | null;
+    /** Style key for when condition is false. null → emit `undefined` (empty branch). */
+    falseStyleKey: string | null;
+  }>;
+  /**
    * Whether this component should support external className/style extension.
    * True if: (1) extended by another styled component, or (2) exported and adapter opts-in.
    */

@@ -44,6 +44,8 @@ export const testCaseTheme = {
       background: "#E0F2FE",
     },
   },
+  isDark: true as boolean,
+  mode: "light" as "light" | "dark",
 } as const;
 
 export type TestCaseTheme = typeof testCaseTheme;
