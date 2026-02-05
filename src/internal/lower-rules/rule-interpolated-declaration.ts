@@ -9,7 +9,10 @@ import type { WarningType } from "../logger.js";
 import type { ExpressionKind } from "./decl-types.js";
 import type { DeclProcessingState } from "./decl-setup.js";
 import { resolveDynamicNode } from "../builtin-handlers.js";
-import { cssDeclarationToStylexDeclarations, cssPropertyToStylexProp } from "../css-prop-mapping.js";
+import {
+  cssDeclarationToStylexDeclarations,
+  cssPropertyToStylexProp,
+} from "../css-prop-mapping.js";
 import { buildThemeStyleKeys } from "../utilities/style-key-naming.js";
 import {
   cloneAstNode,
@@ -147,36 +150,40 @@ export function handleInterpolatedDeclaration(args: InterpolatedDeclarationConte
       break;
     }
     if (
-      tryHandleInterpolatedBorder({
-        api,
-        j,
-        filePath,
-        decl,
-        d,
-        selector: rule.selector,
-        atRuleStack: rule.atRuleStack ?? [],
-        extraStyleObjects,
-        hasLocalThemeBinding,
-        resolveValue,
-        resolveCall,
-        importMap,
-        resolverImports,
-        parseExpr,
-        applyResolvedPropValue: (prop, value) => applyResolvedPropValue(prop, value, null),
-        bailUnsupported: (type) => bailUnsupportedLocal(decl, type),
-        bailUnsupportedWithContext: (type, context, loc) => {
-          warnings.push({
-            severity: "error",
-            type,
-            loc: loc ?? decl.loc,
-            context,
-          });
-          bail = true;
+      tryHandleInterpolatedBorder(
+        {
+          api,
+          j,
+          filePath,
+          decl,
+          extraStyleObjects,
+          hasLocalThemeBinding,
+          resolveValue,
+          resolveCall,
+          importMap,
+          resolverImports,
+          parseExpr,
+          variantBuckets,
+          variantStyleKeys,
+          inlineStyleProps,
         },
-        variantBuckets,
-        variantStyleKeys,
-        inlineStyleProps,
-      })
+        {
+          d,
+          selector: rule.selector,
+          atRuleStack: rule.atRuleStack ?? [],
+          applyResolvedPropValue: (prop, value) => applyResolvedPropValue(prop, value, null),
+          bailUnsupported: (type) => bailUnsupportedLocal(decl, type),
+          bailUnsupportedWithContext: (type, context, loc) => {
+            warnings.push({
+              severity: "error",
+              type,
+              loc: loc ?? decl.loc,
+              context,
+            });
+            bail = true;
+          },
+        },
+      )
     ) {
       continue;
     }

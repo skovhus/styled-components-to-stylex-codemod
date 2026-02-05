@@ -2,8 +2,8 @@
  * Resolves interpolated border shorthand values into StyleX properties.
  * Core concepts: border parsing, dynamic value handling, and adapter resolution.
  */
-import type { API, Expression, JSCodeshift } from "jscodeshift";
-import type { Adapter, ImportSource } from "../../adapter.js";
+import type { Expression } from "jscodeshift";
+import type { ImportSpec } from "../../adapter.js";
 import { resolveDynamicNode, type InternalHandlerContext } from "../builtin-handlers.js";
 import { getMemberPathFromIdentifier, getNodeLocStart } from "../utilities/jscodeshift-utils.js";
 import type { StyledDecl } from "../transform-types.js";
@@ -14,30 +14,32 @@ import {
 } from "../css-prop-mapping.js";
 import { extractStaticParts } from "./interpolations.js";
 import { toSuffixFromProp } from "../transform/helpers.js";
+import type { LowerRulesState } from "./state.js";
 
-type ExpressionKind = Parameters<JSCodeshift["expressionStatement"]>[0];
-
-export function tryHandleInterpolatedBorder(args: {
-  api: API;
-  j: any;
-  filePath: string;
+export type BorderHandlerContext = Pick<
+  LowerRulesState,
+  | "api"
+  | "j"
+  | "filePath"
+  | "resolveValue"
+  | "resolveCall"
+  | "importMap"
+  | "resolverImports"
+  | "parseExpr"
+  | "hasLocalThemeBinding"
+> & {
   decl: StyledDecl;
+  extraStyleObjects: Map<string, Record<string, unknown>>;
+  variantBuckets: Map<string, Record<string, unknown>>;
+  variantStyleKeys: Record<string, string>;
+  inlineStyleProps: Array<{ prop: string; expr: unknown }>;
+};
+
+export type BorderHandlerArgs = {
+  // jscodeshift AST declaration node; `any` needed due to jscodeshift's complex typing
   d: any;
   selector: string;
   atRuleStack: string[];
-  extraStyleObjects: Map<string, Record<string, unknown>>;
-  hasLocalThemeBinding: boolean;
-  resolveValue: Adapter["resolveValue"];
-  resolveCall: Adapter["resolveCall"];
-  importMap: Map<
-    string,
-    {
-      importedName: string;
-      source: ImportSource;
-    }
-  >;
-  resolverImports: Map<string, any>;
-  parseExpr: (exprSource: string) => ExpressionKind | null;
   applyResolvedPropValue: (prop: string, value: unknown) => void;
   bailUnsupported: (type: WarningType) => void;
   bailUnsupportedWithContext: (
@@ -45,32 +47,36 @@ export function tryHandleInterpolatedBorder(args: {
     context?: Record<string, unknown>,
     loc?: { line: number; column: number } | null,
   ) => void;
-  variantBuckets: Map<string, Record<string, unknown>>;
-  variantStyleKeys: Record<string, string>;
-  inlineStyleProps: Array<{ prop: string; expr: any }>;
-}): boolean {
+};
+
+export function tryHandleInterpolatedBorder(
+  ctx: BorderHandlerContext,
+  args: BorderHandlerArgs,
+): boolean {
   const {
     api,
     j,
     filePath,
     decl,
-    d,
-    selector,
-    atRuleStack,
     extraStyleObjects,
     resolveValue,
     resolveCall,
     importMap,
     resolverImports,
     parseExpr,
-    applyResolvedPropValue,
-    bailUnsupported,
-    bailUnsupportedWithContext,
     variantBuckets,
     variantStyleKeys,
     inlineStyleProps,
+  } = ctx;
+  const { hasLocalThemeBinding } = ctx;
+  const {
+    d,
+    selector,
+    atRuleStack,
+    applyResolvedPropValue,
+    bailUnsupported,
+    bailUnsupportedWithContext,
   } = args;
-  const { hasLocalThemeBinding } = args;
 
   // Handle border shorthands with interpolated color:
   //   border: 2px solid ${(p) => (p.hasError ? "red" : "#ccc")}
@@ -433,7 +439,7 @@ export function tryHandleInterpolatedBorder(args: {
     };
 
     const bumpResolverImportToEnd = (predicate: (spec: unknown) => boolean): void => {
-      let bump: { k: string; v: unknown } | null = null;
+      let bump: { k: string; v: ImportSpec } | null = null;
       for (const [k, v] of resolverImports.entries()) {
         if (predicate(v)) {
           bump = { k, v };
