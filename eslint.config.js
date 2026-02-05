@@ -13,8 +13,6 @@ export default [
       "**/storybook-static/**",
       "**/playground/dist/**",
       "**/src/**",
-      // Test case outputs contain dynamic patterns that StyleX's static analyzer can't verify
-      //"**/test-cases/**",
       "**/test-cases-next-to-tackle/**",
     ],
   },
