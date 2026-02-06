@@ -2,7 +2,7 @@ import React from "react";
 import * as stylex from "@stylexjs/stylex";
 import { mergedSx } from "./lib/mergedSx";
 import { transitionSpeed } from "./tokens.stylex";
-import "./css-variables.css";
+import "./cssVariable-basic.css";
 
 type AnimatedPathProps = Omit<React.ComponentProps<"path">, "className"> & {
   $width: number;

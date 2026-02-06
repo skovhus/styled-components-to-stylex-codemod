@@ -1,4 +1,4 @@
-import styled from "styled-components";
+import * as stylex from "@stylexjs/stylex";
 import React from "react";
 
 // Bug: When externalInterface returns { styles: true } and the wrapped component
@@ -8,7 +8,7 @@ import React from "react";
 // TS2339: Property 'style' does not exist on type 'LoadingProps'.
 //
 // This happens when the adapter is configured with externalInterface: () => ({ styles: true })
-// like in the linear-app-v2 codemod.
+// like in a real-world app codemod.
 
 type LoadingProps = {
   delay?: number;
@@ -19,8 +19,33 @@ function Loading(props: LoadingProps) {
 }
 
 // Exported styled component with external styles enabled will destructure className/style
-export const StyledLoading = styled(Loading)`
-  height: 100%;
-`;
+export function StyledLoading(
+  props: React.ComponentPropsWithRef<typeof Loading> & {
+    className?: string;
+    style?: React.CSSProperties;
+  },
+) {
+  const { className, style, ...rest } = props;
+
+  const sx = stylex.props(styles.loading);
+
+  return (
+    <Loading
+      {...rest}
+      {...sx}
+      className={[sx.className, className].filter(Boolean).join(" ")}
+      style={{
+        ...sx.style,
+        ...style,
+      }}
+    />
+  );
+}
 
 export const App = () => <StyledLoading delay={1000} />;
+
+const styles = stylex.create({
+  loading: {
+    height: "100%",
+  },
+});

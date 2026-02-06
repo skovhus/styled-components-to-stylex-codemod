@@ -8,7 +8,7 @@ function Button(props: { onClick: () => void; children: React.ReactNode; variant
   return <button onClick={props.onClick}>{props.children}</button>;
 }
 
-const StyledButton = styled(Button)`
+export const StyledButton = styled(Button)`
   padding: 8px 16px;
   border-radius: 4px;
   background-color: blue;

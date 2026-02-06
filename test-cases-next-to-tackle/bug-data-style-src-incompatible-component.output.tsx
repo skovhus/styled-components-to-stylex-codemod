@@ -8,10 +8,29 @@ function Button(props: { onClick: () => void; children: React.ReactNode; variant
   return <button onClick={props.onClick}>{props.children}</button>;
 }
 
-function StyledButton(
-  props: Omit<React.ComponentPropsWithRef<typeof Button>, "className" | "style">,
+export function StyledButton(
+  props: React.ComponentPropsWithRef<typeof Button> & {
+    className?: string;
+    style?: React.CSSProperties;
+  },
 ) {
-  return <Button {...props} {...stylex.props(styles.button)} />;
+  const { className, children, style, ...rest } = props;
+
+  const sx = stylex.props(styles.button);
+
+  return (
+    <Button
+      {...rest}
+      {...sx}
+      className={[sx.className, className].filter(Boolean).join(" ")}
+      style={{
+        ...sx.style,
+        ...style,
+      }}
+    >
+      {children}
+    </Button>
+  );
 }
 
 export const App = () => (

@@ -22,7 +22,7 @@ describe("runTransform (e2e)", () => {
     const repoRoot = join(__dirname, "..", "..");
     execFileSync("pnpm", ["build"], { cwd: repoRoot, stdio: "pipe" });
 
-    const fixtureName = "css-variables";
+    const fixtureName = "cssVariable-basic";
 
     const tmp = await mkdtemp(join(tmpdir(), "styledx-run-e2e-"));
     const fixtureDir = join(tmp, fixtureName);

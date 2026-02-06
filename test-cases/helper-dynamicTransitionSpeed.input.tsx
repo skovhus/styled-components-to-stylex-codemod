@@ -1,6 +1,6 @@
 import React from "react";
 import styled from "styled-components";
-import "./css-variables.css";
+import "./cssVariable-basic.css";
 import { transitionSpeed } from "./lib/helpers.ts";
 
 const AnimatedPath = styled.path.withConfig({

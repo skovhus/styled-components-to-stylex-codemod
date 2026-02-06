@@ -63,6 +63,21 @@ Create matching `.input.tsx` and `.output.tsx` files in `test-cases/`. Tests aut
 
 Unsupported test cases can be named `_unsupported.<case>.input.tsx` and should NOT have an output file.
 
+### Test Case Naming Convention
+
+Test cases follow a `category-variation` naming scheme:
+
+- **Category**: The feature area being tested (e.g., `attrs`, `conditional`, `wrapper`, `theme`)
+- **Variation**: A lowerCamelCase suffix describing the specific scenario (e.g., `polymorphicAs`, `complexTernary`)
+- **Separator**: A single `-` between category and variation
+- If a category has only one test case, no variation suffix is needed (e.g., `ref`, `styleObject`, `withConfig`)
+
+Examples: `attrs-polymorphicAs`, `conditional-enumIfChain`, `wrapper-basic`, `externalStyles-missingClassName`
+
+For `_unsupported.*` files, keep the `_unsupported.` prefix and apply the same `category-variation` scheme after it: `_unsupported.selector-complex`, `_unsupported.theme-adhoc`
+
+**Categories**: `basic`, `extending`, `attrs`, `asProp`, `conditional`, `interpolation`, `mixin`, `cssHelper`, `selector`, `theme`, `useTheme`, `wrapper`, `externalStyles`, `helper`, `cssVariable`, `mediaQuery`, `transientProp`, `shouldForwardProp`, `withConfig`, `keyframes`, `variant`, `css`, `htmlProp`, `typeHandling`, `import`, `staticProp`, `ref`, `styleObject`, `naming`, `example`
+
 ## Storybook Visual Testing
 
 Storybook renders all test cases side-by-side (input with styled-components, output with StyleX) to visually verify the transformation produces identical styles.

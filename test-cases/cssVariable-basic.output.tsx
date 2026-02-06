@@ -1,4 +1,4 @@
-import "./css-variables.css";
+import "./cssVariable-basic.css";
 import * as stylex from "@stylexjs/stylex";
 import { vars, textVars } from "./css-variables.stylex";
 

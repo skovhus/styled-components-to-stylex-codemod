@@ -24,7 +24,7 @@
     "../dist",
     "./_unsupported.*",
     // Static properties on styled-components are not typeable without workarounds
-    "./static-properties.input.tsx",
-    "./static-properties.output.tsx"
+    "./staticProp-basic.input.tsx",
+    "./staticProp-basic.output.tsx"
   ]
 }
