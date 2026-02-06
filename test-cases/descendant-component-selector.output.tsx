@@ -88,6 +88,8 @@ const styles = stylex.create({
     },
   },
   iconInButton: {
+    width: "20px",
+    height: "20px",
     opacity: {
       default: 0.8,
       [stylex.when.ancestor(":hover")]: 1,
@@ -96,7 +98,5 @@ const styles = stylex.create({
       default: null,
       [stylex.when.ancestor(":hover")]: "scale(1.1)",
     },
-    width: "20px",
-    height: "20px",
   },
 });

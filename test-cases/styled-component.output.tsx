@@ -1,4 +1,4 @@
-import React from "react";
+import * as React from "react";
 import * as stylex from "@stylexjs/stylex";
 
 const Link = ({
@@ -15,11 +15,11 @@ const Link = ({
   </a>
 );
 
-export const App = () => (
-  <Link href="https://example.com" {...stylex.props(styles.link)}>
-    Visit Example
-  </Link>
-);
+function StyledLink(props: Omit<React.ComponentPropsWithRef<typeof Link>, "className" | "style">) {
+  return <Link {...props} {...stylex.props(styles.link)} />;
+}
+
+export const App = () => <StyledLink href="https://example.com">Visit Example</StyledLink>;
 
 const styles = stylex.create({
   link: {

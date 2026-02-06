@@ -41,13 +41,9 @@ export const App = () => (
 );
 
 const styles = stylex.create({
-  // B has .attrs({ as: "button" }) but is only used as a base for A.
-  // The chain-flattening logic must NOT flatten A to Text, because
-  // B's wrapper semantics (as="button") would be lost.
   styledButton: {
     cursor: "pointer",
   },
-
   clickableText: {
     color: "blue",
   },

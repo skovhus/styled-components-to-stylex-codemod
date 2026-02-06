@@ -8,7 +8,13 @@ function EditorLoader(props: { content: string; ref?: React.Ref<HTMLDivElement> 
   return <div>{props.content}</div>;
 }
 
-export const App = () => <EditorLoader content="hello" {...stylex.props(styles.editor)} />;
+function Editor(
+  props: Omit<React.ComponentPropsWithRef<typeof EditorLoader>, "className" | "style">,
+) {
+  return <EditorLoader {...props} {...stylex.props(styles.editor)} />;
+}
+
+export const App = () => <Editor content="hello" />;
 
 const styles = stylex.create({
   editor: {

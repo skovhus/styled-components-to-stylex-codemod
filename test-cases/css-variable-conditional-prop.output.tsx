@@ -14,7 +14,7 @@ function ContainerWrapper(props: ContainerWrapperProps) {
       {...stylex.props(
         styles.containerWrapper,
         props.$width || false
-          ? styles.containerWrapperCondTruthy({
+          ? styles.containerWrapperCondTruthyComponentWidth({
               width: props.$width,
             })
           : undefined,
@@ -40,7 +40,7 @@ export const App = () => (
 );
 
 const styles = stylex.create({
-  containerWrapperCondTruthy: (props: { width: number }) => ({
+  containerWrapperCondTruthyComponentWidth: (props: { width: number | undefined }) => ({
     "--component-width": `${props.width}px`,
   }),
   // A wrapper that conditionally sets a CSS custom property based on prop

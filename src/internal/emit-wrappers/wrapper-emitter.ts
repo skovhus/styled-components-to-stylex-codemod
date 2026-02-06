@@ -225,7 +225,9 @@ export class WrapperEmitter {
     if (d.supportsAsProp) {
       return true;
     }
-    if (d.supportsExternalStyles) {
+    // supportsExternalStyles enables `as` prop for intrinsic-based components,
+    // but NOT when wrapping another styled component (to avoid TS2590 union complexity).
+    if (d.supportsExternalStyles && d.base.kind !== "component") {
       return true;
     }
     // For void tags without explicit opt-in, don't allow `as` prop

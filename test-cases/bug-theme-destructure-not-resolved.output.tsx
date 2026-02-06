@@ -1,5 +1,6 @@
 import * as React from "react";
 import * as stylex from "@stylexjs/stylex";
+import { $colors } from "./tokens.stylex";
 
 // Bug: The destructured `theme` from `${({ enabled, theme }) => ...}` is converted to
 // `props.theme.color.greenBase` but `theme` doesn't exist on the component's props type.
@@ -7,22 +8,13 @@ import * as stylex from "@stylexjs/stylex";
 
 type Props = { enabled?: boolean };
 
-type StatusIconProps = Omit<React.ComponentProps<"div">, "className" | "style"> & Props;
+type StatusIconProps = React.PropsWithChildren<Props>;
 
 function StatusIcon(props: StatusIconProps) {
-  const { children, ...rest } = props;
-
-  const sx = stylex.props(styles.statusIcon);
+  const { children, enabled } = props;
 
   return (
-    <div
-      {...rest}
-      {...sx}
-      style={{
-        ...sx.style,
-        fill: props.enabled ? props.theme.color.greenBase : props.theme.color.labelMuted,
-      }}
-    >
+    <div {...stylex.props(styles.statusIcon, enabled ? styles.statusIconEnabled : undefined)}>
       {children}
     </div>
   );
@@ -38,7 +30,11 @@ export const App = () => (
 
 const styles = stylex.create({
   statusIcon: {
+    fill: $colors.labelMuted,
     width: "6px",
     height: "6px",
+  },
+  statusIconEnabled: {
+    fill: $colors.greenBase,
   },
 });

@@ -154,6 +154,12 @@ export function buildStaticAttrsFromRecord(
       }
     } else if (typeof value === "number") {
       attrs.push(j.jsxAttribute(j.jsxIdentifier(key), j.jsxExpressionContainer(j.literal(value))));
+    } else if (value === undefined) {
+      attrs.push(
+        j.jsxAttribute(j.jsxIdentifier(key), j.jsxExpressionContainer(j.identifier("undefined"))),
+      );
+    } else if (value === null) {
+      attrs.push(j.jsxAttribute(j.jsxIdentifier(key), j.jsxExpressionContainer(j.literal(null))));
     }
   }
   return attrs;

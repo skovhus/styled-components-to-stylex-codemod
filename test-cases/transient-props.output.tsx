@@ -97,7 +97,7 @@ export const App = () => (
     <Point $size={100} style={{ top: "10px" }} data-testid="point" />
     <CollapseArrowIcon $isOpen />
     <CollapseArrowIcon $isOpen={false} />
-    <AnimatedContainer $direction="up" $delay={0.4} {...stylex.props(styles.animatedContainer)} />
+    <StyledAnimatedContainer $direction="up" $delay={0.4} />
   </div>
 );
 
@@ -113,6 +113,12 @@ function AnimatedContainer(props: AnimatedContainerProps) {
   return (
     <div className={className} data-direction={$direction} data-delay={$delay} style={style} />
   );
+}
+
+function StyledAnimatedContainer(
+  props: Omit<React.ComponentPropsWithRef<typeof AnimatedContainer>, "className" | "style">,
+) {
+  return <AnimatedContainer {...props} {...stylex.props(styles.animatedContainer)} />;
 }
 
 const styles = stylex.create({

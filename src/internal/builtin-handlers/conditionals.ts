@@ -553,6 +553,42 @@ export function tryResolveConditionalValue(
       : { type: "splitVariantsResolvedValue", variants };
   }
 
+  // 1b) Destructured theme + bare Identifier test: ({ enabled, theme }) => enabled ? theme.x : theme.y
+  // When the param is an ObjectPattern with `theme`, a bare Identifier test refers to another
+  // destructured prop. Handle this like the MemberExpression test above.
+  if (
+    info?.kind === "themeBinding" &&
+    test.type === "Identifier" &&
+    typeof test.name === "string"
+  ) {
+    const destructuredProp = test.name;
+    const cons = getBranch(consequent);
+    const alt = getBranch(alternate);
+    if (cons && alt) {
+      const allUsages = new Set([cons.usage, alt.usage]);
+      if (allUsages.size === 1) {
+        const usage = cons.usage;
+        const variants = [
+          {
+            nameHint: "truthy",
+            when: destructuredProp,
+            expr: cons.expr,
+            imports: cons.imports,
+          },
+          {
+            nameHint: "falsy",
+            when: `!${destructuredProp}`,
+            expr: alt.expr,
+            imports: alt.imports,
+          },
+        ];
+        return usage === "props"
+          ? { type: "splitVariantsResolvedStyles", variants }
+          : { type: "splitVariantsResolvedValue", variants };
+      }
+    }
+  }
+
   // 2) Handle nested ternaries: prop === "a" ? valA : prop === "b" ? valB : defaultVal
   // This also handles the simple case: prop === "a" ? valA : defaultVal
   const condInfo = extractConditionInfo(test);

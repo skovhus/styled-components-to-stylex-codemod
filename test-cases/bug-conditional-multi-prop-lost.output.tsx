@@ -31,12 +31,12 @@ export function Spacer(props: SpacerProps) {
       {...rest}
       {...stylex.props(
         showProperty(props.width)
-          ? styles.spacerCondTruthy({
+          ? styles.spacerCondTruthyWidth({
               width: props.width,
             })
           : undefined,
         showProperty(props.height)
-          ? styles.spacerCondTruthy({
+          ? styles.spacerCondTruthyHeight({
               height: props.height,
             })
           : undefined,
@@ -57,7 +57,10 @@ export const App = () => (
 );
 
 const styles = stylex.create({
-  spacerCondTruthy: (props: { height: number }) => ({
+  spacerCondTruthyWidth: (props: { width: number | string | undefined }) => ({
+    width: getSize(props.width),
+  }),
+  spacerCondTruthyHeight: (props: { height: number | string | undefined }) => ({
     height: getSize(props.height),
   }),
 });

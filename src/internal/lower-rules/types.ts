@@ -17,6 +17,35 @@ export function ensureShouldForwardPropDrop(decl: StyledDecl, propName: string):
   decl.shouldForwardProp = { ...existing, dropProps: [...dropProps] };
 }
 
+/**
+ * Given a raw TS type node from `findJsxPropTsType`, return a copy suitable for use
+ * in a type annotation. Returns `null` when the type node cannot be resolved.
+ * Handles TSNumberKeyword, TSStringKeyword, TSTypeReference, TSUnionType, TSLiteralType.
+ */
+export function resolveTypeNodeFromTsType(
+  j: { tsNumberKeyword: () => unknown; tsStringKeyword: () => unknown },
+  tsType: unknown,
+): unknown {
+  if (!tsType || typeof tsType !== "object") {
+    return null;
+  }
+  const typeType = (tsType as { type: string }).type;
+  if (typeType === "TSNumberKeyword") {
+    return j.tsNumberKeyword();
+  }
+  if (typeType === "TSStringKeyword") {
+    return j.tsStringKeyword();
+  }
+  if (
+    typeType === "TSTypeReference" ||
+    typeType === "TSUnionType" ||
+    typeType === "TSLiteralType"
+  ) {
+    return tsType; // Caller should clone if mutation is a concern
+  }
+  return null;
+}
+
 export function createTypeInferenceHelpers(args: { root: any; j: any; decl: StyledDecl }): {
   findJsxPropTsType: (jsxProp: string) => unknown;
   findJsxPropTsTypeForVariantExtraction: (jsxProp: string) => unknown;
@@ -213,26 +242,9 @@ export function createTypeInferenceHelpers(args: { root: any; j: any; decl: Styl
   };
 
   const annotateParamFromJsxProp = (paramId: any, jsxProp: string): void => {
-    const t = findJsxPropTsType(jsxProp);
-    if (t && typeof t === "object") {
-      const typeType = (t as any).type;
-      // Special-case numeric props (matches the `$width: number` ask).
-      if (typeType === "TSNumberKeyword") {
-        (paramId as any).typeAnnotation = j.tsTypeAnnotation(j.tsNumberKeyword());
-        return;
-      }
-      // Preserve type references (e.g., `Colors` from `color: Colors`)
-      // This ensures imported types are preserved in the style function signature
-      if (
-        typeType === "TSTypeReference" ||
-        typeType === "TSUnionType" ||
-        typeType === "TSLiteralType"
-      ) {
-        (paramId as any).typeAnnotation = j.tsTypeAnnotation(t);
-        return;
-      }
-    }
-    (paramId as any).typeAnnotation = j.tsTypeAnnotation(j.tsStringKeyword());
+    const resolved = resolveTypeNodeFromTsType(j, findJsxPropTsType(jsxProp));
+    const typeNode = resolved ?? j.tsStringKeyword();
+    (paramId as any).typeAnnotation = j.tsTypeAnnotation(typeNode);
   };
 
   // Check if a JSX prop is optional (has ? in its type annotation)

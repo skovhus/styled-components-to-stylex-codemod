@@ -585,16 +585,18 @@ export function emitSiblingWrappers(ctx: EmitIntrinsicContext): void {
     const classNameId = j.identifier("className");
     const restId = j.identifier("rest");
     const adjId = j.identifier(sw.propAdjacent);
-    const afterId = sw.propAfter ? j.identifier(sw.propAfter) : j.identifier("_unused");
 
+    const allowClassNamePropForDestructure = emitter.shouldAllowClassNameProp(d);
     const declStmt = j.variableDeclaration("const", [
       j.variableDeclarator(
         j.objectPattern([
           ...(allowAsProp ? [asDestructureProp("div")] : []),
           emitter.patternProp("children", childrenId),
-          emitter.patternProp("className", classNameId),
+          ...(allowClassNamePropForDestructure
+            ? [emitter.patternProp("className", classNameId)]
+            : []),
           emitter.patternProp(sw.propAdjacent, adjId),
-          emitter.patternProp(afterId.name, afterId),
+          ...(sw.propAfter ? [emitter.patternProp(sw.propAfter, j.identifier(sw.propAfter))] : []),
           j.restElement(restId),
         ] as any),
         propsId,
@@ -617,7 +619,7 @@ export function emitSiblingWrappers(ctx: EmitIntrinsicContext): void {
         ? [
             j.logicalExpression(
               "&&",
-              afterId as any,
+              j.identifier(sw.propAfter) as any,
               j.memberExpression(j.identifier(stylesIdentifier), j.identifier(sw.afterKey)),
             ),
           ]

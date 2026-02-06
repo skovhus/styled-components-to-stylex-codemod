@@ -7,7 +7,7 @@ type RowProps = React.PropsWithChildren<{
 }> & { isAdjacentSibling?: boolean };
 
 function Row(props: RowProps) {
-  const { children, className, isAdjacentSibling, _unused, ...rest } = props;
+  const { children, isAdjacentSibling, ...rest } = props;
 
   return (
     <div {...rest} {...stylex.props(isAdjacentSibling && styles.adjacentSibling)}>

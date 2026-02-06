@@ -378,13 +378,23 @@ export function emitShouldForwardPropWrappers(ctx: EmitIntrinsicContext): void {
       if (p.conditionWhen) {
         const { cond, isBoolean } = emitter.collectConditionProps({ when: p.conditionWhen });
         styleArgs.push(emitter.makeConditionalStyleExpr({ cond, expr: call, isBoolean }));
-        continue;
+      } else {
+        const isRequired =
+          p.jsxProp === "__props" ||
+          emitter.isPropRequiredInPropsTypeLiteral(d.propsType, p.jsxProp);
+        styleArgs.push(
+          buildStyleFnConditionExpr({ j, condition: p.condition, propExpr, call, isRequired }),
+        );
       }
-      const isRequired =
-        p.jsxProp === "__props" || emitter.isPropRequiredInPropsTypeLiteral(d.propsType, p.jsxProp);
-      styleArgs.push(
-        buildStyleFnConditionExpr({ j, condition: p.condition, propExpr, call, isRequired }),
-      );
+      // Ensure the prop is destructured from props
+      if (
+        typeof p.jsxProp === "string" &&
+        p.jsxProp !== "__props" &&
+        !isPrefixProp &&
+        !destructureParts.includes(p.jsxProp)
+      ) {
+        destructureParts.push(p.jsxProp);
+      }
     }
     for (const p of knownPrefixProps) {
       if (!destructureParts.includes(p)) {

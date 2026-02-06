@@ -8,10 +8,16 @@ function Button(props: { onClick: () => void; children: React.ReactNode; variant
   return <button onClick={props.onClick}>{props.children}</button>;
 }
 
+function StyledButton(
+  props: Omit<React.ComponentPropsWithRef<typeof Button>, "className" | "style">,
+) {
+  return <Button {...props} {...stylex.props(styles.button)} />;
+}
+
 export const App = () => (
-  <Button onClick={() => {}} variant="primary" {...stylex.props(styles.button)}>
+  <StyledButton onClick={() => {}} variant="primary">
     Click me
-  </Button>
+  </StyledButton>
 );
 
 const styles = stylex.create({

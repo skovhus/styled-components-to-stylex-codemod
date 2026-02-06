@@ -30,6 +30,7 @@ function StyledSubmitButton(props: StyledSubmitButtonProps) {
 
   return (
     <SubmitButton
+      onlyIcon={undefined}
       {...rest}
       {...stylex.props(styles.submitButton, $hasLabel ? styles.submitButtonHasLabel : undefined)}
     >

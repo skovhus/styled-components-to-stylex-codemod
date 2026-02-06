@@ -335,7 +335,11 @@ export function rewriteJsxStep(ctx: TransformContext): StepResult {
                 ? j.literal(v)
                 : typeof v === "number" || typeof v === "boolean"
                   ? j.jsxExpressionContainer(j.literal(v))
-                  : j.literal(String(v));
+                  : v === undefined
+                    ? j.jsxExpressionContainer(j.identifier("undefined"))
+                    : v === null
+                      ? j.jsxExpressionContainer(j.literal(null))
+                      : j.literal(String(v as string | number | boolean));
             keptAttrs.unshift(j.jsxAttribute(j.jsxIdentifier(k), valNode as any));
           }
         }

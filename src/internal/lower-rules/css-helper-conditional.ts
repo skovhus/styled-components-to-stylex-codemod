@@ -34,8 +34,13 @@ import { cssValueToJs, toSuffixFromProp } from "../transform/helpers.js";
 import { createPropTestHelpers, invertWhen } from "./variant-utils.js";
 import { cssPropertyToIdentifier, makeCssProperty, makeCssPropKey } from "./shared.js";
 import { resolveTemplateLiteralBranch } from "./template-literals.js";
-import { ensureShouldForwardPropDrop, literalToStaticValue } from "./types.js";
+import {
+  ensureShouldForwardPropDrop,
+  literalToStaticValue,
+  resolveTypeNodeFromTsType,
+} from "./types.js";
 import { buildThemeStyleKeys } from "../utilities/style-key-naming.js";
+import { capitalize } from "../utilities/string-utils.js";
 
 type StyleFnFromPropsEntry = {
   fnKey: string;
@@ -77,6 +82,8 @@ export type CssHelperConditionalContext = {
   applyVariant: (testInfo: TestInfo, styleObj: Record<string, unknown>) => void;
   dropAllTestInfoProps: (testInfo: TestInfo) => void;
   annotateParamFromJsxProp: (paramId: any, jsxProp: string) => void;
+  findJsxPropTsType: (jsxProp: string) => unknown;
+  isJsxPropOptional: (jsxProp: string) => boolean;
   markBail: () => void;
   extraStyleObjects: Map<string, Record<string, unknown>>;
   resolvedStyleObjects: Map<string, unknown>;
@@ -107,10 +114,34 @@ export function createCssHelperConditionalHandler(ctx: CssHelperConditionalConte
     applyVariant,
     dropAllTestInfoProps,
     annotateParamFromJsxProp,
+    findJsxPropTsType,
+    isJsxPropOptional,
     markBail,
     extraStyleObjects,
     resolvedStyleObjects,
   } = ctx;
+
+  /**
+   * Resolve the TS type node for a prop used in a style function parameter object.
+   * Uses the component's type annotation to infer the correct type (e.g. `number | string`).
+   * For optional props, includes `| undefined` in the union.
+   * Falls back to `number` when the prop type cannot be determined.
+   */
+  const resolveStyleFnPropType = (jsxProp: string): unknown => {
+    const resolved =
+      cloneAstNode(resolveTypeNodeFromTsType(j, findJsxPropTsType(jsxProp))) ?? j.tsNumberKeyword();
+
+    // Wrap with `| undefined` for optional props
+    if (isJsxPropOptional(jsxProp)) {
+      const members =
+        (resolved as { type: string }).type === "TSUnionType"
+          ? [...(resolved as { types: unknown[] }).types, j.tsUndefinedKeyword()]
+          : [resolved, j.tsUndefinedKeyword()];
+      return j.tsUnionType(members as any[]);
+    }
+
+    return resolved;
+  };
 
   return (d: any): boolean => {
     if (d.value.kind !== "interpolated") {
@@ -790,12 +821,12 @@ export function createCssHelperConditionalHandler(ctx: CssHelperConditionalConte
           }
 
           // Create parameterized StyleX style function with props object parameter
-          // Type: { size: number; padding: number }
+          // Type inferred from component's prop types (e.g. { size: number | string })
           const propsTypeProperties = valuePropParams.map((p) => {
             const propName = p.startsWith("$") ? p.slice(1) : p;
             const prop = j.tsPropertySignature(
               j.identifier(propName),
-              j.tsTypeAnnotation(j.tsNumberKeyword()),
+              j.tsTypeAnnotation(resolveStyleFnPropType(p) as any),
             );
             return prop;
           });
@@ -932,7 +963,7 @@ export function createCssHelperConditionalHandler(ctx: CssHelperConditionalConte
           const propName = p.startsWith("$") ? p.slice(1) : p;
           const prop = j.tsPropertySignature(
             j.identifier(propName),
-            j.tsTypeAnnotation(j.tsNumberKeyword()),
+            j.tsTypeAnnotation(resolveStyleFnPropType(p) as any),
           );
           return prop;
         });
@@ -950,10 +981,22 @@ export function createCssHelperConditionalHandler(ctx: CssHelperConditionalConte
 
       // Generate style function keys with descriptive names when possible
       const conditionName = extractConditionName(conditional.test);
-      const consKey = conditionName
+      // When conditionName is null (e.g., call expression conditions), disambiguate keys
+      // using CSS property names to avoid collisions when multiple conditionals exist
+      const propSuffix =
+        !conditionName && consMap.size > 0
+          ? capitalize(cssPropertyToIdentifier(Array.from(consMap.keys())[0]!))
+          : !conditionName && altMap.size > 0
+            ? capitalize(cssPropertyToIdentifier(Array.from(altMap.keys())[0]!))
+            : "";
+      const rawConsKey = conditionName
         ? `${decl.styleKey}${conditionName}`
-        : `${decl.styleKey}CondTruthy`;
-      const altKey = conditionName ? `${decl.styleKey}Default` : `${decl.styleKey}CondFalsy`;
+        : `${decl.styleKey}CondTruthy${propSuffix}`;
+      const rawAltKey = conditionName
+        ? `${decl.styleKey}Default`
+        : `${decl.styleKey}CondFalsy${propSuffix}`;
+      const consKey = ensureUniqueKey(resolvedStyleObjects, rawConsKey);
+      const altKey = ensureUniqueKey(resolvedStyleObjects, rawAltKey);
 
       if (consMap.size > 0) {
         resolvedStyleObjects.set(consKey, createStyleFn(consMap));
@@ -1543,4 +1586,16 @@ function tryResolveBlockLevelThemeConditional(args: BlockThemeConditionalArgs): 
 
   decl.needsWrapperComponent = true;
   return true;
+}
+
+/** Returns a unique key by appending a numeric suffix if the key already exists in the map. */
+function ensureUniqueKey(map: Map<string, unknown>, key: string): string {
+  if (!map.has(key)) {
+    return key;
+  }
+  let i = 2;
+  while (map.has(`${key}${i}`)) {
+    i++;
+  }
+  return `${key}${i}`;
 }

@@ -58,7 +58,10 @@ function StyledLoaderCaret(props: StyledLoaderCaretProps) {
   return (
     <LoaderCaret
       {...rest}
-      {...stylex.props(styles.loaderCaret, $noPadding ? styles.loaderCaretNoPadding : undefined)}
+      {...stylex.props(
+        styles.styledLoaderCaret,
+        $noPadding ? styles.styledLoaderCaretNoPadding : undefined,
+      )}
     />
   );
 }
@@ -71,14 +74,26 @@ export const App = () => (
 
 const styles = stylex.create({
   loaderCaret: {
-    position: "absolute",
-    top: "11px",
-    left: "10px",
+    width: "8px",
+    height: "16px",
+    borderRadius: "2px",
+    backgroundColor: "blue",
+    opacity: 0,
+    animationName: pulse,
+    animationDuration: "2000ms",
+    animationIterationCount: "infinite",
+    animationTimingFunction: "cubic-bezier(0.25, 0.46, 0.45, 0.94)",
+    animationDelay: "1000ms",
   },
   loaderCaretAnimationDelay: (animationDelay: string) => ({
     animationDelay,
   }),
-  loaderCaretNoPadding: {
+  styledLoaderCaret: {
+    position: "absolute",
+    top: "11px",
+    left: "10px",
+  },
+  styledLoaderCaretNoPadding: {
     left: "0",
   },
 });
