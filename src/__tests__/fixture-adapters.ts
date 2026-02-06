@@ -219,9 +219,18 @@ export const fixtureAdapter = defineAdapter({
     }
 
     if (ctx.calleeImportedName === "scrollFadeMaskStyles") {
+      const argsStr = ctx.args
+        .map((a) =>
+          a.kind === "literal"
+            ? typeof a.value === "string"
+              ? JSON.stringify(a.value)
+              : String(a.value)
+            : "undefined",
+        )
+        .join(", ");
       return {
         usage: "props",
-        expr: "scrollFadeMaskStyles(18)",
+        expr: `scrollFadeMaskStyles(${argsStr})`,
         imports: [
           {
             from: { kind: "specifier", value: "./lib/helpers.stylex" },

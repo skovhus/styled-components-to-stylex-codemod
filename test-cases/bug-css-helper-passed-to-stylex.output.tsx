@@ -12,14 +12,16 @@ import { scrollFadeMaskStyles } from "./lib/helpers.stylex";
 function Container(props: React.PropsWithChildren<{ ref?: React.Ref<HTMLDivElement> }>) {
   const { children } = props;
 
-  return <div {...stylex.props(styles.container, scrollFadeMaskStyles(18))}>{children}</div>;
+  return (
+    <div {...stylex.props(styles.container, scrollFadeMaskStyles(18, "both"))}>{children}</div>
+  );
 }
 
 // Pattern 2: css helper as the only interpolation
 function FadeBox(props: React.PropsWithChildren<{ ref?: React.Ref<HTMLDivElement> }>) {
   const { children } = props;
 
-  return <div {...stylex.props(scrollFadeMaskStyles(18))}>{children}</div>;
+  return <div {...stylex.props(scrollFadeMaskStyles(24, "bottom"))}>{children}</div>;
 }
 
 // Pattern 3: Multiple css helpers
@@ -27,7 +29,13 @@ function ComplexFade(props: React.PropsWithChildren<{ ref?: React.Ref<HTMLDivEle
   const { children } = props;
 
   return (
-    <div {...stylex.props(styles.complexFade, scrollFadeMaskStyles(18), scrollFadeMaskStyles(18))}>
+    <div
+      {...stylex.props(
+        styles.complexFade,
+        scrollFadeMaskStyles(12, "top"),
+        scrollFadeMaskStyles(12, "bottom"),
+      )}
+    >
       {children}
     </div>
   );
