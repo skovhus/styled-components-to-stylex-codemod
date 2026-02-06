@@ -136,3 +136,17 @@ export const Browser = {
   isSafari:
     typeof navigator !== "undefined" && /^((?!chrome|android).)*safari/i.test(navigator.userAgent),
 };
+
+/**
+ * Scroll fade mask helper - returns a css`` RuleSet for scroll fade effects.
+ * This demonstrates the bug where css`` helper return values are passed directly to stylex.props().
+ */
+export const scrollFadeMaskStyles = (size: number, direction?: "top" | "bottom" | "both") => css`
+  --fade-size: ${size}px;
+  mask-image: linear-gradient(
+    to bottom,
+    ${direction === "top" || direction === "both" ? "transparent, black var(--fade-size)," : ""}
+    black,
+    ${direction === "bottom" || direction === "both" ? "black calc(100% - var(--fade-size)), transparent" : ""}
+  );
+`;
