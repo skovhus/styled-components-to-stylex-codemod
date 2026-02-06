@@ -11,7 +11,6 @@ import {
   emitEnumVariantWrappers,
   emitInputWrappers,
   emitLinkWrappers,
-  emitSiblingWrappers,
 } from "./emit-intrinsic-specialized.js";
 import { emitIntrinsicPolymorphicWrappers } from "./emit-intrinsic-polymorphic.js";
 import { emitShouldForwardPropWrappers } from "./emit-intrinsic-should-forward-prop.js";
@@ -77,7 +76,6 @@ export function emitIntrinsicWrappers(emitter: WrapperEmitter): {
   emitEnumVariantWrappers(ctx);
   emitShouldForwardPropWrappers(ctx);
   emitSimpleWithConfigWrappers(ctx);
-  emitSiblingWrappers(ctx);
   emitSimpleExportedIntrinsicWrappers(ctx);
 
   return { emitted, needsReactTypeImport, needsUseThemeImport };

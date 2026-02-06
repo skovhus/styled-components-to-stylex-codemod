@@ -1,15 +1,6 @@
 import styled from "styled-components";
 import React from "react";
 
-// Bug: When externalInterface returns { styles: true } and the wrapped component
-// doesn't have className/style in its props type, the codemod generates code that
-// destructures these props, causing:
-// TS2339: Property 'className' does not exist on type 'LoadingProps'.
-// TS2339: Property 'style' does not exist on type 'LoadingProps'.
-//
-// This happens when the adapter is configured with externalInterface: () => ({ styles: true })
-// like in a real-world app codemod.
-
 type LoadingProps = {
   delay?: number;
 };

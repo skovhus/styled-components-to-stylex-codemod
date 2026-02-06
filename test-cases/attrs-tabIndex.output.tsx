@@ -2,10 +2,6 @@ import * as React from "react";
 import * as stylex from "@stylexjs/stylex";
 import { $colors } from "./tokens.stylex";
 
-// Bug: `.attrs()` sets `tabIndex` with a default of 0, but the converted output
-// does not preserve the tabIndex attribute or its default value. The element
-// loses keyboard focusability that the original styled component provided.
-
 type Props = {
   $applyBackground?: boolean;
 };

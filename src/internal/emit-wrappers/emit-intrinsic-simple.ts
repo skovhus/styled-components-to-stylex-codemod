@@ -39,9 +39,6 @@ export function emitSimpleWithConfigWrappers(ctx: EmitIntrinsicContext): void {
     if (d.enumVariant) {
       return false;
     }
-    if (d.siblingWrapper) {
-      return false;
-    }
     if (d.attrWrapper) {
       return false;
     }
@@ -365,9 +362,6 @@ export function emitSimpleExportedIntrinsicWrappers(ctx: EmitIntrinsicContext): 
       return false;
     }
     if (d.enumVariant) {
-      return false;
-    }
-    if (d.siblingWrapper) {
       return false;
     }
     if (d.attrWrapper) {

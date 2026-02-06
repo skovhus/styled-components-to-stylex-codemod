@@ -2,10 +2,6 @@ import * as React from "react";
 import * as stylex from "@stylexjs/stylex";
 import { $colors } from "./tokens.stylex";
 
-// Bug: The destructured `theme` from `${({ enabled, theme }) => ...}` is converted to
-// `props.theme.color.greenBase` but `theme` doesn't exist on the component's props type.
-// The theme reference should be resolved via the adapter. Causes TS2339.
-
 type Props = { enabled?: boolean };
 
 type StatusIconProps = React.PropsWithChildren<Props>;

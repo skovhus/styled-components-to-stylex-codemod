@@ -1,9 +1,5 @@
 import styled, { keyframes } from "styled-components";
 
-// Bug: `styled(LoaderCaret)` wrapping produces a generic component type that causes
-// TS2590 ("union type too complex") when computing `ComponentPropsWithRef<typeof LoaderCaret>`.
-// Also, the base component's styles (width, height, animation, etc.) are lost in the output.
-
 const pulse = keyframes`
   0%, 40%, 100% {
     opacity: 1;

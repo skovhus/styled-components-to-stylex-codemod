@@ -1,10 +1,6 @@
 import styled from "styled-components";
 import React from "react";
 
-// Bug: The styled component `StyledFallback` is used inside a function argument
-// (passed to `withFallback`), not in a JSX return. The codemod must handle styled
-// components referenced as values in non-JSX positions without breaking.
-
 const StyledFallback = styled.div`
   display: flex;
   height: 100%;

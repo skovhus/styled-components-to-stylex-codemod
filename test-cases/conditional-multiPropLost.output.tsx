@@ -2,10 +2,6 @@ import * as React from "react";
 import * as stylex from "@stylexjs/stylex";
 import { mergedSx } from "./lib/mergedSx";
 
-// Bug: Two separate conditional interpolations (width and height) are collapsed into
-// a single style function that only contains `height`. The `width` branch is lost
-// entirely, so `Spacer width={100}` has no effect. Causes TS2353.
-
 type Props = {
   width?: number | string;
   height?: number | string;

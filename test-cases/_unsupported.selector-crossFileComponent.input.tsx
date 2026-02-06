@@ -1,7 +1,4 @@
 // @expected-warning: Unsupported selector: unknown component selector
-// Bug: When a component is converted to StyleX in its own file, it can no longer be used
-// as a CSS selector `${Component} { ... }` in styled-components template literals in other files.
-// This produces TS2345: Argument of type '(props: ...) => Element' is not assignable to parameter of type 'Interpolation<...>'
 import styled from "styled-components";
 import { CollapseArrowIcon } from "./lib/collapse-arrow-icon";
 

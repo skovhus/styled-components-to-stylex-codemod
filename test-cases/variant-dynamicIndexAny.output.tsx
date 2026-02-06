@@ -1,10 +1,6 @@
 import * as React from "react";
 import * as stylex from "@stylexjs/stylex";
 
-// Bug: The output references a bare `color` variable that was never destructured
-// from props (`color != null && styles.badgeBackgroundColor(color)`).
-// The `color` prop should be extracted as `props.color`. Causes TS2304/TS7053.
-
 type Size = "tiny" | "small" | "normal";
 
 type Props = {

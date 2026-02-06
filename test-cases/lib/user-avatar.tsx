@@ -7,8 +7,6 @@ export interface UserAvatarProps {
   style?: React.CSSProperties;
   size?: "tiny" | "small" | "regular";
   user: string;
-  enablePresence?: boolean;
-  enablePopover?: boolean;
 }
 
 export function UserAvatar({ className, style, size = "regular", user }: UserAvatarProps) {

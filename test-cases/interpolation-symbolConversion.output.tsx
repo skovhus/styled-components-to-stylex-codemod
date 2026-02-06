@@ -6,10 +6,6 @@ type ContainerProps = React.PropsWithChildren<{
   $compact: boolean;
 }>;
 
-// Bug: When thinPixel() is resolved to pixelVars.thin (a StyleXVar<string>),
-// wrapping it in a template literal causes TS2731: Implicit conversion of a 'symbol' to a 'string'
-// Real-world cases: DashboardPageTitle.tsx:295, LabelDescriptionInput.tsx:120
-
 function Container(props: ContainerProps) {
   const { children, $compact } = props;
 

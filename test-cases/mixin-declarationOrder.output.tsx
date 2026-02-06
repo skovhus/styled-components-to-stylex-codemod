@@ -2,10 +2,6 @@ import * as stylex from "@stylexjs/stylex";
 import React from "react";
 
 const styles = stylex.create({
-  // Bug: The styled component `StyledFallback` is used inside a function argument
-  // (passed to `withFallback`), not in a JSX return. The codemod must handle styled
-  // components referenced as values in non-JSX positions without breaking.
-
   styledFallback: {
     display: "flex",
     height: "100%",

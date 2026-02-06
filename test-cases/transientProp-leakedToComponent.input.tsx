@@ -1,9 +1,6 @@
 import React from "react";
 import styled from "styled-components";
 
-// Bug: `.attrs({ onlyIcon: undefined })` sets a default attribute, but the codemod
-// drops the attrs entirely. The `onlyIcon` default is lost in the converted output,
-// changing runtime behavior for consumers that relied on the default.
 function SubmitButton(props: {
   onlyIcon?: boolean;
   children?: React.ReactNode;

@@ -1,9 +1,5 @@
 import styled from "styled-components";
 
-// Bug: The destructured `theme` from `${({ enabled, theme }) => ...}` is converted to
-// `props.theme.color.greenBase` but `theme` doesn't exist on the component's props type.
-// The theme reference should be resolved via the adapter. Causes TS2339.
-
 type Props = { enabled?: boolean };
 
 const StatusIcon = styled.div<Props>`

@@ -93,7 +93,6 @@ export function Scrollable(props: ScrollableProps) {
 }
 
 // Pattern 5: styled(Component).attrs with TYPE ALIAS (not interface)
-// Bug: type aliases might not get `extends React.ComponentProps<...>` added
 // This is the exact pattern from a design system's Scrollable.tsx
 type TypeAliasProps = Omit<React.ComponentPropsWithRef<typeof Flex>, "className" | "style"> & {
   /** Whether scrollbar gutter should be stable */

@@ -70,7 +70,6 @@ export const Scrollable = styled(Flex).attrs((props) => ({
 `;
 
 // Pattern 5: styled(Component).attrs with TYPE ALIAS (not interface)
-// Bug: type aliases might not get `extends React.ComponentProps<...>` added
 // This is the exact pattern from a design system's Scrollable.tsx
 type TypeAliasProps = {
   /** Whether scrollbar gutter should be stable */

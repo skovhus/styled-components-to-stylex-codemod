@@ -3,25 +3,20 @@ import * as stylex from "@stylexjs/stylex";
 import { motion } from "./lib/framer-motion";
 import { UserAvatar } from "./lib/user-avatar";
 
-type PulseWrapperProps = Omit<
+type ComponentWrapperProps = Omit<
   React.ComponentPropsWithRef<typeof motion.div>,
   "className" | "style"
 > & {
   $isOpen: boolean;
 };
 
-// Bug: styled(motion.div)<{ $isOpen: boolean }> converts but the codemod
-// may inline the usage, passing the transient $isOpen prop directly to
-// motion.div which doesn't accept it. Similarly, styled(UserAvatar)<{ $highlight }>
-// leaks $highlight to UserAvatar. styled-components auto-strips $-prefixed props.
-
-function PulseWrapper(props: PulseWrapperProps) {
+function ComponentWrapper(props: ComponentWrapperProps) {
   const { children, $isOpen, ...rest } = props;
 
   return (
     <motion.div
       {...rest}
-      {...stylex.props(styles.pulseWrapper, $isOpen ? styles.pulseWrapperOpen : undefined)}
+      {...stylex.props(styles.componentWrapper, $isOpen ? styles.componentWrapperOpen : undefined)}
     >
       {children}
     </motion.div>
@@ -51,24 +46,24 @@ function HighlightedAvatar(props: HighlightedAvatarProps) {
 
 export const App = () => (
   <div>
-    <PulseWrapper $isOpen={true} initial={{ height: 40 }} animate={{ height: 200 }}>
+    <ComponentWrapper $isOpen={true} initial={{ height: 40 }} animate={{ height: 200 }}>
       Open content
-    </PulseWrapper>
-    <PulseWrapper $isOpen={false} initial={{ height: 40 }} animate={{ height: 40 }}>
+    </ComponentWrapper>
+    <ComponentWrapper $isOpen={false} initial={{ height: 40 }} animate={{ height: 40 }}>
       Closed
-    </PulseWrapper>
-    <HighlightedAvatar user="Alice" size="small" $highlightColor="blue" enablePresence={false} />
-    <HighlightedAvatar user="Bob" size="tiny" enablePresence={false} />
+    </ComponentWrapper>
+    <HighlightedAvatar user="Alice" size="small" $highlightColor="blue" />
+    <HighlightedAvatar user="Bob" size="tiny" />
   </div>
 );
 
 const styles = stylex.create({
-  pulseWrapper: {
+  componentWrapper: {
     backgroundColor: "white",
     borderRadius: "20px",
     overflow: "hidden",
   },
-  pulseWrapperOpen: {
+  componentWrapperOpen: {
     borderRadius: "8px",
   },
   highlightedAvatar: {

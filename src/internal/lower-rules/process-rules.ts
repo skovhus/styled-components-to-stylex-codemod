@@ -14,7 +14,7 @@ import {
   parseSelector,
 } from "../selectors.js";
 import { extractRootAndPath, getNodeLocStart } from "../utilities/jscodeshift-utils.js";
-import { cssValueToJs, toStyleKey, toSuffixFromProp } from "../transform/helpers.js";
+import { cssValueToJs, toStyleKey } from "../transform/helpers.js";
 
 export function processDeclRules(ctx: DeclProcessingState): void {
   const {
@@ -56,78 +56,6 @@ export function processDeclRules(ctx: DeclProcessingState): void {
     }
     // Track resolved selector media for this rule (set by adapter.resolveSelector)
     let resolvedSelectorMedia: { keyExpr: unknown; exprSource: string } | null = null;
-
-    // (debug logging removed)
-    // Sibling selectors:
-    // - & + &  (adjacent sibling)
-    // - &.something ~ & (general sibling after a class marker)
-    const selTrim = rule.selector.trim();
-
-    if (selTrim === "& + &" || /^&\s*\+\s*&$/.test(selTrim)) {
-      decl.needsWrapperComponent = true;
-      decl.siblingWrapper ??= {
-        adjacentKey: "adjacentSibling",
-        propAdjacent: "isAdjacentSibling",
-      };
-      const obj: Record<string, unknown> = {};
-      for (const d of rule.declarations) {
-        if (d.value.kind !== "static") {
-          continue;
-        }
-        const outs = cssDeclarationToStylexDeclarations(d);
-        for (let i = 0; i < outs.length; i++) {
-          const out = outs[i]!;
-          if (out.value.kind !== "static") {
-            continue;
-          }
-          obj[out.prop] = cssValueToJs(out.value, d.important, out.prop);
-          if (i === 0) {
-            addPropComments(obj, out.prop, {
-              leading: (d as any).leadingComment,
-              trailingLine: (d as any).trailingLineComment,
-            });
-          }
-        }
-      }
-      resolvedStyleObjects.set(decl.siblingWrapper.adjacentKey, obj);
-      continue;
-    }
-    const mSibling = selTrim.match(/^&\.([a-zA-Z0-9_-]+)\s*~\s*&$/);
-    if (mSibling) {
-      const cls = mSibling[1]!;
-      const propAfter = `isSiblingAfter${toSuffixFromProp(cls)}`;
-      decl.needsWrapperComponent = true;
-      decl.siblingWrapper ??= {
-        adjacentKey: "adjacentSibling",
-        propAdjacent: "isAdjacentSibling",
-      };
-      decl.siblingWrapper.afterClass = cls;
-      decl.siblingWrapper.afterKey = `siblingAfter${toSuffixFromProp(cls)}`;
-      decl.siblingWrapper.propAfter = propAfter;
-
-      const obj: Record<string, unknown> = {};
-      for (const d of rule.declarations) {
-        if (d.value.kind !== "static") {
-          continue;
-        }
-        const outs = cssDeclarationToStylexDeclarations(d);
-        for (let i = 0; i < outs.length; i++) {
-          const out = outs[i]!;
-          if (out.value.kind !== "static") {
-            continue;
-          }
-          obj[out.prop] = cssValueToJs(out.value, d.important, out.prop);
-          if (i === 0) {
-            addPropComments(obj, out.prop, {
-              leading: (d as any).leadingComment,
-              trailingLine: (d as any).trailingLineComment,
-            });
-          }
-        }
-      }
-      resolvedStyleObjects.set(decl.siblingWrapper.afterKey, obj);
-      continue;
-    }
 
     // --- Unsupported complex selector detection ---
     // We bail out rather than emitting incorrect unconditional styles.
@@ -204,6 +132,15 @@ export function processDeclRules(ctx: DeclProcessingState): void {
         warnings.push({
           severity: "warning",
           type: "Unsupported selector: class selector",
+          loc: computeSelectorWarningLoc(decl.loc, decl.rawCss, rule.selector),
+        });
+        break;
+      } else if (/[+~]/.test(s) && !isHandledComponentPattern) {
+        // Sibling combinators like `& + &`, `& ~ &`
+        state.markBail();
+        warnings.push({
+          severity: "warning",
+          type: "Unsupported selector: sibling combinator",
           loc: computeSelectorWarningLoc(decl.loc, decl.rawCss, rule.selector),
         });
         break;

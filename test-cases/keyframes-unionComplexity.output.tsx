@@ -2,10 +2,6 @@ import * as React from "react";
 import * as stylex from "@stylexjs/stylex";
 import { mergedSx } from "./lib/mergedSx";
 
-// Bug: `styled(LoaderCaret)` wrapping produces a generic component type that causes
-// TS2590 ("union type too complex") when computing `ComponentPropsWithRef<typeof LoaderCaret>`.
-// Also, the base component's styles (width, height, animation, etc.) are lost in the output.
-
 const pulse = stylex.keyframes({
   "0%,40%,100%": {
     opacity: 1,

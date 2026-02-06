@@ -1,14 +1,12 @@
 /**
- * Emits specialized intrinsic wrappers (input/link/enum/sibling variants).
+ * Emits specialized intrinsic wrappers (input/link/enum variants).
  *
  * These handle attribute-driven behavior or wrapper-specific style conditions
  * that need bespoke AST output rather than the generic wrapper paths.
  */
 import type { StyledDecl } from "../transform-types.js";
 import type { ExpressionKind } from "./types.js";
-import type { JsxAttr, StatementKind } from "./wrapper-emitter.js";
 import { withLeadingComments } from "./comments.js";
-import { emitStyleMerging } from "./style-merger.js";
 import type { EmitIntrinsicContext } from "./emit-intrinsic-helpers.js";
 
 export function emitInputWrappers(ctx: EmitIntrinsicContext): void {
@@ -527,148 +525,5 @@ export function emitEnumVariantWrappers(ctx: EmitIntrinsicContext): void {
         ),
       );
     }
-  }
-}
-
-export function emitSiblingWrappers(ctx: EmitIntrinsicContext): void {
-  const { emitter, j, emitTypes, wrapperDecls, stylesIdentifier, emitted } = ctx;
-  const { emitPropsType, shouldAllowAsProp, asDestructureProp } = ctx.helpers;
-  // Sibling selector wrappers (Thing + variants)
-  const siblingWrappers = wrapperDecls.filter((d: StyledDecl) => d.siblingWrapper);
-  for (const d of siblingWrappers) {
-    if (d.base.kind !== "intrinsic" || d.base.tagName !== "div") {
-      continue;
-    }
-    const sw = d.siblingWrapper!;
-    const tagName = "div";
-    const allowAsProp = shouldAllowAsProp(d, "div");
-
-    {
-      const explicit = emitter.stringifyTsType(d.propsType);
-      const extras: string[] = [];
-      extras.push(`${sw.propAdjacent}?: boolean;`);
-      if (sw.propAfter) {
-        extras.push(`${sw.propAfter}?: boolean;`);
-      }
-      const extraType = `{ ${extras.join(" ")} }`;
-      const allowClassNameProp = emitter.shouldAllowClassNameProp(d);
-      const allowStyleProp = emitter.shouldAllowStyleProp(d);
-      const baseTypeText = emitter.inferredIntrinsicPropsTypeText({
-        d,
-        tagName: "div",
-        allowClassNameProp,
-        allowStyleProp,
-      });
-      const typeText = explicit ?? emitter.joinIntersection(baseTypeText, extraType);
-      emitPropsType({
-        localName: d.localName,
-        tagName,
-        typeText,
-        allowAsProp,
-        allowClassNameProp,
-        allowStyleProp,
-      });
-    }
-
-    const propsParamId = j.identifier("props");
-    if (allowAsProp && emitTypes) {
-      emitter.annotatePropsParam(
-        propsParamId,
-        d.localName,
-        `${emitter.propsTypeNameFor(d.localName)}<C>`,
-      );
-    } else {
-      emitter.annotatePropsParam(propsParamId, d.localName);
-    }
-    const propsId = j.identifier("props");
-    const childrenId = j.identifier("children");
-    const classNameId = j.identifier("className");
-    const restId = j.identifier("rest");
-    const adjId = j.identifier(sw.propAdjacent);
-
-    const allowClassNamePropForDestructure = emitter.shouldAllowClassNameProp(d);
-    const declStmt = j.variableDeclaration("const", [
-      j.variableDeclarator(
-        j.objectPattern([
-          ...(allowAsProp ? [asDestructureProp("div")] : []),
-          emitter.patternProp("children", childrenId),
-          ...(allowClassNamePropForDestructure
-            ? [emitter.patternProp("className", classNameId)]
-            : []),
-          emitter.patternProp(sw.propAdjacent, adjId),
-          ...(sw.propAfter ? [emitter.patternProp(sw.propAfter, j.identifier(sw.propAfter))] : []),
-          j.restElement(restId),
-        ] as any),
-        propsId,
-      ),
-    ]);
-
-    // Build styleArgs for sibling selectors
-    const { beforeBase: extraStyleArgs, afterBase: extraStyleArgsAfterBase } =
-      emitter.splitExtraStyleArgs(d);
-    const styleArgs: ExpressionKind[] = [
-      ...extraStyleArgs,
-      j.memberExpression(j.identifier(stylesIdentifier), j.identifier(d.styleKey)),
-      ...extraStyleArgsAfterBase,
-      j.logicalExpression(
-        "&&",
-        adjId as any,
-        j.memberExpression(j.identifier(stylesIdentifier), j.identifier(sw.adjacentKey)),
-      ),
-      ...(sw.afterKey && sw.propAfter
-        ? [
-            j.logicalExpression(
-              "&&",
-              j.identifier(sw.propAfter) as any,
-              j.memberExpression(j.identifier(stylesIdentifier), j.identifier(sw.afterKey)),
-            ),
-          ]
-        : []),
-    ];
-
-    const allowClassNameProp = emitter.shouldAllowClassNameProp(d);
-    const allowStyleProp = emitter.shouldAllowStyleProp(d);
-
-    // Use the style merger helper
-    const merging = emitStyleMerging({
-      j,
-      emitter,
-      styleArgs,
-      classNameId,
-      styleId: j.identifier("style"),
-      allowClassNameProp,
-      allowStyleProp,
-      inlineStyleProps: [],
-    });
-
-    // Build attrs: {...rest} then {...mergedStylexProps(...)} so stylex styles override
-    const openingAttrs: JsxAttr[] = [j.jsxSpreadAttribute(restId)];
-    emitter.appendMergingAttrs(openingAttrs, merging);
-
-    const jsx = emitter.buildJsxElement({
-      tagName: allowAsProp ? "Component" : "div",
-      attrs: openingAttrs,
-      includeChildren: true,
-      childrenExpr: childrenId,
-    });
-
-    const bodyStmts: StatementKind[] = [declStmt];
-    if (merging.sxDecl) {
-      bodyStmts.push(merging.sxDecl);
-    }
-    bodyStmts.push(j.returnStatement(jsx as any));
-
-    emitted.push(
-      emitter.buildWrapperFunction({
-        localName: d.localName,
-        params: [propsParamId],
-        bodyStmts,
-        typeParameters:
-          allowAsProp && emitTypes
-            ? j(`function _<C extends React.ElementType = "div">() { return null }`).get().node
-                .program.body[0].typeParameters
-            : undefined,
-      }),
-    );
   }
 }

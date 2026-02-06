@@ -3,10 +3,6 @@ import * as stylex from "@stylexjs/stylex";
 import { mergedSx } from "./lib/mergedSx";
 import { $colors } from "./tokens.stylex";
 
-// Bug: A three-level styled chain (Sentence → PaddedSentence → PaddedMutedSentence)
-// where the base component is used before its declaration. The codemod must correctly
-// delegate styles through the chain without losing intermediate styles.
-
 export function App() {
   return (
     <>

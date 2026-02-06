@@ -12,10 +12,6 @@ type HeaderTitleProps<C extends React.ElementType = typeof Text> = React.Compone
     as?: C;
   };
 
-// Bug: styled(Text) always supports the `as` prop for polymorphism, but the codemod
-// only adds `as` to the wrapper type when it detects `as` usage in the same file.
-// Exported components used with `as` in other files lose polymorphism. Causes TS2322.
-
 export function HeaderTitle<C extends React.ElementType = typeof Text>(props: HeaderTitleProps<C>) {
   const { as: Component = Text, ...rest } = props;
 

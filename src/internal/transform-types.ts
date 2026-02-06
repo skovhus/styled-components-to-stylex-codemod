@@ -275,13 +275,6 @@ export type StyledDecl = {
       value: string;
     }>;
   };
-  siblingWrapper?: {
-    adjacentKey: string;
-    afterKey?: string;
-    afterClass?: string;
-    propAdjacent: string;
-    propAfter?: string;
-  };
   // Leading comments (JSDoc, line comments) from the original styled component declaration
   leadingComments?: Comment[];
 };

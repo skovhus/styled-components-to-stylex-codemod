@@ -187,9 +187,6 @@ export function analyzeBeforeEmitStep(ctx: TransformContext): StepResult {
     if (decl.enumVariant) {
       return false;
     }
-    if (decl.siblingWrapper) {
-      return false;
-    }
     if (decl.attrWrapper) {
       return false;
     }

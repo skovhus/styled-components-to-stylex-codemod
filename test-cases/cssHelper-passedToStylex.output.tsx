@@ -2,12 +2,6 @@ import * as React from "react";
 import * as stylex from "@stylexjs/stylex";
 import { scrollFadeMaskStyles } from "./lib/helpers.stylex";
 
-/**
- * BUG: When a styled-component uses a css helper function as an interpolation,
- * the codemod passes the result directly to stylex.props(). But the css helper
- * returns a styled-components RuleSet<object>, not a StyleX style. This causes TS2345.
- */
-
 // Pattern 1: css helper used alongside regular CSS properties
 function Container(props: React.PropsWithChildren<{ ref?: React.Ref<HTMLDivElement> }>) {
   const { children } = props;

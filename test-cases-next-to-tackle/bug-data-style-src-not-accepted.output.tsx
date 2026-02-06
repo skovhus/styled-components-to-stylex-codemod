@@ -2,11 +2,6 @@ import React from "react";
 import * as stylex from "@stylexjs/stylex";
 import { Loading } from "./lib/loading";
 
-// Bug: When an exported styled() wraps a component whose props do NOT include
-// className (e.g. Loading only accepts style/size/text), the codemod creates a
-// wrapper that forwards className explicitly to the base component, causing TS2322.
-// styled-components handled this internally, but the wrapper exposes the mismatch.
-
 export function StyledLoading(
   props: React.ComponentPropsWithRef<typeof Loading> & {
     className?: string;

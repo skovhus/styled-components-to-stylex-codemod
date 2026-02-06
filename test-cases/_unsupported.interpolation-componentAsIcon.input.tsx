@@ -2,10 +2,6 @@
 import React from "react";
 import styled from "styled-components";
 
-// Bug: The component selector `${ArrowIcon} { width: 18px; ... }` targets a child
-// component, but the codemod merges those styles into the parent button's style object
-// instead of applying them to the ArrowIcon. The icon styles are lost.
-
 // Simulates a collapse arrow icon component
 function ArrowIcon(props: React.SVGProps<SVGSVGElement> & { $isOpen?: boolean }) {
   const { $isOpen, ...rest } = props;
