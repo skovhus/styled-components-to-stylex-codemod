@@ -10,17 +10,27 @@ export function SomeComponent() {
 
   return (
     <Wrapper ref={outerRef} tabIndex={-1}>
-      <div ref={innerRef} />
+      <div ref={innerRef} style={{ height: 200 }}>
+        Scrollable content
+      </div>
     </Wrapper>
   );
 }
 
 const Wrapper = styled.div`
-  /* A height of 10 */
-  height: 10px;
+  /* Constrained height to show scroll */
+  height: 60px;
   /* Fixed width */
-  width: 50px;
+  width: 160px;
   overflow-y: scroll; // This is important
+  background-color: #f0f4f8;
+  border-radius: 6px;
+  padding: 8px;
+  font-size: 14px;
 `;
 
-export const App = () => <SomeComponent />;
+export const App = () => (
+  <div style={{ padding: 16 }}>
+    <SomeComponent />
+  </div>
+);

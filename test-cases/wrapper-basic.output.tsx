@@ -10,20 +10,30 @@ export function SomeComponent() {
 
   return (
     <div ref={outerRef} tabIndex={-1} {...stylex.props(styles.wrapper)}>
-      <div ref={innerRef} />
+      <div ref={innerRef} style={{ height: 200 }}>
+        Scrollable content
+      </div>
     </div>
   );
 }
 
-export const App = () => <SomeComponent />;
+export const App = () => (
+  <div style={{ padding: 16 }}>
+    <SomeComponent />
+  </div>
+);
 
 const styles = stylex.create({
   wrapper: {
-    /* A height of 10 */
-    height: "10px",
+    /* Constrained height to show scroll */
+    height: "60px",
     /* Fixed width */
-    width: "50px",
+    width: "160px",
     // This is important
     overflowY: "scroll",
+    backgroundColor: "#f0f4f8",
+    borderRadius: "6px",
+    padding: "8px",
+    fontSize: "14px",
   },
 });

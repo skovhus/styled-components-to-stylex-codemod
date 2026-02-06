@@ -12,17 +12,29 @@ type ViewProps = Omit<React.ComponentProps<"div">, "className" | "style"> & {
 function View(props: ViewProps) {
   const { children, backgroundColor } = props;
 
-  return <div {...stylex.props(styles.viewBackgroundColor(backgroundColor))}>{children}</div>;
+  return (
+    <div {...stylex.props(styles.view, styles.viewBackgroundColor(backgroundColor))}>
+      {children}
+    </div>
+  );
 }
 
 export const App = () => (
-  <>
-    <View backgroundColor="labelBase" />
-    <View backgroundColor="labelMuted" />
-  </>
+  <div style={{ display: "flex", gap: 12, padding: 16 }}>
+    <View backgroundColor="labelBase">labelBase</View>
+    <View backgroundColor="labelMuted">labelMuted</View>
+  </div>
 );
 
 const styles = stylex.create({
+  view: {
+    color: "white",
+    paddingBlock: "12px",
+    paddingInline: "16px",
+    borderRadius: "6px",
+    fontSize: "14px",
+    fontWeight: 500,
+  },
   viewBackgroundColor: (backgroundColor: Color) => ({
     backgroundColor: $colors[backgroundColor] || `${backgroundColor}`,
   }),

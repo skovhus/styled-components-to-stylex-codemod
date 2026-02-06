@@ -556,10 +556,12 @@ export function tryResolveConditionalValue(
   // 1b) Destructured theme + bare Identifier test: ({ enabled, theme }) => enabled ? theme.x : theme.y
   // When the param is an ObjectPattern with `theme`, a bare Identifier test refers to another
   // destructured prop. Handle this like the MemberExpression test above.
+  // Guard: the identifier must actually be in the ObjectPattern (not a closure variable).
   if (
     info?.kind === "themeBinding" &&
     test.type === "Identifier" &&
-    typeof test.name === "string"
+    typeof test.name === "string" &&
+    isDestructuredFromParam(expr, test.name)
   ) {
     const destructuredProp = test.name;
     const cons = getBranch(consequent);
@@ -1114,6 +1116,29 @@ export function tryResolveIndexedThemeWithPropFallback(
 }
 
 // --- Non-exported helpers ---
+
+/**
+ * Check whether a given identifier name is actually destructured from the
+ * arrow function's ObjectPattern parameter.  This prevents treating closure
+ * variables (captured from outer scope) as component props.
+ *
+ * Example: `({ enabled, theme }) => enabled ? …` → `enabled` IS destructured.
+ * Example: `({ theme }) => closureVar ? …` → `closureVar` is NOT destructured.
+ */
+function isDestructuredFromParam(arrowFn: unknown, name: string): boolean {
+  const fn = arrowFn as { params?: Array<{ type?: string; properties?: unknown[] }> };
+  const param = fn.params?.[0];
+  if (!param || param.type !== "ObjectPattern" || !Array.isArray(param.properties)) {
+    return false;
+  }
+  return param.properties.some((prop) => {
+    const p = prop as { type?: string; key?: { type?: string; name?: string } };
+    if (p.type !== "Property" && p.type !== "ObjectProperty") {
+      return false;
+    }
+    return p.key?.type === "Identifier" && p.key.name === name;
+  });
+}
 
 /**
  * Parses a template literal that contains a simple prop-based ternary expression.

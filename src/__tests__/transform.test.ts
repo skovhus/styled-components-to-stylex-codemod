@@ -1654,4 +1654,30 @@ export const App = () => <Box isActive>Hello</Box>;
       ]
     `);
   });
+
+  it("should not treat closure variables as destructured props in theme conditionals", () => {
+    // When the arrow param is ({ theme }) and the test is `closureVar`,
+    // closureVar is NOT a destructured prop — it comes from outer scope.
+    // The codemod should NOT create prop-based variants for it.
+    const source = `
+import styled from "styled-components";
+
+const isSpecial = true;
+
+const Badge = styled.div\`
+  color: \${({ theme }) => (isSpecial ? theme.color.greenBase : theme.color.labelMuted)};
+\`;
+
+export const App = () => <Badge>Hello</Badge>;
+`;
+
+    const result = transformWithWarnings(
+      { source, path: "theme-closure.tsx" },
+      { jscodeshift: j, j, stats: () => {}, report: () => {} },
+      { adapter: fixtureAdapter },
+    );
+
+    // Should bail — closureVar is not a prop, so we can't create variants
+    expect(result.code).toBeNull();
+  });
 });
