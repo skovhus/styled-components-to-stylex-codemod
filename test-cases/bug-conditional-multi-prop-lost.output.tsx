@@ -1,5 +1,6 @@
 import * as React from "react";
 import * as stylex from "@stylexjs/stylex";
+import { mergedSx } from "./lib/mergedSx";
 
 // Bug: Two separate conditional interpolations (width and height) are collapsed into
 // a single style function that only contains `height`. The `width` branch is lost
@@ -21,25 +22,29 @@ const showProperty = (size?: number | string) => {
   return !!size || size === 0;
 };
 
-type SpacerProps = Omit<React.ComponentProps<"div">, "className" | "style"> & Props;
+type SpacerProps = Omit<React.ComponentProps<"div">, "className"> & Props;
 
 export function Spacer(props: SpacerProps) {
-  const { children, width, height, ...rest } = props;
+  const { children, style, width, height, ...rest } = props;
 
   return (
     <div
       {...rest}
-      {...stylex.props(
-        showProperty(props.width)
-          ? styles.spacerCondTruthyWidth({
-              width: props.width,
-            })
-          : undefined,
-        showProperty(props.height)
-          ? styles.spacerCondTruthyHeight({
-              height: props.height,
-            })
-          : undefined,
+      {...mergedSx(
+        [
+          showProperty(props.width)
+            ? styles.spacerCondTruthyWidth({
+                width: props.width,
+              })
+            : undefined,
+          showProperty(props.height)
+            ? styles.spacerCondTruthyHeight({
+                height: props.height,
+              })
+            : undefined,
+        ],
+        undefined,
+        style,
       )}
     >
       {children}
@@ -48,11 +53,11 @@ export function Spacer(props: SpacerProps) {
 }
 
 export const App = () => (
-  <div>
-    <Spacer width={100} height={50} />
-    <Spacer width="2rem" />
-    <Spacer height={0} />
-    <Spacer />
+  <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+    <Spacer width={100} height={50} style={{ background: "#cce5ff" }} />
+    <Spacer width="2rem" style={{ background: "#d4edda", height: 20 }} />
+    <Spacer height={0} style={{ background: "#fff3cd", width: 40 }} />
+    <Spacer style={{ background: "#f8d7da", width: 20, height: 20 }} />
   </div>
 );
 

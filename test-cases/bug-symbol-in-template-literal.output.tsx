@@ -20,7 +20,12 @@ function Container(props: ContainerProps) {
   );
 }
 
-export const App = () => <Container $compact />;
+export const App = () => (
+  <div>
+    <Container $compact>Compact mode</Container>
+    <Container $compact={false}>Normal mode</Container>
+  </div>
+);
 
 const styles = stylex.create({
   container: {

@@ -11,4 +11,9 @@ const Container = styled.div<{ $compact: boolean }>`
   background: #f0f0f0;
 `;
 
-export const App = () => <Container $compact />;
+export const App = () => (
+  <div>
+    <Container $compact>Compact mode</Container>
+    <Container $compact={false}>Normal mode</Container>
+  </div>
+);

@@ -31,7 +31,14 @@ const StyledLoaderCaret = styled(LoaderCaret)<{ $noPadding?: boolean }>`
 `;
 
 export const App = () => (
-  <div>
-    <StyledLoaderCaret $delay={500} />
+  <div style={{ display: "flex", gap: 16, alignItems: "flex-start" }}>
+    <div>
+      <p>LoaderCaret:</p>
+      <LoaderCaret $delay={0} />
+    </div>
+    <div style={{ position: "relative", height: 40 }}>
+      <p>StyledLoaderCaret:</p>
+      <StyledLoaderCaret $delay={500} />
+    </div>
   </div>
 );

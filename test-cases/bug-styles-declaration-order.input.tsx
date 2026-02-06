@@ -23,4 +23,9 @@ export const MyComponent = withFallback(
   { fallback: <StyledFallback>Loading...</StyledFallback> },
 );
 
-export const App = () => <MyComponent />;
+export const App = () => (
+  <div>
+    <StyledFallback>Fallback content</StyledFallback>
+    <MyComponent />
+  </div>
+);

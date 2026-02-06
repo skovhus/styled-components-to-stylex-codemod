@@ -25,4 +25,9 @@ export const MyComponent = withFallback(
   { fallback: <div {...stylex.props(styles.styledFallback)}>Loading...</div> },
 );
 
-export const App = () => <MyComponent />;
+export const App = () => (
+  <div>
+    <div {...stylex.props(styles.styledFallback)}>Fallback content</div>
+    <MyComponent />
+  </div>
+);
