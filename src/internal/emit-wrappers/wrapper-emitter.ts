@@ -225,7 +225,9 @@ export class WrapperEmitter {
     if (d.supportsAsProp) {
       return true;
     }
-    if (d.supportsExternalStyles) {
+    // supportsExternalStyles enables `as` prop for intrinsic-based components,
+    // but NOT when wrapping another styled component (to avoid TS2590 union complexity).
+    if (d.supportsExternalStyles && d.base.kind !== "component") {
       return true;
     }
     // For void tags without explicit opt-in, don't allow `as` prop
@@ -821,7 +823,8 @@ export class WrapperEmitter {
       lines.push("style?: React.CSSProperties");
     }
     const literal = lines.length > 0 ? `{ ${lines.join(", ")} }` : "{}";
-    const base = `React.ComponentPropsWithRef<typeof ${(d.base as any).ident}>`;
+    const propsTarget = d.attrsInfo?.attrsAsTag ?? (d.base as any).ident;
+    const base = `React.ComponentPropsWithRef<typeof ${propsTarget}>`;
     const omitted: string[] = [];
     if (!allowClassNameProp) {
       omitted.push('"className"');
@@ -925,6 +928,8 @@ export class WrapperEmitter {
     invertedBoolAttrs?: Array<{ jsxProp: string; attrName: string }>;
     staticAttrs?: Record<string, unknown>;
     inlineStyleProps?: InlineStyleProp[];
+    /** Component reference from `.attrs({ as: Component })` — overrides the rendered tag. */
+    attrsAsTag?: string;
   }): ASTNode[] {
     const {
       localName,
@@ -943,6 +948,7 @@ export class WrapperEmitter {
       invertedBoolAttrs = [],
       staticAttrs = {},
       inlineStyleProps = [],
+      attrsAsTag,
     } = args;
 
     const { j } = this;
@@ -1211,7 +1217,7 @@ export class WrapperEmitter {
       );
     }
 
-    const renderedTagName = allowAsProp ? "Component" : tagName;
+    const renderedTagName = allowAsProp ? "Component" : (attrsAsTag ?? tagName);
     const openingEl = j.jsxOpeningElement(j.jsxIdentifier(renderedTagName), jsxAttrs, isVoidTag);
     const jsx = j.jsxElement(
       openingEl,

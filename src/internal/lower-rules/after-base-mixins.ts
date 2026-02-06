@@ -197,12 +197,6 @@ export function postProcessAfterBaseMixins(state: LowerRulesState): void {
           referencedKeys.add(c.styleKey);
         }
       }
-      if (d.siblingWrapper) {
-        referencedKeys.add(d.siblingWrapper.adjacentKey);
-        if (d.siblingWrapper.afterKey) {
-          referencedKeys.add(d.siblingWrapper.afterKey);
-        }
-      }
       if (d.attrWrapper) {
         if (d.attrWrapper.checkboxKey) {
           referencedKeys.add(d.attrWrapper.checkboxKey);

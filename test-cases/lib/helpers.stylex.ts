@@ -17,3 +17,21 @@ export const helpers = stylex.create({
     color: "transparent",
   },
 });
+
+// Scroll fade mask styles - parameterized with size and direction.
+// Uses stylex.create with dynamic functions for the size parameter.
+const scrollFadeMask = stylex.create({
+  both: (size: string) => ({
+    maskImage: `linear-gradient(to bottom, transparent, black ${size}, black calc(100% - ${size}), transparent)`,
+  }),
+  top: (size: string) => ({
+    maskImage: `linear-gradient(to bottom, transparent, black ${size}, black)`,
+  }),
+  bottom: (size: string) => ({
+    maskImage: `linear-gradient(to bottom, black, black calc(100% - ${size}), transparent)`,
+  }),
+});
+
+/** Returns a StyleX style for scroll fade mask effects. */
+export const scrollFadeMaskStyles = (size: number, direction: "top" | "bottom" | "both" = "both") =>
+  scrollFadeMask[direction](`${size}px`);

@@ -39,9 +39,6 @@ export function emitSimpleWithConfigWrappers(ctx: EmitIntrinsicContext): void {
     if (d.enumVariant) {
       return false;
     }
-    if (d.siblingWrapper) {
-      return false;
-    }
     if (d.attrWrapper) {
       return false;
     }
@@ -241,6 +238,7 @@ export function emitSimpleWithConfigWrappers(ctx: EmitIntrinsicContext): void {
             invertedBoolAttrs: d.attrsInfo?.invertedBoolAttrs ?? [],
             staticAttrs: d.attrsInfo?.staticAttrs ?? {},
             inlineStyleProps: (d.inlineStyleProps ?? []) as InlineStyleProp[],
+            attrsAsTag: d.attrsInfo?.attrsAsTag,
           }),
           d,
         ),
@@ -364,9 +362,6 @@ export function emitSimpleExportedIntrinsicWrappers(ctx: EmitIntrinsicContext): 
       return false;
     }
     if (d.enumVariant) {
-      return false;
-    }
-    if (d.siblingWrapper) {
       return false;
     }
     if (d.attrWrapper) {
@@ -904,6 +899,7 @@ export function emitSimpleExportedIntrinsicWrappers(ctx: EmitIntrinsicContext): 
           invertedBoolAttrs: d.attrsInfo?.invertedBoolAttrs ?? [],
           staticAttrs: d.attrsInfo?.staticAttrs ?? {},
           inlineStyleProps: (d.inlineStyleProps ?? []) as InlineStyleProp[],
+          attrsAsTag: d.attrsInfo?.attrsAsTag,
         }),
         d,
       ),

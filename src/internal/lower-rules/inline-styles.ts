@@ -165,10 +165,30 @@ export function hasThemeAccessInArrowFn(expr: any): boolean {
   if (!expr || expr.type !== "ArrowFunctionExpression") {
     return false;
   }
-  if (expr.params?.length !== 1 || expr.params[0]?.type !== "Identifier") {
+  if (expr.params?.length !== 1) {
     return false;
   }
-  const paramName = expr.params[0].name;
+  const param = expr.params[0];
+
+  // Check for destructured `theme` in ObjectPattern: ({ enabled, theme }) => ...
+  if (param?.type === "ObjectPattern" && Array.isArray(param.properties)) {
+    for (const prop of param.properties) {
+      if (
+        prop &&
+        (prop.type === "Property" || prop.type === "ObjectProperty") &&
+        prop.key?.type === "Identifier" &&
+        prop.key.name === "theme"
+      ) {
+        return true;
+      }
+    }
+    return false;
+  }
+
+  if (param?.type !== "Identifier") {
+    return false;
+  }
+  const paramName = param.name;
   const bodyExpr = getFunctionBodyExpr(expr);
   if (!bodyExpr) {
     return false;

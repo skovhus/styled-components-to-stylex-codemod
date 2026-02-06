@@ -24,7 +24,7 @@ const styles = stylex.create({
     width: "100px",
   },
   boxDark: {
-    padding: `${pixelVars.thin}`,
+    padding: pixelVars.thin,
   },
   boxLight: {
     padding: "100px",

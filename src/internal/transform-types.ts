@@ -196,6 +196,8 @@ export type StyledDecl = {
   withConfig?: { componentId?: string };
   attrsInfo?: {
     staticAttrs: Record<string, unknown>;
+    /** Component identifier from `as: ComponentRef` in `.attrs()`, overrides the rendered tag. */
+    attrsAsTag?: string;
     /**
      * Attrs that provide a default when a prop is nullish (undefined / null).
      * Pattern: `attr: props.attr ?? <literal>`
@@ -272,13 +274,6 @@ export type StyledDecl = {
       styleKey: string;
       value: string;
     }>;
-  };
-  siblingWrapper?: {
-    adjacentKey: string;
-    afterKey?: string;
-    afterClass?: string;
-    propAdjacent: string;
-    propAfter?: string;
   };
   // Leading comments (JSDoc, line comments) from the original styled component declaration
   leadingComments?: Comment[];

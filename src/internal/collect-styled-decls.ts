@@ -84,8 +84,10 @@ function collectStyledDeclsImpl(args: {
     if (!arg0) {
       return undefined;
     }
-    // Use Required to narrow the type since we're initializing all fields
-    const out: Required<NonNullable<StyledDecl["attrsInfo"]>> = {
+    // Use Omit + Required to make all fields non-optional, then add attrsAsTag back as optional
+    const out: Omit<Required<NonNullable<StyledDecl["attrsInfo"]>>, "attrsAsTag"> & {
+      attrsAsTag?: string;
+    } = {
       staticAttrs: {},
       defaultAttrs: [],
       conditionalAttrs: [],
@@ -114,6 +116,18 @@ function collectStyledDeclsImpl(args: {
           v.type === "BooleanLiteral"
         ) {
           out.staticAttrs[key] = v.value;
+          continue;
+        }
+
+        // Support: as: ComponentRef (overrides rendered element)
+        if (key === "as" && v.type === "Identifier" && v.name !== "undefined") {
+          out.attrsAsTag = v.name;
+          continue;
+        }
+
+        // Support: onlyIcon: undefined or onlyIcon: null
+        if ((v.type === "Identifier" && v.name === "undefined") || v.type === "NullLiteral") {
+          out.staticAttrs[key] = v.type === "NullLiteral" ? null : undefined;
           continue;
         }
 
@@ -752,7 +766,7 @@ function collectStyledDeclsImpl(args: {
       ) {
         const localName = id.name;
         const ident = tag.callee.object.arguments[0].name;
-        const styleKey = localName === `Styled${ident}` ? toStyleKey(ident) : toStyleKey(localName);
+        const styleKey = resolveStyledComponentStyleKey(localName, ident, styledDecls);
         const template = init.quasi;
         const templateLoc = getTemplateLoc(template);
         const parsed = parseStyledTemplateLiteral(template);
@@ -836,7 +850,7 @@ function collectStyledDeclsImpl(args: {
       ) {
         const localName = id.name;
         const ident = tag.arguments[0].name;
-        const styleKey = localName === `Styled${ident}` ? toStyleKey(ident) : toStyleKey(localName);
+        const styleKey = resolveStyledComponentStyleKey(localName, ident, styledDecls);
         const template = init.quasi;
         const templateLoc = getTemplateLoc(template);
         const parsed = parseStyledTemplateLiteral(template);
@@ -1402,4 +1416,20 @@ function collectStyledDeclsImpl(args: {
     });
 
   return { styledDecls, hasUniversalSelectors, universalSelectorLoc };
+}
+
+/**
+ * For `const StyledFoo = styled(Foo)\`...\``, use `foo` as the style key when the
+ * local name follows the `Styled${base}` convention — unless `Foo` is itself a local
+ * styled-component, which would cause a key collision.
+ */
+function resolveStyledComponentStyleKey(
+  localName: string,
+  baseName: string,
+  styledDecls: StyledDecl[],
+): string {
+  const baseIsLocalStyledDecl = styledDecls.some((d) => d.localName === baseName);
+  return localName === `Styled${baseName}` && !baseIsLocalStyledDecl
+    ? toStyleKey(baseName)
+    : toStyleKey(localName);
 }

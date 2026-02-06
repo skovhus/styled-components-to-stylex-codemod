@@ -26,13 +26,13 @@ export const fixtureAdapter = defineAdapter({
     // output includes className/style prop support and HTMLAttributes extension.
     if (
       [
-        "attrs-polymorphic-as",
+        "attrs-polymorphicAs",
         "bug-external-styles-missing-classname",
-        "external-styles-support",
-        "input-external-styles",
-        "styled-element-html-props",
-        "styled-input-html-props",
-        "transient-prop-not-forwarded",
+        "externalStyles-basic",
+        "externalStyles-input",
+        "htmlProp-element",
+        "htmlProp-input",
+        "transientProp-notForwarded",
       ].some((filePath) => ctx.filePath.includes(filePath))
     ) {
       return { styles: true };
@@ -40,14 +40,16 @@ export const fixtureAdapter = defineAdapter({
 
     // wrapper-props-incomplete - TextColor and ThemeText should extend HTMLAttributes
     // Highlight wraps a component and shouldn't support external styles
-    if (ctx.filePath.includes("wrapper-props-incomplete")) {
+    if (ctx.filePath.includes("wrapper-propsIncomplete")) {
       if (ctx.componentName === "TextColor" || ctx.componentName === "ThemeText") {
         return { styles: true };
       }
     }
 
     // Enable `as` prop support (without styles) for exported components in selected fixtures.
-    if (["exported-as-prop"].some((filePath) => ctx.filePath.includes(filePath))) {
+    if (
+      ["asProp-exported", "asProp-crossFile"].some((filePath) => ctx.filePath.includes(filePath))
+    ) {
       return { styles: false, as: true };
     }
 
@@ -212,6 +214,28 @@ export const fixtureAdapter = defineAdapter({
     // Note: calleeSource.value may or may not include the extension
     if (!src.includes("lib/helpers") && !src.includes("lib\\helpers")) {
       throw new Error(`Unknown helper: ${src} ${ctx.calleeImportedName}`);
+    }
+
+    if (ctx.calleeImportedName === "scrollFadeMaskStyles") {
+      const argsStr = ctx.args
+        .map((a) =>
+          a.kind === "literal"
+            ? typeof a.value === "string"
+              ? JSON.stringify(a.value)
+              : String(a.value)
+            : "undefined",
+        )
+        .join(", ");
+      return {
+        usage: "props",
+        expr: `scrollFadeMaskStyles(${argsStr})`,
+        imports: [
+          {
+            from: { kind: "specifier", value: "./lib/helpers.stylex" },
+            names: [{ imported: "scrollFadeMaskStyles" }],
+          },
+        ],
+      };
     }
 
     const helperStyleKey = (() => {
@@ -397,6 +421,28 @@ function customResolveValue(ctx: ResolveValueContext): ResolveValueResult | unde
 function customResolveSelector(_ctx: SelectorResolveContext): SelectorResolveResult | undefined {
   return undefined;
 }
+
+// Adapter that mimics a real-world app codebase configuration:
+// - styleMerger: null (uses verbose className merging, not a helper function)
+// - externalInterface returns { styles: true } for all exported components
+// This triggers the verbose `className={[sx.className, className].filter(Boolean).join(" ")}`
+// pattern that exposes TS errors when the base component doesn't accept className.
+// Used for bug-* test cases that reproduce real-world TS errors.
+export const appLikeAdapter = defineAdapter({
+  styleMerger: null,
+  externalInterface(): ExternalInterfaceResult {
+    return { styles: true };
+  },
+  resolveValue(ctx) {
+    return fixtureAdapter.resolveValue?.(ctx);
+  },
+  resolveCall(ctx) {
+    return fixtureAdapter.resolveCall?.(ctx);
+  },
+  resolveSelector(ctx) {
+    return fixtureAdapter.resolveSelector?.(ctx);
+  },
+});
 
 // Test adapters - examples of custom adapter usage
 export const customAdapter = defineAdapter({

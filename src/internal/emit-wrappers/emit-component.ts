@@ -105,6 +105,8 @@ export function emitComponentWrappers(emitter: WrapperEmitter): {
       continue;
     }
     const wrappedComponent = d.base.ident;
+    // When .attrs({ as: ComponentRef }) is present, render and type against that component
+    const renderedComponent = d.attrsInfo?.attrsAsTag ?? wrappedComponent;
     const baseComponentPropsType = findComponentPropsType(wrappedComponent);
     const wrappedComponentHasAs = wrapperNames.has(wrappedComponent);
     const supportsAsProp = d.supportsAsProp ?? false;
@@ -132,7 +134,7 @@ export function emitComponentWrappers(emitter: WrapperEmitter): {
 
       if (explicitTypeExists && explicit && explicitTypeName && !isPolymorphicComponentWrapper) {
         const baseTypeText = (() => {
-          const base = `React.ComponentPropsWithRef<typeof ${wrappedComponent}>`;
+          const base = `React.ComponentPropsWithRef<typeof ${renderedComponent}>`;
           const omitted: string[] = [];
           if (!allowClassNameProp) {
             omitted.push('"className"');
@@ -150,7 +152,7 @@ export function emitComponentWrappers(emitter: WrapperEmitter): {
         functionParamTypeName = explicitTypeName;
       } else {
         if (isPolymorphicComponentWrapper) {
-          const baseProps = `React.ComponentPropsWithRef<typeof ${wrappedComponent}>`;
+          const baseProps = `React.ComponentPropsWithRef<typeof ${renderedComponent}>`;
           const omitted: string[] = [];
           if (!allowClassNameProp) {
             omitted.push('"className"');
@@ -482,11 +484,11 @@ export function emitComponentWrappers(emitter: WrapperEmitter): {
     let jsxTagName: JsxTagName;
     if (isPolymorphicComponentWrapper) {
       jsxTagName = j.jsxIdentifier("Component");
-    } else if (wrappedComponent.includes(".")) {
-      const parts = wrappedComponent.split(".");
+    } else if (renderedComponent.includes(".")) {
+      const parts = renderedComponent.split(".");
       const firstPart = parts[0];
       if (!firstPart) {
-        jsxTagName = j.jsxIdentifier(wrappedComponent);
+        jsxTagName = j.jsxIdentifier(renderedComponent);
       } else {
         jsxTagName = j.jsxMemberExpression(
           j.jsxIdentifier(firstPart),
@@ -494,7 +496,7 @@ export function emitComponentWrappers(emitter: WrapperEmitter): {
         );
       }
     } else {
-      jsxTagName = j.jsxIdentifier(wrappedComponent);
+      jsxTagName = j.jsxIdentifier(renderedComponent);
     }
 
     const { attrsInfo, staticClassNameExpr } = emitter.splitAttrsInfo(d.attrsInfo);

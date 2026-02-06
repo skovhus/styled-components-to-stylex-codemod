@@ -2,7 +2,7 @@
  * Step: analyze declarations before emitting styles and wrappers.
  * Core concepts: wrapper decisions, export mapping, and styles identifier selection.
  */
-import type { JSXAttribute, JSXSpreadAttribute } from "jscodeshift";
+import type { JSCodeshift, JSXAttribute, JSXSpreadAttribute } from "jscodeshift";
 import { CONTINUE, type StepResult } from "../transform-types.js";
 import type { StyledDecl } from "../transform-types.js";
 import { TransformContext, type ExportInfo } from "../transform-context.js";
@@ -31,7 +31,7 @@ export function analyzeBeforeEmitStep(ctx: TransformContext): StepResult {
   let hasStylesVariable = false;
   root.find(j.VariableDeclarator).forEach((path) => {
     const id = path.node.id;
-    if (id.type === "Identifier" && id.name === "styles" && !styledDeclNames.has("styles")) {
+    if (patternContainsName(id, "styles") && !styledDeclNames.has("styles")) {
       hasStylesVariable = true;
     }
   });
@@ -187,9 +187,6 @@ export function analyzeBeforeEmitStep(ctx: TransformContext): StepResult {
     if (decl.enumVariant) {
       return false;
     }
-    if (decl.siblingWrapper) {
-      return false;
-    }
     if (decl.attrWrapper) {
       return false;
     }
@@ -246,6 +243,25 @@ export function analyzeBeforeEmitStep(ctx: TransformContext): StepResult {
           // and may still set needsWrapperComponent = true
         }
       }
+    }
+  }
+
+  // Locally-defined non-styled components wrapped with styled() need wrapper components
+  // because we cannot guarantee the base component accepts className/style props.
+  for (const decl of styledDecls) {
+    if (decl.isCssHelper || decl.needsWrapperComponent) {
+      continue;
+    }
+    if (decl.base.kind !== "component") {
+      continue;
+    }
+    const baseDecl = declByLocal.get(decl.base.ident);
+    const isImportedComponent = ctx.importMap?.has(decl.base.ident);
+    // If base is neither a styled-component nor an imported component,
+    // it's a locally-defined non-styled component — force wrapper,
+    // but only if it's declared as a function/class (not a variable assignment)
+    if (!baseDecl && !isImportedComponent && isLocalFunctionComponent(root, j, decl.base.ident)) {
+      decl.needsWrapperComponent = true;
     }
   }
 
@@ -597,4 +613,62 @@ export function analyzeBeforeEmitStep(ctx: TransformContext): StepResult {
   }
 
   return CONTINUE;
+}
+
+// --- Non-exported helpers ---
+
+/**
+ * Check if a name refers to a locally-defined function component (FunctionDeclaration,
+ * arrow function, or function expression), as opposed to a variable assigned from an
+ * opaque call expression or import.
+ */
+function isLocalFunctionComponent(
+  root: ReturnType<JSCodeshift>,
+  j: JSCodeshift,
+  name: string,
+): boolean {
+  // Check FunctionDeclaration: function Foo(...) {}
+  if (root.find(j.FunctionDeclaration, { id: { type: "Identifier", name } } as any).size() > 0) {
+    return true;
+  }
+  // Check VariableDeclarator with arrow/function expression: const Foo = (...) => ...
+  return (
+    root
+      .find(j.VariableDeclarator, { id: { type: "Identifier", name } } as any)
+      .filter((p) => {
+        const init = p.node.init as { type?: string } | null;
+        return init?.type === "ArrowFunctionExpression" || init?.type === "FunctionExpression";
+      })
+      .size() > 0
+  );
+}
+
+/** Recursively check if a pattern (Identifier, ArrayPattern, ObjectPattern, etc.) contains a binding with the given name. */
+function patternContainsName(node: { type?: string } | null | undefined, name: string): boolean {
+  if (!node || typeof node !== "object") {
+    return false;
+  }
+  if (node.type === "Identifier") {
+    return (node as { name: string }).name === name;
+  }
+  if (node.type === "ArrayPattern") {
+    return ((node as any).elements ?? []).some(
+      (el: { type?: string } | null) => el && patternContainsName(el, name),
+    );
+  }
+  if (node.type === "ObjectPattern") {
+    return ((node as any).properties ?? []).some((prop: any) => {
+      if (prop.type === "RestElement" || prop.type === "RestProperty") {
+        return patternContainsName(prop.argument, name);
+      }
+      return patternContainsName(prop.value, name);
+    });
+  }
+  if (node.type === "RestElement" || node.type === "RestProperty") {
+    return patternContainsName((node as any).argument, name);
+  }
+  if (node.type === "AssignmentPattern") {
+    return patternContainsName((node as any).left, name);
+  }
+  return false;
 }
