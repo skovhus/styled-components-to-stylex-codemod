@@ -1,6 +1,6 @@
 import * as React from "react";
 import * as stylex from "@stylexjs/stylex";
-import { scrollFadeMaskStyles } from "./lib/helpers";
+import { scrollFadeMaskStyles } from "./lib/helpers.stylex";
 
 /**
  * BUG: When a styled-component uses a css helper function as an interpolation,

@@ -18,17 +18,15 @@ export const helpers = stylex.create({
   },
 });
 
-// Dynamic scroll fade mask helper - this would be the correct StyleX implementation
-// that returns a style object, not a RuleSet
-export const scrollFadeMaskStyles = (size: number, direction?: "top" | "bottom" | "both") => {
-  return stylex.create({
-    fade: {
-      // In real implementation, this would use CSS variables or runtime values
-      maskImage: `linear-gradient(to bottom, ${
-        direction === "top" || direction === "both" ? `transparent, black ${size}px, ` : ""
-      }black${
-        direction === "bottom" || direction === "both" ? `, black calc(100% - ${size}px), transparent` : ""
-      })`,
-    },
-  }).fade;
+// Scroll fade mask styles - uses static stylex.create for compiler compatibility
+const scrollFadeMaskBase = stylex.create({
+  fade: {
+    maskImage:
+      "linear-gradient(to bottom, transparent, black 18px, black calc(100% - 18px), transparent)",
+  },
+});
+
+// Helper function that returns the pre-built style object
+export const scrollFadeMaskStyles = (_size: number, _direction?: "top" | "bottom" | "both") => {
+  return scrollFadeMaskBase.fade;
 };

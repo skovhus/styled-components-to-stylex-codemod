@@ -236,9 +236,14 @@ export function resolveTemplateLiteralBranch(
         }
         quasis.push(j.templateElement({ raw: currentStaticPart, cooked: currentStaticPart }, true));
 
-        const templateLiteral = j.templateLiteral(quasis, expressions);
+        // Simplify trivial template literals: `${expr}` → expr
+        // Avoids TS2731 when expr is a symbol type (e.g. StyleXVar<string>)
+        const styleValue =
+          expressions.length === 1 && quasis.every((q) => !q.value.raw && !q.value.cooked)
+            ? expressions[0]
+            : j.templateLiteral(quasis, expressions);
         for (const mapped of cssDeclarationToStylexDeclarations(d)) {
-          style[mapped.prop] = templateLiteral;
+          style[mapped.prop] = styleValue;
         }
         continue;
       }
@@ -347,6 +352,13 @@ export function resolveTemplateLiteralValue(args: TemplateLiteralValueArgs): Exp
       i === quasis.length - 1,
     ),
   );
+
+  // Simplify trivial template literals: `${expr}` → expr
+  // This avoids TS2731 when expr is a symbol type (e.g. StyleXVar<string>)
+  if (resolvedExprs.length === 1 && newQuasis.every((q) => !q.value.raw && !q.value.cooked)) {
+    return resolvedExprs[0]!;
+  }
+
   return j.templateLiteral(newQuasis, resolvedExprs);
 }
 

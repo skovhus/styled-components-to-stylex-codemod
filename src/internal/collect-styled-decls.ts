@@ -84,8 +84,10 @@ function collectStyledDeclsImpl(args: {
     if (!arg0) {
       return undefined;
     }
-    // Use Required to narrow the type since we're initializing all fields
-    const out: Required<NonNullable<StyledDecl["attrsInfo"]>> = {
+    // Use Omit + Required to make all fields non-optional, then add attrsAsTag back as optional
+    const out: Omit<Required<NonNullable<StyledDecl["attrsInfo"]>>, "attrsAsTag"> & {
+      attrsAsTag?: string;
+    } = {
       staticAttrs: {},
       defaultAttrs: [],
       conditionalAttrs: [],
@@ -114,6 +116,12 @@ function collectStyledDeclsImpl(args: {
           v.type === "BooleanLiteral"
         ) {
           out.staticAttrs[key] = v.value;
+          continue;
+        }
+
+        // Support: as: ComponentRef (overrides rendered element)
+        if (key === "as" && v.type === "Identifier" && v.name !== "undefined") {
+          out.attrsAsTag = v.name;
           continue;
         }
 

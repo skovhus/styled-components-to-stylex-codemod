@@ -29,7 +29,7 @@ const styles = stylex.create({
     backgroundColor: "#f0f0f0",
   },
   containerCompact: {
-    padding: `${pixelVars.thin}`,
+    padding: pixelVars.thin,
     marginLeft: `calc(-4px + ${pixelVars.thin})`,
   },
 });

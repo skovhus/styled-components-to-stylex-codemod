@@ -155,13 +155,9 @@ export function analyzeAfterEmitStep(ctx: TransformContext): StepResult {
       }
     }
 
-    // Component wrappers with `.attrs({ as: "element" })` that specify a different element
+    // Component wrappers with `.attrs({ as: ... })` that specify a different element
     // need wrappers to render the correct element type (not the base component's element).
-    if (
-      decl.base.kind === "component" &&
-      decl.attrsInfo?.staticAttrs?.as &&
-      typeof decl.attrsInfo.staticAttrs.as === "string"
-    ) {
+    if (decl.base.kind === "component" && hasAttrsAsOverride(decl.attrsInfo)) {
       decl.needsWrapperComponent = true;
     }
   }
@@ -175,8 +171,8 @@ export function analyzeAfterEmitStep(ctx: TransformContext): StepResult {
   // - .attrs({ as: "element" }) - changes the rendered element type
   // - shouldForwardProp - filters which props are forwarded to the DOM
   const hasWrapperSemantics = (d: StyledDecl): boolean => {
-    // .attrs({ as: "element" }) with a string value changes the rendered element
-    if (d.attrsInfo?.staticAttrs?.as && typeof d.attrsInfo.staticAttrs.as === "string") {
+    // .attrs({ as: ... }) changes the rendered element (string tag or component reference)
+    if (hasAttrsAsOverride(d.attrsInfo)) {
       return true;
     }
     // shouldForwardProp filters props, so it must be preserved
@@ -246,10 +242,9 @@ export function analyzeAfterEmitStep(ctx: TransformContext): StepResult {
         const immediateBaseIdent = decl.base.ident;
         const baseUsedInJsx = isComponentUsedInJsx(root, j, immediateBaseIdent);
         const shouldDelegate = baseUsedInJsx && decl.needsWrapperComponent;
-        // Don't flatten if this component has .attrs({ as: "element" }) that specifies
+        // Don't flatten if this component has .attrs({ as: ... }) that specifies
         // a different element - it needs to render that element directly.
-        const hasAsAttr =
-          decl.attrsInfo?.staticAttrs?.as && typeof decl.attrsInfo.staticAttrs.as === "string";
+        const hasAsAttr = hasAttrsAsOverride(decl.attrsInfo);
         if (!shouldDelegate && !hasAsAttr) {
           // Flatten to intrinsic tag for inline style merging
           decl.base = { kind: "intrinsic", tagName: currentBase.tagName };
@@ -297,4 +292,16 @@ export function analyzeAfterEmitStep(ctx: TransformContext): StepResult {
   ctx.wrapperNames = wrapperNames;
 
   return CONTINUE;
+}
+
+// ---------------------------------------------------------------------------
+// Helpers
+// ---------------------------------------------------------------------------
+
+/** Checks if attrs contain an `as` override (either a component ref or a string tag). */
+function hasAttrsAsOverride(attrsInfo: StyledDecl["attrsInfo"]): boolean {
+  return !!(
+    attrsInfo?.attrsAsTag ||
+    (attrsInfo?.staticAttrs?.as && typeof attrsInfo.staticAttrs.as === "string")
+  );
 }

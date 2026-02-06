@@ -166,6 +166,18 @@ export function resolveTemplateLiteralExpressions(
     allImports.push(...r.imports);
   }
 
+  // Simplify trivial template literals: `${expr}` → expr
+  // Avoids TS2731 when expr is a symbol type (e.g. StyleXVar<string>)
+  if (
+    resolvedExprs.length === 1 &&
+    quasis.every((q) => !(q?.value?.raw ?? "") && !(q?.value?.cooked ?? ""))
+  ) {
+    return {
+      expr: resolvedExprs[0]!.expr,
+      imports: allImports,
+    };
+  }
+
   return {
     expr: "`" + parts.join("") + "`",
     imports: allImports,

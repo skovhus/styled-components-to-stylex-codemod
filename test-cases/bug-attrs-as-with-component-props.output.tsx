@@ -1,10 +1,16 @@
+import * as React from "react";
 import * as stylex from "@stylexjs/stylex";
+import { Flex } from "./lib/flex";
+
+function List(props: Omit<React.ComponentPropsWithRef<typeof Flex>, "className" | "style">) {
+  return <Flex {...props} column={true} {...stylex.props(styles.list)} />;
+}
 
 export const App = () => (
-  <div column={true} {...stylex.props(styles.list)}>
+  <List>
     <div>Item 1</div>
     <div>Item 2</div>
-  </div>
+  </List>
 );
 
 const styles = stylex.create({

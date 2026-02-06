@@ -14,6 +14,6 @@ export const App = () => <Box />;
 
 const styles = stylex.create({
   boxLight: {
-    padding: `${pixelVars.thin}`,
+    padding: pixelVars.thin,
   },
 });

@@ -47,7 +47,11 @@ export const fixtureAdapter = defineAdapter({
     }
 
     // Enable `as` prop support (without styles) for exported components in selected fixtures.
-    if (["exported-as-prop"].some((filePath) => ctx.filePath.includes(filePath))) {
+    if (
+      ["exported-as-prop", "bug-as-prop-not-in-same-file"].some((filePath) =>
+        ctx.filePath.includes(filePath),
+      )
+    ) {
       return { styles: false, as: true };
     }
 
@@ -214,17 +218,13 @@ export const fixtureAdapter = defineAdapter({
       throw new Error(`Unknown helper: ${src} ${ctx.calleeImportedName}`);
     }
 
-    // BUG DEMO: scrollFadeMaskStyles returns a RuleSet<object> from css`` helper,
-    // but the adapter resolves it without usage: "props", so the codemod treats
-    // it as a CSS value and passes the raw call into stylex.props() -> TS2345.
     if (ctx.calleeImportedName === "scrollFadeMaskStyles") {
       return {
-        // Missing usage: "props" — this is the bug.
-        // The expression still evaluates to RuleSet<object> at runtime.
+        usage: "props",
         expr: "scrollFadeMaskStyles(18)",
         imports: [
           {
-            from: { kind: "specifier", value: "./lib/helpers" },
+            from: { kind: "specifier", value: "./lib/helpers.stylex" },
             names: [{ imported: "scrollFadeMaskStyles" }],
           },
         ],
