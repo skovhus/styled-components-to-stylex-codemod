@@ -30,9 +30,7 @@ export const App = () => (
     </div>
     <div>
       <div style={{ fontSize: 12, color: "#6b7280", marginBottom: 4 }}>Truncate on hover</div>
-      <Text $truncate>
-        Long text that will truncate with ellipsis when you hover over this box
-      </Text>
+      <Text $truncate>Long text that will truncate with ellipsis when you hover over this box</Text>
     </div>
   </div>
 );
@@ -53,10 +51,17 @@ const styles = stylex.create({
     marginLeft: 0,
   },
   textTruncate: {
-    ":hover": {
-      whiteSpace: "nowrap",
-      overflow: "hidden",
-      textOverflow: "ellipsis",
+    whiteSpace: {
+      default: null,
+      ":hover": "nowrap",
+    },
+    overflow: {
+      default: null,
+      ":hover": "hidden",
+    },
+    textOverflow: {
+      default: null,
+      ":hover": "ellipsis",
     },
   },
 });

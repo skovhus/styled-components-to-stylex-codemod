@@ -160,8 +160,12 @@ export function createCssHelperConditionalHandler(ctx: CssHelperConditionalConte
       return style;
     }
     const wrapped: Record<string, unknown> = {};
-    for (const ps of pseudos) {
-      wrapped[ps] = style;
+    for (const [prop, value] of Object.entries(style)) {
+      const map: Record<string, unknown> = { default: null };
+      for (const ps of pseudos) {
+        map[ps] = value;
+      }
+      wrapped[prop] = map;
     }
     return wrapped;
   };
@@ -1109,8 +1113,7 @@ export function createCssHelperConditionalHandler(ctx: CssHelperConditionalConte
     }
 
     if (activePseudos.length > 0) {
-      const canHandlePseudoCall =
-        (consIsCall && altIsEmpty) || (consIsEmpty && altIsCall);
+      const canHandlePseudoCall = (consIsCall && altIsEmpty) || (consIsEmpty && altIsCall);
       if (!canHandlePseudoCall) {
         return false;
       }
