@@ -302,6 +302,67 @@ export function normalizeStylisAstToIR(
     }
     // Flush final line (if file doesn't end with newline).
     flushLine();
+
+    // Recover standalone placeholders inside simple pseudo selector blocks.
+    // Example:
+    //   &:hover {
+    //     __SC_EXPR_0__;
+    //   }
+    //
+    // We keep this narrowly-scoped: no nested blocks or at-rules inside the pseudo.
+    const pseudoBlockRe = /&(:[a-z-]+(?:\([^)]*\))?)\s*\{([\s\S]*?)\}/gi;
+    let pseudoMatch: RegExpExecArray | null;
+    while ((pseudoMatch = pseudoBlockRe.exec(rawCss))) {
+      const pseudo = pseudoMatch[1];
+      const block = pseudoMatch[2] ?? "";
+      if (!pseudo) {
+        continue;
+      }
+      if (block.includes("{") || block.includes("@")) {
+        continue;
+      }
+      const lines = block.split(/[\n\r]/);
+      for (const lineText of lines) {
+        const trimmed = lineText.trim();
+        if (!trimmed) {
+          continue;
+        }
+        const m = trimmed.match(placeholderLineRe);
+        if (!m) {
+          continue;
+        }
+        const slotId = Number(m[1]);
+        const placeholder = `__SC_EXPR_${slotId}__`;
+        const mapped = slotByPlaceholder.get(placeholder);
+        if (mapped === undefined) {
+          continue;
+        }
+        const selector = `&${pseudo}`;
+        const alreadyDeclared = rules.some(
+          (rule) =>
+            rule.selector === selector &&
+            rule.atRuleStack.length === 0 &&
+            rule.declarations.some((decl) => {
+              if (decl.property !== "" || decl.value.kind !== "interpolated") {
+                return false;
+              }
+              const parts = decl.value.parts;
+              return parts.length === 1 && parts[0]?.kind === "slot" && parts[0].slotId === mapped;
+            }),
+        );
+        if (alreadyDeclared) {
+          continue;
+        }
+        const decl: CssDeclarationIR = {
+          property: "",
+          value: { kind: "interpolated", parts: [{ kind: "slot", slotId: mapped }] },
+          important: false,
+          valueRaw: placeholder,
+        };
+        ensureRule(selector, []).declarations.push(decl);
+        lastDecl = decl;
+      }
+    }
   }
 
   return rules;
