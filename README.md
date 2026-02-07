@@ -10,13 +10,7 @@ Transform styled-components to StyleX.
 
 ## Why migrate to StyleX?
 
-**styled-components is no longer actively maintained.** The library has been in maintenance mode since 2024 and is not receiving new features or significant updates. Staying on an unmaintained styling solution is a growing risk for any production codebase.
-
-**StyleX delivers better runtime performance.** styled-components injects styles at runtime — parsing template literals, generating CSS, and inserting `<style>` tags on every render. StyleX compiles styles at build time into atomic CSS classes, eliminating runtime overhead entirely. The result: faster component mounts, less JavaScript shipped to the browser, and no style recalculation during re-renders.
-
-**StyleX produces smaller CSS bundles.** Atomic CSS means identical declarations are shared across components. A large app with hundreds of styled-components generating redundant CSS rules will see meaningful bundle size reductions after migrating.
-
-**StyleX is type-safe.** Style values are checked at build time. No more runtime errors from typos in CSS property names or invalid values buried in template literals.
+styled-components has been in maintenance mode since 2024 and is no longer receiving new features — staying on it is a growing risk. StyleX compiles styles at build time into atomic CSS classes, so there's zero runtime overhead (no template parsing, no `<style>` injection on every render), and identical declarations are deduplicated across components for smaller bundles. It's also type-safe: style values are checked at build time, catching typos and invalid CSS before they hit production.
 
 ## Migration game plan
 
