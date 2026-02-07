@@ -1,4 +1,5 @@
 import styled, { ThemeProvider } from "styled-components";
+import { testCaseTheme } from "./tokens.stylex";
 
 const Button = styled.button`
   font-size: 14px;
@@ -6,21 +7,17 @@ const Button = styled.button`
   padding: 8px 16px;
   border-radius: 6px;
   background-color: white;
-  color: ${(props) => props.theme.main};
+  color: ${(props) => props.theme.color.primaryColor};
   border-width: 2px;
   border-style: solid;
-  border-color: ${(props) => props.theme.main};
+  border-color: ${(props) => props.theme.color.primaryColor};
 `;
 
 Button.defaultProps = {
-  theme: {
-    main: "#BF4F74",
-  },
+  theme: testCaseTheme,
 };
 
-const theme = {
-  main: "mediumseagreen",
-};
+const theme = testCaseTheme;
 
 export const App = () => (
   <div style={{ display: "flex", gap: "12px", padding: "12px" }}>

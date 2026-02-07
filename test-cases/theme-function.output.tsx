@@ -1,14 +1,8 @@
 import * as stylex from "@stylexjs/stylex";
-import { $colors } from "./tokens.stylex";
 import { ThemeProvider } from "styled-components";
+import { testCaseTheme, $colors } from "./tokens.stylex";
 
-const baseTheme = {
-  color: {
-    primaryColor: "#BF4F74",
-    secondaryColor: "#4F74BF",
-    bgBase: "#990000",
-  },
-};
+const baseTheme = testCaseTheme;
 
 export const App = () => (
   <ThemeProvider theme={baseTheme}>
@@ -18,13 +12,13 @@ export const App = () => (
       </div>
       {/* Function theme that extends parent theme */}
       <ThemeProvider
-        theme={(parentTheme) => ({
-          ...parentTheme,
-          color: {
-            ...parentTheme.color,
-            primaryColor: "#22C55E",
-          },
-        })}
+        theme={(parentTheme) => {
+          const resolvedTheme = parentTheme ?? testCaseTheme;
+          return {
+            ...resolvedTheme,
+            isDark: !resolvedTheme.isDark,
+          };
+        }}
       >
         <div {...stylex.props(styles.card)}>
           <button {...stylex.props(styles.button)}>Extended Theme</button>
@@ -43,7 +37,7 @@ const styles = stylex.create({
     borderRadius: "4px",
     borderWidth: "2px",
     borderStyle: "solid",
-    borderColor: $colors.secondaryColor,
+    borderColor: $colors.bgBorderFaint,
   },
   card: {
     padding: "16px",

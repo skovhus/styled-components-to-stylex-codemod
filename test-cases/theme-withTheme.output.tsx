@@ -1,13 +1,9 @@
 import React from "react";
 import * as stylex from "@stylexjs/stylex";
-import { $colors } from "./tokens.stylex";
 import { ThemeProvider, withTheme } from "styled-components";
+import { testCaseTheme, $colors } from "./tokens.stylex";
 
-const theme = {
-  color: {
-    primaryColor: "#BF4F74",
-  },
-};
+const theme = testCaseTheme;
 
 interface ThemeProps {
   theme: typeof theme;

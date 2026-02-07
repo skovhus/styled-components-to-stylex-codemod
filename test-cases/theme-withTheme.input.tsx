@@ -1,11 +1,8 @@
 import React from "react";
 import styled, { ThemeProvider, withTheme } from "styled-components";
+import { testCaseTheme } from "./tokens.stylex";
 
-const theme = {
-  color: {
-    primaryColor: "#BF4F74",
-  },
-};
+const theme = testCaseTheme;
 
 const Panel = styled.div`
   padding: 12px 16px;

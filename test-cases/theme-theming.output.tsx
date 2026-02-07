@@ -1,8 +1,8 @@
 import React from "react";
 import * as stylex from "@stylexjs/stylex";
 import { mergedSx } from "./lib/mergedSx";
-import { $colors } from "./tokens.stylex";
 import { ThemeProvider } from "styled-components";
+import { testCaseTheme, $colors } from "./tokens.stylex";
 
 function Button(props: React.ComponentProps<"button">) {
   const { className, children, style } = props;
@@ -10,9 +10,7 @@ function Button(props: React.ComponentProps<"button">) {
   return <button {...mergedSx(styles.button, className, style)}>{children}</button>;
 }
 
-const theme = {
-  main: "mediumseagreen",
-};
+const theme = testCaseTheme;
 
 export const App = () => (
   <div style={{ display: "flex", gap: "12px", padding: "12px" }}>
@@ -31,9 +29,9 @@ const styles = stylex.create({
     paddingInline: "16px",
     borderRadius: "6px",
     backgroundColor: "white",
-    color: $colors.main,
+    color: $colors.primaryColor,
     borderWidth: "2px",
     borderStyle: "solid",
-    borderColor: $colors.main,
+    borderColor: $colors.primaryColor,
   },
 });

@@ -1,18 +1,13 @@
 import * as stylex from "@stylexjs/stylex";
-import { $colors } from "./tokens.stylex";
 import { ThemeProvider, useTheme } from "styled-components";
+import { testCaseTheme, $colors } from "./tokens.stylex";
 
-const theme = {
-  color: {
-    primaryColor: "#BF4F74",
-    secondaryColor: "#4F74BF",
-  },
-};
+const theme = testCaseTheme;
 
 const ThemeInfo = () => {
   const theme = useTheme();
   return (
-    <div style={{ color: theme.color.secondaryColor }}>Primary: {theme.color.primaryColor}</div>
+    <div style={{ color: theme.color.textSecondary }}>Primary: {theme.color.primaryColor}</div>
   );
 };
 

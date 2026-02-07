@@ -1,12 +1,7 @@
 import styled, { ThemeProvider } from "styled-components";
+import { testCaseTheme } from "./tokens.stylex";
 
-const baseTheme = {
-  color: {
-    primaryColor: "#BF4F74",
-    secondaryColor: "#4F74BF",
-    bgBase: "#990000",
-  },
-};
+const baseTheme = testCaseTheme;
 
 const Button = styled.button`
   padding: 12px 16px;
@@ -15,7 +10,7 @@ const Button = styled.button`
   border-radius: 4px;
   border-width: 2px;
   border-style: solid;
-  border-color: ${(props) => props.theme.color.secondaryColor};
+  border-color: ${(props) => props.theme.color.bgBorderFaint};
 `;
 
 const Card = styled.div`
@@ -32,13 +27,13 @@ export const App = () => (
       </Card>
       {/* Function theme that extends parent theme */}
       <ThemeProvider
-        theme={(parentTheme) => ({
-          ...parentTheme,
-          color: {
-            ...parentTheme.color,
-            primaryColor: "#22C55E",
-          },
-        })}
+        theme={(parentTheme) => {
+          const resolvedTheme = parentTheme ?? testCaseTheme;
+          return {
+            ...resolvedTheme,
+            isDark: !resolvedTheme.isDark,
+          };
+        }}
       >
         <Card>
           <Button>Extended Theme</Button>

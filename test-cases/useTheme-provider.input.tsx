@@ -1,11 +1,7 @@
 import styled, { ThemeProvider, useTheme } from "styled-components";
+import { testCaseTheme } from "./tokens.stylex";
 
-const theme = {
-  color: {
-    primaryColor: "#BF4F74",
-    secondaryColor: "#4F74BF",
-  },
-};
+const theme = testCaseTheme;
 
 const Button = styled.button`
   padding: 10px 14px;
@@ -19,7 +15,7 @@ const Button = styled.button`
 const ThemeInfo = () => {
   const theme = useTheme();
   return (
-    <div style={{ color: theme.color.secondaryColor }}>Primary: {theme.color.primaryColor}</div>
+    <div style={{ color: theme.color.textSecondary }}>Primary: {theme.color.primaryColor}</div>
   );
 };
 
