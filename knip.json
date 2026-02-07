@@ -13,7 +13,8 @@
     "@stylexjs/stylex",
     "assert",
     "path-browserify",
-    "playwright"
+    "playwright",
+    "chromatic"
   ],
   "ignore": [
     "dist/**",

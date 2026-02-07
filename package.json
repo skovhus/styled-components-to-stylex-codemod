@@ -75,6 +75,7 @@
     "@vitejs/plugin-react": "^5.1.2",
     "@vitest/coverage-v8": "^4.0.16",
     "assert": "^2.1.0",
+    "chromatic": "^15.0.0",
     "concurrently": "^9.2.1",
     "eslint": "^9.39.2",
     "eslint-plugin-storybook": "10.2.5",
