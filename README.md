@@ -8,6 +8,177 @@ Transform styled-components to StyleX.
 >
 > **Very much under construction (alpha):** this codemod is still early in development — expect rough edges! 🚧
 
+## Why migrate to StyleX?
+
+**styled-components is no longer actively maintained.** The library has been in maintenance mode since 2024 and is not receiving new features or significant updates. Staying on an unmaintained styling solution is a growing risk for any production codebase.
+
+**StyleX delivers better runtime performance.** styled-components injects styles at runtime — parsing template literals, generating CSS, and inserting `<style>` tags on every render. StyleX compiles styles at build time into atomic CSS classes, eliminating runtime overhead entirely. The result: faster component mounts, less JavaScript shipped to the browser, and no style recalculation during re-renders.
+
+**StyleX produces smaller CSS bundles.** Atomic CSS means identical declarations are shared across components. A large app with hundreds of styled-components generating redundant CSS rules will see meaningful bundle size reductions after migrating.
+
+**StyleX is type-safe.** Style values are checked at build time. No more runtime errors from typos in CSS property names or invalid values buried in template literals.
+
+## Migration game plan
+
+Migrating a codebase from styled-components to StyleX is best done incrementally. Here's a practical step-by-step approach:
+
+### Step 1: Define your theme variables and mixins in StyleX
+
+Before running the codemod, you need a StyleX home for the design tokens and helpers your styled-components currently consume via `ThemeProvider` and helper functions.
+
+**Theme variables** — Convert your theme object into `stylex.defineVars`:
+
+```ts
+// Before: theme passed to <ThemeProvider>
+const theme = {
+  colors: { primary: "#0066cc", background: "#ffffff" },
+  spacing: { sm: "8px", md: "16px" },
+};
+
+// After: tokens.stylex.ts
+import * as stylex from "@stylexjs/stylex";
+
+export const colors = stylex.defineVars({
+  primary: "#0066cc",
+  background: "#ffffff",
+});
+
+export const spacing = stylex.defineVars({
+  sm: "8px",
+  md: "16px",
+});
+```
+
+**Mixins / helper functions** — Convert shared style helpers into `stylex.create` exports:
+
+```ts
+// Before: helper function used in styled-components interpolations
+export const truncate = () => `
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+`;
+
+// After: helpers.stylex.ts
+import * as stylex from "@stylexjs/stylex";
+
+export const truncate = stylex.create({
+  base: {
+    whiteSpace: "nowrap",
+    overflow: "hidden",
+    textOverflow: "ellipsis",
+  },
+});
+```
+
+### Step 2: Write your adapter
+
+The adapter tells the codemod how to map your project's theme access patterns and helper functions to the StyleX equivalents you defined in Step 1:
+
+```ts
+// transform.ts
+import { runTransform, defineAdapter } from "styled-components-to-stylex-codemod";
+
+const adapter = defineAdapter({
+  resolveValue(ctx) {
+    if (ctx.kind === "theme") {
+      // ${props => props.theme.colors.primary} → colors.primary
+      const [group, ...rest] = ctx.path.split(".");
+      return {
+        expr: `${group}.${rest.join(".")}`,
+        imports: [
+          {
+            from: { kind: "specifier", value: `./tokens.stylex` },
+            names: [{ imported: group }],
+          },
+        ],
+      };
+    }
+    return undefined;
+  },
+
+  resolveCall(ctx) {
+    // Map your helper functions here
+    return undefined;
+  },
+
+  resolveSelector(ctx) {
+    return undefined;
+  },
+
+  externalInterface() {
+    return null;
+  },
+
+  styleMerger: null,
+});
+```
+
+### Step 3: Do a dry run
+
+Run the codemod in dry-run mode first to see what it would change without writing any files:
+
+```ts
+const result = await runTransform({
+  files: "src/**/*.tsx",
+  adapter,
+  dryRun: true,
+  parser: "tsx",
+});
+
+console.log(result);
+// Shows: files transformed, files skipped, warnings, errors
+```
+
+Review the output. Pay attention to warnings — they tell you about interpolations the codemod couldn't resolve, CSS shorthands it expanded, or files it skipped entirely.
+
+### Step 4: Run the codemod for real
+
+Once you're comfortable with the dry run output:
+
+```ts
+const result = await runTransform({
+  files: "src/**/*.tsx",
+  adapter,
+  dryRun: false,
+  parser: "tsx",
+  formatterCommand: "pnpm prettier --write",
+});
+```
+
+Commit the result. The codemod transforms as many files as it can in a single pass and leaves untransformable files untouched.
+
+### Step 5: Verify and iterate
+
+1. **Build your project** — fix any TypeScript errors in the transformed files
+2. **Run your tests** — check for visual regressions or behavioral changes
+3. **Review the warnings** — the codemod logs which files it skipped and why (e.g., unresolved helper call, unsupported feature)
+
+For files that were skipped or partially transformed:
+
+- **Adapter gaps**: If files were skipped because of unresolved theme paths or helper calls, update your adapter to handle those patterns, then re-run the codemod on just those files
+- **Unsupported patterns**: Some patterns (e.g., `createGlobalStyle`, complex selectors) may need manual migration
+- **Inline style fallbacks**: The codemod may fall back to `style={...}` for dynamic values it can't express in `stylex.create`. Review these and convert to StyleX style functions where possible
+
+### Step 6: Report issues
+
+If the codemod produces incorrect output, crashes on valid input, or silently drops styles, [open an issue](https://github.com/skovhus/styled-components-to-stylex-codemod/issues) on this repo. Include:
+
+- The input styled-component code
+- The expected output
+- The actual output (or error message)
+- Your adapter configuration (if relevant)
+
+### Step 7: Remove styled-components
+
+Once all files are migrated:
+
+1. **Delete `ThemeProvider`** — remove the provider and theme object from your app root
+2. **Uninstall styled-components** — `pnpm remove styled-components`
+3. **Clean up** — remove any leftover `styled-components` imports, type definitions, or babel plugins
+
+You're done. Your styles are now compiled at build time, your CSS bundle is smaller, and you've moved off an unmaintained dependency.
+
 ## Installation
 
 ```bash
