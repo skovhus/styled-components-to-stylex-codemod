@@ -85,6 +85,11 @@
   inherits: false
 }
 
+@property --x-flexShrink {
+  syntax: "*";
+  inherits: false
+}
+
 @property --x-strokeWidth {
   syntax: "*";
   inherits: false
@@ -126,11 +131,6 @@
 }
 
 @property --x-1e2mv7m {
-  syntax: "*";
-  inherits: false
-}
-
-@property --x-flexShrink {
   syntax: "*";
   inherits: false
 }
@@ -1713,6 +1713,10 @@
   text-align: right;
 }
 
+.xbrixnn:not(#\#):not(#\#):not(#\#) {
+  text-overflow: clip;
+}
+
 .xlyipyv:not(#\#):not(#\#):not(#\#) {
   text-overflow: ellipsis;
 }
@@ -1779,6 +1783,10 @@
 
 .x87ps6o:not(#\#):not(#\#):not(#\#) {
   user-select: none;
+}
+
+.xeaf4i8:not(#\#):not(#\#):not(#\#) {
+  white-space: normal;
 }
 
 .xuxw1ft:not(#\#):not(#\#):not(#\#) {
