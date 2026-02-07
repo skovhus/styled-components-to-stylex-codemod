@@ -31,7 +31,7 @@ jobs:
       - name: Build playground
         run: pnpm build:playground
 
-      - name: Push to gh-pages branch
+      - name: Deploy to gh-pages
         uses: peaceiris/actions-gh-pages@v4
         with:
           github_token: ${{ secrets.GITHUB_TOKEN }}
