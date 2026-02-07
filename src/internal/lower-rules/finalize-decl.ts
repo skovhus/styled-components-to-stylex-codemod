@@ -233,6 +233,17 @@ export function finalizeDeclProcessing(ctx: DeclProcessingState): void {
           state.markBail();
           break;
         }
+        if (result.outcome === "invalid-cssText") {
+          // The adapter provided cssText but it couldn't be parsed as valid CSS declarations.
+          warnings.push({
+            severity: "error",
+            type: 'Adapter resolveCall cssText could not be parsed as CSS declarations — expected semicolon-separated property: value pairs (e.g. "white-space: nowrap; overflow: hidden;")',
+            loc: decl.loc,
+            context: { selector: result.selector, cssText: result.cssText },
+          });
+          state.markBail();
+          break;
+        }
       }
       // Cannot handle this interpolation - bail with generic warning
       warnings.push({
@@ -462,7 +473,8 @@ function isEmptyBranch(node: unknown): boolean {
 type PseudoHelperCallResult =
   | { outcome: "handled" }
   | { outcome: "not-applicable" }
-  | { outcome: "resolved-without-cssText"; selector: string };
+  | { outcome: "resolved-without-cssText"; selector: string }
+  | { outcome: "invalid-cssText"; selector: string; cssText: string };
 
 /**
  * Resolves conditional helper calls inside pseudo selector blocks.
@@ -478,6 +490,7 @@ type PseudoHelperCallResult =
  * - `"not-applicable"`: expression doesn't match the expected pattern
  * - `"resolved-without-cssText"`: adapter resolved the call as StyleX styles but did not
  *    provide `cssText`, so properties can't be expanded for pseudo-wrapping
+ * - `"invalid-cssText"`: adapter provided `cssText` but it could not be parsed as CSS declarations
  */
 function tryResolveConditionalHelperCallInPseudo(
   ctx: DeclProcessingState,
@@ -555,7 +568,7 @@ function tryResolveConditionalHelperCallInPseudo(
   // Parse the CSS text into StyleX properties
   const parsedStyle = parseCssDeclarationBlock(res.cssText);
   if (!parsedStyle || Object.keys(parsedStyle).length === 0) {
-    return { outcome: "not-applicable" };
+    return { outcome: "invalid-cssText", selector: `&${pseudo}`, cssText: res.cssText };
   }
 
   // Wrap each property in pseudo selectors: { default: <base>, ":hover": value }

@@ -1385,6 +1385,62 @@ export const App = () => <Text>Hello</Text>;
     expect(result.code).toContain("default: null");
   });
 
+  it("should emit descriptive error when adapter provides unparseable cssText", () => {
+    // When the adapter provides cssText that cannot be parsed as CSS declarations,
+    // the codemod should emit a descriptive error mentioning the expected format.
+    const source = `
+import styled from "styled-components";
+import { brokenHelper } from "./lib/helpers";
+
+const Text = styled.p<{ $active?: boolean }>\`
+  font-size: 14px;
+  &:hover {
+    \${(props) => (props.$active ? brokenHelper() : "")}
+  }
+\`;
+
+export const App = () => <Text>Hello</Text>;
+`;
+
+    const adapterWithBadCssText = {
+      externalInterface() {
+        return null;
+      },
+      resolveValue() {
+        return undefined;
+      },
+      resolveCall() {
+        return {
+          usage: "props" as const,
+          expr: "helpers.broken",
+          imports: [],
+          cssText: "this is not valid css at all",
+        };
+      },
+      resolveSelector() {
+        return undefined;
+      },
+      styleMerger: null,
+    } satisfies Adapter;
+
+    const result = transformWithWarnings(
+      { source, path: "test-bad-csstext.tsx" },
+      { jscodeshift: j, j, stats: () => {}, report: () => {} },
+      { adapter: adapterWithBadCssText },
+    );
+
+    expect(result.code).toBeNull();
+    expect(result.warnings.length).toBeGreaterThan(0);
+    expect(result.warnings[0]!.type).toBe(
+      'Adapter resolveCall cssText could not be parsed as CSS declarations — expected semicolon-separated property: value pairs (e.g. "white-space: nowrap; overflow: hidden;")',
+    );
+    expect(result.warnings[0]!.severity).toBe("error");
+    expect(result.warnings[0]!.context).toMatchObject({
+      selector: "&:hover",
+      cssText: "this is not valid css at all",
+    });
+  });
+
   it("should use generic warning when adapter cannot resolve the call at all", () => {
     // When the adapter returns undefined (cannot resolve), the generic warning is used.
     const source = `
