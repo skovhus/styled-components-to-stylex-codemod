@@ -142,7 +142,14 @@ function App() {
           <h1 style={styles.title}>
             skovhus/styled-components-to-stylex-codemod
             {import.meta.env.VITE_PR_NUMBER && (
-              <span style={styles.prBadge}>#{import.meta.env.VITE_PR_NUMBER}</span>
+              <a
+                href={`https://github.com/skovhus/styled-components-to-stylex-codemod/pull/${import.meta.env.VITE_PR_NUMBER}`}
+                target="_blank"
+                rel="noopener noreferrer"
+                style={styles.prLink}
+              >
+                #{import.meta.env.VITE_PR_NUMBER}
+              </a>
             )}
           </h1>
           <select value={selectedTestCase} onChange={handleTestCaseChange} style={styles.select}>
@@ -320,11 +327,10 @@ const styles: Record<string, React.CSSProperties> = {
     fontWeight: 600,
     color: "#333",
   },
-  prBadge: {
+  prLink: {
     marginLeft: "6px",
-    fontSize: "14px",
-    fontWeight: 500,
     color: "#0969da",
+    textDecoration: "none",
   },
   select: {
     padding: "6px 12px",
