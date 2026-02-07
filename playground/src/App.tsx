@@ -307,11 +307,25 @@ export default function App() {
             <button
               className="pg-settings-btn"
               onClick={() => setIsSettingsOpen((prev) => !prev)}
-              style={styles.button}
+              style={styles.settingsButton}
               aria-haspopup="menu"
               aria-expanded={isSettingsOpen}
+              aria-label="Settings"
+              title="Settings"
             >
-              Settings
+              <svg
+                width="18"
+                height="18"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="2"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+              >
+                <circle cx="12" cy="12" r="3" />
+                <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z" />
+              </svg>
             </button>
             {isSettingsOpen && (
               <div
@@ -449,9 +463,9 @@ export default function App() {
           style={hideCode ? styles.renderPanelFullHeight : styles.renderPanel}
         >
           <div className="pg-render-panel-header" style={styles.renderPanelHeader}>
-            <span>Rendered preview</span>
+            <span>Render</span>
             <span className="pg-render-panel-note" style={styles.renderPanelNote}>
-              Fixture components only (editor changes are not rendered)
+              Editor changes are not rendered
             </span>
           </div>
           <div className="pg-render-body" style={styles.renderPanelBody}>
@@ -873,13 +887,16 @@ const styles: Record<string, React.CSSProperties> = {
     color: "#0969da",
     textDecoration: "none",
   },
-  button: {
-    padding: "8px 16px",
-    fontSize: "14px",
+  settingsButton: {
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "center",
+    padding: "6px",
     borderRadius: "6px",
     border: "1px solid #ccc",
     backgroundColor: "white",
     cursor: "pointer",
+    color: "#555",
   },
   navButtons: {
     display: "flex",
