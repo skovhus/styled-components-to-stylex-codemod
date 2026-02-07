@@ -1,1 +1,0 @@
-import{j as o,n as r}from"./index-DQGQMgP1.js";function x(s){const{children:t}=s,e=r();return o.jsx("div",{...{0:{className:"x1tamke2 xtv2irb x13xamvd"},1:{className:"x1tamke2 x1cc1xoi x15qk9wz"}}[!!e.isDark<<0],children:t})}const n=()=>o.jsx("div",{style:{backgroundColor:"red",opacity:.5},children:o.jsx(x,{children:"Hello world"})});export{n as App};

@@ -1,0 +1,3 @@
+import{j as s,d as t}from"./index-DMuxzsKV.js";import{e as o}from"./helpers-Dr9nLsm7.js";const i=o("fast"),r=t.div`
+  transition: color ${o("normal")};
+`,d=()=>s.jsxs("div",{children:[s.jsx("div",{children:i}),s.jsx(r,{})]});export{d as App};
