@@ -1,11 +1,19 @@
 import type { ComponentType } from "react";
 
 // Auto-import all test case input files as raw strings
-const inputs = import.meta.glob<string>("../../../test-cases/*.input.tsx", {
-  query: "?raw",
-  import: "default",
-  eager: true,
-});
+const inputs = import.meta.glob<string>(
+  [
+    "../../../test-cases/*.input.tsx",
+    // Exclude `_unsupported.*` fixtures from bundling (these may contain intentionally broken imports).
+    "!../../../test-cases/_unsupported.*.input.tsx",
+    "!../../../test-cases/unsupported-*.input.tsx",
+  ],
+  {
+    query: "?raw",
+    import: "default",
+    eager: true,
+  },
+);
 
 type TestCaseModule = {
   App: ComponentType<Record<string, never>>;
@@ -13,8 +21,16 @@ type TestCaseModule = {
 
 type TestCaseModuleLoader = () => Promise<TestCaseModule>;
 
-const inputModuleLoaders = import.meta.glob<TestCaseModule>("../../../test-cases/*.input.tsx");
-const outputModuleLoaders = import.meta.glob<TestCaseModule>("../../../test-cases/*.output.tsx");
+const inputModuleLoaders = import.meta.glob<TestCaseModule>([
+  "../../../test-cases/*.input.tsx",
+  "!../../../test-cases/_unsupported.*.input.tsx",
+  "!../../../test-cases/unsupported-*.input.tsx",
+]);
+const outputModuleLoaders = import.meta.glob<TestCaseModule>([
+  "../../../test-cases/*.output.tsx",
+  "!../../../test-cases/_unsupported.*.output.tsx",
+  "!../../../test-cases/unsupported-*.output.tsx",
+]);
 
 interface TestCase {
   name: string;
