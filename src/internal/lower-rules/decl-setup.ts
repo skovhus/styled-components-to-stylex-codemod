@@ -269,7 +269,8 @@ export function createDeclProcessingState(state: LowerRulesState, decl: StyledDe
     applyVariant,
     dropAllTestInfoProps,
     annotateParamFromJsxProp,
-    findJsxPropTsType, isJsxPropOptional,
+    findJsxPropTsType,
+    isJsxPropOptional,
     extraStyleObjects,
     resolvedStyleObjects: state.resolvedStyleObjects,
   });

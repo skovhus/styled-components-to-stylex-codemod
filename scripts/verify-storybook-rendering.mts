@@ -157,9 +157,7 @@ async function compareRenderedPanels(p: Page): Promise<string | null> {
   // Locate the two RenderDebugFrame host divs (the ones with the ref).
   // Each panel has structure: <div style="position:relative..."> <div ref={hostRef}>...</div> ... </div>
   // We target the outer debug-frame containers via their distinctive background style.
-  const debugFrames = p.locator(
-    'div[style*="repeating-linear-gradient"]',
-  );
+  const debugFrames = p.locator('div[style*="repeating-linear-gradient"]');
   const count = await debugFrames.count();
   if (count < 2) {
     // Can't compare if we don't have both panels (some stories may not have output)
@@ -224,9 +222,7 @@ function diffPngBuffers(a: Buffer, b: Buffer): string | null {
 }
 
 /** Minimal PNG → raw RGBA decoder (no native deps). Supports 8-bit RGBA only. */
-function decodePngToRGBA(
-  buf: Buffer,
-): { width: number; height: number; data: Uint8Array } | null {
+function decodePngToRGBA(buf: Buffer): { width: number; height: number; data: Uint8Array } | null {
   try {
     // Verify PNG signature
     const sig = [137, 80, 78, 71, 13, 10, 26, 10];

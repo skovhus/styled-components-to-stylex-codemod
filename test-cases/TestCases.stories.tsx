@@ -98,9 +98,6 @@ const inputModules = import.meta.glob<{ App: React.ComponentType }>(
     "!./_unsupported.*.input.tsx",
     "!./_unsupported.*.input.jsx",
     "!./_unsupported.*.flow.input.jsx",
-    "!./unsupported-*.input.tsx",
-    "!./unsupported-*.input.jsx",
-    "!./unsupported-*.flow.input.jsx",
   ],
   { eager: true },
 );
