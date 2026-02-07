@@ -37,9 +37,13 @@ export const testCaseTheme = {
     textSecondary: "#6B7280",
     primaryColor: "#BF4F74",
   },
-  /** Returns a highlighted variant of a color (e.g., lighter for dark themes). */
+  /** Returns a highlighted (lighter) variant of a hex color for dark themes. */
   highlightVariant(color: string): string {
-    return color;
+    const hex = color.replace("#", "");
+    const r = Math.min(255, parseInt(hex.slice(0, 2), 16) + 40);
+    const g = Math.min(255, parseInt(hex.slice(2, 4), 16) + 40);
+    const b = Math.min(255, parseInt(hex.slice(4, 6), 16) + 40);
+    return `#${r.toString(16).padStart(2, "0")}${g.toString(16).padStart(2, "0")}${b.toString(16).padStart(2, "0")}`;
   },
   primary: "#BF4F74",
   secondary: "#4F74BF",
