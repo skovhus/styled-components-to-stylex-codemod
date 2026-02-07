@@ -1,0 +1,1 @@
+import{r as s,j as t}from"./index-B4qiiF0X.js";const o=()=>{const e=s.useRef(null);return s.useEffect(()=>{e.current?.focus()},[]),t.jsx("input",{ref:e,placeholder:"Focus me on mount!",className:"xon2cxt x1sscd6g x12xhozv xd10qfp xc342km xng3xce x18zih8k"})};export{o as App};
