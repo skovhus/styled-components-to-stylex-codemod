@@ -9,7 +9,10 @@ import type { WarningType } from "../logger.js";
 import type { ExpressionKind } from "./decl-types.js";
 import type { DeclProcessingState } from "./decl-setup.js";
 import { resolveDynamicNode } from "../builtin-handlers.js";
-import { cssDeclarationToStylexDeclarations, cssPropertyToStylexProp } from "../css-prop-mapping.js";
+import {
+  cssDeclarationToStylexDeclarations,
+  cssPropertyToStylexProp,
+} from "../css-prop-mapping.js";
 import { buildThemeStyleKeys } from "../utilities/style-key-naming.js";
 import {
   cloneAstNode,
@@ -743,6 +746,58 @@ export function handleInterpolatedDeclaration(args: InterpolatedDeclarationConte
 
       extraStyleObjects.set(trueStyleKey, trueStyle);
       extraStyleObjects.set(falseStyleKey, falseStyle);
+
+      decl.needsWrapperComponent = true;
+      continue;
+    }
+
+    // Handle theme boolean conditional with one unresolvable call expression branch.
+    // The resolved branch becomes the base StyleX style; the unresolvable branch
+    // is emitted as a conditional inline style using the useTheme() hook.
+    if (res && res.type === "splitThemeBooleanWithInlineStyleFallback") {
+      // Add imports for the resolved value
+      for (const imp of res.resolvedImports ?? []) {
+        resolverImports.set(JSON.stringify(imp), imp);
+      }
+
+      // Map CSS prop to StyleX prop
+      const stylexProp = cssPropertyToStylexProp(res.cssProp);
+
+      // Set the resolved value as the base style
+      styleObj[stylexProp] = res.resolvedValue;
+
+      // Ensure useTheme() is imported and called by adding a needsUseThemeHook entry
+      // with both keys null (no style buckets needed — only the import/declaration)
+      if (!decl.needsUseThemeHook) {
+        decl.needsUseThemeHook = [];
+      }
+      if (!decl.needsUseThemeHook.some((e) => e.themeProp === res.themeProp)) {
+        decl.needsUseThemeHook.push({
+          themeProp: res.themeProp,
+          trueStyleKey: null,
+          falseStyleKey: null,
+        });
+      }
+
+      // Build the conditional inline style expression:
+      //   theme.<prop> ? <inlineExpr> : undefined   (when resolved branch is false)
+      //   theme.<prop> ? undefined : <inlineExpr>   (when resolved branch is true)
+      //   !theme.<prop> ? <inlineExpr> : undefined  (when negated + resolved branch is true)
+      // Simplified: use the theme condition to pick the inline expr or undefined
+      const themeCondition = j.memberExpression(j.identifier("theme"), j.identifier(res.themeProp));
+      const undefinedExpr = j.identifier("undefined") as ExpressionKind;
+      const inlineExpr = res.inlineExpr as ExpressionKind;
+
+      // Determine when the inline style should apply:
+      // The inline style replaces the unresolvable branch.
+      // resolvedBranchIsTrue means: true branch is resolved → inline style is for the false branch.
+      // isNegated flips the mapping between consequent/alternate and true/false.
+      const inlineAppliesWhenThemeIsTrue = !res.resolvedBranchIsTrue !== res.isNegated;
+      const conditionalExpr = inlineAppliesWhenThemeIsTrue
+        ? j.conditionalExpression(themeCondition, inlineExpr, undefinedExpr)
+        : j.conditionalExpression(themeCondition, undefinedExpr, inlineExpr);
+
+      inlineStyleProps.push({ prop: stylexProp, expr: conditionalExpr });
 
       decl.needsWrapperComponent = true;
       continue;

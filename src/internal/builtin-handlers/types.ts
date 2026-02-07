@@ -275,6 +275,37 @@ export type HandlerResult =
       trueImports: ImportSpec[];
       /** Imports required for false branch value */
       falseImports: ImportSpec[];
+    }
+  | {
+      /**
+       * One branch of a theme boolean conditional resolved to a static value,
+       * but the other branch contains a call expression that cannot be resolved.
+       *
+       * The resolved branch becomes the base StyleX style value.
+       * The unresolvable branch is emitted as a conditional inline style
+       * guarded by the theme boolean (using `useTheme()`).
+       *
+       * Pattern: `props.theme.isDark ? unresolvedCall(...) : resolvedThemeValue`
+       *
+       * Output:
+       * - Base style: `backgroundColor: $colors.bgFocus`
+       * - Inline style: `style={theme.isDark ? theme.highlightVariant(theme.color.bgFocus) : undefined}`
+       */
+      type: "splitThemeBooleanWithInlineStyleFallback";
+      /** The CSS property name (e.g., "backgroundColor") */
+      cssProp: string;
+      /** The theme property name being tested (e.g., "isDark") */
+      themeProp: string;
+      /** Whether the theme boolean test was negated */
+      isNegated: boolean;
+      /** The resolved value for the resolvable branch */
+      resolvedValue: unknown;
+      /** Imports required for the resolved value */
+      resolvedImports: ImportSpec[];
+      /** Whether the resolved branch is the true (consequent) or false (alternate) branch */
+      resolvedBranchIsTrue: boolean;
+      /** The unresolvable branch expression with props.theme.* replaced by theme.* */
+      inlineExpr: unknown;
     };
 
 export type InternalHandlerContext = {

@@ -12,6 +12,7 @@ export const $colors = stylex.defineVars({
   bgBase: "#990000",
   bgBaseHover: "#BAE6FD",
   bgBorderFaint: "#7DD3FC",
+  bgFocus: "#60A5FA",
   bgSub: "#009900",
   textPrimary: "#111827",
   textSecondary: "#6B7280",
@@ -30,10 +31,15 @@ export const testCaseTheme = {
     bgBase: "#990000",
     bgBaseHover: "#BAE6FD",
     bgBorderFaint: "#7DD3FC",
+    bgFocus: "#60A5FA",
     bgSub: "#009900",
     textPrimary: "#111827",
     textSecondary: "#6B7280",
     primaryColor: "#BF4F74",
+  },
+  /** Returns a highlighted variant of a color (e.g., lighter for dark themes). */
+  highlightVariant(color: string): string {
+    return color;
   },
   primary: "#BF4F74",
   secondary: "#4F74BF",
