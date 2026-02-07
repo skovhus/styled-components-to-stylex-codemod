@@ -558,10 +558,21 @@ function tryResolveConditionalHelperCallInPseudo(
     return { outcome: "not-applicable" };
   }
 
-  // Wrap each property in pseudo selectors: { default: null, ":hover": value }
+  // Wrap each property in pseudo selectors: { default: <base>, ":hover": value }
+  // Preserve existing base values from styleObj so they aren't cleared by `default: null`
+  // when the variant is applied. In styled-components, the base value persists and only
+  // the pseudo state overrides it.
+  const { styleObj, cssHelperPropValues, resolveComposedDefaultValue } = ctx;
   const pseudoWrappedStyle: Record<string, unknown> = {};
   for (const [prop, value] of Object.entries(parsedStyle)) {
-    pseudoWrappedStyle[prop] = { default: null, [pseudo]: value };
+    const existingBase = (styleObj as Record<string, unknown>)[prop];
+    const defaultValue =
+      existingBase !== undefined
+        ? existingBase
+        : cssHelperPropValues.has(prop)
+          ? resolveComposedDefaultValue(cssHelperPropValues.get(prop), prop)
+          : null;
+    pseudoWrappedStyle[prop] = { default: defaultValue, [pseudo]: value };
   }
 
   // Determine the condition: truthy for consequent call, inverted for alternate call

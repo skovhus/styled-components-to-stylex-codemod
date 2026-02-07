@@ -1326,6 +1326,65 @@ export const App = () => <Text>Hello</Text>;
     expect(result.code).toContain("textTruncate");
   });
 
+  it("should preserve base values for overlapping properties in pseudo-wrapped variants", () => {
+    // When the component's base styles define a property (e.g., overflow: auto) and the
+    // helper's cssText also sets that property, the pseudo-wrapped variant must preserve
+    // the base value as the default so it isn't cleared in the non-pseudo state.
+    // In styled-components, the base value persists; only the pseudo state overrides it.
+    const source = `
+import styled from "styled-components";
+import { truncate } from "./lib/helpers";
+
+const Text = styled.p<{ $truncate?: boolean }>\`
+  font-size: 14px;
+  overflow: auto;
+  white-space: pre-wrap;
+  &:hover {
+    \${(props) => (props.$truncate ? truncate() : "")}
+  }
+\`;
+
+export const App = () => <Text>Hello</Text>;
+`;
+
+    const adapterWithCssText = {
+      externalInterface() {
+        return null;
+      },
+      resolveValue() {
+        return undefined;
+      },
+      resolveCall() {
+        return {
+          usage: "props" as const,
+          expr: "helpers.truncate",
+          imports: [],
+          // overflow and white-space overlap with base styles
+          cssText: "white-space: nowrap; overflow: hidden; text-overflow: ellipsis;",
+        };
+      },
+      resolveSelector() {
+        return undefined;
+      },
+      styleMerger: null,
+    } satisfies Adapter;
+
+    const result = transformWithWarnings(
+      { source, path: "test-overlap.tsx" },
+      { jscodeshift: j, j, stats: () => {}, report: () => {} },
+      { adapter: adapterWithCssText },
+    );
+
+    expect(result.code).not.toBeNull();
+    expect(result.warnings).toHaveLength(0);
+    // overflow has base value "auto" → default should preserve it, not null
+    expect(result.code).toContain('"auto"');
+    // white-space has base value "pre-wrap" → default should preserve it
+    expect(result.code).toContain('"pre-wrap"');
+    // text-overflow has no base value → default should be null
+    expect(result.code).toContain("default: null");
+  });
+
   it("should use generic warning when adapter cannot resolve the call at all", () => {
     // When the adapter returns undefined (cannot resolve), the generic warning is used.
     const source = `
