@@ -1,0 +1,1 @@
+import{j as t}from"./index-DwHm5w_i.js";function s(){return t.jsx("div",{className:"import-valueMember__styles.container xur7f20 x1ruevkc x1dt7z5j xixxii4 x8ihxv3","data-style-src":"styled-components-to-stylex-codemod:test-cases/import-valueMember.output.tsx:12"})}export{s as App};

@@ -1,0 +1,1 @@
+import{j as s}from"./index-DwHm5w_i.js";const e=()=>s.jsx("div",{className:"selector-pseudo__styles.thing xs1s249 x32b0ac x130oxxl xju2f9n x1dgwipm xxop9cq xatca5b","data-style-src":"styled-components-to-stylex-codemod:test-cases/selector-pseudo.output.tsx:6",children:"Hover me!"});export{e as App};

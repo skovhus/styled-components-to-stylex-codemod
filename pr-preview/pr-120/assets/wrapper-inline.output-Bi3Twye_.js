@@ -1,0 +1,1 @@
+import{j as t}from"./index-DwHm5w_i.js";import{E as e}from"./external-component-B4SUoG3B.js";function n(){return t.jsx("div",{children:t.jsx(e,{isOpen:!0,className:"wrapper-inline__styles.externalComponent xdj266r xv8wvd9 xat24cr x1bawvfr","data-style-src":"styled-components-to-stylex-codemod:test-cases/wrapper-inline.output.tsx:15"})})}export{n as App};

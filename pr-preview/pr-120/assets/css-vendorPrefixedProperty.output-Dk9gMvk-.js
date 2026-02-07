@@ -1,0 +1,1 @@
+import{j as s}from"./index-DwHm5w_i.js";const e=()=>s.jsx("div",{className:"css-vendorPrefixedProperty__styles.box xo6swyp xjyslct","data-style-src":"styled-components-to-stylex-codemod:test-cases/css-vendorPrefixedProperty.output.tsx:6"});export{e as App};

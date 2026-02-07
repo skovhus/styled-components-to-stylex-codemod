@@ -1,0 +1,1 @@
+import{j as s}from"./index-DwHm5w_i.js";const t=()=>s.jsx("input",{type:"range",className:"css-vendorPrefixedPseudo__styles.slider x1eir19f","data-style-src":"styled-components-to-stylex-codemod:test-cases/css-vendorPrefixedPseudo.output.tsx:6"});export{t as App};

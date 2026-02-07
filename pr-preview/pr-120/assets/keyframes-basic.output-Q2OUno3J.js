@@ -1,0 +1,1 @@
+import{j as s}from"./index-DwHm5w_i.js";const e=()=>s.jsx("div",{className:"keyframes-basic__styles.rotate x1rg5ohu x1aerksh x1c74tu6 x1esw782 xa4qsjk x18mflkt xnxx81d xvewgow","data-style-src":"styled-components-to-stylex-codemod:test-cases/keyframes-basic.output.tsx:16",children:"💅"});export{e as App};

@@ -1,0 +1,1 @@
+import{j as t}from"./index-DwHm5w_i.js";const s=()=>t.jsx("button",{className:"mixin-hover__styles.button mixin-hover__styles.hoverStylesInButton x1e2nbdu x17z2mba","data-style-src":"styled-components-to-stylex-codemod:test-cases/mixin-hover.output.tsx:8; styled-components-to-stylex-codemod:test-cases/mixin-hover.output.tsx:11",children:"Hover me"});export{s as App};

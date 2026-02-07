@@ -1,0 +1,1 @@
+import{j as t}from"./index-DwHm5w_i.js";import{e as s}from"./helpers-DJ7I6cbn.js";const e=s("fast"),i=()=>t.jsxs("div",{children:[t.jsx("div",{children:e}),t.jsx("div",{className:"helper-importNameConflict__styles.box x4lopbt","data-style-src":"styled-components-to-stylex-codemod:test-cases/helper-importNameConflict.output.tsx:20"})]});export{i as App};
