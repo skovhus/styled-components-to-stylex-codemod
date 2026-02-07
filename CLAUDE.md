@@ -60,6 +60,10 @@ Run repo scripts directly with `node`, see `scripts` folder
 - `scripts/regenerate-test-case-outputs.mts` - Updates test case output files.
   - All supported test cases: `node scripts/regenerate-test-case-outputs.mts`
   - Single test case: `node scripts/regenerate-test-case-outputs.mts --only attrs`
+- `scripts/verify-storybook-rendering.mts` - Verifies that input (styled-components) and output (StyleX) render with matching dimensions and content in Storybook. Requires Storybook running (`pnpm storybook`).
+  - All test cases: `node scripts/verify-storybook-rendering.mts`
+  - Specific test case: `node scripts/verify-storybook-rendering.mts theme-conditionalInlineStyle`
+  - Only changed vs main: `node scripts/verify-storybook-rendering.mts --only-changed`
 
 ## Adding Test Cases
 
@@ -104,7 +108,7 @@ Storybook renders all test cases side-by-side (input with styled-components, out
 
 Run `pnpm storybook` to start the dev server and visually compare transformations.
 
-Use the Playwright MCP to inspect test case rendering.
+To verify rendering programmatically, run `node scripts/verify-storybook-rendering.mts` (requires Storybook running). Use `--only-changed` to check only test cases changed on the current branch.
 
 ## Skills
 

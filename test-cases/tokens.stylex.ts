@@ -12,10 +12,20 @@ export const $colors = stylex.defineVars({
   bgBase: "#990000",
   bgBaseHover: "#BAE6FD",
   bgBorderFaint: "#7DD3FC",
+  bgFocus: "#60A5FA",
   bgSub: "#009900",
   textPrimary: "#111827",
   textSecondary: "#6B7280",
 });
+
+/** Lightens a hex color by adding 40 to each RGB channel (clamped to 255). */
+export function highlightVariant(color: string): string {
+  const hex = color.replace("#", "");
+  const r = Math.min(255, parseInt(hex.slice(0, 2), 16) + 40);
+  const g = Math.min(255, parseInt(hex.slice(2, 4), 16) + 40);
+  const b = Math.min(255, parseInt(hex.slice(4, 6), 16) + 40);
+  return `#${r.toString(16).padStart(2, "0")}${g.toString(16).padStart(2, "0")}${b.toString(16).padStart(2, "0")}`;
+}
 
 /**
  * Plain JS theme for Storybook/styled-components fixtures.
@@ -30,11 +40,13 @@ export const testCaseTheme = {
     bgBase: "#990000",
     bgBaseHover: "#BAE6FD",
     bgBorderFaint: "#7DD3FC",
+    bgFocus: "#60A5FA",
     bgSub: "#009900",
     textPrimary: "#111827",
     textSecondary: "#6B7280",
     primaryColor: "#BF4F74",
   },
+  highlightVariant,
   primary: "#BF4F74",
   secondary: "#4F74BF",
   spacing: {
