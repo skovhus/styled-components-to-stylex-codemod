@@ -39,7 +39,9 @@ const testCaseIndexer: Indexer = {
 
     // Add individual test case stories
     // Export name uses underscores (valid JS identifier), name keeps hyphens (display name)
-    // Story ID will be: test-cases--{name-with-hyphens}
+    // Note: Storybook auto-generates story IDs by kebab-casing the name, so
+    // "theme-conditionalInlineStyle" becomes "test-cases--theme-conditional-inline-style".
+    // The verify-storybook-rendering script accounts for this conversion.
     for (const name of testCaseNames) {
       entries.push({
         type: "story" as const,

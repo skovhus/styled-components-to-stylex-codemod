@@ -924,6 +924,11 @@ function appendThemeBooleanStyleArgs(
   }
   ctx.markNeedsUseThemeImport();
   for (const entry of hooks) {
+    // Skip entries used only for triggering useTheme import/declaration
+    // (e.g., when the theme conditional uses inline styles instead of style buckets)
+    if (!entry.trueStyleKey && !entry.falseStyleKey) {
+      continue;
+    }
     const trueExpr = entry.trueStyleKey
       ? j.memberExpression(j.identifier(stylesIdentifier), j.identifier(entry.trueStyleKey))
       : (j.identifier("undefined") as ExpressionKind);

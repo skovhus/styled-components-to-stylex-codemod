@@ -755,6 +755,59 @@ export function handleInterpolatedDeclaration(args: InterpolatedDeclarationConte
       continue;
     }
 
+    // Handle theme boolean conditional with one unresolvable call expression branch.
+    // The resolved branch becomes the base StyleX style; the unresolvable branch
+    // is emitted as a conditional inline style using the useTheme() hook.
+    if (res && res.type === "splitThemeBooleanWithInlineStyleFallback") {
+      // Add imports for the resolved value
+      for (const imp of res.resolvedImports ?? []) {
+        resolverImports.set(JSON.stringify(imp), imp);
+      }
+
+      // Ensure useTheme() is imported and called by adding a needsUseThemeHook entry
+      // with both keys null (no style buckets needed — only the import/declaration)
+      if (!decl.needsUseThemeHook) {
+        decl.needsUseThemeHook = [];
+      }
+      if (!decl.needsUseThemeHook.some((e) => e.themeProp === res.themeProp)) {
+        decl.needsUseThemeHook.push({
+          themeProp: res.themeProp,
+          trueStyleKey: null,
+          falseStyleKey: null,
+        });
+      }
+
+      // Build the conditional inline style expression:
+      //   theme.<prop> ? <inlineExpr> : undefined   (when resolved branch is false)
+      //   theme.<prop> ? undefined : <inlineExpr>   (when resolved branch is true)
+      // Simplified: use the theme condition to pick the inline expr or undefined
+      const themeCondition = j.memberExpression(j.identifier("theme"), j.identifier(res.themeProp));
+      const undefinedExpr = j.identifier("undefined") as ExpressionKind;
+      const inlineExpr = res.inlineExpr as ExpressionKind;
+
+      // Determine when the inline style should apply:
+      // The inline style replaces the unresolvable branch.
+      // resolvedBranchIsTrue means: true branch is resolved → inline style is for the false branch.
+      // isNegated flips the mapping between consequent/alternate and true/false.
+      const inlineAppliesWhenThemeIsTrue = !res.resolvedBranchIsTrue !== res.isNegated;
+      const conditionalExpr = inlineAppliesWhenThemeIsTrue
+        ? j.conditionalExpression(themeCondition, inlineExpr, undefinedExpr)
+        : j.conditionalExpression(themeCondition, undefinedExpr, inlineExpr);
+
+      // Expand shorthand CSS properties (e.g., padding → paddingBlock/paddingInline)
+      // using the CSS declaration IR, consistent with other handlers.
+      for (const out of cssDeclarationToStylexDeclarations(d)) {
+        if (!out.prop) {
+          continue;
+        }
+        styleObj[out.prop] = res.resolvedValue;
+        inlineStyleProps.push({ prop: out.prop, expr: conditionalExpr });
+      }
+
+      decl.needsWrapperComponent = true;
+      continue;
+    }
+
     if (res && res.type === "splitVariants") {
       // Extract any imports from variants (used by template literal theme resolution)
       for (const v of res.variants) {
