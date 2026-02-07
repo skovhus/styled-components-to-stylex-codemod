@@ -9,6 +9,7 @@ import {
   type ResolveValueResult,
   type SelectorResolveContext,
   type SelectorResolveResult,
+  type StylexStyleObject,
 } from "../adapter.ts";
 
 // Fixtures don't use theme resolution, but the transformer requires an adapter.
@@ -458,7 +459,7 @@ export const customAdapter = defineAdapter({
   resolveSelector: customResolveSelector,
 });
 
-const helperStyleObjects: Record<string, Record<string, unknown>> = {
+const helperStyleObjects: Record<string, StylexStyleObject> = {
   truncate: {
     whiteSpace: "nowrap",
     overflow: "hidden",
