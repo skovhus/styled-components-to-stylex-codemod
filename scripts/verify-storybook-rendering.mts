@@ -1,9 +1,12 @@
 /**
  * Verify that storybook renders Input (styled-components) and Output (StyleX)
- * panels with matching dimensions and content for each test case.
+ * panels with matching dimensions, content, and visual appearance for each test case.
  *
  * This script launches a headless browser via `playwright` to render each story
- * and compare the Input vs Output panels.
+ * and compare the Input vs Output panels. Checks include:
+ *   - Matching dimensions (from the debug frame size label)
+ *   - Matching text content
+ *   - Pixel-level screenshot comparison of the rendered content areas
  *
  * Prerequisites:
  *   - Storybook dev server running (pnpm storybook)
@@ -21,6 +24,7 @@
 import { execSync } from "node:child_process";
 import { readdirSync } from "node:fs";
 import { join } from "node:path";
+import { inflateSync } from "node:zlib";
 
 // ---------------------------------------------------------------------------
 // CLI argument parsing
@@ -136,11 +140,201 @@ const context = await browser.newContext({ viewport: { width: 1200, height: 800 
 const page = await context.newPage();
 
 // ---------------------------------------------------------------------------
+// Screenshot comparison helpers
+// ---------------------------------------------------------------------------
+
+type Page = typeof page;
+
+/**
+ * Takes screenshots of the input and output content areas (inside the debug
+ * frame) and compares them pixel-by-pixel.  Returns a description of the
+ * mismatch, or `null` when both sides are visually identical.
+ *
+ * The comparison tolerates a small per-channel delta (±2) to absorb
+ * sub-pixel anti-aliasing differences across renderers.
+ */
+async function compareRenderedPanels(p: Page): Promise<string | null> {
+  // Locate the two RenderDebugFrame host divs (the ones with the ref).
+  // Each panel has structure: <div style="position:relative..."> <div ref={hostRef}>...</div> ... </div>
+  // We target the outer debug-frame containers via their distinctive background style.
+  const debugFrames = p.locator(
+    'div[style*="repeating-linear-gradient"]',
+  );
+  const count = await debugFrames.count();
+  if (count < 2) {
+    // Can't compare if we don't have both panels (some stories may not have output)
+    return null;
+  }
+
+  const inputFrame = debugFrames.nth(0);
+  const outputFrame = debugFrames.nth(1);
+
+  const [inputShot, outputShot] = await Promise.all([
+    inputFrame.screenshot(),
+    outputFrame.screenshot(),
+  ]);
+
+  return diffPngBuffers(inputShot, outputShot);
+}
+
+/**
+ * Compares two PNG buffers by decoding them to raw RGBA pixels.
+ * Returns a human-readable mismatch description, or `null` if identical
+ * (within tolerance).
+ *
+ * Uses a simple manual PNG IDAT decoder (inflate → un-filter) so we don't
+ * need any native image dependencies.  Only supports 8-bit RGBA (which is
+ * what Playwright screenshots produce).
+ */
+function diffPngBuffers(a: Buffer, b: Buffer): string | null {
+  const pixelsA = decodePngToRGBA(a);
+  const pixelsB = decodePngToRGBA(b);
+
+  if (!pixelsA || !pixelsB) {
+    // Couldn't decode — skip comparison silently
+    return null;
+  }
+
+  if (pixelsA.width !== pixelsB.width || pixelsA.height !== pixelsB.height) {
+    return `Screenshot sizes differ: ${pixelsA.width}×${pixelsA.height} vs ${pixelsB.width}×${pixelsB.height}`;
+  }
+
+  const tolerance = 2; // per-channel delta to absorb anti-aliasing
+  const { data: dA } = pixelsA;
+  const { data: dB } = pixelsB;
+  let mismatchCount = 0;
+  const totalPixels = pixelsA.width * pixelsA.height;
+
+  for (let i = 0; i < dA.length; i += 4) {
+    const dr = Math.abs(dA[i]! - dB[i]!);
+    const dg = Math.abs(dA[i + 1]! - dB[i + 1]!);
+    const db = Math.abs(dA[i + 2]! - dB[i + 2]!);
+    const da = Math.abs(dA[i + 3]! - dB[i + 3]!);
+    if (dr > tolerance || dg > tolerance || db > tolerance || da > tolerance) {
+      mismatchCount++;
+    }
+  }
+
+  if (mismatchCount === 0) {
+    return null;
+  }
+
+  const pct = ((mismatchCount / totalPixels) * 100).toFixed(1);
+  return `Visual mismatch: ${mismatchCount} of ${totalPixels} pixels differ (${pct}%)`;
+}
+
+/** Minimal PNG → raw RGBA decoder (no native deps). Supports 8-bit RGBA only. */
+function decodePngToRGBA(
+  buf: Buffer,
+): { width: number; height: number; data: Uint8Array } | null {
+  try {
+    // Verify PNG signature
+    const sig = [137, 80, 78, 71, 13, 10, 26, 10];
+    for (let i = 0; i < 8; i++) {
+      if (buf[i] !== sig[i]) {
+        return null;
+      }
+    }
+
+    let width = 0;
+    let height = 0;
+    let bitDepth = 0;
+    let colorType = 0;
+    const idatChunks: Buffer[] = [];
+    let pos = 8;
+
+    while (pos < buf.length) {
+      const len = buf.readUInt32BE(pos);
+      const type = buf.toString("ascii", pos + 4, pos + 8);
+      const chunkData = buf.subarray(pos + 8, pos + 8 + len);
+
+      if (type === "IHDR") {
+        width = chunkData.readUInt32BE(0);
+        height = chunkData.readUInt32BE(4);
+        bitDepth = chunkData[8]!;
+        colorType = chunkData[9]!;
+      } else if (type === "IDAT") {
+        idatChunks.push(chunkData as Buffer);
+      } else if (type === "IEND") {
+        break;
+      }
+      pos += 12 + len; // 4 len + 4 type + data + 4 crc
+    }
+
+    // Only support 8-bit RGBA
+    if (bitDepth !== 8 || colorType !== 6) {
+      return null;
+    }
+
+    const compressed = Buffer.concat(idatChunks);
+    const raw = inflateSync(compressed);
+
+    // Un-filter scanlines (filter byte + 4 bytes per pixel per row)
+    const bpp = 4; // bytes per pixel (RGBA)
+    const stride = width * bpp;
+    const pixels = new Uint8Array(width * height * bpp);
+
+    for (let y = 0; y < height; y++) {
+      const filterType = raw[y * (stride + 1)]!;
+      const scanlineOffset = y * (stride + 1) + 1;
+      const outOffset = y * stride;
+
+      for (let x = 0; x < stride; x++) {
+        const rawByte = raw[scanlineOffset + x]!;
+        const a = x >= bpp ? pixels[outOffset + x - bpp]! : 0; // left
+        const b = y > 0 ? pixels[outOffset - stride + x]! : 0; // above
+        const c = x >= bpp && y > 0 ? pixels[outOffset - stride + x - bpp]! : 0; // upper-left
+
+        let value: number;
+        switch (filterType) {
+          case 0:
+            value = rawByte;
+            break;
+          case 1:
+            value = (rawByte + a) & 0xff;
+            break;
+          case 2:
+            value = (rawByte + b) & 0xff;
+            break;
+          case 3:
+            value = (rawByte + ((a + b) >>> 1)) & 0xff;
+            break;
+          case 4:
+            value = (rawByte + paethPredictor(a, b, c)) & 0xff;
+            break;
+          default:
+            return null; // unknown filter
+        }
+        pixels[outOffset + x] = value;
+      }
+    }
+
+    return { width, height, data: pixels };
+  } catch {
+    return null;
+  }
+}
+
+function paethPredictor(a: number, b: number, c: number): number {
+  const p = a + b - c;
+  const pa = Math.abs(p - a);
+  const pb = Math.abs(p - b);
+  const pc = Math.abs(p - c);
+  if (pa <= pb && pa <= pc) {
+    return a;
+  }
+  if (pb <= pc) {
+    return b;
+  }
+  return c;
+}
+
+// ---------------------------------------------------------------------------
 // Check each test case
 // ---------------------------------------------------------------------------
 interface TestResult {
   name: string;
-  status: "pass" | "dimension-mismatch" | "content-mismatch" | "error";
+  status: "pass" | "dimension-mismatch" | "content-mismatch" | "screenshot-mismatch" | "error";
   inputDimensions: string | null;
   outputDimensions: string | null;
   inputText: string;
@@ -241,6 +435,17 @@ for (const tc of testCases) {
     } else if (!textMatch) {
       status = "content-mismatch";
       message = `Text differs:\n    Input:  "${data.inputText.substring(0, 100)}"\n    Output: "${data.outputText.substring(0, 100)}"`;
+    }
+
+    // Pixel-level screenshot comparison of the rendered content areas.
+    // The RenderDebugFrame component wraps each panel's content in a div[ref]
+    // that we can screenshot independently.
+    if (status === "pass") {
+      const mismatch = await compareRenderedPanels(page);
+      if (mismatch) {
+        status = "screenshot-mismatch";
+        message = mismatch;
+      }
     }
 
     results.push({
