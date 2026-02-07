@@ -34,6 +34,9 @@ export default defineConfig(({ command }) => {
     build: {
       outDir: path.resolve(__dirname, "../dist-playground"),
       emptyOutDir: true,
+      // Ensure StyleX-generated CSS is always loaded (even when styles originate
+      // from dynamically imported test-case chunks).
+      cssCodeSplit: false,
     },
   };
 });
