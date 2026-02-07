@@ -38,7 +38,7 @@ export const App = () => (
 const styles = stylex.create({
   // withConfig for displayName (debugging)
   button: {
-    backgroundColor: "#BF4F74",
+    backgroundColor: "#bf4f74",
     color: "white",
     paddingBlock: "8px",
     paddingInline: "16px",
@@ -81,7 +81,7 @@ const styles = stylex.create({
     cursor: "pointer",
   },
   extendedButton: {
-    backgroundColor: "#4F74BF",
+    backgroundColor: "#4f74bf",
     color: "white",
     paddingBlock: "8px",
     paddingInline: "16px",

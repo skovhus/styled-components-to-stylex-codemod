@@ -4,7 +4,7 @@ import styled from "styled-components";
 const Button = styled.button.withConfig({
   displayName: "PrimaryButton",
 })`
-  background: #BF4F74;
+  background: #bf4f74;
   color: white;
   padding: 8px 16px;
   border: none;
@@ -48,7 +48,7 @@ const BaseButton = styled.button`
 const ExtendedButton = styled(BaseButton).withConfig({
   displayName: "ExtendedButton",
 })`
-  background: #4F74BF;
+  background: #4f74bf;
   color: white;
   padding: 8px 16px;
   border: none;
