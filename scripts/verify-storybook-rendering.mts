@@ -153,7 +153,11 @@ const results: TestResult[] = [];
 console.log(`Checking ${testCases.length} test case(s) against storybook at ${baseUrl}...\n`);
 
 for (const tc of testCases) {
-  const url = `${baseUrl}/iframe.html?id=test-cases--${tc}&viewMode=story`;
+  // Storybook auto-generates story IDs by kebab-casing the display name, e.g.
+  // "theme-conditionalInlineStyle" → "theme-conditional-inline-style".
+  // Apply the same conversion so the URL matches.
+  const storyId = tc.replace(/[A-Z]/g, (ch) => `-${ch.toLowerCase()}`);
+  const url = `${baseUrl}/iframe.html?id=test-cases--${storyId}&viewMode=story`;
 
   try {
     await page.goto(url, { waitUntil: "networkidle", timeout: 15000 });
