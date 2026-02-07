@@ -8,7 +8,7 @@ import type { InternalHandlerContext } from "../builtin-handlers.js";
 import { cssDeclarationToStylexDeclarations } from "../css-prop-mapping.js";
 import { normalizeStylisAstToIR } from "../css-ir.js";
 import { createCssHelperHandlers } from "./css-helper-handlers.js";
-import type { ExpressionKind, TestInfo } from "./decl-types.js";
+import type { ExpressionKind, StyleFnFromPropsEntry, TestInfo } from "./decl-types.js";
 import { createTypeInferenceHelpers, ensureShouldForwardPropDrop } from "./types.js";
 import { createCssHelperConditionalHandler } from "./css-helper-conditional.js";
 import { createValuePatternHandlers } from "./value-patterns.js";
@@ -54,13 +54,7 @@ export function createDeclProcessingState(state: LowerRulesState, decl: StyledDe
   const variantBuckets = new Map<string, Record<string, unknown>>();
   const variantStyleKeys: Record<string, string> = {};
   const extraStyleObjects = new Map<string, Record<string, unknown>>();
-  const styleFnFromProps: Array<{
-    fnKey: string;
-    jsxProp: string;
-    condition?: "truthy" | "always";
-    conditionWhen?: string;
-    callArg?: ExpressionKind;
-  }> = [];
+  const styleFnFromProps: StyleFnFromPropsEntry[] = [];
   const styleFnDecls = new Map<string, any>();
   const attrBuckets = new Map<string, Record<string, unknown>>();
   const inlineStyleProps: Array<{ prop: string; expr: ExpressionKind; jsxProp?: string }> = [];
@@ -115,6 +109,21 @@ export function createDeclProcessingState(state: LowerRulesState, decl: StyledDe
     }
   };
 
+  // Shared fields from LowerRulesState used by multiple handler factories
+  const sharedFromState = {
+    j,
+    filePath,
+    warnings,
+    parseExpr,
+    resolveValue,
+    resolveCall,
+    resolveImportInScope,
+    resolverImports,
+    isCssHelperTaggedTemplate,
+    resolveCssHelperTemplate,
+    markBail,
+  };
+
   const {
     tryHandleMappedFunctionColor,
     tryHandleLogicalOrDefault,
@@ -122,24 +131,18 @@ export function createDeclProcessingState(state: LowerRulesState, decl: StyledDe
     tryHandleEnumIfChainValue,
     tryHandleThemeIndexedLookup,
   } = createValuePatternHandlers({
+    ...sharedFromState,
     api,
-    j,
-    filePath,
     decl,
     styleObj,
     variantBuckets,
     variantStyleKeys,
     styleFnFromProps,
     styleFnDecls,
-    warnings,
-    resolveValue,
-    parseExpr,
-    resolverImports,
     stringMappingFns,
     hasLocalThemeBinding,
     annotateParamFromJsxProp,
     findJsxPropTsType,
-    markBail,
   });
 
   // Build reusable handler context for resolveDynamicNode calls
@@ -171,26 +174,17 @@ export function createDeclProcessingState(state: LowerRulesState, decl: StyledDe
 
   const { tryHandlePropertyTernaryTemplateLiteral, tryHandleCssHelperFunctionSwitchBlock } =
     createCssHelperHandlers({
-      j,
-      filePath,
+      ...sharedFromState,
       decl,
-      warnings,
       styleObj,
       variantBuckets,
       variantStyleKeys,
       cssHelperFunctions,
       usedCssHelperFunctions,
-      parseExpr,
-      resolveCall,
-      resolveImportInScope,
-      resolverImports,
-      isCssHelperTaggedTemplate,
-      resolveCssHelperTemplate,
       applyVariant,
       dropAllTestInfoProps,
       componentInfo,
       handlerContext,
-      markBail,
     });
 
   const resolveStaticCssBlock = (rawCss: string): Record<string, unknown> | null => {
@@ -261,32 +255,21 @@ export function createDeclProcessingState(state: LowerRulesState, decl: StyledDe
   };
 
   const tryHandleCssHelperConditionalBlock = createCssHelperConditionalHandler({
-    j,
+    ...sharedFromState,
     decl,
-    filePath,
-    warnings,
-    parseExpr,
-    resolveValue,
-    resolveCall,
-    resolveImportInScope,
-    resolverImports,
     componentInfo,
     handlerContext,
     styleObj,
     styleFnFromProps,
     styleFnDecls,
     inlineStyleProps,
-    isCssHelperTaggedTemplate,
-    resolveCssHelperTemplate,
     resolveStaticCssBlock,
     isPlainTemplateLiteral,
     isThemeAccessTest,
     applyVariant,
     dropAllTestInfoProps,
     annotateParamFromJsxProp,
-    findJsxPropTsType,
-    isJsxPropOptional,
-    markBail,
+    findJsxPropTsType, isJsxPropOptional,
     extraStyleObjects,
     resolvedStyleObjects: state.resolvedStyleObjects,
   });

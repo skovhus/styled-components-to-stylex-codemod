@@ -3,12 +3,12 @@
  * Core concepts: analyzing conditional branches, extracting variant conditions,
  * and emitting StyleX-compatible style objects or style functions.
  */
-import type { ASTNode, JSCodeshift } from "jscodeshift";
+import type { ASTNode } from "jscodeshift";
 import type { ImportSpec } from "../../adapter.js";
 import type { StyledDecl } from "../transform-types.js";
-import type { WarningLog } from "../logger.js";
-import type { ExpressionKind, TestInfo } from "./decl-types.js";
+import type { ExpressionKind, StyleFnFromPropsEntry, TestInfo } from "./decl-types.js";
 import type { InternalHandlerContext } from "../builtin-handlers.js";
+import type { LowerRulesState } from "./state.js";
 import { resolveDynamicNode } from "../builtin-handlers.js";
 import { cssDeclarationToStylexDeclarations } from "../css-prop-mapping.js";
 import { parseCssTemplateToRules, type ConditionalVariant } from "./css-helper.js";
@@ -33,7 +33,11 @@ import {
 import { cssValueToJs, toSuffixFromProp } from "../transform/helpers.js";
 import { createPropTestHelpers, invertWhen } from "./variant-utils.js";
 import { cssPropertyToIdentifier, makeCssProperty, makeCssPropKey } from "./shared.js";
-import { resolveTemplateLiteralBranch } from "./template-literals.js";
+import {
+  resolveTemplateLiteralBranch,
+  type ComponentInfo,
+  type TemplateLiteralContext,
+} from "./template-literals.js";
 import {
   ensureShouldForwardPropDrop,
   literalToStaticValue,
@@ -42,49 +46,35 @@ import {
 import { buildThemeStyleKeys } from "../utilities/style-key-naming.js";
 import { capitalize } from "../utilities/string-utils.js";
 
-type StyleFnFromPropsEntry = {
-  fnKey: string;
-  jsxProp: string;
-  condition?: "truthy" | "always";
-  conditionWhen?: string;
-  callArg?: ExpressionKind;
-};
-
-export type CssHelperConditionalContext = {
-  j: JSCodeshift;
+export type CssHelperConditionalContext = Pick<
+  LowerRulesState,
+  | "j"
+  | "filePath"
+  | "warnings"
+  | "parseExpr"
+  | "resolveValue"
+  | "resolveCall"
+  | "resolveImportInScope"
+  | "resolverImports"
+  | "isCssHelperTaggedTemplate"
+  | "resolveCssHelperTemplate"
+  | "markBail"
+> & {
   decl: StyledDecl;
-  filePath: string;
-  warnings: WarningLog[];
-  parseExpr: (value: string) => ExpressionKind | null;
-  resolveValue: (...args: any[]) => any;
-  resolveCall: (...args: any[]) => any;
-  resolveImportInScope: (...args: any[]) => any;
-  resolverImports: Map<string, any>;
-  componentInfo: any;
   handlerContext: InternalHandlerContext;
+  componentInfo: ComponentInfo;
   styleObj: Record<string, unknown>;
   styleFnFromProps: StyleFnFromPropsEntry[];
-  styleFnDecls: Map<string, any>;
+  styleFnDecls: Map<string, unknown>;
   inlineStyleProps: Array<{ prop: string; expr: ExpressionKind; jsxProp?: string }>;
-  isCssHelperTaggedTemplate: (node: unknown) => boolean;
-  resolveCssHelperTemplate: (
-    template: any,
-    paramName: string | null,
-    loc: { line: number; column: number } | null | undefined,
-  ) => {
-    style: Record<string, unknown>;
-    dynamicProps: Array<{ jsxProp: string; stylexProp: string }>;
-    conditionalVariants: ConditionalVariant[];
-  } | null;
   resolveStaticCssBlock: (rawCss: string) => Record<string, unknown> | null;
   isPlainTemplateLiteral: (node: ExpressionKind | null | undefined) => boolean;
   isThemeAccessTest: (test: ExpressionKind, paramName: string | null) => boolean;
   applyVariant: (testInfo: TestInfo, styleObj: Record<string, unknown>) => void;
   dropAllTestInfoProps: (testInfo: TestInfo) => void;
-  annotateParamFromJsxProp: (paramId: any, jsxProp: string) => void;
+  annotateParamFromJsxProp: (paramId: unknown, jsxProp: string) => void;
   findJsxPropTsType: (jsxProp: string) => unknown;
   isJsxPropOptional: (jsxProp: string) => boolean;
-  markBail: () => void;
   extraStyleObjects: Map<string, Record<string, unknown>>;
   resolvedStyleObjects: Map<string, unknown>;
 };
@@ -141,6 +131,11 @@ export function createCssHelperConditionalHandler(ctx: CssHelperConditionalConte
     }
 
     return resolved;
+  };
+
+  const tplCtx: TemplateLiteralContext = {
+    j, filePath, parseExpr, resolveValue, resolveCall,
+    resolveImportInScope, resolverImports, componentInfo, handlerContext,
   };
 
   return (d: any): boolean => {
@@ -559,18 +554,9 @@ export function createCssHelperConditionalHandler(ctx: CssHelperConditionalConte
         // Handle template literals with interpolations
         if (tpl.expressions && tpl.expressions.length > 0) {
           // Use resolveTemplateLiteralBranch to parse the template
-          const resolved = resolveTemplateLiteralBranch({
-            j,
+          const resolved = resolveTemplateLiteralBranch(tplCtx, {
             node: body.right,
             paramName,
-            filePath,
-            parseExpr,
-            resolveValue,
-            resolveCall,
-            resolveImportInScope,
-            resolverImports,
-            componentInfo,
-            handlerContext,
           });
           if (!resolved) {
             return false;
@@ -745,18 +731,9 @@ export function createCssHelperConditionalHandler(ctx: CssHelperConditionalConte
     // Handle direct TemplateLiteral body: (props) => `width: ${props.$width}px;`
     // Applies styles unconditionally - static styles merge into base, dynamic become style functions.
     if (body?.type === "TemplateLiteral") {
-      const resolved = resolveTemplateLiteralBranch({
-        j,
+      const resolved = resolveTemplateLiteralBranch(tplCtx, {
         node: body,
         paramName,
-        filePath,
-        parseExpr,
-        resolveValue,
-        resolveCall,
-        resolveImportInScope,
-        resolverImports,
-        componentInfo,
-        handlerContext,
       });
 
       if (!resolved) {
@@ -1151,18 +1128,9 @@ export function createCssHelperConditionalHandler(ctx: CssHelperConditionalConte
     // and the altIsEmpty case doesn't require invertWhen (which fails for compound conditions)
     if (consIsTpl && altIsEmpty) {
       dropAllTestInfoProps(testInfo);
-      const consResolved = resolveTemplateLiteralBranch({
-        j,
+      const consResolved = resolveTemplateLiteralBranch(tplCtx, {
         node: cons as any,
         paramName,
-        filePath,
-        parseExpr,
-        resolveValue,
-        resolveCall,
-        resolveImportInScope,
-        resolverImports,
-        componentInfo,
-        handlerContext,
       });
       if (!consResolved) {
         return false;
@@ -1181,31 +1149,13 @@ export function createCssHelperConditionalHandler(ctx: CssHelperConditionalConte
 
     if (consIsTpl && altIsTpl) {
       dropAllTestInfoProps(testInfo);
-      const consResolved = resolveTemplateLiteralBranch({
-        j,
+      const consResolved = resolveTemplateLiteralBranch(tplCtx, {
         node: cons as any,
         paramName,
-        filePath,
-        parseExpr,
-        resolveValue,
-        resolveCall,
-        resolveImportInScope,
-        resolverImports,
-        componentInfo,
-        handlerContext,
       });
-      const altResolved = resolveTemplateLiteralBranch({
-        j,
+      const altResolved = resolveTemplateLiteralBranch(tplCtx, {
         node: alt as any,
         paramName,
-        filePath,
-        parseExpr,
-        resolveValue,
-        resolveCall,
-        resolveImportInScope,
-        resolverImports,
-        componentInfo,
-        handlerContext,
       });
       if (!consResolved || !altResolved) {
         return false;
@@ -1237,18 +1187,9 @@ export function createCssHelperConditionalHandler(ctx: CssHelperConditionalConte
 
     if (consIsEmpty && altIsTpl) {
       dropAllTestInfoProps(testInfo);
-      const altResolved = resolveTemplateLiteralBranch({
-        j,
+      const altResolved = resolveTemplateLiteralBranch(tplCtx, {
         node: alt as any,
         paramName,
-        filePath,
-        parseExpr,
-        resolveValue,
-        resolveCall,
-        resolveImportInScope,
-        resolverImports,
-        componentInfo,
-        handlerContext,
       });
       if (!altResolved) {
         return false;
@@ -1486,23 +1427,24 @@ function tryResolveBlockLevelThemeConditional(args: BlockThemeConditionalArgs): 
   const consIsEmpty = isEmptyCssBranch(cons);
   const altIsEmpty = isEmptyCssBranch(alt);
 
+  const tplCtx: TemplateLiteralContext = {
+    j,
+    filePath,
+    parseExpr,
+    resolveValue,
+    resolveCall,
+    resolveImportInScope,
+    resolverImports,
+    componentInfo: componentInfo as TemplateLiteralContext["componentInfo"],
+    handlerContext,
+  };
+
   const resolveTemplateNode = (
     tplNode: import("jscodeshift").TemplateLiteral,
   ): Record<string, unknown> | null => {
-    const resolved = resolveTemplateLiteralBranch({
-      j,
+    const resolved = resolveTemplateLiteralBranch(tplCtx, {
       node: tplNode,
       paramName,
-      filePath,
-      parseExpr,
-      resolveValue,
-      resolveCall,
-      resolveImportInScope,
-      resolverImports,
-      componentInfo: componentInfo as Parameters<
-        typeof resolveTemplateLiteralBranch
-      >[0]["componentInfo"],
-      handlerContext,
     });
     if (!resolved) {
       return null;

@@ -2,12 +2,7 @@
  * CSS helper-specific handlers extracted from lower-rules.
  * Core concepts: css`` helper parsing and variant/test handling.
  */
-import type { JSCodeshift } from "jscodeshift";
-
-import type { Adapter, ImportSpec, ImportSource } from "../../adapter.js";
-import type { WarningLog } from "../logger.js";
 import type { StyledDecl } from "../transform-types.js";
-import type { CssHelperFunction } from "../transform/css-helpers.js";
 import { cssDeclarationToStylexDeclarations } from "../css-prop-mapping.js";
 import {
   getArrowFnParamBindings,
@@ -17,45 +12,40 @@ import { createPropTestHelpers, invertWhen } from "./variant-utils.js";
 import { ensureShouldForwardPropDrop } from "./types.js";
 import { mergeStyleObjects } from "./utils.js";
 import type { InternalHandlerContext } from "../builtin-handlers.js";
-import type { ExpressionKind, TestInfo } from "./decl-types.js";
+import type { TestInfo } from "./decl-types.js";
 import { parseSwitchReturningCssTemplates } from "./switch-variants.js";
-import { resolveTemplateLiteralValue } from "./template-literals.js";
-import type { ConditionalVariant } from "./css-helper.js";
+import {
+  resolveTemplateLiteralValue,
+  type ComponentInfo,
+  type TemplateLiteralContext,
+} from "./template-literals.js";
 import { cssValueToJs, toSuffixFromProp } from "../transform/helpers.js";
+import type { LowerRulesState } from "./state.js";
 
-type ImportMeta = { importedName: string; source: ImportSource };
-
-type ResolveImportInScope = (localName: string, identNode?: unknown) => ImportMeta | null;
-
-type CssHelperHandlersContext = {
-  j: JSCodeshift;
-  filePath: string;
+type CssHelperHandlersContext = Pick<
+  LowerRulesState,
+  | "j"
+  | "filePath"
+  | "warnings"
+  | "parseExpr"
+  | "resolveValue"
+  | "resolveCall"
+  | "resolveImportInScope"
+  | "resolverImports"
+  | "isCssHelperTaggedTemplate"
+  | "resolveCssHelperTemplate"
+  | "cssHelperFunctions"
+  | "usedCssHelperFunctions"
+  | "markBail"
+> & {
   decl: StyledDecl;
-  warnings: WarningLog[];
   styleObj: Record<string, unknown>;
   variantBuckets: Map<string, Record<string, unknown>>;
   variantStyleKeys: Record<string, string>;
-  cssHelperFunctions: Map<string, CssHelperFunction>;
-  usedCssHelperFunctions: Set<string>;
-  parseExpr: (exprSource: string) => ExpressionKind | null;
-  resolveCall: Adapter["resolveCall"];
-  resolveImportInScope: ResolveImportInScope;
-  resolverImports: Map<string, ImportSpec>;
-  isCssHelperTaggedTemplate: (expr: any) => expr is { quasi: any };
-  resolveCssHelperTemplate: (
-    template: any,
-    paramName: string | null,
-    loc: { line: number; column: number } | null | undefined,
-  ) => {
-    style: Record<string, unknown>;
-    dynamicProps: Array<{ jsxProp: string; stylexProp: string }>;
-    conditionalVariants: ConditionalVariant[];
-  } | null;
   applyVariant: (testInfo: TestInfo, consStyle: Record<string, unknown>) => void;
   dropAllTestInfoProps: (testInfo: TestInfo) => void;
-  componentInfo: any;
+  componentInfo: ComponentInfo;
   handlerContext: InternalHandlerContext;
-  markBail: () => void;
 };
 
 export const createCssHelperHandlers = (ctx: CssHelperHandlersContext) => {
@@ -70,6 +60,7 @@ export const createCssHelperHandlers = (ctx: CssHelperHandlersContext) => {
     cssHelperFunctions,
     usedCssHelperFunctions,
     parseExpr,
+    resolveValue,
     resolveCall,
     resolveImportInScope,
     resolverImports,
@@ -81,6 +72,18 @@ export const createCssHelperHandlers = (ctx: CssHelperHandlersContext) => {
     handlerContext,
     markBail,
   } = ctx;
+
+  const tplCtx: TemplateLiteralContext = {
+    j,
+    filePath,
+    parseExpr,
+    resolveValue,
+    resolveCall,
+    resolveImportInScope,
+    resolverImports,
+    componentInfo,
+    handlerContext,
+  };
 
   // Handle property-level ternary with template literal branches containing helper calls:
   //   background: ${(props) => props.$faded
@@ -127,29 +130,13 @@ export const createCssHelperHandlers = (ctx: CssHelperHandlersContext) => {
       return false;
     }
 
-    const consValue = resolveTemplateLiteralValue({
-      j,
+    const consValue = resolveTemplateLiteralValue(tplCtx, {
       tpl: cons as any,
       property: d.property,
-      filePath,
-      parseExpr,
-      resolveCall,
-      resolveImportInScope,
-      resolverImports,
-      componentInfo,
-      handlerContext,
     });
-    const altValue = resolveTemplateLiteralValue({
-      j,
+    const altValue = resolveTemplateLiteralValue(tplCtx, {
       tpl: alt as any,
       property: d.property,
-      filePath,
-      parseExpr,
-      resolveCall,
-      resolveImportInScope,
-      resolverImports,
-      componentInfo,
-      handlerContext,
     });
 
     if (!consValue || !altValue) {
