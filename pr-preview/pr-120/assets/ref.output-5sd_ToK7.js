@@ -1,1 +1,0 @@
-import{r as s,j as e}from"./index-DwHm5w_i.js";const c=()=>{const t=s.useRef(null);return s.useEffect(()=>{t.current?.focus()},[]),e.jsx("input",{ref:t,placeholder:"Focus me on mount!",className:"ref__styles.input xon2cxt x1sscd6g x12xhozv xd10qfp xc342km xng3xce x18zih8k","data-style-src":"styled-components-to-stylex-codemod:test-cases/ref.output.tsx:15"})};export{c as App};

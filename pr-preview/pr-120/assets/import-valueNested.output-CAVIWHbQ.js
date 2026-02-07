@@ -1,1 +1,0 @@
-import{j as t}from"./index-DwHm5w_i.js";function s(){return t.jsx("div",{className:"import-valueNested__styles.card x4y1yjg xjwt9iq x12peec7 xur7f20","data-style-src":"styled-components-to-stylex-codemod:test-cases/import-valueNested.output.tsx:10"})}export{s as App};

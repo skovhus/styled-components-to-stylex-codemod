@@ -1,1 +1,0 @@
-import{j as s}from"./index-DwHm5w_i.js";import{w as t}from"./helpers-DJ7I6cbn.js";const e=o=>s.jsx("div",{...o}),n=t(e),c=()=>s.jsx(n,{className:"basic-callExpression__styles.wrappedStyled x1e2nbdu","data-style-src":"styled-components-to-stylex-codemod:test-cases/basic-callExpression.output.tsx:16",children:"Hello"});export{c as App};

@@ -1,1 +1,0 @@
-import{j as e}from"./index-DwHm5w_i.js";const t=()=>e.jsx("div",{className:"mediaQuery-helper__styles.container xh8yej3 x1uz70x1 xfcx1n5 x1i7j8g4","data-style-src":"styled-components-to-stylex-codemod:test-cases/mediaQuery-helper.output.tsx:15",children:"Responsive container"});export{t as App};

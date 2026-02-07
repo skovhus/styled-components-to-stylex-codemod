@@ -1,0 +1,1 @@
+import{j as x,n}from"./index-JQ2tgM-p.js";function a(s){const{children:t}=s,e=n();return x.jsx("div",{...{0:{className:"xpyat2d x1exxlbk xyc6gmr"},1:{className:"xpyat2d x1exxlbk xhxy2q7"}}[!!e.isDark<<0],children:t})}const r=()=>x.jsx(a,{});export{r as App};

@@ -1,1 +1,0 @@
-import{j as e}from"./index-DwHm5w_i.js";function s(o){const{children:t}=o;return e.jsx("div",{className:"theme-helperBorderByColor__styles.borderBottom xso031l x1q0q8m5 x1f3p4rf","data-style-src":"styled-components-to-stylex-codemod:test-cases/theme-helperBorderByColor.output.tsx:14",children:t})}const l=()=>e.jsx(s,{});export{l as App};

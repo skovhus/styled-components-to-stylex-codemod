@@ -1,1 +1,0 @@
-import{j as s,n as c}from"./index-DwHm5w_i.js";function n(t){const{children:e}=t,o=c();return s.jsx("div",{...{0:{className:"useTheme-cssBlock__styles.boxLight xhxy2q7","data-style-src":"styled-components-to-stylex-codemod:test-cases/useTheme-cssBlock.output.tsx:16"},1:{}}[!!o.isDark<<0],children:e})}const m=()=>s.jsx(n,{});export{m as App};

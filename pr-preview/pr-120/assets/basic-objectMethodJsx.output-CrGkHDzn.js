@@ -1,1 +1,0 @@
-import{j as t}from"./index-DwHm5w_i.js";const e={render(){return t.jsx("button",{className:"basic-objectMethodJsx__styles.styledButton xxb0df0 xe8ttls","data-style-src":"styled-components-to-stylex-codemod:test-cases/basic-objectMethodJsx.output.tsx:17",children:"Click me"})}},o=()=>e.render();export{o as App};

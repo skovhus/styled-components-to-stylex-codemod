@@ -1,1 +1,0 @@
-import{j as s}from"./index-DwHm5w_i.js";const e=()=>s.jsx("div",{className:"mixin-basic__styles.hiddenOnMobile x137v6ai mixin-basic__styles.elementWithMixin x1e2nbdu","data-style-src":"styled-components-to-stylex-codemod:test-cases/mixin-basic.output.tsx:11; styled-components-to-stylex-codemod:test-cases/mixin-basic.output.tsx:8",children:"Red with mixin"});export{e as App};
