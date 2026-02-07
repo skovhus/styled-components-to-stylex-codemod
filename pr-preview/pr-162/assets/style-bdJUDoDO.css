@@ -45,12 +45,12 @@
   inherits: false
 }
 
-@property --x-zIndex {
+@property --x-maxWidth {
   syntax: "*";
   inherits: false
 }
 
-@property --x-maxWidth {
+@property --x-zIndex {
   syntax: "*";
   inherits: false
 }
@@ -90,12 +90,12 @@
   inherits: false
 }
 
-@property --x-color {
+@property --x-strokeWidth {
   syntax: "*";
   inherits: false
 }
 
-@property --x-strokeWidth {
+@property --x-color {
   syntax: "*";
   inherits: false
 }
@@ -441,7 +441,7 @@
   border-color: #4f74bf;
 }
 
-.xwoz533:not(#\#):not(#\#), .xqn3u4i:not(#\#):not(#\#) {
+.xwoz533:not(#\#):not(#\#) {
   border-color: #bf4f74;
 }
 
@@ -785,7 +785,7 @@
   border-color: #bf4f74;
 }
 
-.xxs78ni:focus:not(:disabled):not(#\#):not(#\#), .x1tybo5q:focus-visible:not(#\#):not(#\#) {
+.xxs78ni:focus:not(:disabled):not(#\#):not(#\#), .x10bewyo:focus-visible:not(#\#):not(#\#) {
   outline: 2px solid #4f74bf;
 }
 
@@ -797,7 +797,7 @@
   border-style: dashed;
 }
 
-.xobfa5r:hover:not(#\#):not(#\#) {
+.x1ynldxa:hover:not(#\#):not(#\#) {
   border-color: #bf4f74;
 }
 
@@ -817,7 +817,7 @@
   text-decoration: underline;
 }
 
-.x1s835y7:focus:not(#\#):not(#\#) {
+.xlc16io:focus:not(#\#):not(#\#), .x1s835y7:focus:not(#\#):not(#\#) {
   border-color: #bf4f74;
 }
 
@@ -837,7 +837,7 @@
   text-decoration: underline;
 }
 
-.xrow9iw:active:not(#\#):not(#\#) {
+.x1cpntj8:active:not(#\#):not(#\#) {
   outline: 2px solid #4f74bf;
 }
 
@@ -1011,11 +1011,11 @@
   appearance: none;
 }
 
-.x9oods1:not(#\#):not(#\#):not(#\#) {
+.xubpbjk:not(#\#):not(#\#):not(#\#), .x9oods1:not(#\#):not(#\#):not(#\#) {
   background-color: #4f74bf;
 }
 
-.x1awmxk9:not(#\#):not(#\#):not(#\#) {
+.xju9k8e:not(#\#):not(#\#):not(#\#) {
   background-color: #bf4f74 !important;
 }
 
@@ -1267,7 +1267,7 @@
   color: #333;
 }
 
-.x1o2o4gj:not(#\#):not(#\#):not(#\#) {
+.xemmkqz:not(#\#):not(#\#):not(#\#) {
   color: #4caf50;
 }
 
@@ -1287,7 +1287,7 @@
   color: #bf4f74;
 }
 
-.x1b03aax:not(#\#):not(#\#):not(#\#) {
+.xcoj9df:not(#\#):not(#\#):not(#\#) {
   color: #f44336;
 }
 
@@ -1826,7 +1826,7 @@
   background-color: #fafafa;
 }
 
-.x16n9v7h:hover:not(#\#):not(#\#):not(#\#) {
+.x1vvhah5:hover:not(#\#):not(#\#):not(#\#) {
   background-color: #bf4f74;
 }
 
@@ -1854,11 +1854,11 @@
   background-color: var(--xufgxy3);
 }
 
-.xql3yvz:hover:not(#\#):not(#\#):not(#\#) {
+.x103215m:hover:not(#\#):not(#\#):not(#\#) {
   color: #4f74bf !important;
 }
 
-.x6vqb8s:hover:not(#\#):not(#\#):not(#\#) {
+.xwfr5fa:hover:not(#\#):not(#\#):not(#\#), .x6vqb8s:hover:not(#\#):not(#\#):not(#\#) {
   color: #bf4f74;
 }
 
@@ -1886,11 +1886,11 @@
   color: #fff;
 }
 
-.xvswd9h:focus:not(#\#):not(#\#):not(#\#) {
+.x1dbka2q:focus:not(#\#):not(#\#):not(#\#) {
   background-color: #bf4f74;
 }
 
-.xokd38v:focus:not(#\#):not(#\#):not(#\#) {
+.x1m6x0ql:focus:not(#\#):not(#\#):not(#\#) {
   color: #bf4f74;
 }
 
@@ -1898,7 +1898,7 @@
   color: #fff;
 }
 
-.xt1kuei:active:not(#\#):not(#\#):not(#\#) {
+.x1uvnybj:active:not(#\#):not(#\#):not(#\#) {
   color: #bf4f74;
 }
 
