@@ -760,12 +760,6 @@ export function handleInterpolatedDeclaration(args: InterpolatedDeclarationConte
         resolverImports.set(JSON.stringify(imp), imp);
       }
 
-      // Map CSS prop to StyleX prop
-      const stylexProp = cssPropertyToStylexProp(res.cssProp);
-
-      // Set the resolved value as the base style
-      styleObj[stylexProp] = res.resolvedValue;
-
       // Ensure useTheme() is imported and called by adding a needsUseThemeHook entry
       // with both keys null (no style buckets needed — only the import/declaration)
       if (!decl.needsUseThemeHook) {
@@ -782,7 +776,6 @@ export function handleInterpolatedDeclaration(args: InterpolatedDeclarationConte
       // Build the conditional inline style expression:
       //   theme.<prop> ? <inlineExpr> : undefined   (when resolved branch is false)
       //   theme.<prop> ? undefined : <inlineExpr>   (when resolved branch is true)
-      //   !theme.<prop> ? <inlineExpr> : undefined  (when negated + resolved branch is true)
       // Simplified: use the theme condition to pick the inline expr or undefined
       const themeCondition = j.memberExpression(j.identifier("theme"), j.identifier(res.themeProp));
       const undefinedExpr = j.identifier("undefined") as ExpressionKind;
@@ -797,7 +790,15 @@ export function handleInterpolatedDeclaration(args: InterpolatedDeclarationConte
         ? j.conditionalExpression(themeCondition, inlineExpr, undefinedExpr)
         : j.conditionalExpression(themeCondition, undefinedExpr, inlineExpr);
 
-      inlineStyleProps.push({ prop: stylexProp, expr: conditionalExpr });
+      // Expand shorthand CSS properties (e.g., padding → paddingBlock/paddingInline)
+      // using the CSS declaration IR, consistent with other handlers.
+      for (const out of cssDeclarationToStylexDeclarations(d)) {
+        if (!out.prop) {
+          continue;
+        }
+        styleObj[out.prop] = res.resolvedValue;
+        inlineStyleProps.push({ prop: out.prop, expr: conditionalExpr });
+      }
 
       decl.needsWrapperComponent = true;
       continue;
