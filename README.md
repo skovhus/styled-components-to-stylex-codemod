@@ -265,8 +265,8 @@ If the pipeline can’t resolve an interpolation:
 ### Limitations
 
 - **Flow** type generation is non-existing, works best with TypeScript or plain JS right now. Contributions more than welcome!
-- **ThemeProvider**: if a file imports and uses `ThemeProvider` from `styled-components`, the transform **skips the entire file** (theming strategy is project-specific).
 - **createGlobalStyle**: detected usage is reported as an **unsupported-feature** warning (StyleX does not support global styles in the same way).
+- **Theme prop overrides**: passing a `theme` prop directly to styled components (e.g. `<Button theme={...} />`) is not supported and will bail with a warning.
 
 ## License
 

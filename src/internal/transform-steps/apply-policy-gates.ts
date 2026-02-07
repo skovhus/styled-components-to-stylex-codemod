@@ -1,13 +1,8 @@
 /**
  * Step: apply policy-based skip gates and warnings.
- * Core concepts: ThemeProvider detection and createGlobalStyle handling.
+ * Core concepts: createGlobalStyle handling.
  */
-import {
-  collectCreateGlobalStyleWarnings,
-  collectThemeProviderSkipWarnings,
-  shouldSkipForCreateGlobalStyle,
-  shouldSkipForThemeProvider,
-} from "../policy.js";
+import { collectCreateGlobalStyleWarnings, shouldSkipForCreateGlobalStyle } from "../policy.js";
 import { CONTINUE, returnResult, type StepResult } from "../transform-types.js";
 import { TransformContext } from "../transform-context.js";
 
@@ -15,20 +10,9 @@ import { TransformContext } from "../transform-context.js";
  * Applies skip policies and emits warnings for unsupported styled-components features.
  */
 export function applyPolicyGates(ctx: TransformContext): StepResult {
-  const { root, j, styledImports, warnings } = ctx;
+  const { j, styledImports, warnings } = ctx;
   if (!styledImports) {
     return CONTINUE;
-  }
-
-  // Policy: ThemeProvider usage is project-specific. If the file uses ThemeProvider, skip entirely.
-  if (shouldSkipForThemeProvider({ root, j, styledImports })) {
-    return returnResult(
-      {
-        code: null,
-        warnings: collectThemeProviderSkipWarnings({ root, j, styledImports }),
-      },
-      "skip",
-    );
   }
 
   // Policy: createGlobalStyle is unsupported in StyleX; emit a warning when imported.

@@ -166,6 +166,8 @@ export function detectUnsupportedPatternsStep(ctx: TransformContext): StepResult
     return false;
   };
 
+  const styledComponentNames = collectStyledComponentNames();
+
   // Detect patterns that aren't directly representable in StyleX (or require semantic rewrites).
   // These warnings are used for per-fixture expectations and help guide manual follow-ups.
   let hasComponentSelector = false;
@@ -174,6 +176,7 @@ export function detectUnsupportedPatternsStep(ctx: TransformContext): StepResult
   let specificityHackLoc: { line: number; column: number } | null = null;
   let hocStyledFactoryLoc: { line: number; column: number } | null = null;
   let staticStyledPropertyLoc: { line: number; column: number } | null = null;
+  let themePropOverrideLoc: { line: number; column: number } | null = null;
 
   root.find(j.TemplateLiteral).forEach((p) => {
     const tl = p.node;
@@ -272,7 +275,6 @@ export function detectUnsupportedPatternsStep(ctx: TransformContext): StepResult
   });
 
   if (!staticStyledPropertyLoc && styledLocalNames && styledLocalNames.size > 0) {
-    const styledComponentNames = collectStyledComponentNames();
     if (styledComponentNames.size > 0) {
       root.find(j.TaggedTemplateExpression).forEach((p) => {
         if (staticStyledPropertyLoc) {
@@ -306,7 +308,6 @@ export function detectUnsupportedPatternsStep(ctx: TransformContext): StepResult
   }
 
   if (!staticStyledPropertyLoc && styledLocalNames && styledLocalNames.size > 0) {
-    const styledComponentNames = collectStyledComponentNames();
     if (styledComponentNames.size > 0) {
       root.find(j.JSXMemberExpression).forEach((p) => {
         if (staticStyledPropertyLoc) {
@@ -325,6 +326,76 @@ export function detectUnsupportedPatternsStep(ctx: TransformContext): StepResult
         }
       });
     }
+  }
+
+  if (!themePropOverrideLoc && styledComponentNames.size > 0) {
+    const getThemeAttrLoc = (attrs: any[] | null | undefined) => {
+      for (const attr of attrs ?? []) {
+        if (
+          attr?.type === "JSXAttribute" &&
+          attr.name?.type === "JSXIdentifier" &&
+          attr.name.name === "theme"
+        ) {
+          const loc = attr.loc?.start;
+          if (loc?.line !== undefined) {
+            return { line: loc.line, column: loc.column ?? 0 };
+          }
+          return null;
+        }
+      }
+      return null;
+    };
+
+    root
+      .find(j.JSXElement, {
+        openingElement: { name: { type: "JSXIdentifier" } },
+      } as any)
+      .forEach((p: any) => {
+        if (themePropOverrideLoc) {
+          return;
+        }
+        const opening = p.node.openingElement;
+        const name = opening?.name;
+        if (name?.type !== "JSXIdentifier") {
+          return;
+        }
+        if (!styledComponentNames.has(name.name)) {
+          return;
+        }
+        const loc = getThemeAttrLoc(opening.attributes ?? []);
+        if (loc) {
+          themePropOverrideLoc = loc;
+        }
+      });
+
+    root
+      .find(j.JSXSelfClosingElement, { name: { type: "JSXIdentifier" } } as any)
+      .forEach((p: any) => {
+        if (themePropOverrideLoc) {
+          return;
+        }
+        const node = p.node;
+        const name = node?.name;
+        if (name?.type !== "JSXIdentifier") {
+          return;
+        }
+        if (!styledComponentNames.has(name.name)) {
+          return;
+        }
+        const loc = getThemeAttrLoc(node.attributes ?? []);
+        if (loc) {
+          themePropOverrideLoc = loc;
+        }
+      });
+  }
+
+  if (themePropOverrideLoc) {
+    warnings.push({
+      severity: "warning",
+      type: "Theme prop overrides on styled components are not supported",
+      loc: themePropOverrideLoc,
+    });
+    return returnResult({ code: null, warnings }, "bail");
   }
 
   if (hasComponentSelector) {

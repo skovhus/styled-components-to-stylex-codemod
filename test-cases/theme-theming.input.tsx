@@ -1,13 +1,15 @@
-// @expected-warning: ThemeProvider conversion needs to be handled manually
 import styled, { ThemeProvider } from "styled-components";
 
 const Button = styled.button`
-  font-size: 1em;
-  margin: 1em;
-  padding: 0.25em 1em;
-  border-radius: 3px;
+  font-size: 14px;
+  margin: 0;
+  padding: 8px 16px;
+  border-radius: 6px;
+  background-color: white;
   color: ${(props) => props.theme.main};
-  border: 2px solid ${(props) => props.theme.main};
+  border-width: 2px;
+  border-style: solid;
+  border-color: ${(props) => props.theme.main};
 `;
 
 Button.defaultProps = {
@@ -21,7 +23,7 @@ const theme = {
 };
 
 export const App = () => (
-  <div>
+  <div style={{ display: "flex", gap: "12px", padding: "12px" }}>
     <Button>Normal</Button>
     <ThemeProvider theme={theme}>
       <Button>Themed</Button>
