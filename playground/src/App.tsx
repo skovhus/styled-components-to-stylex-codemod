@@ -139,7 +139,12 @@ function App() {
               />
             </svg>
           </a>
-          <h1 style={styles.title}>skovhus/styled-components-to-stylex-codemod</h1>
+          <h1 style={styles.title}>
+            skovhus/styled-components-to-stylex-codemod
+            {import.meta.env.VITE_PR_NUMBER && (
+              <span style={styles.prBadge}>#{import.meta.env.VITE_PR_NUMBER}</span>
+            )}
+          </h1>
           <select value={selectedTestCase} onChange={handleTestCaseChange} style={styles.select}>
             {testCases.map((t) => (
               <option key={t.name} value={t.name}>
@@ -314,6 +319,12 @@ const styles: Record<string, React.CSSProperties> = {
     fontSize: "18px",
     fontWeight: 600,
     color: "#333",
+  },
+  prBadge: {
+    marginLeft: "6px",
+    fontSize: "14px",
+    fontWeight: 500,
+    color: "#0969da",
   },
   select: {
     padding: "6px 12px",

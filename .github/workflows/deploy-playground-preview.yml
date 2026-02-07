@@ -34,6 +34,8 @@ jobs:
       - name: Build playground
         if: github.event.action != 'closed'
         run: pnpm build:playground -- --base /styled-components-to-stylex-codemod/pr-preview/pr-${{ github.event.pull_request.number }}/
+        env:
+          VITE_PR_NUMBER: ${{ github.event.pull_request.number }}
 
       - name: Deploy preview
         uses: rossjrw/pr-preview-action@v1
