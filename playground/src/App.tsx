@@ -1,27 +1,88 @@
 // oxlint-disable no-console
-import { useState, useEffect, useCallback, useRef } from "react";
+import { useState, useEffect, useCallback, useRef, Component } from "react";
 import CodeMirror from "@uiw/react-codemirror";
 import { javascript } from "@codemirror/lang-javascript";
-import { testCases } from "./lib/test-cases";
+import Select, { type SingleValue, type StylesConfig } from "react-select";
+import { ThemeProvider } from "styled-components";
+import { loadTestCaseModule, testCases } from "./lib/test-cases";
 import { runTransform, type WarningLog } from "./lib/browser-transform";
 import { DEFAULT_ADAPTER_CODE } from "./lib/default-adapter";
 import { evalAdapter } from "./lib/eval-adapter";
 import type { Adapter } from "../../src/adapter";
 import { fixtureAdapter } from "../../src/__tests__/fixture-adapters";
+import { testCaseTheme } from "../../test-cases/tokens.stylex";
 
-const jsxExtension = javascript({ jsx: true, typescript: true });
-
-function App() {
-  const [selectedTestCase, setSelectedTestCase] = useState(testCases[0]?.name ?? "");
-  const [input, setInput] = useState(testCases[0]?.content ?? "");
+export default function App() {
+  const [initialState] = useState<InitialPlaygroundState>(() =>
+    readInitialPlaygroundStateFromUrl(),
+  );
+  const [selectedTestCase, setSelectedTestCase] = useState(initialState.selectedTestCase);
+  const [input, setInput] = useState(initialState.input);
   const [adapterCode, setAdapterCode] = useState(DEFAULT_ADAPTER_CODE);
-  const [showConfig, setShowConfig] = useState(false);
+  const [showConfig, setShowConfig] = useState(initialState.showConfig);
+  const [showRendering, setShowRendering] = useState(initialState.showRendering);
+  const [hideCode] = useState(initialState.hideCode);
+  const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   const [output, setOutput] = useState("");
   const [warnings, setWarnings] = useState<WarningLog[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [adapterError, setAdapterError] = useState<string | null>(null);
   const lastValidAdapterRef = useRef<Adapter>(fixtureAdapter);
+  const settingsMenuRef = useRef<HTMLDivElement | null>(null);
   const isUsingDefaultAdapter = adapterCode === DEFAULT_ADAPTER_CODE;
+  const [renderState, setRenderState] = useState<RenderState>(initialRenderState);
+  const shouldShowRendering = showRendering || hideCode;
+
+  const selectTestCaseByName = useCallback((name: string) => {
+    setSelectedTestCase(name);
+    const testCase = testCases.find((t) => t.name === name);
+    if (testCase) {
+      setInput(testCase.content);
+    }
+  }, []);
+
+  useEffect(() => {
+    if (hideCode) {
+      setShowRendering(true);
+    }
+  }, [hideCode]);
+
+  useEffect(() => {
+    if (!isSettingsOpen) {
+      return;
+    }
+
+    const handlePointerDown = (event: PointerEvent) => {
+      const host = settingsMenuRef.current;
+      if (!host) {
+        return;
+      }
+      const target = event.target;
+      if (!(target instanceof Node)) {
+        return;
+      }
+      if (!host.contains(target)) {
+        setIsSettingsOpen(false);
+      }
+    };
+
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") {
+        setIsSettingsOpen(false);
+      }
+    };
+
+    window.addEventListener("pointerdown", handlePointerDown);
+    window.addEventListener("keydown", handleKeyDown);
+    return () => {
+      window.removeEventListener("pointerdown", handlePointerDown);
+      window.removeEventListener("keydown", handleKeyDown);
+    };
+  }, [isSettingsOpen]);
+
+  useEffect(() => {
+    updatePlaygroundUrlSearchParams({ selectedTestCase, showRendering, showConfig, hideCode });
+  }, [selectedTestCase, showRendering, showConfig, hideCode]);
 
   // Parse adapter whenever adapterCode changes
   useEffect(() => {
@@ -57,15 +118,61 @@ function App() {
     }
   }, [input, adapterError, adapterCode]);
 
-  // Handle test case selection
-  const handleTestCaseChange = useCallback((e: React.ChangeEvent<HTMLSelectElement>) => {
-    const name = e.target.value;
-    setSelectedTestCase(name);
-    const testCase = testCases.find((t) => t.name === name);
-    if (testCase) {
-      setInput(testCase.content);
+  useEffect(() => {
+    if (!shouldShowRendering || !selectedTestCase) {
+      setRenderState(initialRenderState);
+      return;
     }
-  }, []);
+
+    let cancelled = false;
+    setRenderState((prevState) => ({
+      ...prevState,
+      loading: true,
+      inputError: null,
+      outputError: null,
+    }));
+
+    const loadModules = async () => {
+      const [inputResult, outputResult] = await Promise.allSettled([
+        loadTestCaseModule(selectedTestCase, "input"),
+        loadTestCaseModule(selectedTestCase, "output"),
+      ]);
+
+      if (cancelled) {
+        return;
+      }
+
+      const inputModule = inputResult.status === "fulfilled" ? inputResult.value : null;
+      const outputModule = outputResult.status === "fulfilled" ? outputResult.value : null;
+
+      setRenderState({
+        input: inputModule?.App ?? null,
+        output: outputModule?.App ?? null,
+        inputError:
+          inputResult.status === "rejected" ? formatErrorMessage(inputResult.reason) : null,
+        outputError:
+          outputResult.status === "rejected" ? formatErrorMessage(outputResult.reason) : null,
+        loading: false,
+      });
+    };
+
+    void loadModules();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [shouldShowRendering, selectedTestCase]);
+
+  // Handle test case selection
+  const handleTestCaseChange = useCallback(
+    (value: SingleValue<TestCaseOption>) => {
+      if (!value) {
+        return;
+      }
+      selectTestCaseByName(value.value);
+    },
+    [selectTestCaseByName],
+  );
 
   // Navigate to previous test case
   const navigatePrev = useCallback(() => {
@@ -75,10 +182,9 @@ function App() {
       if (!prevTestCase) {
         return;
       }
-      setSelectedTestCase(prevTestCase.name);
-      setInput(prevTestCase.content);
+      selectTestCaseByName(prevTestCase.name);
     }
-  }, [selectedTestCase]);
+  }, [selectedTestCase, selectTestCaseByName]);
 
   // Navigate to next test case
   const navigateNext = useCallback(() => {
@@ -88,10 +194,9 @@ function App() {
       if (!nextTestCase) {
         return;
       }
-      setSelectedTestCase(nextTestCase.name);
-      setInput(nextTestCase.content);
+      selectTestCaseByName(nextTestCase.name);
     }
-  }, [selectedTestCase]);
+  }, [selectedTestCase, selectTestCaseByName]);
 
   // Handle J/K keyboard navigation
   useEffect(() => {
@@ -152,13 +257,18 @@ function App() {
               </a>
             )}
           </h1>
-          <select value={selectedTestCase} onChange={handleTestCaseChange} style={styles.select}>
-            {testCases.map((t) => (
-              <option key={t.name} value={t.name}>
-                {t.name}
-              </option>
-            ))}
-          </select>
+          <div style={styles.testCaseSelectHost}>
+            <Select<TestCaseOption, false>
+              inputId="test-case-select"
+              aria-label="Select test case"
+              isSearchable
+              isClearable={false}
+              options={testCaseOptions}
+              value={testCaseOptions.find((o) => o.value === selectedTestCase) ?? null}
+              onChange={handleTestCaseChange}
+              styles={testCaseSelectStyles}
+            />
+          </div>
           <div style={styles.navButtons}>
             <button
               onClick={navigatePrev}
@@ -184,9 +294,40 @@ function App() {
             </button>
           </div>
         </div>
-        <button onClick={() => setShowConfig(!showConfig)} style={styles.button}>
-          {showConfig ? "Hide" : "Show"} Configuration
-        </button>
+        <div style={styles.headerRight}>
+          <div style={styles.settingsHost} ref={settingsMenuRef}>
+            <button
+              onClick={() => setIsSettingsOpen((prev) => !prev)}
+              style={styles.button}
+              aria-haspopup="menu"
+              aria-expanded={isSettingsOpen}
+            >
+              Settings
+            </button>
+            {isSettingsOpen && (
+              <div style={styles.settingsMenu} role="menu" aria-label="Playground settings">
+                <label style={styles.settingsItem}>
+                  <input
+                    type="checkbox"
+                    checked={hideCode ? true : showRendering}
+                    disabled={hideCode}
+                    onChange={(event) => setShowRendering(event.target.checked)}
+                  />
+                  <span style={styles.settingsLabel}>Show rendering</span>
+                </label>
+
+                <label style={styles.settingsItem}>
+                  <input
+                    type="checkbox"
+                    checked={showConfig}
+                    onChange={(event) => setShowConfig(event.target.checked)}
+                  />
+                  <span style={styles.settingsLabel}>Show config</span>
+                </label>
+              </div>
+            )}
+          </div>
+        </div>
       </header>
 
       {/* Configuration Panel (collapsible) */}
@@ -205,74 +346,405 @@ function App() {
             onChange={setAdapterCode}
             height="180px"
             extensions={[jsxExtension]}
+            style={codeMirrorStyle}
             theme="light"
           />
         </div>
       )}
 
       {/* Main editors */}
-      <div style={styles.editorsContainer}>
-        <div style={styles.editorPane}>
-          <div style={styles.panelHeader}>Input (styled-components)</div>
-          <div style={styles.editorWrapper}>
-            <CodeMirror
-              value={input}
-              onChange={setInput}
-              height="100%"
-              extensions={[jsxExtension]}
-              theme="light"
+      {!hideCode && (
+        <div style={styles.editorsContainer}>
+          <div style={styles.editorPane}>
+            <div style={styles.panelHeader}>Input (styled-components)</div>
+            <div style={styles.editorWrapper}>
+              <CodeMirror
+                value={input}
+                onChange={setInput}
+                height="100%"
+                extensions={[jsxExtension]}
+                style={codeMirrorStyle}
+                theme="light"
+              />
+            </div>
+          </div>
+          <div style={styles.editorPane}>
+            <div style={styles.panelHeader}>Output (StyleX)</div>
+            <div style={styles.outputContainer}>
+              <div style={styles.editorWrapper}>
+                {error ? (
+                  <pre style={styles.error}>{error}</pre>
+                ) : (
+                  <CodeMirror
+                    value={output}
+                    readOnly
+                    height="100%"
+                    extensions={[jsxExtension]}
+                    style={codeMirrorStyle}
+                    theme="light"
+                  />
+                )}
+              </div>
+              <div style={styles.issueBar}>
+                <a
+                  href="https://github.com/skovhus/styled-components-to-stylex-codemod/issues/new"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  style={styles.issueLink}
+                >
+                  Suggest improvement
+                </a>
+              </div>
+              {(adapterError || warnings.length > 0) && (
+                <div style={styles.warningsPanel}>
+                  <div style={styles.warningsHeader}>
+                    Warnings ({warnings.length + (adapterError ? 1 : 0)})
+                  </div>
+                  <ul style={styles.warningsList}>
+                    {adapterError && (
+                      <li style={styles.warningItem}>
+                        <span style={styles.warningFeature}>adapter-config</span>
+                        <span style={styles.warningMessage}>{adapterError}</span>
+                      </li>
+                    )}
+                    {warnings.map((w, i) => (
+                      <li key={i} style={styles.warningItem}>
+                        <span style={styles.warningMessage}>{w.type}</span>
+                        {w.loc && <span style={styles.warningLoc}>line {w.loc.line}</span>}
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+      {shouldShowRendering && (
+        <div style={hideCode ? styles.renderPanelFullHeight : styles.renderPanel}>
+          <div style={styles.renderPanelHeader}>
+            <span>Rendered preview</span>
+            <span style={styles.renderPanelNote}>
+              Fixture components only (editor changes are not rendered)
+            </span>
+          </div>
+          <div style={styles.renderPanelBody}>
+            <PreviewPane
+              title="Input (styled-components)"
+              component={renderState.input}
+              error={renderState.inputError}
+              loading={renderState.loading}
+              emptyMessage={
+                selectedTestCase
+                  ? "No input fixture found for this test case."
+                  : "Select a test case."
+              }
+              resetKey={`${selectedTestCase}-input`}
+            />
+            <PreviewPane
+              title="Output (StyleX)"
+              component={renderState.output}
+              error={renderState.outputError}
+              loading={renderState.loading}
+              emptyMessage={
+                selectedTestCase
+                  ? "No output fixture found for this test case."
+                  : "Select a test case."
+              }
+              resetKey={`${selectedTestCase}-output`}
+              isLast
             />
           </div>
         </div>
-        <div style={styles.editorPane}>
-          <div style={styles.panelHeader}>Output (StyleX)</div>
-          <div style={styles.outputContainer}>
-            <div style={styles.editorWrapper}>
-              {error ? (
-                <pre style={styles.error}>{error}</pre>
-              ) : (
-                <CodeMirror
-                  value={output}
-                  readOnly
-                  height="100%"
-                  extensions={[jsxExtension]}
-                  theme="light"
-                />
-              )}
-            </div>
-            <div style={styles.issueBar}>
-              <a
-                href="https://github.com/skovhus/styled-components-to-stylex-codemod/issues/new"
-                target="_blank"
-                rel="noopener noreferrer"
-                style={styles.issueLink}
-              >
-                Suggest improvement
-              </a>
-            </div>
-            {(adapterError || warnings.length > 0) && (
-              <div style={styles.warningsPanel}>
-                <div style={styles.warningsHeader}>
-                  Warnings ({warnings.length + (adapterError ? 1 : 0)})
-                </div>
-                <ul style={styles.warningsList}>
-                  {adapterError && (
-                    <li style={styles.warningItem}>
-                      <span style={styles.warningFeature}>adapter-config</span>
-                      <span style={styles.warningMessage}>{adapterError}</span>
-                    </li>
-                  )}
-                  {warnings.map((w, i) => (
-                    <li key={i} style={styles.warningItem}>
-                      <span style={styles.warningMessage}>{w.type}</span>
-                      {w.loc && <span style={styles.warningLoc}>line {w.loc.line}</span>}
-                    </li>
-                  ))}
-                </ul>
-              </div>
+      )}
+    </div>
+  );
+}
+
+const jsxExtension = javascript({ jsx: true, typescript: true });
+
+type TestCaseOption = { value: string; label: string };
+
+const codeMirrorStyle: React.CSSProperties = {
+  fontSize: "12px",
+  fontFamily:
+    "ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, 'Liberation Mono', 'Courier New', monospace",
+  lineHeight: 1.5,
+};
+
+type RenderState = {
+  input: React.ComponentType<Record<string, never>> | null;
+  output: React.ComponentType<Record<string, never>> | null;
+  inputError: string | null;
+  outputError: string | null;
+  loading: boolean;
+};
+
+const initialRenderState: RenderState = {
+  input: null,
+  output: null,
+  inputError: null,
+  outputError: null,
+  loading: false,
+};
+
+const testCaseOptions: TestCaseOption[] = testCases.map((t) => ({ value: t.name, label: t.name }));
+
+const testCaseSelectStyles: StylesConfig<TestCaseOption, false> = {
+  container: (base) => ({ ...base, width: 320 }),
+  control: (base) => ({
+    ...base,
+    minHeight: 30,
+    height: 30,
+    borderRadius: 6,
+    borderColor: "#ccc",
+    boxShadow: "none",
+    fontSize: 13,
+  }),
+  valueContainer: (base) => ({ ...base, padding: "0 8px" }),
+  input: (base) => ({ ...base, margin: 0, padding: 0 }),
+  singleValue: (base) => ({ ...base, fontSize: 13 }),
+  placeholder: (base) => ({ ...base, fontSize: 13 }),
+  option: (base) => ({ ...base, fontSize: 13 }),
+  indicatorsContainer: (base) => ({ ...base, height: 30 }),
+  dropdownIndicator: (base) => ({ ...base, padding: "0 4px" }),
+  indicatorSeparator: () => ({ display: "none" }),
+  menu: (base) => ({ ...base, zIndex: 20 }),
+};
+
+type InitialPlaygroundState = {
+  selectedTestCase: string;
+  input: string;
+  showRendering: boolean;
+  showConfig: boolean;
+  hideCode: boolean;
+};
+
+const readInitialPlaygroundStateFromUrl = (): InitialPlaygroundState => {
+  const defaultTestCase = testCases[0] ?? null;
+  const defaultTestCaseName = defaultTestCase?.name ?? "";
+  const defaultInput = defaultTestCase?.content ?? "";
+
+  if (typeof window === "undefined") {
+    return {
+      selectedTestCase: defaultTestCaseName,
+      input: defaultInput,
+      showRendering: true,
+      showConfig: false,
+      hideCode: false,
+    };
+  }
+
+  const url = safeParseUrl(window.location.href);
+  if (!url) {
+    return {
+      selectedTestCase: defaultTestCaseName,
+      input: defaultInput,
+      showRendering: true,
+      showConfig: false,
+      hideCode: false,
+    };
+  }
+
+  const showRenderingInFullMode = parseShowRenderingInFullMode(url.searchParams);
+  const showConfigInFullMode =
+    url.searchParams.has("showConfig") || url.searchParams.get("config") === "1";
+
+  const hideCode = url.searchParams.has("hideCode") || url.searchParams.get("view") === "rendering";
+  const showRendering = hideCode ? true : showRenderingInFullMode;
+  const showConfig = showConfigInFullMode;
+
+  const requestedTestCase = url.searchParams.get("testCase");
+  const selectedTestCase = resolveTestCaseName(requestedTestCase) ?? defaultTestCaseName;
+  const input =
+    testCases.find((t) => t.name === selectedTestCase)?.content ??
+    testCases.find((t) => t.name === defaultTestCaseName)?.content ??
+    defaultInput;
+
+  return { selectedTestCase, input, showRendering, showConfig, hideCode };
+};
+
+const updatePlaygroundUrlSearchParams = ({
+  selectedTestCase,
+  showRendering,
+  showConfig,
+  hideCode,
+}: {
+  selectedTestCase: string;
+  showRendering: boolean;
+  showConfig: boolean;
+  hideCode: boolean;
+}) => {
+  if (typeof window === "undefined") {
+    return;
+  }
+
+  const url = safeParseUrl(window.location.href);
+  if (!url) {
+    return;
+  }
+
+  const defaultTestCaseName = testCases[0]?.name ?? "";
+  if (selectedTestCase && selectedTestCase !== defaultTestCaseName) {
+    url.searchParams.set("testCase", selectedTestCase);
+  } else {
+    url.searchParams.delete("testCase");
+  }
+
+  if (hideCode) {
+    url.searchParams.set("hideCode", "");
+  } else {
+    url.searchParams.delete("hideCode");
+  }
+
+  if (hideCode) {
+    url.searchParams.delete("showRendering");
+  } else if (showRendering) {
+    url.searchParams.delete("showRendering");
+  } else {
+    // Default is enabled. Only include param when explicitly disabled.
+    url.searchParams.set("showRendering", "0");
+  }
+
+  if (showConfig) {
+    url.searchParams.set("showConfig", "");
+  } else {
+    url.searchParams.delete("showConfig");
+  }
+
+  // Legacy cleanup (we only write the new params)
+  url.searchParams.delete("view");
+  url.searchParams.delete("render");
+  url.searchParams.delete("config");
+
+  window.history.replaceState(null, "", url.toString());
+};
+
+const parseShowRenderingInFullMode = (searchParams: URLSearchParams): boolean => {
+  // Default is enabled.
+  if (!searchParams.has("showRendering") && searchParams.get("render") !== "1") {
+    return true;
+  }
+
+  // Legacy: render=1 meant enabled.
+  if (searchParams.get("render") === "1") {
+    return true;
+  }
+
+  // `showRendering` is a tri-state param:
+  // - absent: default (enabled)
+  // - present with no value: enabled
+  // - showRendering=0|false: explicitly disabled
+  const raw = searchParams.get("showRendering");
+  if (!raw) {
+    return true;
+  }
+
+  const normalized = raw.trim().toLowerCase();
+  if (normalized === "0" || normalized === "false") {
+    return false;
+  }
+  return true;
+};
+
+const safeParseUrl = (href: string): URL | null => {
+  try {
+    return new URL(href);
+  } catch {
+    return null;
+  }
+};
+
+const resolveTestCaseName = (name: string | null): string | null => {
+  if (!name) {
+    return null;
+  }
+  const exists = testCases.some((t) => t.name === name);
+  return exists ? name : null;
+};
+
+const formatErrorMessage = (error: unknown): string =>
+  error instanceof Error ? error.message : String(error);
+
+type RenderErrorBoundaryProps = {
+  resetKey: string;
+  fallback: (error: Error) => React.ReactNode;
+  children: React.ReactNode;
+};
+
+type RenderErrorBoundaryState = {
+  error: Error | null;
+};
+
+class RenderErrorBoundary extends Component<RenderErrorBoundaryProps, RenderErrorBoundaryState> {
+  state: RenderErrorBoundaryState = { error: null };
+
+  static getDerivedStateFromError(error: Error): RenderErrorBoundaryState {
+    return { error };
+  }
+
+  componentDidUpdate(prevProps: RenderErrorBoundaryProps): void {
+    if (prevProps.resetKey !== this.props.resetKey && this.state.error) {
+      this.setState({ error: null });
+    }
+  }
+
+  componentDidCatch(error: Error, info: React.ErrorInfo): void {
+    console.error("Render preview error", error, info);
+  }
+
+  render(): React.ReactNode {
+    if (this.state.error) {
+      return this.props.fallback(this.state.error);
+    }
+    return this.props.children;
+  }
+}
+
+type PreviewPaneProps = {
+  title: string;
+  component: React.ComponentType<Record<string, never>> | null;
+  error: string | null;
+  loading: boolean;
+  emptyMessage: string;
+  resetKey: string;
+  isLast?: boolean;
+};
+
+function PreviewPane({
+  title,
+  component,
+  error,
+  loading,
+  emptyMessage,
+  resetKey,
+  isLast = false,
+}: PreviewPaneProps) {
+  const ComponentToRender = component;
+  const paneStyle = isLast ? { ...styles.renderPane, borderRight: "none" } : styles.renderPane;
+
+  return (
+    <div style={paneStyle}>
+      <div style={styles.renderPaneHeader}>{title}</div>
+      <div style={styles.renderPaneBody}>
+        {loading ? (
+          <div style={styles.renderPlaceholder}>Loading preview...</div>
+        ) : error ? (
+          <pre style={styles.renderError}>{error}</pre>
+        ) : ComponentToRender ? (
+          <RenderErrorBoundary
+            resetKey={resetKey}
+            fallback={(renderError) => (
+              <pre style={styles.renderError}>{formatErrorMessage(renderError)}</pre>
             )}
-          </div>
-        </div>
+          >
+            <ThemeProvider theme={testCaseTheme}>
+              <ComponentToRender />
+            </ThemeProvider>
+          </RenderErrorBoundary>
+        ) : (
+          <div style={styles.renderPlaceholder}>{emptyMessage}</div>
+        )}
       </div>
     </div>
   );
@@ -298,6 +770,47 @@ const styles: Record<string, React.CSSProperties> = {
     display: "flex",
     alignItems: "center",
     gap: "12px",
+  },
+  testCaseSelectHost: {
+    display: "flex",
+    alignItems: "center",
+  },
+  headerRight: {
+    display: "flex",
+    alignItems: "center",
+    gap: "8px",
+  },
+  settingsHost: {
+    position: "relative",
+    display: "flex",
+    alignItems: "center",
+  },
+  settingsMenu: {
+    position: "absolute",
+    top: "calc(100% + 8px)",
+    right: 0,
+    minWidth: "220px",
+    backgroundColor: "#fff",
+    border: "1px solid rgba(0,0,0,0.12)",
+    borderRadius: "8px",
+    boxShadow: "0 10px 30px rgba(0,0,0,0.10)",
+    padding: "10px 10px",
+    zIndex: 10,
+    display: "flex",
+    flexDirection: "column",
+    gap: "8px",
+  },
+  settingsItem: {
+    display: "flex",
+    alignItems: "center",
+    gap: "8px",
+    fontSize: "13px",
+    color: "#333",
+    userSelect: "none",
+    cursor: "pointer",
+  },
+  settingsLabel: {
+    fontWeight: 500,
   },
   issueBar: {
     display: "flex",
@@ -332,19 +845,6 @@ const styles: Record<string, React.CSSProperties> = {
     color: "#0969da",
     textDecoration: "none",
   },
-  select: {
-    padding: "6px 12px",
-    paddingRight: "24px",
-    fontSize: "14px",
-    borderRadius: "6px",
-    border: "1px solid #ccc",
-    backgroundColor: "white",
-    cursor: "pointer",
-    appearance: "none" as const,
-    backgroundImage: `url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12'%3E%3Cpath fill='%23333' d='M6 8L2 4h8L6 8z'/%3E%3C/svg%3E")`,
-    backgroundRepeat: "no-repeat",
-    backgroundPosition: "right 4px center",
-  },
   button: {
     padding: "8px 16px",
     fontSize: "14px",
@@ -369,13 +869,90 @@ const styles: Record<string, React.CSSProperties> = {
     cursor: "pointer",
     color: "#333",
   },
+  renderPanel: {
+    borderTop: "1px solid #e0e0e0",
+    backgroundColor: "#fff",
+    display: "flex",
+    flexDirection: "column",
+    height: "280px",
+  },
+  renderPanelFullHeight: {
+    borderTop: "1px solid #e0e0e0",
+    backgroundColor: "#fff",
+    display: "flex",
+    flexDirection: "column",
+    flex: 1,
+    minHeight: 0,
+  },
+  renderPanelHeader: {
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "space-between",
+    padding: "8px 12px",
+    fontSize: "11px",
+    fontWeight: 600,
+    color: "#666",
+    textTransform: "uppercase",
+    letterSpacing: "0.5px",
+    backgroundColor: "#f0f0f0",
+    borderBottom: "1px solid #e0e0e0",
+  },
+  renderPanelNote: {
+    fontSize: "11px",
+    fontWeight: 400,
+    color: "#888",
+    textTransform: "none",
+    letterSpacing: "normal",
+  },
+  renderPanelBody: {
+    display: "flex",
+    flex: 1,
+    minHeight: 0,
+    overflow: "hidden",
+  },
+  renderPane: {
+    flex: 1,
+    display: "flex",
+    flexDirection: "column",
+    borderRight: "1px solid #e0e0e0",
+    minWidth: 0,
+  },
+  renderPaneHeader: {
+    padding: "6px 12px",
+    fontSize: "11px",
+    fontWeight: 600,
+    color: "#666",
+    textTransform: "uppercase",
+    letterSpacing: "0.5px",
+    backgroundColor: "#fafafa",
+    borderBottom: "1px solid #e0e0e0",
+  },
+  renderPaneBody: {
+    flex: 1,
+    padding: "12px",
+    overflow: "auto",
+    backgroundColor: "#fafafa",
+  },
+  renderPlaceholder: {
+    fontSize: "11px",
+    color: "#888",
+  },
+  renderError: {
+    color: "#c00",
+    padding: 0,
+    margin: 0,
+    fontFamily: "monospace",
+    fontSize: "12px",
+    whiteSpace: "pre-wrap",
+    wordBreak: "break-word",
+  },
   configPanel: {
     borderBottom: "1px solid #e0e0e0",
     backgroundColor: "#fafafa",
   },
   panelHeader: {
     padding: "8px 12px",
-    fontSize: "12px",
+    fontSize: "11px",
     fontWeight: 600,
     color: "#666",
     textTransform: "uppercase",
@@ -407,7 +984,7 @@ const styles: Record<string, React.CSSProperties> = {
     minHeight: 0,
   },
   adapterStatus: {
-    fontSize: "12px",
+    fontSize: "11px",
     color: "#666",
     margin: "8px 12px",
   },
@@ -416,7 +993,7 @@ const styles: Record<string, React.CSSProperties> = {
     padding: "16px",
     margin: 0,
     fontFamily: "monospace",
-    fontSize: "13px",
+    fontSize: "12px",
     whiteSpace: "pre-wrap",
     wordBreak: "break-word",
   },
@@ -448,7 +1025,7 @@ const styles: Record<string, React.CSSProperties> = {
     gap: "8px",
     alignItems: "baseline",
     padding: "4px 0",
-    fontSize: "12px",
+    fontSize: "11px",
     borderBottom: "1px solid #fde68a",
   },
   warningFeature: {
@@ -466,5 +1043,3 @@ const styles: Record<string, React.CSSProperties> = {
     fontSize: "11px",
   },
 };
-
-export default App;

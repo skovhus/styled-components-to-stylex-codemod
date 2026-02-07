@@ -93,8 +93,11 @@ const inputModules = import.meta.glob<{ App: React.ComponentType }>(
     "./*.input.tsx",
     "./*.input.jsx",
     "./*.flow.input.jsx",
-    "!./_unsupported.*.tsx",
-    "!./unsupported-*.tsx",
+    // NOTE: be explicit about the full suffixes here. Vite's glob negations
+    // can be finicky with multi-dot filenames like `_unsupported.foo.input.tsx`.
+    "!./_unsupported.*.input.tsx",
+    "!./_unsupported.*.input.jsx",
+    "!./_unsupported.*.flow.input.jsx",
   ],
   { eager: true },
 );
@@ -103,8 +106,12 @@ const outputModules = import.meta.glob<{ App: React.ComponentType }>(
     "./*.output.tsx",
     "./*.output.jsx",
     "./*.flow.output.jsx",
-    "!./_unsupported.*.tsx",
-    "!./unsupported-*.tsx",
+    "!./_unsupported.*.output.tsx",
+    "!./_unsupported.*.output.jsx",
+    "!./_unsupported.*.flow.output.jsx",
+    "!./unsupported-*.output.tsx",
+    "!./unsupported-*.output.jsx",
+    "!./unsupported-*.flow.output.jsx",
   ],
   { eager: true },
 );

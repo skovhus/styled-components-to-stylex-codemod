@@ -134,8 +134,15 @@ export function createCssHelperConditionalHandler(ctx: CssHelperConditionalConte
   };
 
   const tplCtx: TemplateLiteralContext = {
-    j, filePath, parseExpr, resolveValue, resolveCall,
-    resolveImportInScope, resolverImports, componentInfo, handlerContext,
+    j,
+    filePath,
+    parseExpr,
+    resolveValue,
+    resolveCall,
+    resolveImportInScope,
+    resolverImports,
+    componentInfo,
+    handlerContext,
   };
 
   return (d: any): boolean => {
