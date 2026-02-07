@@ -216,10 +216,25 @@ export function finalizeDeclProcessing(ctx: DeclProcessingState): void {
         continue;
       }
       // Try to resolve conditional helper call inside pseudo selector
-      if (pseudo && tryResolveConditionalHelperCallInPseudo(ctx, expr, pseudo)) {
-        continue;
+      if (pseudo) {
+        const result = tryResolveConditionalHelperCallInPseudo(ctx, expr, pseudo);
+        if (result.outcome === "handled") {
+          continue;
+        }
+        if (result.outcome === "resolved-without-cssText") {
+          // The adapter resolved the call as StyleX styles but didn't provide cssText,
+          // so we can't expand individual CSS properties for pseudo-selector wrapping.
+          warnings.push({
+            severity: "warning",
+            type: "Adapter resolved StyleX styles inside pseudo selector but did not provide cssText for property expansion — add cssText to resolveCall result to enable pseudo-wrapping",
+            loc: decl.loc,
+            context: { selector: result.selector },
+          });
+          state.markBail();
+          break;
+        }
       }
-      // Cannot handle this interpolation - bail
+      // Cannot handle this interpolation - bail with generic warning
       warnings.push({
         severity: "warning",
         type: "Adapter resolved StyleX styles cannot be applied under nested selectors/at-rules",
@@ -444,6 +459,11 @@ function isEmptyBranch(node: unknown): boolean {
   return false;
 }
 
+type PseudoHelperCallResult =
+  | { outcome: "handled" }
+  | { outcome: "not-applicable" }
+  | { outcome: "resolved-without-cssText"; selector: string };
+
 /**
  * Resolves conditional helper calls inside pseudo selector blocks.
  *
@@ -453,25 +473,29 @@ function isEmptyBranch(node: unknown): boolean {
  * can be expanded and wrapped in pseudo selectors (`{ default: null, ":hover": value }`).
  * The result is applied as a variant bucket keyed off the conditional prop.
  *
- * Returns true if the pattern was handled, false otherwise.
+ * Returns a discriminated result:
+ * - `"handled"`: pattern matched and styles were applied
+ * - `"not-applicable"`: expression doesn't match the expected pattern
+ * - `"resolved-without-cssText"`: adapter resolved the call as StyleX styles but did not
+ *    provide `cssText`, so properties can't be expanded for pseudo-wrapping
  */
 function tryResolveConditionalHelperCallInPseudo(
   ctx: DeclProcessingState,
   expr: unknown,
   pseudo: string,
-): boolean {
+): PseudoHelperCallResult {
   if (
     !expr ||
     typeof expr !== "object" ||
     (expr as { type?: string }).type !== "ArrowFunctionExpression"
   ) {
-    return false;
+    return { outcome: "not-applicable" };
   }
   // Minimal assertion: after the type guard, expr is an ArrowFunctionExpression-shaped object.
   const arrowExpr = expr as Parameters<typeof getArrowFnSingleParamName>[0];
   const paramName = getArrowFnSingleParamName(arrowExpr);
   if (!paramName) {
-    return false;
+    return { outcome: "not-applicable" };
   }
   const body = getFunctionBodyExpr(arrowExpr) as {
     type?: string;
@@ -480,7 +504,7 @@ function tryResolveConditionalHelperCallInPseudo(
     alternate?: unknown;
   } | null;
   if (!body || body.type !== "ConditionalExpression") {
-    return false;
+    return { outcome: "not-applicable" };
   }
   const { test, consequent, alternate } = body;
 
@@ -494,7 +518,7 @@ function tryResolveConditionalHelperCallInPseudo(
       : null;
   const testProp = testPath?.[0];
   if (!testPath || testPath.length !== 1 || !testProp) {
-    return false;
+    return { outcome: "not-applicable" };
   }
 
   // Determine which branch is the call expression and which is empty
@@ -504,7 +528,7 @@ function tryResolveConditionalHelperCallInPseudo(
   const altIsCall = !altIsEmpty && isCallExpressionNode(alternate);
 
   if (!((consIsCall && altIsEmpty) || (consIsEmpty && altIsCall))) {
-    return false;
+    return { outcome: "not-applicable" };
   }
 
   const callBranch = consIsCall ? consequent : alternate;
@@ -518,14 +542,20 @@ function tryResolveConditionalHelperCallInPseudo(
     usage: { jsxUsages: 1, hasPropsSpread: false },
   };
   const res = resolveDynamicNode(dynamicNode, ctx.handlerContext);
+
+  // Adapter resolved as StyleX styles but didn't provide cssText for expansion
+  if (res && res.type === "resolvedStyles" && !res.cssText) {
+    return { outcome: "resolved-without-cssText", selector: `&${pseudo}` };
+  }
+
   if (!res || res.type !== "resolvedStyles" || !res.cssText) {
-    return false;
+    return { outcome: "not-applicable" };
   }
 
   // Parse the CSS text into StyleX properties
   const parsedStyle = parseCssDeclarationBlock(res.cssText);
   if (!parsedStyle || Object.keys(parsedStyle).length === 0) {
-    return false;
+    return { outcome: "not-applicable" };
   }
 
   // Wrap each property in pseudo selectors: { default: null, ":hover": value }
@@ -549,5 +579,5 @@ function tryResolveConditionalHelperCallInPseudo(
   // Note: we intentionally do NOT add the adapter's imports here because we use
   // the inlined CSS properties (from cssText) rather than the opaque style reference.
 
-  return true;
+  return { outcome: "handled" };
 }
