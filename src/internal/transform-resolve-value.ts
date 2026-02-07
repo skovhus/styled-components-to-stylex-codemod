@@ -12,6 +12,7 @@ import type {
   SelectorResolveResult,
 } from "../adapter.js";
 import type { WarningLog } from "./logger.js";
+import { describeValue, validateStyleObject } from "./public-api-validation.js";
 
 export function createResolveAdapterSafe(args: { adapter: Adapter; warnings: WarningLog[] }): {
   resolveValueSafe: (ctx: ResolveValueContext) => ResolveValueResult | undefined;
@@ -19,7 +20,7 @@ export function createResolveAdapterSafe(args: { adapter: Adapter; warnings: War
   resolveSelectorSafe: (ctx: SelectorResolveContext) => SelectorResolveResult | undefined;
   bailRef: { value: boolean };
 } {
-  const { adapter } = args;
+  const { adapter, warnings } = args;
   const bailRef = { value: false };
 
   const resolveValueSafe = (ctx: ResolveValueContext): ResolveValueResult | undefined => {
@@ -44,6 +45,23 @@ export function createResolveAdapterSafe(args: { adapter: Adapter; warnings: War
     if (res === undefined) {
       bailRef.value = true;
       return undefined;
+    }
+    if (res && res.style !== undefined) {
+      const validation = validateStyleObject(res.style);
+      if (!validation.ok) {
+        warnings.push({
+          severity: "error",
+          type: "Adapter resolveCall returned invalid style object",
+          loc: ctx.loc ?? null,
+          context: {
+            path: validation.path,
+            value: describeValue(validation.value),
+            reason: validation.reason,
+          },
+        });
+        bailRef.value = true;
+        return undefined;
+      }
     }
     return res;
   };

@@ -736,6 +736,54 @@ export const App = () => (
       ),
     ).toBe(true);
   });
+
+  it("should bail when adapter returns an invalid style object", () => {
+    const source = `
+import styled from "styled-components";
+import { truncate } from "./lib/helpers";
+
+const Text = styled.p\`
+  \${truncate()}
+\`;
+
+export const App = () => <Text />;
+`;
+
+    const adapterWithInvalidStyle = {
+      externalInterface() {
+        return null;
+      },
+      resolveValue() {
+        return undefined;
+      },
+      resolveCall(ctx) {
+        if (ctx.calleeImportedName !== "truncate") {
+          return undefined;
+        }
+        return {
+          usage: "props",
+          expr: "helpers.truncate",
+          imports: [],
+          style: { whiteSpace: ["nowrap"] as unknown as string },
+        };
+      },
+      resolveSelector() {
+        return undefined;
+      },
+      styleMerger: null,
+    } satisfies Adapter;
+
+    const result = transformWithWarnings(
+      { source, path: "adapter-invalid-style-object.tsx" },
+      { jscodeshift: j, j, stats: () => {}, report: () => {} },
+      { adapter: adapterWithInvalidStyle },
+    );
+
+    expect(result.code).toBeNull();
+    expect(
+      result.warnings.some((w) => w.type === "Adapter resolveCall returned invalid style object"),
+    ).toBe(true);
+  });
 });
 
 describe("import resolution scope", () => {

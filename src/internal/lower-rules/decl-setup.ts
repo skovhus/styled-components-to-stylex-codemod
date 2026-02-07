@@ -82,6 +82,7 @@ export function createDeclProcessingState(state: LowerRulesState, decl: StyledDe
   };
   const getComposedDefaultValue = (propName: string): unknown =>
     resolveComposedDefaultValue(cssHelperPropValues.get(propName), propName);
+  const hasComposedDefaultValue = (propName: string): boolean => cssHelperPropValues.has(propName);
 
   const {
     findJsxPropTsType,
@@ -273,6 +274,8 @@ export function createDeclProcessingState(state: LowerRulesState, decl: StyledDe
     isJsxPropOptional,
     extraStyleObjects,
     resolvedStyleObjects: state.resolvedStyleObjects,
+    getComposedDefaultValue,
+    hasComposedDefaultValue,
   });
 
   return {

@@ -10,6 +10,7 @@ import type {
   ImportSpec,
   ResolveValueContext,
   ResolveValueResult,
+  StylexStyleObject,
 } from "../../adapter.js";
 import type { WarningType } from "../logger.js";
 
@@ -52,7 +53,7 @@ export type HandlerResult =
       type: "resolvedStyles";
       expr: string;
       imports: ImportSpec[];
-      style?: Record<string, unknown>;
+      style?: StylexStyleObject;
       resolveCallContext?: CallResolveContext;
       resolveCallResult?: CallResolveResult;
     }

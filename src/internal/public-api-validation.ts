@@ -45,6 +45,51 @@ export function describeValue(value: unknown): string {
   return "[Unknown]";
 }
 
+export type StyleObjectValidationResult =
+  | { ok: true }
+  | { ok: false; path: string; value: unknown; reason: string };
+
+export function validateStyleObject(value: unknown): StyleObjectValidationResult {
+  const seen = new WeakSet<object>();
+  const isPlainObject = (v: unknown): v is Record<string, unknown> =>
+    !!v && typeof v === "object" && !Array.isArray(v);
+
+  const validateValue = (current: unknown, path: string): StyleObjectValidationResult => {
+    if (current === null) {
+      return { ok: true };
+    }
+    const type = typeof current;
+    if (type === "string" || type === "number" || type === "boolean") {
+      return { ok: true };
+    }
+    if (type === "undefined") {
+      return { ok: false, path, value: current, reason: "Value is undefined" };
+    }
+    if (!isPlainObject(current)) {
+      return {
+        ok: false,
+        path,
+        value: current,
+        reason: "Expected a plain object or primitive style value",
+      };
+    }
+    if (seen.has(current)) {
+      return { ok: false, path, value: current, reason: "Circular style object detected" };
+    }
+    seen.add(current);
+    for (const [key, val] of Object.entries(current)) {
+      const nextPath = path ? `${path}.${key}` : key;
+      const result = validateValue(val, nextPath);
+      if (!result.ok) {
+        return result;
+      }
+    }
+    return { ok: true };
+  };
+
+  return validateValue(value, "");
+}
+
 export function assertValidAdapter(
   candidate: unknown,
   where: string,

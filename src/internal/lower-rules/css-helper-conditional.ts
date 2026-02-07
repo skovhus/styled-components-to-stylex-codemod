@@ -26,6 +26,7 @@ import {
   collectIdentifiers,
   getArrowFnParamBindings,
   getNodeLocStart,
+  isAstNode,
   isCallExpressionNode,
   staticValueToLiteral,
   type ASTNodeRecord,
@@ -77,6 +78,8 @@ type CssHelperConditionalContext = Pick<
   isJsxPropOptional: (jsxProp: string) => boolean;
   extraStyleObjects: Map<string, Record<string, unknown>>;
   resolvedStyleObjects: Map<string, unknown>;
+  getComposedDefaultValue: (propName: string) => unknown;
+  hasComposedDefaultValue: (propName: string) => boolean;
 };
 
 export function createCssHelperConditionalHandler(ctx: CssHelperConditionalContext) {
@@ -109,6 +112,8 @@ export function createCssHelperConditionalHandler(ctx: CssHelperConditionalConte
     markBail,
     extraStyleObjects,
     resolvedStyleObjects,
+    getComposedDefaultValue,
+    hasComposedDefaultValue,
   } = ctx;
 
   /**
@@ -152,6 +157,23 @@ export function createCssHelperConditionalHandler(ctx: CssHelperConditionalConte
     decl.handledPseudoInterpolationSlots.add(slotId);
   };
 
+  const isPlainObject = (value: unknown): value is Record<string, unknown> =>
+    !!value && typeof value === "object" && !Array.isArray(value) && !isAstNode(value);
+
+  const readBaseDefaultValue = (prop: string): { hasValue: boolean; value: unknown } => {
+    if (Object.prototype.hasOwnProperty.call(styleObj, prop)) {
+      const existing = styleObj[prop];
+      if (isPlainObject(existing) && "default" in existing) {
+        return { hasValue: true, value: (existing as Record<string, unknown>).default };
+      }
+      return { hasValue: true, value: existing };
+    }
+    if (hasComposedDefaultValue(prop)) {
+      return { hasValue: true, value: getComposedDefaultValue(prop) };
+    }
+    return { hasValue: false, value: undefined };
+  };
+
   const wrapStyleWithPseudos = (
     style: Record<string, unknown>,
     pseudos: string[],
@@ -161,7 +183,9 @@ export function createCssHelperConditionalHandler(ctx: CssHelperConditionalConte
     }
     const wrapped: Record<string, unknown> = {};
     for (const [prop, value] of Object.entries(style)) {
-      const map: Record<string, unknown> = { default: null };
+      const baseDefault = readBaseDefaultValue(prop);
+      const map: Record<string, unknown> = {};
+      map.default = baseDefault.hasValue ? baseDefault.value : null;
       for (const ps of pseudos) {
         map[ps] = value;
       }

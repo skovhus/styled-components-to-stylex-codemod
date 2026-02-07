@@ -45,19 +45,22 @@ const styles = stylex.create({
     borderStyle: "solid",
     borderColor: "#cfd8dc",
     backgroundColor: "#f8f9fb",
+    whiteSpace: "normal",
+    overflow: "visible",
+    textOverflow: "clip",
     margin: 0,
   },
   textTruncate: {
     whiteSpace: {
-      default: null,
+      default: "normal",
       ":hover": "nowrap",
     },
     overflow: {
-      default: null,
+      default: "visible",
       ":hover": "hidden",
     },
     textOverflow: {
-      default: null,
+      default: "clip",
       ":hover": "ellipsis",
     },
   },

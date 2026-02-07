@@ -13,6 +13,7 @@ export type WarningType =
   | "Adapter helper call in border interpolation did not resolve to a single CSS value"
   | "Adapter resolveCall returned an unparseable styles expression"
   | "Adapter resolveCall returned an unparseable value expression"
+  | "Adapter resolveCall returned invalid style object"
   | "Adapter resolveCall returned StyleX styles for helper call where a CSS value was expected"
   | "Adapter resolveCall returned undefined for helper call"
   | "Adapter resolved StyleX styles cannot be applied under nested selectors/at-rules"

@@ -190,8 +190,13 @@ export type CallResolveResult = {
    * When provided, the codemod may prefer this object over `expr`
    * to preserve selector context safely.
    */
-  style?: Record<string, unknown>;
+  style?: StylexStyleObject;
 };
+
+export interface StylexStyleObject {
+  [key: string]: StylexStyleValue;
+}
+export type StylexStyleValue = string | number | boolean | null | StylexStyleObject;
 
 // Note: we intentionally do NOT expose “unified” ResolveContext/ResolveResult types anymore.
 // Consumers should use the specific contexts/results:

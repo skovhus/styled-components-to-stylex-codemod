@@ -99,7 +99,9 @@ const adapter = defineAdapter({
     //
     // Use `ctx.cssProperty` to return the appropriate expression for the context.
     // Optionally return `style` with a raw StyleX style object when helper styles
-    // need to be inlined (e.g., nested selectors/pseudos).
+    // need to be inlined (e.g., nested selectors/pseudos). The style object should
+    // be plain JSON-compatible values (strings/numbers/booleans/null) and nested
+    // pseudo/media maps. Invalid style objects will cause the transform to bail.
 
     const arg0 = ctx.args[0];
     const key = arg0?.kind === "literal" && typeof arg0.value === "string" ? arg0.value : null;
