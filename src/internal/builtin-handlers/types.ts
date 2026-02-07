@@ -54,6 +54,8 @@ export type HandlerResult =
       imports: ImportSpec[];
       resolveCallContext?: CallResolveContext;
       resolveCallResult?: CallResolveResult;
+      /** Raw CSS text from the adapter, enabling pseudo-selector wrapping of individual properties. */
+      cssText?: string;
     }
   | {
       /**

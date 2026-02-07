@@ -5,7 +5,16 @@
 import { cssPropertyToStylexProp, resolveBackgroundStylexProp } from "../css-prop-mapping.js";
 import { cssValueToJs, toStyleKey, toSuffixFromProp } from "../transform/helpers.js";
 import { extractUnionLiteralValues, groupVariantBucketsIntoDimensions } from "./variants.js";
-import { isAstNode } from "../utilities/jscodeshift-utils.js";
+import {
+  getArrowFnSingleParamName,
+  getFunctionBodyExpr,
+  getMemberPathFromIdentifier,
+  isAstNode,
+  isCallExpressionNode,
+} from "../utilities/jscodeshift-utils.js";
+import { resolveDynamicNode } from "../builtin-handlers.js";
+import { parseCssDeclarationBlock } from "../builtin-handlers/css-parsing.js";
+import { ensureShouldForwardPropDrop } from "./types.js";
 import type { DeclProcessingState } from "./decl-setup.js";
 
 export function finalizeDeclProcessing(ctx: DeclProcessingState): void {
@@ -195,24 +204,30 @@ export function finalizeDeclProcessing(ctx: DeclProcessingState): void {
 
     // Detect interpolations INSIDE pseudo selector blocks that weren't handled.
     // Pattern: &:hover { __SC_EXPR_X__; } - placeholder is INSIDE the braces.
-    // These interpolations (e.g., conditional helper calls) cannot be safely
-    // transformed under nested selectors because the selector context would be lost.
+    // When the adapter provides `cssText`, we can expand individual CSS properties and
+    // wrap them in pseudo selectors. Otherwise, bail since the selector context would be lost.
     const insidePseudoRe = /&(:[a-z-]+(?:\([^)]*\))?)\s*\{[^}]*__SC_EXPR_(\d+)__[^}]*\}/gi;
     while ((m = insidePseudoRe.exec(decl.rawCss))) {
       const pseudo = m[1];
       const slotId = Number(m[2]);
       const expr = decl.templateExpressions[slotId] as any;
-      // Only bail if the expression is NOT a component identifier (those are handled above)
-      if (expr && expr.type !== "Identifier") {
-        warnings.push({
-          severity: "warning",
-          type: "Adapter resolved StyleX styles cannot be applied under nested selectors/at-rules",
-          loc: decl.loc,
-          context: { selector: `&${pseudo}` },
-        });
-        state.markBail();
-        break;
+      // Skip component identifiers (those are handled above)
+      if (!expr || expr.type === "Identifier") {
+        continue;
       }
+      // Try to resolve conditional helper call inside pseudo selector
+      if (pseudo && tryResolveConditionalHelperCallInPseudo(ctx, expr, pseudo)) {
+        continue;
+      }
+      // Cannot handle this interpolation - bail
+      warnings.push({
+        severity: "warning",
+        type: "Adapter resolved StyleX styles cannot be applied under nested selectors/at-rules",
+        loc: decl.loc,
+        context: { selector: `&${pseudo}` },
+      });
+      state.markBail();
+      break;
     }
     if (state.bail) {
       return;
@@ -402,4 +417,137 @@ export function finalizeDeclProcessing(ctx: DeclProcessingState): void {
   if (inlineStyleProps.length) {
     decl.inlineStyleProps = inlineStyleProps;
   }
+}
+
+// --- Non-exported helpers ---
+
+/**
+ * Checks if a conditional branch is an empty CSS value (empty string, null, undefined, false).
+ */
+function isEmptyBranch(node: unknown): boolean {
+  if (!node || typeof node !== "object") {
+    return false;
+  }
+  const n = node as { type?: string; value?: unknown; name?: string };
+  if ((n.type === "StringLiteral" || n.type === "Literal") && n.value === "") {
+    return true;
+  }
+  if (n.type === "NullLiteral") {
+    return true;
+  }
+  if (n.type === "Identifier" && n.name === "undefined") {
+    return true;
+  }
+  if (n.type === "BooleanLiteral" && n.value === false) {
+    return true;
+  }
+  return false;
+}
+
+/**
+ * Resolves conditional helper calls inside pseudo selector blocks.
+ *
+ * Pattern: `&:hover { ${(props) => (props.$truncate ? truncate() : "")} }`
+ *
+ * When the adapter provides `cssText` for the resolved helper call, the CSS properties
+ * can be expanded and wrapped in pseudo selectors (`{ default: null, ":hover": value }`).
+ * The result is applied as a variant bucket keyed off the conditional prop.
+ *
+ * Returns true if the pattern was handled, false otherwise.
+ */
+function tryResolveConditionalHelperCallInPseudo(
+  ctx: DeclProcessingState,
+  expr: unknown,
+  pseudo: string,
+): boolean {
+  if (
+    !expr ||
+    typeof expr !== "object" ||
+    (expr as { type?: string }).type !== "ArrowFunctionExpression"
+  ) {
+    return false;
+  }
+  // Minimal assertion: after the type guard, expr is an ArrowFunctionExpression-shaped object.
+  const arrowExpr = expr as Parameters<typeof getArrowFnSingleParamName>[0];
+  const paramName = getArrowFnSingleParamName(arrowExpr);
+  if (!paramName) {
+    return false;
+  }
+  const body = getFunctionBodyExpr(arrowExpr) as {
+    type?: string;
+    test?: unknown;
+    consequent?: unknown;
+    alternate?: unknown;
+  } | null;
+  if (!body || body.type !== "ConditionalExpression") {
+    return false;
+  }
+  const { test, consequent, alternate } = body;
+
+  // Extract test prop name: props.$truncate -> "$truncate"
+  const testPath =
+    test && typeof test === "object" && (test as { type?: string }).type === "MemberExpression"
+      ? getMemberPathFromIdentifier(
+          test as Parameters<typeof getMemberPathFromIdentifier>[0],
+          paramName,
+        )
+      : null;
+  const testProp = testPath?.[0];
+  if (!testPath || testPath.length !== 1 || !testProp) {
+    return false;
+  }
+
+  // Determine which branch is the call expression and which is empty
+  const consIsEmpty = isEmptyBranch(consequent);
+  const altIsEmpty = isEmptyBranch(alternate);
+  const consIsCall = !consIsEmpty && isCallExpressionNode(consequent);
+  const altIsCall = !altIsEmpty && isCallExpressionNode(alternate);
+
+  if (!((consIsCall && altIsEmpty) || (consIsEmpty && altIsCall))) {
+    return false;
+  }
+
+  const callBranch = consIsCall ? consequent : alternate;
+
+  // Resolve the call expression through resolveDynamicNode
+  const dynamicNode = {
+    slotId: 0,
+    expr: callBranch,
+    css: { kind: "declaration" as const, selector: "&", atRuleStack: [] as string[] },
+    component: ctx.componentInfo,
+    usage: { jsxUsages: 1, hasPropsSpread: false },
+  };
+  const res = resolveDynamicNode(dynamicNode, ctx.handlerContext);
+  if (!res || res.type !== "resolvedStyles" || !res.cssText) {
+    return false;
+  }
+
+  // Parse the CSS text into StyleX properties
+  const parsedStyle = parseCssDeclarationBlock(res.cssText);
+  if (!parsedStyle || Object.keys(parsedStyle).length === 0) {
+    return false;
+  }
+
+  // Wrap each property in pseudo selectors: { default: null, ":hover": value }
+  const pseudoWrappedStyle: Record<string, unknown> = {};
+  for (const [prop, value] of Object.entries(parsedStyle)) {
+    pseudoWrappedStyle[prop] = { default: null, [pseudo]: value };
+  }
+
+  // Determine the condition: truthy for consequent call, inverted for alternate call
+  const when = consIsCall ? testProp : `!${testProp}`;
+
+  // Apply as a variant bucket
+  const { variantBuckets, variantStyleKeys, decl } = ctx;
+  variantBuckets.set(when, { ...variantBuckets.get(when), ...pseudoWrappedStyle });
+  variantStyleKeys[when] ??= `${decl.styleKey}${toSuffixFromProp(when)}`;
+
+  // Drop the transient prop from forwarding
+  ensureShouldForwardPropDrop(decl, testProp);
+  decl.needsWrapperComponent = true;
+
+  // Note: we intentionally do NOT add the adapter's imports here because we use
+  // the inlined CSS properties (from cssText) rather than the opaque style reference.
+
+  return true;
 }
