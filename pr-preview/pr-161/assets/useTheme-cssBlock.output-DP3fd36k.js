@@ -1,0 +1,1 @@
+import{j as s,n as r}from"./index-CNtKh6BA.js";function x(t){const{children:n}=t,o=r();return s.jsx("div",{...{0:{className:"xhxy2q7"},1:{}}[!!o.isDark<<0],children:n})}const c=()=>s.jsx(x,{});export{c as App};
