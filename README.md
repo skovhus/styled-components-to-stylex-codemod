@@ -21,10 +21,7 @@ pnpm add styled-components-to-stylex-codemod
 Use `runTransform` to transform files matching a glob pattern:
 
 ```ts
-import {
-  runTransform,
-  defineAdapter,
-} from "styled-components-to-stylex-codemod";
+import { runTransform, defineAdapter } from "styled-components-to-stylex-codemod";
 
 const adapter = defineAdapter({
   resolveValue(ctx) {
@@ -70,9 +67,7 @@ const adapter = defineAdapter({
           .replace(/^--/, "")
           .split("-")
           .filter(Boolean)
-          .map((part, i) =>
-            i === 0 ? part : part[0]?.toUpperCase() + part.slice(1)
-          )
+          .map((part, i) => (i === 0 ? part : part[0]?.toUpperCase() + part.slice(1)))
           .join("");
 
       // If you care about fallbacks, you can use `fallback` here to decide whether to resolve or not.
@@ -105,10 +100,7 @@ const adapter = defineAdapter({
     // Use `ctx.cssProperty` to return the appropriate expression for the context.
 
     const arg0 = ctx.args[0];
-    const key =
-      arg0?.kind === "literal" && typeof arg0.value === "string"
-        ? arg0.value
-        : null;
+    const key = arg0?.kind === "literal" && typeof arg0.value === "string" ? arg0.value : null;
     if (ctx.calleeImportedName !== "transitionSpeed" || !key) {
       return null;
     }
@@ -192,7 +184,7 @@ The merger function should have this signature:
 function mergedSx(
   styles: StyleXStyles,
   className?: string,
-  style?: React.CSSProperties
+  style?: React.CSSProperties,
 ): ReturnType<typeof stylex.props>;
 ```
 

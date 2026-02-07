@@ -55,26 +55,26 @@ export type TemplateLiteralContext = {
 
 ```typescript
 // Before:
-export function resolveTemplateLiteralBranch(args: TemplateLiteralBranchArgs)
+export function resolveTemplateLiteralBranch(args: TemplateLiteralBranchArgs);
 
 // After:
 export function resolveTemplateLiteralBranch(
   ctx: TemplateLiteralContext,
   args: { node: TemplateLiteral; paramName: string | null },
-)
+);
 ```
 
 ### Step 1c: Update `resolveTemplateLiteralValue` signature
 
 ```typescript
 // Before:
-export function resolveTemplateLiteralValue(args: TemplateLiteralValueArgs)
+export function resolveTemplateLiteralValue(args: TemplateLiteralValueArgs);
 
 // After:
 export function resolveTemplateLiteralValue(
   ctx: TemplateLiteralContext,
   args: { tpl: TemplateLiteral; property: string },
-)
+);
 ```
 
 ### Step 1d: In `css-helper-conditional.ts`, build context once
@@ -83,8 +83,15 @@ In `createCssHelperConditionalHandler`, after destructuring `args`, build:
 
 ```typescript
 const tplCtx: TemplateLiteralContext = {
-  j, filePath, parseExpr, resolveValue, resolveCall,
-  resolveImportInScope, resolverImports, componentInfo, handlerContext,
+  j,
+  filePath,
+  parseExpr,
+  resolveValue,
+  resolveCall,
+  resolveImportInScope,
+  resolverImports,
+  componentInfo,
+  handlerContext,
 };
 ```
 
@@ -92,10 +99,22 @@ Then all 6+ call sites become:
 
 ```typescript
 // Before (12 fields):
-resolveTemplateLiteralBranch({ j, node: body.right, paramName, filePath, parseExpr, resolveValue, resolveCall, resolveImportInScope, resolverImports, componentInfo, handlerContext })
+resolveTemplateLiteralBranch({
+  j,
+  node: body.right,
+  paramName,
+  filePath,
+  parseExpr,
+  resolveValue,
+  resolveCall,
+  resolveImportInScope,
+  resolverImports,
+  componentInfo,
+  handlerContext,
+});
 
 // After (2 args):
-resolveTemplateLiteralBranch(tplCtx, { node: body.right, paramName })
+resolveTemplateLiteralBranch(tplCtx, { node: body.right, paramName });
 ```
 
 ### Step 1e: In `css-helper-handlers.ts`, same pattern for `resolveTemplateLiteralValue`
