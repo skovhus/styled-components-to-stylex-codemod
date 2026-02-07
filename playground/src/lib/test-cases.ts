@@ -27,16 +27,11 @@ export const testCases: TestCase[] = Object.entries(inputs)
     name: path.match(/\/([^/]+)\.input\.tsx$/)?.[1] ?? path,
     content,
   }))
-  // Sort alphabetically, but put _unsupported at the bottom
+  // Exclude `_unsupported.*` fixtures from the playground UI.
+  // (These exist to document unsupported behavior and often have no `.output.tsx`.)
+  .filter((t) => !t.name.startsWith("_unsupported."))
+  // Sort alphabetically
   .sort((a, b) => {
-    const aUnsupported = a.name.startsWith("_unsupported");
-    const bUnsupported = b.name.startsWith("_unsupported");
-    if (aUnsupported && !bUnsupported) {
-      return 1;
-    }
-    if (!aUnsupported && bUnsupported) {
-      return -1;
-    }
     return a.name.localeCompare(b.name);
   });
 
@@ -45,6 +40,10 @@ export async function loadTestCaseModule(
   type: "input" | "output",
 ): Promise<TestCaseModule | null> {
   if (!name) {
+    return null;
+  }
+
+  if (name.startsWith("_unsupported.")) {
     return null;
   }
 
