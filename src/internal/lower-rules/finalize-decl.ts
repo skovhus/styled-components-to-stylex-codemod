@@ -201,6 +201,9 @@ export function finalizeDeclProcessing(ctx: DeclProcessingState): void {
     while ((m = insidePseudoRe.exec(decl.rawCss))) {
       const pseudo = m[1];
       const slotId = Number(m[2]);
+      if (decl.handledPseudoInterpolationSlots?.has(slotId)) {
+        continue;
+      }
       const expr = decl.templateExpressions[slotId] as any;
       // Only bail if the expression is NOT a component identifier (those are handled above)
       if (expr && expr.type !== "Identifier") {

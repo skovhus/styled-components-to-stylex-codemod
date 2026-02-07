@@ -254,6 +254,7 @@ export const fixtureAdapter = defineAdapter({
       return {
         usage: "props",
         expr: `helpers.${helperStyleKey}`,
+        style: helperStyleObjects[helperStyleKey],
         imports: [
           {
             from: { kind: "specifier", value: "./lib/helpers.stylex" },
@@ -456,3 +457,20 @@ export const customAdapter = defineAdapter({
   },
   resolveSelector: customResolveSelector,
 });
+
+const helperStyleObjects: Record<string, Record<string, unknown>> = {
+  truncate: {
+    whiteSpace: "nowrap",
+    overflow: "hidden",
+    textOverflow: "ellipsis",
+  },
+  flexCenter: {
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  gradient: {
+    backgroundImage: "linear-gradient(90deg, #ff6b6b, #5f6cff)",
+    color: "transparent",
+  },
+};

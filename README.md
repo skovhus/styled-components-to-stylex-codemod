@@ -98,6 +98,8 @@ const adapter = defineAdapter({
     // - If `ctx.cssProperty` is undefined (e.g., `${helper()}`) → result is used as a StyleX style object
     //
     // Use `ctx.cssProperty` to return the appropriate expression for the context.
+    // Optionally return `style` with a raw StyleX style object when helper styles
+    // need to be inlined (e.g., nested selectors/pseudos).
 
     const arg0 = ctx.args[0];
     const key = arg0?.kind === "literal" && typeof arg0.value === "string" ? arg0.value : null;
@@ -141,6 +143,7 @@ Adapters are the main extension point. They let you control:
 - how theme paths, CSS variables, and imported values are turned into StyleX-compatible JS values (`resolveValue`)
 - what extra imports to inject into transformed files (returned from `resolveValue`)
 - how helper calls are resolved (via `resolveCall({ ... })` returning `{ expr, imports }`; `null`/`undefined` bails the file)
+- optionally inline helper styles with `resolveCall({ ... })` returning `style` for nested selectors
 - which exported components should support external className/style extension and/or polymorphic `as` prop (`externalInterface`)
 - how className/style merging is handled for components accepting external styling (`styleMerger`)
 

@@ -145,7 +145,51 @@ export function createCssHelperConditionalHandler(ctx: CssHelperConditionalConte
     handlerContext,
   };
 
-  return (d: any): boolean => {
+  const markPseudoSlotHandled = (slotId: number): void => {
+    if (!decl.handledPseudoInterpolationSlots) {
+      decl.handledPseudoInterpolationSlots = new Set<number>();
+    }
+    decl.handledPseudoInterpolationSlots.add(slotId);
+  };
+
+  const wrapStyleWithPseudos = (
+    style: Record<string, unknown>,
+    pseudos: string[],
+  ): Record<string, unknown> => {
+    if (pseudos.length === 0) {
+      return style;
+    }
+    const wrapped: Record<string, unknown> = {};
+    for (const ps of pseudos) {
+      wrapped[ps] = style;
+    }
+    return wrapped;
+  };
+
+  const styleUsesImports = (style: Record<string, unknown>, imports: ImportSpec[]): boolean => {
+    if (!imports.length) {
+      return false;
+    }
+    const importLocals = new Set<string>();
+    for (const imp of imports) {
+      for (const name of imp.names ?? []) {
+        importLocals.add(name.local ?? name.imported);
+      }
+    }
+    if (importLocals.size === 0) {
+      return false;
+    }
+    const used = new Set<string>();
+    collectIdentifiers(style, used);
+    for (const ident of importLocals) {
+      if (used.has(ident)) {
+        return true;
+      }
+    }
+    return false;
+  };
+
+  return (d: any, opts?: { pseudos?: string[] | null }): boolean => {
     if (d.value.kind !== "interpolated") {
       return false;
     }
@@ -157,6 +201,7 @@ export function createCssHelperConditionalHandler(ctx: CssHelperConditionalConte
       return false;
     }
     const slotId = parts[0].slotId;
+    const activePseudos = opts?.pseudos?.filter(Boolean) ?? [];
     const expr = decl.templateExpressions[slotId] as any;
     if (!expr || expr.type !== "ArrowFunctionExpression") {
       return false;
@@ -474,6 +519,17 @@ export function createCssHelperConditionalHandler(ctx: CssHelperConditionalConte
 
     // Handle LogicalExpression: props.$x && css`...` or chained: props.$x && props.$y && css`...`
     const body = expr.body;
+    if (activePseudos.length > 0) {
+      const pseudoConditional =
+        body?.type === "ConditionalExpression"
+          ? body
+          : body?.type === "BlockStatement"
+            ? extractConditionalFromIfBlock(body)
+            : null;
+      if (!pseudoConditional) {
+        return false;
+      }
+    }
     if (body?.type === "LogicalExpression" && body.operator === "&&") {
       // Use parseChainedTestInfo to handle both simple and chained && conditions
       const testInfo = parseChainedTestInfo(body.left);
@@ -1052,6 +1108,14 @@ export function createCssHelperConditionalHandler(ctx: CssHelperConditionalConte
       return false;
     }
 
+    if (activePseudos.length > 0) {
+      const canHandlePseudoCall =
+        (consIsCall && altIsEmpty) || (consIsEmpty && altIsCall);
+      if (!canHandlePseudoCall) {
+        return false;
+      }
+    }
+
     const resolveCssBranch = (
       node: any,
     ): {
@@ -1226,7 +1290,7 @@ export function createCssHelperConditionalHandler(ctx: CssHelperConditionalConte
     // These are helpers that return StyleX style objects (usage: "props")
     const tryResolveCallExpressionBranch = (
       callNode: ExpressionKind,
-    ): { expr: string; imports: ImportSpec[] } | null => {
+    ): { expr: string; imports: ImportSpec[]; style?: Record<string, unknown> } | null => {
       const dynamicNode = {
         slotId: 0,
         expr: callNode,
@@ -1236,7 +1300,7 @@ export function createCssHelperConditionalHandler(ctx: CssHelperConditionalConte
       };
       const res = resolveDynamicNode(dynamicNode, handlerContext);
       if (res && res.type === "resolvedStyles") {
-        return { expr: res.expr, imports: res.imports ?? [] };
+        return { expr: res.expr, imports: res.imports ?? [], style: res.style };
       }
       return null;
     };
@@ -1262,6 +1326,20 @@ export function createCssHelperConditionalHandler(ctx: CssHelperConditionalConte
       }
 
       dropAllTestInfoProps(testInfo);
+      if (activePseudos.length > 0) {
+        if (!resolved.style) {
+          return false;
+        }
+        if (styleUsesImports(resolved.style, resolved.imports)) {
+          for (const imp of resolved.imports) {
+            resolverImports.set(JSON.stringify(imp), imp);
+          }
+        }
+        const pseudoStyle = wrapStyleWithPseudos(resolved.style, activePseudos);
+        applyVariant({ ...testInfo, when }, pseudoStyle);
+        markPseudoSlotHandled(slotId);
+        return true;
+      }
       for (const imp of resolved.imports) {
         resolverImports.set(JSON.stringify(imp), imp);
       }

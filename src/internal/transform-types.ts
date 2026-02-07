@@ -235,6 +235,11 @@ export type StyledDecl = {
   rules: CssRuleIR[];
   templateExpressions: unknown[];
   rawCss?: string;
+  /**
+   * Tracks interpolation slot IDs that were safely handled inside pseudo selector blocks.
+   * Used to avoid bailouts when the selector context is preserved by other handlers.
+   */
+  handledPseudoInterpolationSlots?: Set<number>;
   preResolvedStyle?: Record<string, unknown>;
   isCssHelper?: boolean;
   preserveCssHelperDeclaration?: boolean;

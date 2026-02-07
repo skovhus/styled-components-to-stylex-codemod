@@ -52,6 +52,7 @@ export type HandlerResult =
       type: "resolvedStyles";
       expr: string;
       imports: ImportSpec[];
+      style?: Record<string, unknown>;
       resolveCallContext?: CallResolveContext;
       resolveCallResult?: CallResolveResult;
     }

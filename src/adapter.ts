@@ -183,6 +183,14 @@ export type CallResolveResult = {
    * returns a StyleX styles object even when used with a CSS property like `border:`.
    */
   usage?: "create" | "props";
+  /**
+   * Optional raw StyleX style object for contexts that need inlining
+   * (e.g., nested selectors where `stylex.props(...)` cannot be used).
+   *
+   * When provided, the codemod may prefer this object over `expr`
+   * to preserve selector context safely.
+   */
+  style?: Record<string, unknown>;
 };
 
 // Note: we intentionally do NOT expose “unified” ResolveContext/ResolveResult types anymore.

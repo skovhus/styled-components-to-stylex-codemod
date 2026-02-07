@@ -53,6 +53,7 @@ export function buildResolvedHandlerResult(
         type: "resolvedStyles",
         expr: result.expr,
         imports: result.imports,
+        style: result.style,
         ...payload,
       };
 }

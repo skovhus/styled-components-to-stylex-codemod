@@ -511,9 +511,9 @@ export function handleInterpolatedDeclaration(args: InterpolatedDeclarationConte
     if (tryHandlePropertyTernaryTemplateLiteral(d)) {
       continue;
     }
-    // Only apply to base declarations; variant expansion for pseudo/media/attr buckets is more complex.
-    if (!media && !attrTarget && !pseudos?.length) {
-      if (tryHandleCssHelperConditionalBlock(d)) {
+    // Only apply when media/attr buckets are not involved.
+    if (!media && !attrTarget) {
+      if (tryHandleCssHelperConditionalBlock(d, { pseudos })) {
         continue;
       }
     }
