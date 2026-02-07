@@ -49,7 +49,7 @@ import { toStyleKey, toSuffixFromProp } from "../transform/helpers.js";
 import { cssPropertyToIdentifier, makeCssProperty, makeCssPropKey } from "./shared.js";
 type CommentSource = { leading?: string; trailingLine?: string } | null;
 
-export type InterpolatedDeclarationContext = {
+type InterpolatedDeclarationContext = {
   ctx: DeclProcessingState;
   rule: CssRuleIR;
   d: CssDeclarationIR;

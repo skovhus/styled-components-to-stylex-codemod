@@ -6,7 +6,7 @@ import type { CssDeclarationIR, CssValue } from "./css-ir.js";
 import { splitDirectionalProperty } from "./stylex-shorthands.js";
 import { isBackgroundImageValue, looksLikeLength } from "./utilities/string-utils.js";
 
-export type StylexPropDecl = { prop: string; value: CssValue };
+type StylexPropDecl = { prop: string; value: CssValue };
 
 /**
  * For a `background` CSS property, determine the appropriate StyleX property name.

@@ -47,19 +47,19 @@ export type ComponentInfo =
       withConfig?: { shouldForwardProp?: boolean };
     };
 
-export type TemplateDynamicEntry = {
+type TemplateDynamicEntry = {
   jsxProp: string;
   stylexProp: string;
   callArg: ExpressionKind;
 };
 
-export type TemplateInlineEntry = {
+type TemplateInlineEntry = {
   jsxProp: string;
   prop: string;
   callArg: ExpressionKind;
 };
 
-export type TemplateLiteralBranchResult = {
+type TemplateLiteralBranchResult = {
   style: Record<string, unknown>;
   dynamicEntries: TemplateDynamicEntry[];
   inlineEntries: TemplateInlineEntry[];

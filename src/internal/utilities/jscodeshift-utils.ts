@@ -45,7 +45,7 @@ export type ASTNodeRecord = Record<string, unknown> & { type: string };
 /**
  * Result of extracting root identifier and member path from an expression.
  */
-export type RootIdentifierInfo = {
+type RootIdentifierInfo = {
   rootName: string;
   rootNode: IdentifierNode;
   path: string[];

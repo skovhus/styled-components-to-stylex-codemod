@@ -206,7 +206,7 @@ interface WarningGroup {
   warnings: WarningWithSnippet[];
 }
 
-export class LoggerReport {
+class LoggerReport {
   private readonly warnings: CollectedWarning[];
   private fileCache = new Map<string, string[] | null>();
 

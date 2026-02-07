@@ -55,7 +55,7 @@ export type EmitIntrinsicHelpers = {
   emitMinimalWrapper: (args: Parameters<WrapperEmitter["emitMinimalWrapper"]>[0]) => ASTNode[];
 };
 
-export type EmitIntrinsicHelpersEnv = {
+type EmitIntrinsicHelpersEnv = {
   emitter: WrapperEmitter;
   root: Collection<ASTNode>;
   j: JSCodeshift;

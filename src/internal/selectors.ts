@@ -7,7 +7,7 @@ import selectorParser from "postcss-selector-parser";
 /**
  * Result of parsing a selector for StyleX compatibility.
  */
-export type ParsedSelector =
+type ParsedSelector =
   | { kind: "base" } // Just "&"
   | { kind: "pseudo"; pseudos: string[] } // ":hover", ":focus:not(:disabled)", etc.
   | { kind: "pseudoElement"; element: string } // "::before", "::after"
