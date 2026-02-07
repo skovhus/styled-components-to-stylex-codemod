@@ -18,6 +18,15 @@ export const $colors = stylex.defineVars({
   textSecondary: "#6B7280",
 });
 
+/** Lightens a hex color by adding 40 to each RGB channel (clamped to 255). */
+export function highlightVariant(color: string): string {
+  const hex = color.replace("#", "");
+  const r = Math.min(255, parseInt(hex.slice(0, 2), 16) + 40);
+  const g = Math.min(255, parseInt(hex.slice(2, 4), 16) + 40);
+  const b = Math.min(255, parseInt(hex.slice(4, 6), 16) + 40);
+  return `#${r.toString(16).padStart(2, "0")}${g.toString(16).padStart(2, "0")}${b.toString(16).padStart(2, "0")}`;
+}
+
 /**
  * Plain JS theme for Storybook/styled-components fixtures.
  * Keep this as the source of truth for ThemeProvider values.
@@ -37,14 +46,7 @@ export const testCaseTheme = {
     textSecondary: "#6B7280",
     primaryColor: "#BF4F74",
   },
-  /** Returns a highlighted (lighter) variant of a hex color for dark themes. */
-  highlightVariant(color: string): string {
-    const hex = color.replace("#", "");
-    const r = Math.min(255, parseInt(hex.slice(0, 2), 16) + 40);
-    const g = Math.min(255, parseInt(hex.slice(2, 4), 16) + 40);
-    const b = Math.min(255, parseInt(hex.slice(4, 6), 16) + 40);
-    return `#${r.toString(16).padStart(2, "0")}${g.toString(16).padStart(2, "0")}${b.toString(16).padStart(2, "0")}`;
-  },
+  highlightVariant,
   primary: "#BF4F74",
   secondary: "#4F74BF",
   spacing: {
