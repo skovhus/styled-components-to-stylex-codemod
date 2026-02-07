@@ -7,13 +7,15 @@ on:
 
 permissions:
   contents: write
+  pages: write
+  id-token: write
 
 concurrency:
-  group: pages-main
+  group: pages-build-main
   cancel-in-progress: false
 
 jobs:
-  deploy:
+  build:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -31,9 +33,35 @@ jobs:
       - name: Build playground
         run: pnpm build:playground
 
-      - name: Deploy to GitHub Pages
+      - name: Push to gh-pages branch
         uses: peaceiris/actions-gh-pages@v4
         with:
           github_token: ${{ secrets.GITHUB_TOKEN }}
           publish_dir: ./dist-playground
           keep_files: true
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    concurrency:
+      group: pages-deploy
+      cancel-in-progress: false
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: gh-pages
+
+      - name: Setup Pages
+        uses: actions/configure-pages@v5
+
+      - name: Upload artifact
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: .
+
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4
