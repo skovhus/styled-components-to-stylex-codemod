@@ -45,10 +45,7 @@ const styles = stylex.create({
     borderStyle: "solid",
     borderColor: "#cfd8dc",
     backgroundColor: "#f8f9fb",
-    marginTop: 0,
-    marginRight: 0,
-    marginBottom: 0,
-    marginLeft: 0,
+    margin: 0,
   },
   textTruncate: {
     whiteSpace: {
