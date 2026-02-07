@@ -21,6 +21,7 @@
     "coverage/**",
     "test-cases/**",
     "playground/src/lib/fs-stub.ts",
+    "playground/src/vite-env.d.ts",
     "node_modules/**"
   ]
 }

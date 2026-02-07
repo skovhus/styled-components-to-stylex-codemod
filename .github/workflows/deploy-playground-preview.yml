@@ -1,0 +1,45 @@
+name: Deploy Playground Preview
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened, closed]
+
+permissions:
+  contents: write
+  pull-requests: write
+
+concurrency:
+  group: preview-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  preview:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+        if: github.event.action != 'closed'
+
+      - uses: actions/setup-node@v4
+        if: github.event.action != 'closed'
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - name: Install dependencies
+        if: github.event.action != 'closed'
+        run: pnpm install
+
+      - name: Build playground
+        if: github.event.action != 'closed'
+        run: pnpm build:playground
+        env:
+          VITE_PR_NUMBER: ${{ github.event.pull_request.number }}
+          PLAYGROUND_BASE_PATH: /styled-components-to-stylex-codemod/pr-preview/pr-${{ github.event.pull_request.number }}/
+
+      - name: Deploy preview
+        uses: rossjrw/pr-preview-action@v1
+        with:
+          source-dir: ./dist-playground/
+          qr-code: false

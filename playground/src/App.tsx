@@ -139,7 +139,19 @@ function App() {
               />
             </svg>
           </a>
-          <h1 style={styles.title}>skovhus/styled-components-to-stylex-codemod</h1>
+          <h1 style={styles.title}>
+            skovhus/styled-components-to-stylex-codemod
+            {import.meta.env.VITE_PR_NUMBER && (
+              <a
+                href={`https://github.com/skovhus/styled-components-to-stylex-codemod/pull/${import.meta.env.VITE_PR_NUMBER}`}
+                target="_blank"
+                rel="noopener noreferrer"
+                style={styles.prLink}
+              >
+                #{import.meta.env.VITE_PR_NUMBER}
+              </a>
+            )}
+          </h1>
           <select value={selectedTestCase} onChange={handleTestCaseChange} style={styles.select}>
             {testCases.map((t) => (
               <option key={t.name} value={t.name}>
@@ -314,6 +326,11 @@ const styles: Record<string, React.CSSProperties> = {
     fontSize: "18px",
     fontWeight: 600,
     color: "#333",
+  },
+  prLink: {
+    marginLeft: "6px",
+    color: "#0969da",
+    textDecoration: "none",
   },
   select: {
     padding: "6px 12px",

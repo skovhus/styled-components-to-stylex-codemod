@@ -4,7 +4,7 @@ import path from "node:path";
 
 export default defineConfig({
   root: path.resolve(__dirname),
-  base: "/styled-components-to-stylex-codemod/",
+  base: process.env.PLAYGROUND_BASE_PATH ?? "/styled-components-to-stylex-codemod/",
   plugins: [react()],
   define: {
     "process.env.NODE_DEBUG": "false",
