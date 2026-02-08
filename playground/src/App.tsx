@@ -1269,7 +1269,7 @@ const s = stylex.create({
     },
   },
   renderPanelFullHeight: {
-    height: null,
+    height: "auto",
     flex: 1,
     minHeight: 0,
   },
