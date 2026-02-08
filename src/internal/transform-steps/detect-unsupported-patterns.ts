@@ -175,7 +175,6 @@ export function detectUnsupportedPatternsStep(ctx: TransformContext): StepResult
   let componentSelectorLoc: { line: number; column: number } | null = null;
   let specificityHackLoc: { line: number; column: number } | null = null;
   let hocStyledFactoryLoc: { line: number; column: number } | null = null;
-  let staticStyledPropertyLoc: { line: number; column: number } | null = null;
   let themePropOverrideLoc: { line: number; column: number } | null = null;
 
   root.find(j.TemplateLiteral).forEach((p) => {
@@ -273,60 +272,6 @@ export function detectUnsupportedPatternsStep(ctx: TransformContext): StepResult
       hocStyledFactoryLoc = { line: loc.line, column: loc.column ?? 0 };
     }
   });
-
-  if (!staticStyledPropertyLoc && styledLocalNames && styledLocalNames.size > 0) {
-    if (styledComponentNames.size > 0) {
-      root.find(j.TaggedTemplateExpression).forEach((p) => {
-        if (staticStyledPropertyLoc) {
-          return;
-        }
-        const tag = p.node.tag as any;
-        if (!isStyledTag(styledLocalNames, tag)) {
-          return;
-        }
-        const expressions = p.node.quasi?.expressions ?? [];
-        for (const expr of expressions) {
-          const base = unwrapExpression(expr);
-          if (base?.type !== "MemberExpression" && base?.type !== "OptionalMemberExpression") {
-            continue;
-          }
-          const obj = unwrapExpression(base.object);
-          if (obj?.type !== "Identifier") {
-            continue;
-          }
-          if (!styledComponentNames.has(obj.name)) {
-            continue;
-          }
-          const loc = base.loc?.start ?? obj.loc?.start ?? p.node.loc?.start;
-          if (loc?.line !== undefined) {
-            staticStyledPropertyLoc = { line: loc.line, column: loc.column ?? 0 };
-            break;
-          }
-        }
-      });
-    }
-  }
-
-  if (!staticStyledPropertyLoc && styledLocalNames && styledLocalNames.size > 0) {
-    if (styledComponentNames.size > 0) {
-      root.find(j.JSXMemberExpression).forEach((p) => {
-        if (staticStyledPropertyLoc) {
-          return;
-        }
-        const obj = p.node.object;
-        if (obj?.type !== "JSXIdentifier") {
-          return;
-        }
-        if (!styledComponentNames.has(obj.name)) {
-          return;
-        }
-        const loc = (p.node.loc ?? obj.loc)?.start;
-        if (loc?.line !== undefined) {
-          staticStyledPropertyLoc = { line: loc.line, column: loc.column ?? 0 };
-        }
-      });
-    }
-  }
 
   if (!themePropOverrideLoc && styledComponentNames.size > 0) {
     const getThemeAttrLoc = (attrs: any[] | null | undefined) => {
@@ -530,15 +475,6 @@ export function detectUnsupportedPatternsStep(ctx: TransformContext): StepResult
       severity: "warning",
       type: "Higher-order styled factory wrappers (e.g. hoc(styled)) are not supported",
       loc: hocStyledFactoryLoc,
-    });
-    return returnResult({ code: null, warnings }, "bail");
-  }
-
-  if (staticStyledPropertyLoc) {
-    warnings.push({
-      severity: "warning",
-      type: "Static properties on styled components (e.g. Styled.Component) are not supported",
-      loc: staticStyledPropertyLoc,
     });
     return returnResult({ code: null, warnings }, "bail");
   }

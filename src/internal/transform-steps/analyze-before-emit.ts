@@ -10,7 +10,7 @@ import {
   isComponentUsedInJsx,
   propagateDelegationWrapperRequirements,
 } from "../utilities/delegation-utils.js";
-import { isFunctionNode } from "../utilities/jscodeshift-utils.js";
+import { getRootJsxIdentifierName, isFunctionNode } from "../utilities/jscodeshift-utils.js";
 import { typeContainsPolymorphicAs } from "../utilities/polymorphic-as-detection.js";
 
 type JsxAttr = JSXAttribute | JSXSpreadAttribute;
@@ -450,6 +450,27 @@ export function analyzeBeforeEmitStep(ctx: TransformContext): StepResult {
     if (usedAsValue) {
       decl.usedAsValue = true;
       decl.needsWrapperComponent = true;
+    }
+  }
+
+  const jsxNamespaceRoots = new Set<string>();
+  root.find(j.JSXMemberExpression).forEach((p) => {
+    const rootName = getRootJsxIdentifierName(p.node);
+    if (rootName) {
+      jsxNamespaceRoots.add(rootName);
+    }
+  });
+
+  // Styled components referenced only via JSX namespaces (e.g., <Styled.Option />)
+  // still need wrappers so the namespace binding remains in the output.
+  if (jsxNamespaceRoots.size > 0) {
+    for (const decl of styledDecls) {
+      if (decl.isCssHelper) {
+        continue;
+      }
+      if (jsxNamespaceRoots.has(decl.localName)) {
+        decl.needsWrapperComponent = true;
+      }
     }
   }
 

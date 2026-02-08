@@ -45,7 +45,6 @@ export type WarningType =
   | "Heterogeneous background values (mix of gradients and colors) not currently supported"
   | "Higher-order styled factory wrappers (e.g. hoc(styled)) are not supported"
   | "Imported CSS helper mixins: cannot determine inherited properties for correct pseudo selector handling"
-  | "Static properties on styled components (e.g. Styled.Component) are not supported"
   | "Styled-components specificity hacks like `&&` / `&&&` are not representable in StyleX"
   | "Theme-dependent block-level conditional could not be fully resolved (branches may contain dynamic interpolations)"
   | "Theme-dependant call expression could not be resolved (e.g. theme helper calls like theme.highlight() are not supported)"

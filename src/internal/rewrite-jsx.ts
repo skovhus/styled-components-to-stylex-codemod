@@ -4,6 +4,7 @@
  */
 import type { Collection } from "jscodeshift";
 import type { DescendantOverride } from "./lower-rules.js";
+import { getJsxElementName } from "./utilities/jscodeshift-utils.js";
 
 export function postProcessTransformedAst(args: {
   root: Collection<any>;
@@ -101,19 +102,6 @@ export function postProcessTransformedAst(args: {
       overridesByChild.set(o.childStyleKey, [...(overridesByChild.get(o.childStyleKey) ?? []), o]);
     }
 
-    // Get JSX element name (for JSXIdentifier or JSXMemberExpression)
-    const getJsxElementName = (opening: any): string | null => {
-      const name = opening?.name;
-      if (!name) {
-        return null;
-      }
-      if (name.type === "JSXIdentifier") {
-        return name.name;
-      }
-      // For member expressions like Foo.Bar, just return null for now
-      return null;
-    };
-
     // Track empty ancestor style keys to remove AFTER all descendant matching is done.
     // We defer removal so that ancestor matching can still find the style keys.
     const pendingEmptyKeyRemovals: Array<{ call: any; key: string }> = [];
@@ -125,7 +113,7 @@ export function postProcessTransformedAst(args: {
       const opening = node.openingElement;
       const attrs = (opening.attributes ?? []) as any[];
       const call = getStylexPropsCallFromAttrs(attrs);
-      const elementName = getJsxElementName(opening);
+      const elementName = getJsxElementName(opening?.name, { allowMemberExpression: false });
       // Get the style key for this element if it's a known component
       const elementStyleKey = elementName ? componentNameToStyleKey?.get(elementName) : null;
 
