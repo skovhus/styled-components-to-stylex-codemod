@@ -516,7 +516,12 @@ const testCaseSelectStyles: StylesConfig<TestCaseOption, false> = {
   dropdownIndicator: (base) => ({ ...base, padding: "0 4px" }),
   indicatorSeparator: () => ({ display: "none" }),
   menu: (base) => ({ ...base, zIndex: 20 }),
-  menuPortal: (base) => ({ ...base, zIndex: 9999 }),
+  menuPortal: (base) => ({
+    ...base,
+    zIndex: 9999,
+    fontFamily:
+      '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif',
+  }),
 };
 
 type InitialPlaygroundState = {
