@@ -120,12 +120,12 @@
   inherits: false
 }
 
-@property --x-animationDelay {
+@property --x-126kuz7 {
   syntax: "*";
   inherits: false
 }
 
-@property --x-126kuz7 {
+@property --x-animationDelay {
   syntax: "*";
   inherits: false
 }
@@ -441,7 +441,7 @@
   border-color: #4f74bf;
 }
 
-.xwoz533:not(#\#):not(#\#), .xqn3u4i:not(#\#):not(#\#) {
+.xwoz533:not(#\#):not(#\#) {
   border-color: #bf4f74;
 }
 
@@ -785,7 +785,7 @@
   border-color: #bf4f74;
 }
 
-.xxs78ni:focus:not(:disabled):not(#\#):not(#\#), .x1tybo5q:focus-visible:not(#\#):not(#\#) {
+.xxs78ni:focus:not(:disabled):not(#\#):not(#\#), .x10bewyo:focus-visible:not(#\#):not(#\#) {
   outline: 2px solid #4f74bf;
 }
 
@@ -797,7 +797,7 @@
   border-style: dashed;
 }
 
-.xobfa5r:hover:not(#\#):not(#\#) {
+.x1ynldxa:hover:not(#\#):not(#\#) {
   border-color: #bf4f74;
 }
 
@@ -817,7 +817,7 @@
   text-decoration: underline;
 }
 
-.x1s835y7:focus:not(#\#):not(#\#) {
+.xlc16io:focus:not(#\#):not(#\#), .x1s835y7:focus:not(#\#):not(#\#) {
   border-color: #bf4f74;
 }
 
@@ -837,7 +837,7 @@
   text-decoration: underline;
 }
 
-.xrow9iw:active:not(#\#):not(#\#) {
+.x1cpntj8:active:not(#\#):not(#\#) {
   outline: 2px solid #4f74bf;
 }
 
@@ -1011,11 +1011,11 @@
   appearance: none;
 }
 
-.x9oods1:not(#\#):not(#\#):not(#\#) {
+.xubpbjk:not(#\#):not(#\#):not(#\#), .x9oods1:not(#\#):not(#\#):not(#\#) {
   background-color: #4f74bf;
 }
 
-.x1awmxk9:not(#\#):not(#\#):not(#\#) {
+.xju9k8e:not(#\#):not(#\#):not(#\#) {
   background-color: #bf4f74 !important;
 }
 
@@ -1196,11 +1196,11 @@
 }
 
 .xn8bucy:not(#\#):not(#\#):not(#\#) {
-  background-image: linear-gradient(to bottom, var(--xufgxy3) 70%, #0000 100%);
+  background-image: linear-gradient(to bottom,var(--xufgxy3) 70%,#0000 100%);
 }
 
 .x2siyzw:not(#\#):not(#\#):not(#\#) {
-  background-image: linear-gradient(to bottom, var(--xufgxy3) 70%, var(--xufgxy3) 100%);
+  background-image: linear-gradient(to bottom,var(--xufgxy3) 70%,var(--xufgxy3) 100%);
 }
 
 .xdgn7ew:not(#\#):not(#\#):not(#\#) {
@@ -1244,7 +1244,7 @@
 }
 
 .x1m9q57h:not(#\#):not(#\#):not(#\#) {
-  box-shadow: inset 0 0 0 1px var(--x1e13nsu), 0 1px 2px #0000000f;
+  box-shadow: inset 0 0 0 1px var(--x1e13nsu),0 1px 2px #0000000f;
 }
 
 .x1gnnqk1:not(#\#):not(#\#):not(#\#) {
@@ -1267,7 +1267,7 @@
   color: #333;
 }
 
-.x1o2o4gj:not(#\#):not(#\#):not(#\#) {
+.xemmkqz:not(#\#):not(#\#):not(#\#) {
   color: #4caf50;
 }
 
@@ -1287,7 +1287,7 @@
   color: #bf4f74;
 }
 
-.x1b03aax:not(#\#):not(#\#):not(#\#) {
+.xcoj9df:not(#\#):not(#\#):not(#\#) {
   color: #f44336;
 }
 
@@ -1556,7 +1556,7 @@
 }
 
 .x1osp4dy:not(#\#):not(#\#):not(#\#) {
-  grid-template-columns: [gutter] var(--line-number-width, 50px) [code] minmax(0, 1fr);
+  grid-template-columns: [gutter] var(--line-number-width, 50px) [code] minmax(0,1fr);
 }
 
 .xl463y0:not(#\#):not(#\#):not(#\#) {
@@ -1762,6 +1762,7 @@
 }
 
 .x87ps6o:not(#\#):not(#\#):not(#\#) {
+  -webkit-user-select: none;
   user-select: none;
 }
 
@@ -1825,7 +1826,7 @@
   background-color: #fafafa;
 }
 
-.x16n9v7h:hover:not(#\#):not(#\#):not(#\#) {
+.x1vvhah5:hover:not(#\#):not(#\#):not(#\#) {
   background-color: #bf4f74;
 }
 
@@ -1853,11 +1854,11 @@
   background-color: var(--xufgxy3);
 }
 
-.xql3yvz:hover:not(#\#):not(#\#):not(#\#) {
+.x103215m:hover:not(#\#):not(#\#):not(#\#) {
   color: #4f74bf !important;
 }
 
-.x6vqb8s:hover:not(#\#):not(#\#):not(#\#) {
+.xwfr5fa:hover:not(#\#):not(#\#):not(#\#), .x6vqb8s:hover:not(#\#):not(#\#):not(#\#) {
   color: #bf4f74;
 }
 
@@ -1885,11 +1886,11 @@
   color: #fff;
 }
 
-.xvswd9h:focus:not(#\#):not(#\#):not(#\#) {
+.x1dbka2q:focus:not(#\#):not(#\#):not(#\#) {
   background-color: #bf4f74;
 }
 
-.xokd38v:focus:not(#\#):not(#\#):not(#\#) {
+.x1m6x0ql:focus:not(#\#):not(#\#):not(#\#) {
   color: #bf4f74;
 }
 
@@ -1897,7 +1898,7 @@
   color: #fff;
 }
 
-.xt1kuei:active:not(#\#):not(#\#):not(#\#) {
+.x1uvnybj:active:not(#\#):not(#\#):not(#\#) {
   color: #bf4f74;
 }
 
@@ -2466,7 +2467,7 @@
 }
 
 .x3pifzw:not(#\#):not(#\#):not(#\#):not(#\#) {
-  width: calc(var(--component-width)  + 60px);
+  width: calc(var(--component-width) + 60px);
 }
 
 .x1ykdc5z:not(#\#):not(#\#):not(#\#):not(#\#) {
