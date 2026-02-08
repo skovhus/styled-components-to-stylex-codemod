@@ -24,7 +24,7 @@ StyledSelect.Option = (BaseSelect as any).Option;
 StyledSelect.Group = (BaseSelect as any).Group;
 StyledSelect.Separator = (BaseSelect as any).Separator;
 
-export function SelectExample() {
+export function App() {
   return (
     <StyledSelect>
       <StyledSelect.Group label="Fruits">

@@ -18,7 +18,7 @@ const StyledSelect = styled(BaseSelect)`
   width: 200px;
 `;
 
-export function SelectExample() {
+export function App() {
   return (
     <StyledSelect>
       <StyledSelect.Group label="Fruits">
