@@ -1,5 +1,4 @@
-// @expected-warning: Static properties on styled components (e.g. Styled.Component) are not supported
-import * as React from "react";
+import React from "react";
 import styled from "styled-components";
 
 // A component with static sub-components (like Select.Option, Select.Group)

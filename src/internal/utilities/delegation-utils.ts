@@ -13,13 +13,26 @@ export function isComponentUsedInJsx(
   j: JSCodeshift,
   name: string,
 ): boolean {
+  const hasMemberExpressionUsage =
+    root
+      .find(j.JSXMemberExpression)
+      .filter((p) => {
+        let obj: any = p.node.object;
+        while (obj?.type === "JSXMemberExpression") {
+          obj = obj.object;
+        }
+        return obj?.type === "JSXIdentifier" && obj.name === name;
+      })
+      .size() > 0;
+
   return (
     root
       .find(j.JSXElement, {
         openingElement: { name: { type: "JSXIdentifier", name } },
       })
       .size() > 0 ||
-    root.find(j.JSXOpeningElement, { name: { type: "JSXIdentifier", name } }).size() > 0
+    root.find(j.JSXOpeningElement, { name: { type: "JSXIdentifier", name } }).size() > 0 ||
+    hasMemberExpressionUsage
   );
 }
 
