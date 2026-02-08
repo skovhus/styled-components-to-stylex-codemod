@@ -2075,3 +2075,43 @@ export const App = () => <Badge>Hello</Badge>;
     expect(result.code).toBeNull();
   });
 });
+
+describe("styled(Component) with attrs on arrow function component", () => {
+  it("should transform styled(ArrowComponent).attrs({...}) without crashing on non-block body", () => {
+    // Regression: arrow functions with expression bodies (no block statement)
+    // caused "bodyStmts is not iterable" because fn.body.body is undefined
+    // for expression-bodied arrows. The transform should handle this gracefully.
+    const source = `
+import styled from "styled-components";
+
+interface FlexProps {
+  direction?: string;
+}
+
+const Flex = (props: FlexProps & React.HTMLAttributes<HTMLDivElement>) => (
+  <div style={{ display: "flex", flexDirection: props.direction as any }} {...props} />
+);
+
+const StyledFlex = styled(Flex).attrs({
+  direction: "column",
+})\`
+  gap: 8px;
+  padding: 16px;
+\`;
+
+export function App() {
+  return <StyledFlex>Hello</StyledFlex>;
+}
+`;
+
+    const result = runTransformWithDiagnostics(source, {}, "test-body-stmts.tsx");
+    expect(result.code).not.toBeNull();
+    expect(result.warnings).toHaveLength(0);
+    // Should pass direction as a static attr
+    expect(result.code).toContain('direction="column"');
+    // Should include StyleX styles
+    expect(result.code).toContain("stylex.props");
+    expect(result.code).toContain("gap");
+    expect(result.code).toContain("padding");
+  });
+});
