@@ -1160,6 +1160,400 @@ export const App = () => <Button>Click me</Button>;
   });
 });
 
+describe("conditional helper call inside pseudo selector", () => {
+  it("should warn with cssText hint when adapter resolves styles but omits cssText", () => {
+    // When a conditional helper call appears inside a pseudo selector (e.g., &:hover)
+    // and the adapter resolves it as StyleX styles (usage: "props") WITHOUT cssText,
+    // the codemod cannot expand individual CSS properties for pseudo-wrapping.
+    // It should emit a descriptive warning mentioning cssText.
+    const source = `
+import styled from "styled-components";
+import { truncate } from "./lib/helpers";
+
+const Text = styled.p<{ $truncate?: boolean }>\`
+  font-size: 14px;
+  &:hover {
+    \${(props) => (props.$truncate ? truncate() : "")}
+  }
+\`;
+
+export const App = () => <Text>Hello</Text>;
+`;
+
+    const adapterWithoutCssText = {
+      externalInterface() {
+        return null;
+      },
+      resolveValue() {
+        return undefined;
+      },
+      resolveCall() {
+        // Resolve as StyleX styles but WITHOUT cssText
+        return {
+          usage: "props" as const,
+          expr: "helpers.truncate",
+          imports: [
+            {
+              from: { kind: "specifier" as const, value: "./lib/helpers.stylex" },
+              names: [{ imported: "helpers" }],
+            },
+          ],
+          // cssText is intentionally omitted
+        };
+      },
+      resolveSelector() {
+        return undefined;
+      },
+      styleMerger: null,
+    } satisfies Adapter;
+
+    const result = transformWithWarnings(
+      { source, path: "test-no-csstext.tsx" },
+      { jscodeshift: j, j, stats: () => {}, report: () => {} },
+      { adapter: adapterWithoutCssText },
+    );
+
+    expect(result.code).toBeNull();
+    expect(result.warnings.length).toBeGreaterThan(0);
+    expect(result.warnings[0]!.type).toBe(
+      "Adapter resolved StyleX styles inside pseudo selector but did not provide cssText for property expansion — add cssText to resolveCall result to enable pseudo-wrapping",
+    );
+    expect(result.warnings[0]!.context).toMatchObject({
+      selector: "&:hover",
+    });
+  });
+
+  it("should use generic warning when expression is not a conditional helper call", () => {
+    // When the interpolation inside a pseudo selector is NOT a conditional helper call
+    // (e.g., it's a direct call without a conditional, or a logical expression),
+    // the generic "cannot be applied under nested selectors" warning should be used.
+    const source = `
+import styled from "styled-components";
+import { truncate } from "./lib/helpers";
+
+const Text = styled.p\`
+  font-size: 14px;
+  &:hover {
+    \${(props) => props.$active && truncate()}
+  }
+\`;
+
+export const App = () => <Text>Hello</Text>;
+`;
+
+    const adapterResolving = {
+      externalInterface() {
+        return null;
+      },
+      resolveValue() {
+        return undefined;
+      },
+      resolveCall() {
+        return {
+          usage: "props" as const,
+          expr: "helpers.truncate",
+          imports: [],
+        };
+      },
+      resolveSelector() {
+        return undefined;
+      },
+      styleMerger: null,
+    } satisfies Adapter;
+
+    const result = transformWithWarnings(
+      { source, path: "test-logical.tsx" },
+      { jscodeshift: j, j, stats: () => {}, report: () => {} },
+      { adapter: adapterResolving },
+    );
+
+    expect(result.code).toBeNull();
+    expect(result.warnings.length).toBeGreaterThan(0);
+    expect(result.warnings[0]!.type).toBe(
+      "Adapter resolved StyleX styles cannot be applied under nested selectors/at-rules",
+    );
+  });
+
+  it("should succeed when adapter provides cssText for pseudo-wrapping", () => {
+    // When the adapter resolves the call with both usage: "props" AND cssText,
+    // the codemod can expand the CSS properties and wrap them in pseudo selectors.
+    const source = `
+import styled from "styled-components";
+import { truncate } from "./lib/helpers";
+
+const Text = styled.p<{ $truncate?: boolean }>\`
+  font-size: 14px;
+  &:hover {
+    \${(props) => (props.$truncate ? truncate() : "")}
+  }
+\`;
+
+export const App = () => <Text>Hello</Text>;
+`;
+
+    const adapterWithCssText = {
+      externalInterface() {
+        return null;
+      },
+      resolveValue() {
+        return undefined;
+      },
+      resolveCall() {
+        return {
+          usage: "props" as const,
+          expr: "helpers.truncate",
+          imports: [],
+          cssText: "white-space: nowrap; overflow: hidden; text-overflow: ellipsis;",
+        };
+      },
+      resolveSelector() {
+        return undefined;
+      },
+      styleMerger: null,
+    } satisfies Adapter;
+
+    const result = transformWithWarnings(
+      { source, path: "test-with-csstext.tsx" },
+      { jscodeshift: j, j, stats: () => {}, report: () => {} },
+      { adapter: adapterWithCssText },
+    );
+
+    expect(result.code).not.toBeNull();
+    expect(result.warnings).toHaveLength(0);
+    // Verify the output contains pseudo-wrapped styles
+    expect(result.code).toContain('":hover"');
+    expect(result.code).toContain("nowrap");
+    expect(result.code).toContain("textTruncate");
+  });
+
+  it("should preserve base values for overlapping properties in pseudo-wrapped variants", () => {
+    // When the component's base styles define a property (e.g., overflow: auto) and the
+    // helper's cssText also sets that property, the pseudo-wrapped variant must preserve
+    // the base value as the default so it isn't cleared in the non-pseudo state.
+    // In styled-components, the base value persists; only the pseudo state overrides it.
+    const source = `
+import styled from "styled-components";
+import { truncate } from "./lib/helpers";
+
+const Text = styled.p<{ $truncate?: boolean }>\`
+  font-size: 14px;
+  overflow: auto;
+  white-space: pre-wrap;
+  &:hover {
+    \${(props) => (props.$truncate ? truncate() : "")}
+  }
+\`;
+
+export const App = () => <Text>Hello</Text>;
+`;
+
+    const adapterWithCssText = {
+      externalInterface() {
+        return null;
+      },
+      resolveValue() {
+        return undefined;
+      },
+      resolveCall() {
+        return {
+          usage: "props" as const,
+          expr: "helpers.truncate",
+          imports: [],
+          // overflow and white-space overlap with base styles
+          cssText: "white-space: nowrap; overflow: hidden; text-overflow: ellipsis;",
+        };
+      },
+      resolveSelector() {
+        return undefined;
+      },
+      styleMerger: null,
+    } satisfies Adapter;
+
+    const result = transformWithWarnings(
+      { source, path: "test-overlap.tsx" },
+      { jscodeshift: j, j, stats: () => {}, report: () => {} },
+      { adapter: adapterWithCssText },
+    );
+
+    expect(result.code).not.toBeNull();
+    expect(result.warnings).toHaveLength(0);
+    // overflow has base value "auto" → default should preserve it, not null
+    expect(result.code).toContain('"auto"');
+    // white-space has base value "pre-wrap" → default should preserve it
+    expect(result.code).toContain('"pre-wrap"');
+    // text-overflow has no base value → default should be null
+    expect(result.code).toContain("default: null");
+  });
+
+  it("should extract scalar default and preserve existing pseudo entries from base map", () => {
+    // When a property in styleObj is already a pseudo/media map
+    // (e.g. { default: "auto", ":focus": "scroll" } from a separate &:focus rule),
+    // the pseudo-wrapped variant must:
+    // 1. Use the scalar `.default` value, not the whole map (avoids invalid nested maps)
+    // 2. Merge existing pseudo/media entries (e.g. ":focus") so they aren't lost when
+    //    StyleX replaces the entire property map with the variant's value
+    const source = `
+import styled from "styled-components";
+import { truncate } from "./lib/helpers";
+
+const Text = styled.p<{ $truncate?: boolean }>\`
+  font-size: 14px;
+  overflow: auto;
+  &:focus {
+    overflow: scroll;
+  }
+  &:hover {
+    \${(props) => (props.$truncate ? truncate() : "")}
+  }
+\`;
+
+export const App = () => <Text>Hello</Text>;
+`;
+
+    const adapterWithCssText = {
+      externalInterface() {
+        return null;
+      },
+      resolveValue() {
+        return undefined;
+      },
+      resolveCall() {
+        return {
+          usage: "props" as const,
+          expr: "helpers.truncate",
+          imports: [],
+          // overflow overlaps with a property that has a pseudo/media map in base styles
+          cssText: "white-space: nowrap; overflow: hidden; text-overflow: ellipsis;",
+        };
+      },
+      resolveSelector() {
+        return undefined;
+      },
+      styleMerger: null,
+    } satisfies Adapter;
+
+    const result = transformWithWarnings(
+      { source, path: "test-pseudo-map-default.tsx" },
+      { jscodeshift: j, j, stats: () => {}, report: () => {} },
+      { adapter: adapterWithCssText },
+    );
+
+    expect(result.code).not.toBeNull();
+    expect(result.warnings).toHaveLength(0);
+    // overflow's base is a pseudo map { default: "auto", ":focus": "scroll" },
+    // so the variant should extract the scalar "auto", not embed the whole map
+    expect(result.code).toContain('"auto"');
+    // Must NOT contain a nested default object (invalid StyleX)
+    expect(result.code).not.toMatch(/default:\s*\{/);
+    // The existing :focus entry must be preserved in the variant so it isn't dropped
+    // when StyleX replaces the property map
+    expect(result.code).toContain('":focus"');
+    expect(result.code).toContain('"scroll"');
+  });
+
+  it("should emit descriptive error when adapter provides unparseable cssText", () => {
+    // When the adapter provides cssText that cannot be parsed as CSS declarations,
+    // the codemod should emit a descriptive error mentioning the expected format.
+    const source = `
+import styled from "styled-components";
+import { brokenHelper } from "./lib/helpers";
+
+const Text = styled.p<{ $active?: boolean }>\`
+  font-size: 14px;
+  &:hover {
+    \${(props) => (props.$active ? brokenHelper() : "")}
+  }
+\`;
+
+export const App = () => <Text>Hello</Text>;
+`;
+
+    const adapterWithBadCssText = {
+      externalInterface() {
+        return null;
+      },
+      resolveValue() {
+        return undefined;
+      },
+      resolveCall() {
+        return {
+          usage: "props" as const,
+          expr: "helpers.broken",
+          imports: [],
+          cssText: "this is not valid css at all",
+        };
+      },
+      resolveSelector() {
+        return undefined;
+      },
+      styleMerger: null,
+    } satisfies Adapter;
+
+    const result = transformWithWarnings(
+      { source, path: "test-bad-csstext.tsx" },
+      { jscodeshift: j, j, stats: () => {}, report: () => {} },
+      { adapter: adapterWithBadCssText },
+    );
+
+    expect(result.code).toBeNull();
+    expect(result.warnings.length).toBeGreaterThan(0);
+    expect(result.warnings[0]!.type).toBe(
+      'Adapter resolveCall cssText could not be parsed as CSS declarations — expected semicolon-separated property: value pairs (e.g. "white-space: nowrap; overflow: hidden;")',
+    );
+    expect(result.warnings[0]!.severity).toBe("error");
+    expect(result.warnings[0]!.context).toMatchObject({
+      selector: "&:hover",
+      cssText: "this is not valid css at all",
+    });
+  });
+
+  it("should use generic warning when adapter cannot resolve the call at all", () => {
+    // When the adapter returns undefined (cannot resolve), the generic warning is used.
+    const source = `
+import styled from "styled-components";
+import { unknownHelper } from "./lib/helpers";
+
+const Text = styled.p<{ $active?: boolean }>\`
+  font-size: 14px;
+  &:focus {
+    \${(props) => (props.$active ? unknownHelper() : "")}
+  }
+\`;
+
+export const App = () => <Text>Hello</Text>;
+`;
+
+    const adapterReturningUndefined = {
+      externalInterface() {
+        return null;
+      },
+      resolveValue() {
+        return undefined;
+      },
+      resolveCall() {
+        return undefined;
+      },
+      resolveSelector() {
+        return undefined;
+      },
+      styleMerger: null,
+    } satisfies Adapter;
+
+    const result = transformWithWarnings(
+      { source, path: "test-unresolved.tsx" },
+      { jscodeshift: j, j, stats: () => {}, report: () => {} },
+      { adapter: adapterReturningUndefined },
+    );
+
+    expect(result.code).toBeNull();
+    expect(result.warnings.length).toBeGreaterThan(0);
+    // Should use generic warning since the call couldn't be resolved at all
+    expect(result.warnings[0]!.type).toBe(
+      "Adapter resolved StyleX styles cannot be applied under nested selectors/at-rules",
+    );
+  });
+});
+
 describe("destructured param defaults", () => {
   it("should preserve destructured defaults when inlining arrow functions", () => {
     // Regression test: Previously ({ color = "hotpink" }) => color || "blue"

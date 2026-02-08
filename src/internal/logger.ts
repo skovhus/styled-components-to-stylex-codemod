@@ -16,6 +16,8 @@ export type WarningType =
   | "Adapter resolveCall returned StyleX styles for helper call where a CSS value was expected"
   | "Adapter resolveCall returned undefined for helper call"
   | "Adapter resolved StyleX styles cannot be applied under nested selectors/at-rules"
+  | "Adapter resolved StyleX styles inside pseudo selector but did not provide cssText for property expansion — add cssText to resolveCall result to enable pseudo-wrapping"
+  | 'Adapter resolveCall cssText could not be parsed as CSS declarations — expected semicolon-separated property: value pairs (e.g. "white-space: nowrap; overflow: hidden;")'
   | "Adapter resolveValue returned an unparseable value expression"
   | "Adapter resolveValue returned undefined for imported value"
   | "Arrow function: body is not a recognized pattern (expected ternary, logical, call, or member expression)"

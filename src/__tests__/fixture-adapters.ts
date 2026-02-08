@@ -238,6 +238,12 @@ export const fixtureAdapter = defineAdapter({
       };
     }
 
+    // Map helper names to their CSS text for pseudo-selector expansion
+    const helperCssText: Record<string, string> = {
+      truncate: "white-space: nowrap; overflow: hidden; text-overflow: ellipsis;",
+      flexCenter: "display: flex; align-items: center; justify-content: center;",
+      gradient: "background-image: linear-gradient(90deg, #ff6b6b, #5f6cff); color: transparent;",
+    };
     const helperStyleKey = (() => {
       switch (ctx.calleeImportedName) {
         case "gradient":
@@ -251,6 +257,7 @@ export const fixtureAdapter = defineAdapter({
     if (helperStyleKey) {
       // These helpers return StyleX style objects (for standalone interpolations)
       // Explicitly mark as "props" so the codemod knows not to use them as CSS values
+      // Include cssText so the codemod can expand properties for pseudo-selector wrapping
       return {
         usage: "props",
         expr: `helpers.${helperStyleKey}`,
@@ -260,6 +267,7 @@ export const fixtureAdapter = defineAdapter({
             names: [{ imported: "helpers" }],
           },
         ],
+        cssText: helperCssText[helperStyleKey],
       };
     }
 

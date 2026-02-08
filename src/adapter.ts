@@ -183,6 +183,18 @@ export type CallResolveResult = {
    * returns a StyleX styles object even when used with a CSS property like `border:`.
    */
   usage?: "create" | "props";
+
+  /**
+   * Optional raw CSS text for helpers that return CSS declaration blocks.
+   *
+   * When provided alongside `usage: "props"`, the codemod can expand the CSS
+   * declarations for pseudo-selector wrapping. Without this, the codemod treats
+   * the resolved expression as opaque and cannot wrap individual properties
+   * inside pseudo selectors like `:hover`.
+   *
+   * Example: `"white-space: nowrap; overflow: hidden; text-overflow: ellipsis;"`
+   */
+  cssText?: string;
 };
 
 // Note: we intentionally do NOT expose “unified” ResolveContext/ResolveResult types anymore.
