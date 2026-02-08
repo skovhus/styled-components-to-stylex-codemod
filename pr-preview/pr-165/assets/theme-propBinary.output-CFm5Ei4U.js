@@ -1,1 +1,0 @@
-import{j as x,Z as a}from"./index-BkkT2WGp.js";function o(s){const{children:e}=s,t=a();return x.jsx("div",{...{0:{className:"xpyat2d x1exxlbk x1mqxbix"},1:{className:"xpyat2d x1exxlbk x1awj2ng"}}[(t.mode==="dark")<<0],children:e})}const m=()=>x.jsx(o,{});export{m as App};
