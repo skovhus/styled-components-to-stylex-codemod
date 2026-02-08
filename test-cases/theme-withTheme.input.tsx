@@ -12,12 +12,13 @@ const Panel = styled.div`
 `;
 
 interface ThemeProps {
-  theme: typeof theme;
+  theme?: typeof theme;
 }
 
 class MyComponent extends React.Component<ThemeProps> {
   render() {
-    return <div style={{ color: this.props.theme.color.primaryColor }}>Themed Component</div>;
+    const resolvedTheme = this.props.theme ?? theme;
+    return <div style={{ color: resolvedTheme.color.primaryColor }}>Themed Component</div>;
   }
 }
 
