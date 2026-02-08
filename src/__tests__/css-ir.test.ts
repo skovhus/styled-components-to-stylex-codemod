@@ -1,5 +1,11 @@
 import { describe, it, expect } from "vitest";
-import { findUniversalSelectorLineOffset, findSelectorLineOffset } from "../internal/css-ir.js";
+import jscodeshift from "jscodeshift";
+import { compile } from "stylis";
+import {
+  findUniversalSelectorLineOffset,
+  findSelectorLineOffset,
+  normalizeStylisAstToIR,
+} from "../internal/css-ir.js";
 
 describe("findUniversalSelectorLineOffset", () => {
   it("returns 0 for universal selector on first line", () => {
@@ -168,5 +174,38 @@ describe("findSelectorLineOffset", () => {
 &:focus { color: blue; }`;
     expect(findSelectorLineOffset(css, "&:hover")).toBe(0);
     expect(findSelectorLineOffset(css, "&:focus")).toBe(1);
+  });
+});
+
+describe("normalizeStylisAstToIR", () => {
+  it("preserves at-rule stack when recovering pseudo placeholders", () => {
+    const rawCss = `@media (min-width: 600px) {
+  &:hover {
+    __SC_EXPR_0__;
+  }
+}`;
+    const placeholder = "__SC_EXPR_0__";
+    const startOffset = rawCss.indexOf(placeholder);
+    expect(startOffset).toBeGreaterThanOrEqual(0);
+    const endOffset = startOffset + placeholder.length;
+
+    const slots = [
+      {
+        index: 0,
+        placeholder,
+        expression: jscodeshift.identifier("expr"),
+        startOffset,
+        endOffset,
+      },
+    ];
+
+    const stylisAst = compile(rawCss);
+    const rules = normalizeStylisAstToIR(stylisAst, slots, { rawCss });
+    const hoverRule = rules.find((r) => r.selector === "&:hover");
+    expect(hoverRule).toBeDefined();
+    expect(hoverRule?.atRuleStack.some((r) => r.startsWith("@media"))).toBe(true);
+    expect(
+      hoverRule?.declarations.some((d) => d.property === "" && d.value.kind === "interpolated"),
+    ).toBe(true);
   });
 });

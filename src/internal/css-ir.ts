@@ -311,6 +311,47 @@ export function normalizeStylisAstToIR(
     //
     // We keep this narrowly-scoped: no nested blocks or at-rules inside the pseudo.
     const pseudoBlockRe = /&(:[a-z-]+(?:\([^)]*\))?)\s*\{([\s\S]*?)\}/gi;
+    const normalizeAtRule = (rule: string): string => rule.replace(/\s+/g, " ").trim();
+    const getAtRuleStackAtIndex = (endIndex: number): string[] => {
+      const stack: Array<{ rule: string; depth: number }> = [];
+      let depth = 0;
+      let i = 0;
+      while (i < endIndex) {
+        const ch = rawCss[i]!;
+        if (ch === "@") {
+          let j = i + 1;
+          while (j < endIndex && rawCss[j] !== "{" && rawCss[j] !== ";") {
+            j++;
+          }
+          const header = normalizeAtRule(rawCss.slice(i, j));
+          if (rawCss[j] === "{") {
+            depth++;
+            if (header) {
+              stack.push({ rule: header, depth });
+            }
+            i = j + 1;
+            continue;
+          }
+          i = j + 1;
+          continue;
+        }
+        if (ch === "{") {
+          depth++;
+          i++;
+          continue;
+        }
+        if (ch === "}") {
+          depth = Math.max(0, depth - 1);
+          while (stack.length && stack[stack.length - 1]!.depth > depth) {
+            stack.pop();
+          }
+          i++;
+          continue;
+        }
+        i++;
+      }
+      return stack.map((entry) => entry.rule);
+    };
     let pseudoMatch: RegExpExecArray | null;
     while ((pseudoMatch = pseudoBlockRe.exec(rawCss))) {
       const pseudo = pseudoMatch[1];
@@ -321,6 +362,7 @@ export function normalizeStylisAstToIR(
       if (block.includes("{") || block.includes("@")) {
         continue;
       }
+      const atRuleStackForMatch = getAtRuleStackAtIndex(pseudoMatch.index ?? 0);
       const lines = block.split(/[\n\r]/);
       for (const lineText of lines) {
         const trimmed = lineText.trim();
@@ -341,7 +383,7 @@ export function normalizeStylisAstToIR(
         const alreadyDeclared = rules.some(
           (rule) =>
             rule.selector === selector &&
-            rule.atRuleStack.length === 0 &&
+            sameArray(rule.atRuleStack, atRuleStackForMatch) &&
             rule.declarations.some((decl) => {
               if (decl.property !== "" || decl.value.kind !== "interpolated") {
                 return false;
@@ -359,7 +401,7 @@ export function normalizeStylisAstToIR(
           important: false,
           valueRaw: placeholder,
         };
-        ensureRule(selector, []).declarations.push(decl);
+        ensureRule(selector, atRuleStackForMatch).declarations.push(decl);
         lastDecl = decl;
       }
     }
