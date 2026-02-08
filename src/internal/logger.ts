@@ -50,7 +50,7 @@ export type WarningType =
   | "Theme value with fallback (props.theme.X ?? / || default) cannot be resolved statically — use adapter.resolveValue to map theme paths to StyleX tokens"
   | "Theme-dependent nested prop access requires a project-specific theme source (e.g. useTheme())"
   | "Theme-dependent template literals require a project-specific theme source (e.g. useTheme())"
-  | "ThemeProvider conversion needs to be handled manually"
+  | "Theme prop overrides on styled components are not supported"
   | "Universal selectors (`*`) are currently unsupported"
   | "Unsupported call expression (expected imported helper(...) or imported helper(...)(...))"
   | "Unsupported conditional test in shouldForwardProp"

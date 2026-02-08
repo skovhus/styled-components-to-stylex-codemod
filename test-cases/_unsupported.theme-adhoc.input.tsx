@@ -1,4 +1,4 @@
-// @expected-warning: ThemeProvider conversion needs to be handled manually
+// @expected-warning: Theme prop overrides on styled components are not supported
 import styled, { ThemeProvider } from "styled-components";
 
 const theme = {

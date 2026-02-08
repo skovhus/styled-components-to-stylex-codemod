@@ -7,4 +7,4 @@ const Box = styled.div`
   ${(props) => (props.theme.mode === "dark" ? "color: white;" : "color: black;")}
 `;
 
-export const App = () => <Box />;
+export const App = () => <Box>Theme mode</Box>;

@@ -1,90 +1,9 @@
 /**
  * Policy checks for opt-out conditions and rule gating.
- * Core concepts: ThemeProvider detection and warning emission.
+ * Core concepts: createGlobalStyle warning emission.
  */
-import type {
-  ASTNode,
-  Collection,
-  ImportDeclaration,
-  ImportSpecifier,
-  JSCodeshift,
-} from "jscodeshift";
+import type { Collection, ImportDeclaration, ImportSpecifier, JSCodeshift } from "jscodeshift";
 import type { WarningLog } from "./logger.js";
-
-export function shouldSkipForThemeProvider(args: {
-  root: Collection<ASTNode>;
-  j: JSCodeshift;
-  styledImports: Collection<ImportDeclaration>;
-}): boolean {
-  const { root, j, styledImports } = args;
-
-  const themeProviderImportForSkip = styledImports
-    .find(j.ImportSpecifier)
-    .filter(
-      (p) => p.node.imported.type === "Identifier" && p.node.imported.name === "ThemeProvider",
-    )
-    .nodes()[0];
-  const themeProviderLocalForSkip =
-    themeProviderImportForSkip?.local?.type === "Identifier"
-      ? themeProviderImportForSkip.local.name
-      : themeProviderImportForSkip?.imported?.type === "Identifier"
-        ? themeProviderImportForSkip.imported.name
-        : undefined;
-  if (!themeProviderLocalForSkip) {
-    return false;
-  }
-  return (
-    root
-      .find(j.JSXIdentifier)
-      .filter((p) => p.node.name === themeProviderLocalForSkip)
-      .size() > 0
-  );
-}
-
-export function collectThemeProviderSkipWarnings(args: {
-  root: Collection<ASTNode>;
-  j: JSCodeshift;
-  styledImports: Collection<ImportDeclaration>;
-}): WarningLog[] {
-  const { root, j, styledImports } = args;
-  const warnings: WarningLog[] = [];
-
-  const themeProviderImportForSkip = findStyledComponentsNamedImport({
-    styledImports,
-    j,
-    importedName: "ThemeProvider",
-  });
-  const themeProviderLocalForSkip =
-    themeProviderImportForSkip?.local?.type === "Identifier"
-      ? themeProviderImportForSkip.local.name
-      : themeProviderImportForSkip?.imported?.type === "Identifier"
-        ? themeProviderImportForSkip.imported.name
-        : undefined;
-  if (!themeProviderLocalForSkip) {
-    return warnings;
-  }
-  const isUsed =
-    root
-      .find(j.JSXIdentifier)
-      .filter((p) => p.node.name === themeProviderLocalForSkip)
-      .size() > 0;
-  if (!isUsed) {
-    return warnings;
-  }
-
-  warnings.push({
-    severity: "warning",
-    type: "ThemeProvider conversion needs to be handled manually",
-    loc: themeProviderImportForSkip?.loc
-      ? {
-          line: themeProviderImportForSkip.loc.start.line,
-          column: themeProviderImportForSkip.loc.start.column ?? 0,
-        }
-      : undefined,
-  });
-
-  return warnings;
-}
 
 export function collectCreateGlobalStyleWarnings(
   styledImports: Collection<ImportDeclaration>,
