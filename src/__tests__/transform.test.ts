@@ -2076,11 +2076,11 @@ export const App = () => <Badge>Hello</Badge>;
   });
 });
 
-describe("styled(Component) with attrs on arrow function component", () => {
-  it("should transform styled(ArrowComponent).attrs({...}) without crashing on non-block body", () => {
-    // Regression: arrow functions with expression bodies (no block statement)
-    // caused "bodyStmts is not iterable" because fn.body.body is undefined
-    // for expression-bodied arrows. The transform should handle this gracefully.
+describe("arrow function expression body", () => {
+  it("should transform styled(ArrowComponent).attrs({...}) when base has expression body", () => {
+    // Arrow functions with expression bodies (no block statement) have fn.body
+    // as a JSX element, not a BlockStatement. The transform must not crash
+    // trying to iterate fn.body.body when it's an expression.
     const source = `
 import styled from "styled-components";
 
@@ -2104,7 +2104,7 @@ export function App() {
 }
 `;
 
-    const result = runTransformWithDiagnostics(source, {}, "test-body-stmts.tsx");
+    const result = runTransformWithDiagnostics(source, {}, "test-arrow-expr-body.tsx");
     expect(result.code).not.toBeNull();
     expect(result.warnings).toHaveLength(0);
     // Should pass direction as a static attr
