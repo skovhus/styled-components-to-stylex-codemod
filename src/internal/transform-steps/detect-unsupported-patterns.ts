@@ -389,6 +389,112 @@ export function detectUnsupportedPatternsStep(ctx: TransformContext): StepResult
       });
   }
 
+  if (!themePropOverrideLoc && styledComponentNames.size > 0) {
+    const getThemeDefaultPropsLoc = (expr: any): { line: number; column: number } | null => {
+      const objExpr = unwrapExpression(expr);
+      if (!objExpr || objExpr.type !== "ObjectExpression") {
+        return null;
+      }
+      for (const prop of objExpr.properties ?? []) {
+        if (!prop || (prop.type !== "Property" && prop.type !== "ObjectProperty")) {
+          continue;
+        }
+        const key = prop.key;
+        const keyName =
+          key?.type === "Identifier"
+            ? key.name
+            : key?.type === "StringLiteral"
+              ? key.value
+              : key?.type === "Literal" && typeof key.value === "string"
+                ? key.value
+                : null;
+        if (keyName !== "theme") {
+          continue;
+        }
+        const loc = prop.loc?.start ?? objExpr.loc?.start;
+        if (loc?.line !== undefined) {
+          return { line: loc.line, column: loc.column ?? 0 };
+        }
+        return null;
+      }
+      return null;
+    };
+
+    root.find(j.AssignmentExpression).forEach((p) => {
+      if (themePropOverrideLoc) {
+        return;
+      }
+      const left = unwrapExpression(p.node.left);
+      const right = unwrapExpression(p.node.right);
+      if (!left || !right) {
+        return;
+      }
+      if (left.type !== "MemberExpression" && left.type !== "OptionalMemberExpression") {
+        return;
+      }
+      const obj = unwrapExpression(left.object);
+      const prop = left.property;
+      if (obj?.type !== "Identifier") {
+        return;
+      }
+      if (!styledComponentNames.has(obj.name)) {
+        return;
+      }
+      if (left.computed) {
+        return;
+      }
+      if (prop?.type !== "Identifier" || prop.name !== "defaultProps") {
+        return;
+      }
+      const loc = getThemeDefaultPropsLoc(right);
+      if (loc) {
+        themePropOverrideLoc = loc;
+      }
+    });
+
+    root.find(j.AssignmentExpression).forEach((p) => {
+      if (themePropOverrideLoc) {
+        return;
+      }
+      const left = unwrapExpression(p.node.left);
+      if (!left) {
+        return;
+      }
+      if (left.type !== "MemberExpression" && left.type !== "OptionalMemberExpression") {
+        return;
+      }
+      const inner = unwrapExpression(left.object);
+      const themeProp = left.property;
+      if (
+        !inner ||
+        (inner.type !== "MemberExpression" && inner.type !== "OptionalMemberExpression")
+      ) {
+        return;
+      }
+      if (left.computed || inner.computed) {
+        return;
+      }
+      const baseObj = unwrapExpression(inner.object);
+      const defaultPropsProp = inner.property;
+      if (baseObj?.type !== "Identifier") {
+        return;
+      }
+      if (!styledComponentNames.has(baseObj.name)) {
+        return;
+      }
+      if (defaultPropsProp?.type !== "Identifier" || defaultPropsProp.name !== "defaultProps") {
+        return;
+      }
+      if (themeProp?.type !== "Identifier" || themeProp.name !== "theme") {
+        return;
+      }
+      const loc = left.loc?.start ?? inner.loc?.start ?? baseObj.loc?.start;
+      if (loc?.line !== undefined) {
+        themePropOverrideLoc = { line: loc.line, column: loc.column ?? 0 };
+      }
+    });
+  }
+
   if (themePropOverrideLoc) {
     warnings.push({
       severity: "warning",

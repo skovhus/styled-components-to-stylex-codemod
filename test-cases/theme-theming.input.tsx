@@ -13,10 +13,6 @@ const Button = styled.button`
   border-color: ${(props) => props.theme.color.primaryColor};
 `;
 
-Button.defaultProps = {
-  theme: testCaseTheme,
-};
-
 const theme = testCaseTheme;
 
 export const App = () => (

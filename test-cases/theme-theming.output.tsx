@@ -1,22 +1,14 @@
-import React from "react";
 import * as stylex from "@stylexjs/stylex";
-import { mergedSx } from "./lib/mergedSx";
 import { ThemeProvider } from "styled-components";
 import { testCaseTheme, $colors } from "./tokens.stylex";
-
-function Button(props: React.ComponentProps<"button">) {
-  const { className, children, style } = props;
-
-  return <button {...mergedSx(styles.button, className, style)}>{children}</button>;
-}
 
 const theme = testCaseTheme;
 
 export const App = () => (
   <div style={{ display: "flex", gap: "12px", padding: "12px" }}>
-    <Button>Normal</Button>
+    <button {...stylex.props(styles.button)}>Normal</button>
     <ThemeProvider theme={theme}>
-      <Button>Themed</Button>
+      <button {...stylex.props(styles.button)}>Themed</button>
     </ThemeProvider>
   </div>
 );
