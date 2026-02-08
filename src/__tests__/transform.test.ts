@@ -1385,6 +1385,66 @@ export const App = () => <Text>Hello</Text>;
     expect(result.code).toContain("default: null");
   });
 
+  it("should extract scalar default when base already has a pseudo/media map", () => {
+    // When a property in styleObj is already a pseudo/media map
+    // (e.g. { default: "auto", ":focus": "scroll" } from a separate &:focus rule),
+    // the pseudo-wrapped variant must use the scalar `.default` value, not the whole map.
+    // Using the map as-is produces invalid StyleX: { default: { default: "auto", ... }, ":hover": "hidden" }
+    const source = `
+import styled from "styled-components";
+import { truncate } from "./lib/helpers";
+
+const Text = styled.p<{ $truncate?: boolean }>\`
+  font-size: 14px;
+  overflow: auto;
+  &:focus {
+    overflow: scroll;
+  }
+  &:hover {
+    \${(props) => (props.$truncate ? truncate() : "")}
+  }
+\`;
+
+export const App = () => <Text>Hello</Text>;
+`;
+
+    const adapterWithCssText = {
+      externalInterface() {
+        return null;
+      },
+      resolveValue() {
+        return undefined;
+      },
+      resolveCall() {
+        return {
+          usage: "props" as const,
+          expr: "helpers.truncate",
+          imports: [],
+          // overflow overlaps with a property that has a pseudo/media map in base styles
+          cssText: "white-space: nowrap; overflow: hidden; text-overflow: ellipsis;",
+        };
+      },
+      resolveSelector() {
+        return undefined;
+      },
+      styleMerger: null,
+    } satisfies Adapter;
+
+    const result = transformWithWarnings(
+      { source, path: "test-pseudo-map-default.tsx" },
+      { jscodeshift: j, j, stats: () => {}, report: () => {} },
+      { adapter: adapterWithCssText },
+    );
+
+    expect(result.code).not.toBeNull();
+    expect(result.warnings).toHaveLength(0);
+    // overflow's base is a pseudo map { default: "auto", ":focus": "scroll" },
+    // so the variant should extract the scalar "auto", not embed the whole map
+    expect(result.code).toContain('"auto"');
+    // Must NOT contain a nested default object (invalid StyleX)
+    expect(result.code).not.toMatch(/default:\s*\{/);
+  });
+
   it("should emit descriptive error when adapter provides unparseable cssText", () => {
     // When the adapter provides cssText that cannot be parsed as CSS declarations,
     // the codemod should emit a descriptive error mentioning the expected format.

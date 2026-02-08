@@ -448,6 +448,21 @@ export function finalizeDeclProcessing(ctx: DeclProcessingState): void {
 // --- Non-exported helpers ---
 
 /**
+ * Extracts a scalar default value from a style property value.
+ *
+ * If the value is already a pseudo/media map (e.g. `{ default: "auto", ":focus": "scroll" }`),
+ * returns its `.default` property to avoid nesting maps which produces invalid StyleX values.
+ * Otherwise returns the value as-is (string, number, or null).
+ */
+function extractScalarDefault(value: unknown): unknown {
+  if (value && typeof value === "object" && !Array.isArray(value) && !isAstNode(value)) {
+    const map = value as Record<string, unknown>;
+    return "default" in map ? map.default : null;
+  }
+  return value ?? null;
+}
+
+/**
  * Checks if a conditional branch is an empty CSS value (empty string, null, undefined, false).
  */
 function isEmptyBranch(node: unknown): boolean {
@@ -575,17 +590,19 @@ function tryResolveConditionalHelperCallInPseudo(
   // Preserve existing base values from styleObj so they aren't cleared by `default: null`
   // when the variant is applied. In styled-components, the base value persists and only
   // the pseudo state overrides it.
+  // When the existing value is already a pseudo/media map (e.g. { default: "auto", ":focus": "scroll" }),
+  // extract its `.default` to avoid nesting maps which produces invalid StyleX values.
   const { styleObj, cssHelperPropValues, resolveComposedDefaultValue } = ctx;
   const pseudoWrappedStyle: Record<string, unknown> = {};
   for (const [prop, value] of Object.entries(parsedStyle)) {
-    const existingBase = (styleObj as Record<string, unknown>)[prop];
-    const defaultValue =
-      existingBase !== undefined
-        ? existingBase
+    const raw = (styleObj as Record<string, unknown>)[prop];
+    const existingBase =
+      raw !== undefined
+        ? extractScalarDefault(raw)
         : cssHelperPropValues.has(prop)
-          ? resolveComposedDefaultValue(cssHelperPropValues.get(prop), prop)
+          ? extractScalarDefault(resolveComposedDefaultValue(cssHelperPropValues.get(prop), prop))
           : null;
-    pseudoWrappedStyle[prop] = { default: defaultValue, [pseudo]: value };
+    pseudoWrappedStyle[prop] = { default: existingBase, [pseudo]: value };
   }
 
   // Determine the condition: truthy for consequent call, inverted for alternate call
