@@ -1,3 +1,0 @@
-import{j as e,a as n}from"./index-DK5osccl.js";const r=a=>e.jsx("div",{className:a.className,children:a.children});r.Option=a=>e.jsx("div",{"data-value":a.value,children:a.children});r.Group=a=>e.jsx("div",{"data-label":a.label,children:a.children});r.Separator=()=>e.jsx("hr",{});const l=n(r)`
-  width: 200px;
-`;function i(){return e.jsxs(l,{children:[e.jsxs(l.Group,{label:"Fruits",children:[e.jsx(l.Option,{value:"apple",children:"Apple"}),e.jsx(l.Option,{value:"banana",children:"Banana"})]}),e.jsx(l.Separator,{}),e.jsx(l.Group,{label:"Vegetables",children:e.jsx(l.Option,{value:"carrot",children:"Carrot"})})]})}export{i as App};

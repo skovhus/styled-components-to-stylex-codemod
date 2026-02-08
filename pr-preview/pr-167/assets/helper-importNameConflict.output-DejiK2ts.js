@@ -1,0 +1,1 @@
+import{j as s}from"./index-BAeIKpud.js";import{e}from"./helpers-C4_CMea7.js";const t=e("fast"),p=()=>s.jsxs("div",{children:[s.jsx("div",{children:t}),s.jsx("div",{className:"x4lopbt"})]});export{p as App};

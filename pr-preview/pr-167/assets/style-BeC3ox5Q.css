@@ -45,12 +45,12 @@
   inherits: false
 }
 
-@property --x-zIndex {
+@property --x-maxWidth {
   syntax: "*";
   inherits: false
 }
 
-@property --x-maxWidth {
+@property --x-zIndex {
   syntax: "*";
   inherits: false
 }
@@ -435,6 +435,10 @@
   .x1i7j8g4.x1i7j8g4:not(#\#) {
     padding: 2rem;
   }
+}
+
+.x1uuigni:not(#\#):not(#\#) {
+  border-color: #2f2f2f;
 }
 
 .x1e9dlz5:not(#\#):not(#\#) {
@@ -1051,6 +1055,10 @@
   background-color: #f3f3f3;
 }
 
+.xkafh1q:not(#\#):not(#\#):not(#\#) {
+  background-color: #f6f7fb;
+}
+
 .x1t391ir:not(#\#):not(#\#):not(#\#) {
   background-color: #00f;
 }
@@ -1257,6 +1265,10 @@
 
 .x1gcbo06:not(#\#):not(#\#):not(#\#) {
   color: #0b4f6c;
+}
+
+.xaj10i5:not(#\#):not(#\#):not(#\#) {
+  color: #1c1c1c;
 }
 
 .x295qbr:not(#\#):not(#\#):not(#\#) {
@@ -2292,6 +2304,10 @@
   min-height: 100px;
 }
 
+.x7v6ubd:not(#\#):not(#\#):not(#\#):not(#\#) {
+  min-height: 140px;
+}
+
 .xu0aao5:not(#\#):not(#\#):not(#\#):not(#\#) {
   min-height: 36px;
 }
@@ -2416,6 +2432,10 @@
 
 .xw4jnvo:not(#\#):not(#\#):not(#\#):not(#\#) {
   width: 20px;
+}
+
+.xafpxmx:not(#\#):not(#\#):not(#\#):not(#\#) {
+  width: 240px;
 }
 
 .xdzyupr:not(#\#):not(#\#):not(#\#):not(#\#) {
