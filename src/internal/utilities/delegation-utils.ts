@@ -4,6 +4,7 @@
  */
 import type { ASTNode, Collection, JSCodeshift } from "jscodeshift";
 import type { StyledDecl } from "../transform-types.js";
+import { getRootJsxIdentifierName } from "./jscodeshift-utils.js";
 
 /**
  * Checks if a component name is used in JSX within the given AST root.
@@ -13,13 +14,20 @@ export function isComponentUsedInJsx(
   j: JSCodeshift,
   name: string,
 ): boolean {
+  const hasMemberExpressionUsage =
+    root
+      .find(j.JSXMemberExpression)
+      .filter((p) => getRootJsxIdentifierName(p.node) === name)
+      .size() > 0;
+
   return (
     root
       .find(j.JSXElement, {
         openingElement: { name: { type: "JSXIdentifier", name } },
       })
       .size() > 0 ||
-    root.find(j.JSXOpeningElement, { name: { type: "JSXIdentifier", name } }).size() > 0
+    root.find(j.JSXOpeningElement, { name: { type: "JSXIdentifier", name } }).size() > 0 ||
+    hasMemberExpressionUsage
   );
 }
 

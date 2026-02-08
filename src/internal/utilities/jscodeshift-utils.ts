@@ -139,6 +139,47 @@ export function getMemberPathFromIdentifier(
 }
 
 /**
+ * Extracts the root JSX identifier name from a JSX name node.
+ *
+ * Examples:
+ *   `Foo`              → "Foo"
+ *   `Foo.Bar`          → "Foo"
+ *   `Foo.Bar.Baz`      → "Foo"
+ *
+ * Returns null for invalid or non-JSX name nodes.
+ */
+export function getRootJsxIdentifierName(node: unknown): string | null {
+  let current: unknown = node;
+  while (current && typeof current === "object") {
+    if (isJsxIdentifierNode(current)) {
+      return current.name;
+    }
+    const typed = current as { type?: string; object?: unknown };
+    if (typed.type === "JSXMemberExpression") {
+      current = typed.object;
+      continue;
+    }
+    break;
+  }
+  return null;
+}
+
+/**
+ * Extracts the JSX element name with optional member-expression support.
+ *
+ * When allowMemberExpression is false, only simple JSX identifiers are returned.
+ */
+export function getJsxElementName(
+  node: unknown,
+  options?: { allowMemberExpression?: boolean },
+): string | null {
+  if (!options?.allowMemberExpression) {
+    return isJsxIdentifierNode(node) ? node.name : null;
+  }
+  return getRootJsxIdentifierName(node);
+}
+
+/**
  * Type guard for IdentifierNode (minimal type with just type and name).
  */
 export function isIdentifierNode(node: unknown): node is IdentifierNode {
@@ -626,4 +667,12 @@ export function buildStyleFnConditionExpr(args: {
 // Internal helper - not exported
 function isIdentifier(node: unknown, name?: string): node is IdentifierNode {
   return isIdentifierNode(node) && (name ? node.name === name : true);
+}
+
+function isJsxIdentifierNode(node: unknown): node is { type: "JSXIdentifier"; name: string } {
+  if (!node || typeof node !== "object") {
+    return false;
+  }
+  const typed = node as { type?: unknown; name?: unknown };
+  return typed.type === "JSXIdentifier" && typeof typed.name === "string";
 }

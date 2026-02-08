@@ -2,6 +2,8 @@ import { describe, it, expect } from "vitest";
 import jscodeshift, { type Expression } from "jscodeshift";
 import {
   extractRootAndPath,
+  getJsxElementName,
+  getRootJsxIdentifierName,
   getMemberPathFromIdentifier,
   staticValueToLiteral,
   literalToStaticValue,
@@ -16,6 +18,16 @@ function parseExpr(code: string): Expression {
     throw new Error("Failed to parse expression");
   }
   return decl.init;
+}
+
+function parseJsxName(code: string): unknown {
+  const ast = j(`const x = ${code};`);
+  const decl = ast.find(j.VariableDeclarator).nodes()[0];
+  const init = decl?.init;
+  if (!init || init.type !== "JSXElement") {
+    throw new Error("Failed to parse JSX element");
+  }
+  return init.openingElement.name;
 }
 
 describe("extractRootAndPath", () => {
@@ -113,6 +125,40 @@ describe("getMemberPathFromIdentifier", () => {
     const expr = parseExpr("props[key]");
     const result = getMemberPathFromIdentifier(expr, "props");
     expect(result).toBeNull();
+  });
+});
+
+describe("getRootJsxIdentifierName", () => {
+  it("returns name for JSXIdentifier", () => {
+    const name = parseJsxName("<Foo />");
+    expect(getRootJsxIdentifierName(name)).toBe("Foo");
+  });
+
+  it("returns root for JSXMemberExpression", () => {
+    const name = parseJsxName("<Foo.Bar />");
+    expect(getRootJsxIdentifierName(name)).toBe("Foo");
+  });
+
+  it("returns root for nested JSXMemberExpression", () => {
+    const name = parseJsxName("<Foo.Bar.Baz />");
+    expect(getRootJsxIdentifierName(name)).toBe("Foo");
+  });
+});
+
+describe("getJsxElementName", () => {
+  it("returns name for JSXIdentifier", () => {
+    const name = parseJsxName("<Foo />");
+    expect(getJsxElementName(name)).toBe("Foo");
+  });
+
+  it("returns null when member expressions are disallowed", () => {
+    const name = parseJsxName("<Foo.Bar />");
+    expect(getJsxElementName(name, { allowMemberExpression: false })).toBeNull();
+  });
+
+  it("returns root when member expressions are allowed", () => {
+    const name = parseJsxName("<Foo.Bar />");
+    expect(getJsxElementName(name, { allowMemberExpression: true })).toBe("Foo");
   });
 });
 
