@@ -1385,11 +1385,13 @@ export const App = () => <Text>Hello</Text>;
     expect(result.code).toContain("default: null");
   });
 
-  it("should extract scalar default when base already has a pseudo/media map", () => {
+  it("should extract scalar default and preserve existing pseudo entries from base map", () => {
     // When a property in styleObj is already a pseudo/media map
     // (e.g. { default: "auto", ":focus": "scroll" } from a separate &:focus rule),
-    // the pseudo-wrapped variant must use the scalar `.default` value, not the whole map.
-    // Using the map as-is produces invalid StyleX: { default: { default: "auto", ... }, ":hover": "hidden" }
+    // the pseudo-wrapped variant must:
+    // 1. Use the scalar `.default` value, not the whole map (avoids invalid nested maps)
+    // 2. Merge existing pseudo/media entries (e.g. ":focus") so they aren't lost when
+    //    StyleX replaces the entire property map with the variant's value
     const source = `
 import styled from "styled-components";
 import { truncate } from "./lib/helpers";
@@ -1443,6 +1445,10 @@ export const App = () => <Text>Hello</Text>;
     expect(result.code).toContain('"auto"');
     // Must NOT contain a nested default object (invalid StyleX)
     expect(result.code).not.toMatch(/default:\s*\{/);
+    // The existing :focus entry must be preserved in the variant so it isn't dropped
+    // when StyleX replaces the property map
+    expect(result.code).toContain('":focus"');
+    expect(result.code).toContain('"scroll"');
   });
 
   it("should emit descriptive error when adapter provides unparseable cssText", () => {

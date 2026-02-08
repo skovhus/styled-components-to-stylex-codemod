@@ -463,6 +463,28 @@ function extractScalarDefault(value: unknown): unknown {
 }
 
 /**
+ * Copies existing pseudo/media entries from a source style value into a target map.
+ *
+ * When the source is a pseudo/media map (e.g. `{ default: "auto", ":focus": "scroll" }`),
+ * copies all entries except `default` (which is handled separately) into the target.
+ * This preserves existing pseudo/media rules so they aren't lost when StyleX replaces
+ * the entire property map with the variant's value.
+ */
+function mergeExistingPseudoEntries(target: Record<string, unknown>, source: unknown): void {
+  if (!source || typeof source !== "object" || Array.isArray(source) || isAstNode(source)) {
+    return;
+  }
+  const map = source as Record<string, unknown>;
+  for (const [key, val] of Object.entries(map)) {
+    // Skip `default` (handled by extractScalarDefault) and keys already set in target
+    if (key === "default" || key in target) {
+      continue;
+    }
+    target[key] = val;
+  }
+}
+
+/**
  * Checks if a conditional branch is an empty CSS value (empty string, null, undefined, false).
  */
 function isEmptyBranch(node: unknown): boolean {
@@ -591,18 +613,22 @@ function tryResolveConditionalHelperCallInPseudo(
   // when the variant is applied. In styled-components, the base value persists and only
   // the pseudo state overrides it.
   // When the existing value is already a pseudo/media map (e.g. { default: "auto", ":focus": "scroll" }),
-  // extract its `.default` to avoid nesting maps which produces invalid StyleX values.
+  // extract the scalar `.default` AND merge existing pseudo/media entries so they aren't lost
+  // when StyleX replaces the entire property map with the variant's value.
   const { styleObj, cssHelperPropValues, resolveComposedDefaultValue } = ctx;
   const pseudoWrappedStyle: Record<string, unknown> = {};
   for (const [prop, value] of Object.entries(parsedStyle)) {
     const raw = (styleObj as Record<string, unknown>)[prop];
-    const existingBase =
-      raw !== undefined
-        ? extractScalarDefault(raw)
-        : cssHelperPropValues.has(prop)
-          ? extractScalarDefault(resolveComposedDefaultValue(cssHelperPropValues.get(prop), prop))
-          : null;
-    pseudoWrappedStyle[prop] = { default: existingBase, [pseudo]: value };
+    const helperRaw = cssHelperPropValues.has(prop)
+      ? resolveComposedDefaultValue(cssHelperPropValues.get(prop), prop)
+      : undefined;
+    const sourceMap = raw !== undefined ? raw : helperRaw;
+    const scalarDefault = extractScalarDefault(sourceMap ?? null);
+    // Start with { default: <scalar>, [pseudo]: value }
+    const propMap: Record<string, unknown> = { default: scalarDefault, [pseudo]: value };
+    // Merge existing pseudo/media entries so they aren't dropped when the variant replaces the map
+    mergeExistingPseudoEntries(propMap, sourceMap);
+    pseudoWrappedStyle[prop] = propMap;
   }
 
   // Determine the condition: truthy for consequent call, inverted for alternate call
