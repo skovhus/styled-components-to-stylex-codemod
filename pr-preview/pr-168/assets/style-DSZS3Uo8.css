@@ -5,26 +5,6 @@ body{font-family:-apple-system,BlinkMacSystemFont,Segoe UI,Roboto,Helvetica Neue
   inherits: false
 }
 
-@property --x-top {
-  syntax: "*";
-  inherits: false
-}
-
-@property --x-right {
-  syntax: "*";
-  inherits: false
-}
-
-@property --x-bottom {
-  syntax: "*";
-  inherits: false
-}
-
-@property --x-left {
-  syntax: "*";
-  inherits: false
-}
-
 @property --x-backgroundColor {
   syntax: "*";
   inherits: false
@@ -41,6 +21,26 @@ body{font-family:-apple-system,BlinkMacSystemFont,Segoe UI,Roboto,Helvetica Neue
 }
 
 @property --x-width {
+  syntax: "*";
+  inherits: false
+}
+
+@property --x-top {
+  syntax: "*";
+  inherits: false
+}
+
+@property --x-right {
+  syntax: "*";
+  inherits: false
+}
+
+@property --x-bottom {
+  syntax: "*";
+  inherits: false
+}
+
+@property --x-left {
   syntax: "*";
   inherits: false
 }
@@ -80,12 +80,12 @@ body{font-family:-apple-system,BlinkMacSystemFont,Segoe UI,Roboto,Helvetica Neue
   inherits: false
 }
 
-@property --x-flexShrink {
+@property --x---component-width {
   syntax: "*";
   inherits: false
 }
 
-@property --x---component-width {
+@property --x-flexShrink {
   syntax: "*";
   inherits: false
 }
@@ -125,12 +125,12 @@ body{font-family:-apple-system,BlinkMacSystemFont,Segoe UI,Roboto,Helvetica Neue
   inherits: false
 }
 
-@property --x-1e2mv7m {
+@property --x-126kuz7 {
   syntax: "*";
   inherits: false
 }
 
-@property --x-126kuz7 {
+@property --x-1e2mv7m {
   syntax: "*";
   inherits: false
 }
