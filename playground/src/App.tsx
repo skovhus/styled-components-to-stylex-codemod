@@ -226,10 +226,10 @@ export default function App() {
   }, [navigatePrev, navigateNext]);
 
   return (
-    <div style={styles.container}>
+    <div className="pg-container" style={styles.container}>
       {/* Header */}
-      <header style={styles.header}>
-        <div style={styles.headerLeft}>
+      <header className="pg-header" style={styles.header}>
+        <div className="pg-header-left" style={styles.headerLeft}>
           <a
             href="https://github.com/skovhus/styled-components-to-stylex-codemod"
             target="_blank"
@@ -237,14 +237,20 @@ export default function App() {
             style={styles.githubLink}
             title="View on GitHub"
           >
-            <svg height="24" viewBox="0 0 16 16" width="24" style={styles.githubIcon}>
+            <svg
+              className="pg-github-icon"
+              height="24"
+              viewBox="0 0 16 16"
+              width="24"
+              style={styles.githubIcon}
+            >
               <path
                 fill="currentColor"
                 d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0016 8c0-4.42-3.58-8-8-8z"
               />
             </svg>
           </a>
-          <h1 style={styles.title}>
+          <h1 className="pg-title" style={styles.title}>
             skovhus/styled-components-to-stylex-codemod
             {import.meta.env.VITE_PR_NUMBER && (
               <a
@@ -257,7 +263,7 @@ export default function App() {
               </a>
             )}
           </h1>
-          <div style={styles.testCaseSelectHost}>
+          <div className="pg-select-host" style={styles.testCaseSelectHost}>
             <Select<TestCaseOption, false>
               inputId="test-case-select"
               aria-label="Select test case"
@@ -269,8 +275,9 @@ export default function App() {
               styles={testCaseSelectStyles}
             />
           </div>
-          <div style={styles.navButtons}>
+          <div className="pg-nav-buttons" style={styles.navButtons}>
             <button
+              className="pg-nav-button"
               onClick={navigatePrev}
               style={styles.navButton}
               title="Go to previous test case (K)"
@@ -281,6 +288,7 @@ export default function App() {
               </svg>
             </button>
             <button
+              className="pg-nav-button"
               onClick={navigateNext}
               style={styles.navButton}
               title="Go to next test case (J)"
@@ -294,18 +302,38 @@ export default function App() {
             </button>
           </div>
         </div>
-        <div style={styles.headerRight}>
+        <div className="pg-header-right" style={styles.headerRight}>
           <div style={styles.settingsHost} ref={settingsMenuRef}>
             <button
+              className="pg-settings-btn"
               onClick={() => setIsSettingsOpen((prev) => !prev)}
-              style={styles.button}
+              style={styles.settingsButton}
               aria-haspopup="menu"
               aria-expanded={isSettingsOpen}
+              aria-label="Settings"
+              title="Settings"
             >
-              Settings
+              <svg
+                width="18"
+                height="18"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="2"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+              >
+                <circle cx="12" cy="12" r="3" />
+                <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z" />
+              </svg>
             </button>
             {isSettingsOpen && (
-              <div style={styles.settingsMenu} role="menu" aria-label="Playground settings">
+              <div
+                className="pg-settings-menu"
+                style={styles.settingsMenu}
+                role="menu"
+                aria-label="Playground settings"
+              >
                 <label style={styles.settingsItem}>
                   <input
                     type="checkbox"
@@ -332,9 +360,11 @@ export default function App() {
 
       {/* Configuration Panel (collapsible) */}
       {showConfig && (
-        <div style={styles.configPanel}>
-          <div style={styles.panelHeader}>Adapter configuration</div>
-          <div style={styles.adapterStatus}>
+        <div className="pg-config-panel" style={styles.configPanel}>
+          <div className="pg-panel-header" style={styles.panelHeader}>
+            Adapter configuration
+          </div>
+          <div className="pg-adapter-status" style={styles.adapterStatus}>
             {adapterError
               ? "Adapter error: using last valid adapter"
               : isUsingDefaultAdapter
@@ -354,9 +384,11 @@ export default function App() {
 
       {/* Main editors */}
       {!hideCode && (
-        <div style={styles.editorsContainer}>
-          <div style={styles.editorPane}>
-            <div style={styles.panelHeader}>Input (styled-components)</div>
+        <div className="pg-editors" style={styles.editorsContainer}>
+          <div className="pg-editor-pane" style={styles.editorPane}>
+            <div className="pg-panel-header" style={styles.panelHeader}>
+              Input (styled-components)
+            </div>
             <div style={styles.editorWrapper}>
               <CodeMirror
                 value={input}
@@ -368,12 +400,16 @@ export default function App() {
               />
             </div>
           </div>
-          <div style={styles.editorPane}>
-            <div style={styles.panelHeader}>Output (StyleX)</div>
+          <div className="pg-editor-pane" style={styles.editorPane}>
+            <div className="pg-panel-header" style={styles.panelHeader}>
+              Output (StyleX)
+            </div>
             <div style={styles.outputContainer}>
               <div style={styles.editorWrapper}>
                 {error ? (
-                  <pre style={styles.error}>{error}</pre>
+                  <pre className="pg-error" style={styles.error}>
+                    {error}
+                  </pre>
                 ) : (
                   <CodeMirror
                     value={output}
@@ -385,8 +421,9 @@ export default function App() {
                   />
                 )}
               </div>
-              <div style={styles.issueBar}>
+              <div className="pg-issue-bar" style={styles.issueBar}>
                 <a
+                  className="pg-issue-link"
                   href="https://github.com/skovhus/styled-components-to-stylex-codemod/issues/new"
                   target="_blank"
                   rel="noopener noreferrer"
@@ -396,19 +433,19 @@ export default function App() {
                 </a>
               </div>
               {(adapterError || warnings.length > 0) && (
-                <div style={styles.warningsPanel}>
-                  <div style={styles.warningsHeader}>
+                <div className="pg-warnings-panel" style={styles.warningsPanel}>
+                  <div className="pg-warnings-header" style={styles.warningsHeader}>
                     Warnings ({warnings.length + (adapterError ? 1 : 0)})
                   </div>
                   <ul style={styles.warningsList}>
                     {adapterError && (
-                      <li style={styles.warningItem}>
+                      <li className="pg-warning-item" style={styles.warningItem}>
                         <span style={styles.warningFeature}>adapter-config</span>
                         <span style={styles.warningMessage}>{adapterError}</span>
                       </li>
                     )}
                     {warnings.map((w, i) => (
-                      <li key={i} style={styles.warningItem}>
+                      <li className="pg-warning-item" key={i} style={styles.warningItem}>
                         <span style={styles.warningMessage}>{w.type}</span>
                         {w.loc && <span style={styles.warningLoc}>line {w.loc.line}</span>}
                       </li>
@@ -421,14 +458,17 @@ export default function App() {
         </div>
       )}
       {shouldShowRendering && (
-        <div style={hideCode ? styles.renderPanelFullHeight : styles.renderPanel}>
-          <div style={styles.renderPanelHeader}>
-            <span>Rendered preview</span>
-            <span style={styles.renderPanelNote}>
-              Fixture components only (editor changes are not rendered)
+        <div
+          className="pg-render-panel"
+          style={hideCode ? styles.renderPanelFullHeight : styles.renderPanel}
+        >
+          <div className="pg-render-panel-header" style={styles.renderPanelHeader}>
+            <span>Render</span>
+            <span className="pg-render-panel-note" style={styles.renderPanelNote}>
+              Editor changes are not rendered
             </span>
           </div>
-          <div style={styles.renderPanelBody}>
+          <div className="pg-render-body" style={styles.renderPanelBody}>
             <PreviewPane
               title="Input (styled-components)"
               component={renderState.input}
@@ -724,9 +764,11 @@ function PreviewPane({
   const paneStyle = isLast ? { ...styles.renderPane, borderRight: "none" } : styles.renderPane;
 
   return (
-    <div style={paneStyle}>
-      <div style={styles.renderPaneHeader}>{title}</div>
-      <div style={styles.renderPaneBody}>
+    <div className="pg-render-pane" style={paneStyle}>
+      <div className="pg-render-pane-header" style={styles.renderPaneHeader}>
+        {title}
+      </div>
+      <div className="pg-render-pane-body" style={styles.renderPaneBody}>
         {loading ? (
           <div style={styles.renderPlaceholder}>Loading preview...</div>
         ) : error ? (
@@ -845,13 +887,16 @@ const styles: Record<string, React.CSSProperties> = {
     color: "#0969da",
     textDecoration: "none",
   },
-  button: {
-    padding: "8px 16px",
-    fontSize: "14px",
+  settingsButton: {
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "center",
+    padding: "6px",
     borderRadius: "6px",
     border: "1px solid #ccc",
     backgroundColor: "white",
     cursor: "pointer",
+    color: "#555",
   },
   navButtons: {
     display: "flex",
