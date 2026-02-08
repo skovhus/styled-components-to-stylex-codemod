@@ -45,7 +45,7 @@ export function describeValue(value: unknown): string {
   return "[Unknown]";
 }
 
-export type StyleObjectValidationResult =
+type StyleObjectValidationResult =
   | { ok: true }
   | { ok: false; path: string; value: unknown; reason: string };
 
