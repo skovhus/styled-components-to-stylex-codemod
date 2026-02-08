@@ -1,0 +1,8 @@
+/* Global base styles for the playground.
+ * Sets the font-family on the body so portal-rendered elements
+ * (e.g. react-select dropdown) inherit the correct typeface.
+ */
+body {
+  font-family:
+    -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+}
