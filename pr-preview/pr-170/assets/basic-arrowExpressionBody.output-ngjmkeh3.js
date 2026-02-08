@@ -1,0 +1,1 @@
+import{j as t}from"./index-DKJERyte.js";const i=e=>t.jsx("div",{style:{display:"flex",flexDirection:e.direction},...e});function n(e){return t.jsx(i,{...e,direction:"column",className:"x167g77z x1tamke2"})}function x(){return t.jsx(n,{children:"Hello"})}export{x as App};
