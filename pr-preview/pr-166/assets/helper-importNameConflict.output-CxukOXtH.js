@@ -1,1 +1,0 @@
-import{j as s}from"./index-CLa-IExF.js";import{e}from"./helpers-DKMA8xkd.js";const t=e("fast"),p=()=>s.jsxs("div",{children:[s.jsx("div",{children:t}),s.jsx("div",{className:"x4lopbt"})]});export{p as App};

@@ -45,12 +45,12 @@
   inherits: false
 }
 
-@property --x-maxWidth {
+@property --x-zIndex {
   syntax: "*";
   inherits: false
 }
 
-@property --x-zIndex {
+@property --x-maxWidth {
   syntax: "*";
   inherits: false
 }
@@ -90,12 +90,12 @@
   inherits: false
 }
 
-@property --x-strokeWidth {
+@property --x-color {
   syntax: "*";
   inherits: false
 }
 
-@property --x-color {
+@property --x-strokeWidth {
   syntax: "*";
   inherits: false
 }
