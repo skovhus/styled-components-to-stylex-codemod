@@ -1,1 +1,0 @@
-import{j as o}from"./index-DUEN-k9G.js";import{w as s}from"./helpers-B4NHd4_a.js";const e=n=>o.jsx("div",{...n}),t=s(e),r=()=>o.jsx(t,{className:"x1e2nbdu",children:"Hello"});export{r as App};
