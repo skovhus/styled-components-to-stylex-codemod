@@ -1,0 +1,1 @@
+import{j as o}from"./index-C0e-C6u8.js";function t(n){return o.jsx("div",{children:n.content})}function e(n){return o.jsx(t,{...n,className:"x1p5oq8j x1xpa7k x1sgudl8 x1uhho1l"})}const r=()=>o.jsx(e,{content:"hello"});export{r as App};
