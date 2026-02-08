@@ -1,0 +1,1 @@
+import{j as n}from"./index-ByUSJ-O2.js";const t=(o,c)=>o,s=t(function(){return n.jsx("div",{children:"Hello"})}),i=()=>n.jsxs("div",{children:[n.jsx("div",{className:"x78zum5 x5yr21d",children:"Fallback content"}),n.jsx(s,{})]});export{i as App,s as MyComponent};
