@@ -8,4 +8,4 @@ const Box = styled.div`
   ${(props) => (props.theme.isDark ? `padding: ${thinPixel()};` : `padding: 100px;`)}
 `;
 
-export const App = () => <Box />;
+export const App = () => <Box>Theme prop</Box>;

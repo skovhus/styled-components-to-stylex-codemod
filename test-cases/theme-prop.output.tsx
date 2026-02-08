@@ -16,7 +16,7 @@ function Box(props: React.PropsWithChildren<{ ref?: React.Ref<HTMLDivElement> }>
   );
 }
 
-export const App = () => <Box />;
+export const App = () => <Box>Theme prop</Box>;
 
 const styles = stylex.create({
   box: {
