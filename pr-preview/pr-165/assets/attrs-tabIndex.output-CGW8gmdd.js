@@ -1,0 +1,1 @@
+import{j as n}from"./index-BkkT2WGp.js";function t(o){const{children:x,$applyBackground:s,tabIndex:e,...r}=o;return n.jsx("div",{tabIndex:e??0,...r,...{0:{className:"x1odjw0f x1n2onr6 x1iyjqo2 xgcd1z6"},1:{className:"x1odjw0f x1n2onr6 x1iyjqo2 xlsoqq1"}}[!!s<<0],children:x})}const c=()=>n.jsx(t,{children:"Tab me!"});export{c as App,t as Component};
