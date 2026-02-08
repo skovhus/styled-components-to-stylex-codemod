@@ -9,14 +9,14 @@ export const App = () => (
 
 const styles = stylex.create({
   button: {
-    color: "#BF4F74",
+    color: "#bf4f74",
     fontSize: "1em",
     margin: "1em",
     paddingBlock: "0.25em",
     paddingInline: "1em",
     borderWidth: "2px",
     borderStyle: "solid",
-    borderColor: "#BF4F74",
+    borderColor: "#bf4f74",
     borderRadius: "3px",
   },
   tomatoButton: {

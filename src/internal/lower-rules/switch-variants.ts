@@ -5,7 +5,7 @@
 import type { WarningLog } from "../logger.js";
 import { literalToString } from "../utilities/jscodeshift-utils.js";
 
-export type CssSwitchParseResult = {
+type CssSwitchParseResult = {
   // Maps explicit string literal cases to the returned css tagged template expression
   caseCssTemplates: Map<string, { quasi: any }>;
   // The default returned css tagged template expression

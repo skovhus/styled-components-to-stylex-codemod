@@ -14,7 +14,7 @@ export type StyledInterpolationSlot = {
   endOffset: number;
 };
 
-export type ParsedStyledTemplate = {
+type ParsedStyledTemplate = {
   rawCss: string;
   slots: StyledInterpolationSlot[];
   stylisAst: Element[];

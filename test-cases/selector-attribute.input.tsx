@@ -7,7 +7,7 @@ const Input = styled.input`
   font-size: 14px;
 
   &:focus {
-    border-color: #BF4F74;
+    border-color: #bf4f74;
     outline: none;
   }
 
@@ -42,7 +42,7 @@ const Input = styled.input`
 `;
 
 const Link = styled.a`
-  color: #BF4F74;
+  color: #bf4f74;
   text-decoration: none;
 
   &[target="_blank"]::after {
@@ -51,11 +51,11 @@ const Link = styled.a`
   }
 
   &[href^="https"] {
-    color: #4CAF50;
+    color: #4caf50;
   }
 
   &[href$=".pdf"] {
-    color: #F44336;
+    color: #f44336;
   }
 `;
 

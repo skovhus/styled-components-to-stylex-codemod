@@ -11,14 +11,14 @@ const Button = styled.button`
 
   &:hover,
   &:focus {
-    background: #BF4F74;
+    background: #bf4f74;
     color: white;
-    border-color: #BF4F74;
+    border-color: #bf4f74;
   }
 
   &:active,
   &:focus-visible {
-    outline: 2px solid #4F74BF;
+    outline: 2px solid #4f74bf;
     outline-offset: 2px;
   }
 `;
@@ -31,7 +31,7 @@ const Link = styled.a`
   &:hover,
   &:focus,
   &:active {
-    color: #BF4F74;
+    color: #bf4f74;
     text-decoration: underline;
   }
 `;
@@ -44,7 +44,7 @@ const Input = styled.input`
 
   &:hover,
   &:focus {
-    border-color: #BF4F74;
+    border-color: #bf4f74;
   }
 
   &::placeholder {

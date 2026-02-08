@@ -148,7 +148,7 @@ tryResolveBlockLevel({
   resolverImports,
   handlerContext,
   // ...10 more shared fields
-  conditional,  // ← the only call-specific field
+  conditional, // ← the only call-specific field
 });
 ```
 

@@ -38,7 +38,7 @@ const styles = stylex.create({
     display: "inline-block",
     paddingBlock: "8px",
     paddingInline: "16px",
-    backgroundColor: "#BF4F74",
+    backgroundColor: "#bf4f74",
     color: "white",
     borderWidth: 0,
     borderStyle: "none",

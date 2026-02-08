@@ -54,7 +54,7 @@ const Component = styled.div\`...\`;
     const result = transformWithWarnings(
       { source, path: "test.tsx" },
       { jscodeshift: j, j, stats: () => {}, report: () => {} },
-      { adapter: fixtureAdapter }
+      { adapter: fixtureAdapter },
     );
 
     // Assert the expected behavior

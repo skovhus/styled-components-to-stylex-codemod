@@ -10,7 +10,7 @@ import { handleInterpolatedDeclaration } from "./rule-interpolated-declaration.j
 
 type CommentSource = { leading?: string; trailingLine?: string } | null;
 
-export type RuleDeclarationContext = {
+type RuleDeclarationContext = {
   ctx: DeclProcessingState;
   rule: CssRuleIR;
   media: string | undefined;

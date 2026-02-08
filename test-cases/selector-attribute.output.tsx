@@ -57,7 +57,7 @@ const styles = stylex.create({
     },
     borderColor: {
       default: "#ccc",
-      ":focus": "#BF4F74",
+      ":focus": "#bf4f74",
     },
     borderRadius: "4px",
     fontSize: "14px",
@@ -95,7 +95,7 @@ const styles = stylex.create({
     borderRadius: "50%",
   },
   link: {
-    color: "#BF4F74",
+    color: "#bf4f74",
     textDecoration: "none",
   },
   linkExternal: {
@@ -105,9 +105,9 @@ const styles = stylex.create({
     },
   },
   linkHttps: {
-    color: "#4CAF50",
+    color: "#4caf50",
   },
   linkPdf: {
-    color: "#F44336",
+    color: "#f44336",
   },
 });

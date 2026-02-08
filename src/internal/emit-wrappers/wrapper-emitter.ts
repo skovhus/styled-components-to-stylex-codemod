@@ -30,7 +30,7 @@ type TsTypeAnnotationInput = Parameters<JSCodeshift["tsTypeAnnotation"]>[0];
 type BlockStatementBody = Parameters<JSCodeshift["blockStatement"]>[0];
 type AstNodeOrNull = ASTNode | null | undefined;
 
-export type WrapperEmitterArgs = {
+type WrapperEmitterArgs = {
   root: Collection<ASTNode>;
   j: JSCodeshift;
   filePath: string;

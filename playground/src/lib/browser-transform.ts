@@ -5,7 +5,7 @@ import type { WarningLog } from "../../../src/internal/logger";
 
 export type { WarningLog };
 
-export interface TransformResult {
+interface TransformResult {
   code: string | null;
   warnings: WarningLog[];
 }
