@@ -1820,6 +1820,65 @@ export const App = () => <Box>Test</Box>;
   });
 });
 
+describe("array destructuring holes", () => {
+  it("should handle array destructuring patterns with holes (elisions)", () => {
+    // Regression test: `const [, setHovered] = useState(false)` produces an
+    // ArrayPattern with a null element representing the hole.  The AST safety
+    // check must not throw on legitimate elisions.
+    const source = `
+import styled from "styled-components";
+import { useState } from "react";
+
+const Container = styled.div\`
+  padding: 16px;
+  background-color: #f0f0f0;
+\`;
+
+export function App() {
+  const [, setHovered] = useState(false);
+  return <Container onClick={() => setHovered(true)}>Hello</Container>;
+}
+`;
+
+    const result = transformWithWarnings(
+      { source, path: "array-destructure-hole.tsx" },
+      { jscodeshift: j, j, stats: () => {}, report: () => {} },
+      { adapter: fixtureAdapter },
+    );
+
+    expect(result.code).not.toBeNull();
+    expect(result.warnings).toHaveLength(0);
+    // The destructuring pattern should be preserved in the output
+    expect(result.code).toContain("[, setHovered]");
+  });
+
+  it("should handle array expressions with holes (sparse arrays)", () => {
+    // [1, , 3] produces an ArrayExpression with a null element.
+    const source = `
+import styled from "styled-components";
+
+const Box = styled.div\`
+  color: blue;
+\`;
+
+const sparse = [1, , 3];
+
+export function App() {
+  return <Box>{sparse.length}</Box>;
+}
+`;
+
+    const result = transformWithWarnings(
+      { source, path: "array-expression-hole.tsx" },
+      { jscodeshift: j, j, stats: () => {}, report: () => {} },
+      { adapter: fixtureAdapter },
+    );
+
+    expect(result.code).not.toBeNull();
+    expect(result.warnings).toHaveLength(0);
+  });
+});
+
 describe("attrs defaultAttrs nullish coalescing", () => {
   it("should preserve nullish-coalescing semantics for intrinsic element attrs", () => {
     // Regression test: styled.div.attrs with props.X ?? defaultValue should
