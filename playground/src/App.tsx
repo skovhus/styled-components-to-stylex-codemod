@@ -268,6 +268,7 @@ export default function App() {
               value={testCaseOptions.find((o) => o.value === selectedTestCase) ?? null}
               onChange={handleTestCaseChange}
               styles={testCaseSelectStyles}
+              menuPortalTarget={document.body}
             />
           </div>
           <div {...stylex.props(s.navButtons)}>
@@ -515,6 +516,7 @@ const testCaseSelectStyles: StylesConfig<TestCaseOption, false> = {
   dropdownIndicator: (base) => ({ ...base, padding: "0 4px" }),
   indicatorSeparator: () => ({ display: "none" }),
   menu: (base) => ({ ...base, zIndex: 20 }),
+  menuPortal: (base) => ({ ...base, zIndex: 9999 }),
 };
 
 type InitialPlaygroundState = {
@@ -810,10 +812,6 @@ const s = stylex.create({
     minWidth: {
       default: null,
       [MOBILE]: 0,
-    },
-    overflow: {
-      default: null,
-      [MOBILE]: "hidden",
     },
   },
   headerRight: {
