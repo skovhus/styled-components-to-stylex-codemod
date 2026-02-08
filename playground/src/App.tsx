@@ -2,7 +2,7 @@
 import { useState, useEffect, useCallback, useRef, Component } from "react";
 import CodeMirror from "@uiw/react-codemirror";
 import { javascript } from "@codemirror/lang-javascript";
-import Select, { type SingleValue } from "react-select";
+import Select, { type SingleValue, type StylesConfig } from "react-select";
 import { ThemeProvider } from "styled-components";
 import * as stylex from "@stylexjs/stylex";
 import { loadTestCaseModule, testCases } from "./lib/test-cases";
@@ -267,6 +267,7 @@ export default function App() {
               options={testCaseOptions}
               value={testCaseOptions.find((o) => o.value === selectedTestCase) ?? null}
               onChange={handleTestCaseChange}
+              styles={testCaseSelectStyles}
               menuPortalTarget={document.body}
             />
           </div>
@@ -494,6 +495,29 @@ const initialRenderState: RenderState = {
 };
 
 const testCaseOptions: TestCaseOption[] = testCases.map((t) => ({ value: t.name, label: t.name }));
+
+const testCaseSelectStyles: StylesConfig<TestCaseOption, false> = {
+  container: (base) => ({ ...base, width: "100%" }),
+  control: (base) => ({
+    ...base,
+    minHeight: 30,
+    height: 30,
+    borderRadius: 6,
+    borderColor: "#ccc",
+    boxShadow: "none",
+    fontSize: 13,
+  }),
+  valueContainer: (base) => ({ ...base, padding: "0 8px" }),
+  input: (base) => ({ ...base, margin: 0, padding: 0 }),
+  singleValue: (base) => ({ ...base, fontSize: 13 }),
+  placeholder: (base) => ({ ...base, fontSize: 13 }),
+  option: (base) => ({ ...base, fontSize: 13 }),
+  indicatorsContainer: (base) => ({ ...base, height: 30 }),
+  dropdownIndicator: (base) => ({ ...base, padding: "0 4px" }),
+  indicatorSeparator: () => ({ display: "none" }),
+  menu: (base) => ({ ...base, zIndex: 20 }),
+  menuPortal: (base) => ({ ...base, zIndex: 9999 }),
+};
 
 type InitialPlaygroundState = {
   selectedTestCase: string;
