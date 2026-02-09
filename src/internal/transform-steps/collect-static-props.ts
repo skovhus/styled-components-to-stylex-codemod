@@ -57,6 +57,13 @@ export function collectStaticPropsStep(ctx: TransformContext): StepResult {
       const componentName = expr.left.object.name as string;
       const propName = expr.left.property?.name ?? expr.left.property?.value;
 
+      // Theme-only defaultProps are dropped entirely (theme values are resolved via StyleX variables).
+      // Don't track for inheritance or reinsertion — just remove.
+      if (propName === "defaultProps" && ctx.themeDefaultPropsComponents?.has(componentName)) {
+        j(p).remove();
+        return;
+      }
+
       // Track property names for inheritance generation
       if (propName) {
         const names = staticPropertyNames.get(componentName) ?? [];

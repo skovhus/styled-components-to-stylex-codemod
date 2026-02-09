@@ -80,6 +80,8 @@ export class TransformContext {
   newImportLocalNames?: Set<string>;
   newImportSourcesByLocal?: Map<string, Set<string>>;
   needsReactImport?: boolean;
+  /** Components whose `defaultProps = { theme: ... }` should be removed during transform. */
+  themeDefaultPropsComponents?: Set<string>;
 
   constructor(file: FileInfo, api: API, options: TransformOptions) {
     const j = api.jscodeshift;

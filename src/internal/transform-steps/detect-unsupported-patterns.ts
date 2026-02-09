@@ -334,109 +334,17 @@ export function detectUnsupportedPatternsStep(ctx: TransformContext): StepResult
       });
   }
 
-  if (!themePropOverrideLoc && styledComponentNames.size > 0) {
-    const getThemeDefaultPropsLoc = (expr: any): { line: number; column: number } | null => {
-      const objExpr = unwrapExpression(expr);
-      if (!objExpr || objExpr.type !== "ObjectExpression") {
-        return null;
-      }
-      for (const prop of objExpr.properties ?? []) {
-        if (!prop || (prop.type !== "Property" && prop.type !== "ObjectProperty")) {
-          continue;
-        }
-        const key = prop.key;
-        const keyName =
-          key?.type === "Identifier"
-            ? key.name
-            : key?.type === "StringLiteral"
-              ? key.value
-              : key?.type === "Literal" && typeof key.value === "string"
-                ? key.value
-                : null;
-        if (keyName !== "theme") {
-          continue;
-        }
-        const loc = prop.loc?.start ?? objExpr.loc?.start;
-        if (loc?.line !== undefined) {
-          return { line: loc.line, column: loc.column ?? 0 };
-        }
-        return null;
-      }
-      return null;
-    };
-
-    root.find(j.AssignmentExpression).forEach((p) => {
-      if (themePropOverrideLoc) {
-        return;
-      }
-      const left = unwrapExpression(p.node.left);
-      const right = unwrapExpression(p.node.right);
-      if (!left || !right) {
-        return;
-      }
-      if (left.type !== "MemberExpression" && left.type !== "OptionalMemberExpression") {
-        return;
-      }
-      const obj = unwrapExpression(left.object);
-      const prop = left.property;
-      if (obj?.type !== "Identifier") {
-        return;
-      }
-      if (!styledComponentNames.has(obj.name)) {
-        return;
-      }
-      if (left.computed) {
-        return;
-      }
-      if (prop?.type !== "Identifier" || prop.name !== "defaultProps") {
-        return;
-      }
-      const loc = getThemeDefaultPropsLoc(right);
-      if (loc) {
-        themePropOverrideLoc = loc;
-      }
-    });
-
-    root.find(j.AssignmentExpression).forEach((p) => {
-      if (themePropOverrideLoc) {
-        return;
-      }
-      const left = unwrapExpression(p.node.left);
-      if (!left) {
-        return;
-      }
-      if (left.type !== "MemberExpression" && left.type !== "OptionalMemberExpression") {
-        return;
-      }
-      const inner = unwrapExpression(left.object);
-      const themeProp = left.property;
-      if (
-        !inner ||
-        (inner.type !== "MemberExpression" && inner.type !== "OptionalMemberExpression")
-      ) {
-        return;
-      }
-      if (left.computed || inner.computed) {
-        return;
-      }
-      const baseObj = unwrapExpression(inner.object);
-      const defaultPropsProp = inner.property;
-      if (baseObj?.type !== "Identifier") {
-        return;
-      }
-      if (!styledComponentNames.has(baseObj.name)) {
-        return;
-      }
-      if (defaultPropsProp?.type !== "Identifier" || defaultPropsProp.name !== "defaultProps") {
-        return;
-      }
-      if (themeProp?.type !== "Identifier" || themeProp.name !== "theme") {
-        return;
-      }
-      const loc = left.loc?.start ?? inner.loc?.start ?? baseObj.loc?.start;
-      if (loc?.line !== undefined) {
-        themePropOverrideLoc = { line: loc.line, column: loc.column ?? 0 };
-      }
+  // Detect Component.defaultProps = { theme: ... } assignments.
+  // These are safe to handle: the codemod removes the defaultProps assignment and
+  // resolves theme values via the adapter (StyleX variables). We record the component
+  // names so collect-static-props can strip the theme key from defaultProps.
+  if (styledComponentNames.size > 0) {
+    collectThemeDefaultProps({
+      root,
+      j,
+      styledComponentNames,
+      unwrapExpression,
+      ctx,
     });
   }
 
@@ -480,4 +388,118 @@ export function detectUnsupportedPatternsStep(ctx: TransformContext): StepResult
   }
 
   return CONTINUE;
+}
+
+// =============================================================================
+// Non-exported helpers
+// =============================================================================
+
+/**
+ * Checks whether an object expression contains ONLY a `theme` key (no other properties).
+ */
+function isThemeOnlyObjectExpression(objExpr: any): boolean {
+  if (!objExpr || objExpr.type !== "ObjectExpression") {
+    return false;
+  }
+  const props = (objExpr.properties ?? []).filter(
+    (p: any) => p && (p.type === "Property" || p.type === "ObjectProperty"),
+  );
+  if (props.length === 0) {
+    return false;
+  }
+  return props.every((prop: any) => {
+    const key = prop.key;
+    const keyName =
+      key?.type === "Identifier"
+        ? key.name
+        : key?.type === "StringLiteral"
+          ? key.value
+          : key?.type === "Literal" && typeof key.value === "string"
+            ? key.value
+            : null;
+    return keyName === "theme";
+  });
+}
+
+/**
+ * Detects `Component.defaultProps = { theme: ... }` and `Component.defaultProps.theme = ...`
+ * assignments. Records the component names on context so the assignments can be cleaned up
+ * later (instead of bailing the entire transform).
+ */
+function collectThemeDefaultProps(args: {
+  root: ReturnType<import("jscodeshift").API["jscodeshift"]>;
+  j: import("jscodeshift").API["jscodeshift"];
+  styledComponentNames: Set<string>;
+  unwrapExpression: (expr: any) => any;
+  ctx: TransformContext;
+}): void {
+  const { root, j, styledComponentNames, unwrapExpression, ctx } = args;
+
+  // Pattern 1: Component.defaultProps = { theme: ... }
+  root.find(j.AssignmentExpression).forEach((p) => {
+    const left = unwrapExpression(p.node.left);
+    const right = unwrapExpression(p.node.right);
+    if (!left || !right) {
+      return;
+    }
+    if (left.type !== "MemberExpression" && left.type !== "OptionalMemberExpression") {
+      return;
+    }
+    const obj = unwrapExpression(left.object);
+    const prop = left.property;
+    if (obj?.type !== "Identifier") {
+      return;
+    }
+    if (!styledComponentNames.has(obj.name)) {
+      return;
+    }
+    if (left.computed) {
+      return;
+    }
+    if (prop?.type !== "Identifier" || prop.name !== "defaultProps") {
+      return;
+    }
+    if (isThemeOnlyObjectExpression(right)) {
+      ctx.themeDefaultPropsComponents ??= new Set();
+      ctx.themeDefaultPropsComponents.add(obj.name);
+    }
+  });
+
+  // Pattern 2: Component.defaultProps.theme = ...
+  root.find(j.AssignmentExpression).forEach((p) => {
+    const left = unwrapExpression(p.node.left);
+    if (!left) {
+      return;
+    }
+    if (left.type !== "MemberExpression" && left.type !== "OptionalMemberExpression") {
+      return;
+    }
+    const inner = unwrapExpression(left.object);
+    const themeProp = left.property;
+    if (
+      !inner ||
+      (inner.type !== "MemberExpression" && inner.type !== "OptionalMemberExpression")
+    ) {
+      return;
+    }
+    if (left.computed || inner.computed) {
+      return;
+    }
+    const baseObj = unwrapExpression(inner.object);
+    const defaultPropsProp = inner.property;
+    if (baseObj?.type !== "Identifier") {
+      return;
+    }
+    if (!styledComponentNames.has(baseObj.name)) {
+      return;
+    }
+    if (defaultPropsProp?.type !== "Identifier" || defaultPropsProp.name !== "defaultProps") {
+      return;
+    }
+    if (themeProp?.type !== "Identifier" || themeProp.name !== "theme") {
+      return;
+    }
+    ctx.themeDefaultPropsComponents ??= new Set();
+    ctx.themeDefaultPropsComponents.add(baseObj.name);
+  });
 }

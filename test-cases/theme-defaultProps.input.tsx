@@ -1,4 +1,3 @@
-// @expected-warning: Theme prop overrides on styled components are not supported
 import styled from "styled-components";
 import { testCaseTheme } from "./tokens.stylex";
 
