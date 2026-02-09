@@ -1,0 +1,1 @@
+import{j as e,Z as t}from"./index-Pee1c3Zl.js";function x(o){const{children:s}=o,r=t();return e.jsx("div",{...{0:{className:"x1tamke2 xtv2irb x13xamvd"},1:{className:"x1tamke2 x1cc1xoi x15qk9wz"}}[!!r.isDark<<0],children:s})}const a=()=>e.jsx("div",{style:{backgroundColor:"red",opacity:.5},children:e.jsx(x,{children:"Hello world"})});export{a as App};
