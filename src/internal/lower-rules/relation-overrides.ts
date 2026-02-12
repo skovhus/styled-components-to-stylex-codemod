@@ -1,19 +1,20 @@
 /**
- * Builds descendant override style objects from pseudo buckets.
+ * Builds relation override style objects from pseudo buckets.
+ * Handles descendant, ancestor, and sibling selector overrides.
  */
 import type { JSCodeshift } from "jscodeshift";
 import { isAstNode } from "../utilities/jscodeshift-utils.js";
 import type { ExpressionKind } from "./decl-types.js";
 import { literalToAst } from "../transform/helpers.js";
 
-export const finalizeDescendantOverrides = (args: {
+export const finalizeRelationOverrides = (args: {
   j: JSCodeshift;
-  descendantOverridePseudoBuckets: Map<string, Map<string | null, Record<string, unknown>>>;
+  relationOverridePseudoBuckets: Map<string, Map<string | null, Record<string, unknown>>>;
   resolvedStyleObjects: Map<string, unknown>;
   makeCssPropKey: (j: JSCodeshift, prop: string) => ExpressionKind;
 }): void => {
-  const { j, descendantOverridePseudoBuckets, resolvedStyleObjects, makeCssPropKey } = args;
-  if (descendantOverridePseudoBuckets.size === 0) {
+  const { j, relationOverridePseudoBuckets, resolvedStyleObjects, makeCssPropKey } = args;
+  if (relationOverridePseudoBuckets.size === 0) {
     return;
   }
 
@@ -29,7 +30,7 @@ export const finalizeDescendantOverrides = (args: {
   // Local type guard that narrows to ExpressionKind for use with jscodeshift builders
   const isExpressionNode = (v: unknown): v is ExpressionKind => isAstNode(v);
 
-  for (const [overrideKey, pseudoBuckets] of descendantOverridePseudoBuckets.entries()) {
+  for (const [overrideKey, pseudoBuckets] of relationOverridePseudoBuckets.entries()) {
     const baseBucket = pseudoBuckets.get(null) ?? {};
     const props: any[] = [];
 

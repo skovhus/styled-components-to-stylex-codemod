@@ -37,8 +37,8 @@ export function finalizeDeclProcessing(ctx: DeclProcessingState): void {
   } = ctx;
   const {
     rewriteCssVarsInStyleObject,
-    descendantOverridePseudoBuckets,
-    descendantOverrides,
+    relationOverridePseudoBuckets,
+    relationOverrides,
     ancestorSelectorParents,
     resolvedStyleObjects,
     warnings,
@@ -135,19 +135,19 @@ export function finalizeDeclProcessing(ctx: DeclProcessingState): void {
       }
       const overrideStyleKey = `${toStyleKey(childLocal)}In${decl.localName}`;
       ancestorSelectorParents.add(decl.styleKey);
-      // Only add to descendantOverrides once per override key
-      if (!descendantOverridePseudoBuckets.has(overrideStyleKey)) {
-        descendantOverrides.push({
+      // Only add to relationOverrides once per override key
+      if (!relationOverridePseudoBuckets.has(overrideStyleKey)) {
+        relationOverrides.push({
           parentStyleKey: decl.styleKey,
           childStyleKey: childDecl.styleKey,
           overrideStyleKey,
         });
       }
       // Get or create the pseudo buckets map for this override key
-      let pseudoBuckets = descendantOverridePseudoBuckets.get(overrideStyleKey);
+      let pseudoBuckets = relationOverridePseudoBuckets.get(overrideStyleKey);
       if (!pseudoBuckets) {
         pseudoBuckets = new Map();
-        descendantOverridePseudoBuckets.set(overrideStyleKey, pseudoBuckets);
+        relationOverridePseudoBuckets.set(overrideStyleKey, pseudoBuckets);
       }
       // Get or create the bucket for this specific pseudo (or null for base)
       let bucket = pseudoBuckets.get(ancestorPseudo);

@@ -38,8 +38,8 @@ export function processDeclRules(ctx: DeclProcessingState): void {
     parseExpr,
     cssHelperNames,
     declByLocalName,
-    descendantOverridePseudoBuckets,
-    descendantOverrides,
+    relationOverridePseudoBuckets,
+    relationOverrides,
     ancestorSelectorParents,
     resolveThemeValue,
     resolveThemeValueFromFn,
@@ -204,8 +204,8 @@ export function processDeclRules(ctx: DeclProcessingState): void {
         ancestorSelectorParents.add(parentDecl.styleKey);
 
         // Register the override relationship (parent→child)
-        if (!descendantOverridePseudoBuckets.has(overrideStyleKey)) {
-          descendantOverrides.push({
+        if (!relationOverridePseudoBuckets.has(overrideStyleKey)) {
+          relationOverrides.push({
             parentStyleKey: parentDecl.styleKey,
             childStyleKey: decl.styleKey,
             overrideStyleKey,
@@ -213,10 +213,10 @@ export function processDeclRules(ctx: DeclProcessingState): void {
         }
 
         // Get or create the pseudo buckets map for this override key
-        let pseudoBuckets = descendantOverridePseudoBuckets.get(overrideStyleKey);
+        let pseudoBuckets = relationOverridePseudoBuckets.get(overrideStyleKey);
         if (!pseudoBuckets) {
           pseudoBuckets = new Map();
-          descendantOverridePseudoBuckets.set(overrideStyleKey, pseudoBuckets);
+          relationOverridePseudoBuckets.set(overrideStyleKey, pseudoBuckets);
         }
         let bucket = pseudoBuckets.get(ancestorPseudo);
         if (!bucket) {
@@ -262,19 +262,19 @@ export function processDeclRules(ctx: DeclProcessingState): void {
         if (childDecl) {
           const overrideStyleKey = `${toStyleKey(otherLocal)}In${decl.localName}`;
           ancestorSelectorParents.add(decl.styleKey);
-          // Only add to descendantOverrides once per override key
-          if (!descendantOverridePseudoBuckets.has(overrideStyleKey)) {
-            descendantOverrides.push({
+          // Only add to relationOverrides once per override key
+          if (!relationOverridePseudoBuckets.has(overrideStyleKey)) {
+            relationOverrides.push({
               parentStyleKey: decl.styleKey,
               childStyleKey: childDecl.styleKey,
               overrideStyleKey,
             });
           }
           // Get or create the pseudo buckets map for this override key
-          let pseudoBuckets = descendantOverridePseudoBuckets.get(overrideStyleKey);
+          let pseudoBuckets = relationOverridePseudoBuckets.get(overrideStyleKey);
           if (!pseudoBuckets) {
             pseudoBuckets = new Map();
-            descendantOverridePseudoBuckets.set(overrideStyleKey, pseudoBuckets);
+            relationOverridePseudoBuckets.set(overrideStyleKey, pseudoBuckets);
           }
           // Get or create the bucket for this specific pseudo (or null for base)
           let bucket = pseudoBuckets.get(ancestorPseudo);

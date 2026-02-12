@@ -65,7 +65,7 @@ export class TransformContext {
   hasUniversalSelectors?: boolean;
   universalSelectorLoc?: { line: number; column: number } | null;
   resolvedStyleObjects?: Map<string, unknown>;
-  descendantOverrides?: any[];
+  relationOverrides?: any[];
   ancestorSelectorParents?: Set<string>;
   emptyStyleKeys?: Set<string>;
   stylesIdentifier?: string;

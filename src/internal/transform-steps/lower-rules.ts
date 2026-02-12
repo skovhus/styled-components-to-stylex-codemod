@@ -18,7 +18,7 @@ export function lowerRulesStep(ctx: TransformContext): StepResult {
   const lowered = lowerRules(ctx);
 
   ctx.resolvedStyleObjects = lowered.resolvedStyleObjects;
-  ctx.descendantOverrides = lowered.descendantOverrides;
+  ctx.relationOverrides = lowered.relationOverrides;
   ctx.ancestorSelectorParents = lowered.ancestorSelectorParents;
 
   if (lowered.bail || ctx.resolveValueBailRef.value) {
