@@ -1,4 +1,3 @@
-// @expected-warning: Component selectors like `${OtherComponent}:hover &` are not directly representable in StyleX. Manual refactor is required
 import styled from "styled-components";
 
 const Link = styled.a`

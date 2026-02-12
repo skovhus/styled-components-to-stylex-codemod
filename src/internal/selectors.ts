@@ -11,6 +11,8 @@ type ParsedSelector =
   | { kind: "base" } // Just "&"
   | { kind: "pseudo"; pseudos: string[] } // ":hover", ":focus:not(:disabled)", etc.
   | { kind: "pseudoElement"; element: string } // "::before", "::after"
+  | { kind: "adjacentSibling"; selectorArg: string | null } // "& + &", "&.active + &"
+  | { kind: "generalSibling"; selectorArg: string | null } // "& ~ &", "&.active ~ &"
   | { kind: "attribute"; attr: ParsedAttributeSelector }
   | { kind: "unsupported"; reason: string };
 
@@ -90,6 +92,11 @@ function parseSingleSelector(selector: selectorParser.Selector): ParsedSelector 
 
   if (nodes.length === 0) {
     return { kind: "base" };
+  }
+
+  const siblingSelector = parseSiblingSelector(nodes);
+  if (siblingSelector) {
+    return siblingSelector;
   }
 
   // Check for unsupported patterns
@@ -185,6 +192,73 @@ function parseSingleSelector(selector: selectorParser.Selector): ParsedSelector 
 
   // Just & with nothing else
   return { kind: "base" };
+}
+
+function parseSiblingSelector(nodes: selectorParser.Node[]): ParsedSelector | null {
+  const siblingCombinatorIndices: number[] = [];
+  for (let i = 0; i < nodes.length; i++) {
+    const node = nodes[i];
+    if (node?.type !== "combinator") {
+      continue;
+    }
+    const value = node.value.trim();
+    if (value === "+" || value === "~") {
+      siblingCombinatorIndices.push(i);
+    }
+  }
+
+  if (siblingCombinatorIndices.length !== 1) {
+    return null;
+  }
+
+  const combinatorIndex = siblingCombinatorIndices[0]!;
+  const combinatorNode = nodes[combinatorIndex];
+  if (!combinatorNode || combinatorNode.type !== "combinator") {
+    return null;
+  }
+
+  const leftNodes = nodes.slice(0, combinatorIndex);
+  const rightNodes = nodes.slice(combinatorIndex + 1);
+  if (leftNodes.length === 0 || rightNodes.length !== 1) {
+    return null;
+  }
+  const firstLeftNode = leftNodes[0];
+  const rightNode = rightNodes[0];
+  if (
+    !firstLeftNode ||
+    firstLeftNode.type !== "nesting" ||
+    !rightNode ||
+    rightNode.type !== "nesting"
+  ) {
+    return null;
+  }
+
+  const leftTail = leftNodes.slice(1);
+  const hasUnsupportedLeftTail = leftTail.some(
+    (node) =>
+      node.type !== "class" &&
+      node.type !== "pseudo" &&
+      node.type !== "comment" &&
+      node.type !== "spacing",
+  );
+  if (hasUnsupportedLeftTail) {
+    return null;
+  }
+
+  const selectorArgRaw = leftTail
+    .filter((node) => node.type !== "comment" && node.type !== "spacing")
+    .map((node) => node.toString())
+    .join("");
+  const selectorArg = selectorArgRaw.length > 0 ? selectorArgRaw : null;
+
+  const combinatorValue = combinatorNode.value.trim();
+  if (combinatorValue === "+") {
+    return { kind: "adjacentSibling", selectorArg };
+  }
+  if (combinatorValue === "~") {
+    return { kind: "generalSibling", selectorArg };
+  }
+  return null;
 }
 
 /**

@@ -6,8 +6,8 @@ import type { DeclProcessingState } from "./decl-setup.js";
 import { computeSelectorWarningLoc } from "../css-ir.js";
 import { cssDeclarationToStylexDeclarations } from "../css-prop-mapping.js";
 import { addPropComments } from "./comments.js";
+import { addStyleKeyMixin } from "./precompute.js";
 import { processRuleDeclarations } from "./process-rule-declarations.js";
-import { toKebab } from "./utils.js";
 import {
   normalizeSelectorForInputAttributePseudos,
   normalizeInterpolatedSelector,
@@ -29,7 +29,6 @@ export function processDeclRules(ctx: DeclProcessingState): void {
     localVarValues,
     cssHelperPropValues,
     getComposedDefaultValue,
-    resolveComposedDefaultValue,
   } = ctx;
   const {
     j,
@@ -38,13 +37,14 @@ export function processDeclRules(ctx: DeclProcessingState): void {
     resolveSelector,
     parseExpr,
     cssHelperNames,
-    resolvedStyleObjects,
     declByLocalName,
-    cssHelperValuesByKey,
-    mixinValuesByKey,
-    descendantOverridePseudoBuckets,
-    descendantOverrides,
+    relationOverrideMarkersByKey,
     ancestorSelectorParents,
+    namedAncestorMarkersByStyleKey,
+    namedAncestorMarkersByComponentName,
+    resolveMarker,
+    getOrCreateRelationBucket,
+    registerRelationOverride,
     resolveThemeValue,
     resolveThemeValueFromFn,
     resolveImportInScope,
@@ -70,7 +70,7 @@ export function processDeclRules(ctx: DeclProcessingState): void {
     // NOTE: normalize interpolated component selectors before the complex selector checks
     // to avoid skipping bails for selectors like `${Other} .child &`.
     if (typeof rule.selector === "string") {
-      const s = normalizeInterpolatedSelector(rule.selector).trim();
+      const s = stripSpecificityHackSelector(normalizeInterpolatedSelector(rule.selector)).trim();
       const hasComponentExpr = rule.selector.includes("__SC_EXPR_");
       const hasInterpolatedPseudo = /:[^\s{]*__SC_EXPR_\d+__/.test(rule.selector);
 
@@ -127,23 +127,16 @@ export function processDeclRules(ctx: DeclProcessingState): void {
         }
       } else if (/&\.[a-zA-Z0-9_-]+/.test(s)) {
         // Class selector on same element like &.active
-        // Note: Specificity hacks (&&, &&&) bail early in transform.ts
-        state.markBail();
-        warnings.push({
-          severity: "warning",
-          type: "Unsupported selector: class selector",
-          loc: computeSelectorWarningLoc(decl.loc, decl.rawCss, rule.selector),
-        });
-        break;
-      } else if (/[+~]/.test(s) && !isHandledComponentPattern) {
-        // Sibling combinators like `& + &`, `& ~ &`
-        state.markBail();
-        warnings.push({
-          severity: "warning",
-          type: "Unsupported selector: sibling combinator",
-          loc: computeSelectorWarningLoc(decl.loc, decl.rawCss, rule.selector),
-        });
-        break;
+        const parsed = parseSelector(s);
+        if (parsed.kind !== "adjacentSibling" && parsed.kind !== "generalSibling") {
+          state.markBail();
+          warnings.push({
+            severity: "warning",
+            type: "Unsupported selector: class selector",
+            loc: computeSelectorWarningLoc(decl.loc, decl.rawCss, rule.selector),
+          });
+          break;
+        }
       } else if (/\s+[a-zA-Z.#]/.test(s) && !isHandledComponentPattern) {
         // Descendant element/class/id selectors like `& a`, `& .child`, `& #foo`
         // But NOT `&:hover ${Child}` (component selector pattern)
@@ -169,170 +162,132 @@ export function processDeclRules(ctx: DeclProcessingState): void {
 
       const selTrim2 = rule.selector.trim();
 
-      // `${Other}:hover &` (Icon reacting to Link hover)
-      if (
-        otherLocal &&
-        !isCssHelperPlaceholder &&
-        selTrim2.startsWith("__SC_EXPR_") &&
-        rule.selector.includes(":hover") &&
-        rule.selector.includes("&")
-      ) {
-        const parentDecl = declByLocalName.get(otherLocal);
-        const parentStyle = parentDecl && resolvedStyleObjects.get(parentDecl.styleKey);
-        if (parentStyle) {
-          for (const d of rule.declarations) {
-            if (d.value.kind !== "static") {
-              continue;
-            }
-            for (const out of cssDeclarationToStylexDeclarations(d)) {
+      const appendRuleDeclarationsToBucket = (bucket: Record<string, unknown>): void => {
+        for (const declaration of rule.declarations) {
+          if (declaration.value.kind === "static") {
+            for (const out of cssDeclarationToStylexDeclarations(declaration)) {
               if (out.value.kind !== "static") {
                 continue;
               }
-              const hoverValue = out.value.value;
-              const rawBase = (styleObj as any)[out.prop] as unknown;
-              let baseValue: string | null = null;
-              if (typeof rawBase === "string" || typeof rawBase === "number") {
-                baseValue = String(rawBase);
-              } else if (cssHelperPropValues.has(out.prop)) {
-                const helperDefault = getComposedDefaultValue(out.prop);
-                if (typeof helperDefault === "string" || typeof helperDefault === "number") {
-                  baseValue = String(helperDefault);
+              const value = cssValueToJs(out.value, declaration.important, out.prop);
+              bucket[out.prop] = value;
+            }
+            continue;
+          }
+          if (declaration.value.kind === "interpolated" && declaration.property) {
+            const slotPart = (
+              declaration.value as { parts?: Array<{ kind: string; slotId?: number }> }
+            ).parts?.find((part) => part.kind === "slot");
+            if (!slotPart || slotPart.slotId === undefined) {
+              continue;
+            }
+            const expr = decl.templateExpressions[slotPart.slotId] as unknown;
+            const resolved =
+              expr &&
+              typeof expr === "object" &&
+              ((expr as { type?: string }).type === "ArrowFunctionExpression" ||
+                (expr as { type?: string }).type === "FunctionExpression")
+                ? resolveThemeValueFromFn(expr)
+                : resolveThemeValue(expr);
+            if (!resolved) {
+              continue;
+            }
+            for (const out of cssDeclarationToStylexDeclarations(declaration)) {
+              const parts =
+                (declaration.value as { parts?: Array<{ kind: string; value?: string }> }).parts ??
+                [];
+              const hasStaticParts = parts.some((part) => part.kind === "static" && part.value);
+              let finalValue: unknown;
+              if (hasStaticParts) {
+                const quasis: any[] = [];
+                const expressions: any[] = [];
+                let currentStatic = "";
+                for (let i = 0; i < parts.length; i++) {
+                  const part = parts[i];
+                  if (!part) {
+                    continue;
+                  }
+                  if (part.kind === "static") {
+                    currentStatic += part.value ?? "";
+                  } else if (part.kind === "slot") {
+                    quasis.push(
+                      j.templateElement({ raw: currentStatic, cooked: currentStatic }, false),
+                    );
+                    currentStatic = "";
+                    expressions.push(resolved);
+                  }
                 }
-              } else if (parentDecl) {
-                const parentValues = parentDecl.isCssHelper
-                  ? cssHelperValuesByKey.get(parentDecl.styleKey)
-                  : mixinValuesByKey.get(parentDecl.styleKey);
-                const parentValue = resolveComposedDefaultValue(
-                  parentValues?.get(out.prop),
-                  out.prop,
-                );
-                if (typeof parentValue === "string" || typeof parentValue === "number") {
-                  baseValue = String(parentValue);
-                }
+                quasis.push(j.templateElement({ raw: currentStatic, cooked: currentStatic }, true));
+                finalValue = j.templateLiteral(quasis, expressions);
+              } else {
+                finalValue = resolved;
               }
-              const varName = `--sc2sx-${toKebab(decl.localName)}-${toKebab(out.prop)}`;
-              (parentStyle as any)[varName] = {
-                default: baseValue ?? null,
-                ":hover": hoverValue,
-              };
-              styleObj[out.prop] = `var(${varName}, ${baseValue ?? "inherit"})`;
+              bucket[out.prop] = finalValue;
             }
           }
         }
+      };
+
+      // `${Other}:pseudo &` (self reacting to ancestor component state)
+      const inverseComponentMatch = selTrim2.match(
+        /^__SC_EXPR_\d+__(:[a-z-]+(?:\([^)]*\))?)?\s*&$/i,
+      );
+      if (otherLocal && !isCssHelperPlaceholder && inverseComponentMatch) {
+        const ancestorPseudo = inverseComponentMatch[1] ?? null;
+        const parentDecl = declByLocalName.get(otherLocal);
+        const parentStyleKey = parentDecl?.styleKey ?? null;
+        const markerName = resolveMarker(otherLocal);
+        const overrideStyleKey = `${toStyleKey(decl.localName)}In${otherLocal}`;
+        if (markerName) {
+          relationOverrideMarkersByKey.set(overrideStyleKey, markerName);
+          if (parentStyleKey) {
+            namedAncestorMarkersByStyleKey.set(parentStyleKey, markerName);
+          } else {
+            namedAncestorMarkersByComponentName.set(otherLocal, markerName);
+          }
+        } else if (parentStyleKey) {
+          ancestorSelectorParents.add(parentStyleKey);
+        }
+        registerRelationOverride({
+          kind: "ancestor",
+          parentStyleKey,
+          ...(parentStyleKey ? {} : { parentComponentName: otherLocal }),
+          targetStyleKey: decl.styleKey,
+          overrideStyleKey,
+        });
+        const bucket = getOrCreateRelationBucket(overrideStyleKey, {
+          kind: "ancestor",
+          pseudo: ancestorPseudo,
+          selectorArg: null,
+        });
+        appendRuleDeclarationsToBucket(bucket);
         continue;
       }
 
-      // `${Child}` / `&:hover ${Child}` / `&:focus-visible ${Child}` (Parent styling a descendant child)
+      // `${Child}` / `&:hover ${Child}` / `&:focus-visible ${Child}` (parent styling a child)
       // Also handle standalone `__SC_EXPR_N__` selectors (no `&` prefix) which Stylis
       // produces when the component selector is used without `&` in the template.
       const isComponentSelectorPattern =
         selTrim2.startsWith("&") || /^__SC_EXPR_\d+__$/.test(selTrim2);
       if (otherLocal && !isCssHelperPlaceholder && isComponentSelectorPattern) {
         const childDecl = declByLocalName.get(otherLocal);
-        // Extract the actual pseudo-selector (e.g., ":hover", ":focus-visible")
-        const pseudoMatch = rule.selector.match(/&(:[a-z-]+(?:\([^)]*\))?)/i);
-        const ancestorPseudo: string | null = pseudoMatch?.[1] ?? null;
-        if (!childDecl) {
-          state.markBail();
-          warnings.push({
-            severity: "warning",
-            type: "Unsupported selector: unknown component selector",
-            loc: computeSelectorWarningLoc(decl.loc, decl.rawCss, rule.selector),
-          });
-          break;
-        }
-        if (childDecl) {
-          const overrideStyleKey = `${toStyleKey(otherLocal)}In${decl.localName}`;
-          ancestorSelectorParents.add(decl.styleKey);
-          // Only add to descendantOverrides once per override key
-          if (!descendantOverridePseudoBuckets.has(overrideStyleKey)) {
-            descendantOverrides.push({
-              parentStyleKey: decl.styleKey,
-              childStyleKey: childDecl.styleKey,
-              overrideStyleKey,
-            });
-          }
-          // Get or create the pseudo buckets map for this override key
-          let pseudoBuckets = descendantOverridePseudoBuckets.get(overrideStyleKey);
-          if (!pseudoBuckets) {
-            pseudoBuckets = new Map();
-            descendantOverridePseudoBuckets.set(overrideStyleKey, pseudoBuckets);
-          }
-          // Get or create the bucket for this specific pseudo (or null for base)
-          let bucket = pseudoBuckets.get(ancestorPseudo);
-          if (!bucket) {
-            bucket = {};
-            pseudoBuckets.set(ancestorPseudo, bucket);
-          }
-
-          for (const d of rule.declarations) {
-            // Handle static values
-            if (d.value.kind === "static") {
-              for (const out of cssDeclarationToStylexDeclarations(d)) {
-                if (out.value.kind !== "static") {
-                  continue;
-                }
-                const v = cssValueToJs(out.value, d.important, out.prop);
-                (bucket as Record<string, unknown>)[out.prop] = v;
-              }
-            } else if (d.value.kind === "interpolated" && d.property) {
-              // Handle interpolated theme values (e.g., ${props => props.theme.color.labelBase})
-              const slotPart = (
-                d.value as { parts?: Array<{ kind: string; slotId?: number }> }
-              ).parts?.find((p) => p.kind === "slot");
-              if (slotPart && slotPart.slotId !== undefined) {
-                const expr = decl.templateExpressions[slotPart.slotId] as unknown;
-                const resolved =
-                  expr &&
-                  typeof expr === "object" &&
-                  ((expr as { type?: string }).type === "ArrowFunctionExpression" ||
-                    (expr as { type?: string }).type === "FunctionExpression")
-                    ? resolveThemeValueFromFn(expr)
-                    : resolveThemeValue(expr);
-                if (resolved) {
-                  for (const out of cssDeclarationToStylexDeclarations(d)) {
-                    // Build the value: preserve the order of static and interpolated parts
-                    const parts =
-                      (d.value as { parts?: Array<{ kind: string; value?: string }> }).parts ?? [];
-                    const hasStaticParts = parts.some((p) => p.kind === "static" && p.value);
-                    let finalValue: unknown;
-                    if (hasStaticParts) {
-                      // Build a proper template literal preserving the order of parts
-                      const quasis: any[] = [];
-                      const expressions: any[] = [];
-                      let currentStatic = "";
-
-                      for (let i = 0; i < parts.length; i++) {
-                        const part = parts[i];
-                        if (!part) {
-                          continue;
-                        }
-                        if (part.kind === "static") {
-                          currentStatic += part.value ?? "";
-                        } else if (part.kind === "slot") {
-                          // Add the accumulated static text as a quasi
-                          quasis.push(
-                            j.templateElement({ raw: currentStatic, cooked: currentStatic }, false),
-                          );
-                          currentStatic = "";
-                          expressions.push(resolved);
-                        }
-                      }
-                      // Add the final static text (may be empty)
-                      quasis.push(
-                        j.templateElement({ raw: currentStatic, cooked: currentStatic }, true),
-                      );
-                      finalValue = j.templateLiteral(quasis, expressions);
-                    } else {
-                      finalValue = resolved;
-                    }
-                    (bucket as Record<string, unknown>)[out.prop] = finalValue;
-                  }
-                }
-              }
-            }
-          }
-        }
+        const ancestorPseudo = rule.selector.match(/&(:[a-z-]+(?:\([^)]*\))?)/i)?.[1] ?? null;
+        const overrideStyleKey = `${toStyleKey(otherLocal)}In${decl.localName}`;
+        ancestorSelectorParents.add(decl.styleKey);
+        relationOverrideMarkersByKey.set(overrideStyleKey, null);
+        registerRelationOverride({
+          kind: "ancestor",
+          parentStyleKey: decl.styleKey,
+          targetStyleKey: childDecl?.styleKey ?? null,
+          ...(childDecl ? {} : { targetComponentName: otherLocal }),
+          overrideStyleKey,
+        });
+        const bucket = getOrCreateRelationBucket(overrideStyleKey, {
+          kind: "ancestor",
+          pseudo: ancestorPseudo,
+          selectorArg: null,
+        });
+        appendRuleDeclarationsToBucket(bucket);
         continue;
       }
 
@@ -397,7 +352,7 @@ export function processDeclRules(ctx: DeclProcessingState): void {
 
     const isInputIntrinsic = decl.base.kind === "intrinsic" && decl.base.tagName === "input";
     let selector = normalizeSelectorForInputAttributePseudos(rule.selector, isInputIntrinsic);
-    selector = normalizeInterpolatedSelector(selector);
+    selector = stripSpecificityHackSelector(normalizeInterpolatedSelector(selector));
     if (!media && selector.trim().startsWith("@media")) {
       media = selector.trim();
       selector = "&";
@@ -406,6 +361,88 @@ export function processDeclRules(ctx: DeclProcessingState): void {
     // Support comma-separated pseudo-selectors like "&:hover, &:focus"
     // and chained pseudo-selectors like "&:focus:not(:disabled)"
     const parsedSelector = parseSelector(selector);
+
+    if (parsedSelector.kind === "adjacentSibling" || parsedSelector.kind === "generalSibling") {
+      const relationKind = parsedSelector.kind;
+      const overrideStyleKey = `${decl.styleKey}${
+        relationKind === "adjacentSibling" ? "SiblingBefore" : "AnySibling"
+      }`;
+      ancestorSelectorParents.add(decl.styleKey);
+      relationOverrideMarkersByKey.set(overrideStyleKey, null);
+      registerRelationOverride({
+        kind: relationKind,
+        parentStyleKey: decl.styleKey,
+        targetStyleKey: decl.styleKey,
+        overrideStyleKey,
+      });
+      addStyleKeyMixin(decl, overrideStyleKey, { afterBase: true });
+      const bucket = getOrCreateRelationBucket(overrideStyleKey, {
+        kind: relationKind,
+        pseudo: null,
+        selectorArg: parsedSelector.selectorArg ?? null,
+      });
+
+      for (const declaration of rule.declarations) {
+        if (declaration.value.kind === "static") {
+          for (const out of cssDeclarationToStylexDeclarations(declaration)) {
+            if (out.value.kind !== "static") {
+              continue;
+            }
+            bucket[out.prop] = cssValueToJs(out.value, declaration.important, out.prop);
+          }
+          continue;
+        }
+
+        if (declaration.value.kind === "interpolated" && declaration.property) {
+          const slotPart = (
+            declaration.value as { parts?: Array<{ kind: string; slotId?: number }> }
+          ).parts?.find((part) => part.kind === "slot");
+          if (!slotPart || slotPart.slotId === undefined) {
+            continue;
+          }
+          const expr = decl.templateExpressions[slotPart.slotId] as unknown;
+          const resolved =
+            expr &&
+            typeof expr === "object" &&
+            ((expr as { type?: string }).type === "ArrowFunctionExpression" ||
+              (expr as { type?: string }).type === "FunctionExpression")
+              ? resolveThemeValueFromFn(expr)
+              : resolveThemeValue(expr);
+          if (!resolved) {
+            continue;
+          }
+          for (const out of cssDeclarationToStylexDeclarations(declaration)) {
+            const parts =
+              (declaration.value as { parts?: Array<{ kind: string; value?: string }> }).parts ??
+              [];
+            const hasStaticParts = parts.some((part) => part.kind === "static" && part.value);
+            if (!hasStaticParts) {
+              bucket[out.prop] = resolved;
+              continue;
+            }
+            const quasis: any[] = [];
+            const expressions: any[] = [];
+            let currentStatic = "";
+            for (let i = 0; i < parts.length; i++) {
+              const part = parts[i];
+              if (!part) {
+                continue;
+              }
+              if (part.kind === "static") {
+                currentStatic += part.value ?? "";
+                continue;
+              }
+              quasis.push(j.templateElement({ raw: currentStatic, cooked: currentStatic }, false));
+              currentStatic = "";
+              expressions.push(resolved);
+            }
+            quasis.push(j.templateElement({ raw: currentStatic, cooked: currentStatic }, true));
+            bucket[out.prop] = j.templateLiteral(quasis, expressions);
+          }
+        }
+      }
+      continue;
+    }
 
     // Bail on unsupported selectors that weren't caught by the heuristic checks above.
     // The heuristic regex checks may miss cases where Stylis normalizes selectors differently
@@ -648,4 +685,14 @@ export function processDeclRules(ctx: DeclProcessingState): void {
       break;
     }
   }
+}
+
+function stripSpecificityHackSelector(selector: string): string {
+  const trimmed = selector.trim();
+  if (!trimmed.includes("&&")) {
+    return selector;
+  }
+  const pseudoParts = trimmed.match(/:[a-z-]+(?:\([^)]*\))?/gi) ?? [];
+  const pseudoSuffix = pseudoParts.join("");
+  return pseudoSuffix ? `&${pseudoSuffix}` : "&";
 }

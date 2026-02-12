@@ -62,8 +62,11 @@ export function postProcessStep(ctx: TransformContext): StepResult {
   const post = postProcessTransformedAst({
     root,
     j,
-    descendantOverrides: ctx.descendantOverrides ?? [],
+    relationOverrides: ctx.relationOverrides ?? [],
     ancestorSelectorParents: ctx.ancestorSelectorParents ?? new Set<string>(),
+    namedAncestorMarkersByStyleKey: ctx.namedAncestorMarkersByStyleKey ?? new Map<string, string>(),
+    namedAncestorMarkersByComponentName:
+      ctx.namedAncestorMarkersByComponentName ?? new Map<string, string>(),
     componentNameToStyleKey,
     emptyStyleKeys: ctx.emptyStyleKeys ?? new Set<string>(),
     preserveReactImport: ctx.preserveReactImport,

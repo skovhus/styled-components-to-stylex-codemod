@@ -82,6 +82,11 @@ export function postProcessAfterBaseMixins(state: LowerRulesState): void {
     }
 
     for (const mixinKey of afterBaseKeys) {
+      if (state.relationOverrideBuckets.has(mixinKey)) {
+        // Relation override styles are finalized later from structured buckets.
+        // Skip css-helper after-base processing for these synthetic keys.
+        continue;
+      }
       const mixinStyle = resolvedStyleObjects.get(mixinKey);
       if (!isPlainObject(mixinStyle)) {
         state.markBail();

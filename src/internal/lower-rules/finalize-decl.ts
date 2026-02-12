@@ -37,9 +37,10 @@ export function finalizeDeclProcessing(ctx: DeclProcessingState): void {
   } = ctx;
   const {
     rewriteCssVarsInStyleObject,
-    descendantOverridePseudoBuckets,
-    descendantOverrides,
+    relationOverrideMarkersByKey,
     ancestorSelectorParents,
+    getOrCreateRelationBucket,
+    registerRelationOverride,
     resolvedStyleObjects,
     warnings,
   } = state;
@@ -130,31 +131,21 @@ export function finalizeDeclProcessing(ctx: DeclProcessingState): void {
       }
       const childLocal = expr.name as string;
       const childDecl = state.declByLocalName.get(childLocal);
-      if (!childDecl) {
-        return;
-      }
       const overrideStyleKey = `${toStyleKey(childLocal)}In${decl.localName}`;
       ancestorSelectorParents.add(decl.styleKey);
-      // Only add to descendantOverrides once per override key
-      if (!descendantOverridePseudoBuckets.has(overrideStyleKey)) {
-        descendantOverrides.push({
-          parentStyleKey: decl.styleKey,
-          childStyleKey: childDecl.styleKey,
-          overrideStyleKey,
-        });
-      }
-      // Get or create the pseudo buckets map for this override key
-      let pseudoBuckets = descendantOverridePseudoBuckets.get(overrideStyleKey);
-      if (!pseudoBuckets) {
-        pseudoBuckets = new Map();
-        descendantOverridePseudoBuckets.set(overrideStyleKey, pseudoBuckets);
-      }
-      // Get or create the bucket for this specific pseudo (or null for base)
-      let bucket = pseudoBuckets.get(ancestorPseudo);
-      if (!bucket) {
-        bucket = {};
-        pseudoBuckets.set(ancestorPseudo, bucket);
-      }
+      relationOverrideMarkersByKey.set(overrideStyleKey, null);
+      registerRelationOverride({
+        kind: "ancestor",
+        parentStyleKey: decl.styleKey,
+        targetStyleKey: childDecl?.styleKey ?? null,
+        ...(childDecl ? {} : { targetComponentName: childLocal }),
+        overrideStyleKey,
+      });
+      const bucket = getOrCreateRelationBucket(overrideStyleKey, {
+        kind: "ancestor",
+        pseudo: ancestorPseudo,
+        selectorArg: null,
+      });
       didApply = true;
 
       const declLines = declsText

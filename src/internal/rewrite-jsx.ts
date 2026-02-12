@@ -3,14 +3,16 @@
  * Core concepts: descendant overrides and stylex.props cleanup.
  */
 import type { Collection } from "jscodeshift";
-import type { DescendantOverride } from "./lower-rules.js";
+import type { RelationOverride } from "./lower-rules.js";
 import { getJsxElementName } from "./utilities/jscodeshift-utils.js";
 
 export function postProcessTransformedAst(args: {
   root: Collection<any>;
   j: any;
-  descendantOverrides: DescendantOverride[];
+  relationOverrides: RelationOverride[];
   ancestorSelectorParents: Set<string>;
+  namedAncestorMarkersByStyleKey: Map<string, string>;
+  namedAncestorMarkersByComponentName: Map<string, string>;
   /** Map from component local name to its style key (for ancestor selector matching) */
   componentNameToStyleKey?: Map<string, string>;
   /** Set of style keys that have empty style objects (should be excluded from stylex.props calls) */
@@ -24,8 +26,10 @@ export function postProcessTransformedAst(args: {
   const {
     root,
     j,
-    descendantOverrides,
+    relationOverrides,
     ancestorSelectorParents,
+    namedAncestorMarkersByStyleKey,
+    namedAncestorMarkersByComponentName,
     componentNameToStyleKey,
     emptyStyleKeys,
     preserveReactImport,
@@ -42,10 +46,15 @@ export function postProcessTransformedAst(args: {
     }
   });
 
-  // Apply descendant override styles that rely on `stylex.when.ancestor()`:
-  // - Add `stylex.defaultMarker()` to ancestor elements.
-  // - Add override style keys to descendant elements' `stylex.props(...)` calls.
-  if (descendantOverrides.length > 0) {
+  // Apply relation overrides and marker requirements:
+  // - Add marker arguments to observed ancestor components.
+  // - Add override style keys to target elements' `stylex.props(...)` calls.
+  if (
+    relationOverrides.length > 0 ||
+    ancestorSelectorParents.size > 0 ||
+    namedAncestorMarkersByStyleKey.size > 0 ||
+    namedAncestorMarkersByComponentName.size > 0
+  ) {
     // IMPORTANT: Do not reuse the same AST node instance across multiple insertion points.
     // Recast/jscodeshift expect a tree (no shared references); reuse can corrupt printing.
     const makeDefaultMarkerCall = () =>
@@ -53,6 +62,7 @@ export function postProcessTransformedAst(args: {
         j.memberExpression(j.identifier("stylex"), j.identifier("defaultMarker")),
         [],
       );
+    const makeNamedMarkerArg = (markerName: string) => j.identifier(markerName);
 
     const isStylexPropsCall = (n: any): n is any =>
       n?.type === "CallExpression" &&
@@ -72,6 +82,20 @@ export function postProcessTransformedAst(args: {
         }
       }
       return undefined;
+    };
+
+    const ensureStylexPropsCall = (attrs: any[]): any => {
+      const existing = getStylexPropsCallFromAttrs(attrs);
+      if (existing) {
+        return existing;
+      }
+      const createdCall = j.callExpression(
+        j.memberExpression(j.identifier("stylex"), j.identifier("props")),
+        [],
+      );
+      attrs.push(j.jsxSpreadAttribute(createdCall));
+      changed = true;
+      return createdCall;
     };
 
     const hasStyleKeyArg = (call: any, key: string): boolean => {
@@ -97,14 +121,103 @@ export function postProcessTransformedAst(args: {
       );
     };
 
-    const overridesByChild = new Map<string, DescendantOverride[]>();
-    for (const o of descendantOverrides) {
-      overridesByChild.set(o.childStyleKey, [...(overridesByChild.get(o.childStyleKey) ?? []), o]);
+    const hasNamedMarkerArg = (call: any, markerName: string): boolean => {
+      return (call.arguments ?? []).some(
+        (a: any) => a?.type === "Identifier" && a.name === markerName,
+      );
+    };
+
+    const addOverrideArg = (call: any, overrideStyleKey: string): void => {
+      if (hasStyleKeyArg(call, overrideStyleKey)) {
+        return;
+      }
+      const overrideArg = j.memberExpression(
+        j.identifier("styles"),
+        j.identifier(overrideStyleKey),
+      );
+      call.arguments = [...(call.arguments ?? []), overrideArg];
+      changed = true;
+    };
+
+    const relationMatchesAncestors = (
+      relationOverride: RelationOverride,
+      ancestors: any[],
+    ): boolean => {
+      return ancestors.some((ancestor) => {
+        const matchesParentStyleKey =
+          !!relationOverride.parentStyleKey &&
+          ((ancestor?.call && hasStyleKeyArg(ancestor.call, relationOverride.parentStyleKey)) ||
+            ancestor?.elementStyleKey === relationOverride.parentStyleKey);
+        const matchesParentComponentName =
+          !!relationOverride.parentComponentName &&
+          ancestor?.elementName === relationOverride.parentComponentName;
+        return matchesParentStyleKey || matchesParentComponentName;
+      });
+    };
+
+    const overridesByTargetStyleKey = new Map<string, RelationOverride[]>();
+    const overridesByTargetComponentName = new Map<string, RelationOverride[]>();
+    for (const relationOverride of relationOverrides) {
+      if (relationOverride.targetStyleKey) {
+        overridesByTargetStyleKey.set(relationOverride.targetStyleKey, [
+          ...(overridesByTargetStyleKey.get(relationOverride.targetStyleKey) ?? []),
+          relationOverride,
+        ]);
+      }
+      if (relationOverride.targetComponentName) {
+        overridesByTargetComponentName.set(relationOverride.targetComponentName, [
+          ...(overridesByTargetComponentName.get(relationOverride.targetComponentName) ?? []),
+          relationOverride,
+        ]);
+      }
     }
 
     // Track empty ancestor style keys to remove AFTER all descendant matching is done.
     // We defer removal so that ancestor matching can still find the style keys.
     const pendingEmptyKeyRemovals: Array<{ call: any; key: string }> = [];
+
+    const visitEmbeddedJsx = (value: any, ancestors: any[]): void => {
+      if (!value) {
+        return;
+      }
+      if (Array.isArray(value)) {
+        for (const item of value) {
+          visitEmbeddedJsx(item, ancestors);
+        }
+        return;
+      }
+      if (typeof value !== "object") {
+        return;
+      }
+      if (value.type === "JSXElement") {
+        visit(value, ancestors);
+        return;
+      }
+      if (value.type === "JSXFragment") {
+        for (const child of value.children ?? []) {
+          visitEmbeddedJsx(child, ancestors);
+        }
+        return;
+      }
+      if (value.type === "JSXExpressionContainer") {
+        visitEmbeddedJsx(value.expression, ancestors);
+        return;
+      }
+      if (value.type === "JSXAttribute") {
+        visitEmbeddedJsx(value.value, ancestors);
+        return;
+      }
+      if (value.type === "JSXSpreadAttribute") {
+        visitEmbeddedJsx(value.argument, ancestors);
+        return;
+      }
+      for (const key of Object.keys(value)) {
+        if (key === "loc" || key === "comments") {
+          continue;
+        }
+        visitEmbeddedJsx((value as Record<string, unknown>)[key], ancestors);
+      }
+    };
 
     const visit = (node: any, ancestors: any[]) => {
       if (!node || node.type !== "JSXElement") {
@@ -112,10 +225,25 @@ export function postProcessTransformedAst(args: {
       }
       const opening = node.openingElement;
       const attrs = (opening.attributes ?? []) as any[];
-      const call = getStylexPropsCallFromAttrs(attrs);
       const elementName = getJsxElementName(opening?.name, { allowMemberExpression: false });
       // Get the style key for this element if it's a known component
       const elementStyleKey = elementName ? componentNameToStyleKey?.get(elementName) : null;
+      let call = getStylexPropsCallFromAttrs(attrs);
+
+      if (elementName) {
+        const componentMarker = namedAncestorMarkersByComponentName.get(elementName);
+        if (componentMarker) {
+          const ensuredCall = ensureStylexPropsCall(attrs);
+          if (!hasNamedMarkerArg(ensuredCall, componentMarker)) {
+            ensuredCall.arguments = [
+              ...(ensuredCall.arguments ?? []),
+              makeNamedMarkerArg(componentMarker),
+            ];
+            changed = true;
+          }
+          call = ensuredCall;
+        }
+      }
 
       if (call) {
         for (const parentKey of ancestorSelectorParents) {
@@ -131,42 +259,67 @@ export function postProcessTransformedAst(args: {
             }
           }
         }
-      }
-
-      if (call) {
-        for (const [childKey, list] of overridesByChild.entries()) {
-          if (!hasStyleKeyArg(call, childKey)) {
+        for (const [parentKey, markerName] of namedAncestorMarkersByStyleKey.entries()) {
+          if (!hasStyleKeyArg(call, parentKey)) {
             continue;
           }
-          for (const o of list) {
-            // Check if any ancestor has a stylex.props call with the parent style key,
-            // OR if any ancestor is a component whose style key matches the parent style key
-            const matched = ancestors.some(
-              (a: any) =>
-                (a?.call && hasStyleKeyArg(a.call, o.parentStyleKey)) ||
-                (a?.elementStyleKey && a.elementStyleKey === o.parentStyleKey),
-            );
-            if (!matched) {
-              continue;
-            }
-            if (hasStyleKeyArg(call, o.overrideStyleKey)) {
-              continue;
-            }
-            const overrideArg = j.memberExpression(
-              j.identifier("styles"),
-              j.identifier(o.overrideStyleKey),
-            );
-            call.arguments = [...(call.arguments ?? []), overrideArg];
+          if (emptyStyleKeys?.has(parentKey)) {
+            pendingEmptyKeyRemovals.push({ call, key: parentKey });
+          }
+          if (!hasNamedMarkerArg(call, markerName)) {
+            call.arguments = [...(call.arguments ?? []), makeNamedMarkerArg(markerName)];
             changed = true;
           }
         }
       }
 
-      const nextAncestors = [...ancestors, { call, elementStyleKey }];
+      if (call) {
+        for (const [targetStyleKey, list] of overridesByTargetStyleKey.entries()) {
+          if (!hasStyleKeyArg(call, targetStyleKey)) {
+            continue;
+          }
+          for (const relationOverride of list) {
+            const matched =
+              relationOverride.kind === "ancestor"
+                ? relationMatchesAncestors(relationOverride, ancestors)
+                : true;
+            if (!matched) {
+              continue;
+            }
+            addOverrideArg(call, relationOverride.overrideStyleKey);
+          }
+        }
+      }
+
+      if (elementName) {
+        const list = overridesByTargetComponentName.get(elementName) ?? [];
+        if (list.length > 0) {
+          let ensuredCall = call;
+          for (const relationOverride of list) {
+            const matched =
+              relationOverride.kind === "ancestor"
+                ? relationMatchesAncestors(relationOverride, ancestors)
+                : true;
+            if (!matched) {
+              continue;
+            }
+            ensuredCall ??= ensureStylexPropsCall(attrs);
+            addOverrideArg(ensuredCall, relationOverride.overrideStyleKey);
+          }
+          call = ensuredCall;
+        }
+      }
+
+      const nextAncestors = [...ancestors, { call, elementStyleKey, elementName }];
       for (const c of node.children ?? []) {
         if (c?.type === "JSXElement") {
           visit(c, nextAncestors);
+          continue;
         }
+        visitEmbeddedJsx(c, nextAncestors);
+      }
+      for (const attr of attrs) {
+        visitEmbeddedJsx(attr, nextAncestors);
       }
     };
 

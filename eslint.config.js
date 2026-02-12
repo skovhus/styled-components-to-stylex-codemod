@@ -44,5 +44,11 @@ export default [
       "stylex/valid-styles": "off",
     },
   },
+  {
+    files: ["test-cases/**/*.output.tsx"],
+    rules: {
+      "stylex/no-lookahead-selectors": "off",
+    },
+  },
   ...storybook.configs["flat/recommended"],
 ];

@@ -1,4 +1,3 @@
-// @expected-warning: Styled-components specificity hacks like `&&` / `&&&` are not representable in StyleX
 import styled from "styled-components";
 
 const Thing = styled.div`
