@@ -31,10 +31,12 @@ const styles = stylex.create({
     paddingInline: "16px",
     borderRadius: "4px",
     backgroundColor: $colors.bgBase,
+    backgroundImage: $colors.bgBase,
     color: "black",
   },
   buttonPrimary: {
     backgroundColor: "blue",
+    backgroundImage: "none",
     color: "white",
     "::after": {
       content: '""',

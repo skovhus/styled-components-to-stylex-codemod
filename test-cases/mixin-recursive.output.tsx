@@ -15,5 +15,6 @@ const styles = stylex.create({
   },
   middleStyles: {
     backgroundColor: "blue",
+    backgroundImage: "none",
   },
 });

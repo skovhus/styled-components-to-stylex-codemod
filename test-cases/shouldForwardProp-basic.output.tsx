@@ -16,6 +16,7 @@ function Button(props: ButtonProps) {
         styles.button,
         size === "large" && styles.buttonSizeLarge,
         color != null && styles.buttonBackgroundColor(color),
+        color != null && styles.buttonBackgroundImage(color),
       )}
     >
       {children}
@@ -52,6 +53,7 @@ function Box(props: BoxProps) {
       {...stylex.props(
         styles.box,
         $background != null && styles.boxBackgroundColor($background),
+        $background != null && styles.boxBackgroundImage($background),
         $padding != null && styles.boxPadding($padding),
       )}
     >
@@ -99,7 +101,13 @@ export const App = () => (
     <Box $background="#f0f0f0" $padding="24px">
       Box with transient-like props
     </Box>
-    <div {...stylex.props(styles.colorBox, styles.colorBoxBackgroundColor("#bf4f74"))}>
+    <div
+      {...stylex.props(
+        styles.colorBox,
+        styles.colorBoxBackgroundColor("#bf4f74"),
+        styles.colorBoxBackgroundImage("#bf4f74"),
+      )}
+    >
       Nullish Coalescing Box
     </div>
     <Card variant="primary" elevation={3} rounded>
@@ -112,12 +120,14 @@ const styles = stylex.create({
   // Using shouldForwardProp to filter props (v5 pattern)
   button: {
     backgroundColor: "#BF4F74",
+    backgroundImage: "#BF4F74",
     paddingBlock: "8px",
     paddingInline: "16px",
     fontSize: "14px",
     color: "white",
     borderWidth: 0,
     borderStyle: "none",
+    borderColor: "currentcolor",
     borderRadius: "4px",
   },
   buttonSizeLarge: {
@@ -127,6 +137,9 @@ const styles = stylex.create({
   },
   buttonBackgroundColor: (backgroundColor: string) => ({
     backgroundColor,
+  }),
+  buttonBackgroundImage: (backgroundImage: string) => ({
+    backgroundImage,
   }),
   // Using isPropValid from @emotion
   link: {
@@ -144,6 +157,7 @@ const styles = stylex.create({
   // Custom prop filtering logic (transient props pattern)
   box: {
     backgroundColor: "white",
+    backgroundImage: "white",
     padding: "16px",
     borderRadius: "8px",
     boxShadow: "0 2px 4px rgba(0, 0, 0, 0.1)",
@@ -151,16 +165,23 @@ const styles = stylex.create({
   boxBackgroundColor: (backgroundColor: string) => ({
     backgroundColor,
   }),
+  boxBackgroundImage: (backgroundImage: string) => ({
+    backgroundImage,
+  }),
   boxPadding: (padding: string) => ({
     padding,
   }),
   // Using nullish coalescing operator for fallbacks
   colorBox: {
     backgroundColor: "#e0e0e0",
+    backgroundImage: "#e0e0e0",
     padding: "16px",
   },
   colorBoxBackgroundColor: (backgroundColor: string) => ({
     backgroundColor,
+  }),
+  colorBoxBackgroundImage: (backgroundImage: string) => ({
+    backgroundImage,
   }),
   // Filter multiple custom props
   card: {

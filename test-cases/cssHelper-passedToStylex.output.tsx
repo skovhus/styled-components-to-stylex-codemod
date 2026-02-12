@@ -58,5 +58,6 @@ const styles = stylex.create({
   complexFade: {
     position: "relative",
     backgroundColor: "white",
+    backgroundImage: "none",
   },
 });

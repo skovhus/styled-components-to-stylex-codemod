@@ -18,6 +18,7 @@ const styles = stylex.create({
     justifyContent: "center",
     borderWidth: 0,
     borderStyle: "none",
+    borderColor: "currentcolor",
     cursor: "pointer",
   },
   buttonStylesSizeCss: {

@@ -16,6 +16,7 @@ export const App = () => viewConfig.render();
 const styles = stylex.create({
   styledButton: {
     backgroundColor: dynamicColor,
+    backgroundImage: dynamicColor,
     padding: "8px",
   },
 });

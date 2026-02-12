@@ -37,6 +37,7 @@ const styles = stylex.create({
     width: "auto",
     height: "10px",
     backgroundColor: $colors.bgBase,
+    backgroundImage: $colors.bgBase,
     boxShadow: `0 2px 4px ${$colors.primaryColor}`,
     borderRadius: "8px",
     display: "flex",

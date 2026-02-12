@@ -47,9 +47,14 @@ const styles = stylex.create({
     paddingInline: "8px",
     minHeight: "36px",
     backgroundColor: $colors.bgBase,
+    backgroundImage: $colors.bgBase,
   },
   projectRow: {
     backgroundColor: {
+      default: $colors.bgBase,
+      ":hover": $colors.bgBaseHover,
+    },
+    backgroundImage: {
       default: $colors.bgBase,
       ":hover": $colors.bgBaseHover,
     },

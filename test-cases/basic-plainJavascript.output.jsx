@@ -10,17 +10,20 @@ export const App = () => (
 const styles = stylex.create({
   button: {
     backgroundColor: "#bf4f74",
+    backgroundImage: "none",
     color: "white",
     paddingBlock: "8px",
     paddingInline: "16px",
     borderWidth: 0,
     borderStyle: "none",
+    borderColor: "currentcolor",
     borderRadius: "4px",
   },
   card: {
     paddingBlock: "16px",
     paddingInline: "12px",
     backgroundColor: "white",
+    backgroundImage: "none",
     borderRadius: "8px",
   },
 });

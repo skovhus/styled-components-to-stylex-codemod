@@ -27,6 +27,7 @@ const styles = stylex.create({
   },
   gutter: {
     backgroundColor: "#f3f3f3",
+    backgroundImage: "none",
     color: "#666",
     textAlign: "right",
     paddingBlock: "4px",
@@ -37,6 +38,7 @@ const styles = stylex.create({
   },
   code: {
     backgroundColor: "#e7f3ff",
+    backgroundImage: "none",
     color: "#0b4f6c",
     paddingBlock: "4px",
     paddingInline: "8px",

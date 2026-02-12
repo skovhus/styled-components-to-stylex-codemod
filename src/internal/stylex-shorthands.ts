@@ -104,13 +104,7 @@ export function splitDirectionalProperty(args: {
   const withImportant = (value: string): string => (important ? `${value} !important` : value);
 
   if (values.length === 1 && !important && !alwaysExpand) {
-    // Always expand to Block/Inline to avoid atomic CSS conflicts when a
-    // conditional style uses the shorthand alongside a base style that sets
-    // individual directional properties (e.g., marginBottom vs margin).
-    return [
-      { prop: `${prop}Block`, value: withImportant(top) },
-      { prop: `${prop}Inline`, value: withImportant(top) },
-    ];
+    return [{ prop, value: withImportant(top) }];
   }
 
   const quad = expandQuadValues(values);

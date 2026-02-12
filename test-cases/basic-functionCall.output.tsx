@@ -21,6 +21,7 @@ const styles = stylex.create({
     height: "32px",
     padding: "8px",
     backgroundColor: "white",
+    backgroundImage: "none",
     borderWidth: "1px",
     borderStyle: "solid",
     borderColor: "#ccc",
@@ -29,6 +30,7 @@ const styles = stylex.create({
   animatedBox: {
     padding: "16px",
     backgroundColor: "blue",
+    backgroundImage: "none",
     color: "white",
     borderWidth: "1px",
     borderStyle: "solid",

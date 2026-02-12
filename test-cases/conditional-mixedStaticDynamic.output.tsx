@@ -65,6 +65,7 @@ const styles = stylex.create({
     position: "relative",
     height: "80px",
     backgroundColor: "#f0f0f0",
+    backgroundImage: "none",
     borderWidth: "1px",
     borderStyle: "solid",
     borderColor: "#ccc",
@@ -74,6 +75,7 @@ const styles = stylex.create({
     justifyContent: "center",
     alignItems: "center",
     backgroundColor: "paleturquoise",
+    backgroundImage: "none",
     padding: "8px",
   },
   containerPositionFixedSidebarCollapsed: {

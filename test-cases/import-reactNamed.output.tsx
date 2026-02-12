@@ -39,6 +39,7 @@ const styles = stylex.create({
   card: {
     padding: "16px",
     backgroundColor: "white",
+    backgroundImage: "none",
   },
   button: {
     paddingBlock: "8px",

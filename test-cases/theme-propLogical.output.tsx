@@ -31,6 +31,7 @@ const styles = stylex.create({
     height: "100px",
     width: "100px",
     backgroundColor: "red",
+    backgroundImage: "none",
   },
   boxDark: {
     opacity: 0.5,

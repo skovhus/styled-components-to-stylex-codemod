@@ -83,9 +83,11 @@ const styles = stylex.create({
   },
   buttonNotHollowPrimary: {
     backgroundColor: "#BF4F74",
+    backgroundImage: "none",
   },
   buttonNotHollowNotPrimary: {
     backgroundColor: "white",
+    backgroundImage: "none",
   },
   // Test case: inner ternary tests the same prop as outer
   // The inner variants must be guarded by the outer falsy condition
@@ -95,9 +97,11 @@ const styles = stylex.create({
   },
   badgeSizeNotSmallSizeLarge: {
     backgroundColor: "blue",
+    backgroundImage: "none",
   },
   badgeSizeNotSmallSizeNotLarge: {
     backgroundColor: "gray",
+    backgroundImage: "none",
   },
   badgeSizeSmall: {
     fontSize: "10px",

@@ -79,6 +79,7 @@ const styles = stylex.create({
   card: {
     padding: "16px",
     backgroundColor: "white",
+    backgroundImage: "none",
   },
   cardNotHighlighted: {
     borderWidth: "1px",
