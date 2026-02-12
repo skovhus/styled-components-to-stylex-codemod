@@ -1,1 +1,0 @@
-import{j as e}from"./index-CXOGh4gL.js";import{F as r}from"./flex-DGhERICE.js";function s(o){return e.jsx(r,{...o,column:!0,className:"x12peec7 x18o3ruo x12oqio5"})}const x=()=>e.jsxs(s,{children:[e.jsx("div",{children:"Item 1"}),e.jsx("div",{children:"Item 2"})]});export{x as App};

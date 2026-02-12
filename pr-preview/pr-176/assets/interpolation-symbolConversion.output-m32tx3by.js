@@ -1,0 +1,1 @@
+import{j as o}from"./index-Cj1dRIxP.js";function c(s){const{children:t,$compact:x}=s;return o.jsx("div",{...{0:{className:"x1tamke2 xj3b58b x15yo4kd x18o3ruo"},1:{className:"x15yo4kd x18o3ruo xhxy2q7 x121t8fs"}}[!!x<<0],children:t})}const r=()=>o.jsxs("div",{children:[o.jsx(c,{$compact:!0,children:"Compact mode"}),o.jsx(c,{$compact:!1,children:"Normal mode"})]});export{r as App};

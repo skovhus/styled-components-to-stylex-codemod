@@ -1,1 +1,0 @@
-import{j as e}from"./index-CXOGh4gL.js";import{a as t}from"./react-spring-D_stTWr4.js";function a(){return e.jsxs("div",{children:[e.jsx("input",{placeholder:"Type here",className:"x10w6t97 xe8ttls x12peec7 x18o3ruo xmkeg23 x1y0btm7 xtb30c9"}),e.jsx(t.div,{className:"x1tamke2 x1t391ir x18o3ruo x1awj2ng xmkeg23 x1y0btm7 x1hfh2ia",children:"Animated content"})]})}export{a as App};
