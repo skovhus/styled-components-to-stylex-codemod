@@ -1,1 +1,0 @@
-import{j as t}from"./index-BLjWRMd3.js";import{T as r}from"./text-RBdQ4HLd.js";function s(e){return t.jsx(r,{...e,className:"x1iog12x"})}function x(e){return t.jsx(r,{...e,className:"xl010v5"})}const i=()=>t.jsxs("div",{children:[t.jsx(s,{children:"Help text content"}),t.jsx(x,{children:"|"})]});export{i as App,s as HelpText,x as Separator};
