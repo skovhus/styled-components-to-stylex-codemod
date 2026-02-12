@@ -22,14 +22,7 @@
 /* oxlint-disable no-console */
 
 import { execSync } from "node:child_process";
-import {
-  existsSync,
-  mkdirSync,
-  readdirSync,
-  readFileSync,
-  statSync,
-  writeFileSync,
-} from "node:fs";
+import { existsSync, mkdirSync, readdirSync, readFileSync, statSync, writeFileSync } from "node:fs";
 import http from "node:http";
 import { extname, join } from "node:path";
 
@@ -291,9 +284,12 @@ for (const tc of testCases) {
   const url = `${baseUrl}/iframe.html?id=test-cases--${storyId}&viewMode=story`;
 
   try {
-    await page.goto(url, { waitUntil: "networkidle", timeout: 15_000 });
-    // Wait for React rendering + ResizeObserver to fire
-    await page.waitForTimeout(1500);
+    await page.goto(url, { waitUntil: "load", timeout: 15_000 });
+    // Wait for Input/Output headings to appear (React rendering complete)
+    await page.waitForSelector('h3:has-text("Input")', { timeout: 10_000 });
+    await page.waitForSelector('h3:has-text("Output")', { timeout: 10_000 });
+    // Brief pause for ResizeObserver to fire and measure dimensions
+    await page.waitForTimeout(500);
 
     const data = await page.evaluate(() => {
       const headings = Array.from(document.querySelectorAll("h3"));
