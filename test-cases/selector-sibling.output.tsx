@@ -35,7 +35,7 @@ const styles = stylex.create({
   },
   thingSiblingBefore: {
     color: {
-      default: null,
+      default: "blue",
       [stylex.when.siblingBefore(":is(*)")]: "red",
     },
     backgroundColor: {

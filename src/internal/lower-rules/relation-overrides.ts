@@ -55,6 +55,70 @@ export const finalizeRelationOverrides = (args: {
 
   // Local type guard that narrows to ExpressionKind for use with jscodeshift builders
   const isExpressionNode = (value: unknown): value is ExpressionKind => isAstNode(value);
+  const readDefaultFromNestedValue = (value: unknown): unknown => {
+    if (!value || typeof value !== "object" || isExpressionNode(value)) {
+      return undefined;
+    }
+    if (!Object.hasOwn(value as object, "default")) {
+      return undefined;
+    }
+    return (value as Record<string, unknown>).default;
+  };
+  const readPropValueFromObjectExpression = (objectExpression: any, propName: string): unknown => {
+    const props = objectExpression?.properties;
+    if (!Array.isArray(props)) {
+      return undefined;
+    }
+    for (const prop of props) {
+      if (!prop || prop.type !== "Property" || prop.computed) {
+        continue;
+      }
+      const key =
+        prop.key?.type === "Identifier"
+          ? prop.key.name
+          : prop.key?.type === "Literal"
+            ? prop.key.value
+            : prop.key?.type === "StringLiteral"
+              ? prop.key.value
+              : null;
+      if (key === propName) {
+        return prop.value;
+      }
+    }
+    return undefined;
+  };
+  const inferTargetDefaultValue = (
+    relationOverride: RelationOverride,
+    propName: string,
+  ): unknown => {
+    const targetStyleKey = relationOverride.targetStyleKey;
+    if (!targetStyleKey) {
+      return undefined;
+    }
+    const targetStyleObject = resolvedStyleObjects.get(targetStyleKey);
+    if (!targetStyleObject) {
+      return undefined;
+    }
+
+    if (!isExpressionNode(targetStyleObject) && typeof targetStyleObject === "object") {
+      const plainValue = (targetStyleObject as Record<string, unknown>)[propName];
+      const nestedDefault = readDefaultFromNestedValue(plainValue);
+      return nestedDefault !== undefined ? nestedDefault : plainValue;
+    }
+
+    if (isExpressionNode(targetStyleObject) && targetStyleObject.type === "ObjectExpression") {
+      const astPropValue = readPropValueFromObjectExpression(targetStyleObject, propName);
+      if (!astPropValue) {
+        return undefined;
+      }
+      if ((astPropValue as any).type === "ObjectExpression") {
+        const astDefault = readPropValueFromObjectExpression(astPropValue, "default");
+        return astDefault ?? astPropValue;
+      }
+      return astPropValue;
+    }
+    return undefined;
+  };
 
   for (const [overrideKey, bucketsByCondition] of relationOverrideBuckets.entries()) {
     const relationOverride = relationByOverrideKey.get(overrideKey);
@@ -79,6 +143,9 @@ export const finalizeRelationOverrides = (args: {
 
     for (const prop of allPropNames) {
       const baseVal = baseProps[prop];
+      const inferredTargetDefault =
+        baseVal === undefined ? inferTargetDefaultValue(relationOverride, prop) : undefined;
+      const defaultValue = baseVal !== undefined ? baseVal : inferredTargetDefault;
       const conditionalValues: Array<{
         entry: RelationBucketEntry;
         value: unknown;
@@ -95,7 +162,7 @@ export const finalizeRelationOverrides = (args: {
           j.property(
             "init",
             j.identifier("default"),
-            isExpressionNode(baseVal) ? baseVal : literalToAst(j, baseVal ?? null),
+            isExpressionNode(defaultValue) ? defaultValue : literalToAst(j, defaultValue ?? null),
           ),
         ];
 

@@ -27,7 +27,7 @@ const styles = stylex.create({
   },
   iconInLink: {
     fill: {
-      default: null,
+      default: "#bf4f74",
       [stylex.when.ancestor(":hover")]: "rebeccapurple",
     },
   },
