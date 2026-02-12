@@ -12,7 +12,7 @@ export function Tooltip(props: TooltipProps) {
   const { children, $open, ...rest } = props;
 
   return (
-    <div {...rest} {...stylex.props(!$open && styles.tooltipNotOpen)}>
+    <div {...rest} {...stylex.props(styles.tooltip, !$open && styles.tooltipNotOpen)}>
       {children}
     </div>
   );
@@ -44,6 +44,7 @@ export const App = () => (
 );
 
 const styles = stylex.create({
+  tooltip: {},
   tooltipNotOpen: {
     pointerEvents: "none",
     opacity: 0.1,

@@ -18,7 +18,16 @@ function Button<C extends React.ElementType = "button">(
 function ButtonWrapper(
   props: Omit<React.ComponentPropsWithRef<typeof Button>, "className" | "style">,
 ) {
-  return <Button {...props} {...stylex.props(styles.buttonWrapper)} />;
+  const { children, ...rest } = props;
+
+  return (
+    <button
+      {...(rest as React.ButtonHTMLAttributes<HTMLButtonElement>)}
+      {...stylex.props(styles.button, styles.buttonWrapper)}
+    >
+      {children}
+    </button>
+  );
 }
 
 export const App = () => (

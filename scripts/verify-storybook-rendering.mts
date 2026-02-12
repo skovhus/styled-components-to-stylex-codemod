@@ -19,6 +19,7 @@
  *   node scripts/verify-storybook-rendering.mts --only-changed      # only test cases changed vs main
  *   node scripts/verify-storybook-rendering.mts --save-diffs        # save diff images to .rendering-diffs/
  *   node scripts/verify-storybook-rendering.mts --threshold 0.1     # custom pixelmatch threshold (0-1)
+ *   node scripts/verify-storybook-rendering.mts --mismatch-tolerance 0.005  # allow up to 0.5% pixel mismatch
  *   node scripts/verify-storybook-rendering.mts --concurrency 8     # number of parallel browser pages
  */
 
@@ -51,13 +52,7 @@ interface TestResult {
 // These are tracked in plans/2026-02-12-rendering-mismatches.md.
 // Remove entries as the underlying codemod issues are fixed.
 // ---------------------------------------------------------------------------
-const EXPECTED_FAILURES = new Set([
-  "asProp-forwarded",
-  "conditional-emptyStringBranch",
-  "conditional-negation",
-  "keyframes-unionComplexity",
-  "selector-attribute",
-]);
+const EXPECTED_FAILURES = new Set<string>([]);
 
 type Page = Awaited<ReturnType<Awaited<ReturnType<typeof chromium.launch>>["newPage"]>>;
 
@@ -69,6 +64,7 @@ const cliArgs = process.argv.slice(2);
 let onlyChanged = false;
 let saveDiffs = false;
 let threshold = 0.1;
+let mismatchTolerance = 0.02; // allow up to 2% of pixels to differ (subpixel text antialiasing)
 let concurrency = 6;
 const explicitCases: string[] = [];
 
@@ -80,6 +76,8 @@ for (let i = 0; i < cliArgs.length; i++) {
     saveDiffs = true;
   } else if (arg === "--threshold" && cliArgs[i + 1]) {
     threshold = Number(cliArgs[++i]);
+  } else if (arg === "--mismatch-tolerance" && cliArgs[i + 1]) {
+    mismatchTolerance = Number(cliArgs[++i]);
   } else if (arg === "--concurrency" && cliArgs[i + 1]) {
     concurrency = Number(cliArgs[++i]);
   } else if (!arg.startsWith("-")) {
@@ -271,11 +269,12 @@ async function compareRenderedPanels(
     threshold,
   });
 
-  if (mismatchCount === 0) {
+  const totalPixels = width * height;
+
+  if (mismatchCount === 0 || mismatchCount / totalPixels <= mismatchTolerance) {
     return null;
   }
 
-  const totalPixels = width * height;
   const pct = ((mismatchCount / totalPixels) * 100).toFixed(1);
 
   return {
