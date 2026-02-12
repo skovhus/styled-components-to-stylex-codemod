@@ -15,7 +15,6 @@ function Line(props: LineProps) {
       {...stylex.props(
         styles.line,
         $isRemoval ? styles.lineBackgroundColor($deletionColor ?? $colors.bgBase) : undefined,
-        $isRemoval ? styles.lineBackgroundImage($deletionColor ?? $colors.bgBase) : undefined,
       )}
     >
       {children}
@@ -35,13 +34,9 @@ const styles = stylex.create({
   line: {
     height: pixelVars.thin,
     backgroundColor: $colors.bgSub,
-    backgroundImage: $colors.bgSub,
     margin: "10px",
   },
   lineBackgroundColor: (backgroundColor: string) => ({
     backgroundColor,
-  }),
-  lineBackgroundImage: (backgroundImage: string) => ({
-    backgroundImage,
   }),
 });

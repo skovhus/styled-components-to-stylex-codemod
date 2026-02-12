@@ -44,7 +44,6 @@ export const App = () => (
 const styles = stylex.create({
   overrideButton: {
     backgroundColor: "#bf4f74 !important",
-    backgroundImage: "none !important",
     color: "white !important",
     borderWidth: "0 !important",
     borderStyle: "none",

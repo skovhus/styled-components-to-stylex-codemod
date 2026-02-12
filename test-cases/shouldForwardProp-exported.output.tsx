@@ -45,7 +45,6 @@ export function ExplicitFilterButton(props: ExplicitFilterButtonProps) {
       {...stylex.props(
         styles.explicitFilterButton,
         customProp != null && styles.explicitFilterButtonBackgroundColor(customProp),
-        customProp != null && styles.explicitFilterButtonBackgroundImage(customProp),
         styles.explicitFilterButtonPadding(props),
       )}
     >
@@ -81,16 +80,11 @@ const styles = stylex.create({
   // Exported component with explicit list-based shouldForwardProp
   explicitFilterButton: {
     backgroundColor: "#BF4F74",
-    backgroundImage: "#BF4F74",
     color: "white",
   },
 
   explicitFilterButtonBackgroundColor: (backgroundColor: string) => ({
     backgroundColor,
-  }),
-
-  explicitFilterButtonBackgroundImage: (backgroundImage: string) => ({
-    backgroundImage,
   }),
 
   explicitFilterButtonPadding: (props) => ({

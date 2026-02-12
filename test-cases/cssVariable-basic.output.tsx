@@ -17,10 +17,6 @@ const styles = stylex.create({
       default: vars.colorPrimary,
       ":hover": vars.colorSecondary,
     },
-    backgroundImage: {
-      default: "none",
-      ":hover": "none",
-    },
     color: "white",
     borderWidth: "2px",
     borderStyle: "solid",

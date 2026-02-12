@@ -70,11 +70,6 @@ const styles = stylex.create({
       ":disabled": "#f5f5f5",
       ":read-only": "#fafafa",
     },
-    backgroundImage: {
-      default: null,
-      ":disabled": "none",
-      ":read-only": "none",
-    },
     color: {
       default: null,
       ":disabled": "#999",

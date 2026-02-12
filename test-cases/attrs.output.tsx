@@ -186,7 +186,6 @@ const styles = stylex.create({
     height: "32px",
     padding: "8px",
     backgroundColor: "white",
-    backgroundImage: "none",
   },
   background: {
     position: "absolute",

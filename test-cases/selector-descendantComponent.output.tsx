@@ -42,7 +42,6 @@ export const App = () => (
 const styles = stylex.create({
   content: {
     backgroundColor: $colors.bgSub,
-    backgroundImage: $colors.bgSub,
     width: "100px",
     height: "100px",
   },
@@ -51,14 +50,12 @@ const styles = stylex.create({
     width: "50px",
     height: "50px",
     backgroundColor: "white",
-    backgroundImage: "none",
   },
   icon: {
     display: "inline-block",
     width: "16px",
     height: "16px",
     backgroundColor: "currentColor",
-    backgroundImage: "none",
     maskSize: "contain",
     borderRadius: "50%",
   },
@@ -69,7 +66,6 @@ const styles = stylex.create({
     paddingBlock: "8px",
     paddingInline: "16px",
     backgroundColor: "#BF4F74",
-    backgroundImage: "none",
     color: "white",
     borderWidth: 0,
     borderStyle: "none",

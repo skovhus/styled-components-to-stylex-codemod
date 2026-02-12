@@ -31,7 +31,6 @@ const styles = stylex.create({
   wrapper: {
     padding: "4em",
     backgroundColor: "papayawhip",
-    backgroundImage: "none",
   },
   select: {
     paddingBlock: "4px",

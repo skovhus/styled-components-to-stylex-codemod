@@ -20,11 +20,6 @@ const styles = stylex.create({
       ":hover": "#bf4f74",
       ":focus": "#bf4f74",
     },
-    backgroundImage: {
-      default: "none",
-      ":hover": "none",
-      ":focus": "none",
-    },
     color: {
       default: "#333",
       ":hover": "white",

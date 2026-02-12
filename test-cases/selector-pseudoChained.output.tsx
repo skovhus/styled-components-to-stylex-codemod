@@ -26,10 +26,6 @@ const styles = stylex.create({
       default: "white",
       ":disabled": "#f5f5f5",
     },
-    backgroundImage: {
-      default: "none",
-      ":disabled": "none",
-    },
     outline: {
       default: null,
       ":focus:not(:disabled)": "none",

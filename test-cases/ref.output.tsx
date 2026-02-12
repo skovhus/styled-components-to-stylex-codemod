@@ -17,7 +17,6 @@ const styles = stylex.create({
     margin: "0.5em",
     color: "#bf4f74",
     backgroundColor: "papayawhip",
-    backgroundImage: "none",
     borderWidth: 0,
     borderStyle: "none",
     borderColor: "currentcolor",

@@ -20,7 +20,6 @@ export const App = () => (
 const styles = stylex.create({
   button: {
     backgroundColor: "#bf4f74",
-    backgroundImage: "none",
     color: "white",
     paddingBlock: "8px",
     paddingInline: "16px",
@@ -32,7 +31,6 @@ const styles = stylex.create({
   card: {
     padding: "16px",
     backgroundColor: "white",
-    backgroundImage: "none",
     borderRadius: "8px",
   },
 });

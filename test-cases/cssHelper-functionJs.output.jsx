@@ -20,7 +20,6 @@ export const App = () => (
 const styles = stylex.create({
   styleBox: {
     backgroundColor: "hotpink",
-    backgroundImage: "none",
     width: "30px",
     margin: "10px",
     height: "50px",

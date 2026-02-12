@@ -11,7 +11,6 @@ const styles = stylex.create({
     padding: $config["ui.spacing.medium"],
     margin: $config["ui.spacing.small"],
     backgroundColor: "white",
-    backgroundImage: "none",
     borderRadius: "8px",
   },
 });

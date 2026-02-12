@@ -16,7 +16,6 @@ export const App = () => (
 const styles = stylex.create({
   list: {
     backgroundColor: "white",
-    backgroundImage: "none",
     borderRadius: "4px",
   },
 });

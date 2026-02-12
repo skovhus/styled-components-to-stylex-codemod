@@ -20,7 +20,6 @@ export function Badge(props: BadgeProps) {
         styles.badge,
         sizeVariants[size],
         color != null && styles.badgeBackgroundColor(color),
-        color != null && styles.badgeBackgroundImage(color),
       )}
     >
       {children}
@@ -44,13 +43,9 @@ const styles = stylex.create({
     borderRadius: "50%",
     flexShrink: 0,
     backgroundColor: "gray",
-    backgroundImage: "gray",
   },
   badgeBackgroundColor: (backgroundColor: string) => ({
     backgroundColor,
-  }),
-  badgeBackgroundImage: (backgroundImage: string) => ({
-    backgroundImage,
   }),
 });
 

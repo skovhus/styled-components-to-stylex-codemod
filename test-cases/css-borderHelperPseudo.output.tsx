@@ -27,7 +27,6 @@ const styles = stylex.create({
     display: "flex",
     padding: "16px",
     backgroundColor: "#f0f0f0",
-    backgroundImage: "none",
     borderBottomStyle: {
       default: null,
       ":not(:only-child)": "solid",

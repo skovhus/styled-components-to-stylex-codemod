@@ -28,7 +28,6 @@ export const App = () => (
 const styles = stylex.create({
   exportedButton: {
     backgroundColor: "#bf4f74",
-    backgroundImage: "none",
     color: "white",
     paddingBlock: "8px",
     paddingInline: "16px",
@@ -41,7 +40,6 @@ const styles = stylex.create({
   // This is also exported but won't use shouldSupportExternalStyling (for comparison)
   internalBox: {
     backgroundColor: "#f0f0f0",
-    backgroundImage: "none",
     padding: "16px",
   },
 });

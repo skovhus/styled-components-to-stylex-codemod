@@ -28,7 +28,6 @@ const styles = stylex.create({
     padding: "16px",
     marginLeft: "0px",
     backgroundColor: "#f0f0f0",
-    backgroundImage: "none",
   },
   containerCompact: {
     padding: pixelVars.thin,

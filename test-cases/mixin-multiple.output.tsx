@@ -15,6 +15,5 @@ const styles = stylex.create({
   },
   backgroundMixin: {
     backgroundColor: "blue",
-    backgroundImage: "none",
   },
 });

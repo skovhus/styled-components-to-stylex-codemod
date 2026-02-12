@@ -39,7 +39,6 @@ const styles = stylex.create({
   // withConfig for displayName (debugging)
   button: {
     backgroundColor: "#bf4f74",
-    backgroundImage: "none",
     color: "white",
     paddingBlock: "8px",
     paddingInline: "16px",
@@ -51,7 +50,6 @@ const styles = stylex.create({
   card: {
     padding: "16px",
     backgroundColor: "white",
-    backgroundImage: "none",
     borderRadius: "8px",
     boxShadow: "0 2px 4px rgba(0, 0, 0, 0.1)",
   },
@@ -85,7 +83,6 @@ const styles = stylex.create({
   },
   extendedButton: {
     backgroundColor: "#4f74bf",
-    backgroundImage: "none",
     color: "white",
     paddingBlock: "8px",
     paddingInline: "16px",

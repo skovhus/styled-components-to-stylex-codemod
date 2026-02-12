@@ -164,17 +164,6 @@ export function cssDeclarationToStylexDeclarations(decl: CssDeclarationIR): Styl
 
   if (prop === "background") {
     const stylexProp = resolveBackgroundStylexProp(decl.valueRaw ?? "");
-    if (stylexProp === "backgroundColor") {
-      // The `background` shorthand resets all sub-properties (including
-      // background-image). Emit `backgroundImage: "none"` alongside the
-      // color so the output fully matches the shorthand behaviour—especially
-      // for elements (e.g. disabled inputs) whose user-agent style sets a
-      // non-trivial background appearance.
-      return [
-        { prop: "backgroundColor", value: decl.value },
-        { prop: "backgroundImage", value: { kind: "static", value: "none" } },
-      ];
-    }
     return [{ prop: stylexProp, value: decl.value }];
   }
 

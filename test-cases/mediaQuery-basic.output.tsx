@@ -83,7 +83,6 @@ const styles = stylex.create({
   card: {
     padding: "1rem",
     backgroundColor: "white",
-    backgroundImage: "none",
     borderRadius: "8px",
     boxShadow: {
       default: "0 2px 4px rgba(0, 0, 0, 0.1)",

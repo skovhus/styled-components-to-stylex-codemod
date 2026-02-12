@@ -60,7 +60,6 @@ export const App = () => (
 const styles = stylex.create({
   button: {
     backgroundColor: dynamicColor,
-    backgroundImage: dynamicColor,
     padding: `${spacing}px`,
     borderRadius: borderRadius,
     color: "white",
@@ -76,7 +75,6 @@ const styles = stylex.create({
   },
   conditionalButton: {
     backgroundColor: isPrimary ? "#BF4F74" : "#ccc",
-    backgroundImage: isPrimary ? "#BF4F74" : "#ccc",
     color: isPrimary ? "white" : "#333",
     paddingBlock: "8px",
     paddingInline: "16px",
@@ -87,7 +85,6 @@ const styles = stylex.create({
   },
   themedCard: {
     backgroundColor: `${theme.color.primary}`,
-    backgroundImage: `${theme.color.primary}`,
     borderWidth: "1px",
     borderStyle: "solid",
     borderColor: `${theme.color.secondary}`,

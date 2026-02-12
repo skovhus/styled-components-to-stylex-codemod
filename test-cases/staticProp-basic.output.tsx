@@ -87,11 +87,9 @@ const styles = stylex.create({
     paddingBlock: "8px",
     paddingInline: "16px",
     backgroundColor: "gray",
-    backgroundImage: "none",
   },
   extendedButton: {
     backgroundColor: "blue",
-    backgroundImage: "none",
     color: "white",
   },
   commandMenuTextDivider: {
