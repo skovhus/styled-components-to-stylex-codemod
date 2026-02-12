@@ -52,6 +52,31 @@ export function processDeclRules(ctx: DeclProcessingState): void {
     }
     // Track resolved selector media for this rule (set by adapter.resolveSelector)
     let resolvedSelectorMedia: { keyExpr: unknown; exprSource: string } | null = null;
+    const interpolationWarningType = (expr: unknown) => {
+      const exprType =
+        expr && typeof expr === "object" ? ((expr as { type?: unknown }).type ?? null) : null;
+      if (exprType === "ArrowFunctionExpression" || exprType === "FunctionExpression") {
+        return "Unsupported interpolation: arrow function" as const;
+      }
+      if (exprType === "CallExpression") {
+        return "Unsupported interpolation: call expression" as const;
+      }
+      if (exprType === "Identifier") {
+        return "Unsupported interpolation: identifier" as const;
+      }
+      if (exprType === "MemberExpression" || exprType === "OptionalMemberExpression") {
+        return "Unsupported interpolation: member expression" as const;
+      }
+      return "Unsupported interpolation: unknown" as const;
+    };
+    const bailUnsupportedInterpolation = (expr: unknown): void => {
+      state.markBail();
+      warnings.push({
+        severity: "warning",
+        type: interpolationWarningType(expr),
+        loc: computeSelectorWarningLoc(decl.loc, decl.rawCss, rule.selector),
+      });
+    };
 
     // --- Unsupported complex selector detection ---
     // We bail out rather than emitting incorrect unconditional styles.
@@ -369,6 +394,16 @@ export function processDeclRules(ctx: DeclProcessingState): void {
     const parsedSelector = parseSelector(selector);
 
     if (parsedSelector.kind === "adjacentSibling" || parsedSelector.kind === "generalSibling") {
+      if (media || resolvedSelectorMedia) {
+        state.markBail();
+        warnings.push({
+          severity: "warning",
+          type: "Unsupported selector: sibling combinator",
+          loc: computeSelectorWarningLoc(decl.loc, decl.rawCss, rule.selector),
+        });
+        break;
+      }
+
       const relationKind = parsedSelector.kind;
       const overrideStyleKey = `${decl.styleKey}${
         relationKind === "adjacentSibling" ? "SiblingBefore" : "AnySibling"
@@ -386,6 +421,7 @@ export function processDeclRules(ctx: DeclProcessingState): void {
         pseudo: null,
         selectorArg: parsedSelector.selectorArg ?? null,
       });
+      let failedSiblingInterpolation = false;
 
       for (const declaration of rule.declarations) {
         if (declaration.value.kind === "static") {
@@ -403,7 +439,9 @@ export function processDeclRules(ctx: DeclProcessingState): void {
             declaration.value as { parts?: Array<{ kind: string; slotId?: number }> }
           ).parts?.find((part) => part.kind === "slot");
           if (!slotPart || slotPart.slotId === undefined) {
-            continue;
+            bailUnsupportedInterpolation(null);
+            failedSiblingInterpolation = true;
+            break;
           }
           const expr = decl.templateExpressions[slotPart.slotId] as unknown;
           const resolved =
@@ -414,7 +452,9 @@ export function processDeclRules(ctx: DeclProcessingState): void {
               ? resolveThemeValueFromFn(expr)
               : resolveThemeValue(expr);
           if (!resolved) {
-            continue;
+            bailUnsupportedInterpolation(expr);
+            failedSiblingInterpolation = true;
+            break;
           }
           for (const out of cssDeclarationToStylexDeclarations(declaration)) {
             const parts =
@@ -445,6 +485,9 @@ export function processDeclRules(ctx: DeclProcessingState): void {
             bucket[out.prop] = j.templateLiteral(quasis, expressions);
           }
         }
+      }
+      if (failedSiblingInterpolation) {
+        break;
       }
       continue;
     }
