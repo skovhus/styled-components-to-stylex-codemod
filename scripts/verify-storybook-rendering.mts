@@ -375,12 +375,17 @@ async function processTestCase(p: Page, tc: string): Promise<TestResult> {
     // Freeze CSS keyframe animations so screenshots are deterministic.
     // Only targets CSSAnimation instances (not CSSTransition) to avoid
     // disturbing transition-dependent layouts or image loading states.
+    // Also blur any focused element so that focus rings (which can only
+    // appear on one element per page) don't cause mismatches between panels.
     await p.evaluate(() => {
       for (const animation of document.getAnimations()) {
         if (animation instanceof CSSAnimation) {
           animation.currentTime = 0;
           animation.pause();
         }
+      }
+      if (document.activeElement instanceof HTMLElement) {
+        document.activeElement.blur();
       }
     });
 
