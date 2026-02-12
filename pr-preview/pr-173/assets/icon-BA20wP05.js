@@ -1,1 +1,0 @@
-import{r as o}from"./index-BeIDg5Sp.js";function l(t){const{width:e=16,height:r=16,children:n,style:s,...i}=t;return o.createElement("span",{...i,style:{display:"inline-block",width:e,height:r,...s},children:n})}export{l as I};
