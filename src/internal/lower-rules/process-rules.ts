@@ -11,6 +11,7 @@ import { toKebab } from "./utils.js";
 import {
   normalizeSelectorForInputAttributePseudos,
   normalizeInterpolatedSelector,
+  normalizeSpecificityHacks,
   parseSelector,
 } from "../selectors.js";
 import { extractRootAndPath, getNodeLocStart } from "../utilities/jscodeshift-utils.js";
@@ -70,7 +71,11 @@ export function processDeclRules(ctx: DeclProcessingState): void {
     // NOTE: normalize interpolated component selectors before the complex selector checks
     // to avoid skipping bails for selectors like `${Other} .child &`.
     if (typeof rule.selector === "string") {
-      const s = normalizeInterpolatedSelector(rule.selector).trim();
+      // Normalize specificity hacks (&&, &&&) before any selector analysis.
+      // This collapses consecutive `&` characters (e.g., `&&` → `&`, `&&:hover` → `&:hover`).
+      const specificityResult = normalizeSpecificityHacks(rule.selector);
+      const selectorForAnalysis = specificityResult.normalized;
+      const s = normalizeInterpolatedSelector(selectorForAnalysis).trim();
       const hasComponentExpr = rule.selector.includes("__SC_EXPR_");
       const hasInterpolatedPseudo = /:[^\s{]*__SC_EXPR_\d+__/.test(rule.selector);
 
@@ -398,6 +403,21 @@ export function processDeclRules(ctx: DeclProcessingState): void {
     const isInputIntrinsic = decl.base.kind === "intrinsic" && decl.base.tagName === "input";
     let selector = normalizeSelectorForInputAttributePseudos(rule.selector, isInputIntrinsic);
     selector = normalizeInterpolatedSelector(selector);
+    // Normalize specificity hacks (&&, &&&) to base selector (&).
+    const { normalized: selectorNormalized, wasStripped: specificityStripped } =
+      normalizeSpecificityHacks(selector);
+    selector = selectorNormalized;
+
+    // When a specificity hack is stripped, annotate the first declaration so the
+    // output includes a comment explaining the change.
+    if (specificityStripped && rule.declarations.length > 0) {
+      const first = rule.declarations[0];
+      if (first) {
+        const note = `Specificity hack stripped (was: ${rule.selector.trim()})`;
+        first.leadingComment = first.leadingComment ? `${note}\n${first.leadingComment}` : note;
+      }
+    }
+
     if (!media && selector.trim().startsWith("@media")) {
       media = selector.trim();
       selector = "&";

@@ -283,6 +283,28 @@ function parseAttributeSelectorInternal(selector: string): ParsedAttributeSelect
 // Non-parsing utility functions (kept as-is)
 // =============================================================================
 
+/**
+ * Normalize specificity hacks (`&&`, `&&&`, etc.) by collapsing consecutive `&` characters
+ * into a single `&`. Returns the normalized selector and whether any stripping occurred.
+ *
+ * Examples:
+ *   - `&&` → `&` (stripped)
+ *   - `&&&` → `&` (stripped)
+ *   - `&&:hover` → `&:hover` (stripped)
+ *   - `.wrapper &&` → `.wrapper &` (stripped, but `.wrapper` will be caught later)
+ *   - `&:hover` → `&:hover` (no change)
+ */
+export function normalizeSpecificityHacks(selector: string): {
+  normalized: string;
+  wasStripped: boolean;
+} {
+  if (!selector.includes("&&")) {
+    return { normalized: selector, wasStripped: false };
+  }
+  const normalized = selector.replace(/&{2,}/g, "&");
+  return { normalized, wasStripped: normalized !== selector };
+}
+
 export function normalizeInterpolatedSelector(selectorRaw: string): string {
   if (!/__SC_EXPR_\d+__/.test(selectorRaw)) {
     return selectorRaw;
@@ -295,8 +317,8 @@ export function normalizeInterpolatedSelector(selectorRaw: string): string {
       // Normalize `& &:pseudo` to `&:pseudo` (css helper interpolation + pseudo selector).
       // This handles patterns like `${rowBase}\n&:hover { ... }` where the css helper
       // interpolation becomes `&` and the nested pseudo selector is `&:hover`.
-      // NOTE: We intentionally do NOT normalize `& &` or `&&` without a pseudo, as those
-      // are specificity hacks that should bail (handled in transform.ts).
+      // NOTE: `&&` without a pseudo is a specificity hack and is handled separately
+      // by `normalizeSpecificityHacks()`.
       .replace(/&\s*&:/g, "&:")
       .replace(/&\s*:/g, "&:")
   );
