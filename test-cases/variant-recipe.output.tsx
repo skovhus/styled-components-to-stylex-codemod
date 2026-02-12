@@ -13,7 +13,7 @@ type Props = {
 type ButtonProps = Omit<React.ComponentProps<"button">, "className" | "style"> & Props;
 
 function Button(props: ButtonProps) {
-  const { children, size: size = "small", color: color = "secondary", disabled } = props;
+  const { children, size = "small", color = "secondary", disabled } = props;
 
   return (
     <button
