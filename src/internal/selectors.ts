@@ -15,7 +15,14 @@ type ParsedSelector =
   | { kind: "unsupported"; reason: string };
 
 type ParsedAttributeSelector = {
-  type: "typeCheckbox" | "typeRadio" | "hrefStartsHttps" | "hrefEndsPdf" | "targetBlankAfter";
+  type:
+    | "typeCheckbox"
+    | "typeRadio"
+    | "disabled"
+    | "readonly"
+    | "hrefStartsHttps"
+    | "hrefEndsPdf"
+    | "targetBlankAfter";
   suffix: string;
   pseudoElement?: string | null;
 };
@@ -222,6 +229,15 @@ function parseAttributeSelectorInternal(selector: string): ParsedAttributeSelect
   }
   const inside = m[1];
 
+  // Boolean attribute selectors: [disabled], [readonly], [readOnly]
+  const boolAttr = inside.replace(/\s+/g, "").toLowerCase();
+  if (boolAttr === "disabled") {
+    return { type: "disabled", suffix: "Disabled" };
+  }
+  if (boolAttr === "readonly") {
+    return { type: "readonly", suffix: "Readonly" };
+  }
+
   // type="checkbox" / type="radio"
   const typeEq = inside.match(/^type\s*=\s*"(checkbox|radio)"$/);
   if (typeEq) {
@@ -296,21 +312,9 @@ export function normalizeSelectorForInputAttributePseudos(
     return selector;
   }
 
-  // Convert input attribute selectors into equivalent pseudo-classes so they can live
-  // in the base style object (no wrapper needed).
-  // - &[disabled]  -> &:disabled
-  // - &[readonly]  -> &:read-only
-  // - &[readOnly]  -> &:read-only (defensive)
-  const m = selector.match(/^&\[(.+)\]$/) ?? selector.match(/^\[(.+)\]$/);
-  if (!m || !m[1]) {
-    return selector;
-  }
-  const inside = m[1].replace(/\s+/g, "");
-  if (inside === "disabled") {
-    return "&:disabled";
-  }
-  if (inside === "readonly" || inside === "readOnly") {
-    return "&:read-only";
-  }
+  // [disabled] and [readonly] are now handled as attribute selectors in the attrWrapper
+  // pattern (converted to JS prop-based conditionals). No pseudo-class conversion needed
+  // because CSS :read-only matches too broadly (disabled inputs, checkbox/radio, etc.)
+  // while the attribute selector [readonly] only matches elements with the attribute set.
   return selector;
 }

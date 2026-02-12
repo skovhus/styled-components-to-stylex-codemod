@@ -228,6 +228,8 @@ export type StyledDecl = {
     // Base style key is `styleKey`; other keys are optional.
     checkboxKey?: string;
     radioKey?: string;
+    disabledKey?: string;
+    readonlyKey?: string;
     externalKey?: string;
     httpsKey?: string;
     pdfKey?: string;

@@ -9,6 +9,7 @@ import { isAstNode } from "./utilities/jscodeshift-utils.js";
 import { lowerFirst } from "./utilities/string-utils.js";
 import { literalToAst, objectToAst } from "./transform/helpers.js";
 import type { TransformContext } from "./transform-context.js";
+import { splitDirectionalProperty } from "./stylex-shorthands.js";
 
 export function emitStylesAndImports(ctx: TransformContext): { emptyStyleKeys: Set<string> } {
   const { root, j, file, resolverImports, adapter } = ctx;
@@ -491,6 +492,13 @@ export function emitStylesAndImports(ctx: TransformContext): { emptyStyleKeys: S
     }
   }
 
+  // Normalize shorthand/longhand conflicts across style objects within the same component.
+  // When one style object has a shorthand (e.g., `margin`) and another has a longhand
+  // (e.g., `marginBottom`), StyleX's atomic CSS won't reliably resolve the override.
+  // We expand the shorthand into longhands that match the form used by the conflicting
+  // longhands (physical or logical).
+  normalizeShorthandLonghandConflicts(styledDecls, resolvedStyleObjects);
+
   // Compute the set of empty style keys (style objects with no properties)
   const emptyStyleKeys = new Set<string>();
   for (const [k, v] of resolvedStyleObjects.entries()) {
@@ -498,6 +506,25 @@ export function emitStylesAndImports(ctx: TransformContext): { emptyStyleKeys: S
       if (Object.keys(v as Record<string, unknown>).length === 0) {
         emptyStyleKeys.add(k);
       }
+    }
+  }
+
+  // Keep empty base style keys when the component has conditional/variant styles.
+  // A bare element with no className renders differently than one with an empty className
+  // (e.g., subpixel text rendering). Preserving the empty base style ensures the element
+  // always receives a className from stylex.props().
+  for (const decl of styledDecls) {
+    if (!emptyStyleKeys.has(decl.styleKey)) {
+      continue;
+    }
+    const hasConditionalStyles =
+      (decl.variantStyleKeys && Object.keys(decl.variantStyleKeys).length > 0) ||
+      (decl.variantDimensions && decl.variantDimensions.length > 0) ||
+      (decl.compoundVariants && decl.compoundVariants.length > 0) ||
+      (decl.styleFnFromProps && decl.styleFnFromProps.length > 0) ||
+      (decl.needsUseThemeHook && decl.needsUseThemeHook.length > 0);
+    if (hasConditionalStyles) {
+      emptyStyleKeys.delete(decl.styleKey);
     }
   }
 
@@ -666,4 +693,190 @@ function emitVariantDimensionDecl(j: any, dimension: VariantDimension): any {
   ]);
 
   return variantDecl;
+}
+
+// ---------------------------------------------------------------------------
+// Shorthand/longhand conflict normalization
+// ---------------------------------------------------------------------------
+
+/** Mapping from CSS shorthand to the longhands that conflict with it */
+const SHORTHAND_LONGHANDS: Record<string, { physical: string[]; logical: string[] }> = {
+  margin: {
+    physical: ["marginTop", "marginRight", "marginBottom", "marginLeft"],
+    logical: ["marginBlock", "marginInline"],
+  },
+  padding: {
+    physical: ["paddingTop", "paddingRight", "paddingBottom", "paddingLeft"],
+    logical: ["paddingBlock", "paddingInline"],
+  },
+};
+
+/**
+ * Expand shorthand properties in style objects when they conflict with longhands
+ * in other style objects of the same component.
+ *
+ * Example: component has base `marginBottom: "8px"` and conditional `margin: "24px"`.
+ * StyleX's atomic CSS won't reliably resolve `margin` overriding `marginBottom`,
+ * so we expand `margin: "24px"` → `marginTop/Right/Bottom/Left: "24px"`.
+ *
+ * The expansion form matches the conflicting longhands:
+ *  - physical (`marginBottom`) → `marginTop/Right/Bottom/Left`
+ *  - logical (`paddingBlock`) → `paddingBlock/paddingInline`
+ */
+function normalizeShorthandLonghandConflicts(
+  styledDecls: StyledDecl[],
+  resolvedStyleObjects: Map<string, unknown>,
+): void {
+  for (const decl of styledDecls) {
+    const componentStyleKeys = collectComponentStyleKeys(decl);
+    if (componentStyleKeys.length < 2) {
+      continue;
+    }
+
+    // Collect all property names across all style objects
+    const propsByKey = new Map<string, Set<string>>();
+    for (const key of componentStyleKeys) {
+      const style = resolvedStyleObjects.get(key);
+      if (!style || typeof style !== "object" || isAstNode(style)) {
+        continue;
+      }
+      propsByKey.set(key, new Set(Object.keys(style as Record<string, unknown>)));
+    }
+
+    for (const [shorthand, longhands] of Object.entries(SHORTHAND_LONGHANDS)) {
+      // Find style keys that use the shorthand
+      const shorthandKeys: string[] = [];
+      for (const [key, props] of propsByKey) {
+        if (props.has(shorthand)) {
+          shorthandKeys.push(key);
+        }
+      }
+      if (shorthandKeys.length === 0) {
+        continue;
+      }
+
+      // Check if any OTHER style object uses longhands of this shorthand
+      let hasPhysicalConflict = false;
+      let hasLogicalConflict = false;
+      for (const [key, props] of propsByKey) {
+        if (shorthandKeys.includes(key)) {
+          continue;
+        } // skip same object
+        if (longhands.physical.some((l) => props.has(l))) {
+          hasPhysicalConflict = true;
+        }
+        if (longhands.logical.some((l) => props.has(l))) {
+          hasLogicalConflict = true;
+        }
+      }
+
+      if (!hasPhysicalConflict && !hasLogicalConflict) {
+        continue;
+      }
+
+      // Expand the shorthand in each style object that has it
+      for (const key of shorthandKeys) {
+        const style = resolvedStyleObjects.get(key) as Record<string, unknown>;
+        const value = style[shorthand];
+        if (value === undefined || value === null) {
+          continue;
+        }
+        // Only expand simple values (strings and numbers), not conditional objects
+        if (typeof value === "object") {
+          continue;
+        }
+
+        expandShorthandInStyle(style, shorthand, value, hasLogicalConflict && !hasPhysicalConflict);
+      }
+    }
+  }
+}
+
+/** Collect all style keys belonging to a single component declaration */
+function collectComponentStyleKeys(decl: StyledDecl): string[] {
+  const keys: string[] = [decl.styleKey];
+  if (decl.variantStyleKeys) {
+    keys.push(...Object.values(decl.variantStyleKeys));
+  }
+  if (decl.extraStyleKeys) {
+    keys.push(...decl.extraStyleKeys);
+  }
+  if (decl.extraStyleKeysAfterBase) {
+    keys.push(...decl.extraStyleKeysAfterBase);
+  }
+  if (decl.enumVariant) {
+    keys.push(decl.enumVariant.baseKey);
+    for (const c of decl.enumVariant.cases) {
+      keys.push(c.styleKey);
+    }
+  }
+  if (decl.attrWrapper) {
+    const aw = decl.attrWrapper;
+    if (aw.checkboxKey) {
+      keys.push(aw.checkboxKey);
+    }
+    if (aw.radioKey) {
+      keys.push(aw.radioKey);
+    }
+    if (aw.externalKey) {
+      keys.push(aw.externalKey);
+    }
+    if (aw.httpsKey) {
+      keys.push(aw.httpsKey);
+    }
+    if (aw.pdfKey) {
+      keys.push(aw.pdfKey);
+    }
+  }
+  return keys;
+}
+
+/**
+ * Replace a shorthand property with expanded longhands in a style object.
+ * Preserves property ordering by rebuilding the object with longhands
+ * inserted where the shorthand was.
+ * Uses logical form (block/inline) when the conflict is with logical properties,
+ * otherwise uses physical form (top/right/bottom/left).
+ */
+function expandShorthandInStyle(
+  style: Record<string, unknown>,
+  shorthand: string,
+  value: string | number,
+  useLogical: boolean,
+): void {
+  // Build the replacement entries
+  let replacements: Array<{ prop: string; value: unknown }>;
+  if (useLogical) {
+    replacements = [
+      { prop: `${shorthand}Block`, value },
+      { prop: `${shorthand}Inline`, value },
+    ];
+  } else {
+    const prop = shorthand as "margin" | "padding" | "scrollMargin";
+    replacements = splitDirectionalProperty({
+      prop,
+      rawValue: typeof value === "number" ? String(value) : value,
+      alwaysExpand: true,
+    }).map((entry) => ({
+      prop: entry.prop,
+      value: typeof value === "number" ? value : entry.value,
+    }));
+  }
+
+  // Rebuild the object with longhands replacing the shorthand in-place
+  const entries = Object.entries(style);
+  // Clear the object
+  for (const key of Object.keys(style)) {
+    delete style[key];
+  }
+  // Re-insert with expansion
+  for (const [key, val] of entries) {
+    if (key === shorthand) {
+      for (const r of replacements) {
+        style[r.prop] = r.value;
+      }
+    } else {
+      style[key] = val;
+    }
+  }
 }

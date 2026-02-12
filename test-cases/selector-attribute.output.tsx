@@ -69,6 +69,11 @@ const styles = stylex.create({
       fontStyle: "italic",
     },
   },
+  inputDisabled: {
+    backgroundColor: "#f5f5f5",
+    color: "#999",
+    cursor: "not-allowed",
+  },
   inputCheckbox: {
     width: "20px",
     height: "20px",
@@ -81,11 +86,6 @@ const styles = stylex.create({
     paddingBlock: 0,
     paddingInline: 0,
     borderRadius: "50%",
-  },
-  inputDisabled: {
-    backgroundColor: "#f5f5f5",
-    color: "#999",
-    cursor: "not-allowed",
   },
   inputReadonly: {
     backgroundColor: "#fafafa",

@@ -458,6 +458,10 @@ export function processDeclRules(ctx: DeclProcessingState): void {
           decl.attrWrapper.checkboxKey = attrTargetStyleKey;
         } else if (attrSel.kind === "typeRadio") {
           decl.attrWrapper.radioKey = attrTargetStyleKey;
+        } else if (attrSel.kind === "disabled") {
+          decl.attrWrapper.disabledKey = attrTargetStyleKey;
+        } else if (attrSel.kind === "readonly") {
+          decl.attrWrapper.readonlyKey = attrTargetStyleKey;
         }
       } else if (attrWrapperKind === "link") {
         if (attrSel.kind === "targetBlankAfter") {
