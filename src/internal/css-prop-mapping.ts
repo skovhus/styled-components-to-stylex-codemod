@@ -228,7 +228,6 @@ function borderShorthandToStylex(valueRaw: string, direction: string): StylexPro
     return [
       { prop: widthProp, value: { kind: "static", value: "0" } },
       { prop: styleProp, value: { kind: "static", value: "none" } },
-      { prop: colorProp, value: { kind: "static", value: "currentcolor" } },
     ];
   }
 

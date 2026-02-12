@@ -65,7 +65,6 @@ const styles = stylex.create({
     color: "white",
     borderWidth: 0,
     borderStyle: "none",
-    borderColor: "currentcolor",
   },
   text: {
     fontSize: `${fontSize}px`,
@@ -80,7 +79,6 @@ const styles = stylex.create({
     paddingInline: "16px",
     borderWidth: 0,
     borderStyle: "none",
-    borderColor: "currentcolor",
     borderRadius: "4px",
   },
   themedCard: {

@@ -47,7 +47,6 @@ const styles = stylex.create({
     color: "white !important",
     borderWidth: "0 !important",
     borderStyle: "none",
-    borderColor: "currentcolor !important",
     paddingBlock: "8px",
     paddingInline: "16px",
     borderRadius: "4px",

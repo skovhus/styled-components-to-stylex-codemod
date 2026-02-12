@@ -13,7 +13,6 @@ const styles = stylex.create({
   divider: {
     borderWidth: 0,
     borderStyle: "none",
-    borderColor: "currentcolor",
     height: "1px",
     backgroundColor: "#e0e0e0",
     marginBlock: "16px",
