@@ -60,12 +60,12 @@ body{font-family:-apple-system,BlinkMacSystemFont,Segoe UI,Roboto,Helvetica Neue
   inherits: false
 }
 
-@property --x-transitionDelay {
+@property --x-backgroundImage {
   syntax: "*";
   inherits: false
 }
 
-@property --x-backgroundImage {
+@property --x-transitionDelay {
   syntax: "*";
   inherits: false
 }
@@ -125,12 +125,12 @@ body{font-family:-apple-system,BlinkMacSystemFont,Segoe UI,Roboto,Helvetica Neue
   inherits: false
 }
 
-@property --x-animationDelay {
+@property --x-126kuz7 {
   syntax: "*";
   inherits: false
 }
 
-@property --x-126kuz7 {
+@property --x-animationDelay {
   syntax: "*";
   inherits: false
 }
