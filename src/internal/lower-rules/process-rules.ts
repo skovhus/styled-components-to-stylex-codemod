@@ -213,6 +213,8 @@ export function processDeclRules(ctx: DeclProcessingState): void {
           relationOverridePseudoBuckets,
         );
 
+        // Collect the override property names to populate base defaults
+        const overrideProps = new Set<string>();
         for (const d of rule.declarations) {
           if (d.value.kind === "static") {
             for (const out of cssDeclarationToStylexDeclarations(d)) {
@@ -221,6 +223,7 @@ export function processDeclRules(ctx: DeclProcessingState): void {
               }
               const v = cssValueToJs(out.value, d.important, out.prop);
               bucket[out.prop] = v;
+              overrideProps.add(out.prop);
             }
           } else if (d.value.kind === "interpolated" && d.property) {
             // Handle interpolated theme values (e.g., ${props => props.theme.color.labelBase})
@@ -240,8 +243,32 @@ export function processDeclRules(ctx: DeclProcessingState): void {
                 for (const out of cssDeclarationToStylexDeclarations(d)) {
                   const finalValue = buildInterpolatedValue(j, d, resolved);
                   bucket[out.prop] = finalValue;
+                  overrideProps.add(out.prop);
                 }
               }
+            }
+          }
+        }
+
+        // For the reverse pattern, the declaring component (self) has base styles
+        // that must be preserved as defaults in the override. Without this, the
+        // override's `default: null` would clear the base value (e.g., fill: #bf4f74).
+        if (overrideProps.size > 0) {
+          const baseBucket = getOrCreateRelationOverrideBucket(
+            overrideStyleKey,
+            parentDecl.styleKey,
+            decl.styleKey,
+            null, // base bucket (no pseudo)
+            relationOverrides,
+            relationOverridePseudoBuckets,
+          );
+          for (const prop of overrideProps) {
+            if (prop in baseBucket) {
+              continue; // already has a base value
+            }
+            const existingVal = (styleObj as Record<string, unknown>)[prop];
+            if (existingVal !== undefined) {
+              baseBucket[prop] = existingVal;
             }
           }
         }
