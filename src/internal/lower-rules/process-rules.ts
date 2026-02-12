@@ -405,9 +405,9 @@ export function processDeclRules(ctx: DeclProcessingState): void {
       }
 
       const relationKind = parsedSelector.kind;
-      const overrideStyleKey = `${decl.styleKey}${
-        relationKind === "adjacentSibling" ? "SiblingBefore" : "AnySibling"
-      }`;
+      // Keep all sibling relation conditions in a single override style key so later
+      // sibling conditions don't reset earlier sibling defaults for the same property.
+      const overrideStyleKey = `${decl.styleKey}SiblingBefore`;
       ancestorSelectorParents.add(decl.styleKey);
       registerRelationOverride({
         kind: relationKind,

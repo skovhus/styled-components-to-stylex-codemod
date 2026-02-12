@@ -12,10 +12,7 @@ function Thing(
 
   return (
     <div
-      {...mergedSx(
-        [styles.thing, styles.thingSiblingBefore, styles.thingAnySibling, stylex.defaultMarker()],
-        className,
-      )}
+      {...mergedSx([styles.thing, styles.thingSiblingBefore, stylex.defaultMarker()], className)}
     >
       {children}
     </div>
@@ -44,11 +41,6 @@ const styles = stylex.create({
     backgroundColor: {
       default: null,
       [stylex.when.siblingBefore(":is(*)")]: "lime",
-    },
-  },
-  thingAnySibling: {
-    backgroundColor: {
-      default: null,
       [stylex.when.siblingBefore(":is(.something)")]: "yellow",
     },
   },
