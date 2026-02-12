@@ -16,6 +16,7 @@ import { resolveDynamicNode } from "../builtin-handlers.js";
 import { parseCssDeclarationBlock } from "../builtin-handlers/css-parsing.js";
 import { ensureShouldForwardPropDrop } from "./types.js";
 import type { DeclProcessingState } from "./decl-setup.js";
+import { getOrCreateRelationOverrideBucket } from "./shared.js";
 
 export function finalizeDeclProcessing(ctx: DeclProcessingState): void {
   const {
@@ -135,26 +136,15 @@ export function finalizeDeclProcessing(ctx: DeclProcessingState): void {
       }
       const overrideStyleKey = `${toStyleKey(childLocal)}In${decl.localName}`;
       ancestorSelectorParents.add(decl.styleKey);
-      // Only add to relationOverrides once per override key
-      if (!relationOverridePseudoBuckets.has(overrideStyleKey)) {
-        relationOverrides.push({
-          parentStyleKey: decl.styleKey,
-          childStyleKey: childDecl.styleKey,
-          overrideStyleKey,
-        });
-      }
-      // Get or create the pseudo buckets map for this override key
-      let pseudoBuckets = relationOverridePseudoBuckets.get(overrideStyleKey);
-      if (!pseudoBuckets) {
-        pseudoBuckets = new Map();
-        relationOverridePseudoBuckets.set(overrideStyleKey, pseudoBuckets);
-      }
-      // Get or create the bucket for this specific pseudo (or null for base)
-      let bucket = pseudoBuckets.get(ancestorPseudo);
-      if (!bucket) {
-        bucket = {};
-        pseudoBuckets.set(ancestorPseudo, bucket);
-      }
+
+      const bucket = getOrCreateRelationOverrideBucket(
+        overrideStyleKey,
+        decl.styleKey,
+        childDecl.styleKey,
+        ancestorPseudo,
+        relationOverrides,
+        relationOverridePseudoBuckets,
+      );
       didApply = true;
 
       const declLines = declsText
