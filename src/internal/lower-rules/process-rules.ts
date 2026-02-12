@@ -222,7 +222,7 @@ export function processDeclRules(ctx: DeclProcessingState): void {
               continue;
             }
             const v = cssValueToJs(out.value, d.important, out.prop);
-            (bucket as Record<string, unknown>)[out.prop] = v;
+            bucket[out.prop] = v;
           }
         }
 

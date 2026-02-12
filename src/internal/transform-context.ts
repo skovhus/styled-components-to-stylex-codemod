@@ -15,6 +15,7 @@ import {
   patternProp as patternPropImpl,
 } from "./transform-utils.js";
 import type { TransformOptions } from "./transform-types.js";
+import type { RelationOverride } from "./lower-rules/state.js";
 
 export type ExportInfo = { exportName: string; isDefault: boolean; isSpecifier: boolean };
 
@@ -65,7 +66,7 @@ export class TransformContext {
   hasUniversalSelectors?: boolean;
   universalSelectorLoc?: { line: number; column: number } | null;
   resolvedStyleObjects?: Map<string, unknown>;
-  relationOverrides?: any[];
+  relationOverrides?: RelationOverride[];
   ancestorSelectorParents?: Set<string>;
   emptyStyleKeys?: Set<string>;
   stylesIdentifier?: string;
