@@ -2078,7 +2078,7 @@ body{font-family:-apple-system,BlinkMacSystemFont,Segoe UI,Roboto,Helvetica Neue
   background-color: #0f0;
 }
 
-.x711cr8.x711cr8:where(.x-default-marker.something ~ *, :has( ~ .x-default-marker.something)):not(#\#):not(#\#):not(#\#) {
+.x6651v9.x6651v9:where(.x-default-marker.something ~ *):not(#\#):not(#\#):not(#\#) {
   background-color: #ff0;
 }
 
