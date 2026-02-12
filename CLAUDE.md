@@ -60,7 +60,7 @@ Run repo scripts directly with `node`, see `scripts` folder
 - `scripts/regenerate-test-case-outputs.mts` - Updates test case output files.
   - All supported test cases: `node scripts/regenerate-test-case-outputs.mts`
   - Single test case: `node scripts/regenerate-test-case-outputs.mts --only attrs`
-- `scripts/verify-storybook-rendering.mts` - Verifies that input (styled-components) and output (StyleX) render with matching dimensions and content in Storybook. Self-contained: auto-builds Storybook, starts a static server, and auto-installs Playwright Chromium if needed. Uses pixelmatch for pixel-level image comparison.
+- `scripts/verify-storybook-rendering.mts` - Verifies that input (styled-components) and output (StyleX) render with matching dimensions and content in Storybook. Self-contained: builds Storybook, starts a static file server, and auto-installs Playwright Chromium if needed. Uses pixelmatch for pixel-level image comparison.
 - All test cases: `node scripts/verify-storybook-rendering.mts`
 - Specific test case: `node scripts/verify-storybook-rendering.mts theme-conditionalInlineStyle`
 - Only changed vs main: `node scripts/verify-storybook-rendering.mts --only-changed`
@@ -109,7 +109,7 @@ Storybook renders all test cases side-by-side (input with styled-components, out
 
 Run `pnpm storybook` to start the dev server and visually compare transformations.
 
-To verify rendering programmatically, run `node scripts/verify-storybook-rendering.mts`. The script is self-contained: it builds Storybook if needed, starts a static file server, and auto-installs Playwright Chromium. Use `--only-changed` to check only test cases changed on the current branch, or `--save-diffs` to save diff images for mismatches.
+To verify rendering programmatically, run `node scripts/verify-storybook-rendering.mts`. The script is self-contained: it builds Storybook, starts a static file server, and auto-installs Playwright Chromium. Use `--only-changed` to check only test cases changed on the current branch, or `--save-diffs` to save diff images for mismatches.
 
 ## Skills
 

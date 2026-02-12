@@ -2,10 +2,10 @@
  * Verify that storybook renders Input (styled-components) and Output (StyleX)
  * panels with matching dimensions, content, and visual appearance for each test case.
  *
- * This script is self-contained: it builds Storybook (if needed), starts a
- * lightweight static file server, launches a headless Chromium browser via
- * Playwright, and compares the Input vs Output panels using pixelmatch for
- * pixel-level image comparison.
+ * This script is self-contained: it builds Storybook, starts a lightweight
+ * static file server, launches a headless Chromium browser via Playwright,
+ * and compares the Input vs Output panels using pixelmatch for pixel-level
+ * image comparison.
  *
  * Runs test cases in parallel across multiple browser pages for speed.
  *
@@ -25,7 +25,7 @@
 /* oxlint-disable no-console */
 
 import { execSync } from "node:child_process";
-import { existsSync, mkdirSync, readdirSync, readFileSync, statSync, writeFileSync } from "node:fs";
+import { mkdirSync, readdirSync, readFileSync, statSync, writeFileSync } from "node:fs";
 import http from "node:http";
 import { extname, join } from "node:path";
 
@@ -142,12 +142,10 @@ if (testCases.length === 0) {
 }
 
 // ---------------------------------------------------------------------------
-// Build Storybook if needed
+// Build Storybook (always, to avoid stale assets)
 // ---------------------------------------------------------------------------
-if (!existsSync(storybookStaticDir)) {
-  console.log("Storybook build not found. Building...");
-  execSync("pnpm storybook:build", { cwd: projectRoot, stdio: "inherit" });
-}
+console.log("Building Storybook...");
+execSync("pnpm storybook:build", { cwd: projectRoot, stdio: "inherit" });
 
 // ---------------------------------------------------------------------------
 // Static file server for storybook-static/
@@ -349,7 +347,7 @@ async function processTestCase(p: Page, tc: string): Promise<TestResult> {
   const url = `${baseUrl}/iframe.html?id=test-cases--${storyId}&viewMode=story`;
 
   try {
-    await p.goto(url, { waitUntil: "domcontentloaded", timeout: 15_000 });
+    await p.goto(url, { waitUntil: "load", timeout: 15_000 });
 
     // Wait for React to render the story (both headings appear)
     await p.waitForSelector("h3", { timeout: 10_000 });
