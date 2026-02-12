@@ -13,16 +13,8 @@ const Thing = styled.div`
   }
 `;
 
-const OverrideStyles = styled.div`
-  .wrapper && {
-    /* Context-based specificity boost */
-    background: papayawhip;
-  }
-`;
-
 export const App = () => (
-  <div className="wrapper">
+  <div>
     <Thing>High specificity text (blue due to &&&)</Thing>
-    <OverrideStyles>Context override (papayawhip background)</OverrideStyles>
   </div>
 );

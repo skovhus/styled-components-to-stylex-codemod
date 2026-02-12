@@ -290,6 +290,13 @@ export function processDeclRules(ctx: DeclProcessingState): void {
         continue;
       }
 
+      // Component-interpolated sibling selectors (e.g. `${Other} + &`, `& ~ ${Other}`)
+      // cannot be represented with the current self-to-self sibling lowering.
+      if (otherLocal && !isCssHelperPlaceholder && /[+~]/.test(selTrim2)) {
+        bailUnknownComponentSelector();
+        break;
+      }
+
       // Selector interpolation that's a MemberExpression (e.g., screenSize.phone)
       // Try to resolve it via the adapter as a media query helper.
       if (
@@ -690,7 +697,14 @@ function stripSpecificityHackSelector(selector: string): string {
   if (!trimmed.includes("&&")) {
     return selector;
   }
-  const pseudoParts = trimmed.match(/:[a-z-]+(?:\([^)]*\))?/gi) ?? [];
-  const pseudoSuffix = pseudoParts.join("");
-  return pseudoSuffix ? `&${pseudoSuffix}` : "&";
+
+  // Only collapse pure specificity hacks (`&&`, `&&&`, optionally with pseudos).
+  // Keep contextual/combinator selectors (e.g. `.wrapper &&`, `&& + &`) unchanged
+  // so they safely hit existing unsupported-selector bails.
+  const match = trimmed.match(/^&{2,}((:[a-z-]+(?:\([^)]*\))?)*)$/i);
+  if (!match) {
+    return selector;
+  }
+  const pseudoSuffix = match[1] ?? "";
+  return `&${pseudoSuffix}`;
 }
