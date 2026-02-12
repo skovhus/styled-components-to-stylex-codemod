@@ -221,6 +221,17 @@ export function emitSimpleWithConfigWrappers(ctx: EmitIntrinsicContext): void {
           ...(d.attrsInfo?.invertedBoolAttrs ?? []).map((inv: any) => inv.jsxProp).filter(Boolean),
         ]),
       ];
+      // When a defaultAttr prop is also used in a style conditional,
+      // add a destructuring default so the condition sees the resolved value.
+      const minimalPropDefaults = new Map<string, string>();
+      for (const attr of d.attrsInfo?.defaultAttrs ?? []) {
+        if (
+          destructureProps.includes(attr.jsxProp) &&
+          (typeof attr.value === "string" || typeof attr.value === "number")
+        ) {
+          minimalPropDefaults.set(attr.jsxProp, `${attr.value}`);
+        }
+      }
       emitted.push(
         ...withLeadingCommentsOnFirstFunction(
           emitMinimalWrapper({
@@ -229,6 +240,7 @@ export function emitSimpleWithConfigWrappers(ctx: EmitIntrinsicContext): void {
             propsTypeName: emitter.propsTypeNameFor(d.localName),
             styleArgs,
             destructureProps,
+            propDefaults: minimalPropDefaults.size > 0 ? minimalPropDefaults : undefined,
             allowAsProp,
             allowClassNameProp: false,
             allowStyleProp: false,
@@ -672,6 +684,20 @@ export function emitSimpleExportedIntrinsicWrappers(ctx: EmitIntrinsicContext): 
         // Use makeConditionalStyleExpr to handle boolean vs non-boolean conditions correctly.
         // For boolean conditions, && is used. For non-boolean (could be "" or 0), ternary is used.
         styleArgs.push(emitter.makeConditionalStyleExpr({ cond, expr: styleExpr, isBoolean }));
+      }
+    }
+
+    // When a defaultAttr (e.g. tabIndex: props.tabIndex ?? 0) is also used in a
+    // style conditional (e.g. tabIndex === 0 && styles.xxx), add a destructuring
+    // default so the resolved value is available to both the JSX attr and the
+    // style condition.  Without this the condition evaluates against the raw
+    // (possibly undefined) prop instead of the defaulted value.
+    for (const attr of d.attrsInfo?.defaultAttrs ?? []) {
+      if (
+        destructureProps.includes(attr.jsxProp) &&
+        (typeof attr.value === "string" || typeof attr.value === "number")
+      ) {
+        propDefaults.set(attr.jsxProp, `${attr.value}`);
       }
     }
 

@@ -1058,22 +1058,20 @@ export class WrapperEmitter {
     if (allowStyleProp) {
       patternProps.push(this.patternProp("style"));
     }
-    // Build a set of defaultAttrs prop names to check if we should skip destructuring defaults
-    const defaultAttrsSet = new Set(defaultAttrs.map((a) => a.jsxProp));
-
     for (const name of expandedDestructureProps) {
       if (name !== "children" && name !== "style" && name !== "className") {
         const defaultVal = propDefaults?.get(name);
-        // Don't add destructuring defaults for defaultAttrs props - we use ?? in JSX instead
-        // to preserve nullish coalescing semantics (handles both undefined AND null)
-        const isDefaultAttr = defaultAttrsSet.has(name);
-        if (defaultVal && !isDefaultAttr) {
+        if (defaultVal) {
+          // Parse numeric defaults back to numbers so the literal node is
+          // `= 0` (number) instead of `= "0"` (string).
+          const parsedVal =
+            defaultVal !== "" && !isNaN(Number(defaultVal)) ? Number(defaultVal) : defaultVal;
           patternProps.push(
             j.property.from({
               kind: "init",
               key: j.identifier(name),
-              value: j.assignmentPattern(j.identifier(name), j.literal(defaultVal)),
-              shorthand: false,
+              value: j.assignmentPattern(j.identifier(name), j.literal(parsedVal)),
+              shorthand: true,
             }) as Property,
           );
         } else {
