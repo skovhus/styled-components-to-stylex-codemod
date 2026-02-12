@@ -359,6 +359,31 @@ async function processTestCase(p: Page, tc: string): Promise<TestResult> {
       )
       .catch(() => {});
 
+    // Wait for all <img> elements to finish loading (or error) so that
+    // external images (e.g. picsum.photos) don't cause nondeterministic
+    // screenshots depending on network timing.
+    await p
+      .waitForFunction(
+        () => {
+          const images = document.querySelectorAll("img");
+          return Array.from(images).every((img) => img.complete);
+        },
+        { timeout: 10_000 },
+      )
+      .catch(() => {});
+
+    // Freeze CSS keyframe animations so screenshots are deterministic.
+    // Only targets CSSAnimation instances (not CSSTransition) to avoid
+    // disturbing transition-dependent layouts or image loading states.
+    await p.evaluate(() => {
+      for (const animation of document.getAnimations()) {
+        if (animation instanceof CSSAnimation) {
+          animation.currentTime = 0;
+          animation.pause();
+        }
+      }
+    });
+
     const data = await p.evaluate(evaluateStoryData);
 
     if ("error" in data) {
