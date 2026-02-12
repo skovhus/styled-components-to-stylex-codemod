@@ -35,3 +35,17 @@ jobs:
 
       - name: Build
         run: pnpm run build
+
+      - name: Install Playwright browsers
+        run: npx playwright install --with-deps chromium
+
+      - name: Verify rendering
+        run: pnpm verify-rendering --save-diffs
+
+      - name: Upload rendering diffs
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: rendering-diffs
+          path: .rendering-diffs/
+          if-no-files-found: ignore

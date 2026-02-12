@@ -2,45 +2,59 @@
  * Verify that storybook renders Input (styled-components) and Output (StyleX)
  * panels with matching dimensions, content, and visual appearance for each test case.
  *
- * This script launches a headless browser via `playwright` to render each story
- * and compare the Input vs Output panels. Checks include:
- *   - Matching dimensions (from the debug frame size label)
- *   - Matching text content
- *   - Pixel-level screenshot comparison of the rendered content areas
+ * This script is self-contained: it builds Storybook (if needed), starts a
+ * lightweight static file server, launches a headless Chromium browser via
+ * Playwright, and compares the Input vs Output panels using pixelmatch for
+ * pixel-level image comparison.
  *
- * Prerequisites:
- *   - Storybook dev server running (pnpm storybook)
- *   - `npx playwright install chromium` (one-time setup)
+ * Prerequisites (handled automatically):
+ *   - `pnpm install` (playwright, pixelmatch, pngjs as devDependencies)
+ *   - Playwright chromium browser (auto-installed on first run)
  *
  * Usage:
  *   node scripts/verify-storybook-rendering.mts                     # check all test cases
- *   node scripts/verify-storybook-rendering.mts bug-tab-index       # check specific cases
- *   node scripts/verify-storybook-rendering.mts --port 6006         # custom storybook port
+ *   node scripts/verify-storybook-rendering.mts theme-conditional   # check specific cases
  *   node scripts/verify-storybook-rendering.mts --only-changed      # only test cases changed vs main
+ *   node scripts/verify-storybook-rendering.mts --save-diffs        # save diff images to .rendering-diffs/
+ *   node scripts/verify-storybook-rendering.mts --threshold 0.1     # custom pixelmatch threshold (0-1)
  */
 
 /* oxlint-disable no-console */
 
 import { execSync } from "node:child_process";
-import { readdirSync } from "node:fs";
-import { join } from "node:path";
-import { inflateSync } from "node:zlib";
+import {
+  existsSync,
+  mkdirSync,
+  readdirSync,
+  readFileSync,
+  statSync,
+  writeFileSync,
+} from "node:fs";
+import http from "node:http";
+import { extname, join } from "node:path";
+
+import pixelmatch from "pixelmatch";
+import { chromium } from "playwright";
+import { PNG } from "pngjs";
 
 // ---------------------------------------------------------------------------
 // CLI argument parsing
 // ---------------------------------------------------------------------------
 const cliArgs = process.argv.slice(2);
 
-let port = 6006;
 let onlyChanged = false;
+let saveDiffs = false;
+let threshold = 0.1;
 const explicitCases: string[] = [];
 
 for (let i = 0; i < cliArgs.length; i++) {
   const arg = cliArgs[i]!;
-  if (arg === "--port" && cliArgs[i + 1]) {
-    port = Number(cliArgs[++i]);
-  } else if (arg === "--only-changed") {
+  if (arg === "--only-changed") {
     onlyChanged = true;
+  } else if (arg === "--save-diffs") {
+    saveDiffs = true;
+  } else if (arg === "--threshold" && cliArgs[i + 1]) {
+    threshold = Number(cliArgs[++i]);
   } else if (!arg.startsWith("-")) {
     explicitCases.push(arg);
   }
@@ -51,6 +65,8 @@ for (let i = 0; i < cliArgs.length; i++) {
 // ---------------------------------------------------------------------------
 const projectRoot = join(import.meta.dirname, "..");
 const testCasesDir = join(projectRoot, "test-cases");
+const storybookStaticDir = join(projectRoot, "storybook-static");
+const diffsDir = join(projectRoot, ".rendering-diffs");
 
 function discoverAllTestCases(): string[] {
   const files = readdirSync(testCasesDir);
@@ -99,68 +115,113 @@ if (testCases.length === 0) {
 }
 
 // ---------------------------------------------------------------------------
-// Verify storybook is running
+// Build Storybook if needed
 // ---------------------------------------------------------------------------
-const baseUrl = `http://localhost:${port}`;
-try {
-  await fetch(baseUrl, { signal: AbortSignal.timeout(3000) });
-} catch {
-  console.error(
-    `\x1b[31mError: Storybook is not running at ${baseUrl}\x1b[0m\n` +
-      "Start it with: pnpm storybook" +
-      (port !== 6006 ? ` --port ${port}` : ""),
-  );
-  process.exit(1);
+if (!existsSync(storybookStaticDir)) {
+  console.log("Storybook build not found. Building...");
+  execSync("pnpm storybook:build", { cwd: projectRoot, stdio: "inherit" });
 }
 
 // ---------------------------------------------------------------------------
-// Launch browser
+// Static file server for storybook-static/
 // ---------------------------------------------------------------------------
-let chromium: typeof import("playwright").chromium;
-try {
-  let pw: typeof import("playwright");
-  try {
-    pw = await import("playwright");
-  } catch {
-    // Fall back to globally installed playwright
-    const globalRoot = execSync("npm root -g", { encoding: "utf8" }).trim();
-    pw = await import(join(globalRoot, "playwright", "index.mjs"));
-  }
-  chromium = pw.chromium;
-} catch {
-  console.error(
-    "\x1b[31mError: playwright is not installed.\x1b[0m\n" +
-      "Install it with: npm install -g playwright && npx playwright install chromium",
-  );
-  process.exit(1);
+const MIME_TYPES: Record<string, string> = {
+  ".html": "text/html; charset=utf-8",
+  ".js": "application/javascript; charset=utf-8",
+  ".mjs": "application/javascript; charset=utf-8",
+  ".css": "text/css; charset=utf-8",
+  ".json": "application/json; charset=utf-8",
+  ".png": "image/png",
+  ".jpg": "image/jpeg",
+  ".jpeg": "image/jpeg",
+  ".gif": "image/gif",
+  ".svg": "image/svg+xml",
+  ".woff": "font/woff",
+  ".woff2": "font/woff2",
+  ".ttf": "font/ttf",
+  ".eot": "application/vnd.ms-fontobject",
+  ".ico": "image/x-icon",
+  ".map": "application/json",
+  ".txt": "text/plain; charset=utf-8",
+};
+
+function startStaticServer(root: string): Promise<{ server: http.Server; port: number }> {
+  return new Promise((resolve) => {
+    const server = http.createServer((req, res) => {
+      const url = new URL(req.url!, "http://localhost");
+      let filePath = join(root, decodeURIComponent(url.pathname));
+
+      try {
+        if (statSync(filePath).isDirectory()) {
+          filePath = join(filePath, "index.html");
+        }
+      } catch {
+        // file doesn't exist, handled below
+      }
+
+      const ext = extname(filePath);
+      const contentType = MIME_TYPES[ext] ?? "application/octet-stream";
+
+      try {
+        const data = readFileSync(filePath);
+        res.writeHead(200, { "Content-Type": contentType });
+        res.end(data);
+      } catch {
+        res.writeHead(404);
+        res.end("Not found");
+      }
+    });
+
+    server.listen(0, "127.0.0.1", () => {
+      const addr = server.address();
+      const port = typeof addr === "string" ? parseInt(addr) : addr!.port;
+      resolve({ server, port });
+    });
+  });
 }
 
-const browser = await chromium.launch({ headless: true });
+const { server, port } = await startStaticServer(storybookStaticDir);
+const baseUrl = `http://127.0.0.1:${port}`;
+console.log(`Serving storybook-static at ${baseUrl}`);
+
+// ---------------------------------------------------------------------------
+// Launch browser (auto-install Chromium if needed)
+// ---------------------------------------------------------------------------
+let browser;
+try {
+  browser = await chromium.launch({ headless: true });
+} catch {
+  console.log("Installing Playwright Chromium browser...");
+  execSync("npx playwright install --with-deps chromium", {
+    cwd: projectRoot,
+    stdio: "inherit",
+  });
+  browser = await chromium.launch({ headless: true });
+}
+
 const context = await browser.newContext({ viewport: { width: 1200, height: 800 } });
 const page = await context.newPage();
 
 // ---------------------------------------------------------------------------
-// Screenshot comparison helpers
+// Screenshot comparison using pixelmatch
 // ---------------------------------------------------------------------------
 
 type Page = typeof page;
 
 /**
  * Takes screenshots of the input and output content areas (inside the debug
- * frame) and compares them pixel-by-pixel.  Returns a description of the
- * mismatch, or `null` when both sides are visually identical.
+ * frame) and compares them pixel-by-pixel using pixelmatch.
  *
- * The comparison tolerates a small per-channel delta (±2) to absorb
- * sub-pixel anti-aliasing differences across renderers.
+ * Returns a mismatch description and optional diff PNG, or `null` when both
+ * sides are visually identical.
  */
-async function compareRenderedPanels(p: Page): Promise<string | null> {
-  // Locate the two RenderDebugFrame host divs (the ones with the ref).
-  // Each panel has structure: <div style="position:relative..."> <div ref={hostRef}>...</div> ... </div>
-  // We target the outer debug-frame containers via their distinctive background style.
+async function compareRenderedPanels(
+  p: Page,
+): Promise<{ message: string; diffPng: Buffer | null } | null> {
+  // Locate the two RenderDebugFrame host divs via their distinctive background style.
   const debugFrames = p.locator('div[style*="repeating-linear-gradient"]');
   const count = await debugFrames.count();
   if (count < 2) {
-    // Can't compare if we don't have both panels (some stories may not have output)
     return null;
   }
 
@@ -172,157 +233,34 @@ async function compareRenderedPanels(p: Page): Promise<string | null> {
     outputFrame.screenshot(),
   ]);
 
-  return diffPngBuffers(inputShot, outputShot);
-}
+  const imgA = PNG.sync.read(inputShot);
+  const imgB = PNG.sync.read(outputShot);
 
-/**
- * Compares two PNG buffers by decoding them to raw RGBA pixels.
- * Returns a human-readable mismatch description, or `null` if identical
- * (within tolerance).
- *
- * Uses a simple manual PNG IDAT decoder (inflate → un-filter) so we don't
- * need any native image dependencies.  Only supports 8-bit RGBA (which is
- * what Playwright screenshots produce).
- */
-function diffPngBuffers(a: Buffer, b: Buffer): string | null {
-  const pixelsA = decodePngToRGBA(a);
-  const pixelsB = decodePngToRGBA(b);
-
-  if (!pixelsA || !pixelsB) {
-    // Couldn't decode — skip comparison silently
-    return null;
+  if (imgA.width !== imgB.width || imgA.height !== imgB.height) {
+    return {
+      message: `Screenshot sizes differ: ${imgA.width}\u00d7${imgA.height} vs ${imgB.width}\u00d7${imgB.height}`,
+      diffPng: null,
+    };
   }
 
-  if (pixelsA.width !== pixelsB.width || pixelsA.height !== pixelsB.height) {
-    return `Screenshot sizes differ: ${pixelsA.width}×${pixelsA.height} vs ${pixelsB.width}×${pixelsB.height}`;
-  }
+  const { width, height } = imgA;
+  const diff = new PNG({ width, height });
 
-  const tolerance = 2; // per-channel delta to absorb anti-aliasing
-  const { data: dA } = pixelsA;
-  const { data: dB } = pixelsB;
-  let mismatchCount = 0;
-  const totalPixels = pixelsA.width * pixelsA.height;
-
-  for (let i = 0; i < dA.length; i += 4) {
-    const dr = Math.abs(dA[i]! - dB[i]!);
-    const dg = Math.abs(dA[i + 1]! - dB[i + 1]!);
-    const db = Math.abs(dA[i + 2]! - dB[i + 2]!);
-    const da = Math.abs(dA[i + 3]! - dB[i + 3]!);
-    if (dr > tolerance || dg > tolerance || db > tolerance || da > tolerance) {
-      mismatchCount++;
-    }
-  }
+  const mismatchCount = pixelmatch(imgA.data, imgB.data, diff.data, width, height, {
+    threshold,
+  });
 
   if (mismatchCount === 0) {
     return null;
   }
 
+  const totalPixels = width * height;
   const pct = ((mismatchCount / totalPixels) * 100).toFixed(1);
-  return `Visual mismatch: ${mismatchCount} of ${totalPixels} pixels differ (${pct}%)`;
-}
 
-/** Minimal PNG → raw RGBA decoder (no native deps). Supports 8-bit RGBA only. */
-function decodePngToRGBA(buf: Buffer): { width: number; height: number; data: Uint8Array } | null {
-  try {
-    // Verify PNG signature
-    const sig = [137, 80, 78, 71, 13, 10, 26, 10];
-    for (let i = 0; i < 8; i++) {
-      if (buf[i] !== sig[i]) {
-        return null;
-      }
-    }
-
-    let width = 0;
-    let height = 0;
-    let bitDepth = 0;
-    let colorType = 0;
-    const idatChunks: Buffer[] = [];
-    let pos = 8;
-
-    while (pos < buf.length) {
-      const len = buf.readUInt32BE(pos);
-      const type = buf.toString("ascii", pos + 4, pos + 8);
-      const chunkData = buf.subarray(pos + 8, pos + 8 + len);
-
-      if (type === "IHDR") {
-        width = chunkData.readUInt32BE(0);
-        height = chunkData.readUInt32BE(4);
-        bitDepth = chunkData[8]!;
-        colorType = chunkData[9]!;
-      } else if (type === "IDAT") {
-        idatChunks.push(chunkData as Buffer);
-      } else if (type === "IEND") {
-        break;
-      }
-      pos += 12 + len; // 4 len + 4 type + data + 4 crc
-    }
-
-    // Only support 8-bit RGBA
-    if (bitDepth !== 8 || colorType !== 6) {
-      return null;
-    }
-
-    const compressed = Buffer.concat(idatChunks);
-    const raw = inflateSync(compressed);
-
-    // Un-filter scanlines (filter byte + 4 bytes per pixel per row)
-    const bpp = 4; // bytes per pixel (RGBA)
-    const stride = width * bpp;
-    const pixels = new Uint8Array(width * height * bpp);
-
-    for (let y = 0; y < height; y++) {
-      const filterType = raw[y * (stride + 1)]!;
-      const scanlineOffset = y * (stride + 1) + 1;
-      const outOffset = y * stride;
-
-      for (let x = 0; x < stride; x++) {
-        const rawByte = raw[scanlineOffset + x]!;
-        const a = x >= bpp ? pixels[outOffset + x - bpp]! : 0; // left
-        const b = y > 0 ? pixels[outOffset - stride + x]! : 0; // above
-        const c = x >= bpp && y > 0 ? pixels[outOffset - stride + x - bpp]! : 0; // upper-left
-
-        let value: number;
-        switch (filterType) {
-          case 0:
-            value = rawByte;
-            break;
-          case 1:
-            value = (rawByte + a) & 0xff;
-            break;
-          case 2:
-            value = (rawByte + b) & 0xff;
-            break;
-          case 3:
-            value = (rawByte + ((a + b) >>> 1)) & 0xff;
-            break;
-          case 4:
-            value = (rawByte + paethPredictor(a, b, c)) & 0xff;
-            break;
-          default:
-            return null; // unknown filter
-        }
-        pixels[outOffset + x] = value;
-      }
-    }
-
-    return { width, height, data: pixels };
-  } catch {
-    return null;
-  }
-}
-
-function paethPredictor(a: number, b: number, c: number): number {
-  const p = a + b - c;
-  const pa = Math.abs(p - a);
-  const pb = Math.abs(p - b);
-  const pc = Math.abs(p - c);
-  if (pa <= pb && pa <= pc) {
-    return a;
-  }
-  if (pb <= pc) {
-    return b;
-  }
-  return c;
+  return {
+    message: `Visual mismatch: ${mismatchCount} of ${totalPixels} pixels differ (${pct}%)`,
+    diffPng: PNG.sync.write(diff),
+  };
 }
 
 // ---------------------------------------------------------------------------
@@ -340,17 +278,20 @@ interface TestResult {
 
 const results: TestResult[] = [];
 
-console.log(`Checking ${testCases.length} test case(s) against storybook at ${baseUrl}...\n`);
+if (saveDiffs) {
+  mkdirSync(diffsDir, { recursive: true });
+}
+
+console.log(`\nChecking ${testCases.length} test case(s)...\n`);
 
 for (const tc of testCases) {
   // Storybook auto-generates story IDs by kebab-casing the display name, e.g.
-  // "theme-conditionalInlineStyle" → "theme-conditional-inline-style".
-  // Apply the same conversion so the URL matches.
+  // "theme-conditionalInlineStyle" -> "theme-conditional-inline-style".
   const storyId = tc.replace(/[A-Z]/g, (ch) => `-${ch.toLowerCase()}`);
   const url = `${baseUrl}/iframe.html?id=test-cases--${storyId}&viewMode=story`;
 
   try {
-    await page.goto(url, { waitUntil: "networkidle", timeout: 15000 });
+    await page.goto(url, { waitUntil: "networkidle", timeout: 15_000 });
     // Wait for React rendering + ResizeObserver to fire
     await page.waitForTimeout(1500);
 
@@ -433,14 +374,16 @@ for (const tc of testCases) {
       message = `Text differs:\n    Input:  "${data.inputText.substring(0, 100)}"\n    Output: "${data.outputText.substring(0, 100)}"`;
     }
 
-    // Pixel-level screenshot comparison of the rendered content areas.
-    // The RenderDebugFrame component wraps each panel's content in a div[ref]
-    // that we can screenshot independently.
+    // Pixel-level screenshot comparison of the rendered content areas
     if (status === "pass") {
-      const mismatch = await compareRenderedPanels(page);
-      if (mismatch) {
+      const comparison = await compareRenderedPanels(page);
+      if (comparison) {
         status = "screenshot-mismatch";
-        message = mismatch;
+        message = comparison.message;
+
+        if (saveDiffs && comparison.diffPng) {
+          writeFileSync(join(diffsDir, `${tc}.diff.png`), comparison.diffPng);
+        }
       }
     }
 
@@ -466,7 +409,11 @@ for (const tc of testCases) {
   }
 }
 
+// ---------------------------------------------------------------------------
+// Cleanup
+// ---------------------------------------------------------------------------
 await browser.close();
+server.close();
 
 // ---------------------------------------------------------------------------
 // Print results
@@ -476,10 +423,10 @@ let failCount = 0;
 for (const r of results) {
   const icon =
     r.status === "pass"
-      ? "\x1b[32m✓\x1b[0m"
+      ? "\x1b[32m\u2713\x1b[0m"
       : r.status === "error"
         ? "\x1b[33m!\x1b[0m"
-        : "\x1b[31m✗\x1b[0m";
+        : "\x1b[31m\u2717\x1b[0m";
   const dims = r.inputDimensions ? ` (${r.inputDimensions})` : "";
   console.log(`  ${icon} ${r.name}${dims}`);
   if (r.message) {
@@ -494,5 +441,9 @@ console.log(
   `\n${results.length} checked, ${results.length - failCount} passed` +
     (failCount > 0 ? `, \x1b[31m${failCount} failed\x1b[0m` : ""),
 );
+
+if (saveDiffs && failCount > 0) {
+  console.log(`Diff images saved to ${diffsDir}/`);
+}
 
 process.exit(failCount > 0 ? 1 : 0);
