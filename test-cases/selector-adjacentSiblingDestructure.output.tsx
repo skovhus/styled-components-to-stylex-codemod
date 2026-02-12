@@ -11,7 +11,7 @@ const styles = stylex.create({
   rowSiblingBefore: {
     marginTop: {
       default: null,
-      [stylex.when.siblingBefore()]: "16px",
+      [stylex.when.siblingBefore(":is(*)")]: "16px",
     },
   },
 });

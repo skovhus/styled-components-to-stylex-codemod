@@ -39,17 +39,17 @@ const styles = stylex.create({
   thingSiblingBefore: {
     color: {
       default: null,
-      [stylex.when.siblingBefore()]: "red",
+      [stylex.when.siblingBefore(":is(*)")]: "red",
     },
     backgroundColor: {
       default: null,
-      [stylex.when.siblingBefore()]: "lime",
+      [stylex.when.siblingBefore(":is(*)")]: "lime",
     },
   },
   thingAnySibling: {
     backgroundColor: {
       default: null,
-      [stylex.when.anySibling(".something")]: "yellow",
+      [stylex.when.anySibling(":is(.something)")]: "yellow",
     },
   },
 });

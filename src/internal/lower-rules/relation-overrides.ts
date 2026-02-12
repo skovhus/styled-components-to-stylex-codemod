@@ -41,13 +41,16 @@ export const finalizeRelationOverrides = (args: {
       markerName ? [j.literal(pseudo), j.identifier(markerName)] : [j.literal(pseudo)],
     );
 
-  const makeSiblingBeforeKey = (selectorArg: string | null, markerName: string | null) => {
-    const args: ExpressionKind[] = [];
-    if (selectorArg) {
-      args.push(j.literal(selectorArg));
-    } else if (markerName) {
-      args.push(j.identifier("undefined"));
+  const toSiblingPseudoArg = (selectorArg: string | null): string => {
+    const normalizedSelector = selectorArg?.trim() ?? "";
+    if (normalizedSelector.length === 0) {
+      return ":is(*)";
     }
+    return normalizedSelector.startsWith(":") ? normalizedSelector : `:is(${normalizedSelector})`;
+  };
+
+  const makeSiblingBeforeKey = (selectorArg: string | null, markerName: string | null) => {
+    const args: ExpressionKind[] = [j.literal(toSiblingPseudoArg(selectorArg))];
     if (markerName) {
       args.push(j.identifier(markerName));
     }
@@ -61,12 +64,7 @@ export const finalizeRelationOverrides = (args: {
   };
 
   const makeAnySiblingKey = (selectorArg: string | null, markerName: string | null) => {
-    const args: ExpressionKind[] = [];
-    if (selectorArg) {
-      args.push(j.literal(selectorArg));
-    } else if (markerName) {
-      args.push(j.identifier("undefined"));
-    }
+    const args: ExpressionKind[] = [j.literal(toSiblingPseudoArg(selectorArg))];
     if (markerName) {
       args.push(j.identifier(markerName));
     }
