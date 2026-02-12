@@ -7,6 +7,8 @@
  * Playwright, and compares the Input vs Output panels using pixelmatch for
  * pixel-level image comparison.
  *
+ * Runs test cases in parallel across multiple browser pages for speed.
+ *
  * Prerequisites (handled automatically):
  *   - `pnpm install` (playwright, pixelmatch, pngjs as devDependencies)
  *   - Playwright chromium browser (auto-installed on first run)
@@ -17,6 +19,7 @@
  *   node scripts/verify-storybook-rendering.mts --only-changed      # only test cases changed vs main
  *   node scripts/verify-storybook-rendering.mts --save-diffs        # save diff images to .rendering-diffs/
  *   node scripts/verify-storybook-rendering.mts --threshold 0.1     # custom pixelmatch threshold (0-1)
+ *   node scripts/verify-storybook-rendering.mts --concurrency 8     # number of parallel browser pages
  */
 
 /* oxlint-disable no-console */
@@ -31,6 +34,21 @@ import { chromium } from "playwright";
 import { PNG } from "pngjs";
 
 // ---------------------------------------------------------------------------
+// Types
+// ---------------------------------------------------------------------------
+interface TestResult {
+  name: string;
+  status: "pass" | "dimension-mismatch" | "content-mismatch" | "screenshot-mismatch" | "error";
+  inputDimensions: string | null;
+  outputDimensions: string | null;
+  inputText: string;
+  outputText: string;
+  message?: string;
+}
+
+type Page = Awaited<ReturnType<Awaited<ReturnType<typeof chromium.launch>>["newPage"]>>;
+
+// ---------------------------------------------------------------------------
 // CLI argument parsing
 // ---------------------------------------------------------------------------
 const cliArgs = process.argv.slice(2);
@@ -38,6 +56,7 @@ const cliArgs = process.argv.slice(2);
 let onlyChanged = false;
 let saveDiffs = false;
 let threshold = 0.1;
+let concurrency = 6;
 const explicitCases: string[] = [];
 
 for (let i = 0; i < cliArgs.length; i++) {
@@ -48,6 +67,8 @@ for (let i = 0; i < cliArgs.length; i++) {
     saveDiffs = true;
   } else if (arg === "--threshold" && cliArgs[i + 1]) {
     threshold = Number(cliArgs[++i]);
+  } else if (arg === "--concurrency" && cliArgs[i + 1]) {
+    concurrency = Number(cliArgs[++i]);
   } else if (!arg.startsWith("-")) {
     explicitCases.push(arg);
   }
@@ -175,7 +196,6 @@ function startStaticServer(root: string): Promise<{ server: http.Server; port: n
 
 const { server, port } = await startStaticServer(storybookStaticDir);
 const baseUrl = `http://127.0.0.1:${port}`;
-console.log(`Serving storybook-static at ${baseUrl}`);
 
 // ---------------------------------------------------------------------------
 // Launch browser (auto-install Chromium if needed)
@@ -193,13 +213,10 @@ try {
 }
 
 const context = await browser.newContext({ viewport: { width: 1200, height: 800 } });
-const page = await context.newPage();
 
 // ---------------------------------------------------------------------------
 // Screenshot comparison using pixelmatch
 // ---------------------------------------------------------------------------
-
-type Page = typeof page;
 
 /**
  * Takes screenshots of the input and output content areas (inside the debug
@@ -257,92 +274,95 @@ async function compareRenderedPanels(
 }
 
 // ---------------------------------------------------------------------------
-// Check each test case
+// Evaluate page data (dimensions + text) from the current story
 // ---------------------------------------------------------------------------
-interface TestResult {
-  name: string;
-  status: "pass" | "dimension-mismatch" | "content-mismatch" | "screenshot-mismatch" | "error";
-  inputDimensions: string | null;
-  outputDimensions: string | null;
-  inputText: string;
-  outputText: string;
-  message?: string;
+function evaluateStoryData() {
+  const headings = Array.from(document.querySelectorAll("h3"));
+  const inputHeading = headings.find((h) => h.textContent?.includes("Input"));
+  const outputHeading = headings.find((h) => h.textContent?.includes("Output"));
+
+  if (!inputHeading || !outputHeading) {
+    return { error: "Missing Input/Output headings" };
+  }
+
+  const inputPanel = inputHeading.parentElement;
+  const outputPanel = outputHeading.parentElement;
+
+  if (!inputPanel || !outputPanel) {
+    return { error: "Missing panel containers" };
+  }
+
+  function findDimensions(panel: Element): string[] {
+    const dims: string[] = [];
+    panel.querySelectorAll("*").forEach((el) => {
+      const text = el.textContent?.trim();
+      if (text && /^\d+×\d+$/.test(text) && el.children.length === 0) {
+        dims.push(text);
+      }
+    });
+    return dims;
+  }
+
+  function getVisibleText(panel: Element): string {
+    const clone = panel.cloneNode(true) as Element;
+    clone.querySelectorAll("*").forEach((el) => {
+      const text = el.textContent?.trim();
+      if (text && /^\d+×\d+$/.test(text) && el.children.length === 0) {
+        el.remove();
+      }
+    });
+    const h3 = clone.querySelector("h3");
+    if (h3) {
+      h3.remove();
+    }
+    return (clone.textContent ?? "").replace(/\s+/g, " ").trim();
+  }
+
+  return {
+    inputDimensions: findDimensions(inputPanel),
+    outputDimensions: findDimensions(outputPanel),
+    inputText: getVisibleText(inputPanel),
+    outputText: getVisibleText(outputPanel),
+  };
 }
 
-const results: TestResult[] = [];
-
-if (saveDiffs) {
-  mkdirSync(diffsDir, { recursive: true });
-}
-
-console.log(`\nChecking ${testCases.length} test case(s)...\n`);
-
-for (const tc of testCases) {
+// ---------------------------------------------------------------------------
+// Process a single test case on a given page
+// ---------------------------------------------------------------------------
+async function processTestCase(p: Page, tc: string): Promise<TestResult> {
   // Storybook auto-generates story IDs by kebab-casing the display name, e.g.
   // "theme-conditionalInlineStyle" -> "theme-conditional-inline-style".
   const storyId = tc.replace(/[A-Z]/g, (ch) => `-${ch.toLowerCase()}`);
   const url = `${baseUrl}/iframe.html?id=test-cases--${storyId}&viewMode=story`;
 
   try {
-    await page.goto(url, { waitUntil: "load", timeout: 15_000 });
-    // Wait for Input/Output headings to appear (React rendering complete)
-    await page.waitForSelector('h3:has-text("Input")', { timeout: 10_000 });
-    await page.waitForSelector('h3:has-text("Output")', { timeout: 10_000 });
-    // Brief pause for ResizeObserver to fire and measure dimensions
-    await page.waitForTimeout(500);
+    await p.goto(url, { waitUntil: "domcontentloaded", timeout: 15_000 });
 
-    const data = await page.evaluate(() => {
-      const headings = Array.from(document.querySelectorAll("h3"));
-      const inputHeading = headings.find((h) => h.textContent?.includes("Input"));
-      const outputHeading = headings.find((h) => h.textContent?.includes("Output"));
+    // Wait for React to render the story (both headings appear)
+    await p.waitForSelector("h3", { timeout: 10_000 });
 
-      if (!inputHeading || !outputHeading) {
-        return { error: "Missing Input/Output headings" };
-      }
-
-      const inputPanel = inputHeading.parentElement;
-      const outputPanel = outputHeading.parentElement;
-
-      if (!inputPanel || !outputPanel) {
-        return { error: "Missing panel containers" };
-      }
-
-      function findDimensions(panel: Element): string[] {
-        const dims: string[] = [];
-        panel.querySelectorAll("*").forEach((el) => {
-          const text = el.textContent?.trim();
-          if (text && /^\d+×\d+$/.test(text) && el.children.length === 0) {
-            dims.push(text);
+    // Wait for ResizeObserver dimension labels to appear (NNN×NNN).
+    // Uses a targeted selector for the monospace-styled label divs.
+    // Falls back after timeout — some stories may have no measurable content.
+    await p
+      .waitForFunction(
+        () => {
+          const els = document.querySelectorAll('div[style*="ui-monospace"]');
+          for (const el of els) {
+            if (/\d+×\d+/.test(el.textContent ?? "")) {
+              return true;
+            }
           }
-        });
-        return dims;
-      }
+          return false;
+        },
+        { timeout: 3_000 },
+      )
+      .catch(() => {});
 
-      function getVisibleText(panel: Element): string {
-        const clone = panel.cloneNode(true) as Element;
-        clone.querySelectorAll("*").forEach((el) => {
-          const text = el.textContent?.trim();
-          if (text && /^\d+×\d+$/.test(text) && el.children.length === 0) {
-            el.remove();
-          }
-        });
-        const h3 = clone.querySelector("h3");
-        if (h3) {
-          h3.remove();
-        }
-        return (clone.textContent ?? "").replace(/\s+/g, " ").trim();
-      }
-
-      return {
-        inputDimensions: findDimensions(inputPanel),
-        outputDimensions: findDimensions(outputPanel),
-        inputText: getVisibleText(inputPanel),
-        outputText: getVisibleText(outputPanel),
-      };
-    });
+    const data = await p.evaluate(evaluateStoryData);
 
     if ("error" in data) {
-      results.push({
+      return {
         name: tc,
         status: "error",
         inputDimensions: null,
@@ -350,8 +370,7 @@ for (const tc of testCases) {
         inputText: "",
         outputText: "",
         message: data.error,
-      });
-      continue;
+      };
     }
 
     const inputDim = data.inputDimensions.join(", ");
@@ -372,7 +391,7 @@ for (const tc of testCases) {
 
     // Pixel-level screenshot comparison of the rendered content areas
     if (status === "pass") {
-      const comparison = await compareRenderedPanels(page);
+      const comparison = await compareRenderedPanels(p);
       if (comparison) {
         status = "screenshot-mismatch";
         message = comparison.message;
@@ -383,7 +402,7 @@ for (const tc of testCases) {
       }
     }
 
-    results.push({
+    return {
       name: tc,
       status,
       inputDimensions: inputDim || null,
@@ -391,9 +410,9 @@ for (const tc of testCases) {
       inputText: data.inputText,
       outputText: data.outputText,
       message,
-    });
+    };
   } catch (e) {
-    results.push({
+    return {
       name: tc,
       status: "error",
       inputDimensions: null,
@@ -401,9 +420,46 @@ for (const tc of testCases) {
       inputText: "",
       outputText: "",
       message: e instanceof Error ? e.message : String(e),
-    });
+    };
   }
 }
+
+// ---------------------------------------------------------------------------
+// Run all test cases in parallel across multiple browser pages
+// ---------------------------------------------------------------------------
+if (saveDiffs) {
+  mkdirSync(diffsDir, { recursive: true });
+}
+
+const workerCount = Math.min(concurrency, testCases.length);
+const workerPages = await Promise.all(Array.from({ length: workerCount }, () => context.newPage()));
+
+// Warm up the first page so the JS bundle is cached for all workers.
+// Subsequent navigations by other pages will hit the browser's disk/memory cache.
+const warmupPage = workerPages[0]!;
+await warmupPage.goto(`${baseUrl}/iframe.html?id=test-cases--all&viewMode=story`, {
+  waitUntil: "load",
+  timeout: 30_000,
+});
+
+const results: TestResult[] = Array.from({ length: testCases.length }) as TestResult[];
+let nextIndex = 0;
+let completedCount = 0;
+
+console.log(`Checking ${testCases.length} test case(s) with ${workerCount} workers...\n`);
+
+async function worker(workerPage: Page) {
+  while (nextIndex < testCases.length) {
+    const idx = nextIndex++;
+    const tc = testCases[idx]!;
+    results[idx] = await processTestCase(workerPage, tc);
+    completedCount++;
+    process.stdout.write(`\r  Progress: ${completedCount}/${testCases.length}`);
+  }
+}
+
+await Promise.all(workerPages.map(worker));
+process.stdout.write("\r" + " ".repeat(40) + "\r"); // clear progress line
 
 // ---------------------------------------------------------------------------
 // Cleanup
