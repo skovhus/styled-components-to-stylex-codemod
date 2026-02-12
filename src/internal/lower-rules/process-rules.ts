@@ -214,15 +214,35 @@ export function processDeclRules(ctx: DeclProcessingState): void {
         );
 
         for (const d of rule.declarations) {
-          if (d.value.kind !== "static") {
-            continue;
-          }
-          for (const out of cssDeclarationToStylexDeclarations(d)) {
-            if (out.value.kind !== "static") {
-              continue;
+          if (d.value.kind === "static") {
+            for (const out of cssDeclarationToStylexDeclarations(d)) {
+              if (out.value.kind !== "static") {
+                continue;
+              }
+              const v = cssValueToJs(out.value, d.important, out.prop);
+              bucket[out.prop] = v;
             }
-            const v = cssValueToJs(out.value, d.important, out.prop);
-            bucket[out.prop] = v;
+          } else if (d.value.kind === "interpolated" && d.property) {
+            // Handle interpolated theme values (e.g., ${props => props.theme.color.labelBase})
+            const slotPart = (
+              d.value as { parts?: Array<{ kind: string; slotId?: number }> }
+            ).parts?.find((p) => p.kind === "slot");
+            if (slotPart && slotPart.slotId !== undefined) {
+              const expr = decl.templateExpressions[slotPart.slotId] as unknown;
+              const resolved =
+                expr &&
+                typeof expr === "object" &&
+                ((expr as { type?: string }).type === "ArrowFunctionExpression" ||
+                  (expr as { type?: string }).type === "FunctionExpression")
+                  ? resolveThemeValueFromFn(expr)
+                  : resolveThemeValue(expr);
+              if (resolved) {
+                for (const out of cssDeclarationToStylexDeclarations(d)) {
+                  const finalValue = buildInterpolatedValue(j, d, resolved);
+                  bucket[out.prop] = finalValue;
+                }
+              }
+            }
           }
         }
 
@@ -287,41 +307,7 @@ export function processDeclRules(ctx: DeclProcessingState): void {
                     : resolveThemeValue(expr);
                 if (resolved) {
                   for (const out of cssDeclarationToStylexDeclarations(d)) {
-                    // Build the value: preserve the order of static and interpolated parts
-                    const parts =
-                      (d.value as { parts?: Array<{ kind: string; value?: string }> }).parts ?? [];
-                    const hasStaticParts = parts.some((p) => p.kind === "static" && p.value);
-                    let finalValue: unknown;
-                    if (hasStaticParts) {
-                      // Build a proper template literal preserving the order of parts
-                      const quasis: any[] = [];
-                      const expressions: any[] = [];
-                      let currentStatic = "";
-
-                      for (let i = 0; i < parts.length; i++) {
-                        const part = parts[i];
-                        if (!part) {
-                          continue;
-                        }
-                        if (part.kind === "static") {
-                          currentStatic += part.value ?? "";
-                        } else if (part.kind === "slot") {
-                          // Add the accumulated static text as a quasi
-                          quasis.push(
-                            j.templateElement({ raw: currentStatic, cooked: currentStatic }, false),
-                          );
-                          currentStatic = "";
-                          expressions.push(resolved);
-                        }
-                      }
-                      // Add the final static text (may be empty)
-                      quasis.push(
-                        j.templateElement({ raw: currentStatic, cooked: currentStatic }, true),
-                      );
-                      finalValue = j.templateLiteral(quasis, expressions);
-                    } else {
-                      finalValue = resolved;
-                    }
+                    const finalValue = buildInterpolatedValue(j, d, resolved);
                     (bucket as Record<string, unknown>)[out.prop] = finalValue;
                   }
                 }
@@ -435,10 +421,22 @@ export function processDeclRules(ctx: DeclProcessingState): void {
       // Component is both observer and observed — needs defaultMarker()
       ancestorSelectorParents.add(decl.styleKey);
 
+      // Bail if any declaration uses interpolated values — these can't be
+      // safely placed into computed-key style maps without theme resolution.
+      const hasInterpolatedSiblingDecl = rule.declarations.some(
+        (d) => d.value.kind === "interpolated",
+      );
+      if (hasInterpolatedSiblingDecl) {
+        state.markBail();
+        warnings.push({
+          severity: "warning",
+          type: "Unsupported selector: sibling combinator with interpolated values",
+          loc: computeSelectorWarningLoc(decl.loc, decl.rawCss, rule.selector),
+        });
+        break;
+      }
+
       for (const d of rule.declarations) {
-        if (d.value.kind !== "static") {
-          continue;
-        }
         for (const out of cssDeclarationToStylexDeclarations(d)) {
           if (out.value.kind !== "static") {
             continue;
@@ -708,4 +706,42 @@ export function processDeclRules(ctx: DeclProcessingState): void {
       break;
     }
   }
+}
+
+// --- Non-exported helpers ---
+
+/**
+ * Builds the final AST value for an interpolated CSS declaration,
+ * preserving the order of static and interpolated parts.
+ *
+ * For a declaration like `border: 2px solid ${color}`, this produces
+ * a template literal `\`2px solid ${resolvedExpr}\``.
+ * For a purely interpolated value like `${color}`, returns the resolved
+ * expression directly.
+ */
+function buildInterpolatedValue(
+  j: DeclProcessingState["state"]["j"],
+  d: { value: { kind: string; parts?: Array<{ kind: string; value?: string }> } },
+  resolved: unknown,
+): unknown {
+  const parts = d.value.parts ?? [];
+  const hasStaticParts = parts.some((p) => p.kind === "static" && p.value);
+  if (hasStaticParts) {
+    const quasis: any[] = [];
+    const expressions: any[] = [];
+    let currentStatic = "";
+
+    for (const part of parts) {
+      if (part.kind === "static") {
+        currentStatic += part.value ?? "";
+      } else if (part.kind === "slot") {
+        quasis.push(j.templateElement({ raw: currentStatic, cooked: currentStatic }, false));
+        currentStatic = "";
+        expressions.push(resolved);
+      }
+    }
+    quasis.push(j.templateElement({ raw: currentStatic, cooked: currentStatic }, true));
+    return j.templateLiteral(quasis, expressions);
+  }
+  return resolved;
 }

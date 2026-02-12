@@ -73,6 +73,7 @@ export type WarningType =
   | "Unsupported selector: interpolated pseudo selector"
   | "Unsupported selector: sibling combinator"
   | "Unsupported selector: attribute selector on unsupported element"
+  | "Unsupported selector: sibling combinator with interpolated values"
   | "Unsupported selector: unknown component selector"
   | "Unsupported css`` mixin: after-base mixin style is not a plain object"
   | "Unsupported css`` mixin: nested contextual conditions in after-base mixin"
