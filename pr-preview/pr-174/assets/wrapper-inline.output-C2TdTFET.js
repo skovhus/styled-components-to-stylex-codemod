@@ -1,1 +1,0 @@
-import{j as r}from"./index-Du-06Hd9.js";import{E as t}from"./external-component-BP0Z-IDV.js";function n(){return r.jsx("div",{children:r.jsx(t,{isOpen:!0,className:"xdj266r xv8wvd9 xat24cr x1bawvfr"})})}export{n as App};
