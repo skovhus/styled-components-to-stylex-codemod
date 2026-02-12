@@ -49,7 +49,7 @@ const styles = stylex.create({
   thingAnySibling: {
     backgroundColor: {
       default: null,
-      [stylex.when.anySibling(":is(.something)")]: "yellow",
+      [stylex.when.siblingBefore(":is(.something)")]: "yellow",
     },
   },
 });

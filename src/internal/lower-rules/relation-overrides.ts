@@ -53,17 +53,6 @@ export const finalizeRelationOverrides = (args: {
     );
   };
 
-  const makeAnySiblingKey = (selectorArg: string | null) => {
-    const args: ExpressionKind[] = [j.literal(toSiblingPseudoArg(selectorArg))];
-    return j.callExpression(
-      j.memberExpression(
-        j.memberExpression(j.identifier("stylex"), j.identifier("when")),
-        j.identifier("anySibling"),
-      ),
-      args,
-    );
-  };
-
   // Local type guard that narrows to ExpressionKind for use with jscodeshift builders
   const isExpressionNode = (value: unknown): value is ExpressionKind => isAstNode(value);
 
@@ -114,9 +103,7 @@ export const finalizeRelationOverrides = (args: {
           const keyExpr =
             entry.condition.kind === "ancestor"
               ? makeAncestorKey(entry.condition.pseudo ?? "")
-              : entry.condition.kind === "adjacentSibling"
-                ? makeSiblingBeforeKey(entry.condition.selectorArg)
-                : makeAnySiblingKey(entry.condition.selectorArg);
+              : makeSiblingBeforeKey(entry.condition.selectorArg);
           const valExpr = isExpressionNode(value) ? value : literalToAst(j, value);
           const propNode = Object.assign(j.property("init", keyExpr, valExpr), {
             computed: true,
