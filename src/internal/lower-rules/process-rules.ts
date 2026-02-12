@@ -38,7 +38,6 @@ export function processDeclRules(ctx: DeclProcessingState): void {
     parseExpr,
     cssHelperNames,
     declByLocalName,
-    relationOverrideMarkersByKey,
     ancestorSelectorParents,
     getOrCreateRelationBucket,
     registerRelationOverride,
@@ -276,7 +275,6 @@ export function processDeclRules(ctx: DeclProcessingState): void {
         const ancestorPseudo = rule.selector.match(/&(:[a-z-]+(?:\([^)]*\))?)/i)?.[1] ?? null;
         const overrideStyleKey = `${toStyleKey(otherLocal)}In${decl.localName}`;
         ancestorSelectorParents.add(decl.styleKey);
-        relationOverrideMarkersByKey.set(overrideStyleKey, null);
         registerRelationOverride({
           kind: "ancestor",
           parentStyleKey: decl.styleKey,
@@ -369,7 +367,6 @@ export function processDeclRules(ctx: DeclProcessingState): void {
         relationKind === "adjacentSibling" ? "SiblingBefore" : "AnySibling"
       }`;
       ancestorSelectorParents.add(decl.styleKey);
-      relationOverrideMarkersByKey.set(overrideStyleKey, null);
       registerRelationOverride({
         kind: relationKind,
         parentStyleKey: decl.styleKey,

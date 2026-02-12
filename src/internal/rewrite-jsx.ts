@@ -11,8 +11,6 @@ export function postProcessTransformedAst(args: {
   j: any;
   relationOverrides: RelationOverride[];
   ancestorSelectorParents: Set<string>;
-  namedAncestorMarkersByStyleKey: Map<string, string>;
-  namedAncestorMarkersByComponentName: Map<string, string>;
   /** Map from component local name to its style key (for ancestor selector matching) */
   componentNameToStyleKey?: Map<string, string>;
   /** Set of style keys that have empty style objects (should be excluded from stylex.props calls) */
@@ -28,8 +26,6 @@ export function postProcessTransformedAst(args: {
     j,
     relationOverrides,
     ancestorSelectorParents,
-    namedAncestorMarkersByStyleKey,
-    namedAncestorMarkersByComponentName,
     componentNameToStyleKey,
     emptyStyleKeys,
     preserveReactImport,
@@ -49,12 +45,7 @@ export function postProcessTransformedAst(args: {
   // Apply relation overrides and marker requirements:
   // - Add marker arguments to observed ancestor components.
   // - Add override style keys to target elements' `stylex.props(...)` calls.
-  if (
-    relationOverrides.length > 0 ||
-    ancestorSelectorParents.size > 0 ||
-    namedAncestorMarkersByStyleKey.size > 0 ||
-    namedAncestorMarkersByComponentName.size > 0
-  ) {
+  if (relationOverrides.length > 0 || ancestorSelectorParents.size > 0) {
     // IMPORTANT: Do not reuse the same AST node instance across multiple insertion points.
     // Recast/jscodeshift expect a tree (no shared references); reuse can corrupt printing.
     const makeDefaultMarkerCall = () =>
@@ -62,8 +53,6 @@ export function postProcessTransformedAst(args: {
         j.memberExpression(j.identifier("stylex"), j.identifier("defaultMarker")),
         [],
       );
-    const makeNamedMarkerArg = (markerName: string) => j.identifier(markerName);
-
     const isStylexPropsCall = (n: any): n is any =>
       n?.type === "CallExpression" &&
       n.callee?.type === "MemberExpression" &&
@@ -82,20 +71,6 @@ export function postProcessTransformedAst(args: {
         }
       }
       return undefined;
-    };
-
-    const ensureStylexPropsCall = (attrs: any[]): any => {
-      const existing = getStylexPropsCallFromAttrs(attrs);
-      if (existing) {
-        return existing;
-      }
-      const createdCall = j.callExpression(
-        j.memberExpression(j.identifier("stylex"), j.identifier("props")),
-        [],
-      );
-      attrs.push(j.jsxSpreadAttribute(createdCall));
-      changed = true;
-      return createdCall;
     };
 
     const hasStyleKeyArg = (call: any, key: string): boolean => {
@@ -121,12 +96,6 @@ export function postProcessTransformedAst(args: {
       );
     };
 
-    const hasNamedMarkerArg = (call: any, markerName: string): boolean => {
-      return (call.arguments ?? []).some(
-        (a: any) => a?.type === "Identifier" && a.name === markerName,
-      );
-    };
-
     const addOverrideArg = (call: any, overrideStyleKey: string): void => {
       if (hasStyleKeyArg(call, overrideStyleKey)) {
         return;
@@ -144,29 +113,19 @@ export function postProcessTransformedAst(args: {
       ancestors: any[],
     ): boolean => {
       return ancestors.some((ancestor) => {
-        const matchesParentStyleKey =
+        return (
           !!relationOverride.parentStyleKey &&
           ((ancestor?.call && hasStyleKeyArg(ancestor.call, relationOverride.parentStyleKey)) ||
-            ancestor?.elementStyleKey === relationOverride.parentStyleKey);
-        const matchesParentComponentName =
-          !!relationOverride.parentComponentName &&
-          ancestor?.elementName === relationOverride.parentComponentName;
-        return matchesParentStyleKey || matchesParentComponentName;
+            ancestor?.elementStyleKey === relationOverride.parentStyleKey)
+        );
       });
     };
 
     const overridesByTargetStyleKey = new Map<string, RelationOverride[]>();
-    const overridesByTargetComponentName = new Map<string, RelationOverride[]>();
     for (const relationOverride of relationOverrides) {
       if (relationOverride.targetStyleKey) {
         overridesByTargetStyleKey.set(relationOverride.targetStyleKey, [
           ...(overridesByTargetStyleKey.get(relationOverride.targetStyleKey) ?? []),
-          relationOverride,
-        ]);
-      }
-      if (relationOverride.targetComponentName) {
-        overridesByTargetComponentName.set(relationOverride.targetComponentName, [
-          ...(overridesByTargetComponentName.get(relationOverride.targetComponentName) ?? []),
           relationOverride,
         ]);
       }
@@ -230,21 +189,6 @@ export function postProcessTransformedAst(args: {
       const elementStyleKey = elementName ? componentNameToStyleKey?.get(elementName) : null;
       let call = getStylexPropsCallFromAttrs(attrs);
 
-      if (elementName) {
-        const componentMarker = namedAncestorMarkersByComponentName.get(elementName);
-        if (componentMarker) {
-          const ensuredCall = ensureStylexPropsCall(attrs);
-          if (!hasNamedMarkerArg(ensuredCall, componentMarker)) {
-            ensuredCall.arguments = [
-              ...(ensuredCall.arguments ?? []),
-              makeNamedMarkerArg(componentMarker),
-            ];
-            changed = true;
-          }
-          call = ensuredCall;
-        }
-      }
-
       if (call) {
         for (const parentKey of ancestorSelectorParents) {
           if (hasStyleKeyArg(call, parentKey)) {
@@ -257,18 +201,6 @@ export function postProcessTransformedAst(args: {
               call.arguments = [...(call.arguments ?? []), makeDefaultMarkerCall()];
               changed = true;
             }
-          }
-        }
-        for (const [parentKey, markerName] of namedAncestorMarkersByStyleKey.entries()) {
-          if (!hasStyleKeyArg(call, parentKey)) {
-            continue;
-          }
-          if (emptyStyleKeys?.has(parentKey)) {
-            pendingEmptyKeyRemovals.push({ call, key: parentKey });
-          }
-          if (!hasNamedMarkerArg(call, markerName)) {
-            call.arguments = [...(call.arguments ?? []), makeNamedMarkerArg(markerName)];
-            changed = true;
           }
         }
       }
@@ -288,25 +220,6 @@ export function postProcessTransformedAst(args: {
             }
             addOverrideArg(call, relationOverride.overrideStyleKey);
           }
-        }
-      }
-
-      if (elementName) {
-        const list = overridesByTargetComponentName.get(elementName) ?? [];
-        if (list.length > 0) {
-          let ensuredCall = call;
-          for (const relationOverride of list) {
-            const matched =
-              relationOverride.kind === "ancestor"
-                ? relationMatchesAncestors(relationOverride, ancestors)
-                : true;
-            if (!matched) {
-              continue;
-            }
-            ensuredCall ??= ensureStylexPropsCall(attrs);
-            addOverrideArg(ensuredCall, relationOverride.overrideStyleKey);
-          }
-          call = ensuredCall;
         }
       }
 

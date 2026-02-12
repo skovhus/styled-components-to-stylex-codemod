@@ -67,9 +67,6 @@ export class TransformContext {
   resolvedStyleObjects?: Map<string, unknown>;
   relationOverrides?: any[];
   ancestorSelectorParents?: Set<string>;
-  namedAncestorMarkersByStyleKey?: Map<string, string>;
-  namedAncestorMarkersByComponentName?: Map<string, string>;
-  markerTodos?: Array<{ componentName: string; markerName: string }>;
   emptyStyleKeys?: Set<string>;
   stylesIdentifier?: string;
   stylesInsertPosition?: "end" | "afterImports";

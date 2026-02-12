@@ -10,19 +10,12 @@ import type { RelationBucketEntry, RelationOverride } from "./state.js";
 export const finalizeRelationOverrides = (args: {
   j: JSCodeshift;
   relationOverrideBuckets: Map<string, Map<string, RelationBucketEntry>>;
-  relationOverrideMarkersByKey: Map<string, string | null>;
   relationOverrides: RelationOverride[];
   resolvedStyleObjects: Map<string, unknown>;
   makeCssPropKey: (j: JSCodeshift, prop: string) => ExpressionKind;
 }): void => {
-  const {
-    j,
-    relationOverrideBuckets,
-    relationOverrideMarkersByKey,
-    relationOverrides,
-    resolvedStyleObjects,
-    makeCssPropKey,
-  } = args;
+  const { j, relationOverrideBuckets, relationOverrides, resolvedStyleObjects, makeCssPropKey } =
+    args;
   if (relationOverrideBuckets.size === 0) {
     return;
   }
@@ -32,13 +25,13 @@ export const finalizeRelationOverrides = (args: {
     relationByOverrideKey.set(relationOverride.overrideStyleKey, relationOverride);
   }
 
-  const makeAncestorKey = (pseudo: string, markerName: string | null) =>
+  const makeAncestorKey = (pseudo: string) =>
     j.callExpression(
       j.memberExpression(
         j.memberExpression(j.identifier("stylex"), j.identifier("when")),
         j.identifier("ancestor"),
       ),
-      markerName ? [j.literal(pseudo), j.identifier(markerName)] : [j.literal(pseudo)],
+      [j.literal(pseudo)],
     );
 
   const toSiblingPseudoArg = (selectorArg: string | null): string => {
@@ -49,11 +42,8 @@ export const finalizeRelationOverrides = (args: {
     return normalizedSelector.startsWith(":") ? normalizedSelector : `:is(${normalizedSelector})`;
   };
 
-  const makeSiblingBeforeKey = (selectorArg: string | null, markerName: string | null) => {
+  const makeSiblingBeforeKey = (selectorArg: string | null) => {
     const args: ExpressionKind[] = [j.literal(toSiblingPseudoArg(selectorArg))];
-    if (markerName) {
-      args.push(j.identifier(markerName));
-    }
     return j.callExpression(
       j.memberExpression(
         j.memberExpression(j.identifier("stylex"), j.identifier("when")),
@@ -63,11 +53,8 @@ export const finalizeRelationOverrides = (args: {
     );
   };
 
-  const makeAnySiblingKey = (selectorArg: string | null, markerName: string | null) => {
+  const makeAnySiblingKey = (selectorArg: string | null) => {
     const args: ExpressionKind[] = [j.literal(toSiblingPseudoArg(selectorArg))];
-    if (markerName) {
-      args.push(j.identifier(markerName));
-    }
     return j.callExpression(
       j.memberExpression(
         j.memberExpression(j.identifier("stylex"), j.identifier("when")),
@@ -85,7 +72,6 @@ export const finalizeRelationOverrides = (args: {
     if (!relationOverride) {
       continue;
     }
-    const markerName = relationOverrideMarkersByKey.get(overrideKey) ?? null;
     const props: any[] = [];
     const allPropNames = new Set<string>();
     const conditionalEntries: RelationBucketEntry[] = [];
@@ -127,10 +113,10 @@ export const finalizeRelationOverrides = (args: {
         for (const { entry, value } of conditionalValues) {
           const keyExpr =
             entry.condition.kind === "ancestor"
-              ? makeAncestorKey(entry.condition.pseudo ?? "", markerName)
+              ? makeAncestorKey(entry.condition.pseudo ?? "")
               : entry.condition.kind === "adjacentSibling"
-                ? makeSiblingBeforeKey(entry.condition.selectorArg, markerName)
-                : makeAnySiblingKey(entry.condition.selectorArg, markerName);
+                ? makeSiblingBeforeKey(entry.condition.selectorArg)
+                : makeAnySiblingKey(entry.condition.selectorArg);
           const valExpr = isExpressionNode(value) ? value : literalToAst(j, value);
           const propNode = Object.assign(j.property("init", keyExpr, valExpr), {
             computed: true,

@@ -61,11 +61,7 @@ export function emitStyleMerging(args: {
   j: JSCodeshift;
   emitter: Pick<
     WrapperEmitter,
-    | "styleMerger"
-    | "stylesIdentifier"
-    | "emptyStyleKeys"
-    | "ancestorSelectorParents"
-    | "namedAncestorMarkersByStyleKey"
+    "styleMerger" | "stylesIdentifier" | "emptyStyleKeys" | "ancestorSelectorParents"
   >;
   styleArgs: ExpressionKind[];
   classNameId: Identifier;
@@ -87,20 +83,13 @@ export function emitStyleMerging(args: {
     staticClassNameExpr,
   } = args;
 
-  const {
-    styleMerger,
-    emptyStyleKeys,
-    stylesIdentifier,
-    ancestorSelectorParents,
-    namedAncestorMarkersByStyleKey,
-  } = emitter;
+  const { styleMerger, emptyStyleKeys, stylesIdentifier, ancestorSelectorParents } = emitter;
 
   const styleArgs = filterEmptyStyleArgs({
     styleArgs: rawStyleArgs,
     emptyStyleKeys,
     stylesIdentifier,
     ancestorSelectorParents,
-    namedAncestorMarkersByStyleKey,
   });
 
   if (styleArgs.length === 0) {
@@ -143,7 +132,6 @@ export function emitStyleMerging(args: {
       styleArgs,
       stylesIdentifier: stylesIdentifier ?? "styles",
       ancestorSelectorParents,
-      namedAncestorMarkersByStyleKey,
     });
     return emitWithMerger({
       j,
@@ -175,15 +163,8 @@ function filterEmptyStyleArgs(args: {
   emptyStyleKeys?: Set<string>;
   stylesIdentifier?: string;
   ancestorSelectorParents?: Set<string>;
-  namedAncestorMarkersByStyleKey?: Map<string, string>;
 }): ExpressionKind[] {
-  const {
-    styleArgs,
-    emptyStyleKeys,
-    stylesIdentifier = "styles",
-    ancestorSelectorParents,
-    namedAncestorMarkersByStyleKey,
-  } = args;
+  const { styleArgs, emptyStyleKeys, stylesIdentifier = "styles", ancestorSelectorParents } = args;
   if (!emptyStyleKeys || emptyStyleKeys.size === 0) {
     return styleArgs;
   }
@@ -196,8 +177,7 @@ function filterEmptyStyleArgs(args: {
       node.object.name === stylesIdentifier &&
       node.property?.type === "Identifier" &&
       emptyStyleKeys.has(node.property.name) &&
-      !ancestorSelectorParents?.has(node.property.name) &&
-      !namedAncestorMarkersByStyleKey?.has(node.property.name)
+      !ancestorSelectorParents?.has(node.property.name)
     );
 
   const isEmptyStyleArg = (node: any): boolean => {
@@ -219,15 +199,8 @@ function buildMarkerArgsForStyles(args: {
   styleArgs: ExpressionKind[];
   stylesIdentifier: string;
   ancestorSelectorParents?: Set<string>;
-  namedAncestorMarkersByStyleKey?: Map<string, string>;
 }): ExpressionKind[] {
-  const {
-    j,
-    styleArgs,
-    stylesIdentifier,
-    ancestorSelectorParents,
-    namedAncestorMarkersByStyleKey,
-  } = args;
+  const { j, styleArgs, stylesIdentifier, ancestorSelectorParents } = args;
   const styleKeys = new Set<string>();
   const collectStyleKeys = (node: any): void => {
     if (!node || typeof node !== "object") {
@@ -265,14 +238,9 @@ function buildMarkerArgsForStyles(args: {
   }
 
   let needsDefaultMarker = false;
-  const namedMarkers = new Set<string>();
   for (const key of styleKeys) {
     if (ancestorSelectorParents?.has(key)) {
       needsDefaultMarker = true;
-    }
-    const namedMarker = namedAncestorMarkersByStyleKey?.get(key);
-    if (namedMarker) {
-      namedMarkers.add(namedMarker);
     }
   }
 
@@ -284,9 +252,6 @@ function buildMarkerArgsForStyles(args: {
         [],
       ),
     );
-  }
-  for (const markerName of namedMarkers) {
-    markerArgs.push(j.identifier(markerName));
   }
   return markerArgs;
 }

@@ -509,27 +509,6 @@ export function emitStylesAndImports(ctx: TransformContext): { emptyStyleKeys: S
     }
   }
 
-  const markerDecls = (ctx.markerTodos ?? []).map(({ componentName, markerName }) => {
-    const markerDecl = j.variableDeclaration("const", [
-      j.variableDeclarator(
-        j.identifier(markerName),
-        j.callExpression(
-          j.memberExpression(j.identifier("stylex"), j.identifier("defineMarker")),
-          [],
-        ),
-      ),
-    ]);
-    (markerDecl as any).comments = [
-      {
-        type: "CommentLine",
-        value: ` TODO(stylex-codemod): ensure ${componentName} composes ${markerName} via stylex.props(..., ${markerName}) in its source file.`,
-        leading: true,
-        trailing: false,
-      },
-    ];
-    return markerDecl;
-  });
-
   // Insert `const styles = stylex.create(...)` (or stylexStyles if styles is already used) near top (after imports)
   const stylesDecl = j.variableDeclaration("const", [
     j.variableDeclarator(
@@ -596,13 +575,10 @@ export function emitStylesAndImports(ctx: TransformContext): { emptyStyleKeys: S
       return last;
     })();
     const insertAt = lastImportIdx >= 0 ? lastImportIdx + 1 : 0;
-    programBody.splice(insertAt, 0, ...(markerDecls as any[]), stylesDecl as any);
+    programBody.splice(insertAt, 0, stylesDecl as any);
   } else {
     // Place `styles` at the very end of the file.
     // This keeps component logic first, styles last for better readability.
-    for (const markerDecl of markerDecls) {
-      programBody.push(markerDecl as any);
-    }
     programBody.push(stylesDecl as any);
   }
 

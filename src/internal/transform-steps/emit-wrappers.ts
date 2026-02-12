@@ -28,7 +28,6 @@ export function emitWrappersStep(ctx: TransformContext): StepResult {
     styleMerger: ctx.adapter.styleMerger,
     emptyStyleKeys: ctx.emptyStyleKeys,
     ancestorSelectorParents: ctx.ancestorSelectorParents,
-    namedAncestorMarkersByStyleKey: ctx.namedAncestorMarkersByStyleKey,
   });
 
   return CONTINUE;

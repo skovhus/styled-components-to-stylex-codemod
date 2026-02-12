@@ -42,7 +42,6 @@ type WrapperEmitterArgs = {
   styleMerger: StyleMergerConfig | null;
   emptyStyleKeys?: Set<string>;
   ancestorSelectorParents?: Set<string>;
-  namedAncestorMarkersByStyleKey?: Map<string, string>;
 };
 
 export class WrapperEmitter {
@@ -57,7 +56,6 @@ export class WrapperEmitter {
   readonly styleMerger: StyleMergerConfig | null;
   readonly emptyStyleKeys: Set<string>;
   readonly ancestorSelectorParents: Set<string>;
-  readonly namedAncestorMarkersByStyleKey: Map<string, string>;
 
   // For plain JS/JSX and Flow transforms, skip emitting TS syntax entirely for now.
   readonly emitTypes: boolean;
@@ -80,7 +78,6 @@ export class WrapperEmitter {
     this.styleMerger = args.styleMerger;
     this.emptyStyleKeys = args.emptyStyleKeys ?? new Set<string>();
     this.ancestorSelectorParents = args.ancestorSelectorParents ?? new Set<string>();
-    this.namedAncestorMarkersByStyleKey = args.namedAncestorMarkersByStyleKey ?? new Map();
     this.emitTypes = this.filePath.endsWith(".ts") || this.filePath.endsWith(".tsx");
   }
 

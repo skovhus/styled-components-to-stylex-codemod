@@ -37,7 +37,6 @@ export function finalizeDeclProcessing(ctx: DeclProcessingState): void {
   } = ctx;
   const {
     rewriteCssVarsInStyleObject,
-    relationOverrideMarkersByKey,
     ancestorSelectorParents,
     getOrCreateRelationBucket,
     registerRelationOverride,
@@ -131,14 +130,21 @@ export function finalizeDeclProcessing(ctx: DeclProcessingState): void {
       }
       const childLocal = expr.name as string;
       const childDecl = state.declByLocalName.get(childLocal);
+      if (!childDecl) {
+        state.markBail();
+        warnings.push({
+          severity: "warning",
+          type: "Unsupported selector: unknown component selector",
+          loc: decl.loc,
+        });
+        return;
+      }
       const overrideStyleKey = `${toStyleKey(childLocal)}In${decl.localName}`;
       ancestorSelectorParents.add(decl.styleKey);
-      relationOverrideMarkersByKey.set(overrideStyleKey, null);
       registerRelationOverride({
         kind: "ancestor",
         parentStyleKey: decl.styleKey,
-        targetStyleKey: childDecl?.styleKey ?? null,
-        ...(childDecl ? {} : { targetComponentName: childLocal }),
+        targetStyleKey: childDecl.styleKey,
         overrideStyleKey,
       });
       const bucket = getOrCreateRelationBucket(overrideStyleKey, {

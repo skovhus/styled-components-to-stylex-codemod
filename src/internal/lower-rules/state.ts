@@ -6,7 +6,6 @@ import type { ImportSource } from "../../adapter.js";
 import type { TransformContext } from "../transform-context.js";
 import type { StyledDecl } from "../transform-types.js";
 import type { WarningType } from "../logger.js";
-import { toStyleKey } from "../transform/helpers.js";
 import { createCssHelperResolver } from "./css-helper.js";
 import { createThemeResolvers } from "./theme.js";
 import {
@@ -23,9 +22,7 @@ export type RelationOverrideKind = "ancestor" | "adjacentSibling" | "generalSibl
 export type RelationOverride = {
   kind: RelationOverrideKind;
   parentStyleKey: string | null;
-  parentComponentName?: string;
   targetStyleKey: string | null;
-  targetComponentName?: string;
   overrideStyleKey: string;
 };
 
@@ -76,49 +73,8 @@ export function createLowerRulesState(ctx: TransformContext) {
   const relationOverrides: RelationOverride[] = [];
   const relationOverrideByKey = new Map<string, RelationOverride>();
   const ancestorSelectorParents = new Set<string>();
-  const namedAncestorMarkersByStyleKey = new Map<string, string>();
-  const namedAncestorMarkersByComponentName = new Map<string, string>();
-  const relationOverrideMarkersByKey = new Map<string, string | null>();
   // Map<overrideStyleKey, Map<serializedCondition, RelationBucketEntry>>
   const relationOverrideBuckets = new Map<string, Map<string, RelationBucketEntry>>();
-  const markerTodos: Array<{ componentName: string; markerName: string }> = [];
-  const markerByComponentName = new Map<string, string>();
-  const usedIdentifierNames = new Set<string>();
-  root.find(j.Identifier).forEach((p: any) => {
-    const name = p.node?.name;
-    if (typeof name === "string" && name.length > 0) {
-      usedIdentifierNames.add(name);
-    }
-  });
-
-  const nextMarkerName = (componentName: string): string => {
-    const baseName = `${toStyleKey(componentName)}Marker`;
-    if (!usedIdentifierNames.has(baseName)) {
-      usedIdentifierNames.add(baseName);
-      return baseName;
-    }
-    let suffix = 2;
-    while (usedIdentifierNames.has(`${baseName}${suffix}`)) {
-      suffix += 1;
-    }
-    const markerName = `${baseName}${suffix}`;
-    usedIdentifierNames.add(markerName);
-    return markerName;
-  };
-
-  const resolveMarker = (componentName: string): string | null => {
-    if (declByLocalName.has(componentName)) {
-      return null;
-    }
-    const existing = markerByComponentName.get(componentName);
-    if (existing) {
-      return existing;
-    }
-    const markerName = nextMarkerName(componentName);
-    markerByComponentName.set(componentName, markerName);
-    markerTodos.push({ componentName, markerName });
-    return markerName;
-  };
 
   const serializeRelationBucketCondition = (condition: RelationBucketCondition): string => {
     const pseudoPart = condition.pseudo ?? "";
@@ -323,16 +279,10 @@ export function createLowerRulesState(ctx: TransformContext) {
     declByLocalName,
     relationOverrides,
     ancestorSelectorParents,
-    namedAncestorMarkersByStyleKey,
-    namedAncestorMarkersByComponentName,
-    relationOverrideMarkersByKey,
     relationOverrideBuckets,
-    markerByComponentName,
-    markerTodos,
     cssHelperValuesByKey,
     mixinValuesByKey,
     staticPropertyValues,
-    resolveMarker,
     getOrCreateRelationBucket,
     registerRelationOverride,
     usedCssHelperFunctions: new Set<string>(),

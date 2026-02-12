@@ -19,9 +19,6 @@ export function lowerRules(ctx: TransformContext): {
   resolvedStyleObjects: Map<string, unknown>;
   relationOverrides: RelationOverride[];
   ancestorSelectorParents: Set<string>;
-  namedAncestorMarkersByStyleKey: Map<string, string>;
-  namedAncestorMarkersByComponentName: Map<string, string>;
-  markerTodos: Array<{ componentName: string; markerName: string }>;
   usedCssHelperFunctions: Set<string>;
   bail: boolean;
 } {
@@ -66,7 +63,6 @@ export function lowerRules(ctx: TransformContext): {
     finalizeRelationOverrides({
       j: state.j,
       relationOverrideBuckets: state.relationOverrideBuckets,
-      relationOverrideMarkersByKey: state.relationOverrideMarkersByKey,
       relationOverrides: state.relationOverrides,
       resolvedStyleObjects: state.resolvedStyleObjects,
       makeCssPropKey,
@@ -77,9 +73,6 @@ export function lowerRules(ctx: TransformContext): {
     resolvedStyleObjects: state.resolvedStyleObjects,
     relationOverrides: state.relationOverrides,
     ancestorSelectorParents: state.ancestorSelectorParents,
-    namedAncestorMarkersByStyleKey: state.namedAncestorMarkersByStyleKey,
-    namedAncestorMarkersByComponentName: state.namedAncestorMarkersByComponentName,
-    markerTodos: state.markerTodos,
     usedCssHelperFunctions: state.usedCssHelperFunctions,
     bail: state.bail,
   };
