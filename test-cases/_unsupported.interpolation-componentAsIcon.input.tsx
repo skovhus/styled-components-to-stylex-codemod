@@ -1,3 +1,4 @@
+// @expected-warning: Unsupported selector: unknown component selector
 import React from "react";
 import styled from "styled-components";
 

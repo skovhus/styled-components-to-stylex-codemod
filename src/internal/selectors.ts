@@ -235,18 +235,14 @@ function parseSiblingSelector(nodes: selectorParser.Node[]): ParsedSelector | nu
 
   const leftTail = leftNodes.slice(1);
   const hasUnsupportedLeftTail = leftTail.some(
-    (node) =>
-      node.type !== "class" &&
-      node.type !== "pseudo" &&
-      node.type !== "comment" &&
-      node.type !== "spacing",
+    (node) => node.type !== "class" && node.type !== "pseudo" && node.type !== "comment",
   );
   if (hasUnsupportedLeftTail) {
     return null;
   }
 
   const selectorArgRaw = leftTail
-    .filter((node) => node.type !== "comment" && node.type !== "spacing")
+    .filter((node) => node.type !== "comment")
     .map((node) => node.toString())
     .join("");
   const selectorArg = selectorArgRaw.length > 0 ? selectorArgRaw : null;

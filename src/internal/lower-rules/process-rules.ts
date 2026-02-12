@@ -40,9 +40,6 @@ export function processDeclRules(ctx: DeclProcessingState): void {
     declByLocalName,
     relationOverrideMarkersByKey,
     ancestorSelectorParents,
-    namedAncestorMarkersByStyleKey,
-    namedAncestorMarkersByComponentName,
-    resolveMarker,
     getOrCreateRelationBucket,
     registerRelationOverride,
     resolveThemeValue,
@@ -161,6 +158,14 @@ export function processDeclRules(ctx: DeclProcessingState): void {
       const isCssHelperPlaceholder = !!otherLocal && cssHelperNames.has(otherLocal);
 
       const selTrim2 = rule.selector.trim();
+      const bailUnknownComponentSelector = (): void => {
+        state.markBail();
+        warnings.push({
+          severity: "warning",
+          type: "Unsupported selector: unknown component selector",
+          loc: computeSelectorWarningLoc(decl.loc, decl.rawCss, rule.selector),
+        });
+      };
 
       const appendRuleDeclarationsToBucket = (bucket: Record<string, unknown>): void => {
         for (const declaration of rule.declarations) {
@@ -235,23 +240,16 @@ export function processDeclRules(ctx: DeclProcessingState): void {
       if (otherLocal && !isCssHelperPlaceholder && inverseComponentMatch) {
         const ancestorPseudo = inverseComponentMatch[1] ?? null;
         const parentDecl = declByLocalName.get(otherLocal);
-        const parentStyleKey = parentDecl?.styleKey ?? null;
-        const markerName = resolveMarker(otherLocal);
-        const overrideStyleKey = `${toStyleKey(decl.localName)}In${otherLocal}`;
-        if (markerName) {
-          relationOverrideMarkersByKey.set(overrideStyleKey, markerName);
-          if (parentStyleKey) {
-            namedAncestorMarkersByStyleKey.set(parentStyleKey, markerName);
-          } else {
-            namedAncestorMarkersByComponentName.set(otherLocal, markerName);
-          }
-        } else if (parentStyleKey) {
-          ancestorSelectorParents.add(parentStyleKey);
+        if (!parentDecl) {
+          bailUnknownComponentSelector();
+          break;
         }
+        const parentStyleKey = parentDecl.styleKey;
+        const overrideStyleKey = `${toStyleKey(decl.localName)}In${otherLocal}`;
+        ancestorSelectorParents.add(parentStyleKey);
         registerRelationOverride({
           kind: "ancestor",
           parentStyleKey,
-          ...(parentStyleKey ? {} : { parentComponentName: otherLocal }),
           targetStyleKey: decl.styleKey,
           overrideStyleKey,
         });
@@ -271,6 +269,10 @@ export function processDeclRules(ctx: DeclProcessingState): void {
         selTrim2.startsWith("&") || /^__SC_EXPR_\d+__$/.test(selTrim2);
       if (otherLocal && !isCssHelperPlaceholder && isComponentSelectorPattern) {
         const childDecl = declByLocalName.get(otherLocal);
+        if (!childDecl) {
+          bailUnknownComponentSelector();
+          break;
+        }
         const ancestorPseudo = rule.selector.match(/&(:[a-z-]+(?:\([^)]*\))?)/i)?.[1] ?? null;
         const overrideStyleKey = `${toStyleKey(otherLocal)}In${decl.localName}`;
         ancestorSelectorParents.add(decl.styleKey);
@@ -278,8 +280,7 @@ export function processDeclRules(ctx: DeclProcessingState): void {
         registerRelationOverride({
           kind: "ancestor",
           parentStyleKey: decl.styleKey,
-          targetStyleKey: childDecl?.styleKey ?? null,
-          ...(childDecl ? {} : { targetComponentName: otherLocal }),
+          targetStyleKey: childDecl.styleKey,
           overrideStyleKey,
         });
         const bucket = getOrCreateRelationBucket(overrideStyleKey, {

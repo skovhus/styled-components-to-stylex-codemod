@@ -1,3 +1,4 @@
+// @expected-warning: Unsupported selector: unknown component selector
 import styled from "styled-components";
 import { CollapseArrowIcon } from "./lib/collapse-arrow-icon";
 
