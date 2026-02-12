@@ -7,7 +7,6 @@ import { computeSelectorWarningLoc } from "../css-ir.js";
 import { cssDeclarationToStylexDeclarations } from "../css-prop-mapping.js";
 import { addPropComments } from "./comments.js";
 import { processRuleDeclarations } from "./process-rule-declarations.js";
-import { toKebab } from "./utils.js";
 import {
   normalizeSelectorForInputAttributePseudos,
   normalizeInterpolatedSelector,
@@ -30,7 +29,6 @@ export function processDeclRules(ctx: DeclProcessingState): void {
     localVarValues,
     cssHelperPropValues,
     getComposedDefaultValue,
-    resolveComposedDefaultValue,
   } = ctx;
   const {
     j,
@@ -39,10 +37,7 @@ export function processDeclRules(ctx: DeclProcessingState): void {
     resolveSelector,
     parseExpr,
     cssHelperNames,
-    resolvedStyleObjects,
     declByLocalName,
-    cssHelperValuesByKey,
-    mixinValuesByKey,
     descendantOverridePseudoBuckets,
     descendantOverrides,
     ancestorSelectorParents,
@@ -90,14 +85,16 @@ export function processDeclRules(ctx: DeclProcessingState): void {
       }
 
       // Component selector patterns that have special handling below:
-      // 1. `${Other}:hover &` - requires :hover and ends with &
-      // 2. `&:hover ${Child}` or just `& ${Child}` - starts with & and contains component
+      // 1. `${Other}:pseudo &` - ancestor pseudo targets self (e.g., `${Link}:hover &`)
+      // 2. `&:pseudo ${Child}` or just `& ${Child}` - parent styling descendant child
       // Other component selector patterns (like `${Other} .child`) should bail.
       const isHandledComponentPattern =
-        hasComponentExpr &&
-        (rule.selector.includes(":hover") ||
-          rule.selector.trim().startsWith("&") ||
-          /^__SC_EXPR_\d+__\s*\{/.test(rule.selector.trim()));
+        hasComponentExpr && // Pattern 1: `__SC_EXPR_N__:pseudo &` — ancestor pseudo targeting self
+        (/^__SC_EXPR_\d+__:[a-z]/.test(selectorForAnalysis.trim()) ||
+          // Pattern 2: starts with & (forward descendant/pseudo pattern)
+          selectorForAnalysis.trim().startsWith("&") ||
+          // Pattern 3: standalone component selector `${Child} { ... }`
+          /^__SC_EXPR_\d+__\s*\{/.test(selectorForAnalysis.trim()));
 
       // Use heuristic-based bail checks. We need to allow:
       // - Component selectors that have special handling
@@ -174,56 +171,68 @@ export function processDeclRules(ctx: DeclProcessingState): void {
 
       const selTrim2 = rule.selector.trim();
 
-      // `${Other}:hover &` (Icon reacting to Link hover)
-      if (
-        otherLocal &&
-        !isCssHelperPlaceholder &&
+      // `${Other}:pseudo &` (Icon reacting to ancestor hover/focus/etc.)
+      // This is the inverse of `&:pseudo ${Child}` — the declaring component is the child,
+      // and the referenced component is the ancestor.
+      // The selector starts with `__SC_EXPR_N__:` (component with pseudo) and ends with `&` (self).
+      const isReverseSelectorPattern =
         selTrim2.startsWith("__SC_EXPR_") &&
-        rule.selector.includes(":hover") &&
-        rule.selector.includes("&")
-      ) {
+        /^__SC_EXPR_\d+__:[a-z]/.test(selTrim2) &&
+        /&\s*$/.test(selTrim2);
+      if (otherLocal && !isCssHelperPlaceholder && isReverseSelectorPattern) {
+        // Extract the pseudo from the referenced component selector (e.g., `:hover` from `__SC_EXPR_0__:hover &`)
+        const reversePseudoMatch = rule.selector.match(/__SC_EXPR_\d+__(:[a-z-]+(?:\([^)]*\))?)/i);
+        const ancestorPseudo: string | null = reversePseudoMatch?.[1] ?? null;
+
         const parentDecl = declByLocalName.get(otherLocal);
-        const parentStyle = parentDecl && resolvedStyleObjects.get(parentDecl.styleKey);
-        if (parentStyle) {
-          for (const d of rule.declarations) {
-            if (d.value.kind !== "static") {
+        if (!parentDecl) {
+          state.markBail();
+          warnings.push({
+            severity: "warning",
+            type: "Unsupported selector: unknown component selector",
+            loc: computeSelectorWarningLoc(decl.loc, decl.rawCss, rule.selector),
+          });
+          break;
+        }
+
+        // Declare self as child, referenced component as ancestor parent
+        const overrideStyleKey = `${toStyleKey(decl.localName)}In${otherLocal}`;
+        ancestorSelectorParents.add(parentDecl.styleKey);
+
+        // Register the override relationship (parent→child)
+        if (!descendantOverridePseudoBuckets.has(overrideStyleKey)) {
+          descendantOverrides.push({
+            parentStyleKey: parentDecl.styleKey,
+            childStyleKey: decl.styleKey,
+            overrideStyleKey,
+          });
+        }
+
+        // Get or create the pseudo buckets map for this override key
+        let pseudoBuckets = descendantOverridePseudoBuckets.get(overrideStyleKey);
+        if (!pseudoBuckets) {
+          pseudoBuckets = new Map();
+          descendantOverridePseudoBuckets.set(overrideStyleKey, pseudoBuckets);
+        }
+        let bucket = pseudoBuckets.get(ancestorPseudo);
+        if (!bucket) {
+          bucket = {};
+          pseudoBuckets.set(ancestorPseudo, bucket);
+        }
+
+        for (const d of rule.declarations) {
+          if (d.value.kind !== "static") {
+            continue;
+          }
+          for (const out of cssDeclarationToStylexDeclarations(d)) {
+            if (out.value.kind !== "static") {
               continue;
             }
-            for (const out of cssDeclarationToStylexDeclarations(d)) {
-              if (out.value.kind !== "static") {
-                continue;
-              }
-              const hoverValue = out.value.value;
-              const rawBase = (styleObj as any)[out.prop] as unknown;
-              let baseValue: string | null = null;
-              if (typeof rawBase === "string" || typeof rawBase === "number") {
-                baseValue = String(rawBase);
-              } else if (cssHelperPropValues.has(out.prop)) {
-                const helperDefault = getComposedDefaultValue(out.prop);
-                if (typeof helperDefault === "string" || typeof helperDefault === "number") {
-                  baseValue = String(helperDefault);
-                }
-              } else if (parentDecl) {
-                const parentValues = parentDecl.isCssHelper
-                  ? cssHelperValuesByKey.get(parentDecl.styleKey)
-                  : mixinValuesByKey.get(parentDecl.styleKey);
-                const parentValue = resolveComposedDefaultValue(
-                  parentValues?.get(out.prop),
-                  out.prop,
-                );
-                if (typeof parentValue === "string" || typeof parentValue === "number") {
-                  baseValue = String(parentValue);
-                }
-              }
-              const varName = `--sc2sx-${toKebab(decl.localName)}-${toKebab(out.prop)}`;
-              (parentStyle as any)[varName] = {
-                default: baseValue ?? null,
-                ":hover": hoverValue,
-              };
-              styleObj[out.prop] = `var(${varName}, ${baseValue ?? "inherit"})`;
-            }
+            const v = cssValueToJs(out.value, d.important, out.prop);
+            (bucket as Record<string, unknown>)[out.prop] = v;
           }
         }
+
         continue;
       }
 

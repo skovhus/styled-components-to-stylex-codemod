@@ -170,34 +170,13 @@ export function detectUnsupportedPatternsStep(ctx: TransformContext): StepResult
 
   // Detect patterns that aren't directly representable in StyleX (or require semantic rewrites).
   // These warnings are used for per-fixture expectations and help guide manual follow-ups.
-  let hasComponentSelector = false;
-  let componentSelectorLoc: { line: number; column: number } | null = null;
   let hocStyledFactoryLoc: { line: number; column: number } | null = null;
   let themePropOverrideLoc: { line: number; column: number } | null = null;
 
   // NOTE: Specificity hacks (`&&`, `&&&`) are handled during rule processing by
   // normalizeSpecificityHacks() in selectors.ts — no file-level bail needed.
-
-  // Component selector patterns like `${Link}:hover & { ... }`
-  root.find(j.TemplateLiteral).forEach((p) => {
-    const tl = p.node;
-    for (let i = 0; i < tl.expressions.length; i++) {
-      const expr = tl.expressions[i];
-      const after = tl.quasis[i + 1]?.value.raw ?? "";
-      if (expr?.type === "Identifier" && after.includes(":hover &")) {
-        hasComponentSelector = true;
-        if (!componentSelectorLoc) {
-          const loc = (expr as any).loc ?? tl.loc;
-          if (loc?.start?.line !== undefined) {
-            componentSelectorLoc = {
-              line: loc.start.line,
-              column: loc.start.column ?? 0,
-            };
-          }
-        }
-      }
-    }
-  });
+  // NOTE: Component selector patterns (`${Link}:hover &`) are handled during rule
+  // processing via stylex.when.ancestor() — no file-level bail needed.
 
   if (!hocStyledFactoryLoc) {
     const hocFactories = collectHocStyledFactoryNames();
@@ -432,15 +411,6 @@ export function detectUnsupportedPatternsStep(ctx: TransformContext): StepResult
       severity: "warning",
       type: "Theme prop overrides on styled components are not supported",
       loc: themePropOverrideLoc,
-    });
-    return returnResult({ code: null, warnings }, "bail");
-  }
-
-  if (hasComponentSelector) {
-    warnings.push({
-      severity: "warning",
-      type: "Component selectors like `${OtherComponent}:hover &` are not directly representable in StyleX. Manual refactor is required",
-      loc: componentSelectorLoc,
     });
     return returnResult({ code: null, warnings }, "bail");
   }

@@ -2,13 +2,6 @@
  * Shared string formatting utilities.
  * Core concepts: casing conversions and whitespace normalization.
  */
-export function toKebab(s: string): string {
-  return s
-    .replace(/([a-z0-9])([A-Z])/g, "$1-$2")
-    .replace(/[^a-zA-Z0-9-]/g, "-")
-    .toLowerCase();
-}
-
 /**
  * Capitalizes the first character of a string.
  * @example capitalize("hello") => "Hello"
