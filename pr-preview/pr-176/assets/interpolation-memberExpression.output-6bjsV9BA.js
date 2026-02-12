@@ -1,1 +1,0 @@
-import{j as x}from"./index-6VaHe6no.js";const n=()=>x.jsx("button",{className:"x3nfvp2 x6s0dn4 xl56j7k xc342km xng3xce x181nr7w x1ypdohk x1vvogim x1hr3lfm xif65rj x1y3eh9s x1awj2ng x12oqio5",children:"Click me"});export{n as App};
