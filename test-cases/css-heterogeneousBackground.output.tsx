@@ -14,6 +14,7 @@ function MixedBackground(props: MixedBackgroundProps) {
   return (
     <div
       {...stylex.props(
+        styles.mixedBackground,
         !$useGradient && styles.mixedBackgroundNotUseGradient,
         $useGradient ? styles.mixedBackgroundUseGradient : undefined,
       )}
@@ -55,6 +56,7 @@ export const App = () => (
 );
 
 const styles = stylex.create({
+  mixedBackground: {},
   mixedBackgroundNotUseGradient: {
     backgroundColor: "green",
   },

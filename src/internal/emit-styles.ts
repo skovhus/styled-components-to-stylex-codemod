@@ -509,21 +509,27 @@ export function emitStylesAndImports(ctx: TransformContext): { emptyStyleKeys: S
     }
   }
 
-  // Keep empty base style keys when the component has conditional/variant styles.
-  // A bare element with no className renders differently than one with an empty className
-  // (e.g., subpixel text rendering). Preserving the empty base style ensures the element
-  // always receives a className from stylex.props().
+  // Keep empty base style keys when the component has ONLY variant styles (no base CSS
+  // at all, and no styleFnFromProps / other style expressions). In that case, when no
+  // condition is met the element would have no className, which can cause subpixel
+  // text rendering differences vs styled-components (which always adds a component class).
+  // We only do this when there's nothing else producing a className for the element.
   for (const decl of styledDecls) {
     if (!emptyStyleKeys.has(decl.styleKey)) {
       continue;
     }
-    const hasConditionalStyles =
-      (decl.variantStyleKeys && Object.keys(decl.variantStyleKeys).length > 0) ||
+    const hasVariantStyles = decl.variantStyleKeys && Object.keys(decl.variantStyleKeys).length > 0;
+    const hasOtherStyleExpressions =
+      (decl.styleFnFromProps && decl.styleFnFromProps.length > 0) ||
       (decl.variantDimensions && decl.variantDimensions.length > 0) ||
       (decl.compoundVariants && decl.compoundVariants.length > 0) ||
-      (decl.styleFnFromProps && decl.styleFnFromProps.length > 0) ||
-      (decl.needsUseThemeHook && decl.needsUseThemeHook.length > 0);
-    if (hasConditionalStyles) {
+      (decl.needsUseThemeHook && decl.needsUseThemeHook.length > 0) ||
+      (decl.extraStyleKeys && decl.extraStyleKeys.length > 0) ||
+      (decl.extraStyleKeysAfterBase && decl.extraStyleKeysAfterBase.length > 0) ||
+      (decl.extraStylexPropsArgs && decl.extraStylexPropsArgs.length > 0) ||
+      !!decl.enumVariant ||
+      !!decl.attrWrapper;
+    if (hasVariantStyles && !hasOtherStyleExpressions) {
       emptyStyleKeys.delete(decl.styleKey);
     }
   }
@@ -782,7 +788,7 @@ function normalizeShorthandLonghandConflicts(
           continue;
         }
         // Only expand simple values (strings and numbers), not conditional objects
-        if (typeof value === "object") {
+        if (typeof value !== "string" && typeof value !== "number") {
           continue;
         }
 

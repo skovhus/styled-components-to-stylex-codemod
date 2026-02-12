@@ -49,20 +49,16 @@ type StyledLoaderCaretProps = Omit<
 };
 
 function StyledLoaderCaret(props: StyledLoaderCaretProps) {
-  const { $noPadding, $delay, children, ...rest } = props;
+  const { $noPadding, ...rest } = props;
 
   return (
-    <div
+    <LoaderCaret
       {...rest}
       {...stylex.props(
-        styles.loaderCaret,
-        styles.loaderCaretAnimationDelay(`${$delay ?? 1000}ms`),
         styles.styledLoaderCaret,
         $noPadding ? styles.styledLoaderCaretNoPadding : undefined,
       )}
-    >
-      {children}
-    </div>
+    />
   );
 }
 

@@ -18,16 +18,7 @@ function Button<C extends React.ElementType = "button">(
 function ButtonWrapper(
   props: Omit<React.ComponentPropsWithRef<typeof Button>, "className" | "style">,
 ) {
-  const { children, ...rest } = props;
-
-  return (
-    <button
-      {...(rest as React.ButtonHTMLAttributes<HTMLButtonElement>)}
-      {...stylex.props(styles.button, styles.buttonWrapper)}
-    >
-      {children}
-    </button>
-  );
+  return <Button {...props} {...stylex.props(styles.buttonWrapper)} />;
 }
 
 export const App = () => (
@@ -36,7 +27,7 @@ export const App = () => (
     <Button as="a" href="#">
       Button as Link
     </Button>
-    <ButtonWrapper as="a" href="#">
+    <ButtonWrapper forwardedAs="a" href="#">
       Wrapper forwards as Link
     </ButtonWrapper>
   </div>

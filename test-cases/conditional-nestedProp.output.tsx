@@ -19,7 +19,10 @@ export function Badge(props: BadgeProps) {
   const { children, user, ...rest } = props;
 
   return (
-    <div {...rest} {...stylex.props(user.role === Role.admin && styles.badgeUserRoleAdmin)}>
+    <div
+      {...rest}
+      {...stylex.props(styles.badge, user.role === Role.admin && styles.badgeUserRoleAdmin)}
+    >
       {children}
     </div>
   );
@@ -35,6 +38,7 @@ export function App() {
 }
 
 const styles = stylex.create({
+  badge: {},
   badgeUserRoleAdmin: {
     color: "red",
   },

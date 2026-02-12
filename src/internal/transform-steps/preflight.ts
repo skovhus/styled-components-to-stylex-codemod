@@ -2,7 +2,7 @@
  * Preflight step to normalize JSX and gather transform context.
  * Core concepts: import detection and JSX attribute normalization.
  */
-import type { ASTPath, ImportDeclaration, JSXAttribute } from "jscodeshift";
+import type { ASTPath, ImportDeclaration } from "jscodeshift";
 import { CONTINUE, returnResult, type StepResult } from "../transform-types.js";
 import { isStyledTag as isStyledTagImpl } from "../transform/css-helpers.js";
 import { TransformContext } from "../transform-context.js";
@@ -13,14 +13,12 @@ import { TransformContext } from "../transform-context.js";
 export function preflight(ctx: TransformContext): StepResult {
   const { j, root } = ctx;
 
-  // `forwardedAs` is styled-components-specific; in StyleX output we standardize on `as`.
-  root
-    .find(j.JSXAttribute, { name: { type: "JSXIdentifier", name: "forwardedAs" } })
-    .forEach((p: ASTPath<JSXAttribute>) => {
-      if (p.node.name.type === "JSXIdentifier") {
-        p.node.name.name = "as";
-      }
-    });
+  // NOTE: `forwardedAs` is NOT globally renamed to `as` here.
+  // In styled-components, `forwardedAs` on `styled(Component)` doesn't change the
+  // rendered element — it's forwarded to the inner component which may or may not use it.
+  // Converting it to `as` would incorrectly change the wrapper's rendered element.
+  // Instead, `forwardedAs` is handled per-declaration in rewrite-jsx.ts (for inline
+  // substitution) and dropped for wrapper components (where the wrapper function is called).
 
   // Preserve existing `import React ... from "react"` (default or namespace import) even if it becomes "unused"
   // after the transform. JSX runtime differences and local conventions can make this import intentionally present.
