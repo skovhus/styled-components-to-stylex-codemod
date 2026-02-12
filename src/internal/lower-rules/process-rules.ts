@@ -138,14 +138,18 @@ export function processDeclRules(ctx: DeclProcessingState): void {
         });
         break;
       } else if (/[+~]/.test(s) && !isHandledComponentPattern) {
-        // Sibling combinators like `& + &`, `& ~ &`
-        state.markBail();
-        warnings.push({
-          severity: "warning",
-          type: "Unsupported selector: sibling combinator",
-          loc: computeSelectorWarningLoc(decl.loc, decl.rawCss, rule.selector),
-        });
-        break;
+        // Self-referencing sibling combinators: `& + &`, `& ~ &`
+        // These are handled below via stylex.when.siblingBefore() / stylex.when.anySibling()
+        const isSelfSiblingPattern = /^&\s*[+~]\s*&$/.test(s.trim());
+        if (!isSelfSiblingPattern) {
+          state.markBail();
+          warnings.push({
+            severity: "warning",
+            type: "Unsupported selector: sibling combinator",
+            loc: computeSelectorWarningLoc(decl.loc, decl.rawCss, rule.selector),
+          });
+          break;
+        }
       } else if (/\s+[a-zA-Z.#]/.test(s) && !isHandledComponentPattern) {
         // Descendant element/class/id selectors like `& a`, `& .child`, `& #foo`
         // But NOT `&:hover ${Child}` (component selector pattern)
@@ -430,6 +434,55 @@ export function processDeclRules(ctx: DeclProcessingState): void {
     if (!media && selector.trim().startsWith("@media")) {
       media = selector.trim();
       selector = "&";
+    }
+
+    // Self-referencing sibling selectors: `& + &` → stylex.when.siblingBefore()
+    // and `& ~ &` → stylex.when.anySibling()
+    const siblingMatch = selector.trim().match(/^&\s*([+~])\s*&$/);
+    if (siblingMatch && siblingMatch[1]) {
+      const combinator = siblingMatch[1];
+      const whenMethod = combinator === "+" ? "siblingBefore" : "anySibling";
+
+      // Build the stylex.when.*() AST expression for computed key.
+      // NOTE: The StyleX Babel plugin requires a pseudo selector argument even for
+      // unconditional matching. We use `:is(*)` which is semantically "always matches".
+      const siblingKeyExpr = j.callExpression(
+        j.memberExpression(
+          j.memberExpression(j.identifier("stylex"), j.identifier("when")),
+          j.identifier(whenMethod),
+        ),
+        [j.literal(":is(*)")],
+      );
+
+      // Component is both observer and observed — needs defaultMarker()
+      ancestorSelectorParents.add(decl.styleKey);
+
+      for (const d of rule.declarations) {
+        if (d.value.kind !== "static") {
+          continue;
+        }
+        for (const out of cssDeclarationToStylexDeclarations(d)) {
+          if (out.value.kind !== "static") {
+            continue;
+          }
+          const v = cssValueToJs(out.value, d.important, out.prop);
+          // Use the perPropComputedMedia mechanism to emit computed key entries
+          let entry = perPropComputedMedia.get(out.prop);
+          if (!entry) {
+            const existingVal = (styleObj as Record<string, unknown>)[out.prop];
+            const defaultValue =
+              existingVal !== undefined
+                ? existingVal
+                : cssHelperPropValues.has(out.prop)
+                  ? getComposedDefaultValue(out.prop)
+                  : null;
+            entry = { defaultValue, entries: [] };
+            perPropComputedMedia.set(out.prop, entry);
+          }
+          entry.entries.push({ keyExpr: siblingKeyExpr, value: v });
+        }
+      }
+      continue;
     }
 
     // Support comma-separated pseudo-selectors like "&:hover, &:focus"

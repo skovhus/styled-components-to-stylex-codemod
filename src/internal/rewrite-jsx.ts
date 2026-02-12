@@ -42,10 +42,10 @@ export function postProcessTransformedAst(args: {
     }
   });
 
-  // Apply descendant override styles that rely on `stylex.when.ancestor()`:
-  // - Add `stylex.defaultMarker()` to ancestor elements.
+  // Apply descendant/sibling override styles that rely on `stylex.when.*()`:
+  // - Add `stylex.defaultMarker()` to elements that need markers (ancestors, siblings).
   // - Add override style keys to descendant elements' `stylex.props(...)` calls.
-  if (descendantOverrides.length > 0) {
+  if (descendantOverrides.length > 0 || ancestorSelectorParents.size > 0) {
     // IMPORTANT: Do not reuse the same AST node instance across multiple insertion points.
     // Recast/jscodeshift expect a tree (no shared references); reuse can corrupt printing.
     const makeDefaultMarkerCall = () =>
