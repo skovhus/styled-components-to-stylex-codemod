@@ -1,0 +1,1 @@
+import{j as x}from"./index-DHZz3PB-.js";function r(e){const{children:s,$faded:t}=e;return x.jsx("div",{...{0:{className:"x98rzlu x1exxlbk xpyat2d x2siyzw"},1:{className:"x98rzlu x1exxlbk xpyat2d xn8bucy"}}[!!t<<0],children:s})}const n=()=>x.jsx(r,{$faded:!0});export{n as App};
