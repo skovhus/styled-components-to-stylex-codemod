@@ -1,0 +1,1 @@
+import{j as e}from"./index-CikS5bYh.js";const i=()=>e.jsxs("div",{className:"wrapper",children:[e.jsx("div",{className:"xju2f9n",children:"High specificity text (blue due to &&&)"}),e.jsx("div",{className:"xd10qfp",children:"Context override (papayawhip background)"})]});export{i as App};
