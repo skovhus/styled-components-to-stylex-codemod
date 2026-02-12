@@ -10,7 +10,6 @@
   "ignoreDependencies": [
     "@emotion/is-prop-valid",
     "@stylexjs/babel-plugin",
-    "@stylexjs/stylex",
     "assert",
     "path-browserify"
   ],
@@ -19,6 +18,7 @@
     "dist-playground/**",
     "coverage/**",
     "test-cases/**",
+    "src/__tests__/fixtures/**",
     "playground/src/lib/fs-stub.ts",
     "playground/src/vite-env.d.ts",
     "node_modules/**"

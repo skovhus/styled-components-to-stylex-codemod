@@ -3,7 +3,11 @@ import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { dirname } from "node:path";
 import { createModuleResolver } from "../internal/prepass/resolve-imports.js";
-import { scanCrossFileSelectors } from "../internal/prepass/scan-cross-file-selectors.js";
+import {
+  scanCrossFileSelectors,
+  type CrossFileInfo,
+  type CrossFileSelectorUsage,
+} from "../internal/prepass/scan-cross-file-selectors.js";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const fixturesDir = join(__dirname, "fixtures", "cross-file");
@@ -52,7 +56,7 @@ describe("scanCrossFileSelectors", () => {
   const resolver = createModuleResolver();
 
   it("detects basic cross-file component selector usage", () => {
-    const info = scanCrossFileSelectors(
+    const info: CrossFileInfo = scanCrossFileSelectors(
       [fixture("consumer-basic.tsx"), fixture("lib/collapse-arrow-icon.tsx")],
       [],
       resolver,
@@ -61,7 +65,8 @@ describe("scanCrossFileSelectors", () => {
     const usages = info.selectorUsages.get(fixture("consumer-basic.tsx"));
     expect(usages).toBeDefined();
     expect(usages).toHaveLength(1);
-    expect(usages![0]).toMatchObject({
+    const usage: CrossFileSelectorUsage = usages![0]!;
+    expect(usage).toMatchObject({
       localName: "CollapseArrowIcon",
       importSource: "./lib/collapse-arrow-icon",
       importedName: "CollapseArrowIcon",

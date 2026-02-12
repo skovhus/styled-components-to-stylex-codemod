@@ -182,14 +182,17 @@ function buildImportMap(
     }
 
     for (const specifier of path.node.specifiers ?? []) {
-      if (specifier.type === "ImportDefaultSpecifier" && specifier.local) {
-        map.set(specifier.local.name, { source, importedName: "default" });
-      } else if (specifier.type === "ImportSpecifier" && specifier.local) {
-        const importedName =
-          specifier.imported.type === "Identifier"
-            ? specifier.imported.name
-            : String(specifier.imported.value);
-        map.set(specifier.local.name, { source, importedName });
+      const localName = getIdentifierName(specifier.local);
+      if (!localName) {
+        continue;
+      }
+
+      if (specifier.type === "ImportDefaultSpecifier") {
+        map.set(localName, { source, importedName: "default" });
+      } else if (specifier.type === "ImportSpecifier") {
+        const imported = specifier.imported;
+        const importedName = getIdentifierName(imported) ?? localName;
+        map.set(localName, { source, importedName });
       }
     }
   });
@@ -209,8 +212,11 @@ function findStyledImportName(
       return;
     }
     for (const spec of path.node.specifiers ?? []) {
-      if (spec.type === "ImportDefaultSpecifier" && spec.local) {
-        styledName = spec.local.name;
+      if (spec.type === "ImportDefaultSpecifier") {
+        const name = getIdentifierName(spec.local);
+        if (name) {
+          styledName = name;
+        }
       }
     }
   });
@@ -375,4 +381,16 @@ function addToSetMap(map: Map<string, Set<string>>, key: string, value: string):
     map.set(key, set);
   }
   set.add(value);
+}
+
+/** Safely extract the name string from an AST identifier-like node. */
+function getIdentifierName(node: unknown): string | undefined {
+  if (!node || typeof node !== "object") {
+    return undefined;
+  }
+  const n = node as { type?: string; name?: string };
+  if (n.type === "Identifier" && typeof n.name === "string") {
+    return n.name;
+  }
+  return undefined;
 }

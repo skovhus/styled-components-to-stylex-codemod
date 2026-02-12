@@ -1,4 +1,3 @@
-import React from "react";
 import styled from "styled-components";
 
 export const CollapseArrowIcon = styled.svg`
@@ -6,3 +5,5 @@ export const CollapseArrowIcon = styled.svg`
   height: 16px;
   fill: currentColor;
 `;
+
+export default CollapseArrowIcon;

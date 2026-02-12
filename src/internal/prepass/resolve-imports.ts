@@ -10,8 +10,6 @@
  */
 import { ResolverFactory } from "oxc-resolver";
 
-export type { ResolverFactory } from "oxc-resolver";
-
 /**
  * Create a module resolver with sensible defaults for TypeScript projects.
  *

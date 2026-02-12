@@ -1,9 +1,6 @@
-import React from "react";
+import styled from "styled-components";
 
-export function PlainIcon(props: React.SVGProps<SVGSVGElement>) {
-  return (
-    <svg viewBox="0 0 16 16" {...props}>
-      <path d="M4 10L8 6L12 10" />
-    </svg>
-  );
-}
+export const PlainIcon = styled.svg`
+  width: 12px;
+  height: 12px;
+`;
