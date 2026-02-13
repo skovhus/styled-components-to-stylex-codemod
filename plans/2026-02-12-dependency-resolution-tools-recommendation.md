@@ -1,35 +1,75 @@
 # Cross-File Dependency Resolution
 
-**Context:** The cross-file selector prepass needs to resolve `import { Icon } from "./icon"` to an absolute file path, handling extension probing, tsconfig paths, project references, monorepo workspaces, and `.js`→`.ts` remapping.
+**Status:** Implemented. Module resolution uses `oxc-resolver`, import scanning uses `jscodeshift`.
 
-## Solution: `oxc-resolver` + jscodeshift
+## Architecture
 
-**Module resolution** uses [`oxc-resolver`](https://github.com/oxc-project/oxc-resolver) — a Rust-native (NAPI) resolver with built-in tsconfig support, sync API, and zero JS dependencies. Used by oxlint (already in this project), Rspack, Rolldown, and Biome.
+### Prepass: scan + resolve
 
-**Import scanning** reuses jscodeshift (existing runtime dependency) for full AST access.
-
-### `src/internal/prepass/resolve-imports.ts`
-
-```typescript
-import { ResolverFactory } from "oxc-resolver";
-
-const resolver = new ResolverFactory({
-  extensions: [".ts", ".tsx", ".js", ".jsx"],
-  conditionNames: ["import", "node"],
-  mainFields: ["module", "main"],
-  extensionAlias: { ".js": [".ts", ".tsx", ".js"], ".jsx": [".tsx", ".jsx"] },
-});
-
-export function resolveImport(fromFile: string, specifier: string): string | undefined {
-  const result = resolver.resolveFileSync(fromFile, specifier);
-  return result.path ?? undefined;
-}
+```
+src/internal/prepass/resolve-imports.ts    — oxc-resolver wrapper (ResolverFactory)
+src/internal/prepass/scan-cross-file-selectors.ts — AST scanner + resolver → CrossFileInfo
 ```
 
-`resolveFileSync(filePath, specifier)` auto-discovers the nearest `tsconfig.json` by traversing parent directories, respecting `paths`, `references`, `include`/`exclude`, and `${configDir}` templates.
+1. `createModuleResolver()` builds a `ResolverFactory` with extension probing, tsconfig auto-discovery, and `.js`→`.ts` remapping
+2. `scanCrossFileSelectors(filesToTransform, consumerPaths, resolver)` parses each file with jscodeshift, finds `${ImportedComponent}` in styled templates, resolves import specifiers to absolute paths
+3. Returns `CrossFileInfo`: `selectorUsages`, `componentsNeedingStyleAcceptance`, `componentsNeedingBridge`
 
-### `src/internal/prepass/scan-cross-file-selectors.ts`
+### Transport: options → context → state
 
-Parses each file with jscodeshift, finds `${ImportedComponent}` references inside styled template literals, and calls `resolveImport` to get absolute paths. Returns a `CrossFileInfo` map describing which files are consumers and which are targets.
+```
+run.ts          — runs prepass, passes global CrossFileInfo via jscodeshift options
+transform.ts    — extracts per-file slice into TransformOptions.crossFileInfo
+TransformContext — stores crossFileSelectorUsages, crossFileStyleAcceptance, crossFileMarkers
+LowerRulesState  — crossFileSelectorsByLocal lookup, crossFileMarkers tracking
+```
 
-See the prototype implementation for the full API.
+### Transform: cross-file selector handling
+
+**`process-rules.ts`** — At the `!childDecl` bail point, checks `crossFileSelectorsByLocal`. If the unknown component is a known cross-file import:
+
+- Proceeds with override logic (same as same-file `${Child}` handling)
+- Uses a synthetic child style key based on the local name
+- Registers a `defineMarker()` variable for the parent component
+- Tags the `RelationOverride` as `crossFile` with `markerVarName`
+
+**`relation-overrides.ts`** — `makeAncestorKey(pseudo, markerVarName?)` passes the marker as a second argument to `stylex.when.ancestor()` for cross-file overrides.
+
+**`emit-styles step`** — Emits `const __ParentMarker = stylex.defineMarker()` declarations at module scope.
+
+**`rewrite-jsx.ts`** — For cross-file parents: uses marker variable instead of `defaultMarker()`. For cross-file children: adds `{...stylex.props(styles.overrideKey)}` spread to imported component JSX.
+
+### Example transform
+
+```tsx
+// Input
+import { Icon } from "./icon";
+const Btn = styled(Button)`
+  ${Icon} {
+    width: 18px;
+  }
+  &:hover ${Icon} {
+    transform: rotate(180deg);
+  }
+`;
+
+// Output
+const __BtnMarker = stylex.defineMarker();
+// ...
+<button {...stylex.props(styles.btn, __BtnMarker)}>
+  <Icon {...stylex.props(styles.iconInBtn)} />
+</button>;
+
+const styles = stylex.create({
+  btn: {
+    /* ... */
+  },
+  iconInBtn: {
+    width: "18px",
+    transform: {
+      default: null,
+      [stylex.when.ancestor(":hover", __BtnMarker)]: "rotate(180deg)",
+    },
+  },
+});
+```
