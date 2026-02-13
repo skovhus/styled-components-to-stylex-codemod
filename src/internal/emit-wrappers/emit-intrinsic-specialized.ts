@@ -4,6 +4,7 @@
  * These handle attribute-driven behavior or wrapper-specific style conditions
  * that need bespoke AST output rather than the generic wrapper paths.
  */
+import type { JSCodeshift } from "jscodeshift";
 import type { StyledDecl } from "../transform-types.js";
 import type { ExpressionKind } from "./types.js";
 import { withLeadingComments } from "./comments.js";
@@ -552,8 +553,6 @@ export function emitEnumVariantWrappers(ctx: EmitIntrinsicContext): void {
 // ---------------------------------------------------------------------------
 // Post-processing helpers
 // ---------------------------------------------------------------------------
-
-import type { JSCodeshift } from "jscodeshift";
 
 /**
  * Inject extra destructured props (e.g., `disabled`, `readOnly`) into an

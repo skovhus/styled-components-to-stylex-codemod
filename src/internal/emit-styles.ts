@@ -693,6 +693,47 @@ const SHORTHAND_LONGHANDS: Record<string, { physical: string[]; logical: string[
 };
 
 /**
+ * Mapping from logical longhands to their physical equivalents, derived from SHORTHAND_LONGHANDS.
+ * `marginBlock` → `["marginTop", "marginBottom"]`
+ */
+const LOGICAL_TO_PHYSICAL: Record<string, string[]> = Object.fromEntries(
+  Object.values(SHORTHAND_LONGHANDS).flatMap(({ physical, logical }) => [
+    [logical[0]!, [physical[0]!, physical[2]!]], // Block → Top + Bottom
+    [logical[1]!, [physical[1]!, physical[3]!]], // Inline → Right + Left
+  ]),
+);
+
+/** Type guard: value is a simple string or number (not a conditional object) */
+function isSimpleStyleValue(value: unknown): value is string | number {
+  return typeof value === "string" || typeof value === "number";
+}
+
+/**
+ * Replace properties in a style object in-place, preserving property ordering.
+ * Each key in `replacements` maps a property name to its replacement entries.
+ * Properties not in `replacements` are kept as-is.
+ */
+function replacePropsInPlace(
+  style: Record<string, unknown>,
+  replacements: Map<string, Array<{ prop: string; value: unknown }>>,
+): void {
+  const entries = Object.entries(style);
+  for (const key of Object.keys(style)) {
+    delete style[key];
+  }
+  for (const [key, val] of entries) {
+    const replacement = replacements.get(key);
+    if (replacement) {
+      for (const r of replacement) {
+        style[r.prop] = r.value;
+      }
+    } else {
+      style[key] = val;
+    }
+  }
+}
+
+/**
  * Expand shorthand properties in style objects when they conflict with longhands
  * in other style objects of the same component.
  *
@@ -759,11 +800,7 @@ function normalizeShorthandLonghandConflicts(
       for (const key of shorthandKeys) {
         const style = resolvedStyleObjects.get(key) as Record<string, unknown>;
         const value = style[shorthand];
-        if (value === undefined || value === null) {
-          continue;
-        }
-        // Only expand simple values (strings and numbers), not conditional objects
-        if (typeof value !== "string" && typeof value !== "number") {
+        if (value === undefined || value === null || !isSimpleStyleValue(value)) {
           continue;
         }
 
@@ -801,38 +838,21 @@ function collectComponentStyleKeys(decl: StyledDecl): string[] {
   }
   if (decl.attrWrapper) {
     const aw = decl.attrWrapper;
-    if (aw.checkboxKey) {
-      keys.push(aw.checkboxKey);
-    }
-    if (aw.radioKey) {
-      keys.push(aw.radioKey);
-    }
-    if (aw.readonlyKey) {
-      keys.push(aw.readonlyKey);
-    }
-    if (aw.externalKey) {
-      keys.push(aw.externalKey);
-    }
-    if (aw.httpsKey) {
-      keys.push(aw.httpsKey);
-    }
-    if (aw.pdfKey) {
-      keys.push(aw.pdfKey);
+    for (const k of [
+      aw.checkboxKey,
+      aw.radioKey,
+      aw.readonlyKey,
+      aw.externalKey,
+      aw.httpsKey,
+      aw.pdfKey,
+    ]) {
+      if (k) {
+        keys.push(k);
+      }
     }
   }
   return keys;
 }
-
-/**
- * Mapping from logical longhands to their physical equivalents.
- * `marginBlock: "8px"` → `marginTop: "8px", marginBottom: "8px"`
- */
-const LOGICAL_TO_PHYSICAL: Record<string, string[]> = {
-  marginBlock: ["marginTop", "marginBottom"],
-  marginInline: ["marginRight", "marginLeft"],
-  paddingBlock: ["paddingTop", "paddingBottom"],
-  paddingInline: ["paddingRight", "paddingLeft"],
-};
 
 /**
  * Detect and resolve logical-vs-physical longhand conflicts within a component's
@@ -845,56 +865,38 @@ function normalizeLogicalPhysicalConflicts(
   propsByKey: Map<string, Set<string>>,
   resolvedStyleObjects: Map<string, unknown>,
 ): void {
-  // Collect which keys have physical longhands and which have logical longhands
-  const physicalKeys: string[] = [];
-  const logicalKeys: string[] = [];
-  for (const [key, props] of propsByKey) {
-    if (longhands.physical.some((l) => props.has(l))) {
-      physicalKeys.push(key);
-    }
-    if (longhands.logical.some((l) => props.has(l))) {
-      logicalKeys.push(key);
-    }
-  }
+  const hasPhysical = [...propsByKey.values()].some((props) =>
+    longhands.physical.some((l) => props.has(l)),
+  );
+  const logicalKeys = [...propsByKey.entries()]
+    .filter(([, props]) => longhands.logical.some((l) => props.has(l)))
+    .map(([key]) => key);
 
-  // Only normalize when there's a cross-form conflict
-  if (physicalKeys.length === 0 || logicalKeys.length === 0) {
+  if (!hasPhysical || logicalKeys.length === 0) {
     return;
   }
 
-  // Expand logical longhands to physical in each affected style object
   for (const key of logicalKeys) {
     const style = resolvedStyleObjects.get(key) as Record<string, unknown>;
     if (!style) {
       continue;
     }
+    const replacements = new Map<string, Array<{ prop: string; value: unknown }>>();
     for (const logicalProp of longhands.logical) {
       const value = style[logicalProp];
-      if (value === undefined || value === null) {
-        continue;
-      }
-      // Only expand simple values (not conditional objects)
-      if (typeof value !== "string" && typeof value !== "number") {
+      if (value == null || !isSimpleStyleValue(value)) {
         continue;
       }
       const physicalProps = LOGICAL_TO_PHYSICAL[logicalProp];
-      if (!physicalProps) {
-        continue;
+      if (physicalProps) {
+        replacements.set(
+          logicalProp,
+          physicalProps.map((p) => ({ prop: p, value })),
+        );
       }
-      // Rebuild style with logical replaced by physical (preserving order)
-      const entries = Object.entries(style);
-      for (const k of Object.keys(style)) {
-        delete style[k];
-      }
-      for (const [k, v] of entries) {
-        if (k === logicalProp) {
-          for (const p of physicalProps) {
-            style[p] = value;
-          }
-        } else {
-          style[k] = v;
-        }
-      }
+    }
+    if (replacements.size > 0) {
+      replacePropsInPlace(style, replacements);
     }
   }
 }
@@ -945,28 +947,14 @@ function expandShorthandInStyle(
     const right = tokens[1] ?? top;
     const bottom = tokens[2] ?? top;
     const left = tokens[3] ?? right;
+    const numOrStr = (v: string): string | number => (typeof value === "number" ? value : v);
     replacements = [
-      { prop: `${shorthand}Top`, value: typeof value === "number" ? value : top },
-      { prop: `${shorthand}Right`, value: typeof value === "number" ? value : right },
-      { prop: `${shorthand}Bottom`, value: typeof value === "number" ? value : bottom },
-      { prop: `${shorthand}Left`, value: typeof value === "number" ? value : left },
+      { prop: `${shorthand}Top`, value: numOrStr(top) },
+      { prop: `${shorthand}Right`, value: numOrStr(right) },
+      { prop: `${shorthand}Bottom`, value: numOrStr(bottom) },
+      { prop: `${shorthand}Left`, value: numOrStr(left) },
     ];
   }
 
-  // Rebuild the object with longhands replacing the shorthand in-place
-  const entries = Object.entries(style);
-  // Clear the object
-  for (const key of Object.keys(style)) {
-    delete style[key];
-  }
-  // Re-insert with expansion
-  for (const [key, val] of entries) {
-    if (key === shorthand) {
-      for (const r of replacements) {
-        style[r.prop] = r.value;
-      }
-    } else {
-      style[key] = val;
-    }
-  }
+  replacePropsInPlace(style, new Map([[shorthand, replacements]]));
 }
