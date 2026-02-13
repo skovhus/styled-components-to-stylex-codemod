@@ -70,15 +70,6 @@ export function emitInputWrappers(ctx: EmitIntrinsicContext): void {
               ),
             ]
           : []),
-        ...(aw.disabledKey
-          ? [
-              j.logicalExpression(
-                "&&",
-                j.identifier("disabled"),
-                j.memberExpression(j.identifier(stylesIdentifier), j.identifier(aw.disabledKey)),
-              ),
-            ]
-          : []),
         ...(aw.readonlyKey
           ? [
               j.logicalExpression(
@@ -184,11 +175,10 @@ export function emitInputWrappers(ctx: EmitIntrinsicContext): void {
                 ` as any),
       );
 
-      // Post-process: add disabled/readOnly destructuring and JSX props when needed
+      // Post-process: add readOnly destructuring and JSX props when [readonly] is used.
+      // Note: [disabled] stays as a StyleX :disabled pseudo-class (semantically equivalent),
+      // but [readonly] must be a JS conditional because CSS :read-only is too broad.
       const extraInputProps: string[] = [];
-      if (aw.disabledKey) {
-        extraInputProps.push("disabled");
-      }
       if (aw.readonlyKey) {
         extraInputProps.push("readOnly");
       }

@@ -3,15 +3,14 @@ import * as stylex from "@stylexjs/stylex";
 
 type InputProps = Omit<React.InputHTMLAttributes<HTMLInputElement>, "className" | "style">;
 function Input(props: InputProps) {
-  const { type, disabled, readOnly, ...rest } = props;
+  const { type, readOnly, ...rest } = props;
   const sx = stylex.props(
     styles.input,
     type === "checkbox" && styles.inputCheckbox,
     type === "radio" && styles.inputRadio,
-    disabled && styles.inputDisabled,
     readOnly && styles.inputReadonly,
   );
-  return <input type={type} disabled={disabled} readOnly={readOnly} {...rest} {...sx} />;
+  return <input type={type} readOnly={readOnly} {...rest} {...sx} />;
 }
 type LinkProps = Omit<React.AnchorHTMLAttributes<HTMLAnchorElement>, "className" | "style">;
 function Link(props: LinkProps) {
@@ -64,15 +63,22 @@ const styles = stylex.create({
       default: null,
       ":focus": "none",
     },
+    backgroundColor: {
+      default: null,
+      ":disabled": "#f5f5f5",
+    },
+    color: {
+      default: null,
+      ":disabled": "#999",
+    },
+    cursor: {
+      default: null,
+      ":disabled": "not-allowed",
+    },
     "::placeholder": {
       color: "#999",
       fontStyle: "italic",
     },
-  },
-  inputDisabled: {
-    backgroundColor: "#f5f5f5",
-    color: "#999",
-    cursor: "not-allowed",
   },
   inputCheckbox: {
     width: "20px",

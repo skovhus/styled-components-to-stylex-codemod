@@ -18,7 +18,6 @@ type ParsedAttributeSelector = {
   type:
     | "typeCheckbox"
     | "typeRadio"
-    | "disabled"
     | "readonly"
     | "hrefStartsHttps"
     | "hrefEndsPdf"
@@ -229,11 +228,10 @@ function parseAttributeSelectorInternal(selector: string): ParsedAttributeSelect
   }
   const inside = m[1];
 
-  // Boolean attribute selectors: [disabled], [readonly], [readOnly]
+  // [readonly] / [readOnly] → handled as JS prop conditional (not :read-only pseudo-class)
+  // because CSS :read-only matches much more broadly than [readonly]: it also matches
+  // disabled inputs, checkbox/radio, and other inherently non-editable elements.
   const boolAttr = inside.replace(/\s+/g, "").toLowerCase();
-  if (boolAttr === "disabled") {
-    return { type: "disabled", suffix: "Disabled" };
-  }
   if (boolAttr === "readonly") {
     return { type: "readonly", suffix: "Readonly" };
   }
@@ -312,9 +310,18 @@ export function normalizeSelectorForInputAttributePseudos(
     return selector;
   }
 
-  // [disabled] and [readonly] are now handled as attribute selectors in the attrWrapper
-  // pattern (converted to JS prop-based conditionals). No pseudo-class conversion needed
-  // because CSS :read-only matches too broadly (disabled inputs, checkbox/radio, etc.)
-  // while the attribute selector [readonly] only matches elements with the attribute set.
+  // Convert [disabled] to :disabled (semantically equivalent for <input> elements).
+  // NOTE: [readonly] is NOT converted to :read-only because :read-only matches much
+  // more broadly (disabled inputs, checkbox/radio, etc.) while [readonly] only matches
+  // elements with the readonly attribute explicitly set. [readonly] is instead handled
+  // as a JS prop conditional via the attrWrapper pattern.
+  const m = selector.match(/^&\[(.+)\]$/) ?? selector.match(/^\[(.+)\]$/);
+  if (!m || !m[1]) {
+    return selector;
+  }
+  const inside = m[1].replace(/\s+/g, "");
+  if (inside === "disabled") {
+    return "&:disabled";
+  }
   return selector;
 }

@@ -204,9 +204,6 @@ export function postProcessAfterBaseMixins(state: LowerRulesState): void {
         if (d.attrWrapper.radioKey) {
           referencedKeys.add(d.attrWrapper.radioKey);
         }
-        if (d.attrWrapper.disabledKey) {
-          referencedKeys.add(d.attrWrapper.disabledKey);
-        }
         if (d.attrWrapper.readonlyKey) {
           referencedKeys.add(d.attrWrapper.readonlyKey);
         }
