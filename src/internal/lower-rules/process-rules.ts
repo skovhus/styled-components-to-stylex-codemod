@@ -286,6 +286,13 @@ export function processDeclRules(ctx: DeclProcessingState): void {
         continue;
       }
 
+      // Component-interpolated sibling selectors (e.g. `${Other} + &`, `& ~ ${Other}`)
+      // cannot be represented with the current relation model.
+      if (otherLocal && !isCssHelperPlaceholder && /[+~]/.test(selTrim2)) {
+        bailUnknownComponentSelector();
+        break;
+      }
+
       // `${Child}` / `&:hover ${Child}` / `&:focus-visible ${Child}` (parent styling a child)
       // Also handle standalone `__SC_EXPR_N__` selectors (no `&` prefix) which Stylis
       // produces when the component selector is used without `&` in the template.
@@ -313,13 +320,6 @@ export function processDeclRules(ctx: DeclProcessingState): void {
         });
         appendRuleDeclarationsToBucket(bucket);
         continue;
-      }
-
-      // Component-interpolated sibling selectors (e.g. `${Other} + &`, `& ~ ${Other}`)
-      // cannot be represented with the current self-to-self sibling lowering.
-      if (otherLocal && !isCssHelperPlaceholder && /[+~]/.test(selTrim2)) {
-        bailUnknownComponentSelector();
-        break;
       }
 
       // Selector interpolation that's a MemberExpression (e.g., screenSize.phone)
@@ -395,6 +395,15 @@ export function processDeclRules(ctx: DeclProcessingState): void {
 
     if (parsedSelector.kind === "adjacentSibling" || parsedSelector.kind === "generalSibling") {
       if (media || resolvedSelectorMedia) {
+        state.markBail();
+        warnings.push({
+          severity: "warning",
+          type: "Unsupported selector: sibling combinator",
+          loc: computeSelectorWarningLoc(decl.loc, decl.rawCss, rule.selector),
+        });
+        break;
+      }
+      if (parsedSelector.kind === "generalSibling" && !parsedSelector.selectorArg) {
         state.markBail();
         warnings.push({
           severity: "warning",
