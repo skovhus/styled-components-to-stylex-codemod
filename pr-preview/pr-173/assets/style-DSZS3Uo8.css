@@ -2058,6 +2058,10 @@ body{font-family:-apple-system,BlinkMacSystemFont,Segoe UI,Roboto,Helvetica Neue
   box-shadow: 0 4px 8px var(--xvyasvk);
 }
 
+.xobp4yc.xobp4yc:where(.x-default-marker:hover *):not(#\#):not(#\#):not(#\#) {
+  color: #00f;
+}
+
 .xl35chj.xl35chj:where(.x-default-marker:hover *):not(#\#):not(#\#):not(#\#) {
   fill: #639;
 }
@@ -2172,6 +2176,10 @@ body{font-family:-apple-system,BlinkMacSystemFont,Segoe UI,Roboto,Helvetica Neue
 
 .x1m6x0ql:focus:not(#\#):not(#\#):not(#\#) {
   color: #bf4f74;
+}
+
+.xla370w:focus:not(#\#):not(#\#):not(#\#) {
+  color: orange;
 }
 
 .x1kcn3es:focus:not(#\#):not(#\#):not(#\#) {
