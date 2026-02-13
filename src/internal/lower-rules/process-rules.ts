@@ -91,7 +91,17 @@ export function processDeclRules(ctx: DeclProcessingState): void {
     // NOTE: normalize interpolated component selectors before the complex selector checks
     // to avoid skipping bails for selectors like `${Other} .child &`.
     if (typeof rule.selector === "string") {
-      const s = stripSpecificityHackSelector(normalizeInterpolatedSelector(rule.selector)).trim();
+      const normalizedSelector = normalizeInterpolatedSelector(rule.selector).trim();
+      if (isUnsupportedSpecificityTierSelector(normalizedSelector)) {
+        state.markBail();
+        warnings.push({
+          severity: "warning",
+          type: "Unsupported selector: descendant/child/sibling selector",
+          loc: computeSelectorWarningLoc(decl.loc, decl.rawCss, rule.selector),
+        });
+        break;
+      }
+      const s = stripSpecificityHackSelector(normalizedSelector).trim();
       const hasComponentExpr = rule.selector.includes("__SC_EXPR_");
       const hasInterpolatedPseudo = /:[^\s{]*__SC_EXPR_\d+__/.test(rule.selector);
 
@@ -118,7 +128,8 @@ export function processDeclRules(ctx: DeclProcessingState): void {
       // Use heuristic-based bail checks. We need to allow:
       // - Component selectors that have special handling
       // - Attribute selectors (have special handling for input type, href, etc.)
-      // Note: Specificity hacks (&&, &&&) bail early in transform.ts
+      // Note: We only normalize a single specificity tier (`&&` -> `&`).
+      // Higher tiers (e.g. `&&&`) are left intact and should bail via unsupported-selector checks.
 
       // Check for descendant pseudo selectors BEFORE normalization collapses them.
       // "& :not(:disabled)" (with space) targets descendants, not the component itself.
@@ -776,13 +787,19 @@ function stripSpecificityHackSelector(selector: string): string {
     return selector;
   }
 
-  // Only collapse pure specificity hacks (`&&`, `&&&`, optionally with pseudos).
+  // Only collapse a single pure specificity tier (`&&`, optionally with pseudos).
+  // Preserving `&&&`/higher tiers avoids silently erasing relative specificity ordering.
   // Keep contextual/combinator selectors (e.g. `.wrapper &&`, `&& + &`) unchanged
   // so they safely hit existing unsupported-selector bails.
-  const match = trimmed.match(/^&{2,}((:[a-z-]+(?:\([^)]*\))?)*)$/i);
+  const match = trimmed.match(/^&&((:[a-z-]+(?:\([^)]*\))?)*)$/i);
   if (!match) {
     return selector;
   }
   const pseudoSuffix = match[1] ?? "";
   return `&${pseudoSuffix}`;
+}
+
+function isUnsupportedSpecificityTierSelector(selector: string): boolean {
+  const trimmed = selector.trim();
+  return /^&{3,}((:[a-z-]+(?:\([^)]*\))?)*)$/i.test(trimmed);
 }
