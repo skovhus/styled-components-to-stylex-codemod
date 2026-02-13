@@ -412,6 +412,10 @@ export function processDeclRules(ctx: DeclProcessingState): void {
         });
         break;
       }
+      if (rule.declarations.length === 0) {
+        bailUnsupportedInterpolation(null);
+        break;
+      }
 
       const relationKind = parsedSelector.kind;
       // Keep all sibling relation conditions in a single override style key so later
@@ -433,6 +437,21 @@ export function processDeclRules(ctx: DeclProcessingState): void {
       let failedSiblingInterpolation = false;
 
       for (const declaration of rule.declarations) {
+        if (!declaration.property) {
+          const slotPart =
+            declaration.value.kind === "interpolated"
+              ? (
+                  declaration.value as { parts?: Array<{ kind: string; slotId?: number }> }
+                ).parts?.find((part) => part.kind === "slot")
+              : undefined;
+          const expr =
+            slotPart?.slotId !== undefined
+              ? (decl.templateExpressions[slotPart.slotId] as unknown)
+              : null;
+          bailUnsupportedInterpolation(expr);
+          failedSiblingInterpolation = true;
+          break;
+        }
         if (declaration.value.kind === "static") {
           for (const out of cssDeclarationToStylexDeclarations(declaration)) {
             if (out.value.kind !== "static") {
@@ -443,7 +462,7 @@ export function processDeclRules(ctx: DeclProcessingState): void {
           continue;
         }
 
-        if (declaration.value.kind === "interpolated" && declaration.property) {
+        if (declaration.value.kind === "interpolated") {
           const slotPart = (
             declaration.value as { parts?: Array<{ kind: string; slotId?: number }> }
           ).parts?.find((part) => part.kind === "slot");
@@ -493,18 +512,6 @@ export function processDeclRules(ctx: DeclProcessingState): void {
             quasis.push(j.templateElement({ raw: currentStatic, cooked: currentStatic }, true));
             bucket[out.prop] = j.templateLiteral(quasis, expressions);
           }
-        }
-        if (declaration.value.kind === "interpolated" && !declaration.property) {
-          const slotPart = (
-            declaration.value as { parts?: Array<{ kind: string; slotId?: number }> }
-          ).parts?.find((part) => part.kind === "slot");
-          const expr =
-            slotPart?.slotId !== undefined
-              ? (decl.templateExpressions[slotPart.slotId] as unknown)
-              : null;
-          bailUnsupportedInterpolation(expr);
-          failedSiblingInterpolation = true;
-          break;
         }
       }
       if (failedSiblingInterpolation) {

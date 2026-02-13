@@ -1,4 +1,4 @@
-// @expected-warning: Unsupported interpolation: identifier
+// @expected-warning: Unsupported interpolation: unknown
 import styled, { css } from "styled-components";
 
 const sharedSiblingStyles = css`
