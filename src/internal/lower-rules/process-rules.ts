@@ -411,7 +411,17 @@ export function processDeclRules(ctx: DeclProcessingState): void {
     // and chained pseudo-selectors like "&:focus:not(:disabled)"
     const parsedSelector = parseSelector(selector);
 
-    if (parsedSelector.kind === "adjacentSibling" || parsedSelector.kind === "generalSibling") {
+    if (parsedSelector.kind === "adjacentSibling") {
+      state.markBail();
+      warnings.push({
+        severity: "warning",
+        type: "Unsupported selector: sibling combinator",
+        loc: computeSelectorWarningLoc(decl.loc, decl.rawCss, rule.selector),
+      });
+      break;
+    }
+
+    if (parsedSelector.kind === "generalSibling") {
       if (media || resolvedSelectorMedia) {
         state.markBail();
         warnings.push({
@@ -481,51 +491,77 @@ export function processDeclRules(ctx: DeclProcessingState): void {
         }
 
         if (declaration.value.kind === "interpolated") {
-          const slotPart = (
-            declaration.value as { parts?: Array<{ kind: string; slotId?: number }> }
-          ).parts?.find((part) => part.kind === "slot");
-          if (!slotPart || slotPart.slotId === undefined) {
+          const parts =
+            (
+              declaration.value as {
+                parts?: Array<{ kind: string; value?: string; slotId?: number }>;
+              }
+            ).parts ?? [];
+          const resolvedParts: Array<
+            { kind: "static"; value: string } | { kind: "slot"; expr: unknown }
+          > = [];
+          const resolvedSlotExpressions: unknown[] = [];
+          for (const part of parts) {
+            if (!part) {
+              continue;
+            }
+            if (part.kind === "static") {
+              resolvedParts.push({ kind: "static", value: part.value ?? "" });
+              continue;
+            }
+            if (part.kind !== "slot" || part.slotId === undefined) {
+              bailUnsupportedInterpolation(null);
+              failedSiblingInterpolation = true;
+              break;
+            }
+            const expr = decl.templateExpressions[part.slotId] as unknown;
+            const resolvedExpr =
+              expr &&
+              typeof expr === "object" &&
+              ((expr as { type?: string }).type === "ArrowFunctionExpression" ||
+                (expr as { type?: string }).type === "FunctionExpression")
+                ? resolveThemeValueFromFn(expr)
+                : resolveThemeValue(expr);
+            if (!resolvedExpr) {
+              bailUnsupportedInterpolation(expr);
+              failedSiblingInterpolation = true;
+              break;
+            }
+            resolvedParts.push({ kind: "slot", expr: resolvedExpr });
+            resolvedSlotExpressions.push(resolvedExpr);
+          }
+          if (failedSiblingInterpolation) {
+            break;
+          }
+          if (resolvedSlotExpressions.length === 0) {
             bailUnsupportedInterpolation(null);
             failedSiblingInterpolation = true;
             break;
           }
-          const expr = decl.templateExpressions[slotPart.slotId] as unknown;
-          const resolved =
-            expr &&
-            typeof expr === "object" &&
-            ((expr as { type?: string }).type === "ArrowFunctionExpression" ||
-              (expr as { type?: string }).type === "FunctionExpression")
-              ? resolveThemeValueFromFn(expr)
-              : resolveThemeValue(expr);
-          if (!resolved) {
-            bailUnsupportedInterpolation(expr);
-            failedSiblingInterpolation = true;
-            break;
-          }
+
+          const hasNonEmptyStaticParts = resolvedParts.some(
+            (part) => part.kind === "static" && part.value.length > 0,
+          );
           for (const out of cssDeclarationToStylexDeclarations(declaration)) {
-            const parts =
-              (declaration.value as { parts?: Array<{ kind: string; value?: string }> }).parts ??
-              [];
-            const hasStaticParts = parts.some((part) => part.kind === "static" && part.value);
-            if (!hasStaticParts) {
-              bucket[out.prop] = resolved;
+            if (resolvedSlotExpressions.length === 1 && !hasNonEmptyStaticParts) {
+              const singleResolvedExpression = resolvedSlotExpressions[0];
+              if (!singleResolvedExpression) {
+                continue;
+              }
+              bucket[out.prop] = singleResolvedExpression;
               continue;
             }
             const quasis: any[] = [];
             const expressions: any[] = [];
             let currentStatic = "";
-            for (let i = 0; i < parts.length; i++) {
-              const part = parts[i];
-              if (!part) {
-                continue;
-              }
+            for (const part of resolvedParts) {
               if (part.kind === "static") {
-                currentStatic += part.value ?? "";
+                currentStatic += part.value;
                 continue;
               }
               quasis.push(j.templateElement({ raw: currentStatic, cooked: currentStatic }, false));
               currentStatic = "";
-              expressions.push(resolved);
+              expressions.push(part.expr);
             }
             quasis.push(j.templateElement({ raw: currentStatic, cooked: currentStatic }, true));
             bucket[out.prop] = j.templateLiteral(quasis, expressions);

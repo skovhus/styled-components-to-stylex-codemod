@@ -42,16 +42,6 @@ export const finalizeRelationOverrides = (args: {
     return normalizedSelector.startsWith(":") ? normalizedSelector : `:is(${normalizedSelector})`;
   };
 
-  const makeAdjacentSiblingKey = (selectorArg: string | null) => {
-    const args: ExpressionKind[] = [j.literal(toSiblingPseudoArg(selectorArg))];
-    return j.callExpression(
-      j.memberExpression(
-        j.memberExpression(j.identifier("stylex"), j.identifier("when")),
-        j.identifier("siblingBefore"),
-      ),
-      args,
-    );
-  };
   const makeGeneralSiblingKey = (selectorArg: string | null) => {
     const args: ExpressionKind[] = [j.literal(toSiblingPseudoArg(selectorArg))];
     return j.callExpression(
@@ -177,12 +167,15 @@ export const finalizeRelationOverrides = (args: {
         ];
 
         for (const { entry, value } of conditionalValues) {
+          if (entry.condition.kind === "adjacentSibling") {
+            throw new Error(
+              "Adjacent sibling relation overrides are unsupported and should bail earlier.",
+            );
+          }
           const keyExpr =
             entry.condition.kind === "ancestor"
               ? makeAncestorKey(entry.condition.pseudo ?? "")
-              : entry.condition.kind === "adjacentSibling"
-                ? makeAdjacentSiblingKey(entry.condition.selectorArg)
-                : makeGeneralSiblingKey(entry.condition.selectorArg);
+              : makeGeneralSiblingKey(entry.condition.selectorArg);
           const valExpr = isExpressionNode(value) ? value : literalToAst(j, value);
           const propNode = Object.assign(j.property("init", keyExpr, valExpr), {
             computed: true,

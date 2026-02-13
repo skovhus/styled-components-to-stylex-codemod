@@ -9,14 +9,14 @@ const sharedSiblingStyles = css`
 const Thing = styled.div`
   color: blue;
 
-  & + & {
+  &.anchor ~ & {
     ${sharedSiblingStyles}
   }
 `;
 
 export const App = () => (
   <div>
-    <Thing>First</Thing>
+    <Thing className="anchor">First</Thing>
     <Thing>Second</Thing>
   </div>
 );

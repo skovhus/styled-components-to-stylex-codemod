@@ -22,7 +22,7 @@ function Thing(
 export const App = () => (
   <div>
     <Thing>First (blue)</Thing>
-    <Thing>Second (red, lime background - adjacent to first)</Thing>
+    <Thing>Second (blue)</Thing>
     <Thing className="something">Third with .something class</Thing>
     <Thing>Fourth (yellow background - sibling after .something)</Thing>
     <Thing>Fifth (yellow background - sibling after .something)</Thing>
@@ -34,13 +34,8 @@ const styles = stylex.create({
     color: "blue",
   },
   thingSiblingBefore: {
-    color: {
-      default: "blue",
-      [stylex.when.siblingBefore(":is(*)")]: "red",
-    },
     backgroundColor: {
       default: null,
-      [stylex.when.siblingBefore(":is(*)")]: "lime",
       [stylex.when.siblingBefore(":is(.something)")]: "yellow",
     },
   },
