@@ -27,9 +27,7 @@ export const App = () => (
     <Button as="a" href="#">
       Button as Link
     </Button>
-    <ButtonWrapper forwardedAs="a" href="#">
-      Wrapper forwards as Link
-    </ButtonWrapper>
+    <ButtonWrapper href="#">Wrapper forwards as Link</ButtonWrapper>
   </div>
 );
 

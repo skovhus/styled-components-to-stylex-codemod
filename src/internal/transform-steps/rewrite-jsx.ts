@@ -65,13 +65,29 @@ export function rewriteJsxStep(ctx: TransformContext): StepResult {
 
     // Preserve as a wrapper component for polymorphic/forwarded-as cases.
     if (decl.needsWrapperComponent) {
-      continue;
-    }
-
-    // If we emitted a wrapper for this decl, keep JSX usage as `<Decl ... />`.
-    // Inline substitution (`<Decl>` -> `<tag>`) is only valid when the styled declaration
-    // is removed and there is no wrapper component boundary to preserve.
-    if (decl.needsWrapperComponent) {
+      // For component wrappers where `forwardedAs` was used, strip the converted `as`
+      // from JSX callsites. In styled-components, `forwardedAs` on styled(StyledComponent)
+      // doesn't change the rendered element. Our wrappers forward props to the inner
+      // component, so leaving `as` would incorrectly change its element type.
+      if (decl.base.kind === "component" && ctx.forwardedAsComponents?.has(decl.localName)) {
+        root
+          .find(j.JSXElement, {
+            openingElement: {
+              name: { type: "JSXIdentifier", name: decl.localName },
+            },
+          })
+          .forEach((p) => {
+            const opening = p.node.openingElement;
+            opening.attributes = (opening.attributes ?? []).filter(
+              (attr) =>
+                !(
+                  attr.type === "JSXAttribute" &&
+                  attr.name.type === "JSXIdentifier" &&
+                  attr.name.name === "as"
+                ),
+            );
+          });
+      }
       continue;
     }
 

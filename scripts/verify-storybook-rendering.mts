@@ -52,7 +52,13 @@ interface TestResult {
 // These are tracked in plans/2026-02-12-rendering-mismatches.md.
 // Remove entries as the underlying codemod issues are fixed.
 // ---------------------------------------------------------------------------
-const EXPECTED_FAILURES = new Set<string>([]);
+const EXPECTED_FAILURES = new Set([
+  // Subpixel text antialiasing differences: all computed styles are identical between
+  // input and output, but different CSS class names cause microscopic rendering diffs.
+  // Use --mismatch-tolerance 0.02 to verify these pass within tolerance.
+  "conditional-negation",
+  "keyframes-unionComplexity",
+]);
 
 type Page = Awaited<ReturnType<Awaited<ReturnType<typeof chromium.launch>>["newPage"]>>;
 
@@ -64,7 +70,7 @@ const cliArgs = process.argv.slice(2);
 let onlyChanged = false;
 let saveDiffs = false;
 let threshold = 0.1;
-let mismatchTolerance = 0.02; // allow up to 2% of pixels to differ (subpixel text antialiasing)
+let mismatchTolerance = 0; // strict by default; use --mismatch-tolerance 0.02 for subpixel tolerance
 let concurrency = 6;
 const explicitCases: string[] = [];
 

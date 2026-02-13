@@ -77,6 +77,8 @@ export class TransformContext {
   staticPropertyAssignments?: Map<string, any[]>;
   staticPropertyNames?: Map<string, string[]>;
   resolverImportAliases?: Map<string, string>;
+  /** Component names whose JSX callsites had `forwardedAs` converted to `as` by preflight */
+  forwardedAsComponents?: Set<string>;
   newImportLocalNames?: Set<string>;
   newImportSourcesByLocal?: Map<string, Set<string>>;
   needsReactImport?: boolean;

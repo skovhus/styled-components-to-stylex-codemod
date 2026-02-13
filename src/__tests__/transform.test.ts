@@ -2229,3 +2229,40 @@ export const App = () => <Input readOnly value="test" />;
     expect(readonlyBlock).toContain("paddingInline");
   });
 });
+
+describe("forwardedAs prop handling", () => {
+  it("should not leak forwardedAs to DOM on styled(Component) wrappers", () => {
+    // Regression: when forwardedAs was not converted to `as`, the prop leaked
+    // to the DOM as an invalid HTML attribute. When it IS converted to `as`,
+    // it gets forwarded to the inner component and incorrectly changes the
+    // rendered element. The correct behavior: strip it from the JSX callsite
+    // of styled(Component) wrappers so it doesn't leak or change the element.
+    const source = `
+import styled from "styled-components";
+
+const Button = styled.button\`
+  color: white;
+  background: blue;
+\`;
+
+const ButtonWrapper = styled(Button)\`
+  box-shadow: 0 2px 4px rgba(0,0,0,0.2);
+\`;
+
+export const App = () => (
+  <div>
+    <ButtonWrapper forwardedAs="a" href="#">Link</ButtonWrapper>
+  </div>
+);
+`;
+    const result = transformWithWarnings(
+      { source, path: "test.tsx" },
+      { jscodeshift: j, j, stats: () => {}, report: () => {} },
+      { adapter: fixtureAdapter },
+    );
+    expect(result.code).not.toBeNull();
+    // forwardedAs should not appear in the output — it's a styled-components-specific prop
+    // that gets converted to `as` internally and then stripped from component wrapper callsites
+    expect(result.code).not.toContain("forwardedAs");
+  });
+});
