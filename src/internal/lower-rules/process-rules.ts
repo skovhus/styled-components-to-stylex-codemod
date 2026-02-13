@@ -77,6 +77,22 @@ export function processDeclRules(ctx: DeclProcessingState): void {
         loc: computeSelectorWarningLoc(decl.loc, decl.rawCss, rule.selector),
       });
     };
+    const resolveThemeInterpolationExpression = (expr: unknown): unknown => {
+      const exprType =
+        expr && typeof expr === "object" ? ((expr as { type?: unknown }).type ?? null) : null;
+      if (exprType === "ArrowFunctionExpression" || exprType === "FunctionExpression") {
+        return resolveThemeValueFromFn(expr);
+      }
+      return resolveThemeValue(expr);
+    };
+    const bailUnsupportedSiblingCombinator = (): void => {
+      state.markBail();
+      warnings.push({
+        severity: "warning",
+        type: "Unsupported selector: sibling combinator",
+        loc: computeSelectorWarningLoc(decl.loc, decl.rawCss, rule.selector),
+      });
+    };
 
     // --- Unsupported complex selector detection ---
     // We bail out rather than emitting incorrect unconditional styles.
@@ -222,13 +238,7 @@ export function processDeclRules(ctx: DeclProcessingState): void {
               continue;
             }
             const expr = decl.templateExpressions[slotPart.slotId] as unknown;
-            const resolved =
-              expr &&
-              typeof expr === "object" &&
-              ((expr as { type?: string }).type === "ArrowFunctionExpression" ||
-                (expr as { type?: string }).type === "FunctionExpression")
-                ? resolveThemeValueFromFn(expr)
-                : resolveThemeValue(expr);
+            const resolved = resolveThemeInterpolationExpression(expr);
             if (!resolved) {
               continue;
             }
@@ -412,32 +422,17 @@ export function processDeclRules(ctx: DeclProcessingState): void {
     const parsedSelector = parseSelector(selector);
 
     if (parsedSelector.kind === "adjacentSibling") {
-      state.markBail();
-      warnings.push({
-        severity: "warning",
-        type: "Unsupported selector: sibling combinator",
-        loc: computeSelectorWarningLoc(decl.loc, decl.rawCss, rule.selector),
-      });
+      bailUnsupportedSiblingCombinator();
       break;
     }
 
     if (parsedSelector.kind === "generalSibling") {
       if (media || resolvedSelectorMedia) {
-        state.markBail();
-        warnings.push({
-          severity: "warning",
-          type: "Unsupported selector: sibling combinator",
-          loc: computeSelectorWarningLoc(decl.loc, decl.rawCss, rule.selector),
-        });
+        bailUnsupportedSiblingCombinator();
         break;
       }
       if (parsedSelector.kind === "generalSibling" && !parsedSelector.selectorArg) {
-        state.markBail();
-        warnings.push({
-          severity: "warning",
-          type: "Unsupported selector: sibling combinator",
-          loc: computeSelectorWarningLoc(decl.loc, decl.rawCss, rule.selector),
-        });
+        bailUnsupportedSiblingCombinator();
         break;
       }
       if (rule.declarations.length === 0) {
@@ -515,13 +510,7 @@ export function processDeclRules(ctx: DeclProcessingState): void {
               break;
             }
             const expr = decl.templateExpressions[part.slotId] as unknown;
-            const resolvedExpr =
-              expr &&
-              typeof expr === "object" &&
-              ((expr as { type?: string }).type === "ArrowFunctionExpression" ||
-                (expr as { type?: string }).type === "FunctionExpression")
-                ? resolveThemeValueFromFn(expr)
-                : resolveThemeValue(expr);
+            const resolvedExpr = resolveThemeInterpolationExpression(expr);
             if (!resolvedExpr) {
               bailUnsupportedInterpolation(expr);
               failedSiblingInterpolation = true;
