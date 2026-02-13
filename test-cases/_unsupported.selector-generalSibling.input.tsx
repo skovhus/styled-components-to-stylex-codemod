@@ -1,4 +1,4 @@
-// @expected-warning: Unsupported selector: general sibling combinator (& ~ &) cannot preserve forward-only semantics
+// @expected-warning: Unsupported selector: sibling combinator
 import styled from "styled-components";
 
 const Thing = styled.div`

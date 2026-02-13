@@ -44,14 +44,5 @@ export default [
       "stylex/valid-styles": "off",
     },
   },
-  // Disable the no-lookahead-selectors rule for test case outputs that use
-  // stylex.when.anySibling() — these are valid transforms, and the browser
-  // compatibility concern is for users to evaluate, not for the codemod to block.
-  {
-    files: ["**/test-cases/**/*.output.{ts,tsx}"],
-    rules: {
-      "stylex/no-lookahead-selectors": "off",
-    },
-  },
   ...storybook.configs["flat/recommended"],
 ];

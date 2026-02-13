@@ -46,9 +46,15 @@ export function getOrCreateRelationOverrideBucket(
   ancestorPseudo: string | null,
   relationOverrides: RelationOverride[],
   relationOverridePseudoBuckets: Map<string, Map<string | null, Record<string, unknown>>>,
+  childExtraStyleKeys?: string[],
 ): Record<string, unknown> {
   if (!relationOverridePseudoBuckets.has(overrideStyleKey)) {
-    relationOverrides.push({ parentStyleKey, childStyleKey, overrideStyleKey });
+    relationOverrides.push({
+      parentStyleKey,
+      childStyleKey,
+      overrideStyleKey,
+      childExtraStyleKeys,
+    });
   }
   let pseudoBuckets = relationOverridePseudoBuckets.get(overrideStyleKey);
   if (!pseudoBuckets) {

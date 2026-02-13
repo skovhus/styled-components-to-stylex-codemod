@@ -140,29 +140,17 @@ export function processDeclRules(ctx: DeclProcessingState): void {
         });
         break;
       } else if (/[+~]/.test(s) && !isHandledComponentPattern) {
-        // Only adjacent sibling `& + &` is supported (via stylex.when.siblingBefore).
-        // General sibling `& ~ &` is NOT supported because stylex.when.anySibling()
-        // matches both directions while CSS `~` only selects forward siblings.
-        const isAdjacentSiblingPattern = /^&\s*\+\s*&$/.test(s.trim());
-        const isGeneralSiblingPattern = /^&\s*~\s*&$/.test(s.trim());
-        if (isGeneralSiblingPattern) {
-          state.markBail();
-          warnings.push({
-            severity: "warning",
-            type: "Unsupported selector: general sibling combinator (& ~ &) cannot preserve forward-only semantics",
-            loc: computeSelectorWarningLoc(decl.loc, decl.rawCss, rule.selector),
-          });
-          break;
-        }
-        if (!isAdjacentSiblingPattern) {
-          state.markBail();
-          warnings.push({
-            severity: "warning",
-            type: "Unsupported selector: sibling combinator",
-            loc: computeSelectorWarningLoc(decl.loc, decl.rawCss, rule.selector),
-          });
-          break;
-        }
+        // Sibling combinators (`& + &`, `& ~ &`) are not supported.
+        // `& ~ &`: stylex.when.anySibling() matches both directions while CSS `~` is forward-only.
+        // `& + &`: stylex.when.siblingBefore() uses defaultMarker() which is file-global —
+        //   without defineMarker() per component, the sibling match can't be scoped.
+        state.markBail();
+        warnings.push({
+          severity: "warning",
+          type: "Unsupported selector: sibling combinator",
+          loc: computeSelectorWarningLoc(decl.loc, decl.rawCss, rule.selector),
+        });
+        break;
       } else if (/\s+[a-zA-Z.#]/.test(s) && !isHandledComponentPattern) {
         // Descendant element/class/id selectors like `& a`, `& .child`, `& #foo`
         // But NOT `&:hover ${Child}` (component selector pattern)
@@ -226,6 +214,7 @@ export function processDeclRules(ctx: DeclProcessingState): void {
           ancestorPseudo,
           relationOverrides,
           relationOverridePseudoBuckets,
+          decl.extraStyleKeys,
         );
 
         // Collect the override property names to populate base defaults
@@ -415,75 +404,6 @@ export function processDeclRules(ctx: DeclProcessingState): void {
     if (!media && selector.trim().startsWith("@media")) {
       media = selector.trim();
       selector = "&";
-    }
-
-    // Self-referencing adjacent sibling selector: `& + &` → stylex.when.siblingBefore()
-    // NOTE: `& ~ &` (general sibling) is NOT supported — bailed in heuristic checks above.
-    const siblingMatch = selector.trim().match(/^&\s*\+\s*&$/);
-    if (siblingMatch) {
-      // Bail if the sibling selector is inside a @media rule — we can't combine
-      // computed sibling keys with media constraints in the current architecture.
-      if (media) {
-        state.markBail();
-        warnings.push({
-          severity: "warning",
-          type: "Unsupported selector: sibling combinator inside @media",
-          loc: computeSelectorWarningLoc(decl.loc, decl.rawCss, rule.selector),
-        });
-        break;
-      }
-      // Build the stylex.when.siblingBefore() AST expression for computed key.
-      // NOTE: The StyleX Babel plugin requires a pseudo selector argument even for
-      // unconditional matching. We use `:is(*)` which is semantically "always matches".
-      const siblingKeyExpr = j.callExpression(
-        j.memberExpression(
-          j.memberExpression(j.identifier("stylex"), j.identifier("when")),
-          j.identifier("siblingBefore"),
-        ),
-        [j.literal(":is(*)")],
-      );
-
-      // Component is both observer and observed — needs defaultMarker()
-      ancestorSelectorParents.add(decl.styleKey);
-
-      // Bail if any declaration uses interpolated values — these can't be
-      // safely placed into computed-key style maps without theme resolution.
-      const hasInterpolatedSiblingDecl = rule.declarations.some(
-        (d) => d.value.kind === "interpolated",
-      );
-      if (hasInterpolatedSiblingDecl) {
-        state.markBail();
-        warnings.push({
-          severity: "warning",
-          type: "Unsupported selector: sibling combinator with interpolated values",
-          loc: computeSelectorWarningLoc(decl.loc, decl.rawCss, rule.selector),
-        });
-        break;
-      }
-
-      for (const d of rule.declarations) {
-        for (const out of cssDeclarationToStylexDeclarations(d)) {
-          if (out.value.kind !== "static") {
-            continue;
-          }
-          const v = cssValueToJs(out.value, d.important, out.prop);
-          // Use the perPropComputedMedia mechanism to emit computed key entries
-          let entry = perPropComputedMedia.get(out.prop);
-          if (!entry) {
-            const existingVal = (styleObj as Record<string, unknown>)[out.prop];
-            const defaultValue =
-              existingVal !== undefined
-                ? existingVal
-                : cssHelperPropValues.has(out.prop)
-                  ? getComposedDefaultValue(out.prop)
-                  : null;
-            entry = { defaultValue, entries: [] };
-            perPropComputedMedia.set(out.prop, entry);
-          }
-          entry.entries.push({ keyExpr: siblingKeyExpr, value: v });
-        }
-      }
-      continue;
     }
 
     // Support comma-separated pseudo-selectors like "&:hover, &:focus"

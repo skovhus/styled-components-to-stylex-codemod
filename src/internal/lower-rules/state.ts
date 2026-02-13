@@ -21,6 +21,8 @@ export type RelationOverride = {
   parentStyleKey: string;
   childStyleKey: string;
   overrideStyleKey: string;
+  /** Additional style keys (from composed mixins) to search for base values */
+  childExtraStyleKeys?: string[];
 };
 
 export type LowerRulesState = ReturnType<typeof createLowerRulesState>;

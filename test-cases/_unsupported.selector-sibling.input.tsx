@@ -1,3 +1,4 @@
+// @expected-warning: Unsupported selector: sibling combinator
 import styled from "styled-components";
 
 const Thing = styled.div`
