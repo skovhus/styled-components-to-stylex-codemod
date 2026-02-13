@@ -494,6 +494,18 @@ export function processDeclRules(ctx: DeclProcessingState): void {
             bucket[out.prop] = j.templateLiteral(quasis, expressions);
           }
         }
+        if (declaration.value.kind === "interpolated" && !declaration.property) {
+          const slotPart = (
+            declaration.value as { parts?: Array<{ kind: string; slotId?: number }> }
+          ).parts?.find((part) => part.kind === "slot");
+          const expr =
+            slotPart?.slotId !== undefined
+              ? (decl.templateExpressions[slotPart.slotId] as unknown)
+              : null;
+          bailUnsupportedInterpolation(expr);
+          failedSiblingInterpolation = true;
+          break;
+        }
       }
       if (failedSiblingInterpolation) {
         break;

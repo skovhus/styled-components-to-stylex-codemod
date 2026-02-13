@@ -232,7 +232,9 @@ export function postProcessTransformedAst(args: {
         visitEmbeddedJsx(c, nextAncestors);
       }
       for (const attr of attrs) {
-        visitEmbeddedJsx(attr, nextAncestors);
+        // JSX nested in prop values (e.g. render props, callbacks) is not a structural
+        // descendant in the rendered tree, so do not inherit ancestor relation context.
+        visitEmbeddedJsx(attr, []);
       }
     };
 
