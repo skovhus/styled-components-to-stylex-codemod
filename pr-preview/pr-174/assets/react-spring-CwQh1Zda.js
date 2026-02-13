@@ -1,0 +1,1 @@
+import{R as r,j as s}from"./index-CYANH7sh.js";const o={div:r.forwardRef((a,t)=>s.jsx("div",{ref:t,...a})),path:r.forwardRef((a,t)=>s.jsx("path",{ref:t,...a}))};function i(a){return[a(),{start:()=>{}}]}export{o as a,i as u};
