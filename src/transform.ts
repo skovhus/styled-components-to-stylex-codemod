@@ -60,7 +60,9 @@ export function transformWithWarnings(
   api: API,
   options: TransformOptions,
 ): TransformResult {
-  const ctx = new TransformContext(file, api, options);
+  // Extract per-file cross-file info from the global prepass result
+  const enrichedOptions = extractCrossFileInfoForFile(file.path, options);
+  const ctx = new TransformContext(file, api, enrichedOptions);
   const pipeline: TransformStep[] = [
     preflight,
     applyPolicyGates,
@@ -94,4 +96,53 @@ export function transformWithWarnings(
   }
 
   return finalize(ctx);
+}
+
+// --- Non-exported helpers ---
+
+import { resolve as pathResolve } from "node:path";
+import type { CrossFileInfo } from "./internal/transform-types.js";
+
+/**
+ * Extract per-file cross-file info from the global prepass result stored in jscodeshift options.
+ * The prepass result (if any) is passed via `options.crossFilePrepassResult` from runTransform.
+ */
+function extractCrossFileInfoForFile(
+  filePath: string,
+  options: TransformOptions,
+): TransformOptions {
+  const prepass = (options as Record<string, unknown>).crossFilePrepassResult as
+    | {
+        selectorUsages: Map<
+          string,
+          Array<{
+            localName: string;
+            importSource: string;
+            importedName: string;
+            resolvedPath: string;
+          }>
+        >;
+        componentsNeedingStyleAcceptance: Map<string, Set<string>>;
+      }
+    | undefined;
+
+  if (!prepass) {
+    return options;
+  }
+
+  const absPath = pathResolve(filePath);
+  const selectorUsages = prepass.selectorUsages.get(absPath) ?? [];
+  const componentsNeedingStyleAcceptance =
+    prepass.componentsNeedingStyleAcceptance.get(absPath) ?? new Set<string>();
+
+  if (selectorUsages.length === 0 && componentsNeedingStyleAcceptance.size === 0) {
+    return options;
+  }
+
+  const crossFileInfo: CrossFileInfo = {
+    selectorUsages,
+    componentsNeedingStyleAcceptance,
+  };
+
+  return { ...options, crossFileInfo };
 }

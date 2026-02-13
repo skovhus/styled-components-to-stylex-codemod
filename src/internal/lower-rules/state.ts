@@ -23,6 +23,12 @@ export type RelationOverride = {
   overrideStyleKey: string;
   /** Additional style keys (from composed mixins) to search for base values */
   childExtraStyleKeys?: string[];
+  /** When true, this override targets a cross-file component and uses defineMarker() */
+  crossFile?: boolean;
+  /** Variable name of the marker for cross-file overrides (e.g. "__styledCollapseButtonMarker") */
+  markerVarName?: string;
+  /** Local name of the imported cross-file child component */
+  crossFileChildLocalName?: string;
 };
 
 export type LowerRulesState = ReturnType<typeof createLowerRulesState>;
@@ -217,6 +223,20 @@ export function createLowerRulesState(ctx: TransformContext) {
     importMap,
   });
 
+  // Build cross-file selector lookup: localName → usage info
+  const crossFileSelectorsByLocal = new Map<
+    string,
+    { localName: string; resolvedPath: string; importedName: string }
+  >();
+  if (ctx.crossFileSelectorUsages) {
+    for (const usage of ctx.crossFileSelectorUsages) {
+      crossFileSelectorsByLocal.set(usage.localName, usage);
+    }
+  }
+
+  // Track markers needed for cross-file parent components: parentStyleKey → markerVarName
+  const crossFileMarkers = new Map<string, string>();
+
   const state = {
     api,
     j,
@@ -256,6 +276,8 @@ export function createLowerRulesState(ctx: TransformContext) {
     resolveCssHelperTemplate,
     resolveImportInScope,
     resolveImportForExpr,
+    crossFileSelectorsByLocal,
+    crossFileMarkers,
     bail: false,
     markBail: () => {
       state.bail = true;

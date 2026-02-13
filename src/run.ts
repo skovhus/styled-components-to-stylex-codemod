@@ -4,7 +4,7 @@
  */
 import { run as jscodeshiftRun } from "jscodeshift/src/Runner.js";
 import { fileURLToPath } from "node:url";
-import { dirname, join } from "node:path";
+import { dirname, join, resolve } from "node:path";
 import { existsSync } from "node:fs";
 import { glob } from "node:fs/promises";
 import { spawn } from "node:child_process";
@@ -26,6 +26,15 @@ export interface RunTransformOptions {
    * @example "src/**\/*.tsx" or ["src/**\/*.ts", "src/**\/*.tsx"]
    */
   files: string | string[];
+
+  /**
+   * Additional file glob(s) to scan for cross-file component selector usage.
+   * Files matching this glob that are NOT in `files` trigger the bridge strategy
+   * (Scenario B: stable className + toString shim for incremental migration).
+   * Files in both globs use the marker strategy (Scenario A).
+   * @example "src/**\/*.tsx"
+   */
+  consumerPaths?: string | string[];
 
   /**
    * Adapter for customizing the transform.
@@ -157,7 +166,14 @@ export async function runTransform(options: RunTransformOptions): Promise<RunTra
     }
   }
 
-  const { files, dryRun = false, print = false, parser = "tsx", formatterCommand } = options;
+  const {
+    files,
+    consumerPaths: consumerPathsOption,
+    dryRun = false,
+    print = false,
+    parser = "tsx",
+    formatterCommand,
+  } = options;
 
   const adapter = options.adapter;
   assertValidAdapter(adapter, "runTransform(options)");
@@ -232,6 +248,33 @@ export async function runTransform(options: RunTransformOptions): Promise<RunTra
 
   Logger.setFileCount(filePaths.length);
 
+  // Resolve consumer paths for cross-file selector prepass
+  const consumerFilePaths: string[] = [];
+  if (consumerPathsOption) {
+    const consumerPatterns = Array.isArray(consumerPathsOption)
+      ? consumerPathsOption
+      : [consumerPathsOption];
+    for (const pattern of consumerPatterns) {
+      for await (const file of glob(pattern, { cwd })) {
+        consumerFilePaths.push(file);
+      }
+    }
+  }
+
+  // Run cross-file selector prepass if consumer paths are provided
+  let crossFilePrepassResult:
+    | import("./internal/prepass/scan-cross-file-selectors.js").CrossFileInfo
+    | undefined;
+  if (consumerFilePaths.length > 0 || filePaths.length > 1) {
+    const { createModuleResolver } = await import("./internal/prepass/resolve-imports.js");
+    const { scanCrossFileSelectors } =
+      await import("./internal/prepass/scan-cross-file-selectors.js");
+    const absoluteFiles = filePaths.map((f) => resolve(f));
+    const absoluteConsumers = consumerFilePaths.map((f) => resolve(f));
+    const resolver = createModuleResolver();
+    crossFilePrepassResult = scanCrossFileSelectors(absoluteFiles, absoluteConsumers, resolver);
+  }
+
   // Path to the transform module.
   // - In published builds, `dist/index.mjs` and `dist/transform.mjs` live together.
   // - In-repo tests/dev, `src/transform.mjs` doesn't exist, but `dist/transform.mjs` usually does
@@ -261,6 +304,7 @@ export async function runTransform(options: RunTransformOptions): Promise<RunTra
     dry: dryRun,
     print,
     adapter: adapterWithLogging,
+    crossFilePrepassResult,
     // Programmatic use passes an Adapter object (functions). That cannot be
     // serialized across process boundaries, so we must run in-band.
     runInBand: true,

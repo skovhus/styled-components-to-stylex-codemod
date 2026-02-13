@@ -51,6 +51,34 @@ export interface TransformOptions extends Options {
    * Controls value resolution and resolver-provided imports.
    */
   adapter: Adapter;
+
+  /**
+   * Cross-file selector information from the prepass.
+   * When present, enables cross-file component selector handling.
+   */
+  crossFileInfo?: CrossFileInfo;
+}
+
+/**
+ * Cross-file selector info passed from the prepass to the per-file transform.
+ * Kept minimal: only what the transform needs to know about this specific file.
+ */
+export interface CrossFileInfo {
+  /** Cross-file selector usages where this file is the consumer */
+  selectorUsages: CrossFileSelectorUsage[];
+  /** Component names (exported from this file) that need to accept external styles */
+  componentsNeedingStyleAcceptance: Set<string>;
+}
+
+export interface CrossFileSelectorUsage {
+  /** Local name in the consumer file (e.g. "CollapseArrowIcon") */
+  localName: string;
+  /** Raw import specifier (e.g. "./lib/collapse-arrow-icon") */
+  importSource: string;
+  /** Imported binding name ("default" for default imports, otherwise named) */
+  importedName: string;
+  /** Absolute path of the target module */
+  resolvedPath: string;
 }
 
 type ExpressionKind = Parameters<JSCodeshift["expressionStatement"]>[0];

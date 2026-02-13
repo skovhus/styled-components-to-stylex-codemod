@@ -20,6 +20,8 @@ export function postProcessTransformedAst(args: {
   newImportLocalNames?: Set<string>;
   /** Map of local import names to the module specifiers they were added from */
   newImportSourcesByLocal?: Map<string, Set<string>>;
+  /** Cross-file marker variables: parentStyleKey → markerVarName */
+  crossFileMarkers?: Map<string, string>;
 }): { changed: boolean; needsReactImport: boolean } {
   const {
     root,
@@ -31,6 +33,7 @@ export function postProcessTransformedAst(args: {
     preserveReactImport,
     newImportLocalNames,
     newImportSourcesByLocal,
+    crossFileMarkers,
   } = args;
   let changed = false;
 
@@ -45,6 +48,7 @@ export function postProcessTransformedAst(args: {
   // Apply relation override styles that rely on `stylex.when.*()`:
   // - Add `stylex.defaultMarker()` to elements that need markers (ancestor selectors).
   // - Add override style keys to descendant/child elements' `stylex.props(...)` calls.
+  // - For cross-file selectors: use `defineMarker()` and add overrides to imported child JSX.
   if (relationOverrides.length > 0 || ancestorSelectorParents.size > 0) {
     // IMPORTANT: Do not reuse the same AST node instance across multiple insertion points.
     // Recast/jscodeshift expect a tree (no shared references); reuse can corrupt printing.
@@ -53,6 +57,24 @@ export function postProcessTransformedAst(args: {
         j.memberExpression(j.identifier("stylex"), j.identifier("defaultMarker")),
         [],
       );
+
+    // Build cross-file override lookup: childLocalName → overrides
+    const crossFileOverridesByChild = new Map<string, RelationOverride[]>();
+    for (const o of relationOverrides) {
+      if (o.crossFile && o.crossFileChildLocalName) {
+        const existing = crossFileOverridesByChild.get(o.crossFileChildLocalName) ?? [];
+        existing.push(o);
+        crossFileOverridesByChild.set(o.crossFileChildLocalName, existing);
+      }
+    }
+
+    // Collect cross-file parent style keys that need defineMarker instead of defaultMarker
+    const crossFileParentStyleKeys = new Set<string>();
+    if (crossFileMarkers) {
+      for (const key of crossFileMarkers.keys()) {
+        crossFileParentStyleKeys.add(key);
+      }
+    }
 
     const isStylexPropsCall = (n: any): n is any =>
       n?.type === "CallExpression" &&
@@ -124,8 +146,18 @@ export function postProcessTransformedAst(args: {
             if (emptyStyleKeys?.has(parentKey)) {
               pendingEmptyKeyRemovals.push({ call, key: parentKey });
             }
-            // Add defaultMarker if not already present
-            if (!hasDefaultMarker(call)) {
+            // For cross-file parents, use the defineMarker variable; otherwise defaultMarker
+            const markerVarName = crossFileMarkers?.get(parentKey);
+            if (markerVarName) {
+              // Add the marker variable reference if not already present
+              const hasMarkerVar = (call.arguments ?? []).some(
+                (a: any) => a?.type === "Identifier" && a.name === markerVarName,
+              );
+              if (!hasMarkerVar) {
+                call.arguments = [...(call.arguments ?? []), j.identifier(markerVarName)];
+                changed = true;
+              }
+            } else if (!hasDefaultMarker(call)) {
               call.arguments = [...(call.arguments ?? []), makeDefaultMarkerCall()];
               changed = true;
             }
@@ -159,6 +191,35 @@ export function postProcessTransformedAst(args: {
             call.arguments = [...(call.arguments ?? []), overrideArg];
             changed = true;
           }
+        }
+      }
+
+      // Cross-file child handling: for imported components used as selectors,
+      // add {...stylex.props(styles.overrideKey)} to their JSX attributes
+      if (elementName && crossFileOverridesByChild.has(elementName)) {
+        const overrides = crossFileOverridesByChild.get(elementName)!;
+        for (const o of overrides) {
+          // Check if any ancestor has the parent style key
+          const matched = ancestors.some(
+            (a: any) =>
+              (a?.call && hasStyleKeyArg(a.call, o.parentStyleKey)) ||
+              (a?.elementStyleKey && a.elementStyleKey === o.parentStyleKey),
+          );
+          if (!matched) {
+            continue;
+          }
+          // Build the spread: {...stylex.props(styles.overrideKey)}
+          const overrideArg = j.memberExpression(
+            j.identifier("styles"),
+            j.identifier(o.overrideStyleKey),
+          );
+          const stylexPropsCall = j.callExpression(
+            j.memberExpression(j.identifier("stylex"), j.identifier("props")),
+            [overrideArg],
+          );
+          const spread = j.jsxSpreadAttribute(stylexPropsCall);
+          opening.attributes = [...(opening.attributes ?? []), spread];
+          changed = true;
         }
       }
 

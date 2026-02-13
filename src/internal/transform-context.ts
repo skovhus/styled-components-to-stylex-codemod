@@ -81,6 +81,12 @@ export class TransformContext {
   newImportLocalNames?: Set<string>;
   newImportSourcesByLocal?: Map<string, Set<string>>;
   needsReactImport?: boolean;
+  /** Cross-file selector usages where this file is the consumer */
+  crossFileSelectorUsages?: import("./transform-types.js").CrossFileSelectorUsage[];
+  /** Component names (exported from this file) that need to accept external styles */
+  crossFileStyleAcceptance?: Set<string>;
+  /** Marker variable names generated for cross-file parent components (parentStyleKey → markerName) */
+  crossFileMarkers?: Map<string, string>;
 
   constructor(file: FileInfo, api: API, options: TransformOptions) {
     const j = api.jscodeshift;
@@ -142,6 +148,13 @@ export class TransformContext {
     this.styledLocalNames = new Set<string>();
     this.isStyledTag = () => false;
     this.keyframesNames = new Set<string>();
+
+    // Wire cross-file info from options
+    const crossFileInfo = options.crossFileInfo;
+    if (crossFileInfo) {
+      this.crossFileSelectorUsages = crossFileInfo.selectorUsages;
+      this.crossFileStyleAcceptance = crossFileInfo.componentsNeedingStyleAcceptance;
+    }
   }
 
   markChanged(): void {

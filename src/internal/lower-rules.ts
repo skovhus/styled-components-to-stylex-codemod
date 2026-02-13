@@ -20,6 +20,7 @@ export function lowerRules(ctx: TransformContext): {
   relationOverrides: RelationOverride[];
   ancestorSelectorParents: Set<string>;
   usedCssHelperFunctions: Set<string>;
+  crossFileMarkers: Map<string, string>;
   bail: boolean;
 } {
   const state = createLowerRulesState(ctx);
@@ -75,6 +76,7 @@ export function lowerRules(ctx: TransformContext): {
     relationOverrides: state.relationOverrides,
     ancestorSelectorParents: state.ancestorSelectorParents,
     usedCssHelperFunctions: state.usedCssHelperFunctions,
+    crossFileMarkers: state.crossFileMarkers,
     bail: state.bail,
   };
 }

@@ -35,21 +35,35 @@ export const finalizeRelationOverrides = (args: {
     overrideToChildKeys.set(o.overrideStyleKey, keys);
   }
 
-  const makeAncestorKey = (pseudo: string) =>
-    j.callExpression(
+  const makeAncestorKey = (pseudo: string, markerVarName?: string) => {
+    const args: ExpressionKind[] = [j.literal(pseudo)];
+    if (markerVarName) {
+      args.push(j.identifier(markerVarName));
+    }
+    return j.callExpression(
       j.memberExpression(
         j.memberExpression(j.identifier("stylex"), j.identifier("when")),
         j.identifier("ancestor"),
       ),
-      [j.literal(pseudo)],
+      args,
     );
+  };
 
   // Local type guard that narrows to ExpressionKind for use with jscodeshift builders
   const isExpressionNode = (v: unknown): v is ExpressionKind => isAstNode(v);
 
+  // Build a lookup from override key → marker variable name for cross-file overrides
+  const overrideToMarker = new Map<string, string>();
+  for (const o of relationOverrides) {
+    if (o.crossFile && o.markerVarName) {
+      overrideToMarker.set(o.overrideStyleKey, o.markerVarName);
+    }
+  }
+
   for (const [overrideKey, pseudoBuckets] of relationOverridePseudoBuckets.entries()) {
     const baseBucket = pseudoBuckets.get(null) ?? {};
     const props: any[] = [];
+    const markerVarName = overrideToMarker.get(overrideKey);
 
     // Look up the child's resolved style objects (primary + composed mixins)
     // for fallback base values. This handles:
@@ -118,7 +132,7 @@ export const finalizeRelationOverrides = (args: {
             objProps.push(j.property("init", j.literal(pseudo), valExpr));
           } else {
             // Ancestor pseudo: use stylex.when.ancestor() computed key
-            const ancestorKey = makeAncestorKey(pseudo);
+            const ancestorKey = makeAncestorKey(pseudo, markerVarName);
             const propNode = Object.assign(j.property("init", ancestorKey, valExpr), {
               computed: true,
             });

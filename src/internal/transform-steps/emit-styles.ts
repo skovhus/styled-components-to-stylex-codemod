@@ -18,6 +18,33 @@ export function emitStylesStep(ctx: TransformContext): StepResult {
   ctx.emptyStyleKeys = emptyStyleKeys;
   ctx.markChanged();
 
+  // Emit defineMarker() declarations for cross-file parent components
+  if (ctx.crossFileMarkers && ctx.crossFileMarkers.size > 0) {
+    const j = ctx.j;
+    const programBody = ctx.root.get().node.program.body as unknown[];
+    // Find insertion point: after imports, before styles
+    const lastImportIdx = (programBody as { type?: string }[]).reduce(
+      (last, node, i) => (node?.type === "ImportDeclaration" ? i : last),
+      -1,
+    );
+    const insertAt = lastImportIdx >= 0 ? lastImportIdx + 1 : 0;
+
+    let offset = 0;
+    for (const [, markerVarName] of ctx.crossFileMarkers) {
+      const markerDecl = j.variableDeclaration("const", [
+        j.variableDeclarator(
+          j.identifier(markerVarName),
+          j.callExpression(
+            j.memberExpression(j.identifier("stylex"), j.identifier("defineMarker")),
+            [],
+          ),
+        ),
+      ]);
+      (programBody as unknown[]).splice(insertAt + offset, 0, markerDecl);
+      offset++;
+    }
+  }
+
   if (ctx.resolverImportAliases && ctx.resolverImportAliases.size > 0) {
     const renameIdentifier = (node: any, parent: any): void => {
       if (!node || typeof node !== "object") {

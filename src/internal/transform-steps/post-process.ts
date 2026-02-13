@@ -69,6 +69,7 @@ export function postProcessStep(ctx: TransformContext): StepResult {
     preserveReactImport: ctx.preserveReactImport,
     newImportLocalNames,
     newImportSourcesByLocal,
+    crossFileMarkers: ctx.crossFileMarkers,
   });
   if (post.changed) {
     ctx.markChanged();

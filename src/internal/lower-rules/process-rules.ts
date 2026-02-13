@@ -371,10 +371,13 @@ export function processDeclRules(ctx: DeclProcessingState): void {
         selTrim2.startsWith("&") || /^__SC_EXPR_\d+__$/.test(selTrim2);
       if (otherLocal && !isCssHelperPlaceholder && isComponentSelectorPattern) {
         const childDecl = declByLocalName.get(otherLocal);
+        const crossFileUsage = !childDecl
+          ? state.crossFileSelectorsByLocal.get(otherLocal)
+          : undefined;
         // Extract the actual pseudo-selector (e.g., ":hover", ":focus-visible")
         const pseudoMatch = rule.selector.match(/&(:[a-z-]+(?:\([^)]*\))?)/i);
         const ancestorPseudo: string | null = pseudoMatch?.[1] ?? null;
-        if (!childDecl) {
+        if (!childDecl && !crossFileUsage) {
           state.markBail();
           warnings.push({
             severity: "warning",
@@ -383,37 +386,59 @@ export function processDeclRules(ctx: DeclProcessingState): void {
           });
           break;
         }
-        if (childDecl) {
-          const overrideStyleKey = `${toStyleKey(otherLocal)}In${decl.localName}`;
-          ancestorSelectorParents.add(decl.styleKey);
 
-          const bucket = getOrCreateRelationOverrideBucket(
-            overrideStyleKey,
-            decl.styleKey,
-            childDecl.styleKey,
-            ancestorPseudo,
-            relationOverrides,
-            relationOverridePseudoBuckets,
-          );
+        // For cross-file selectors, the child's style key is synthetic (just the local name
+        // lowered to a style key). The override style objects will be applied to the
+        // imported component via JSX spread in rewrite-jsx.
+        const childStyleKey = childDecl ? childDecl.styleKey : toStyleKey(otherLocal);
+        const overrideStyleKey = `${toStyleKey(otherLocal)}In${decl.localName}`;
+        ancestorSelectorParents.add(decl.styleKey);
 
-          const forwardResult = processDeclarationsIntoBucket(
-            rule,
-            bucket,
-            j,
-            decl,
-            resolveThemeValue,
-            resolveThemeValueFromFn,
-            { bailOnUnresolved: true },
-          );
-          if (forwardResult === "bail") {
-            state.markBail();
-            warnings.push({
-              severity: "warning",
-              type: "Unsupported selector: unresolved interpolation in descendant component selector",
-              loc: computeSelectorWarningLoc(decl.loc, decl.rawCss, rule.selector),
-            });
-            break;
+        // For cross-file, register a defineMarker for the parent component
+        if (crossFileUsage) {
+          const markerVarName = `__${decl.localName}Marker`;
+          state.crossFileMarkers.set(decl.styleKey, markerVarName);
+        }
+
+        const bucket = getOrCreateRelationOverrideBucket(
+          overrideStyleKey,
+          decl.styleKey,
+          childStyleKey,
+          ancestorPseudo,
+          relationOverrides,
+          relationOverridePseudoBuckets,
+        );
+
+        // Tag the relation override as cross-file so downstream code
+        // emits defineMarker() instead of defaultMarker()
+        if (crossFileUsage) {
+          const existing = relationOverrides.find((o) => o.overrideStyleKey === overrideStyleKey);
+          if (existing) {
+            existing.crossFile = true;
+            existing.markerVarName = `__${decl.localName}Marker`;
+            existing.crossFileChildLocalName = otherLocal;
           }
+        }
+
+        const forwardResult = processDeclarationsIntoBucket(
+          rule,
+          bucket,
+          j,
+          decl,
+          resolveThemeValue,
+          resolveThemeValueFromFn,
+          { bailOnUnresolved: true },
+        );
+        if (forwardResult === "bail") {
+          state.markBail();
+          warnings.push({
+            severity: "warning",
+            type: crossFileUsage
+              ? "Unsupported selector: unresolved interpolation in cross-file component selector"
+              : "Unsupported selector: unresolved interpolation in descendant component selector",
+            loc: computeSelectorWarningLoc(decl.loc, decl.rawCss, rule.selector),
+          });
+          break;
         }
         continue;
       }
