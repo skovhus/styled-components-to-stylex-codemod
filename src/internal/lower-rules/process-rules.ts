@@ -86,16 +86,17 @@ export function processDeclRules(ctx: DeclProcessingState): void {
       }
 
       // Component selector patterns that have special handling below:
-      // 1. `${Other}:pseudo &` - ancestor pseudo targets self (e.g., `${Link}:hover &`)
+      // 1. `${Other}:pseudo &` - ancestor pseudo via descendant combinator (space only)
       // 2. `&:pseudo ${Child}` or just `& ${Child}` - parent styling descendant child
       // Other component selector patterns (like `${Other} .child`) should bail.
+      const selectorTrimmed = selectorForAnalysis.trim();
       const isHandledComponentPattern =
-        hasComponentExpr && // Pattern 1: `__SC_EXPR_N__:pseudo &` — ancestor pseudo targeting self
-        (/^__SC_EXPR_\d+__:[a-z]/.test(selectorForAnalysis.trim()) ||
+        hasComponentExpr && // Pattern 1: `__SC_EXPR_N__:pseudo &` — descendant combinator only (space, no +~>)
+        (/^__SC_EXPR_\d+__:[a-z][a-z0-9()-]*\s+&\s*$/.test(selectorTrimmed) ||
           // Pattern 2: starts with & (forward descendant/pseudo pattern)
-          selectorForAnalysis.trim().startsWith("&") ||
+          selectorTrimmed.startsWith("&") ||
           // Pattern 3: standalone component selector `${Child} { ... }`
-          /^__SC_EXPR_\d+__\s*\{/.test(selectorForAnalysis.trim()));
+          /^__SC_EXPR_\d+__\s*\{/.test(selectorTrimmed));
 
       // Use heuristic-based bail checks. We need to allow:
       // - Component selectors that have special handling
@@ -190,11 +191,14 @@ export function processDeclRules(ctx: DeclProcessingState): void {
       // `${Other}:pseudo &` (Icon reacting to ancestor hover/focus/etc.)
       // This is the inverse of `&:pseudo ${Child}` — the declaring component is the child,
       // and the referenced component is the ancestor.
-      // The selector starts with `__SC_EXPR_N__:` (component with pseudo) and ends with `&` (self).
+      //
+      // The selector MUST be: `__SC_EXPR_N__:pseudo <space> &` (descendant combinator only).
+      // Reject non-descendant combinators like `+`, `~`, `>` (e.g., `${Link}:focus + &`),
+      // and reject grouped selectors (commas) since only a single pseudo can be captured.
       const isReverseSelectorPattern =
         selTrim2.startsWith("__SC_EXPR_") &&
-        /^__SC_EXPR_\d+__:[a-z]/.test(selTrim2) &&
-        /&\s*$/.test(selTrim2);
+        !selTrim2.includes(",") &&
+        /^__SC_EXPR_\d+__:[a-z][a-z0-9()-]*\s+&\s*$/.test(selTrim2);
       if (otherLocal && !isCssHelperPlaceholder && isReverseSelectorPattern) {
         // Extract the pseudo from the referenced component selector (e.g., `:hover` from `__SC_EXPR_0__:hover &`)
         const reversePseudoMatch = rule.selector.match(/__SC_EXPR_\d+__(:[a-z-]+(?:\([^)]*\))?)/i);
