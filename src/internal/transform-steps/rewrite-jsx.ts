@@ -64,13 +64,8 @@ export function rewriteJsxStep(ctx: TransformContext): StepResult {
     }
 
     // Preserve as a wrapper component for polymorphic/forwarded-as cases.
-    if (decl.needsWrapperComponent) {
-      continue;
-    }
-
-    // If we emitted a wrapper for this decl, keep JSX usage as `<Decl ... />`.
-    // Inline substitution (`<Decl>` -> `<tag>`) is only valid when the styled declaration
-    // is removed and there is no wrapper component boundary to preserve.
+    // forwardedAs is converted to `as` in preflight and forwarded to the wrapped component
+    // (matching styled-components semantics where forwardedAs enables polymorphic rendering).
     if (decl.needsWrapperComponent) {
       continue;
     }

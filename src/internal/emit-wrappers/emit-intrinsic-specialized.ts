@@ -4,6 +4,7 @@
  * These handle attribute-driven behavior or wrapper-specific style conditions
  * that need bespoke AST output rather than the generic wrapper paths.
  */
+import type { JSCodeshift } from "jscodeshift";
 import type { StyledDecl } from "../transform-types.js";
 import type { ExpressionKind } from "./types.js";
 import { withLeadingComments } from "./comments.js";
@@ -67,6 +68,15 @@ export function emitInputWrappers(ctx: EmitIntrinsicContext): void {
                 "&&",
                 j.binaryExpression("===", j.identifier("type"), j.literal("radio")),
                 j.memberExpression(j.identifier(stylesIdentifier), j.identifier(aw.radioKey)),
+              ),
+            ]
+          : []),
+        ...(aw.readonlyKey
+          ? [
+              j.logicalExpression(
+                "&&",
+                j.identifier("readOnly"),
+                j.memberExpression(j.identifier(stylesIdentifier), j.identifier(aw.readonlyKey)),
               ),
             ]
           : []),
@@ -165,6 +175,18 @@ export function emitInputWrappers(ctx: EmitIntrinsicContext): void {
                   }
                 ` as any),
       );
+
+      // Post-process: add readOnly destructuring and JSX props when [readonly] is used.
+      // Note: [disabled] stays as a StyleX :disabled pseudo-class (semantically equivalent),
+      // but [readonly] must be a JS conditional because CSS :read-only is too broad.
+      const extraInputProps: string[] = [];
+      if (aw.readonlyKey) {
+        extraInputProps.push("readOnly");
+      }
+      if (extraInputProps.length > 0) {
+        const lastEmitted = emitted[emitted.length - 1] as any;
+        injectExtraInputProps(j, lastEmitted, extraInputProps);
+      }
     }
   }
 }
@@ -524,6 +546,94 @@ export function emitEnumVariantWrappers(ctx: EmitIntrinsicContext): void {
           d,
         ),
       );
+    }
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Post-processing helpers
+// ---------------------------------------------------------------------------
+
+/**
+ * Inject extra destructured props (e.g., `disabled`, `readOnly`) into an
+ * input wrapper function's parameter destructuring and JSX element.
+ *
+ * Modifies the AST in-place:
+ *   Destructuring: `{ type, ...rest }` → `{ type, disabled, readOnly, ...rest }`
+ *   JSX: `<input type={type} {...rest}>` → `<input type={type} disabled={disabled} readOnly={readOnly} {...rest}>`
+ */
+function injectExtraInputProps(j: JSCodeshift, fnDecl: unknown, extraProps: string[]): void {
+  if (!fnDecl || typeof fnDecl !== "object") {
+    return;
+  }
+
+  const queue: unknown[] = [fnDecl];
+  while (queue.length > 0) {
+    const node = queue.pop();
+    if (!node || typeof node !== "object") {
+      continue;
+    }
+    if (Array.isArray(node)) {
+      for (const item of node) {
+        queue.push(item);
+      }
+      continue;
+    }
+
+    const n = node as Record<string, unknown>;
+
+    // Inject into destructuring: { type, ...rest } → { type, disabled, readOnly, ...rest }
+    if (n.type === "ObjectPattern" && Array.isArray(n.properties)) {
+      const properties = n.properties as unknown[];
+      const restIdx = properties.findIndex(
+        (p: unknown) =>
+          !!p &&
+          typeof p === "object" &&
+          ((p as Record<string, unknown>).type === "RestElement" ||
+            (p as Record<string, unknown>).type === "RestProperty" ||
+            (p as Record<string, unknown>).type === "SpreadProperty"),
+      );
+      if (restIdx >= 0) {
+        const toInsert = extraProps.map((name) => {
+          const id = j.identifier(name);
+          const prop = j.property("init", id, id);
+          (prop as unknown as Record<string, unknown>).shorthand = true;
+          return prop;
+        });
+        properties.splice(restIdx, 0, ...toInsert);
+      }
+    }
+
+    // Inject JSX attributes: <input type={type} {...rest}> → <input type={type} disabled={disabled} readOnly={readOnly} {...rest}>
+    if (n.type === "JSXOpeningElement" && Array.isArray(n.attributes)) {
+      const nameNode = n.name as Record<string, unknown> | undefined;
+      const tagName = nameNode?.type === "JSXIdentifier" ? String(nameNode.name) : "";
+      if (tagName === "input" || tagName === "Component") {
+        const attrs = n.attributes as unknown[];
+        // Find the first spread attribute position
+        const spreadIdx = attrs.findIndex(
+          (a: unknown) =>
+            !!a &&
+            typeof a === "object" &&
+            (a as Record<string, unknown>).type === "JSXSpreadAttribute",
+        );
+        const insertIdx = spreadIdx >= 0 ? spreadIdx : attrs.length;
+        const toInsert = extraProps.map((name) =>
+          j.jsxAttribute(j.jsxIdentifier(name), j.jsxExpressionContainer(j.identifier(name))),
+        );
+        attrs.splice(insertIdx, 0, ...toInsert);
+      }
+    }
+
+    // Recurse
+    for (const key of Object.keys(n)) {
+      if (key === "loc" || key === "start" || key === "end" || key === "comments") {
+        continue;
+      }
+      const child = n[key];
+      if (child && typeof child === "object") {
+        queue.push(child);
+      }
     }
   }
 }

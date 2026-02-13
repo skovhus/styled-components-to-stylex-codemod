@@ -13,7 +13,9 @@ import { TransformContext } from "../transform-context.js";
 export function preflight(ctx: TransformContext): StepResult {
   const { j, root } = ctx;
 
-  // `forwardedAs` is styled-components-specific; in StyleX output we standardize on `as`.
+  // `forwardedAs` is styled-components-specific; normalize to `as` so it doesn't
+  // leak to the DOM as an invalid attribute. The `as` prop enables polymorphic rendering
+  // on the wrapped component (matching styled-components semantics).
   root
     .find(j.JSXAttribute, { name: { type: "JSXIdentifier", name: "forwardedAs" } })
     .forEach((p: ASTPath<JSXAttribute>) => {

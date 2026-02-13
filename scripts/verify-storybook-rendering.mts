@@ -52,11 +52,13 @@ interface TestResult {
 // Remove entries as the underlying codemod issues are fixed.
 // ---------------------------------------------------------------------------
 const EXPECTED_FAILURES = new Set([
+  // forwardedAs forwards polymorphism to the wrapped component (renders as <a> instead
+  // of <button>), matching styled-components semantics but producing different element types
   "asProp-forwarded",
-  "conditional-emptyStringBranch",
+  // Subpixel text antialiasing differences: all computed styles are identical between
+  // input and output, but different CSS class names cause microscopic rendering diffs.
   "conditional-negation",
   "keyframes-unionComplexity",
-  "selector-attribute",
 ]);
 
 type Page = Awaited<ReturnType<Awaited<ReturnType<typeof chromium.launch>>["newPage"]>>;
@@ -69,6 +71,7 @@ const cliArgs = process.argv.slice(2);
 let onlyChanged = false;
 let saveDiffs = false;
 let threshold = 0.1;
+const mismatchTolerance = 0; // strict pixel-level comparison; subpixel diffs go in EXPECTED_FAILURES
 let concurrency = 6;
 const explicitCases: string[] = [];
 
@@ -271,11 +274,12 @@ async function compareRenderedPanels(
     threshold,
   });
 
-  if (mismatchCount === 0) {
+  const totalPixels = width * height;
+
+  if (mismatchCount === 0 || mismatchCount / totalPixels <= mismatchTolerance) {
     return null;
   }
 
-  const totalPixels = width * height;
   const pct = ((mismatchCount / totalPixels) * 100).toFixed(1);
 
   return {

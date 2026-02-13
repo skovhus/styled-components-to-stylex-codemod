@@ -2134,3 +2134,196 @@ export const App = () => <Badge>Hello</Badge>;
     expect(result.code).toBeNull();
   });
 });
+
+describe("attribute selector handling", () => {
+  it("should bail on [readonly] for non-input elements like textarea", () => {
+    // Regression: [readonly] attribute selector was recognized by parseAttributeSelectorInternal
+    // for ALL elements, but the attrWrapper pattern only supports <input>. For non-input
+    // elements, the readonly styles fell through unconditionally into the base style object.
+    const source = `
+import styled from "styled-components";
+
+const TextArea = styled.textarea\`
+  padding: 8px;
+  font-size: 14px;
+
+  &[readonly] {
+    background: #fafafa;
+    border-style: dashed;
+  }
+\`;
+
+export const App = () => <TextArea />;
+`;
+    const result = transformWithWarnings(
+      { source, path: "test.tsx" },
+      { jscodeshift: j, j, stats: () => {}, report: () => {} },
+      { adapter: fixtureAdapter },
+    );
+    // Should bail — [readonly] on textarea is an unsupported attribute selector
+    expect(result.code).toBeNull();
+  });
+
+  it("should handle [readonly] correctly on input elements as JS prop conditional", () => {
+    // [readonly] on <input> should produce a separate style object applied via readOnly prop,
+    // NOT a :read-only pseudo-class (which matches too broadly: disabled, checkbox, radio).
+    const source = `
+import styled from "styled-components";
+
+const Input = styled.input\`
+  padding: 8px;
+
+  &[readonly] {
+    background: #fafafa;
+  }
+\`;
+
+export const App = () => <Input readOnly value="test" />;
+`;
+    const result = transformWithWarnings(
+      { source, path: "test.tsx" },
+      { jscodeshift: j, j, stats: () => {}, report: () => {} },
+      { adapter: fixtureAdapter },
+    );
+    expect(result.code).not.toBeNull();
+    // Should use JS conditional, not :read-only pseudo-class
+    expect(result.code).toContain("readOnly && styles.inputReadonly");
+    expect(result.code).not.toContain(":read-only");
+  });
+
+  it("should normalize shorthand/longhand conflicts in readonly style objects", () => {
+    // Regression: readonlyKey was missing from collectComponentStyleKeys, so shorthand
+    // declarations in [readonly] blocks were not expanded when conflicting with base longhands.
+    const source = `
+import styled from "styled-components";
+
+const Input = styled.input\`
+  padding: 8px 12px;
+
+  &[readonly] {
+    padding: 0;
+    background: #fafafa;
+  }
+\`;
+
+export const App = () => <Input readOnly value="test" />;
+`;
+    const result = transformWithWarnings(
+      { source, path: "test.tsx" },
+      { jscodeshift: j, j, stats: () => {}, report: () => {} },
+      { adapter: fixtureAdapter },
+    );
+    expect(result.code).not.toBeNull();
+    // The base has paddingBlock/paddingInline (from "8px 12px").
+    // The readonly block has padding: 0 which should be expanded to match.
+    expect(result.code).toContain("paddingBlock");
+    expect(result.code).toContain("paddingInline");
+    // The readonly style should NOT have the shorthand "padding" since it conflicts
+    // with the base's paddingBlock/paddingInline longhands.
+    const readonlyMatch = result.code!.match(/inputReadonly:\s*\{([^}]+)\}/);
+    expect(readonlyMatch).toBeTruthy();
+    const readonlyBlock = readonlyMatch![1]!;
+    // Should have expanded longhands, not shorthand
+    expect(readonlyBlock).not.toMatch(/\bpadding\b(?!Block|Inline)/);
+    expect(readonlyBlock).toContain("paddingBlock");
+    expect(readonlyBlock).toContain("paddingInline");
+  });
+});
+
+describe("shorthand/longhand normalization edge cases", () => {
+  it("should expand 2-value physical conflict to 4 physical longhands, not logical", () => {
+    // Regression: splitDirectionalProperty returns logical Block/Inline for 2-value shorthands
+    // even when alwaysExpand is true, but when there's a physical conflict (e.g., marginBottom),
+    // we need physical longhands (marginTop/Right/Bottom/Left).
+    const source = `
+import styled from "styled-components";
+
+const Box = styled.div<{ $wide?: boolean }>\`
+  margin-bottom: 8px;
+  \${(p) => p.$wide ? "" : "margin: 8px 16px;"}
+\`;
+
+export const App = () => <Box>test</Box>;
+`;
+    const result = transformWithWarnings(
+      { source, path: "test.tsx" },
+      { jscodeshift: j, j, stats: () => {}, report: () => {} },
+      { adapter: fixtureAdapter },
+    );
+    expect(result.code).not.toBeNull();
+    // The base has marginBottom (physical). The conditional has margin: 8px 16px (2-value).
+    // The expansion should produce 4 physical longhands, not logical Block/Inline.
+    expect(result.code).toContain("marginTop");
+    expect(result.code).toContain("marginRight");
+    expect(result.code).toContain("marginBottom");
+    expect(result.code).toContain("marginLeft");
+    // Should NOT contain logical longhands (which is what splitDirectionalProperty
+    // returns for 2-value shorthands)
+    expect(result.code).not.toContain("marginBlock");
+    expect(result.code).not.toContain("marginInline");
+  });
+
+  it("should split multi-value shorthands before logical block/inline assignment", () => {
+    // Regression: logical expansion path assigned the entire multi-value string to both
+    // Block and Inline, e.g., paddingBlock: "8px 12px", paddingInline: "8px 12px"
+    // instead of paddingBlock: "8px", paddingInline: "12px".
+    const source = `
+import styled from "styled-components";
+
+const Input = styled.input\`
+  padding-block: 4px;
+  \${(p) => p.readOnly ? "" : "padding: 8px 12px;"}
+\`;
+
+export const App = () => <Input />;
+`;
+    const result = transformWithWarnings(
+      { source, path: "test.tsx" },
+      { jscodeshift: j, j, stats: () => {}, report: () => {} },
+      { adapter: fixtureAdapter },
+    );
+    expect(result.code).not.toBeNull();
+    // The base has paddingBlock (logical). The conditional has padding: 8px 12px.
+    // The expansion should split: paddingBlock: "8px", paddingInline: "12px"
+    expect(result.code).toContain('paddingBlock: "8px"');
+    expect(result.code).toContain('paddingInline: "12px"');
+    // Should NOT have the unsplit value
+    expect(result.code).not.toContain('"8px 12px"');
+  });
+});
+
+describe("forwardedAs prop handling", () => {
+  it("should convert forwardedAs to as and forward polymorphism to wrapped component", () => {
+    // forwardedAs is a styled-components prop that forwards `as` to the wrapped component,
+    // enabling polymorphic rendering. In the transformed output, forwardedAs should become
+    // `as` so the wrapper function can forward it to the inner component.
+    const source = `
+import styled from "styled-components";
+
+const Button = styled.button\`
+  color: white;
+  background: blue;
+\`;
+
+const ButtonWrapper = styled(Button)\`
+  box-shadow: 0 2px 4px rgba(0,0,0,0.2);
+\`;
+
+export const App = () => (
+  <div>
+    <ButtonWrapper forwardedAs="a" href="#">Link</ButtonWrapper>
+  </div>
+);
+`;
+    const result = transformWithWarnings(
+      { source, path: "test.tsx" },
+      { jscodeshift: j, j, stats: () => {}, report: () => {} },
+      { adapter: fixtureAdapter },
+    );
+    expect(result.code).not.toBeNull();
+    // forwardedAs should be converted to as (not leak as raw forwardedAs)
+    expect(result.code).not.toContain("forwardedAs");
+    // The converted as="a" should be preserved so polymorphism works
+    expect(result.code).toContain('as="a"');
+  });
+});
