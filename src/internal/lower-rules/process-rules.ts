@@ -444,6 +444,19 @@ export function processDeclRules(ctx: DeclProcessingState): void {
     let attrTarget: Record<string, unknown> | null = null;
     let attrPseudoElement: string | null = null;
 
+    // Bail when an attribute selector is recognized but the element type doesn't
+    // support attr wrappers (e.g., [readonly] on <textarea>). Without this check,
+    // the declarations would fall through unconditionally into the base style object.
+    if (attrSel && !attrWrapperKind) {
+      state.markBail();
+      warnings.push({
+        severity: "warning",
+        type: "Unsupported selector: attribute selector on unsupported element",
+        loc: computeSelectorWarningLoc(decl.loc, decl.rawCss, rule.selector),
+      });
+      break;
+    }
+
     if (isAttrRule && attrSel && attrWrapperKind) {
       decl.needsWrapperComponent = true;
       decl.attrWrapper ??= { kind: attrWrapperKind };

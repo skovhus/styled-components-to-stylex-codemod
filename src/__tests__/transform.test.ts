@@ -2134,3 +2134,98 @@ export const App = () => <Badge>Hello</Badge>;
     expect(result.code).toBeNull();
   });
 });
+
+describe("attribute selector handling", () => {
+  it("should bail on [readonly] for non-input elements like textarea", () => {
+    // Regression: [readonly] attribute selector was recognized by parseAttributeSelectorInternal
+    // for ALL elements, but the attrWrapper pattern only supports <input>. For non-input
+    // elements, the readonly styles fell through unconditionally into the base style object.
+    const source = `
+import styled from "styled-components";
+
+const TextArea = styled.textarea\`
+  padding: 8px;
+  font-size: 14px;
+
+  &[readonly] {
+    background: #fafafa;
+    border-style: dashed;
+  }
+\`;
+
+export const App = () => <TextArea />;
+`;
+    const result = transformWithWarnings(
+      { source, path: "test.tsx" },
+      { jscodeshift: j, j, stats: () => {}, report: () => {} },
+      { adapter: fixtureAdapter },
+    );
+    // Should bail — [readonly] on textarea is an unsupported attribute selector
+    expect(result.code).toBeNull();
+  });
+
+  it("should handle [readonly] correctly on input elements as JS prop conditional", () => {
+    // [readonly] on <input> should produce a separate style object applied via readOnly prop,
+    // NOT a :read-only pseudo-class (which matches too broadly: disabled, checkbox, radio).
+    const source = `
+import styled from "styled-components";
+
+const Input = styled.input\`
+  padding: 8px;
+
+  &[readonly] {
+    background: #fafafa;
+  }
+\`;
+
+export const App = () => <Input readOnly value="test" />;
+`;
+    const result = transformWithWarnings(
+      { source, path: "test.tsx" },
+      { jscodeshift: j, j, stats: () => {}, report: () => {} },
+      { adapter: fixtureAdapter },
+    );
+    expect(result.code).not.toBeNull();
+    // Should use JS conditional, not :read-only pseudo-class
+    expect(result.code).toContain("readOnly && styles.inputReadonly");
+    expect(result.code).not.toContain(":read-only");
+  });
+
+  it("should normalize shorthand/longhand conflicts in readonly style objects", () => {
+    // Regression: readonlyKey was missing from collectComponentStyleKeys, so shorthand
+    // declarations in [readonly] blocks were not expanded when conflicting with base longhands.
+    const source = `
+import styled from "styled-components";
+
+const Input = styled.input\`
+  padding: 8px 12px;
+
+  &[readonly] {
+    padding: 0;
+    background: #fafafa;
+  }
+\`;
+
+export const App = () => <Input readOnly value="test" />;
+`;
+    const result = transformWithWarnings(
+      { source, path: "test.tsx" },
+      { jscodeshift: j, j, stats: () => {}, report: () => {} },
+      { adapter: fixtureAdapter },
+    );
+    expect(result.code).not.toBeNull();
+    // The base has paddingBlock/paddingInline (from "8px 12px").
+    // The readonly block has padding: 0 which should be expanded to match.
+    expect(result.code).toContain("paddingBlock");
+    expect(result.code).toContain("paddingInline");
+    // The readonly style should NOT have the shorthand "padding" since it conflicts
+    // with the base's paddingBlock/paddingInline longhands.
+    const readonlyMatch = result.code!.match(/inputReadonly:\s*\{([^}]+)\}/);
+    expect(readonlyMatch).toBeTruthy();
+    const readonlyBlock = readonlyMatch![1]!;
+    // Should have expanded longhands, not shorthand
+    expect(readonlyBlock).not.toMatch(/\bpadding\b(?!Block|Inline)/);
+    expect(readonlyBlock).toContain("paddingBlock");
+    expect(readonlyBlock).toContain("paddingInline");
+  });
+});

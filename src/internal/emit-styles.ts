@@ -824,6 +824,9 @@ function collectComponentStyleKeys(decl: StyledDecl): string[] {
     if (aw.radioKey) {
       keys.push(aw.radioKey);
     }
+    if (aw.readonlyKey) {
+      keys.push(aw.readonlyKey);
+    }
     if (aw.externalKey) {
       keys.push(aw.externalKey);
     }
