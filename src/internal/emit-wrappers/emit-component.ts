@@ -6,7 +6,12 @@ import type { ASTNode, Property } from "jscodeshift";
 import type { StyledDecl } from "../transform-types.js";
 import { emitStyleMerging } from "./style-merger.js";
 import { withLeadingComments } from "./comments.js";
-import { collectInlineStylePropNames, type ExpressionKind, type InlineStyleProp } from "./types.js";
+import {
+  collectInlineStylePropNames,
+  type ExpressionKind,
+  type InlineStyleProp,
+  type WrapperPropDefaults,
+} from "./types.js";
 import type { JsxAttr, JsxTagName, StatementKind, WrapperEmitter } from "./wrapper-emitter.js";
 import {
   getAttrsAsString,
@@ -244,7 +249,7 @@ export function emitComponentWrappers(emitter: WrapperEmitter): {
     // Track props that need to be destructured for conditional styles
     const destructureProps: string[] = [];
     // Track default values for props (used for destructuring defaults on optional props)
-    const propDefaults = new Map<string, string>();
+    const propDefaults: WrapperPropDefaults = new Map();
     // Track namespace boolean props (like 'disabled') that need to be passed to wrapped component
     const namespaceBooleanProps: string[] = [];
 

@@ -6,7 +6,12 @@
  */
 import type { JSCodeshift } from "jscodeshift";
 import type { StyledDecl } from "../transform-types.js";
-import { collectInlineStylePropNames, type ExpressionKind, type InlineStyleProp } from "./types.js";
+import {
+  collectInlineStylePropNames,
+  type ExpressionKind,
+  type InlineStyleProp,
+  type WrapperPropDefaults,
+} from "./types.js";
 import type { JsxAttr, StatementKind } from "./wrapper-emitter.js";
 import { emitStyleMerging } from "./style-merger.js";
 import { sortVariantEntriesBySpecificity, VOID_TAGS } from "./type-helpers.js";
@@ -223,13 +228,13 @@ export function emitSimpleWithConfigWrappers(ctx: EmitIntrinsicContext): void {
       ];
       // When a defaultAttr prop is also used in a style conditional,
       // add a destructuring default so the condition sees the resolved value.
-      const minimalPropDefaults = new Map<string, string>();
+      const minimalPropDefaults: WrapperPropDefaults = new Map();
       for (const attr of d.attrsInfo?.defaultAttrs ?? []) {
         if (
           destructureProps.includes(attr.jsxProp) &&
           (typeof attr.value === "string" || typeof attr.value === "number")
         ) {
-          minimalPropDefaults.set(attr.jsxProp, `${attr.value}`);
+          minimalPropDefaults.set(attr.jsxProp, attr.value);
         }
       }
       emitted.push(
@@ -633,7 +638,7 @@ export function emitSimpleExportedIntrinsicWrappers(ctx: EmitIntrinsicContext): 
 
     const destructureProps: string[] = [];
     // Track default values for props (for destructuring defaults)
-    const propDefaults = new Map<string, string>();
+    const propDefaults: WrapperPropDefaults = new Map();
 
     // Add adapter-resolved StyleX styles (emitted directly into stylex.props args).
     if (d.extraStylexPropsArgs) {
@@ -697,7 +702,7 @@ export function emitSimpleExportedIntrinsicWrappers(ctx: EmitIntrinsicContext): 
         destructureProps.includes(attr.jsxProp) &&
         (typeof attr.value === "string" || typeof attr.value === "number")
       ) {
-        propDefaults.set(attr.jsxProp, `${attr.value}`);
+        propDefaults.set(attr.jsxProp, attr.value);
       }
     }
 

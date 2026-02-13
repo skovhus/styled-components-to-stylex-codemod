@@ -5,7 +5,11 @@
  * wrapper functions so the chosen element type drives allowed props.
  */
 import type { StyledDecl } from "../transform-types.js";
-import { collectInlineStylePropNames, type ExpressionKind } from "./types.js";
+import {
+  collectInlineStylePropNames,
+  type ExpressionKind,
+  type WrapperPropDefaults,
+} from "./types.js";
 import type { JsxAttr, StatementKind } from "./wrapper-emitter.js";
 import { emitStyleMerging } from "./style-merger.js";
 import { sortVariantEntriesBySpecificity, VOID_TAGS } from "./type-helpers.js";
@@ -99,7 +103,7 @@ export function emitIntrinsicPolymorphicWrappers(ctx: EmitIntrinsicContext): voi
       // Track props that need to be destructured for variant styles
       const destructureProps: string[] = [];
       // Track default values for props (for destructuring defaults)
-      const propDefaults = new Map<string, string>();
+      const propDefaults: WrapperPropDefaults = new Map();
 
       // Collect keys used by compound variants (they're handled separately)
       const compoundVariantKeys = new Set<string>();
@@ -215,7 +219,7 @@ export function emitIntrinsicPolymorphicWrappers(ctx: EmitIntrinsicContext): voi
             // Add variant props to destructuring (with defaults when available)
             ...destructureProps.filter(Boolean).map((name) => {
               const defaultVal = propDefaults.get(name);
-              if (defaultVal) {
+              if (defaultVal !== undefined) {
                 // Create property with default: { name = "defaultValue" }
                 return j.property.from({
                   kind: "init",

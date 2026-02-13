@@ -9,7 +9,7 @@
 import type { JSCodeshift } from "jscodeshift";
 import type { StyledDecl, VariantDimension } from "../transform-types.js";
 import { buildStyleFnConditionExpr, collectIdentifiers } from "../utilities/jscodeshift-utils.js";
-import type { ExpressionKind } from "./types.js";
+import type { ExpressionKind, WrapperPropDefaults } from "./types.js";
 import { collectConditionProps, makeConditionalStyleExpr } from "./variant-condition.js";
 import type { WrapperEmitter } from "./wrapper-emitter.js";
 
@@ -106,7 +106,7 @@ export function buildVariantDimensionLookups(
     dimensions: VariantDimension[];
     styleArgs: ExpressionKind[];
     destructureProps?: string[];
-    propDefaults?: Map<string, string>;
+    propDefaults?: WrapperPropDefaults;
     namespaceBooleanProps?: string[];
   },
 ): void {

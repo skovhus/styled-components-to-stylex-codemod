@@ -32,6 +32,7 @@ import { extname, join } from "node:path";
 import pixelmatch from "pixelmatch";
 import { chromium } from "playwright";
 import { PNG } from "pngjs";
+import { DEFAULT_CONCURRENCY, normalizeConcurrency } from "./verify-storybook-rendering-utils.mts";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -72,7 +73,7 @@ let onlyChanged = false;
 let saveDiffs = false;
 let threshold = 0.1;
 const mismatchTolerance = 0; // strict pixel-level comparison; subpixel diffs go in EXPECTED_FAILURES
-let concurrency = 6;
+let concurrency = DEFAULT_CONCURRENCY;
 const explicitCases: string[] = [];
 
 for (let i = 0; i < cliArgs.length; i++) {
@@ -89,6 +90,14 @@ for (let i = 0; i < cliArgs.length; i++) {
     explicitCases.push(arg);
   }
 }
+
+const normalizedConcurrency = normalizeConcurrency(concurrency);
+if (normalizedConcurrency !== concurrency) {
+  console.warn(
+    `Invalid --concurrency value (${String(concurrency)}); using ${normalizedConcurrency} instead.`,
+  );
+}
+concurrency = normalizedConcurrency;
 
 // ---------------------------------------------------------------------------
 // Discover test cases
@@ -476,12 +485,15 @@ if (saveDiffs) {
   mkdirSync(diffsDir, { recursive: true });
 }
 
-const workerCount = Math.min(concurrency, testCases.length);
+const workerCount = Math.max(1, Math.min(concurrency, testCases.length));
 const workerPages = await Promise.all(Array.from({ length: workerCount }, () => context.newPage()));
 
 // Warm up the first page so the JS bundle is cached for all workers.
 // Subsequent navigations by other pages will hit the browser's disk/memory cache.
-const warmupPage = workerPages[0]!;
+const warmupPage = workerPages[0];
+if (!warmupPage) {
+  throw new Error("Failed to initialize rendering workers.");
+}
 await warmupPage.goto(`${baseUrl}/iframe.html?id=test-cases--all&viewMode=story`, {
   waitUntil: "load",
   timeout: 30_000,

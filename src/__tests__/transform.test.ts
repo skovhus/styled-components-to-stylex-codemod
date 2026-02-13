@@ -1910,6 +1910,32 @@ export const App = () => <Box />;
     // Should NOT use destructuring default for this pattern
     expect(result.code).not.toMatch(/tabIndex:\s*tabIndex\s*=\s*0/);
   });
+
+  it("should preserve numeric-looking string defaults in destructured attrs props", () => {
+    // Regression test: defaults like "01" must stay strings when emitted as
+    // destructuring defaults, otherwise strict comparisons and prop types can change.
+    const source = `
+import styled from "styled-components";
+
+const Box = styled.div.attrs((props) => ({
+  role: props.role ?? "01",
+}))<{ role?: string }>\`
+  color: \${(props) => props.role === "01" ? "red" : "blue"};
+\`;
+
+export const App = () => <Box />;
+`;
+
+    const result = transformWithWarnings(
+      { source, path: "attrs-string-default.tsx" },
+      { jscodeshift: j, j, stats: () => {}, report: () => {} },
+      { adapter: fixtureAdapter },
+    );
+
+    expect(result.code).not.toBeNull();
+    expect(result.code).toContain('role = "01"');
+    expect(result.code).not.toContain("role = 1");
+  });
 });
 
 describe("theme boolean conditionals", () => {
