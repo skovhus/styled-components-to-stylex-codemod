@@ -5,26 +5,6 @@ body{font-family:-apple-system,BlinkMacSystemFont,Segoe UI,Roboto,Helvetica Neue
   inherits: false
 }
 
-@property --x-top {
-  syntax: "*";
-  inherits: false
-}
-
-@property --x-right {
-  syntax: "*";
-  inherits: false
-}
-
-@property --x-bottom {
-  syntax: "*";
-  inherits: false
-}
-
-@property --x-left {
-  syntax: "*";
-  inherits: false
-}
-
 @property --x-backgroundColor {
   syntax: "*";
   inherits: false
@@ -45,12 +25,32 @@ body{font-family:-apple-system,BlinkMacSystemFont,Segoe UI,Roboto,Helvetica Neue
   inherits: false
 }
 
-@property --x-zIndex {
+@property --x-top {
+  syntax: "*";
+  inherits: false
+}
+
+@property --x-right {
+  syntax: "*";
+  inherits: false
+}
+
+@property --x-bottom {
+  syntax: "*";
+  inherits: false
+}
+
+@property --x-left {
   syntax: "*";
   inherits: false
 }
 
 @property --x-maxWidth {
+  syntax: "*";
+  inherits: false
+}
+
+@property --x-zIndex {
   syntax: "*";
   inherits: false
 }
@@ -425,14 +425,16 @@ body{font-family:-apple-system,BlinkMacSystemFont,Segoe UI,Roboto,Helvetica Neue
   .x1wk2j8l.x1wk2j8l:not(#\#) {
     padding: 2.5rem;
   }
-
-  .x1i7j8g4.x1i7j8g4:not(#\#) {
-    padding: 2rem;
-  }
 }
 
 @media (width >= 768px) and (width <= 1023.99px) {
   .x1t32qvz.x1t32qvz:not(#\#) {
+    padding: 2rem;
+  }
+}
+
+@media (width >= 1024px) {
+  .x1i7j8g4.x1i7j8g4:not(#\#) {
     padding: 2rem;
   }
 }
