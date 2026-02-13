@@ -6,16 +6,30 @@ import type { JSCodeshift } from "jscodeshift";
 import { isAstNode } from "../utilities/jscodeshift-utils.js";
 import type { ExpressionKind } from "./decl-types.js";
 import { literalToAst } from "../transform/helpers.js";
+import type { RelationOverride } from "./state.js";
 
 export const finalizeRelationOverrides = (args: {
   j: JSCodeshift;
   relationOverridePseudoBuckets: Map<string, Map<string | null, Record<string, unknown>>>;
+  relationOverrides: RelationOverride[];
   resolvedStyleObjects: Map<string, unknown>;
   makeCssPropKey: (j: JSCodeshift, prop: string) => ExpressionKind;
 }): void => {
-  const { j, relationOverridePseudoBuckets, resolvedStyleObjects, makeCssPropKey } = args;
+  const {
+    j,
+    relationOverridePseudoBuckets,
+    relationOverrides,
+    resolvedStyleObjects,
+    makeCssPropKey,
+  } = args;
   if (relationOverridePseudoBuckets.size === 0) {
     return;
+  }
+
+  // Build a lookup from override key → child style key for base value resolution
+  const overrideToChildKey = new Map<string, string>();
+  for (const o of relationOverrides) {
+    overrideToChildKey.set(o.overrideStyleKey, o.childStyleKey);
   }
 
   const makeAncestorKey = (pseudo: string) =>
@@ -34,6 +48,17 @@ export const finalizeRelationOverrides = (args: {
     const baseBucket = pseudoBuckets.get(null) ?? {};
     const props: any[] = [];
 
+    // Look up the child's resolved style object for fallback base values.
+    // This handles the case where the reverse selector rule is processed before
+    // the child's base declaration (CSS ordering), so styleObj[prop] was still
+    // empty at snapshot time.
+    const childStyleKey = overrideToChildKey.get(overrideKey);
+    const childStyleObj = childStyleKey ? resolvedStyleObjects.get(childStyleKey) : null;
+    const childStylePlain =
+      childStyleObj && typeof childStyleObj === "object" && !isAstNode(childStyleObj)
+        ? (childStyleObj as Record<string, unknown>)
+        : null;
+
     // Collect all property names across all pseudo buckets
     const allPropNames = new Set<string>();
     for (const bucket of pseudoBuckets.values()) {
@@ -43,7 +68,12 @@ export const finalizeRelationOverrides = (args: {
     }
 
     for (const prop of allPropNames) {
-      const baseVal = (baseBucket as Record<string, unknown>)[prop];
+      // Resolve base value: prefer explicit base bucket, then child's resolved style
+      let baseVal = (baseBucket as Record<string, unknown>)[prop];
+      if (baseVal === undefined && childStylePlain) {
+        baseVal = childStylePlain[prop];
+      }
+
       // Collect pseudo values for this property
       const pseudoValues: Array<{ pseudo: string; value: unknown }> = [];
       for (const [pseudo, bucket] of pseudoBuckets.entries()) {

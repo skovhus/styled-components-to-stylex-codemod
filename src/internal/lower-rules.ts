@@ -63,6 +63,7 @@ export function lowerRules(ctx: TransformContext): {
     finalizeRelationOverrides({
       j: state.j,
       relationOverridePseudoBuckets: state.relationOverridePseudoBuckets,
+      relationOverrides: state.relationOverrides,
       resolvedStyleObjects: state.resolvedStyleObjects,
       makeCssPropKey,
     });
