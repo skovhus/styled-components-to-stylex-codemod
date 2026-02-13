@@ -1,0 +1,1 @@
+import{j as i}from"./index-CHeaNO06.js";const e=()=>i.jsx("div",{style:{display:"flex",gap:16,padding:16},children:i.jsx("div",{className:"xju2f9n xe8ttls",children:"High specificity text (blue due to &&&, with padding)"})});export{e as App};
