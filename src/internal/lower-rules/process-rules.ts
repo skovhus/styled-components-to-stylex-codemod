@@ -259,10 +259,17 @@ export function processDeclRules(ctx: DeclProcessingState): void {
 
       // `${Other}:pseudo &` (self reacting to ancestor component state)
       const inverseComponentMatch = selTrim2.match(
-        /^__SC_EXPR_\d+__(:[a-z-]+(?:\([^)]*\))?)?\s*&$/i,
+        /^__SC_EXPR_\d+__((?::[a-z-]+(?:\([^)]*\))?)*)\s*&$/i,
       );
       if (otherLocal && !isCssHelperPlaceholder && inverseComponentMatch) {
-        const ancestorPseudo = inverseComponentMatch[1] ?? null;
+        const pseudoChain = inverseComponentMatch[1] ?? "";
+        const pseudoMatches = pseudoChain.match(/:[a-z-]+(?:\([^)]*\))?/gi) ?? [];
+        if (pseudoMatches.length > 1) {
+          // Chained pseudos on inverse component selectors are currently unsupported.
+          bailUnknownComponentSelector();
+          break;
+        }
+        const ancestorPseudo = pseudoMatches[0] ?? null;
         const parentDecl = declByLocalName.get(otherLocal);
         if (!parentDecl) {
           bailUnknownComponentSelector();

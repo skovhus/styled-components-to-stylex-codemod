@@ -148,6 +148,18 @@ export function postProcessTransformedAst(args: {
       if (typeof value !== "object") {
         return;
       }
+      if (
+        value.type === "ArrowFunctionExpression" ||
+        value.type === "FunctionExpression" ||
+        value.type === "FunctionDeclaration" ||
+        value.type === "ObjectMethod" ||
+        value.type === "ClassMethod"
+      ) {
+        // Function bodies may render in non-structural paths; reset ancestor context
+        // to avoid leaking relation overrides/default markers into callback JSX.
+        visitEmbeddedJsx((value as { body?: unknown }).body, []);
+        return;
+      }
       if (value.type === "JSXElement") {
         visit(value, ancestors);
         return;
