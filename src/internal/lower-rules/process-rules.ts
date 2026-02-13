@@ -45,6 +45,123 @@ export function processDeclRules(ctx: DeclProcessingState): void {
     resolveThemeValueFromFn,
     resolveImportInScope,
   } = state;
+  type InterpolatedPart = { kind: string; value?: string; slotId?: number };
+  type ResolvedInterpolatedPart =
+    | { kind: "static"; value: string }
+    | { kind: "slot"; expr: unknown };
+  const interpolationWarningType = (expr: unknown) => {
+    const exprType =
+      expr && typeof expr === "object" ? ((expr as { type?: unknown }).type ?? null) : null;
+    if (exprType === "ArrowFunctionExpression" || exprType === "FunctionExpression") {
+      return "Unsupported interpolation: arrow function" as const;
+    }
+    if (exprType === "CallExpression") {
+      return "Unsupported interpolation: call expression" as const;
+    }
+    if (exprType === "Identifier") {
+      return "Unsupported interpolation: identifier" as const;
+    }
+    if (exprType === "MemberExpression" || exprType === "OptionalMemberExpression") {
+      return "Unsupported interpolation: member expression" as const;
+    }
+    return "Unsupported interpolation: unknown" as const;
+  };
+  const resolveThemeInterpolationExpression = (expr: unknown): unknown => {
+    const exprType =
+      expr && typeof expr === "object" ? ((expr as { type?: unknown }).type ?? null) : null;
+    if (exprType === "ArrowFunctionExpression" || exprType === "FunctionExpression") {
+      return resolveThemeValueFromFn(expr);
+    }
+    return resolveThemeValue(expr);
+  };
+  const getInterpolatedParts = (interpolatedValue: { parts?: InterpolatedPart[] }) =>
+    interpolatedValue.parts ?? [];
+  const getFirstInterpolationExpression = (interpolatedValue: {
+    parts?: InterpolatedPart[];
+  }): unknown => {
+    const firstSlot = getInterpolatedParts(interpolatedValue).find((part) => part.kind === "slot");
+    return firstSlot?.slotId !== undefined
+      ? (decl.templateExpressions[firstSlot.slotId] as unknown)
+      : null;
+  };
+  const resolveInterpolatedParts = (
+    interpolatedValue: { parts?: InterpolatedPart[] },
+    onUnresolved: (expr: unknown) => void,
+  ): ResolvedInterpolatedPart[] | null => {
+    const parts = getInterpolatedParts(interpolatedValue);
+    const resolvedParts: ResolvedInterpolatedPart[] = [];
+    let hasResolvedSlot = false;
+    for (const part of parts) {
+      if (!part) {
+        continue;
+      }
+      if (part.kind === "static") {
+        resolvedParts.push({ kind: "static", value: part.value ?? "" });
+        continue;
+      }
+      if (part.kind !== "slot" || part.slotId === undefined) {
+        onUnresolved(null);
+        return null;
+      }
+      const expr = decl.templateExpressions[part.slotId] as unknown;
+      const resolvedExpression = resolveThemeInterpolationExpression(expr);
+      if (!resolvedExpression) {
+        onUnresolved(expr);
+        return null;
+      }
+      hasResolvedSlot = true;
+      resolvedParts.push({ kind: "slot", expr: resolvedExpression });
+    }
+    if (!hasResolvedSlot) {
+      onUnresolved(null);
+      return null;
+    }
+    return resolvedParts;
+  };
+  const buildInterpolatedStyleValue = (resolvedParts: ResolvedInterpolatedPart[]): unknown => {
+    const slotExpressions: unknown[] = [];
+    for (const part of resolvedParts) {
+      if (part.kind === "slot") {
+        slotExpressions.push(part.expr);
+      }
+    }
+    const hasNonEmptyStaticParts = resolvedParts.some(
+      (part) => part.kind === "static" && part.value.length > 0,
+    );
+    if (slotExpressions.length === 1 && !hasNonEmptyStaticParts) {
+      return slotExpressions[0];
+    }
+    const quasis: any[] = [];
+    const expressions: any[] = [];
+    let currentStatic = "";
+    for (const part of resolvedParts) {
+      if (part.kind === "static") {
+        currentStatic += part.value;
+        continue;
+      }
+      quasis.push(j.templateElement({ raw: currentStatic, cooked: currentStatic }, false));
+      currentStatic = "";
+      expressions.push(part.expr);
+    }
+    quasis.push(j.templateElement({ raw: currentStatic, cooked: currentStatic }, true));
+    return j.templateLiteral(quasis, expressions);
+  };
+  const bailUnsupportedInterpolation = (selector: string, expr: unknown): void => {
+    state.markBail();
+    warnings.push({
+      severity: "warning",
+      type: interpolationWarningType(expr),
+      loc: computeSelectorWarningLoc(decl.loc, decl.rawCss, selector),
+    });
+  };
+  const bailUnsupportedSiblingCombinator = (selector: string): void => {
+    state.markBail();
+    warnings.push({
+      severity: "warning",
+      type: "Unsupported selector: sibling combinator",
+      loc: computeSelectorWarningLoc(decl.loc, decl.rawCss, selector),
+    });
+  };
 
   for (const rule of decl.rules) {
     if (state.bail) {
@@ -52,125 +169,6 @@ export function processDeclRules(ctx: DeclProcessingState): void {
     }
     // Track resolved selector media for this rule (set by adapter.resolveSelector)
     let resolvedSelectorMedia: { keyExpr: unknown; exprSource: string } | null = null;
-    const interpolationWarningType = (expr: unknown) => {
-      const exprType =
-        expr && typeof expr === "object" ? ((expr as { type?: unknown }).type ?? null) : null;
-      if (exprType === "ArrowFunctionExpression" || exprType === "FunctionExpression") {
-        return "Unsupported interpolation: arrow function" as const;
-      }
-      if (exprType === "CallExpression") {
-        return "Unsupported interpolation: call expression" as const;
-      }
-      if (exprType === "Identifier") {
-        return "Unsupported interpolation: identifier" as const;
-      }
-      if (exprType === "MemberExpression" || exprType === "OptionalMemberExpression") {
-        return "Unsupported interpolation: member expression" as const;
-      }
-      return "Unsupported interpolation: unknown" as const;
-    };
-    const bailUnsupportedInterpolation = (expr: unknown): void => {
-      state.markBail();
-      warnings.push({
-        severity: "warning",
-        type: interpolationWarningType(expr),
-        loc: computeSelectorWarningLoc(decl.loc, decl.rawCss, rule.selector),
-      });
-    };
-    const resolveThemeInterpolationExpression = (expr: unknown): unknown => {
-      const exprType =
-        expr && typeof expr === "object" ? ((expr as { type?: unknown }).type ?? null) : null;
-      if (exprType === "ArrowFunctionExpression" || exprType === "FunctionExpression") {
-        return resolveThemeValueFromFn(expr);
-      }
-      return resolveThemeValue(expr);
-    };
-    const bailUnsupportedSiblingCombinator = (): void => {
-      state.markBail();
-      warnings.push({
-        severity: "warning",
-        type: "Unsupported selector: sibling combinator",
-        loc: computeSelectorWarningLoc(decl.loc, decl.rawCss, rule.selector),
-      });
-    };
-    type InterpolatedPart = { kind: string; value?: string; slotId?: number };
-    type ResolvedInterpolatedPart =
-      | { kind: "static"; value: string }
-      | { kind: "slot"; expr: unknown };
-    const getInterpolatedParts = (interpolatedValue: { parts?: InterpolatedPart[] }) =>
-      interpolatedValue.parts ?? [];
-    const getFirstInterpolationExpression = (interpolatedValue: {
-      parts?: InterpolatedPart[];
-    }): unknown => {
-      const firstSlot = getInterpolatedParts(interpolatedValue).find(
-        (part) => part.kind === "slot",
-      );
-      return firstSlot?.slotId !== undefined
-        ? (decl.templateExpressions[firstSlot.slotId] as unknown)
-        : null;
-    };
-    const resolveInterpolatedParts = (
-      interpolatedValue: { parts?: InterpolatedPart[] },
-      onUnresolved: (expr: unknown) => void,
-    ): ResolvedInterpolatedPart[] | null => {
-      const parts = getInterpolatedParts(interpolatedValue);
-      const resolvedParts: ResolvedInterpolatedPart[] = [];
-      let hasResolvedSlot = false;
-      for (const part of parts) {
-        if (!part) {
-          continue;
-        }
-        if (part.kind === "static") {
-          resolvedParts.push({ kind: "static", value: part.value ?? "" });
-          continue;
-        }
-        if (part.kind !== "slot" || part.slotId === undefined) {
-          onUnresolved(null);
-          return null;
-        }
-        const expr = decl.templateExpressions[part.slotId] as unknown;
-        const resolvedExpression = resolveThemeInterpolationExpression(expr);
-        if (!resolvedExpression) {
-          onUnresolved(expr);
-          return null;
-        }
-        hasResolvedSlot = true;
-        resolvedParts.push({ kind: "slot", expr: resolvedExpression });
-      }
-      if (!hasResolvedSlot) {
-        onUnresolved(null);
-        return null;
-      }
-      return resolvedParts;
-    };
-    const buildInterpolatedStyleValue = (resolvedParts: ResolvedInterpolatedPart[]): unknown => {
-      const slotExpressions: unknown[] = [];
-      for (const part of resolvedParts) {
-        if (part.kind === "slot") {
-          slotExpressions.push(part.expr);
-        }
-      }
-      const hasNonEmptyStaticParts = resolvedParts.some(
-        (part) => part.kind === "static" && part.value.length > 0,
-      );
-      if (slotExpressions.length === 1 && !hasNonEmptyStaticParts) {
-        return slotExpressions[0];
-      }
-      const quasis: any[] = [];
-      const expressions: any[] = [];
-      let currentStatic = "";
-      for (const part of resolvedParts) {
-        if (part.kind === "static") {
-          currentStatic += part.value;
-          continue;
-        }
-        quasis.push(j.templateElement({ raw: currentStatic, cooked: currentStatic }, false));
-        currentStatic = "";
-        expressions.push(part.expr);
-      }
-      quasis.push(j.templateElement({ raw: currentStatic, cooked: currentStatic }, true));
-      return j.templateLiteral(quasis, expressions);
-    };
 
     // --- Unsupported complex selector detection ---
     // We bail out rather than emitting incorrect unconditional styles.
@@ -467,21 +465,21 @@ export function processDeclRules(ctx: DeclProcessingState): void {
     const parsedSelector = parseSelector(selector);
 
     if (parsedSelector.kind === "adjacentSibling") {
-      bailUnsupportedSiblingCombinator();
+      bailUnsupportedSiblingCombinator(rule.selector);
       break;
     }
 
     if (parsedSelector.kind === "generalSibling") {
       if (media || resolvedSelectorMedia) {
-        bailUnsupportedSiblingCombinator();
+        bailUnsupportedSiblingCombinator(rule.selector);
         break;
       }
-      if (parsedSelector.kind === "generalSibling" && !parsedSelector.selectorArg) {
-        bailUnsupportedSiblingCombinator();
+      if (!parsedSelector.selectorArg) {
+        bailUnsupportedSiblingCombinator(rule.selector);
         break;
       }
       if (rule.declarations.length === 0) {
-        bailUnsupportedInterpolation(null);
+        bailUnsupportedInterpolation(rule.selector, null);
         break;
       }
 
@@ -510,7 +508,7 @@ export function processDeclRules(ctx: DeclProcessingState): void {
             declaration.value.kind === "interpolated"
               ? getFirstInterpolationExpression(declaration.value as { parts?: InterpolatedPart[] })
               : null;
-          bailUnsupportedInterpolation(expr);
+          bailUnsupportedInterpolation(rule.selector, expr);
           failedSiblingInterpolation = true;
           break;
         }
@@ -528,7 +526,7 @@ export function processDeclRules(ctx: DeclProcessingState): void {
           const resolvedParts = resolveInterpolatedParts(
             declaration.value as { parts?: InterpolatedPart[] },
             (expr) => {
-              bailUnsupportedInterpolation(expr);
+              bailUnsupportedInterpolation(rule.selector, expr);
             },
           );
           if (!resolvedParts) {
