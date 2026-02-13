@@ -1,1 +1,0 @@
-import{j as n}from"./index-BxcpDfu-.js";const c=t=>n.jsx("button",{...t});function r(t){const{children:o,useRoundStyle:s,...e}=t;return n.jsx(c,{...e,...{0:{className:"xfawy5m"},1:{className:"xfawy5m xorixrz"}}[(s!==!1)<<0],children:o})}const a=()=>n.jsx(r,{children:"Icon"});export{a as App};
