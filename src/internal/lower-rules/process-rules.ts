@@ -3,6 +3,7 @@
  * Core concepts: selector normalization, attribute wrappers, and rule buckets.
  */
 import type { DeclProcessingState } from "./decl-setup.js";
+import type { CssDeclarationIR } from "../css-ir.js";
 import { computeSelectorWarningLoc } from "../css-ir.js";
 import { cssDeclarationToStylexDeclarations } from "../css-prop-mapping.js";
 import { addPropComments } from "./comments.js";
@@ -217,45 +218,22 @@ export function processDeclRules(ctx: DeclProcessingState): void {
           decl.extraStyleKeys,
         );
 
-        // Collect the override property names to populate base defaults
-        const overrideProps = new Set<string>();
-        for (const d of rule.declarations) {
-          if (d.value.kind === "static") {
-            for (const out of cssDeclarationToStylexDeclarations(d)) {
-              if (out.value.kind !== "static") {
-                continue;
-              }
-              const v = cssValueToJs(out.value, d.important, out.prop);
-              bucket[out.prop] = v;
-              overrideProps.add(out.prop);
-            }
-          } else if (d.value.kind === "interpolated" && d.property) {
-            // Handle interpolated theme values, resolving each slot independently
-            const resolveResult = resolveAllSlots(
-              d,
-              decl,
-              resolveThemeValue,
-              resolveThemeValueFromFn,
-            );
-            if (resolveResult === "bail") {
-              state.markBail();
-              warnings.push({
-                severity: "warning",
-                type: "Unsupported selector: unknown component selector",
-                loc: computeSelectorWarningLoc(decl.loc, decl.rawCss, rule.selector),
-              });
-              break;
-            }
-            if (resolveResult) {
-              for (const out of cssDeclarationToStylexDeclarations(d)) {
-                const finalValue = buildInterpolatedValue(j, d, resolveResult);
-                bucket[out.prop] = finalValue;
-                overrideProps.add(out.prop);
-              }
-            }
-          }
-        }
-        if (state.bail) {
+        const result = processDeclarationsIntoBucket(
+          rule,
+          bucket,
+          j,
+          decl,
+          resolveThemeValue,
+          resolveThemeValueFromFn,
+          { bailOnUnresolved: true },
+        );
+        if (result === "bail") {
+          state.markBail();
+          warnings.push({
+            severity: "warning",
+            type: "Unsupported selector: unknown component selector",
+            loc: computeSelectorWarningLoc(decl.loc, decl.rawCss, rule.selector),
+          });
           break;
         }
 
@@ -294,32 +272,14 @@ export function processDeclRules(ctx: DeclProcessingState): void {
             relationOverridePseudoBuckets,
           );
 
-          for (const d of rule.declarations) {
-            // Handle static values
-            if (d.value.kind === "static") {
-              for (const out of cssDeclarationToStylexDeclarations(d)) {
-                if (out.value.kind !== "static") {
-                  continue;
-                }
-                const v = cssValueToJs(out.value, d.important, out.prop);
-                (bucket as Record<string, unknown>)[out.prop] = v;
-              }
-            } else if (d.value.kind === "interpolated" && d.property) {
-              // Handle interpolated theme values, resolving each slot independently
-              const resolveResult = resolveAllSlots(
-                d,
-                decl,
-                resolveThemeValue,
-                resolveThemeValueFromFn,
-              );
-              if (resolveResult && resolveResult !== "bail") {
-                for (const out of cssDeclarationToStylexDeclarations(d)) {
-                  const finalValue = buildInterpolatedValue(j, d, resolveResult);
-                  (bucket as Record<string, unknown>)[out.prop] = finalValue;
-                }
-              }
-            }
-          }
+          processDeclarationsIntoBucket(
+            rule,
+            bucket,
+            j,
+            decl,
+            resolveThemeValue,
+            resolveThemeValueFromFn,
+          );
         }
         continue;
       }
@@ -656,6 +616,50 @@ export function processDeclRules(ctx: DeclProcessingState): void {
 // --- Non-exported helpers ---
 
 /**
+ * Processes rule declarations into a relation override bucket, handling both static
+ * and interpolated (theme-resolved) values. Returns "bail" if any interpolated
+ * declaration can't be resolved; returns the set of property names written otherwise.
+ */
+function processDeclarationsIntoBucket(
+  rule: { declarations: CssDeclarationIR[] },
+  bucket: Record<string, unknown>,
+  j: DeclProcessingState["state"]["j"],
+  decl: { templateExpressions: unknown[] },
+  resolveThemeValue: (expr: unknown) => unknown,
+  resolveThemeValueFromFn: (expr: unknown) => unknown,
+  options?: { bailOnUnresolved?: boolean },
+): Set<string> | "bail" {
+  const writtenProps = new Set<string>();
+  for (const d of rule.declarations) {
+    if (d.value.kind === "static") {
+      for (const out of cssDeclarationToStylexDeclarations(d)) {
+        if (out.value.kind !== "static") {
+          continue;
+        }
+        const v = cssValueToJs(out.value, d.important, out.prop);
+        bucket[out.prop] = v;
+        writtenProps.add(out.prop);
+      }
+    } else if (d.value.kind === "interpolated" && d.property) {
+      const resolveResult = resolveAllSlots(d, decl, resolveThemeValue, resolveThemeValueFromFn);
+      if (resolveResult === "bail") {
+        if (options?.bailOnUnresolved) {
+          return "bail";
+        }
+        continue;
+      }
+      if (resolveResult) {
+        for (const out of cssDeclarationToStylexDeclarations(d)) {
+          bucket[out.prop] = buildInterpolatedValue(j, d, resolveResult);
+          writtenProps.add(out.prop);
+        }
+      }
+    }
+  }
+  return writtenProps;
+}
+
+/**
  * Resolves all interpolation slots in a declaration to theme AST nodes.
  * Returns a resolver function `(slotId) => astNode`, or `"bail"` if any
  * slot can't be resolved, or `null` if no slots are found.
@@ -676,8 +680,8 @@ function resolveAllSlots(
   }
   const resolvedBySlotId = new Map<number, unknown>();
   for (const sp of slotParts) {
-    const slotId = sp.slotId!;
-    if (resolvedBySlotId.has(slotId)) {
+    const slotId = sp.slotId;
+    if (slotId === undefined || resolvedBySlotId.has(slotId)) {
       continue;
     }
     const expr = decl.templateExpressions[slotId] as unknown;

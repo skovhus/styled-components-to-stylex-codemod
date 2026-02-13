@@ -73,7 +73,7 @@ export const finalizeRelationOverrides = (args: {
     for (const prop of allPropNames) {
       // Resolve base value: prefer explicit base bucket, then child's resolved styles
       // (including composed mixin style objects)
-      let baseVal = (baseBucket as Record<string, unknown>)[prop];
+      let baseVal = baseBucket[prop];
       if (baseVal === undefined) {
         for (const childStyle of childStyleObjects) {
           const val = childStyle[prop];
@@ -90,7 +90,7 @@ export const finalizeRelationOverrides = (args: {
         if (pseudo === null) {
           continue;
         }
-        const val = (bucket as Record<string, unknown>)[prop];
+        const val = bucket[prop];
         if (val !== undefined) {
           pseudoValues.push({ pseudo, value: val });
         }
