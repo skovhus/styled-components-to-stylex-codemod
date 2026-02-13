@@ -1,1 +1,0 @@
-import{j as r}from"./index-6VWU0kVj.js";function s(t){const e=`https://proxy.example.com/${t.src}`;return r.jsx("img",{...t,className:"x1e4dklr xl1xv1r",src:e})}function n(t,e){return r.jsx("div",{...t,"data-test":"middle",...e,className:"xe8ttls"})}function x(){return r.jsx(s,{src:"test.jpg"})}export{x as App,n as MultiSpread,s as SecureThumbnail};
