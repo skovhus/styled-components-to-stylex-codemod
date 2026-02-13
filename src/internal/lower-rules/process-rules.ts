@@ -93,6 +93,84 @@ export function processDeclRules(ctx: DeclProcessingState): void {
         loc: computeSelectorWarningLoc(decl.loc, decl.rawCss, rule.selector),
       });
     };
+    type InterpolatedPart = { kind: string; value?: string; slotId?: number };
+    type ResolvedInterpolatedPart =
+      | { kind: "static"; value: string }
+      | { kind: "slot"; expr: unknown };
+    const getInterpolatedParts = (interpolatedValue: { parts?: InterpolatedPart[] }) =>
+      interpolatedValue.parts ?? [];
+    const getFirstInterpolationExpression = (interpolatedValue: {
+      parts?: InterpolatedPart[];
+    }): unknown => {
+      const firstSlot = getInterpolatedParts(interpolatedValue).find(
+        (part) => part.kind === "slot",
+      );
+      return firstSlot?.slotId !== undefined
+        ? (decl.templateExpressions[firstSlot.slotId] as unknown)
+        : null;
+    };
+    const resolveInterpolatedParts = (
+      interpolatedValue: { parts?: InterpolatedPart[] },
+      onUnresolved: (expr: unknown) => void,
+    ): ResolvedInterpolatedPart[] | null => {
+      const parts = getInterpolatedParts(interpolatedValue);
+      const resolvedParts: ResolvedInterpolatedPart[] = [];
+      let hasResolvedSlot = false;
+      for (const part of parts) {
+        if (!part) {
+          continue;
+        }
+        if (part.kind === "static") {
+          resolvedParts.push({ kind: "static", value: part.value ?? "" });
+          continue;
+        }
+        if (part.kind !== "slot" || part.slotId === undefined) {
+          onUnresolved(null);
+          return null;
+        }
+        const expr = decl.templateExpressions[part.slotId] as unknown;
+        const resolvedExpression = resolveThemeInterpolationExpression(expr);
+        if (!resolvedExpression) {
+          onUnresolved(expr);
+          return null;
+        }
+        hasResolvedSlot = true;
+        resolvedParts.push({ kind: "slot", expr: resolvedExpression });
+      }
+      if (!hasResolvedSlot) {
+        onUnresolved(null);
+        return null;
+      }
+      return resolvedParts;
+    };
+    const buildInterpolatedStyleValue = (resolvedParts: ResolvedInterpolatedPart[]): unknown => {
+      const slotExpressions: unknown[] = [];
+      for (const part of resolvedParts) {
+        if (part.kind === "slot") {
+          slotExpressions.push(part.expr);
+        }
+      }
+      const hasNonEmptyStaticParts = resolvedParts.some(
+        (part) => part.kind === "static" && part.value.length > 0,
+      );
+      if (slotExpressions.length === 1 && !hasNonEmptyStaticParts) {
+        return slotExpressions[0];
+      }
+      const quasis: any[] = [];
+      const expressions: any[] = [];
+      let currentStatic = "";
+      for (const part of resolvedParts) {
+        if (part.kind === "static") {
+          currentStatic += part.value;
+          continue;
+        }
+        quasis.push(j.templateElement({ raw: currentStatic, cooked: currentStatic }, false));
+        currentStatic = "";
+        expressions.push(part.expr);
+      }
+      quasis.push(j.templateElement({ raw: currentStatic, cooked: currentStatic }, true));
+      return j.templateLiteral(quasis, expressions);
+    };
 
     // --- Unsupported complex selector detection ---
     // We bail out rather than emitting incorrect unconditional styles.
@@ -231,48 +309,15 @@ export function processDeclRules(ctx: DeclProcessingState): void {
             continue;
           }
           if (declaration.value.kind === "interpolated" && declaration.property) {
-            const slotPart = (
-              declaration.value as { parts?: Array<{ kind: string; slotId?: number }> }
-            ).parts?.find((part) => part.kind === "slot");
-            if (!slotPart || slotPart.slotId === undefined) {
-              continue;
-            }
-            const expr = decl.templateExpressions[slotPart.slotId] as unknown;
-            const resolved = resolveThemeInterpolationExpression(expr);
-            if (!resolved) {
+            const resolvedParts = resolveInterpolatedParts(
+              declaration.value as { parts?: InterpolatedPart[] },
+              () => {},
+            );
+            if (!resolvedParts) {
               continue;
             }
             for (const out of cssDeclarationToStylexDeclarations(declaration)) {
-              const parts =
-                (declaration.value as { parts?: Array<{ kind: string; value?: string }> }).parts ??
-                [];
-              const hasStaticParts = parts.some((part) => part.kind === "static" && part.value);
-              let finalValue: unknown;
-              if (hasStaticParts) {
-                const quasis: any[] = [];
-                const expressions: any[] = [];
-                let currentStatic = "";
-                for (let i = 0; i < parts.length; i++) {
-                  const part = parts[i];
-                  if (!part) {
-                    continue;
-                  }
-                  if (part.kind === "static") {
-                    currentStatic += part.value ?? "";
-                  } else if (part.kind === "slot") {
-                    quasis.push(
-                      j.templateElement({ raw: currentStatic, cooked: currentStatic }, false),
-                    );
-                    currentStatic = "";
-                    expressions.push(resolved);
-                  }
-                }
-                quasis.push(j.templateElement({ raw: currentStatic, cooked: currentStatic }, true));
-                finalValue = j.templateLiteral(quasis, expressions);
-              } else {
-                finalValue = resolved;
-              }
-              bucket[out.prop] = finalValue;
+              bucket[out.prop] = buildInterpolatedStyleValue(resolvedParts);
             }
           }
         }
@@ -461,15 +506,9 @@ export function processDeclRules(ctx: DeclProcessingState): void {
 
       for (const declaration of rule.declarations) {
         if (!declaration.property) {
-          const slotPart =
-            declaration.value.kind === "interpolated"
-              ? (
-                  declaration.value as { parts?: Array<{ kind: string; slotId?: number }> }
-                ).parts?.find((part) => part.kind === "slot")
-              : undefined;
           const expr =
-            slotPart?.slotId !== undefined
-              ? (decl.templateExpressions[slotPart.slotId] as unknown)
+            declaration.value.kind === "interpolated"
+              ? getFirstInterpolationExpression(declaration.value as { parts?: InterpolatedPart[] })
               : null;
           bailUnsupportedInterpolation(expr);
           failedSiblingInterpolation = true;
@@ -486,74 +525,18 @@ export function processDeclRules(ctx: DeclProcessingState): void {
         }
 
         if (declaration.value.kind === "interpolated") {
-          const parts =
-            (
-              declaration.value as {
-                parts?: Array<{ kind: string; value?: string; slotId?: number }>;
-              }
-            ).parts ?? [];
-          const resolvedParts: Array<
-            { kind: "static"; value: string } | { kind: "slot"; expr: unknown }
-          > = [];
-          const resolvedSlotExpressions: unknown[] = [];
-          for (const part of parts) {
-            if (!part) {
-              continue;
-            }
-            if (part.kind === "static") {
-              resolvedParts.push({ kind: "static", value: part.value ?? "" });
-              continue;
-            }
-            if (part.kind !== "slot" || part.slotId === undefined) {
-              bailUnsupportedInterpolation(null);
-              failedSiblingInterpolation = true;
-              break;
-            }
-            const expr = decl.templateExpressions[part.slotId] as unknown;
-            const resolvedExpr = resolveThemeInterpolationExpression(expr);
-            if (!resolvedExpr) {
+          const resolvedParts = resolveInterpolatedParts(
+            declaration.value as { parts?: InterpolatedPart[] },
+            (expr) => {
               bailUnsupportedInterpolation(expr);
-              failedSiblingInterpolation = true;
-              break;
-            }
-            resolvedParts.push({ kind: "slot", expr: resolvedExpr });
-            resolvedSlotExpressions.push(resolvedExpr);
-          }
-          if (failedSiblingInterpolation) {
-            break;
-          }
-          if (resolvedSlotExpressions.length === 0) {
-            bailUnsupportedInterpolation(null);
+            },
+          );
+          if (!resolvedParts) {
             failedSiblingInterpolation = true;
             break;
           }
-
-          const hasNonEmptyStaticParts = resolvedParts.some(
-            (part) => part.kind === "static" && part.value.length > 0,
-          );
           for (const out of cssDeclarationToStylexDeclarations(declaration)) {
-            if (resolvedSlotExpressions.length === 1 && !hasNonEmptyStaticParts) {
-              const singleResolvedExpression = resolvedSlotExpressions[0];
-              if (!singleResolvedExpression) {
-                continue;
-              }
-              bucket[out.prop] = singleResolvedExpression;
-              continue;
-            }
-            const quasis: any[] = [];
-            const expressions: any[] = [];
-            let currentStatic = "";
-            for (const part of resolvedParts) {
-              if (part.kind === "static") {
-                currentStatic += part.value;
-                continue;
-              }
-              quasis.push(j.templateElement({ raw: currentStatic, cooked: currentStatic }, false));
-              currentStatic = "";
-              expressions.push(part.expr);
-            }
-            quasis.push(j.templateElement({ raw: currentStatic, cooked: currentStatic }, true));
-            bucket[out.prop] = j.templateLiteral(quasis, expressions);
+            bucket[out.prop] = buildInterpolatedStyleValue(resolvedParts);
           }
         }
       }

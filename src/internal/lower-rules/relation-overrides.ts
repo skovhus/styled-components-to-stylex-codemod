@@ -52,6 +52,15 @@ export const finalizeRelationOverrides = (args: {
       args,
     );
   };
+  const makeConditionKey = (entry: RelationBucketEntry): ExpressionKind => {
+    if (entry.condition.kind === "ancestor") {
+      return makeAncestorKey(entry.condition.pseudo ?? "");
+    }
+    if (entry.condition.kind === "generalSibling") {
+      return makeGeneralSiblingKey(entry.condition.selectorArg);
+    }
+    throw new Error("Adjacent sibling relation overrides are unsupported and should bail earlier.");
+  };
 
   // Local type guard that narrows to ExpressionKind for use with jscodeshift builders
   const isExpressionNode = (value: unknown): value is ExpressionKind => isAstNode(value);
@@ -167,15 +176,7 @@ export const finalizeRelationOverrides = (args: {
         ];
 
         for (const { entry, value } of conditionalValues) {
-          if (entry.condition.kind === "adjacentSibling") {
-            throw new Error(
-              "Adjacent sibling relation overrides are unsupported and should bail earlier.",
-            );
-          }
-          const keyExpr =
-            entry.condition.kind === "ancestor"
-              ? makeAncestorKey(entry.condition.pseudo ?? "")
-              : makeGeneralSiblingKey(entry.condition.selectorArg);
+          const keyExpr = makeConditionKey(entry);
           const valExpr = isExpressionNode(value) ? value : literalToAst(j, value);
           const propNode = Object.assign(j.property("init", keyExpr, valExpr), {
             computed: true,
