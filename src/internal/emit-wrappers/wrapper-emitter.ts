@@ -15,7 +15,7 @@ import type {
 import type { StyleMergerConfig } from "../../adapter.js";
 import type { StyledDecl, VariantDimension } from "../transform-types.js";
 import { emitStyleMerging } from "./style-merger.js";
-import type { ExportInfo, ExpressionKind, InlineStyleProp } from "./types.js";
+import type { ExportInfo, ExpressionKind, InlineStyleProp, WrapperPropDefaults } from "./types.js";
 import { TAG_TO_HTML_ELEMENT, VOID_TAGS } from "./type-helpers.js";
 import { isIdentifierNode } from "../utilities/jscodeshift-utils.js";
 import type { JsxAttr, JsxTagName, StatementKind } from "./jsx-builders.js";
@@ -918,7 +918,7 @@ export class WrapperEmitter {
     inlineTypeText?: string;
     styleArgs: ExpressionKind[];
     destructureProps: string[];
-    propDefaults?: Map<string, string>;
+    propDefaults?: WrapperPropDefaults;
     allowClassNameProp?: boolean;
     allowStyleProp?: boolean;
     allowAsProp?: boolean;
@@ -1061,16 +1061,12 @@ export class WrapperEmitter {
     for (const name of expandedDestructureProps) {
       if (name !== "children" && name !== "style" && name !== "className") {
         const defaultVal = propDefaults?.get(name);
-        if (defaultVal) {
-          // Parse numeric defaults back to numbers so the literal node is
-          // `= 0` (number) instead of `= "0"` (string).
-          const parsedVal =
-            defaultVal !== "" && !isNaN(Number(defaultVal)) ? Number(defaultVal) : defaultVal;
+        if (defaultVal !== undefined) {
           patternProps.push(
             j.property.from({
               kind: "init",
               key: j.identifier(name),
-              value: j.assignmentPattern(j.identifier(name), j.literal(parsedVal)),
+              value: j.assignmentPattern(j.identifier(name), j.literal(defaultVal)),
               shorthand: true,
             }) as Property,
           );
@@ -1337,7 +1333,7 @@ export class WrapperEmitter {
   buildDestructurePatternProps(args: {
     baseProps: Array<Property | RestElement>;
     destructureProps: Array<string | null | undefined>;
-    propDefaults?: Map<string, string>;
+    propDefaults?: WrapperPropDefaults;
     includeRest?: boolean;
     restId?: Identifier;
   }): Array<Property | RestElement> {
@@ -1356,7 +1352,7 @@ export class WrapperEmitter {
     dimensions: VariantDimension[];
     styleArgs: ExpressionKind[];
     destructureProps?: string[];
-    propDefaults?: Map<string, string>;
+    propDefaults?: WrapperPropDefaults;
     namespaceBooleanProps?: string[];
   }): void {
     seb.buildVariantDimensionLookups(this.j, args);

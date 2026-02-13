@@ -6,7 +6,7 @@
  */
 import type { StyledDecl } from "../transform-types.js";
 import { buildStyleFnConditionExpr } from "../utilities/jscodeshift-utils.js";
-import { type ExpressionKind, type InlineStyleProp } from "./types.js";
+import { type ExpressionKind, type InlineStyleProp, type WrapperPropDefaults } from "./types.js";
 import type { JsxAttr, StatementKind } from "./wrapper-emitter.js";
 import { emitStyleMerging } from "./style-merger.js";
 import { sortVariantEntriesBySpecificity, VOID_TAGS } from "./type-helpers.js";
@@ -319,7 +319,7 @@ export function emitShouldForwardPropWrappers(ctx: EmitIntrinsicContext): void {
     // Initialize destructureParts and propDefaults early so buildVariantDimensionLookups can populate them
     const destructureParts: string[] = [];
     // Track default values for props (for destructuring defaults)
-    const propDefaults = new Map<string, string>();
+    const propDefaults: WrapperPropDefaults = new Map();
     for (const p of dropProps) {
       destructureParts.push(p);
     }
