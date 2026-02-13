@@ -55,6 +55,13 @@ export function getOrCreateRelationOverrideBucket(
       overrideStyleKey,
       childExtraStyleKeys,
     });
+  } else if (childExtraStyleKeys?.length) {
+    // Update an existing override entry with child extras that weren't available
+    // on the first call (e.g., forward path created the entry, reverse path adds extras).
+    const existing = relationOverrides.find((o) => o.overrideStyleKey === overrideStyleKey);
+    if (existing && !existing.childExtraStyleKeys?.length) {
+      existing.childExtraStyleKeys = childExtraStyleKeys;
+    }
   }
   let pseudoBuckets = relationOverridePseudoBuckets.get(overrideStyleKey);
   if (!pseudoBuckets) {
