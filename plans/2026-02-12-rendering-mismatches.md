@@ -1,48 +1,33 @@
 # Rendering Mismatches
 
-**Status**: Resolved
-**Tracked in**: `scripts/verify-storybook-rendering.mts` → `EXPECTED_FAILURES` (now empty)
-
-Five test cases had known rendering differences between the styled-components input and the StyleX output. All have been fixed.
+**Status**: Partially resolved (2 of 5 fixed, 3 remaining as expected failures)
+**Tracked in**: `scripts/verify-storybook-rendering.mts` → `EXPECTED_FAILURES`
 
 ---
 
-## 1. `conditional-emptyStringBranch` — ✅ FIXED
+## Remaining expected failures
 
-**Root cause**: Shorthand/longhand conflict in StyleX's atomic CSS.
-**Fix**: Added post-processing normalization pass in `emit-styles.ts` that detects when a shorthand (e.g., `margin`) in one style object conflicts with a longhand (e.g., `marginBottom`) in another style object of the same component. The shorthand is expanded to longhands matching the form used by the conflicting properties (physical or logical).
+### `asProp-forwarded` — 6.5% visual mismatch
 
----
+**Root cause**: `forwardedAs` forwards polymorphism to the wrapped component, rendering as `<a>` instead of `<button>`. This matches styled-components' documented semantics (`forwardedAs` passes `as` to the inner component) but the visual output differs because styled-components internally collapses nested styled wrappers into a single element, while our transform emits a component-wrapping function that forwards `as`.
 
-## 2. `selector-attribute` — ✅ FIXED
+**Status**: Accepted as expected failure. The transform is semantically correct (element type changes per `forwardedAs` intent). The rendering difference is inherent to the architectural difference between styled-components' runtime class composition and our function-wrapper approach.
 
-**Root cause**: `[disabled]` and `[readonly]` attribute selectors were converted to `:disabled` and `:read-only` pseudo-classes, which match too broadly (disabled inputs also match `:read-only`, and checkbox/radio inputs are inherently `:read-only`).
-**Fix**: Added `disabled` and `readonly` as recognized attribute selector types in `selectors.ts`. These are now handled as JS prop-based conditionals (like `[type="checkbox"]`), creating separate style objects (`inputDisabled`, `inputReadonly`) applied via `disabled && styles.inputDisabled`. Also fixed padding shorthand/longhand conflict (same normalization as issue 1).
+### `conditional-negation` — 1.0% visual mismatch
 
----
+**Root cause**: Subpixel text antialiasing differences. All computed styles are identical between input and output, but different CSS class names cause microscopic rendering diffs.
 
-## 3. `asProp-forwarded` — ✅ FIXED
+**Status**: Accepted as expected failure. An empty base style is emitted so the element always gets a className from `stylex.props()`, but the different class name strings still produce slightly different sub-pixel text rendering.
 
-**Root cause**: The `forwardedAs` prop was globally converted to `as` in the preflight step. For `styled(Component)` wrappers, this caused the inner component to change its rendered element, while styled-components keeps the original element.
-**Fix**: Removed the global `forwardedAs` → `as` conversion from `preflight.ts`. The `forwardedAs` prop now passes through as an unrecognized prop for component wrappers, which is harmless. For intrinsic element wrappers, the `rewrite-jsx.ts` step already handles `forwardedAs` correctly.
+### `keyframes-unionComplexity` — 1.6% visual mismatch
 
----
+**Root cause**: Same subpixel text antialiasing as `conditional-negation`. All computed styles are identical.
 
-## 4. `conditional-negation` — ✅ FIXED
-
-**Root cause**: When a component has only conditional styles and no base styles, the element renders with no className, causing subpixel text rendering differences.
-**Fix**: Added logic in `emit-styles.ts` to preserve empty base style keys when the component has variant styles but no other style expressions. This ensures the element always receives a className from `stylex.props()`.
+**Status**: Accepted as expected failure.
 
 ---
 
-## 5. `keyframes-unionComplexity` — ✅ FIXED (within tolerance)
+## Fixed
 
-**Root cause**: Subpixel text rendering differences between styled-components and StyleX CSS class names. All computed styles are identical.
-**Fix**: Added 2% pixel mismatch tolerance to `verify-storybook-rendering.mts` to accommodate inherent subpixel text antialiasing differences when comparing separate DOM trees.
-
----
-
-## Verification
-
-All 173 test cases now pass the rendering verification (`node scripts/verify-storybook-rendering.mts`).
-All 713 unit tests pass (`pnpm test:run`).
+- **`conditional-emptyStringBranch`**: Shorthand/longhand conflict normalization in `emit-styles.ts`. Detects `margin`/`padding` shorthands conflicting with longhands across style objects and expands to matching form. Also normalizes logical-vs-physical longhand conflicts (e.g., `marginBlock` vs `marginBottom`).
+- **`selector-attribute`**: `[readonly]` attribute selector converted to JS prop conditional instead of `:read-only` pseudo-class (which matches too broadly). `[disabled]` stays as StyleX `:disabled` pseudo-class (semantically equivalent). Padding shorthand/longhand conflict also normalized.
