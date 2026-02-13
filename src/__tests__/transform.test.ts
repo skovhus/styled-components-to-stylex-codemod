@@ -2293,12 +2293,10 @@ export const App = () => <Input />;
 });
 
 describe("forwardedAs prop handling", () => {
-  it("should not leak forwardedAs to DOM on styled(Component) wrappers", () => {
-    // Regression: when forwardedAs was not converted to `as`, the prop leaked
-    // to the DOM as an invalid HTML attribute. When it IS converted to `as`,
-    // it gets forwarded to the inner component and incorrectly changes the
-    // rendered element. The correct behavior: strip it from the JSX callsite
-    // of styled(Component) wrappers so it doesn't leak or change the element.
+  it("should convert forwardedAs to as and forward polymorphism to wrapped component", () => {
+    // forwardedAs is a styled-components prop that forwards `as` to the wrapped component,
+    // enabling polymorphic rendering. In the transformed output, forwardedAs should become
+    // `as` so the wrapper function can forward it to the inner component.
     const source = `
 import styled from "styled-components";
 
@@ -2323,42 +2321,9 @@ export const App = () => (
       { adapter: fixtureAdapter },
     );
     expect(result.code).not.toBeNull();
-    // forwardedAs should not appear in the output — it's a styled-components-specific prop
-    // that gets converted to `as` internally and then stripped from component wrapper callsites
+    // forwardedAs should be converted to as (not leak as raw forwardedAs)
     expect(result.code).not.toContain("forwardedAs");
-  });
-
-  it("should preserve legitimate as= props when same component also has forwardedAs callsites", () => {
-    // Regression: stripping converted forwardedAs removed ALL as= props for the component,
-    // even legitimate ones on other callsites.
-    const source = `
-import styled from "styled-components";
-
-const Button = styled.button\`
-  color: white;
-  background: blue;
-\`;
-
-const StyledButton = styled(Button)\`
-  border: 1px solid red;
-\`;
-
-export const App = () => (
-  <div>
-    <StyledButton as="a" href="#">Legitimate as link</StyledButton>
-    <StyledButton forwardedAs="span">Forwarded span</StyledButton>
-  </div>
-);
-`;
-    const result = transformWithWarnings(
-      { source, path: "test.tsx" },
-      { jscodeshift: j, j, stats: () => {}, report: () => {} },
-      { adapter: fixtureAdapter },
-    );
-    expect(result.code).not.toBeNull();
-    // forwardedAs should not appear
-    expect(result.code).not.toContain("forwardedAs");
-    // The legitimate as="a" callsite should be PRESERVED
+    // The converted as="a" should be preserved so polymorphism works
     expect(result.code).toContain('as="a"');
   });
 });

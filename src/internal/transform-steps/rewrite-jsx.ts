@@ -64,34 +64,9 @@ export function rewriteJsxStep(ctx: TransformContext): StepResult {
     }
 
     // Preserve as a wrapper component for polymorphic/forwarded-as cases.
+    // forwardedAs is converted to `as` in preflight and forwarded to the wrapped component
+    // (matching styled-components semantics where forwardedAs enables polymorphic rendering).
     if (decl.needsWrapperComponent) {
-      // For component wrappers where `forwardedAs` was used, strip the converted `as`
-      // from JSX callsites. In styled-components, `forwardedAs` on styled(StyledComponent)
-      // doesn't change the rendered element. Our wrappers forward props to the inner
-      // component, so leaving `as` would incorrectly change its element type.
-      if (decl.base.kind === "component" && ctx.forwardedAsComponents?.has(decl.localName)) {
-        root
-          .find(j.JSXElement, {
-            openingElement: {
-              name: { type: "JSXIdentifier", name: decl.localName },
-            },
-          })
-          .forEach((p) => {
-            const opening = p.node.openingElement;
-            // Only strip `as` attrs that were converted from `forwardedAs` (marked by preflight).
-            // Preserve legitimate `as` props on other callsites of the same component.
-            opening.attributes = (opening.attributes ?? []).filter((attr) => {
-              if (
-                attr.type !== "JSXAttribute" ||
-                attr.name.type !== "JSXIdentifier" ||
-                attr.name.name !== "as"
-              ) {
-                return true;
-              }
-              return !(attr as typeof attr & { __fromForwardedAs?: boolean }).__fromForwardedAs;
-            });
-          });
-      }
       continue;
     }
 

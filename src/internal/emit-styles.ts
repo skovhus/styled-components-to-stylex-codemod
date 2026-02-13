@@ -962,18 +962,20 @@ function expandShorthandInStyle(
     }
   } else {
     // Physical conflict: always expand to 4 physical longhands (top/right/bottom/left).
-    // splitDirectionalProperty with alwaysExpand only expands single-value shorthands,
-    // and returns logical (block/inline) for 2-value shorthands. We force physical by
-    // using the important path which always produces 4 physical longhands, then strip
-    // the !important suffix.
-    const prop = shorthand as "margin" | "padding" | "scrollMargin";
+    // Parse the value to extract quad values (CSS shorthand notation: 1→all, 2→TB/LR,
+    // 3→T/LR/B, 4→T/R/B/L) and map to physical property names.
     const rawStr = typeof value === "number" ? String(value) : value;
-    // Use important=true to force 4-longhand physical expansion, then strip the suffix
-    const entries = splitDirectionalProperty({ prop, rawValue: rawStr, important: true });
-    replacements = entries.map((entry) => ({
-      prop: entry.prop,
-      value: typeof value === "number" ? value : entry.value.replace(/ !important$/, ""),
-    }));
+    const tokens = rawStr.trim().split(/\s+/);
+    const top = tokens[0] ?? rawStr;
+    const right = tokens[1] ?? top;
+    const bottom = tokens[2] ?? top;
+    const left = tokens[3] ?? right;
+    replacements = [
+      { prop: `${shorthand}Top`, value: typeof value === "number" ? value : top },
+      { prop: `${shorthand}Right`, value: typeof value === "number" ? value : right },
+      { prop: `${shorthand}Bottom`, value: typeof value === "number" ? value : bottom },
+      { prop: `${shorthand}Left`, value: typeof value === "number" ? value : left },
+    ];
   }
 
   // Rebuild the object with longhands replacing the shorthand in-place

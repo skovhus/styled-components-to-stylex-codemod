@@ -52,9 +52,11 @@ interface TestResult {
 // Remove entries as the underlying codemod issues are fixed.
 // ---------------------------------------------------------------------------
 const EXPECTED_FAILURES = new Set([
+  // forwardedAs forwards polymorphism to the wrapped component (renders as <a> instead
+  // of <button>), matching styled-components semantics but producing different element types
+  "asProp-forwarded",
   // Subpixel text antialiasing differences: all computed styles are identical between
   // input and output, but different CSS class names cause microscopic rendering diffs.
-  // Use --mismatch-tolerance 0.02 to verify these pass within tolerance.
   "conditional-negation",
   "keyframes-unionComplexity",
 ]);

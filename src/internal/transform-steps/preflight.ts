@@ -14,34 +14,13 @@ export function preflight(ctx: TransformContext): StepResult {
   const { j, root } = ctx;
 
   // `forwardedAs` is styled-components-specific; normalize to `as` so it doesn't
-  // leak to the DOM as an invalid attribute. Track which components had forwardedAs
-  // so rewrite-jsx can strip it from component wrapper callsites (where forwarding
-  // `as` to the inner component would incorrectly change its rendered element).
-  // First, collect component names that have forwardedAs on their JSX callsites
-  const forwardedAsComponents = new Set<string>();
-  root.find(j.JSXOpeningElement).forEach((p) => {
-    const attrs = p.node.attributes ?? [];
-    const hasForwardedAs = attrs.some(
-      (a) =>
-        a.type === "JSXAttribute" &&
-        a.name.type === "JSXIdentifier" &&
-        a.name.name === "forwardedAs",
-    );
-    if (hasForwardedAs && p.node.name.type === "JSXIdentifier") {
-      forwardedAsComponents.add(p.node.name.name);
-    }
-  });
-  ctx.forwardedAsComponents = forwardedAsComponents;
-
-  // Then convert forwardedAs → as to prevent DOM leakage.
-  // Mark each converted attr so rewrite-jsx only strips these specific attrs,
-  // not legitimate `as` props on other callsites of the same component.
+  // leak to the DOM as an invalid attribute. The `as` prop enables polymorphic rendering
+  // on the wrapped component (matching styled-components semantics).
   root
     .find(j.JSXAttribute, { name: { type: "JSXIdentifier", name: "forwardedAs" } })
     .forEach((p: ASTPath<JSXAttribute>) => {
       if (p.node.name.type === "JSXIdentifier") {
         p.node.name.name = "as";
-        (p.node as JSXAttribute & { __fromForwardedAs?: boolean }).__fromForwardedAs = true;
       }
     });
 
