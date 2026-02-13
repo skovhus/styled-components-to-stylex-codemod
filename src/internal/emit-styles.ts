@@ -795,6 +795,14 @@ function normalizeShorthandLonghandConflicts(
         expandShorthandInStyle(style, shorthand, value, hasLogicalConflict && !hasPhysicalConflict);
       }
     }
+
+    // Phase 2: Detect logical-vs-physical longhand conflicts across all property families.
+    // E.g., base has `marginBottom` (physical) and conditional has `marginBlock` (logical).
+    // These generate independent atomic classes that don't reliably override each other.
+    // Runs independently of phase 1 since CSS lowering may have already expanded shorthands.
+    for (const longhands of Object.values(SHORTHAND_LONGHANDS)) {
+      normalizeLogicalPhysicalConflicts(longhands, propsByKey, resolvedStyleObjects);
+    }
   }
 }
 
@@ -841,6 +849,82 @@ function collectComponentStyleKeys(decl: StyledDecl): string[] {
 }
 
 /**
+ * Mapping from logical longhands to their physical equivalents.
+ * `marginBlock: "8px"` → `marginTop: "8px", marginBottom: "8px"`
+ */
+const LOGICAL_TO_PHYSICAL: Record<string, string[]> = {
+  marginBlock: ["marginTop", "marginBottom"],
+  marginInline: ["marginRight", "marginLeft"],
+  paddingBlock: ["paddingTop", "paddingBottom"],
+  paddingInline: ["paddingRight", "paddingLeft"],
+};
+
+/**
+ * Detect and resolve logical-vs-physical longhand conflicts within a component's
+ * style objects. When one style object uses logical longhands (e.g., `marginBlock`)
+ * and another uses physical longhands (e.g., `marginBottom`), expand the logical
+ * longhands to their physical equivalents so the atomic CSS override is reliable.
+ */
+function normalizeLogicalPhysicalConflicts(
+  longhands: { physical: string[]; logical: string[] },
+  propsByKey: Map<string, Set<string>>,
+  resolvedStyleObjects: Map<string, unknown>,
+): void {
+  // Collect which keys have physical longhands and which have logical longhands
+  const physicalKeys: string[] = [];
+  const logicalKeys: string[] = [];
+  for (const [key, props] of propsByKey) {
+    if (longhands.physical.some((l) => props.has(l))) {
+      physicalKeys.push(key);
+    }
+    if (longhands.logical.some((l) => props.has(l))) {
+      logicalKeys.push(key);
+    }
+  }
+
+  // Only normalize when there's a cross-form conflict
+  if (physicalKeys.length === 0 || logicalKeys.length === 0) {
+    return;
+  }
+
+  // Expand logical longhands to physical in each affected style object
+  for (const key of logicalKeys) {
+    const style = resolvedStyleObjects.get(key) as Record<string, unknown>;
+    if (!style) {
+      continue;
+    }
+    for (const logicalProp of longhands.logical) {
+      const value = style[logicalProp];
+      if (value === undefined || value === null) {
+        continue;
+      }
+      // Only expand simple values (not conditional objects)
+      if (typeof value !== "string" && typeof value !== "number") {
+        continue;
+      }
+      const physicalProps = LOGICAL_TO_PHYSICAL[logicalProp];
+      if (!physicalProps) {
+        continue;
+      }
+      // Rebuild style with logical replaced by physical (preserving order)
+      const entries = Object.entries(style);
+      for (const k of Object.keys(style)) {
+        delete style[k];
+      }
+      for (const [k, v] of entries) {
+        if (k === logicalProp) {
+          for (const p of physicalProps) {
+            style[p] = value;
+          }
+        } else {
+          style[k] = v;
+        }
+      }
+    }
+  }
+}
+
+/**
  * Replace a shorthand property with expanded longhands in a style object.
  * Preserves property ordering by rebuilding the object with longhands
  * inserted where the shorthand was.
@@ -856,19 +940,39 @@ function expandShorthandInStyle(
   // Build the replacement entries
   let replacements: Array<{ prop: string; value: unknown }>;
   if (useLogical) {
-    replacements = [
-      { prop: `${shorthand}Block`, value },
-      { prop: `${shorthand}Inline`, value },
-    ];
-  } else {
+    // Use splitDirectionalProperty to correctly parse multi-value shorthands
+    // into block/inline components (e.g., "8px 12px" → block: "8px", inline: "12px")
     const prop = shorthand as "margin" | "padding" | "scrollMargin";
-    replacements = splitDirectionalProperty({
+    const entries = splitDirectionalProperty({
       prop,
       rawValue: typeof value === "number" ? String(value) : value,
-      alwaysExpand: true,
-    }).map((entry) => ({
+    });
+    if (entries.length === 1 && entries[0]!.prop === shorthand) {
+      // Single value — expand to both block and inline with same value
+      replacements = [
+        { prop: `${shorthand}Block`, value },
+        { prop: `${shorthand}Inline`, value },
+      ];
+    } else {
+      // splitDirectionalProperty already split into logical (block/inline) or physical
+      replacements = entries.map((entry) => ({
+        prop: entry.prop,
+        value: typeof value === "number" ? value : entry.value,
+      }));
+    }
+  } else {
+    // Physical conflict: always expand to 4 physical longhands (top/right/bottom/left).
+    // splitDirectionalProperty with alwaysExpand only expands single-value shorthands,
+    // and returns logical (block/inline) for 2-value shorthands. We force physical by
+    // using the important path which always produces 4 physical longhands, then strip
+    // the !important suffix.
+    const prop = shorthand as "margin" | "padding" | "scrollMargin";
+    const rawStr = typeof value === "number" ? String(value) : value;
+    // Use important=true to force 4-longhand physical expansion, then strip the suffix
+    const entries = splitDirectionalProperty({ prop, rawValue: rawStr, important: true });
+    replacements = entries.map((entry) => ({
       prop: entry.prop,
-      value: typeof value === "number" ? value : entry.value,
+      value: typeof value === "number" ? value : entry.value.replace(/ !important$/, ""),
     }));
   }
 

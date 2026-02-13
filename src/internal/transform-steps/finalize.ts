@@ -15,38 +15,13 @@ export function finalize(ctx: TransformContext): TransformResult {
   if (ctx.hasChanges) {
     assertNoNullNodesInArrays(ctx.root.get().node);
     try {
-      let rawCode = ctx.root.toSource({
-        quote: "double",
-        trailingComma: true,
-        reuseWhitespace: true,
-      });
-
-      // Strip `as` (converted from `forwardedAs`) from component wrapper JSX callsites.
-      // In styled-components, `forwardedAs` on styled(StyledComponent) doesn't change
-      // the rendered element. Our wrappers forward props, so `as` would incorrectly
-      // change the inner component's element type. We do this post-serialization because
-      // later pipeline steps can regenerate parts of the AST from templates.
-      if (ctx.forwardedAsComponents && ctx.forwardedAsComponents.size > 0) {
-        const styledDecls = ctx.styledDecls as
-          | Array<{ localName: string; base: { kind: string } }>
-          | undefined;
-        for (const decl of styledDecls ?? []) {
-          if (decl.base.kind !== "component") {
-            continue;
-          }
-          if (!ctx.forwardedAsComponents.has(decl.localName)) {
-            continue;
-          }
-          // Remove `as="..."` or `as={...}` from JSX callsites of this component
-          const pattern = new RegExp(
-            `(<${decl.localName}\\b)([^>]*?)\\s*\\bas=(?:"[^"]*"|\\{[^}]*\\})`,
-            "g",
-          );
-          rawCode = rawCode.replace(pattern, "$1$2");
-        }
-      }
-
-      code = formatOutput(rawCode);
+      code = formatOutput(
+        ctx.root.toSource({
+          quote: "double",
+          trailingComma: true,
+          reuseWhitespace: true,
+        }),
+      );
     } catch (e) {
       // Debug: find the smallest top-level statement that crashes recast printing.
       const program: any = ctx.root.get().node.program;

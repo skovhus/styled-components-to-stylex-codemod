@@ -33,12 +33,15 @@ export function preflight(ctx: TransformContext): StepResult {
   });
   ctx.forwardedAsComponents = forwardedAsComponents;
 
-  // Then convert forwardedAs → as to prevent DOM leakage
+  // Then convert forwardedAs → as to prevent DOM leakage.
+  // Mark each converted attr so rewrite-jsx only strips these specific attrs,
+  // not legitimate `as` props on other callsites of the same component.
   root
     .find(j.JSXAttribute, { name: { type: "JSXIdentifier", name: "forwardedAs" } })
     .forEach((p: ASTPath<JSXAttribute>) => {
       if (p.node.name.type === "JSXIdentifier") {
         p.node.name.name = "as";
+        (p.node as JSXAttribute & { __fromForwardedAs?: boolean }).__fromForwardedAs = true;
       }
     });
 

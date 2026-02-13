@@ -2230,6 +2230,68 @@ export const App = () => <Input readOnly value="test" />;
   });
 });
 
+describe("shorthand/longhand normalization edge cases", () => {
+  it("should expand 2-value physical conflict to 4 physical longhands, not logical", () => {
+    // Regression: splitDirectionalProperty returns logical Block/Inline for 2-value shorthands
+    // even when alwaysExpand is true, but when there's a physical conflict (e.g., marginBottom),
+    // we need physical longhands (marginTop/Right/Bottom/Left).
+    const source = `
+import styled from "styled-components";
+
+const Box = styled.div<{ $wide?: boolean }>\`
+  margin-bottom: 8px;
+  \${(p) => p.$wide ? "" : "margin: 8px 16px;"}
+\`;
+
+export const App = () => <Box>test</Box>;
+`;
+    const result = transformWithWarnings(
+      { source, path: "test.tsx" },
+      { jscodeshift: j, j, stats: () => {}, report: () => {} },
+      { adapter: fixtureAdapter },
+    );
+    expect(result.code).not.toBeNull();
+    // The base has marginBottom (physical). The conditional has margin: 8px 16px (2-value).
+    // The expansion should produce 4 physical longhands, not logical Block/Inline.
+    expect(result.code).toContain("marginTop");
+    expect(result.code).toContain("marginRight");
+    expect(result.code).toContain("marginBottom");
+    expect(result.code).toContain("marginLeft");
+    // Should NOT contain logical longhands (which is what splitDirectionalProperty
+    // returns for 2-value shorthands)
+    expect(result.code).not.toContain("marginBlock");
+    expect(result.code).not.toContain("marginInline");
+  });
+
+  it("should split multi-value shorthands before logical block/inline assignment", () => {
+    // Regression: logical expansion path assigned the entire multi-value string to both
+    // Block and Inline, e.g., paddingBlock: "8px 12px", paddingInline: "8px 12px"
+    // instead of paddingBlock: "8px", paddingInline: "12px".
+    const source = `
+import styled from "styled-components";
+
+const Input = styled.input\`
+  padding-block: 4px;
+  \${(p) => p.readOnly ? "" : "padding: 8px 12px;"}
+\`;
+
+export const App = () => <Input />;
+`;
+    const result = transformWithWarnings(
+      { source, path: "test.tsx" },
+      { jscodeshift: j, j, stats: () => {}, report: () => {} },
+      { adapter: fixtureAdapter },
+    );
+    expect(result.code).not.toBeNull();
+    // The base has paddingBlock (logical). The conditional has padding: 8px 12px.
+    // The expansion should split: paddingBlock: "8px", paddingInline: "12px"
+    expect(result.code).toContain('paddingBlock: "8px"');
+    expect(result.code).toContain('paddingInline: "12px"');
+    // Should NOT have the unsplit value
+    expect(result.code).not.toContain('"8px 12px"');
+  });
+});
+
 describe("forwardedAs prop handling", () => {
   it("should not leak forwardedAs to DOM on styled(Component) wrappers", () => {
     // Regression: when forwardedAs was not converted to `as`, the prop leaked
@@ -2264,5 +2326,39 @@ export const App = () => (
     // forwardedAs should not appear in the output — it's a styled-components-specific prop
     // that gets converted to `as` internally and then stripped from component wrapper callsites
     expect(result.code).not.toContain("forwardedAs");
+  });
+
+  it("should preserve legitimate as= props when same component also has forwardedAs callsites", () => {
+    // Regression: stripping converted forwardedAs removed ALL as= props for the component,
+    // even legitimate ones on other callsites.
+    const source = `
+import styled from "styled-components";
+
+const Button = styled.button\`
+  color: white;
+  background: blue;
+\`;
+
+const StyledButton = styled(Button)\`
+  border: 1px solid red;
+\`;
+
+export const App = () => (
+  <div>
+    <StyledButton as="a" href="#">Legitimate as link</StyledButton>
+    <StyledButton forwardedAs="span">Forwarded span</StyledButton>
+  </div>
+);
+`;
+    const result = transformWithWarnings(
+      { source, path: "test.tsx" },
+      { jscodeshift: j, j, stats: () => {}, report: () => {} },
+      { adapter: fixtureAdapter },
+    );
+    expect(result.code).not.toBeNull();
+    // forwardedAs should not appear
+    expect(result.code).not.toContain("forwardedAs");
+    // The legitimate as="a" callsite should be PRESERVED
+    expect(result.code).toContain('as="a"');
   });
 });

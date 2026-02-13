@@ -78,14 +78,18 @@ export function rewriteJsxStep(ctx: TransformContext): StepResult {
           })
           .forEach((p) => {
             const opening = p.node.openingElement;
-            opening.attributes = (opening.attributes ?? []).filter(
-              (attr) =>
-                !(
-                  attr.type === "JSXAttribute" &&
-                  attr.name.type === "JSXIdentifier" &&
-                  attr.name.name === "as"
-                ),
-            );
+            // Only strip `as` attrs that were converted from `forwardedAs` (marked by preflight).
+            // Preserve legitimate `as` props on other callsites of the same component.
+            opening.attributes = (opening.attributes ?? []).filter((attr) => {
+              if (
+                attr.type !== "JSXAttribute" ||
+                attr.name.type !== "JSXIdentifier" ||
+                attr.name.name !== "as"
+              ) {
+                return true;
+              }
+              return !(attr as typeof attr & { __fromForwardedAs?: boolean }).__fromForwardedAs;
+            });
           });
       }
       continue;
