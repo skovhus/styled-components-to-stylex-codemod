@@ -139,10 +139,21 @@ export function processDeclRules(ctx: DeclProcessingState): void {
         });
         break;
       } else if (/[+~]/.test(s) && !isHandledComponentPattern) {
-        // Self-referencing sibling combinators: `& + &`, `& ~ &`
-        // These are handled below via stylex.when.siblingBefore() / stylex.when.anySibling()
-        const isSelfSiblingPattern = /^&\s*[+~]\s*&$/.test(s.trim());
-        if (!isSelfSiblingPattern) {
+        // Only adjacent sibling `& + &` is supported (via stylex.when.siblingBefore).
+        // General sibling `& ~ &` is NOT supported because stylex.when.anySibling()
+        // matches both directions while CSS `~` only selects forward siblings.
+        const isAdjacentSiblingPattern = /^&\s*\+\s*&$/.test(s.trim());
+        const isGeneralSiblingPattern = /^&\s*~\s*&$/.test(s.trim());
+        if (isGeneralSiblingPattern) {
+          state.markBail();
+          warnings.push({
+            severity: "warning",
+            type: "Unsupported selector: general sibling combinator (& ~ &) cannot preserve forward-only semantics",
+            loc: computeSelectorWarningLoc(decl.loc, decl.rawCss, rule.selector),
+          });
+          break;
+        }
+        if (!isAdjacentSiblingPattern) {
           state.markBail();
           warnings.push({
             severity: "warning",
@@ -245,9 +256,22 @@ export function processDeclRules(ctx: DeclProcessingState): void {
                   bucket[out.prop] = finalValue;
                   overrideProps.add(out.prop);
                 }
+              } else {
+                // Non-theme interpolation (e.g., prop-based ternary) can't be resolved.
+                // Bail to avoid silently dropping the declaration.
+                state.markBail();
+                warnings.push({
+                  severity: "warning",
+                  type: "Unsupported selector: unknown component selector",
+                  loc: computeSelectorWarningLoc(decl.loc, decl.rawCss, rule.selector),
+                });
+                break;
               }
             }
           }
+        }
+        if (state.bail) {
+          break;
         }
 
         // For the reverse pattern, the declaring component (self) has base styles
@@ -427,20 +451,28 @@ export function processDeclRules(ctx: DeclProcessingState): void {
       selector = "&";
     }
 
-    // Self-referencing sibling selectors: `& + &` → stylex.when.siblingBefore()
-    // and `& ~ &` → stylex.when.anySibling()
-    const siblingMatch = selector.trim().match(/^&\s*([+~])\s*&$/);
-    if (siblingMatch && siblingMatch[1]) {
-      const combinator = siblingMatch[1];
-      const whenMethod = combinator === "+" ? "siblingBefore" : "anySibling";
-
-      // Build the stylex.when.*() AST expression for computed key.
+    // Self-referencing adjacent sibling selector: `& + &` → stylex.when.siblingBefore()
+    // NOTE: `& ~ &` (general sibling) is NOT supported — bailed in heuristic checks above.
+    const siblingMatch = selector.trim().match(/^&\s*\+\s*&$/);
+    if (siblingMatch) {
+      // Bail if the sibling selector is inside a @media rule — we can't combine
+      // computed sibling keys with media constraints in the current architecture.
+      if (media) {
+        state.markBail();
+        warnings.push({
+          severity: "warning",
+          type: "Unsupported selector: sibling combinator inside @media",
+          loc: computeSelectorWarningLoc(decl.loc, decl.rawCss, rule.selector),
+        });
+        break;
+      }
+      // Build the stylex.when.siblingBefore() AST expression for computed key.
       // NOTE: The StyleX Babel plugin requires a pseudo selector argument even for
       // unconditional matching. We use `:is(*)` which is semantically "always matches".
       const siblingKeyExpr = j.callExpression(
         j.memberExpression(
           j.memberExpression(j.identifier("stylex"), j.identifier("when")),
-          j.identifier(whenMethod),
+          j.identifier("siblingBefore"),
         ),
         [j.literal(":is(*)")],
       );

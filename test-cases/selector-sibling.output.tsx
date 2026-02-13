@@ -20,17 +20,5 @@ const styles = stylex.create({
       default: null,
       [stylex.when.siblingBefore(":is(*)")]: "lime",
     },
-    borderBottomWidth: {
-      default: null,
-      [stylex.when.anySibling(":is(*)")]: "2px",
-    },
-    borderBottomStyle: {
-      default: null,
-      [stylex.when.anySibling(":is(*)")]: "solid",
-    },
-    borderBottomColor: {
-      default: null,
-      [stylex.when.anySibling(":is(*)")]: "gray",
-    },
   },
 });

@@ -9,11 +9,6 @@ const Thing = styled.div`
     color: red;
     background: lime;
   }
-
-  /* General sibling: all following siblings */
-  & ~ & {
-    border-bottom: 2px solid gray;
-  }
 `;
 
 export const App = () => (
