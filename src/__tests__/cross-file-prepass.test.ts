@@ -1,13 +1,25 @@
-import { describe, it, expect } from "vitest";
+import { describe, it, expect, vi } from "vitest";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { dirname } from "node:path";
+import jscodeshift from "jscodeshift";
 import { createModuleResolver } from "../internal/prepass/resolve-imports.js";
 import {
   scanCrossFileSelectors,
   type CrossFileInfo,
   type CrossFileSelectorUsage,
 } from "../internal/prepass/scan-cross-file-selectors.js";
+import { transformWithWarnings } from "../transform.js";
+import { fixtureAdapter } from "./fixture-adapters.js";
+
+// Suppress codemod logs in tests
+vi.mock("../internal/logger.js", () => ({
+  Logger: {
+    warn: vi.fn(),
+    error: vi.fn(),
+    logWarnings: vi.fn(),
+  },
+}));
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const fixturesDir = join(__dirname, "fixtures", "cross-file");
@@ -163,5 +175,119 @@ describe("scanCrossFileSelectors", () => {
     const usages = info.selectorUsages.get(fixture("consumer-basic.tsx"));
     expect(usages).toBeDefined();
     expect(usages![0]!.consumerIsTransformed).toBe(true);
+  });
+});
+
+/* ── Cross-file transform (end-to-end) ───────────────────────────────── */
+
+const j = jscodeshift.withParser("tsx");
+const api = { jscodeshift: j, j, stats: () => {}, report: () => {} };
+
+describe("cross-file transform (Scenario A)", () => {
+  it("transforms consumer file with cross-file selector using defineMarker", () => {
+    const source = `
+import styled from "styled-components";
+import { CollapseArrowIcon } from "./lib/collapse-arrow-icon";
+
+const Button = styled.button\`
+  display: inline-flex;
+  align-items: center;
+  padding: 8px 12px;
+\`;
+
+const StyledCollapseButton = styled(Button)\`
+  gap: 8px;
+
+  \${CollapseArrowIcon} {
+    width: 18px;
+    height: auto;
+  }
+
+  &:hover \${CollapseArrowIcon} {
+    transform: rotate(180deg);
+  }
+\`;
+
+export const App = () => (
+  <div>
+    <StyledCollapseButton>
+      <CollapseArrowIcon />
+      Toggle
+    </StyledCollapseButton>
+  </div>
+);
+`;
+
+    // Build the cross-file info as the prepass would
+    const crossFileInfo = {
+      selectorUsages: [
+        {
+          localName: "CollapseArrowIcon",
+          importSource: "./lib/collapse-arrow-icon",
+          importedName: "CollapseArrowIcon",
+          resolvedPath: fixture("lib/collapse-arrow-icon.tsx"),
+        },
+      ],
+      componentsNeedingStyleAcceptance: new Set<string>(),
+    };
+
+    const result = transformWithWarnings({ source, path: fixture("consumer-basic.tsx") }, api, {
+      adapter: fixtureAdapter,
+      crossFileInfo,
+    });
+
+    expect(result.code).not.toBeNull();
+    const code = result.code!;
+
+    // Should emit defineMarker()
+    expect(code).toContain("stylex.defineMarker()");
+    // Should have the marker variable
+    expect(code).toContain("__StyledCollapseButtonMarker");
+    // Should use stylex.when.ancestor with the marker
+    expect(code).toContain("stylex.when.ancestor");
+    // Should apply override styles to CollapseArrowIcon
+    expect(code).toContain("collapseArrowIconInStyledCollapseButton");
+    // Should NOT have the "unknown component selector" bail
+    expect(result.warnings).not.toContainEqual(
+      expect.objectContaining({ type: "Unsupported selector: unknown component selector" }),
+    );
+    // Should spread override styles onto CollapseArrowIcon
+    expect(code).toContain("stylex.props(styles.collapseArrowIconInStyledCollapseButton)");
+  });
+
+  it("does not break same-file descendant overrides", () => {
+    // Ensure same-file selectors still use defaultMarker()
+    const source = `
+import styled from "styled-components";
+
+const Icon = styled.svg\`
+  width: 16px;
+  height: 16px;
+\`;
+
+const Button = styled.button\`
+  display: flex;
+  \${Icon} {
+    fill: currentColor;
+  }
+\`;
+
+export const App = () => (
+  <Button>
+    <Icon />
+  </Button>
+);
+`;
+
+    const result = transformWithWarnings({ source, path: "same-file-test.tsx" }, api, {
+      adapter: fixtureAdapter,
+    });
+
+    expect(result.code).not.toBeNull();
+    const code = result.code!;
+
+    // Same-file should use defaultMarker, not defineMarker
+    expect(code).toContain("stylex.defaultMarker()");
+    expect(code).not.toContain("stylex.defineMarker()");
   });
 });

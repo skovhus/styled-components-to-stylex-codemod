@@ -13,6 +13,7 @@
     "assert",
     "path-browserify"
   ],
+  "ignoreBinaries": ["playwright"],
   "ignore": [
     "dist/**",
     "dist-playground/**",
