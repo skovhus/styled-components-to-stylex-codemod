@@ -241,35 +241,27 @@ export function processDeclRules(ctx: DeclProcessingState): void {
               overrideProps.add(out.prop);
             }
           } else if (d.value.kind === "interpolated" && d.property) {
-            // Handle interpolated theme values (e.g., ${props => props.theme.color.labelBase})
-            const slotPart = (
-              d.value as { parts?: Array<{ kind: string; slotId?: number }> }
-            ).parts?.find((p) => p.kind === "slot");
-            if (slotPart && slotPart.slotId !== undefined) {
-              const expr = decl.templateExpressions[slotPart.slotId] as unknown;
-              const resolved =
-                expr &&
-                typeof expr === "object" &&
-                ((expr as { type?: string }).type === "ArrowFunctionExpression" ||
-                  (expr as { type?: string }).type === "FunctionExpression")
-                  ? resolveThemeValueFromFn(expr)
-                  : resolveThemeValue(expr);
-              if (resolved) {
-                for (const out of cssDeclarationToStylexDeclarations(d)) {
-                  const finalValue = buildInterpolatedValue(j, d, resolved);
-                  bucket[out.prop] = finalValue;
-                  overrideProps.add(out.prop);
-                }
-              } else {
-                // Non-theme interpolation (e.g., prop-based ternary) can't be resolved.
-                // Bail to avoid silently dropping the declaration.
-                state.markBail();
-                warnings.push({
-                  severity: "warning",
-                  type: "Unsupported selector: unknown component selector",
-                  loc: computeSelectorWarningLoc(decl.loc, decl.rawCss, rule.selector),
-                });
-                break;
+            // Handle interpolated theme values, resolving each slot independently
+            const resolveResult = resolveAllSlots(
+              d,
+              decl,
+              resolveThemeValue,
+              resolveThemeValueFromFn,
+            );
+            if (resolveResult === "bail") {
+              state.markBail();
+              warnings.push({
+                severity: "warning",
+                type: "Unsupported selector: unknown component selector",
+                loc: computeSelectorWarningLoc(decl.loc, decl.rawCss, rule.selector),
+              });
+              break;
+            }
+            if (resolveResult) {
+              for (const out of cssDeclarationToStylexDeclarations(d)) {
+                const finalValue = buildInterpolatedValue(j, d, resolveResult);
+                bucket[out.prop] = finalValue;
+                overrideProps.add(out.prop);
               }
             }
           }
@@ -324,24 +316,17 @@ export function processDeclRules(ctx: DeclProcessingState): void {
                 (bucket as Record<string, unknown>)[out.prop] = v;
               }
             } else if (d.value.kind === "interpolated" && d.property) {
-              // Handle interpolated theme values (e.g., ${props => props.theme.color.labelBase})
-              const slotPart = (
-                d.value as { parts?: Array<{ kind: string; slotId?: number }> }
-              ).parts?.find((p) => p.kind === "slot");
-              if (slotPart && slotPart.slotId !== undefined) {
-                const expr = decl.templateExpressions[slotPart.slotId] as unknown;
-                const resolved =
-                  expr &&
-                  typeof expr === "object" &&
-                  ((expr as { type?: string }).type === "ArrowFunctionExpression" ||
-                    (expr as { type?: string }).type === "FunctionExpression")
-                    ? resolveThemeValueFromFn(expr)
-                    : resolveThemeValue(expr);
-                if (resolved) {
-                  for (const out of cssDeclarationToStylexDeclarations(d)) {
-                    const finalValue = buildInterpolatedValue(j, d, resolved);
-                    (bucket as Record<string, unknown>)[out.prop] = finalValue;
-                  }
+              // Handle interpolated theme values, resolving each slot independently
+              const resolveResult = resolveAllSlots(
+                d,
+                decl,
+                resolveThemeValue,
+                resolveThemeValueFromFn,
+              );
+              if (resolveResult && resolveResult !== "bail") {
+                for (const out of cssDeclarationToStylexDeclarations(d)) {
+                  const finalValue = buildInterpolatedValue(j, d, resolveResult);
+                  (bucket as Record<string, unknown>)[out.prop] = finalValue;
                 }
               }
             }
@@ -751,8 +736,51 @@ export function processDeclRules(ctx: DeclProcessingState): void {
 // --- Non-exported helpers ---
 
 /**
+ * Resolves all interpolation slots in a declaration to theme AST nodes.
+ * Returns a resolver function `(slotId) => astNode`, or `"bail"` if any
+ * slot can't be resolved, or `null` if no slots are found.
+ */
+function resolveAllSlots(
+  d: { value: { kind: string; parts?: Array<{ kind: string; slotId?: number }> } },
+  decl: { templateExpressions: unknown[] },
+  resolveThemeValue: (expr: unknown) => unknown,
+  resolveThemeValueFromFn: (expr: unknown) => unknown,
+): ((slotId: number) => unknown) | "bail" | null {
+  const parts = (d.value as { parts?: Array<{ kind: string; slotId?: number }> }).parts;
+  if (!parts) {
+    return null;
+  }
+  const slotParts = parts.filter((p) => p.kind === "slot" && p.slotId !== undefined);
+  if (slotParts.length === 0) {
+    return null;
+  }
+  const resolvedBySlotId = new Map<number, unknown>();
+  for (const sp of slotParts) {
+    const slotId = sp.slotId!;
+    if (resolvedBySlotId.has(slotId)) {
+      continue;
+    }
+    const expr = decl.templateExpressions[slotId] as unknown;
+    const resolved =
+      expr &&
+      typeof expr === "object" &&
+      ((expr as { type?: string }).type === "ArrowFunctionExpression" ||
+        (expr as { type?: string }).type === "FunctionExpression")
+        ? resolveThemeValueFromFn(expr)
+        : resolveThemeValue(expr);
+    if (!resolved) {
+      return "bail";
+    }
+    resolvedBySlotId.set(slotId, resolved);
+  }
+  return (slotId: number) => resolvedBySlotId.get(slotId);
+}
+
+/**
  * Builds the final AST value for an interpolated CSS declaration,
  * preserving the order of static and interpolated parts.
+ *
+ * Each slot is resolved independently via `resolveSlot(slotId)`.
  *
  * For a declaration like `border: 2px solid ${color}`, this produces
  * a template literal `\`2px solid ${resolvedExpr}\``.
@@ -761,8 +789,8 @@ export function processDeclRules(ctx: DeclProcessingState): void {
  */
 function buildInterpolatedValue(
   j: DeclProcessingState["state"]["j"],
-  d: { value: { kind: string; parts?: Array<{ kind: string; value?: string }> } },
-  resolved: unknown,
+  d: { value: { kind: string; parts?: Array<{ kind: string; value?: string; slotId?: number }> } },
+  resolveSlot: (slotId: number) => unknown,
 ): unknown {
   const parts = d.value.parts ?? [];
   const hasStaticParts = parts.some((p) => p.kind === "static" && p.value);
@@ -774,14 +802,19 @@ function buildInterpolatedValue(
     for (const part of parts) {
       if (part.kind === "static") {
         currentStatic += part.value ?? "";
-      } else if (part.kind === "slot") {
+      } else if (part.kind === "slot" && part.slotId !== undefined) {
         quasis.push(j.templateElement({ raw: currentStatic, cooked: currentStatic }, false));
         currentStatic = "";
-        expressions.push(resolved);
+        expressions.push(resolveSlot(part.slotId));
       }
     }
     quasis.push(j.templateElement({ raw: currentStatic, cooked: currentStatic }, true));
     return j.templateLiteral(quasis, expressions);
   }
-  return resolved;
+  // Single-slot pure interpolation: return the resolved value directly
+  const singleSlot = parts.find((p) => p.kind === "slot" && p.slotId !== undefined);
+  if (singleSlot && singleSlot.slotId !== undefined) {
+    return resolveSlot(singleSlot.slotId);
+  }
+  return j.literal(null);
 }
