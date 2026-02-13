@@ -43,7 +43,6 @@ export function IconWithTransform(
       status={status}
       {...rest}
       {...stylex.props(
-        styles.iconWithTransform,
         noDate && !selected && status === Status.active
           ? styles.iconWithTransformNoDateNotSelectedStatusActive
           : undefined,
@@ -78,10 +77,6 @@ const styles = stylex.create({
   iconWithTeamColorFill: (fill: string) => ({
     fill,
   }),
-  /**
-   * Renders a diamond shaped icon for the timeline
-   */
-  iconWithTransform: {},
   iconWithTransformNoDateNotSelectedStatusActive: {
     transform: "scale(0.66)",
   },

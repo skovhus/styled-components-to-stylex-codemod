@@ -509,31 +509,6 @@ export function emitStylesAndImports(ctx: TransformContext): { emptyStyleKeys: S
     }
   }
 
-  // Keep empty base style keys when the component has ONLY variant styles (no base CSS
-  // at all, and no styleFnFromProps / other style expressions). In that case, when no
-  // condition is met the element would have no className, which can cause subpixel
-  // text rendering differences vs styled-components (which always adds a component class).
-  // We only do this when there's nothing else producing a className for the element.
-  for (const decl of styledDecls) {
-    if (!emptyStyleKeys.has(decl.styleKey)) {
-      continue;
-    }
-    const hasVariantStyles = decl.variantStyleKeys && Object.keys(decl.variantStyleKeys).length > 0;
-    const hasOtherStyleExpressions =
-      (decl.styleFnFromProps && decl.styleFnFromProps.length > 0) ||
-      (decl.variantDimensions && decl.variantDimensions.length > 0) ||
-      (decl.compoundVariants && decl.compoundVariants.length > 0) ||
-      (decl.needsUseThemeHook && decl.needsUseThemeHook.length > 0) ||
-      (decl.extraStyleKeys && decl.extraStyleKeys.length > 0) ||
-      (decl.extraStyleKeysAfterBase && decl.extraStyleKeysAfterBase.length > 0) ||
-      (decl.extraStylexPropsArgs && decl.extraStylexPropsArgs.length > 0) ||
-      !!decl.enumVariant ||
-      !!decl.attrWrapper;
-    if (hasVariantStyles && !hasOtherStyleExpressions) {
-      emptyStyleKeys.delete(decl.styleKey);
-    }
-  }
-
   // Insert `const styles = stylex.create(...)` (or stylexStyles if styles is already used) near top (after imports)
   const stylesDecl = j.variableDeclaration("const", [
     j.variableDeclarator(
