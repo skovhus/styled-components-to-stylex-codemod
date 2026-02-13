@@ -1,4 +1,4 @@
-// @expected-warning: Unsupported selector: unknown component selector
+// @expected-warning: Unsupported selector: unresolved interpolation in reverse component selector
 import styled from "styled-components";
 
 const Link = styled.a`

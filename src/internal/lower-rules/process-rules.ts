@@ -68,9 +68,18 @@ export function processDeclRules(ctx: DeclProcessingState): void {
     // NOTE: normalize interpolated component selectors before the complex selector checks
     // to avoid skipping bails for selectors like `${Other} .child &`.
     if (typeof rule.selector === "string") {
-      // Normalize specificity hacks (&&, &&&) before any selector analysis.
-      // This collapses consecutive `&` characters (e.g., `&&` → `&`, `&&:hover` → `&:hover`).
+      // Normalize specificity hacks (&&) before any selector analysis.
+      // Only double-ampersand is collapsed; triple-or-more (&&&) bails.
       const specificityResult = normalizeSpecificityHacks(rule.selector);
+      if (specificityResult.hasHigherTier) {
+        state.markBail();
+        warnings.push({
+          severity: "warning",
+          type: "Styled-components specificity hacks like `&&` / `&&&` are not representable in StyleX",
+          loc: computeSelectorWarningLoc(decl.loc, decl.rawCss, rule.selector),
+        });
+        break;
+      }
       const selectorForAnalysis = specificityResult.normalized;
       const s = normalizeInterpolatedSelector(selectorForAnalysis).trim();
       const hasComponentExpr = rule.selector.includes("__SC_EXPR_");
@@ -231,7 +240,7 @@ export function processDeclRules(ctx: DeclProcessingState): void {
           state.markBail();
           warnings.push({
             severity: "warning",
-            type: "Unsupported selector: unknown component selector",
+            type: "Unsupported selector: unresolved interpolation in reverse component selector",
             loc: computeSelectorWarningLoc(decl.loc, decl.rawCss, rule.selector),
           });
           break;
@@ -272,14 +281,24 @@ export function processDeclRules(ctx: DeclProcessingState): void {
             relationOverridePseudoBuckets,
           );
 
-          processDeclarationsIntoBucket(
+          const forwardResult = processDeclarationsIntoBucket(
             rule,
             bucket,
             j,
             decl,
             resolveThemeValue,
             resolveThemeValueFromFn,
+            { bailOnUnresolved: true },
           );
+          if (forwardResult === "bail") {
+            state.markBail();
+            warnings.push({
+              severity: "warning",
+              type: "Unsupported selector: unresolved interpolation in descendant component selector",
+              loc: computeSelectorWarningLoc(decl.loc, decl.rawCss, rule.selector),
+            });
+            break;
+          }
         }
         continue;
       }
@@ -346,7 +365,8 @@ export function processDeclRules(ctx: DeclProcessingState): void {
     const isInputIntrinsic = decl.base.kind === "intrinsic" && decl.base.tagName === "input";
     let selector = normalizeSelectorForInputAttributePseudos(rule.selector, isInputIntrinsic);
     selector = normalizeInterpolatedSelector(selector);
-    // Normalize specificity hacks (&&, &&&) to base selector (&).
+    // Normalize specificity hacks (&&) to base selector (&).
+    // Higher tiers (&&&) are caught in the heuristic check above.
     const { normalized: selectorNormalized, wasStripped: specificityStripped } =
       normalizeSpecificityHacks(selector);
     selector = selectorNormalized;

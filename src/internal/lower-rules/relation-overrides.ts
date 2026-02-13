@@ -1,6 +1,6 @@
 /**
  * Builds relation override style objects from pseudo buckets.
- * Handles descendant, ancestor, and sibling selector overrides.
+ * Handles descendant and ancestor selector overrides.
  */
 import type { JSCodeshift } from "jscodeshift";
 import { isAstNode } from "../utilities/jscodeshift-utils.js";
@@ -83,6 +83,9 @@ export const finalizeRelationOverrides = (args: {
           }
         }
       }
+      // When the base value is a pseudo/media map (e.g., { default: "gray", ":focus": "orange" }),
+      // extract the scalar default to avoid JSON-stringifying the entire map.
+      baseVal = extractScalarDefault(baseVal);
 
       // Collect pseudo values for this property
       const pseudoValues: Array<{ pseudo: string; value: unknown }> = [];
@@ -131,3 +134,20 @@ export const finalizeRelationOverrides = (args: {
     }
   }
 };
+
+// --- Non-exported helpers ---
+
+/**
+ * If a value is a pseudo/media map (e.g., `{ default: "gray", ":focus": "orange" }`),
+ * extracts its scalar `default` property. AST nodes and non-map values pass through.
+ */
+function extractScalarDefault(value: unknown): unknown {
+  if (!value || typeof value !== "object" || Array.isArray(value) || isAstNode(value)) {
+    return value;
+  }
+  const map = value as Record<string, unknown>;
+  if ("default" in map) {
+    return map.default;
+  }
+  return value;
+}

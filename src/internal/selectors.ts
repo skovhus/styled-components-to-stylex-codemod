@@ -284,25 +284,31 @@ function parseAttributeSelectorInternal(selector: string): ParsedAttributeSelect
 // =============================================================================
 
 /**
- * Normalize specificity hacks (`&&`, `&&&`, etc.) by collapsing consecutive `&` characters
- * into a single `&`. Returns the normalized selector and whether any stripping occurred.
+ * Normalize double-ampersand specificity hacks (`&&`) by collapsing to a single `&`.
+ * Only handles `&&` (exactly two). Higher tiers (`&&&`, `&&&&`) are flagged as
+ * `hasHigherTier` because flattening them can change cascade precedence.
  *
  * Examples:
  *   - `&&` → `&` (stripped)
- *   - `&&&` → `&` (stripped)
  *   - `&&:hover` → `&:hover` (stripped)
  *   - `.wrapper &&` → `.wrapper &` (stripped, but `.wrapper` will be caught later)
- *   - `&:hover` → `&:hover` (no change)
+ *   - `&&&` → flagged as hasHigherTier (not normalized)
+ *   - `&:hover` → no change
  */
 export function normalizeSpecificityHacks(selector: string): {
   normalized: string;
   wasStripped: boolean;
+  hasHigherTier: boolean;
 } {
   if (!selector.includes("&&")) {
-    return { normalized: selector, wasStripped: false };
+    return { normalized: selector, wasStripped: false, hasHigherTier: false };
   }
-  const normalized = selector.replace(/&{2,}/g, "&");
-  return { normalized, wasStripped: normalized !== selector };
+  // Check for triple-or-more ampersand sequences
+  if (/&{3,}/.test(selector)) {
+    return { normalized: selector, wasStripped: false, hasHigherTier: true };
+  }
+  const normalized = selector.replace(/&&/g, "&");
+  return { normalized, wasStripped: normalized !== selector, hasHigherTier: false };
 }
 
 export function normalizeInterpolatedSelector(selectorRaw: string): string {

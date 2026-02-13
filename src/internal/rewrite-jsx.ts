@@ -1,6 +1,6 @@
 /**
  * Post-processes the transformed JSX tree after style emission.
- * Core concepts: relation overrides (descendant/ancestor/sibling) and stylex.props cleanup.
+ * Core concepts: relation overrides (descendant/ancestor) and stylex.props cleanup.
  */
 import type { Collection } from "jscodeshift";
 import type { RelationOverride } from "./lower-rules.js";
@@ -43,7 +43,7 @@ export function postProcessTransformedAst(args: {
   });
 
   // Apply relation override styles that rely on `stylex.when.*()`:
-  // - Add `stylex.defaultMarker()` to elements that need markers (ancestors, siblings).
+  // - Add `stylex.defaultMarker()` to elements that need markers (ancestor selectors).
   // - Add override style keys to descendant/child elements' `stylex.props(...)` calls.
   if (relationOverrides.length > 0 || ancestorSelectorParents.size > 0) {
     // IMPORTANT: Do not reuse the same AST node instance across multiple insertion points.
