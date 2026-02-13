@@ -1,0 +1,1 @@
+import{j as r}from"./index-BcniTRs4.js";const e=()=>r.jsxs("div",{children:[r.jsx("div",{className:"x6gnr5x x-default-marker",children:"First"}),r.jsx("div",{className:"x6gnr5x x-default-marker",children:"Second"})]});export{e as App};

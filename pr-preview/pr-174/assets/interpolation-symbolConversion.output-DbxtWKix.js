@@ -1,1 +1,0 @@
-import{j as o}from"./index-8HERoedA.js";function c(s){const{children:t,$compact:e}=s;return o.jsx("div",{...{0:{className:"x1tamke2 xj3b58b x15yo4kd"},1:{className:"x15yo4kd xhxy2q7 x121t8fs"}}[!!e<<0],children:t})}const a=()=>o.jsxs("div",{children:[o.jsx(c,{$compact:!0,children:"Compact mode"}),o.jsx(c,{$compact:!1,children:"Normal mode"})]});export{a as App};
