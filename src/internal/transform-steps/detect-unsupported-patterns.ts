@@ -170,47 +170,13 @@ export function detectUnsupportedPatternsStep(ctx: TransformContext): StepResult
 
   // Detect patterns that aren't directly representable in StyleX (or require semantic rewrites).
   // These warnings are used for per-fixture expectations and help guide manual follow-ups.
-  let hasComponentSelector = false;
-  let hasSpecificityHack = false;
-  let componentSelectorLoc: { line: number; column: number } | null = null;
-  let specificityHackLoc: { line: number; column: number } | null = null;
   let hocStyledFactoryLoc: { line: number; column: number } | null = null;
   let themePropOverrideLoc: { line: number; column: number } | null = null;
 
-  root.find(j.TemplateLiteral).forEach((p) => {
-    const tl = p.node;
-
-    // Specificity hacks like `&&` / `&&&` inside styled template literals.
-    for (const quasi of tl.quasis) {
-      if (quasi.value.raw.includes("&&")) {
-        hasSpecificityHack = true;
-        if (!specificityHackLoc && quasi.loc?.start?.line !== undefined) {
-          specificityHackLoc = {
-            line: quasi.loc.start.line,
-            column: quasi.loc.start.column ?? 0,
-          };
-        }
-      }
-    }
-
-    // Component selector patterns like `${Link}:hover & { ... }`
-    for (let i = 0; i < tl.expressions.length; i++) {
-      const expr = tl.expressions[i];
-      const after = tl.quasis[i + 1]?.value.raw ?? "";
-      if (expr?.type === "Identifier" && after.includes(":hover &")) {
-        hasComponentSelector = true;
-        if (!componentSelectorLoc) {
-          const loc = (expr as any).loc ?? tl.loc;
-          if (loc?.start?.line !== undefined) {
-            componentSelectorLoc = {
-              line: loc.start.line,
-              column: loc.start.column ?? 0,
-            };
-          }
-        }
-      }
-    }
-  });
+  // NOTE: Specificity hacks (`&&`, `&&&`) are handled during rule processing by
+  // normalizeSpecificityHacks() in selectors.ts — no file-level bail needed.
+  // NOTE: Component selector patterns (`${Link}:hover &`) are handled during rule
+  // processing via stylex.when.ancestor() — no file-level bail needed.
 
   if (!hocStyledFactoryLoc) {
     const hocFactories = collectHocStyledFactoryNames();
@@ -445,27 +411,6 @@ export function detectUnsupportedPatternsStep(ctx: TransformContext): StepResult
       severity: "warning",
       type: "Theme prop overrides on styled components are not supported",
       loc: themePropOverrideLoc,
-    });
-    return returnResult({ code: null, warnings }, "bail");
-  }
-
-  if (hasComponentSelector) {
-    warnings.push({
-      severity: "warning",
-      type: "Component selectors like `${OtherComponent}:hover &` are not directly representable in StyleX. Manual refactor is required",
-      loc: componentSelectorLoc,
-    });
-
-    // Policy: component selectors like `${OtherComponent}:hover &` require a semantic refactor.
-    // Bail out to avoid producing incorrect output.
-    return returnResult({ code: null, warnings }, "bail");
-  }
-
-  if (hasSpecificityHack) {
-    warnings.push({
-      severity: "warning",
-      type: "Styled-components specificity hacks like `&&` / `&&&` are not representable in StyleX",
-      loc: specificityHackLoc,
     });
     return returnResult({ code: null, warnings }, "bail");
   }

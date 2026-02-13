@@ -4,8 +4,6 @@
  */
 import { isAstNode } from "../utilities/jscodeshift-utils.js";
 
-export { toKebab } from "../utilities/string-utils.js";
-
 /**
  * Recursively merges style objects, combining nested objects rather than overwriting.
  *

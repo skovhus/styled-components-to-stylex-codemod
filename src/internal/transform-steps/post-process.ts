@@ -1,6 +1,6 @@
 /**
  * Step: post-process transformed AST and cleanup imports.
- * Core concepts: descendant overrides and import reconciliation.
+ * Core concepts: relation overrides and import reconciliation.
  */
 import path from "node:path";
 import { postProcessTransformedAst } from "../rewrite-jsx.js";
@@ -62,7 +62,7 @@ export function postProcessStep(ctx: TransformContext): StepResult {
   const post = postProcessTransformedAst({
     root,
     j,
-    descendantOverrides: ctx.descendantOverrides ?? [],
+    relationOverrides: ctx.relationOverrides ?? [],
     ancestorSelectorParents: ctx.ancestorSelectorParents ?? new Set<string>(),
     componentNameToStyleKey,
     emptyStyleKeys: ctx.emptyStyleKeys ?? new Set<string>(),

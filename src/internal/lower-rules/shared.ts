@@ -1,9 +1,11 @@
 /**
  * Shared helpers for lower-rules transformations.
- * Core concepts: safe AST keys for CSS props and concise style object properties.
+ * Core concepts: safe AST keys for CSS props, concise style object properties,
+ * and relation override bucket management.
  */
 import type { JSCodeshift } from "jscodeshift";
 import type { ExpressionKind } from "./decl-types.js";
+import type { RelationOverride } from "./state.js";
 
 /**
  * Creates an AST key node for a CSS property name.
@@ -31,6 +33,47 @@ export function cssPropertyToIdentifier(prop: string): string {
     return withoutDashes.replace(/-([a-z])/g, (_, letter) => letter.toUpperCase());
   }
   return prop;
+}
+
+/**
+ * Get or create a pseudo bucket for a relation override style key.
+ * Registers the override in `relationOverrides` if not already present.
+ */
+export function getOrCreateRelationOverrideBucket(
+  overrideStyleKey: string,
+  parentStyleKey: string,
+  childStyleKey: string,
+  ancestorPseudo: string | null,
+  relationOverrides: RelationOverride[],
+  relationOverridePseudoBuckets: Map<string, Map<string | null, Record<string, unknown>>>,
+  childExtraStyleKeys?: string[],
+): Record<string, unknown> {
+  if (!relationOverridePseudoBuckets.has(overrideStyleKey)) {
+    relationOverrides.push({
+      parentStyleKey,
+      childStyleKey,
+      overrideStyleKey,
+      childExtraStyleKeys,
+    });
+  } else if (childExtraStyleKeys?.length) {
+    // Update an existing override entry with child extras that weren't available
+    // on the first call (e.g., forward path created the entry, reverse path adds extras).
+    const existing = relationOverrides.find((o) => o.overrideStyleKey === overrideStyleKey);
+    if (existing && !existing.childExtraStyleKeys?.length) {
+      existing.childExtraStyleKeys = childExtraStyleKeys;
+    }
+  }
+  let pseudoBuckets = relationOverridePseudoBuckets.get(overrideStyleKey);
+  if (!pseudoBuckets) {
+    pseudoBuckets = new Map();
+    relationOverridePseudoBuckets.set(overrideStyleKey, pseudoBuckets);
+  }
+  let bucket = pseudoBuckets.get(ancestorPseudo);
+  if (!bucket) {
+    bucket = {};
+    pseudoBuckets.set(ancestorPseudo, bucket);
+  }
+  return bucket;
 }
 
 /**
