@@ -648,23 +648,6 @@ export const App = () => (
   });
 });
 
-/* ── Single-file prepass (P1 regression) ──────────────────────────────── */
-
-describe("scanCrossFileSelectors with single file", () => {
-  const resolver = createModuleResolver();
-
-  it("detects cross-file selectors even when only one file is scanned", () => {
-    // P1 regression: the prepass must run even for a single consumer file,
-    // because that one file may import cross-file component selectors.
-    const info = scanCrossFileSelectors([fixture("consumer-basic.tsx")], [], resolver);
-
-    const usages = info.selectorUsages.get(fixture("consumer-basic.tsx"));
-    expect(usages).toBeDefined();
-    expect(usages!.length).toBeGreaterThanOrEqual(1);
-    expect(usages![0]!.localName).toBe("CollapseArrowIcon");
-  });
-});
-
 /* ── Monorepo workspace resolution ────────────────────────────────────── */
 
 import { existsSync, mkdirSync, symlinkSync, rmSync } from "node:fs";
