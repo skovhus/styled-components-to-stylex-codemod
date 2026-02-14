@@ -2395,4 +2395,36 @@ export const App = () => (
     expect(result.code).toContain('as={forwardedAs ?? "span"}');
     expect(result.code).not.toContain('as="span"');
   });
+
+  it("should lower forwardedAs through styled(Component) when wrapped base is polymorphic", () => {
+    const source = `
+import styled from "styled-components";
+
+const Base = styled.button\`
+  color: red;
+\`;
+
+const Outer = styled(Base)\`
+  background: blue;
+\`;
+
+export const App = () => (
+  <div>
+    <Base as="section">Base polymorphic</Base>
+    <Outer forwardedAs="a" href="#">
+      Outer forwardedAs
+    </Outer>
+  </div>
+);
+`;
+    const result = transformWithWarnings(
+      { source, path: "test.tsx" },
+      { jscodeshift: j, j, stats: () => {}, report: () => {} },
+      { adapter: fixtureAdapter },
+    );
+    expect(result.code).not.toBeNull();
+    expect(result.code).toContain('<Outer forwardedAs="a" href="#">');
+    expect(result.code).toContain("forwardedAs?: React.ElementType");
+    expect(result.code).toContain("as={forwardedAs}");
+  });
 });

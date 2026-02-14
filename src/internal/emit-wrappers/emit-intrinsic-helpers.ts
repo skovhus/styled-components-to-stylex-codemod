@@ -97,8 +97,47 @@ export function createEmitIntrinsicHelpers(env: EmitIntrinsicHelpersEnv): EmitIn
 
   const FORWARDED_AS_TYPE = "{ forwardedAs?: React.ElementType }";
 
+  const forwardedAsUsageCache = new Map<string, boolean>();
+  const usesForwardedAsInWrapperChain = (
+    localName: string,
+    visiting: Set<string> = new Set<string>(),
+  ): boolean => {
+    const cached = forwardedAsUsageCache.get(localName);
+    if (cached !== undefined) {
+      return cached;
+    }
+    if (visiting.has(localName)) {
+      return false;
+    }
+    visiting.add(localName);
+
+    if (emitter.getUsedAttrs(localName).has("forwardedAs")) {
+      forwardedAsUsageCache.set(localName, true);
+      visiting.delete(localName);
+      return true;
+    }
+
+    for (const wrapperDecl of emitter.wrapperDecls) {
+      if (wrapperDecl.base.kind !== "component") {
+        continue;
+      }
+      if (wrapperDecl.base.ident !== localName) {
+        continue;
+      }
+      if (usesForwardedAsInWrapperChain(wrapperDecl.localName, visiting)) {
+        forwardedAsUsageCache.set(localName, true);
+        visiting.delete(localName);
+        return true;
+      }
+    }
+
+    visiting.delete(localName);
+    forwardedAsUsageCache.set(localName, false);
+    return false;
+  };
+
   const hasForwardedAsUsage = (d: StyledDecl): boolean =>
-    emitter.getUsedAttrs(d.localName).has("forwardedAs");
+    usesForwardedAsInWrapperChain(d.localName);
 
   const withForwardedAsType = (typeText: string, includeForwardedAs: boolean): string =>
     includeForwardedAs ? emitter.joinIntersection(typeText, FORWARDED_AS_TYPE) : typeText;
