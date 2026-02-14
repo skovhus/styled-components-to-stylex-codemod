@@ -1,0 +1,1 @@
+import{j as s}from"./index-Cev5G7if.js";import{a as i}from"./react-spring-CJc_Q9ap.js";const r=()=>s.jsx("div",{className:"x1lliihq",children:s.jsx(i.div,{role:"region",className:"x78zum5 x6s0dn4",children:"Hello"})});export{r as App};
