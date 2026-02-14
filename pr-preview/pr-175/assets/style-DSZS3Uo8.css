@@ -601,6 +601,10 @@ body{font-family:-apple-system,BlinkMacSystemFont,Segoe UI,Roboto,Helvetica Neue
   border-width: 2px;
 }
 
+.xf0lols:not(#\#):not(#\#) {
+  border-width: 5px;
+}
+
 .x1b4wo1g:not(#\#):not(#\#) {
   border-width: var(--xdppooy);
 }
@@ -811,6 +815,10 @@ body{font-family:-apple-system,BlinkMacSystemFont,Segoe UI,Roboto,Helvetica Neue
 
 .xvzc9z4:not(#\#):not(#\#) {
   transition: background var(--x1gjurbz);
+}
+
+.xn1o98z:not(#\#):not(#\#) {
+  transition: background-color .25s;
 }
 
 .x4lopbt:not(#\#):not(#\#) {
@@ -1185,6 +1193,14 @@ body{font-family:-apple-system,BlinkMacSystemFont,Segoe UI,Roboto,Helvetica Neue
 
 .x1jxpefe:not(#\#):not(#\#):not(#\#) {
   background-color: #e7f3ff;
+}
+
+.x1s31fwb:not(#\#):not(#\#):not(#\#) {
+  background-color: #e8e8f4;
+}
+
+.x330b2w:not(#\#):not(#\#):not(#\#) {
+  background-color: #e8f4e8;
 }
 
 .x1f4o5zr:not(#\#):not(#\#):not(#\#) {
@@ -2054,6 +2070,10 @@ body{font-family:-apple-system,BlinkMacSystemFont,Segoe UI,Roboto,Helvetica Neue
   outline-offset: 5px;
 }
 
+.xgnhpqq.xgnhpqq:where(.x6dck52:hover *):not(#\#):not(#\#):not(#\#) {
+  background-color: #639;
+}
+
 .x1izue6a.x1izue6a:where(.x-default-marker:hover *):not(#\#):not(#\#):not(#\#) {
   box-shadow: 0 4px 8px var(--xvyasvk);
 }
@@ -2068,6 +2088,10 @@ body{font-family:-apple-system,BlinkMacSystemFont,Segoe UI,Roboto,Helvetica Neue
 
 .x5b7970.x5b7970:where(.x-default-marker:hover *):not(#\#):not(#\#):not(#\#) {
   opacity: 1;
+}
+
+.x104dzdg.x104dzdg:where(.x1f77che:hover *):not(#\#):not(#\#):not(#\#) {
+  transform: rotate(180deg);
 }
 
 .x16gas18.x16gas18:where(.x-default-marker:hover *):not(#\#):not(#\#):not(#\#) {
@@ -2496,6 +2520,10 @@ body{font-family:-apple-system,BlinkMacSystemFont,Segoe UI,Roboto,Helvetica Neue
   height: 280px;
 }
 
+.x1gnnpzl:not(#\#):not(#\#):not(#\#):not(#\#) {
+  height: 30px;
+}
+
 .x10w6t97:not(#\#):not(#\#):not(#\#):not(#\#) {
   height: 32px;
 }
@@ -2888,6 +2916,10 @@ body{font-family:-apple-system,BlinkMacSystemFont,Segoe UI,Roboto,Helvetica Neue
 
 .xdzyupr:not(#\#):not(#\#):not(#\#):not(#\#) {
   width: 300px;
+}
+
+.x1849jeq:not(#\#):not(#\#):not(#\#):not(#\#) {
+  width: 30px;
 }
 
 .x10h3iyq:not(#\#):not(#\#):not(#\#):not(#\#) {
