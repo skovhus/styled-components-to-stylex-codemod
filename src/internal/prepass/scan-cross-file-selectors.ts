@@ -8,11 +8,13 @@
  * Returns a CrossFileInfo map describing which components are used as
  * selectors across file boundaries, enabling marker-based override wiring.
  *
- * Performance: uses regex-based scanning (~0.1ms/file) instead of
- * full AST parsing (~5ms/file). For 500 files: ~50ms vs ~2500ms.
+ * Uses jscodeshift AST parsing for correctness (handles multi-line imports,
+ * comments, aliased imports, etc.). The quick-bail on "styled-components"
+ * substring avoids parsing files that don't use styled-components at all.
  */
 import { readFileSync } from "node:fs";
 import { resolve as pathResolve } from "node:path";
+import jscodeshift from "jscodeshift";
 import type { ModuleResolver } from "./resolve-imports.js";
 
 /* ── Public types ─────────────────────────────────────────────────────── */
@@ -62,8 +64,11 @@ export function scanCrossFileSelectors(
   const componentsNeedingStyleAcceptance = new Map<string, Set<string>>();
   const componentsNeedingBridge = new Map<string, Set<string>>();
 
+  // Create the parser once, reuse for all files
+  const j = jscodeshift.withParser("tsx");
+
   for (const filePath of allFiles) {
-    const usages = scanFile(filePath, transformSet, resolver);
+    const usages = scanFile(filePath, transformSet, resolver, j);
     if (usages.length === 0) {
       continue;
     }
@@ -84,18 +89,14 @@ export function scanCrossFileSelectors(
 
 /* ── File scanner ─────────────────────────────────────────────────────── */
 
-/**
- * Regex matching `${Identifier}` used as a CSS selector in a styled template.
- * Looks for: ${ Identifier } followed (after optional whitespace/CSS) by `{`.
- * This is a heuristic — the main transform does precise AST-based detection.
- */
-const SELECTOR_INTERPOLATION_RE =
-  /\$\{\s*([A-Z][A-Za-z0-9_]*)\s*\}\s*\{|&[:\w-]*\s+\$\{\s*([A-Z][A-Za-z0-9_]*)\s*\}/g;
+/** Placeholder pattern used by styled-components template parsing */
+const PLACEHOLDER_RE = /__SC_EXPR_(\d+)__/g;
 
 function scanFile(
   filePath: string,
   transformSet: ReadonlySet<string>,
   resolver: ModuleResolver,
+  j: ReturnType<typeof jscodeshift.withParser>,
 ): CrossFileSelectorUsage[] {
   let source: string;
   try {
@@ -109,20 +110,32 @@ function scanFile(
     return [];
   }
 
-  // Step 1: Parse imports via regex
-  const importMap = parseImportMap(source);
+  let root: ReturnType<typeof j>;
+  try {
+    root = j(source);
+  } catch {
+    return [];
+  }
+
+  // Step 1: Build import map (localName → { source, importedName })
+  const importMap = buildImportMap(root, j);
   if (importMap.size === 0) {
     return [];
   }
 
-  // Step 2: Find component names used as selectors in styled templates.
-  // Only scan identifiers that are actually imported (skip same-file components).
-  const selectorLocals = findSelectorIdentifiers(source, importMap);
+  // Step 2: Find the styled default import name
+  const styledImportName = findStyledImportName(root, j);
+  if (!styledImportName) {
+    return [];
+  }
+
+  // Step 3: Find template expressions used as selectors
+  const selectorLocals = findComponentSelectorLocals(root, j, styledImportName);
   if (selectorLocals.size === 0) {
     return [];
   }
 
-  // Step 3: Resolve import specifiers to absolute paths
+  // Step 4: Resolve import specifiers to absolute paths
   const consumerIsTransformed = transformSet.has(filePath);
   const usages: CrossFileSelectorUsage[] = [];
   for (const localName of selectorLocals) {
@@ -149,96 +162,194 @@ function scanFile(
   return usages;
 }
 
-/* ── Import parsing (regex-based) ─────────────────────────────────────── */
+/* ── AST helpers ──────────────────────────────────────────────────────── */
 
 type ImportEntry = { source: string; importedName: string };
 
-/**
- * Matches static import declarations. Captures:
- * - Full import statement up to the specifier
- * - The specifier string (single or double quoted)
- *
- * Handles: import X from "...", import { A, B } from "...", import X, { A } from "..."
- * Does not handle: dynamic imports, re-exports, require()
- */
-const IMPORT_RE = /import\s+(?:type\s+)?(.+?)\s+from\s+["']([^"']+)["']/g;
-
-/**
- * Build localName → { source, importedName } map using regex.
- * ~50x faster than jscodeshift AST parsing for just extracting imports.
- */
-function parseImportMap(source: string): Map<string, ImportEntry> {
+/** Build a map of localName → import info for all import declarations. */
+function buildImportMap(
+  root: ReturnType<typeof jscodeshift>,
+  j: typeof jscodeshift,
+): Map<string, ImportEntry> {
   const map = new Map<string, ImportEntry>();
 
-  IMPORT_RE.lastIndex = 0;
-  let match: RegExpExecArray | null;
-  while ((match = IMPORT_RE.exec(source)) !== null) {
-    const bindings = match[1]!;
-    const specifier = match[2]!;
-
-    // Skip `import type { ... }` — already handled by the `type\s+` optional group,
-    // but if the whole import is `import type`, skip it
-    if (bindings.startsWith("type ") || bindings.startsWith("type{")) {
-      continue;
+  root.find(j.ImportDeclaration).forEach((path) => {
+    const source = path.node.source.value;
+    if (typeof source !== "string") {
+      return;
     }
 
-    // Extract default import: `import X from` or `import X, { ... } from`
-    const defaultMatch = bindings.match(/^([A-Za-z_$][A-Za-z0-9_$]*)/);
-    if (defaultMatch && defaultMatch[1] !== "type") {
-      const localName = defaultMatch[1]!;
-      // Check it's not the start of `{ ... }` (no default)
-      if (localName !== "{" && !bindings.startsWith("{")) {
-        map.set(localName, { source: specifier, importedName: "default" });
+    for (const specifier of path.node.specifiers ?? []) {
+      const localName = getIdentifierName(specifier.local);
+      if (!localName) {
+        continue;
+      }
+
+      if (specifier.type === "ImportDefaultSpecifier") {
+        map.set(localName, { source, importedName: "default" });
+      } else if (specifier.type === "ImportSpecifier") {
+        const importedName = getIdentifierName(specifier.imported) ?? localName;
+        map.set(localName, { source, importedName });
       }
     }
-
-    // Extract named imports: `{ A, B as C, type D }`
-    const namedMatch = bindings.match(/\{([^}]+)\}/);
-    if (namedMatch) {
-      for (const binding of namedMatch[1]!.split(",")) {
-        const trimmed = binding.trim();
-        if (!trimmed || trimmed.startsWith("type ")) {
-          continue;
-        }
-        const asMatch = trimmed.match(/^(\S+)\s+as\s+(\S+)$/);
-        if (asMatch) {
-          map.set(asMatch[2]!, { source: specifier, importedName: asMatch[1]! });
-        } else {
-          map.set(trimmed, { source: specifier, importedName: trimmed });
-        }
-      }
-    }
-  }
+  });
 
   return map;
 }
 
-/* ── Selector detection (regex-based) ─────────────────────────────────── */
+/** Find the local name for the styled-components default import. */
+function findStyledImportName(
+  root: ReturnType<typeof jscodeshift>,
+  j: typeof jscodeshift,
+): string | undefined {
+  let styledName: string | undefined;
+
+  root.find(j.ImportDeclaration).forEach((path) => {
+    if (path.node.source.value !== "styled-components") {
+      return;
+    }
+    for (const spec of path.node.specifiers ?? []) {
+      if (spec.type === "ImportDefaultSpecifier") {
+        const name = getIdentifierName(spec.local);
+        if (name) {
+          styledName = name;
+        }
+      }
+    }
+  });
+
+  return styledName;
+}
 
 /**
- * Find imported component names used as CSS selectors in styled templates.
- * Only returns names that exist in the importMap (skips same-file components).
+ * Find local names of imported components used as selectors inside
+ * styled-components template literals.
+ *
+ * Detects `${Identifier}` expressions inside tagged templates where the
+ * tag is a styled-components call, and the expression is used as a CSS
+ * selector (i.e. the placeholder appears in a selector context like
+ * `__SC_EXPR_0__ { ... }` or `&:hover __SC_EXPR_0__ { ... }`).
  */
-function findSelectorIdentifiers(
-  source: string,
-  importMap: ReadonlyMap<string, ImportEntry>,
+function findComponentSelectorLocals(
+  root: ReturnType<typeof jscodeshift>,
+  j: typeof jscodeshift,
+  styledImportName: string,
 ): Set<string> {
   const selectorLocals = new Set<string>();
 
-  // Reset regex state
-  SELECTOR_INTERPOLATION_RE.lastIndex = 0;
+  root.find(j.TaggedTemplateExpression).forEach((path) => {
+    if (!isStyledTag(path.node.tag, styledImportName)) {
+      return;
+    }
 
-  let match: RegExpExecArray | null;
-  while ((match = SELECTOR_INTERPOLATION_RE.exec(source)) !== null) {
-    // Group 1: ${Identifier} { ...
-    // Group 2: &:pseudo ${Identifier} ...
-    const name = match[1] ?? match[2];
-    if (name && importMap.has(name)) {
-      selectorLocals.add(name);
+    const template = path.node.quasi;
+    const expressions = template.expressions;
+
+    // Reconstruct the raw CSS with placeholders
+    const rawParts: string[] = [];
+    for (let i = 0; i < template.quasis.length; i++) {
+      rawParts.push(template.quasis[i]!.value.raw);
+      if (i < expressions.length) {
+        rawParts.push(`__SC_EXPR_${i}__`);
+      }
+    }
+    const rawCss = rawParts.join("");
+
+    // Find placeholders used as selectors (not as values)
+    for (const match of rawCss.matchAll(PLACEHOLDER_RE)) {
+      const exprIndex = Number(match[1]);
+      const pos = match.index;
+
+      if (isPlaceholderInSelectorContext(rawCss, pos, match[0].length)) {
+        const expr = expressions[exprIndex];
+        if (expr && expr.type === "Identifier") {
+          selectorLocals.add(expr.name);
+        }
+      }
+    }
+  });
+
+  return selectorLocals;
+}
+
+/**
+ * Check whether a styled-components tag expression is a styled call.
+ * Matches: styled.div, styled(X), styled.div.attrs(...), styled(X).withConfig(...), etc.
+ */
+function isStyledTag(tag: unknown, styledName: string): boolean {
+  const node = tag as Record<string, unknown>;
+  if (!node || typeof node !== "object") {
+    return false;
+  }
+
+  // styled.div
+  if (
+    node.type === "MemberExpression" &&
+    (node.object as Record<string, unknown>)?.type === "Identifier" &&
+    (node.object as Record<string, unknown>)?.name === styledName
+  ) {
+    return true;
+  }
+
+  // styled(X)
+  if (
+    node.type === "CallExpression" &&
+    (node.callee as Record<string, unknown>)?.type === "Identifier" &&
+    (node.callee as Record<string, unknown>)?.name === styledName
+  ) {
+    return true;
+  }
+
+  // styled.div.attrs(...) / styled(X).withConfig(...)
+  if (node.type === "CallExpression" && node.callee) {
+    const callee = node.callee as Record<string, unknown>;
+    if (callee.type === "MemberExpression" && callee.object) {
+      return isStyledTag(callee.object, styledName);
     }
   }
 
-  return selectorLocals;
+  return false;
+}
+
+/**
+ * Determine if a placeholder at the given position is in a CSS selector context
+ * rather than a property value context.
+ *
+ * Selector context: followed by `{`, or preceded by `&:pseudo ` and followed by `{` eventually.
+ * Value context: after `:` with no intervening `{`, `}`, or `;`.
+ */
+function isPlaceholderInSelectorContext(rawCss: string, pos: number, length: number): boolean {
+  const after = rawCss.slice(pos + length).trimStart();
+  const before = rawCss.slice(0, pos).trimEnd();
+
+  // If preceded by `:` with no `{`, `}`, or `;` between, it's a value context
+  // (but `:hover`, `:focus` etc. are pseudo-selectors, not values)
+  const lastSemiOrBrace = Math.max(
+    before.lastIndexOf(";"),
+    before.lastIndexOf("{"),
+    before.lastIndexOf("}"),
+  );
+  const lastColon = before.lastIndexOf(":");
+  if (lastColon > lastSemiOrBrace) {
+    const colonContext = before.slice(lastColon).trim();
+    if (!/^:[a-z-]+/i.test(colonContext)) {
+      return false;
+    }
+  }
+
+  // Followed by `{` → definitely a selector
+  if (after.startsWith("{")) {
+    return true;
+  }
+
+  // A `{` appears before the next `;` and no `:` between → still a selector
+  const afterUpToBrace = after.split("{")[0] ?? "";
+  const afterUpToSemi = after.split(";")[0] ?? "";
+  if (afterUpToBrace.length < afterUpToSemi.length && !afterUpToBrace.includes(":")) {
+    return true;
+  }
+
+  return false;
 }
 
 /* ── Utilities ────────────────────────────────────────────────────────── */
@@ -250,6 +361,18 @@ function addToSetMap(map: Map<string, Set<string>>, key: string, value: string):
     map.set(key, set);
   }
   set.add(value);
+}
+
+/** Safely extract the name string from an AST identifier-like node. */
+function getIdentifierName(node: unknown): string | undefined {
+  if (!node || typeof node !== "object") {
+    return undefined;
+  }
+  const n = node as { type?: string; name?: string };
+  if (n.type === "Identifier" && typeof n.name === "string") {
+    return n.name;
+  }
+  return undefined;
 }
 
 /** Deduplicate and resolve two file lists into a single array of absolute paths. */

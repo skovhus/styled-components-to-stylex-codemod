@@ -164,6 +164,20 @@ describe("scanCrossFileSelectors", () => {
     expect(usages![0]!.resolvedPath).toBe(fixture("lib/collapse-arrow-icon.tsx"));
   });
 
+  it("handles multi-line named imports", () => {
+    const info = scanCrossFileSelectors(
+      [fixture("consumer-multiline-import.tsx"), fixture("lib/collapse-arrow-icon.tsx")],
+      [],
+      resolver,
+    );
+
+    const usages = info.selectorUsages.get(fixture("consumer-multiline-import.tsx"));
+    expect(usages).toBeDefined();
+    expect(usages).toHaveLength(1);
+    expect(usages![0]!.localName).toBe("CollapseArrowIcon");
+    expect(usages![0]!.resolvedPath).toBe(fixture("lib/collapse-arrow-icon.tsx"));
+  });
+
   it("deduplicates files appearing in both filesToTransform and consumerPaths", () => {
     const info = scanCrossFileSelectors(
       [fixture("consumer-basic.tsx"), fixture("lib/collapse-arrow-icon.tsx")],
