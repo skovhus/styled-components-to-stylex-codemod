@@ -20,29 +20,7 @@ export function emitStylesStep(ctx: TransformContext): StepResult {
 
   // Emit defineMarker() declarations for cross-file parent components
   if (ctx.crossFileMarkers && ctx.crossFileMarkers.size > 0) {
-    const j = ctx.j;
-    const programBody = ctx.root.get().node.program.body as unknown[];
-    // Find insertion point: after imports, before styles
-    const lastImportIdx = (programBody as { type?: string }[]).reduce(
-      (last, node, i) => (node?.type === "ImportDeclaration" ? i : last),
-      -1,
-    );
-    const insertAt = lastImportIdx >= 0 ? lastImportIdx + 1 : 0;
-
-    let offset = 0;
-    for (const [, markerVarName] of ctx.crossFileMarkers) {
-      const markerDecl = j.variableDeclaration("const", [
-        j.variableDeclarator(
-          j.identifier(markerVarName),
-          j.callExpression(
-            j.memberExpression(j.identifier("stylex"), j.identifier("defineMarker")),
-            [],
-          ),
-        ),
-      ]);
-      (programBody as unknown[]).splice(insertAt + offset, 0, markerDecl);
-      offset++;
-    }
+    emitDefineMarkerDeclarations(ctx);
   }
 
   if (ctx.resolverImportAliases && ctx.resolverImportAliases.size > 0) {
@@ -111,4 +89,34 @@ export function emitStylesStep(ctx: TransformContext): StepResult {
   }
 
   return CONTINUE;
+}
+
+// --- Non-exported helpers ---
+
+/** Emit `const __XMarker = stylex.defineMarker()` declarations at module scope. */
+function emitDefineMarkerDeclarations(ctx: TransformContext): void {
+  const j = ctx.j;
+  const programBody = ctx.root.get().node.program.body as Array<{ type?: string }>;
+  // Insert after imports, before component code
+  const lastImportIdx = programBody.reduce(
+    (last: number, node: { type?: string }, i: number) =>
+      node?.type === "ImportDeclaration" ? i : last,
+    -1,
+  );
+  const insertAt = lastImportIdx >= 0 ? lastImportIdx + 1 : 0;
+
+  let offset = 0;
+  for (const [, markerVarName] of ctx.crossFileMarkers!) {
+    const markerDecl = j.variableDeclaration("const", [
+      j.variableDeclarator(
+        j.identifier(markerVarName),
+        j.callExpression(
+          j.memberExpression(j.identifier("stylex"), j.identifier("defineMarker")),
+          [],
+        ),
+      ),
+    ]);
+    programBody.splice(insertAt + offset, 0, markerDecl as { type?: string });
+    offset++;
+  }
 }

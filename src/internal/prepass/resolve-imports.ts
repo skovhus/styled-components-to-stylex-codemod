@@ -10,10 +10,20 @@
  */
 import { ResolverFactory } from "oxc-resolver";
 
+export interface ModuleResolver {
+  /**
+   * Resolve an import specifier to an absolute file path.
+   * @param fromFile - Absolute path of the file containing the import
+   * @param specifier - The import specifier (e.g., "./icon", "@scope/pkg")
+   * @returns Absolute path of the resolved file, or undefined if unresolvable
+   */
+  resolve(fromFile: string, specifier: string): string | undefined;
+}
+
 /**
  * Create a module resolver with sensible defaults for TypeScript projects.
  *
- * The returned `resolveImport` function resolves a specifier relative to
+ * The returned `resolve` function resolves a specifier relative to
  * a source file path, returning the absolute path or `undefined` on failure.
  */
 export function createModuleResolver(): ModuleResolver {
@@ -37,14 +47,4 @@ export function createModuleResolver(): ModuleResolver {
       }
     },
   };
-}
-
-export interface ModuleResolver {
-  /**
-   * Resolve an import specifier to an absolute file path.
-   * @param fromFile - Absolute path of the file containing the import
-   * @param specifier - The import specifier (e.g., "./icon", "@scope/pkg")
-   * @returns Absolute path of the resolved file, or undefined if unresolvable
-   */
-  resolve(fromFile: string, specifier: string): string | undefined;
 }

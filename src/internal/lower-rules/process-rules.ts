@@ -395,11 +395,14 @@ export function processDeclRules(ctx: DeclProcessingState): void {
         ancestorSelectorParents.add(decl.styleKey);
 
         // For cross-file, register a defineMarker for the parent component
-        if (crossFileUsage) {
-          const markerVarName = `__${decl.localName}Marker`;
+        const markerVarName = crossFileUsage ? `__${decl.localName}Marker` : undefined;
+        if (markerVarName) {
           state.crossFileMarkers.set(decl.styleKey, markerVarName);
         }
 
+        // getOrCreateRelationOverrideBucket creates the RelationOverride entry on first
+        // call for this overrideStyleKey. Track count to detect new entries.
+        const overrideCountBefore = relationOverrides.length;
         const bucket = getOrCreateRelationOverrideBucket(
           overrideStyleKey,
           decl.styleKey,
@@ -409,15 +412,12 @@ export function processDeclRules(ctx: DeclProcessingState): void {
           relationOverridePseudoBuckets,
         );
 
-        // Tag the relation override as cross-file so downstream code
-        // emits defineMarker() instead of defaultMarker()
-        if (crossFileUsage) {
-          const existing = relationOverrides.find((o) => o.overrideStyleKey === overrideStyleKey);
-          if (existing) {
-            existing.crossFile = true;
-            existing.markerVarName = `__${decl.localName}Marker`;
-            existing.crossFileChildLocalName = otherLocal;
-          }
+        // Tag newly-created relation override as cross-file
+        if (markerVarName && relationOverrides.length > overrideCountBefore) {
+          const created = relationOverrides[relationOverrides.length - 1]!;
+          created.crossFile = true;
+          created.markerVarName = markerVarName;
+          created.crossFileChildLocalName = otherLocal;
         }
 
         const forwardResult = processDeclarationsIntoBucket(

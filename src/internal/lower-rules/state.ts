@@ -4,7 +4,7 @@
  */
 import type { ImportSource } from "../../adapter.js";
 import type { TransformContext } from "../transform-context.js";
-import type { StyledDecl } from "../transform-types.js";
+import type { CrossFileSelectorUsage, StyledDecl } from "../transform-types.js";
 import type { WarningType } from "../logger.js";
 import { createCssHelperResolver } from "./css-helper.js";
 import { createThemeResolvers } from "./theme.js";
@@ -224,10 +224,7 @@ export function createLowerRulesState(ctx: TransformContext) {
   });
 
   // Build cross-file selector lookup: localName → usage info
-  const crossFileSelectorsByLocal = new Map<
-    string,
-    { localName: string; resolvedPath: string; importedName: string }
-  >();
+  const crossFileSelectorsByLocal = new Map<string, CrossFileSelectorUsage>();
   if (ctx.crossFileSelectorUsages) {
     for (const usage of ctx.crossFileSelectorUsages) {
       crossFileSelectorsByLocal.set(usage.localName, usage);

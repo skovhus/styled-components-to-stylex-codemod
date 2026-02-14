@@ -109,7 +109,7 @@ function scanFile(
     return [];
   }
 
-  // Step 1: Parse imports with es-module-lexer (fast WASM lexer, ~0.04ms/file)
+  // Step 1: Parse imports via regex
   const importMap = parseImportMap(source);
   if (importMap.size === 0) {
     return [];
