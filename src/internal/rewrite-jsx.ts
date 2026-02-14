@@ -68,14 +68,6 @@ export function postProcessTransformedAst(args: {
       }
     }
 
-    // Collect cross-file parent style keys that need defineMarker instead of defaultMarker
-    const crossFileParentStyleKeys = new Set<string>();
-    if (crossFileMarkers) {
-      for (const key of crossFileMarkers.keys()) {
-        crossFileParentStyleKeys.add(key);
-      }
-    }
-
     const isStylexPropsCall = (n: any): n is any =>
       n?.type === "CallExpression" &&
       n.callee?.type === "MemberExpression" &&
@@ -124,6 +116,14 @@ export function postProcessTransformedAst(args: {
       overridesByChild.set(o.childStyleKey, [...(overridesByChild.get(o.childStyleKey) ?? []), o]);
     }
 
+    /** Check if any ancestor in the JSX tree contains the given parent style key. */
+    const ancestorHasParentKey = (ancestors: any[], parentStyleKey: string): boolean =>
+      ancestors.some(
+        (a: any) =>
+          (a?.call && hasStyleKeyArg(a.call, parentStyleKey)) ||
+          (a?.elementStyleKey && a.elementStyleKey === parentStyleKey),
+      );
+
     // Track empty ancestor style keys to remove AFTER all descendant matching is done.
     // We defer removal so that ancestor matching can still find the style keys.
     const pendingEmptyKeyRemovals: Array<{ call: any; key: string }> = [];
@@ -171,14 +171,7 @@ export function postProcessTransformedAst(args: {
             continue;
           }
           for (const o of list) {
-            // Check if any ancestor has a stylex.props call with the parent style key,
-            // OR if any ancestor is a component whose style key matches the parent style key
-            const matched = ancestors.some(
-              (a: any) =>
-                (a?.call && hasStyleKeyArg(a.call, o.parentStyleKey)) ||
-                (a?.elementStyleKey && a.elementStyleKey === o.parentStyleKey),
-            );
-            if (!matched) {
+            if (!ancestorHasParentKey(ancestors, o.parentStyleKey)) {
               continue;
             }
             if (hasStyleKeyArg(call, o.overrideStyleKey)) {
@@ -199,13 +192,7 @@ export function postProcessTransformedAst(args: {
       if (elementName && crossFileOverridesByChild.has(elementName)) {
         const overrides = crossFileOverridesByChild.get(elementName)!;
         for (const o of overrides) {
-          // Check if any ancestor has the parent style key
-          const matched = ancestors.some(
-            (a: any) =>
-              (a?.call && hasStyleKeyArg(a.call, o.parentStyleKey)) ||
-              (a?.elementStyleKey && a.elementStyleKey === o.parentStyleKey),
-          );
-          if (!matched) {
+          if (!ancestorHasParentKey(ancestors, o.parentStyleKey)) {
             continue;
           }
           // Build the spread: {...stylex.props(styles.overrideKey)}

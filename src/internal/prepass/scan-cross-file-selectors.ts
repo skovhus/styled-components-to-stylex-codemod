@@ -16,18 +16,12 @@ import { readFileSync } from "node:fs";
 import { resolve as pathResolve } from "node:path";
 import jscodeshift from "jscodeshift";
 import type { ModuleResolver } from "./resolve-imports.js";
+import type { CrossFileSelectorUsage as CoreUsage } from "../transform-types.js";
 
 /* ── Public types ─────────────────────────────────────────────────────── */
 
-export interface CrossFileSelectorUsage {
-  /** Local name in the consumer file (e.g. "CollapseArrowIcon") */
-  localName: string;
-  /** Raw import specifier (e.g. "./lib/collapse-arrow-icon") */
-  importSource: string;
-  /** Imported binding name ("default" for default imports, otherwise named) */
-  importedName: string;
-  /** Absolute path of the target module */
-  resolvedPath: string;
+/** Extends the core CrossFileSelectorUsage with prepass-specific fields. */
+export interface CrossFileSelectorUsage extends CoreUsage {
   /** Absolute path of the consumer file */
   consumerPath: string;
   /** Whether the consumer is in the `files` set (Scenario A) */

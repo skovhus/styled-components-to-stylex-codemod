@@ -83,8 +83,6 @@ export class TransformContext {
   needsReactImport?: boolean;
   /** Cross-file selector usages where this file is the consumer */
   crossFileSelectorUsages?: import("./transform-types.js").CrossFileSelectorUsage[];
-  /** Component names (exported from this file) that need to accept external styles */
-  crossFileStyleAcceptance?: Set<string>;
   /** Marker variable names generated for cross-file parent components (parentStyleKey → markerName) */
   crossFileMarkers?: Map<string, string>;
 
@@ -150,10 +148,8 @@ export class TransformContext {
     this.keyframesNames = new Set<string>();
 
     // Wire cross-file info from options
-    const crossFileInfo = options.crossFileInfo;
-    if (crossFileInfo) {
-      this.crossFileSelectorUsages = crossFileInfo.selectorUsages;
-      this.crossFileStyleAcceptance = crossFileInfo.componentsNeedingStyleAcceptance;
+    if (options.crossFileInfo) {
+      this.crossFileSelectorUsages = options.crossFileInfo.selectorUsages;
     }
   }
 

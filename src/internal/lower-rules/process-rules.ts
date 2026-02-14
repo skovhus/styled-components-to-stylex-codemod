@@ -394,11 +394,9 @@ export function processDeclRules(ctx: DeclProcessingState): void {
         const overrideStyleKey = `${toStyleKey(otherLocal)}In${decl.localName}`;
         ancestorSelectorParents.add(decl.styleKey);
 
-        // For cross-file, register a defineMarker for the parent component
+        // For cross-file, compute the marker variable name (stored on RelationOverride,
+        // derived into crossFileMarkers map by lowerRules after processing completes)
         const markerVarName = crossFileUsage ? `__${decl.localName}Marker` : undefined;
-        if (markerVarName) {
-          state.crossFileMarkers.set(decl.styleKey, markerVarName);
-        }
 
         // getOrCreateRelationOverrideBucket creates the RelationOverride entry on first
         // call for this overrideStyleKey. Track count to detect new entries.

@@ -113,7 +113,6 @@ export function transformWithWarnings(
  */
 interface GlobalPrepassResult {
   selectorUsages: Map<string, CrossFileSelectorUsage[]>;
-  componentsNeedingStyleAcceptance: Map<string, Set<string>>;
 }
 
 /**
@@ -136,18 +135,13 @@ function extractCrossFileInfoForFile(
   }
 
   const absPath = pathResolve(filePath);
-  const selectorUsages = prepass.selectorUsages.get(absPath) ?? [];
-  const componentsNeedingStyleAcceptance =
-    prepass.componentsNeedingStyleAcceptance.get(absPath) ?? new Set<string>();
+  const selectorUsages = prepass.selectorUsages.get(absPath);
 
-  if (selectorUsages.length === 0 && componentsNeedingStyleAcceptance.size === 0) {
+  if (!selectorUsages || selectorUsages.length === 0) {
     return options;
   }
 
-  const crossFileInfo: CrossFileInfo = {
-    selectorUsages,
-    componentsNeedingStyleAcceptance,
-  };
+  const crossFileInfo: CrossFileInfo = { selectorUsages };
 
   return { ...options, crossFileInfo };
 }

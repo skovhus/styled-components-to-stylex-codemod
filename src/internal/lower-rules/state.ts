@@ -231,9 +231,6 @@ export function createLowerRulesState(ctx: TransformContext) {
     }
   }
 
-  // Track markers needed for cross-file parent components: parentStyleKey → markerVarName
-  const crossFileMarkers = new Map<string, string>();
-
   const state = {
     api,
     j,
@@ -274,7 +271,6 @@ export function createLowerRulesState(ctx: TransformContext) {
     resolveImportInScope,
     resolveImportForExpr,
     crossFileSelectorsByLocal,
-    crossFileMarkers,
     bail: false,
     markBail: () => {
       state.bail = true;

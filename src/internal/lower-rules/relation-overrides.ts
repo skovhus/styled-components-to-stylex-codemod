@@ -28,37 +28,35 @@ export const finalizeRelationOverrides = (args: {
     return;
   }
 
-  // Build a lookup from override key → child style keys (primary + extras) for base value resolution
+  // Build lookups from override key → child style keys and marker variable names (single pass)
   const overrideToChildKeys = new Map<string, string[]>();
+  const overrideToMarker = new Map<string, string>();
   for (const o of relationOverrides) {
-    const keys = [o.childStyleKey, ...(o.childExtraStyleKeys ?? [])];
-    overrideToChildKeys.set(o.overrideStyleKey, keys);
+    overrideToChildKeys.set(o.overrideStyleKey, [
+      o.childStyleKey,
+      ...(o.childExtraStyleKeys ?? []),
+    ]);
+    if (o.crossFile && o.markerVarName) {
+      overrideToMarker.set(o.overrideStyleKey, o.markerVarName);
+    }
   }
 
   const makeAncestorKey = (pseudo: string, markerVarName?: string) => {
-    const args: ExpressionKind[] = [j.literal(pseudo)];
+    const callArgs: ExpressionKind[] = [j.literal(pseudo)];
     if (markerVarName) {
-      args.push(j.identifier(markerVarName));
+      callArgs.push(j.identifier(markerVarName));
     }
     return j.callExpression(
       j.memberExpression(
         j.memberExpression(j.identifier("stylex"), j.identifier("when")),
         j.identifier("ancestor"),
       ),
-      args,
+      callArgs,
     );
   };
 
   // Local type guard that narrows to ExpressionKind for use with jscodeshift builders
   const isExpressionNode = (v: unknown): v is ExpressionKind => isAstNode(v);
-
-  // Build a lookup from override key → marker variable name for cross-file overrides
-  const overrideToMarker = new Map<string, string>();
-  for (const o of relationOverrides) {
-    if (o.crossFile && o.markerVarName) {
-      overrideToMarker.set(o.overrideStyleKey, o.markerVarName);
-    }
-  }
 
   for (const [overrideKey, pseudoBuckets] of relationOverridePseudoBuckets.entries()) {
     const baseBucket = pseudoBuckets.get(null) ?? {};

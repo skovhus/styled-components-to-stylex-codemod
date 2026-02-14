@@ -66,8 +66,6 @@ export interface TransformOptions extends Options {
 export interface CrossFileInfo {
   /** Cross-file selector usages where this file is the consumer */
   selectorUsages: CrossFileSelectorUsage[];
-  /** Component names (exported from this file) that need to accept external styles */
-  componentsNeedingStyleAcceptance: Set<string>;
 }
 
 export interface CrossFileSelectorUsage {
