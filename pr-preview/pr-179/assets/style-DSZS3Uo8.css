@@ -60,12 +60,12 @@ body{font-family:-apple-system,BlinkMacSystemFont,Segoe UI,Roboto,Helvetica Neue
   inherits: false
 }
 
-@property --x-fill {
+@property --x-transitionDelay {
   syntax: "*";
   inherits: false
 }
 
-@property --x-transitionDelay {
+@property --x-fill {
   syntax: "*";
   inherits: false
 }
