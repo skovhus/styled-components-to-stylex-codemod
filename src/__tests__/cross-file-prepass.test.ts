@@ -192,6 +192,68 @@ describe("scanCrossFileSelectors", () => {
   });
 });
 
+/* ── Scanner corner cases ─────────────────────────────────────────────── */
+
+describe("scanCrossFileSelectors corner cases", () => {
+  const resolver = createModuleResolver();
+
+  it("does NOT detect value interpolation as a selector", () => {
+    // ${Component} used as a CSS value (mixin), not inside a selector block
+    const info = scanCrossFileSelectors(
+      [fixture("consumer-value-interpolation.tsx"), fixture("lib/collapse-arrow-icon.tsx")],
+      [],
+      resolver,
+    );
+
+    // Should NOT find any selector usages — the component is used as a value
+    const usages = info.selectorUsages.get(fixture("consumer-value-interpolation.tsx"));
+    expect(usages ?? []).toHaveLength(0);
+  });
+
+  it("detects aliased import used as selector (import { X as Y })", () => {
+    const info = scanCrossFileSelectors(
+      [fixture("consumer-aliased-import.tsx"), fixture("lib/collapse-arrow-icon.tsx")],
+      [],
+      resolver,
+    );
+
+    const usages = info.selectorUsages.get(fixture("consumer-aliased-import.tsx"));
+    expect(usages).toBeDefined();
+    expect(usages).toHaveLength(1);
+    // The local name is the alias
+    expect(usages![0]!.localName).toBe("Arrow");
+    // The imported name is the original
+    expect(usages![0]!.importedName).toBe("CollapseArrowIcon");
+  });
+
+  it("detects two parents styling the same cross-file child", () => {
+    const info = scanCrossFileSelectors(
+      [fixture("consumer-two-parents.tsx"), fixture("lib/collapse-arrow-icon.tsx")],
+      [],
+      resolver,
+    );
+
+    const usages = info.selectorUsages.get(fixture("consumer-two-parents.tsx"));
+    expect(usages).toBeDefined();
+    // One usage entry (same import, same local name, same resolved path)
+    expect(usages!.length).toBeGreaterThanOrEqual(1);
+    expect(usages![0]!.localName).toBe("CollapseArrowIcon");
+  });
+
+  it("detects selector with renamed styled import (import styledComponents from ...)", () => {
+    const info = scanCrossFileSelectors(
+      [fixture("consumer-renamed-styled.tsx"), fixture("lib/collapse-arrow-icon.tsx")],
+      [],
+      resolver,
+    );
+
+    const usages = info.selectorUsages.get(fixture("consumer-renamed-styled.tsx"));
+    expect(usages).toBeDefined();
+    expect(usages).toHaveLength(1);
+    expect(usages![0]!.localName).toBe("CollapseArrowIcon");
+  });
+});
+
 /* ── Cross-file transform (end-to-end) ───────────────────────────────── */
 
 const j = jscodeshift.withParser("tsx");
@@ -303,6 +365,178 @@ export const App = () => (
     // Same-file should use defaultMarker, not defineMarker
     expect(code).toContain("stylex.defaultMarker()");
     expect(code).not.toContain("stylex.defineMarker()");
+  });
+
+  it("handles aliased cross-file import (import { X as Y })", () => {
+    const source = `
+import styled from "styled-components";
+import { CollapseArrowIcon as Arrow } from "./lib/collapse-arrow-icon";
+
+const Card = styled.div\`
+  padding: 16px;
+  \${Arrow} {
+    fill: blue;
+  }
+\`;
+
+export const App = () => (
+  <Card><Arrow /></Card>
+);
+`;
+
+    const crossFileInfo = {
+      selectorUsages: [
+        {
+          localName: "Arrow",
+          importSource: "./lib/collapse-arrow-icon",
+          importedName: "CollapseArrowIcon",
+          resolvedPath: fixture("lib/collapse-arrow-icon.tsx"),
+        },
+      ],
+      componentsNeedingStyleAcceptance: new Set<string>(),
+    };
+
+    const result = transformWithWarnings(
+      { source, path: fixture("consumer-aliased-import.tsx") },
+      api,
+      { adapter: fixtureAdapter, crossFileInfo },
+    );
+
+    expect(result.code).not.toBeNull();
+    const code = result.code!;
+
+    // Should not bail
+    expect(result.warnings).not.toContainEqual(
+      expect.objectContaining({ type: "Unsupported selector: unknown component selector" }),
+    );
+    // Should emit defineMarker and override styles
+    expect(code).toContain("stylex.defineMarker()");
+    expect(code).toContain("arrowInCard");
+    // Should spread overrides onto Arrow (the alias)
+    expect(code).toContain("stylex.props(styles.arrowInCard)");
+  });
+
+  it("handles two parents styling the same cross-file child", () => {
+    const source = `
+import styled from "styled-components";
+import { CollapseArrowIcon } from "./lib/collapse-arrow-icon";
+
+const ButtonA = styled.button\`
+  \${CollapseArrowIcon} {
+    fill: red;
+  }
+\`;
+
+const ButtonB = styled.button\`
+  \${CollapseArrowIcon} {
+    fill: blue;
+  }
+\`;
+
+export const App = () => (
+  <div>
+    <ButtonA><CollapseArrowIcon /></ButtonA>
+    <ButtonB><CollapseArrowIcon /></ButtonB>
+  </div>
+);
+`;
+
+    const crossFileInfo = {
+      selectorUsages: [
+        {
+          localName: "CollapseArrowIcon",
+          importSource: "./lib/collapse-arrow-icon",
+          importedName: "CollapseArrowIcon",
+          resolvedPath: fixture("lib/collapse-arrow-icon.tsx"),
+        },
+      ],
+      componentsNeedingStyleAcceptance: new Set<string>(),
+    };
+
+    const result = transformWithWarnings(
+      { source, path: fixture("consumer-two-parents.tsx") },
+      api,
+      { adapter: fixtureAdapter, crossFileInfo },
+    );
+
+    expect(result.code).not.toBeNull();
+    const code = result.code!;
+
+    // Should not bail
+    expect(result.warnings).not.toContainEqual(
+      expect.objectContaining({ type: "Unsupported selector: unknown component selector" }),
+    );
+    // Should have overrides for both parents
+    expect(code).toContain("collapseArrowIconInButtonA");
+    expect(code).toContain("collapseArrowIconInButtonB");
+    // Each parent needs its own marker
+    expect(code).toContain("__ButtonAMarker");
+    expect(code).toContain("__ButtonBMarker");
+  });
+
+  it("value interpolation is not detected as selector by prepass", () => {
+    // This is a prepass-level test: when ${Component} is used as a CSS *value*
+    // (not a selector), the prepass should NOT flag it as a cross-file selector.
+    // The value-interpolation fixture has `color: ${CollapseArrowIcon}` — the
+    // prepass's isPlaceholderInSelectorContext correctly rejects this because
+    // it's preceded by `:` in a value context. See the scanner test above:
+    // "does NOT detect value interpolation as a selector"
+    //
+    // The transform-level behavior (bail or resolve) depends on the adapter.
+    // We don't test the transform here — just verify the prepass is correct.
+    const info = scanCrossFileSelectors(
+      [fixture("consumer-value-interpolation.tsx"), fixture("lib/collapse-arrow-icon.tsx")],
+      [],
+      createModuleResolver(),
+    );
+    expect(info.selectorUsages.get(fixture("consumer-value-interpolation.tsx")) ?? []).toHaveLength(
+      0,
+    );
+  });
+
+  it("handles base-only cross-file selector (no pseudo)", () => {
+    // ${Icon} { width: 18px; } — no &:hover, just a plain descendant selector
+    const source = `
+import styled from "styled-components";
+import { CollapseArrowIcon } from "./lib/collapse-arrow-icon";
+
+const Card = styled.div\`
+  padding: 16px;
+  \${CollapseArrowIcon} {
+    width: 24px;
+    height: 24px;
+  }
+\`;
+
+export const App = () => (
+  <Card><CollapseArrowIcon /></Card>
+);
+`;
+
+    const crossFileInfo = {
+      selectorUsages: [
+        {
+          localName: "CollapseArrowIcon",
+          importSource: "./lib/collapse-arrow-icon",
+          importedName: "CollapseArrowIcon",
+          resolvedPath: fixture("lib/collapse-arrow-icon.tsx"),
+        },
+      ],
+      componentsNeedingStyleAcceptance: new Set<string>(),
+    };
+
+    const result = transformWithWarnings({ source, path: fixture("consumer-basic.tsx") }, api, {
+      adapter: fixtureAdapter,
+      crossFileInfo,
+    });
+
+    expect(result.code).not.toBeNull();
+    const code = result.code!;
+
+    // Should have the override style key
+    expect(code).toContain("collapseArrowIconInCard");
+    // Base-only selector: values should be flat (not wrapped in default/when.ancestor)
+    expect(code).toContain('"24px"');
   });
 });
 
