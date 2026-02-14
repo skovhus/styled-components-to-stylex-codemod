@@ -12,7 +12,8 @@ import type { EmitIntrinsicContext } from "./emit-intrinsic-helpers.js";
 
 export function emitInputWrappers(ctx: EmitIntrinsicContext): void {
   const { emitter, j, emitTypes, wrapperDecls, stylesIdentifier, emitted } = ctx;
-  const { emitPropsType, shouldAllowAsProp } = ctx.helpers;
+  const { emitPropsType, hasForwardedAsUsage, shouldAllowAsProp, withForwardedAsType } =
+    ctx.helpers;
   const inputWrapperDecls = wrapperDecls.filter(
     (d: StyledDecl) =>
       d.base.kind === "intrinsic" && d.base.tagName === "input" && d.attrWrapper?.kind === "input",
@@ -23,10 +24,10 @@ export function emitInputWrappers(ctx: EmitIntrinsicContext): void {
       const allowClassNameProp = emitter.shouldAllowClassNameProp(d);
       const allowStyleProp = emitter.shouldAllowStyleProp(d);
       const allowAsProp = shouldAllowAsProp(d, "input");
-      const hasForwardedAsUsage = emitter.getUsedAttrs(d.localName).has("forwardedAs");
+      const includesForwardedAs = hasForwardedAsUsage(d);
       const explicit = emitter.stringifyTsType(d.propsType);
-      const baseTypeText =
-        (explicit ??
+      const baseTypeText = withForwardedAsType(
+        explicit ??
           (() => {
             const base = "React.InputHTMLAttributes<HTMLInputElement>";
             const omitted: string[] = [];
@@ -37,7 +38,9 @@ export function emitInputWrappers(ctx: EmitIntrinsicContext): void {
               omitted.push('"style"');
             }
             return omitted.length > 0 ? `Omit<${base}, ${omitted.join(" | ")}>` : base;
-          })()) + (hasForwardedAsUsage ? " & { forwardedAs?: React.ElementType }" : "");
+          })(),
+        includesForwardedAs,
+      );
       emitPropsType({
         localName: d.localName,
         tagName: "input",
@@ -176,7 +179,7 @@ export function emitInputWrappers(ctx: EmitIntrinsicContext): void {
                   }
                 ` as any),
       );
-      if (hasForwardedAsUsage) {
+      if (includesForwardedAs) {
         const lastEmitted = emitted[emitted.length - 1] as any;
         injectForwardedAsHandling(j, lastEmitted);
       }
@@ -198,7 +201,8 @@ export function emitInputWrappers(ctx: EmitIntrinsicContext): void {
 
 export function emitLinkWrappers(ctx: EmitIntrinsicContext): void {
   const { emitter, j, emitTypes, wrapperDecls, stylesIdentifier, emitted } = ctx;
-  const { emitPropsType, shouldAllowAsProp } = ctx.helpers;
+  const { emitPropsType, hasForwardedAsUsage, shouldAllowAsProp, withForwardedAsType } =
+    ctx.helpers;
   const linkWrapperDecls = wrapperDecls.filter(
     (d: StyledDecl) =>
       d.base.kind === "intrinsic" && d.base.tagName === "a" && d.attrWrapper?.kind === "link",
@@ -209,10 +213,10 @@ export function emitLinkWrappers(ctx: EmitIntrinsicContext): void {
       const allowClassNameProp = emitter.shouldAllowClassNameProp(d);
       const allowStyleProp = emitter.shouldAllowStyleProp(d);
       const allowAsProp = shouldAllowAsProp(d, "a");
-      const hasForwardedAsUsage = emitter.getUsedAttrs(d.localName).has("forwardedAs");
+      const includesForwardedAs = hasForwardedAsUsage(d);
       const explicit = emitter.stringifyTsType(d.propsType);
-      const baseTypeText =
-        (explicit ??
+      const baseTypeText = withForwardedAsType(
+        explicit ??
           emitter.withChildren(
             (() => {
               const base = "React.AnchorHTMLAttributes<HTMLAnchorElement>";
@@ -225,7 +229,9 @@ export function emitLinkWrappers(ctx: EmitIntrinsicContext): void {
               }
               return omitted.length > 0 ? `Omit<${base}, ${omitted.join(" | ")}>` : base;
             })(),
-          )) + (hasForwardedAsUsage ? " & { forwardedAs?: React.ElementType }" : "");
+          ),
+        includesForwardedAs,
+      );
       emitPropsType({
         localName: d.localName,
         tagName: "a",
@@ -417,7 +423,7 @@ export function emitLinkWrappers(ctx: EmitIntrinsicContext): void {
                   }
                 ` as any),
       );
-      if (hasForwardedAsUsage) {
+      if (includesForwardedAs) {
         const lastEmitted = emitted[emitted.length - 1] as any;
         injectForwardedAsHandling(j, lastEmitted);
       }
@@ -427,7 +433,13 @@ export function emitLinkWrappers(ctx: EmitIntrinsicContext): void {
 
 export function emitEnumVariantWrappers(ctx: EmitIntrinsicContext): void {
   const { emitter, j, emitTypes, wrapperDecls, stylesIdentifier, emitted } = ctx;
-  const { emitPropsType, shouldAllowAsProp, asDestructureProp } = ctx.helpers;
+  const {
+    emitPropsType,
+    hasForwardedAsUsage,
+    shouldAllowAsProp,
+    asDestructureProp,
+    withForwardedAsType,
+  } = ctx.helpers;
   // Enum-variant wrappers (e.g. DynamicBox variant mapping from string-interpolation fixture).
   const enumVariantWrappers = wrapperDecls.filter((d: StyledDecl) => d.enumVariant);
   if (enumVariantWrappers.length > 0) {
@@ -436,7 +448,7 @@ export function emitEnumVariantWrappers(ctx: EmitIntrinsicContext): void {
         continue;
       }
       const tagName = "div";
-      const hasForwardedAsUsage = emitter.getUsedAttrs(d.localName).has("forwardedAs");
+      const includesForwardedAs = hasForwardedAsUsage(d);
       const allowClassNameProp = false;
       const allowStyleProp = false;
       const allowAsProp = shouldAllowAsProp(d, tagName);
@@ -451,12 +463,7 @@ export function emitEnumVariantWrappers(ctx: EmitIntrinsicContext): void {
         emitPropsType({
           localName: d.localName,
           tagName,
-          typeText: hasForwardedAsUsage
-            ? emitter.joinIntersection(
-                emitter.withChildren(explicit),
-                "{ forwardedAs?: React.ElementType }",
-              )
-            : emitter.withChildren(explicit),
+          typeText: withForwardedAsType(emitter.withChildren(explicit), includesForwardedAs),
           allowAsProp,
           allowClassNameProp,
           allowStyleProp,
@@ -476,9 +483,7 @@ export function emitEnumVariantWrappers(ctx: EmitIntrinsicContext): void {
         emitPropsType({
           localName: d.localName,
           tagName,
-          typeText: hasForwardedAsUsage
-            ? emitter.joinIntersection(typeText, "{ forwardedAs?: React.ElementType }")
-            : typeText,
+          typeText: withForwardedAsType(typeText, includesForwardedAs),
           allowAsProp,
           allowClassNameProp,
           allowStyleProp,
@@ -503,7 +508,7 @@ export function emitEnumVariantWrappers(ctx: EmitIntrinsicContext): void {
         j.variableDeclarator(
           j.objectPattern([
             ...(allowAsProp ? [asDestructureProp("div")] : []),
-            ...(hasForwardedAsUsage ? [emitter.patternProp("forwardedAs", forwardedAsId)] : []),
+            ...(includesForwardedAs ? [emitter.patternProp("forwardedAs", forwardedAsId)] : []),
             emitter.patternProp(propName, variantId),
             emitter.patternProp("children", childrenId),
           ] as any),
@@ -541,7 +546,7 @@ export function emitEnumVariantWrappers(ctx: EmitIntrinsicContext): void {
         j.jsxIdentifier(allowAsProp ? "Component" : "div"),
         [
           j.jsxSpreadAttribute(j.identifier("sx")),
-          ...(hasForwardedAsUsage
+          ...(includesForwardedAs
             ? [j.jsxAttribute(j.jsxIdentifier("as"), j.jsxExpressionContainer(forwardedAsId))]
             : []),
         ],

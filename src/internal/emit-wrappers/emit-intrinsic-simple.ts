@@ -353,15 +353,19 @@ export function emitSimpleWithConfigWrappers(ctx: EmitIntrinsicContext): void {
 export function emitSimpleExportedIntrinsicWrappers(ctx: EmitIntrinsicContext): void {
   const { emitter, j, emitTypes, wrapperDecls, wrapperNames, stylesIdentifier, emitted } = ctx;
   const {
+    buildForwardedAsValueExpr,
     canUseSimplePropsType,
     shouldIncludeRestForProps,
     buildCompoundVariantExpressions,
     emitPropsType,
     emitSimplePropsType,
+    hasForwardedAsUsage,
     withSimpleAsPropType,
     polymorphicIntrinsicPropsTypeText,
     propsTypeHasExistingPolymorphicAs,
+    splitForwardedAsStaticAttrs,
     shouldAllowAsProp,
+    withForwardedAsType,
     hasElementPropsInDefaultAttrs,
     emitMinimalWrapper,
   } = ctx.helpers;
@@ -406,7 +410,7 @@ export function emitSimpleExportedIntrinsicWrappers(ctx: EmitIntrinsicContext): 
     const allowClassNameProp = emitter.shouldAllowClassNameProp(d);
     const allowStyleProp = emitter.shouldAllowStyleProp(d);
     const usedAttrsForType = emitter.getUsedAttrs(d.localName);
-    const hasForwardedAsUsage = usedAttrsForType.has("forwardedAs");
+    const includesForwardedAs = hasForwardedAsUsage(d);
     const allowAsProp = shouldAllowAsProp(d, tagName);
     let inlineTypeText: string | undefined;
     // d.isExported is already set from exportedComponents during analyze-before-emit
@@ -569,10 +573,7 @@ export function emitSimpleExportedIntrinsicWrappers(ctx: EmitIntrinsicContext): 
         // Wrap the explicit type with PropsWithChildren since the wrapper may need children
         return emitter.withChildren(explicit);
       })();
-      const typeTextWithForwardedAs =
-        explicit && hasForwardedAsUsage
-          ? emitter.joinIntersection(typeText, "{ forwardedAs?: React.ElementType }")
-          : typeText;
+      const typeTextWithForwardedAs = withForwardedAsType(typeText, includesForwardedAs);
 
       // Emit the public props type.
       // For exported components that support `as`, use the full polymorphic pattern.
@@ -608,7 +609,7 @@ export function emitSimpleExportedIntrinsicWrappers(ctx: EmitIntrinsicContext): 
               tagName,
               allowClassNameProp,
               allowStyleProp,
-              includeForwardedAs: hasForwardedAsUsage,
+              includeForwardedAs: includesForwardedAs,
             });
             inlineTypeText = poly.typeExprText;
           } else if (explicit) {
@@ -618,7 +619,7 @@ export function emitSimpleExportedIntrinsicWrappers(ctx: EmitIntrinsicContext): 
               tagName,
               allowClassNameProp,
               allowStyleProp,
-              includeForwardedAs: hasForwardedAsUsage,
+              includeForwardedAs: includesForwardedAs,
               extra: explicit,
             });
             inlineTypeText = poly.typeExprText;
@@ -844,7 +845,7 @@ export function emitSimpleExportedIntrinsicWrappers(ctx: EmitIntrinsicContext): 
                 }),
               ]
             : []),
-          ...(hasForwardedAsUsage ? [ctx.patternProp("forwardedAs", forwardedAsId)] : []),
+          ...(includesForwardedAs ? [ctx.patternProp("forwardedAs", forwardedAsId)] : []),
           ...(allowClassNameProp ? [ctx.patternProp("className", classNameId)] : []),
           ...(includeChildren ? [ctx.patternProp("children", childrenId)] : []),
           ...(allowStyleProp ? [ctx.patternProp("style", styleId)] : []),
@@ -860,6 +861,11 @@ export function emitSimpleExportedIntrinsicWrappers(ctx: EmitIntrinsicContext): 
 
       // Use the style merger helper
       const { attrsInfo, staticClassNameExpr } = emitter.splitAttrsInfo(d.attrsInfo);
+      const { attrsInfo: attrsInfoWithoutForwardedAsStatic, forwardedAsStaticFallback } =
+        splitForwardedAsStaticAttrs({
+          attrsInfo,
+          includeForwardedAs: includesForwardedAs,
+        });
       const merging = emitStyleMerging({
         j,
         emitter,
@@ -874,12 +880,19 @@ export function emitSimpleExportedIntrinsicWrappers(ctx: EmitIntrinsicContext): 
 
       const openingAttrs: JsxAttr[] = [
         ...emitter.buildAttrsFromAttrsInfo({
-          attrsInfo,
+          attrsInfo: attrsInfoWithoutForwardedAsStatic,
           propExprFor: (prop) => j.identifier(prop),
         }),
         ...(restId ? [j.jsxSpreadAttribute(restId)] : []),
-        ...(hasForwardedAsUsage
-          ? [j.jsxAttribute(j.jsxIdentifier("as"), j.jsxExpressionContainer(forwardedAsId))]
+        ...(includesForwardedAs
+          ? [
+              j.jsxAttribute(
+                j.jsxIdentifier("as"),
+                j.jsxExpressionContainer(
+                  buildForwardedAsValueExpr(forwardedAsId, forwardedAsStaticFallback),
+                ),
+              ),
+            ]
           : []),
       ];
       emitter.appendMergingAttrs(openingAttrs, merging);

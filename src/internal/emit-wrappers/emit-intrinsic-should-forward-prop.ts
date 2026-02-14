@@ -57,12 +57,16 @@ function buildPrefixCleanupStatements(
 export function emitShouldForwardPropWrappers(ctx: EmitIntrinsicContext): void {
   const { emitter, j, emitTypes, wrapperDecls, stylesIdentifier, emitted } = ctx;
   const {
+    buildForwardedAsValueExpr,
     canUseSimplePropsType,
     shouldIncludeRestForProps,
     buildCompoundVariantExpressions,
     emitPropsType,
+    hasForwardedAsUsage,
     asDestructureProp,
     shouldAllowAsProp,
+    splitForwardedAsStaticAttrs,
+    withForwardedAsType,
   } = ctx.helpers;
   // Generic wrappers for `withConfig({ shouldForwardProp })` cases.
   const shouldForwardPropWrapperDecls = wrapperDecls.filter(
@@ -75,7 +79,7 @@ export function emitShouldForwardPropWrappers(ctx: EmitIntrinsicContext): void {
     const tagName = d.base.tagName;
     const allowClassNameProp = emitter.shouldAllowClassNameProp(d);
     const allowStyleProp = emitter.shouldAllowStyleProp(d);
-    const hasForwardedAsUsage = emitter.getUsedAttrs(d.localName).has("forwardedAs");
+    const includesForwardedAs = hasForwardedAsUsage(d);
     const allowAsProp = shouldAllowAsProp(d, tagName);
 
     const extraProps = new Set<string>();
@@ -209,6 +213,7 @@ export function emitShouldForwardPropWrappers(ctx: EmitIntrinsicContext): void {
       });
       return VOID_TAGS.has(tagName) ? inferred : emitter.withChildren(inferred);
     })();
+    const finalTypeTextWithForwardedAs = withForwardedAsType(finalTypeText, includesForwardedAs);
 
     // Detect if there are no custom user-defined props (just intrinsic element props)
     const hasNoCustomProps = !explicit && extraProps.size === 0;
@@ -217,7 +222,7 @@ export function emitShouldForwardPropWrappers(ctx: EmitIntrinsicContext): void {
     emitPropsType({
       localName: d.localName,
       tagName,
-      typeText: finalTypeText,
+      typeText: finalTypeTextWithForwardedAs,
       allowAsProp,
       allowClassNameProp,
       allowStyleProp,
@@ -423,11 +428,11 @@ export function emitShouldForwardPropWrappers(ctx: EmitIntrinsicContext): void {
       // When there are no custom props, use inline type
       // When there ARE custom props (explicit), use inline intersection with user-defined type
       const propsTypeText = hasNoCustomProps
-        ? hasForwardedAsUsage
+        ? includesForwardedAs
           ? "React.ComponentPropsWithRef<C> & { as?: C } & { forwardedAs?: React.ElementType }"
           : "React.ComponentPropsWithRef<C> & { as?: C }"
         : explicit
-          ? hasForwardedAsUsage
+          ? includesForwardedAs
             ? `${explicit} & React.ComponentPropsWithRef<C> & { as?: C } & { forwardedAs?: React.ElementType }`
             : `${explicit} & React.ComponentPropsWithRef<C> & { as?: C }`
           : `${emitter.propsTypeNameFor(d.localName)}<C>`;
@@ -474,7 +479,7 @@ export function emitShouldForwardPropWrappers(ctx: EmitIntrinsicContext): void {
       const patternProps = emitter.buildDestructurePatternProps({
         baseProps: [
           ...(allowAsProp ? [asDestructureProp(tagName)] : []),
-          ...(hasForwardedAsUsage ? [ctx.patternProp("forwardedAs", forwardedAsId)] : []),
+          ...(includesForwardedAs ? [ctx.patternProp("forwardedAs", forwardedAsId)] : []),
           ...(includeChildrenInner ? [ctx.patternProp("children", childrenId)] : []),
         ],
         destructureProps: destructureParts,
@@ -497,6 +502,11 @@ export function emitShouldForwardPropWrappers(ctx: EmitIntrinsicContext): void {
         : null;
 
       const { attrsInfo, staticClassNameExpr } = emitter.splitAttrsInfo(d.attrsInfo);
+      const { attrsInfo: attrsInfoWithoutForwardedAsStatic, forwardedAsStaticFallback } =
+        splitForwardedAsStaticAttrs({
+          attrsInfo,
+          includeForwardedAs: includesForwardedAs,
+        });
       const merging = emitStyleMerging({
         j,
         emitter,
@@ -511,12 +521,19 @@ export function emitShouldForwardPropWrappers(ctx: EmitIntrinsicContext): void {
 
       const openingAttrs: JsxAttr[] = [
         ...emitter.buildAttrsFromAttrsInfo({
-          attrsInfo,
+          attrsInfo: attrsInfoWithoutForwardedAsStatic,
           propExprFor: (prop) => j.identifier(prop),
         }),
         ...(includeRest ? [j.jsxSpreadAttribute(restId)] : []),
-        ...(hasForwardedAsUsage
-          ? [j.jsxAttribute(j.jsxIdentifier("as"), j.jsxExpressionContainer(forwardedAsId))]
+        ...(includesForwardedAs
+          ? [
+              j.jsxAttribute(
+                j.jsxIdentifier("as"),
+                j.jsxExpressionContainer(
+                  buildForwardedAsValueExpr(forwardedAsId, forwardedAsStaticFallback),
+                ),
+              ),
+            ]
           : []),
       ];
       emitter.appendMergingAttrs(openingAttrs, merging);
@@ -562,7 +579,7 @@ export function emitShouldForwardPropWrappers(ctx: EmitIntrinsicContext): void {
     const patternProps = emitter.buildDestructurePatternProps({
       baseProps: [
         ...(allowAsProp ? [asDestructureProp(tagName)] : []),
-        ...(hasForwardedAsUsage ? [ctx.patternProp("forwardedAs", forwardedAsId)] : []),
+        ...(includesForwardedAs ? [ctx.patternProp("forwardedAs", forwardedAsId)] : []),
         ...(allowClassNameProp ? [ctx.patternProp("className", classNameId)] : []),
         ...(includeChildrenOuter ? [ctx.patternProp("children", childrenId)] : []),
         ...(allowStyleProp ? [ctx.patternProp("style", styleId)] : []),
@@ -604,9 +621,12 @@ export function emitShouldForwardPropWrappers(ctx: EmitIntrinsicContext): void {
     if (includeRest) {
       openingAttrs.push(j.jsxSpreadAttribute(restId));
     }
-    if (hasForwardedAsUsage) {
+    if (includesForwardedAs) {
       openingAttrs.push(
-        j.jsxAttribute(j.jsxIdentifier("as"), j.jsxExpressionContainer(forwardedAsId)),
+        j.jsxAttribute(
+          j.jsxIdentifier("as"),
+          j.jsxExpressionContainer(buildForwardedAsValueExpr(forwardedAsId)),
+        ),
       );
     }
     emitter.appendMergingAttrs(openingAttrs, merging);

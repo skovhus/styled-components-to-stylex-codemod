@@ -1116,7 +1116,16 @@ export class WrapperEmitter {
     const styleId = j.identifier("style");
     const staticClassName =
       typeof staticAttrs.className === "string" ? staticAttrs.className : undefined;
-    const { className: _omit, ...filteredStaticAttrs } = staticAttrs;
+    const hasStaticAsFallback = allowForwardedAsProp && Object.hasOwn(staticAttrs, "as");
+    const staticAsFallback = hasStaticAsFallback ? staticAttrs.as : undefined;
+    const filteredStaticAttrs = (() => {
+      if (allowForwardedAsProp) {
+        const { className: _omitClassName, as: _omitAs, ...rest } = staticAttrs;
+        return rest;
+      }
+      const { className: _omitClassName, ...rest } = staticAttrs;
+      return rest;
+    })();
     const merging = emitStyleMerging({
       j,
       emitter: this,
@@ -1200,11 +1209,11 @@ export class WrapperEmitter {
       }
     }
     if (allowForwardedAsProp) {
+      const forwardedAsValueExpr = hasStaticAsFallback
+        ? j.logicalExpression("??", j.identifier("forwardedAs"), this.literalExpr(staticAsFallback))
+        : j.identifier("forwardedAs");
       jsxAttrs.push(
-        j.jsxAttribute(
-          j.jsxIdentifier("as"),
-          j.jsxExpressionContainer(j.identifier("forwardedAs")),
-        ),
+        j.jsxAttribute(j.jsxIdentifier("as"), j.jsxExpressionContainer(forwardedAsValueExpr)),
       );
     }
 

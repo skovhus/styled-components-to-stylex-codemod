@@ -19,9 +19,13 @@ export function emitIntrinsicPolymorphicWrappers(ctx: EmitIntrinsicContext): voi
   const { emitter, j, emitTypes, wrapperDecls, wrapperNames, stylesIdentifier, emitted } = ctx;
   const {
     buildCompoundVariantExpressions,
+    buildForwardedAsValueExpr,
     emitNamedPropsType,
+    hasForwardedAsUsage,
     propsTypeHasExistingPolymorphicAs,
+    splitForwardedAsStaticAttrs,
     shouldAllowAsProp,
+    withForwardedAsType,
   } = ctx.helpers;
   const intrinsicPolymorphicWrapperDecls = wrapperDecls.filter((d: StyledDecl) => {
     if (d.base.kind !== "intrinsic") {
@@ -50,7 +54,7 @@ export function emitIntrinsicPolymorphicWrappers(ctx: EmitIntrinsicContext): voi
       const allowClassNameProp = emitter.shouldAllowClassNameProp(d);
       const allowStyleProp = emitter.shouldAllowStyleProp(d);
       const allowAsProp = shouldAllowAsProp(d, tagName);
-      const hasForwardedAsUsage = emitter.getUsedAttrs(d.localName).has("forwardedAs");
+      const includesForwardedAs = hasForwardedAsUsage(d);
       const explicit = emitter.stringifyTsType(d.propsType);
 
       // Polymorphic `as` wrappers: type the wrapper generically so the chosen `as` value
@@ -73,9 +77,7 @@ export function emitIntrinsicPolymorphicWrappers(ctx: EmitIntrinsicContext): voi
         const withAs = allowAsProp
           ? emitter.joinIntersection(baseMaybeOmitted, "{ as?: C }")
           : baseMaybeOmitted;
-        const withForwardedAs = hasForwardedAsUsage
-          ? emitter.joinIntersection(withAs, "{ forwardedAs?: React.ElementType }")
-          : withAs;
+        const withForwardedAs = withForwardedAsType(withAs, includesForwardedAs);
         return explicit ? emitter.joinIntersection(withForwardedAs, explicit) : withForwardedAs;
       })();
 
@@ -218,7 +220,7 @@ export function emitIntrinsicPolymorphicWrappers(ctx: EmitIntrinsicContext): voi
                   }),
                 ]
               : []),
-            ...(hasForwardedAsUsage ? [ctx.patternProp("forwardedAs", forwardedAsId)] : []),
+            ...(includesForwardedAs ? [ctx.patternProp("forwardedAs", forwardedAsId)] : []),
             ...(allowClassNameProp ? [ctx.patternProp("className", classNameId)] : []),
             ...(includeChildren ? [ctx.patternProp("children", childrenId)] : []),
             ...(allowStyleProp ? [ctx.patternProp("style", styleId)] : []),
@@ -243,6 +245,11 @@ export function emitIntrinsicPolymorphicWrappers(ctx: EmitIntrinsicContext): voi
       ]);
 
       const { attrsInfo, staticClassNameExpr } = emitter.splitAttrsInfo(d.attrsInfo);
+      const { attrsInfo: attrsInfoWithoutForwardedAsStatic, forwardedAsStaticFallback } =
+        splitForwardedAsStaticAttrs({
+          attrsInfo,
+          includeForwardedAs: includesForwardedAs,
+        });
       const merging = emitStyleMerging({
         j,
         emitter,
@@ -257,12 +264,19 @@ export function emitIntrinsicPolymorphicWrappers(ctx: EmitIntrinsicContext): voi
 
       const attrs: JsxAttr[] = [
         ...emitter.buildAttrsFromAttrsInfo({
-          attrsInfo,
+          attrsInfo: attrsInfoWithoutForwardedAsStatic,
           propExprFor: (prop) => j.identifier(prop),
         }),
         j.jsxSpreadAttribute(restId),
-        ...(hasForwardedAsUsage
-          ? [j.jsxAttribute(j.jsxIdentifier("as"), j.jsxExpressionContainer(forwardedAsId))]
+        ...(includesForwardedAs
+          ? [
+              j.jsxAttribute(
+                j.jsxIdentifier("as"),
+                j.jsxExpressionContainer(
+                  buildForwardedAsValueExpr(forwardedAsId, forwardedAsStaticFallback),
+                ),
+              ),
+            ]
           : []),
       ];
       emitter.appendMergingAttrs(attrs, merging);
