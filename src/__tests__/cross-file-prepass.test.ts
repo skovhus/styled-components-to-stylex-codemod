@@ -595,6 +595,74 @@ export const App = () => (
     // Should add marker to the imported Link component's JSX
     expect(code).toContain("__LinkMarker");
   });
+
+  it("reverse cross-file: adds marker to parent that already has stylex.props()", () => {
+    // P2 regression: if the imported parent JSX already has a stylex.props() call
+    // (e.g., from a partial migration), the marker must be appended to it, not skipped.
+    const source = `
+import * as stylex from "@stylexjs/stylex";
+import styled from "styled-components";
+import { Link } from "./lib/collapse-arrow-icon";
+
+const Icon = styled.svg\`
+  fill: gray;
+
+  \${Link}:hover & {
+    fill: rebeccapurple;
+  }
+\`;
+
+const linkStyles = stylex.create({ link: { textDecoration: "none" } });
+
+export const App = () => (
+  <Link href="#" {...stylex.props(linkStyles.link)}>
+    <Icon viewBox="0 0 20 20" />
+  </Link>
+);
+`;
+
+    const crossFileInfo = {
+      selectorUsages: [
+        {
+          localName: "Link",
+          importSource: "./lib/collapse-arrow-icon",
+          importedName: "Link",
+          resolvedPath: fixture("lib/collapse-arrow-icon.tsx"),
+        },
+      ],
+    };
+
+    const result = transformWithWarnings(
+      { source, path: fixture("consumer-reverse-selector.tsx") },
+      api,
+      { adapter: fixtureAdapter, crossFileInfo },
+    );
+
+    expect(result.code).not.toBeNull();
+    const code = result.code!;
+
+    // The marker should be added to the existing stylex.props call on <Link>
+    expect(code).toContain("__LinkMarker");
+    // It should appear as an argument inside stylex.props, not as a separate spread
+    expect(code).toMatch(/stylex\.props\([^)]*__LinkMarker/);
+  });
+});
+
+/* ── Single-file prepass (P1 regression) ──────────────────────────────── */
+
+describe("scanCrossFileSelectors with single file", () => {
+  const resolver = createModuleResolver();
+
+  it("detects cross-file selectors even when only one file is scanned", () => {
+    // P1 regression: the prepass must run even for a single consumer file,
+    // because that one file may import cross-file component selectors.
+    const info = scanCrossFileSelectors([fixture("consumer-basic.tsx")], [], resolver);
+
+    const usages = info.selectorUsages.get(fixture("consumer-basic.tsx"));
+    expect(usages).toBeDefined();
+    expect(usages!.length).toBeGreaterThanOrEqual(1);
+    expect(usages![0]!.localName).toBe("CollapseArrowIcon");
+  });
 });
 
 /* ── Monorepo workspace resolution ────────────────────────────────────── */

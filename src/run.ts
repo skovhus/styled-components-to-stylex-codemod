@@ -261,11 +261,12 @@ export async function runTransform(options: RunTransformOptions): Promise<RunTra
     }
   }
 
-  // Run cross-file selector prepass if consumer paths are provided
+  // Run cross-file selector prepass to detect ${ImportedComponent} selectors.
+  // Always run when there are files — even a single file can import cross-file selectors.
   let crossFilePrepassResult:
     | import("./internal/prepass/scan-cross-file-selectors.js").CrossFileInfo
     | undefined;
-  if (consumerFilePaths.length > 0 || filePaths.length > 1) {
+  if (filePaths.length > 0) {
     const { createModuleResolver } = await import("./internal/prepass/resolve-imports.js");
     const { scanCrossFileSelectors } =
       await import("./internal/prepass/scan-cross-file-selectors.js");

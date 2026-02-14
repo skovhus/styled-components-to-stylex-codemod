@@ -4,6 +4,7 @@
  */
 import type { Collection } from "jscodeshift";
 import type { RelationOverride } from "./lower-rules.js";
+import { toStyleKey } from "./transform/helpers.js";
 import { getJsxElementName } from "./utilities/jscodeshift-utils.js";
 
 export function postProcessTransformedAst(args: {
@@ -58,13 +59,31 @@ export function postProcessTransformedAst(args: {
         [],
       );
 
-    // Build cross-file override lookup: crossFileComponentLocalName → overrides
-    const crossFileOverridesByComponent = new Map<string, RelationOverride[]>();
+    // Build cross-file override lookups, split by direction:
+    // - Forward: imported component is the child → apply override styles to its JSX
+    // - Reverse: imported component is the parent → apply marker to its JSX
+    // We distinguish by checking if the component's synthetic style key matches parentStyleKey
+    // (reverse) or childStyleKey (forward).
+    const crossFileChildOverrides = new Map<string, RelationOverride[]>();
+    const crossFileParentMarkers = new Map<string, RelationOverride[]>();
     for (const o of relationOverrides) {
-      if (o.crossFile && o.crossFileComponentLocalName) {
-        const existing = crossFileOverridesByComponent.get(o.crossFileComponentLocalName) ?? [];
+      if (!o.crossFile || !o.crossFileComponentLocalName) {
+        continue;
+      }
+      const componentStyleKey = componentNameToStyleKey?.get(o.crossFileComponentLocalName);
+      if (
+        componentStyleKey === o.parentStyleKey ||
+        o.parentStyleKey === toStyleKey(o.crossFileComponentLocalName)
+      ) {
+        // Reverse: the cross-file component is the parent
+        const existing = crossFileParentMarkers.get(o.crossFileComponentLocalName) ?? [];
         existing.push(o);
-        crossFileOverridesByComponent.set(o.crossFileComponentLocalName, existing);
+        crossFileParentMarkers.set(o.crossFileComponentLocalName, existing);
+      } else {
+        // Forward: the cross-file component is the child
+        const existing = crossFileChildOverrides.get(o.crossFileComponentLocalName) ?? [];
+        existing.push(o);
+        crossFileChildOverrides.set(o.crossFileComponentLocalName, existing);
       }
     }
 
@@ -187,37 +206,49 @@ export function postProcessTransformedAst(args: {
         }
       }
 
-      // Cross-file component handling: for imported components used as selectors,
-      // add appropriate spreads to their JSX attributes.
-      if (elementName && crossFileOverridesByComponent.has(elementName)) {
-        const overrides = crossFileOverridesByComponent.get(elementName)!;
-        for (const o of overrides) {
-          // Forward case (cross-file child): the imported component is the child,
-          // the declaring component (in this file) is the parent.
-          // → Add override styles to the child: {...stylex.props(styles.overrideKey)}
-          if (ancestorHasParentKey(ancestors, o.parentStyleKey)) {
-            const overrideArg = j.memberExpression(
-              j.identifier("styles"),
-              j.identifier(o.overrideStyleKey),
-            );
-            const stylexPropsCall = j.callExpression(
-              j.memberExpression(j.identifier("stylex"), j.identifier("props")),
-              [overrideArg],
-            );
-            opening.attributes = [
-              ...(opening.attributes ?? []),
-              j.jsxSpreadAttribute(stylexPropsCall),
-            ];
-            changed = true;
+      // Cross-file forward child: add override styles to imported child JSX
+      if (elementName && crossFileChildOverrides.has(elementName)) {
+        for (const o of crossFileChildOverrides.get(elementName)!) {
+          if (!ancestorHasParentKey(ancestors, o.parentStyleKey)) {
+            continue;
           }
+          const overrideArg = j.memberExpression(
+            j.identifier("styles"),
+            j.identifier(o.overrideStyleKey),
+          );
+          const stylexPropsCall = j.callExpression(
+            j.memberExpression(j.identifier("stylex"), j.identifier("props")),
+            [overrideArg],
+          );
+          opening.attributes = [
+            ...(opening.attributes ?? []),
+            j.jsxSpreadAttribute(stylexPropsCall),
+          ];
+          changed = true;
+        }
+      }
 
-          // Reverse case (cross-file parent): the imported component is the parent/ancestor,
-          // the declaring component (in this file) is the child.
-          // → Add marker to the parent: {...stylex.props(markerVar)}
-          if (o.markerVarName && !call) {
+      // Cross-file reverse parent: add marker to imported parent JSX
+      if (elementName && crossFileParentMarkers.has(elementName)) {
+        for (const o of crossFileParentMarkers.get(elementName)!) {
+          if (!o.markerVarName) {
+            continue;
+          }
+          const markerIdent = j.identifier(o.markerVarName);
+          if (call) {
+            // Parent already has stylex.props(...) — append marker to its arguments
+            const hasMarkerArg = (call.arguments ?? []).some(
+              (a: any) => a?.type === "Identifier" && a.name === o.markerVarName,
+            );
+            if (!hasMarkerArg) {
+              call.arguments = [...(call.arguments ?? []), markerIdent];
+              changed = true;
+            }
+          } else {
+            // Parent has no stylex.props() — add a new spread
             const markerCall = j.callExpression(
               j.memberExpression(j.identifier("stylex"), j.identifier("props")),
-              [j.identifier(o.markerVarName)],
+              [markerIdent],
             );
             opening.attributes = [...(opening.attributes ?? []), j.jsxSpreadAttribute(markerCall)];
             changed = true;
