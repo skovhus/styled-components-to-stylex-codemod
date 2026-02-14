@@ -75,6 +75,7 @@ export function emitShouldForwardPropWrappers(ctx: EmitIntrinsicContext): void {
     const tagName = d.base.tagName;
     const allowClassNameProp = emitter.shouldAllowClassNameProp(d);
     const allowStyleProp = emitter.shouldAllowStyleProp(d);
+    const hasForwardedAsUsage = emitter.getUsedAttrs(d.localName).has("forwardedAs");
     const allowAsProp = shouldAllowAsProp(d, tagName);
 
     const extraProps = new Set<string>();
@@ -422,9 +423,13 @@ export function emitShouldForwardPropWrappers(ctx: EmitIntrinsicContext): void {
       // When there are no custom props, use inline type
       // When there ARE custom props (explicit), use inline intersection with user-defined type
       const propsTypeText = hasNoCustomProps
-        ? "React.ComponentPropsWithRef<C> & { as?: C }"
+        ? hasForwardedAsUsage
+          ? "React.ComponentPropsWithRef<C> & { as?: C } & { forwardedAs?: React.ElementType }"
+          : "React.ComponentPropsWithRef<C> & { as?: C }"
         : explicit
-          ? `${explicit} & React.ComponentPropsWithRef<C> & { as?: C }`
+          ? hasForwardedAsUsage
+            ? `${explicit} & React.ComponentPropsWithRef<C> & { as?: C } & { forwardedAs?: React.ElementType }`
+            : `${explicit} & React.ComponentPropsWithRef<C> & { as?: C }`
           : `${emitter.propsTypeNameFor(d.localName)}<C>`;
       emitter.annotatePropsParam(propsParamId, d.localName, propsTypeText);
     } else {
@@ -435,6 +440,7 @@ export function emitShouldForwardPropWrappers(ctx: EmitIntrinsicContext): void {
     const childrenId = j.identifier("children");
     const styleId = j.identifier("style");
     const restId = j.identifier("rest");
+    const forwardedAsId = j.identifier("forwardedAs");
     const isVoidTag = tagName === "input";
     const { hasAny: hasLocalUsage } = emitter.getJsxCallsites(d.localName);
 
@@ -468,6 +474,7 @@ export function emitShouldForwardPropWrappers(ctx: EmitIntrinsicContext): void {
       const patternProps = emitter.buildDestructurePatternProps({
         baseProps: [
           ...(allowAsProp ? [asDestructureProp(tagName)] : []),
+          ...(hasForwardedAsUsage ? [ctx.patternProp("forwardedAs", forwardedAsId)] : []),
           ...(includeChildrenInner ? [ctx.patternProp("children", childrenId)] : []),
         ],
         destructureProps: destructureParts,
@@ -508,6 +515,9 @@ export function emitShouldForwardPropWrappers(ctx: EmitIntrinsicContext): void {
           propExprFor: (prop) => j.identifier(prop),
         }),
         ...(includeRest ? [j.jsxSpreadAttribute(restId)] : []),
+        ...(hasForwardedAsUsage
+          ? [j.jsxAttribute(j.jsxIdentifier("as"), j.jsxExpressionContainer(forwardedAsId))]
+          : []),
       ];
       emitter.appendMergingAttrs(openingAttrs, merging);
 
@@ -552,6 +562,7 @@ export function emitShouldForwardPropWrappers(ctx: EmitIntrinsicContext): void {
     const patternProps = emitter.buildDestructurePatternProps({
       baseProps: [
         ...(allowAsProp ? [asDestructureProp(tagName)] : []),
+        ...(hasForwardedAsUsage ? [ctx.patternProp("forwardedAs", forwardedAsId)] : []),
         ...(allowClassNameProp ? [ctx.patternProp("className", classNameId)] : []),
         ...(includeChildrenOuter ? [ctx.patternProp("children", childrenId)] : []),
         ...(allowStyleProp ? [ctx.patternProp("style", styleId)] : []),
@@ -592,6 +603,11 @@ export function emitShouldForwardPropWrappers(ctx: EmitIntrinsicContext): void {
     const openingAttrs: JsxAttr[] = [];
     if (includeRest) {
       openingAttrs.push(j.jsxSpreadAttribute(restId));
+    }
+    if (hasForwardedAsUsage) {
+      openingAttrs.push(
+        j.jsxAttribute(j.jsxIdentifier("as"), j.jsxExpressionContainer(forwardedAsId)),
+      );
     }
     emitter.appendMergingAttrs(openingAttrs, merging);
 

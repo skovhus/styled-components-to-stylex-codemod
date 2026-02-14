@@ -744,7 +744,11 @@ export class WrapperEmitter {
       if (attr === "*" || attr === "children") {
         continue;
       }
-      if (attr === "as" || attr === "forwardedAs") {
+      if (attr === "as") {
+        continue;
+      }
+      if (attr === "forwardedAs") {
+        lines.push("forwardedAs?: React.ElementType");
         continue;
       }
       if (attr === "className" || attr === "style") {
@@ -1001,6 +1005,7 @@ export class WrapperEmitter {
     }
 
     const isVoidTag = VOID_TAGS.has(tagName);
+    const allowForwardedAsProp = this.getUsedAttrs(localName).has("forwardedAs");
     const propsParamId = j.identifier("props");
     const needsPolymorphicTypeParams =
       this.emitTypes && (allowAsProp || Boolean(inlineTypeText?.includes("<C")));
@@ -1053,6 +1058,9 @@ export class WrapperEmitter {
         }) as Property,
       );
     }
+    if (allowForwardedAsProp) {
+      patternProps.push(this.patternProp("forwardedAs"));
+    }
     if (!isVoidTag) {
       patternProps.push(this.patternProp("children"));
     }
@@ -1063,7 +1071,12 @@ export class WrapperEmitter {
       patternProps.push(this.patternProp("style"));
     }
     for (const name of expandedDestructureProps) {
-      if (name !== "children" && name !== "style" && name !== "className") {
+      if (
+        name !== "children" &&
+        name !== "style" &&
+        name !== "className" &&
+        name !== "forwardedAs"
+      ) {
         const defaultVal = propDefaults?.get(name);
         if (defaultVal !== undefined) {
           patternProps.push(
@@ -1185,6 +1198,14 @@ export class WrapperEmitter {
           j.jsxAttribute(j.jsxIdentifier(key), j.jsxExpressionContainer(j.literal(value))),
         );
       }
+    }
+    if (allowForwardedAsProp) {
+      jsxAttrs.push(
+        j.jsxAttribute(
+          j.jsxIdentifier("as"),
+          j.jsxExpressionContainer(j.identifier("forwardedAs")),
+        ),
+      );
     }
 
     if (tagName === "button" && destructureProps.includes("disabled")) {

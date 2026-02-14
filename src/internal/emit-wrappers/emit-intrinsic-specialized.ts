@@ -23,20 +23,21 @@ export function emitInputWrappers(ctx: EmitIntrinsicContext): void {
       const allowClassNameProp = emitter.shouldAllowClassNameProp(d);
       const allowStyleProp = emitter.shouldAllowStyleProp(d);
       const allowAsProp = shouldAllowAsProp(d, "input");
+      const hasForwardedAsUsage = emitter.getUsedAttrs(d.localName).has("forwardedAs");
       const explicit = emitter.stringifyTsType(d.propsType);
       const baseTypeText =
-        explicit ??
-        (() => {
-          const base = "React.InputHTMLAttributes<HTMLInputElement>";
-          const omitted: string[] = [];
-          if (!allowClassNameProp) {
-            omitted.push('"className"');
-          }
-          if (!allowStyleProp) {
-            omitted.push('"style"');
-          }
-          return omitted.length > 0 ? `Omit<${base}, ${omitted.join(" | ")}>` : base;
-        })();
+        (explicit ??
+          (() => {
+            const base = "React.InputHTMLAttributes<HTMLInputElement>";
+            const omitted: string[] = [];
+            if (!allowClassNameProp) {
+              omitted.push('"className"');
+            }
+            if (!allowStyleProp) {
+              omitted.push('"style"');
+            }
+            return omitted.length > 0 ? `Omit<${base}, ${omitted.join(" | ")}>` : base;
+          })()) + (hasForwardedAsUsage ? " & { forwardedAs?: React.ElementType }" : "");
       emitPropsType({
         localName: d.localName,
         tagName: "input",
@@ -175,6 +176,10 @@ export function emitInputWrappers(ctx: EmitIntrinsicContext): void {
                   }
                 ` as any),
       );
+      if (hasForwardedAsUsage) {
+        const lastEmitted = emitted[emitted.length - 1] as any;
+        injectForwardedAsHandling(j, lastEmitted);
+      }
 
       // Post-process: add readOnly destructuring and JSX props when [readonly] is used.
       // Note: [disabled] stays as a StyleX :disabled pseudo-class (semantically equivalent),
@@ -204,22 +209,23 @@ export function emitLinkWrappers(ctx: EmitIntrinsicContext): void {
       const allowClassNameProp = emitter.shouldAllowClassNameProp(d);
       const allowStyleProp = emitter.shouldAllowStyleProp(d);
       const allowAsProp = shouldAllowAsProp(d, "a");
+      const hasForwardedAsUsage = emitter.getUsedAttrs(d.localName).has("forwardedAs");
       const explicit = emitter.stringifyTsType(d.propsType);
       const baseTypeText =
-        explicit ??
-        emitter.withChildren(
-          (() => {
-            const base = "React.AnchorHTMLAttributes<HTMLAnchorElement>";
-            const omitted: string[] = [];
-            if (!allowClassNameProp) {
-              omitted.push('"className"');
-            }
-            if (!allowStyleProp) {
-              omitted.push('"style"');
-            }
-            return omitted.length > 0 ? `Omit<${base}, ${omitted.join(" | ")}>` : base;
-          })(),
-        );
+        (explicit ??
+          emitter.withChildren(
+            (() => {
+              const base = "React.AnchorHTMLAttributes<HTMLAnchorElement>";
+              const omitted: string[] = [];
+              if (!allowClassNameProp) {
+                omitted.push('"className"');
+              }
+              if (!allowStyleProp) {
+                omitted.push('"style"');
+              }
+              return omitted.length > 0 ? `Omit<${base}, ${omitted.join(" | ")}>` : base;
+            })(),
+          )) + (hasForwardedAsUsage ? " & { forwardedAs?: React.ElementType }" : "");
       emitPropsType({
         localName: d.localName,
         tagName: "a",
@@ -411,6 +417,10 @@ export function emitLinkWrappers(ctx: EmitIntrinsicContext): void {
                   }
                 ` as any),
       );
+      if (hasForwardedAsUsage) {
+        const lastEmitted = emitted[emitted.length - 1] as any;
+        injectForwardedAsHandling(j, lastEmitted);
+      }
     }
   }
 }
@@ -426,6 +436,7 @@ export function emitEnumVariantWrappers(ctx: EmitIntrinsicContext): void {
         continue;
       }
       const tagName = "div";
+      const hasForwardedAsUsage = emitter.getUsedAttrs(d.localName).has("forwardedAs");
       const allowClassNameProp = false;
       const allowStyleProp = false;
       const allowAsProp = shouldAllowAsProp(d, tagName);
@@ -440,7 +451,12 @@ export function emitEnumVariantWrappers(ctx: EmitIntrinsicContext): void {
         emitPropsType({
           localName: d.localName,
           tagName,
-          typeText: emitter.withChildren(explicit),
+          typeText: hasForwardedAsUsage
+            ? emitter.joinIntersection(
+                emitter.withChildren(explicit),
+                "{ forwardedAs?: React.ElementType }",
+              )
+            : emitter.withChildren(explicit),
           allowAsProp,
           allowClassNameProp,
           allowStyleProp,
@@ -460,7 +476,9 @@ export function emitEnumVariantWrappers(ctx: EmitIntrinsicContext): void {
         emitPropsType({
           localName: d.localName,
           tagName,
-          typeText,
+          typeText: hasForwardedAsUsage
+            ? emitter.joinIntersection(typeText, "{ forwardedAs?: React.ElementType }")
+            : typeText,
           allowAsProp,
           allowClassNameProp,
           allowStyleProp,
@@ -479,11 +497,13 @@ export function emitEnumVariantWrappers(ctx: EmitIntrinsicContext): void {
       const propsId = j.identifier("props");
       const variantId = j.identifier(propName);
       const childrenId = j.identifier("children");
+      const forwardedAsId = j.identifier("forwardedAs");
 
       const declStmt = j.variableDeclaration("const", [
         j.variableDeclarator(
           j.objectPattern([
             ...(allowAsProp ? [asDestructureProp("div")] : []),
+            ...(hasForwardedAsUsage ? [emitter.patternProp("forwardedAs", forwardedAsId)] : []),
             emitter.patternProp(propName, variantId),
             emitter.patternProp("children", childrenId),
           ] as any),
@@ -519,7 +539,12 @@ export function emitEnumVariantWrappers(ctx: EmitIntrinsicContext): void {
 
       const openingEl = j.jsxOpeningElement(
         j.jsxIdentifier(allowAsProp ? "Component" : "div"),
-        [j.jsxSpreadAttribute(j.identifier("sx"))],
+        [
+          j.jsxSpreadAttribute(j.identifier("sx")),
+          ...(hasForwardedAsUsage
+            ? [j.jsxAttribute(j.jsxIdentifier("as"), j.jsxExpressionContainer(forwardedAsId))]
+            : []),
+        ],
         false,
       );
       const jsx = j.jsxElement(
@@ -626,6 +651,98 @@ function injectExtraInputProps(j: JSCodeshift, fnDecl: unknown, extraProps: stri
     }
 
     // Recurse
+    for (const key of Object.keys(n)) {
+      if (key === "loc" || key === "start" || key === "end" || key === "comments") {
+        continue;
+      }
+      const child = n[key];
+      if (child && typeof child === "object") {
+        queue.push(child);
+      }
+    }
+  }
+}
+
+/**
+ * Inject `forwardedAs` support into emitted intrinsic wrapper functions.
+ *
+ * - Adds `forwardedAs` to destructuring so it doesn't leak via `{...rest}` as `forwardedas`
+ * - Adds `as={forwardedAs}` on rendered JSX elements/components to match styled-components
+ *   semantics where `forwardedAs` lowers to an `as` attribute (not polymorphic outer `as`)
+ */
+function injectForwardedAsHandling(j: JSCodeshift, fnDecl: unknown): void {
+  if (!fnDecl || typeof fnDecl !== "object") {
+    return;
+  }
+
+  const queue: unknown[] = [fnDecl];
+  while (queue.length > 0) {
+    const node = queue.pop();
+    if (!node || typeof node !== "object") {
+      continue;
+    }
+    if (Array.isArray(node)) {
+      for (const item of node) {
+        queue.push(item);
+      }
+      continue;
+    }
+
+    const n = node as Record<string, unknown>;
+
+    if (n.type === "ObjectPattern" && Array.isArray(n.properties)) {
+      const properties = n.properties as unknown[];
+      const hasForwardedAs = properties.some((p: unknown) => {
+        if (!p || typeof p !== "object") {
+          return false;
+        }
+        const prop = p as Record<string, unknown>;
+        if (prop.type !== "Property") {
+          return false;
+        }
+        const key = prop.key as Record<string, unknown> | undefined;
+        return key?.type === "Identifier" && key.name === "forwardedAs";
+      });
+      if (!hasForwardedAs) {
+        const restIdx = properties.findIndex(
+          (p: unknown) =>
+            !!p &&
+            typeof p === "object" &&
+            ((p as Record<string, unknown>).type === "RestElement" ||
+              (p as Record<string, unknown>).type === "RestProperty" ||
+              (p as Record<string, unknown>).type === "SpreadProperty"),
+        );
+        const insertIdx = restIdx >= 0 ? restIdx : properties.length;
+        const id = j.identifier("forwardedAs");
+        const prop = j.property("init", id, id);
+        (prop as unknown as Record<string, unknown>).shorthand = true;
+        properties.splice(insertIdx, 0, prop);
+      }
+    }
+
+    if (n.type === "JSXOpeningElement" && Array.isArray(n.attributes)) {
+      const attrs = n.attributes as unknown[];
+      const hasAsAttr = attrs.some((a: unknown) => {
+        if (!a || typeof a !== "object") {
+          return false;
+        }
+        const attr = a as Record<string, unknown>;
+        if (attr.type !== "JSXAttribute") {
+          return false;
+        }
+        const name = attr.name as Record<string, unknown> | undefined;
+        return name?.type === "JSXIdentifier" && name.name === "as";
+      });
+      if (!hasAsAttr) {
+        attrs.push(
+          j.jsxAttribute(
+            j.jsxIdentifier("as"),
+            j.jsxExpressionContainer(j.identifier("forwardedAs")),
+          ),
+        );
+      }
+    }
+
     for (const key of Object.keys(n)) {
       if (key === "loc" || key === "start" || key === "end" || key === "comments") {
         continue;

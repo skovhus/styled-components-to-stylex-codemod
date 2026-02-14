@@ -3,12 +3,12 @@ import * as stylex from "@stylexjs/stylex";
 import { mergedSx } from "./lib/mergedSx";
 
 function Button<C extends React.ElementType = "button">(
-  props: React.ComponentPropsWithRef<C> & { as?: C },
+  props: React.ComponentPropsWithRef<C> & { as?: C } & { forwardedAs?: React.ElementType },
 ) {
-  const { as: Component = "button", className, children, style, ...rest } = props;
+  const { as: Component = "button", forwardedAs, className, children, style, ...rest } = props;
 
   return (
-    <Component {...rest} {...mergedSx(styles.button, className, style)}>
+    <Component {...rest} as={forwardedAs} {...mergedSx(styles.button, className, style)}>
       {children}
     </Component>
   );
@@ -29,8 +29,12 @@ export const App = () => (
     <Button as="a" href="#">
       Button as Link
     </Button>
+    <Button forwardedAs="a">Button forwardedAs</Button>
     <ButtonWrapper forwardedAs="a" href="#">
       Wrapper forwards as Link
+    </ButtonWrapper>
+    <ButtonWrapper as="section" forwardedAs="a" href="#">
+      Wrapper as Section + forwardedAs
     </ButtonWrapper>
   </div>
 );

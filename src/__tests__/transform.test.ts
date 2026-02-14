@@ -2337,7 +2337,9 @@ const ButtonWrapper = styled(Button)\`
 
 export const App = () => (
   <div>
+    <Button forwardedAs="a" href="#">Direct forwardedAs</Button>
     <ButtonWrapper forwardedAs="a" href="#">Link</ButtonWrapper>
+    <ButtonWrapper as="section" forwardedAs="a" href="#">Both</ButtonWrapper>
   </div>
 );
 `;
@@ -2350,5 +2352,11 @@ export const App = () => (
     // Keep forwardedAs at the wrapper callsite (no blanket conversion to `as`).
     expect(result.code).toContain('forwardedAs="a"');
     expect(result.code).not.toContain('<ButtonWrapper as="a"');
+    // forwardedAs should lower to `as={forwardedAs}` at the rendered intrinsic layer.
+    expect(result.code).toContain("as={forwardedAs}");
+    // Direct forwardedAs should remain a callsite prop (not become element polymorphism).
+    expect(result.code).toContain('<Button forwardedAs="a" href="#">');
+    // `as` and `forwardedAs` can co-exist on wrapper callsites.
+    expect(result.code).toContain('<ButtonWrapper as="section" forwardedAs="a" href="#">');
   });
 });

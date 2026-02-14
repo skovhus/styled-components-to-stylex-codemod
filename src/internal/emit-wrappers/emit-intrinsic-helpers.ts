@@ -47,6 +47,7 @@ export type EmitIntrinsicHelpers = {
     tagName: string;
     allowClassNameProp: boolean;
     allowStyleProp: boolean;
+    includeForwardedAs?: boolean;
     extra?: string | null;
   }) => { typeExprText: string; genericParams: string };
   propsTypeHasExistingPolymorphicAs: (d: StyledDecl) => boolean;
@@ -240,9 +241,10 @@ export function createEmitIntrinsicHelpers(env: EmitIntrinsicHelpersEnv): EmitIn
     tagName: string;
     allowClassNameProp: boolean;
     allowStyleProp: boolean;
+    includeForwardedAs?: boolean;
     extra?: string | null;
   }): { typeExprText: string; genericParams: string } => {
-    const { tagName, allowClassNameProp, allowStyleProp, extra } = args;
+    const { tagName, allowClassNameProp, allowStyleProp, includeForwardedAs, extra } = args;
     const genericParams = `C extends React.ElementType = "${tagName}"`;
 
     // Simple polymorphic pattern:
@@ -260,15 +262,16 @@ export function createEmitIntrinsicHelpers(env: EmitIntrinsicHelpersEnv): EmitIn
       omitted.length > 0
         ? `Omit<React.ComponentPropsWithRef<C>, ${omitted.join(" | ")}>`
         : "React.ComponentPropsWithRef<C>";
+    const forwardedAsPart = includeForwardedAs ? " & { forwardedAs?: React.ElementType }" : "";
     if (extra) {
       // Omit as from extra since we're adding our own as?: C
       const extraWithoutAs = `Omit<${extra}, "as">`;
       // Combine: base props, then custom props (overriding), then polymorphic as
-      const typeExprText = `${base} & ${extraWithoutAs} & { as?: C }`;
+      const typeExprText = `${base} & ${extraWithoutAs} & { as?: C }${forwardedAsPart}`;
       return { typeExprText, genericParams };
     }
     // Just element props with as?: C
-    const typeExprText = `${base} & { as?: C }`;
+    const typeExprText = `${base} & { as?: C }${forwardedAsPart}`;
     return { typeExprText, genericParams };
   };
 

@@ -82,6 +82,8 @@ export function rewriteJsxStep(ctx: TransformContext): StepResult {
         let finalTag = decl.base.kind === "intrinsic" ? decl.base.tagName : decl.base.ident;
 
         // Handle `as="tag"` (styled-components polymorphism) by rewriting the element.
+        // `forwardedAs` does NOT switch the outer rendered element; it maps to an `as`
+        // attribute on the rendered element/component.
         const attrs = opening.attributes ?? [];
         for (const attr of attrs) {
           if (attr.type !== "JSXAttribute") {
@@ -91,7 +93,7 @@ export function rewriteJsxStep(ctx: TransformContext): StepResult {
             continue;
           }
           const attrName = attr.name.name;
-          if (attrName !== "as" && attrName !== "forwardedAs") {
+          if (attrName !== "as") {
             continue;
           }
           const v = attr.value;
@@ -146,7 +148,16 @@ export function rewriteJsxStep(ctx: TransformContext): StepResult {
               return false;
             }
           }
-          return attr.name.name !== "as" && attr.name.name !== "forwardedAs";
+          if (attr.name.name === "as") {
+            return false;
+          }
+          if (attr.name.name === "forwardedAs") {
+            // Preserve styled-components forwardedAs semantics by lowering it to `as`
+            // on the rendered element/component.
+            attr.name.name = "as";
+            return true;
+          }
+          return true;
         });
 
         // Apply `attrs(...)` derived attributes (static + simple prop-conditional).
