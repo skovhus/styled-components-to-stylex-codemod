@@ -294,8 +294,29 @@ export const App = () => (
 
 /* ── Monorepo workspace resolution ────────────────────────────────────── */
 
+import { existsSync, mkdirSync, symlinkSync, rmSync } from "node:fs";
+import { beforeAll } from "vitest";
+
 const monoFixturesDir = join(__dirname, "fixtures", "cross-file-monorepo");
 const monoFixture = (name: string) => join(monoFixturesDir, name);
+
+// Create the workspace symlink that pnpm would normally create.
+// This can't be committed to git (node_modules is gitignored) so we create it at test time.
+const symlinkPath = monoFixture("packages/app/node_modules/@myorg/icons");
+beforeAll(() => {
+  if (!existsSync(symlinkPath)) {
+    mkdirSync(dirname(symlinkPath), { recursive: true });
+    symlinkSync("../../../icons", symlinkPath);
+  }
+  return () => {
+    // Cleanup: remove the symlink after tests (optional, keeps fixtures clean)
+    try {
+      rmSync(symlinkPath);
+    } catch {
+      // ignore
+    }
+  };
+});
 
 describe("monorepo workspace resolution", () => {
   const resolver = createModuleResolver();
