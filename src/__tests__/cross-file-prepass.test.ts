@@ -291,3 +291,132 @@ export const App = () => (
     expect(code).not.toContain("stylex.defineMarker()");
   });
 });
+
+/* ── Monorepo workspace resolution ────────────────────────────────────── */
+
+const monoFixturesDir = join(__dirname, "fixtures", "cross-file-monorepo");
+const monoFixture = (name: string) => join(monoFixturesDir, name);
+
+describe("monorepo workspace resolution", () => {
+  const resolver = createModuleResolver();
+
+  it("resolves workspace package via symlink (@myorg/icons barrel)", () => {
+    const result = resolver.resolve(monoFixture("packages/app/src/button.tsx"), "@myorg/icons");
+    expect(result).toBeDefined();
+    // Should resolve through symlink to the real icons package
+    expect(result).toContain("packages/icons/src/index.ts");
+  });
+
+  it("resolves workspace package subpath export (@myorg/icons/collapse-arrow-icon)", () => {
+    const result = resolver.resolve(
+      monoFixture("packages/app/src/card-subpath.tsx"),
+      "@myorg/icons/collapse-arrow-icon",
+    );
+    expect(result).toBeDefined();
+    expect(result).toContain("packages/icons/src/collapse-arrow-icon.tsx");
+  });
+});
+
+describe("scanCrossFileSelectors with monorepo workspace packages", () => {
+  const resolver = createModuleResolver();
+
+  it("detects cross-file selector via workspace package barrel import", () => {
+    const consumerPath = monoFixture("packages/app/src/button.tsx");
+    const targetPath = monoFixture("packages/icons/src/index.ts");
+
+    const info = scanCrossFileSelectors([consumerPath, targetPath], [], resolver);
+
+    const usages = info.selectorUsages.get(consumerPath);
+    expect(usages).toBeDefined();
+    expect(usages!.length).toBeGreaterThanOrEqual(1);
+
+    const usage = usages!.find((u) => u.localName === "CollapseArrowIcon");
+    expect(usage).toBeDefined();
+    expect(usage!.importSource).toBe("@myorg/icons");
+    // Resolved path should be the real path (through symlink)
+    expect(usage!.resolvedPath).toContain("packages/icons/src/index.ts");
+    expect(usage!.consumerIsTransformed).toBe(true);
+  });
+
+  it("detects cross-file selector via workspace package subpath import", () => {
+    const consumerPath = monoFixture("packages/app/src/card-subpath.tsx");
+    const targetPath = monoFixture("packages/icons/src/collapse-arrow-icon.tsx");
+
+    const info = scanCrossFileSelectors([consumerPath, targetPath], [], resolver);
+
+    const usages = info.selectorUsages.get(consumerPath);
+    expect(usages).toBeDefined();
+    expect(usages).toHaveLength(1);
+
+    const usage = usages![0]!;
+    expect(usage.localName).toBe("CollapseArrowIcon");
+    expect(usage.importSource).toBe("@myorg/icons/collapse-arrow-icon");
+    expect(usage.resolvedPath).toContain("packages/icons/src/collapse-arrow-icon.tsx");
+  });
+});
+
+describe("cross-file transform with monorepo workspace package", () => {
+  it("transforms consumer importing from workspace package", () => {
+    const source = `
+import styled from "styled-components";
+import { CollapseArrowIcon } from "@myorg/icons";
+
+const Button = styled.button\`
+  display: inline-flex;
+  gap: 8px;
+
+  \${CollapseArrowIcon} {
+    width: 18px;
+    height: auto;
+  }
+
+  &:hover \${CollapseArrowIcon} {
+    transform: rotate(180deg);
+  }
+\`;
+
+export const App = () => (
+  <Button>
+    <CollapseArrowIcon />
+    Toggle
+  </Button>
+);
+`;
+
+    const crossFileInfo = {
+      selectorUsages: [
+        {
+          localName: "CollapseArrowIcon",
+          importSource: "@myorg/icons",
+          importedName: "CollapseArrowIcon",
+          resolvedPath: monoFixture("packages/icons/src/index.ts"),
+        },
+      ],
+      componentsNeedingStyleAcceptance: new Set<string>(),
+    };
+
+    const result = transformWithWarnings(
+      { source, path: monoFixture("packages/app/src/button.tsx") },
+      api,
+      { adapter: fixtureAdapter, crossFileInfo },
+    );
+
+    expect(result.code).not.toBeNull();
+    const code = result.code!;
+
+    // Should emit defineMarker for the cross-file parent
+    expect(code).toContain("stylex.defineMarker()");
+    expect(code).toContain("__ButtonMarker");
+    // Should generate override styles using marker
+    expect(code).toContain("stylex.when.ancestor");
+    expect(code).toContain("collapseArrowIconInButton");
+    // Should NOT bail with unknown component selector
+    expect(result.warnings).not.toContainEqual(
+      expect.objectContaining({ type: "Unsupported selector: unknown component selector" }),
+    );
+    // Should spread overrides onto the imported component
+    expect(code).toContain("stylex.props(styles.collapseArrowIconInButton)");
+    // The import for @myorg/icons should be preserved
+    expect(code).toContain("@myorg/icons");
+  });
+});
