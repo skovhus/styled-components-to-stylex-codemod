@@ -119,7 +119,7 @@ export function emitComponentWrappers(emitter: WrapperEmitter): {
     const isPolymorphicComponentWrapper = shouldAllowAsProp && !wrappedComponentHasAs;
     const allowClassNameProp = emitter.shouldAllowClassNameProp(d);
     const allowStyleProp = emitter.shouldAllowStyleProp(d);
-    const hasForwardedAsUsage = emitter.getUsedAttrs(d.localName).has("forwardedAs");
+    const hasForwardedAsUsage = emitter.hasForwardedAsUsage(d.localName);
     const shouldLowerForwardedAs = hasForwardedAsUsage && !wrappedComponentHasAs;
     const propsIdForExpr = j.identifier("props");
     // Track which type name to use for the function parameter

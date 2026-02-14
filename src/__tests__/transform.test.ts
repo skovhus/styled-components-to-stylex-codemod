@@ -2427,4 +2427,51 @@ export const App = () => (
     expect(result.code).toContain("forwardedAs?: React.ElementType");
     expect(result.code).toContain("as={forwardedAs}");
   });
+
+  it("should propagate forwardedAs through multi-level styled(Component) wrapper chains", () => {
+    const source = `
+import React from "react";
+import styled from "styled-components";
+
+type LeafProps = {
+  as?: React.ElementType;
+  href?: string;
+  children?: React.ReactNode;
+};
+
+const Leaf = ({ as: Component = "button", ...rest }: LeafProps) => {
+  return <Component {...rest} />;
+};
+
+const Base = styled(Leaf)\`
+  color: red;
+\`;
+
+const Mid = styled(Base)\`
+  background: blue;
+\`;
+
+const Outer = styled(Mid)\`
+  border: 1px solid black;
+\`;
+
+export const App = () => (
+  <div>
+    <Base as="section">Base polymorphic</Base>
+    <Outer forwardedAs="a" href="#">
+      Outer forwardedAs
+    </Outer>
+  </div>
+);
+`;
+    const result = transformWithWarnings(
+      { source, path: "test.tsx" },
+      { jscodeshift: j, j, stats: () => {}, report: () => {} },
+      { adapter: fixtureAdapter },
+    );
+    expect(result.code).not.toBeNull();
+    expect(result.code).toContain('<Outer forwardedAs="a" href="#">');
+    expect(result.code).toContain("function Base");
+    expect(result.code).toContain("as={forwardedAs}");
+  });
 });

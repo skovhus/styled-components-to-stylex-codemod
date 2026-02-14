@@ -65,6 +65,7 @@ export class WrapperEmitter {
   private jsxCallsitesCache = new Map<string, { hasAny: boolean }>();
   private jsxChildrenUsageCache = new Map<string, boolean>();
   private usedAsValueCache = new Map<string, boolean>();
+  private forwardedAsUsageCache = new Map<string, boolean>();
 
   constructor(args: WrapperEmitterArgs) {
     this.root = args.root;
@@ -124,6 +125,38 @@ export class WrapperEmitter {
       .forEach((p: any) => collectFromOpening(p.node));
     this.usedAttrsCache.set(localName, attrs);
     return attrs;
+  }
+
+  hasForwardedAsUsage(localName: string, visiting: Set<string> = new Set<string>()): boolean {
+    const cached = this.forwardedAsUsageCache.get(localName);
+    if (cached !== undefined) {
+      return cached;
+    }
+    if (visiting.has(localName)) {
+      return false;
+    }
+    visiting.add(localName);
+
+    if (this.getUsedAttrs(localName).has("forwardedAs")) {
+      this.forwardedAsUsageCache.set(localName, true);
+      visiting.delete(localName);
+      return true;
+    }
+
+    for (const wrapperDecl of this.wrapperDecls) {
+      if (wrapperDecl.base.kind !== "component" || wrapperDecl.base.ident !== localName) {
+        continue;
+      }
+      if (this.hasForwardedAsUsage(wrapperDecl.localName, visiting)) {
+        this.forwardedAsUsageCache.set(localName, true);
+        visiting.delete(localName);
+        return true;
+      }
+    }
+
+    visiting.delete(localName);
+    this.forwardedAsUsageCache.set(localName, false);
+    return false;
   }
 
   getJsxCallsites(localName: string): { hasAny: boolean } {
@@ -235,7 +268,7 @@ export class WrapperEmitter {
       return false;
     }
     const used = this.getUsedAttrs(d.localName);
-    return used.has("as") || used.has("forwardedAs");
+    return used.has("as") || this.hasForwardedAsUsage(d.localName);
   }
 
   private stringifyTsTypeName(n: AstNodeOrNull): string | null {
@@ -809,7 +842,6 @@ export class WrapperEmitter {
       wrappedComponentIsInternalWrapper,
       hasExplicitPropsType,
     } = args;
-    const usedAttrs = this.getUsedAttrs(d.localName);
     const lines: string[] = [];
     // When external styles are EXPLICITLY enabled via adapter (d.supportsExternalStyles) and
     // the wrapped component is NOT one of our generated wrappers, add className/style to the type.
@@ -827,7 +859,7 @@ export class WrapperEmitter {
     if (shouldAddStyleProps && allowStyleProp) {
       lines.push("style?: React.CSSProperties");
     }
-    if (usedAttrs.has("forwardedAs")) {
+    if (this.hasForwardedAsUsage(d.localName)) {
       lines.push("forwardedAs?: React.ElementType");
     }
     const literal = lines.length > 0 ? `{ ${lines.join(", ")} }` : "{}";
