@@ -538,6 +538,63 @@ export const App = () => (
     // Base-only selector: values should be flat (not wrapped in default/when.ancestor)
     expect(code).toContain('"24px"');
   });
+
+  it("handles reverse cross-file selector (${Parent}:hover &)", () => {
+    const source = `
+import styled from "styled-components";
+import { Link } from "./lib/collapse-arrow-icon";
+
+const Icon = styled.svg\`
+  fill: gray;
+  transition: fill 0.25s;
+
+  \${Link}:hover & {
+    fill: rebeccapurple;
+  }
+\`;
+
+export const App = () => (
+  <Link href="#">
+    <Icon viewBox="0 0 20 20" />
+    Hover me
+  </Link>
+);
+`;
+
+    const crossFileInfo = {
+      selectorUsages: [
+        {
+          localName: "Link",
+          importSource: "./lib/collapse-arrow-icon",
+          importedName: "Link",
+          resolvedPath: fixture("lib/collapse-arrow-icon.tsx"),
+        },
+      ],
+    };
+
+    const result = transformWithWarnings(
+      { source, path: fixture("consumer-reverse-selector.tsx") },
+      api,
+      { adapter: fixtureAdapter, crossFileInfo },
+    );
+
+    expect(result.code).not.toBeNull();
+    const code = result.code!;
+
+    // Should NOT bail
+    expect(result.warnings).not.toContainEqual(
+      expect.objectContaining({ type: "Unsupported selector: unknown component selector" }),
+    );
+    // Should emit defineMarker for the cross-file parent
+    expect(code).toContain("stylex.defineMarker()");
+    expect(code).toContain("__LinkMarker");
+    // Override styles should use when.ancestor with the marker
+    expect(code).toContain("stylex.when.ancestor");
+    // Should produce the override style key (self "in" parent)
+    expect(code).toContain("iconInLink");
+    // Should add marker to the imported Link component's JSX
+    expect(code).toContain("__LinkMarker");
+  });
 });
 
 /* ── Monorepo workspace resolution ────────────────────────────────────── */

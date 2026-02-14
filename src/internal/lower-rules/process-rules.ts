@@ -318,7 +318,10 @@ export function processDeclRules(ctx: DeclProcessingState): void {
         const ancestorPseudo: string | null = reversePseudoMatch?.[1] ?? null;
 
         const parentDecl = declByLocalName.get(otherLocal);
-        if (!parentDecl) {
+        const crossFileParent = !parentDecl
+          ? state.crossFileSelectorsByLocal.get(otherLocal)
+          : undefined;
+        if (!parentDecl && !crossFileParent) {
           state.markBail();
           warnings.push({
             severity: "warning",
@@ -328,19 +331,34 @@ export function processDeclRules(ctx: DeclProcessingState): void {
           break;
         }
 
-        // Declare self as child, referenced component as ancestor parent
+        // Declare self as child, referenced component as ancestor parent.
+        // For cross-file parents, use a synthetic style key based on the local name.
+        const parentStyleKey = parentDecl ? parentDecl.styleKey : toStyleKey(otherLocal);
         const overrideStyleKey = `${toStyleKey(decl.localName)}In${otherLocal}`;
-        ancestorSelectorParents.add(parentDecl.styleKey);
+        ancestorSelectorParents.add(parentStyleKey);
 
+        // For cross-file reverse, register a defineMarker for the imported parent
+        const reverseMarkerVarName = crossFileParent ? `__${otherLocal}Marker` : undefined;
+
+        const overrideCountBeforeReverse = relationOverrides.length;
         const bucket = getOrCreateRelationOverrideBucket(
           overrideStyleKey,
-          parentDecl.styleKey,
+          parentStyleKey,
           decl.styleKey,
           ancestorPseudo,
           relationOverrides,
           relationOverridePseudoBuckets,
           decl.extraStyleKeys,
         );
+
+        // Tag newly-created relation override as cross-file (reverse direction)
+        if (reverseMarkerVarName && relationOverrides.length > overrideCountBeforeReverse) {
+          const created = relationOverrides[relationOverrides.length - 1]!;
+          created.crossFile = true;
+          created.markerVarName = reverseMarkerVarName;
+          // In reverse, the cross-file component is the parent (needs marker on JSX)
+          created.crossFileComponentLocalName = otherLocal;
+        }
 
         const result = processDeclarationsIntoBucket(
           rule,
@@ -415,7 +433,7 @@ export function processDeclRules(ctx: DeclProcessingState): void {
           const created = relationOverrides[relationOverrides.length - 1]!;
           created.crossFile = true;
           created.markerVarName = markerVarName;
-          created.crossFileChildLocalName = otherLocal;
+          created.crossFileComponentLocalName = otherLocal;
         }
 
         const forwardResult = processDeclarationsIntoBucket(

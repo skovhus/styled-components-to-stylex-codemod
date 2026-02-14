@@ -23,12 +23,12 @@ export type RelationOverride = {
   overrideStyleKey: string;
   /** Additional style keys (from composed mixins) to search for base values */
   childExtraStyleKeys?: string[];
-  /** When true, this override targets a cross-file component and uses defineMarker() */
+  /** When true, this override involves a cross-file component and uses defineMarker() */
   crossFile?: boolean;
-  /** Variable name of the marker for cross-file overrides (e.g. "__styledCollapseButtonMarker") */
+  /** Variable name of the marker for cross-file overrides (e.g. "__ButtonMarker") */
   markerVarName?: string;
-  /** Local name of the imported cross-file child component */
-  crossFileChildLocalName?: string;
+  /** Local name of the imported cross-file component (child in forward, parent in reverse) */
+  crossFileComponentLocalName?: string;
 };
 
 export type LowerRulesState = ReturnType<typeof createLowerRulesState>;

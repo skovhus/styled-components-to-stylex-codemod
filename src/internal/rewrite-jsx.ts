@@ -58,13 +58,13 @@ export function postProcessTransformedAst(args: {
         [],
       );
 
-    // Build cross-file override lookup: childLocalName → overrides
-    const crossFileOverridesByChild = new Map<string, RelationOverride[]>();
+    // Build cross-file override lookup: crossFileComponentLocalName → overrides
+    const crossFileOverridesByComponent = new Map<string, RelationOverride[]>();
     for (const o of relationOverrides) {
-      if (o.crossFile && o.crossFileChildLocalName) {
-        const existing = crossFileOverridesByChild.get(o.crossFileChildLocalName) ?? [];
+      if (o.crossFile && o.crossFileComponentLocalName) {
+        const existing = crossFileOverridesByComponent.get(o.crossFileComponentLocalName) ?? [];
         existing.push(o);
-        crossFileOverridesByChild.set(o.crossFileChildLocalName, existing);
+        crossFileOverridesByComponent.set(o.crossFileComponentLocalName, existing);
       }
     }
 
@@ -187,26 +187,41 @@ export function postProcessTransformedAst(args: {
         }
       }
 
-      // Cross-file child handling: for imported components used as selectors,
-      // add {...stylex.props(styles.overrideKey)} to their JSX attributes
-      if (elementName && crossFileOverridesByChild.has(elementName)) {
-        const overrides = crossFileOverridesByChild.get(elementName)!;
+      // Cross-file component handling: for imported components used as selectors,
+      // add appropriate spreads to their JSX attributes.
+      if (elementName && crossFileOverridesByComponent.has(elementName)) {
+        const overrides = crossFileOverridesByComponent.get(elementName)!;
         for (const o of overrides) {
-          if (!ancestorHasParentKey(ancestors, o.parentStyleKey)) {
-            continue;
+          // Forward case (cross-file child): the imported component is the child,
+          // the declaring component (in this file) is the parent.
+          // → Add override styles to the child: {...stylex.props(styles.overrideKey)}
+          if (ancestorHasParentKey(ancestors, o.parentStyleKey)) {
+            const overrideArg = j.memberExpression(
+              j.identifier("styles"),
+              j.identifier(o.overrideStyleKey),
+            );
+            const stylexPropsCall = j.callExpression(
+              j.memberExpression(j.identifier("stylex"), j.identifier("props")),
+              [overrideArg],
+            );
+            opening.attributes = [
+              ...(opening.attributes ?? []),
+              j.jsxSpreadAttribute(stylexPropsCall),
+            ];
+            changed = true;
           }
-          // Build the spread: {...stylex.props(styles.overrideKey)}
-          const overrideArg = j.memberExpression(
-            j.identifier("styles"),
-            j.identifier(o.overrideStyleKey),
-          );
-          const stylexPropsCall = j.callExpression(
-            j.memberExpression(j.identifier("stylex"), j.identifier("props")),
-            [overrideArg],
-          );
-          const spread = j.jsxSpreadAttribute(stylexPropsCall);
-          opening.attributes = [...(opening.attributes ?? []), spread];
-          changed = true;
+
+          // Reverse case (cross-file parent): the imported component is the parent/ancestor,
+          // the declaring component (in this file) is the child.
+          // → Add marker to the parent: {...stylex.props(markerVar)}
+          if (o.markerVarName && !call) {
+            const markerCall = j.callExpression(
+              j.memberExpression(j.identifier("stylex"), j.identifier("props")),
+              [j.identifier(o.markerVarName)],
+            );
+            opening.attributes = [...(opening.attributes ?? []), j.jsxSpreadAttribute(markerCall)];
+            changed = true;
+          }
         }
       }
 
