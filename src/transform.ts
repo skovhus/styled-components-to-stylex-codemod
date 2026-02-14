@@ -3,7 +3,7 @@
  * Core concepts: ordered transform steps, context orchestration, and logging.
  */
 import type { API, FileInfo, Options } from "jscodeshift";
-import { resolve as pathResolve } from "node:path";
+import { basename, dirname, join, resolve as pathResolve } from "node:path";
 
 import { Logger } from "./internal/logger.js";
 import { TransformContext } from "./internal/transform-context.js";
@@ -50,6 +50,19 @@ export default function transform(file: FileInfo, api: API, options: Options): s
   try {
     const result = transformWithWarnings(file, api, options as TransformOptions);
     Logger.logWarnings(result.warnings, file.path);
+
+    // Store sidecar .stylex.ts content in the options side-channel for the runner to write
+    if (result.sidecarContent) {
+      const sidecarFiles = (options as Record<string, unknown>).sidecarFiles as
+        | Map<string, string>
+        | undefined;
+      if (sidecarFiles) {
+        const dir = dirname(file.path);
+        const fileBase = basename(file.path).replace(/\.\w+$/, "");
+        sidecarFiles.set(join(dir, `${fileBase}.stylex.ts`), result.sidecarContent);
+      }
+    }
+
     return result.code;
   } catch (e) {
     const msg = `Transform failed: ${e instanceof Error ? e.message : String(e)}`;

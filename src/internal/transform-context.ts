@@ -85,6 +85,8 @@ export class TransformContext {
   crossFileSelectorUsages?: import("./transform-types.js").CrossFileSelectorUsage[];
   /** Marker variable names generated for cross-file parent components (parentStyleKey → markerName) */
   crossFileMarkers?: Map<string, string>;
+  /** Content for the sidecar .stylex.ts file (defineMarker declarations), populated by emitStylesStep */
+  sidecarStylexContent?: string;
 
   constructor(file: FileInfo, api: API, options: TransformOptions) {
     const j = api.jscodeshift;

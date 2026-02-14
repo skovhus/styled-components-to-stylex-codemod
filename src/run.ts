@@ -6,6 +6,7 @@ import { run as jscodeshiftRun } from "jscodeshift/src/Runner.js";
 import { fileURLToPath } from "node:url";
 import { dirname, join, resolve } from "node:path";
 import { existsSync } from "node:fs";
+import { writeFile } from "node:fs/promises";
 import { glob } from "node:fs/promises";
 import { spawn } from "node:child_process";
 import type {
@@ -300,16 +301,27 @@ export async function runTransform(options: RunTransformOptions): Promise<RunTra
     );
   })();
 
+  // Map populated by the per-file transform to collect sidecar .stylex.ts files
+  const sidecarFiles = new Map<string, string>();
+
   const result = await jscodeshiftRun(transformPath, filePaths, {
     parser,
     dry: dryRun,
     print,
     adapter: adapterWithLogging,
     crossFilePrepassResult,
+    sidecarFiles,
     // Programmatic use passes an Adapter object (functions). That cannot be
     // serialized across process boundaries, so we must run in-band.
     runInBand: true,
   });
+
+  // Write sidecar .stylex.ts files (defineMarker declarations)
+  if (sidecarFiles.size > 0 && !dryRun) {
+    for (const [sidecarPath, content] of sidecarFiles) {
+      await writeFile(sidecarPath, content, "utf-8");
+    }
+  }
 
   // Run formatter if specified and files were transformed (not in dry run mode)
   if (formatterCommand && result.ok > 0 && !dryRun) {

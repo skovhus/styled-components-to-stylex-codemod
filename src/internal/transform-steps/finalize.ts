@@ -48,5 +48,5 @@ export function finalize(ctx: TransformContext): TransformResult {
     }
   }
 
-  return { code, warnings: ctx.warnings };
+  return { code, warnings: ctx.warnings, sidecarContent: ctx.sidecarStylexContent };
 }

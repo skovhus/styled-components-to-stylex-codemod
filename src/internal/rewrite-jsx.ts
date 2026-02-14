@@ -136,12 +136,16 @@ export function postProcessTransformedAst(args: {
     }
 
     /** Check if any ancestor in the JSX tree contains the given parent style key. */
-    const ancestorHasParentKey = (ancestors: any[], parentStyleKey: string): boolean =>
-      ancestors.some(
+    const ancestorHasParentKey = (ancestors: any[], parentStyleKey: string): boolean => {
+      // For cross-file reverse selectors, the ancestor has a marker variable instead of styles.X
+      const markerVarName = crossFileMarkers?.get(parentStyleKey);
+      return ancestors.some(
         (a: any) =>
           (a?.call && hasStyleKeyArg(a.call, parentStyleKey)) ||
-          (a?.elementStyleKey && a.elementStyleKey === parentStyleKey),
+          (a?.elementStyleKey && a.elementStyleKey === parentStyleKey) ||
+          (markerVarName && a?.markerVarName === markerVarName),
       );
+    };
 
     // Track empty ancestor style keys to remove AFTER all descendant matching is done.
     // We defer removal so that ancestor matching can still find the style keys.
@@ -229,11 +233,13 @@ export function postProcessTransformedAst(args: {
       }
 
       // Cross-file reverse parent: add marker to imported parent JSX
+      let addedMarkerVarName: string | undefined;
       if (elementName && crossFileParentMarkers.has(elementName)) {
         for (const o of crossFileParentMarkers.get(elementName)!) {
           if (!o.markerVarName) {
             continue;
           }
+          addedMarkerVarName = o.markerVarName;
           const markerIdent = j.identifier(o.markerVarName);
           if (call) {
             // Parent already has stylex.props(...) — append marker to its arguments
@@ -256,7 +262,10 @@ export function postProcessTransformedAst(args: {
         }
       }
 
-      const nextAncestors = [...ancestors, { call, elementStyleKey }];
+      const nextAncestors = [
+        ...ancestors,
+        { call, elementStyleKey, markerVarName: addedMarkerVarName },
+      ];
       for (const c of node.children ?? []) {
         if (c?.type === "JSXElement") {
           visit(c, nextAncestors);
@@ -265,7 +274,7 @@ export function postProcessTransformedAst(args: {
     };
 
     root.find(j.JSXElement).forEach((p: any) => {
-      if (j(p).closest(j.JSXElement).size() > 1) {
+      if (j(p).closest(j.JSXElement).size() > 0) {
         return;
       }
       visit(p.node, []);

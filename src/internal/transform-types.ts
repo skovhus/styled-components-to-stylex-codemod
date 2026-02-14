@@ -14,6 +14,8 @@ import type { TransformContext } from "./transform-context.js";
 export interface TransformResult {
   code: string | null;
   warnings: WarningLog[];
+  /** Content for the sidecar .stylex.ts file (defineMarker declarations). Undefined when no markers needed. */
+  sidecarContent?: string;
 }
 
 /**

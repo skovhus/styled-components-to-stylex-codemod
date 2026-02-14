@@ -336,11 +336,16 @@ function isPlaceholderInSelectorContext(rawCss: string, pos: number, length: num
     return true;
   }
 
-  // A `{` appears before the next `;` and no `:` between → still a selector
+  // A `{` appears before the next `;` → likely a selector context.
+  // Reject if there's a value-separator colon (`:` followed by whitespace),
+  // but allow pseudo-selector colons (`:hover`, `::before`, `:nth-child()`).
   const afterUpToBrace = after.split("{")[0] ?? "";
   const afterUpToSemi = after.split(";")[0] ?? "";
-  if (afterUpToBrace.length < afterUpToSemi.length && !afterUpToBrace.includes(":")) {
-    return true;
+  if (afterUpToBrace.length < afterUpToSemi.length) {
+    const hasValueSeparatorColon = /:\s|:$/.test(afterUpToBrace);
+    if (!hasValueSeparatorColon) {
+      return true;
+    }
   }
 
   return false;

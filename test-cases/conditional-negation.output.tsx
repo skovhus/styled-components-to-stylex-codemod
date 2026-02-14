@@ -49,7 +49,6 @@ const styles = stylex.create({
     opacity: 0.1,
   },
   overlay: {
-    position: "fixed",
     inset: 0,
     opacity: 0,
   },

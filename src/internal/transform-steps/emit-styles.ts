@@ -2,6 +2,7 @@
  * Step: emit stylex.create objects and resolver imports.
  * Core concepts: style emission and import aliasing.
  */
+import { basename } from "node:path";
 import { emitStylesAndImports } from "../emit-styles.js";
 import { CONTINUE, type StepResult } from "../transform-types.js";
 import { TransformContext } from "../transform-context.js";
@@ -93,30 +94,37 @@ export function emitStylesStep(ctx: TransformContext): StepResult {
 
 // --- Non-exported helpers ---
 
-/** Emit `const __XMarker = stylex.defineMarker()` declarations at module scope. */
+/**
+ * Emit defineMarker declarations into a sidecar `.stylex.ts` file and insert
+ * an import for the markers into the main file. StyleX requires defineMarker()
+ * to live in `.stylex.ts` files for the babel plugin's `fileNameForHashing`.
+ */
 function emitDefineMarkerDeclarations(ctx: TransformContext): void {
   const j = ctx.j;
+  const markerNames = [...ctx.crossFileMarkers!.values()];
+
+  // Build sidecar file content
+  const markerDecls = markerNames
+    .map((name) => `export const ${name} = stylex.defineMarker();`)
+    .join("\n");
+  ctx.sidecarStylexContent = `import * as stylex from "@stylexjs/stylex";\n\n${markerDecls}\n`;
+
+  // Derive sidecar import path from file basename
+  const fileBase = basename(ctx.file.path).replace(/\.\w+$/, "");
+  const sidecarImportPath = `./${fileBase}.stylex`;
+
+  // Insert `import { __XMarker, ... } from "./file.stylex"` after existing imports
+  const importDecl = j.importDeclaration(
+    markerNames.map((name) => j.importSpecifier(j.identifier(name))),
+    j.literal(sidecarImportPath),
+  );
+
   const programBody = ctx.root.get().node.program.body as Array<{ type?: string }>;
-  // Insert after imports, before component code
   const lastImportIdx = programBody.reduce(
     (last: number, node: { type?: string }, i: number) =>
       node?.type === "ImportDeclaration" ? i : last,
     -1,
   );
   const insertAt = lastImportIdx >= 0 ? lastImportIdx + 1 : 0;
-
-  let offset = 0;
-  for (const [, markerVarName] of ctx.crossFileMarkers!) {
-    const markerDecl = j.variableDeclaration("const", [
-      j.variableDeclarator(
-        j.identifier(markerVarName),
-        j.callExpression(
-          j.memberExpression(j.identifier("stylex"), j.identifier("defineMarker")),
-          [],
-        ),
-      ),
-    ]);
-    programBody.splice(insertAt + offset, 0, markerDecl as { type?: string });
-    offset++;
-  }
+  programBody.splice(insertAt, 0, importDecl as unknown as { type?: string });
 }
