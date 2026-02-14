@@ -119,6 +119,7 @@ export function emitComponentWrappers(emitter: WrapperEmitter): {
     const isPolymorphicComponentWrapper = shouldAllowAsProp && !wrappedComponentHasAs;
     const allowClassNameProp = emitter.shouldAllowClassNameProp(d);
     const allowStyleProp = emitter.shouldAllowStyleProp(d);
+    const hasForwardedAsUsage = emitter.getUsedAttrs(d.localName).has("forwardedAs");
     const propsIdForExpr = j.identifier("props");
     // Track which type name to use for the function parameter
     let functionParamTypeName: string | null = null;
@@ -147,7 +148,10 @@ export function emitComponentWrappers(emitter: WrapperEmitter): {
           if (!allowStyleProp) {
             omitted.push('"style"');
           }
-          return omitted.length ? `Omit<${base}, ${omitted.join(" | ")}>` : base;
+          const baseWithOmit = omitted.length ? `Omit<${base}, ${omitted.join(" | ")}>` : base;
+          return hasForwardedAsUsage
+            ? emitter.joinIntersection(baseWithOmit, "{ forwardedAs?: React.ElementType }")
+            : baseWithOmit;
         })();
         // Extend the existing type in-place so the wrapper can reuse it.
         const interfaceExtended = emitter.extendExistingInterface(explicitTypeName, baseTypeText);
@@ -169,6 +173,7 @@ export function emitComponentWrappers(emitter: WrapperEmitter): {
             baseProps,
             `Omit<React.ComponentPropsWithRef<C>, keyof ${baseProps} | "className" | "style">`,
             "{\n  as?: C;\n}",
+            ...(hasForwardedAsUsage ? ["{ forwardedAs?: React.ElementType }"] : []),
             // Include user's explicit props type if it exists
             ...(explicit ? [explicit] : []),
           ].join(" & ");

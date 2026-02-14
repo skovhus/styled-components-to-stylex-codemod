@@ -805,6 +805,7 @@ export class WrapperEmitter {
       wrappedComponentIsInternalWrapper,
       hasExplicitPropsType,
     } = args;
+    const usedAttrs = this.getUsedAttrs(d.localName);
     const lines: string[] = [];
     // When external styles are EXPLICITLY enabled via adapter (d.supportsExternalStyles) and
     // the wrapped component is NOT one of our generated wrappers, add className/style to the type.
@@ -821,6 +822,9 @@ export class WrapperEmitter {
     }
     if (shouldAddStyleProps && allowStyleProp) {
       lines.push("style?: React.CSSProperties");
+    }
+    if (usedAttrs.has("forwardedAs")) {
+      lines.push("forwardedAs?: React.ElementType");
     }
     const literal = lines.length > 0 ? `{ ${lines.join(", ")} }` : "{}";
     const propsTarget = d.attrsInfo?.attrsAsTag ?? (d.base as any).ident;

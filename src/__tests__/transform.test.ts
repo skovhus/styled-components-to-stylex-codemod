@@ -2319,10 +2319,10 @@ export const App = () => <Input />;
 });
 
 describe("forwardedAs prop handling", () => {
-  it("should convert forwardedAs to as and forward polymorphism to wrapped component", () => {
-    // forwardedAs is a styled-components prop that forwards `as` to the wrapped component,
-    // enabling polymorphic rendering. In the transformed output, forwardedAs should become
-    // `as` so the wrapper function can forward it to the inner component.
+  it("should preserve forwardedAs on wrapper callsites for styled(styled.tag) chains", () => {
+    // In styled-components wrapper chains, `forwardedAs` does not behave like a direct `as`
+    // replacement. Preserve `forwardedAs` at the wrapper callsite so the rendered output
+    // stays aligned with the source behavior.
     const source = `
 import styled from "styled-components";
 
@@ -2347,9 +2347,8 @@ export const App = () => (
       { adapter: fixtureAdapter },
     );
     expect(result.code).not.toBeNull();
-    // forwardedAs should be converted to as (not leak as raw forwardedAs)
-    expect(result.code).not.toContain("forwardedAs");
-    // The converted as="a" should be preserved so polymorphism works
-    expect(result.code).toContain('as="a"');
+    // Keep forwardedAs at the wrapper callsite (no blanket conversion to `as`).
+    expect(result.code).toContain('forwardedAs="a"');
+    expect(result.code).not.toContain('<ButtonWrapper as="a"');
   });
 });

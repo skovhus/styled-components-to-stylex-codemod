@@ -64,8 +64,7 @@ export function rewriteJsxStep(ctx: TransformContext): StepResult {
     }
 
     // Preserve as a wrapper component for polymorphic/forwarded-as cases.
-    // forwardedAs is converted to `as` in preflight and forwarded to the wrapped component
-    // (matching styled-components semantics where forwardedAs enables polymorphic rendering).
+    // Wrapper emitters keep `forwardedAs` callsite attrs intact when needed.
     if (decl.needsWrapperComponent) {
       continue;
     }

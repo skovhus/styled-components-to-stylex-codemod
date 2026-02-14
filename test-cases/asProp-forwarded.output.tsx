@@ -16,7 +16,9 @@ function Button<C extends React.ElementType = "button">(
 
 // Wrapper that always renders as a specific element but passes `as` through
 function ButtonWrapper(
-  props: Omit<React.ComponentPropsWithRef<typeof Button>, "className" | "style">,
+  props: Omit<React.ComponentPropsWithRef<typeof Button>, "className" | "style"> & {
+    forwardedAs?: React.ElementType;
+  },
 ) {
   return <Button {...props} {...stylex.props(styles.buttonWrapper)} />;
 }
@@ -27,7 +29,7 @@ export const App = () => (
     <Button as="a" href="#">
       Button as Link
     </Button>
-    <ButtonWrapper as="a" href="#">
+    <ButtonWrapper forwardedAs="a" href="#">
       Wrapper forwards as Link
     </ButtonWrapper>
   </div>
