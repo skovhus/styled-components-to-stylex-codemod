@@ -120,6 +120,7 @@ export function emitComponentWrappers(emitter: WrapperEmitter): {
     const allowClassNameProp = emitter.shouldAllowClassNameProp(d);
     const allowStyleProp = emitter.shouldAllowStyleProp(d);
     const hasForwardedAsUsage = emitter.getUsedAttrs(d.localName).has("forwardedAs");
+    const shouldLowerForwardedAs = hasForwardedAsUsage && !wrappedComponentHasAs;
     const propsIdForExpr = j.identifier("props");
     // Track which type name to use for the function parameter
     let functionParamTypeName: string | null = null;
@@ -522,7 +523,8 @@ export function emitComponentWrappers(emitter: WrapperEmitter): {
       destructureProps.length > 0 ||
       needsSxVar ||
       isPolymorphicComponentWrapper ||
-      defaultAttrs.length > 0;
+      defaultAttrs.length > 0 ||
+      shouldLowerForwardedAs;
     const includeChildren =
       !isPolymorphicComponentWrapper && emitter.hasJsxChildrenUsage(d.localName);
 
@@ -532,6 +534,7 @@ export function emitComponentWrappers(emitter: WrapperEmitter): {
       const styleId = j.identifier("style");
       const restId = j.identifier("rest");
       const componentId = j.identifier("Component");
+      const forwardedAsId = j.identifier("forwardedAs");
       const wrappedComponentExpr = buildWrappedComponentExpr();
 
       // Add defaultAttrs props to destructureProps for nullish coalescing patterns
@@ -556,6 +559,7 @@ export function emitComponentWrappers(emitter: WrapperEmitter): {
           ...(allowClassNameProp ? [patternProp("className", classNameId)] : []),
           ...(includeChildren ? [patternProp("children", childrenId)] : []),
           ...(allowStyleProp ? [patternProp("style", styleId)] : []),
+          ...(shouldLowerForwardedAs ? [patternProp("forwardedAs", forwardedAsId)] : []),
         ],
         destructureProps,
         propDefaults,
@@ -586,6 +590,16 @@ export function emitComponentWrappers(emitter: WrapperEmitter): {
       }
 
       const openingAttrs: JsxAttr[] = [];
+      const hasStaticForwardedAsFallback =
+        shouldLowerForwardedAs && Object.hasOwn(staticAttrs, "as");
+      const staticForwardedAsFallback = hasStaticForwardedAsFallback ? staticAttrs.as : undefined;
+      const staticAttrsWithoutForwardedAsFallback = (() => {
+        if (!hasStaticForwardedAsFallback) {
+          return staticAttrs;
+        }
+        const { as: _omitAs, ...restStaticAttrs } = staticAttrs;
+        return restStaticAttrs;
+      })();
       // Add attrs in order: defaultAttrs, staticAttrs, then {...rest}
       // This allows props passed to the component to override attrs (styled-components semantics)
       // Use buildDefaultAttrsFromProps to preserve nullish coalescing (e.g., tabIndex ?? 0)
@@ -597,7 +611,9 @@ export function emitComponentWrappers(emitter: WrapperEmitter): {
       );
       // Add staticAttrs from .attrs({...}) before {...rest} so they can be overridden
       openingAttrs.push(
-        ...emitter.buildStaticAttrsFromRecord(staticAttrs, { booleanTrueAsShorthand: false }),
+        ...emitter.buildStaticAttrsFromRecord(staticAttrsWithoutForwardedAsFallback, {
+          booleanTrueAsShorthand: false,
+        }),
       );
       const forwardedProps = new Set<string>();
       const pushForwardedProp = (propName: string) => {
@@ -654,6 +670,19 @@ export function emitComponentWrappers(emitter: WrapperEmitter): {
         pushForwardedProp(propName);
       }
       openingAttrs.push(j.jsxSpreadAttribute(restId));
+      if (shouldLowerForwardedAs) {
+        const forwardedAsValueExpr =
+          hasStaticForwardedAsFallback &&
+          (typeof staticForwardedAsFallback === "string" ||
+            typeof staticForwardedAsFallback === "number" ||
+            typeof staticForwardedAsFallback === "boolean" ||
+            staticForwardedAsFallback === null)
+            ? j.logicalExpression("??", forwardedAsId, j.literal(staticForwardedAsFallback))
+            : forwardedAsId;
+        openingAttrs.push(
+          j.jsxAttribute(j.jsxIdentifier("as"), j.jsxExpressionContainer(forwardedAsValueExpr)),
+        );
+      }
       emitter.appendMergingAttrs(openingAttrs, merging);
 
       const jsx = emitter.buildJsxElement({

@@ -2359,4 +2359,40 @@ export const App = () => (
     // `as` and `forwardedAs` can co-exist on wrapper callsites.
     expect(result.code).toContain('<ButtonWrapper as="section" forwardedAs="a" href="#">');
   });
+
+  it("should lower forwardedAs for styled(Component) and keep attrs(as) as a fallback", () => {
+    const source = `
+import React from "react";
+import styled from "styled-components";
+
+type BaseProps = {
+  as?: React.ElementType;
+  href?: string;
+  children?: React.ReactNode;
+};
+
+const Base = ({ as: Component = "button", ...rest }: BaseProps) => {
+  return <Component {...rest} />;
+};
+
+const Wrapper = styled(Base).attrs({ as: "span" })\`
+  color: red;
+\`;
+
+export const App = () => (
+  <Wrapper forwardedAs="a" href="#">
+    Link
+  </Wrapper>
+);
+`;
+    const result = transformWithWarnings(
+      { source, path: "test.tsx" },
+      { jscodeshift: j, j, stats: () => {}, report: () => {} },
+      { adapter: fixtureAdapter },
+    );
+    expect(result.code).not.toBeNull();
+    expect(result.code).toContain("forwardedAs?: React.ElementType");
+    expect(result.code).toContain('as={forwardedAs ?? "span"}');
+    expect(result.code).not.toContain('as="span"');
+  });
 });
