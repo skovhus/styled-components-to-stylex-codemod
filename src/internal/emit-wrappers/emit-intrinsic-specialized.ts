@@ -574,15 +574,7 @@ export function emitEnumVariantWrappers(ctx: EmitIntrinsicContext): void {
 
       // Inject guard props into the destructuring pattern
       if (pseudoGuardPropsEnum.length > 0) {
-        const decl = declStmt.declarations[0] as { id?: { type?: string; properties?: unknown[] } };
-        if (decl?.id?.type === "ObjectPattern" && Array.isArray(decl.id.properties)) {
-          for (const gp of pseudoGuardPropsEnum) {
-            const id = j.identifier(gp);
-            const prop = j.property("init", id, id);
-            (prop as unknown as Record<string, unknown>).shorthand = true;
-            decl.id.properties.push(prop);
-          }
-        }
+        injectDestructureProps(j, declStmt, pseudoGuardPropsEnum);
       }
 
       const sxDecl = j.variableDeclaration("const", [
@@ -850,13 +842,28 @@ function injectDestructureProps(j: JSCodeshift, fnDecl: unknown, props: string[]
             (p as Record<string, unknown>).type === "RestProperty" ||
             (p as Record<string, unknown>).type === "SpreadProperty"),
       );
+      // Collect existing binding names to avoid duplicates
+      const existingNames = new Set<string>();
+      for (const p of properties) {
+        if (p && typeof p === "object") {
+          const pr = p as Record<string, unknown>;
+          if (pr.type === "Property" && pr.key && typeof pr.key === "object") {
+            const key = pr.key as Record<string, unknown>;
+            if (key.type === "Identifier" && typeof key.name === "string") {
+              existingNames.add(key.name);
+            }
+          }
+        }
+      }
       const insertIdx = restIdx >= 0 ? restIdx : properties.length;
-      const toInsert = props.map((name) => {
-        const id = j.identifier(name);
-        const prop = j.property("init", id, id);
-        (prop as unknown as Record<string, unknown>).shorthand = true;
-        return prop;
-      });
+      const toInsert = props
+        .filter((name) => !existingNames.has(name))
+        .map((name) => {
+          const id = j.identifier(name);
+          const prop = j.property("init", id, id);
+          (prop as unknown as Record<string, unknown>).shorthand = true;
+          return prop;
+        });
       properties.splice(insertIdx, 0, ...toInsert);
       // Only inject into the first ObjectPattern (the props destructuring)
       return;

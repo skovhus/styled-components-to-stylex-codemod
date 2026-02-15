@@ -13,11 +13,12 @@ function Button(props: ButtonProps) {
     <button
       {...stylex.props(
         styles.button,
-        $active &&
-          highlightStyles({
-            active: styles.buttonActivePseudoActive,
-            hover: styles.buttonActivePseudoHover,
-          }),
+        $active
+          ? highlightStyles({
+              active: styles.buttonActivePseudoActive,
+              hover: styles.buttonActivePseudoHover,
+            })
+          : undefined,
       )}
     >
       {children}

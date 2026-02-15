@@ -18,7 +18,7 @@ import { sortVariantEntriesBySpecificity, VOID_TAGS } from "./type-helpers.js";
 import { withLeadingCommentsOnFirstFunction } from "./comments.js";
 import type { EmitIntrinsicContext } from "./emit-intrinsic-helpers.js";
 import { cloneAstNode } from "../utilities/jscodeshift-utils.js";
-import { parseVariantWhenToAst } from "./variant-condition.js";
+import { makeConditionalStyleExpr, parseVariantWhenToAst } from "./variant-condition.js";
 
 export function emitSimpleWithConfigWrappers(ctx: EmitIntrinsicContext): void {
   const { emitter, j, emitTypes, wrapperDecls, wrapperNames, stylesIdentifier, emitted } = ctx;
@@ -1058,7 +1058,13 @@ export function appendPseudoAliasStyleArgs(
           guardProps.push(p);
         }
       }
-      styleArgs.push(j.logicalExpression("&&", parsed.cond, callExpr));
+      styleArgs.push(
+        makeConditionalStyleExpr(j, {
+          cond: parsed.cond,
+          expr: callExpr,
+          isBoolean: parsed.isBoolean,
+        }),
+      );
     } else {
       styleArgs.push(callExpr);
     }
