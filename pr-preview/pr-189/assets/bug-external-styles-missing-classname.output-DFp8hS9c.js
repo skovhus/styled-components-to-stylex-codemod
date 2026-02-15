@@ -1,0 +1,1 @@
+import{j as e}from"./index-DqlKelsC.js";function r(t){return e.jsx("div",{children:"Loading..."})}function l(t){const{className:n,style:o,...a}=t,s={className:"x5yr21d"};return e.jsx(r,{...a,...s,className:[s.className,n].filter(Boolean).join(" "),style:{...s.style,...o}})}const c=()=>e.jsx(l,{delay:1e3});export{c as App,l as StyledLoading};
