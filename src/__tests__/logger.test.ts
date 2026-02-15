@@ -138,9 +138,7 @@ describe("Logger", () => {
 
           /path/file14.tsx
 
-          /path/file15.tsx
-
-          /path/file16.tsx
+          ... and 2 more file(s)
         "
       `);
     });

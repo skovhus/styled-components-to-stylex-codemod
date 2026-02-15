@@ -57,6 +57,12 @@ export interface RunTransformOptions {
    * @example "pnpm prettier --write"
    */
   formatterCommand?: string;
+
+  /**
+   * Maximum number of examples shown per warning category in the summary.
+   * @default 15
+   */
+  maxExamples?: number;
 }
 
 export interface RunTransformResult {
@@ -157,7 +163,18 @@ export async function runTransform(options: RunTransformOptions): Promise<RunTra
     }
   }
 
-  const { files, dryRun = false, print = false, parser = "tsx", formatterCommand } = options;
+  const {
+    files,
+    dryRun = false,
+    print = false,
+    parser = "tsx",
+    formatterCommand,
+    maxExamples,
+  } = options;
+
+  if (maxExamples !== undefined) {
+    Logger.setMaxExamples(maxExamples);
+  }
 
   const adapter = options.adapter;
   assertValidAdapter(adapter, "runTransform(options)");
