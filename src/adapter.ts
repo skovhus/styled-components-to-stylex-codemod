@@ -247,25 +247,73 @@ export type SelectorResolveContext = {
 
 /**
  * Result for `adapter.resolveSelector(...)`.
+ *
+ * Three kinds are supported:
+ * - `"media"`: maps a selector interpolation to a media query computed key
+ * - `"pseudoConditional"`: maps `&:${expr}` to a JS-level ternary that picks between two pseudo style objects
+ * - `"pseudoMediaQuery"`: maps `&:${expr}` to nested CSS `@media` guards inside each pseudo
  */
-export type SelectorResolveResult = {
-  /**
-   * The kind of selector resolved.
-   * Currently only "media" is supported.
-   */
-  kind: "media";
-  /**
-   * JS expression to use as the computed property key.
-   * Should reference a `defineConsts` value for media queries.
-   * Example: "breakpoints.phone"
-   */
-  expr: string;
-  /**
-   * Import statements required by `expr`.
-   * Example: [{ from: { kind: "specifier", value: "./breakpoints.stylex" }, names: [{ imported: "breakpoints" }] }]
-   */
-  imports: ImportSpec[];
-};
+export type SelectorResolveResult =
+  | {
+      kind: "media";
+      /**
+       * JS expression to use as the computed property key.
+       * Should reference a `defineConsts` value for media queries.
+       * Example: "breakpoints.phone"
+       */
+      expr: string;
+      /**
+       * Import statements required by `expr`.
+       * Example: [{ from: { kind: "specifier", value: "./breakpoints.stylex" }, names: [{ imported: "breakpoints" }] }]
+       */
+      imports: ImportSpec[];
+    }
+  | {
+      kind: "pseudoConditional";
+      /**
+       * JS expression string for the boolean condition that picks the pseudo.
+       * Example: "Browser.isPureTouchDevice"
+       */
+      conditionExpr: string;
+      /**
+       * Pseudo-class name for the truthy branch (without leading colon).
+       * Example: "active"
+       */
+      truePseudo: string;
+      /**
+       * Pseudo-class name for the falsy branch (without leading colon).
+       * Example: "hover"
+       */
+      falsePseudo: string;
+      /**
+       * Import statements required by `conditionExpr`.
+       */
+      imports: ImportSpec[];
+      /**
+       * Optional helper function that wraps the conditional application.
+       * When provided, emits `helperFn({ [trueKey]: styles.X, [falseKey]: styles.Y })`
+       * instead of a raw ternary.
+       */
+      helperFunction?: {
+        name: string;
+        importSource: ImportSource;
+        trueKey: string;
+        falseKey: string;
+      };
+    }
+  | {
+      kind: "pseudoMediaQuery";
+      /**
+       * Each branch maps a pseudo-class to its guarding media query.
+       * Pseudo includes leading colon (e.g., ":hover").
+       * Example: [{ pseudo: ":hover", mediaQuery: "@media (hover: hover)" }]
+       */
+      branches: Array<{ pseudo: string; mediaQuery: string }>;
+      /**
+       * Import statements required by the branch expressions.
+       */
+      imports: ImportSpec[];
+    };
 
 // ────────────────────────────────────────────────────────────────────────────
 // External Interface Context and Result
@@ -355,10 +403,13 @@ export interface Adapter {
    * Resolver for interpolations used in selector position.
    *
    * This handles patterns like `${screenSize.phone} { ... }` where an imported
-   * value is used as a CSS selector (typically a media query helper).
+   * value is used as a CSS selector (typically a media query helper), and
+   * `&:${highlight}` where an imported value picks a pseudo-class.
    *
    * Return:
    * - `{ kind: "media", expr, imports }` when the interpolation resolves to a media query
+   * - `{ kind: "pseudoConditional", conditionExpr, truePseudo, falsePseudo, imports }` for JS-level ternary pseudo selection
+   * - `{ kind: "pseudoMediaQuery", branches, imports }` for CSS @media-guarded pseudo selection
    * - `undefined` to bail/skip the file
    */
   resolveSelector: (context: SelectorResolveContext) => SelectorResolveResult | undefined;

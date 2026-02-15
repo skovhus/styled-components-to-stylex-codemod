@@ -135,7 +135,23 @@ export function wrapComponent<P extends object>(
 export const Browser = {
   isSafari:
     typeof navigator !== "undefined" && /^((?!chrome|android).)*safari/i.test(navigator.userAgent),
+  isPureTouchDevice:
+    typeof window !== "undefined" &&
+    "ontouchstart" in window &&
+    !window.matchMedia("(hover: hover)").matches,
 };
+
+/**
+ * Pseudo-class highlight helper: picks "hover" or "active" based on device capability.
+ * On touch devices we use :active for immediate feedback; on pointer devices, :hover.
+ */
+export const highlight = Browser.isPureTouchDevice ? "active" : "hover";
+
+/**
+ * Pseudo-class highlight using pure CSS media queries (no JS runtime).
+ * Same behavior as `highlight`, but resolved to @media guards in StyleX.
+ */
+export const highlightMedia = highlight;
 
 /**
  * Scroll fade mask helper - returns a css`` RuleSet for scroll fade effects.
