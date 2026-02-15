@@ -55,6 +55,7 @@
   },
   "dependencies": {
     "jscodeshift": "^17.3.0",
+    "oxc-resolver": "^11.17.1",
     "postcss-selector-parser": "^7.1.1",
     "postcss-value-parser": "^4.2.0",
     "stylis": "^4.3.6"

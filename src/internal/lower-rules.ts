@@ -21,6 +21,7 @@ export function lowerRules(ctx: TransformContext): {
   relationOverrides: RelationOverride[];
   ancestorSelectorParents: Set<string>;
   usedCssHelperFunctions: Set<string>;
+  crossFileMarkers: Map<string, string>;
   bail: boolean;
 } {
   const state = createLowerRulesState(ctx);
@@ -90,11 +91,20 @@ export function lowerRules(ctx: TransformContext): {
     });
   }
 
+  // Derive cross-file markers from relation overrides (single source of truth)
+  const crossFileMarkers = new Map<string, string>();
+  for (const o of state.relationOverrides) {
+    if (o.crossFile && o.markerVarName) {
+      crossFileMarkers.set(o.parentStyleKey, o.markerVarName);
+    }
+  }
+
   return {
     resolvedStyleObjects: state.resolvedStyleObjects,
     relationOverrides: state.relationOverrides,
     ancestorSelectorParents: state.ancestorSelectorParents,
     usedCssHelperFunctions: state.usedCssHelperFunctions,
+    crossFileMarkers,
     bail: state.bail,
   };
 }

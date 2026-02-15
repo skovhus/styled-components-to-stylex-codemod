@@ -81,6 +81,12 @@ export class TransformContext {
   newImportLocalNames?: Set<string>;
   newImportSourcesByLocal?: Map<string, Set<string>>;
   needsReactImport?: boolean;
+  /** Cross-file selector usages where this file is the consumer */
+  crossFileSelectorUsages?: import("./transform-types.js").CrossFileSelectorUsage[];
+  /** Marker variable names generated for cross-file parent components (parentStyleKey → markerName) */
+  crossFileMarkers?: Map<string, string>;
+  /** Content for the sidecar .stylex.ts file (defineMarker declarations), populated by emitStylesStep */
+  sidecarStylexContent?: string;
   /** Inline @keyframes extracted from styled component templates: JS identifier name → frame objects */
   inlineKeyframes?: Map<string, Record<string, Record<string, unknown>>>;
   /** Maps CSS @keyframes names to sanitized JS identifier names (e.g. "fade-in" → "fadeIn") */
@@ -146,6 +152,11 @@ export class TransformContext {
     this.styledLocalNames = new Set<string>();
     this.isStyledTag = () => false;
     this.keyframesNames = new Set<string>();
+
+    // Wire cross-file info from options
+    if (options.crossFileInfo) {
+      this.crossFileSelectorUsages = options.crossFileInfo.selectorUsages;
+    }
   }
 
   markChanged(): void {

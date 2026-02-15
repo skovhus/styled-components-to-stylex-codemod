@@ -26,6 +26,7 @@ import {
 import { cssValueToJs, toStyleKey, toSuffixFromProp } from "../transform/helpers.js";
 import { capitalize, kebabToCamelCase } from "../utilities/string-utils.js";
 import { getOrCreateRelationOverrideBucket } from "./shared.js";
+import type { RelationOverride } from "./state.js";
 import { createPropTestHelpers } from "./variant-utils.js";
 import { parseCssDeclarationBlock } from "../builtin-handlers/css-parsing.js";
 import { ensureShouldForwardPropDrop } from "./types.js";
@@ -368,7 +369,10 @@ export function processDeclRules(ctx: DeclProcessingState): void {
         const ancestorPseudo: string | null = reversePseudoMatch?.[1] ?? null;
 
         const parentDecl = declByLocalName.get(otherLocal);
-        if (!parentDecl) {
+        const crossFileParent = !parentDecl
+          ? state.crossFileSelectorsByLocal.get(otherLocal)
+          : undefined;
+        if (!parentDecl && !crossFileParent) {
           state.markBail();
           warnings.push({
             severity: "warning",
@@ -378,18 +382,32 @@ export function processDeclRules(ctx: DeclProcessingState): void {
           break;
         }
 
-        // Declare self as child, referenced component as ancestor parent
+        // Declare self as child, referenced component as ancestor parent.
+        // For cross-file parents, use a synthetic style key based on the local name.
+        const parentStyleKey = parentDecl ? parentDecl.styleKey : toStyleKey(otherLocal);
         const overrideStyleKey = `${toStyleKey(decl.localName)}In${otherLocal}`;
-        ancestorSelectorParents.add(parentDecl.styleKey);
+        ancestorSelectorParents.add(parentStyleKey);
 
+        // For cross-file reverse, register a defineMarker for the imported parent
+        const reverseMarkerVarName = crossFileParent ? `__${otherLocal}Marker` : undefined;
+
+        const overrideCountBeforeReverse = relationOverrides.length;
         const bucket = getOrCreateRelationOverrideBucket(
           overrideStyleKey,
-          parentDecl.styleKey,
+          parentStyleKey,
           decl.styleKey,
           ancestorPseudo,
           relationOverrides,
           relationOverridePseudoBuckets,
           decl.extraStyleKeys,
+        );
+
+        // Tag newly-created relation override as cross-file (reverse direction)
+        tagCrossFileOverride(
+          relationOverrides,
+          overrideCountBeforeReverse,
+          reverseMarkerVarName,
+          otherLocal,
         );
 
         const result = processDeclarationsIntoBucket(
@@ -421,10 +439,13 @@ export function processDeclRules(ctx: DeclProcessingState): void {
         selTrim2.startsWith("&") || /^__SC_EXPR_\d+__$/.test(selTrim2);
       if (otherLocal && !isCssHelperPlaceholder && isComponentSelectorPattern) {
         const childDecl = declByLocalName.get(otherLocal);
+        const crossFileUsage = !childDecl
+          ? state.crossFileSelectorsByLocal.get(otherLocal)
+          : undefined;
         // Extract the actual pseudo-selector (e.g., ":hover", ":focus-visible")
         const pseudoMatch = rule.selector.match(/&(:[a-z-]+(?:\([^)]*\))?)/i);
         const ancestorPseudo: string | null = pseudoMatch?.[1] ?? null;
-        if (!childDecl) {
+        if (!childDecl && !crossFileUsage) {
           state.markBail();
           warnings.push({
             severity: "warning",
@@ -433,37 +454,52 @@ export function processDeclRules(ctx: DeclProcessingState): void {
           });
           break;
         }
-        if (childDecl) {
-          const overrideStyleKey = `${toStyleKey(otherLocal)}In${decl.localName}`;
-          ancestorSelectorParents.add(decl.styleKey);
 
-          const bucket = getOrCreateRelationOverrideBucket(
-            overrideStyleKey,
-            decl.styleKey,
-            childDecl.styleKey,
-            ancestorPseudo,
-            relationOverrides,
-            relationOverridePseudoBuckets,
-          );
+        // For cross-file selectors, the child's style key is synthetic (just the local name
+        // lowered to a style key). The override style objects will be applied to the
+        // imported component via JSX spread in rewrite-jsx.
+        const childStyleKey = childDecl ? childDecl.styleKey : toStyleKey(otherLocal);
+        const overrideStyleKey = `${toStyleKey(otherLocal)}In${decl.localName}`;
+        ancestorSelectorParents.add(decl.styleKey);
 
-          const forwardResult = processDeclarationsIntoBucket(
-            rule,
-            bucket,
-            j,
-            decl,
-            resolveThemeValue,
-            resolveThemeValueFromFn,
-            { bailOnUnresolved: true },
-          );
-          if (forwardResult === "bail") {
-            state.markBail();
-            warnings.push({
-              severity: "warning",
-              type: "Unsupported selector: unresolved interpolation in descendant component selector",
-              loc: computeSelectorWarningLoc(decl.loc, decl.rawCss, rule.selector),
-            });
-            break;
-          }
+        // For cross-file, compute the marker variable name (stored on RelationOverride,
+        // derived into crossFileMarkers map by lowerRules after processing completes)
+        const markerVarName = crossFileUsage ? `__${decl.localName}Marker` : undefined;
+
+        // getOrCreateRelationOverrideBucket creates the RelationOverride entry on first
+        // call for this overrideStyleKey. Track count to detect new entries.
+        const overrideCountBefore = relationOverrides.length;
+        const bucket = getOrCreateRelationOverrideBucket(
+          overrideStyleKey,
+          decl.styleKey,
+          childStyleKey,
+          ancestorPseudo,
+          relationOverrides,
+          relationOverridePseudoBuckets,
+        );
+
+        // Tag newly-created relation override as cross-file
+        tagCrossFileOverride(relationOverrides, overrideCountBefore, markerVarName, otherLocal);
+
+        const forwardResult = processDeclarationsIntoBucket(
+          rule,
+          bucket,
+          j,
+          decl,
+          resolveThemeValue,
+          resolveThemeValueFromFn,
+          { bailOnUnresolved: true },
+        );
+        if (forwardResult === "bail") {
+          state.markBail();
+          warnings.push({
+            severity: "warning",
+            type: crossFileUsage
+              ? "Unsupported selector: unresolved interpolation in cross-file component selector"
+              : "Unsupported selector: unresolved interpolation in descendant component selector",
+            loc: computeSelectorWarningLoc(decl.loc, decl.rawCss, rule.selector),
+          });
+          break;
         }
         continue;
       }
@@ -1277,6 +1313,25 @@ function handlePseudoAlias(
   }
 
   decl.needsWrapperComponent = true;
+}
+
+/**
+ * If a new relation override was created (array grew), tag it with cross-file metadata.
+ * Used for both forward and reverse cross-file selector patterns.
+ */
+function tagCrossFileOverride(
+  relationOverrides: RelationOverride[],
+  countBefore: number,
+  markerVarName: string | undefined,
+  componentLocalName: string,
+): void {
+  if (!markerVarName || relationOverrides.length <= countBefore) {
+    return;
+  }
+  const created = relationOverrides[relationOverrides.length - 1]!;
+  created.crossFile = true;
+  created.markerVarName = markerVarName;
+  created.crossFileComponentLocalName = componentLocalName;
 }
 
 /**

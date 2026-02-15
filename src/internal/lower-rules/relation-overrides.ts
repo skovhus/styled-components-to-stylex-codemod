@@ -28,21 +28,32 @@ export const finalizeRelationOverrides = (args: {
     return;
   }
 
-  // Build a lookup from override key → child style keys (primary + extras) for base value resolution
+  // Build lookups from override key → child style keys and marker variable names (single pass)
   const overrideToChildKeys = new Map<string, string[]>();
+  const overrideToMarker = new Map<string, string>();
   for (const o of relationOverrides) {
-    const keys = [o.childStyleKey, ...(o.childExtraStyleKeys ?? [])];
-    overrideToChildKeys.set(o.overrideStyleKey, keys);
+    overrideToChildKeys.set(o.overrideStyleKey, [
+      o.childStyleKey,
+      ...(o.childExtraStyleKeys ?? []),
+    ]);
+    if (o.crossFile && o.markerVarName) {
+      overrideToMarker.set(o.overrideStyleKey, o.markerVarName);
+    }
   }
 
-  const makeAncestorKey = (pseudo: string) =>
-    j.callExpression(
+  const makeAncestorKey = (pseudo: string, markerVarName?: string) => {
+    const callArgs: ExpressionKind[] = [j.literal(pseudo)];
+    if (markerVarName) {
+      callArgs.push(j.identifier(markerVarName));
+    }
+    return j.callExpression(
       j.memberExpression(
         j.memberExpression(j.identifier("stylex"), j.identifier("when")),
         j.identifier("ancestor"),
       ),
-      [j.literal(pseudo)],
+      callArgs,
     );
+  };
 
   // Local type guard that narrows to ExpressionKind for use with jscodeshift builders
   const isExpressionNode = (v: unknown): v is ExpressionKind => isAstNode(v);
@@ -50,6 +61,7 @@ export const finalizeRelationOverrides = (args: {
   for (const [overrideKey, pseudoBuckets] of relationOverridePseudoBuckets.entries()) {
     const baseBucket = pseudoBuckets.get(null) ?? {};
     const props: any[] = [];
+    const markerVarName = overrideToMarker.get(overrideKey);
 
     // Look up the child's resolved style objects (primary + composed mixins)
     // for fallback base values. This handles:
@@ -118,7 +130,7 @@ export const finalizeRelationOverrides = (args: {
             objProps.push(j.property("init", j.literal(pseudo), valExpr));
           } else {
             // Ancestor pseudo: use stylex.when.ancestor() computed key
-            const ancestorKey = makeAncestorKey(pseudo);
+            const ancestorKey = makeAncestorKey(pseudo, markerVarName);
             const propNode = Object.assign(j.property("init", ancestorKey, valExpr), {
               computed: true,
             });

@@ -107,7 +107,6 @@ const config: StorybookConfig = {
   viteFinal: async (config) => {
     config.plugins = config.plugins || [];
 
-    // Add StyleX plugin for processing .stylex.ts files
     config.plugins.unshift(
       stylex.vite({
         dev: true,
