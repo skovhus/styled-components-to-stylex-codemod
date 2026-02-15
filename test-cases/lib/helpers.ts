@@ -144,8 +144,11 @@ export const Browser = {
 /**
  * Pseudo-class highlight helper: picks "hover" or "active" based on device capability.
  * On touch devices we use :active for immediate feedback; on pointer devices, :hover.
+ *
+ * Defined as a function so styled-components re-evaluates it on each render,
+ * picking up the current `Browser.isTouchDevice` value set by `TouchDeviceToggle`.
  */
-export const highlight = Browser.isTouchDevice ? "active" : "hover";
+export const highlight = () => (Browser.isTouchDevice ? "active" : "hover");
 
 /**
  * Helper that wraps the conditional pseudo selection in a function call,
