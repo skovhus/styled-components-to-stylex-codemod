@@ -128,15 +128,14 @@ export type StyledDecl = {
    * Pseudo-alias selectors from `&:${expr}` patterns resolved via
    * `adapter.resolveSelector()` with `kind: "pseudoAlias"`.
    *
-   * Each entry creates N extra style objects (one per pseudo value).
-   * Without `styleSelectorExpr`, all are applied directly in `stylex.props(...)`.
-   * With `styleSelectorExpr`, wraps them in a JS function call for runtime selection.
+   * Each entry creates N extra style objects (one per pseudo value),
+   * wrapped in a `styleSelectorExpr` function call for runtime selection.
    */
   pseudoAliasSelectors?: Array<{
     /** Style keys for each pseudo variant, in order matching the adapter's `values` array. */
     styleKeys: string[];
-    /** Parsed AST node of the runtime selector function (from `styleSelectorExpr`). */
-    styleSelectorExpr?: unknown;
+    /** Parsed AST node of the runtime selector function. */
+    styleSelectorExpr: unknown;
     /** Pseudo-class names (without leading colon), in order matching `styleKeys`. */
     pseudoNames: string[];
   }>;

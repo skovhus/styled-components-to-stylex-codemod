@@ -250,9 +250,8 @@ export type SelectorResolveContext = {
  *
  * Two kinds are supported:
  * - `"media"`: maps a selector interpolation to a media query computed key
- * - `"pseudoAlias"`: maps `&:${expr}` to N pseudo style objects (one per value).
- *   Without `styleSelectorExpr`, all pseudo styles are applied simultaneously (CSS handles activation).
- *   With `styleSelectorExpr`, wraps the styles in a JS function call for runtime selection.
+ * - `"pseudoAlias"`: maps `&:${expr}` to N pseudo style objects (one per value),
+ *   wrapped in a `styleSelectorExpr` function call for runtime selection.
  */
 export type SelectorResolveResult =
   | {
@@ -277,16 +276,15 @@ export type SelectorResolveResult =
        */
       values: string[];
       /**
-       * Optional JS expression for runtime selection.
-       * When provided, emits `expr({ active: styles.keyActive, hover: styles.keyHover })`
+       * JS expression for runtime selection.
+       * Emits `expr({ active: styles.keyActive, hover: styles.keyHover })`
        * with an object whose keys are the `values` entries.
-       * When absent, all pseudo style objects are applied directly.
        */
-      styleSelectorExpr?: string;
+      styleSelectorExpr: string;
       /**
-       * Import statements required by `styleSelectorExpr` (or by the pseudo alias itself).
+       * Import statements required by `styleSelectorExpr`.
        */
-      imports?: ImportSpec[];
+      imports: ImportSpec[];
     };
 
 // ────────────────────────────────────────────────────────────────────────────

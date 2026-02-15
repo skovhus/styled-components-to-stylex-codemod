@@ -1008,9 +1008,7 @@ function appendThemeBooleanStyleArgs(
 /**
  * Appends pseudo-alias style args to `styleArgs`.
  *
- * For each entry, generates either:
- * - Simple case (no `styleSelectorExpr`): each `styles.<key>` is pushed as a separate arg
- * - Function case: `selectorExpr({ active: styles.keyActive, hover: styles.keyHover })` as a single arg
+ * Emits `selectorExpr({ active: styles.keyActive, hover: styles.keyHover })` as a single arg.
  */
 function appendPseudoAliasStyleArgs(
   entries: StyledDecl["pseudoAliasSelectors"],
@@ -1022,26 +1020,18 @@ function appendPseudoAliasStyleArgs(
     return;
   }
   for (const entry of entries) {
-    if (entry.styleSelectorExpr) {
-      // Function case: emit selectorExpr({ active: styles.keyActive, hover: styles.keyHover })
-      const properties = entry.pseudoNames.map((name, i) =>
-        j.property(
-          "init",
-          j.identifier(name),
-          j.memberExpression(j.identifier(stylesIdentifier), j.identifier(entry.styleKeys[i]!)),
-        ),
-      );
-      styleArgs.push(
-        j.callExpression(cloneAstNode(entry.styleSelectorExpr) as ExpressionKind, [
-          j.objectExpression(properties),
-        ]) as ExpressionKind,
-      );
-    } else {
-      // Simple case: push each styles.<key> as a separate arg
-      for (const key of entry.styleKeys) {
-        styleArgs.push(j.memberExpression(j.identifier(stylesIdentifier), j.identifier(key)));
-      }
-    }
+    const properties = entry.pseudoNames.map((name, i) =>
+      j.property(
+        "init",
+        j.identifier(name),
+        j.memberExpression(j.identifier(stylesIdentifier), j.identifier(entry.styleKeys[i]!)),
+      ),
+    );
+    styleArgs.push(
+      j.callExpression(cloneAstNode(entry.styleSelectorExpr) as ExpressionKind, [
+        j.objectExpression(properties),
+      ]) as ExpressionKind,
+    );
   }
 }
 

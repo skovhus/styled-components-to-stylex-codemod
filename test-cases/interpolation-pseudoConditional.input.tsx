@@ -4,9 +4,8 @@ import { TouchDeviceToggle } from "./lib/TouchDeviceToggle";
 
 /**
  * Interpolated pseudo-class selector using a runtime variable.
- * `&:${highlight}` expands to `:active` and `:hover` pseudo style objects.
- * The adapter resolves this to a `pseudoAlias` result (simple case, no
- * `styleSelectorExpr`), so all pseudo styles are applied directly.
+ * `&:${highlight}` expands to `:active` and `:hover` pseudo style objects,
+ * wrapped in `highlightStyles({ active: ..., hover: ... })` for runtime selection.
  */
 const Button = styled.button`
   color: blue;

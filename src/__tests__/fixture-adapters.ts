@@ -408,26 +408,19 @@ export const fixtureAdapter = defineAdapter({
     }
 
     // Handle `highlight` pseudo-class interpolation: &:${highlight}
-    // Resolves to a pseudoAlias that expands into :active and :hover pseudo style objects.
+    // Resolves to a pseudoAlias that expands into :active and :hover pseudo style objects,
+    // wrapped in a highlightStyles() function call for runtime selection.
     if (ctx.importedName === "highlight") {
-      // For the helper test case, wrap selection in a styleSelectorExpr function call.
-      if (ctx.filePath.includes("interpolation-pseudoConditionalHelper")) {
-        return {
-          kind: "pseudoAlias",
-          values: ["active", "hover"],
-          styleSelectorExpr: "highlightStyles",
-          imports: [
-            {
-              from: { kind: "specifier", value: "./lib/helpers" },
-              names: [{ imported: "highlightStyles" }],
-            },
-          ],
-        };
-      }
-      // Simple case: no styleSelectorExpr, all pseudo styles applied directly.
       return {
         kind: "pseudoAlias",
         values: ["active", "hover"],
+        styleSelectorExpr: "highlightStyles",
+        imports: [
+          {
+            from: { kind: "specifier", value: "./lib/helpers" },
+            names: [{ imported: "highlightStyles" }],
+          },
+        ],
       };
     }
 

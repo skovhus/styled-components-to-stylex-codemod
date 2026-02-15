@@ -1168,11 +1168,7 @@ function tryResolveInterpolatedPseudo(
  * Handles `pseudoAlias` result: builds N extra style objects (one per pseudo value)
  * and registers them on `decl.pseudoAliasSelectors` for the emit phase.
  *
- * Simple case (no `styleSelectorExpr`): all pseudo style objects are applied directly
- * in `stylex.props(...)` — CSS handles which one activates. No wrapper needed.
- *
- * Function case (`styleSelectorExpr` provided): wraps the style args in a JS function
- * call for runtime selection. Requires a wrapper component.
+ * Wraps the style args in a `styleSelectorExpr` function call for runtime selection.
  */
 function handlePseudoAlias(
   result: Extract<SelectorResolveResult, { kind: "pseudoAlias" }>,
@@ -1216,13 +1212,10 @@ function handlePseudoAlias(
     extraStyleObjects.set(styleKey, styleObjForPseudo);
   }
 
-  // Parse the styleSelectorExpr if provided
-  let parsedSelectorExpr: unknown;
-  if (result.styleSelectorExpr) {
-    parsedSelectorExpr = parseExpr(result.styleSelectorExpr);
-    if (!parsedSelectorExpr) {
-      return "bail";
-    }
+  // Parse the styleSelectorExpr
+  const parsedSelectorExpr = parseExpr(result.styleSelectorExpr);
+  if (!parsedSelectorExpr) {
+    return "bail";
   }
 
   // Register on the decl for the emit phase
@@ -1233,13 +1226,10 @@ function handlePseudoAlias(
     pseudoNames: result.values,
   });
 
-  // Add imports from the adapter result (for styleSelectorExpr or other needs)
-  for (const impSpec of result.imports ?? []) {
+  // Add imports from the adapter result
+  for (const impSpec of result.imports) {
     resolverImports.set(JSON.stringify(impSpec), impSpec);
   }
 
-  // Only need a wrapper component when there's a runtime selector expression
-  if (result.styleSelectorExpr) {
-    decl.needsWrapperComponent = true;
-  }
+  decl.needsWrapperComponent = true;
 }
