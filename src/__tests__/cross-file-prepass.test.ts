@@ -209,25 +209,7 @@ describe("cross-file transform (Scenario A)", () => {
   //   selector-crossFileTwoParents, selector-crossFileBaseOnly,
   //   selector-crossFileReverse
 
-  it("value interpolation is not detected as selector by prepass", () => {
-    // This is a prepass-level test: when ${Component} is used as a CSS *value*
-    // (not a selector), the prepass should NOT flag it as a cross-file selector.
-    // The value-interpolation fixture has `color: ${CollapseArrowIcon}` — the
-    // prepass's isPlaceholderInSelectorContext correctly rejects this because
-    // it's preceded by `:` in a value context. See the scanner test above:
-    // "does NOT detect value interpolation as a selector"
-    //
-    // The transform-level behavior (bail or resolve) depends on the adapter.
-    // We don't test the transform here — just verify the prepass is correct.
-    const info = scanCrossFileSelectors(
-      [fixture("consumer-value-interpolation.tsx"), fixture("lib/collapse-arrow-icon.tsx")],
-      [],
-      createModuleResolver(),
-    );
-    expect(info.selectorUsages.get(fixture("consumer-value-interpolation.tsx")) ?? []).toHaveLength(
-      0,
-    );
-  });
+  // Value-interpolation prepass test is covered above in "scanCrossFileSelectors corner cases"
 
   it("reverse cross-file: adds marker to parent that already has stylex.props()", () => {
     // P2 regression: if the imported parent JSX already has a stylex.props() call

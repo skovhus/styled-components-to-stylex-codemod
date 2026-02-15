@@ -21,7 +21,7 @@ export function emitStylesStep(ctx: TransformContext): StepResult {
 
   // Emit defineMarker() declarations for cross-file parent components
   if (ctx.crossFileMarkers && ctx.crossFileMarkers.size > 0) {
-    emitDefineMarkerDeclarations(ctx);
+    emitDefineMarkerDeclarations(ctx, ctx.crossFileMarkers);
   }
 
   if (ctx.resolverImportAliases && ctx.resolverImportAliases.size > 0) {
@@ -99,9 +99,12 @@ export function emitStylesStep(ctx: TransformContext): StepResult {
  * an import for the markers into the main file. StyleX requires defineMarker()
  * to live in `.stylex.ts` files for the babel plugin's `fileNameForHashing`.
  */
-function emitDefineMarkerDeclarations(ctx: TransformContext): void {
+function emitDefineMarkerDeclarations(
+  ctx: TransformContext,
+  crossFileMarkers: Map<string, string>,
+): void {
   const j = ctx.j;
-  const markerNames = [...ctx.crossFileMarkers!.values()];
+  const markerNames = [...crossFileMarkers.values()];
 
   // Build sidecar file content
   const markerDecls = markerNames

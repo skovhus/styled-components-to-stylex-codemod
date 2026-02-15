@@ -20,6 +20,7 @@ import {
 import { extractRootAndPath, getNodeLocStart } from "../utilities/jscodeshift-utils.js";
 import { cssValueToJs, toStyleKey } from "../transform/helpers.js";
 import { getOrCreateRelationOverrideBucket } from "./shared.js";
+import type { RelationOverride } from "./state.js";
 
 export function processDeclRules(ctx: DeclProcessingState): void {
   const {
@@ -352,13 +353,12 @@ export function processDeclRules(ctx: DeclProcessingState): void {
         );
 
         // Tag newly-created relation override as cross-file (reverse direction)
-        if (reverseMarkerVarName && relationOverrides.length > overrideCountBeforeReverse) {
-          const created = relationOverrides[relationOverrides.length - 1]!;
-          created.crossFile = true;
-          created.markerVarName = reverseMarkerVarName;
-          // In reverse, the cross-file component is the parent (needs marker on JSX)
-          created.crossFileComponentLocalName = otherLocal;
-        }
+        tagCrossFileOverride(
+          relationOverrides,
+          overrideCountBeforeReverse,
+          reverseMarkerVarName,
+          otherLocal,
+        );
 
         const result = processDeclarationsIntoBucket(
           rule,
@@ -429,12 +429,7 @@ export function processDeclRules(ctx: DeclProcessingState): void {
         );
 
         // Tag newly-created relation override as cross-file
-        if (markerVarName && relationOverrides.length > overrideCountBefore) {
-          const created = relationOverrides[relationOverrides.length - 1]!;
-          created.crossFile = true;
-          created.markerVarName = markerVarName;
-          created.crossFileComponentLocalName = otherLocal;
-        }
+        tagCrossFileOverride(relationOverrides, overrideCountBefore, markerVarName, otherLocal);
 
         const forwardResult = processDeclarationsIntoBucket(
           rule,
@@ -1120,4 +1115,23 @@ function hasDynamicJsxChildren(
       }
     });
   return hasDynamic;
+}
+
+/**
+ * If a new relation override was created (array grew), tag it with cross-file metadata.
+ * Used for both forward and reverse cross-file selector patterns.
+ */
+function tagCrossFileOverride(
+  relationOverrides: RelationOverride[],
+  countBefore: number,
+  markerVarName: string | undefined,
+  componentLocalName: string,
+): void {
+  if (!markerVarName || relationOverrides.length <= countBefore) {
+    return;
+  }
+  const created = relationOverrides[relationOverrides.length - 1]!;
+  created.crossFile = true;
+  created.markerVarName = markerVarName;
+  created.crossFileComponentLocalName = componentLocalName;
 }

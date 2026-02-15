@@ -266,38 +266,40 @@ function findComponentSelectorLocals(
   return selectorLocals;
 }
 
+/** Loose shape for AST node property access without full jscodeshift types. */
+type AstRecord = Record<string, unknown>;
+
 /**
  * Check whether a styled-components tag expression is a styled call.
  * Matches: styled.div, styled(X), styled.div.attrs(...), styled(X).withConfig(...), etc.
  */
 function isStyledTag(tag: unknown, styledName: string): boolean {
-  const node = tag as Record<string, unknown>;
+  const node = tag as AstRecord;
   if (!node || typeof node !== "object") {
     return false;
   }
 
+  const child = (key: string): AstRecord | undefined => {
+    const val = node[key];
+    return val && typeof val === "object" ? (val as AstRecord) : undefined;
+  };
+
   // styled.div
-  if (
-    node.type === "MemberExpression" &&
-    (node.object as Record<string, unknown>)?.type === "Identifier" &&
-    (node.object as Record<string, unknown>)?.name === styledName
-  ) {
-    return true;
+  if (node.type === "MemberExpression") {
+    const obj = child("object");
+    if (obj?.type === "Identifier" && obj.name === styledName) {
+      return true;
+    }
   }
 
   // styled(X)
-  if (
-    node.type === "CallExpression" &&
-    (node.callee as Record<string, unknown>)?.type === "Identifier" &&
-    (node.callee as Record<string, unknown>)?.name === styledName
-  ) {
-    return true;
-  }
-
-  // styled.div.attrs(...) / styled(X).withConfig(...)
-  if (node.type === "CallExpression" && node.callee) {
-    const callee = node.callee as Record<string, unknown>;
-    if (callee.type === "MemberExpression" && callee.object) {
+  if (node.type === "CallExpression") {
+    const callee = child("callee");
+    if (callee?.type === "Identifier" && callee.name === styledName) {
+      return true;
+    }
+    // styled.div.attrs(...) / styled(X).withConfig(...)
+    if (callee?.type === "MemberExpression" && callee.object) {
       return isStyledTag(callee.object, styledName);
     }
   }

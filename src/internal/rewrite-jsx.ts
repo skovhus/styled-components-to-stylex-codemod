@@ -71,20 +71,11 @@ export function postProcessTransformedAst(args: {
         continue;
       }
       const componentStyleKey = componentNameToStyleKey?.get(o.crossFileComponentLocalName);
-      if (
+      const isReverse =
         componentStyleKey === o.parentStyleKey ||
-        o.parentStyleKey === toStyleKey(o.crossFileComponentLocalName)
-      ) {
-        // Reverse: the cross-file component is the parent
-        const existing = crossFileParentMarkers.get(o.crossFileComponentLocalName) ?? [];
-        existing.push(o);
-        crossFileParentMarkers.set(o.crossFileComponentLocalName, existing);
-      } else {
-        // Forward: the cross-file component is the child
-        const existing = crossFileChildOverrides.get(o.crossFileComponentLocalName) ?? [];
-        existing.push(o);
-        crossFileChildOverrides.set(o.crossFileComponentLocalName, existing);
-      }
+        o.parentStyleKey === toStyleKey(o.crossFileComponentLocalName);
+      const targetMap = isReverse ? crossFileParentMarkers : crossFileChildOverrides;
+      appendToMapList(targetMap, o.crossFileComponentLocalName, o);
     }
 
     const isStylexPropsCall = (n: any): n is any =>
@@ -117,6 +108,9 @@ export function postProcessTransformedAst(args: {
           a.property.name === key,
       );
     };
+
+    const hasIdentifierArg = (call: any, name: string): boolean =>
+      (call.arguments ?? []).some((a: any) => a?.type === "Identifier" && a.name === name);
 
     const hasDefaultMarker = (call: any): boolean => {
       return (call.arguments ?? []).some(
@@ -173,10 +167,7 @@ export function postProcessTransformedAst(args: {
             const markerVarName = crossFileMarkers?.get(parentKey);
             if (markerVarName) {
               // Add the marker variable reference if not already present
-              const hasMarkerVar = (call.arguments ?? []).some(
-                (a: any) => a?.type === "Identifier" && a.name === markerVarName,
-              );
-              if (!hasMarkerVar) {
+              if (!hasIdentifierArg(call, markerVarName)) {
                 call.arguments = [...(call.arguments ?? []), j.identifier(markerVarName)];
                 changed = true;
               }
@@ -211,8 +202,9 @@ export function postProcessTransformedAst(args: {
       }
 
       // Cross-file forward child: add override styles to imported child JSX
-      if (elementName && crossFileChildOverrides.has(elementName)) {
-        for (const o of crossFileChildOverrides.get(elementName)!) {
+      const childOverrides = elementName ? crossFileChildOverrides.get(elementName) : undefined;
+      if (childOverrides) {
+        for (const o of childOverrides) {
           if (!ancestorHasParentKey(ancestors, o.parentStyleKey)) {
             continue;
           }
@@ -234,8 +226,9 @@ export function postProcessTransformedAst(args: {
 
       // Cross-file reverse parent: add marker to imported parent JSX
       let addedMarkerVarName: string | undefined;
-      if (elementName && crossFileParentMarkers.has(elementName)) {
-        for (const o of crossFileParentMarkers.get(elementName)!) {
+      const parentMarkers = elementName ? crossFileParentMarkers.get(elementName) : undefined;
+      if (parentMarkers) {
+        for (const o of parentMarkers) {
           if (!o.markerVarName) {
             continue;
           }
@@ -243,10 +236,7 @@ export function postProcessTransformedAst(args: {
           const markerIdent = j.identifier(o.markerVarName);
           if (call) {
             // Parent already has stylex.props(...) — append marker to its arguments
-            const hasMarkerArg = (call.arguments ?? []).some(
-              (a: any) => a?.type === "Identifier" && a.name === o.markerVarName,
-            );
-            if (!hasMarkerArg) {
+            if (!hasIdentifierArg(call, o.markerVarName)) {
               call.arguments = [...(call.arguments ?? []), markerIdent];
               changed = true;
             }
@@ -517,4 +507,15 @@ export function postProcessTransformedAst(args: {
   const usesReactIdent = root.find(j.Identifier, { name: "React" } as any).size() > 0;
 
   return { changed, needsReactImport: usesReactIdent && !hasReactImport };
+}
+
+// --- Non-exported helpers ---
+
+function appendToMapList<K, V>(map: Map<K, V[]>, key: K, value: V): void {
+  const list = map.get(key);
+  if (list) {
+    list.push(value);
+  } else {
+    map.set(key, [value]);
+  }
 }
