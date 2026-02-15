@@ -1193,8 +1193,15 @@ function isEmptyCssBranch(node: unknown): boolean {
   if (n.type === "BooleanLiteral" && n.value === false) {
     return true;
   }
+  // Only treat `void 0` as empty — arbitrary `void <expr>` may carry side effects.
   if (n.type === "UnaryExpression" && n.operator === "void") {
-    return true;
+    const arg = (n as { argument?: { type?: string; value?: unknown } }).argument;
+    if (
+      (arg?.type === "NumericLiteral" && arg.value === 0) ||
+      (arg?.type === "Literal" && arg.value === 0)
+    ) {
+      return true;
+    }
   }
   return false;
 }
