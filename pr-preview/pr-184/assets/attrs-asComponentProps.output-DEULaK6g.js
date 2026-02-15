@@ -1,1 +1,0 @@
-import{j as e}from"./index-CAZB_ac6.js";import{F as r}from"./flex-eDZm6A_-.js";function t(s){return e.jsx(r,{...s,column:!0,className:"x12peec7 x12oqio5"})}const x=()=>e.jsxs(t,{children:[e.jsx("div",{children:"Item 1"}),e.jsx("div",{children:"Item 2"})]});export{x as App};
