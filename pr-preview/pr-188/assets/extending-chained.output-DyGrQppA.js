@@ -1,0 +1,1 @@
+import{j as t}from"./index-CxZ44mwd.js";import{T as r}from"./text-DszeJN-W.js";function s(e){return t.jsx(r,{...e,className:"x1iog12x"})}function x(e){return t.jsx(r,{...e,className:"xl010v5"})}const i=()=>t.jsxs("div",{children:[t.jsx(s,{children:"Help text content"}),t.jsx(x,{children:"|"})]});export{i as App,s as HelpText,x as Separator};
