@@ -1,7 +1,0 @@
-{
-  "name": "@myorg/app",
-  "version": "1.0.0",
-  "dependencies": {
-    "@myorg/icons": "workspace:*"
-  }
-}
