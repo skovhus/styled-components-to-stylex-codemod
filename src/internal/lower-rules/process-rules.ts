@@ -1343,17 +1343,24 @@ function recoverStandaloneInterpolationsInPseudoBlock(
 
   let test: unknown;
   let cssNode: unknown;
+  let needsNegation = false;
 
   if (body.type === "LogicalExpression" && body.operator === "&&") {
     test = body.left;
     cssNode = body.right;
   } else if (body.type === "ConditionalExpression") {
     test = body.test;
-    // Pick the non-empty branch
-    if (extractCssTextFromNode(body.consequent)) {
+    const consequentCss = extractCssTextFromNode(body.consequent);
+    const alternateCss = extractCssTextFromNode(body.alternate);
+    // Both branches have CSS - bail (we can't represent both in a single guard)
+    if (consequentCss && alternateCss) {
+      return null;
+    }
+    if (consequentCss) {
       cssNode = body.consequent;
-    } else if (extractCssTextFromNode(body.alternate)) {
+    } else if (alternateCss) {
       cssNode = body.alternate;
+      needsNegation = true;
     } else {
       return null;
     }
@@ -1376,7 +1383,22 @@ function recoverStandaloneInterpolationsInPseudoBlock(
     return null;
   }
 
-  return { when: testInfo.when, propName: testInfo.propName, cssProps };
+  const when = needsNegation ? negateWhen(testInfo.when) : testInfo.when;
+  return { when, propName: testInfo.propName, cssProps };
+}
+
+/** Negates a `when` condition string (e.g. `$active` → `!$active`, `!$x` → `$x`). */
+function negateWhen(when: string): string {
+  if (when.startsWith("!")) {
+    return when.slice(1);
+  }
+  if (when.includes(" === ")) {
+    return when.replace(" === ", " !== ");
+  }
+  if (when.includes(" !== ")) {
+    return when.replace(" !== ", " === ");
+  }
+  return `!${when}`;
 }
 
 /** Extracts static CSS text from a StringLiteral or zero-expression TemplateLiteral. */

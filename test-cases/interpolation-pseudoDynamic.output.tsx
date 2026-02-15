@@ -25,10 +25,39 @@ function Button(props: ButtonProps) {
   );
 }
 
+type InvertedButtonProps = React.PropsWithChildren<{
+  $disabled?: boolean;
+}>;
+
+/**
+ * Ternary with CSS in alternate branch: the guard must be negated.
+ * `$disabled ? '' : 'background-color: green;'` → `!$disabled && ...`
+ */
+function InvertedButton(props: InvertedButtonProps) {
+  const { children, $disabled } = props;
+
+  return (
+    <button
+      {...stylex.props(
+        styles.invertedButton,
+        !$disabled &&
+          highlightStyles({
+            active: styles.invertedButtonNotDisabledPseudoActive,
+            hover: styles.invertedButtonNotDisabledPseudoHover,
+          }),
+      )}
+    >
+      {children}
+    </button>
+  );
+}
+
 export const App = () => (
   <div style={{ display: "flex", gap: "16px", padding: "16px" }}>
     <Button $active>Active</Button>
     <Button>Inactive</Button>
+    <InvertedButton>Enabled</InvertedButton>
+    <InvertedButton $disabled>Disabled</InvertedButton>
   </div>
 );
 
@@ -48,6 +77,23 @@ const styles = stylex.create({
     backgroundColor: {
       default: null,
       ":hover": "red",
+    },
+  },
+  invertedButton: {
+    color: "blue",
+    paddingBlock: "8px",
+    paddingInline: "16px",
+  },
+  invertedButtonNotDisabledPseudoActive: {
+    backgroundColor: {
+      default: null,
+      ":active": "green",
+    },
+  },
+  invertedButtonNotDisabledPseudoHover: {
+    backgroundColor: {
+      default: null,
+      ":hover": "green",
     },
   },
 });

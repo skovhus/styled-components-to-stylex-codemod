@@ -280,7 +280,7 @@ export function emitSimpleWithConfigWrappers(ctx: EmitIntrinsicContext): void {
         ...(isVoidTag ? [] : [emitter.patternProp("children", childrenId)]),
         emitter.patternProp("style", styleId),
       ],
-      destructureProps: [],
+      destructureProps: [...pseudoGuardProps],
       includeRest: true,
       restId,
     });

@@ -88,7 +88,12 @@ export function emitInputWrappers(ctx: EmitIntrinsicContext): void {
       ];
 
       // Handle pseudo-alias selectors (e.g., &:${highlight})
-      appendPseudoAliasStyleArgs(d.pseudoAliasSelectors, styleArgs, j, stylesIdentifier);
+      const pseudoGuardPropsInput = appendPseudoAliasStyleArgs(
+        d.pseudoAliasSelectors,
+        styleArgs,
+        j,
+        stylesIdentifier,
+      );
 
       emitted.push(
         allowClassNameProp
@@ -199,6 +204,11 @@ export function emitInputWrappers(ctx: EmitIntrinsicContext): void {
         const lastEmitted = emitted[emitted.length - 1] as any;
         injectExtraInputProps(j, lastEmitted, extraInputProps);
       }
+
+      // Post-process: add pseudo-alias guard props to destructuring
+      if (pseudoGuardPropsInput.length > 0) {
+        injectDestructureProps(j, emitted[emitted.length - 1] as any, pseudoGuardPropsInput);
+      }
     }
   }
 }
@@ -283,7 +293,12 @@ export function emitLinkWrappers(ctx: EmitIntrinsicContext): void {
       ];
 
       // Handle pseudo-alias selectors (e.g., &:${highlight})
-      appendPseudoAliasStyleArgs(d.pseudoAliasSelectors, styleArgs, j, stylesIdentifier);
+      const pseudoGuardPropsLink = appendPseudoAliasStyleArgs(
+        d.pseudoAliasSelectors,
+        styleArgs,
+        j,
+        stylesIdentifier,
+      );
 
       emitted.push(
         allowClassNameProp
@@ -434,6 +449,11 @@ export function emitLinkWrappers(ctx: EmitIntrinsicContext): void {
         const lastEmitted = emitted[emitted.length - 1] as any;
         injectForwardedAsHandling(j, lastEmitted);
       }
+
+      // Post-process: add pseudo-alias guard props to destructuring
+      if (pseudoGuardPropsLink.length > 0) {
+        injectDestructureProps(j, emitted[emitted.length - 1] as any, pseudoGuardPropsLink);
+      }
     }
   }
 }
@@ -545,7 +565,25 @@ export function emitEnumVariantWrappers(ctx: EmitIntrinsicContext): void {
       ];
 
       // Handle pseudo-alias selectors (e.g., &:${highlight})
-      appendPseudoAliasStyleArgs(d.pseudoAliasSelectors, styleArgs, j, stylesIdentifier);
+      const pseudoGuardPropsEnum = appendPseudoAliasStyleArgs(
+        d.pseudoAliasSelectors,
+        styleArgs,
+        j,
+        stylesIdentifier,
+      );
+
+      // Inject guard props into the destructuring pattern
+      if (pseudoGuardPropsEnum.length > 0) {
+        const decl = declStmt.declarations[0] as { id?: { type?: string; properties?: unknown[] } };
+        if (decl?.id?.type === "ObjectPattern" && Array.isArray(decl.id.properties)) {
+          for (const gp of pseudoGuardPropsEnum) {
+            const id = j.identifier(gp);
+            const prop = j.property("init", id, id);
+            (prop as unknown as Record<string, unknown>).shorthand = true;
+            decl.id.properties.push(prop);
+          }
+        }
+      }
 
       const sxDecl = j.variableDeclaration("const", [
         j.variableDeclarator(
@@ -761,6 +799,67 @@ function injectForwardedAsHandling(j: JSCodeshift, fnDecl: unknown): void {
           ),
         );
       }
+    }
+
+    for (const key of Object.keys(n)) {
+      if (key === "loc" || key === "start" || key === "end" || key === "comments") {
+        continue;
+      }
+      const child = n[key];
+      if (child && typeof child === "object") {
+        queue.push(child);
+      }
+    }
+  }
+}
+
+/**
+ * Inject extra props into an emitted function's destructuring pattern only
+ * (unlike `injectExtraInputProps` which also adds JSX attributes).
+ *
+ * Used for pseudo-alias guard props that need to be in scope for style
+ * expressions but should NOT be forwarded as JSX attributes.
+ */
+function injectDestructureProps(j: JSCodeshift, fnDecl: unknown, props: string[]): void {
+  if (!fnDecl || typeof fnDecl !== "object" || props.length === 0) {
+    return;
+  }
+
+  const queue: unknown[] = [fnDecl];
+  while (queue.length > 0) {
+    const node = queue.pop();
+    if (!node || typeof node !== "object") {
+      continue;
+    }
+    if (Array.isArray(node)) {
+      for (const item of node) {
+        queue.push(item);
+      }
+      continue;
+    }
+
+    const n = node as Record<string, unknown>;
+
+    if (n.type === "ObjectPattern" && Array.isArray(n.properties)) {
+      const properties = n.properties as unknown[];
+      const restIdx = properties.findIndex(
+        (p: unknown) =>
+          !!p &&
+          typeof p === "object" &&
+          ((p as Record<string, unknown>).type === "RestElement" ||
+            (p as Record<string, unknown>).type === "RestProperty" ||
+            (p as Record<string, unknown>).type === "SpreadProperty"),
+      );
+      const insertIdx = restIdx >= 0 ? restIdx : properties.length;
+      const toInsert = props.map((name) => {
+        const id = j.identifier(name);
+        const prop = j.property("init", id, id);
+        (prop as unknown as Record<string, unknown>).shorthand = true;
+        return prop;
+      });
+      properties.splice(insertIdx, 0, ...toInsert);
+      // Only inject into the first ObjectPattern (the props destructuring)
+      return;
     }
 
     for (const key of Object.keys(n)) {
