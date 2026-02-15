@@ -66,6 +66,9 @@ export function createLowerRulesState(ctx: TransformContext) {
     string,
     Map<string | null, Record<string, unknown>>
   >();
+  // Map<overrideStyleKey, Set<pseudo>> — pseudos that apply to child element, not ancestor.
+  // These use regular string literal keys (e.g., ":hover") instead of stylex.when.ancestor().
+  const childPseudoMarkers = new Map<string, Set<string>>();
 
   // Pre-compute properties and values defined by each css helper and mixin from their rules.
   // This allows us to know what properties they provide (and their values) before styled
@@ -239,6 +242,7 @@ export function createLowerRulesState(ctx: TransformContext) {
     relationOverrides,
     ancestorSelectorParents,
     relationOverridePseudoBuckets,
+    childPseudoMarkers,
     cssHelperValuesByKey,
     mixinValuesByKey,
     staticPropertyValues,
