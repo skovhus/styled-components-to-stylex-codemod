@@ -125,26 +125,20 @@ export type StyledDecl = {
   }>;
   needsWrapperComponent?: boolean;
   /**
-   * Conditional pseudo-class selectors from `&:${expr}` patterns resolved via
-   * `adapter.resolveSelector()` with `kind: "pseudoConditional"`.
+   * Pseudo-alias selectors from `&:${expr}` patterns resolved via
+   * `adapter.resolveSelector()` with `kind: "pseudoAlias"`.
    *
-   * Each entry creates two extra style objects (one per pseudo) and a ternary
-   * expression in `stylex.props(...)` that picks the active one at runtime.
+   * Each entry creates N extra style objects (one per pseudo value).
+   * Without `styleSelectorExpr`, all are applied directly in `stylex.props(...)`.
+   * With `styleSelectorExpr`, wraps them in a JS function call for runtime selection.
    */
-  conditionalPseudoSelectors?: Array<{
-    /** AST node for the runtime condition expression */
-    conditionExpr: unknown;
-    /** Style key for the truthy-branch pseudo style object */
-    trueStyleKey: string;
-    /** Style key for the falsy-branch pseudo style object */
-    falseStyleKey: string;
-    /** Optional helper function info for wrapping the conditional */
-    helperFunction?: {
-      name: string;
-      importSource: import("../adapter.js").ImportSource;
-      trueKey: string;
-      falseKey: string;
-    };
+  pseudoAliasSelectors?: Array<{
+    /** Style keys for each pseudo variant, in order matching the adapter's `values` array. */
+    styleKeys: string[];
+    /** Parsed AST node of the runtime selector function (from `styleSelectorExpr`). */
+    styleSelectorExpr?: unknown;
+    /** Pseudo-class names (without leading colon), in order matching `styleKeys`. */
+    pseudoNames: string[];
   }>;
   /**
    * When set, the wrapper needs to call `useTheme()` from styled-components

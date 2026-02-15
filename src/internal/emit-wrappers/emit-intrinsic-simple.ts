@@ -141,8 +141,8 @@ export function emitSimpleWithConfigWrappers(ctx: EmitIntrinsicContext): void {
       ctx,
     );
 
-    // Handle conditional pseudo-class selectors (e.g., &:${highlight})
-    appendConditionalPseudoStyleArgs(d.conditionalPseudoSelectors, styleArgs, j, stylesIdentifier);
+    // Handle pseudo-alias selectors (e.g., &:${highlight})
+    appendPseudoAliasStyleArgs(d.pseudoAliasSelectors, styleArgs, j, stylesIdentifier);
 
     const propsParamId = j.identifier("props");
     if (allowAsProp && emitTypes) {
@@ -677,8 +677,8 @@ export function emitSimpleExportedIntrinsicWrappers(ctx: EmitIntrinsicContext): 
       ctx,
     );
 
-    // Handle conditional pseudo-class selectors (e.g., &:${highlight})
-    appendConditionalPseudoStyleArgs(d.conditionalPseudoSelectors, styleArgs, j, stylesIdentifier);
+    // Handle pseudo-alias selectors (e.g., &:${highlight})
+    appendPseudoAliasStyleArgs(d.pseudoAliasSelectors, styleArgs, j, stylesIdentifier);
 
     // Collect keys used by compound variants (they're handled separately)
     const compoundVariantKeys = new Set<string>();
@@ -1006,14 +1006,14 @@ function appendThemeBooleanStyleArgs(
 }
 
 /**
- * Appends conditional pseudo-class style args to `styleArgs`.
+ * Appends pseudo-alias style args to `styleArgs`.
  *
  * For each entry, generates either:
- * - A ternary: `condition ? styles.trueKey : styles.falseKey`
- * - A helper call: `helperFn({ trueKey: styles.trueKey, falseKey: styles.falseKey })`
+ * - Simple case (no `styleSelectorExpr`): each `styles.<key>` is pushed as a separate arg
+ * - Function case: `selectorExpr({ active: styles.keyActive, hover: styles.keyHover })` as a single arg
  */
-function appendConditionalPseudoStyleArgs(
-  entries: StyledDecl["conditionalPseudoSelectors"],
+function appendPseudoAliasStyleArgs(
+  entries: StyledDecl["pseudoAliasSelectors"],
   styleArgs: ExpressionKind[],
   j: JSCodeshift,
   stylesIdentifier: string,
@@ -1022,30 +1022,25 @@ function appendConditionalPseudoStyleArgs(
     return;
   }
   for (const entry of entries) {
-    const trueExpr = j.memberExpression(
-      j.identifier(stylesIdentifier),
-      j.identifier(entry.trueStyleKey),
-    );
-    const falseExpr = j.memberExpression(
-      j.identifier(stylesIdentifier),
-      j.identifier(entry.falseStyleKey),
-    );
-
-    if (entry.helperFunction) {
-      // Emit: helperFn({ trueKey: styles.X, falseKey: styles.Y })
-      const hf = entry.helperFunction;
+    if (entry.styleSelectorExpr) {
+      // Function case: emit selectorExpr({ active: styles.keyActive, hover: styles.keyHover })
+      const properties = entry.pseudoNames.map((name, i) =>
+        j.property(
+          "init",
+          j.identifier(name),
+          j.memberExpression(j.identifier(stylesIdentifier), j.identifier(entry.styleKeys[i]!)),
+        ),
+      );
       styleArgs.push(
-        j.callExpression(j.identifier(hf.name), [
-          j.objectExpression([
-            j.property("init", j.identifier(hf.trueKey), trueExpr),
-            j.property("init", j.identifier(hf.falseKey), falseExpr),
-          ]),
+        j.callExpression(cloneAstNode(entry.styleSelectorExpr) as ExpressionKind, [
+          j.objectExpression(properties),
         ]) as ExpressionKind,
       );
     } else {
-      // Emit: condition ? styles.trueKey : styles.falseKey
-      const condition = cloneAstNode(entry.conditionExpr) as ExpressionKind;
-      styleArgs.push(j.conditionalExpression(condition, trueExpr, falseExpr));
+      // Simple case: push each styles.<key> as a separate arg
+      for (const key of entry.styleKeys) {
+        styleArgs.push(j.memberExpression(j.identifier(stylesIdentifier), j.identifier(key)));
+      }
     }
   }
 }

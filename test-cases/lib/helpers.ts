@@ -148,12 +148,6 @@ export const Browser = {
 export const highlight = Browser.isTouchDevice ? "active" : "hover";
 
 /**
- * Same as `highlight`, but the adapter wraps the conditional in a
- * `highlightStyles()` helper function for lint-enforceable consistency.
- */
-export const highlightWithHelper = highlight;
-
-/**
  * Helper that wraps the conditional pseudo selection in a function call,
  * making the pairing explicit and enabling lint enforcement.
  */

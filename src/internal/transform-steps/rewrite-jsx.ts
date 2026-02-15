@@ -366,6 +366,15 @@ export function rewriteJsxStep(ctx: TransformContext): StepResult {
           ...extraAfterBaseArgs,
         ];
 
+        // Append pseudo-alias style args (simple case: no styleSelectorExpr)
+        for (const entry of decl.pseudoAliasSelectors ?? []) {
+          for (const key of entry.styleKeys) {
+            styleArgs.push(
+              j.memberExpression(j.identifier(ctx.stylesIdentifier ?? "styles"), j.identifier(key)),
+            );
+          }
+        }
+
         const variantKeys = decl.variantStyleKeys ?? {};
         const variantProps = new Set(Object.keys(variantKeys));
         const keptLeadingAfterVariants: typeof leading = [];

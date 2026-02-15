@@ -221,7 +221,7 @@ export function processDeclRules(ctx: DeclProcessingState): void {
           break;
         }
 
-        // pseudoConditional and pseudoMediaQuery both handled all declarations —
+        // pseudoAlias and media both handled all declarations —
         // skip remaining rule processing for this rule.
         continue;
       }
@@ -1109,8 +1109,8 @@ function hasDynamicJsxChildren(
 
 /**
  * Attempts to resolve an interpolated pseudo-class selector (`&:${expr}`) via the
- * adapter's `resolveSelector`. Handles `pseudoConditional` (builds two separate style
- * objects with a JS-level ternary) and `pseudoMediaQuery` (merges into perPropPseudo
+ * adapter's `resolveSelector`. Handles `pseudoAlias` (builds N separate style
+ * objects, one per pseudo value) and `media` (merges into perPropPseudo
  * with nested media guards).
  *
  * Returns "bail" if resolution fails or the pattern isn't supported.
@@ -1156,8 +1156,8 @@ function tryResolveInterpolatedPseudo(
     resolverImports.set(JSON.stringify(impSpec), impSpec);
   }
 
-  if (selectorResult.kind === "pseudoConditional") {
-    return handlePseudoConditional(selectorResult, rule, ctx);
+  if (selectorResult.kind === "pseudoAlias") {
+    return handlePseudoAlias(selectorResult, rule, ctx);
   }
 
   // "media" kind is not applicable for pseudo selectors
@@ -1165,11 +1165,17 @@ function tryResolveInterpolatedPseudo(
 }
 
 /**
- * Handles `pseudoConditional` result: builds two extra style objects (one per pseudo)
- * and registers them on `decl.conditionalPseudoSelectors` for the emit phase.
+ * Handles `pseudoAlias` result: builds N extra style objects (one per pseudo value)
+ * and registers them on `decl.pseudoAliasSelectors` for the emit phase.
+ *
+ * Simple case (no `styleSelectorExpr`): all pseudo style objects are applied directly
+ * in `stylex.props(...)` — CSS handles which one activates. No wrapper needed.
+ *
+ * Function case (`styleSelectorExpr` provided): wraps the style args in a JS function
+ * call for runtime selection. Requires a wrapper component.
  */
-function handlePseudoConditional(
-  result: Extract<SelectorResolveResult, { kind: "pseudoConditional" }>,
+function handlePseudoAlias(
+  result: Extract<SelectorResolveResult, { kind: "pseudoAlias" }>,
   rule: DeclProcessingState["decl"]["rules"][number],
   ctx: DeclProcessingState,
 ): "bail" | void {
@@ -1192,53 +1198,48 @@ function handlePseudoConditional(
     return "bail";
   }
 
-  const truePseudo = `:${result.truePseudo}`;
-  const falsePseudo = `:${result.falsePseudo}`;
+  // Build N style objects (one per pseudo value)
+  const styleKeys: string[] = [];
+  for (const pseudoName of result.values) {
+    const pseudo = `:${pseudoName}`;
+    const styleKey = `${decl.styleKey}${capitalize(pseudoName)}`;
+    styleKeys.push(styleKey);
 
-  // Parse the condition expression from the adapter's string
-  const conditionExpr = parseExpr(result.conditionExpr);
-  if (!conditionExpr) {
-    return "bail";
+    const styleObjForPseudo: Record<string, unknown> = {};
+    for (const prop of Object.keys(flatBucket)) {
+      const value = flatBucket[prop];
+      const baseValue =
+        (styleObj as Record<string, unknown>)[prop] ??
+        (cssHelperPropValues.has(prop) ? getComposedDefaultValue(prop) : null);
+      styleObjForPseudo[prop] = { default: baseValue, [pseudo]: value };
+    }
+    extraStyleObjects.set(styleKey, styleObjForPseudo);
   }
 
-  // Use pseudo names (capitalized) for style key naming: e.g., buttonActive / buttonHover
-  const trueStyleKey = `${decl.styleKey}${capitalize(result.truePseudo)}`;
-  const falseStyleKey = `${decl.styleKey}${capitalize(result.falsePseudo)}`;
-
-  // Build the two style objects: each prop wrapped in { default: <base>, ":pseudo": value }.
-  // For properties that have a base value in the main style object, use that as `default`
-  // so that `stylex.props(styles.base, styles.pseudoVariant)` doesn't override it with null.
-  const trueStyleObj: Record<string, unknown> = {};
-  const falseStyleObj: Record<string, unknown> = {};
-  for (const prop of Object.keys(flatBucket)) {
-    const value = flatBucket[prop];
-    const baseValue =
-      (styleObj as Record<string, unknown>)[prop] ??
-      (cssHelperPropValues.has(prop) ? getComposedDefaultValue(prop) : null);
-    trueStyleObj[prop] = { default: baseValue, [truePseudo]: value };
-    falseStyleObj[prop] = { default: baseValue, [falsePseudo]: value };
+  // Parse the styleSelectorExpr if provided
+  let parsedSelectorExpr: unknown;
+  if (result.styleSelectorExpr) {
+    parsedSelectorExpr = parseExpr(result.styleSelectorExpr);
+    if (!parsedSelectorExpr) {
+      return "bail";
+    }
   }
-
-  extraStyleObjects.set(trueStyleKey, trueStyleObj);
-  extraStyleObjects.set(falseStyleKey, falseStyleObj);
 
   // Register on the decl for the emit phase
-  decl.conditionalPseudoSelectors ??= [];
-  decl.conditionalPseudoSelectors.push({
-    conditionExpr,
-    trueStyleKey,
-    falseStyleKey,
-    helperFunction: result.helperFunction,
+  decl.pseudoAliasSelectors ??= [];
+  decl.pseudoAliasSelectors.push({
+    styleKeys,
+    styleSelectorExpr: parsedSelectorExpr,
+    pseudoNames: result.values,
   });
 
-  // Add helper function imports if provided
-  if (result.helperFunction) {
-    const helperImport = {
-      from: result.helperFunction.importSource,
-      names: [{ imported: result.helperFunction.name }],
-    };
-    resolverImports.set(JSON.stringify(helperImport), helperImport);
+  // Add imports from the adapter result (for styleSelectorExpr or other needs)
+  for (const impSpec of result.imports ?? []) {
+    resolverImports.set(JSON.stringify(impSpec), impSpec);
   }
 
-  decl.needsWrapperComponent = true;
+  // Only need a wrapper component when there's a runtime selector expression
+  if (result.styleSelectorExpr) {
+    decl.needsWrapperComponent = true;
+  }
 }

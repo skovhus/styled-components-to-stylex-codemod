@@ -108,12 +108,5 @@ const targetFixtures = (() => {
 })();
 
 for (const { name, ext } of targetFixtures) {
-  // Skip when output file doesn't exist (should only happen for unsupported fixtures).
-  const outPath = join(testCasesDir, `${name}.output.${ext}`);
-  try {
-    await readFile(outPath, "utf-8");
-  } catch {
-    continue;
-  }
   await updateFixture(name, ext);
 }

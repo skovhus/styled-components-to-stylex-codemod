@@ -250,7 +250,9 @@ export type SelectorResolveContext = {
  *
  * Two kinds are supported:
  * - `"media"`: maps a selector interpolation to a media query computed key
- * - `"pseudoConditional"`: maps `&:${expr}` to a JS-level ternary that picks between two pseudo style objects
+ * - `"pseudoAlias"`: maps `&:${expr}` to N pseudo style objects (one per value).
+ *   Without `styleSelectorExpr`, all pseudo styles are applied simultaneously (CSS handles activation).
+ *   With `styleSelectorExpr`, wraps the styles in a JS function call for runtime selection.
  */
 export type SelectorResolveResult =
   | {
@@ -268,37 +270,23 @@ export type SelectorResolveResult =
       imports: ImportSpec[];
     }
   | {
-      kind: "pseudoConditional";
+      kind: "pseudoAlias";
       /**
-       * JS expression string for the boolean condition that picks the pseudo.
-       * Example: "Browser.isTouchDevice"
+       * Pseudo-class names without leading colon.
+       * Example: ["active", "hover"]
        */
-      conditionExpr: string;
+      values: string[];
       /**
-       * Pseudo-class name for the truthy branch (without leading colon).
-       * Example: "active"
+       * Optional JS expression for runtime selection.
+       * When provided, emits `expr({ active: styles.keyActive, hover: styles.keyHover })`
+       * with an object whose keys are the `values` entries.
+       * When absent, all pseudo style objects are applied directly.
        */
-      truePseudo: string;
+      styleSelectorExpr?: string;
       /**
-       * Pseudo-class name for the falsy branch (without leading colon).
-       * Example: "hover"
+       * Import statements required by `styleSelectorExpr` (or by the pseudo alias itself).
        */
-      falsePseudo: string;
-      /**
-       * Import statements required by `conditionExpr`.
-       */
-      imports: ImportSpec[];
-      /**
-       * Optional helper function that wraps the conditional application.
-       * When provided, emits `helperFn({ [trueKey]: styles.X, [falseKey]: styles.Y })`
-       * instead of a raw ternary.
-       */
-      helperFunction?: {
-        name: string;
-        importSource: ImportSource;
-        trueKey: string;
-        falseKey: string;
-      };
+      imports?: ImportSpec[];
     };
 
 // ────────────────────────────────────────────────────────────────────────────
@@ -394,7 +382,7 @@ export interface Adapter {
    *
    * Return:
    * - `{ kind: "media", expr, imports }` when the interpolation resolves to a media query
-   * - `{ kind: "pseudoConditional", conditionExpr, truePseudo, falsePseudo, imports }` for JS-level ternary pseudo selection
+   * - `{ kind: "pseudoAlias", values, styleSelectorExpr?, imports? }` for pseudo-class expansion
    * - `undefined` to bail/skip the file
    */
   resolveSelector: (context: SelectorResolveContext) => SelectorResolveResult | undefined;
@@ -465,7 +453,7 @@ export interface Adapter {
  *       // Resolve imported values used in selector position.
  *       // Return one of:
  *       // - { kind: "media", expr, imports } for media queries (e.g., breakpoints.phone)
- *       // - { kind: "pseudoConditional", conditionExpr, truePseudo, falsePseudo, imports } for JS-level pseudo selection
+ *       // - { kind: "pseudoAlias", values, styleSelectorExpr?, imports? } for pseudo-class expansion
  *       // - undefined to bail/skip the file
  *       void ctx;
  *     },

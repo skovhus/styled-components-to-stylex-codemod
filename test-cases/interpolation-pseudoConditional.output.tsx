@@ -1,34 +1,18 @@
-import React from "react";
 import * as stylex from "@stylexjs/stylex";
-import { Browser } from "./lib/helpers";
-import { TouchDeviceToggle } from "./lib/TouchDeviceToggle";
-
-/**
- * Interpolated pseudo-class selector using a runtime variable.
- * `&:${highlight}` picks between `:hover` and `:active` based on device capability.
- * The adapter resolves this to a `pseudoConditional` result, generating two style
- * objects (one per pseudo) with a JS ternary in `stylex.props(...)`.
- */
-function Button(props: React.PropsWithChildren<{ ref?: React.Ref<HTMLButtonElement> }>) {
-  const { children } = props;
-
-  return (
-    <button
-      {...stylex.props(
-        styles.button,
-        Browser.isTouchDevice ? styles.buttonActive : styles.buttonHover,
-      )}
-    >
-      {children}
-    </button>
-  );
-}
 
 export const App = () => (
-  <TouchDeviceToggle>{() => <Button>Highlight Button</Button>}</TouchDeviceToggle>
+  <button {...stylex.props(styles.button, styles.buttonActive, styles.buttonHover)}>
+    Highlight Button
+  </button>
 );
 
 const styles = stylex.create({
+  /**
+   * Interpolated pseudo-class selector using a runtime variable.
+   * `&:${highlight}` expands to `:active` and `:hover` pseudo style objects.
+   * The adapter resolves this to a `pseudoAlias` result (simple case, no
+   * `styleSelectorExpr`), so all pseudo styles are applied directly.
+   */
   button: {
     color: "blue",
     paddingBlock: "8px",

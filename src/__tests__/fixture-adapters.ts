@@ -408,43 +408,26 @@ export const fixtureAdapter = defineAdapter({
     }
 
     // Handle `highlight` pseudo-class interpolation: &:${highlight}
-    // Resolves to a pseudoConditional that picks between :active and :hover
-    // based on Browser.isTouchDevice.
+    // Resolves to a pseudoAlias that expands into :active and :hover pseudo style objects.
     if (ctx.importedName === "highlight") {
+      // For the helper test case, wrap selection in a styleSelectorExpr function call.
+      if (ctx.filePath.includes("interpolation-pseudoConditionalHelper")) {
+        return {
+          kind: "pseudoAlias",
+          values: ["active", "hover"],
+          styleSelectorExpr: "highlightStyles",
+          imports: [
+            {
+              from: { kind: "specifier", value: "./lib/helpers" },
+              names: [{ imported: "highlightStyles" }],
+            },
+          ],
+        };
+      }
+      // Simple case: no styleSelectorExpr, all pseudo styles applied directly.
       return {
-        kind: "pseudoConditional",
-        conditionExpr: "Browser.isTouchDevice",
-        truePseudo: "active",
-        falsePseudo: "hover",
-        imports: [
-          {
-            from: { kind: "specifier", value: "./lib/helpers" },
-            names: [{ imported: "Browser" }],
-          },
-        ],
-      };
-    }
-
-    // Handle `highlightWithHelper` pseudo-class interpolation: &:${highlightWithHelper}
-    // Same as `highlight` but wraps the conditional in a helper function call.
-    if (ctx.importedName === "highlightWithHelper") {
-      return {
-        kind: "pseudoConditional",
-        conditionExpr: "Browser.isTouchDevice",
-        truePseudo: "active",
-        falsePseudo: "hover",
-        imports: [
-          {
-            from: { kind: "specifier", value: "./lib/helpers" },
-            names: [{ imported: "Browser" }],
-          },
-        ],
-        helperFunction: {
-          name: "highlightStyles",
-          importSource: { kind: "specifier", value: "./lib/helpers" },
-          trueKey: "active",
-          falseKey: "hover",
-        },
+        kind: "pseudoAlias",
+        values: ["active", "hover"],
       };
     }
 

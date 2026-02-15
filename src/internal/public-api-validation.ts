@@ -126,7 +126,7 @@ export function assertValidAdapter(
         "",
         "Adapter shape:",
         "  {",
-        '    resolveSelector(context) { return { kind: "media" | "pseudoConditional", ... } | undefined }',
+        '    resolveSelector(context) { return { kind: "media" | "pseudoAlias", ... } | undefined }',
         "  }",
         "",
         `Docs/examples: ${ADAPTER_DOCS_URL}`,
