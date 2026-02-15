@@ -2,7 +2,9 @@
  * Processes per-rule selector logic and dispatches declarations.
  * Core concepts: selector normalization, attribute wrappers, and rule buckets.
  */
+import type { JSCodeshift } from "jscodeshift";
 import type { DeclProcessingState } from "./decl-setup.js";
+import type { StyledDecl } from "../transform-types.js";
 import type { CssDeclarationIR } from "../css-ir.js";
 import { computeSelectorWarningLoc } from "../css-ir.js";
 import { cssDeclarationToStylexDeclarations } from "../css-prop-mapping.js";
@@ -12,6 +14,7 @@ import {
   normalizeSelectorForInputAttributePseudos,
   normalizeInterpolatedSelector,
   normalizeSpecificityHacks,
+  parseElementSelectorPattern,
   parseSelector,
 } from "../selectors.js";
 import { extractRootAndPath, getNodeLocStart } from "../utilities/jscodeshift-utils.js";
@@ -34,19 +37,121 @@ export function processDeclRules(ctx: DeclProcessingState): void {
   } = ctx;
   const {
     j,
+    root,
     warnings,
     resolverImports,
     resolveSelector,
     parseExpr,
     cssHelperNames,
     declByLocalName,
+    styledDecls,
     relationOverridePseudoBuckets,
     relationOverrides,
     ancestorSelectorParents,
+    childPseudoMarkers,
     resolveThemeValue,
     resolveThemeValueFromFn,
     resolveImportInScope,
   } = state;
+
+  /**
+   * Attempts to resolve an element selector (e.g., `& svg`, `& > button`) to a
+   * styled component override. Returns "break" to bail, "continue" to skip to next
+   * rule, or null if the selector isn't an element pattern.
+   */
+  const tryHandleElementSelector = (
+    selectorStr: string,
+    rule: (typeof decl.rules)[number],
+    parentDecl: StyledDecl,
+  ): "break" | "continue" | null => {
+    const elementResult = resolveElementSelectorTarget(
+      selectorStr,
+      parentDecl,
+      styledDecls,
+      root,
+      j,
+    );
+    if (typeof elementResult === "string") {
+      state.markBail();
+      warnings.push({
+        severity: "warning",
+        type: ELEMENT_BAIL_WARNING_MAP[elementResult],
+        loc: computeSelectorWarningLoc(parentDecl.loc, parentDecl.rawCss, rule.selector),
+      });
+      return "break";
+    }
+    if (!elementResult) {
+      return null;
+    }
+    const { childDecl, ancestorPseudo, childPseudo } = elementResult;
+    const overrideStyleKey = `${toStyleKey(childDecl.localName)}In${parentDecl.localName}`;
+    ancestorSelectorParents.add(parentDecl.styleKey);
+
+    // For child pseudos, record the pseudo in childPseudoMarkers
+    // so finalizeRelationOverrides uses a string literal key instead of
+    // stylex.when.ancestor().
+    const pseudoForBucket = childPseudo ?? ancestorPseudo;
+
+    // Detect pseudo collision: same pseudo used as both ancestor and child
+    // for the same override key (e.g., `&:hover svg` + `svg:hover`).
+    if (pseudoForBucket) {
+      const existingChildPseudos = childPseudoMarkers.get(overrideStyleKey);
+      const existingBuckets = relationOverridePseudoBuckets.get(overrideStyleKey);
+      const isAlreadyUsedAsAncestor = !childPseudo && existingChildPseudos?.has(pseudoForBucket);
+      const isAlreadyUsedAsChild =
+        childPseudo &&
+        existingBuckets?.has(pseudoForBucket) &&
+        !existingChildPseudos?.has(pseudoForBucket);
+      if (isAlreadyUsedAsAncestor || isAlreadyUsedAsChild) {
+        state.markBail();
+        warnings.push({
+          severity: "warning",
+          type: ELEMENT_BAIL_WARNING_MAP["bail-pseudo-collision"],
+          loc: computeSelectorWarningLoc(parentDecl.loc, parentDecl.rawCss, rule.selector),
+        });
+        return "break";
+      }
+    }
+
+    if (childPseudo) {
+      let markers = childPseudoMarkers.get(overrideStyleKey);
+      if (!markers) {
+        markers = new Set();
+        childPseudoMarkers.set(overrideStyleKey, markers);
+      }
+      markers.add(childPseudo);
+    }
+
+    const bucket = getOrCreateRelationOverrideBucket(
+      overrideStyleKey,
+      parentDecl.styleKey,
+      childDecl.styleKey,
+      pseudoForBucket,
+      relationOverrides,
+      relationOverridePseudoBuckets,
+      childDecl.extraStyleKeys,
+    );
+
+    const result = processDeclarationsIntoBucket(
+      rule,
+      bucket,
+      j,
+      parentDecl,
+      resolveThemeValue,
+      resolveThemeValueFromFn,
+      { bailOnUnresolved: true },
+    );
+    if (result === "bail") {
+      state.markBail();
+      warnings.push({
+        severity: "warning",
+        type: "Unsupported selector: unresolved interpolation in element selector",
+        loc: computeSelectorWarningLoc(parentDecl.loc, parentDecl.rawCss, rule.selector),
+      });
+      return "break";
+    }
+    return "continue";
+  };
 
   for (const rule of decl.rules) {
     if (state.bail) {
@@ -162,8 +267,18 @@ export function processDeclRules(ctx: DeclProcessingState): void {
         });
         break;
       } else if (/\s+[a-zA-Z.#]/.test(s) && !isHandledComponentPattern) {
-        // Descendant element/class/id selectors like `& a`, `& .child`, `& #foo`
-        // But NOT `&:hover ${Child}` (component selector pattern)
+        // Before bailing on descendant selectors, try to resolve element selectors
+        // like `& svg`, `& > button`, `&:hover svg`, `& svg:hover` to a styled component
+        // in the same file. If resolved, we can transform them to relation overrides.
+        const elementAction = tryHandleElementSelector(s, rule, decl);
+        if (elementAction === "break") {
+          break;
+        }
+        if (elementAction === "continue") {
+          continue;
+        }
+
+        // Fall through to existing bail for descendant selectors
         state.markBail();
         warnings.push({
           severity: "warning",
@@ -398,6 +513,15 @@ export function processDeclRules(ctx: DeclProcessingState): void {
       selector !== "&" &&
       !rule.selector.includes("__SC_EXPR_")
     ) {
+      // Try element selector resolution as a last resort before bailing
+      const elementAction = tryHandleElementSelector(selector, rule, decl);
+      if (elementAction === "break") {
+        break;
+      }
+      if (elementAction === "continue") {
+        continue;
+      }
+
       state.markBail();
       warnings.push({
         severity: "warning",
@@ -761,4 +885,198 @@ function buildInterpolatedValue(
     return resolveSlot(singleSlot.slotId);
   }
   return j.literal(null);
+}
+
+type ElementSelectorBailReason =
+  | "bail-exported"
+  | "bail-ambiguous"
+  | "bail-dynamic"
+  | "bail-combined-pseudo"
+  | "bail-plain-intrinsic"
+  | "bail-pseudo-collision";
+
+const ELEMENT_BAIL_WARNING_MAP: Record<
+  ElementSelectorBailReason,
+  import("../logger.js").WarningType
+> = {
+  "bail-exported": "Unsupported selector: element selector on exported component",
+  "bail-ambiguous": "Unsupported selector: ambiguous element selector",
+  "bail-dynamic": "Unsupported selector: element selector with dynamic children",
+  "bail-combined-pseudo":
+    "Unsupported selector: element selector with combined ancestor and child pseudos",
+  "bail-plain-intrinsic": "Unsupported selector: element selector with plain intrinsic children",
+  "bail-pseudo-collision": "Unsupported selector: element selector pseudo collision",
+};
+
+/**
+ * Orchestrates element selector resolution. Parses the selector, checks for bail
+ * conditions (exported parent, ambiguous targets, dynamic children), and returns
+ * the resolved child declaration + pseudo info, a bail reason, or null if not an
+ * element selector pattern.
+ */
+function resolveElementSelectorTarget(
+  selector: string,
+  parentDecl: StyledDecl,
+  styledDecls: StyledDecl[],
+  root: DeclProcessingState["state"]["root"],
+  j: JSCodeshift,
+):
+  | { childDecl: StyledDecl; ancestorPseudo: string | null; childPseudo: string | null }
+  | ElementSelectorBailReason
+  | null {
+  const parsed = parseElementSelectorPattern(selector);
+  if (!parsed) {
+    return null;
+  }
+  const { tagName, ancestorPseudo, childPseudo } = parsed;
+
+  // Bail if both ancestor and child pseudos are present (e.g., `&:focus > button:disabled`)
+  // — cannot represent both in a single StyleX override
+  if (ancestorPseudo && childPseudo) {
+    return "bail-combined-pseudo";
+  }
+
+  // Bail if the parent component is exported — can't verify external usage
+  if (isComponentExported(parentDecl.localName, root, j)) {
+    return "bail-exported";
+  }
+
+  // Find all styled components with matching intrinsic tag, excluding the parent
+  const matches = styledDecls.filter(
+    (d) =>
+      !d.isCssHelper &&
+      d.localName !== parentDecl.localName &&
+      d.base.kind === "intrinsic" &&
+      d.base.tagName === tagName,
+  );
+
+  if (matches.length === 0) {
+    return null;
+  }
+  if (matches.length > 1) {
+    return "bail-ambiguous";
+  }
+
+  // Bail if the parent has dynamic children (e.g., {children}, {props.children})
+  if (hasDynamicJsxChildren(parentDecl.localName, root, j)) {
+    return "bail-dynamic";
+  }
+
+  // Bail if the parent renders plain intrinsic elements matching the tag
+  // (e.g., both <Icon /> and a plain <svg>) — only the styled component gets the override
+  if (hasPlainIntrinsicDescendant(parentDecl.localName, tagName, matches[0]!.localName, root, j)) {
+    return "bail-plain-intrinsic";
+  }
+
+  return { childDecl: matches[0]!, ancestorPseudo, childPseudo };
+}
+
+/**
+ * Checks whether a component is exported from the file (named, default, or re-export).
+ */
+function isComponentExported(
+  name: string,
+  root: DeclProcessingState["state"]["root"],
+  j: JSCodeshift,
+): boolean {
+  // `export const X = ...` or `export function X ...`
+  const namedExport = root.find(j.ExportNamedDeclaration).filter((path) => {
+    const decl = path.node.declaration;
+    if (decl?.type === "VariableDeclaration") {
+      return decl.declarations.some((d: any) => d.id?.type === "Identifier" && d.id.name === name);
+    }
+    if (decl?.type === "FunctionDeclaration" && (decl as any).id?.name === name) {
+      return true;
+    }
+    // `export { X }` re-exports
+    if (!decl && path.node.specifiers) {
+      return path.node.specifiers.some(
+        (s: any) => s.local?.name === name || s.exported?.name === name,
+      );
+    }
+    return false;
+  });
+  if (namedExport.size() > 0) {
+    return true;
+  }
+
+  // `export default X`
+  const defaultExport = root.find(j.ExportDefaultDeclaration).filter((path) => {
+    const decl = path.node.declaration;
+    return decl?.type === "Identifier" && (decl as any).name === name;
+  });
+  return defaultExport.size() > 0;
+}
+
+/**
+ * Checks whether any JSX usage of the given parent component contains a plain
+ * intrinsic element matching `tagName` that is NOT the styled component. For example,
+ * if parent renders both `<Icon />` (styled.svg) and a plain `<svg>`, returns true.
+ */
+function hasPlainIntrinsicDescendant(
+  parentName: string,
+  tagName: string,
+  styledChildName: string,
+  root: DeclProcessingState["state"]["root"],
+  j: JSCodeshift,
+): boolean {
+  let found = false;
+  root
+    .find(j.JSXElement, {
+      openingElement: {
+        name: { type: "JSXIdentifier", name: parentName },
+      },
+    } as any)
+    .forEach((path) => {
+      if (found) {
+        return;
+      }
+      for (const child of path.node.children ?? []) {
+        if (
+          child.type === "JSXElement" &&
+          child.openingElement.name.type === "JSXIdentifier" &&
+          child.openingElement.name.name === tagName &&
+          child.openingElement.name.name !== styledChildName
+        ) {
+          found = true;
+          return;
+        }
+      }
+    });
+  return found;
+}
+
+/**
+ * Checks whether any JSX usage of the given component has dynamic children
+ * ({children}, {props.children}, or non-empty JSXExpressionContainers).
+ * Static JSX children (<Icon />, <div>text</div>) are OK.
+ */
+function hasDynamicJsxChildren(
+  componentName: string,
+  root: DeclProcessingState["state"]["root"],
+  j: JSCodeshift,
+): boolean {
+  let hasDynamic = false;
+  root
+    .find(j.JSXElement, {
+      openingElement: {
+        name: { type: "JSXIdentifier", name: componentName },
+      },
+    } as any)
+    .forEach((path) => {
+      if (hasDynamic) {
+        return;
+      }
+      for (const child of path.node.children ?? []) {
+        if (child.type === "JSXExpressionContainer") {
+          // Allow empty expressions (comments like {/* ... */})
+          if (child.expression.type === "JSXEmptyExpression") {
+            continue;
+          }
+          hasDynamic = true;
+          return;
+        }
+      }
+    });
+  return hasDynamic;
 }

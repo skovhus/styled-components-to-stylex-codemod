@@ -14,6 +14,7 @@ export const finalizeRelationOverrides = (args: {
   relationOverrides: RelationOverride[];
   resolvedStyleObjects: Map<string, unknown>;
   makeCssPropKey: (j: JSCodeshift, prop: string) => ExpressionKind;
+  childPseudoMarkers: Map<string, Set<string>>;
 }): void => {
   const {
     j,
@@ -21,6 +22,7 @@ export const finalizeRelationOverrides = (args: {
     relationOverrides,
     resolvedStyleObjects,
     makeCssPropKey,
+    childPseudoMarkers,
   } = args;
   if (relationOverridePseudoBuckets.size === 0) {
     return;
@@ -108,13 +110,20 @@ export const finalizeRelationOverrides = (args: {
             isExpressionNode(baseVal) ? baseVal : literalToAst(j, baseVal ?? null),
           ),
         ];
+        const childPseudos = childPseudoMarkers.get(overrideKey);
         for (const { pseudo, value } of pseudoValues) {
-          const ancestorKey = makeAncestorKey(pseudo);
           const valExpr = isExpressionNode(value) ? value : literalToAst(j, value);
-          const propNode = Object.assign(j.property("init", ancestorKey, valExpr), {
-            computed: true,
-          });
-          objProps.push(propNode);
+          if (childPseudos?.has(pseudo)) {
+            // Child pseudo: use regular string literal key (e.g., ":hover")
+            objProps.push(j.property("init", j.literal(pseudo), valExpr));
+          } else {
+            // Ancestor pseudo: use stylex.when.ancestor() computed key
+            const ancestorKey = makeAncestorKey(pseudo);
+            const propNode = Object.assign(j.property("init", ancestorKey, valExpr), {
+              computed: true,
+            });
+            objProps.push(propNode);
+          }
         }
         const mapExpr = j.objectExpression(objProps);
         props.push(j.property("init", makeCssPropKey(j, prop), mapExpr));

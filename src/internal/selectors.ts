@@ -280,6 +280,71 @@ function parseAttributeSelectorInternal(selector: string): ParsedAttributeSelect
 }
 
 // =============================================================================
+// Element selector parsing
+// =============================================================================
+
+/**
+ * Parses selectors like "& svg", "& > button", "&:hover svg", "& svg:hover",
+ * "&:focus > button:disabled".
+ *
+ * Both descendant (space) and child (>) combinators are mapped the same way
+ * because `stylex.when.ancestor()` matches ANY ancestor, not just a direct parent.
+ * The child combinator is therefore less strict in the output than the original CSS.
+ *
+ * Returns null if the selector doesn't match an element selector pattern.
+ */
+export function parseElementSelectorPattern(selector: string): {
+  tagName: string;
+  ancestorPseudo: string | null;
+  childPseudo: string | null;
+} | null {
+  const trimmed = selector.trim();
+
+  // Pattern 1: "&" prefix with optional pseudos and combinator
+  //   e.g., "& svg", "&:hover svg", "&>button", "& > button:disabled"
+  const m = trimmed.match(
+    /^&((?::[\w-]+(?:\([^)]*\))?)*)\s*(>?\s*)([a-zA-Z][a-zA-Z0-9]*)((?::[\w-]+(?:\([^)]*\))?)*)$/,
+  );
+  if (m) {
+    const ancestorPseudoRaw = m[1] ?? "";
+    const tagName = m[3]!;
+    const childPseudoRaw = m[4] ?? "";
+    return {
+      tagName,
+      ancestorPseudo: ancestorPseudoRaw || null,
+      childPseudo: childPseudoRaw || null,
+    };
+  }
+
+  // Pattern 2: Bare tag name with optional child pseudo
+  //   (Stylis strips the `&` for simple descendant selectors)
+  //   e.g., "svg", "button", "svg:hover"
+  const bareM = trimmed.match(/^([a-zA-Z][a-zA-Z0-9]*)((?::[\w-]+(?:\([^)]*\))?)*)$/);
+  if (bareM) {
+    const childPseudoRaw = bareM[2] ?? "";
+    return {
+      tagName: bareM[1]!,
+      ancestorPseudo: null,
+      childPseudo: childPseudoRaw || null,
+    };
+  }
+
+  // Pattern 3: Child combinator without `&` prefix (Stylis strips it)
+  //   e.g., ">button", ">button:disabled"
+  const childCombM = trimmed.match(/^>\s*([a-zA-Z][a-zA-Z0-9]*)((?::[\w-]+(?:\([^)]*\))?)*)$/);
+  if (childCombM) {
+    const childPseudoRaw = childCombM[2] ?? "";
+    return {
+      tagName: childCombM[1]!,
+      ancestorPseudo: null,
+      childPseudo: childPseudoRaw || null,
+    };
+  }
+
+  return null;
+}
+
+// =============================================================================
 // Non-parsing utility functions (kept as-is)
 // =============================================================================
 
