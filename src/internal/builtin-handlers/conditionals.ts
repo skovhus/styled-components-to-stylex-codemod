@@ -772,7 +772,10 @@ export function tryResolveConditionalCssBlock(
   return null;
 }
 
-export function tryResolveConditionalCssBlockTernary(node: DynamicNode): HandlerResult | null {
+export function tryResolveConditionalCssBlockTernary(
+  node: DynamicNode,
+  ctx: InternalHandlerContext,
+): HandlerResult | null {
   const expr = node.expr;
   if (!isArrowFunctionExpression(expr)) {
     return null;
@@ -1005,7 +1008,10 @@ export function tryResolveConditionalCssBlockTernary(node: DynamicNode): Handler
   // Extract variants from the ternary expression
   const result = extractVariantsFromTernary(body);
   if (!result) {
-    return null;
+    // Fallback: handle ternary where one branch is a template literal with theme expressions
+    // and the other is empty (undefined/null/""/false). This is semantically equivalent to
+    // the LogicalExpression && form handled by tryResolveConditionalCssBlock.
+    return tryResolveTemplateLiteralTernaryWithEmptyBranch(body, paramName, ctx);
   }
 
   const { variants, defaultStyle } = result;
@@ -1137,6 +1143,99 @@ export function tryResolveIndexedThemeWithPropFallback(
 }
 
 // --- Non-exported helpers ---
+
+/**
+ * Check if a conditional branch represents an "empty" CSS value (no styles).
+ * Styled-components treats falsy interpolations as "omit this declaration".
+ */
+function isEmptyCssBranch(node: unknown): boolean {
+  if (!node || typeof node !== "object") {
+    return false;
+  }
+  const n = node as { type?: string; value?: unknown; name?: string; operator?: string };
+  if (n.type === "StringLiteral" && n.value === "") {
+    return true;
+  }
+  if (n.type === "Literal" && n.value === "") {
+    return true;
+  }
+  if (n.type === "NullLiteral") {
+    return true;
+  }
+  if (n.type === "Identifier" && n.name === "undefined") {
+    return true;
+  }
+  if (n.type === "BooleanLiteral" && n.value === false) {
+    return true;
+  }
+  if (n.type === "UnaryExpression" && n.operator === "void") {
+    return true;
+  }
+  return false;
+}
+
+/**
+ * Handle a ternary where one branch is a template literal with theme expressions
+ * and the other is empty (undefined/null/false/""). Resolves the template literal
+ * using the same approach as tryResolveConditionalCssBlock's && handler.
+ */
+function tryResolveTemplateLiteralTernaryWithEmptyBranch(
+  body: { test: unknown; consequent: unknown; alternate: unknown },
+  paramName: string,
+  ctx: InternalHandlerContext,
+): HandlerResult | null {
+  const { consequent, alternate } = body;
+  const consType = (consequent as { type?: string })?.type;
+  const altType = (alternate as { type?: string })?.type;
+  const consIsTemplate = consType === "TemplateLiteral";
+  const altIsTemplate = altType === "TemplateLiteral";
+  const consIsEmpty = isEmptyCssBranch(consequent);
+  const altIsEmpty = isEmptyCssBranch(alternate);
+
+  if (!(consIsTemplate && altIsEmpty) && !(consIsEmpty && altIsTemplate)) {
+    return null;
+  }
+
+  const testPath =
+    (body.test as { type?: string })?.type === "MemberExpression"
+      ? getMemberPathFromIdentifier(
+          body.test as Parameters<typeof getMemberPathFromIdentifier>[0],
+          paramName,
+        )
+      : null;
+  const testProp = testPath?.[0];
+  if (!testPath || testPath.length !== 1 || !testProp) {
+    return null;
+  }
+
+  const templateBranch = consIsTemplate ? consequent : alternate;
+  const templateResult = resolveTemplateLiteralWithTheme(templateBranch, paramName, ctx);
+  if (!templateResult) {
+    return null;
+  }
+  const templateText = templateResult.expr.slice(1, -1); // Remove backticks
+  const parsed = parseCssDeclarationBlockWithTemplateExpr(templateText, ctx.api);
+  if (!parsed) {
+    return null;
+  }
+
+  // When the truthy branch is the template, use the test prop directly.
+  // When the falsy branch is the template, negate the condition.
+  const when = consIsTemplate ? testProp : `!${testProp}`;
+  const nameHint = consIsTemplate ? "truthy" : "falsy";
+
+  return {
+    type: "splitVariants",
+    variants: [
+      {
+        nameHint,
+        when,
+        style: parsed.styleObj,
+        imports: templateResult.imports,
+      },
+    ],
+  };
+}
 
 /**
  * Check whether a given identifier name is actually destructured from the
