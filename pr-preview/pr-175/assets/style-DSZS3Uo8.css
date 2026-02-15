@@ -45,12 +45,12 @@ body{font-family:-apple-system,BlinkMacSystemFont,Segoe UI,Roboto,Helvetica Neue
   inherits: false
 }
 
-@property --x-maxWidth {
+@property --x-zIndex {
   syntax: "*";
   inherits: false
 }
 
-@property --x-zIndex {
+@property --x-maxWidth {
   syntax: "*";
   inherits: false
 }
@@ -110,12 +110,7 @@ body{font-family:-apple-system,BlinkMacSystemFont,Segoe UI,Roboto,Helvetica Neue
   inherits: false
 }
 
-@property --x-1113oo7 {
-  syntax: "*";
-  inherits: false
-}
-
-@property --x-64unvl {
+@property --x-126kuz7 {
   syntax: "*";
   inherits: false
 }
@@ -125,12 +120,17 @@ body{font-family:-apple-system,BlinkMacSystemFont,Segoe UI,Roboto,Helvetica Neue
   inherits: false
 }
 
-@property --x-126kuz7 {
+@property --x-1e2mv7m {
   syntax: "*";
   inherits: false
 }
 
-@property --x-1e2mv7m {
+@property --x-1113oo7 {
+  syntax: "*";
+  inherits: false
+}
+
+@property --x-64unvl {
   syntax: "*";
   inherits: false
 }
