@@ -2,11 +2,13 @@ import { describe, it, expect, beforeEach, vi } from "vitest";
 import { Logger } from "../internal/logger.js";
 
 describe("Logger", () => {
+  let writeSpy: ReturnType<typeof vi.spyOn>;
+
   beforeEach(() => {
     Logger._clearCollected();
     vi.restoreAllMocks();
     // Suppress stdout during tests
-    vi.spyOn(process.stdout, "write").mockImplementation(() => true);
+    writeSpy = vi.spyOn(process.stdout, "write").mockImplementation(() => true);
   });
 
   describe("createReport().toString()", () => {
@@ -139,6 +141,75 @@ describe("Logger", () => {
           ... and 2 more file(s)
         "
       `);
+    });
+  });
+
+  describe("conditional logging based on file count", () => {
+    it("prints warnings inline when fileCount is not set (default)", () => {
+      Logger.logWarnings(
+        [{ severity: "warning", type: "Unsupported selector: class selector", loc: null }],
+        "/path/a.tsx",
+      );
+      expect(writeSpy).toHaveBeenCalledWith(expect.stringContaining("Unsupported selector"));
+    });
+
+    it("prints warnings inline when fileCount <= 10", () => {
+      Logger.setFileCount(5);
+      Logger.logWarnings(
+        [{ severity: "warning", type: "Unsupported selector: class selector", loc: null }],
+        "/path/a.tsx",
+      );
+      expect(writeSpy).toHaveBeenCalledWith(expect.stringContaining("Unsupported selector"));
+    });
+
+    it("suppresses inline warnings when fileCount > 10", () => {
+      Logger.setFileCount(15);
+      Logger.logWarnings(
+        [{ severity: "warning", type: "Unsupported selector: class selector", loc: null }],
+        "/path/a.tsx",
+      );
+      expect(writeSpy).not.toHaveBeenCalled();
+    });
+
+    it("still collects warnings when fileCount > 10", () => {
+      Logger.setFileCount(15);
+      Logger.logWarnings(
+        [{ severity: "warning", type: "Unsupported selector: class selector", loc: null }],
+        "/path/a.tsx",
+      );
+      const report = Logger.createReport();
+      expect(report.getWarnings()).toHaveLength(1);
+      expect(report.toString()).toContain("Warning Summary");
+    });
+
+    it("skips summary when fileCount <= 10", () => {
+      Logger.setFileCount(5);
+      Logger.logWarnings(
+        [{ severity: "warning", type: "Unsupported selector: class selector", loc: null }],
+        "/path/a.tsx",
+      );
+      const report = Logger.createReport();
+      writeSpy.mockClear();
+      report.print();
+      expect(writeSpy).not.toHaveBeenCalled();
+    });
+
+    it("prints summary when fileCount > 10", () => {
+      Logger.setFileCount(15);
+      Logger.logWarnings(
+        [{ severity: "warning", type: "Unsupported selector: class selector", loc: null }],
+        "/path/a.tsx",
+      );
+      const report = Logger.createReport();
+      writeSpy.mockClear();
+      report.print();
+      expect(writeSpy).toHaveBeenCalledWith(expect.stringContaining("Warning Summary"));
+    });
+
+    it("always prints errors inline regardless of file count", () => {
+      Logger.setFileCount(15);
+      Logger.logError("Something broke", "/path/a.tsx");
+      expect(writeSpy).toHaveBeenCalledWith(expect.stringContaining("Something broke"));
     });
   });
 });
