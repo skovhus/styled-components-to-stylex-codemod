@@ -1010,7 +1010,7 @@ function appendThemeBooleanStyleArgs(
  *
  * Emits `selectorExpr({ active: styles.keyActive, hover: styles.keyHover })` as a single arg.
  */
-function appendPseudoAliasStyleArgs(
+export function appendPseudoAliasStyleArgs(
   entries: StyledDecl["pseudoAliasSelectors"],
   styleArgs: ExpressionKind[],
   j: JSCodeshift,
