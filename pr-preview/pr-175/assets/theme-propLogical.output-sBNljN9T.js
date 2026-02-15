@@ -1,1 +1,0 @@
-import{j as e,Z as n}from"./index-CJE9hIyi.js";function s(x){const{children:r,enabled:t}=x,a=n();return e.jsx("div",{...{0:{className:"xpyat2d x1exxlbk xrkmrrc"},1:{className:"xpyat2d x1exxlbk xrkmrrc xbyyjgo"}}[!!(a.isDark&&x.enabled)<<0],children:r})}const c=()=>e.jsxs(e.Fragment,{children:[e.jsx(s,{enabled:!0}),e.jsx(s,{enabled:!1})]});export{c as App};

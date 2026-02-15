@@ -1,0 +1,1 @@
+import{j as x}from"./index-BI_LmLER.js";const s=()=>x.jsxs("div",{children:[x.jsx("div",{className:"x1e2nbdu x1t391ir x7z7khe",children:"CSS first"}),x.jsx("div",{className:"x1t391ir x1e2nbdu x1oin6zd",children:"Styled first"}),x.jsx("div",{className:"x1e2nbdu x1t391ir x117nqv4 x14odnwx",children:"Interleaved"})]});export{s as App};

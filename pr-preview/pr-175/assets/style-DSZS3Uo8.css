@@ -125,12 +125,12 @@ body{font-family:-apple-system,BlinkMacSystemFont,Segoe UI,Roboto,Helvetica Neue
   inherits: false
 }
 
-@property --x-1e2mv7m {
+@property --x-126kuz7 {
   syntax: "*";
   inherits: false
 }
 
-@property --x-126kuz7 {
+@property --x-1e2mv7m {
   syntax: "*";
   inherits: false
 }
@@ -425,14 +425,16 @@ body{font-family:-apple-system,BlinkMacSystemFont,Segoe UI,Roboto,Helvetica Neue
   .x1wk2j8l.x1wk2j8l:not(#\#) {
     padding: 2.5rem;
   }
-
-  .x1i7j8g4.x1i7j8g4:not(#\#) {
-    padding: 2rem;
-  }
 }
 
 @media (width >= 768px) and (width <= 1023.99px) {
   .x1t32qvz.x1t32qvz:not(#\#) {
+    padding: 2rem;
+  }
+}
+
+@media (width >= 1024px) {
+  .x1i7j8g4.x1i7j8g4:not(#\#) {
     padding: 2rem;
   }
 }
@@ -2160,6 +2162,10 @@ body{font-family:-apple-system,BlinkMacSystemFont,Segoe UI,Roboto,Helvetica Neue
   background-color: var(--xufgxy3);
 }
 
+.x1336f0y:hover:not(#\#):not(#\#):not(#\#) {
+  background-color: #ff0;
+}
+
 .x103215m:hover:not(#\#):not(#\#):not(#\#) {
   color: #4f74bf !important;
 }
@@ -2228,8 +2234,16 @@ body{font-family:-apple-system,BlinkMacSystemFont,Segoe UI,Roboto,Helvetica Neue
   color: #fff;
 }
 
+.x1tw4c92:active:not(#\#):not(#\#):not(#\#) {
+  background-color: #ff0;
+}
+
 .x1uvnybj:active:not(#\#):not(#\#):not(#\#) {
   color: #bf4f74;
+}
+
+.x96fq8s:active:not(#\#):not(#\#):not(#\#) {
+  color: red;
 }
 
 .xld6lj4:active:not(#\#):not(#\#):not(#\#) {
@@ -2357,12 +2371,20 @@ body{font-family:-apple-system,BlinkMacSystemFont,Segoe UI,Roboto,Helvetica Neue
 }
 
 @media (hover: hover) {
+  .x1e20vcw.x1e20vcw:hover:not(#\#):not(#\#):not(#\#) {
+    background-color: #ff0;
+  }
+
   .x145ape1.x145ape1:hover:not(#\#):not(#\#):not(#\#) {
     box-shadow: 0 4px 12px #4169e166;
   }
 
   .xkhz1eo.xkhz1eo:hover:not(#\#):not(#\#):not(#\#) {
     box-shadow: 0 8px 16px #00000026;
+  }
+
+  .x1cuqhdd.x1cuqhdd:hover:not(#\#):not(#\#):not(#\#) {
+    color: red;
   }
 
   .x1daihsq.x1daihsq:hover:not(#\#):not(#\#):not(#\#) {
@@ -2375,6 +2397,16 @@ body{font-family:-apple-system,BlinkMacSystemFont,Segoe UI,Roboto,Helvetica Neue
 
   .x16yvhws.x16yvhws:hover:not(#\#):not(#\#):not(#\#) {
     transform: translateY(-4px);
+  }
+}
+
+@media (hover: none) {
+  .xx519gk.xx519gk:active:not(#\#):not(#\#):not(#\#) {
+    background-color: #ff0;
+  }
+
+  .xikt6xp.xikt6xp:active:not(#\#):not(#\#):not(#\#) {
+    color: red;
   }
 }
 
