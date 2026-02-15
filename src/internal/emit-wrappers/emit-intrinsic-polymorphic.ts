@@ -172,7 +172,16 @@ export function emitIntrinsicPolymorphicWrappers(ctx: EmitIntrinsicContext): voi
       }
 
       // Handle pseudo-alias selectors (e.g., &:${highlight})
-      appendPseudoAliasStyleArgs(d.pseudoAliasSelectors, styleArgs, j, stylesIdentifier);
+      for (const gp of appendPseudoAliasStyleArgs(
+        d.pseudoAliasSelectors,
+        styleArgs,
+        j,
+        stylesIdentifier,
+      )) {
+        if (!destructureProps.includes(gp)) {
+          destructureProps.push(gp);
+        }
+      }
 
       for (const prop of collectInlineStylePropNames(d.inlineStyleProps ?? [])) {
         if (!destructureProps.includes(prop)) {

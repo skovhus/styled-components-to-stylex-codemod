@@ -278,7 +278,12 @@ export function emitShouldForwardPropWrappers(ctx: EmitIntrinsicContext): void {
     }
 
     // Handle pseudo-alias selectors (e.g., &:${highlight})
-    appendPseudoAliasStyleArgs(d.pseudoAliasSelectors, styleArgs, j, stylesIdentifier);
+    const pseudoGuardProps = appendPseudoAliasStyleArgs(
+      d.pseudoAliasSelectors,
+      styleArgs,
+      j,
+      stylesIdentifier,
+    );
 
     // Collect keys used by compound variants (they're handled separately)
     const compoundVariantKeys = new Set<string>();
@@ -346,6 +351,13 @@ export function emitShouldForwardPropWrappers(ctx: EmitIntrinsicContext): void {
             }
           }
         }
+      }
+    }
+
+    // Add pseudo-alias guard props to destructuring
+    for (const gp of pseudoGuardProps) {
+      if (!destructureParts.includes(gp)) {
+        destructureParts.push(gp);
       }
     }
 
