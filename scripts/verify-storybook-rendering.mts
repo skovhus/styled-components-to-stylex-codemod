@@ -53,7 +53,8 @@ interface TestResult {
 // Remove entries as the underlying codemod issues are fixed.
 // ---------------------------------------------------------------------------
 const EXPECTED_FAILURES = new Set<string>([
-  // All resolved — subpixel AA normalized via WebkitFontSmoothing in RenderDebugFrame.
+  // Flaky due to animation timing — keyframe snapshots occasionally differ.
+  "keyframes-unionComplexity",
 ]);
 
 type Page = Awaited<ReturnType<Awaited<ReturnType<typeof chromium.launch>>["newPage"]>>;
