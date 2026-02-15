@@ -1,1 +1,0 @@
-import{j as e}from"./index-BpR-pv14.js";const x=()=>e.jsx("a",{href:"#",className:"x78zum5 xe8ttls xd10qfp x-default-marker",children:e.jsx("span",{className:"x12ulsxz xdqyycr xkn7p67 xobp4yc",children:"Label (gray, orange on focus, blue on Link hover)"})});export{x as App};

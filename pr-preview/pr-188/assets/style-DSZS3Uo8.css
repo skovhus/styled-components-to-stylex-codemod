@@ -120,17 +120,17 @@ body{font-family:-apple-system,BlinkMacSystemFont,Segoe UI,Roboto,Helvetica Neue
   inherits: false
 }
 
+@property --x-1e2mv7m {
+  syntax: "*";
+  inherits: false
+}
+
 @property --x-animationDelay {
   syntax: "*";
   inherits: false
 }
 
 @property --x-126kuz7 {
-  syntax: "*";
-  inherits: false
-}
-
-@property --x-1e2mv7m {
   syntax: "*";
   inherits: false
 }
@@ -867,6 +867,10 @@ body{font-family:-apple-system,BlinkMacSystemFont,Segoe UI,Roboto,Helvetica Neue
   transition: opacity .2s ease-out;
 }
 
+.x1hzt7jf:not(#\#):not(#\#) {
+  transition: opacity .2s;
+}
+
 .x1v13kt7:not(#\#):not(#\#) {
   transition: transform .2s, box-shadow .2s;
 }
@@ -891,7 +895,7 @@ body{font-family:-apple-system,BlinkMacSystemFont,Segoe UI,Roboto,Helvetica Neue
   border-color: #bf4f74;
 }
 
-.x10bewyo:focus-visible:not(#\#):not(#\#), .xxs78ni:focus:not(:disabled):not(#\#):not(#\#) {
+.xxs78ni:focus:not(:disabled):not(#\#):not(#\#), .x10bewyo:focus-visible:not(#\#):not(#\#) {
   outline: 2px solid #4f74bf;
 }
 
@@ -2170,7 +2174,11 @@ body{font-family:-apple-system,BlinkMacSystemFont,Segoe UI,Roboto,Helvetica Neue
   accent-color: #bf4f74;
 }
 
-.x7s97pk:focus-visible:not(#\#):not(#\#):not(#\#), .xohtw7w:focus:not(:disabled):not(#\#):not(#\#):not(#\#) {
+.x1ke1ukj[data-visible="true"]:not(#\#):not(#\#):not(#\#) {
+  opacity: 1;
+}
+
+.xohtw7w:focus:not(:disabled):not(#\#):not(#\#):not(#\#), .x7s97pk:focus-visible:not(#\#):not(#\#):not(#\#) {
   outline-offset: 2px;
 }
 
@@ -2200,6 +2208,10 @@ body{font-family:-apple-system,BlinkMacSystemFont,Segoe UI,Roboto,Helvetica Neue
 
 .xaub5lb:hover:not(#\#):not(#\#):not(#\#) {
   background-color: #a9a9a9;
+}
+
+.x8t4y8i:hover:not(#\#):not(#\#):not(#\#) {
+  background-color: green;
 }
 
 .xeirn3a:hover:not(#\#):not(#\#):not(#\#) {
@@ -2300,6 +2312,10 @@ body{font-family:-apple-system,BlinkMacSystemFont,Segoe UI,Roboto,Helvetica Neue
 
 .x1kcn3es:focus:not(#\#):not(#\#):not(#\#) {
   color: #fff;
+}
+
+.x1r8vpxm:active:not(#\#):not(#\#):not(#\#) {
+  background-color: green;
 }
 
 .x34ll8x:active:not(#\#):not(#\#):not(#\#) {

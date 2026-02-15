@@ -1,1 +1,0 @@
-import{j as s}from"./index-BpR-pv14.js";import{e}from"./helpers-DMYFvxvW.js";const t=e("fast"),p=()=>s.jsxs("div",{children:[s.jsx("div",{children:t}),s.jsx("div",{className:"x4lopbt"})]});export{p as App};
