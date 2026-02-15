@@ -2319,10 +2319,10 @@ export const App = () => <Input />;
 });
 
 describe("forwardedAs prop handling", () => {
-  it("should convert forwardedAs to as and forward polymorphism to wrapped component", () => {
-    // forwardedAs is a styled-components prop that forwards `as` to the wrapped component,
-    // enabling polymorphic rendering. In the transformed output, forwardedAs should become
-    // `as` so the wrapper function can forward it to the inner component.
+  it("should preserve forwardedAs on wrapper callsites for styled(styled.tag) chains", () => {
+    // In styled-components wrapper chains, `forwardedAs` does not behave like a direct `as`
+    // replacement. Preserve `forwardedAs` at the wrapper callsite so the rendered output
+    // stays aligned with the source behavior.
     const source = `
 import styled from "styled-components";
 
@@ -2337,7 +2337,9 @@ const ButtonWrapper = styled(Button)\`
 
 export const App = () => (
   <div>
+    <Button forwardedAs="a" href="#">Direct forwardedAs</Button>
     <ButtonWrapper forwardedAs="a" href="#">Link</ButtonWrapper>
+    <ButtonWrapper as="section" forwardedAs="a" href="#">Both</ButtonWrapper>
   </div>
 );
 `;
@@ -2347,9 +2349,129 @@ export const App = () => (
       { adapter: fixtureAdapter },
     );
     expect(result.code).not.toBeNull();
-    // forwardedAs should be converted to as (not leak as raw forwardedAs)
-    expect(result.code).not.toContain("forwardedAs");
-    // The converted as="a" should be preserved so polymorphism works
-    expect(result.code).toContain('as="a"');
+    // Keep forwardedAs at the wrapper callsite (no blanket conversion to `as`).
+    expect(result.code).toContain('forwardedAs="a"');
+    expect(result.code).not.toContain('<ButtonWrapper as="a"');
+    // forwardedAs should lower to `as={forwardedAs}` at the rendered intrinsic layer.
+    expect(result.code).toContain("as={forwardedAs}");
+    // Direct forwardedAs should remain a callsite prop (not become element polymorphism).
+    expect(result.code).toContain('<Button forwardedAs="a" href="#">');
+    // `as` and `forwardedAs` can co-exist on wrapper callsites.
+    expect(result.code).toContain('<ButtonWrapper as="section" forwardedAs="a" href="#">');
+  });
+
+  it("should lower forwardedAs for styled(Component) and keep attrs(as) as a fallback", () => {
+    const source = `
+import React from "react";
+import styled from "styled-components";
+
+type BaseProps = {
+  as?: React.ElementType;
+  href?: string;
+  children?: React.ReactNode;
+};
+
+const Base = ({ as: Component = "button", ...rest }: BaseProps) => {
+  return <Component {...rest} />;
+};
+
+const Wrapper = styled(Base).attrs({ as: "span" })\`
+  color: red;
+\`;
+
+export const App = () => (
+  <Wrapper forwardedAs="a" href="#">
+    Link
+  </Wrapper>
+);
+`;
+    const result = transformWithWarnings(
+      { source, path: "test.tsx" },
+      { jscodeshift: j, j, stats: () => {}, report: () => {} },
+      { adapter: fixtureAdapter },
+    );
+    expect(result.code).not.toBeNull();
+    expect(result.code).toContain("forwardedAs?: React.ElementType");
+    expect(result.code).toContain('as={forwardedAs ?? "span"}');
+    expect(result.code).not.toContain('as="span"');
+  });
+
+  it("should lower forwardedAs through styled(Component) when wrapped base is polymorphic", () => {
+    const source = `
+import styled from "styled-components";
+
+const Base = styled.button\`
+  color: red;
+\`;
+
+const Outer = styled(Base)\`
+  background: blue;
+\`;
+
+export const App = () => (
+  <div>
+    <Base as="section">Base polymorphic</Base>
+    <Outer forwardedAs="a" href="#">
+      Outer forwardedAs
+    </Outer>
+  </div>
+);
+`;
+    const result = transformWithWarnings(
+      { source, path: "test.tsx" },
+      { jscodeshift: j, j, stats: () => {}, report: () => {} },
+      { adapter: fixtureAdapter },
+    );
+    expect(result.code).not.toBeNull();
+    expect(result.code).toContain('<Outer forwardedAs="a" href="#">');
+    expect(result.code).toContain("forwardedAs?: React.ElementType");
+    expect(result.code).toContain("as={forwardedAs}");
+  });
+
+  it("should propagate forwardedAs through multi-level styled(Component) wrapper chains", () => {
+    const source = `
+import React from "react";
+import styled from "styled-components";
+
+type LeafProps = {
+  as?: React.ElementType;
+  href?: string;
+  children?: React.ReactNode;
+};
+
+const Leaf = ({ as: Component = "button", ...rest }: LeafProps) => {
+  return <Component {...rest} />;
+};
+
+const Base = styled(Leaf)\`
+  color: red;
+\`;
+
+const Mid = styled(Base)\`
+  background: blue;
+\`;
+
+const Outer = styled(Mid)\`
+  border: 1px solid black;
+\`;
+
+export const App = () => (
+  <div>
+    <Base as="section">Base polymorphic</Base>
+    <Outer forwardedAs="a" href="#">
+      Outer forwardedAs
+    </Outer>
+  </div>
+);
+`;
+    const result = transformWithWarnings(
+      { source, path: "test.tsx" },
+      { jscodeshift: j, j, stats: () => {}, report: () => {} },
+      { adapter: fixtureAdapter },
+    );
+    expect(result.code).not.toBeNull();
+    expect(result.code).toContain('<Outer forwardedAs="a" href="#">');
+    expect(result.code).toContain("function Base");
+    expect(result.code).toContain("as={forwardedAs}");
   });
 });

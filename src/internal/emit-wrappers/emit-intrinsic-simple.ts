@@ -353,15 +353,19 @@ export function emitSimpleWithConfigWrappers(ctx: EmitIntrinsicContext): void {
 export function emitSimpleExportedIntrinsicWrappers(ctx: EmitIntrinsicContext): void {
   const { emitter, j, emitTypes, wrapperDecls, wrapperNames, stylesIdentifier, emitted } = ctx;
   const {
+    buildForwardedAsValueExpr,
     canUseSimplePropsType,
     shouldIncludeRestForProps,
     buildCompoundVariantExpressions,
     emitPropsType,
     emitSimplePropsType,
+    hasForwardedAsUsage,
     withSimpleAsPropType,
     polymorphicIntrinsicPropsTypeText,
     propsTypeHasExistingPolymorphicAs,
+    splitForwardedAsStaticAttrs,
     shouldAllowAsProp,
+    withForwardedAsType,
     hasElementPropsInDefaultAttrs,
     emitMinimalWrapper,
   } = ctx.helpers;
@@ -406,6 +410,7 @@ export function emitSimpleExportedIntrinsicWrappers(ctx: EmitIntrinsicContext): 
     const allowClassNameProp = emitter.shouldAllowClassNameProp(d);
     const allowStyleProp = emitter.shouldAllowStyleProp(d);
     const usedAttrsForType = emitter.getUsedAttrs(d.localName);
+    const includesForwardedAs = hasForwardedAsUsage(d);
     const allowAsProp = shouldAllowAsProp(d, tagName);
     let inlineTypeText: string | undefined;
     // d.isExported is already set from exportedComponents during analyze-before-emit
@@ -568,6 +573,7 @@ export function emitSimpleExportedIntrinsicWrappers(ctx: EmitIntrinsicContext): 
         // Wrap the explicit type with PropsWithChildren since the wrapper may need children
         return emitter.withChildren(explicit);
       })();
+      const typeTextWithForwardedAs = withForwardedAsType(typeText, includesForwardedAs);
 
       // Emit the public props type.
       // For exported components that support `as`, use the full polymorphic pattern.
@@ -579,14 +585,14 @@ export function emitSimpleExportedIntrinsicWrappers(ctx: EmitIntrinsicContext): 
         typeAliasEmitted = emitPropsType({
           localName: d.localName,
           tagName,
-          typeText,
+          typeText: typeTextWithForwardedAs,
           allowAsProp,
           allowClassNameProp,
           allowStyleProp,
           hasNoCustomProps,
         });
       } else if (!hasNoCustomProps) {
-        typeAliasEmitted = emitSimplePropsType(d.localName, typeText, allowAsProp);
+        typeAliasEmitted = emitSimplePropsType(d.localName, typeTextWithForwardedAs, allowAsProp);
       } else {
         typeAliasEmitted = false;
       }
@@ -603,6 +609,7 @@ export function emitSimpleExportedIntrinsicWrappers(ctx: EmitIntrinsicContext): 
               tagName,
               allowClassNameProp,
               allowStyleProp,
+              includeForwardedAs: includesForwardedAs,
             });
             inlineTypeText = poly.typeExprText;
           } else if (explicit) {
@@ -612,6 +619,7 @@ export function emitSimpleExportedIntrinsicWrappers(ctx: EmitIntrinsicContext): 
               tagName,
               allowClassNameProp,
               allowStyleProp,
+              includeForwardedAs: includesForwardedAs,
               extra: explicit,
             });
             inlineTypeText = poly.typeExprText;
@@ -621,7 +629,7 @@ export function emitSimpleExportedIntrinsicWrappers(ctx: EmitIntrinsicContext): 
           }
         } else {
           // Use the computed typeText (which may be an intersection) as the inline type.
-          inlineTypeText = withSimpleAsPropType(typeText, allowAsProp);
+          inlineTypeText = withSimpleAsPropType(typeTextWithForwardedAs, allowAsProp);
         }
       }
     }
@@ -823,6 +831,7 @@ export function emitSimpleExportedIntrinsicWrappers(ctx: EmitIntrinsicContext): 
       const childrenId = j.identifier("children");
       const styleId = j.identifier("style");
       const restId = shouldIncludeRest ? j.identifier("rest") : null;
+      const forwardedAsId = j.identifier("forwardedAs");
 
       const patternProps = emitter.buildDestructurePatternProps({
         baseProps: [
@@ -836,6 +845,7 @@ export function emitSimpleExportedIntrinsicWrappers(ctx: EmitIntrinsicContext): 
                 }),
               ]
             : []),
+          ...(includesForwardedAs ? [ctx.patternProp("forwardedAs", forwardedAsId)] : []),
           ...(allowClassNameProp ? [ctx.patternProp("className", classNameId)] : []),
           ...(includeChildren ? [ctx.patternProp("children", childrenId)] : []),
           ...(allowStyleProp ? [ctx.patternProp("style", styleId)] : []),
@@ -851,6 +861,11 @@ export function emitSimpleExportedIntrinsicWrappers(ctx: EmitIntrinsicContext): 
 
       // Use the style merger helper
       const { attrsInfo, staticClassNameExpr } = emitter.splitAttrsInfo(d.attrsInfo);
+      const { attrsInfo: attrsInfoWithoutForwardedAsStatic, forwardedAsStaticFallback } =
+        splitForwardedAsStaticAttrs({
+          attrsInfo,
+          includeForwardedAs: includesForwardedAs,
+        });
       const merging = emitStyleMerging({
         j,
         emitter,
@@ -865,10 +880,20 @@ export function emitSimpleExportedIntrinsicWrappers(ctx: EmitIntrinsicContext): 
 
       const openingAttrs: JsxAttr[] = [
         ...emitter.buildAttrsFromAttrsInfo({
-          attrsInfo,
+          attrsInfo: attrsInfoWithoutForwardedAsStatic,
           propExprFor: (prop) => j.identifier(prop),
         }),
         ...(restId ? [j.jsxSpreadAttribute(restId)] : []),
+        ...(includesForwardedAs
+          ? [
+              j.jsxAttribute(
+                j.jsxIdentifier("as"),
+                j.jsxExpressionContainer(
+                  buildForwardedAsValueExpr(forwardedAsId, forwardedAsStaticFallback),
+                ),
+              ),
+            ]
+          : []),
       ];
       emitter.appendMergingAttrs(openingAttrs, merging);
 
