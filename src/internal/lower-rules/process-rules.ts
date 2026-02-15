@@ -1121,7 +1121,7 @@ function tryResolveInterpolatedPseudo(
   ctx: DeclProcessingState,
 ): "bail" | void {
   const { state } = ctx;
-  const { resolverImports, resolveSelector, resolveImportInScope } = state;
+  const { resolveSelector, resolveImportInScope } = state;
 
   if (!slotExpr) {
     return "bail";
@@ -1149,11 +1149,6 @@ function tryResolveInterpolatedPseudo(
 
   if (!selectorResult) {
     return "bail";
-  }
-
-  // Add required imports
-  for (const impSpec of selectorResult.imports ?? []) {
-    resolverImports.set(JSON.stringify(impSpec), impSpec);
   }
 
   if (selectorResult.kind === "pseudoAlias") {
