@@ -16,8 +16,8 @@ function Button(props: React.PropsWithChildren<{ ref?: React.Ref<HTMLButtonEleme
       {...stylex.props(
         styles.button,
         highlightStyles({
-          active: styles.buttonActive,
-          hover: styles.buttonHover,
+          active: styles.buttonPseudoActive,
+          hover: styles.buttonPseudoHover,
         }),
       )}
     >
@@ -36,7 +36,7 @@ const styles = stylex.create({
     paddingBlock: "8px",
     paddingInline: "16px",
   },
-  buttonActive: {
+  buttonPseudoActive: {
     color: {
       default: "blue",
       ":active": "red",
@@ -46,7 +46,7 @@ const styles = stylex.create({
       ":active": "yellow",
     },
   },
-  buttonHover: {
+  buttonPseudoHover: {
     color: {
       default: "blue",
       ":hover": "red",

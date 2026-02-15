@@ -1170,6 +1170,12 @@ function handlePseudoAlias(
   rule: DeclProcessingState["decl"]["rules"][number],
   ctx: DeclProcessingState,
 ): "bail" | void {
+  // Bail when the pseudo alias is inside @media or other at-rules —
+  // we can't carry the enclosing conditions into pseudo-alias style objects.
+  if (rule.atRuleStack.length > 0) {
+    return "bail";
+  }
+
   const { state, decl, extraStyleObjects, styleObj, cssHelperPropValues, getComposedDefaultValue } =
     ctx;
   const { j, parseExpr, resolverImports, resolveThemeValue, resolveThemeValueFromFn } = state;
@@ -1193,7 +1199,7 @@ function handlePseudoAlias(
   const styleKeys: string[] = [];
   for (const pseudoName of result.values) {
     const pseudo = `:${pseudoName}`;
-    const styleKey = `${decl.styleKey}${capitalize(kebabToCamelCase(pseudoName))}`;
+    const styleKey = `${decl.styleKey}Pseudo${capitalize(kebabToCamelCase(pseudoName))}`;
     styleKeys.push(styleKey);
 
     const styleObjForPseudo: Record<string, unknown> = {};
