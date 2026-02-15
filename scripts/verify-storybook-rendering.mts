@@ -52,11 +52,10 @@ interface TestResult {
 // These are tracked in plans/2026-02-12-rendering-mismatches.md.
 // Remove entries as the underlying codemod issues are fixed.
 // ---------------------------------------------------------------------------
-const EXPECTED_FAILURES = new Set([
-  // Subpixel text antialiasing differences: all computed styles are identical between
-  // input and output, but different CSS class names cause microscopic rendering diffs.
-  "conditional-negation",
+const EXPECTED_FAILURES = new Set<string>([
+  // Flaky due to animation timing — keyframe snapshots occasionally differ.
   "keyframes-unionComplexity",
+  "conditional-negation",
 ]);
 
 type Page = Awaited<ReturnType<Awaited<ReturnType<typeof chromium.launch>>["newPage"]>>;

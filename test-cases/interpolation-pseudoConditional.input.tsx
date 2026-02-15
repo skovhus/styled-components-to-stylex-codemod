@@ -1,11 +1,11 @@
 import styled from "styled-components";
 import { highlight } from "./lib/helpers";
+import { TouchDeviceToggle } from "./lib/TouchDeviceToggle";
 
 /**
  * Interpolated pseudo-class selector using a runtime variable.
- * `&:${highlight}` picks between `:hover` and `:active` based on device capability.
- * The adapter resolves this to a `pseudoConditional` result, generating two style
- * objects (one per pseudo) with a JS ternary in `stylex.props(...)`.
+ * `&:${highlight}` expands to `:active` and `:hover` pseudo style objects,
+ * wrapped in `highlightStyles({ active: ..., hover: ... })` for runtime selection.
  */
 const Button = styled.button`
   color: blue;
@@ -17,8 +17,27 @@ const Button = styled.button`
   }
 `;
 
+/**
+ * Same as Button but with `&&:${highlight}` specificity hack.
+ * The `&&` should be stripped and the pseudo alias still applied.
+ */
+const SpecificButton = styled.button`
+  color: green;
+  padding: 8px 16px;
+
+  &&:${highlight} {
+    color: purple;
+    background-color: orange;
+  }
+`;
+
 export const App = () => (
-  <div style={{ display: "flex", gap: 16, padding: 16 }}>
-    <Button>Highlight Button</Button>
-  </div>
+  <TouchDeviceToggle>
+    {() => (
+      <div style={{ display: "flex", gap: "16px", padding: "16px" }}>
+        <Button>Highlight Button</Button>
+        <SpecificButton>Specific Button</SpecificButton>
+      </div>
+    )}
+  </TouchDeviceToggle>
 );

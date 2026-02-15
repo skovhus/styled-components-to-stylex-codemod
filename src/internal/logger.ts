@@ -121,6 +121,13 @@ export class Logger {
   }
 
   /**
+   * Set the maximum number of examples shown per warning category in the summary.
+   */
+  public static setMaxExamples(count: number): void {
+    Logger.maxExamples = count;
+  }
+
+  /**
    * Log a warning message to stdout.
    * All codemod warnings go through this so tests can mock it.
    */
@@ -168,7 +175,7 @@ export class Logger {
    * Create a report from all collected warnings.
    */
   public static createReport(): LoggerReport {
-    return new LoggerReport([...Logger.collected], Logger.fileCount);
+    return new LoggerReport([...Logger.collected], Logger.fileCount, Logger.maxExamples);
   }
 
   /** @internal - for testing only */
@@ -181,6 +188,7 @@ export class Logger {
 
   private static collected: CollectedWarning[] = [];
   private static fileCount: number | null = null;
+  private static maxExamples = 15;
 
   private static writeWithSpacing(message: string, context?: unknown): void {
     const trimmed = message.replace(/\s+$/u, "");
@@ -244,11 +252,13 @@ interface WarningGroup {
 class LoggerReport {
   private readonly warnings: CollectedWarning[];
   private readonly fileCount: number | null;
+  private readonly maxExamples: number;
   private fileCache = new Map<string, string[] | null>();
 
-  constructor(warnings: CollectedWarning[], fileCount: number | null) {
+  constructor(warnings: CollectedWarning[], fileCount: number | null, maxExamples = 15) {
     this.warnings = warnings;
     this.fileCount = fileCount;
+    this.maxExamples = maxExamples;
   }
 
   getWarnings(): CollectedWarning[] {
@@ -273,7 +283,7 @@ class LoggerReport {
     );
     lines.push("─".repeat(60));
 
-    const MAX_EXAMPLES = 15;
+    const MAX_EXAMPLES = this.maxExamples;
 
     for (const group of groups) {
       lines.push("");

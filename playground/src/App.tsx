@@ -82,7 +82,12 @@ export default function App() {
   }, [isSettingsOpen]);
 
   useEffect(() => {
-    updatePlaygroundUrlSearchParams({ selectedTestCase, showRendering, showConfig, hideCode });
+    updatePlaygroundUrlSearchParams({
+      selectedTestCase,
+      showRendering,
+      showConfig,
+      hideCode,
+    });
   }, [selectedTestCase, showRendering, showConfig, hideCode]);
 
   // Parse adapter whenever adapterCode changes
@@ -249,7 +254,9 @@ export default function App() {
             skovhus/styled-components-to-stylex-codemod
             {import.meta.env.VITE_PR_NUMBER && (
               <a
-                href={`https://github.com/skovhus/styled-components-to-stylex-codemod/pull/${import.meta.env.VITE_PR_NUMBER}`}
+                href={`https://github.com/skovhus/styled-components-to-stylex-codemod/pull/${
+                  import.meta.env.VITE_PR_NUMBER
+                }`}
                 target="_blank"
                 rel="noopener noreferrer"
                 {...stylex.props(s.prLink)}
@@ -258,42 +265,44 @@ export default function App() {
               </a>
             )}
           </h1>
-          <div {...stylex.props(s.testCaseSelectHost)}>
-            <Select<TestCaseOption, false>
-              inputId="test-case-select"
-              aria-label="Select test case"
-              isSearchable
-              isClearable={false}
-              options={testCaseOptions}
-              value={testCaseOptions.find((o) => o.value === selectedTestCase) ?? null}
-              onChange={handleTestCaseChange}
-              styles={testCaseSelectStyles}
-              menuPortalTarget={document.body}
-            />
-          </div>
-          <div {...stylex.props(s.navButtons)}>
-            <button
-              onClick={navigatePrev}
-              {...stylex.props(s.navButton)}
-              title="Go to previous test case (K)"
-              disabled={testCases.findIndex((t) => t.name === selectedTestCase) === 0}
-            >
-              <svg viewBox="0 0 16 16" fill="currentColor" {...stylex.props(s.navIcon)}>
-                <path d="M8 4L3 9h10L8 4z" />
-              </svg>
-            </button>
-            <button
-              onClick={navigateNext}
-              {...stylex.props(s.navButton)}
-              title="Go to next test case (J)"
-              disabled={
-                testCases.findIndex((t) => t.name === selectedTestCase) === testCases.length - 1
-              }
-            >
-              <svg viewBox="0 0 16 16" fill="currentColor" {...stylex.props(s.navIcon)}>
-                <path d="M8 12L13 7H3l5 5z" />
-              </svg>
-            </button>
+          <div {...stylex.props(s.testCaseControls)}>
+            <div {...stylex.props(s.testCaseSelectHost)}>
+              <Select<TestCaseOption, false>
+                inputId="test-case-select"
+                aria-label="Select test case"
+                isSearchable
+                isClearable={false}
+                options={testCaseOptions}
+                value={testCaseOptions.find((o) => o.value === selectedTestCase) ?? null}
+                onChange={handleTestCaseChange}
+                styles={testCaseSelectStyles}
+                menuPlacement="auto"
+              />
+            </div>
+            <div {...stylex.props(s.navButtons)}>
+              <button
+                onClick={navigatePrev}
+                {...stylex.props(s.navButton)}
+                title="Go to previous test case (K)"
+                disabled={testCases.findIndex((t) => t.name === selectedTestCase) === 0}
+              >
+                <svg viewBox="0 0 16 16" fill="currentColor" {...stylex.props(s.navIcon)}>
+                  <path d="M8 4L3 9h10L8 4z" />
+                </svg>
+              </button>
+              <button
+                onClick={navigateNext}
+                {...stylex.props(s.navButton)}
+                title="Go to next test case (J)"
+                disabled={
+                  testCases.findIndex((t) => t.name === selectedTestCase) === testCases.length - 1
+                }
+              >
+                <svg viewBox="0 0 16 16" fill="currentColor" {...stylex.props(s.navIcon)}>
+                  <path d="M8 12L13 7H3l5 5z" />
+                </svg>
+              </button>
+            </div>
           </div>
         </div>
         <div {...stylex.props(s.headerRight)}>
@@ -494,7 +503,10 @@ const initialRenderState: RenderState = {
   loading: false,
 };
 
-const testCaseOptions: TestCaseOption[] = testCases.map((t) => ({ value: t.name, label: t.name }));
+const testCaseOptions: TestCaseOption[] = testCases.map((t) => ({
+  value: t.name,
+  label: t.name,
+}));
 
 const testCaseSelectStyles: StylesConfig<TestCaseOption, false> = {
   container: (base) => ({ ...base, width: "100%" }),
@@ -805,12 +817,9 @@ const s = stylex.create({
       default: 12,
       [MOBILE]: 6,
     },
-    flex: {
-      default: null,
-      [MOBILE]: 1,
-    },
+    flex: 1,
     minWidth: {
-      default: null,
+      default: 0,
       [MOBILE]: 0,
     },
   },
@@ -847,7 +856,7 @@ const s = stylex.create({
   title: {
     margin: 0,
     fontSize: {
-      default: 18,
+      default: 16,
       [MOBILE]: 12,
     },
     fontWeight: 600,
@@ -874,7 +883,7 @@ const s = stylex.create({
     },
     display: {
       default: null,
-      [PHONE]: "none",
+      [MOBILE]: "none",
     },
   },
   prLink: {
@@ -883,21 +892,26 @@ const s = stylex.create({
     textDecoration: "none",
   },
 
-  // ── Test case select ──
+  // ── Test case controls ──
+  testCaseControls: {
+    display: "flex",
+    alignItems: "center",
+    gap: 6,
+    marginInlineStart: "auto",
+    flexShrink: 0,
+  },
   testCaseSelectHost: {
     display: "flex",
     alignItems: "center",
     maxWidth: {
       default: 320,
-      [MOBILE]: "none",
+      [MOBILE]: 240,
+      [PHONE]: 180,
     },
     width: {
-      default: null,
-      [MOBILE]: "100%",
-    },
-    flex: {
-      default: null,
-      [MOBILE]: 1,
+      default: 320,
+      [MOBILE]: 240,
+      [PHONE]: 180,
     },
     minWidth: {
       default: null,
@@ -921,10 +935,7 @@ const s = stylex.create({
     display: "flex",
     alignItems: "center",
     justifyContent: "center",
-    padding: {
-      default: 6,
-      [MOBILE]: 4,
-    },
+    padding: 6,
     fontSize: 14,
     borderRadius: 6,
     borderWidth: 1,
@@ -935,14 +946,8 @@ const s = stylex.create({
     color: "#333",
   },
   navIcon: {
-    width: {
-      default: 16,
-      [MOBILE]: 14,
-    },
-    height: {
-      default: 16,
-      [MOBILE]: 14,
-    },
+    width: 16,
+    height: 16,
   },
 
   // ── Settings ──

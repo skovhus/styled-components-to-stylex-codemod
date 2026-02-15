@@ -408,33 +408,19 @@ export const fixtureAdapter = defineAdapter({
     }
 
     // Handle `highlight` pseudo-class interpolation: &:${highlight}
-    // Resolves to a pseudoConditional that picks between :active and :hover
-    // based on Browser.isPureTouchDevice.
+    // Resolves to a pseudoAlias that expands into :active and :hover pseudo style objects,
+    // wrapped in a highlightStyles() function call for runtime selection.
     if (ctx.importedName === "highlight") {
       return {
-        kind: "pseudoConditional",
-        conditionExpr: "Browser.isPureTouchDevice",
-        truePseudo: "active",
-        falsePseudo: "hover",
+        kind: "pseudoAlias",
+        values: ["active", "hover"],
+        styleSelectorExpr: "highlightStyles",
         imports: [
           {
             from: { kind: "specifier", value: "./lib/helpers" },
-            names: [{ imported: "Browser" }],
+            names: [{ imported: "highlightStyles" }],
           },
         ],
-      };
-    }
-
-    // Handle `highlightMedia` pseudo-class interpolation: &:${highlightMedia}
-    // Resolves to a pseudoMediaQuery that uses CSS @media guards per pseudo.
-    if (ctx.importedName === "highlightMedia") {
-      return {
-        kind: "pseudoMediaQuery",
-        branches: [
-          { pseudo: ":hover", mediaQuery: "@media (hover: hover)" },
-          { pseudo: ":active", mediaQuery: "@media (hover: none)" },
-        ],
-        imports: [],
       };
     }
 

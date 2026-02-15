@@ -1,12 +1,12 @@
 import React from "react";
 import * as stylex from "@stylexjs/stylex";
-import { Browser } from "./lib/helpers";
+import { highlightStyles } from "./lib/helpers";
+import { TouchDeviceToggle } from "./lib/TouchDeviceToggle";
 
 /**
  * Interpolated pseudo-class selector using a runtime variable.
- * `&:${highlight}` picks between `:hover` and `:active` based on device capability.
- * The adapter resolves this to a `pseudoConditional` result, generating two style
- * objects (one per pseudo) with a JS ternary in `stylex.props(...)`.
+ * `&:${highlight}` expands to `:active` and `:hover` pseudo style objects,
+ * wrapped in `highlightStyles({ active: ..., hover: ... })` for runtime selection.
  */
 function Button(props: React.PropsWithChildren<{ ref?: React.Ref<HTMLButtonElement> }>) {
   const { children } = props;
@@ -15,7 +15,32 @@ function Button(props: React.PropsWithChildren<{ ref?: React.Ref<HTMLButtonEleme
     <button
       {...stylex.props(
         styles.button,
-        Browser.isPureTouchDevice ? styles.buttonActive : styles.buttonHover,
+        highlightStyles({
+          active: styles.buttonPseudoActive,
+          hover: styles.buttonPseudoHover,
+        }),
+      )}
+    >
+      {children}
+    </button>
+  );
+}
+
+/**
+ * Same as Button but with `&&:${highlight}` specificity hack.
+ * The `&&` should be stripped and the pseudo alias still applied.
+ */
+function SpecificButton(props: React.PropsWithChildren<{ ref?: React.Ref<HTMLButtonElement> }>) {
+  const { children } = props;
+
+  return (
+    <button
+      {...stylex.props(
+        styles.specificButton,
+        highlightStyles({
+          active: styles.specificButtonPseudoActive,
+          hover: styles.specificButtonPseudoHover,
+        }),
       )}
     >
       {children}
@@ -24,9 +49,14 @@ function Button(props: React.PropsWithChildren<{ ref?: React.Ref<HTMLButtonEleme
 }
 
 export const App = () => (
-  <div style={{ display: "flex", gap: 16, padding: 16 }}>
-    <Button>Highlight Button</Button>
-  </div>
+  <TouchDeviceToggle>
+    {() => (
+      <div style={{ display: "flex", gap: "16px", padding: "16px" }}>
+        <Button>Highlight Button</Button>
+        <SpecificButton>Specific Button</SpecificButton>
+      </div>
+    )}
+  </TouchDeviceToggle>
 );
 
 const styles = stylex.create({
@@ -35,9 +65,9 @@ const styles = stylex.create({
     paddingBlock: "8px",
     paddingInline: "16px",
   },
-  buttonActive: {
+  buttonPseudoActive: {
     color: {
-      default: null,
+      default: "blue",
       ":active": "red",
     },
     backgroundColor: {
@@ -45,14 +75,39 @@ const styles = stylex.create({
       ":active": "yellow",
     },
   },
-  buttonHover: {
+  buttonPseudoHover: {
     color: {
-      default: null,
+      default: "blue",
       ":hover": "red",
     },
     backgroundColor: {
       default: null,
       ":hover": "yellow",
+    },
+  },
+  specificButton: {
+    color: "green",
+    paddingBlock: "8px",
+    paddingInline: "16px",
+  },
+  specificButtonPseudoActive: {
+    color: {
+      default: "green",
+      ":active": "purple",
+    },
+    backgroundColor: {
+      default: null,
+      ":active": "orange",
+    },
+  },
+  specificButtonPseudoHover: {
+    color: {
+      default: "green",
+      ":hover": "purple",
+    },
+    backgroundColor: {
+      default: null,
+      ":hover": "orange",
     },
   },
 });

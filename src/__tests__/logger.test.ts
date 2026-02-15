@@ -92,7 +92,7 @@ describe("Logger", () => {
       `);
     });
 
-    it("limits examples to 15 per category", () => {
+    it("shows all files in the summary report", () => {
       for (let i = 0; i < 17; i++) {
         Logger.logWarnings(
           [{ severity: "warning", type: "Unsupported selector: class selector", loc: null }],
