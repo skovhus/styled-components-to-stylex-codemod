@@ -1,0 +1,1 @@
+import{j as t}from"./index-U08d60rA.js";const e={getPrimaryStyles:{kWkggS:"xi1c7ey",kMwMTN:"xvbvf6b",$$css:!0}};function s(){return e.getPrimaryStyles}const i=()=>t.jsx("button",{className:"xi1c7ey xvbvf6b x1vvogim x1hr3lfm x12oqio5",children:"Click me"});export{i as App,s as getPrimaryStyles};
