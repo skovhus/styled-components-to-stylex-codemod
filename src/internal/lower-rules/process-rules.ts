@@ -159,6 +159,20 @@ export function processDeclRules(ctx: DeclProcessingState): void {
     if (state.bail) {
       break;
     }
+
+    // Skip rules inside @keyframes blocks whose keyframes were successfully
+    // extracted — these are keyframe frame selectors (e.g. "0%", "100%",
+    // "from", "to") that would otherwise be misidentified as descendant/tag
+    // selectors. If the keyframe was NOT extracted (e.g. it has interpolated
+    // values), let it fall through so the bail logic catches the unsupported case.
+    const kfAtRule = rule.atRuleStack.find((at) => at.startsWith("@keyframes "));
+    if (kfAtRule) {
+      const kfName = kfAtRule.replace("@keyframes ", "").trim();
+      if (state.keyframesNames.has(kfName)) {
+        continue;
+      }
+    }
+
     // Track resolved selector media for this rule (set by adapter.resolveSelector)
     let resolvedSelectorMedia: { keyExpr: unknown; exprSource: string } | null = null;
 
