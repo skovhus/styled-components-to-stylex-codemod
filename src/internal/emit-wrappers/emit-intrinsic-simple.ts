@@ -18,6 +18,7 @@ import { sortVariantEntriesBySpecificity, VOID_TAGS } from "./type-helpers.js";
 import { withLeadingCommentsOnFirstFunction } from "./comments.js";
 import type { EmitIntrinsicContext } from "./emit-intrinsic-helpers.js";
 import { cloneAstNode } from "../utilities/jscodeshift-utils.js";
+import { parseVariantWhenToAst } from "./variant-condition.js";
 
 export function emitSimpleWithConfigWrappers(ctx: EmitIntrinsicContext): void {
   const { emitter, j, emitTypes, wrapperDecls, wrapperNames, stylesIdentifier, emitted } = ctx;
@@ -142,7 +143,12 @@ export function emitSimpleWithConfigWrappers(ctx: EmitIntrinsicContext): void {
     );
 
     // Handle pseudo-alias selectors (e.g., &:${highlight})
-    appendPseudoAliasStyleArgs(d.pseudoAliasSelectors, styleArgs, j, stylesIdentifier);
+    const pseudoGuardProps = appendPseudoAliasStyleArgs(
+      d.pseudoAliasSelectors,
+      styleArgs,
+      j,
+      stylesIdentifier,
+    );
 
     const propsParamId = j.identifier("props");
     if (allowAsProp && emitTypes) {
@@ -225,6 +231,7 @@ export function emitSimpleWithConfigWrappers(ctx: EmitIntrinsicContext): void {
           ...extraProps,
           ...inlineProps,
           ...styleFnProps,
+          ...pseudoGuardProps,
           ...(d.attrsInfo?.conditionalAttrs ?? []).map((c: any) => c.jsxProp).filter(Boolean),
           ...(d.attrsInfo?.invertedBoolAttrs ?? []).map((inv: any) => inv.jsxProp).filter(Boolean),
         ]),
@@ -678,7 +685,16 @@ export function emitSimpleExportedIntrinsicWrappers(ctx: EmitIntrinsicContext): 
     );
 
     // Handle pseudo-alias selectors (e.g., &:${highlight})
-    appendPseudoAliasStyleArgs(d.pseudoAliasSelectors, styleArgs, j, stylesIdentifier);
+    for (const gp of appendPseudoAliasStyleArgs(
+      d.pseudoAliasSelectors,
+      styleArgs,
+      j,
+      stylesIdentifier,
+    )) {
+      if (!destructureProps.includes(gp)) {
+        destructureProps.push(gp);
+      }
+    }
 
     // Collect keys used by compound variants (they're handled separately)
     const compoundVariantKeys = new Set<string>();
@@ -1009,15 +1025,19 @@ function appendThemeBooleanStyleArgs(
  * Appends pseudo-alias style args to `styleArgs`.
  *
  * Emits `selectorExpr({ active: styles.keyActive, hover: styles.keyHover })` as a single arg.
+ * When the entry has a `guard`, the call is wrapped: `cond && selectorExpr(...)`.
+ *
+ * Returns the list of guard prop names that need destructuring.
  */
 export function appendPseudoAliasStyleArgs(
   entries: StyledDecl["pseudoAliasSelectors"],
   styleArgs: ExpressionKind[],
   j: JSCodeshift,
   stylesIdentifier: string,
-): void {
+): string[] {
+  const guardProps: string[] = [];
   if (!entries?.length) {
-    return;
+    return guardProps;
   }
   for (const entry of entries) {
     const properties = entry.pseudoNames.map((name, i) =>
@@ -1027,12 +1047,23 @@ export function appendPseudoAliasStyleArgs(
         j.memberExpression(j.identifier(stylesIdentifier), j.identifier(entry.styleKeys[i]!)),
       ),
     );
-    styleArgs.push(
-      j.callExpression(cloneAstNode(entry.styleSelectorExpr) as ExpressionKind, [
-        j.objectExpression(properties),
-      ]) as ExpressionKind,
-    );
+    const callExpr = j.callExpression(cloneAstNode(entry.styleSelectorExpr) as ExpressionKind, [
+      j.objectExpression(properties),
+    ]) as ExpressionKind;
+
+    if (entry.guard) {
+      const parsed = parseVariantWhenToAst(j, entry.guard.when);
+      for (const p of parsed.props) {
+        if (p && !guardProps.includes(p)) {
+          guardProps.push(p);
+        }
+      }
+      styleArgs.push(j.logicalExpression("&&", parsed.cond, callExpr));
+    } else {
+      styleArgs.push(callExpr);
+    }
   }
+  return guardProps;
 }
 
 /** Builds a `const theme = useTheme();` variable declaration. */
