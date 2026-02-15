@@ -11,6 +11,16 @@ export function capitalize(s: string): string {
 }
 
 /**
+ * Converts a kebab-case string to camelCase.
+ * @example kebabToCamelCase("focus-visible") => "focusVisible"
+ * @example kebabToCamelCase("placeholder-shown") => "placeholderShown"
+ * @example kebabToCamelCase("hover") => "hover"
+ */
+export function kebabToCamelCase(s: string): string {
+  return s.replace(/-([a-z])/g, (_, letter) => letter.toUpperCase());
+}
+
+/**
  * Lowercases the first character of a string.
  * @example lowerFirst("Hello") => "hello"
  */

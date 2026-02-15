@@ -1023,7 +1023,7 @@ export function appendPseudoAliasStyleArgs(
     const properties = entry.pseudoNames.map((name, i) =>
       j.property(
         "init",
-        j.identifier(name),
+        /^[a-zA-Z_$][a-zA-Z0-9_$]*$/.test(name) ? j.identifier(name) : j.literal(name),
         j.memberExpression(j.identifier(stylesIdentifier), j.identifier(entry.styleKeys[i]!)),
       ),
     );

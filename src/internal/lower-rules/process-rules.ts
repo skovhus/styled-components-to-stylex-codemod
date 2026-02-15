@@ -20,7 +20,7 @@ import {
 } from "../selectors.js";
 import { extractRootAndPath, getNodeLocStart } from "../utilities/jscodeshift-utils.js";
 import { cssValueToJs, toStyleKey } from "../transform/helpers.js";
-import { capitalize } from "../utilities/string-utils.js";
+import { capitalize, kebabToCamelCase } from "../utilities/string-utils.js";
 import { getOrCreateRelationOverrideBucket } from "./shared.js";
 
 export function processDeclRules(ctx: DeclProcessingState): void {
@@ -1193,7 +1193,7 @@ function handlePseudoAlias(
   const styleKeys: string[] = [];
   for (const pseudoName of result.values) {
     const pseudo = `:${pseudoName}`;
-    const styleKey = `${decl.styleKey}${capitalize(pseudoName)}`;
+    const styleKey = `${decl.styleKey}${capitalize(kebabToCamelCase(pseudoName))}`;
     styleKeys.push(styleKey);
 
     const styleObjForPseudo: Record<string, unknown> = {};

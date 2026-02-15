@@ -272,7 +272,7 @@ class LoggerReport {
     );
     lines.push("─".repeat(60));
 
-    const MAX_EXAMPLES = 15;
+    const MAX_EXAMPLES = 999;
 
     for (const group of groups) {
       lines.push("");
