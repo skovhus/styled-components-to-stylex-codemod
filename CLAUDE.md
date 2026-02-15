@@ -60,6 +60,7 @@ Run repo scripts directly with `node`, see `scripts` folder
 - `scripts/regenerate-test-case-outputs.mts` - Updates test case output files.
   - All supported test cases: `node scripts/regenerate-test-case-outputs.mts`
   - Single test case: `node scripts/regenerate-test-case-outputs.mts --only attrs`
+  - Note: the script only rewrites existing `.output.*` files; when adding a new supported fixture, create the output file first, then run the script.
 - `scripts/verify-storybook-rendering.mts` - Verifies that input (styled-components) and output (StyleX) render with matching dimensions and content in Storybook. Self-contained: builds Storybook, starts a static file server, and auto-installs Playwright Chromium if needed. Uses pixelmatch for pixel-level image comparison.
 - All test cases: `node scripts/verify-storybook-rendering.mts`
 - Specific test case: `node scripts/verify-storybook-rendering.mts theme-conditionalInlineStyle`

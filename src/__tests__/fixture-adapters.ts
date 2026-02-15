@@ -407,6 +407,27 @@ export const fixtureAdapter = defineAdapter({
       };
     }
 
+    // Handle runtime pseudo alias used as: &:${highlight} { ... }
+    if (ctx.importedName === "highlight") {
+      if (ctx.filePath.includes("selector-highlightAliasFunction")) {
+        return {
+          kind: "pseudoAlias",
+          values: ["active", "hover"],
+          styleSelectorExpr: "highlightRules",
+          imports: [
+            {
+              from: { kind: "specifier", value: "./lib/helpers" },
+              names: [{ imported: "highlightRules" }],
+            },
+          ],
+        };
+      }
+      return {
+        kind: "pseudoAlias",
+        values: ["active", "hover"],
+      };
+    }
+
     return undefined;
   },
 });

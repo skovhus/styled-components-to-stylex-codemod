@@ -251,21 +251,87 @@ export type SelectorResolveContext = {
 export type SelectorResolveResult = {
   /**
    * The kind of selector resolved.
-   * Currently only "media" is supported.
+   * - "media" resolves selector interpolation to a computed media key.
+   * - "pseudoAlias" resolves selector interpolation used as a pseudo alias
+   *   (e.g. `&:${highlight}` where highlight evaluates to "hover" | "active").
    */
-  kind: "media";
-  /**
-   * JS expression to use as the computed property key.
-   * Should reference a `defineConsts` value for media queries.
-   * Example: "breakpoints.phone"
-   */
-  expr: string;
-  /**
-   * Import statements required by `expr`.
-   * Example: [{ from: { kind: "specifier", value: "./breakpoints.stylex" }, names: [{ imported: "breakpoints" }] }]
-   */
-  imports: ImportSpec[];
-};
+} & (
+  | {
+      kind: "media";
+      /**
+       * JS expression to use as the computed property key.
+       * Should reference a `defineConsts` value for media queries.
+       * Example: "breakpoints.phone"
+       */
+      expr: string;
+      /**
+       * Import statements required by `expr`.
+       * Example: [{ from: { kind: "specifier", value: "./breakpoints.stylex" }, names: [{ imported: "breakpoints" }] }]
+       */
+      imports: ImportSpec[];
+    }
+  | {
+      kind: "pseudoAlias";
+      /**
+       * Possible runtime selector values as pseudo names (e.g. "hover") or pseudo tokens
+       * (e.g. ":hover"). Must contain at least one value.
+       *
+       * The codemod normalizes each value and maps it to a StyleX pseudo selector.
+       */
+      values: readonly [PseudoAliasValue, ...PseudoAliasValue[]];
+      /**
+       * Optional callable expression used to select the final style argument from
+       * a map of generated pseudo styles.
+       *
+       * When provided, the codemod emits:
+       *   `<styleSelectorExpr>({ active: styles.foo, hover: styles.bar })`
+       * instead of nested ternaries.
+       *
+       * Example: "highlightRules"
+       */
+      styleSelectorExpr?: string;
+      /**
+       * Optional imports required by alias helper usage.
+       */
+      imports?: ImportSpec[];
+    }
+);
+
+type AsciiLowerLetter =
+  | "a"
+  | "b"
+  | "c"
+  | "d"
+  | "e"
+  | "f"
+  | "g"
+  | "h"
+  | "i"
+  | "j"
+  | "k"
+  | "l"
+  | "m"
+  | "n"
+  | "o"
+  | "p"
+  | "q"
+  | "r"
+  | "s"
+  | "t"
+  | "u"
+  | "v"
+  | "w"
+  | "x"
+  | "y"
+  | "z";
+
+type AsciiLetter = AsciiLowerLetter | Uppercase<AsciiLowerLetter>;
+
+/**
+ * Runtime pseudo-alias token accepted by selector interpolation resolver.
+ * Examples: "hover", ":active", "focus-visible".
+ */
+export type PseudoAliasValue = `${AsciiLetter}${string}` | `:${AsciiLetter}${string}`;
 
 // ────────────────────────────────────────────────────────────────────────────
 // External Interface Context and Result
@@ -359,6 +425,8 @@ export interface Adapter {
    *
    * Return:
    * - `{ kind: "media", expr, imports }` when the interpolation resolves to a media query
+   * - `{ kind: "pseudoAlias", values, styleSelectorExpr?, imports? }` when interpolation resolves to runtime pseudo alias values
+   *   (values must be a non-empty tuple of `PseudoAliasValue`)
    * - `undefined` to bail/skip the file
    */
   resolveSelector: (context: SelectorResolveContext) => SelectorResolveResult | undefined;
@@ -426,9 +494,12 @@ export interface Adapter {
  *     },
  *
  *     resolveSelector(ctx) {
- *       // Resolve imported values used in selector position (e.g., media query helpers).
+ *       // Resolve imported values used in selector position
+ *       // (e.g., media query helpers or pseudo aliases).
  *       // Return:
  *       // - { kind: "media", expr, imports } for media queries (e.g., breakpoints.phone)
+ *       // - { kind: "pseudoAlias", values, styleSelectorExpr? } for pseudo aliases
+ *       //   (e.g., highlight -> ["hover", "active"] as const, styleSelectorExpr: "highlightRules")
  *       // - undefined to bail/skip the file
  *       void ctx;
  *     },

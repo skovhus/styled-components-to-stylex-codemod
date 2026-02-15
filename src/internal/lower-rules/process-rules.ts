@@ -17,7 +17,11 @@ import {
   parseElementSelectorPattern,
   parseSelector,
 } from "../selectors.js";
-import { extractRootAndPath, getNodeLocStart } from "../utilities/jscodeshift-utils.js";
+import {
+  cloneAstNode,
+  extractRootAndPath,
+  getNodeLocStart,
+} from "../utilities/jscodeshift-utils.js";
 import { cssValueToJs, toStyleKey } from "../transform/helpers.js";
 import { getOrCreateRelationOverrideBucket } from "./shared.js";
 
@@ -31,6 +35,7 @@ export function processDeclRules(ctx: DeclProcessingState): void {
     perPropComputedMedia,
     nestedSelectors,
     attrBuckets,
+    extraStyleObjects,
     localVarValues,
     cssHelperPropValues,
     getComposedDefaultValue,
@@ -153,7 +158,7 @@ export function processDeclRules(ctx: DeclProcessingState): void {
     return "continue";
   };
 
-  for (const rule of decl.rules) {
+  for (const [ruleIndex, rule] of decl.rules.entries()) {
     if (state.bail) {
       break;
     }
@@ -188,9 +193,10 @@ export function processDeclRules(ctx: DeclProcessingState): void {
       const selectorForAnalysis = specificityResult.normalized;
       const s = normalizeInterpolatedSelector(selectorForAnalysis).trim();
       const hasComponentExpr = rule.selector.includes("__SC_EXPR_");
+      const interpolatedPseudoSelector = parseInterpolatedPseudoSelector(rule.selector);
       const hasInterpolatedPseudo = /:[^\s{]*__SC_EXPR_\d+__/.test(rule.selector);
 
-      if (hasInterpolatedPseudo) {
+      if (hasInterpolatedPseudo && !interpolatedPseudoSelector) {
         state.markBail();
         warnings.push({
           severity: "warning",
@@ -298,8 +304,40 @@ export function processDeclRules(ctx: DeclProcessingState): void {
       const slotExpr = slotId !== null ? (decl.templateExpressions[slotId] as any) : null;
       const otherLocal = slotExpr?.type === "Identifier" ? (slotExpr.name as string) : null;
       const isCssHelperPlaceholder = !!otherLocal && cssHelperNames.has(otherLocal);
+      const interpolatedPseudoSelector = parseInterpolatedPseudoSelector(rule.selector);
 
       const selTrim2 = rule.selector.trim();
+
+      if (interpolatedPseudoSelector && slotExpr) {
+        const handledInterpolatedPseudo = tryHandleInterpolatedPseudoSelectorRule({
+          rule,
+          ruleIndex,
+          slotExpr,
+          decl,
+          styleObj,
+          cssHelperPropValues,
+          getComposedDefaultValue,
+          resolveSelector,
+          resolveImportInScope,
+          resolverImports,
+          filePath: state.filePath,
+          j,
+          parseExpr,
+          resolveThemeValue,
+          resolveThemeValueFromFn,
+          extraStyleObjects,
+        });
+        if (!handledInterpolatedPseudo) {
+          state.markBail();
+          warnings.push({
+            severity: "warning",
+            type: "Unsupported selector: interpolated pseudo selector",
+            loc: computeSelectorWarningLoc(decl.loc, decl.rawCss, rule.selector),
+          });
+          break;
+        }
+        continue;
+      }
 
       // `${Other}:pseudo &` (Icon reacting to ancestor hover/focus/etc.)
       // This is the inverse of `&:pseudo ${Child}` — the declaring component is the child,
@@ -758,6 +796,410 @@ export function processDeclRules(ctx: DeclProcessingState): void {
 }
 
 // --- Non-exported helpers ---
+
+type StyleArgExpr = NonNullable<StyledDecl["extraStylexPropsArgs"]>[number]["expr"];
+type BinaryOperand = Parameters<JSCodeshift["binaryExpression"]>[1];
+
+type InterpolatedPseudoCandidate = {
+  matchValue: string;
+  pseudo: string;
+  suffix: string;
+};
+
+type InterpolatedPseudoResolution = {
+  candidates: InterpolatedPseudoCandidate[];
+  styleKeyLabel: string;
+  styleSelectorExpr?: string;
+};
+
+function parseInterpolatedPseudoSelector(selector: string): { slotId: number } | null {
+  const match = selector.trim().match(/^&\s*:\s*__SC_EXPR_(\d+)__\s*$/);
+  if (!match?.[1]) {
+    return null;
+  }
+  return { slotId: Number(match[1]) };
+}
+
+function tryHandleInterpolatedPseudoSelectorRule(args: {
+  rule: StyledDecl["rules"][number];
+  ruleIndex: number;
+  slotExpr: unknown;
+  decl: StyledDecl;
+  styleObj: Record<string, unknown>;
+  cssHelperPropValues: Map<string, unknown>;
+  getComposedDefaultValue: (prop: string) => unknown;
+  resolveSelector: DeclProcessingState["state"]["resolveSelector"];
+  resolveImportInScope: DeclProcessingState["state"]["resolveImportInScope"];
+  resolverImports: DeclProcessingState["state"]["resolverImports"];
+  filePath: string;
+  j: DeclProcessingState["state"]["j"];
+  parseExpr: DeclProcessingState["state"]["parseExpr"];
+  resolveThemeValue: (expr: unknown) => unknown;
+  resolveThemeValueFromFn: (expr: unknown) => unknown;
+  extraStyleObjects: Map<string, Record<string, unknown>>;
+}): boolean {
+  const {
+    rule,
+    ruleIndex,
+    slotExpr,
+    decl,
+    styleObj,
+    cssHelperPropValues,
+    getComposedDefaultValue,
+    resolveSelector,
+    resolveImportInScope,
+    resolverImports,
+    filePath,
+    j,
+    parseExpr,
+    resolveThemeValue,
+    resolveThemeValueFromFn,
+    extraStyleObjects,
+  } = args;
+
+  // Keep this narrow: pseudo alias interpolation support is currently only
+  // for direct selector rules (no nested at-rules).
+  if ((rule.atRuleStack ?? []).length > 0) {
+    return false;
+  }
+
+  // We need concrete CSS declarations to build pseudo style objects.
+  if (rule.declarations.some((d) => !d.property)) {
+    return false;
+  }
+
+  const pseudoResolution = resolveInterpolatedPseudoResolution({
+    slotExpr,
+    resolveSelector,
+    resolveImportInScope,
+    resolverImports,
+    filePath,
+  });
+  if (!pseudoResolution || pseudoResolution.candidates.length === 0) {
+    return false;
+  }
+  const { candidates, styleSelectorExpr } = pseudoResolution;
+  const styleKeyPrefix = buildInterpolatedPseudoStyleKeyPrefix(
+    decl.styleKey,
+    pseudoResolution.styleKeyLabel,
+    ruleIndex,
+  );
+
+  const bucket: Record<string, unknown> = {};
+  const writtenProps = processDeclarationsIntoBucket(
+    rule,
+    bucket,
+    j,
+    decl,
+    resolveThemeValue,
+    resolveThemeValueFromFn,
+    { bailOnUnresolved: true },
+  );
+  if (writtenProps === "bail" || writtenProps.size === 0) {
+    return false;
+  }
+
+  const styleCases: Array<{ matchValue: string; styleKey: string }> = [];
+  for (const candidate of candidates) {
+    const styleKey = `${styleKeyPrefix}${candidate.suffix}`;
+    const pseudoStyleObj: Record<string, unknown> = {};
+
+    for (const prop of writtenProps) {
+      const resolvedValue = bucket[prop];
+      if (resolvedValue === undefined) {
+        continue;
+      }
+      const baseValue =
+        styleObj[prop] !== undefined
+          ? styleObj[prop]
+          : cssHelperPropValues.has(prop)
+            ? getComposedDefaultValue(prop)
+            : null;
+      pseudoStyleObj[prop] = { default: baseValue, [candidate.pseudo]: resolvedValue };
+    }
+
+    if (Object.keys(pseudoStyleObj).length === 0) {
+      continue;
+    }
+    extraStyleObjects.set(styleKey, pseudoStyleObj);
+    styleCases.push({ matchValue: candidate.matchValue, styleKey });
+  }
+
+  if (styleCases.length === 0) {
+    return false;
+  }
+
+  const selectorArgExpr = buildInterpolatedPseudoStyleArg({
+    j,
+    parseExpr,
+    slotExpr,
+    styleCases,
+    styleSelectorExpr,
+  });
+  if (!selectorArgExpr) {
+    return false;
+  }
+  decl.extraStylexPropsArgs ??= [];
+  decl.extraStylexPropsArgs.push({ expr: selectorArgExpr });
+  decl.mixinOrder ??= [];
+  decl.mixinOrder.push("propsArg");
+  decl.needsWrapperComponent = true;
+
+  return true;
+}
+
+function buildInterpolatedPseudoStyleArg(args: {
+  j: DeclProcessingState["state"]["j"];
+  parseExpr: DeclProcessingState["state"]["parseExpr"];
+  slotExpr: unknown;
+  styleCases: Array<{ matchValue: string; styleKey: string }>;
+  styleSelectorExpr?: string;
+}): StyleArgExpr | null {
+  const { j, parseExpr, slotExpr, styleCases, styleSelectorExpr } = args;
+  if (styleSelectorExpr) {
+    const selectorFnExpr = parseExpr(styleSelectorExpr);
+    if (!selectorFnExpr) {
+      return null;
+    }
+    const objectEntries = styleCases.map((current) => {
+      const key = isValidIdentifierName(current.matchValue)
+        ? j.identifier(current.matchValue)
+        : j.literal(current.matchValue);
+      const value = j.memberExpression(j.identifier("styles"), j.identifier(current.styleKey));
+      return j.property("init", key, value);
+    });
+    return j.callExpression(selectorFnExpr, [j.objectExpression(objectEntries)]) as StyleArgExpr;
+  }
+
+  if (styleCases.length === 1) {
+    const only = styleCases[0];
+    if (!only) {
+      return j.identifier("undefined") as StyleArgExpr;
+    }
+    return j.memberExpression(j.identifier("styles"), j.identifier(only.styleKey)) as StyleArgExpr;
+  }
+
+  let conditionalExpr = j.identifier("undefined") as StyleArgExpr;
+  for (let i = styleCases.length - 1; i >= 0; i -= 1) {
+    const current = styleCases[i];
+    if (!current) {
+      continue;
+    }
+    const slotExprClone = cloneAstNode(slotExpr) as BinaryOperand;
+    const testExpr = j.binaryExpression("===", slotExprClone, j.literal(current.matchValue));
+    const styleExpr = j.memberExpression(j.identifier("styles"), j.identifier(current.styleKey));
+    conditionalExpr = j.conditionalExpression(testExpr, styleExpr, conditionalExpr) as StyleArgExpr;
+  }
+  return conditionalExpr;
+}
+
+function resolveInterpolatedPseudoResolution(args: {
+  slotExpr: unknown;
+  resolveSelector: DeclProcessingState["state"]["resolveSelector"];
+  resolveImportInScope: DeclProcessingState["state"]["resolveImportInScope"];
+  resolverImports: DeclProcessingState["state"]["resolverImports"];
+  filePath: string;
+}): InterpolatedPseudoResolution | null {
+  const { slotExpr, resolveSelector, resolveImportInScope, resolverImports, filePath } = args;
+
+  const directValues = collectLiteralSelectorValues(slotExpr);
+  if (directValues) {
+    const candidates = normalizePseudoAliasValues(directValues);
+    if (candidates.length > 0) {
+      return {
+        candidates,
+        styleKeyLabel: resolveInterpolatedPseudoStyleKeyLabel(slotExpr),
+      };
+    }
+  }
+
+  const imported = resolveImportedSelectorInterpolation({
+    slotExpr,
+    resolveImportInScope,
+  });
+  if (!imported) {
+    return null;
+  }
+
+  const selectorResult = resolveSelector({
+    kind: "selectorInterpolation",
+    importedName: imported.importedName,
+    source: imported.source,
+    path: imported.path,
+    filePath,
+    loc: getNodeLocStart(slotExpr) ?? undefined,
+  });
+  if (!selectorResult || selectorResult.kind !== "pseudoAlias") {
+    return null;
+  }
+
+  for (const impSpec of selectorResult.imports ?? []) {
+    resolverImports.set(JSON.stringify(impSpec), impSpec);
+  }
+  return {
+    candidates: normalizePseudoAliasValues(selectorResult.values),
+    styleKeyLabel: toPascalWords(imported.importedName),
+    styleSelectorExpr: selectorResult.styleSelectorExpr,
+  };
+}
+
+function resolveImportedSelectorInterpolation(args: {
+  slotExpr: unknown;
+  resolveImportInScope: DeclProcessingState["state"]["resolveImportInScope"];
+}): {
+  importedName: string;
+  source: { kind: "absolutePath" | "specifier"; value: string };
+  path?: string;
+} | null {
+  const { slotExpr, resolveImportInScope } = args;
+  if (!slotExpr || typeof slotExpr !== "object") {
+    return null;
+  }
+
+  const type = (slotExpr as { type?: string }).type;
+  if (type === "Identifier") {
+    const localName = (slotExpr as { name?: string }).name;
+    if (typeof localName !== "string") {
+      return null;
+    }
+    const imported = resolveImportInScope(localName, slotExpr);
+    if (!imported) {
+      return null;
+    }
+    return {
+      importedName: imported.importedName,
+      source: imported.source,
+    };
+  }
+
+  if (type !== "MemberExpression" && type !== "OptionalMemberExpression") {
+    return null;
+  }
+  const info = extractRootAndPath(slotExpr);
+  if (!info) {
+    return null;
+  }
+  const imported = resolveImportInScope(info.rootName, info.rootNode);
+  if (!imported) {
+    return null;
+  }
+  return {
+    importedName: imported.importedName,
+    source: imported.source,
+    path: info.path.length > 0 ? info.path.join(".") : undefined,
+  };
+}
+
+function collectLiteralSelectorValues(node: unknown): string[] | null {
+  if (!node || typeof node !== "object") {
+    return null;
+  }
+  const t = (node as { type?: string }).type;
+  if (t === "StringLiteral" || t === "Literal") {
+    const value = (node as { value?: unknown }).value;
+    return typeof value === "string" ? [value] : null;
+  }
+  if (t === "TemplateLiteral") {
+    const expressions = (node as { expressions?: unknown[] }).expressions ?? [];
+    if (expressions.length > 0) {
+      return null;
+    }
+    const quasi = (node as { quasis?: Array<{ value?: { cooked?: string | null } }> }).quasis?.[0];
+    const cooked = quasi?.value?.cooked;
+    return typeof cooked === "string" ? [cooked] : null;
+  }
+  if (t === "ParenthesizedExpression") {
+    const expr = (node as { expression?: unknown }).expression;
+    return collectLiteralSelectorValues(expr);
+  }
+  if (t === "ConditionalExpression") {
+    const consequent = collectLiteralSelectorValues((node as { consequent?: unknown }).consequent);
+    const alternate = collectLiteralSelectorValues((node as { alternate?: unknown }).alternate);
+    if (!consequent || !alternate) {
+      return null;
+    }
+    return [...consequent, ...alternate];
+  }
+  return null;
+}
+
+function normalizePseudoAliasValues(values: readonly string[]): InterpolatedPseudoCandidate[] {
+  const out: InterpolatedPseudoCandidate[] = [];
+  const seen = new Set<string>();
+  for (const raw of values) {
+    const normalized = normalizePseudoAliasValue(raw);
+    if (!normalized || seen.has(normalized.matchValue)) {
+      continue;
+    }
+    seen.add(normalized.matchValue);
+    out.push(normalized);
+  }
+  return out;
+}
+
+function normalizePseudoAliasValue(rawValue: string): InterpolatedPseudoCandidate | null {
+  const matchValue = rawValue.trim().replace(/^:+/, "");
+  if (!matchValue || !/^[a-z][a-z0-9-]*$/i.test(matchValue)) {
+    return null;
+  }
+  const suffix =
+    matchValue
+      .split(/[^a-zA-Z0-9]+/g)
+      .filter(Boolean)
+      .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
+      .join("") || "Pseudo";
+  return {
+    matchValue,
+    pseudo: `:${matchValue}`,
+    suffix,
+  };
+}
+
+function buildInterpolatedPseudoStyleKeyPrefix(
+  declStyleKey: string,
+  styleKeyLabel: string,
+  ruleIndex: number,
+): string {
+  const label = styleKeyLabel.trim() ? styleKeyLabel : "PseudoAlias";
+  return `${declStyleKey}${label}R${ruleIndex + 1}`;
+}
+
+function resolveInterpolatedPseudoStyleKeyLabel(slotExpr: unknown): string {
+  if (!slotExpr || typeof slotExpr !== "object") {
+    return "PseudoAlias";
+  }
+
+  const type = (slotExpr as { type?: string }).type;
+  if (type === "Identifier") {
+    const name = (slotExpr as { name?: string }).name;
+    return typeof name === "string" ? toPascalWords(name) : "PseudoAlias";
+  }
+
+  if (type === "MemberExpression" || type === "OptionalMemberExpression") {
+    const info = extractRootAndPath(slotExpr);
+    if (!info) {
+      return "PseudoAlias";
+    }
+    const parts = [info.rootName, ...info.path].filter((part) => typeof part === "string");
+    const label = parts.map((part) => toPascalWords(part)).join("");
+    return label || "PseudoAlias";
+  }
+
+  return "PseudoAlias";
+}
+
+function toPascalWords(input: string): string {
+  const pascal = input
+    .split(/[^a-zA-Z0-9]+/g)
+    .filter(Boolean)
+    .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
+    .join("");
+  return pascal || "PseudoAlias";
+}
+
+function isValidIdentifierName(name: string): boolean {
+  return /^[$A-Z_][0-9A-Z_$]*$/i.test(name);
+}
 
 /**
  * Processes rule declarations into a relation override bucket, handling both static

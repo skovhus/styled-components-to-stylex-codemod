@@ -138,6 +138,19 @@ export const Browser = {
 };
 
 /**
+ * Highlight pseudo-selector alias used as `&:${highlight}` in styled templates.
+ * Evaluates at runtime based on browser capabilities.
+ */
+export const highlight = Browser.isSafari ? "active" : "hover";
+
+/**
+ * Selects a pseudo state style map using the runtime highlight alias.
+ */
+export function highlightRules<T>(rules: { active?: T; hover?: T }): T | undefined {
+  return rules[highlight];
+}
+
+/**
  * Scroll fade mask helper - returns a css`` RuleSet for scroll fade effects.
  * This demonstrates the bug where css`` helper return values are passed directly to stylex.props().
  */
