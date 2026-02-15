@@ -4,7 +4,7 @@ import { motion } from "./lib/framer-motion";
 import { UserAvatar } from "./lib/user-avatar";
 
 const ComponentWrapper = styled(motion.div)<{ $isOpen: boolean }>`
-  background: white;
+  background-color: white;
   border-radius: ${(props) => (props.$isOpen ? "8px" : "20px")};
   overflow: hidden;
 `;

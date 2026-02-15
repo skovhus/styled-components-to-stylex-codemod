@@ -57,6 +57,9 @@ const EXPECTED_FAILURES = new Set([
   // input and output, but different CSS class names cause microscopic rendering diffs.
   "conditional-negation",
   "keyframes-unionComplexity",
+  // Dynamic box-shadow via StyleX inline style vs styled-components CSS class
+  // causes subpixel anti-aliasing differences at border-radius: 50% boundaries.
+  "transientProp-motionComponent",
 ]);
 
 type Page = Awaited<ReturnType<Awaited<ReturnType<typeof chromium.launch>>["newPage"]>>;
