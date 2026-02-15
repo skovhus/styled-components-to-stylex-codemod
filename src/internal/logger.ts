@@ -97,7 +97,21 @@ export interface CollectedWarning extends WarningLog {
 // Logger
 // ────────────────────────────────────────────────────────────────────────────
 
+/**
+ * When fileCount <= this threshold, warnings are printed per-file inline and
+ * the summary is skipped. Above the threshold only the summary is printed.
+ */
+const FILE_COUNT_INLINE_THRESHOLD = 10;
+
 export class Logger {
+  /**
+   * Set the total number of files being transformed.
+   * Controls whether warnings are printed per-file or only in the summary.
+   */
+  public static setFileCount(count: number): void {
+    Logger.fileCount = count;
+  }
+
   /**
    * Log a warning message to stdout.
    * All codemod warnings go through this so tests can mock it.
@@ -109,6 +123,7 @@ export class Logger {
   /**
    * Log an error message to stdout with file path and optional location.
    * Formats like warnings: "Error filepath:line:column\nmessage"
+   * Always prints regardless of file count.
    */
   public static logError(
     message: string,
@@ -122,16 +137,22 @@ export class Logger {
   }
 
   /**
-   * Log transform warnings to stdout and collect them.
+   * Collect transform warnings and optionally print them per-file.
+   * Per-file output is shown when fileCount is unknown or <= threshold.
+   * When fileCount > threshold, warnings are only collected for the summary.
    */
   public static logWarnings(warnings: WarningLog[], filePath: string): void {
+    const printInline =
+      Logger.fileCount === null || Logger.fileCount <= FILE_COUNT_INLINE_THRESHOLD;
     for (const warning of warnings) {
       Logger.collected.push({ ...warning, filePath });
-      const location = warning.loc
-        ? `${filePath}:${warning.loc.line}:${warning.loc.column}`
-        : `${filePath}`;
-      const label = Logger.colorizeSeverityLabel(warning.severity);
-      Logger.writeWithSpacing(`${label} ${location}\n${warning.type}`, warning.context);
+      if (printInline) {
+        const location = warning.loc
+          ? `${filePath}:${warning.loc.line}:${warning.loc.column}`
+          : `${filePath}`;
+        const label = Logger.colorizeSeverityLabel(warning.severity);
+        Logger.writeWithSpacing(`${label} ${location}\n${warning.type}`, warning.context);
+      }
     }
   }
 
@@ -139,17 +160,19 @@ export class Logger {
    * Create a report from all collected warnings.
    */
   public static createReport(): LoggerReport {
-    return new LoggerReport([...Logger.collected]);
+    return new LoggerReport([...Logger.collected], Logger.fileCount);
   }
 
   /** @internal - for testing only */
   public static _clearCollected(): void {
     Logger.collected = [];
+    Logger.fileCount = null;
   }
 
   // -- Internal state
 
   private static collected: CollectedWarning[] = [];
+  private static fileCount: number | null = null;
 
   private static writeWithSpacing(message: string, context?: unknown): void {
     const trimmed = message.replace(/\s+$/u, "");
@@ -212,10 +235,12 @@ interface WarningGroup {
 
 class LoggerReport {
   private readonly warnings: CollectedWarning[];
+  private readonly fileCount: number | null;
   private fileCache = new Map<string, string[] | null>();
 
-  constructor(warnings: CollectedWarning[]) {
+  constructor(warnings: CollectedWarning[], fileCount: number | null) {
     this.warnings = warnings;
+    this.fileCount = fileCount;
   }
 
   getWarnings(): CollectedWarning[] {
@@ -281,8 +306,12 @@ class LoggerReport {
 
   /**
    * Print the formatted warning report to stdout.
+   * Skips the summary when fileCount <= threshold (warnings already shown inline).
    */
   print(): void {
+    if (this.fileCount !== null && this.fileCount <= FILE_COUNT_INLINE_THRESHOLD) {
+      return;
+    }
     const output = this.toString();
     if (output) {
       // Add color codes for terminal output

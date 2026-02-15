@@ -230,6 +230,8 @@ export async function runTransform(options: RunTransformOptions): Promise<RunTra
     };
   }
 
+  Logger.setFileCount(filePaths.length);
+
   // Path to the transform module.
   // - In published builds, `dist/index.mjs` and `dist/transform.mjs` live together.
   // - In-repo tests/dev, `src/transform.mjs` doesn't exist, but `dist/transform.mjs` usually does
