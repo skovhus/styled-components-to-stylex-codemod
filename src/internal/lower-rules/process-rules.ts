@@ -91,6 +91,28 @@ export function processDeclRules(ctx: DeclProcessingState): void {
     // so finalizeRelationOverrides uses a string literal key instead of
     // stylex.when.ancestor().
     const pseudoForBucket = childPseudo ?? ancestorPseudo;
+
+    // Detect pseudo collision: same pseudo used as both ancestor and child
+    // for the same override key (e.g., `&:hover svg` + `svg:hover`).
+    if (pseudoForBucket) {
+      const existingChildPseudos = childPseudoMarkers.get(overrideStyleKey);
+      const existingBuckets = relationOverridePseudoBuckets.get(overrideStyleKey);
+      const isAlreadyUsedAsAncestor = !childPseudo && existingChildPseudos?.has(pseudoForBucket);
+      const isAlreadyUsedAsChild =
+        childPseudo &&
+        existingBuckets?.has(pseudoForBucket) &&
+        !existingChildPseudos?.has(pseudoForBucket);
+      if (isAlreadyUsedAsAncestor || isAlreadyUsedAsChild) {
+        state.markBail();
+        warnings.push({
+          severity: "warning",
+          type: ELEMENT_BAIL_WARNING_MAP["bail-pseudo-collision"],
+          loc: computeSelectorWarningLoc(parentDecl.loc, parentDecl.rawCss, rule.selector),
+        });
+        return "break";
+      }
+    }
+
     if (childPseudo) {
       let markers = childPseudoMarkers.get(overrideStyleKey);
       if (!markers) {
@@ -865,7 +887,13 @@ function buildInterpolatedValue(
   return j.literal(null);
 }
 
-type ElementSelectorBailReason = "bail-exported" | "bail-ambiguous" | "bail-dynamic";
+type ElementSelectorBailReason =
+  | "bail-exported"
+  | "bail-ambiguous"
+  | "bail-dynamic"
+  | "bail-combined-pseudo"
+  | "bail-plain-intrinsic"
+  | "bail-pseudo-collision";
 
 const ELEMENT_BAIL_WARNING_MAP: Record<
   ElementSelectorBailReason,
@@ -874,6 +902,10 @@ const ELEMENT_BAIL_WARNING_MAP: Record<
   "bail-exported": "Unsupported selector: element selector on exported component",
   "bail-ambiguous": "Unsupported selector: ambiguous element selector",
   "bail-dynamic": "Unsupported selector: element selector with dynamic children",
+  "bail-combined-pseudo":
+    "Unsupported selector: element selector with combined ancestor and child pseudos",
+  "bail-plain-intrinsic": "Unsupported selector: element selector with plain intrinsic children",
+  "bail-pseudo-collision": "Unsupported selector: element selector pseudo collision",
 };
 
 /**
@@ -897,6 +929,12 @@ function resolveElementSelectorTarget(
     return null;
   }
   const { tagName, ancestorPseudo, childPseudo } = parsed;
+
+  // Bail if both ancestor and child pseudos are present (e.g., `&:focus > button:disabled`)
+  // — cannot represent both in a single StyleX override
+  if (ancestorPseudo && childPseudo) {
+    return "bail-combined-pseudo";
+  }
 
   // Bail if the parent component is exported — can't verify external usage
   if (isComponentExported(parentDecl.localName, root, j)) {
@@ -922,6 +960,12 @@ function resolveElementSelectorTarget(
   // Bail if the parent has dynamic children (e.g., {children}, {props.children})
   if (hasDynamicJsxChildren(parentDecl.localName, root, j)) {
     return "bail-dynamic";
+  }
+
+  // Bail if the parent renders plain intrinsic elements matching the tag
+  // (e.g., both <Icon /> and a plain <svg>) — only the styled component gets the override
+  if (hasPlainIntrinsicDescendant(parentDecl.localName, tagName, matches[0]!.localName, root, j)) {
+    return "bail-plain-intrinsic";
   }
 
   return { childDecl: matches[0]!, ancestorPseudo, childPseudo };
@@ -962,6 +1006,44 @@ function isComponentExported(
     return decl?.type === "Identifier" && (decl as any).name === name;
   });
   return defaultExport.size() > 0;
+}
+
+/**
+ * Checks whether any JSX usage of the given parent component contains a plain
+ * intrinsic element matching `tagName` that is NOT the styled component. For example,
+ * if parent renders both `<Icon />` (styled.svg) and a plain `<svg>`, returns true.
+ */
+function hasPlainIntrinsicDescendant(
+  parentName: string,
+  tagName: string,
+  styledChildName: string,
+  root: DeclProcessingState["state"]["root"],
+  j: JSCodeshift,
+): boolean {
+  let found = false;
+  root
+    .find(j.JSXElement, {
+      openingElement: {
+        name: { type: "JSXIdentifier", name: parentName },
+      },
+    } as any)
+    .forEach((path) => {
+      if (found) {
+        return;
+      }
+      for (const child of path.node.children ?? []) {
+        if (
+          child.type === "JSXElement" &&
+          child.openingElement.name.type === "JSXIdentifier" &&
+          child.openingElement.name.name === tagName &&
+          child.openingElement.name.name !== styledChildName
+        ) {
+          found = true;
+          return;
+        }
+      }
+    });
+  return found;
 }
 
 /**
