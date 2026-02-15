@@ -2,7 +2,7 @@
  * Emits wrapper components for non-intrinsic styled declarations.
  * Core concepts: prop mapping, style merging, and JSX construction.
  */
-import type { ASTNode, Property } from "jscodeshift";
+import type { ASTNode, Property, SpreadElement } from "jscodeshift";
 import type { StyledDecl } from "../transform-types.js";
 import { emitStyleMerging } from "./style-merger.js";
 import { withLeadingComments } from "./comments.js";
@@ -123,6 +123,13 @@ export function emitComponentWrappers(emitter: WrapperEmitter): {
     const hasForwardedAsUsage = emitter.hasForwardedAsUsage(d.localName);
     const shouldLowerForwardedAs = hasForwardedAsUsage && !wrappedComponentHasAs;
     const propsIdForExpr = j.identifier("props");
+    // Check if the wrapped component is one of our styled component wrappers or
+    // already accepts className/style in its props type.
+    const wrappedComponentIsStyledWrapper = wrapperDecls.some(
+      (decl) => decl.localName === wrappedComponent,
+    );
+    const wrappedHasClassName = localComponentHasProp(wrappedComponent, "className");
+    const wrappedHasStyle = localComponentHasProp(wrappedComponent, "style");
     // Track which type name to use for the function parameter
     let functionParamTypeName: string | null = null;
     // Track inline type text for when we skip emitting a named type (no custom props)
@@ -185,15 +192,6 @@ export function emitComponentWrappers(emitter: WrapperEmitter): {
             `C extends React.ElementType = typeof ${wrappedComponent}`,
           );
         } else {
-          // Check if the wrapped component is one of our styled component wrappers.
-          // If so, it already has className/style in its props and we don't need to add them.
-          const wrappedComponentIsStyledWrapper = wrapperDecls.some(
-            (decl) => decl.localName === wrappedComponent,
-          );
-          // Check if the wrapped component is a local React component that already has className/style.
-          // This avoids adding redundant props for components that already accept them.
-          const wrappedHasClassName = localComponentHasProp(wrappedComponent, "className");
-          const wrappedHasStyle = localComponentHasProp(wrappedComponent, "style");
           const skipStyleProps =
             wrappedComponentIsStyledWrapper || (wrappedHasClassName && wrappedHasStyle);
           const hasExplicitPropsType = !!explicit;
@@ -687,7 +685,29 @@ export function emitComponentWrappers(emitter: WrapperEmitter): {
           j.jsxAttribute(j.jsxIdentifier("as"), j.jsxExpressionContainer(forwardedAsValueExpr)),
         );
       }
-      emitter.appendMergingAttrs(openingAttrs, merging);
+      // When the wrapped component doesn't accept className/style in its props type,
+      // combine the sx spread with the merged className/style into a single spread object.
+      // This bypasses TypeScript's excess property checking on explicit JSX attributes,
+      // avoiding TS2322 errors like "Property 'className' does not exist on type ...".
+      const wrapStyleAttrsInSpread =
+        !wrappedComponentIsStyledWrapper &&
+        ((allowClassNameProp && !wrappedHasClassName) || (allowStyleProp && !wrappedHasStyle));
+      if (
+        wrapStyleAttrsInSpread &&
+        merging.jsxSpreadExpr &&
+        (merging.classNameAttr || merging.styleAttr)
+      ) {
+        const spreadProps: (Property | SpreadElement)[] = [j.spreadElement(merging.jsxSpreadExpr)];
+        if (merging.classNameAttr) {
+          spreadProps.push(j.property("init", j.identifier("className"), merging.classNameAttr));
+        }
+        if (merging.styleAttr) {
+          spreadProps.push(j.property("init", j.identifier("style"), merging.styleAttr));
+        }
+        openingAttrs.push(j.jsxSpreadAttribute(j.objectExpression(spreadProps)));
+      } else {
+        emitter.appendMergingAttrs(openingAttrs, merging);
+      }
 
       const jsx = emitter.buildJsxElement({
         tagName: jsxTagName,
