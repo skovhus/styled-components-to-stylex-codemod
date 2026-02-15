@@ -477,9 +477,11 @@ export interface Adapter {
  *     },
  *
  *     resolveSelector(ctx) {
- *       // Resolve imported values used in selector position (e.g., media query helpers).
- *       // Return:
+ *       // Resolve imported values used in selector position.
+ *       // Return one of:
  *       // - { kind: "media", expr, imports } for media queries (e.g., breakpoints.phone)
+ *       // - { kind: "pseudoConditional", conditionExpr, truePseudo, falsePseudo, imports } for JS-level pseudo selection
+ *       // - { kind: "pseudoMediaQuery", branches, imports } for CSS @media-guarded pseudo selection
  *       // - undefined to bail/skip the file
  *       void ctx;
  *     },
