@@ -4,7 +4,9 @@
  */
 import type { ASTNode, Collection, ImportDeclaration, JSCodeshift } from "jscodeshift";
 import { compile } from "stylis";
+import type { CssRuleIR } from "./css-ir.js";
 import { cssPropertyToStylexProp, resolveBackgroundStylexProp } from "./css-prop-mapping.js";
+import { classifyAnimationTokens } from "./lower-rules/animation.js";
 
 export function convertStyledKeyframes(args: {
   root: Collection<ASTNode>;
@@ -159,6 +161,102 @@ function convertStyledKeyframesImpl(args: {
   });
 
   return { keyframesNames, changed };
+}
+
+/**
+ * Extracts inline @keyframes definitions from CSS IR rules.
+ * Returns a map of keyframe name → frame objects (e.g., { "0%": { opacity: 0 }, "100%": { opacity: 1 } }).
+ */
+export function extractInlineKeyframes(
+  rules: CssRuleIR[],
+): Map<string, Record<string, Record<string, unknown>>> {
+  const result = new Map<string, Record<string, Record<string, unknown>>>();
+
+  for (const rule of rules) {
+    const kfAtRule = rule.atRuleStack.find((at) => at.startsWith("@keyframes "));
+    if (!kfAtRule) {
+      continue;
+    }
+    const kfName = kfAtRule.replace("@keyframes ", "").trim();
+    if (!kfName) {
+      continue;
+    }
+
+    let frames = result.get(kfName);
+    if (!frames) {
+      frames = {};
+      result.set(kfName, frames);
+    }
+
+    const frameKey = rule.selector.trim();
+    const styleObj: Record<string, unknown> = frames[frameKey] ?? {};
+    for (const d of rule.declarations) {
+      if (d.value.kind !== "static") {
+        continue;
+      }
+      const prop = cssPropertyToStylexProp(
+        d.property === "background" ? resolveBackgroundStylexProp(d.valueRaw) : d.property,
+      );
+      const valueRaw = d.valueRaw.trim();
+      styleObj[prop] = /^-?\d+(\.\d+)?$/.test(valueRaw) ? Number(valueRaw) : valueRaw;
+    }
+    frames[frameKey] = styleObj;
+  }
+
+  return result;
+}
+
+/**
+ * Expands a static `animation` shorthand value into longhand properties,
+ * replacing the animation name with a keyframes identifier when it matches
+ * an inline keyframe.
+ */
+export function expandStaticAnimationShorthand(
+  value: string,
+  inlineKeyframeNames: Set<string>,
+  j: JSCodeshift,
+  styleObj: Record<string, unknown>,
+): boolean {
+  const tokens = value.trim().split(/\s+/);
+  if (tokens.length === 0) {
+    return false;
+  }
+
+  // Find the animation name: the first token that matches an inline keyframe name
+  const nameIdx = tokens.findIndex((t) => inlineKeyframeNames.has(t));
+  if (nameIdx < 0) {
+    return false;
+  }
+
+  const name = tokens[nameIdx]!;
+  const remaining = tokens.filter((_, i) => i !== nameIdx);
+
+  styleObj.animationName = j.identifier(name);
+
+  const classified = classifyAnimationTokens(remaining);
+  if (classified.duration) {
+    styleObj.animationDuration = classified.duration;
+  }
+  if (classified.delay) {
+    styleObj.animationDelay = classified.delay;
+  }
+  if (classified.timing) {
+    styleObj.animationTimingFunction = classified.timing;
+  }
+  if (classified.direction) {
+    styleObj.animationDirection = classified.direction;
+  }
+  if (classified.fillMode) {
+    styleObj.animationFillMode = classified.fillMode;
+  }
+  if (classified.playState) {
+    styleObj.animationPlayState = classified.playState;
+  }
+  if (classified.iteration) {
+    styleObj.animationIterationCount = classified.iteration;
+  }
+
+  return true;
 }
 
 type ExpressionKind = Parameters<JSCodeshift["expressionStatement"]>[0];

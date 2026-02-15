@@ -6,6 +6,62 @@ import valueParser from "postcss-value-parser";
 import type { StyledDecl } from "../transform-types.js";
 import { cssDeclarationToStylexDeclarations } from "../css-prop-mapping.js";
 
+// --- Shared animation token classifiers ---
+
+const TIME_RE = /^(?:\d+|\d*\.\d+)(ms|s)$/;
+const TIMING_FUNCTIONS = new Set(["linear", "ease", "ease-in", "ease-out", "ease-in-out"]);
+const DIRECTIONS = new Set(["normal", "reverse", "alternate", "alternate-reverse"]);
+const FILL_MODES = new Set(["none", "forwards", "backwards", "both"]);
+const PLAY_STATES = new Set(["running", "paused"]);
+
+function isTimeToken(t: string): boolean {
+  return TIME_RE.test(t);
+}
+
+function isTimingFunction(t: string): boolean {
+  return TIMING_FUNCTIONS.has(t) || t.startsWith("cubic-bezier(") || t.startsWith("steps(");
+}
+
+function isDirection(t: string): boolean {
+  return DIRECTIONS.has(t);
+}
+
+function isFillMode(t: string): boolean {
+  return FILL_MODES.has(t);
+}
+
+function isPlayState(t: string): boolean {
+  return PLAY_STATES.has(t);
+}
+
+function isIterationCount(t: string): boolean {
+  return t === "infinite" || /^\d+$/.test(t);
+}
+
+/**
+ * Classifies animation tokens (excluding the animation name) into longhand categories.
+ */
+export function classifyAnimationTokens(tokens: string[]): {
+  duration: string | null;
+  delay: string | null;
+  timing: string | null;
+  direction: string | null;
+  fillMode: string | null;
+  playState: string | null;
+  iteration: string | null;
+} {
+  const timeTokens = tokens.filter(isTimeToken);
+  return {
+    duration: timeTokens[0] ?? null,
+    delay: timeTokens[1] ?? null,
+    timing: tokens.find(isTimingFunction) ?? null,
+    direction: tokens.find(isDirection) ?? null,
+    fillMode: tokens.find(isFillMode) ?? null,
+    playState: tokens.find(isPlayState) ?? null,
+    iteration: tokens.find(isIterationCount) ?? null,
+  };
+}
+
 export function tryHandleAnimation(args: {
   j: any;
   decl: StyledDecl;
@@ -137,36 +193,17 @@ export function tryHandleAnimation(args: {
       }
       animNames.push({ kind: "ident", name: kf });
 
-      // Remaining tokens
-      const timeTokens = tokens.filter((t) => /^(?:\d+|\d*\.\d+)(ms|s)$/.test(t));
-      durations.push(timeTokens[0] ?? null);
-      delays.push(timeTokens[1] ?? null);
+      // Classify remaining tokens into animation longhand categories
+      const classified = classifyAnimationTokens(tokens);
+      durations.push(classified.duration);
+      delays.push(classified.delay);
+      timings.push(classified.timing);
+      directions.push(classified.direction);
+      fillModes.push(classified.fillMode);
+      playStates.push(classified.playState);
+      iterations.push(classified.iteration);
 
-      const timing = tokens.find(
-        (t) =>
-          t === "linear" ||
-          t === "ease" ||
-          t === "ease-in" ||
-          t === "ease-out" ||
-          t === "ease-in-out" ||
-          t.startsWith("cubic-bezier(") ||
-          t.startsWith("steps("),
-      );
-      timings.push(timing ?? null);
-
-      const direction = tokens.find(
-        (t) => t === "normal" || t === "reverse" || t === "alternate" || t === "alternate-reverse",
-      );
-      directions.push(direction ?? null);
-
-      const fillMode = tokens.find(
-        (t) => t === "none" || t === "forwards" || t === "backwards" || t === "both",
-      );
-      fillModes.push(fillMode ?? null);
-
-      const playState = tokens.find((t) => t === "running" || t === "paused");
-      playStates.push(playState ?? null);
-
+      // Timeline detection (complex — not covered by shared classifiers)
       const timeline = tokens.find((t) => {
         if (t === "auto") {
           return true;
@@ -177,45 +214,21 @@ export function tryHandleAnimation(args: {
         if (!/^[a-zA-Z_][\w-]*$/.test(t)) {
           return false;
         }
-        if (
-          t === "linear" ||
-          t === "ease" ||
-          t === "ease-in" ||
-          t === "ease-out" ||
-          t === "ease-in-out"
-        ) {
-          return false;
-        }
-        if (
-          t === "inherit" ||
-          t === "initial" ||
-          t === "unset" ||
-          t === "revert" ||
-          t === "revert-layer"
-        ) {
-          return false;
-        }
-        if (t === "normal" || t === "reverse" || t === "alternate" || t === "alternate-reverse") {
-          return false;
-        }
-        if (t === "none" || t === "forwards" || t === "backwards" || t === "both") {
-          return false;
-        }
-        if (t === "running" || t === "paused") {
-          return false;
-        }
-        if (t === "infinite" || /^\d+$/.test(t)) {
-          return false;
-        }
-        if (/^(?:\d+|\d*\.\d+)(ms|s)$/.test(t)) {
-          return false;
-        }
-        return true;
+        return (
+          !isTimingFunction(t) &&
+          !isDirection(t) &&
+          !isFillMode(t) &&
+          !isPlayState(t) &&
+          !isIterationCount(t) &&
+          !isTimeToken(t) &&
+          t !== "inherit" &&
+          t !== "initial" &&
+          t !== "unset" &&
+          t !== "revert" &&
+          t !== "revert-layer"
+        );
       });
       timelines.push(timeline ?? null);
-
-      const iter = tokens.find((t) => t === "infinite" || /^\d+$/.test(t));
-      iterations.push(iter ?? null);
     }
 
     const firstAnim = animNames[0];

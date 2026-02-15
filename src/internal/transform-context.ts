@@ -81,6 +81,8 @@ export class TransformContext {
   newImportLocalNames?: Set<string>;
   newImportSourcesByLocal?: Map<string, Set<string>>;
   needsReactImport?: boolean;
+  /** Inline @keyframes extracted from styled component templates: name → frame objects */
+  inlineKeyframes?: Map<string, Record<string, Record<string, unknown>>>;
 
   constructor(file: FileInfo, api: API, options: TransformOptions) {
     const j = api.jscodeshift;

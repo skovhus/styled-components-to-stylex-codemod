@@ -159,6 +159,14 @@ export function processDeclRules(ctx: DeclProcessingState): void {
     if (state.bail) {
       break;
     }
+
+    // Skip rules inside @keyframes blocks — these are keyframe frame selectors
+    // (e.g. "0%", "100%", "from", "to") that would otherwise be misidentified
+    // as descendant/tag selectors and cause a false bail.
+    if (rule.atRuleStack.some((at) => at.startsWith("@keyframes"))) {
+      continue;
+    }
+
     // Track resolved selector media for this rule (set by adapter.resolveSelector)
     let resolvedSelectorMedia: { keyExpr: unknown; exprSource: string } | null = null;
 
