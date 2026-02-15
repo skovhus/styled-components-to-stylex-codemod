@@ -1,6 +1,7 @@
 import React from "react";
 import * as stylex from "@stylexjs/stylex";
 import { Browser, highlightStyles } from "./lib/helpers";
+import { TouchDeviceToggle } from "./lib/TouchDeviceToggle";
 
 /**
  * Interpolated pseudo-class selector with a helper function wrapper.
@@ -26,11 +27,7 @@ function Card(props: React.PropsWithChildren<{ ref?: React.Ref<HTMLDivElement> }
   );
 }
 
-export const App = () => (
-  <div style={{ display: "flex", gap: 16, padding: 16 }}>
-    <Card>Helper Card</Card>
-  </div>
-);
+export const App = () => <TouchDeviceToggle>{() => <Card>Helper Card</Card>}</TouchDeviceToggle>;
 
 const styles = stylex.create({
   card: {
@@ -39,7 +36,7 @@ const styles = stylex.create({
   },
   cardActive: {
     color: {
-      default: null,
+      default: "blue",
       ":active": "red",
     },
     backgroundColor: {
@@ -49,7 +46,7 @@ const styles = stylex.create({
   },
   cardHover: {
     color: {
-      default: null,
+      default: "blue",
       ":hover": "red",
     },
     backgroundColor: {

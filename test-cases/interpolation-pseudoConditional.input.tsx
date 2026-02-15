@@ -1,5 +1,6 @@
 import styled from "styled-components";
 import { highlight } from "./lib/helpers";
+import { TouchDeviceToggle } from "./lib/TouchDeviceToggle";
 
 /**
  * Interpolated pseudo-class selector using a runtime variable.
@@ -18,7 +19,5 @@ const Button = styled.button`
 `;
 
 export const App = () => (
-  <div style={{ display: "flex", gap: 16, padding: 16 }}>
-    <Button>Highlight Button</Button>
-  </div>
+  <TouchDeviceToggle>{() => <Button>Highlight Button</Button>}</TouchDeviceToggle>
 );

@@ -409,11 +409,11 @@ export const fixtureAdapter = defineAdapter({
 
     // Handle `highlight` pseudo-class interpolation: &:${highlight}
     // Resolves to a pseudoConditional that picks between :active and :hover
-    // based on Browser.isPureTouchDevice.
+    // based on Browser.isTouchDevice.
     if (ctx.importedName === "highlight") {
       return {
         kind: "pseudoConditional",
-        conditionExpr: "Browser.isPureTouchDevice",
+        conditionExpr: "Browser.isTouchDevice",
         truePseudo: "active",
         falsePseudo: "hover",
         imports: [
@@ -430,7 +430,7 @@ export const fixtureAdapter = defineAdapter({
     if (ctx.importedName === "highlightWithHelper") {
       return {
         kind: "pseudoConditional",
-        conditionExpr: "Browser.isPureTouchDevice",
+        conditionExpr: "Browser.isTouchDevice",
         truePseudo: "active",
         falsePseudo: "hover",
         imports: [

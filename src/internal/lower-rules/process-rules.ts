@@ -1173,7 +1173,8 @@ function handlePseudoConditional(
   rule: DeclProcessingState["decl"]["rules"][number],
   ctx: DeclProcessingState,
 ): "bail" | void {
-  const { state, decl, extraStyleObjects } = ctx;
+  const { state, decl, extraStyleObjects, styleObj, cssHelperPropValues, getComposedDefaultValue } =
+    ctx;
   const { j, parseExpr, resolverImports, resolveThemeValue, resolveThemeValueFromFn } = state;
 
   // Process declarations into a flat bucket (populated in-place)
@@ -1204,13 +1205,18 @@ function handlePseudoConditional(
   const trueStyleKey = `${decl.styleKey}${capitalize(result.truePseudo)}`;
   const falseStyleKey = `${decl.styleKey}${capitalize(result.falsePseudo)}`;
 
-  // Build the two style objects: each prop wrapped in { default: null, ":pseudo": value }
+  // Build the two style objects: each prop wrapped in { default: <base>, ":pseudo": value }.
+  // For properties that have a base value in the main style object, use that as `default`
+  // so that `stylex.props(styles.base, styles.pseudoVariant)` doesn't override it with null.
   const trueStyleObj: Record<string, unknown> = {};
   const falseStyleObj: Record<string, unknown> = {};
   for (const prop of Object.keys(flatBucket)) {
     const value = flatBucket[prop];
-    trueStyleObj[prop] = { default: null, [truePseudo]: value };
-    falseStyleObj[prop] = { default: null, [falsePseudo]: value };
+    const baseValue =
+      (styleObj as Record<string, unknown>)[prop] ??
+      (cssHelperPropValues.has(prop) ? getComposedDefaultValue(prop) : null);
+    trueStyleObj[prop] = { default: baseValue, [truePseudo]: value };
+    falseStyleObj[prop] = { default: baseValue, [falsePseudo]: value };
   }
 
   extraStyleObjects.set(trueStyleKey, trueStyleObj);

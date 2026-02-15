@@ -135,7 +135,7 @@ export function wrapComponent<P extends object>(
 export const Browser = {
   isSafari:
     typeof navigator !== "undefined" && /^((?!chrome|android).)*safari/i.test(navigator.userAgent),
-  isPureTouchDevice:
+  isTouchDevice:
     typeof window !== "undefined" &&
     "ontouchstart" in window &&
     !window.matchMedia("(hover: hover)").matches,
@@ -145,7 +145,7 @@ export const Browser = {
  * Pseudo-class highlight helper: picks "hover" or "active" based on device capability.
  * On touch devices we use :active for immediate feedback; on pointer devices, :hover.
  */
-export const highlight = Browser.isPureTouchDevice ? "active" : "hover";
+export const highlight = Browser.isTouchDevice ? "active" : "hover";
 
 /**
  * Same as `highlight`, but the adapter wraps the conditional in a
@@ -158,7 +158,7 @@ export const highlightWithHelper = highlight;
  * making the pairing explicit and enabling lint enforcement.
  */
 export function highlightStyles<T>(variants: { active: T; hover: T }): T {
-  return Browser.isPureTouchDevice ? variants.active : variants.hover;
+  return Browser.isTouchDevice ? variants.active : variants.hover;
 }
 
 /**

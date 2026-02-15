@@ -271,7 +271,7 @@ export type SelectorResolveResult =
       kind: "pseudoConditional";
       /**
        * JS expression string for the boolean condition that picks the pseudo.
-       * Example: "Browser.isPureTouchDevice"
+       * Example: "Browser.isTouchDevice"
        */
       conditionExpr: string;
       /**

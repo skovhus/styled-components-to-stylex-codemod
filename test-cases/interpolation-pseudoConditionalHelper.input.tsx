@@ -1,5 +1,6 @@
 import styled from "styled-components";
 import { highlightWithHelper } from "./lib/helpers";
+import { TouchDeviceToggle } from "./lib/TouchDeviceToggle";
 
 /**
  * Interpolated pseudo-class selector with a helper function wrapper.
@@ -17,8 +18,4 @@ const Card = styled.div`
   }
 `;
 
-export const App = () => (
-  <div style={{ display: "flex", gap: 16, padding: 16 }}>
-    <Card>Helper Card</Card>
-  </div>
-);
+export const App = () => <TouchDeviceToggle>{() => <Card>Helper Card</Card>}</TouchDeviceToggle>;

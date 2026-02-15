@@ -1,6 +1,7 @@
 import React from "react";
 import * as stylex from "@stylexjs/stylex";
 import { Browser } from "./lib/helpers";
+import { TouchDeviceToggle } from "./lib/TouchDeviceToggle";
 
 /**
  * Interpolated pseudo-class selector using a runtime variable.
@@ -15,7 +16,7 @@ function Button(props: React.PropsWithChildren<{ ref?: React.Ref<HTMLButtonEleme
     <button
       {...stylex.props(
         styles.button,
-        Browser.isPureTouchDevice ? styles.buttonActive : styles.buttonHover,
+        Browser.isTouchDevice ? styles.buttonActive : styles.buttonHover,
       )}
     >
       {children}
@@ -24,9 +25,7 @@ function Button(props: React.PropsWithChildren<{ ref?: React.Ref<HTMLButtonEleme
 }
 
 export const App = () => (
-  <div style={{ display: "flex", gap: 16, padding: 16 }}>
-    <Button>Highlight Button</Button>
-  </div>
+  <TouchDeviceToggle>{() => <Button>Highlight Button</Button>}</TouchDeviceToggle>
 );
 
 const styles = stylex.create({
@@ -37,7 +36,7 @@ const styles = stylex.create({
   },
   buttonActive: {
     color: {
-      default: null,
+      default: "blue",
       ":active": "red",
     },
     backgroundColor: {
@@ -47,7 +46,7 @@ const styles = stylex.create({
   },
   buttonHover: {
     color: {
-      default: null,
+      default: "blue",
       ":hover": "red",
     },
     backgroundColor: {
