@@ -1,0 +1,1 @@
+import{j as i}from"./index-DWPVAqYl.js";const s=()=>i.jsx("div",{style:{display:"flex",gap:16,padding:16},children:i.jsx("div",{className:"x1e2nbdu xe8ttls",children:"High specificity text (red, with padding)"})});export{s as App};
