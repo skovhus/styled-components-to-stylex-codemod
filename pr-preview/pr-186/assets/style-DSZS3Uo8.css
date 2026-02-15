@@ -80,12 +80,12 @@ body{font-family:-apple-system,BlinkMacSystemFont,Segoe UI,Roboto,Helvetica Neue
   inherits: false
 }
 
-@property --x-flexShrink {
+@property --x---component-width {
   syntax: "*";
   inherits: false
 }
 
-@property --x---component-width {
+@property --x-flexShrink {
   syntax: "*";
   inherits: false
 }
@@ -125,12 +125,12 @@ body{font-family:-apple-system,BlinkMacSystemFont,Segoe UI,Roboto,Helvetica Neue
   inherits: false
 }
 
-@property --x-126kuz7 {
+@property --x-1e2mv7m {
   syntax: "*";
   inherits: false
 }
 
-@property --x-1e2mv7m {
+@property --x-126kuz7 {
   syntax: "*";
   inherits: false
 }
@@ -190,6 +190,18 @@ body{font-family:-apple-system,BlinkMacSystemFont,Segoe UI,Roboto,Helvetica Neue
   }
 
   100% {
+    transform: scale(1);
+  }
+}
+
+@keyframes x18b0m8j-B {
+  0% {
+    opacity: 0;
+    transform: scale(.5);
+  }
+
+  100% {
+    opacity: 1;
     transform: scale(1);
   }
 }
@@ -1091,6 +1103,10 @@ body{font-family:-apple-system,BlinkMacSystemFont,Segoe UI,Roboto,Helvetica Neue
   animation-duration: .3s;
 }
 
+.x2mfxb:not(#\#):not(#\#):not(#\#) {
+  animation-duration: .4s;
+}
+
 .x1j6gpub:not(#\#):not(#\#):not(#\#) {
   animation-duration: .5s, .7s;
 }
@@ -1129,6 +1145,10 @@ body{font-family:-apple-system,BlinkMacSystemFont,Segoe UI,Roboto,Helvetica Neue
 
 .xv7wrfs:not(#\#):not(#\#):not(#\#) {
   animation-name: x11hjej0-B;
+}
+
+.x1i3dyn5:not(#\#):not(#\#):not(#\#) {
+  animation-name: x18b0m8j-B;
 }
 
 .x18xqb03:not(#\#):not(#\#):not(#\#) {
@@ -1173,6 +1193,10 @@ body{font-family:-apple-system,BlinkMacSystemFont,Segoe UI,Roboto,Helvetica Neue
 
 .xiol90p:not(#\#):not(#\#):not(#\#) {
   animation-timing-function: cubic-bezier(.68, -.55, .265, 1.55);
+}
+
+.xtrn9k1:not(#\#):not(#\#):not(#\#) {
+  animation-timing-function: cubic-bezier(.68, -.55, .27, 1.55);
 }
 
 .x1flh53z:not(#\#):not(#\#):not(#\#) {
@@ -1321,6 +1345,10 @@ body{font-family:-apple-system,BlinkMacSystemFont,Segoe UI,Roboto,Helvetica Neue
 
 .x10v9rud:not(#\#):not(#\#):not(#\#) {
   background-color: #d3d3d3;
+}
+
+.x1rrn4n9:not(#\#):not(#\#):not(#\#) {
+  background-color: #90ee90;
 }
 
 .xg3vklh:not(#\#):not(#\#):not(#\#) {
