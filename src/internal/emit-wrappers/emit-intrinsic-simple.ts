@@ -141,6 +141,9 @@ export function emitSimpleWithConfigWrappers(ctx: EmitIntrinsicContext): void {
       ctx,
     );
 
+    // Handle conditional pseudo-class selectors (e.g., &:${highlight})
+    appendConditionalPseudoStyleArgs(d.conditionalPseudoSelectors, styleArgs, j, stylesIdentifier);
+
     const propsParamId = j.identifier("props");
     if (allowAsProp && emitTypes) {
       emitter.annotatePropsParam(
@@ -674,6 +677,9 @@ export function emitSimpleExportedIntrinsicWrappers(ctx: EmitIntrinsicContext): 
       ctx,
     );
 
+    // Handle conditional pseudo-class selectors (e.g., &:${highlight})
+    appendConditionalPseudoStyleArgs(d.conditionalPseudoSelectors, styleArgs, j, stylesIdentifier);
+
     // Collect keys used by compound variants (they're handled separately)
     const compoundVariantKeys = new Set<string>();
     for (const cv of d.compoundVariants ?? []) {
@@ -997,6 +1003,51 @@ function appendThemeBooleanStyleArgs(
     styleArgs.push(j.conditionalExpression(condition, trueExpr, falseExpr));
   }
   return true;
+}
+
+/**
+ * Appends conditional pseudo-class style args to `styleArgs`.
+ *
+ * For each entry, generates either:
+ * - A ternary: `condition ? styles.trueKey : styles.falseKey`
+ * - A helper call: `helperFn({ trueKey: styles.trueKey, falseKey: styles.falseKey })`
+ */
+function appendConditionalPseudoStyleArgs(
+  entries: StyledDecl["conditionalPseudoSelectors"],
+  styleArgs: ExpressionKind[],
+  j: JSCodeshift,
+  stylesIdentifier: string,
+): void {
+  if (!entries?.length) {
+    return;
+  }
+  for (const entry of entries) {
+    const trueExpr = j.memberExpression(
+      j.identifier(stylesIdentifier),
+      j.identifier(entry.trueStyleKey),
+    );
+    const falseExpr = j.memberExpression(
+      j.identifier(stylesIdentifier),
+      j.identifier(entry.falseStyleKey),
+    );
+
+    if (entry.helperFunction) {
+      // Emit: helperFn({ trueKey: styles.X, falseKey: styles.Y })
+      const hf = entry.helperFunction;
+      styleArgs.push(
+        j.callExpression(j.identifier(hf.name), [
+          j.objectExpression([
+            j.property("init", j.identifier(hf.trueKey), trueExpr),
+            j.property("init", j.identifier(hf.falseKey), falseExpr),
+          ]),
+        ]) as ExpressionKind,
+      );
+    } else {
+      // Emit: condition ? styles.trueKey : styles.falseKey
+      const condition = cloneAstNode(entry.conditionExpr) as ExpressionKind;
+      styleArgs.push(j.conditionalExpression(condition, trueExpr, falseExpr));
+    }
+  }
 }
 
 /** Builds a `const theme = useTheme();` variable declaration. */

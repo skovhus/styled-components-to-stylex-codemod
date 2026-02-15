@@ -153,6 +153,28 @@ export type StyledDecl = {
   }>;
   needsWrapperComponent?: boolean;
   /**
+   * Conditional pseudo-class selectors from `&:${expr}` patterns resolved via
+   * `adapter.resolveSelector()` with `kind: "pseudoConditional"`.
+   *
+   * Each entry creates two extra style objects (one per pseudo) and a ternary
+   * expression in `stylex.props(...)` that picks the active one at runtime.
+   */
+  conditionalPseudoSelectors?: Array<{
+    /** AST node for the runtime condition expression */
+    conditionExpr: unknown;
+    /** Style key for the truthy-branch pseudo style object */
+    trueStyleKey: string;
+    /** Style key for the falsy-branch pseudo style object */
+    falseStyleKey: string;
+    /** Optional helper function info for wrapping the conditional */
+    helperFunction?: {
+      name: string;
+      importSource: import("../adapter.js").ImportSource;
+      trueKey: string;
+      falseKey: string;
+    };
+  }>;
+  /**
    * When set, the wrapper needs to call `useTheme()` from styled-components
    * to access runtime theme boolean values (e.g., theme.isDark, theme.isHighContrast).
    *

@@ -19,6 +19,7 @@ import {
 } from "../selectors.js";
 import { extractRootAndPath, getNodeLocStart } from "../utilities/jscodeshift-utils.js";
 import { cssValueToJs, toStyleKey } from "../transform/helpers.js";
+import { capitalize } from "../utilities/string-utils.js";
 import { getOrCreateRelationOverrideBucket } from "./shared.js";
 import type { RelationOverride } from "./state.js";
 
@@ -192,13 +193,37 @@ export function processDeclRules(ctx: DeclProcessingState): void {
       const hasInterpolatedPseudo = /:[^\s{]*__SC_EXPR_\d+__/.test(rule.selector);
 
       if (hasInterpolatedPseudo) {
-        state.markBail();
-        warnings.push({
-          severity: "warning",
-          type: "Unsupported selector: interpolated pseudo selector",
-          loc: computeSelectorWarningLoc(decl.loc, decl.rawCss, rule.selector),
-        });
-        break;
+        // Only handle the simple case: selector is exactly `&:__SC_EXPR_N__`
+        // (the entire pseudo-class is a single interpolation).
+        const pseudoSlotMatch = rule.selector.match(/^&:__SC_EXPR_(\d+)__\s*$/);
+        if (!pseudoSlotMatch) {
+          state.markBail();
+          warnings.push({
+            severity: "warning",
+            type: "Unsupported selector: interpolated pseudo selector",
+            loc: computeSelectorWarningLoc(decl.loc, decl.rawCss, rule.selector),
+          });
+          break;
+        }
+
+        const pseudoSlotId = Number(pseudoSlotMatch[1]);
+        const pseudoSlotExpr = decl.templateExpressions[pseudoSlotId];
+
+        const pseudoResolved = tryResolveInterpolatedPseudo(pseudoSlotExpr, rule, ctx);
+
+        if (pseudoResolved === "bail") {
+          state.markBail();
+          warnings.push({
+            severity: "warning",
+            type: "Unsupported selector: interpolated pseudo selector",
+            loc: computeSelectorWarningLoc(decl.loc, decl.rawCss, rule.selector),
+          });
+          break;
+        }
+
+        // pseudoConditional and pseudoMediaQuery both handled all declarations —
+        // skip remaining rule processing for this rule.
+        continue;
       }
 
       // Component selector patterns that have special handling below:
@@ -1115,6 +1140,195 @@ function hasDynamicJsxChildren(
       }
     });
   return hasDynamic;
+}
+
+/**
+ * Attempts to resolve an interpolated pseudo-class selector (`&:${expr}`) via the
+ * adapter's `resolveSelector`. Handles `pseudoConditional` (builds two separate style
+ * objects with a JS-level ternary) and `pseudoMediaQuery` (merges into perPropPseudo
+ * with nested media guards).
+ *
+ * Returns "bail" if resolution fails or the pattern isn't supported.
+ */
+function tryResolveInterpolatedPseudo(
+  slotExpr: unknown,
+  rule: DeclProcessingState["decl"]["rules"][number],
+  ctx: DeclProcessingState,
+): "bail" | void {
+  const { state } = ctx;
+  const { resolverImports, resolveSelector } = state;
+
+  if (!slotExpr) {
+    return "bail";
+  }
+
+  // Extract root + path from the expression (works for both Identifier and MemberExpression)
+  const info = extractRootAndPath(slotExpr);
+  if (!info) {
+    return "bail";
+  }
+
+  const imp = state.resolveImportInScope(info.rootName, info.rootNode);
+  if (!imp) {
+    return "bail";
+  }
+
+  const selectorResult = resolveSelector({
+    kind: "selectorInterpolation",
+    importedName: imp.importedName,
+    source: imp.source,
+    path: info.path.length > 0 ? info.path.join(".") : undefined,
+    filePath: state.filePath,
+    loc: getNodeLocStart(slotExpr) ?? undefined,
+  });
+
+  if (!selectorResult) {
+    return "bail";
+  }
+
+  // Add required imports
+  for (const impSpec of selectorResult.imports ?? []) {
+    resolverImports.set(JSON.stringify(impSpec), impSpec);
+  }
+
+  if (selectorResult.kind === "pseudoConditional") {
+    return handlePseudoConditional(selectorResult, rule, ctx);
+  }
+
+  if (selectorResult.kind === "pseudoMediaQuery") {
+    return handlePseudoMediaQuery(selectorResult, rule, ctx);
+  }
+
+  // "media" kind is not applicable for pseudo selectors
+  return "bail";
+}
+
+/**
+ * Handles `pseudoConditional` result: builds two extra style objects (one per pseudo)
+ * and registers them on `decl.conditionalPseudoSelectors` for the emit phase.
+ */
+function handlePseudoConditional(
+  result: Extract<import("../../adapter.js").SelectorResolveResult, { kind: "pseudoConditional" }>,
+  rule: DeclProcessingState["decl"]["rules"][number],
+  ctx: DeclProcessingState,
+): "bail" | void {
+  const { state, decl, extraStyleObjects } = ctx;
+  const { j, parseExpr, resolverImports, resolveThemeValue, resolveThemeValueFromFn } = state;
+
+  // Process declarations into a flat bucket (populated in-place)
+  const flatBucket: Record<string, unknown> = {};
+  const writeResult = processDeclarationsIntoBucket(
+    rule,
+    flatBucket,
+    j,
+    decl,
+    resolveThemeValue,
+    resolveThemeValueFromFn,
+    { bailOnUnresolved: true },
+  );
+  if (writeResult === "bail") {
+    return "bail";
+  }
+
+  const truePseudo = `:${result.truePseudo}`;
+  const falsePseudo = `:${result.falsePseudo}`;
+
+  // Parse the condition expression from the adapter's string
+  const conditionExpr = parseExpr(result.conditionExpr);
+  if (!conditionExpr) {
+    return "bail";
+  }
+
+  // Use pseudo names (capitalized) for style key naming: e.g., buttonActive / buttonHover
+  const trueStyleKey = `${decl.styleKey}${capitalize(result.truePseudo)}`;
+  const falseStyleKey = `${decl.styleKey}${capitalize(result.falsePseudo)}`;
+
+  // Build the two style objects: each prop wrapped in { default: null, ":pseudo": value }
+  const trueStyleObj: Record<string, unknown> = {};
+  const falseStyleObj: Record<string, unknown> = {};
+  for (const prop of Object.keys(flatBucket)) {
+    const value = flatBucket[prop];
+    trueStyleObj[prop] = { default: null, [truePseudo]: value };
+    falseStyleObj[prop] = { default: null, [falsePseudo]: value };
+  }
+
+  extraStyleObjects.set(trueStyleKey, trueStyleObj);
+  extraStyleObjects.set(falseStyleKey, falseStyleObj);
+
+  // Register on the decl for the emit phase
+  decl.conditionalPseudoSelectors ??= [];
+  decl.conditionalPseudoSelectors.push({
+    conditionExpr,
+    trueStyleKey,
+    falseStyleKey,
+    helperFunction: result.helperFunction,
+  });
+
+  // Add helper function imports if provided
+  if (result.helperFunction) {
+    const helperImport = {
+      from: result.helperFunction.importSource,
+      names: [{ imported: result.helperFunction.name }],
+    };
+    resolverImports.set(JSON.stringify(helperImport), helperImport);
+  }
+
+  decl.needsWrapperComponent = true;
+}
+
+/**
+ * Handles `pseudoMediaQuery` result: merges declarations into `perPropPseudo` with
+ * nested media query guards per branch. No wrapper component needed.
+ */
+function handlePseudoMediaQuery(
+  result: Extract<import("../../adapter.js").SelectorResolveResult, { kind: "pseudoMediaQuery" }>,
+  rule: DeclProcessingState["decl"]["rules"][number],
+  ctx: DeclProcessingState,
+): "bail" | void {
+  const { state, decl, perPropPseudo, styleObj, cssHelperPropValues, getComposedDefaultValue } =
+    ctx;
+  const { j, resolveThemeValue, resolveThemeValueFromFn } = state;
+
+  // Process declarations into a flat bucket (populated in-place)
+  const flatBucket: Record<string, unknown> = {};
+  const writeResult = processDeclarationsIntoBucket(
+    rule,
+    flatBucket,
+    j,
+    decl,
+    resolveThemeValue,
+    resolveThemeValueFromFn,
+    { bailOnUnresolved: true },
+  );
+  if (writeResult === "bail") {
+    return "bail";
+  }
+
+  // For each property, add nested pseudo + media entries
+  for (const prop of Object.keys(flatBucket)) {
+    const value = flatBucket[prop];
+    perPropPseudo[prop] ??= {};
+    const existing = perPropPseudo[prop]!;
+    if (!("default" in existing)) {
+      const existingVal = (styleObj as Record<string, unknown>)[prop];
+      if (existingVal !== undefined) {
+        existing.default = existingVal;
+      } else if (cssHelperPropValues.has(prop)) {
+        existing.default = getComposedDefaultValue(prop);
+      } else {
+        existing.default = null;
+      }
+    }
+
+    for (const branch of result.branches) {
+      const current = existing[branch.pseudo];
+      if (!current || typeof current !== "object") {
+        existing[branch.pseudo] = { default: null, [branch.mediaQuery]: value };
+      } else {
+        (current as Record<string, unknown>)[branch.mediaQuery] = value;
+      }
+    }
+  }
 }
 
 /**
