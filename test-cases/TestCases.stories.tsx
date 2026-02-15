@@ -47,6 +47,7 @@ const RenderDebugFrame: React.FC<{ children: React.ReactNode }> = ({ children })
           "repeating-linear-gradient(45deg, rgba(0,0,0,0.04), rgba(0,0,0,0.04) 8px, rgba(0,0,0,0.02) 8px, rgba(0,0,0,0.02) 16px)",
         borderRadius: "6px",
         padding: "6px",
+        WebkitFontSmoothing: "antialiased",
       }}
     >
       <div ref={hostRef}>{children}</div>
