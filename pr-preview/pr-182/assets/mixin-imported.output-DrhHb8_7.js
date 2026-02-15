@@ -1,0 +1,1 @@
+import{j as t}from"./index-y-c4swe_.js";import{p as e}from"./stylex-DS3CntOa.js";import{h as i}from"./helpers.stylex-kJESyYcn.js";const m=()=>t.jsx("div",{...e(i.truncate,r.elementWithImportedMixin),children:"Red with imported mixin"}),r={elementWithImportedMixin:{kMwMTN:"x1e2nbdu",$$css:!0}};export{m as App};
