@@ -1,0 +1,1 @@
+import{j as x}from"./index-BXl6qirZ.js";const n=({className:t,children:s,href:e})=>x.jsx("a",{className:t,href:e,children:s});function i(t){return x.jsx(n,{...t,className:"x1c28xdg x117nqv4 x1hl2dhg xt0b8zv"})}const p=()=>x.jsx(i,{href:"https://example.com",children:"Visit Example"});export{p as App};
