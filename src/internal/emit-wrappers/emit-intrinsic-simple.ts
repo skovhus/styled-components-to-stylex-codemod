@@ -141,6 +141,9 @@ export function emitSimpleWithConfigWrappers(ctx: EmitIntrinsicContext): void {
       ctx,
     );
 
+    // Handle pseudo-alias selectors (e.g., &:${highlight})
+    appendPseudoAliasStyleArgs(d.pseudoAliasSelectors, styleArgs, j, stylesIdentifier);
+
     const propsParamId = j.identifier("props");
     if (allowAsProp && emitTypes) {
       emitter.annotatePropsParam(
@@ -674,6 +677,9 @@ export function emitSimpleExportedIntrinsicWrappers(ctx: EmitIntrinsicContext): 
       ctx,
     );
 
+    // Handle pseudo-alias selectors (e.g., &:${highlight})
+    appendPseudoAliasStyleArgs(d.pseudoAliasSelectors, styleArgs, j, stylesIdentifier);
+
     // Collect keys used by compound variants (they're handled separately)
     const compoundVariantKeys = new Set<string>();
     for (const cv of d.compoundVariants ?? []) {
@@ -997,6 +1003,36 @@ function appendThemeBooleanStyleArgs(
     styleArgs.push(j.conditionalExpression(condition, trueExpr, falseExpr));
   }
   return true;
+}
+
+/**
+ * Appends pseudo-alias style args to `styleArgs`.
+ *
+ * Emits `selectorExpr({ active: styles.keyActive, hover: styles.keyHover })` as a single arg.
+ */
+export function appendPseudoAliasStyleArgs(
+  entries: StyledDecl["pseudoAliasSelectors"],
+  styleArgs: ExpressionKind[],
+  j: JSCodeshift,
+  stylesIdentifier: string,
+): void {
+  if (!entries?.length) {
+    return;
+  }
+  for (const entry of entries) {
+    const properties = entry.pseudoNames.map((name, i) =>
+      j.property(
+        "init",
+        /^[a-zA-Z_$][a-zA-Z0-9_$]*$/.test(name) ? j.identifier(name) : j.literal(name),
+        j.memberExpression(j.identifier(stylesIdentifier), j.identifier(entry.styleKeys[i]!)),
+      ),
+    );
+    styleArgs.push(
+      j.callExpression(cloneAstNode(entry.styleSelectorExpr) as ExpressionKind, [
+        j.objectExpression(properties),
+      ]) as ExpressionKind,
+    );
+  }
 }
 
 /** Builds a `const theme = useTheme();` variable declaration. */

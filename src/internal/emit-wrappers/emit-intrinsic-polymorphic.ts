@@ -14,6 +14,7 @@ import type { JsxAttr, StatementKind } from "./wrapper-emitter.js";
 import { emitStyleMerging } from "./style-merger.js";
 import { sortVariantEntriesBySpecificity, VOID_TAGS } from "./type-helpers.js";
 import type { EmitIntrinsicContext } from "./emit-intrinsic-helpers.js";
+import { appendPseudoAliasStyleArgs } from "./emit-intrinsic-simple.js";
 
 export function emitIntrinsicPolymorphicWrappers(ctx: EmitIntrinsicContext): void {
   const { emitter, j, emitTypes, wrapperDecls, wrapperNames, stylesIdentifier, emitted } = ctx;
@@ -169,6 +170,9 @@ export function emitIntrinsicPolymorphicWrappers(ctx: EmitIntrinsicContext): voi
           }
         }
       }
+
+      // Handle pseudo-alias selectors (e.g., &:${highlight})
+      appendPseudoAliasStyleArgs(d.pseudoAliasSelectors, styleArgs, j, stylesIdentifier);
 
       for (const prop of collectInlineStylePropNames(d.inlineStyleProps ?? [])) {
         if (!destructureProps.includes(prop)) {

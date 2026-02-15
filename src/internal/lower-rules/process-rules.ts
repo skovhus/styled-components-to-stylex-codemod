@@ -3,6 +3,7 @@
  * Core concepts: selector normalization, attribute wrappers, and rule buckets.
  */
 import type { JSCodeshift } from "jscodeshift";
+import type { SelectorResolveResult } from "../../adapter.js";
 import type { DeclProcessingState } from "./decl-setup.js";
 import type { StyledDecl } from "../transform-types.js";
 import type { CssDeclarationIR } from "../css-ir.js";
@@ -19,6 +20,7 @@ import {
 } from "../selectors.js";
 import { extractRootAndPath, getNodeLocStart } from "../utilities/jscodeshift-utils.js";
 import { cssValueToJs, toStyleKey } from "../transform/helpers.js";
+import { capitalize, kebabToCamelCase } from "../utilities/string-utils.js";
 import { getOrCreateRelationOverrideBucket } from "./shared.js";
 
 export function processDeclRules(ctx: DeclProcessingState): void {
@@ -191,13 +193,37 @@ export function processDeclRules(ctx: DeclProcessingState): void {
       const hasInterpolatedPseudo = /:[^\s{]*__SC_EXPR_\d+__/.test(rule.selector);
 
       if (hasInterpolatedPseudo) {
-        state.markBail();
-        warnings.push({
-          severity: "warning",
-          type: "Unsupported selector: interpolated pseudo selector",
-          loc: computeSelectorWarningLoc(decl.loc, decl.rawCss, rule.selector),
-        });
-        break;
+        // Only handle the simple case: selector is exactly `&:__SC_EXPR_N__`
+        // (the entire pseudo-class is a single interpolation).
+        const pseudoSlotMatch = rule.selector.match(/^&:__SC_EXPR_(\d+)__\s*$/);
+        if (!pseudoSlotMatch) {
+          state.markBail();
+          warnings.push({
+            severity: "warning",
+            type: "Unsupported selector: interpolated pseudo selector",
+            loc: computeSelectorWarningLoc(decl.loc, decl.rawCss, rule.selector),
+          });
+          break;
+        }
+
+        const pseudoSlotId = Number(pseudoSlotMatch[1]);
+        const pseudoSlotExpr = decl.templateExpressions[pseudoSlotId];
+
+        const pseudoResolved = tryResolveInterpolatedPseudo(pseudoSlotExpr, rule, ctx);
+
+        if (pseudoResolved === "bail") {
+          state.markBail();
+          warnings.push({
+            severity: "warning",
+            type: "Unsupported selector: interpolated pseudo selector",
+            loc: computeSelectorWarningLoc(decl.loc, decl.rawCss, rule.selector),
+          });
+          break;
+        }
+
+        // pseudoAlias and media both handled all declarations —
+        // skip remaining rule processing for this rule.
+        continue;
       }
 
       // Component selector patterns that have special handling below:
@@ -1079,4 +1105,132 @@ function hasDynamicJsxChildren(
       }
     });
   return hasDynamic;
+}
+
+/**
+ * Attempts to resolve an interpolated pseudo-class selector (`&:${expr}`) via the
+ * adapter's `resolveSelector`. Handles `pseudoAlias` (builds N separate style
+ * objects, one per pseudo value) and `media` (merges into perPropPseudo
+ * with nested media guards).
+ *
+ * Returns "bail" if resolution fails or the pattern isn't supported.
+ */
+function tryResolveInterpolatedPseudo(
+  slotExpr: unknown,
+  rule: DeclProcessingState["decl"]["rules"][number],
+  ctx: DeclProcessingState,
+): "bail" | void {
+  const { state } = ctx;
+  const { resolveSelector, resolveImportInScope } = state;
+
+  if (!slotExpr) {
+    return "bail";
+  }
+
+  // Extract root + path from the expression (works for both Identifier and MemberExpression)
+  const info = extractRootAndPath(slotExpr);
+  if (!info) {
+    return "bail";
+  }
+
+  const imp = resolveImportInScope(info.rootName, info.rootNode);
+  if (!imp) {
+    return "bail";
+  }
+
+  const selectorResult = resolveSelector({
+    kind: "selectorInterpolation",
+    importedName: imp.importedName,
+    source: imp.source,
+    path: info.path.length > 0 ? info.path.join(".") : undefined,
+    filePath: state.filePath,
+    loc: getNodeLocStart(slotExpr) ?? undefined,
+  });
+
+  if (!selectorResult) {
+    return "bail";
+  }
+
+  if (selectorResult.kind === "pseudoAlias") {
+    return handlePseudoAlias(selectorResult, rule, ctx);
+  }
+
+  // "media" kind is not applicable for pseudo selectors
+  return "bail";
+}
+
+/**
+ * Handles `pseudoAlias` result: builds N extra style objects (one per pseudo value)
+ * and registers them on `decl.pseudoAliasSelectors` for the emit phase.
+ *
+ * Wraps the style args in a `styleSelectorExpr` function call for runtime selection.
+ */
+function handlePseudoAlias(
+  result: Extract<SelectorResolveResult, { kind: "pseudoAlias" }>,
+  rule: DeclProcessingState["decl"]["rules"][number],
+  ctx: DeclProcessingState,
+): "bail" | void {
+  // Bail when the pseudo alias is inside @media or other at-rules —
+  // we can't carry the enclosing conditions into pseudo-alias style objects.
+  if (rule.atRuleStack.length > 0) {
+    return "bail";
+  }
+
+  const { state, decl, extraStyleObjects, styleObj, cssHelperPropValues, getComposedDefaultValue } =
+    ctx;
+  const { j, parseExpr, resolverImports, resolveThemeValue, resolveThemeValueFromFn } = state;
+
+  // Process declarations into a flat bucket (populated in-place)
+  const flatBucket: Record<string, unknown> = {};
+  const writeResult = processDeclarationsIntoBucket(
+    rule,
+    flatBucket,
+    j,
+    decl,
+    resolveThemeValue,
+    resolveThemeValueFromFn,
+    { bailOnUnresolved: true },
+  );
+  if (writeResult === "bail") {
+    return "bail";
+  }
+
+  // Build N style objects (one per pseudo value)
+  const styleKeys: string[] = [];
+  for (const pseudoName of result.values) {
+    const pseudo = `:${pseudoName}`;
+    const styleKey = `${decl.styleKey}Pseudo${capitalize(kebabToCamelCase(pseudoName))}`;
+    styleKeys.push(styleKey);
+
+    const styleObjForPseudo: Record<string, unknown> = {};
+    for (const prop of Object.keys(flatBucket)) {
+      const value = flatBucket[prop];
+      const baseValue =
+        (styleObj as Record<string, unknown>)[prop] ??
+        (cssHelperPropValues.has(prop) ? getComposedDefaultValue(prop) : null);
+      styleObjForPseudo[prop] = { default: baseValue, [pseudo]: value };
+    }
+    extraStyleObjects.set(styleKey, styleObjForPseudo);
+  }
+
+  // Parse the styleSelectorExpr
+  const parsedSelectorExpr = parseExpr(result.styleSelectorExpr);
+  if (!parsedSelectorExpr) {
+    return "bail";
+  }
+
+  // Register on the decl for the emit phase
+  decl.pseudoAliasSelectors ??= [];
+  decl.pseudoAliasSelectors.push({
+    styleKeys,
+    styleSelectorExpr: parsedSelectorExpr,
+    pseudoNames: result.values,
+  });
+
+  // Add imports from the adapter result
+  for (const impSpec of result.imports) {
+    resolverImports.set(JSON.stringify(impSpec), impSpec);
+  }
+
+  decl.needsWrapperComponent = true;
 }

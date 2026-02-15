@@ -13,6 +13,7 @@ import {
   type WrapperPropDefaults,
 } from "./types.js";
 import type { JsxAttr, JsxTagName, StatementKind, WrapperEmitter } from "./wrapper-emitter.js";
+import { appendPseudoAliasStyleArgs } from "./emit-intrinsic-simple.js";
 import {
   getAttrsAsString,
   injectRefPropIntoTypeLiteralString,
@@ -301,6 +302,9 @@ export function emitComponentWrappers(emitter: WrapperEmitter): {
         }
       }
     }
+
+    // Handle pseudo-alias selectors (e.g., &:${highlight})
+    appendPseudoAliasStyleArgs(d.pseudoAliasSelectors, styleArgs, j, stylesIdentifier);
 
     for (const prop of collectInlineStylePropNames(d.inlineStyleProps ?? [])) {
       if (!destructureProps.includes(prop)) {

@@ -247,25 +247,45 @@ export type SelectorResolveContext = {
 
 /**
  * Result for `adapter.resolveSelector(...)`.
+ *
+ * Two kinds are supported:
+ * - `"media"`: maps a selector interpolation to a media query computed key
+ * - `"pseudoAlias"`: maps `&:${expr}` to N pseudo style objects (one per value),
+ *   wrapped in a `styleSelectorExpr` function call for runtime selection.
  */
-export type SelectorResolveResult = {
-  /**
-   * The kind of selector resolved.
-   * Currently only "media" is supported.
-   */
-  kind: "media";
-  /**
-   * JS expression to use as the computed property key.
-   * Should reference a `defineConsts` value for media queries.
-   * Example: "breakpoints.phone"
-   */
-  expr: string;
-  /**
-   * Import statements required by `expr`.
-   * Example: [{ from: { kind: "specifier", value: "./breakpoints.stylex" }, names: [{ imported: "breakpoints" }] }]
-   */
-  imports: ImportSpec[];
-};
+export type SelectorResolveResult =
+  | {
+      kind: "media";
+      /**
+       * JS expression to use as the computed property key.
+       * Should reference a `defineConsts` value for media queries.
+       * Example: "breakpoints.phone"
+       */
+      expr: string;
+      /**
+       * Import statements required by `expr`.
+       * Example: [{ from: { kind: "specifier", value: "./breakpoints.stylex" }, names: [{ imported: "breakpoints" }] }]
+       */
+      imports: ImportSpec[];
+    }
+  | {
+      kind: "pseudoAlias";
+      /**
+       * Pseudo-class names without leading colon.
+       * Example: ["active", "hover"]
+       */
+      values: string[];
+      /**
+       * JS expression for runtime selection.
+       * Emits `expr({ active: styles.keyActive, hover: styles.keyHover })`
+       * with an object whose keys are the `values` entries.
+       */
+      styleSelectorExpr: string;
+      /**
+       * Import statements required by `styleSelectorExpr`.
+       */
+      imports: ImportSpec[];
+    };
 
 // ────────────────────────────────────────────────────────────────────────────
 // External Interface Context and Result
@@ -355,10 +375,12 @@ export interface Adapter {
    * Resolver for interpolations used in selector position.
    *
    * This handles patterns like `${screenSize.phone} { ... }` where an imported
-   * value is used as a CSS selector (typically a media query helper).
+   * value is used as a CSS selector (typically a media query helper), and
+   * `&:${highlight}` where an imported value picks a pseudo-class.
    *
    * Return:
    * - `{ kind: "media", expr, imports }` when the interpolation resolves to a media query
+   * - `{ kind: "pseudoAlias", values, styleSelectorExpr?, imports? }` for pseudo-class expansion
    * - `undefined` to bail/skip the file
    */
   resolveSelector: (context: SelectorResolveContext) => SelectorResolveResult | undefined;
@@ -426,9 +448,10 @@ export interface Adapter {
  *     },
  *
  *     resolveSelector(ctx) {
- *       // Resolve imported values used in selector position (e.g., media query helpers).
- *       // Return:
+ *       // Resolve imported values used in selector position.
+ *       // Return one of:
  *       // - { kind: "media", expr, imports } for media queries (e.g., breakpoints.phone)
+ *       // - { kind: "pseudoAlias", values, styleSelectorExpr?, imports? } for pseudo-class expansion
  *       // - undefined to bail/skip the file
  *       void ctx;
  *     },

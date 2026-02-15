@@ -12,6 +12,7 @@ import { emitStyleMerging } from "./style-merger.js";
 import { sortVariantEntriesBySpecificity, VOID_TAGS } from "./type-helpers.js";
 import { withLeadingComments } from "./comments.js";
 import type { EmitIntrinsicContext } from "./emit-intrinsic-helpers.js";
+import { appendPseudoAliasStyleArgs } from "./emit-intrinsic-simple.js";
 import type { JSCodeshift, Identifier } from "jscodeshift";
 
 /**
@@ -275,6 +276,9 @@ export function emitShouldForwardPropWrappers(ctx: EmitIntrinsicContext): void {
         }
       }
     }
+
+    // Handle pseudo-alias selectors (e.g., &:${highlight})
+    appendPseudoAliasStyleArgs(d.pseudoAliasSelectors, styleArgs, j, stylesIdentifier);
 
     // Collect keys used by compound variants (they're handled separately)
     const compoundVariantKeys = new Set<string>();

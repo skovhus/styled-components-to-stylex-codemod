@@ -407,6 +407,23 @@ export const fixtureAdapter = defineAdapter({
       };
     }
 
+    // Handle `highlight` pseudo-class interpolation: &:${highlight}
+    // Resolves to a pseudoAlias that expands into :active and :hover pseudo style objects,
+    // wrapped in a highlightStyles() function call for runtime selection.
+    if (ctx.importedName === "highlight") {
+      return {
+        kind: "pseudoAlias",
+        values: ["active", "hover"],
+        styleSelectorExpr: "highlightStyles",
+        imports: [
+          {
+            from: { kind: "specifier", value: "./lib/helpers" },
+            names: [{ imported: "highlightStyles" }],
+          },
+        ],
+      };
+    }
+
     return undefined;
   },
 });

@@ -9,6 +9,7 @@ import type { StyledDecl } from "../transform-types.js";
 import type { ExpressionKind } from "./types.js";
 import { withLeadingComments } from "./comments.js";
 import type { EmitIntrinsicContext } from "./emit-intrinsic-helpers.js";
+import { appendPseudoAliasStyleArgs } from "./emit-intrinsic-simple.js";
 
 export function emitInputWrappers(ctx: EmitIntrinsicContext): void {
   const { emitter, j, emitTypes, wrapperDecls, stylesIdentifier, emitted } = ctx;
@@ -85,6 +86,9 @@ export function emitInputWrappers(ctx: EmitIntrinsicContext): void {
             ]
           : []),
       ];
+
+      // Handle pseudo-alias selectors (e.g., &:${highlight})
+      appendPseudoAliasStyleArgs(d.pseudoAliasSelectors, styleArgs, j, stylesIdentifier);
 
       emitted.push(
         allowClassNameProp
@@ -277,6 +281,9 @@ export function emitLinkWrappers(ctx: EmitIntrinsicContext): void {
             ]
           : []),
       ];
+
+      // Handle pseudo-alias selectors (e.g., &:${highlight})
+      appendPseudoAliasStyleArgs(d.pseudoAliasSelectors, styleArgs, j, stylesIdentifier);
 
       emitted.push(
         allowClassNameProp
@@ -523,22 +530,30 @@ export function emitEnumVariantWrappers(ctx: EmitIntrinsicContext): void {
           ? j.binaryExpression("!==", variantId, j.literal(secondary.whenValue))
           : j.binaryExpression("===", variantId, j.literal(secondary.whenValue));
 
+      const styleArgs: ExpressionKind[] = [
+        base,
+        j.logicalExpression(
+          "&&",
+          condPrimary as any,
+          j.memberExpression(j.identifier(stylesIdentifier), j.identifier(primary.styleKey)),
+        ),
+        j.logicalExpression(
+          "&&",
+          condSecondary as any,
+          j.memberExpression(j.identifier(stylesIdentifier), j.identifier(secondary.styleKey)),
+        ),
+      ];
+
+      // Handle pseudo-alias selectors (e.g., &:${highlight})
+      appendPseudoAliasStyleArgs(d.pseudoAliasSelectors, styleArgs, j, stylesIdentifier);
+
       const sxDecl = j.variableDeclaration("const", [
         j.variableDeclarator(
           j.identifier("sx"),
-          j.callExpression(j.memberExpression(j.identifier("stylex"), j.identifier("props")), [
-            base,
-            j.logicalExpression(
-              "&&",
-              condPrimary as any,
-              j.memberExpression(j.identifier(stylesIdentifier), j.identifier(primary.styleKey)),
-            ),
-            j.logicalExpression(
-              "&&",
-              condSecondary as any,
-              j.memberExpression(j.identifier(stylesIdentifier), j.identifier(secondary.styleKey)),
-            ),
-          ]),
+          j.callExpression(
+            j.memberExpression(j.identifier("stylex"), j.identifier("props")),
+            styleArgs,
+          ),
         ),
       ]);
 
