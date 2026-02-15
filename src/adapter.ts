@@ -248,10 +248,9 @@ export type SelectorResolveContext = {
 /**
  * Result for `adapter.resolveSelector(...)`.
  *
- * Three kinds are supported:
+ * Two kinds are supported:
  * - `"media"`: maps a selector interpolation to a media query computed key
  * - `"pseudoConditional"`: maps `&:${expr}` to a JS-level ternary that picks between two pseudo style objects
- * - `"pseudoMediaQuery"`: maps `&:${expr}` to nested CSS `@media` guards inside each pseudo
  */
 export type SelectorResolveResult =
   | {
@@ -300,19 +299,6 @@ export type SelectorResolveResult =
         trueKey: string;
         falseKey: string;
       };
-    }
-  | {
-      kind: "pseudoMediaQuery";
-      /**
-       * Each branch maps a pseudo-class to its guarding media query.
-       * Pseudo includes leading colon (e.g., ":hover").
-       * Example: [{ pseudo: ":hover", mediaQuery: "@media (hover: hover)" }]
-       */
-      branches: Array<{ pseudo: string; mediaQuery: string }>;
-      /**
-       * Import statements required by the branch expressions.
-       */
-      imports: ImportSpec[];
     };
 
 // ────────────────────────────────────────────────────────────────────────────
@@ -409,7 +395,6 @@ export interface Adapter {
    * Return:
    * - `{ kind: "media", expr, imports }` when the interpolation resolves to a media query
    * - `{ kind: "pseudoConditional", conditionExpr, truePseudo, falsePseudo, imports }` for JS-level ternary pseudo selection
-   * - `{ kind: "pseudoMediaQuery", branches, imports }` for CSS @media-guarded pseudo selection
    * - `undefined` to bail/skip the file
    */
   resolveSelector: (context: SelectorResolveContext) => SelectorResolveResult | undefined;
@@ -481,7 +466,6 @@ export interface Adapter {
  *       // Return one of:
  *       // - { kind: "media", expr, imports } for media queries (e.g., breakpoints.phone)
  *       // - { kind: "pseudoConditional", conditionExpr, truePseudo, falsePseudo, imports } for JS-level pseudo selection
- *       // - { kind: "pseudoMediaQuery", branches, imports } for CSS @media-guarded pseudo selection
  *       // - undefined to bail/skip the file
  *       void ctx;
  *     },

@@ -148,10 +148,18 @@ export const Browser = {
 export const highlight = Browser.isPureTouchDevice ? "active" : "hover";
 
 /**
- * Pseudo-class highlight using pure CSS media queries (no JS runtime).
- * Same behavior as `highlight`, but resolved to @media guards in StyleX.
+ * Same as `highlight`, but the adapter wraps the conditional in a
+ * `highlightStyles()` helper function for lint-enforceable consistency.
  */
-export const highlightMedia = highlight;
+export const highlightWithHelper = highlight;
+
+/**
+ * Helper that wraps the conditional pseudo selection in a function call,
+ * making the pairing explicit and enabling lint enforcement.
+ */
+export function highlightStyles<T>(variants: { active: T; hover: T }): T {
+  return Browser.isPureTouchDevice ? variants.active : variants.hover;
+}
 
 /**
  * Scroll fade mask helper - returns a css`` RuleSet for scroll fade effects.

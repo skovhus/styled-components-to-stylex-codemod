@@ -1160,10 +1160,6 @@ function tryResolveInterpolatedPseudo(
     return handlePseudoConditional(selectorResult, rule, ctx);
   }
 
-  if (selectorResult.kind === "pseudoMediaQuery") {
-    return handlePseudoMediaQuery(selectorResult, rule, ctx);
-  }
-
   // "media" kind is not applicable for pseudo selectors
   return "bail";
 }
@@ -1239,59 +1235,4 @@ function handlePseudoConditional(
   }
 
   decl.needsWrapperComponent = true;
-}
-
-/**
- * Handles `pseudoMediaQuery` result: merges declarations into `perPropPseudo` with
- * nested media query guards per branch. No wrapper component needed.
- */
-function handlePseudoMediaQuery(
-  result: Extract<SelectorResolveResult, { kind: "pseudoMediaQuery" }>,
-  rule: DeclProcessingState["decl"]["rules"][number],
-  ctx: DeclProcessingState,
-): "bail" | void {
-  const { state, decl, perPropPseudo, styleObj, cssHelperPropValues, getComposedDefaultValue } =
-    ctx;
-  const { j, resolveThemeValue, resolveThemeValueFromFn } = state;
-
-  // Process declarations into a flat bucket (populated in-place)
-  const flatBucket: Record<string, unknown> = {};
-  const writeResult = processDeclarationsIntoBucket(
-    rule,
-    flatBucket,
-    j,
-    decl,
-    resolveThemeValue,
-    resolveThemeValueFromFn,
-    { bailOnUnresolved: true },
-  );
-  if (writeResult === "bail") {
-    return "bail";
-  }
-
-  // For each property, add nested pseudo + media entries
-  for (const prop of Object.keys(flatBucket)) {
-    const value = flatBucket[prop];
-    perPropPseudo[prop] ??= {};
-    const existing = perPropPseudo[prop]!;
-    if (!("default" in existing)) {
-      const existingVal = (styleObj as Record<string, unknown>)[prop];
-      if (existingVal !== undefined) {
-        existing.default = existingVal;
-      } else if (cssHelperPropValues.has(prop)) {
-        existing.default = getComposedDefaultValue(prop);
-      } else {
-        existing.default = null;
-      }
-    }
-
-    for (const branch of result.branches) {
-      const current = existing[branch.pseudo];
-      if (!current || typeof current !== "object") {
-        existing[branch.pseudo] = { default: null, [branch.mediaQuery]: value };
-      } else {
-        (current as Record<string, unknown>)[branch.mediaQuery] = value;
-      }
-    }
-  }
 }
