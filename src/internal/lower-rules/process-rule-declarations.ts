@@ -6,6 +6,7 @@ import type { CssRuleIR } from "../css-ir.js";
 import type { DeclProcessingState } from "./decl-setup.js";
 import { cssDeclarationToStylexDeclarations } from "../css-prop-mapping.js";
 import { cssValueToJs } from "../transform/helpers.js";
+import { expandStaticAnimationShorthand } from "../keyframes.js";
 import { handleInterpolatedDeclaration } from "./rule-interpolated-declaration.js";
 
 type CommentSource = { leading?: string; trailingLine?: string } | null;
@@ -51,6 +52,24 @@ export function processRuleDeclarations(args: RuleDeclarationContext): void {
         break;
       }
       continue;
+    }
+
+    // Handle static `animation` shorthand that references inline @keyframes.
+    // Expand to longhand properties with an identifier reference for the name.
+    if (d.property === "animation" && d.value.kind === "static" && state.keyframesNames.size > 0) {
+      const expanded: Record<string, unknown> = {};
+      if (expandStaticAnimationShorthand(d.valueRaw, state.keyframesNames, state.j, expanded)) {
+        const commentSource = {
+          leading: (d as any).leadingComment,
+          trailingLine: (d as any).trailingLineComment,
+        };
+        let isFirst = true;
+        for (const [prop, value] of Object.entries(expanded)) {
+          applyResolvedPropValue(prop, value, isFirst ? commentSource : null);
+          isFirst = false;
+        }
+        continue;
+      }
     }
 
     const outs = cssDeclarationToStylexDeclarations(d);
