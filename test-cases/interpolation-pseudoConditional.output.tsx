@@ -1,9 +1,14 @@
 import * as stylex from "@stylexjs/stylex";
+import { TouchDeviceToggle } from "./lib/TouchDeviceToggle";
 
 export const App = () => (
-  <button {...stylex.props(styles.button, styles.buttonActive, styles.buttonHover)}>
-    Highlight Button
-  </button>
+  <TouchDeviceToggle>
+    {() => (
+      <button {...stylex.props(styles.button, styles.buttonActive, styles.buttonHover)}>
+        Highlight Button
+      </button>
+    )}
+  </TouchDeviceToggle>
 );
 
 const styles = stylex.create({

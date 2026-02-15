@@ -1,5 +1,6 @@
 import styled from "styled-components";
 import { highlight } from "./lib/helpers";
+import { TouchDeviceToggle } from "./lib/TouchDeviceToggle";
 
 /**
  * Interpolated pseudo-class selector using a runtime variable.
@@ -17,4 +18,6 @@ const Button = styled.button`
   }
 `;
 
-export const App = () => <Button>Highlight Button</Button>;
+export const App = () => (
+  <TouchDeviceToggle>{() => <Button>Highlight Button</Button>}</TouchDeviceToggle>
+);
