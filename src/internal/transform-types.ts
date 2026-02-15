@@ -166,6 +166,8 @@ export type StyledDecl = {
     styleSelectorExpr: unknown;
     /** Pseudo-class names (without leading colon), in order matching `styleKeys`. */
     pseudoNames: string[];
+    /** When present, the pseudo-alias call is guarded by a boolean prop condition. */
+    guard?: { when: string };
   }>;
   /**
    * When set, the wrapper needs to call `useTheme()` from styled-components

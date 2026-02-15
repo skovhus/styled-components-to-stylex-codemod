@@ -18,11 +18,19 @@ import {
   parseElementSelectorPattern,
   parseSelector,
 } from "../selectors.js";
-import { extractRootAndPath, getNodeLocStart } from "../utilities/jscodeshift-utils.js";
-import { cssValueToJs, toStyleKey } from "../transform/helpers.js";
+import {
+  extractRootAndPath,
+  getArrowFnParamBindings,
+  getNodeLocStart,
+} from "../utilities/jscodeshift-utils.js";
+import { cssValueToJs, toStyleKey, toSuffixFromProp } from "../transform/helpers.js";
 import { capitalize, kebabToCamelCase } from "../utilities/string-utils.js";
 import { getOrCreateRelationOverrideBucket } from "./shared.js";
 import type { RelationOverride } from "./state.js";
+import { createPropTestHelpers } from "./variant-utils.js";
+import { parseCssDeclarationBlock } from "../builtin-handlers/css-parsing.js";
+import { ensureShouldForwardPropDrop } from "./types.js";
+import type { ExpressionKind } from "./decl-types.js";
 
 export function processDeclRules(ctx: DeclProcessingState): void {
   const {
@@ -160,6 +168,20 @@ export function processDeclRules(ctx: DeclProcessingState): void {
     if (state.bail) {
       break;
     }
+
+    // Skip rules inside @keyframes blocks whose keyframes were successfully
+    // extracted — these are keyframe frame selectors (e.g. "0%", "100%",
+    // "from", "to") that would otherwise be misidentified as descendant/tag
+    // selectors. If the keyframe was NOT extracted (e.g. it has interpolated
+    // values), let it fall through so the bail logic catches the unsupported case.
+    const kfAtRule = rule.atRuleStack.find((at) => at.startsWith("@keyframes "));
+    if (kfAtRule) {
+      const kfName = kfAtRule.replace("@keyframes ", "").trim();
+      if (state.keyframesNames.has(kfName)) {
+        continue;
+      }
+    }
+
     // Track resolved selector media for this rule (set by adapter.resolveSelector)
     let resolvedSelectorMedia: { keyExpr: unknown; exprSource: string } | null = null;
 
@@ -1233,11 +1255,30 @@ function handlePseudoAlias(
     return "bail";
   }
 
+  // When the pseudo block produced no static declarations (all interpolations
+  // were standalone prop-conditional), try to recover by extracting the
+  // condition and CSS from the raw template.
+  let guard: { when: string } | undefined;
+  if (Object.keys(flatBucket).length === 0) {
+    const recovered = recoverStandaloneInterpolationsInPseudoBlock(rule, decl);
+    if (!recovered) {
+      return "bail";
+    }
+    Object.assign(flatBucket, recovered.cssProps);
+    guard = { when: recovered.when };
+
+    // Ensure the guard prop is dropped from DOM forwarding
+    if (recovered.propName && !recovered.propName.startsWith("$")) {
+      ensureShouldForwardPropDrop(decl, recovered.propName);
+    }
+  }
+
   // Build N style objects (one per pseudo value)
   const styleKeys: string[] = [];
+  const styleKeySuffix = guard ? toSuffixFromProp(guard.when) : "";
   for (const pseudoName of result.values) {
     const pseudo = `:${pseudoName}`;
-    const styleKey = `${decl.styleKey}Pseudo${capitalize(kebabToCamelCase(pseudoName))}`;
+    const styleKey = `${decl.styleKey}${styleKeySuffix}Pseudo${capitalize(kebabToCamelCase(pseudoName))}`;
     styleKeys.push(styleKey);
 
     const styleObjForPseudo: Record<string, unknown> = {};
@@ -1263,6 +1304,7 @@ function handlePseudoAlias(
     styleKeys,
     styleSelectorExpr: parsedSelectorExpr,
     pseudoNames: result.values,
+    ...(guard ? { guard } : {}),
   });
 
   // Add imports from the adapter result
@@ -1290,4 +1332,160 @@ function tagCrossFileOverride(
   created.crossFile = true;
   created.markerVarName = markerVarName;
   created.crossFileComponentLocalName = componentLocalName;
+}
+
+/**
+ * Recovers standalone conditional interpolations from inside a pseudo-alias block.
+ *
+ * When Stylis drops standalone placeholders at brace depth > 0, the pseudo-alias
+ * rule ends up empty. This function reads the raw CSS template to find the block,
+ * extracts the arrow function condition and CSS text, and returns parsed CSS props.
+ */
+function recoverStandaloneInterpolationsInPseudoBlock(
+  rule: DeclProcessingState["decl"]["rules"][number],
+  decl: DeclProcessingState["decl"],
+): { when: string; propName: string; cssProps: Record<string, unknown> } | null {
+  const { rawCss, templateExpressions } = decl;
+  if (!rawCss) {
+    return null;
+  }
+
+  // Extract pseudo slot ID from rule selector
+  const pseudoSlotMatch = rule.selector.match(/__SC_EXPR_(\d+)__/);
+  if (!pseudoSlotMatch) {
+    return null;
+  }
+  const pseudoSlotId = pseudoSlotMatch[1];
+
+  // Find the pseudo block in rawCss: `&:__SC_EXPR_<id>__` or `&&:__SC_EXPR_<id>__`
+  const blockRegex = new RegExp(`&&?:\\s*__SC_EXPR_${pseudoSlotId}__\\s*\\{([^}]*)\\}`);
+  const blockMatch = rawCss.match(blockRegex);
+  if (!blockMatch?.[1]) {
+    return null;
+  }
+
+  // Find standalone __SC_EXPR_N__ in the block content
+  const standaloneSlotRegex = /__SC_EXPR_(\d+)__/g;
+  const slots: number[] = [];
+  let slotMatch;
+  while ((slotMatch = standaloneSlotRegex.exec(blockMatch[1])) !== null) {
+    slots.push(Number(slotMatch[1]));
+  }
+
+  // Only handle single standalone interpolation for now
+  if (slots.length !== 1) {
+    return null;
+  }
+
+  const slotId = slots[0]!;
+  const expr = templateExpressions[slotId];
+  if (
+    !expr ||
+    typeof expr !== "object" ||
+    (expr as { type?: string }).type !== "ArrowFunctionExpression"
+  ) {
+    return null;
+  }
+
+  const bindings = getArrowFnParamBindings(expr as any);
+  if (!bindings) {
+    return null;
+  }
+
+  const { parseTestInfo } = createPropTestHelpers(bindings);
+
+  // Extract condition and CSS text from the arrow function body
+  const body = (expr as { body?: unknown }).body as
+    | {
+        type: string;
+        operator?: string;
+        left?: unknown;
+        right?: unknown;
+        test?: unknown;
+        consequent?: unknown;
+        alternate?: unknown;
+      }
+    | undefined;
+  if (!body) {
+    return null;
+  }
+
+  let test: unknown;
+  let cssNode: unknown;
+  let needsNegation = false;
+
+  if (body.type === "LogicalExpression" && body.operator === "&&") {
+    test = body.left;
+    cssNode = body.right;
+  } else if (body.type === "ConditionalExpression") {
+    test = body.test;
+    const consequentCss = extractCssTextFromNode(body.consequent);
+    const alternateCss = extractCssTextFromNode(body.alternate);
+    // Both branches have CSS - bail (we can't represent both in a single guard)
+    if (consequentCss && alternateCss) {
+      return null;
+    }
+    if (consequentCss) {
+      cssNode = body.consequent;
+    } else if (alternateCss) {
+      cssNode = body.alternate;
+      needsNegation = true;
+    } else {
+      return null;
+    }
+  } else {
+    return null;
+  }
+
+  const testInfo = parseTestInfo(test as ExpressionKind);
+  if (!testInfo) {
+    return null;
+  }
+
+  const cssText = extractCssTextFromNode(cssNode);
+  if (!cssText) {
+    return null;
+  }
+
+  const cssProps = parseCssDeclarationBlock(cssText);
+  if (!cssProps || Object.keys(cssProps).length === 0) {
+    return null;
+  }
+
+  const when = needsNegation ? negateWhen(testInfo.when) : testInfo.when;
+  return { when, propName: testInfo.propName, cssProps };
+}
+
+/** Negates a `when` condition string (e.g. `$active` → `!$active`, `!$x` → `$x`). */
+function negateWhen(when: string): string {
+  if (when.startsWith("!")) {
+    return when.slice(1);
+  }
+  if (when.includes(" === ")) {
+    return when.replace(" === ", " !== ");
+  }
+  if (when.includes(" !== ")) {
+    return when.replace(" !== ", " === ");
+  }
+  return `!${when}`;
+}
+
+/** Extracts static CSS text from a StringLiteral or zero-expression TemplateLiteral. */
+function extractCssTextFromNode(node: unknown): string | null {
+  if (!node || typeof node !== "object") {
+    return null;
+  }
+  const n = node as {
+    type?: string;
+    value?: unknown;
+    expressions?: unknown[];
+    quasis?: Array<{ value?: { raw?: string } }>;
+  };
+  if (n.type === "StringLiteral" || (n.type === "Literal" && typeof n.value === "string")) {
+    return n.value as string;
+  }
+  if (n.type === "TemplateLiteral" && (!n.expressions || n.expressions.length === 0)) {
+    return (n.quasis ?? []).map((q) => q.value?.raw ?? "").join("");
+  }
+  return null;
 }

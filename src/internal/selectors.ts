@@ -101,6 +101,7 @@ function parseSingleSelector(selector: selectorParser.Selector): ParsedSelector 
   let hasUniversal = false;
   const pseudoClasses: selectorParser.Pseudo[] = [];
   const pseudoElements: selectorParser.Pseudo[] = [];
+  const attributes: selectorParser.Attribute[] = [];
 
   for (const node of nodes) {
     switch (node.type) {
@@ -132,9 +133,8 @@ function parseSingleSelector(selector: selectorParser.Selector): ParsedSelector 
         }
         break;
       case "attribute":
-        // Attribute selectors like [disabled] - generally unsupported
-        // (handled separately for specific cases like input[type="checkbox"])
-        return { kind: "unsupported", reason: "attribute selector" };
+        attributes.push(node);
+        break;
     }
   }
 
@@ -153,6 +153,22 @@ function parseSingleSelector(selector: selectorParser.Selector): ParsedSelector 
   }
   if (hasUniversal) {
     return { kind: "unsupported", reason: "universal selector" };
+  }
+
+  // Handle self-attribute selectors (e.g., &[data-visible="true"])
+  // StyleX doesn't support bare attribute selector keys, so we wrap them in
+  // :is() to emit as a pseudo-class: ':is([data-visible="true"])'.
+  // Must come before pseudo handling so attr+pseudo combos are caught.
+  // Requires & (nesting) — without it, [attr] is a descendant selector.
+  if (attributes.length > 0) {
+    if (!hasNesting || hasCombinator || hasClass || hasId || hasTag || hasUniversal) {
+      return { kind: "unsupported", reason: "attribute selector" };
+    }
+    if (pseudoClasses.length > 0 || pseudoElements.length > 0) {
+      return { kind: "unsupported", reason: "attribute selector with pseudo" };
+    }
+    const attrStr = attributes.map((a) => a.toString()).join("");
+    return { kind: "pseudo", pseudos: [`:is(${attrStr})`] };
   }
 
   // Must have nesting selector (&) or be just pseudos

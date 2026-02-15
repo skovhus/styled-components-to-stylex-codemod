@@ -2507,3 +2507,26 @@ export const App = () => (
     expect(result.code).toContain("as={forwardedAs}");
   });
 });
+
+describe("self attribute selector handling", () => {
+  it("should bail on bare attribute selector without & (descendant targeting)", () => {
+    const source = `
+import styled from "styled-components";
+
+const Box = styled.div\`
+  opacity: 0;
+  [data-visible="true"] {
+    opacity: 1;
+  }
+\`;
+
+export const App = () => <Box />;
+`;
+    const result = transformWithWarnings(
+      { source, path: "test.tsx" },
+      { jscodeshift: j, j, stats: () => {}, report: () => {} },
+      { adapter: fixtureAdapter },
+    );
+    expect(result.code).toBeNull();
+  });
+});

@@ -12,6 +12,7 @@ import { finalizeDeclProcessing } from "./lower-rules/finalize-decl.js";
 import { postProcessAfterBaseMixins } from "./lower-rules/after-base-mixins.js";
 import { finalizeRelationOverrides } from "./lower-rules/relation-overrides.js";
 import { makeCssPropKey } from "./lower-rules/shared.js";
+import { cssKeyframeNameToIdentifier, extractInlineKeyframes } from "./keyframes.js";
 
 export type { RelationOverride } from "./lower-rules/state.js";
 
@@ -24,6 +25,25 @@ export function lowerRules(ctx: TransformContext): {
   bail: boolean;
 } {
   const state = createLowerRulesState(ctx);
+
+  // Pre-scan all declarations for inline @keyframes definitions.
+  // These must be registered before rule processing so animation properties
+  // can reference them.
+  for (const decl of state.styledDecls) {
+    const inlineKfs = extractInlineKeyframes(decl.rules);
+    for (const [cssName, frames] of inlineKfs) {
+      const jsName = cssKeyframeNameToIdentifier(cssName);
+      state.keyframesNames.add(cssName);
+      if (!ctx.inlineKeyframes) {
+        ctx.inlineKeyframes = new Map();
+      }
+      ctx.inlineKeyframes.set(jsName, frames);
+      if (!ctx.inlineKeyframeNameMap) {
+        ctx.inlineKeyframeNameMap = new Map();
+      }
+      ctx.inlineKeyframeNameMap.set(cssName, jsName);
+    }
+  }
 
   for (const decl of state.styledDecls) {
     if (state.bail) {

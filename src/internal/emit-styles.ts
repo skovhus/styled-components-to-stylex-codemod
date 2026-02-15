@@ -563,6 +563,22 @@ export function emitStylesAndImports(ctx: TransformContext): { emptyStyleKeys: S
     (stylesDecl as any).comments = deduped;
   }
 
+  // Emit inline @keyframes as `const <name> = stylex.keyframes({...})` before stylex.create.
+  const inlineKeyframeDecls: any[] = [];
+  if (ctx.inlineKeyframes && ctx.inlineKeyframes.size > 0) {
+    for (const [name, frames] of ctx.inlineKeyframes) {
+      const kfDecl = j.variableDeclaration("const", [
+        j.variableDeclarator(
+          j.identifier(name),
+          j.callExpression(j.memberExpression(j.identifier("stylex"), j.identifier("keyframes")), [
+            objectToAst(j, frames as Record<string, unknown>),
+          ]),
+        ),
+      ]);
+      inlineKeyframeDecls.push(kfDecl);
+    }
+  }
+
   const programBody = root.get().node.program.body as any[];
   if (stylesInsertPosition === "afterImports") {
     const lastImportIdx = (() => {
@@ -575,11 +591,11 @@ export function emitStylesAndImports(ctx: TransformContext): { emptyStyleKeys: S
       return last;
     })();
     const insertAt = lastImportIdx >= 0 ? lastImportIdx + 1 : 0;
-    programBody.splice(insertAt, 0, stylesDecl as any);
+    programBody.splice(insertAt, 0, ...inlineKeyframeDecls, stylesDecl as any);
   } else {
-    // Place `styles` at the very end of the file.
+    // Place inline keyframes and `styles` at the very end of the file.
     // This keeps component logic first, styles last for better readability.
-    programBody.push(stylesDecl as any);
+    programBody.push(...inlineKeyframeDecls, stylesDecl as any);
   }
 
   // Emit separate stylex.create declarations for variant dimensions

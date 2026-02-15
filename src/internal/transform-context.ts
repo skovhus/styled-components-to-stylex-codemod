@@ -87,6 +87,10 @@ export class TransformContext {
   crossFileMarkers?: Map<string, string>;
   /** Content for the sidecar .stylex.ts file (defineMarker declarations), populated by emitStylesStep */
   sidecarStylexContent?: string;
+  /** Inline @keyframes extracted from styled component templates: JS identifier name → frame objects */
+  inlineKeyframes?: Map<string, Record<string, Record<string, unknown>>>;
+  /** Maps CSS @keyframes names to sanitized JS identifier names (e.g. "fade-in" → "fadeIn") */
+  inlineKeyframeNameMap?: Map<string, string>;
 
   constructor(file: FileInfo, api: API, options: TransformOptions) {
     const j = api.jscodeshift;
