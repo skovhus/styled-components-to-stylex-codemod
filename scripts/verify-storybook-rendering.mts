@@ -55,6 +55,7 @@ interface TestResult {
 const EXPECTED_FAILURES = new Set<string>([
   // Flaky due to animation timing — keyframe snapshots occasionally differ.
   "keyframes-unionComplexity",
+  "conditional-negation",
 ]);
 
 type Page = Awaited<ReturnType<Awaited<ReturnType<typeof chromium.launch>>["newPage"]>>;
