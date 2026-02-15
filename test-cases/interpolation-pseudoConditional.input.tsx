@@ -17,6 +17,27 @@ const Button = styled.button`
   }
 `;
 
+/**
+ * Same as Button but with `&&:${highlight}` specificity hack.
+ * The `&&` should be stripped and the pseudo alias still applied.
+ */
+const SpecificButton = styled.button`
+  color: green;
+  padding: 8px 16px;
+
+  &&:${highlight} {
+    color: purple;
+    background-color: orange;
+  }
+`;
+
 export const App = () => (
-  <TouchDeviceToggle>{() => <Button>Highlight Button</Button>}</TouchDeviceToggle>
+  <TouchDeviceToggle>
+    {() => (
+      <div style={{ display: "flex", gap: "16px", padding: "16px" }}>
+        <Button>Highlight Button</Button>
+        <SpecificButton>Specific Button</SpecificButton>
+      </div>
+    )}
+  </TouchDeviceToggle>
 );

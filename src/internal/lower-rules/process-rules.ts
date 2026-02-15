@@ -190,12 +190,14 @@ export function processDeclRules(ctx: DeclProcessingState): void {
       const selectorForAnalysis = specificityResult.normalized;
       const s = normalizeInterpolatedSelector(selectorForAnalysis).trim();
       const hasComponentExpr = rule.selector.includes("__SC_EXPR_");
-      const hasInterpolatedPseudo = /:[^\s{]*__SC_EXPR_\d+__/.test(rule.selector);
+      const hasInterpolatedPseudo = /:[^\s{]*__SC_EXPR_\d+__/.test(selectorForAnalysis);
 
       if (hasInterpolatedPseudo) {
         // Only handle the simple case: selector is exactly `&:__SC_EXPR_N__`
         // (the entire pseudo-class is a single interpolation).
-        const pseudoSlotMatch = rule.selector.match(/^&:__SC_EXPR_(\d+)__\s*$/);
+        // Uses `selectorForAnalysis` so that `&&:${expr}` (specificity hack) is accepted
+        // after being normalized to `&:__SC_EXPR_N__`.
+        const pseudoSlotMatch = selectorForAnalysis.match(/^&:__SC_EXPR_(\d+)__\s*$/);
         if (!pseudoSlotMatch) {
           state.markBail();
           warnings.push({

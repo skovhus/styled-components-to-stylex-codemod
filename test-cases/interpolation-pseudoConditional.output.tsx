@@ -26,8 +26,37 @@ function Button(props: React.PropsWithChildren<{ ref?: React.Ref<HTMLButtonEleme
   );
 }
 
+/**
+ * Same as Button but with `&&:${highlight}` specificity hack.
+ * The `&&` should be stripped and the pseudo alias still applied.
+ */
+function SpecificButton(props: React.PropsWithChildren<{ ref?: React.Ref<HTMLButtonElement> }>) {
+  const { children } = props;
+
+  return (
+    <button
+      {...stylex.props(
+        styles.specificButton,
+        highlightStyles({
+          active: styles.specificButtonPseudoActive,
+          hover: styles.specificButtonPseudoHover,
+        }),
+      )}
+    >
+      {children}
+    </button>
+  );
+}
+
 export const App = () => (
-  <TouchDeviceToggle>{() => <Button>Highlight Button</Button>}</TouchDeviceToggle>
+  <TouchDeviceToggle>
+    {() => (
+      <div style={{ display: "flex", gap: "16px", padding: "16px" }}>
+        <Button>Highlight Button</Button>
+        <SpecificButton>Specific Button</SpecificButton>
+      </div>
+    )}
+  </TouchDeviceToggle>
 );
 
 const styles = stylex.create({
@@ -54,6 +83,31 @@ const styles = stylex.create({
     backgroundColor: {
       default: null,
       ":hover": "yellow",
+    },
+  },
+  specificButton: {
+    color: "green",
+    paddingBlock: "8px",
+    paddingInline: "16px",
+  },
+  specificButtonPseudoActive: {
+    color: {
+      default: "green",
+      ":active": "purple",
+    },
+    backgroundColor: {
+      default: null,
+      ":active": "orange",
+    },
+  },
+  specificButtonPseudoHover: {
+    color: {
+      default: "green",
+      ":hover": "purple",
+    },
+    backgroundColor: {
+      default: null,
+      ":hover": "orange",
     },
   },
 });
