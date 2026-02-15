@@ -6,11 +6,6 @@ type ButtonProps = React.PropsWithChildren<{
   $active?: boolean;
 }>;
 
-/**
- * Interpolated pseudo with dynamic interpolation inside the pseudo block.
- * `&:${highlight}` pseudo alias wraps a prop-conditional interpolation
- * that generates entire CSS declarations.
- */
 function Button(props: ButtonProps) {
   const { children, $active } = props;
 
