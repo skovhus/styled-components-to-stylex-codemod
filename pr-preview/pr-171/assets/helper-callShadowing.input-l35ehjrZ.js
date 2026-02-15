@@ -1,0 +1,3 @@
+import{j as t,a as r}from"./index-B6Sa1gW2.js";import"./helpers-BmhHu7_z.js";function n(){const o=e=>`#${e}`;return r.div`
+    background-color: ${o("ff0000")};
+  `}const d=()=>{const o=n();return t.jsx(o,{children:"Colored text"})};export{d as App};
