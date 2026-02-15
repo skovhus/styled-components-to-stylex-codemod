@@ -5,6 +5,7 @@ export function App() {
     <div style={{ display: "flex", gap: 16, padding: 20 }}>
       <div {...stylex.props(styles.fadeIn)}>Fading In</div>
       <div {...stylex.props(styles.slideUp)}>Sliding Up</div>
+      <div {...stylex.props(styles.bounceIn)}>Bouncing In</div>
     </div>
   );
 }
@@ -31,6 +32,18 @@ const slideUp = stylex.keyframes({
   },
 });
 
+const bounceIn = stylex.keyframes({
+  "0%": {
+    transform: "scale(0.5)",
+    opacity: 0,
+  },
+
+  "100%": {
+    transform: "scale(1)",
+    opacity: 1,
+  },
+});
+
 const styles = stylex.create({
   fadeIn: {
     animationName: fadeIn,
@@ -45,6 +58,13 @@ const styles = stylex.create({
     animationDuration: "0.3s",
     animationTimingFunction: "ease-out",
     backgroundColor: "lightblue",
+    padding: "20px",
+  },
+  bounceIn: {
+    animationName: bounceIn,
+    animationDuration: "0.4s",
+    animationTimingFunction: "cubic-bezier(0.68, -0.55, 0.27, 1.55)",
+    backgroundColor: "lightgreen",
     padding: "20px",
   },
 });

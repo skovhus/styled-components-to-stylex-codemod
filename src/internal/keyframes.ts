@@ -3,6 +3,7 @@
  * Core concepts: Stylis parsing and keyframes extraction.
  */
 import type { ASTNode, Collection, ImportDeclaration, JSCodeshift } from "jscodeshift";
+import valueParser from "postcss-value-parser";
 import { compile } from "stylis";
 import type { CssRuleIR } from "./css-ir.js";
 import { cssPropertyToStylexProp, resolveBackgroundStylexProp } from "./css-prop-mapping.js";
@@ -164,6 +165,22 @@ function convertStyledKeyframesImpl(args: {
 }
 
 /**
+ * Converts a CSS @keyframes name to a valid JS identifier.
+ * E.g. "fade-in" → "fadeIn", "2bounce" → "_2bounce".
+ */
+export function cssKeyframeNameToIdentifier(name: string): string {
+  // Convert kebab-case to camelCase
+  let result = name.replace(/-([a-zA-Z0-9])/g, (_, ch: string) => ch.toUpperCase());
+  // Replace any remaining invalid characters with underscores
+  result = result.replace(/[^a-zA-Z0-9_$]/g, "_");
+  // Ensure it doesn't start with a digit
+  if (/^\d/.test(result)) {
+    result = `_${result}`;
+  }
+  return result;
+}
+
+/**
  * Extracts inline @keyframes definitions from CSS IR rules.
  * Returns a map of keyframe name → frame objects (e.g., { "0%": { opacity: 0 }, "100%": { opacity: 1 } }).
  */
@@ -188,12 +205,17 @@ export function extractInlineKeyframes(
       result.set(kfName, frames);
     }
 
+    // If any declaration inside this keyframe is non-static (interpolated),
+    // we cannot safely represent it in stylex.keyframes(). Skip this entire
+    // keyframe so the bail logic in process-rules catches it.
+    if (rule.declarations.some((d) => d.value.kind !== "static")) {
+      result.delete(kfName);
+      continue;
+    }
+
     const frameKey = rule.selector.trim();
     const styleObj: Record<string, unknown> = frames[frameKey] ?? {};
     for (const d of rule.declarations) {
-      if (d.value.kind !== "static") {
-        continue;
-      }
       const prop = cssPropertyToStylexProp(
         d.property === "background" ? resolveBackgroundStylexProp(d.valueRaw) : d.property,
       );
@@ -216,8 +238,15 @@ export function expandStaticAnimationShorthand(
   inlineKeyframeNames: Set<string>,
   j: JSCodeshift,
   styleObj: Record<string, unknown>,
+  nameMap?: Map<string, string>,
 ): boolean {
-  const tokens = value.trim().split(/\s+/);
+  // Use postcss-value-parser to properly handle function tokens like
+  // cubic-bezier(0.1, 0.7, 1, 0.1) and steps(4, end) without splitting them.
+  const parsed = valueParser(value.trim());
+  const tokens = parsed.nodes
+    .filter((n) => n.type !== "space")
+    .map((n) => valueParser.stringify(n))
+    .filter(Boolean);
   if (tokens.length === 0) {
     return false;
   }
@@ -228,10 +257,11 @@ export function expandStaticAnimationShorthand(
     return false;
   }
 
-  const name = tokens[nameIdx]!;
+  const cssName = tokens[nameIdx]!;
+  const jsName = nameMap?.get(cssName) ?? cssKeyframeNameToIdentifier(cssName);
   const remaining = tokens.filter((_, i) => i !== nameIdx);
 
-  styleObj.animationName = j.identifier(name);
+  styleObj.animationName = j.identifier(jsName);
 
   const classified = classifyAnimationTokens(remaining);
   if (classified.duration) {
