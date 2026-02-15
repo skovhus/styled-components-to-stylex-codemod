@@ -1,1 +1,0 @@
-import{j as o}from"./index-P9dI8z79.js";import{T as t}from"./TouchDeviceToggle-B0J2MukM.js";import"./helpers-CchOkmhU.js";const x=()=>o.jsx(t,{children:()=>o.jsx("button",{className:"x1vvogim x1hr3lfm xju2f9n x1dgwipm x1336f0y",children:"Highlight Button"})});export{x as App};
