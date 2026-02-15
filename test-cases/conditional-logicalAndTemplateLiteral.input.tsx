@@ -25,6 +25,14 @@ export const Card = styled.div<{ $isHighlighted: boolean }>`
     `border: 1px solid ${props.theme.color.primaryColor}; box-shadow: 0 0 8px ${props.theme.color.bgSub};`}
 `;
 
+// Test ternary with template literal containing theme expression and undefined alternate
+// This is semantically equivalent to the logical AND form above
+export const StatusBar = styled.div<{ $isDisconnected?: boolean }>`
+  padding: 8px;
+  ${(props) =>
+    props.$isDisconnected ? `background-color: ${props.theme.color.bgSub};` : undefined}
+`;
+
 export const App = () => (
   <div>
     <Title>Normal Title</Title>
@@ -33,5 +41,7 @@ export const App = () => (
     <DropZone $isDraggingOver={false}>Not dragging</DropZone>
     <Card $isHighlighted>Highlighted</Card>
     <Card $isHighlighted={false}>Normal</Card>
+    <StatusBar $isDisconnected>Disconnected</StatusBar>
+    <StatusBar>Connected</StatusBar>
   </div>
 );

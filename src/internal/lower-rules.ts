@@ -66,6 +66,7 @@ export function lowerRules(ctx: TransformContext): {
       relationOverrides: state.relationOverrides,
       resolvedStyleObjects: state.resolvedStyleObjects,
       makeCssPropKey,
+      childPseudoMarkers: state.childPseudoMarkers,
     });
   }
 
