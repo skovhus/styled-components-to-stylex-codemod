@@ -120,7 +120,7 @@ body{font-family:-apple-system,BlinkMacSystemFont,Segoe UI,Roboto,Helvetica Neue
   inherits: false
 }
 
-@property --x-animationDelay {
+@property --x-1e2mv7m {
   syntax: "*";
   inherits: false
 }
@@ -130,7 +130,7 @@ body{font-family:-apple-system,BlinkMacSystemFont,Segoe UI,Roboto,Helvetica Neue
   inherits: false
 }
 
-@property --x-1e2mv7m {
+@property --x-animationDelay {
   syntax: "*";
   inherits: false
 }
@@ -150,22 +150,22 @@ body{font-family:-apple-system,BlinkMacSystemFont,Segoe UI,Roboto,Helvetica Neue
   }
 }
 
-@keyframes xekv6nw-B {
-  0% {
-    opacity: 0;
-  }
-
-  100% {
-    opacity: 1;
-  }
-}
-
 @keyframes x18re5ia-B {
   from {
     opacity: 0;
   }
 
   to {
+    opacity: 1;
+  }
+}
+
+@keyframes xekv6nw-B {
+  0% {
+    opacity: 0;
+  }
+
+  100% {
     opacity: 1;
   }
 }
@@ -459,16 +459,14 @@ body{font-family:-apple-system,BlinkMacSystemFont,Segoe UI,Roboto,Helvetica Neue
   .x1wk2j8l.x1wk2j8l:not(#\#) {
     padding: 2.5rem;
   }
-}
 
-@media (width >= 768px) and (width <= 1023.99px) {
-  .x1t32qvz.x1t32qvz:not(#\#) {
+  .x1i7j8g4.x1i7j8g4:not(#\#) {
     padding: 2rem;
   }
 }
 
-@media (width >= 1024px) {
-  .x1i7j8g4.x1i7j8g4:not(#\#) {
+@media (width >= 768px) and (width <= 1023.99px) {
+  .x1t32qvz.x1t32qvz:not(#\#) {
     padding: 2rem;
   }
 }
@@ -2210,8 +2208,16 @@ body{font-family:-apple-system,BlinkMacSystemFont,Segoe UI,Roboto,Helvetica Neue
   background-color: #a9a9a9;
 }
 
+.x8t4y8i:hover:not(#\#):not(#\#):not(#\#) {
+  background-color: green;
+}
+
 .xeirn3a:hover:not(#\#):not(#\#):not(#\#) {
   background-color: orange;
+}
+
+.x1gykpug:hover:not(#\#):not(#\#):not(#\#) {
+  background-color: red;
 }
 
 .x1j2k28p:hover:not(#\#):not(#\#):not(#\#) {
@@ -2306,8 +2312,16 @@ body{font-family:-apple-system,BlinkMacSystemFont,Segoe UI,Roboto,Helvetica Neue
   color: #fff;
 }
 
+.x1r8vpxm:active:not(#\#):not(#\#):not(#\#) {
+  background-color: green;
+}
+
 .x34ll8x:active:not(#\#):not(#\#):not(#\#) {
   background-color: orange;
+}
+
+.xayehhk:active:not(#\#):not(#\#):not(#\#) {
+  background-color: red;
 }
 
 .x1tw4c92:active:not(#\#):not(#\#):not(#\#) {
