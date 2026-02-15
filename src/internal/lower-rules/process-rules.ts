@@ -3,6 +3,7 @@
  * Core concepts: selector normalization, attribute wrappers, and rule buckets.
  */
 import type { JSCodeshift } from "jscodeshift";
+import type { SelectorResolveResult } from "../../adapter.js";
 import type { DeclProcessingState } from "./decl-setup.js";
 import type { StyledDecl } from "../transform-types.js";
 import type { CssDeclarationIR } from "../css-ir.js";
@@ -1156,7 +1157,7 @@ function tryResolveInterpolatedPseudo(
   ctx: DeclProcessingState,
 ): "bail" | void {
   const { state } = ctx;
-  const { resolverImports, resolveSelector } = state;
+  const { resolverImports, resolveSelector, resolveImportInScope } = state;
 
   if (!slotExpr) {
     return "bail";
@@ -1168,7 +1169,7 @@ function tryResolveInterpolatedPseudo(
     return "bail";
   }
 
-  const imp = state.resolveImportInScope(info.rootName, info.rootNode);
+  const imp = resolveImportInScope(info.rootName, info.rootNode);
   if (!imp) {
     return "bail";
   }
@@ -1208,7 +1209,7 @@ function tryResolveInterpolatedPseudo(
  * and registers them on `decl.conditionalPseudoSelectors` for the emit phase.
  */
 function handlePseudoConditional(
-  result: Extract<import("../../adapter.js").SelectorResolveResult, { kind: "pseudoConditional" }>,
+  result: Extract<SelectorResolveResult, { kind: "pseudoConditional" }>,
   rule: DeclProcessingState["decl"]["rules"][number],
   ctx: DeclProcessingState,
 ): "bail" | void {
@@ -1281,7 +1282,7 @@ function handlePseudoConditional(
  * nested media query guards per branch. No wrapper component needed.
  */
 function handlePseudoMediaQuery(
-  result: Extract<import("../../adapter.js").SelectorResolveResult, { kind: "pseudoMediaQuery" }>,
+  result: Extract<SelectorResolveResult, { kind: "pseudoMediaQuery" }>,
   rule: DeclProcessingState["decl"]["rules"][number],
   ctx: DeclProcessingState,
 ): "bail" | void {
