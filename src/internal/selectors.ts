@@ -159,8 +159,9 @@ function parseSingleSelector(selector: selectorParser.Selector): ParsedSelector 
   // StyleX doesn't support bare attribute selector keys, so we wrap them in
   // :is() to emit as a pseudo-class: ':is([data-visible="true"])'.
   // Must come before pseudo handling so attr+pseudo combos are caught.
+  // Requires & (nesting) — without it, [attr] is a descendant selector.
   if (attributes.length > 0) {
-    if (hasCombinator || hasClass || hasId || hasTag || hasUniversal) {
+    if (!hasNesting || hasCombinator || hasClass || hasId || hasTag || hasUniversal) {
       return { kind: "unsupported", reason: "attribute selector" };
     }
     if (pseudoClasses.length > 0 || pseudoElements.length > 0) {
