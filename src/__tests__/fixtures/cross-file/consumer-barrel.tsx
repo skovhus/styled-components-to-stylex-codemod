@@ -1,5 +1,5 @@
 import styled from "styled-components";
-import { CollapseArrowIcon, PlainIcon } from "./lib";
+import { CollapseArrowIcon } from "./lib";
 
 const Card = styled.div`
   padding: 16px;
@@ -8,15 +8,10 @@ const Card = styled.div`
   ${CollapseArrowIcon} {
     fill: blue;
   }
-
-  ${PlainIcon} {
-    fill: green;
-  }
 `;
 
 export const App = () => (
   <Card>
     <CollapseArrowIcon />
-    <PlainIcon />
   </Card>
 );

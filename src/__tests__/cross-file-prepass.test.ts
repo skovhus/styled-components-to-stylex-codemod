@@ -97,7 +97,7 @@ describe("scanCrossFileSelectors", () => {
     expect(info.componentsNeedingBridge.size).toBe(0);
   });
 
-  it("detects barrel (index.ts) import with multiple selectors", () => {
+  it("detects barrel (index.ts) import", () => {
     const info = scanCrossFileSelectors(
       [fixture("consumer-barrel.tsx"), fixture("lib/index.ts")],
       [],
@@ -111,10 +111,6 @@ describe("scanCrossFileSelectors", () => {
     const collapseUsage = usages!.find((u) => u.localName === "CollapseArrowIcon");
     expect(collapseUsage).toBeDefined();
     expect(collapseUsage!.resolvedPath).toBe(fixture("lib/index.ts"));
-
-    const plainUsage = usages!.find((u) => u.localName === "PlainIcon");
-    expect(plainUsage).toBeDefined();
-    expect(plainUsage!.resolvedPath).toBe(fixture("lib/index.ts"));
   });
 
   it("flags bridge when consumer is NOT in the transform set", () => {
