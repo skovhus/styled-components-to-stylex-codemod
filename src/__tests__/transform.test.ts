@@ -1910,6 +1910,32 @@ export const App = () => <Box />;
     // Should NOT use destructuring default for this pattern
     expect(result.code).not.toMatch(/tabIndex:\s*tabIndex\s*=\s*0/);
   });
+
+  it("should preserve numeric-looking string defaults in destructured attrs props", () => {
+    // Regression test: defaults like "01" must stay strings when emitted as
+    // destructuring defaults, otherwise strict comparisons and prop types can change.
+    const source = `
+import styled from "styled-components";
+
+const Box = styled.div.attrs((props) => ({
+  role: props.role ?? "01",
+}))<{ role?: string }>\`
+  color: \${(props) => props.role === "01" ? "red" : "blue"};
+\`;
+
+export const App = () => <Box />;
+`;
+
+    const result = transformWithWarnings(
+      { source, path: "attrs-string-default.tsx" },
+      { jscodeshift: j, j, stats: () => {}, report: () => {} },
+      { adapter: fixtureAdapter },
+    );
+
+    expect(result.code).not.toBeNull();
+    expect(result.code).toContain('role = "01"');
+    expect(result.code).not.toContain("role = 1");
+  });
 });
 
 describe("theme boolean conditionals", () => {
@@ -2132,5 +2158,320 @@ export const App = () => <Badge>Hello</Badge>;
 
     // Should bail — closureVar is not a prop, so we can't create variants
     expect(result.code).toBeNull();
+  });
+});
+
+describe("attribute selector handling", () => {
+  it("should bail on [readonly] for non-input elements like textarea", () => {
+    // Regression: [readonly] attribute selector was recognized by parseAttributeSelectorInternal
+    // for ALL elements, but the attrWrapper pattern only supports <input>. For non-input
+    // elements, the readonly styles fell through unconditionally into the base style object.
+    const source = `
+import styled from "styled-components";
+
+const TextArea = styled.textarea\`
+  padding: 8px;
+  font-size: 14px;
+
+  &[readonly] {
+    background: #fafafa;
+    border-style: dashed;
+  }
+\`;
+
+export const App = () => <TextArea />;
+`;
+    const result = transformWithWarnings(
+      { source, path: "test.tsx" },
+      { jscodeshift: j, j, stats: () => {}, report: () => {} },
+      { adapter: fixtureAdapter },
+    );
+    // Should bail — [readonly] on textarea is an unsupported attribute selector
+    expect(result.code).toBeNull();
+  });
+
+  it("should handle [readonly] correctly on input elements as JS prop conditional", () => {
+    // [readonly] on <input> should produce a separate style object applied via readOnly prop,
+    // NOT a :read-only pseudo-class (which matches too broadly: disabled, checkbox, radio).
+    const source = `
+import styled from "styled-components";
+
+const Input = styled.input\`
+  padding: 8px;
+
+  &[readonly] {
+    background: #fafafa;
+  }
+\`;
+
+export const App = () => <Input readOnly value="test" />;
+`;
+    const result = transformWithWarnings(
+      { source, path: "test.tsx" },
+      { jscodeshift: j, j, stats: () => {}, report: () => {} },
+      { adapter: fixtureAdapter },
+    );
+    expect(result.code).not.toBeNull();
+    // Should use JS conditional, not :read-only pseudo-class
+    expect(result.code).toContain("readOnly && styles.inputReadonly");
+    expect(result.code).not.toContain(":read-only");
+  });
+
+  it("should normalize shorthand/longhand conflicts in readonly style objects", () => {
+    // Regression: readonlyKey was missing from collectComponentStyleKeys, so shorthand
+    // declarations in [readonly] blocks were not expanded when conflicting with base longhands.
+    const source = `
+import styled from "styled-components";
+
+const Input = styled.input\`
+  padding: 8px 12px;
+
+  &[readonly] {
+    padding: 0;
+    background: #fafafa;
+  }
+\`;
+
+export const App = () => <Input readOnly value="test" />;
+`;
+    const result = transformWithWarnings(
+      { source, path: "test.tsx" },
+      { jscodeshift: j, j, stats: () => {}, report: () => {} },
+      { adapter: fixtureAdapter },
+    );
+    expect(result.code).not.toBeNull();
+    // The base has paddingBlock/paddingInline (from "8px 12px").
+    // The readonly block has padding: 0 which should be expanded to match.
+    expect(result.code).toContain("paddingBlock");
+    expect(result.code).toContain("paddingInline");
+    // The readonly style should NOT have the shorthand "padding" since it conflicts
+    // with the base's paddingBlock/paddingInline longhands.
+    const readonlyMatch = result.code!.match(/inputReadonly:\s*\{([^}]+)\}/);
+    expect(readonlyMatch).toBeTruthy();
+    const readonlyBlock = readonlyMatch![1]!;
+    // Should have expanded longhands, not shorthand
+    expect(readonlyBlock).not.toMatch(/\bpadding\b(?!Block|Inline)/);
+    expect(readonlyBlock).toContain("paddingBlock");
+    expect(readonlyBlock).toContain("paddingInline");
+  });
+});
+
+describe("shorthand/longhand normalization edge cases", () => {
+  it("should expand 2-value physical conflict to 4 physical longhands, not logical", () => {
+    // Regression: splitDirectionalProperty returns logical Block/Inline for 2-value shorthands
+    // even when alwaysExpand is true, but when there's a physical conflict (e.g., marginBottom),
+    // we need physical longhands (marginTop/Right/Bottom/Left).
+    const source = `
+import styled from "styled-components";
+
+const Box = styled.div<{ $wide?: boolean }>\`
+  margin-bottom: 8px;
+  \${(p) => p.$wide ? "" : "margin: 8px 16px;"}
+\`;
+
+export const App = () => <Box>test</Box>;
+`;
+    const result = transformWithWarnings(
+      { source, path: "test.tsx" },
+      { jscodeshift: j, j, stats: () => {}, report: () => {} },
+      { adapter: fixtureAdapter },
+    );
+    expect(result.code).not.toBeNull();
+    // The base has marginBottom (physical). The conditional has margin: 8px 16px (2-value).
+    // The expansion should produce 4 physical longhands, not logical Block/Inline.
+    expect(result.code).toContain("marginTop");
+    expect(result.code).toContain("marginRight");
+    expect(result.code).toContain("marginBottom");
+    expect(result.code).toContain("marginLeft");
+    // Should NOT contain logical longhands (which is what splitDirectionalProperty
+    // returns for 2-value shorthands)
+    expect(result.code).not.toContain("marginBlock");
+    expect(result.code).not.toContain("marginInline");
+  });
+
+  it("should split multi-value shorthands before logical block/inline assignment", () => {
+    // Regression: logical expansion path assigned the entire multi-value string to both
+    // Block and Inline, e.g., paddingBlock: "8px 12px", paddingInline: "8px 12px"
+    // instead of paddingBlock: "8px", paddingInline: "12px".
+    const source = `
+import styled from "styled-components";
+
+const Input = styled.input\`
+  padding-block: 4px;
+  \${(p) => p.readOnly ? "" : "padding: 8px 12px;"}
+\`;
+
+export const App = () => <Input />;
+`;
+    const result = transformWithWarnings(
+      { source, path: "test.tsx" },
+      { jscodeshift: j, j, stats: () => {}, report: () => {} },
+      { adapter: fixtureAdapter },
+    );
+    expect(result.code).not.toBeNull();
+    // The base has paddingBlock (logical). The conditional has padding: 8px 12px.
+    // The expansion should split: paddingBlock: "8px", paddingInline: "12px"
+    expect(result.code).toContain('paddingBlock: "8px"');
+    expect(result.code).toContain('paddingInline: "12px"');
+    // Should NOT have the unsplit value
+    expect(result.code).not.toContain('"8px 12px"');
+  });
+});
+
+describe("forwardedAs prop handling", () => {
+  it("should preserve forwardedAs on wrapper callsites for styled(styled.tag) chains", () => {
+    // In styled-components wrapper chains, `forwardedAs` does not behave like a direct `as`
+    // replacement. Preserve `forwardedAs` at the wrapper callsite so the rendered output
+    // stays aligned with the source behavior.
+    const source = `
+import styled from "styled-components";
+
+const Button = styled.button\`
+  color: white;
+  background: blue;
+\`;
+
+const ButtonWrapper = styled(Button)\`
+  box-shadow: 0 2px 4px rgba(0,0,0,0.2);
+\`;
+
+export const App = () => (
+  <div>
+    <Button forwardedAs="a" href="#">Direct forwardedAs</Button>
+    <ButtonWrapper forwardedAs="a" href="#">Link</ButtonWrapper>
+    <ButtonWrapper as="section" forwardedAs="a" href="#">Both</ButtonWrapper>
+  </div>
+);
+`;
+    const result = transformWithWarnings(
+      { source, path: "test.tsx" },
+      { jscodeshift: j, j, stats: () => {}, report: () => {} },
+      { adapter: fixtureAdapter },
+    );
+    expect(result.code).not.toBeNull();
+    // Keep forwardedAs at the wrapper callsite (no blanket conversion to `as`).
+    expect(result.code).toContain('forwardedAs="a"');
+    expect(result.code).not.toContain('<ButtonWrapper as="a"');
+    // forwardedAs should lower to `as={forwardedAs}` at the rendered intrinsic layer.
+    expect(result.code).toContain("as={forwardedAs}");
+    // Direct forwardedAs should remain a callsite prop (not become element polymorphism).
+    expect(result.code).toContain('<Button forwardedAs="a" href="#">');
+    // `as` and `forwardedAs` can co-exist on wrapper callsites.
+    expect(result.code).toContain('<ButtonWrapper as="section" forwardedAs="a" href="#">');
+  });
+
+  it("should lower forwardedAs for styled(Component) and keep attrs(as) as a fallback", () => {
+    const source = `
+import React from "react";
+import styled from "styled-components";
+
+type BaseProps = {
+  as?: React.ElementType;
+  href?: string;
+  children?: React.ReactNode;
+};
+
+const Base = ({ as: Component = "button", ...rest }: BaseProps) => {
+  return <Component {...rest} />;
+};
+
+const Wrapper = styled(Base).attrs({ as: "span" })\`
+  color: red;
+\`;
+
+export const App = () => (
+  <Wrapper forwardedAs="a" href="#">
+    Link
+  </Wrapper>
+);
+`;
+    const result = transformWithWarnings(
+      { source, path: "test.tsx" },
+      { jscodeshift: j, j, stats: () => {}, report: () => {} },
+      { adapter: fixtureAdapter },
+    );
+    expect(result.code).not.toBeNull();
+    expect(result.code).toContain("forwardedAs?: React.ElementType");
+    expect(result.code).toContain('as={forwardedAs ?? "span"}');
+    expect(result.code).not.toContain('as="span"');
+  });
+
+  it("should lower forwardedAs through styled(Component) when wrapped base is polymorphic", () => {
+    const source = `
+import styled from "styled-components";
+
+const Base = styled.button\`
+  color: red;
+\`;
+
+const Outer = styled(Base)\`
+  background: blue;
+\`;
+
+export const App = () => (
+  <div>
+    <Base as="section">Base polymorphic</Base>
+    <Outer forwardedAs="a" href="#">
+      Outer forwardedAs
+    </Outer>
+  </div>
+);
+`;
+    const result = transformWithWarnings(
+      { source, path: "test.tsx" },
+      { jscodeshift: j, j, stats: () => {}, report: () => {} },
+      { adapter: fixtureAdapter },
+    );
+    expect(result.code).not.toBeNull();
+    expect(result.code).toContain('<Outer forwardedAs="a" href="#">');
+    expect(result.code).toContain("forwardedAs?: React.ElementType");
+    expect(result.code).toContain("as={forwardedAs}");
+  });
+
+  it("should propagate forwardedAs through multi-level styled(Component) wrapper chains", () => {
+    const source = `
+import React from "react";
+import styled from "styled-components";
+
+type LeafProps = {
+  as?: React.ElementType;
+  href?: string;
+  children?: React.ReactNode;
+};
+
+const Leaf = ({ as: Component = "button", ...rest }: LeafProps) => {
+  return <Component {...rest} />;
+};
+
+const Base = styled(Leaf)\`
+  color: red;
+\`;
+
+const Mid = styled(Base)\`
+  background: blue;
+\`;
+
+const Outer = styled(Mid)\`
+  border: 1px solid black;
+\`;
+
+export const App = () => (
+  <div>
+    <Base as="section">Base polymorphic</Base>
+    <Outer forwardedAs="a" href="#">
+      Outer forwardedAs
+    </Outer>
+  </div>
+);
+`;
+    const result = transformWithWarnings(
+      { source, path: "test.tsx" },
+      { jscodeshift: j, j, stats: () => {}, report: () => {} },
+      { adapter: fixtureAdapter },
+    );
+    expect(result.code).not.toBeNull();
+    expect(result.code).toContain('<Outer forwardedAs="a" href="#">');
+    expect(result.code).toContain("function Base");
+    expect(result.code).toContain("as={forwardedAs}");
   });
 });

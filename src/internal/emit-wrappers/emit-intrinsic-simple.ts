@@ -6,7 +6,12 @@
  */
 import type { JSCodeshift } from "jscodeshift";
 import type { StyledDecl } from "../transform-types.js";
-import { collectInlineStylePropNames, type ExpressionKind, type InlineStyleProp } from "./types.js";
+import {
+  collectInlineStylePropNames,
+  type ExpressionKind,
+  type InlineStyleProp,
+  type WrapperPropDefaults,
+} from "./types.js";
 import type { JsxAttr, StatementKind } from "./wrapper-emitter.js";
 import { emitStyleMerging } from "./style-merger.js";
 import { sortVariantEntriesBySpecificity, VOID_TAGS } from "./type-helpers.js";
@@ -221,6 +226,17 @@ export function emitSimpleWithConfigWrappers(ctx: EmitIntrinsicContext): void {
           ...(d.attrsInfo?.invertedBoolAttrs ?? []).map((inv: any) => inv.jsxProp).filter(Boolean),
         ]),
       ];
+      // When a defaultAttr prop is also used in a style conditional,
+      // add a destructuring default so the condition sees the resolved value.
+      const minimalPropDefaults: WrapperPropDefaults = new Map();
+      for (const attr of d.attrsInfo?.defaultAttrs ?? []) {
+        if (
+          destructureProps.includes(attr.jsxProp) &&
+          (typeof attr.value === "string" || typeof attr.value === "number")
+        ) {
+          minimalPropDefaults.set(attr.jsxProp, attr.value);
+        }
+      }
       emitted.push(
         ...withLeadingCommentsOnFirstFunction(
           emitMinimalWrapper({
@@ -229,6 +245,7 @@ export function emitSimpleWithConfigWrappers(ctx: EmitIntrinsicContext): void {
             propsTypeName: emitter.propsTypeNameFor(d.localName),
             styleArgs,
             destructureProps,
+            propDefaults: minimalPropDefaults.size > 0 ? minimalPropDefaults : undefined,
             allowAsProp,
             allowClassNameProp: false,
             allowStyleProp: false,
@@ -336,15 +353,19 @@ export function emitSimpleWithConfigWrappers(ctx: EmitIntrinsicContext): void {
 export function emitSimpleExportedIntrinsicWrappers(ctx: EmitIntrinsicContext): void {
   const { emitter, j, emitTypes, wrapperDecls, wrapperNames, stylesIdentifier, emitted } = ctx;
   const {
+    buildForwardedAsValueExpr,
     canUseSimplePropsType,
     shouldIncludeRestForProps,
     buildCompoundVariantExpressions,
     emitPropsType,
     emitSimplePropsType,
+    hasForwardedAsUsage,
     withSimpleAsPropType,
     polymorphicIntrinsicPropsTypeText,
     propsTypeHasExistingPolymorphicAs,
+    splitForwardedAsStaticAttrs,
     shouldAllowAsProp,
+    withForwardedAsType,
     hasElementPropsInDefaultAttrs,
     emitMinimalWrapper,
   } = ctx.helpers;
@@ -389,6 +410,7 @@ export function emitSimpleExportedIntrinsicWrappers(ctx: EmitIntrinsicContext): 
     const allowClassNameProp = emitter.shouldAllowClassNameProp(d);
     const allowStyleProp = emitter.shouldAllowStyleProp(d);
     const usedAttrsForType = emitter.getUsedAttrs(d.localName);
+    const includesForwardedAs = hasForwardedAsUsage(d);
     const allowAsProp = shouldAllowAsProp(d, tagName);
     let inlineTypeText: string | undefined;
     // d.isExported is already set from exportedComponents during analyze-before-emit
@@ -551,6 +573,7 @@ export function emitSimpleExportedIntrinsicWrappers(ctx: EmitIntrinsicContext): 
         // Wrap the explicit type with PropsWithChildren since the wrapper may need children
         return emitter.withChildren(explicit);
       })();
+      const typeTextWithForwardedAs = withForwardedAsType(typeText, includesForwardedAs);
 
       // Emit the public props type.
       // For exported components that support `as`, use the full polymorphic pattern.
@@ -562,14 +585,14 @@ export function emitSimpleExportedIntrinsicWrappers(ctx: EmitIntrinsicContext): 
         typeAliasEmitted = emitPropsType({
           localName: d.localName,
           tagName,
-          typeText,
+          typeText: typeTextWithForwardedAs,
           allowAsProp,
           allowClassNameProp,
           allowStyleProp,
           hasNoCustomProps,
         });
       } else if (!hasNoCustomProps) {
-        typeAliasEmitted = emitSimplePropsType(d.localName, typeText, allowAsProp);
+        typeAliasEmitted = emitSimplePropsType(d.localName, typeTextWithForwardedAs, allowAsProp);
       } else {
         typeAliasEmitted = false;
       }
@@ -586,6 +609,7 @@ export function emitSimpleExportedIntrinsicWrappers(ctx: EmitIntrinsicContext): 
               tagName,
               allowClassNameProp,
               allowStyleProp,
+              includeForwardedAs: includesForwardedAs,
             });
             inlineTypeText = poly.typeExprText;
           } else if (explicit) {
@@ -595,6 +619,7 @@ export function emitSimpleExportedIntrinsicWrappers(ctx: EmitIntrinsicContext): 
               tagName,
               allowClassNameProp,
               allowStyleProp,
+              includeForwardedAs: includesForwardedAs,
               extra: explicit,
             });
             inlineTypeText = poly.typeExprText;
@@ -604,7 +629,7 @@ export function emitSimpleExportedIntrinsicWrappers(ctx: EmitIntrinsicContext): 
           }
         } else {
           // Use the computed typeText (which may be an intersection) as the inline type.
-          inlineTypeText = withSimpleAsPropType(typeText, allowAsProp);
+          inlineTypeText = withSimpleAsPropType(typeTextWithForwardedAs, allowAsProp);
         }
       }
     }
@@ -621,7 +646,7 @@ export function emitSimpleExportedIntrinsicWrappers(ctx: EmitIntrinsicContext): 
 
     const destructureProps: string[] = [];
     // Track default values for props (for destructuring defaults)
-    const propDefaults = new Map<string, string>();
+    const propDefaults: WrapperPropDefaults = new Map();
 
     // Add adapter-resolved StyleX styles (emitted directly into stylex.props args).
     if (d.extraStylexPropsArgs) {
@@ -672,6 +697,20 @@ export function emitSimpleExportedIntrinsicWrappers(ctx: EmitIntrinsicContext): 
         // Use makeConditionalStyleExpr to handle boolean vs non-boolean conditions correctly.
         // For boolean conditions, && is used. For non-boolean (could be "" or 0), ternary is used.
         styleArgs.push(emitter.makeConditionalStyleExpr({ cond, expr: styleExpr, isBoolean }));
+      }
+    }
+
+    // When a defaultAttr (e.g. tabIndex: props.tabIndex ?? 0) is also used in a
+    // style conditional (e.g. tabIndex === 0 && styles.xxx), add a destructuring
+    // default so the resolved value is available to both the JSX attr and the
+    // style condition.  Without this the condition evaluates against the raw
+    // (possibly undefined) prop instead of the defaulted value.
+    for (const attr of d.attrsInfo?.defaultAttrs ?? []) {
+      if (
+        destructureProps.includes(attr.jsxProp) &&
+        (typeof attr.value === "string" || typeof attr.value === "number")
+      ) {
+        propDefaults.set(attr.jsxProp, attr.value);
       }
     }
 
@@ -792,6 +831,7 @@ export function emitSimpleExportedIntrinsicWrappers(ctx: EmitIntrinsicContext): 
       const childrenId = j.identifier("children");
       const styleId = j.identifier("style");
       const restId = shouldIncludeRest ? j.identifier("rest") : null;
+      const forwardedAsId = j.identifier("forwardedAs");
 
       const patternProps = emitter.buildDestructurePatternProps({
         baseProps: [
@@ -805,6 +845,7 @@ export function emitSimpleExportedIntrinsicWrappers(ctx: EmitIntrinsicContext): 
                 }),
               ]
             : []),
+          ...(includesForwardedAs ? [ctx.patternProp("forwardedAs", forwardedAsId)] : []),
           ...(allowClassNameProp ? [ctx.patternProp("className", classNameId)] : []),
           ...(includeChildren ? [ctx.patternProp("children", childrenId)] : []),
           ...(allowStyleProp ? [ctx.patternProp("style", styleId)] : []),
@@ -820,6 +861,11 @@ export function emitSimpleExportedIntrinsicWrappers(ctx: EmitIntrinsicContext): 
 
       // Use the style merger helper
       const { attrsInfo, staticClassNameExpr } = emitter.splitAttrsInfo(d.attrsInfo);
+      const { attrsInfo: attrsInfoWithoutForwardedAsStatic, forwardedAsStaticFallback } =
+        splitForwardedAsStaticAttrs({
+          attrsInfo,
+          includeForwardedAs: includesForwardedAs,
+        });
       const merging = emitStyleMerging({
         j,
         emitter,
@@ -834,10 +880,20 @@ export function emitSimpleExportedIntrinsicWrappers(ctx: EmitIntrinsicContext): 
 
       const openingAttrs: JsxAttr[] = [
         ...emitter.buildAttrsFromAttrsInfo({
-          attrsInfo,
+          attrsInfo: attrsInfoWithoutForwardedAsStatic,
           propExprFor: (prop) => j.identifier(prop),
         }),
         ...(restId ? [j.jsxSpreadAttribute(restId)] : []),
+        ...(includesForwardedAs
+          ? [
+              j.jsxAttribute(
+                j.jsxIdentifier("as"),
+                j.jsxExpressionContainer(
+                  buildForwardedAsValueExpr(forwardedAsId, forwardedAsStaticFallback),
+                ),
+              ),
+            ]
+          : []),
       ];
       emitter.appendMergingAttrs(openingAttrs, merging);
 

@@ -150,6 +150,9 @@ playwright-report
 # Screenshots
 *.png
 
+# Rendering comparison diffs
+.rendering-diffs/
+
 # Test case actual outputs (generated)
 test-cases/*.actual.tsx
 

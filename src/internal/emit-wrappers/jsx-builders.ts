@@ -15,7 +15,7 @@ import type {
   RestElement,
 } from "jscodeshift";
 import type { StyledDecl } from "../transform-types.js";
-import type { ExpressionKind } from "./types.js";
+import type { ExpressionKind, WrapperPropDefaults } from "./types.js";
 import type { StyleMergingResult } from "./style-merger.js";
 
 export type JsxAttr = JSXAttribute | JSXSpreadAttribute;
@@ -278,7 +278,7 @@ export function buildDestructurePatternProps(
   args: {
     baseProps: Array<Property | RestElement>;
     destructureProps: Array<string | null | undefined>;
-    propDefaults?: Map<string, string>;
+    propDefaults?: WrapperPropDefaults;
     includeRest?: boolean;
     restId?: Identifier;
   },
@@ -288,7 +288,7 @@ export function buildDestructurePatternProps(
 
   for (const name of destructureProps.filter((n): n is string => Boolean(n))) {
     const defaultVal = propDefaults?.get(name);
-    if (defaultVal) {
+    if (defaultVal !== undefined) {
       patternProps.push(
         j.property.from({
           kind: "init",

@@ -82,7 +82,10 @@ const styles = stylex.create({
     marginBottom: "8px",
   },
   containerNotCompact: {
-    margin: "24px",
+    marginTop: "24px",
+    marginRight: "24px",
+    marginBottom: "24px",
+    marginLeft: "24px",
     borderWidth: "1px",
     borderStyle: "solid",
     borderColor: "gray",

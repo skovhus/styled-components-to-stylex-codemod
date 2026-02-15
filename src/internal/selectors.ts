@@ -15,7 +15,13 @@ type ParsedSelector =
   | { kind: "unsupported"; reason: string };
 
 type ParsedAttributeSelector = {
-  type: "typeCheckbox" | "typeRadio" | "hrefStartsHttps" | "hrefEndsPdf" | "targetBlankAfter";
+  type:
+    | "typeCheckbox"
+    | "typeRadio"
+    | "readonly"
+    | "hrefStartsHttps"
+    | "hrefEndsPdf"
+    | "targetBlankAfter";
   suffix: string;
   pseudoElement?: string | null;
 };
@@ -222,6 +228,14 @@ function parseAttributeSelectorInternal(selector: string): ParsedAttributeSelect
   }
   const inside = m[1];
 
+  // [readonly] / [readOnly] → handled as JS prop conditional (not :read-only pseudo-class)
+  // because CSS :read-only matches much more broadly than [readonly]: it also matches
+  // disabled inputs, checkbox/radio, and other inherently non-editable elements.
+  const boolAttr = inside.replace(/\s+/g, "").toLowerCase();
+  if (boolAttr === "readonly") {
+    return { type: "readonly", suffix: "Readonly" };
+  }
+
   // type="checkbox" / type="radio"
   const typeEq = inside.match(/^type\s*=\s*"(checkbox|radio)"$/);
   if (typeEq) {
@@ -269,6 +283,34 @@ function parseAttributeSelectorInternal(selector: string): ParsedAttributeSelect
 // Non-parsing utility functions (kept as-is)
 // =============================================================================
 
+/**
+ * Normalize double-ampersand specificity hacks (`&&`) by collapsing to a single `&`.
+ * Only handles `&&` (exactly two). Higher tiers (`&&&`, `&&&&`) are flagged as
+ * `hasHigherTier` because flattening them can change cascade precedence.
+ *
+ * Examples:
+ *   - `&&` → `&` (stripped)
+ *   - `&&:hover` → `&:hover` (stripped)
+ *   - `.wrapper &&` → `.wrapper &` (stripped, but `.wrapper` will be caught later)
+ *   - `&&&` → flagged as hasHigherTier (not normalized)
+ *   - `&:hover` → no change
+ */
+export function normalizeSpecificityHacks(selector: string): {
+  normalized: string;
+  wasStripped: boolean;
+  hasHigherTier: boolean;
+} {
+  if (!selector.includes("&&")) {
+    return { normalized: selector, wasStripped: false, hasHigherTier: false };
+  }
+  // Check for triple-or-more ampersand sequences
+  if (/&{3,}/.test(selector)) {
+    return { normalized: selector, wasStripped: false, hasHigherTier: true };
+  }
+  const normalized = selector.replace(/&&/g, "&");
+  return { normalized, wasStripped: normalized !== selector, hasHigherTier: false };
+}
+
 export function normalizeInterpolatedSelector(selectorRaw: string): string {
   if (!/__SC_EXPR_\d+__/.test(selectorRaw)) {
     return selectorRaw;
@@ -281,8 +323,8 @@ export function normalizeInterpolatedSelector(selectorRaw: string): string {
       // Normalize `& &:pseudo` to `&:pseudo` (css helper interpolation + pseudo selector).
       // This handles patterns like `${rowBase}\n&:hover { ... }` where the css helper
       // interpolation becomes `&` and the nested pseudo selector is `&:hover`.
-      // NOTE: We intentionally do NOT normalize `& &` or `&&` without a pseudo, as those
-      // are specificity hacks that should bail (handled in transform.ts).
+      // NOTE: `&&` without a pseudo is a specificity hack and is handled separately
+      // by `normalizeSpecificityHacks()`.
       .replace(/&\s*&:/g, "&:")
       .replace(/&\s*:/g, "&:")
   );
@@ -296,11 +338,11 @@ export function normalizeSelectorForInputAttributePseudos(
     return selector;
   }
 
-  // Convert input attribute selectors into equivalent pseudo-classes so they can live
-  // in the base style object (no wrapper needed).
-  // - &[disabled]  -> &:disabled
-  // - &[readonly]  -> &:read-only
-  // - &[readOnly]  -> &:read-only (defensive)
+  // Convert [disabled] to :disabled (semantically equivalent for <input> elements).
+  // NOTE: [readonly] is NOT converted to :read-only because :read-only matches much
+  // more broadly (disabled inputs, checkbox/radio, etc.) while [readonly] only matches
+  // elements with the readonly attribute explicitly set. [readonly] is instead handled
+  // as a JS prop conditional via the attrWrapper pattern.
   const m = selector.match(/^&\[(.+)\]$/) ?? selector.match(/^\[(.+)\]$/);
   if (!m || !m[1]) {
     return selector;
@@ -308,9 +350,6 @@ export function normalizeSelectorForInputAttributePseudos(
   const inside = m[1].replace(/\s+/g, "");
   if (inside === "disabled") {
     return "&:disabled";
-  }
-  if (inside === "readonly" || inside === "readOnly") {
-    return "&:read-only";
   }
   return selector;
 }

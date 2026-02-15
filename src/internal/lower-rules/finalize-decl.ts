@@ -16,6 +16,7 @@ import { resolveDynamicNode } from "../builtin-handlers.js";
 import { parseCssDeclarationBlock } from "../builtin-handlers/css-parsing.js";
 import { ensureShouldForwardPropDrop } from "./types.js";
 import type { DeclProcessingState } from "./decl-setup.js";
+import { getOrCreateRelationOverrideBucket } from "./shared.js";
 
 export function finalizeDeclProcessing(ctx: DeclProcessingState): void {
   const {
@@ -37,8 +38,8 @@ export function finalizeDeclProcessing(ctx: DeclProcessingState): void {
   } = ctx;
   const {
     rewriteCssVarsInStyleObject,
-    descendantOverridePseudoBuckets,
-    descendantOverrides,
+    relationOverridePseudoBuckets,
+    relationOverrides,
     ancestorSelectorParents,
     resolvedStyleObjects,
     warnings,
@@ -50,16 +51,23 @@ export function finalizeDeclProcessing(ctx: DeclProcessingState): void {
   for (const [prop, map] of Object.entries(perPropMedia)) {
     styleObj[prop] = map;
   }
-  // Merge computed media keys (from adapter.resolveSelector)
+  // Merge computed media keys (from adapter.resolveSelector and sibling selectors)
   // Preserves any existing @media or pseudo entries already in styleObj[prop]
   for (const [prop, entry] of perPropComputedMedia) {
     const existing = styleObj[prop];
+
+    // Resolve the default value: prefer the early snapshot, but if it was null
+    // and styleObj[prop] now has a value (base declaration appeared after the
+    // computed-key rule), use the current value instead.
+    const resolvedDefault =
+      entry.defaultValue ?? (existing !== undefined && !isAstNode(existing) ? existing : null);
+
     // If the prop already has a media/pseudo map, merge into it
     if (existing && typeof existing === "object" && !isAstNode(existing)) {
       const merged = existing as Record<string, unknown>;
       // Add default if not already present
       if (!("default" in merged)) {
-        merged.default = entry.defaultValue;
+        merged.default = resolvedDefault;
       }
       // Add computed keys to existing object
       (merged as Record<string, unknown>).__computedKeys = entry.entries.map((e) => ({
@@ -68,7 +76,7 @@ export function finalizeDeclProcessing(ctx: DeclProcessingState): void {
       }));
     } else {
       // No existing map, create a new nested object with default and __computedKeys
-      const nested: Record<string, unknown> = { default: entry.defaultValue };
+      const nested: Record<string, unknown> = { default: resolvedDefault };
       (nested as Record<string, unknown>).__computedKeys = entry.entries.map((e) => ({
         keyExpr: e.keyExpr,
         value: e.value,
@@ -135,26 +143,15 @@ export function finalizeDeclProcessing(ctx: DeclProcessingState): void {
       }
       const overrideStyleKey = `${toStyleKey(childLocal)}In${decl.localName}`;
       ancestorSelectorParents.add(decl.styleKey);
-      // Only add to descendantOverrides once per override key
-      if (!descendantOverridePseudoBuckets.has(overrideStyleKey)) {
-        descendantOverrides.push({
-          parentStyleKey: decl.styleKey,
-          childStyleKey: childDecl.styleKey,
-          overrideStyleKey,
-        });
-      }
-      // Get or create the pseudo buckets map for this override key
-      let pseudoBuckets = descendantOverridePseudoBuckets.get(overrideStyleKey);
-      if (!pseudoBuckets) {
-        pseudoBuckets = new Map();
-        descendantOverridePseudoBuckets.set(overrideStyleKey, pseudoBuckets);
-      }
-      // Get or create the bucket for this specific pseudo (or null for base)
-      let bucket = pseudoBuckets.get(ancestorPseudo);
-      if (!bucket) {
-        bucket = {};
-        pseudoBuckets.set(ancestorPseudo, bucket);
-      }
+
+      const bucket = getOrCreateRelationOverrideBucket(
+        overrideStyleKey,
+        decl.styleKey,
+        childDecl.styleKey,
+        ancestorPseudo,
+        relationOverrides,
+        relationOverridePseudoBuckets,
+      );
       didApply = true;
 
       const declLines = declsText

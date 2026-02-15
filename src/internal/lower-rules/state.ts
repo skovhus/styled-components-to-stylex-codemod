@@ -17,10 +17,12 @@ import { createImportResolver } from "./import-resolution.js";
 import { literalToStaticValue } from "./types.js";
 import { cloneAstNode } from "../utilities/jscodeshift-utils.js";
 
-export type DescendantOverride = {
+export type RelationOverride = {
   parentStyleKey: string;
   childStyleKey: string;
   overrideStyleKey: string;
+  /** Additional style keys (from composed mixins) to search for base values */
+  childExtraStyleKeys?: string[];
 };
 
 export type LowerRulesState = ReturnType<typeof createLowerRulesState>;
@@ -56,11 +58,11 @@ export function createLowerRulesState(ctx: TransformContext) {
 
   const resolvedStyleObjects = new Map<string, unknown>();
   const declByLocalName = new Map(styledDecls.map((d) => [d.localName, d]));
-  const descendantOverrides: DescendantOverride[] = [];
+  const relationOverrides: RelationOverride[] = [];
   const ancestorSelectorParents = new Set<string>();
   // Map<overrideStyleKey, Map<pseudo|null, Record<prop, value>>>
   // null key = base styles, string key = pseudo styles (e.g., ":hover", ":focus-visible")
-  const descendantOverridePseudoBuckets = new Map<
+  const relationOverridePseudoBuckets = new Map<
     string,
     Map<string | null, Record<string, unknown>>
   >();
@@ -234,9 +236,9 @@ export function createLowerRulesState(ctx: TransformContext) {
     stringMappingFns,
     resolvedStyleObjects,
     declByLocalName,
-    descendantOverrides,
+    relationOverrides,
     ancestorSelectorParents,
-    descendantOverridePseudoBuckets,
+    relationOverridePseudoBuckets,
     cssHelperValuesByKey,
     mixinValuesByKey,
     staticPropertyValues,

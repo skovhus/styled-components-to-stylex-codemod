@@ -1,24 +1,23 @@
-// @expected-warning: Component selectors like `${OtherComponent}:hover &` are not directly representable in StyleX. Manual refactor is required
 import styled from "styled-components";
 
 const Link = styled.a`
   display: flex;
-  align-items: center;
-  padding: 5px 10px;
+  padding: 8px;
   background: papayawhip;
   color: #bf4f74;
 `;
 
+// The reverse component selector appears BEFORE the base fill declaration.
+// The base value must still be preserved as the default in the override.
 const Icon = styled.svg`
+  ${Link}:hover & {
+    fill: rebeccapurple;
+  }
+
   flex: none;
   width: 48px;
   height: 48px;
   fill: #bf4f74;
-  transition: fill 0.25s;
-
-  ${Link}:hover & {
-    fill: rebeccapurple;
-  }
 `;
 
 export const App = () => (

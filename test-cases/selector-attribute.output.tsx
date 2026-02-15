@@ -3,13 +3,14 @@ import * as stylex from "@stylexjs/stylex";
 
 type InputProps = Omit<React.InputHTMLAttributes<HTMLInputElement>, "className" | "style">;
 function Input(props: InputProps) {
-  const { type, ...rest } = props;
+  const { type, readOnly, ...rest } = props;
   const sx = stylex.props(
     styles.input,
     type === "checkbox" && styles.inputCheckbox,
     type === "radio" && styles.inputRadio,
+    readOnly && styles.inputReadonly,
   );
-  return <input type={type} {...rest} {...sx} />;
+  return <input type={type} readOnly={readOnly} {...rest} {...sx} />;
 }
 type LinkProps = Omit<React.AnchorHTMLAttributes<HTMLAnchorElement>, "className" | "style">;
 function Link(props: LinkProps) {
@@ -51,10 +52,7 @@ const styles = stylex.create({
     paddingBlock: "8px",
     paddingInline: "12px",
     borderWidth: "2px",
-    borderStyle: {
-      default: "solid",
-      ":read-only": "dashed",
-    },
+    borderStyle: "solid",
     borderColor: {
       default: "#ccc",
       ":focus": "#bf4f74",
@@ -68,7 +66,6 @@ const styles = stylex.create({
     backgroundColor: {
       default: null,
       ":disabled": "#f5f5f5",
-      ":read-only": "#fafafa",
     },
     color: {
       default: null,
@@ -86,13 +83,19 @@ const styles = stylex.create({
   inputCheckbox: {
     width: "20px",
     height: "20px",
-    padding: 0,
+    paddingBlock: 0,
+    paddingInline: 0,
   },
   inputRadio: {
     width: "20px",
     height: "20px",
-    padding: 0,
+    paddingBlock: 0,
+    paddingInline: 0,
     borderRadius: "50%",
+  },
+  inputReadonly: {
+    backgroundColor: "#fafafa",
+    borderStyle: "dashed",
   },
   link: {
     color: "#bf4f74",

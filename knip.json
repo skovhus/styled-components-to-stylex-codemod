@@ -12,8 +12,7 @@
     "@stylexjs/babel-plugin",
     "@stylexjs/stylex",
     "assert",
-    "path-browserify",
-    "playwright"
+    "path-browserify"
   ],
   "ignore": [
     "dist/**",
