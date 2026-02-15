@@ -1,0 +1,1 @@
+import{j as x}from"./index-CoJHOwRI.js";const e=()=>x.jsx("div",{style:{display:"flex",gap:16,padding:16},children:x.jsx("div",{className:"xju2f9n x1cuqhdd xikt6xp x1tamke2 x1e20vcw xx519gk",children:"Media Query Card"})});export{e as App};
