@@ -579,7 +579,7 @@ export function handleInterpolatedDeclaration(args: InterpolatedDeclarationConte
     //   boxBackgroundColor: (bg) => ({ backgroundColor: (resolved as any)[bg] })
     //
     // This requires a wrapper to consume `bg` without forwarding it to DOM.
-    if (tryHandleThemeIndexedLookup(d, { media, attrTarget, pseudos })) {
+    if (tryHandleThemeIndexedLookup(d, { media, attrTarget, pseudos, pseudoElement })) {
       continue;
     }
 
