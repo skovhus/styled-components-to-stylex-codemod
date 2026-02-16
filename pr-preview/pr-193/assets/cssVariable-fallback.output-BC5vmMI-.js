@@ -1,1 +1,0 @@
-import{j as e}from"./index-Dx0shiVf.js";function o({children:r}){return e.jsx("div",{className:"xh8yej3 x17apdc0 x1odjw0f",children:r})}const l=()=>e.jsx(o,{children:e.jsx("div",{children:"Scrollable content"})});export{l as App,o as ScrollableArea};
