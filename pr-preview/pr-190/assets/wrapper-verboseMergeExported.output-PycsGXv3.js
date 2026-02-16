@@ -1,0 +1,1 @@
+import{j as e}from"./index-CZqLpxaG.js";function l(t){return e.jsx("div",{children:"Loading..."})}function c(t){const{className:n,style:o,...a}=t,s={className:"x5yr21d"},r={...s,className:[s.className,n].filter(Boolean).join(" "),style:{...s.style,...o}};return e.jsx(l,{...a,...r})}const d=()=>e.jsx(c,{delay:1e3});export{d as App,c as StyledLoading};
