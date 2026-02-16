@@ -120,12 +120,12 @@ body{font-family:-apple-system,BlinkMacSystemFont,Segoe UI,Roboto,Helvetica Neue
   inherits: false
 }
 
-@property --x-1e2mv7m {
+@property --x-126kuz7 {
   syntax: "*";
   inherits: false
 }
 
-@property --x-126kuz7 {
+@property --x-1e2mv7m {
   syntax: "*";
   inherits: false
 }
@@ -150,22 +150,22 @@ body{font-family:-apple-system,BlinkMacSystemFont,Segoe UI,Roboto,Helvetica Neue
   }
 }
 
-@keyframes x18re5ia-B {
-  from {
-    opacity: 0;
-  }
-
-  to {
-    opacity: 1;
-  }
-}
-
 @keyframes xekv6nw-B {
   0% {
     opacity: 0;
   }
 
   100% {
+    opacity: 1;
+  }
+}
+
+@keyframes x18re5ia-B {
+  from {
+    opacity: 0;
+  }
+
+  to {
     opacity: 1;
   }
 }
@@ -1249,6 +1249,10 @@ body{font-family:-apple-system,BlinkMacSystemFont,Segoe UI,Roboto,Helvetica Neue
   background-color: #e0e0e0;
 }
 
+.x1ba05yr:not(#\#):not(#\#):not(#\#) {
+  background-color: #e0f0e0;
+}
+
 .x1jxpefe:not(#\#):not(#\#):not(#\#) {
   background-color: #e7f3ff;
 }
@@ -1259,6 +1263,10 @@ body{font-family:-apple-system,BlinkMacSystemFont,Segoe UI,Roboto,Helvetica Neue
 
 .x1x08nk5:not(#\#):not(#\#):not(#\#) {
   background-color: #f0e0d0;
+}
+
+.x149xgia:not(#\#):not(#\#):not(#\#) {
+  background-color: #f0e0f0;
 }
 
 .x15yo4kd:not(#\#):not(#\#):not(#\#) {
@@ -2852,6 +2860,10 @@ body{font-family:-apple-system,BlinkMacSystemFont,Segoe UI,Roboto,Helvetica Neue
 
 .x1dt7z5j:not(#\#):not(#\#):not(#\#):not(#\#) {
   max-width: 380px;
+}
+
+.x1j9u4d2:not(#\#):not(#\#):not(#\#):not(#\#) {
+  max-width: 400px;
 }
 
 .x1v9c91d:not(#\#):not(#\#):not(#\#):not(#\#) {
