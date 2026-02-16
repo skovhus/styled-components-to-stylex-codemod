@@ -15,16 +15,18 @@ export function StyledButton(
 
   const sx = stylex.props(styles.button);
 
+  const sxMerged = {
+    ...sx,
+    className: [sx.className, className].filter(Boolean).join(" "),
+
+    style: {
+      ...sx.style,
+      ...style,
+    },
+  };
+
   return (
-    <Button
-      {...rest}
-      {...sx}
-      className={[sx.className, className].filter(Boolean).join(" ")}
-      style={{
-        ...sx.style,
-        ...style,
-      }}
-    >
+    <Button {...rest} {...sxMerged}>
       {children}
     </Button>
   );

@@ -7,7 +7,7 @@ import { fileURLToPath } from "node:url";
 import { format } from "oxfmt";
 import transform, { transformWithWarnings } from "../transform.js";
 import type { TransformOptions } from "../transform.js";
-import { customAdapter, fixtureAdapter, appLikeAdapter } from "./fixture-adapters.js";
+import { customAdapter, fixtureAdapter, adapterForFixture } from "./fixture-adapters.js";
 import type { Adapter, ResolveValueContext } from "../adapter.js";
 
 // Suppress codemod logs in tests
@@ -137,20 +137,6 @@ function getExpectedWarningType(source: string, filePath: string): string {
 type TestTransformOptions = Partial<Omit<TransformOptions, "adapter">> & {
   adapter?: TransformOptions["adapter"];
 };
-
-// Test cases that use the app-like adapter (styleMerger: null) to reproduce
-// real-world TS errors with the verbose className/style merging pattern.
-const APP_LIKE_ADAPTER_FIXTURES = new Set([
-  "bug-data-style-src-not-accepted",
-  "bug-data-style-src-incompatible-component",
-  "bug-external-styles-missing-classname",
-]);
-
-/** Select the adapter based on the fixture name. */
-function adapterForFixture(filePath: string): TransformOptions["adapter"] {
-  const base = filePath.replace(/^.*[\\/]/, "").replace(/\.input\.\w+$/, "");
-  return APP_LIKE_ADAPTER_FIXTURES.has(base) ? appLikeAdapter : fixtureAdapter;
-}
 
 function runTransform(
   source: string,

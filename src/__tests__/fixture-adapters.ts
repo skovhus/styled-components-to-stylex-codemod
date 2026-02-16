@@ -27,10 +27,10 @@ export const fixtureAdapter = defineAdapter({
     if (
       [
         "attrs-polymorphicAs",
-        "bug-external-styles-missing-classname",
         "externalStyles-basic",
         "externalStyles-input",
         "htmlProp-element",
+        "wrapper-mergerImported",
         "htmlProp-input",
         "transientProp-notForwarded",
       ].some((filePath) => ctx.filePath.includes(filePath))
@@ -447,13 +447,25 @@ function customResolveSelector(_ctx: SelectorResolveContext): SelectorResolveRes
   return undefined;
 }
 
+// Test cases that use the app-like adapter (styleMerger: null) to test the
+// verbose className/style merging pattern on component wrappers.
+const APP_LIKE_ADAPTER_FIXTURES = new Set([
+  "wrapper-verboseMergeLocal",
+  "wrapper-verboseMergeExported",
+]);
+
+/** Select the adapter based on the fixture file path. */
+export function adapterForFixture(filePath: string): ReturnType<typeof defineAdapter> {
+  const base = filePath.replace(/^.*[\\/]/, "").replace(/\.input\.\w+$/, "");
+  return APP_LIKE_ADAPTER_FIXTURES.has(base) ? appLikeAdapter : fixtureAdapter;
+}
+
 // Adapter that mimics a real-world app codebase configuration:
 // - styleMerger: null (uses verbose className merging, not a helper function)
 // - externalInterface returns { styles: true } for all exported components
-// This triggers the verbose `className={[sx.className, className].filter(Boolean).join(" ")}`
-// pattern that exposes TS errors when the base component doesn't accept className.
-// Used for bug-* test cases that reproduce real-world TS errors.
-export const appLikeAdapter = defineAdapter({
+// This triggers the verbose className/style merging pattern that requires
+// spread-based prop passing to avoid TS excess-property errors.
+const appLikeAdapter = defineAdapter({
   styleMerger: null,
   externalInterface(): ExternalInterfaceResult {
     return { styles: true };

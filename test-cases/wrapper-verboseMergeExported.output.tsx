@@ -20,17 +20,17 @@ export function StyledLoading(
 
   const sx = stylex.props(styles.loading);
 
-  return (
-    <Loading
-      {...rest}
-      {...sx}
-      className={[sx.className, className].filter(Boolean).join(" ")}
-      style={{
-        ...sx.style,
-        ...style,
-      }}
-    />
-  );
+  const sxMerged = {
+    ...sx,
+    className: [sx.className, className].filter(Boolean).join(" "),
+
+    style: {
+      ...sx.style,
+      ...style,
+    },
+  };
+
+  return <Loading {...rest} {...sxMerged} />;
 }
 
 export const App = () => <StyledLoading delay={1000} />;

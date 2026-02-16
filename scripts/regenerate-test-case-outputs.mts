@@ -23,7 +23,7 @@ import { format } from "oxfmt";
 // We register a tiny resolver hook, then dynamically import the TS sources.
 register(new URL("./src-ts-specifier-loader.mjs", import.meta.url).href, pathToFileURL(".."));
 
-const [{ default: transform }, { fixtureAdapter, appLikeAdapter }] = await Promise.all([
+const [{ default: transform }, { adapterForFixture }] = await Promise.all([
   import("../src/transform.ts"),
   import("../src/__tests__/fixture-adapters.ts"),
 ]);
@@ -31,18 +31,6 @@ const [{ default: transform }, { fixtureAdapter, appLikeAdapter }] = await Promi
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const repoRoot = join(__dirname, "..");
 const testCasesDir = join(repoRoot, "test-cases");
-
-// Test cases that use the app-like adapter (styleMerger: null) to reproduce
-// real-world TS errors with the verbose className/style merging pattern.
-const APP_LIKE_ADAPTER_FIXTURES = new Set([
-  "bug-data-style-src-not-accepted",
-  "bug-data-style-src-incompatible-component",
-  "bug-external-styles-missing-classname",
-]);
-
-function selectAdapter(name: string) {
-  return APP_LIKE_ADAPTER_FIXTURES.has(name) ? appLikeAdapter : fixtureAdapter;
-}
 
 async function normalizeCode(code: string, ext: string) {
   const { code: formatted } = await format(`test.${ext}`, code);
@@ -75,10 +63,7 @@ async function updateFixture(name: string, ext: string) {
   // Determine parser based on filename pattern
   const parser = name.includes(".flow") ? "flow" : ext === "jsx" ? "babel" : "tsx";
 
-  // Select adapter: appLikeAdapter (styleMerger: null, externalInterface
-  // returns { styles: true }) mimics a real-world app config to reproduce
-  // TS errors from the verbose className merging pattern.
-  const adapter = selectAdapter(name);
+  const adapter = adapterForFixture(inputPath);
   const result = applyTransform(
     transform,
     { adapter },
