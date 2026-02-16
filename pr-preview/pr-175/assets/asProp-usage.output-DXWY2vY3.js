@@ -1,1 +1,0 @@
-import{j as e}from"./index-CzOQqraX.js";const o=()=>e.jsx("div",{className:"x12nagc",children:e.jsx(i,{as:"label",children:"Invite link"})});function i(n){const{as:s="div",children:t,...r}=n;return e.jsx(s,{...r,className:"xh8yej3",children:t})}export{o as App};
