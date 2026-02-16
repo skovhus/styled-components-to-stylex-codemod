@@ -242,7 +242,7 @@ function findComponentSelectorLocals(
     // Reconstruct the raw CSS with placeholders
     const rawParts: string[] = [];
     for (let i = 0; i < template.quasis.length; i++) {
-      rawParts.push(template.quasis[i]!.value.raw);
+      rawParts.push(template.quasis[i]?.value.raw ?? "");
       if (i < expressions.length) {
         rawParts.push(`__SC_EXPR_${i}__`);
       }

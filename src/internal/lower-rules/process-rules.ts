@@ -1328,7 +1328,10 @@ function tagCrossFileOverride(
   if (!markerVarName || relationOverrides.length <= countBefore) {
     return;
   }
-  const created = relationOverrides[relationOverrides.length - 1]!;
+  const created = relationOverrides.at(-1);
+  if (!created) {
+    return;
+  }
   created.crossFile = true;
   created.markerVarName = markerVarName;
   created.crossFileComponentLocalName = componentLocalName;
