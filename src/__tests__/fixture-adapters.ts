@@ -27,10 +27,10 @@ export const fixtureAdapter = defineAdapter({
     if (
       [
         "attrs-polymorphicAs",
-        "bug-external-styles-missing-classname",
         "externalStyles-basic",
         "externalStyles-input",
         "htmlProp-element",
+        "wrapper-mergerImported",
         "htmlProp-input",
         "transientProp-notForwarded",
       ].some((filePath) => ctx.filePath.includes(filePath))
@@ -446,28 +446,6 @@ function customResolveValue(ctx: ResolveValueContext): ResolveValueResult | unde
 function customResolveSelector(_ctx: SelectorResolveContext): SelectorResolveResult | undefined {
   return undefined;
 }
-
-// Adapter that mimics a real-world app codebase configuration:
-// - styleMerger: null (uses verbose className merging, not a helper function)
-// - externalInterface returns { styles: true } for all exported components
-// This triggers the verbose `className={[sx.className, className].filter(Boolean).join(" ")}`
-// pattern that exposes TS errors when the base component doesn't accept className.
-// Used for bug-* test cases that reproduce real-world TS errors.
-export const appLikeAdapter = defineAdapter({
-  styleMerger: null,
-  externalInterface(): ExternalInterfaceResult {
-    return { styles: true };
-  },
-  resolveValue(ctx) {
-    return fixtureAdapter.resolveValue?.(ctx);
-  },
-  resolveCall(ctx) {
-    return fixtureAdapter.resolveCall?.(ctx);
-  },
-  resolveSelector(ctx) {
-    return fixtureAdapter.resolveSelector?.(ctx);
-  },
-});
 
 // Test adapters - examples of custom adapter usage
 export const customAdapter = defineAdapter({

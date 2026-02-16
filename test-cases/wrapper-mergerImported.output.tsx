@@ -1,5 +1,6 @@
 import React from "react";
 import * as stylex from "@stylexjs/stylex";
+import { mergedSx } from "./lib/mergedSx";
 import { Loading } from "./lib/loading";
 
 export function StyledLoading(
@@ -10,19 +11,7 @@ export function StyledLoading(
 ) {
   const { className, style, ...rest } = props;
 
-  const sx = stylex.props(styles.loading);
-
-  return (
-    <Loading
-      {...rest}
-      {...sx}
-      className={[sx.className, className].filter(Boolean).join(" ")}
-      style={{
-        ...sx.style,
-        ...style,
-      }}
-    />
-  );
+  return <Loading {...rest} {...mergedSx(styles.loading, className, style)} />;
 }
 
 export const App = () => (

@@ -555,6 +555,7 @@ export const createValuePatternHandlers = (ctx: ValuePatternContext) => {
       media?: string | null;
       attrTarget?: Record<string, unknown> | null;
       pseudos?: string[] | null;
+      pseudoElement?: string | null;
     },
   ): boolean => {
     if (d.value.kind !== "interpolated") {
@@ -564,7 +565,10 @@ export const createValuePatternHandlers = (ctx: ValuePatternContext) => {
       return false;
     }
     // Skip media/attr buckets for now; these require more complex wiring.
-    if (opts.media || opts.attrTarget) {
+    // Also skip pseudo-elements: dynamic style functions inside pseudo-elements
+    // generate invalid @property rules in StyleX.
+    // See: https://github.com/facebook/stylex/issues/1396
+    if (opts.media || opts.attrTarget || opts.pseudoElement) {
       return false;
     }
     const parts = d.value.parts ?? [];
