@@ -687,29 +687,7 @@ export function emitComponentWrappers(emitter: WrapperEmitter): {
           j.jsxAttribute(j.jsxIdentifier("as"), j.jsxExpressionContainer(forwardedAsValueExpr)),
         );
       }
-      // For component wrappers using the verbose pattern, merge sx + className/style
-      // into a variable and spread it. Explicit JSX attributes like className={...}
-      // cause TS excess-property errors when the wrapped component doesn't accept
-      // them, but spread attributes bypass this check.
-      if (merging.needsSxVar && (merging.classNameAttr || merging.styleAttr)) {
-        const mergedProps: Parameters<typeof j.objectExpression>[0] = [
-          j.spreadElement(j.identifier("sx")),
-        ];
-        if (merging.classNameAttr) {
-          mergedProps.push(j.property("init", j.identifier("className"), merging.classNameAttr));
-        }
-        if (merging.styleAttr) {
-          mergedProps.push(j.property("init", j.identifier("style"), merging.styleAttr));
-        }
-        stmts.push(
-          j.variableDeclaration("const", [
-            j.variableDeclarator(j.identifier("sxMerged"), j.objectExpression(mergedProps)),
-          ]),
-        );
-        openingAttrs.push(j.jsxSpreadAttribute(j.identifier("sxMerged")));
-      } else {
-        emitter.appendMergingAttrs(openingAttrs, merging);
-      }
+      emitter.appendMergingAttrs(openingAttrs, merging);
 
       const jsx = emitter.buildJsxElement({
         tagName: jsxTagName,

@@ -23,7 +23,7 @@ import { format } from "oxfmt";
 // We register a tiny resolver hook, then dynamically import the TS sources.
 register(new URL("./src-ts-specifier-loader.mjs", import.meta.url).href, pathToFileURL(".."));
 
-const [{ default: transform }, { adapterForFixture }] = await Promise.all([
+const [{ default: transform }, { fixtureAdapter }] = await Promise.all([
   import("../src/transform.ts"),
   import("../src/__tests__/fixture-adapters.ts"),
 ]);
@@ -63,7 +63,7 @@ async function updateFixture(name: string, ext: string) {
   // Determine parser based on filename pattern
   const parser = name.includes(".flow") ? "flow" : ext === "jsx" ? "babel" : "tsx";
 
-  const adapter = adapterForFixture(inputPath);
+  const adapter = fixtureAdapter;
   const result = applyTransform(
     transform,
     { adapter },

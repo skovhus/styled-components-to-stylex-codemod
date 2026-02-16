@@ -7,7 +7,7 @@ import { fileURLToPath } from "node:url";
 import { format } from "oxfmt";
 import transform, { transformWithWarnings } from "../transform.js";
 import type { TransformOptions } from "../transform.js";
-import { customAdapter, fixtureAdapter, adapterForFixture } from "./fixture-adapters.js";
+import { customAdapter, fixtureAdapter } from "./fixture-adapters.js";
 import type { Adapter, ResolveValueContext } from "../adapter.js";
 
 // Suppress codemod logs in tests
@@ -145,7 +145,7 @@ function runTransform(
   parser: "tsx" | "babel" | "flow" = "tsx",
 ): string {
   const opts: TransformOptions = {
-    adapter: adapterForFixture(filePath),
+    adapter: fixtureAdapter,
     ...options,
   };
   const result = applyTransform(transform, opts, { source, path: filePath }, { parser });
@@ -164,7 +164,7 @@ function runTransformWithDiagnostics(
   parser: "tsx" | "babel" | "flow" = "tsx",
 ): { code: string | null; warnings: ReturnType<typeof transformWithWarnings>["warnings"] } {
   const opts: TransformOptions = {
-    adapter: adapterForFixture(filePath),
+    adapter: fixtureAdapter,
     ...options,
   };
   const jWithParser = jscodeshift.withParser(parser);
