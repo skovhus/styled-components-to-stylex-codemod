@@ -100,6 +100,16 @@ body{font-family:-apple-system,BlinkMacSystemFont,Segoe UI,Roboto,Helvetica Neue
   inherits: false
 }
 
+@property --x-margin {
+  syntax: "*";
+  inherits: false
+}
+
+@property --x-fontWeight {
+  syntax: "*";
+  inherits: false
+}
+
 @property --x-1113oo7 {
   syntax: "*";
   inherits: false
@@ -110,27 +120,17 @@ body{font-family:-apple-system,BlinkMacSystemFont,Segoe UI,Roboto,Helvetica Neue
   inherits: false
 }
 
-@property --x-animationDelay {
-  syntax: "*";
-  inherits: false
-}
-
 @property --x-126kuz7 {
   syntax: "*";
   inherits: false
 }
 
+@property --x-animationDelay {
+  syntax: "*";
+  inherits: false
+}
+
 @property --x-1e2mv7m {
-  syntax: "*";
-  inherits: false
-}
-
-@property --x-margin {
-  syntax: "*";
-  inherits: false
-}
-
-@property --x-fontWeight {
   syntax: "*";
   inherits: false
 }
