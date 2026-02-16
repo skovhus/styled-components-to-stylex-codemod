@@ -1,1 +1,0 @@
-import{j as t}from"./index-BeauJk6N.js";function i(n){const{text:e,children:r}=n;return t.jsxs("div",{children:[t.jsx("span",{children:e}),r]})}function s(n){return t.jsx(i,{...n,className:"x5tiur9"})}const x=()=>t.jsx(s,{text:"Section",children:t.jsx("span",{children:"Extra content"})});export{x as App,s as StyledDivider};
