@@ -122,32 +122,57 @@ function tryResolveArrowFnHelperCallWithThemeArg(
   if (!node.css.property) {
     return null;
   }
-  const expr: any = node.expr as any;
+  const expr = node.expr;
   if (!isArrowFunctionExpression(expr)) {
     return null;
   }
-  const propsParamName = getArrowFnSingleParamName(expr);
-  if (!propsParamName) {
+
+  // Support both (props) => ... and ({ theme }) => ...
+  const info = getArrowFnThemeParamInfo(expr);
+  if (!info) {
     return null;
   }
-  const body: any = expr.body as any;
+
+  // Use getFunctionBodyExpr to also handle block-body arrows with single return
+  const body = getFunctionBodyExpr(expr);
   if (!isCallExpressionNode(body)) {
     return null;
   }
   const args = body.arguments ?? [];
-  if (args.length !== 1) {
-    return null;
-  }
-  const arg0 = args[0] as any;
-  if (!arg0 || arg0.type !== "MemberExpression") {
-    return null;
-  }
-  const parts = getMemberPathFromIdentifier(arg0, propsParamName);
-  if (!parts || parts[0] !== "theme" || parts.length <= 1) {
+  if (args.length === 0) {
     return null;
   }
 
-  const simple = resolveImportedHelperCall(body, ctx, propsParamName, node.css.property);
+  // Determine param names based on parameter style
+  const propsParamName = info.kind === "propsParam" ? info.propsName : undefined;
+  const themeBindingName = info.kind === "themeBinding" ? info.themeName : undefined;
+
+  // Verify at least one arg is a theme member access
+  const hasThemeArg = args.some((arg: any) => {
+    if (!arg || arg.type !== "MemberExpression") {
+      return false;
+    }
+    if (propsParamName) {
+      const parts = getMemberPathFromIdentifier(arg, propsParamName);
+      return parts !== null && parts[0] === "theme" && parts.length > 1;
+    }
+    if (themeBindingName) {
+      const parts = getMemberPathFromIdentifier(arg, themeBindingName);
+      return parts !== null && parts.length > 0;
+    }
+    return false;
+  });
+  if (!hasThemeArg) {
+    return null;
+  }
+
+  const simple = resolveImportedHelperCall(
+    body,
+    ctx,
+    propsParamName,
+    node.css.property,
+    themeBindingName,
+  );
   if (simple.kind === "resolved") {
     return buildResolvedHandlerResult(simple.result, node.css.property, {
       resolveCallContext: simple.resolveCallContext,

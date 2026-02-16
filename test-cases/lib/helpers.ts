@@ -121,6 +121,34 @@ export function borderByColor(color: string) {
 }
 
 /**
+ * Color utility with member expression methods.
+ * E.g. ColorConverter.cssWithAlpha(color, alpha) returns a CSS color-mix string.
+ */
+export const ColorConverter = {
+  cssWithAlpha(color: string, alpha: number): string {
+    if (!color.startsWith("#")) {
+      return color;
+    }
+    const raw = color.slice(1);
+    const normalized =
+      raw.length === 3
+        ? raw
+            .split("")
+            .map((ch) => ch + ch)
+            .join("")
+        : raw;
+    if (normalized.length !== 6) {
+      return color;
+    }
+    const r = Number.parseInt(normalized.slice(0, 2), 16);
+    const g = Number.parseInt(normalized.slice(2, 4), 16);
+    const b = Number.parseInt(normalized.slice(4, 6), 16);
+    const a = Math.min(1, Math.max(0, alpha));
+    return `rgba(${r}, ${g}, ${b}, ${a})`;
+  },
+};
+
+/**
  * Component wrapper helper - wraps a component for testing styled(wrapper(Component)) patterns
  */
 export function wrapComponent<P extends object>(
