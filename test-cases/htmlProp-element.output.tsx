@@ -11,13 +11,7 @@ interface TextColorProps {
  * A text span that sets the color.
  * When exported, should include HTML span props (className, children, style).
  */
-export function TextColor(
-  props: TextColorProps & {
-    className?: string;
-    style?: React.CSSProperties;
-    children?: React.ReactNode;
-  },
-) {
+export function TextColor(props: React.ComponentProps<"span"> & TextColorProps) {
   const { className, children, style, color, ...rest } = props;
 
   return (

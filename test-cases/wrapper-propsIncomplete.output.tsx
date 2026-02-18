@@ -14,13 +14,7 @@ interface TextColorProps {
   color: string;
 }
 
-export function TextColor(
-  props: TextColorProps & {
-    className?: string;
-    style?: React.CSSProperties;
-    children?: React.ReactNode;
-  },
-) {
+export function TextColor(props: React.ComponentProps<"span"> & TextColorProps) {
   const { className, children, style, color, ...rest } = props;
 
   return (
