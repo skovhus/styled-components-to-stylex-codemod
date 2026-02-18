@@ -632,7 +632,7 @@ export const App = () => <Box $on />;
 
     const adapterWithBadThemeExpr = {
       externalInterface() {
-        return null;
+        return { styles: false, as: false };
       },
       resolveValue(ctx: ResolveValueContext) {
         if (ctx.kind !== "theme") {
@@ -691,7 +691,7 @@ export const App = () => (
 
     const adapterWithoutCallResolution = {
       externalInterface() {
-        return null;
+        return { styles: false, as: false };
       },
       resolveValue(ctx: ResolveValueContext) {
         // Intentionally do not resolve any calls.
@@ -781,7 +781,7 @@ export const App = () => <Button>Click</Button>;
 describe("styleMerger configuration", () => {
   const mergerAdapter = {
     externalInterface() {
-      return { styles: true } as const;
+      return { styles: true, as: false } as const;
     },
     resolveValue() {
       return undefined;
@@ -799,7 +799,7 @@ describe("styleMerger configuration", () => {
   };
   const noExternalMergerAdapter = {
     externalInterface() {
-      return null;
+      return { styles: false, as: false };
     },
     resolveValue() {
       return undefined;
@@ -968,7 +968,7 @@ export const App = () => <Box $delay={100} />;
     const adapterWithoutMerger = {
       styleMerger: null,
       externalInterface() {
-        return { styles: true } as const;
+        return { styles: true, as: false } as const;
       },
       resolveValue() {
         return undefined;
@@ -1168,7 +1168,7 @@ export const App = () => <Text>Hello</Text>;
 
     const adapterWithoutCssText = {
       externalInterface() {
-        return null;
+        return { styles: false, as: false };
       },
       resolveValue() {
         return undefined;
@@ -1229,7 +1229,7 @@ export const App = () => <Text>Hello</Text>;
 
     const adapterResolving = {
       externalInterface() {
-        return null;
+        return { styles: false, as: false };
       },
       resolveValue() {
         return undefined;
@@ -1279,7 +1279,7 @@ export const App = () => <Text>Hello</Text>;
 
     const adapterWithCssText = {
       externalInterface() {
-        return null;
+        return { styles: false, as: false };
       },
       resolveValue() {
         return undefined;
@@ -1335,7 +1335,7 @@ export const App = () => <Text>Hello</Text>;
 
     const adapterWithCssText = {
       externalInterface() {
-        return null;
+        return { styles: false, as: false };
       },
       resolveValue() {
         return undefined;
@@ -1398,7 +1398,7 @@ export const App = () => <Text>Hello</Text>;
 
     const adapterWithCssText = {
       externalInterface() {
-        return null;
+        return { styles: false, as: false };
       },
       resolveValue() {
         return undefined;
@@ -1456,7 +1456,7 @@ export const App = () => <Text>Hello</Text>;
 
     const adapterWithBadCssText = {
       externalInterface() {
-        return null;
+        return { styles: false, as: false };
       },
       resolveValue() {
         return undefined;
@@ -1511,7 +1511,7 @@ export const App = () => <Text>Hello</Text>;
 
     const adapterReturningUndefined = {
       externalInterface() {
-        return null;
+        return { styles: false, as: false };
       },
       resolveValue() {
         return undefined;

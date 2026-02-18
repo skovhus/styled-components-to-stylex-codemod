@@ -165,9 +165,9 @@ const adapter = defineAdapter({
 
   externalInterface(ctx) {
     if (ctx.filePath.includes("/shared/components/")) {
-      return { styles: true };
+      return { styles: true, as: true };
     }
-    return null;
+    return { styles: false, as: false };
   },
 
   // Use a custom merger function for cleaner output
@@ -215,7 +215,7 @@ const adapter = defineAdapter({
 
     // Example: Enable only styles (no `as` prop)
     if (ctx.filePath.includes("/design-system/")) {
-      return { styles: true };
+      return { styles: true, as: false };
     }
 
     // Example: Enable only `as` prop (no style merging)
@@ -224,7 +224,7 @@ const adapter = defineAdapter({
     }
 
     // Disable both (default)
-    return null;
+    return { styles: false, as: false };
   },
 
   styleMerger: null,
@@ -233,8 +233,8 @@ const adapter = defineAdapter({
 
 The `externalInterface` method returns:
 
-- `null` — no external interface (neither className/style nor `as` prop)
-- `{ styles: true }` — accept className/style props only
+- `{ styles: false, as: false }` — no external interface
+- `{ styles: true, as: false }` — accept className/style props only
 - `{ styles: true, as: true }` — accept className/style props AND polymorphic `as` prop
 - `{ styles: false, as: true }` — accept only polymorphic `as` prop (no style merging)
 

@@ -41,14 +41,14 @@ export const fixtureAdapter = defineAdapter({
         "transientProp-notForwarded",
       ].some((filePath) => ctx.filePath.includes(filePath))
     ) {
-      return { styles: true };
+      return { styles: true, as: false };
     }
 
     // wrapper-propsIncomplete - TextColor and ThemeText should extend HTMLAttributes
     // Highlight wraps a component and shouldn't support external styles
     if (ctx.filePath.includes("wrapper-propsIncomplete")) {
       if (ctx.componentName === "TextColor" || ctx.componentName === "ThemeText") {
-        return { styles: true };
+        return { styles: true, as: false };
       }
     }
 
@@ -59,7 +59,7 @@ export const fixtureAdapter = defineAdapter({
       return { styles: false, as: true };
     }
 
-    return null;
+    return { styles: false, as: false };
   },
 
   resolveValue(ctx) {
@@ -457,7 +457,7 @@ function customResolveSelector(_ctx: SelectorResolveContext): SelectorResolveRes
 export const customAdapter = defineAdapter({
   styleMerger: null,
   externalInterface() {
-    return null;
+    return { styles: false, as: false };
   },
   resolveValue: customResolveValue,
   resolveCall(_ctx) {
