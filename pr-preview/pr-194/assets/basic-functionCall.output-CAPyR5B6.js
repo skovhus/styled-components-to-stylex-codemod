@@ -1,0 +1,1 @@
+import{j as e}from"./index-BbDQu6W7.js";import{a as t}from"./react-spring-D0vW8P_j.js";function m(){return e.jsxs("div",{children:[e.jsx("input",{placeholder:"Type here",className:"x10w6t97 xe8ttls x12peec7 xmkeg23 x1y0btm7 xtb30c9"}),e.jsx(t.div,{className:"x1tamke2 x1t391ir x1awj2ng xmkeg23 x1y0btm7 x1hfh2ia",children:"Animated content"})]})}export{m as App};
