@@ -14,15 +14,19 @@ interface TextColorProps {
   color: string;
 }
 
-export function TextColor<C extends React.ElementType = "span">(
-  props: React.ComponentPropsWithRef<C> & Omit<TextColorProps, "as"> & { as?: C },
+export function TextColor(
+  props: TextColorProps & {
+    className?: string;
+    style?: React.CSSProperties;
+    children?: React.ReactNode;
+  },
 ) {
-  const { as: Component = "span", className, children, style, color, ...rest } = props;
+  const { className, children, style, color, ...rest } = props;
 
   return (
-    <Component {...rest} {...mergedSx(styles.textColorColor(color), className, style)}>
+    <span {...rest} {...mergedSx(styles.textColorColor(color), className, style)}>
       {children}
-    </Component>
+    </span>
   );
 }
 
@@ -65,21 +69,19 @@ export function App() {
 
 // Pattern 3: styled("span") with NO local usage - wrapper props should still be extended
 // This matches TextColor.tsx in a design system which doesn't use the component in the same file
-interface ThemeTextProps {
+interface ThemeTextProps extends React.ComponentProps<"span"> {
   /** Theme color name */
   themeColor: Colors;
 }
 
 /** A text span that gets color from theme */
-export function ThemeText<C extends React.ElementType = "span">(
-  props: ThemeTextProps & React.ComponentPropsWithRef<C> & { as?: C },
-) {
-  const { as: Component = "span", className, children, style, themeColor, ...rest } = props;
+export function ThemeText(props: ThemeTextProps) {
+  const { className, children, style, themeColor, ...rest } = props;
 
   return (
-    <Component {...rest} {...mergedSx(styles.themeTextColor(themeColor), className, style)}>
+    <span {...rest} {...mergedSx(styles.themeTextColor(themeColor), className, style)}>
       {children}
-    </Component>
+    </span>
   );
 }
 

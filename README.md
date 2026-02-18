@@ -208,8 +208,13 @@ const adapter = defineAdapter({
   externalInterface(ctx) {
     // ctx: { filePath, componentName, exportName, isDefaultExport }
 
-    // Example: Enable styles (and `as`) for all exports in shared components folder
+    // Example: Enable styles and `as` for all exports in shared components folder
     if (ctx.filePath.includes("/shared/components/")) {
+      return { styles: true, as: true };
+    }
+
+    // Example: Enable only styles (no `as` prop)
+    if (ctx.filePath.includes("/design-system/")) {
       return { styles: true };
     }
 
@@ -229,16 +234,17 @@ const adapter = defineAdapter({
 The `externalInterface` method returns:
 
 - `null` — no external interface (neither className/style nor `as` prop)
-- `{ styles: true }` — accept className/style props AND polymorphic `as` prop
+- `{ styles: true }` — accept className/style props only
+- `{ styles: true, as: true }` — accept className/style props AND polymorphic `as` prop
 - `{ styles: false, as: true }` — accept only polymorphic `as` prop (no style merging)
-- `{ styles: false, as: false }` — equivalent to `null`
 
 When `styles: true`, the generated component will:
 
 - Accept `className` and `style` props
 - Merge them with the StyleX-generated styles
 - Forward remaining props via `...rest`
-- Accept polymorphic `as` prop (required for style merging to work correctly)
+
+When `as: true` is also set, the component will additionally accept a polymorphic `as` prop for rendering as a different element type.
 
 When `{ styles: false, as: true }`, the generated component will accept a polymorphic `as` prop but won't include className/style merging.
 
