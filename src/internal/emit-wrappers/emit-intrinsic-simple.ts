@@ -471,9 +471,12 @@ export function emitSimpleExportedIntrinsicWrappers(ctx: EmitIntrinsicContext): 
         ...invertedPropsForType,
         ...staticAttrNames,
       ]);
+      const supportsExternalStyles = d.supportsExternalStyles ?? false;
       const needsRestForType =
         !!d.usedAsValue ||
         usedAttrsForType.has("*") ||
+        // External callers need full HTML props (id, onClick, aria-*, etc.)
+        supportsExternalStyles ||
         // When defaultAttrs reference element props (like tabIndex: props.tabIndex ?? 0),
         // include element props in type so those props are available
         hasElementPropsInDefaultAttrs(d) ||
@@ -557,9 +560,10 @@ export function emitSimpleExportedIntrinsicWrappers(ctx: EmitIntrinsicContext): 
           return emitter.joinIntersection(extendBaseTypeText, explicit);
         }
         if (needsRestForType) {
-          // For non-exported components that only use transient props ($-prefixed),
-          // use simple PropsWithChildren instead of verbose intersection type
+          // For non-exported components that only use transient props ($-prefixed)
+          // and don't need external styles, use simple PropsWithChildren
           if (
+            !supportsExternalStyles &&
             canUseSimplePropsType({
               isExported: d.isExported ?? false,
               usedAttrs: usedAttrsForType,

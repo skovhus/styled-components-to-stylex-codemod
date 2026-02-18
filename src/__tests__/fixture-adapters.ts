@@ -22,27 +22,33 @@ export const fixtureAdapter = defineAdapter({
 
   // Configure external interface for exported components
   externalInterface(ctx): ExternalInterfaceResult {
-    // Enable external styles for exported components in specific test cases where the expected
-    // output includes className/style prop support and HTMLAttributes extension.
+    // Enable external styles + polymorphic `as` prop for test cases that need both
+    if (
+      ["externalStyles-basic", "externalStyles-input"].some((filePath) =>
+        ctx.filePath.includes(filePath),
+      )
+    ) {
+      return { styles: true, as: true };
+    }
+
+    // Enable external styles only (no `as`) for test cases that only need className/style merging
     if (
       [
         "attrs-polymorphicAs",
-        "externalStyles-basic",
-        "externalStyles-input",
         "htmlProp-element",
         "wrapper-mergerImported",
         "htmlProp-input",
         "transientProp-notForwarded",
       ].some((filePath) => ctx.filePath.includes(filePath))
     ) {
-      return { styles: true };
+      return { styles: true, as: false };
     }
 
-    // wrapper-props-incomplete - TextColor and ThemeText should extend HTMLAttributes
+    // wrapper-propsIncomplete - TextColor and ThemeText should extend HTMLAttributes
     // Highlight wraps a component and shouldn't support external styles
     if (ctx.filePath.includes("wrapper-propsIncomplete")) {
       if (ctx.componentName === "TextColor" || ctx.componentName === "ThemeText") {
-        return { styles: true };
+        return { styles: true, as: false };
       }
     }
 
@@ -53,7 +59,7 @@ export const fixtureAdapter = defineAdapter({
       return { styles: false, as: true };
     }
 
-    return null;
+    return { styles: false, as: false };
   },
 
   resolveValue(ctx) {
@@ -451,7 +457,7 @@ function customResolveSelector(_ctx: SelectorResolveContext): SelectorResolveRes
 export const customAdapter = defineAdapter({
   styleMerger: null,
   externalInterface() {
-    return null;
+    return { styles: false, as: false };
   },
   resolveValue: customResolveValue,
   resolveCall(_ctx) {
