@@ -160,6 +160,12 @@ describe("createExternalInterface", () => {
       'import styled from "styled-components";\nimport { Tag as MyTag } from "../components/Tag";\nconst FancyTag = styled(MyTag)`border: 2px solid red;`;\nexport const App = () => <FancyTag />;',
     );
 
+    // Issue: `import { default as X }` form with styled() wrapping
+    writeFileSync(
+      path.join(consumersDir, "default-as-named.tsx"),
+      'import styled from "styled-components";\nimport { default as Link } from "../components/Link";\nconst FancyLink = styled(Link)`text-decoration: underline;`;\nexport const App = () => <FancyLink />;',
+    );
+
     // Run analysis once for all tests
     const originalCwd = process.cwd();
     try {
@@ -201,7 +207,7 @@ describe("createExternalInterface", () => {
         },
         "components/Link.tsx:Link": {
           "as": true,
-          "styles": false,
+          "styles": true,
         },
         "components/Tag.tsx:Tag": {
           "as": false,

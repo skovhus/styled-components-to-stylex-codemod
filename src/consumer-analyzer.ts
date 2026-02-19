@@ -296,11 +296,12 @@ interface ImportInfo {
 
 function findImportSource(src: string, localName: string): ImportInfo | null {
   // Named aliased import: `import { OriginalName as localName }`
+  // Skip `{ default as X }` — treat it like a default import so the local name is used.
   const aliasRe = new RegExp(
     String.raw`import\s+\{[^}]*\b(\w+)\s+as\s+${localName}\b[^}]*\}\s+from\s+["']([^"']+)["']`,
   );
   const aliasMatch = src.match(aliasRe);
-  if (aliasMatch?.[1] && aliasMatch[2]) {
+  if (aliasMatch?.[1] && aliasMatch[1] !== "default" && aliasMatch[2]) {
     return { source: aliasMatch[2], exportedName: aliasMatch[1] };
   }
 
