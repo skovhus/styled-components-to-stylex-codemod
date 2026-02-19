@@ -12,41 +12,6 @@ npm install styled-components-to-stylex-codemod
 pnpm add styled-components-to-stylex-codemod
 ```
 
-## Migration game plan
-
-### 1. Define your theme and mixins as StyleX
-
-Before running the codemod, convert your theme object and shared style helpers into StyleX equivalents:
-
-```ts
-// tokens.stylex.ts — theme variables
-import * as stylex from "@stylexjs/stylex";
-
-// Before: { colors: { primary: "#0066cc" }, spacing: { sm: "8px" } }
-export const colors = stylex.defineVars({ primary: "#0066cc" });
-export const spacing = stylex.defineVars({ sm: "8px" });
-```
-
-```ts
-// helpers.stylex.ts — shared mixins
-import * as stylex from "@stylexjs/stylex";
-
-// Before: export const truncate = () => `white-space: nowrap; overflow: hidden; ...`
-export const truncate = stylex.create({
-  base: { whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" },
-});
-```
-
-### 2. Write an adapter and run the codemod
-
-The adapter maps your project's `props.theme.*` access, CSS variables, and helper calls to the StyleX equivalents from step 1. See [Usage](#usage) below for the full API.
-
-Start with a dry run (`dryRun: true`) to preview changes, then run for real. The codemod transforms what it can and leaves the rest untouched.
-
-### 3. Verify, iterate, clean up
-
-Build and test your project. Review warnings — they tell you which files were skipped and why. Fix adapter gaps, re-run on remaining files, and repeat until done. [Report issues](https://github.com/skovhus/styled-components-to-stylex-codemod/issues) with input/output examples if the codemod produces incorrect results. Once everything is migrated, remove `ThemeProvider` and uninstall `styled-components`.
-
 ## Usage
 
 Use `runTransform` to transform files matching a glob pattern:
@@ -235,6 +200,39 @@ If the pipeline can't resolve an interpolation:
 - **Flow** type generation is non-existing, works best with TypeScript or plain JS right now. Contributions more than welcome!
 - **createGlobalStyle**: detected usage is reported as an **unsupported-feature** warning (StyleX does not support global styles in the same way).
 - **Theme prop overrides**: passing a `theme` prop directly to styled components (e.g. `<Button theme={...} />`) is not supported and will bail with a warning.
+
+## Migration game plan
+
+### 1. Define your theme and mixins as StyleX
+
+Before running the codemod, convert your theme object and shared style helpers into StyleX equivalents:
+
+```ts
+// tokens.stylex.ts — theme variables
+import * as stylex from "@stylexjs/stylex";
+
+// Before: { colors: { primary: "#0066cc" }, spacing: { sm: "8px" } }
+export const colors = stylex.defineVars({ primary: "#0066cc" });
+export const spacing = stylex.defineVars({ sm: "8px" });
+```
+
+```ts
+// helpers.stylex.ts — shared mixins
+import * as stylex from "@stylexjs/stylex";
+
+// Before: export const truncate = () => `white-space: nowrap; overflow: hidden; ...`
+export const truncate = stylex.create({
+  base: { whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" },
+});
+```
+
+### 2. Write an adapter and run the codemod
+
+The adapter maps your project's `props.theme.*` access, CSS variables, and helper calls to the StyleX equivalents from step 1. See [Usage](#usage) for the full API.
+
+### 3. Verify, iterate, clean up
+
+Build and test your project. Review warnings — they tell you which files were skipped and why. Fix adapter gaps, re-run on remaining files, and repeat until done. [Report issues](https://github.com/skovhus/styled-components-to-stylex-codemod/issues) with input/output examples if the codemod produces incorrect results.
 
 ## License
 
