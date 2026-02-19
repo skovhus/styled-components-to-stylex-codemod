@@ -65,7 +65,7 @@ function analyzeConsumers(options: AnalyzeConsumersOptions): Map<string, Externa
   };
 
   // Single rg call for both as-prop and styled() patterns
-  const { asUsages, styledCallUsages } = findConsumerUsages(options);
+  const { asUsages, styledCallUsages } = findConsumerUsages(options, read);
 
   // as-prop detection: find where as-prop components are defined
   if (asUsages.size > 0) {
@@ -105,12 +105,13 @@ interface ConsumerUsages {
   styledCallUsages: { file: string; name: string }[];
 }
 
-function findConsumerUsages(options: AnalyzeConsumersOptions): ConsumerUsages {
+function findConsumerUsages(options: AnalyzeConsumersOptions, read: CachedReader): ConsumerUsages {
   // Single rg call matches both `as={` / `as=` props and `styled(Component)` calls
   const lines = rg(String.raw`(\bas[={]|styled\([A-Z])`, options.searchDirs);
 
   const asUsages = new Map<string, Set<string>>();
   const styledCallUsages: { file: string; name: string }[] = [];
+  const unresolvedAsFiles = new Set<string>();
 
   const jsxAsRe = /<([A-Z][A-Za-z0-9]*)\b/;
   const styledCallRe = /styled\(([A-Z][A-Za-z0-9]+)/;
@@ -123,12 +124,10 @@ function findConsumerUsages(options: AnalyzeConsumersOptions): ConsumerUsages {
     if (asPropRe.test(line)) {
       const m = line.match(jsxAsRe);
       if (m?.[1]) {
-        let files = asUsages.get(m[1]);
-        if (!files) {
-          files = new Set();
-          asUsages.set(m[1], files);
-        }
-        files.add(file);
+        addToSetMap(asUsages, m[1], file);
+      } else {
+        // Component name on a different line (multiline JSX) — resolve later
+        unresolvedAsFiles.add(file);
       }
     }
 
@@ -136,6 +135,22 @@ function findConsumerUsages(options: AnalyzeConsumersOptions): ConsumerUsages {
     const styledMatch = line.match(styledCallRe);
     if (styledMatch?.[1]) {
       styledCallUsages.push({ file, name: styledMatch[1] });
+    }
+  }
+
+  // Resolve multiline JSX: <Component\n  as={...}> where tag and prop span lines
+  if (unresolvedAsFiles.size > 0) {
+    const multilineJsxAsRe = /<([A-Z][A-Za-z0-9]*)\b[^>]*?\bas[={]/g;
+    for (const file of unresolvedAsFiles) {
+      try {
+        for (const m of read(file).matchAll(multilineJsxAsRe)) {
+          if (m[1]) {
+            addToSetMap(asUsages, m[1], file);
+          }
+        }
+      } catch {
+        // skip unreadable files
+      }
     }
   }
 
@@ -264,8 +279,10 @@ function findImportSource(src: string, localName: string): string | null {
     return namedMatch[1];
   }
 
-  // Default import
-  const defaultRe = new RegExp(String.raw`import\s+${localName}\s+from\s+["']([^"']+)["']`);
+  // Default import (including `import Name, { type X } from "..."`)
+  const defaultRe = new RegExp(
+    String.raw`import\s+${localName}(?:\s*,\s*\{[^}]*\})?\s+from\s+["']([^"']+)["']`,
+  );
   const defaultMatch = src.match(defaultRe);
   if (defaultMatch?.[1]) {
     return defaultMatch[1];
@@ -372,8 +389,13 @@ function fileImportsFrom(
   defFile: string,
   resolve: Resolve,
 ): boolean {
-  const re = new RegExp(
+  // Match both named imports (`import { Name } from`) and default imports (`import Name from`)
+  const namedRe = new RegExp(
     String.raw`import\s+\{[^}]*\b${name}\b[^}]*\}\s+from\s+["']([^"']+)["']`,
+    "g",
+  );
+  const defaultRe = new RegExp(
+    String.raw`import\s+${name}(?:\s*,\s*\{[^}]*\})?\s+from\s+["']([^"']+)["']`,
     "g",
   );
 
@@ -381,27 +403,38 @@ function fileImportsFrom(
   const stem = path.parse(defFile).name;
   const parent = path.basename(path.dirname(defFile));
 
-  for (const match of usageSrc.matchAll(re)) {
-    const specifier = match[1];
-    if (!specifier) {
-      continue;
-    }
-    // Resolve the import specifier from the usage file and compare to the definition file
-    const resolved = resolve(specifier, usageFile);
-    if (resolved && path.resolve(resolved) === path.resolve(defFile)) {
-      return true;
-    }
-    // Fallback: heuristic path matching
-    if (
-      specifier.endsWith(stem) ||
-      specifier.endsWith(`${parent}/${stem}`) ||
-      specifier.endsWith(parent)
-    ) {
-      return true;
+  for (const re of [namedRe, defaultRe]) {
+    for (const match of usageSrc.matchAll(re)) {
+      const specifier = match[1];
+      if (!specifier) {
+        continue;
+      }
+      // Resolve the import specifier from the usage file and compare to the definition file
+      const resolved = resolve(specifier, usageFile);
+      if (resolved && path.resolve(resolved) === path.resolve(defFile)) {
+        return true;
+      }
+      // Fallback: heuristic path matching
+      if (
+        specifier.endsWith(stem) ||
+        specifier.endsWith(`${parent}/${stem}`) ||
+        specifier.endsWith(parent)
+      ) {
+        return true;
+      }
     }
   }
 
   return false;
+}
+
+function addToSetMap(map: Map<string, Set<string>>, key: string, value: string): void {
+  let set = map.get(key);
+  if (!set) {
+    set = new Set();
+    map.set(key, set);
+  }
+  set.add(value);
 }
 
 function sortedRecord(record: Record<string, string[]>): Record<string, string[]> {

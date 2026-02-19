@@ -57,6 +57,24 @@ describe("createExternalInterface", () => {
       'import styled from "styled-components";\nexport const Badge = styled.span`font-size: 12px;`;',
     );
 
+    // Default-exported component (for default import tests)
+    writeFileSync(
+      path.join(componentsDir, "Link.tsx"),
+      'import styled from "styled-components";\nconst Link = styled.a`color: blue;`;\nexport default Link;',
+    );
+
+    // Default-exported component with a named type export (for default+named import test)
+    writeFileSync(
+      path.join(componentsDir, "Input.tsx"),
+      'import styled from "styled-components";\nexport type InputProps = { value: string };\nconst Input = styled.input`border: 1px solid;`;\nexport default Input;',
+    );
+
+    // Component only used with multiline as-prop (no single-line usage)
+    writeFileSync(
+      path.join(componentsDir, "Heading.tsx"),
+      'import styled from "styled-components";\nexport const Heading = styled.h1`font-size: 24px;`;',
+    );
+
     // --- Consumer files ---
     const consumersDir = path.join(fixtureDir, "consumers");
     mkdirSync(consumersDir, { recursive: true });
@@ -77,6 +95,33 @@ describe("createExternalInterface", () => {
     writeFileSync(
       path.join(consumersDir, "both.tsx"),
       'import styled from "styled-components";\nimport { Badge } from "../components/Badge";\nconst SuperBadge = styled(Badge)`font-weight: bold;`;\nexport const App = () => <Badge as="div">Text</Badge>;',
+    );
+
+    // Issue: multiline JSX as-prop (component name on different line than `as=`)
+    writeFileSync(
+      path.join(consumersDir, "multiline-as.tsx"),
+      [
+        'import { Heading } from "../components/Heading";',
+        "export const App = () => (",
+        "  <Heading",
+        '    as="h2"',
+        "  >",
+        "    Title",
+        "  </Heading>",
+        ");",
+      ].join("\n"),
+    );
+
+    // Issue: default import with as-prop (cross-file)
+    writeFileSync(
+      path.join(consumersDir, "default-as.tsx"),
+      'import Link from "../components/Link";\nexport const App = () => <Link as="span">Text</Link>;',
+    );
+
+    // Issue: default import with named specifiers + styled()
+    writeFileSync(
+      path.join(consumersDir, "default-named.tsx"),
+      'import styled from "styled-components";\nimport Input, { type InputProps } from "../components/Input";\nconst FancyInput = styled(Input)`border-color: blue;`;\nexport const App = () => <FancyInput />;',
     );
 
     // Run analysis once for all tests
@@ -107,6 +152,18 @@ describe("createExternalInterface", () => {
         "components/Card.tsx:Card": {
           "as": false,
           "styles": true,
+        },
+        "components/Heading.tsx:Heading": {
+          "as": true,
+          "styles": false,
+        },
+        "components/Input.tsx:Input": {
+          "as": false,
+          "styles": true,
+        },
+        "components/Link.tsx:Link": {
+          "as": true,
+          "styles": false,
         },
       }
     `);
