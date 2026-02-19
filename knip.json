@@ -10,7 +10,6 @@
   "ignoreDependencies": [
     "@emotion/is-prop-valid",
     "@stylexjs/babel-plugin",
-    "@stylexjs/stylex",
     "assert",
     "path-browserify"
   ],
