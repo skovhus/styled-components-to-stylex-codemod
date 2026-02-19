@@ -354,8 +354,16 @@ function rg(pattern: string, searchDirs: string[]): string[] {
     const dirs = searchDirs.map(shellQuote).join(" ");
     const cmd = `rg ${shellQuote(pattern)} --no-heading --glob '*.tsx' --glob '*.ts' --glob '*.jsx' ${dirs}`;
     return execSync(cmd, { encoding: "utf-8" }).trim().split("\n").filter(Boolean);
-  } catch {
-    return []; // rg exits 1 on no matches
+  } catch (err: unknown) {
+    // rg exits 1 on no matches — that's fine, return empty
+    if (err instanceof Error && "status" in err && (err as { status: number }).status === 1) {
+      return [];
+    }
+    // Any other error (rg not installed, exit code 2, etc.) should propagate
+    throw new Error(
+      "ripgrep (rg) is required but not available. Install it: https://github.com/BurntSushi/ripgrep",
+      { cause: err },
+    );
   }
 }
 

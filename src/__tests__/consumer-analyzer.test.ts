@@ -1,9 +1,20 @@
+import { execSync } from "node:child_process";
 import { mkdirSync, mkdtempSync, realpathSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { describe, it, expect, beforeAll, afterAll } from "vitest";
 
 import { createExternalInterface } from "../consumer-analyzer.js";
+
+function assertRgAvailable(): void {
+  try {
+    execSync("rg --version", { stdio: "ignore" });
+  } catch {
+    throw new Error(
+      "ripgrep (rg) is required to run consumer-analyzer tests. Install it: https://github.com/BurntSushi/ripgrep",
+    );
+  }
+}
 
 /** Convert analysis Map to a snapshot-friendly sorted record with relative paths */
 const toSnapshot = (
@@ -30,6 +41,7 @@ describe("createExternalInterface", () => {
   let result: ReturnType<typeof createExternalInterface>;
 
   beforeAll(() => {
+    assertRgAvailable();
     fixtureDir = mkdtempSync(path.join(tmpdir(), "consumer-analyzer-test-"));
 
     // Create a minimal tsconfig so oxc-resolver can work
@@ -198,6 +210,10 @@ describe("createExternalInterface", () => {
 // ---------------------------------------------------------------------------
 
 describe("createExternalInterface snapshot on test-cases", () => {
+  beforeAll(() => {
+    assertRgAvailable();
+  });
+
   it("matches snapshot for test-cases directory", () => {
     const result = createExternalInterface({ searchDirs: ["test-cases/"] });
     expect(toSnapshot(result.map)).toMatchInlineSnapshot(`
