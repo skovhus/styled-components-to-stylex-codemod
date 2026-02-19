@@ -87,6 +87,12 @@ describe("createExternalInterface", () => {
       'import styled from "styled-components";\nexport const Heading = styled.h1`font-size: 24px;`;',
     );
 
+    // Component only consumed via aliased import (for alias resolution test)
+    writeFileSync(
+      path.join(componentsDir, "Tag.tsx"),
+      'import styled from "styled-components";\nexport const Tag = styled.span`border-radius: 4px;`;',
+    );
+
     // Non-exported component used with as-prop in same file (should NOT appear in results)
     writeFileSync(
       path.join(componentsDir, "Internal.tsx"),
@@ -148,6 +154,12 @@ describe("createExternalInterface", () => {
       'import styled from "styled-components";\nimport Input, { type InputProps } from "../components/Input";\nconst FancyInput = styled(Input)`border-color: blue;`;\nexport const App = () => <FancyInput />;',
     );
 
+    // Issue: aliased import with styled() wrapping (Tag is ONLY consumed via alias)
+    writeFileSync(
+      path.join(consumersDir, "aliased-styled.tsx"),
+      'import styled from "styled-components";\nimport { Tag as MyTag } from "../components/Tag";\nconst FancyTag = styled(MyTag)`border: 2px solid red;`;\nexport const App = () => <FancyTag />;',
+    );
+
     // Run analysis once for all tests
     const originalCwd = process.cwd();
     try {
@@ -191,6 +203,10 @@ describe("createExternalInterface", () => {
           "as": true,
           "styles": false,
         },
+        "components/Tag.tsx:Tag": {
+          "as": false,
+          "styles": true,
+        },
       }
     `);
   });
@@ -205,6 +221,24 @@ describe("createExternalInterface", () => {
         isDefaultExport: false,
       }),
     ).toEqual({ as: true, styles: true });
+  });
+
+  it("get resolves relative file paths", () => {
+    const originalCwd = process.cwd();
+    try {
+      process.chdir(fixtureDir);
+      const relativePath = "components/Badge.tsx";
+      expect(
+        result.get({
+          filePath: relativePath,
+          componentName: "Badge",
+          exportName: "Badge",
+          isDefaultExport: false,
+        }),
+      ).toEqual({ as: true, styles: true });
+    } finally {
+      process.chdir(originalCwd);
+    }
   });
 
   it("get returns default for unknown components", () => {

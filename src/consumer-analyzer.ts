@@ -28,7 +28,8 @@ import type { ExternalInterfaceContext, ExternalInterfaceResult } from "./adapte
 export function createExternalInterface(options: AnalyzeConsumersOptions): ExternalInterface {
   const map = analyzeConsumers(options);
   return {
-    get: (ctx) => map.get(`${ctx.filePath}:${ctx.componentName}`) ?? { styles: false, as: false },
+    get: (ctx) =>
+      map.get(`${path.resolve(ctx.filePath)}:${ctx.componentName}`) ?? { styles: false, as: false },
     map,
   };
 }
@@ -220,10 +221,12 @@ function resolveReStyledDefinitions(
   const seen = new Set<string>();
 
   for (const { file, name } of usages) {
-    const importSource = findImportSource(read(file), name);
-    if (!importSource) {
+    const importInfo = findImportSource(read(file), name);
+    if (!importInfo) {
       continue; // defined locally, not imported
     }
+
+    const { source: importSource, exportedName } = importInfo;
 
     let defFile = resolve(importSource, file);
     if (!defFile) {
@@ -231,9 +234,9 @@ function resolveReStyledDefinitions(
     }
 
     // Follow barrel re-exports (index.ts -> actual definition)
-    defFile = resolveBarrelReExport(defFile, name, resolve, read) ?? defFile;
+    defFile = resolveBarrelReExport(defFile, exportedName, resolve, read) ?? defFile;
 
-    const key = `${defFile}:${name}`;
+    const key = `${defFile}:${exportedName}`;
     if (seen.has(key)) {
       continue;
     }
@@ -241,14 +244,14 @@ function resolveReStyledDefinitions(
 
     // Verify the component is exported from the definition file
     try {
-      if (!fileExports(read(defFile), name)) {
+      if (!fileExports(read(defFile), exportedName)) {
         continue;
       }
     } catch {
       continue; // skip unreadable files
     }
 
-    (result[defFile] ??= []).push(name);
+    (result[defFile] ??= []).push(exportedName);
   }
 
   return sortedRecord(result);
@@ -285,14 +288,29 @@ function createResolver(): Resolve {
   };
 }
 
-function findImportSource(src: string, localName: string): string | null {
-  // Named import (including aliases like `import { Foo as localName }`)
+interface ImportInfo {
+  source: string;
+  /** The original exported name (differs from local name for aliased imports) */
+  exportedName: string;
+}
+
+function findImportSource(src: string, localName: string): ImportInfo | null {
+  // Named aliased import: `import { OriginalName as localName }`
+  const aliasRe = new RegExp(
+    String.raw`import\s+\{[^}]*\b(\w+)\s+as\s+${localName}\b[^}]*\}\s+from\s+["']([^"']+)["']`,
+  );
+  const aliasMatch = src.match(aliasRe);
+  if (aliasMatch?.[1] && aliasMatch[2]) {
+    return { source: aliasMatch[2], exportedName: aliasMatch[1] };
+  }
+
+  // Named import (no alias): `import { localName }`
   const namedRe = new RegExp(
     String.raw`import\s+\{[^}]*\b${localName}\b[^}]*\}\s+from\s+["']([^"']+)["']`,
   );
   const namedMatch = src.match(namedRe);
   if (namedMatch?.[1]) {
-    return namedMatch[1];
+    return { source: namedMatch[1], exportedName: localName };
   }
 
   // Default import (including `import Name, { type X } from "..."`)
@@ -301,7 +319,7 @@ function findImportSource(src: string, localName: string): string | null {
   );
   const defaultMatch = src.match(defaultRe);
   if (defaultMatch?.[1]) {
-    return defaultMatch[1];
+    return { source: defaultMatch[1], exportedName: localName };
   }
 
   return null;
