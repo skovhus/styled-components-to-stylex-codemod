@@ -183,17 +183,18 @@ function matchDefinitionsToUsages(
       continue;
     }
 
+    const defSrc = read(defFile);
+    if (!fileExports(defSrc, name)) {
+      continue;
+    }
+
     // Same-file usage — no import needed
     if (usageFiles.has(defFile)) {
       (result[defFile] ??= []).push(name);
       continue;
     }
 
-    // Cross-file — must be exported and imported by a usage file
-    const defSrc = read(defFile);
-    if (!fileExports(defSrc, name)) {
-      continue;
-    }
+    // Cross-file — must be imported by a usage file
 
     for (const usageFile of usageFiles) {
       if (fileImportsFrom(read(usageFile), usageFile, name, defFile, resolve)) {
@@ -238,6 +239,15 @@ function resolveReStyledDefinitions(
     }
     seen.add(key);
 
+    // Verify the component is exported from the definition file
+    try {
+      if (!fileExports(read(defFile), name)) {
+        continue;
+      }
+    } catch {
+      continue; // skip unreadable files
+    }
+
     (result[defFile] ??= []).push(name);
   }
 
@@ -254,14 +264,20 @@ type CachedReader = (filePath: string) => string;
 function createResolver(): Resolve {
   const factory = new ResolverFactory({
     extensions: [".tsx", ".ts", ".jsx", ".js"],
-    conditionNames: ["import", "types"],
+    conditionNames: ["import", "types", "default"],
     mainFields: ["module", "main"],
-    tsconfig: { configFile: path.resolve("tsconfig.json") },
+    // When package.json "exports" wildcards resolve to a .ts path that doesn't
+    // exist (e.g. "./*": ["./src/*.ts", "./src/*.tsx"]), extensionAlias lets
+    // oxc-resolver try .tsx as a fallback during file resolution.
+    extensionAlias: { ".ts": [".ts", ".tsx"] },
+    // Auto-discover the nearest tsconfig.json per file for path alias resolution.
+    tsconfig: "auto",
   });
 
   return (specifier: string, fromFile: string): string | null => {
-    const fromDir = path.resolve(path.dirname(fromFile));
-    const result = factory.sync(fromDir, specifier);
+    // resolveFileSync (not sync) is required for tsconfig: "auto" to work —
+    // it auto-discovers the nearest tsconfig.json per file.
+    const result = factory.resolveFileSync(path.resolve(fromFile), specifier);
     if (result.error || !result.path) {
       return null;
     }
