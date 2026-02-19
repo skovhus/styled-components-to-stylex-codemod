@@ -147,7 +147,9 @@ describe("createExternalInterface", () => {
   });
 
   afterAll(() => {
-    rmSync(fixtureDir, { recursive: true, force: true });
+    if (fixtureDir) {
+      rmSync(fixtureDir, { recursive: true, force: true });
+    }
   });
 
   it("detects as-prop and re-styled usage", () => {
