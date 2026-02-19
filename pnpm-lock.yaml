@@ -11,6 +11,9 @@ importers:
       jscodeshift:
         specifier: ^17.3.0
         version: 17.3.0
+      oxc-resolver:
+        specifier: ^11.17.0
+        version: 11.17.0
       postcss-selector-parser:
         specifier: ^7.1.1
         version: 7.1.1

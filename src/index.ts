@@ -4,3 +4,4 @@
  */
 export { defineAdapter } from "./adapter.js";
 export { runTransform } from "./run.js";
+export { createExternalInterface } from "./consumer-analyzer.js";
