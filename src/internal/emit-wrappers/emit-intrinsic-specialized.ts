@@ -4,14 +4,17 @@
  * These handle attribute-driven behavior or wrapper-specific style conditions
  * that need bespoke AST output rather than the generic wrapper paths.
  */
+import type { JSCodeshift } from "jscodeshift";
 import type { StyledDecl } from "../transform-types.js";
 import type { ExpressionKind } from "./types.js";
 import { withLeadingComments } from "./comments.js";
 import type { EmitIntrinsicContext } from "./emit-intrinsic-helpers.js";
+import { appendPseudoAliasStyleArgs } from "./emit-intrinsic-simple.js";
 
 export function emitInputWrappers(ctx: EmitIntrinsicContext): void {
   const { emitter, j, emitTypes, wrapperDecls, stylesIdentifier, emitted } = ctx;
-  const { emitPropsType, shouldAllowAsProp } = ctx.helpers;
+  const { emitPropsType, hasForwardedAsUsage, shouldAllowAsProp, withForwardedAsType } =
+    ctx.helpers;
   const inputWrapperDecls = wrapperDecls.filter(
     (d: StyledDecl) =>
       d.base.kind === "intrinsic" && d.base.tagName === "input" && d.attrWrapper?.kind === "input",
@@ -22,20 +25,23 @@ export function emitInputWrappers(ctx: EmitIntrinsicContext): void {
       const allowClassNameProp = emitter.shouldAllowClassNameProp(d);
       const allowStyleProp = emitter.shouldAllowStyleProp(d);
       const allowAsProp = shouldAllowAsProp(d, "input");
+      const includesForwardedAs = hasForwardedAsUsage(d);
       const explicit = emitter.stringifyTsType(d.propsType);
-      const baseTypeText =
+      const baseTypeText = withForwardedAsType(
         explicit ??
-        (() => {
-          const base = "React.InputHTMLAttributes<HTMLInputElement>";
-          const omitted: string[] = [];
-          if (!allowClassNameProp) {
-            omitted.push('"className"');
-          }
-          if (!allowStyleProp) {
-            omitted.push('"style"');
-          }
-          return omitted.length > 0 ? `Omit<${base}, ${omitted.join(" | ")}>` : base;
-        })();
+          (() => {
+            const base = "React.InputHTMLAttributes<HTMLInputElement>";
+            const omitted: string[] = [];
+            if (!allowClassNameProp) {
+              omitted.push('"className"');
+            }
+            if (!allowStyleProp) {
+              omitted.push('"style"');
+            }
+            return omitted.length > 0 ? `Omit<${base}, ${omitted.join(" | ")}>` : base;
+          })(),
+        includesForwardedAs,
+      );
       emitPropsType({
         localName: d.localName,
         tagName: "input",
@@ -70,7 +76,24 @@ export function emitInputWrappers(ctx: EmitIntrinsicContext): void {
               ),
             ]
           : []),
+        ...(aw.readonlyKey
+          ? [
+              j.logicalExpression(
+                "&&",
+                j.identifier("readOnly"),
+                j.memberExpression(j.identifier(stylesIdentifier), j.identifier(aw.readonlyKey)),
+              ),
+            ]
+          : []),
       ];
+
+      // Handle pseudo-alias selectors (e.g., &:${highlight})
+      const pseudoGuardPropsInput = appendPseudoAliasStyleArgs(
+        d.pseudoAliasSelectors,
+        styleArgs,
+        j,
+        stylesIdentifier,
+      );
 
       emitted.push(
         allowClassNameProp
@@ -165,13 +188,35 @@ export function emitInputWrappers(ctx: EmitIntrinsicContext): void {
                   }
                 ` as any),
       );
+      if (includesForwardedAs) {
+        const lastEmitted = emitted[emitted.length - 1] as any;
+        injectForwardedAsHandling(j, lastEmitted);
+      }
+
+      // Post-process: add readOnly destructuring and JSX props when [readonly] is used.
+      // Note: [disabled] stays as a StyleX :disabled pseudo-class (semantically equivalent),
+      // but [readonly] must be a JS conditional because CSS :read-only is too broad.
+      const extraInputProps: string[] = [];
+      if (aw.readonlyKey) {
+        extraInputProps.push("readOnly");
+      }
+      if (extraInputProps.length > 0) {
+        const lastEmitted = emitted[emitted.length - 1] as any;
+        injectExtraInputProps(j, lastEmitted, extraInputProps);
+      }
+
+      // Post-process: add pseudo-alias guard props to destructuring
+      if (pseudoGuardPropsInput.length > 0) {
+        injectDestructureProps(j, emitted[emitted.length - 1] as any, pseudoGuardPropsInput);
+      }
     }
   }
 }
 
 export function emitLinkWrappers(ctx: EmitIntrinsicContext): void {
   const { emitter, j, emitTypes, wrapperDecls, stylesIdentifier, emitted } = ctx;
-  const { emitPropsType, shouldAllowAsProp } = ctx.helpers;
+  const { emitPropsType, hasForwardedAsUsage, shouldAllowAsProp, withForwardedAsType } =
+    ctx.helpers;
   const linkWrapperDecls = wrapperDecls.filter(
     (d: StyledDecl) =>
       d.base.kind === "intrinsic" && d.base.tagName === "a" && d.attrWrapper?.kind === "link",
@@ -182,22 +227,25 @@ export function emitLinkWrappers(ctx: EmitIntrinsicContext): void {
       const allowClassNameProp = emitter.shouldAllowClassNameProp(d);
       const allowStyleProp = emitter.shouldAllowStyleProp(d);
       const allowAsProp = shouldAllowAsProp(d, "a");
+      const includesForwardedAs = hasForwardedAsUsage(d);
       const explicit = emitter.stringifyTsType(d.propsType);
-      const baseTypeText =
+      const baseTypeText = withForwardedAsType(
         explicit ??
-        emitter.withChildren(
-          (() => {
-            const base = "React.AnchorHTMLAttributes<HTMLAnchorElement>";
-            const omitted: string[] = [];
-            if (!allowClassNameProp) {
-              omitted.push('"className"');
-            }
-            if (!allowStyleProp) {
-              omitted.push('"style"');
-            }
-            return omitted.length > 0 ? `Omit<${base}, ${omitted.join(" | ")}>` : base;
-          })(),
-        );
+          emitter.withChildren(
+            (() => {
+              const base = "React.AnchorHTMLAttributes<HTMLAnchorElement>";
+              const omitted: string[] = [];
+              if (!allowClassNameProp) {
+                omitted.push('"className"');
+              }
+              if (!allowStyleProp) {
+                omitted.push('"style"');
+              }
+              return omitted.length > 0 ? `Omit<${base}, ${omitted.join(" | ")}>` : base;
+            })(),
+          ),
+        includesForwardedAs,
+      );
       emitPropsType({
         localName: d.localName,
         tagName: "a",
@@ -243,6 +291,14 @@ export function emitLinkWrappers(ctx: EmitIntrinsicContext): void {
             ]
           : []),
       ];
+
+      // Handle pseudo-alias selectors (e.g., &:${highlight})
+      const pseudoGuardPropsLink = appendPseudoAliasStyleArgs(
+        d.pseudoAliasSelectors,
+        styleArgs,
+        j,
+        stylesIdentifier,
+      );
 
       emitted.push(
         allowClassNameProp
@@ -389,13 +445,28 @@ export function emitLinkWrappers(ctx: EmitIntrinsicContext): void {
                   }
                 ` as any),
       );
+      if (includesForwardedAs) {
+        const lastEmitted = emitted[emitted.length - 1] as any;
+        injectForwardedAsHandling(j, lastEmitted);
+      }
+
+      // Post-process: add pseudo-alias guard props to destructuring
+      if (pseudoGuardPropsLink.length > 0) {
+        injectDestructureProps(j, emitted[emitted.length - 1] as any, pseudoGuardPropsLink);
+      }
     }
   }
 }
 
 export function emitEnumVariantWrappers(ctx: EmitIntrinsicContext): void {
   const { emitter, j, emitTypes, wrapperDecls, stylesIdentifier, emitted } = ctx;
-  const { emitPropsType, shouldAllowAsProp, asDestructureProp } = ctx.helpers;
+  const {
+    emitPropsType,
+    hasForwardedAsUsage,
+    shouldAllowAsProp,
+    asDestructureProp,
+    withForwardedAsType,
+  } = ctx.helpers;
   // Enum-variant wrappers (e.g. DynamicBox variant mapping from string-interpolation fixture).
   const enumVariantWrappers = wrapperDecls.filter((d: StyledDecl) => d.enumVariant);
   if (enumVariantWrappers.length > 0) {
@@ -404,6 +475,7 @@ export function emitEnumVariantWrappers(ctx: EmitIntrinsicContext): void {
         continue;
       }
       const tagName = "div";
+      const includesForwardedAs = hasForwardedAsUsage(d);
       const allowClassNameProp = false;
       const allowStyleProp = false;
       const allowAsProp = shouldAllowAsProp(d, tagName);
@@ -418,7 +490,7 @@ export function emitEnumVariantWrappers(ctx: EmitIntrinsicContext): void {
         emitPropsType({
           localName: d.localName,
           tagName,
-          typeText: emitter.withChildren(explicit),
+          typeText: withForwardedAsType(emitter.withChildren(explicit), includesForwardedAs),
           allowAsProp,
           allowClassNameProp,
           allowStyleProp,
@@ -438,7 +510,7 @@ export function emitEnumVariantWrappers(ctx: EmitIntrinsicContext): void {
         emitPropsType({
           localName: d.localName,
           tagName,
-          typeText,
+          typeText: withForwardedAsType(typeText, includesForwardedAs),
           allowAsProp,
           allowClassNameProp,
           allowStyleProp,
@@ -457,11 +529,13 @@ export function emitEnumVariantWrappers(ctx: EmitIntrinsicContext): void {
       const propsId = j.identifier("props");
       const variantId = j.identifier(propName);
       const childrenId = j.identifier("children");
+      const forwardedAsId = j.identifier("forwardedAs");
 
       const declStmt = j.variableDeclaration("const", [
         j.variableDeclarator(
           j.objectPattern([
             ...(allowAsProp ? [asDestructureProp("div")] : []),
+            ...(includesForwardedAs ? [emitter.patternProp("forwardedAs", forwardedAsId)] : []),
             emitter.patternProp(propName, variantId),
             emitter.patternProp("children", childrenId),
           ] as any),
@@ -476,28 +550,51 @@ export function emitEnumVariantWrappers(ctx: EmitIntrinsicContext): void {
           ? j.binaryExpression("!==", variantId, j.literal(secondary.whenValue))
           : j.binaryExpression("===", variantId, j.literal(secondary.whenValue));
 
+      const styleArgs: ExpressionKind[] = [
+        base,
+        j.logicalExpression(
+          "&&",
+          condPrimary as any,
+          j.memberExpression(j.identifier(stylesIdentifier), j.identifier(primary.styleKey)),
+        ),
+        j.logicalExpression(
+          "&&",
+          condSecondary as any,
+          j.memberExpression(j.identifier(stylesIdentifier), j.identifier(secondary.styleKey)),
+        ),
+      ];
+
+      // Handle pseudo-alias selectors (e.g., &:${highlight})
+      const pseudoGuardPropsEnum = appendPseudoAliasStyleArgs(
+        d.pseudoAliasSelectors,
+        styleArgs,
+        j,
+        stylesIdentifier,
+      );
+
+      // Inject guard props into the destructuring pattern
+      if (pseudoGuardPropsEnum.length > 0) {
+        injectDestructureProps(j, declStmt, pseudoGuardPropsEnum);
+      }
+
       const sxDecl = j.variableDeclaration("const", [
         j.variableDeclarator(
           j.identifier("sx"),
-          j.callExpression(j.memberExpression(j.identifier("stylex"), j.identifier("props")), [
-            base,
-            j.logicalExpression(
-              "&&",
-              condPrimary as any,
-              j.memberExpression(j.identifier(stylesIdentifier), j.identifier(primary.styleKey)),
-            ),
-            j.logicalExpression(
-              "&&",
-              condSecondary as any,
-              j.memberExpression(j.identifier(stylesIdentifier), j.identifier(secondary.styleKey)),
-            ),
-          ]),
+          j.callExpression(
+            j.memberExpression(j.identifier("stylex"), j.identifier("props")),
+            styleArgs,
+          ),
         ),
       ]);
 
       const openingEl = j.jsxOpeningElement(
         j.jsxIdentifier(allowAsProp ? "Component" : "div"),
-        [j.jsxSpreadAttribute(j.identifier("sx"))],
+        [
+          j.jsxSpreadAttribute(j.identifier("sx")),
+          ...(includesForwardedAs
+            ? [j.jsxAttribute(j.jsxIdentifier("as"), j.jsxExpressionContainer(forwardedAsId))]
+            : []),
+        ],
         false,
       );
       const jsx = j.jsxElement(
@@ -524,6 +621,262 @@ export function emitEnumVariantWrappers(ctx: EmitIntrinsicContext): void {
           d,
         ),
       );
+    }
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Post-processing helpers
+// ---------------------------------------------------------------------------
+
+/**
+ * Inject extra destructured props (e.g., `disabled`, `readOnly`) into an
+ * input wrapper function's parameter destructuring and JSX element.
+ *
+ * Modifies the AST in-place:
+ *   Destructuring: `{ type, ...rest }` → `{ type, disabled, readOnly, ...rest }`
+ *   JSX: `<input type={type} {...rest}>` → `<input type={type} disabled={disabled} readOnly={readOnly} {...rest}>`
+ */
+function injectExtraInputProps(j: JSCodeshift, fnDecl: unknown, extraProps: string[]): void {
+  if (!fnDecl || typeof fnDecl !== "object") {
+    return;
+  }
+
+  const queue: unknown[] = [fnDecl];
+  while (queue.length > 0) {
+    const node = queue.pop();
+    if (!node || typeof node !== "object") {
+      continue;
+    }
+    if (Array.isArray(node)) {
+      for (const item of node) {
+        queue.push(item);
+      }
+      continue;
+    }
+
+    const n = node as Record<string, unknown>;
+
+    // Inject into destructuring: { type, ...rest } → { type, disabled, readOnly, ...rest }
+    if (n.type === "ObjectPattern" && Array.isArray(n.properties)) {
+      const properties = n.properties as unknown[];
+      const restIdx = properties.findIndex(
+        (p: unknown) =>
+          !!p &&
+          typeof p === "object" &&
+          ((p as Record<string, unknown>).type === "RestElement" ||
+            (p as Record<string, unknown>).type === "RestProperty" ||
+            (p as Record<string, unknown>).type === "SpreadProperty"),
+      );
+      if (restIdx >= 0) {
+        const toInsert = extraProps.map((name) => {
+          const id = j.identifier(name);
+          const prop = j.property("init", id, id);
+          (prop as unknown as Record<string, unknown>).shorthand = true;
+          return prop;
+        });
+        properties.splice(restIdx, 0, ...toInsert);
+      }
+    }
+
+    // Inject JSX attributes: <input type={type} {...rest}> → <input type={type} disabled={disabled} readOnly={readOnly} {...rest}>
+    if (n.type === "JSXOpeningElement" && Array.isArray(n.attributes)) {
+      const nameNode = n.name as Record<string, unknown> | undefined;
+      const tagName = nameNode?.type === "JSXIdentifier" ? String(nameNode.name) : "";
+      if (tagName === "input" || tagName === "Component") {
+        const attrs = n.attributes as unknown[];
+        // Find the first spread attribute position
+        const spreadIdx = attrs.findIndex(
+          (a: unknown) =>
+            !!a &&
+            typeof a === "object" &&
+            (a as Record<string, unknown>).type === "JSXSpreadAttribute",
+        );
+        const insertIdx = spreadIdx >= 0 ? spreadIdx : attrs.length;
+        const toInsert = extraProps.map((name) =>
+          j.jsxAttribute(j.jsxIdentifier(name), j.jsxExpressionContainer(j.identifier(name))),
+        );
+        attrs.splice(insertIdx, 0, ...toInsert);
+      }
+    }
+
+    // Recurse
+    for (const key of Object.keys(n)) {
+      if (key === "loc" || key === "start" || key === "end" || key === "comments") {
+        continue;
+      }
+      const child = n[key];
+      if (child && typeof child === "object") {
+        queue.push(child);
+      }
+    }
+  }
+}
+
+/**
+ * Inject `forwardedAs` support into emitted intrinsic wrapper functions.
+ *
+ * - Adds `forwardedAs` to destructuring so it doesn't leak via `{...rest}` as `forwardedas`
+ * - Adds `as={forwardedAs}` on rendered JSX elements/components to match styled-components
+ *   semantics where `forwardedAs` lowers to an `as` attribute (not polymorphic outer `as`)
+ */
+function injectForwardedAsHandling(j: JSCodeshift, fnDecl: unknown): void {
+  if (!fnDecl || typeof fnDecl !== "object") {
+    return;
+  }
+
+  const queue: unknown[] = [fnDecl];
+  while (queue.length > 0) {
+    const node = queue.pop();
+    if (!node || typeof node !== "object") {
+      continue;
+    }
+    if (Array.isArray(node)) {
+      for (const item of node) {
+        queue.push(item);
+      }
+      continue;
+    }
+
+    const n = node as Record<string, unknown>;
+
+    if (n.type === "ObjectPattern" && Array.isArray(n.properties)) {
+      const properties = n.properties as unknown[];
+      const hasForwardedAs = properties.some((p: unknown) => {
+        if (!p || typeof p !== "object") {
+          return false;
+        }
+        const prop = p as Record<string, unknown>;
+        if (prop.type !== "Property") {
+          return false;
+        }
+        const key = prop.key as Record<string, unknown> | undefined;
+        return key?.type === "Identifier" && key.name === "forwardedAs";
+      });
+      if (!hasForwardedAs) {
+        const restIdx = properties.findIndex(
+          (p: unknown) =>
+            !!p &&
+            typeof p === "object" &&
+            ((p as Record<string, unknown>).type === "RestElement" ||
+              (p as Record<string, unknown>).type === "RestProperty" ||
+              (p as Record<string, unknown>).type === "SpreadProperty"),
+        );
+        const insertIdx = restIdx >= 0 ? restIdx : properties.length;
+        const id = j.identifier("forwardedAs");
+        const prop = j.property("init", id, id);
+        (prop as unknown as Record<string, unknown>).shorthand = true;
+        properties.splice(insertIdx, 0, prop);
+      }
+    }
+
+    if (n.type === "JSXOpeningElement" && Array.isArray(n.attributes)) {
+      const attrs = n.attributes as unknown[];
+      const hasAsAttr = attrs.some((a: unknown) => {
+        if (!a || typeof a !== "object") {
+          return false;
+        }
+        const attr = a as Record<string, unknown>;
+        if (attr.type !== "JSXAttribute") {
+          return false;
+        }
+        const name = attr.name as Record<string, unknown> | undefined;
+        return name?.type === "JSXIdentifier" && name.name === "as";
+      });
+      if (!hasAsAttr) {
+        attrs.push(
+          j.jsxAttribute(
+            j.jsxIdentifier("as"),
+            j.jsxExpressionContainer(j.identifier("forwardedAs")),
+          ),
+        );
+      }
+    }
+
+    for (const key of Object.keys(n)) {
+      if (key === "loc" || key === "start" || key === "end" || key === "comments") {
+        continue;
+      }
+      const child = n[key];
+      if (child && typeof child === "object") {
+        queue.push(child);
+      }
+    }
+  }
+}
+
+/**
+ * Inject extra props into an emitted function's destructuring pattern only
+ * (unlike `injectExtraInputProps` which also adds JSX attributes).
+ *
+ * Used for pseudo-alias guard props that need to be in scope for style
+ * expressions but should NOT be forwarded as JSX attributes.
+ */
+function injectDestructureProps(j: JSCodeshift, fnDecl: unknown, props: string[]): void {
+  if (!fnDecl || typeof fnDecl !== "object" || props.length === 0) {
+    return;
+  }
+
+  const queue: unknown[] = [fnDecl];
+  while (queue.length > 0) {
+    const node = queue.pop();
+    if (!node || typeof node !== "object") {
+      continue;
+    }
+    if (Array.isArray(node)) {
+      for (const item of node) {
+        queue.push(item);
+      }
+      continue;
+    }
+
+    const n = node as Record<string, unknown>;
+
+    if (n.type === "ObjectPattern" && Array.isArray(n.properties)) {
+      const properties = n.properties as unknown[];
+      const restIdx = properties.findIndex(
+        (p: unknown) =>
+          !!p &&
+          typeof p === "object" &&
+          ((p as Record<string, unknown>).type === "RestElement" ||
+            (p as Record<string, unknown>).type === "RestProperty" ||
+            (p as Record<string, unknown>).type === "SpreadProperty"),
+      );
+      // Collect existing binding names to avoid duplicates
+      const existingNames = new Set<string>();
+      for (const p of properties) {
+        if (p && typeof p === "object") {
+          const pr = p as Record<string, unknown>;
+          if (pr.type === "Property" && pr.key && typeof pr.key === "object") {
+            const key = pr.key as Record<string, unknown>;
+            if (key.type === "Identifier" && typeof key.name === "string") {
+              existingNames.add(key.name);
+            }
+          }
+        }
+      }
+      const insertIdx = restIdx >= 0 ? restIdx : properties.length;
+      const toInsert = props
+        .filter((name) => !existingNames.has(name))
+        .map((name) => {
+          const id = j.identifier(name);
+          const prop = j.property("init", id, id);
+          (prop as unknown as Record<string, unknown>).shorthand = true;
+          return prop;
+        });
+      properties.splice(insertIdx, 0, ...toInsert);
+      // Only inject into the first ObjectPattern (the props destructuring)
+      return;
+    }
+
+    for (const key of Object.keys(n)) {
+      if (key === "loc" || key === "start" || key === "end" || key === "comments") {
+        continue;
+      }
+      const child = n[key];
+      if (child && typeof child === "object") {
+        queue.push(child);
+      }
     }
   }
 }

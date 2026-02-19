@@ -5,19 +5,28 @@
  * wrapper functions so the chosen element type drives allowed props.
  */
 import type { StyledDecl } from "../transform-types.js";
-import { collectInlineStylePropNames, type ExpressionKind } from "./types.js";
+import {
+  collectInlineStylePropNames,
+  type ExpressionKind,
+  type WrapperPropDefaults,
+} from "./types.js";
 import type { JsxAttr, StatementKind } from "./wrapper-emitter.js";
 import { emitStyleMerging } from "./style-merger.js";
 import { sortVariantEntriesBySpecificity, VOID_TAGS } from "./type-helpers.js";
 import type { EmitIntrinsicContext } from "./emit-intrinsic-helpers.js";
+import { appendPseudoAliasStyleArgs } from "./emit-intrinsic-simple.js";
 
 export function emitIntrinsicPolymorphicWrappers(ctx: EmitIntrinsicContext): void {
   const { emitter, j, emitTypes, wrapperDecls, wrapperNames, stylesIdentifier, emitted } = ctx;
   const {
     buildCompoundVariantExpressions,
+    buildForwardedAsValueExpr,
     emitNamedPropsType,
+    hasForwardedAsUsage,
     propsTypeHasExistingPolymorphicAs,
+    splitForwardedAsStaticAttrs,
     shouldAllowAsProp,
+    withForwardedAsType,
   } = ctx.helpers;
   const intrinsicPolymorphicWrapperDecls = wrapperDecls.filter((d: StyledDecl) => {
     if (d.base.kind !== "intrinsic") {
@@ -46,6 +55,7 @@ export function emitIntrinsicPolymorphicWrappers(ctx: EmitIntrinsicContext): voi
       const allowClassNameProp = emitter.shouldAllowClassNameProp(d);
       const allowStyleProp = emitter.shouldAllowStyleProp(d);
       const allowAsProp = shouldAllowAsProp(d, tagName);
+      const includesForwardedAs = hasForwardedAsUsage(d);
       const explicit = emitter.stringifyTsType(d.propsType);
 
       // Polymorphic `as` wrappers: type the wrapper generically so the chosen `as` value
@@ -68,7 +78,8 @@ export function emitIntrinsicPolymorphicWrappers(ctx: EmitIntrinsicContext): voi
         const withAs = allowAsProp
           ? emitter.joinIntersection(baseMaybeOmitted, "{ as?: C }")
           : baseMaybeOmitted;
-        return explicit ? emitter.joinIntersection(withAs, explicit) : withAs;
+        const withForwardedAs = withForwardedAsType(withAs, includesForwardedAs);
+        return explicit ? emitter.joinIntersection(withForwardedAs, explicit) : withForwardedAs;
       })();
 
       // When there are no custom props, skip generating a named type.
@@ -99,7 +110,7 @@ export function emitIntrinsicPolymorphicWrappers(ctx: EmitIntrinsicContext): voi
       // Track props that need to be destructured for variant styles
       const destructureProps: string[] = [];
       // Track default values for props (for destructuring defaults)
-      const propDefaults = new Map<string, string>();
+      const propDefaults: WrapperPropDefaults = new Map();
 
       // Collect keys used by compound variants (they're handled separately)
       const compoundVariantKeys = new Set<string>();
@@ -160,6 +171,18 @@ export function emitIntrinsicPolymorphicWrappers(ctx: EmitIntrinsicContext): voi
         }
       }
 
+      // Handle pseudo-alias selectors (e.g., &:${highlight})
+      for (const gp of appendPseudoAliasStyleArgs(
+        d.pseudoAliasSelectors,
+        styleArgs,
+        j,
+        stylesIdentifier,
+      )) {
+        if (!destructureProps.includes(gp)) {
+          destructureProps.push(gp);
+        }
+      }
+
       for (const prop of collectInlineStylePropNames(d.inlineStyleProps ?? [])) {
         if (!destructureProps.includes(prop)) {
           destructureProps.push(prop);
@@ -195,6 +218,7 @@ export function emitIntrinsicPolymorphicWrappers(ctx: EmitIntrinsicContext): voi
       const restId = j.identifier("rest");
       const classNameId = j.identifier("className");
       const styleId = j.identifier("style");
+      const forwardedAsId = j.identifier("forwardedAs");
 
       const declStmt = j.variableDeclaration("const", [
         j.variableDeclarator(
@@ -209,13 +233,14 @@ export function emitIntrinsicPolymorphicWrappers(ctx: EmitIntrinsicContext): voi
                   }),
                 ]
               : []),
+            ...(includesForwardedAs ? [ctx.patternProp("forwardedAs", forwardedAsId)] : []),
             ...(allowClassNameProp ? [ctx.patternProp("className", classNameId)] : []),
             ...(includeChildren ? [ctx.patternProp("children", childrenId)] : []),
             ...(allowStyleProp ? [ctx.patternProp("style", styleId)] : []),
             // Add variant props to destructuring (with defaults when available)
             ...destructureProps.filter(Boolean).map((name) => {
               const defaultVal = propDefaults.get(name);
-              if (defaultVal) {
+              if (defaultVal !== undefined) {
                 // Create property with default: { name = "defaultValue" }
                 return j.property.from({
                   kind: "init",
@@ -233,6 +258,11 @@ export function emitIntrinsicPolymorphicWrappers(ctx: EmitIntrinsicContext): voi
       ]);
 
       const { attrsInfo, staticClassNameExpr } = emitter.splitAttrsInfo(d.attrsInfo);
+      const { attrsInfo: attrsInfoWithoutForwardedAsStatic, forwardedAsStaticFallback } =
+        splitForwardedAsStaticAttrs({
+          attrsInfo,
+          includeForwardedAs: includesForwardedAs,
+        });
       const merging = emitStyleMerging({
         j,
         emitter,
@@ -247,10 +277,20 @@ export function emitIntrinsicPolymorphicWrappers(ctx: EmitIntrinsicContext): voi
 
       const attrs: JsxAttr[] = [
         ...emitter.buildAttrsFromAttrsInfo({
-          attrsInfo,
+          attrsInfo: attrsInfoWithoutForwardedAsStatic,
           propExprFor: (prop) => j.identifier(prop),
         }),
         j.jsxSpreadAttribute(restId),
+        ...(includesForwardedAs
+          ? [
+              j.jsxAttribute(
+                j.jsxIdentifier("as"),
+                j.jsxExpressionContainer(
+                  buildForwardedAsValueExpr(forwardedAsId, forwardedAsStaticFallback),
+                ),
+              ),
+            ]
+          : []),
       ];
       emitter.appendMergingAttrs(attrs, merging);
       const jsx = emitter.buildJsxElement({

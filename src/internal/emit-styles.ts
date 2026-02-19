@@ -9,6 +9,7 @@ import { isAstNode } from "./utilities/jscodeshift-utils.js";
 import { lowerFirst } from "./utilities/string-utils.js";
 import { literalToAst, objectToAst } from "./transform/helpers.js";
 import type { TransformContext } from "./transform-context.js";
+import { splitDirectionalProperty } from "./stylex-shorthands.js";
 
 export function emitStylesAndImports(ctx: TransformContext): { emptyStyleKeys: Set<string> } {
   const { root, j, file, resolverImports, adapter } = ctx;
@@ -491,6 +492,13 @@ export function emitStylesAndImports(ctx: TransformContext): { emptyStyleKeys: S
     }
   }
 
+  // Normalize shorthand/longhand conflicts across style objects within the same component.
+  // When one style object has a shorthand (e.g., `margin`) and another has a longhand
+  // (e.g., `marginBottom`), StyleX's atomic CSS won't reliably resolve the override.
+  // We expand the shorthand into longhands that match the form used by the conflicting
+  // longhands (physical or logical).
+  normalizeShorthandLonghandConflicts(styledDecls, resolvedStyleObjects);
+
   // Compute the set of empty style keys (style objects with no properties)
   const emptyStyleKeys = new Set<string>();
   for (const [k, v] of resolvedStyleObjects.entries()) {
@@ -555,6 +563,22 @@ export function emitStylesAndImports(ctx: TransformContext): { emptyStyleKeys: S
     (stylesDecl as any).comments = deduped;
   }
 
+  // Emit inline @keyframes as `const <name> = stylex.keyframes({...})` before stylex.create.
+  const inlineKeyframeDecls: any[] = [];
+  if (ctx.inlineKeyframes && ctx.inlineKeyframes.size > 0) {
+    for (const [name, frames] of ctx.inlineKeyframes) {
+      const kfDecl = j.variableDeclaration("const", [
+        j.variableDeclarator(
+          j.identifier(name),
+          j.callExpression(j.memberExpression(j.identifier("stylex"), j.identifier("keyframes")), [
+            objectToAst(j, frames as Record<string, unknown>),
+          ]),
+        ),
+      ]);
+      inlineKeyframeDecls.push(kfDecl);
+    }
+  }
+
   const programBody = root.get().node.program.body as any[];
   if (stylesInsertPosition === "afterImports") {
     const lastImportIdx = (() => {
@@ -567,11 +591,11 @@ export function emitStylesAndImports(ctx: TransformContext): { emptyStyleKeys: S
       return last;
     })();
     const insertAt = lastImportIdx >= 0 ? lastImportIdx + 1 : 0;
-    programBody.splice(insertAt, 0, stylesDecl as any);
+    programBody.splice(insertAt, 0, ...inlineKeyframeDecls, stylesDecl as any);
   } else {
-    // Place `styles` at the very end of the file.
+    // Place inline keyframes and `styles` at the very end of the file.
     // This keeps component logic first, styles last for better readability.
-    programBody.push(stylesDecl as any);
+    programBody.push(...inlineKeyframeDecls, stylesDecl as any);
   }
 
   // Emit separate stylex.create declarations for variant dimensions
@@ -666,4 +690,287 @@ function emitVariantDimensionDecl(j: any, dimension: VariantDimension): any {
   ]);
 
   return variantDecl;
+}
+
+// ---------------------------------------------------------------------------
+// Shorthand/longhand conflict normalization
+// ---------------------------------------------------------------------------
+
+/** Mapping from CSS shorthand to the longhands that conflict with it */
+const SHORTHAND_LONGHANDS: Record<string, { physical: string[]; logical: string[] }> = {
+  margin: {
+    physical: ["marginTop", "marginRight", "marginBottom", "marginLeft"],
+    logical: ["marginBlock", "marginInline"],
+  },
+  padding: {
+    physical: ["paddingTop", "paddingRight", "paddingBottom", "paddingLeft"],
+    logical: ["paddingBlock", "paddingInline"],
+  },
+};
+
+/**
+ * Mapping from logical longhands to their physical equivalents, derived from SHORTHAND_LONGHANDS.
+ * `marginBlock` → `["marginTop", "marginBottom"]`
+ */
+const LOGICAL_TO_PHYSICAL: Record<string, string[]> = Object.fromEntries(
+  Object.values(SHORTHAND_LONGHANDS).flatMap(({ physical, logical }) => [
+    [logical[0]!, [physical[0]!, physical[2]!]], // Block → Top + Bottom
+    [logical[1]!, [physical[1]!, physical[3]!]], // Inline → Right + Left
+  ]),
+);
+
+/** Type guard: value is a simple string or number (not a conditional object) */
+function isSimpleStyleValue(value: unknown): value is string | number {
+  return typeof value === "string" || typeof value === "number";
+}
+
+/**
+ * Replace properties in a style object in-place, preserving property ordering.
+ * Each key in `replacements` maps a property name to its replacement entries.
+ * Properties not in `replacements` are kept as-is.
+ */
+function replacePropsInPlace(
+  style: Record<string, unknown>,
+  replacements: Map<string, Array<{ prop: string; value: unknown }>>,
+): void {
+  const entries = Object.entries(style);
+  for (const key of Object.keys(style)) {
+    delete style[key];
+  }
+  for (const [key, val] of entries) {
+    const replacement = replacements.get(key);
+    if (replacement) {
+      for (const r of replacement) {
+        style[r.prop] = r.value;
+      }
+    } else {
+      style[key] = val;
+    }
+  }
+}
+
+/**
+ * Expand shorthand properties in style objects when they conflict with longhands
+ * in other style objects of the same component.
+ *
+ * Example: component has base `marginBottom: "8px"` and conditional `margin: "24px"`.
+ * StyleX's atomic CSS won't reliably resolve `margin` overriding `marginBottom`,
+ * so we expand `margin: "24px"` → `marginTop/Right/Bottom/Left: "24px"`.
+ *
+ * The expansion form matches the conflicting longhands:
+ *  - physical (`marginBottom`) → `marginTop/Right/Bottom/Left`
+ *  - logical (`paddingBlock`) → `paddingBlock/paddingInline`
+ */
+function normalizeShorthandLonghandConflicts(
+  styledDecls: StyledDecl[],
+  resolvedStyleObjects: Map<string, unknown>,
+): void {
+  for (const decl of styledDecls) {
+    const componentStyleKeys = collectComponentStyleKeys(decl);
+    if (componentStyleKeys.length < 2) {
+      continue;
+    }
+
+    // Collect all property names across all style objects
+    const propsByKey = new Map<string, Set<string>>();
+    for (const key of componentStyleKeys) {
+      const style = resolvedStyleObjects.get(key);
+      if (!style || typeof style !== "object" || isAstNode(style)) {
+        continue;
+      }
+      propsByKey.set(key, new Set(Object.keys(style as Record<string, unknown>)));
+    }
+
+    for (const [shorthand, longhands] of Object.entries(SHORTHAND_LONGHANDS)) {
+      // Find style keys that use the shorthand
+      const shorthandKeys: string[] = [];
+      for (const [key, props] of propsByKey) {
+        if (props.has(shorthand)) {
+          shorthandKeys.push(key);
+        }
+      }
+      if (shorthandKeys.length === 0) {
+        continue;
+      }
+
+      // Check if any OTHER style object uses longhands of this shorthand
+      let hasPhysicalConflict = false;
+      let hasLogicalConflict = false;
+      for (const [key, props] of propsByKey) {
+        if (shorthandKeys.includes(key)) {
+          continue;
+        } // skip same object
+        if (longhands.physical.some((l) => props.has(l))) {
+          hasPhysicalConflict = true;
+        }
+        if (longhands.logical.some((l) => props.has(l))) {
+          hasLogicalConflict = true;
+        }
+      }
+
+      if (!hasPhysicalConflict && !hasLogicalConflict) {
+        continue;
+      }
+
+      // Expand the shorthand in each style object that has it
+      for (const key of shorthandKeys) {
+        const style = resolvedStyleObjects.get(key) as Record<string, unknown>;
+        const value = style[shorthand];
+        if (value === undefined || value === null || !isSimpleStyleValue(value)) {
+          continue;
+        }
+
+        expandShorthandInStyle(style, shorthand, value, hasLogicalConflict && !hasPhysicalConflict);
+      }
+    }
+
+    // Phase 2: Detect logical-vs-physical longhand conflicts across all property families.
+    // E.g., base has `marginBottom` (physical) and conditional has `marginBlock` (logical).
+    // These generate independent atomic classes that don't reliably override each other.
+    // Runs independently of phase 1 since CSS lowering may have already expanded shorthands.
+    for (const longhands of Object.values(SHORTHAND_LONGHANDS)) {
+      normalizeLogicalPhysicalConflicts(longhands, propsByKey, resolvedStyleObjects);
+    }
+  }
+}
+
+/** Collect all style keys belonging to a single component declaration */
+function collectComponentStyleKeys(decl: StyledDecl): string[] {
+  const keys: string[] = [decl.styleKey];
+  if (decl.variantStyleKeys) {
+    keys.push(...Object.values(decl.variantStyleKeys));
+  }
+  if (decl.extraStyleKeys) {
+    keys.push(...decl.extraStyleKeys);
+  }
+  if (decl.extraStyleKeysAfterBase) {
+    keys.push(...decl.extraStyleKeysAfterBase);
+  }
+  if (decl.enumVariant) {
+    keys.push(decl.enumVariant.baseKey);
+    for (const c of decl.enumVariant.cases) {
+      keys.push(c.styleKey);
+    }
+  }
+  if (decl.attrWrapper) {
+    const aw = decl.attrWrapper;
+    for (const k of [
+      aw.checkboxKey,
+      aw.radioKey,
+      aw.readonlyKey,
+      aw.externalKey,
+      aw.httpsKey,
+      aw.pdfKey,
+    ]) {
+      if (k) {
+        keys.push(k);
+      }
+    }
+  }
+  return keys;
+}
+
+/**
+ * Detect and resolve logical-vs-physical longhand conflicts within a component's
+ * style objects. When one style object uses logical longhands (e.g., `marginBlock`)
+ * and another uses physical longhands (e.g., `marginBottom`), expand the logical
+ * longhands to their physical equivalents so the atomic CSS override is reliable.
+ */
+function normalizeLogicalPhysicalConflicts(
+  longhands: { physical: string[]; logical: string[] },
+  propsByKey: Map<string, Set<string>>,
+  resolvedStyleObjects: Map<string, unknown>,
+): void {
+  const hasPhysical = [...propsByKey.values()].some((props) =>
+    longhands.physical.some((l) => props.has(l)),
+  );
+  const logicalKeys = [...propsByKey.entries()]
+    .filter(([, props]) => longhands.logical.some((l) => props.has(l)))
+    .map(([key]) => key);
+
+  if (!hasPhysical || logicalKeys.length === 0) {
+    return;
+  }
+
+  for (const key of logicalKeys) {
+    const style = resolvedStyleObjects.get(key) as Record<string, unknown>;
+    if (!style) {
+      continue;
+    }
+    const replacements = new Map<string, Array<{ prop: string; value: unknown }>>();
+    for (const logicalProp of longhands.logical) {
+      const value = style[logicalProp];
+      if (value == null || !isSimpleStyleValue(value)) {
+        continue;
+      }
+      const physicalProps = LOGICAL_TO_PHYSICAL[logicalProp];
+      if (physicalProps) {
+        replacements.set(
+          logicalProp,
+          physicalProps.map((p) => ({ prop: p, value })),
+        );
+      }
+    }
+    if (replacements.size > 0) {
+      replacePropsInPlace(style, replacements);
+    }
+  }
+}
+
+/**
+ * Replace a shorthand property with expanded longhands in a style object.
+ * Preserves property ordering by rebuilding the object with longhands
+ * inserted where the shorthand was.
+ * Uses logical form (block/inline) when the conflict is with logical properties,
+ * otherwise uses physical form (top/right/bottom/left).
+ */
+function expandShorthandInStyle(
+  style: Record<string, unknown>,
+  shorthand: string,
+  value: string | number,
+  useLogical: boolean,
+): void {
+  // Build the replacement entries
+  let replacements: Array<{ prop: string; value: unknown }>;
+  if (useLogical) {
+    // Use splitDirectionalProperty to correctly parse multi-value shorthands
+    // into block/inline components (e.g., "8px 12px" → block: "8px", inline: "12px")
+    const prop = shorthand as "margin" | "padding" | "scrollMargin";
+    const entries = splitDirectionalProperty({
+      prop,
+      rawValue: typeof value === "number" ? String(value) : value,
+    });
+    if (entries.length === 1 && entries[0]!.prop === shorthand) {
+      // Single value — expand to both block and inline with same value
+      replacements = [
+        { prop: `${shorthand}Block`, value },
+        { prop: `${shorthand}Inline`, value },
+      ];
+    } else {
+      // splitDirectionalProperty already split into logical (block/inline) or physical
+      replacements = entries.map((entry) => ({
+        prop: entry.prop,
+        value: typeof value === "number" ? value : entry.value,
+      }));
+    }
+  } else {
+    // Physical conflict: always expand to 4 physical longhands (top/right/bottom/left).
+    // Parse the value to extract quad values (CSS shorthand notation: 1→all, 2→TB/LR,
+    // 3→T/LR/B, 4→T/R/B/L) and map to physical property names.
+    const rawStr = typeof value === "number" ? String(value) : value;
+    const tokens = rawStr.trim().split(/\s+/);
+    const top = tokens[0] ?? rawStr;
+    const right = tokens[1] ?? top;
+    const bottom = tokens[2] ?? top;
+    const left = tokens[3] ?? right;
+    const numOrStr = (v: string): string | number => (typeof value === "number" ? value : v);
+    replacements = [
+      { prop: `${shorthand}Top`, value: numOrStr(top) },
+      { prop: `${shorthand}Right`, value: numOrStr(right) },
+      { prop: `${shorthand}Bottom`, value: numOrStr(bottom) },
+      { prop: `${shorthand}Left`, value: numOrStr(left) },
+    ];
+  }
+
+  replacePropsInPlace(style, new Map([[shorthand, replacements]]));
 }

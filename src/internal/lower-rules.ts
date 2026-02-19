@@ -3,26 +3,46 @@
  * Core concepts: stateful rule processing, variant extraction, and safe bailouts.
  */
 import type { TransformContext } from "./transform-context.js";
-import type { DescendantOverride } from "./lower-rules/state.js";
+import type { RelationOverride } from "./lower-rules/state.js";
 import { createLowerRulesState } from "./lower-rules/state.js";
 import { createDeclProcessingState } from "./lower-rules/decl-setup.js";
 import { preScanCssHelperPlaceholders } from "./lower-rules/pre-scan.js";
 import { processDeclRules } from "./lower-rules/process-rules.js";
 import { finalizeDeclProcessing } from "./lower-rules/finalize-decl.js";
 import { postProcessAfterBaseMixins } from "./lower-rules/after-base-mixins.js";
-import { finalizeDescendantOverrides } from "./lower-rules/descendant-overrides.js";
+import { finalizeRelationOverrides } from "./lower-rules/relation-overrides.js";
 import { makeCssPropKey } from "./lower-rules/shared.js";
+import { cssKeyframeNameToIdentifier, extractInlineKeyframes } from "./keyframes.js";
 
-export type { DescendantOverride } from "./lower-rules/state.js";
+export type { RelationOverride } from "./lower-rules/state.js";
 
 export function lowerRules(ctx: TransformContext): {
   resolvedStyleObjects: Map<string, unknown>;
-  descendantOverrides: DescendantOverride[];
+  relationOverrides: RelationOverride[];
   ancestorSelectorParents: Set<string>;
   usedCssHelperFunctions: Set<string>;
   bail: boolean;
 } {
   const state = createLowerRulesState(ctx);
+
+  // Pre-scan all declarations for inline @keyframes definitions.
+  // These must be registered before rule processing so animation properties
+  // can reference them.
+  for (const decl of state.styledDecls) {
+    const inlineKfs = extractInlineKeyframes(decl.rules);
+    for (const [cssName, frames] of inlineKfs) {
+      const jsName = cssKeyframeNameToIdentifier(cssName);
+      state.keyframesNames.add(cssName);
+      if (!ctx.inlineKeyframes) {
+        ctx.inlineKeyframes = new Map();
+      }
+      ctx.inlineKeyframes.set(jsName, frames);
+      if (!ctx.inlineKeyframeNameMap) {
+        ctx.inlineKeyframeNameMap = new Map();
+      }
+      ctx.inlineKeyframeNameMap.set(cssName, jsName);
+    }
+  }
 
   for (const decl of state.styledDecls) {
     if (state.bail) {
@@ -60,17 +80,19 @@ export function lowerRules(ctx: TransformContext): {
 
   if (!state.bail) {
     // Generate style objects from descendant override pseudo buckets
-    finalizeDescendantOverrides({
+    finalizeRelationOverrides({
       j: state.j,
-      descendantOverridePseudoBuckets: state.descendantOverridePseudoBuckets,
+      relationOverridePseudoBuckets: state.relationOverridePseudoBuckets,
+      relationOverrides: state.relationOverrides,
       resolvedStyleObjects: state.resolvedStyleObjects,
       makeCssPropKey,
+      childPseudoMarkers: state.childPseudoMarkers,
     });
   }
 
   return {
     resolvedStyleObjects: state.resolvedStyleObjects,
-    descendantOverrides: state.descendantOverrides,
+    relationOverrides: state.relationOverrides,
     ancestorSelectorParents: state.ancestorSelectorParents,
     usedCssHelperFunctions: state.usedCssHelperFunctions,
     bail: state.bail,

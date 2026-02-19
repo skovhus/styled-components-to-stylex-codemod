@@ -24,7 +24,7 @@ import { cloneAstNode, getFunctionBodyExpr } from "../utilities/jscodeshift-util
 import { makeCssPropKey } from "./shared.js";
 import { toSuffixFromProp } from "../transform/helpers.js";
 
-export type InlineStyleFromPropsContext = {
+type InlineStyleFromPropsContext = {
   j: JSCodeshift;
   decl: StyledDecl;
   d: CssDeclarationIR;

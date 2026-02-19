@@ -53,6 +53,28 @@ export function Card(props: CardProps) {
   );
 }
 
+type StatusBarProps = React.PropsWithChildren<{
+  $isDisconnected?: boolean;
+}>;
+
+// Test ternary with template literal containing theme expression and undefined alternate
+// This is semantically equivalent to the logical AND form above
+export function StatusBar(props: StatusBarProps) {
+  const { children, $isDisconnected, ...rest } = props;
+
+  return (
+    <div
+      {...rest}
+      {...stylex.props(
+        styles.statusBar,
+        $isDisconnected ? styles.statusBarDisconnected : undefined,
+      )}
+    >
+      {children}
+    </div>
+  );
+}
+
 export const App = () => (
   <div>
     <Title>Normal Title</Title>
@@ -61,6 +83,8 @@ export const App = () => (
     <DropZone $isDraggingOver={false}>Not dragging</DropZone>
     <Card $isHighlighted>Highlighted</Card>
     <Card $isHighlighted={false}>Normal</Card>
+    <StatusBar $isDisconnected>Disconnected</StatusBar>
+    <StatusBar>Connected</StatusBar>
   </div>
 );
 
@@ -88,5 +112,11 @@ const styles = stylex.create({
     borderStyle: "solid",
     borderColor: `${$colors.primaryColor}`,
     boxShadow: `0 0 8px ${$colors.bgSub}`,
+  },
+  statusBar: {
+    padding: "8px",
+  },
+  statusBarDisconnected: {
+    backgroundColor: `${$colors.bgSub}`,
   },
 });

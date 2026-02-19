@@ -16,7 +16,7 @@ import type { StyledDecl } from "../transform-types.js";
 
 type Loc = { line: number; column: number } | null;
 
-export type CssHelperFunction = {
+type CssHelperFunction = {
   name: string;
   paramName: string;
   paramType?: unknown;
@@ -26,12 +26,12 @@ export type CssHelperFunction = {
   rawCss: string;
 };
 
-export type CssHelperReplacement = {
+type CssHelperReplacement = {
   localName: string;
   styleKey: string;
 };
 
-export type CssHelperTemplateReplacement = {
+type CssHelperTemplateReplacement = {
   node: any;
   styleKey: string;
 };
@@ -864,7 +864,7 @@ export { type UnsupportedCssUsage };
  *   const buttonStyles = { rootCss: css`...`, sizeCss: css`...` }
  * Maps: objectName -> propertyName -> StyledDecl
  */
-export type CssHelperObjectMembers = Map<string, Map<string, StyledDecl>>;
+type CssHelperObjectMembers = Map<string, Map<string, StyledDecl>>;
 
 export function extractAndRemoveCssHelpers(args: {
   root: any;

@@ -2,10 +2,6 @@ import * as React from "react";
 import * as stylex from "@stylexjs/stylex";
 import { mergedSx } from "./lib/mergedSx";
 
-/**
- *  This component is exported and will use shouldSupportExternalStyling to enable
- * className/style/rest merging for external style extension support.
- **/
 export function ExportedButton<C extends React.ElementType = "button">(
   props: React.ComponentPropsWithRef<C> & { as?: C },
 ) {

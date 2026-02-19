@@ -183,6 +183,18 @@ export type CallResolveResult = {
    * returns a StyleX styles object even when used with a CSS property like `border:`.
    */
   usage?: "create" | "props";
+
+  /**
+   * Optional raw CSS text for helpers that return CSS declaration blocks.
+   *
+   * When provided alongside `usage: "props"`, the codemod can expand the CSS
+   * declarations for pseudo-selector wrapping. Without this, the codemod treats
+   * the resolved expression as opaque and cannot wrap individual properties
+   * inside pseudo selectors like `:hover`.
+   *
+   * Example: `"white-space: nowrap; overflow: hidden; text-overflow: ellipsis;"`
+   */
+  cssText?: string;
 };
 
 // Note: we intentionally do NOT expose “unified” ResolveContext/ResolveResult types anymore.
@@ -235,25 +247,45 @@ export type SelectorResolveContext = {
 
 /**
  * Result for `adapter.resolveSelector(...)`.
+ *
+ * Two kinds are supported:
+ * - `"media"`: maps a selector interpolation to a media query computed key
+ * - `"pseudoAlias"`: maps `&:${expr}` to N pseudo style objects (one per value),
+ *   wrapped in a `styleSelectorExpr` function call for runtime selection.
  */
-export type SelectorResolveResult = {
-  /**
-   * The kind of selector resolved.
-   * Currently only "media" is supported.
-   */
-  kind: "media";
-  /**
-   * JS expression to use as the computed property key.
-   * Should reference a `defineConsts` value for media queries.
-   * Example: "breakpoints.phone"
-   */
-  expr: string;
-  /**
-   * Import statements required by `expr`.
-   * Example: [{ from: { kind: "specifier", value: "./breakpoints.stylex" }, names: [{ imported: "breakpoints" }] }]
-   */
-  imports: ImportSpec[];
-};
+export type SelectorResolveResult =
+  | {
+      kind: "media";
+      /**
+       * JS expression to use as the computed property key.
+       * Should reference a `defineConsts` value for media queries.
+       * Example: "breakpoints.phone"
+       */
+      expr: string;
+      /**
+       * Import statements required by `expr`.
+       * Example: [{ from: { kind: "specifier", value: "./breakpoints.stylex" }, names: [{ imported: "breakpoints" }] }]
+       */
+      imports: ImportSpec[];
+    }
+  | {
+      kind: "pseudoAlias";
+      /**
+       * Pseudo-class names without leading colon.
+       * Example: ["active", "hover"]
+       */
+      values: string[];
+      /**
+       * JS expression for runtime selection.
+       * Emits `expr({ active: styles.keyActive, hover: styles.keyHover })`
+       * with an object whose keys are the `values` entries.
+       */
+      styleSelectorExpr: string;
+      /**
+       * Import statements required by `styleSelectorExpr`.
+       */
+      imports: ImportSpec[];
+    };
 
 // ────────────────────────────────────────────────────────────────────────────
 // External Interface Context and Result
@@ -273,15 +305,12 @@ export interface ExternalInterfaceContext {
 /**
  * Result type for `adapter.externalInterface(...)`.
  *
- * - `null` → no external interface support (neither styles nor `as`)
- * - `{ styles: true }` → enable className/style support AND polymorphic `as` prop
+ * - `{ styles: true, as: false }` → enable className/style support only
+ * - `{ styles: true, as: true }` → enable className/style support AND polymorphic `as` prop
  * - `{ styles: false, as: true }` → enable only polymorphic `as` prop (no style merging)
- * - `{ styles: false, as: false }` → equivalent to `null`
- *
- * Note: When `styles: true`, the `as` prop is always enabled because the style
- * merging implementation requires polymorphic rendering support.
+ * - `{ styles: false, as: false }` → no external interface support
  */
-export type ExternalInterfaceResult = { styles: true } | { styles: false; as: boolean } | null;
+export type ExternalInterfaceResult = { styles: boolean; as: boolean };
 
 // ────────────────────────────────────────────────────────────────────────────
 // Style Merger Configuration
@@ -343,10 +372,12 @@ export interface Adapter {
    * Resolver for interpolations used in selector position.
    *
    * This handles patterns like `${screenSize.phone} { ... }` where an imported
-   * value is used as a CSS selector (typically a media query helper).
+   * value is used as a CSS selector (typically a media query helper), and
+   * `&:${highlight}` where an imported value picks a pseudo-class.
    *
    * Return:
    * - `{ kind: "media", expr, imports }` when the interpolation resolves to a media query
+   * - `{ kind: "pseudoAlias", values, styleSelectorExpr?, imports? }` for pseudo-class expansion
    * - `undefined` to bail/skip the file
    */
   resolveSelector: (context: SelectorResolveContext) => SelectorResolveResult | undefined;
@@ -355,10 +386,10 @@ export interface Adapter {
    * Called for exported styled components to determine their external interface.
    *
    * Return:
-   * - `null` → no external interface (neither styles nor `as`)
-   * - `{ styles: true }` → accept className/style props AND polymorphic `as` prop
+   * - `{ styles: false, as: false }` → no external interface
+   * - `{ styles: true, as: false }` → accept className/style props only
+   * - `{ styles: true, as: true }` → accept className/style props AND polymorphic `as` prop
    * - `{ styles: false, as: true }` → accept only polymorphic `as` prop
-   * - `{ styles: false, as: false }` → equivalent to `null`
    */
   externalInterface: (context: ExternalInterfaceContext) => ExternalInterfaceResult;
 
@@ -414,20 +445,21 @@ export interface Adapter {
  *     },
  *
  *     resolveSelector(ctx) {
- *       // Resolve imported values used in selector position (e.g., media query helpers).
- *       // Return:
+ *       // Resolve imported values used in selector position.
+ *       // Return one of:
  *       // - { kind: "media", expr, imports } for media queries (e.g., breakpoints.phone)
+ *       // - { kind: "pseudoAlias", values, styleSelectorExpr?, imports? } for pseudo-class expansion
  *       // - undefined to bail/skip the file
  *       void ctx;
  *     },
  *
  *     // Configure external interface for exported components
  *     externalInterface(ctx) {
- *       // Example: Enable styles (and `as`) for shared components folder
+ *       // Example: Enable styles and `as` for shared components folder
  *       if (ctx.filePath.includes("/shared/components/")) {
- *         return { styles: true };
+ *         return { styles: true, as: true };
  *       }
- *       return null;
+ *       return { styles: false, as: false };
  *     },
  *
  *     // Optional: provide a custom merger, or use `null` for the default verbose merge output

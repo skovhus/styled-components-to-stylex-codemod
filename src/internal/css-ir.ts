@@ -36,7 +36,7 @@ export type CssRuleIR = {
   declarations: CssDeclarationIR[];
 };
 
-export type NormalizeOptions = {
+type NormalizeOptions = {
   stripFormFeedInSelectors?: boolean;
   /**
    * Raw CSS text as authored in the template literal (best-effort).

@@ -4,6 +4,7 @@ import CodeMirror from "@uiw/react-codemirror";
 import { javascript } from "@codemirror/lang-javascript";
 import Select, { type SingleValue, type StylesConfig } from "react-select";
 import { ThemeProvider } from "styled-components";
+import * as stylex from "@stylexjs/stylex";
 import { loadTestCaseModule, testCases } from "./lib/test-cases";
 import { runTransform, type WarningLog } from "./lib/browser-transform";
 import { DEFAULT_ADAPTER_CODE } from "./lib/default-adapter";
@@ -81,7 +82,12 @@ export default function App() {
   }, [isSettingsOpen]);
 
   useEffect(() => {
-    updatePlaygroundUrlSearchParams({ selectedTestCase, showRendering, showConfig, hideCode });
+    updatePlaygroundUrlSearchParams({
+      selectedTestCase,
+      showRendering,
+      showConfig,
+      hideCode,
+    });
   }, [selectedTestCase, showRendering, showConfig, hideCode]);
 
   // Parse adapter whenever adapterCode changes
@@ -226,103 +232,121 @@ export default function App() {
   }, [navigatePrev, navigateNext]);
 
   return (
-    <div style={styles.container}>
+    <div {...stylex.props(s.container)}>
       {/* Header */}
-      <header style={styles.header}>
-        <div style={styles.headerLeft}>
+      <header {...stylex.props(s.header)}>
+        <div {...stylex.props(s.headerLeft)}>
           <a
             href="https://github.com/skovhus/styled-components-to-stylex-codemod"
             target="_blank"
             rel="noopener noreferrer"
-            style={styles.githubLink}
+            {...stylex.props(s.githubLink)}
             title="View on GitHub"
           >
-            <svg height="24" viewBox="0 0 16 16" width="24" style={styles.githubIcon}>
+            <svg viewBox="0 0 16 16" {...stylex.props(s.githubIcon)}>
               <path
                 fill="currentColor"
                 d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0016 8c0-4.42-3.58-8-8-8z"
               />
             </svg>
           </a>
-          <h1 style={styles.title}>
+          <h1 {...stylex.props(s.title)}>
             skovhus/styled-components-to-stylex-codemod
             {import.meta.env.VITE_PR_NUMBER && (
               <a
-                href={`https://github.com/skovhus/styled-components-to-stylex-codemod/pull/${import.meta.env.VITE_PR_NUMBER}`}
+                href={`https://github.com/skovhus/styled-components-to-stylex-codemod/pull/${
+                  import.meta.env.VITE_PR_NUMBER
+                }`}
                 target="_blank"
                 rel="noopener noreferrer"
-                style={styles.prLink}
+                {...stylex.props(s.prLink)}
               >
                 #{import.meta.env.VITE_PR_NUMBER}
               </a>
             )}
           </h1>
-          <div style={styles.testCaseSelectHost}>
-            <Select<TestCaseOption, false>
-              inputId="test-case-select"
-              aria-label="Select test case"
-              isSearchable
-              isClearable={false}
-              options={testCaseOptions}
-              value={testCaseOptions.find((o) => o.value === selectedTestCase) ?? null}
-              onChange={handleTestCaseChange}
-              styles={testCaseSelectStyles}
-            />
-          </div>
-          <div style={styles.navButtons}>
-            <button
-              onClick={navigatePrev}
-              style={styles.navButton}
-              title="Go to previous test case (K)"
-              disabled={testCases.findIndex((t) => t.name === selectedTestCase) === 0}
-            >
-              <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor">
-                <path d="M8 4L3 9h10L8 4z" />
-              </svg>
-            </button>
-            <button
-              onClick={navigateNext}
-              style={styles.navButton}
-              title="Go to next test case (J)"
-              disabled={
-                testCases.findIndex((t) => t.name === selectedTestCase) === testCases.length - 1
-              }
-            >
-              <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor">
-                <path d="M8 12L13 7H3l5 5z" />
-              </svg>
-            </button>
+          <div {...stylex.props(s.testCaseControls)}>
+            <div {...stylex.props(s.testCaseSelectHost)}>
+              <Select<TestCaseOption, false>
+                inputId="test-case-select"
+                aria-label="Select test case"
+                isSearchable
+                isClearable={false}
+                options={testCaseOptions}
+                value={testCaseOptions.find((o) => o.value === selectedTestCase) ?? null}
+                onChange={handleTestCaseChange}
+                styles={testCaseSelectStyles}
+                menuPlacement="auto"
+              />
+            </div>
+            <div {...stylex.props(s.navButtons)}>
+              <button
+                onClick={navigatePrev}
+                {...stylex.props(s.navButton)}
+                title="Go to previous test case (K)"
+                disabled={testCases.findIndex((t) => t.name === selectedTestCase) === 0}
+              >
+                <svg viewBox="0 0 16 16" fill="currentColor" {...stylex.props(s.navIcon)}>
+                  <path d="M8 4L3 9h10L8 4z" />
+                </svg>
+              </button>
+              <button
+                onClick={navigateNext}
+                {...stylex.props(s.navButton)}
+                title="Go to next test case (J)"
+                disabled={
+                  testCases.findIndex((t) => t.name === selectedTestCase) === testCases.length - 1
+                }
+              >
+                <svg viewBox="0 0 16 16" fill="currentColor" {...stylex.props(s.navIcon)}>
+                  <path d="M8 12L13 7H3l5 5z" />
+                </svg>
+              </button>
+            </div>
           </div>
         </div>
-        <div style={styles.headerRight}>
-          <div style={styles.settingsHost} ref={settingsMenuRef}>
+        <div {...stylex.props(s.headerRight)}>
+          <div {...stylex.props(s.settingsHost)} ref={settingsMenuRef}>
             <button
               onClick={() => setIsSettingsOpen((prev) => !prev)}
-              style={styles.button}
+              {...stylex.props(s.settingsButton)}
               aria-haspopup="menu"
               aria-expanded={isSettingsOpen}
+              aria-label="Settings"
+              title="Settings"
             >
-              Settings
+              <svg
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="2"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                {...stylex.props(s.settingsIcon)}
+              >
+                <circle cx="12" cy="12" r="3" />
+                <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z" />
+              </svg>
             </button>
             {isSettingsOpen && (
-              <div style={styles.settingsMenu} role="menu" aria-label="Playground settings">
-                <label style={styles.settingsItem}>
+              <div {...stylex.props(s.settingsMenu)} role="menu" aria-label="Playground settings">
+                <label {...stylex.props(s.settingsItem)}>
                   <input
                     type="checkbox"
                     checked={hideCode ? true : showRendering}
                     disabled={hideCode}
                     onChange={(event) => setShowRendering(event.target.checked)}
                   />
-                  <span style={styles.settingsLabel}>Show rendering</span>
+                  <span {...stylex.props(s.settingsLabel)}>Show rendering</span>
                 </label>
 
-                <label style={styles.settingsItem}>
+                <label {...stylex.props(s.settingsItem)}>
                   <input
                     type="checkbox"
                     checked={showConfig}
                     onChange={(event) => setShowConfig(event.target.checked)}
                   />
-                  <span style={styles.settingsLabel}>Show config</span>
+                  <span {...stylex.props(s.settingsLabel)}>Show config</span>
                 </label>
               </div>
             )}
@@ -332,9 +356,9 @@ export default function App() {
 
       {/* Configuration Panel (collapsible) */}
       {showConfig && (
-        <div style={styles.configPanel}>
-          <div style={styles.panelHeader}>Adapter configuration</div>
-          <div style={styles.adapterStatus}>
+        <div {...stylex.props(s.configPanel)}>
+          <div {...stylex.props(s.panelHeader)}>Adapter configuration</div>
+          <div {...stylex.props(s.adapterStatus)}>
             {adapterError
               ? "Adapter error: using last valid adapter"
               : isUsingDefaultAdapter
@@ -346,7 +370,7 @@ export default function App() {
             onChange={setAdapterCode}
             height="180px"
             extensions={[jsxExtension]}
-            style={codeMirrorStyle}
+            {...stylex.props(s.codeMirror)}
             theme="light"
           />
         </div>
@@ -354,63 +378,63 @@ export default function App() {
 
       {/* Main editors */}
       {!hideCode && (
-        <div style={styles.editorsContainer}>
-          <div style={styles.editorPane}>
-            <div style={styles.panelHeader}>Input (styled-components)</div>
-            <div style={styles.editorWrapper}>
+        <div {...stylex.props(s.editorsContainer)}>
+          <div {...stylex.props(s.editorPane)}>
+            <div {...stylex.props(s.panelHeader)}>Input (styled-components)</div>
+            <div {...stylex.props(s.editorWrapper)}>
               <CodeMirror
                 value={input}
                 onChange={setInput}
                 height="100%"
                 extensions={[jsxExtension]}
-                style={codeMirrorStyle}
+                {...stylex.props(s.codeMirror)}
                 theme="light"
               />
             </div>
           </div>
-          <div style={styles.editorPane}>
-            <div style={styles.panelHeader}>Output (StyleX)</div>
-            <div style={styles.outputContainer}>
-              <div style={styles.editorWrapper}>
+          <div {...stylex.props(s.editorPane)}>
+            <div {...stylex.props(s.panelHeader)}>Output (StyleX)</div>
+            <div {...stylex.props(s.outputContainer)}>
+              <div {...stylex.props(s.editorWrapper)}>
                 {error ? (
-                  <pre style={styles.error}>{error}</pre>
+                  <pre {...stylex.props(s.error)}>{error}</pre>
                 ) : (
                   <CodeMirror
                     value={output}
                     readOnly
                     height="100%"
                     extensions={[jsxExtension]}
-                    style={codeMirrorStyle}
+                    {...stylex.props(s.codeMirror)}
                     theme="light"
                   />
                 )}
               </div>
-              <div style={styles.issueBar}>
+              <div {...stylex.props(s.issueBar)}>
                 <a
                   href="https://github.com/skovhus/styled-components-to-stylex-codemod/issues/new"
                   target="_blank"
                   rel="noopener noreferrer"
-                  style={styles.issueLink}
+                  {...stylex.props(s.issueLink)}
                 >
                   Suggest improvement
                 </a>
               </div>
               {(adapterError || warnings.length > 0) && (
-                <div style={styles.warningsPanel}>
-                  <div style={styles.warningsHeader}>
+                <div {...stylex.props(s.warningsPanel)}>
+                  <div {...stylex.props(s.warningsHeader)}>
                     Warnings ({warnings.length + (adapterError ? 1 : 0)})
                   </div>
-                  <ul style={styles.warningsList}>
+                  <ul {...stylex.props(s.warningsList)}>
                     {adapterError && (
-                      <li style={styles.warningItem}>
-                        <span style={styles.warningFeature}>adapter-config</span>
-                        <span style={styles.warningMessage}>{adapterError}</span>
+                      <li {...stylex.props(s.warningItem)}>
+                        <span {...stylex.props(s.warningFeature)}>adapter-config</span>
+                        <span {...stylex.props(s.warningMessage)}>{adapterError}</span>
                       </li>
                     )}
                     {warnings.map((w, i) => (
-                      <li key={i} style={styles.warningItem}>
-                        <span style={styles.warningMessage}>{w.type}</span>
-                        {w.loc && <span style={styles.warningLoc}>line {w.loc.line}</span>}
+                      <li key={i} {...stylex.props(s.warningItem)}>
+                        <span {...stylex.props(s.warningMessage)}>{w.type}</span>
+                        {w.loc && <span {...stylex.props(s.warningLoc)}>line {w.loc.line}</span>}
                       </li>
                     ))}
                   </ul>
@@ -421,14 +445,12 @@ export default function App() {
         </div>
       )}
       {shouldShowRendering && (
-        <div style={hideCode ? styles.renderPanelFullHeight : styles.renderPanel}>
-          <div style={styles.renderPanelHeader}>
-            <span>Rendered preview</span>
-            <span style={styles.renderPanelNote}>
-              Fixture components only (editor changes are not rendered)
-            </span>
+        <div {...stylex.props(s.renderPanel, hideCode && s.renderPanelFullHeight)}>
+          <div {...stylex.props(s.renderPanelHeader)}>
+            <span>Render</span>
+            <span {...stylex.props(s.renderPanelNote)}>Editor changes are not rendered</span>
           </div>
-          <div style={styles.renderPanelBody}>
+          <div {...stylex.props(s.renderPanelBody)}>
             <PreviewPane
               title="Input (styled-components)"
               component={renderState.input}
@@ -465,13 +487,6 @@ const jsxExtension = javascript({ jsx: true, typescript: true });
 
 type TestCaseOption = { value: string; label: string };
 
-const codeMirrorStyle: React.CSSProperties = {
-  fontSize: "12px",
-  fontFamily:
-    "ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, 'Liberation Mono', 'Courier New', monospace",
-  lineHeight: 1.5,
-};
-
 type RenderState = {
   input: React.ComponentType<Record<string, never>> | null;
   output: React.ComponentType<Record<string, never>> | null;
@@ -488,10 +503,13 @@ const initialRenderState: RenderState = {
   loading: false,
 };
 
-const testCaseOptions: TestCaseOption[] = testCases.map((t) => ({ value: t.name, label: t.name }));
+const testCaseOptions: TestCaseOption[] = testCases.map((t) => ({
+  value: t.name,
+  label: t.name,
+}));
 
 const testCaseSelectStyles: StylesConfig<TestCaseOption, false> = {
-  container: (base) => ({ ...base, width: 320 }),
+  container: (base) => ({ ...base, width: "100%" }),
   control: (base) => ({
     ...base,
     minHeight: 30,
@@ -510,6 +528,7 @@ const testCaseSelectStyles: StylesConfig<TestCaseOption, false> = {
   dropdownIndicator: (base) => ({ ...base, padding: "0 4px" }),
   indicatorSeparator: () => ({ display: "none" }),
   menu: (base) => ({ ...base, zIndex: 20 }),
+  menuPortal: (base) => ({ ...base, zIndex: 9999 }),
 };
 
 type InitialPlaygroundState = {
@@ -721,21 +740,20 @@ function PreviewPane({
   isLast = false,
 }: PreviewPaneProps) {
   const ComponentToRender = component;
-  const paneStyle = isLast ? { ...styles.renderPane, borderRight: "none" } : styles.renderPane;
 
   return (
-    <div style={paneStyle}>
-      <div style={styles.renderPaneHeader}>{title}</div>
-      <div style={styles.renderPaneBody}>
+    <div {...stylex.props(s.renderPane, isLast && s.renderPaneLast)}>
+      <div {...stylex.props(s.renderPaneHeader)}>{title}</div>
+      <div {...stylex.props(s.renderPaneBody)}>
         {loading ? (
-          <div style={styles.renderPlaceholder}>Loading preview...</div>
+          <div {...stylex.props(s.renderPlaceholder)}>Loading preview...</div>
         ) : error ? (
-          <pre style={styles.renderError}>{error}</pre>
+          <pre {...stylex.props(s.renderError)}>{error}</pre>
         ) : ComponentToRender ? (
           <RenderErrorBoundary
             resetKey={resetKey}
             fallback={(renderError) => (
-              <pre style={styles.renderError}>{formatErrorMessage(renderError)}</pre>
+              <pre {...stylex.props(s.renderError)}>{formatErrorMessage(renderError)}</pre>
             )}
           >
             <ThemeProvider theme={testCaseTheme}>
@@ -743,88 +761,79 @@ function PreviewPane({
             </ThemeProvider>
           </RenderErrorBoundary>
         ) : (
-          <div style={styles.renderPlaceholder}>{emptyMessage}</div>
+          <div {...stylex.props(s.renderPlaceholder)}>{emptyMessage}</div>
         )}
       </div>
     </div>
   );
 }
 
-const styles: Record<string, React.CSSProperties> = {
+// ── Media query breakpoints ──
+const MOBILE = "@media (max-width: 768px)";
+const PHONE = "@media (max-width: 480px)";
+
+const s = stylex.create({
+  // ── Layout ──
   container: {
     display: "flex",
     flexDirection: "column",
     height: "100vh",
     fontFamily:
       '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif',
+    fontSize: {
+      default: null,
+      [MOBILE]: 13,
+    },
   },
+
+  // ── Header ──
   header: {
     display: "flex",
     alignItems: "center",
     justifyContent: "space-between",
-    padding: "12px 16px",
-    borderBottom: "1px solid #e0e0e0",
+    paddingBlock: {
+      default: 12,
+      [MOBILE]: 8,
+      [PHONE]: 6,
+    },
+    paddingInline: {
+      default: 16,
+      [MOBILE]: 10,
+      [PHONE]: 8,
+    },
+    borderBottomWidth: 1,
+    borderBottomStyle: "solid",
+    borderBottomColor: "#e0e0e0",
     backgroundColor: "#f8f9fa",
+    gap: {
+      default: null,
+      [MOBILE]: 6,
+    },
   },
   headerLeft: {
     display: "flex",
     alignItems: "center",
-    gap: "12px",
-  },
-  testCaseSelectHost: {
-    display: "flex",
-    alignItems: "center",
+    gap: {
+      default: 12,
+      [MOBILE]: 6,
+    },
+    flex: 1,
+    minWidth: {
+      default: 0,
+      [MOBILE]: 0,
+    },
   },
   headerRight: {
     display: "flex",
     alignItems: "center",
-    gap: "8px",
+    gap: 8,
+    flexShrink: {
+      default: null,
+      [MOBILE]: 0,
+    },
   },
-  settingsHost: {
-    position: "relative",
-    display: "flex",
-    alignItems: "center",
-  },
-  settingsMenu: {
-    position: "absolute",
-    top: "calc(100% + 8px)",
-    right: 0,
-    minWidth: "220px",
-    backgroundColor: "#fff",
-    border: "1px solid rgba(0,0,0,0.12)",
-    borderRadius: "8px",
-    boxShadow: "0 10px 30px rgba(0,0,0,0.10)",
-    padding: "10px 10px",
-    zIndex: 10,
-    display: "flex",
-    flexDirection: "column",
-    gap: "8px",
-  },
-  settingsItem: {
-    display: "flex",
-    alignItems: "center",
-    gap: "8px",
-    fontSize: "13px",
-    color: "#333",
-    userSelect: "none",
-    cursor: "pointer",
-  },
-  settingsLabel: {
-    fontWeight: 500,
-  },
-  issueBar: {
-    display: "flex",
-    justifyContent: "flex-end",
-    alignItems: "center",
-    padding: "8px 12px",
-    borderTop: "1px solid #e0e0e0",
-    backgroundColor: "#f8f9fa",
-  },
-  issueLink: {
-    fontSize: "12px",
-    color: "#666",
-    textDecoration: "none",
-  },
+
+  // ── GitHub link ──
   githubLink: {
     display: "flex",
     alignItems: "center",
@@ -833,144 +842,304 @@ const styles: Record<string, React.CSSProperties> = {
   },
   githubIcon: {
     display: "block",
+    width: {
+      default: 24,
+      [MOBILE]: 20,
+    },
+    height: {
+      default: 24,
+      [MOBILE]: 20,
+    },
   },
+
+  // ── Title ──
   title: {
     margin: 0,
-    fontSize: "18px",
+    fontSize: {
+      default: 16,
+      [MOBILE]: 12,
+    },
     fontWeight: 600,
     color: "#333",
+    whiteSpace: {
+      default: null,
+      [MOBILE]: "nowrap",
+    },
+    overflow: {
+      default: null,
+      [MOBILE]: "hidden",
+    },
+    textOverflow: {
+      default: null,
+      [MOBILE]: "ellipsis",
+    },
+    flexShrink: {
+      default: null,
+      [MOBILE]: 1,
+    },
+    minWidth: {
+      default: null,
+      [MOBILE]: 0,
+    },
+    display: {
+      default: null,
+      [MOBILE]: "none",
+    },
   },
   prLink: {
-    marginLeft: "6px",
+    marginLeft: 6,
     color: "#0969da",
     textDecoration: "none",
   },
-  button: {
-    padding: "8px 16px",
-    fontSize: "14px",
-    borderRadius: "6px",
-    border: "1px solid #ccc",
-    backgroundColor: "white",
-    cursor: "pointer",
+
+  // ── Test case controls ──
+  testCaseControls: {
+    display: "flex",
+    alignItems: "center",
+    gap: 6,
+    marginInlineStart: "auto",
+    flexShrink: 0,
   },
+  testCaseSelectHost: {
+    display: "flex",
+    alignItems: "center",
+    maxWidth: {
+      default: 320,
+      [MOBILE]: 240,
+      [PHONE]: 180,
+    },
+    width: {
+      default: 320,
+      [MOBILE]: 240,
+      [PHONE]: 180,
+    },
+    minWidth: {
+      default: null,
+      [MOBILE]: 80,
+    },
+  },
+
+  // ── Nav buttons ──
   navButtons: {
     display: "flex",
-    gap: "4px",
+    gap: {
+      default: 4,
+      [MOBILE]: 2,
+    },
+    flexShrink: {
+      default: null,
+      [MOBILE]: 0,
+    },
   },
   navButton: {
     display: "flex",
     alignItems: "center",
     justifyContent: "center",
-    padding: "6px",
-    fontSize: "14px",
-    borderRadius: "6px",
-    border: "1px solid #ccc",
+    padding: 6,
+    fontSize: 14,
+    borderRadius: 6,
+    borderWidth: 1,
+    borderStyle: "solid",
+    borderColor: "#ccc",
     backgroundColor: "white",
     cursor: "pointer",
     color: "#333",
   },
-  renderPanel: {
-    borderTop: "1px solid #e0e0e0",
-    backgroundColor: "#fff",
-    display: "flex",
-    flexDirection: "column",
-    height: "280px",
+  navIcon: {
+    width: 16,
+    height: 16,
   },
-  renderPanelFullHeight: {
-    borderTop: "1px solid #e0e0e0",
-    backgroundColor: "#fff",
-    display: "flex",
-    flexDirection: "column",
-    flex: 1,
-    minHeight: 0,
-  },
-  renderPanelHeader: {
+
+  // ── Settings ──
+  settingsHost: {
+    position: "relative",
     display: "flex",
     alignItems: "center",
-    justifyContent: "space-between",
-    padding: "8px 12px",
-    fontSize: "11px",
-    fontWeight: 600,
-    color: "#666",
-    textTransform: "uppercase",
-    letterSpacing: "0.5px",
-    backgroundColor: "#f0f0f0",
-    borderBottom: "1px solid #e0e0e0",
   },
-  renderPanelNote: {
-    fontSize: "11px",
-    fontWeight: 400,
-    color: "#888",
-    textTransform: "none",
-    letterSpacing: "normal",
-  },
-  renderPanelBody: {
+  settingsButton: {
     display: "flex",
-    flex: 1,
-    minHeight: 0,
-    overflow: "hidden",
+    alignItems: "center",
+    justifyContent: "center",
+    padding: {
+      default: 6,
+      [MOBILE]: 5,
+    },
+    borderRadius: 6,
+    borderWidth: 1,
+    borderStyle: "solid",
+    borderColor: "#ccc",
+    backgroundColor: "white",
+    cursor: "pointer",
+    color: "#555",
   },
-  renderPane: {
-    flex: 1,
+  settingsIcon: {
+    width: {
+      default: 18,
+      [MOBILE]: 16,
+    },
+    height: {
+      default: 18,
+      [MOBILE]: 16,
+    },
+  },
+  settingsMenu: {
+    position: "absolute",
+    top: "calc(100% + 8px)",
+    right: 0,
+    minWidth: {
+      default: 220,
+      [MOBILE]: 180,
+    },
+    backgroundColor: "#fff",
+    borderWidth: 1,
+    borderStyle: "solid",
+    borderColor: "rgba(0,0,0,0.12)",
+    borderRadius: 8,
+    boxShadow: "0 10px 30px rgba(0,0,0,0.10)",
+    padding: {
+      default: 10,
+      [MOBILE]: 8,
+    },
+    zIndex: 10,
     display: "flex",
     flexDirection: "column",
-    borderRight: "1px solid #e0e0e0",
-    minWidth: 0,
+    gap: 8,
+    fontSize: {
+      default: null,
+      [MOBILE]: 12,
+    },
   },
-  renderPaneHeader: {
-    padding: "6px 12px",
-    fontSize: "11px",
-    fontWeight: 600,
+  settingsItem: {
+    display: "flex",
+    alignItems: "center",
+    gap: 8,
+    fontSize: 13,
+    color: "#333",
+    userSelect: "none",
+    cursor: "pointer",
+  },
+  settingsLabel: {
+    fontWeight: 500,
+  },
+
+  // ── Issue bar ──
+  issueBar: {
+    display: "flex",
+    justifyContent: "flex-end",
+    alignItems: "center",
+    paddingBlock: {
+      default: 8,
+      [MOBILE]: 5,
+    },
+    paddingInline: {
+      default: 12,
+      [MOBILE]: 8,
+    },
+    borderTopWidth: 1,
+    borderTopStyle: "solid",
+    borderTopColor: "#e0e0e0",
+    backgroundColor: "#f8f9fa",
+  },
+  issueLink: {
+    fontSize: {
+      default: 12,
+      [MOBILE]: 11,
+    },
     color: "#666",
-    textTransform: "uppercase",
-    letterSpacing: "0.5px",
-    backgroundColor: "#fafafa",
-    borderBottom: "1px solid #e0e0e0",
+    textDecoration: "none",
   },
-  renderPaneBody: {
-    flex: 1,
-    padding: "12px",
-    overflow: "auto",
-    backgroundColor: "#fafafa",
-  },
-  renderPlaceholder: {
-    fontSize: "11px",
-    color: "#888",
-  },
-  renderError: {
-    color: "#c00",
-    padding: 0,
-    margin: 0,
-    fontFamily: "monospace",
-    fontSize: "12px",
-    whiteSpace: "pre-wrap",
-    wordBreak: "break-word",
-  },
+
+  // ── Config panel ──
   configPanel: {
-    borderBottom: "1px solid #e0e0e0",
+    borderBottomWidth: 1,
+    borderBottomStyle: "solid",
+    borderBottomColor: "#e0e0e0",
     backgroundColor: "#fafafa",
   },
+  adapterStatus: {
+    fontSize: {
+      default: 11,
+      [MOBILE]: 10,
+    },
+    color: "#666",
+    marginBlock: {
+      default: 8,
+      [MOBILE]: 5,
+    },
+    marginInline: {
+      default: 12,
+      [MOBILE]: 8,
+    },
+  },
+
+  // ── Panel headers ──
   panelHeader: {
-    padding: "8px 12px",
-    fontSize: "11px",
+    paddingBlock: {
+      default: 8,
+      [MOBILE]: 5,
+    },
+    paddingInline: {
+      default: 12,
+      [MOBILE]: 8,
+    },
+    fontSize: {
+      default: 11,
+      [MOBILE]: 10,
+    },
     fontWeight: 600,
     color: "#666",
     textTransform: "uppercase",
     letterSpacing: "0.5px",
     backgroundColor: "#f0f0f0",
-    borderBottom: "1px solid #e0e0e0",
+    borderBottomWidth: 1,
+    borderBottomStyle: "solid",
+    borderBottomColor: "#e0e0e0",
   },
+
+  // ── Code editors ──
   editorsContainer: {
     display: "flex",
     flex: 1,
     minHeight: 0,
+    flexDirection: {
+      default: "row",
+      [MOBILE]: "column",
+    },
   },
   editorPane: {
     flex: 1,
     display: "flex",
     flexDirection: "column",
-    borderRight: "1px solid #e0e0e0",
+    borderRightWidth: {
+      default: 1,
+      [MOBILE]: 0,
+    },
+    borderRightStyle: {
+      default: "solid",
+      [MOBILE]: "none",
+    },
+    borderRightColor: {
+      default: "#e0e0e0",
+      [MOBILE]: null,
+    },
+    borderBottomWidth: {
+      default: null,
+      [MOBILE]: 1,
+    },
+    borderBottomStyle: {
+      default: null,
+      [MOBILE]: "solid",
+    },
+    borderBottomColor: {
+      default: null,
+      [MOBILE]: "#e0e0e0",
+    },
     minWidth: 0,
+    minHeight: {
+      default: null,
+      [MOBILE]: 200,
+      [PHONE]: 160,
+    },
   },
   outputContainer: {
     display: "flex",
@@ -983,50 +1152,92 @@ const styles: Record<string, React.CSSProperties> = {
     overflow: "auto",
     minHeight: 0,
   },
-  adapterStatus: {
-    fontSize: "11px",
-    color: "#666",
-    margin: "8px 12px",
+  codeMirror: {
+    fontSize: {
+      default: 12,
+      [MOBILE]: 11,
+      [PHONE]: 10,
+    },
+    fontFamily:
+      "ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, 'Liberation Mono', 'Courier New', monospace",
+    lineHeight: 1.5,
   },
+
+  // ── Error display ──
   error: {
     color: "#c00",
-    padding: "16px",
+    padding: {
+      default: 16,
+      [MOBILE]: 10,
+    },
     margin: 0,
     fontFamily: "monospace",
-    fontSize: "12px",
+    fontSize: {
+      default: 12,
+      [MOBILE]: 11,
+    },
     whiteSpace: "pre-wrap",
     wordBreak: "break-word",
   },
+
+  // ── Warnings ──
   warningsPanel: {
-    borderTop: "1px solid #e0e0e0",
+    borderTopWidth: 1,
+    borderTopStyle: "solid",
+    borderTopColor: "#e0e0e0",
     backgroundColor: "#fffbeb",
-    maxHeight: "150px",
+    maxHeight: {
+      default: 150,
+      [MOBILE]: 100,
+    },
     overflow: "auto",
   },
   warningsHeader: {
-    padding: "6px 12px",
-    fontSize: "11px",
+    paddingBlock: {
+      default: 6,
+      [MOBILE]: 4,
+    },
+    paddingInline: {
+      default: 12,
+      [MOBILE]: 8,
+    },
+    fontSize: {
+      default: 11,
+      [MOBILE]: 10,
+    },
     fontWeight: 600,
     color: "#92400e",
     textTransform: "uppercase",
     letterSpacing: "0.5px",
     backgroundColor: "#fef3c7",
-    borderBottom: "1px solid #fcd34d",
-    position: "sticky" as const,
+    borderBottomWidth: 1,
+    borderBottomStyle: "solid",
+    borderBottomColor: "#fcd34d",
+    position: "sticky",
     top: 0,
   },
   warningsList: {
     margin: 0,
-    padding: "8px 12px",
+    paddingBlock: 8,
+    paddingInline: 12,
     listStyle: "none",
   },
   warningItem: {
     display: "flex",
-    gap: "8px",
+    gap: 8,
     alignItems: "baseline",
-    padding: "4px 0",
-    fontSize: "11px",
-    borderBottom: "1px solid #fde68a",
+    paddingBlock: {
+      default: 4,
+      [MOBILE]: 3,
+    },
+    paddingInline: 0,
+    fontSize: {
+      default: 11,
+      [MOBILE]: 10,
+    },
+    borderBottomWidth: 1,
+    borderBottomStyle: "solid",
+    borderBottomColor: "#fde68a",
   },
   warningFeature: {
     fontWeight: 600,
@@ -1040,6 +1251,159 @@ const styles: Record<string, React.CSSProperties> = {
   warningLoc: {
     color: "#a16207",
     fontFamily: "monospace",
-    fontSize: "11px",
+    fontSize: 11,
   },
-};
+
+  // ── Render panel ──
+  renderPanel: {
+    borderTopWidth: 1,
+    borderTopStyle: "solid",
+    borderTopColor: "#e0e0e0",
+    backgroundColor: "#fff",
+    display: "flex",
+    flexDirection: "column",
+    height: {
+      default: 280,
+      [MOBILE]: "auto",
+    },
+    minHeight: {
+      default: null,
+      [MOBILE]: 200,
+    },
+  },
+  renderPanelFullHeight: {
+    height: "auto",
+    flex: 1,
+    minHeight: 0,
+  },
+  renderPanelHeader: {
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "space-between",
+    paddingBlock: {
+      default: 8,
+      [MOBILE]: 5,
+    },
+    paddingInline: {
+      default: 12,
+      [MOBILE]: 8,
+    },
+    fontSize: {
+      default: 11,
+      [MOBILE]: 10,
+    },
+    fontWeight: 600,
+    color: "#666",
+    textTransform: "uppercase",
+    letterSpacing: "0.5px",
+    backgroundColor: "#f0f0f0",
+    borderBottomWidth: 1,
+    borderBottomStyle: "solid",
+    borderBottomColor: "#e0e0e0",
+  },
+  renderPanelNote: {
+    fontSize: {
+      default: 11,
+      [MOBILE]: 9,
+    },
+    fontWeight: 400,
+    color: "#888",
+    textTransform: "none",
+    letterSpacing: "normal",
+  },
+  renderPanelBody: {
+    display: "flex",
+    flex: 1,
+    minHeight: 0,
+    overflow: "hidden",
+    flexDirection: {
+      default: "row",
+      [MOBILE]: "column",
+    },
+  },
+
+  // ── Render panes ──
+  renderPane: {
+    flex: 1,
+    display: "flex",
+    flexDirection: "column",
+    borderRightWidth: {
+      default: 1,
+      [MOBILE]: 0,
+    },
+    borderRightStyle: {
+      default: "solid",
+      [MOBILE]: "none",
+    },
+    borderRightColor: {
+      default: "#e0e0e0",
+      [MOBILE]: null,
+    },
+    borderBottomWidth: {
+      default: null,
+      [MOBILE]: 1,
+    },
+    borderBottomStyle: {
+      default: null,
+      [MOBILE]: "solid",
+    },
+    borderBottomColor: {
+      default: null,
+      [MOBILE]: "#e0e0e0",
+    },
+    minWidth: 0,
+    minHeight: {
+      default: null,
+      [MOBILE]: 120,
+      [PHONE]: 100,
+    },
+  },
+  renderPaneLast: {
+    borderRightWidth: 0,
+    borderRightStyle: "none",
+  },
+  renderPaneHeader: {
+    paddingBlock: {
+      default: 6,
+      [MOBILE]: 4,
+    },
+    paddingInline: {
+      default: 12,
+      [MOBILE]: 8,
+    },
+    fontSize: {
+      default: 11,
+      [MOBILE]: 10,
+    },
+    fontWeight: 600,
+    color: "#666",
+    textTransform: "uppercase",
+    letterSpacing: "0.5px",
+    backgroundColor: "#fafafa",
+    borderBottomWidth: 1,
+    borderBottomStyle: "solid",
+    borderBottomColor: "#e0e0e0",
+  },
+  renderPaneBody: {
+    flex: 1,
+    padding: {
+      default: 12,
+      [MOBILE]: 8,
+    },
+    overflow: "auto",
+    backgroundColor: "#fafafa",
+  },
+  renderPlaceholder: {
+    fontSize: 11,
+    color: "#888",
+  },
+  renderError: {
+    color: "#c00",
+    padding: 0,
+    margin: 0,
+    fontFamily: "monospace",
+    fontSize: 12,
+    whiteSpace: "pre-wrap",
+    wordBreak: "break-word",
+  },
+});

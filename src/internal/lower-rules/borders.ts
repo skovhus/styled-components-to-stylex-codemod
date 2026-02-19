@@ -16,7 +16,7 @@ import { extractStaticParts } from "./interpolations.js";
 import { toSuffixFromProp } from "../transform/helpers.js";
 import type { LowerRulesState } from "./state.js";
 
-export type BorderHandlerContext = Pick<
+type BorderHandlerContext = Pick<
   LowerRulesState,
   | "api"
   | "j"
@@ -35,7 +35,7 @@ export type BorderHandlerContext = Pick<
   inlineStyleProps: Array<{ prop: string; expr: unknown }>;
 };
 
-export type BorderHandlerArgs = {
+type BorderHandlerArgs = {
   // jscodeshift AST declaration node; `any` needed due to jscodeshift's complex typing
   d: any;
   selector: string;

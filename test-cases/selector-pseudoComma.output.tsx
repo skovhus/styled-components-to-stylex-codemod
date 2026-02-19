@@ -17,8 +17,8 @@ const styles = stylex.create({
     paddingInline: "16px",
     backgroundColor: {
       default: "white",
-      ":hover": "#BF4F74",
-      ":focus": "#BF4F74",
+      ":hover": "#bf4f74",
+      ":focus": "#bf4f74",
     },
     color: {
       default: "#333",
@@ -29,15 +29,15 @@ const styles = stylex.create({
     borderStyle: "solid",
     borderColor: {
       default: "#ccc",
-      ":hover": "#BF4F74",
-      ":focus": "#BF4F74",
+      ":hover": "#bf4f74",
+      ":focus": "#bf4f74",
     },
     borderRadius: "4px",
     cursor: "pointer",
     outline: {
       default: null,
-      ":active": "2px solid #4F74BF",
-      ":focus-visible": "2px solid #4F74BF",
+      ":active": "2px solid #4f74bf",
+      ":focus-visible": "2px solid #4f74bf",
     },
     outlineOffset: {
       default: null,
@@ -49,9 +49,9 @@ const styles = stylex.create({
   link: {
     color: {
       default: "#333",
-      ":hover": "#BF4F74",
-      ":focus": "#BF4F74",
-      ":active": "#BF4F74",
+      ":hover": "#bf4f74",
+      ":focus": "#bf4f74",
+      ":active": "#bf4f74",
     },
     textDecoration: {
       default: "none",
@@ -68,8 +68,8 @@ const styles = stylex.create({
     borderStyle: "solid",
     borderColor: {
       default: "#ccc",
-      ":hover": "#BF4F74",
-      ":focus": "#BF4F74",
+      ":hover": "#bf4f74",
+      ":focus": "#bf4f74",
     },
     borderRadius: "4px",
     "::placeholder": {

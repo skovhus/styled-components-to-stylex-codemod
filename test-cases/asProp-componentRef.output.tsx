@@ -3,7 +3,8 @@ import * as stylex from "@stylexjs/stylex";
 import { mergedSx } from "./lib/mergedSx";
 
 // SpringValue simulates react-spring's animated value type
-type SpringValue<T> = { get(): T };
+// Intersected with T so it's assignable to CSS property types (e.g., Width)
+type SpringValue<T> = T & { get(): T };
 
 // AnimatedSpanProps accepts SpringValue for style properties (like react-spring)
 type AnimatedSpanProps = Omit<React.ComponentProps<"span">, "style"> & {

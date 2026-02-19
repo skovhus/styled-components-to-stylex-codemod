@@ -11,7 +11,7 @@ import type { ExpressionKind } from "./types.js";
 
 export type LogicalExpressionOperand = Parameters<JSCodeshift["logicalExpression"]>[1];
 
-export type VariantConditionResult = {
+type VariantConditionResult = {
   cond: LogicalExpressionOperand;
   props: string[];
   isBoolean: boolean;

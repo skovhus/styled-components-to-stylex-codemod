@@ -166,49 +166,17 @@ export function detectUnsupportedPatternsStep(ctx: TransformContext): StepResult
     return false;
   };
 
+  const styledComponentNames = collectStyledComponentNames();
+
   // Detect patterns that aren't directly representable in StyleX (or require semantic rewrites).
   // These warnings are used for per-fixture expectations and help guide manual follow-ups.
-  let hasComponentSelector = false;
-  let hasSpecificityHack = false;
-  let componentSelectorLoc: { line: number; column: number } | null = null;
-  let specificityHackLoc: { line: number; column: number } | null = null;
   let hocStyledFactoryLoc: { line: number; column: number } | null = null;
-  let staticStyledPropertyLoc: { line: number; column: number } | null = null;
+  let themePropOverrideLoc: { line: number; column: number } | null = null;
 
-  root.find(j.TemplateLiteral).forEach((p) => {
-    const tl = p.node;
-
-    // Specificity hacks like `&&` / `&&&` inside styled template literals.
-    for (const quasi of tl.quasis) {
-      if (quasi.value.raw.includes("&&")) {
-        hasSpecificityHack = true;
-        if (!specificityHackLoc && quasi.loc?.start?.line !== undefined) {
-          specificityHackLoc = {
-            line: quasi.loc.start.line,
-            column: quasi.loc.start.column ?? 0,
-          };
-        }
-      }
-    }
-
-    // Component selector patterns like `${Link}:hover & { ... }`
-    for (let i = 0; i < tl.expressions.length; i++) {
-      const expr = tl.expressions[i];
-      const after = tl.quasis[i + 1]?.value.raw ?? "";
-      if (expr?.type === "Identifier" && after.includes(":hover &")) {
-        hasComponentSelector = true;
-        if (!componentSelectorLoc) {
-          const loc = (expr as any).loc ?? tl.loc;
-          if (loc?.start?.line !== undefined) {
-            componentSelectorLoc = {
-              line: loc.start.line,
-              column: loc.start.column ?? 0,
-            };
-          }
-        }
-      }
-    }
-  });
+  // NOTE: Specificity hacks (`&&`, `&&&`) are handled during rule processing by
+  // normalizeSpecificityHacks() in selectors.ts — no file-level bail needed.
+  // NOTE: Component selector patterns (`${Link}:hover &`) are handled during rule
+  // processing via stylex.when.ancestor() — no file-level bail needed.
 
   if (!hocStyledFactoryLoc) {
     const hocFactories = collectHocStyledFactoryNames();
@@ -271,79 +239,178 @@ export function detectUnsupportedPatternsStep(ctx: TransformContext): StepResult
     }
   });
 
-  if (!staticStyledPropertyLoc && styledLocalNames && styledLocalNames.size > 0) {
-    const styledComponentNames = collectStyledComponentNames();
-    if (styledComponentNames.size > 0) {
-      root.find(j.TaggedTemplateExpression).forEach((p) => {
-        if (staticStyledPropertyLoc) {
-          return;
-        }
-        const tag = p.node.tag as any;
-        if (!isStyledTag(styledLocalNames, tag)) {
-          return;
-        }
-        const expressions = p.node.quasi?.expressions ?? [];
-        for (const expr of expressions) {
-          const base = unwrapExpression(expr);
-          if (base?.type !== "MemberExpression" && base?.type !== "OptionalMemberExpression") {
-            continue;
-          }
-          const obj = unwrapExpression(base.object);
-          if (obj?.type !== "Identifier") {
-            continue;
-          }
-          if (!styledComponentNames.has(obj.name)) {
-            continue;
-          }
-          const loc = base.loc?.start ?? obj.loc?.start ?? p.node.loc?.start;
+  if (!themePropOverrideLoc && styledComponentNames.size > 0) {
+    const getThemeAttrLoc = (attrs: any[] | null | undefined) => {
+      for (const attr of attrs ?? []) {
+        if (
+          attr?.type === "JSXAttribute" &&
+          attr.name?.type === "JSXIdentifier" &&
+          attr.name.name === "theme"
+        ) {
+          const loc = attr.loc?.start;
           if (loc?.line !== undefined) {
-            staticStyledPropertyLoc = { line: loc.line, column: loc.column ?? 0 };
-            break;
+            return { line: loc.line, column: loc.column ?? 0 };
           }
+          return null;
+        }
+      }
+      return null;
+    };
+
+    root
+      .find(j.JSXElement, {
+        openingElement: { name: { type: "JSXIdentifier" } },
+      } as any)
+      .forEach((p: any) => {
+        if (themePropOverrideLoc) {
+          return;
+        }
+        const opening = p.node.openingElement;
+        const name = opening?.name;
+        if (name?.type !== "JSXIdentifier") {
+          return;
+        }
+        if (!styledComponentNames.has(name.name)) {
+          return;
+        }
+        const loc = getThemeAttrLoc(opening.attributes ?? []);
+        if (loc) {
+          themePropOverrideLoc = loc;
         }
       });
-    }
+
+    root
+      .find(j.JSXSelfClosingElement, { name: { type: "JSXIdentifier" } } as any)
+      .forEach((p: any) => {
+        if (themePropOverrideLoc) {
+          return;
+        }
+        const node = p.node;
+        const name = node?.name;
+        if (name?.type !== "JSXIdentifier") {
+          return;
+        }
+        if (!styledComponentNames.has(name.name)) {
+          return;
+        }
+        const loc = getThemeAttrLoc(node.attributes ?? []);
+        if (loc) {
+          themePropOverrideLoc = loc;
+        }
+      });
   }
 
-  if (!staticStyledPropertyLoc && styledLocalNames && styledLocalNames.size > 0) {
-    const styledComponentNames = collectStyledComponentNames();
-    if (styledComponentNames.size > 0) {
-      root.find(j.JSXMemberExpression).forEach((p) => {
-        if (staticStyledPropertyLoc) {
-          return;
+  if (!themePropOverrideLoc && styledComponentNames.size > 0) {
+    const getThemeDefaultPropsLoc = (expr: any): { line: number; column: number } | null => {
+      const objExpr = unwrapExpression(expr);
+      if (!objExpr || objExpr.type !== "ObjectExpression") {
+        return null;
+      }
+      for (const prop of objExpr.properties ?? []) {
+        if (!prop || (prop.type !== "Property" && prop.type !== "ObjectProperty")) {
+          continue;
         }
-        const obj = p.node.object;
-        if (obj?.type !== "JSXIdentifier") {
-          return;
+        const key = prop.key;
+        const keyName =
+          key?.type === "Identifier"
+            ? key.name
+            : key?.type === "StringLiteral"
+              ? key.value
+              : key?.type === "Literal" && typeof key.value === "string"
+                ? key.value
+                : null;
+        if (keyName !== "theme") {
+          continue;
         }
-        if (!styledComponentNames.has(obj.name)) {
-          return;
-        }
-        const loc = (p.node.loc ?? obj.loc)?.start;
+        const loc = prop.loc?.start ?? objExpr.loc?.start;
         if (loc?.line !== undefined) {
-          staticStyledPropertyLoc = { line: loc.line, column: loc.column ?? 0 };
+          return { line: loc.line, column: loc.column ?? 0 };
         }
-      });
-    }
-  }
+        return null;
+      }
+      return null;
+    };
 
-  if (hasComponentSelector) {
-    warnings.push({
-      severity: "warning",
-      type: "Component selectors like `${OtherComponent}:hover &` are not directly representable in StyleX. Manual refactor is required",
-      loc: componentSelectorLoc,
+    root.find(j.AssignmentExpression).forEach((p) => {
+      if (themePropOverrideLoc) {
+        return;
+      }
+      const left = unwrapExpression(p.node.left);
+      const right = unwrapExpression(p.node.right);
+      if (!left || !right) {
+        return;
+      }
+      if (left.type !== "MemberExpression" && left.type !== "OptionalMemberExpression") {
+        return;
+      }
+      const obj = unwrapExpression(left.object);
+      const prop = left.property;
+      if (obj?.type !== "Identifier") {
+        return;
+      }
+      if (!styledComponentNames.has(obj.name)) {
+        return;
+      }
+      if (left.computed) {
+        return;
+      }
+      if (prop?.type !== "Identifier" || prop.name !== "defaultProps") {
+        return;
+      }
+      const loc = getThemeDefaultPropsLoc(right);
+      if (loc) {
+        themePropOverrideLoc = loc;
+      }
     });
 
-    // Policy: component selectors like `${OtherComponent}:hover &` require a semantic refactor.
-    // Bail out to avoid producing incorrect output.
-    return returnResult({ code: null, warnings }, "bail");
+    root.find(j.AssignmentExpression).forEach((p) => {
+      if (themePropOverrideLoc) {
+        return;
+      }
+      const left = unwrapExpression(p.node.left);
+      if (!left) {
+        return;
+      }
+      if (left.type !== "MemberExpression" && left.type !== "OptionalMemberExpression") {
+        return;
+      }
+      const inner = unwrapExpression(left.object);
+      const themeProp = left.property;
+      if (
+        !inner ||
+        (inner.type !== "MemberExpression" && inner.type !== "OptionalMemberExpression")
+      ) {
+        return;
+      }
+      if (left.computed || inner.computed) {
+        return;
+      }
+      const baseObj = unwrapExpression(inner.object);
+      const defaultPropsProp = inner.property;
+      if (baseObj?.type !== "Identifier") {
+        return;
+      }
+      if (!styledComponentNames.has(baseObj.name)) {
+        return;
+      }
+      if (defaultPropsProp?.type !== "Identifier" || defaultPropsProp.name !== "defaultProps") {
+        return;
+      }
+      if (themeProp?.type !== "Identifier" || themeProp.name !== "theme") {
+        return;
+      }
+      const loc = left.loc?.start ?? inner.loc?.start ?? baseObj.loc?.start;
+      if (loc?.line !== undefined) {
+        themePropOverrideLoc = { line: loc.line, column: loc.column ?? 0 };
+      }
+    });
   }
 
-  if (hasSpecificityHack) {
+  if (themePropOverrideLoc) {
     warnings.push({
       severity: "warning",
-      type: "Styled-components specificity hacks like `&&` / `&&&` are not representable in StyleX",
-      loc: specificityHackLoc,
+      type: "Theme prop overrides on styled components are not supported",
+      loc: themePropOverrideLoc,
     });
     return returnResult({ code: null, warnings }, "bail");
   }
@@ -353,15 +420,6 @@ export function detectUnsupportedPatternsStep(ctx: TransformContext): StepResult
       severity: "warning",
       type: "Higher-order styled factory wrappers (e.g. hoc(styled)) are not supported",
       loc: hocStyledFactoryLoc,
-    });
-    return returnResult({ code: null, warnings }, "bail");
-  }
-
-  if (staticStyledPropertyLoc) {
-    warnings.push({
-      severity: "warning",
-      type: "Static properties on styled components (e.g. Styled.Component) are not supported",
-      loc: staticStyledPropertyLoc,
     });
     return returnResult({ code: null, warnings }, "bail");
   }

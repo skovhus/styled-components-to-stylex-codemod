@@ -46,7 +46,7 @@ import {
 import { buildThemeStyleKeys } from "../utilities/style-key-naming.js";
 import { capitalize } from "../utilities/string-utils.js";
 
-export type CssHelperConditionalContext = Pick<
+type CssHelperConditionalContext = Pick<
   LowerRulesState,
   | "j"
   | "filePath"

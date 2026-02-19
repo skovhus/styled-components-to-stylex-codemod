@@ -15,7 +15,7 @@ import type {
 import type { StyleMergerConfig } from "../../adapter.js";
 import type { StyledDecl, VariantDimension } from "../transform-types.js";
 import { emitStyleMerging } from "./style-merger.js";
-import type { ExportInfo, ExpressionKind, InlineStyleProp } from "./types.js";
+import type { ExportInfo, ExpressionKind, InlineStyleProp, WrapperPropDefaults } from "./types.js";
 import { TAG_TO_HTML_ELEMENT, VOID_TAGS } from "./type-helpers.js";
 import { isIdentifierNode } from "../utilities/jscodeshift-utils.js";
 import type { JsxAttr, JsxTagName, StatementKind } from "./jsx-builders.js";
@@ -30,7 +30,7 @@ type TsTypeAnnotationInput = Parameters<JSCodeshift["tsTypeAnnotation"]>[0];
 type BlockStatementBody = Parameters<JSCodeshift["blockStatement"]>[0];
 type AstNodeOrNull = ASTNode | null | undefined;
 
-export type WrapperEmitterArgs = {
+type WrapperEmitterArgs = {
   root: Collection<ASTNode>;
   j: JSCodeshift;
   filePath: string;
@@ -65,6 +65,7 @@ export class WrapperEmitter {
   private jsxCallsitesCache = new Map<string, { hasAny: boolean }>();
   private jsxChildrenUsageCache = new Map<string, boolean>();
   private usedAsValueCache = new Map<string, boolean>();
+  private forwardedAsUsageCache = new Map<string, boolean>();
 
   constructor(args: WrapperEmitterArgs) {
     this.root = args.root;
@@ -124,6 +125,38 @@ export class WrapperEmitter {
       .forEach((p: any) => collectFromOpening(p.node));
     this.usedAttrsCache.set(localName, attrs);
     return attrs;
+  }
+
+  hasForwardedAsUsage(localName: string, visiting: Set<string> = new Set<string>()): boolean {
+    const cached = this.forwardedAsUsageCache.get(localName);
+    if (cached !== undefined) {
+      return cached;
+    }
+    if (visiting.has(localName)) {
+      return false;
+    }
+    visiting.add(localName);
+
+    if (this.getUsedAttrs(localName).has("forwardedAs")) {
+      this.forwardedAsUsageCache.set(localName, true);
+      visiting.delete(localName);
+      return true;
+    }
+
+    for (const wrapperDecl of this.wrapperDecls) {
+      if (wrapperDecl.base.kind !== "component" || wrapperDecl.base.ident !== localName) {
+        continue;
+      }
+      if (this.hasForwardedAsUsage(wrapperDecl.localName, visiting)) {
+        this.forwardedAsUsageCache.set(localName, true);
+        visiting.delete(localName);
+        return true;
+      }
+    }
+
+    visiting.delete(localName);
+    this.forwardedAsUsageCache.set(localName, false);
+    return false;
   }
 
   getJsxCallsites(localName: string): { hasAny: boolean } {
@@ -225,9 +258,10 @@ export class WrapperEmitter {
     if (d.supportsAsProp) {
       return true;
     }
-    // supportsExternalStyles enables `as` prop for intrinsic-based components,
-    // but NOT when wrapping another styled component (to avoid TS2590 union complexity).
-    if (d.supportsExternalStyles && d.base.kind !== "component") {
+    // Auto-enable `as` for components extended by other styled components in the same file
+    // (supportsExternalStyles is set but supportsAsProp was not explicitly set by the adapter).
+    // Does NOT apply when wrapping another component (to avoid TS2590 union complexity).
+    if (d.supportsExternalStyles && d.base.kind !== "component" && d.supportsAsProp === undefined) {
       return true;
     }
     // For void tags without explicit opt-in, don't allow `as` prop
@@ -235,7 +269,7 @@ export class WrapperEmitter {
       return false;
     }
     const used = this.getUsedAttrs(d.localName);
-    return used.has("as") || used.has("forwardedAs");
+    return used.has("as") || this.hasForwardedAsUsage(d.localName);
   }
 
   private stringifyTsTypeName(n: AstNodeOrNull): string | null {
@@ -744,7 +778,11 @@ export class WrapperEmitter {
       if (attr === "*" || attr === "children") {
         continue;
       }
-      if (attr === "as" || attr === "forwardedAs") {
+      if (attr === "as") {
+        continue;
+      }
+      if (attr === "forwardedAs") {
+        lines.push("forwardedAs?: React.ElementType");
         continue;
       }
       if (attr === "className" || attr === "style") {
@@ -821,6 +859,9 @@ export class WrapperEmitter {
     }
     if (shouldAddStyleProps && allowStyleProp) {
       lines.push("style?: React.CSSProperties");
+    }
+    if (this.hasForwardedAsUsage(d.localName)) {
+      lines.push("forwardedAs?: React.ElementType");
     }
     const literal = lines.length > 0 ? `{ ${lines.join(", ")} }` : "{}";
     const propsTarget = d.attrsInfo?.attrsAsTag ?? (d.base as any).ident;
@@ -918,7 +959,7 @@ export class WrapperEmitter {
     inlineTypeText?: string;
     styleArgs: ExpressionKind[];
     destructureProps: string[];
-    propDefaults?: Map<string, string>;
+    propDefaults?: WrapperPropDefaults;
     allowClassNameProp?: boolean;
     allowStyleProp?: boolean;
     allowAsProp?: boolean;
@@ -997,6 +1038,7 @@ export class WrapperEmitter {
     }
 
     const isVoidTag = VOID_TAGS.has(tagName);
+    const allowForwardedAsProp = this.getUsedAttrs(localName).has("forwardedAs");
     const propsParamId = j.identifier("props");
     const needsPolymorphicTypeParams =
       this.emitTypes && (allowAsProp || Boolean(inlineTypeText?.includes("<C")));
@@ -1049,6 +1091,9 @@ export class WrapperEmitter {
         }) as Property,
       );
     }
+    if (allowForwardedAsProp) {
+      patternProps.push(this.patternProp("forwardedAs"));
+    }
     if (!isVoidTag) {
       patternProps.push(this.patternProp("children"));
     }
@@ -1058,22 +1103,21 @@ export class WrapperEmitter {
     if (allowStyleProp) {
       patternProps.push(this.patternProp("style"));
     }
-    // Build a set of defaultAttrs prop names to check if we should skip destructuring defaults
-    const defaultAttrsSet = new Set(defaultAttrs.map((a) => a.jsxProp));
-
     for (const name of expandedDestructureProps) {
-      if (name !== "children" && name !== "style" && name !== "className") {
+      if (
+        name !== "children" &&
+        name !== "style" &&
+        name !== "className" &&
+        name !== "forwardedAs"
+      ) {
         const defaultVal = propDefaults?.get(name);
-        // Don't add destructuring defaults for defaultAttrs props - we use ?? in JSX instead
-        // to preserve nullish coalescing semantics (handles both undefined AND null)
-        const isDefaultAttr = defaultAttrsSet.has(name);
-        if (defaultVal && !isDefaultAttr) {
+        if (defaultVal !== undefined) {
           patternProps.push(
             j.property.from({
               kind: "init",
               key: j.identifier(name),
               value: j.assignmentPattern(j.identifier(name), j.literal(defaultVal)),
-              shorthand: false,
+              shorthand: true,
             }) as Property,
           );
         } else {
@@ -1105,7 +1149,16 @@ export class WrapperEmitter {
     const styleId = j.identifier("style");
     const staticClassName =
       typeof staticAttrs.className === "string" ? staticAttrs.className : undefined;
-    const { className: _omit, ...filteredStaticAttrs } = staticAttrs;
+    const hasStaticAsFallback = allowForwardedAsProp && Object.hasOwn(staticAttrs, "as");
+    const staticAsFallback = hasStaticAsFallback ? staticAttrs.as : undefined;
+    const filteredStaticAttrs = (() => {
+      if (allowForwardedAsProp) {
+        const { className: _omitClassName, as: _omitAs, ...rest } = staticAttrs;
+        return rest;
+      }
+      const { className: _omitClassName, ...rest } = staticAttrs;
+      return rest;
+    })();
     const merging = emitStyleMerging({
       j,
       emitter: this,
@@ -1187,6 +1240,14 @@ export class WrapperEmitter {
           j.jsxAttribute(j.jsxIdentifier(key), j.jsxExpressionContainer(j.literal(value))),
         );
       }
+    }
+    if (allowForwardedAsProp) {
+      const forwardedAsValueExpr = hasStaticAsFallback
+        ? j.logicalExpression("??", j.identifier("forwardedAs"), this.literalExpr(staticAsFallback))
+        : j.identifier("forwardedAs");
+      jsxAttrs.push(
+        j.jsxAttribute(j.jsxIdentifier("as"), j.jsxExpressionContainer(forwardedAsValueExpr)),
+      );
     }
 
     if (tagName === "button" && destructureProps.includes("disabled")) {
@@ -1339,7 +1400,7 @@ export class WrapperEmitter {
   buildDestructurePatternProps(args: {
     baseProps: Array<Property | RestElement>;
     destructureProps: Array<string | null | undefined>;
-    propDefaults?: Map<string, string>;
+    propDefaults?: WrapperPropDefaults;
     includeRest?: boolean;
     restId?: Identifier;
   }): Array<Property | RestElement> {
@@ -1358,7 +1419,7 @@ export class WrapperEmitter {
     dimensions: VariantDimension[];
     styleArgs: ExpressionKind[];
     destructureProps?: string[];
-    propDefaults?: Map<string, string>;
+    propDefaults?: WrapperPropDefaults;
     namespaceBooleanProps?: string[];
   }): void {
     seb.buildVariantDimensionLookups(this.j, args);

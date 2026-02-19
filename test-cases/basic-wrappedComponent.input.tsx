@@ -15,7 +15,7 @@ const Link = ({
 );
 
 const StyledLink = styled(Link)`
-  color: #BF4F74;
+  color: #bf4f74;
   font-weight: bold;
   text-decoration: none;
 

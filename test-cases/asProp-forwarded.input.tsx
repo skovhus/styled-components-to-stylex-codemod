@@ -3,7 +3,7 @@ import styled from "styled-components";
 const Button = styled.button`
   display: inline-block;
   padding: 8px 16px;
-  background: #BF4F74;
+  background: #bf4f74;
   color: white;
   border: none;
   border-radius: 4px;
@@ -22,8 +22,12 @@ export const App = () => (
     <Button as="a" href="#">
       Button as Link
     </Button>
+    <Button forwardedAs="a">Button forwardedAs</Button>
     <ButtonWrapper forwardedAs="a" href="#">
       Wrapper forwards as Link
+    </ButtonWrapper>
+    <ButtonWrapper as="section" forwardedAs="a" href="#">
+      Wrapper as Section + forwardedAs
     </ButtonWrapper>
   </div>
 );

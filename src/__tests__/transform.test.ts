@@ -7,7 +7,7 @@ import { fileURLToPath } from "node:url";
 import { format } from "oxfmt";
 import transform, { transformWithWarnings } from "../transform.js";
 import type { TransformOptions } from "../transform.js";
-import { customAdapter, fixtureAdapter, appLikeAdapter } from "./fixture-adapters.js";
+import { customAdapter, fixtureAdapter } from "./fixture-adapters.js";
 import type { Adapter, ResolveValueContext } from "../adapter.js";
 
 // Suppress codemod logs in tests
@@ -138,20 +138,6 @@ type TestTransformOptions = Partial<Omit<TransformOptions, "adapter">> & {
   adapter?: TransformOptions["adapter"];
 };
 
-// Test cases that use the app-like adapter (styleMerger: null) to reproduce
-// real-world TS errors with the verbose className/style merging pattern.
-const APP_LIKE_ADAPTER_FIXTURES = new Set([
-  "bug-data-style-src-not-accepted",
-  "bug-data-style-src-incompatible-component",
-  "bug-external-styles-missing-classname",
-]);
-
-/** Select the adapter based on the fixture name. */
-function adapterForFixture(filePath: string): TransformOptions["adapter"] {
-  const base = filePath.replace(/^.*[\\/]/, "").replace(/\.input\.\w+$/, "");
-  return APP_LIKE_ADAPTER_FIXTURES.has(base) ? appLikeAdapter : fixtureAdapter;
-}
-
 function runTransform(
   source: string,
   options: TestTransformOptions = {},
@@ -159,7 +145,7 @@ function runTransform(
   parser: "tsx" | "babel" | "flow" = "tsx",
 ): string {
   const opts: TransformOptions = {
-    adapter: adapterForFixture(filePath),
+    adapter: fixtureAdapter,
     ...options,
   };
   const result = applyTransform(transform, opts, { source, path: filePath }, { parser });
@@ -178,7 +164,7 @@ function runTransformWithDiagnostics(
   parser: "tsx" | "babel" | "flow" = "tsx",
 ): { code: string | null; warnings: ReturnType<typeof transformWithWarnings>["warnings"] } {
   const opts: TransformOptions = {
-    adapter: adapterForFixture(filePath),
+    adapter: fixtureAdapter,
     ...options,
   };
   const jWithParser = jscodeshift.withParser(parser);
@@ -646,7 +632,7 @@ export const App = () => <Box $on />;
 
     const adapterWithBadThemeExpr = {
       externalInterface() {
-        return null;
+        return { styles: false, as: false };
       },
       resolveValue(ctx: ResolveValueContext) {
         if (ctx.kind !== "theme") {
@@ -705,7 +691,7 @@ export const App = () => (
 
     const adapterWithoutCallResolution = {
       externalInterface() {
-        return null;
+        return { styles: false, as: false };
       },
       resolveValue(ctx: ResolveValueContext) {
         // Intentionally do not resolve any calls.
@@ -795,7 +781,7 @@ export const App = () => <Button>Click</Button>;
 describe("styleMerger configuration", () => {
   const mergerAdapter = {
     externalInterface() {
-      return { styles: true } as const;
+      return { styles: true, as: false } as const;
     },
     resolveValue() {
       return undefined;
@@ -813,7 +799,7 @@ describe("styleMerger configuration", () => {
   };
   const noExternalMergerAdapter = {
     externalInterface() {
-      return null;
+      return { styles: false, as: false };
     },
     resolveValue() {
       return undefined;
@@ -982,7 +968,7 @@ export const App = () => <Box $delay={100} />;
     const adapterWithoutMerger = {
       styleMerger: null,
       externalInterface() {
-        return { styles: true } as const;
+        return { styles: true, as: false } as const;
       },
       resolveValue() {
         return undefined;
@@ -1157,6 +1143,400 @@ export const App = () => <Button>Click me</Button>;
 
     // Should succeed because adapter resolved the call
     expect(result.code).not.toBeNull();
+  });
+});
+
+describe("conditional helper call inside pseudo selector", () => {
+  it("should warn with cssText hint when adapter resolves styles but omits cssText", () => {
+    // When a conditional helper call appears inside a pseudo selector (e.g., &:hover)
+    // and the adapter resolves it as StyleX styles (usage: "props") WITHOUT cssText,
+    // the codemod cannot expand individual CSS properties for pseudo-wrapping.
+    // It should emit a descriptive warning mentioning cssText.
+    const source = `
+import styled from "styled-components";
+import { truncate } from "./lib/helpers";
+
+const Text = styled.p<{ $truncate?: boolean }>\`
+  font-size: 14px;
+  &:hover {
+    \${(props) => (props.$truncate ? truncate() : "")}
+  }
+\`;
+
+export const App = () => <Text>Hello</Text>;
+`;
+
+    const adapterWithoutCssText = {
+      externalInterface() {
+        return { styles: false, as: false };
+      },
+      resolveValue() {
+        return undefined;
+      },
+      resolveCall() {
+        // Resolve as StyleX styles but WITHOUT cssText
+        return {
+          usage: "props" as const,
+          expr: "helpers.truncate",
+          imports: [
+            {
+              from: { kind: "specifier" as const, value: "./lib/helpers.stylex" },
+              names: [{ imported: "helpers" }],
+            },
+          ],
+          // cssText is intentionally omitted
+        };
+      },
+      resolveSelector() {
+        return undefined;
+      },
+      styleMerger: null,
+    } satisfies Adapter;
+
+    const result = transformWithWarnings(
+      { source, path: "test-no-csstext.tsx" },
+      { jscodeshift: j, j, stats: () => {}, report: () => {} },
+      { adapter: adapterWithoutCssText },
+    );
+
+    expect(result.code).toBeNull();
+    expect(result.warnings.length).toBeGreaterThan(0);
+    expect(result.warnings[0]!.type).toBe(
+      "Adapter resolved StyleX styles inside pseudo selector but did not provide cssText for property expansion — add cssText to resolveCall result to enable pseudo-wrapping",
+    );
+    expect(result.warnings[0]!.context).toMatchObject({
+      selector: "&:hover",
+    });
+  });
+
+  it("should use generic warning when expression is not a conditional helper call", () => {
+    // When the interpolation inside a pseudo selector is NOT a conditional helper call
+    // (e.g., it's a direct call without a conditional, or a logical expression),
+    // the generic "cannot be applied under nested selectors" warning should be used.
+    const source = `
+import styled from "styled-components";
+import { truncate } from "./lib/helpers";
+
+const Text = styled.p\`
+  font-size: 14px;
+  &:hover {
+    \${(props) => props.$active && truncate()}
+  }
+\`;
+
+export const App = () => <Text>Hello</Text>;
+`;
+
+    const adapterResolving = {
+      externalInterface() {
+        return { styles: false, as: false };
+      },
+      resolveValue() {
+        return undefined;
+      },
+      resolveCall() {
+        return {
+          usage: "props" as const,
+          expr: "helpers.truncate",
+          imports: [],
+        };
+      },
+      resolveSelector() {
+        return undefined;
+      },
+      styleMerger: null,
+    } satisfies Adapter;
+
+    const result = transformWithWarnings(
+      { source, path: "test-logical.tsx" },
+      { jscodeshift: j, j, stats: () => {}, report: () => {} },
+      { adapter: adapterResolving },
+    );
+
+    expect(result.code).toBeNull();
+    expect(result.warnings.length).toBeGreaterThan(0);
+    expect(result.warnings[0]!.type).toBe(
+      "Adapter resolved StyleX styles cannot be applied under nested selectors/at-rules",
+    );
+  });
+
+  it("should succeed when adapter provides cssText for pseudo-wrapping", () => {
+    // When the adapter resolves the call with both usage: "props" AND cssText,
+    // the codemod can expand the CSS properties and wrap them in pseudo selectors.
+    const source = `
+import styled from "styled-components";
+import { truncate } from "./lib/helpers";
+
+const Text = styled.p<{ $truncate?: boolean }>\`
+  font-size: 14px;
+  &:hover {
+    \${(props) => (props.$truncate ? truncate() : "")}
+  }
+\`;
+
+export const App = () => <Text>Hello</Text>;
+`;
+
+    const adapterWithCssText = {
+      externalInterface() {
+        return { styles: false, as: false };
+      },
+      resolveValue() {
+        return undefined;
+      },
+      resolveCall() {
+        return {
+          usage: "props" as const,
+          expr: "helpers.truncate",
+          imports: [],
+          cssText: "white-space: nowrap; overflow: hidden; text-overflow: ellipsis;",
+        };
+      },
+      resolveSelector() {
+        return undefined;
+      },
+      styleMerger: null,
+    } satisfies Adapter;
+
+    const result = transformWithWarnings(
+      { source, path: "test-with-csstext.tsx" },
+      { jscodeshift: j, j, stats: () => {}, report: () => {} },
+      { adapter: adapterWithCssText },
+    );
+
+    expect(result.code).not.toBeNull();
+    expect(result.warnings).toHaveLength(0);
+    // Verify the output contains pseudo-wrapped styles
+    expect(result.code).toContain('":hover"');
+    expect(result.code).toContain("nowrap");
+    expect(result.code).toContain("textTruncate");
+  });
+
+  it("should preserve base values for overlapping properties in pseudo-wrapped variants", () => {
+    // When the component's base styles define a property (e.g., overflow: auto) and the
+    // helper's cssText also sets that property, the pseudo-wrapped variant must preserve
+    // the base value as the default so it isn't cleared in the non-pseudo state.
+    // In styled-components, the base value persists; only the pseudo state overrides it.
+    const source = `
+import styled from "styled-components";
+import { truncate } from "./lib/helpers";
+
+const Text = styled.p<{ $truncate?: boolean }>\`
+  font-size: 14px;
+  overflow: auto;
+  white-space: pre-wrap;
+  &:hover {
+    \${(props) => (props.$truncate ? truncate() : "")}
+  }
+\`;
+
+export const App = () => <Text>Hello</Text>;
+`;
+
+    const adapterWithCssText = {
+      externalInterface() {
+        return { styles: false, as: false };
+      },
+      resolveValue() {
+        return undefined;
+      },
+      resolveCall() {
+        return {
+          usage: "props" as const,
+          expr: "helpers.truncate",
+          imports: [],
+          // overflow and white-space overlap with base styles
+          cssText: "white-space: nowrap; overflow: hidden; text-overflow: ellipsis;",
+        };
+      },
+      resolveSelector() {
+        return undefined;
+      },
+      styleMerger: null,
+    } satisfies Adapter;
+
+    const result = transformWithWarnings(
+      { source, path: "test-overlap.tsx" },
+      { jscodeshift: j, j, stats: () => {}, report: () => {} },
+      { adapter: adapterWithCssText },
+    );
+
+    expect(result.code).not.toBeNull();
+    expect(result.warnings).toHaveLength(0);
+    // overflow has base value "auto" → default should preserve it, not null
+    expect(result.code).toContain('"auto"');
+    // white-space has base value "pre-wrap" → default should preserve it
+    expect(result.code).toContain('"pre-wrap"');
+    // text-overflow has no base value → default should be null
+    expect(result.code).toContain("default: null");
+  });
+
+  it("should extract scalar default and preserve existing pseudo entries from base map", () => {
+    // When a property in styleObj is already a pseudo/media map
+    // (e.g. { default: "auto", ":focus": "scroll" } from a separate &:focus rule),
+    // the pseudo-wrapped variant must:
+    // 1. Use the scalar `.default` value, not the whole map (avoids invalid nested maps)
+    // 2. Merge existing pseudo/media entries (e.g. ":focus") so they aren't lost when
+    //    StyleX replaces the entire property map with the variant's value
+    const source = `
+import styled from "styled-components";
+import { truncate } from "./lib/helpers";
+
+const Text = styled.p<{ $truncate?: boolean }>\`
+  font-size: 14px;
+  overflow: auto;
+  &:focus {
+    overflow: scroll;
+  }
+  &:hover {
+    \${(props) => (props.$truncate ? truncate() : "")}
+  }
+\`;
+
+export const App = () => <Text>Hello</Text>;
+`;
+
+    const adapterWithCssText = {
+      externalInterface() {
+        return { styles: false, as: false };
+      },
+      resolveValue() {
+        return undefined;
+      },
+      resolveCall() {
+        return {
+          usage: "props" as const,
+          expr: "helpers.truncate",
+          imports: [],
+          // overflow overlaps with a property that has a pseudo/media map in base styles
+          cssText: "white-space: nowrap; overflow: hidden; text-overflow: ellipsis;",
+        };
+      },
+      resolveSelector() {
+        return undefined;
+      },
+      styleMerger: null,
+    } satisfies Adapter;
+
+    const result = transformWithWarnings(
+      { source, path: "test-pseudo-map-default.tsx" },
+      { jscodeshift: j, j, stats: () => {}, report: () => {} },
+      { adapter: adapterWithCssText },
+    );
+
+    expect(result.code).not.toBeNull();
+    expect(result.warnings).toHaveLength(0);
+    // overflow's base is a pseudo map { default: "auto", ":focus": "scroll" },
+    // so the variant should extract the scalar "auto", not embed the whole map
+    expect(result.code).toContain('"auto"');
+    // Must NOT contain a nested default object (invalid StyleX)
+    expect(result.code).not.toMatch(/default:\s*\{/);
+    // The existing :focus entry must be preserved in the variant so it isn't dropped
+    // when StyleX replaces the property map
+    expect(result.code).toContain('":focus"');
+    expect(result.code).toContain('"scroll"');
+  });
+
+  it("should emit descriptive error when adapter provides unparseable cssText", () => {
+    // When the adapter provides cssText that cannot be parsed as CSS declarations,
+    // the codemod should emit a descriptive error mentioning the expected format.
+    const source = `
+import styled from "styled-components";
+import { brokenHelper } from "./lib/helpers";
+
+const Text = styled.p<{ $active?: boolean }>\`
+  font-size: 14px;
+  &:hover {
+    \${(props) => (props.$active ? brokenHelper() : "")}
+  }
+\`;
+
+export const App = () => <Text>Hello</Text>;
+`;
+
+    const adapterWithBadCssText = {
+      externalInterface() {
+        return { styles: false, as: false };
+      },
+      resolveValue() {
+        return undefined;
+      },
+      resolveCall() {
+        return {
+          usage: "props" as const,
+          expr: "helpers.broken",
+          imports: [],
+          cssText: "this is not valid css at all",
+        };
+      },
+      resolveSelector() {
+        return undefined;
+      },
+      styleMerger: null,
+    } satisfies Adapter;
+
+    const result = transformWithWarnings(
+      { source, path: "test-bad-csstext.tsx" },
+      { jscodeshift: j, j, stats: () => {}, report: () => {} },
+      { adapter: adapterWithBadCssText },
+    );
+
+    expect(result.code).toBeNull();
+    expect(result.warnings.length).toBeGreaterThan(0);
+    expect(result.warnings[0]!.type).toBe(
+      'Adapter resolveCall cssText could not be parsed as CSS declarations — expected semicolon-separated property: value pairs (e.g. "white-space: nowrap; overflow: hidden;")',
+    );
+    expect(result.warnings[0]!.severity).toBe("error");
+    expect(result.warnings[0]!.context).toMatchObject({
+      selector: "&:hover",
+      cssText: "this is not valid css at all",
+    });
+  });
+
+  it("should use generic warning when adapter cannot resolve the call at all", () => {
+    // When the adapter returns undefined (cannot resolve), the generic warning is used.
+    const source = `
+import styled from "styled-components";
+import { unknownHelper } from "./lib/helpers";
+
+const Text = styled.p<{ $active?: boolean }>\`
+  font-size: 14px;
+  &:focus {
+    \${(props) => (props.$active ? unknownHelper() : "")}
+  }
+\`;
+
+export const App = () => <Text>Hello</Text>;
+`;
+
+    const adapterReturningUndefined = {
+      externalInterface() {
+        return { styles: false, as: false };
+      },
+      resolveValue() {
+        return undefined;
+      },
+      resolveCall() {
+        return undefined;
+      },
+      resolveSelector() {
+        return undefined;
+      },
+      styleMerger: null,
+    } satisfies Adapter;
+
+    const result = transformWithWarnings(
+      { source, path: "test-unresolved.tsx" },
+      { jscodeshift: j, j, stats: () => {}, report: () => {} },
+      { adapter: adapterReturningUndefined },
+    );
+
+    expect(result.code).toBeNull();
+    expect(result.warnings.length).toBeGreaterThan(0);
+    // Should use generic warning since the call couldn't be resolved at all
+    expect(result.warnings[0]!.type).toBe(
+      "Adapter resolved StyleX styles cannot be applied under nested selectors/at-rules",
+    );
   });
 });
 
@@ -1426,6 +1806,65 @@ export const App = () => <Box>Test</Box>;
   });
 });
 
+describe("array destructuring holes", () => {
+  it("should handle array destructuring patterns with holes (elisions)", () => {
+    // Regression test: `const [, setHovered] = useState(false)` produces an
+    // ArrayPattern with a null element representing the hole.  The AST safety
+    // check must not throw on legitimate elisions.
+    const source = `
+import styled from "styled-components";
+import { useState } from "react";
+
+const Container = styled.div\`
+  padding: 16px;
+  background-color: #f0f0f0;
+\`;
+
+export function App() {
+  const [, setHovered] = useState(false);
+  return <Container onClick={() => setHovered(true)}>Hello</Container>;
+}
+`;
+
+    const result = transformWithWarnings(
+      { source, path: "array-destructure-hole.tsx" },
+      { jscodeshift: j, j, stats: () => {}, report: () => {} },
+      { adapter: fixtureAdapter },
+    );
+
+    expect(result.code).not.toBeNull();
+    expect(result.warnings).toHaveLength(0);
+    // The destructuring pattern should be preserved in the output
+    expect(result.code).toContain("[, setHovered]");
+  });
+
+  it("should handle array expressions with holes (sparse arrays)", () => {
+    // [1, , 3] produces an ArrayExpression with a null element.
+    const source = `
+import styled from "styled-components";
+
+const Box = styled.div\`
+  color: blue;
+\`;
+
+const sparse = [1, , 3];
+
+export function App() {
+  return <Box>{sparse.length}</Box>;
+}
+`;
+
+    const result = transformWithWarnings(
+      { source, path: "array-expression-hole.tsx" },
+      { jscodeshift: j, j, stats: () => {}, report: () => {} },
+      { adapter: fixtureAdapter },
+    );
+
+    expect(result.code).not.toBeNull();
+    expect(result.warnings).toHaveLength(0);
+  });
+});
+
 describe("attrs defaultAttrs nullish coalescing", () => {
   it("should preserve nullish-coalescing semantics for intrinsic element attrs", () => {
     // Regression test: styled.div.attrs with props.X ?? defaultValue should
@@ -1456,6 +1895,32 @@ export const App = () => <Box />;
     expect(result.code).toContain("tabIndex ?? 0");
     // Should NOT use destructuring default for this pattern
     expect(result.code).not.toMatch(/tabIndex:\s*tabIndex\s*=\s*0/);
+  });
+
+  it("should preserve numeric-looking string defaults in destructured attrs props", () => {
+    // Regression test: defaults like "01" must stay strings when emitted as
+    // destructuring defaults, otherwise strict comparisons and prop types can change.
+    const source = `
+import styled from "styled-components";
+
+const Box = styled.div.attrs((props) => ({
+  role: props.role ?? "01",
+}))<{ role?: string }>\`
+  color: \${(props) => props.role === "01" ? "red" : "blue"};
+\`;
+
+export const App = () => <Box />;
+`;
+
+    const result = transformWithWarnings(
+      { source, path: "attrs-string-default.tsx" },
+      { jscodeshift: j, j, stats: () => {}, report: () => {} },
+      { adapter: fixtureAdapter },
+    );
+
+    expect(result.code).not.toBeNull();
+    expect(result.code).toContain('role = "01"');
+    expect(result.code).not.toContain("role = 1");
   });
 });
 
@@ -1678,6 +2143,344 @@ export const App = () => <Badge>Hello</Badge>;
     );
 
     // Should bail — closureVar is not a prop, so we can't create variants
+    expect(result.code).toBeNull();
+  });
+});
+
+describe("attribute selector handling", () => {
+  it("should bail on [readonly] for non-input elements like textarea", () => {
+    // Regression: [readonly] attribute selector was recognized by parseAttributeSelectorInternal
+    // for ALL elements, but the attrWrapper pattern only supports <input>. For non-input
+    // elements, the readonly styles fell through unconditionally into the base style object.
+    const source = `
+import styled from "styled-components";
+
+const TextArea = styled.textarea\`
+  padding: 8px;
+  font-size: 14px;
+
+  &[readonly] {
+    background: #fafafa;
+    border-style: dashed;
+  }
+\`;
+
+export const App = () => <TextArea />;
+`;
+    const result = transformWithWarnings(
+      { source, path: "test.tsx" },
+      { jscodeshift: j, j, stats: () => {}, report: () => {} },
+      { adapter: fixtureAdapter },
+    );
+    // Should bail — [readonly] on textarea is an unsupported attribute selector
+    expect(result.code).toBeNull();
+  });
+
+  it("should handle [readonly] correctly on input elements as JS prop conditional", () => {
+    // [readonly] on <input> should produce a separate style object applied via readOnly prop,
+    // NOT a :read-only pseudo-class (which matches too broadly: disabled, checkbox, radio).
+    const source = `
+import styled from "styled-components";
+
+const Input = styled.input\`
+  padding: 8px;
+
+  &[readonly] {
+    background: #fafafa;
+  }
+\`;
+
+export const App = () => <Input readOnly value="test" />;
+`;
+    const result = transformWithWarnings(
+      { source, path: "test.tsx" },
+      { jscodeshift: j, j, stats: () => {}, report: () => {} },
+      { adapter: fixtureAdapter },
+    );
+    expect(result.code).not.toBeNull();
+    // Should use JS conditional, not :read-only pseudo-class
+    expect(result.code).toContain("readOnly && styles.inputReadonly");
+    expect(result.code).not.toContain(":read-only");
+  });
+
+  it("should normalize shorthand/longhand conflicts in readonly style objects", () => {
+    // Regression: readonlyKey was missing from collectComponentStyleKeys, so shorthand
+    // declarations in [readonly] blocks were not expanded when conflicting with base longhands.
+    const source = `
+import styled from "styled-components";
+
+const Input = styled.input\`
+  padding: 8px 12px;
+
+  &[readonly] {
+    padding: 0;
+    background: #fafafa;
+  }
+\`;
+
+export const App = () => <Input readOnly value="test" />;
+`;
+    const result = transformWithWarnings(
+      { source, path: "test.tsx" },
+      { jscodeshift: j, j, stats: () => {}, report: () => {} },
+      { adapter: fixtureAdapter },
+    );
+    expect(result.code).not.toBeNull();
+    // The base has paddingBlock/paddingInline (from "8px 12px").
+    // The readonly block has padding: 0 which should be expanded to match.
+    expect(result.code).toContain("paddingBlock");
+    expect(result.code).toContain("paddingInline");
+    // The readonly style should NOT have the shorthand "padding" since it conflicts
+    // with the base's paddingBlock/paddingInline longhands.
+    const readonlyMatch = result.code!.match(/inputReadonly:\s*\{([^}]+)\}/);
+    expect(readonlyMatch).toBeTruthy();
+    const readonlyBlock = readonlyMatch![1]!;
+    // Should have expanded longhands, not shorthand
+    expect(readonlyBlock).not.toMatch(/\bpadding\b(?!Block|Inline)/);
+    expect(readonlyBlock).toContain("paddingBlock");
+    expect(readonlyBlock).toContain("paddingInline");
+  });
+});
+
+describe("shorthand/longhand normalization edge cases", () => {
+  it("should expand 2-value physical conflict to 4 physical longhands, not logical", () => {
+    // Regression: splitDirectionalProperty returns logical Block/Inline for 2-value shorthands
+    // even when alwaysExpand is true, but when there's a physical conflict (e.g., marginBottom),
+    // we need physical longhands (marginTop/Right/Bottom/Left).
+    const source = `
+import styled from "styled-components";
+
+const Box = styled.div<{ $wide?: boolean }>\`
+  margin-bottom: 8px;
+  \${(p) => p.$wide ? "" : "margin: 8px 16px;"}
+\`;
+
+export const App = () => <Box>test</Box>;
+`;
+    const result = transformWithWarnings(
+      { source, path: "test.tsx" },
+      { jscodeshift: j, j, stats: () => {}, report: () => {} },
+      { adapter: fixtureAdapter },
+    );
+    expect(result.code).not.toBeNull();
+    // The base has marginBottom (physical). The conditional has margin: 8px 16px (2-value).
+    // The expansion should produce 4 physical longhands, not logical Block/Inline.
+    expect(result.code).toContain("marginTop");
+    expect(result.code).toContain("marginRight");
+    expect(result.code).toContain("marginBottom");
+    expect(result.code).toContain("marginLeft");
+    // Should NOT contain logical longhands (which is what splitDirectionalProperty
+    // returns for 2-value shorthands)
+    expect(result.code).not.toContain("marginBlock");
+    expect(result.code).not.toContain("marginInline");
+  });
+
+  it("should split multi-value shorthands before logical block/inline assignment", () => {
+    // Regression: logical expansion path assigned the entire multi-value string to both
+    // Block and Inline, e.g., paddingBlock: "8px 12px", paddingInline: "8px 12px"
+    // instead of paddingBlock: "8px", paddingInline: "12px".
+    const source = `
+import styled from "styled-components";
+
+const Input = styled.input\`
+  padding-block: 4px;
+  \${(p) => p.readOnly ? "" : "padding: 8px 12px;"}
+\`;
+
+export const App = () => <Input />;
+`;
+    const result = transformWithWarnings(
+      { source, path: "test.tsx" },
+      { jscodeshift: j, j, stats: () => {}, report: () => {} },
+      { adapter: fixtureAdapter },
+    );
+    expect(result.code).not.toBeNull();
+    // The base has paddingBlock (logical). The conditional has padding: 8px 12px.
+    // The expansion should split: paddingBlock: "8px", paddingInline: "12px"
+    expect(result.code).toContain('paddingBlock: "8px"');
+    expect(result.code).toContain('paddingInline: "12px"');
+    // Should NOT have the unsplit value
+    expect(result.code).not.toContain('"8px 12px"');
+  });
+});
+
+describe("forwardedAs prop handling", () => {
+  it("should preserve forwardedAs on wrapper callsites for styled(styled.tag) chains", () => {
+    // In styled-components wrapper chains, `forwardedAs` does not behave like a direct `as`
+    // replacement. Preserve `forwardedAs` at the wrapper callsite so the rendered output
+    // stays aligned with the source behavior.
+    const source = `
+import styled from "styled-components";
+
+const Button = styled.button\`
+  color: white;
+  background: blue;
+\`;
+
+const ButtonWrapper = styled(Button)\`
+  box-shadow: 0 2px 4px rgba(0,0,0,0.2);
+\`;
+
+export const App = () => (
+  <div>
+    <Button forwardedAs="a" href="#">Direct forwardedAs</Button>
+    <ButtonWrapper forwardedAs="a" href="#">Link</ButtonWrapper>
+    <ButtonWrapper as="section" forwardedAs="a" href="#">Both</ButtonWrapper>
+  </div>
+);
+`;
+    const result = transformWithWarnings(
+      { source, path: "test.tsx" },
+      { jscodeshift: j, j, stats: () => {}, report: () => {} },
+      { adapter: fixtureAdapter },
+    );
+    expect(result.code).not.toBeNull();
+    // Keep forwardedAs at the wrapper callsite (no blanket conversion to `as`).
+    expect(result.code).toContain('forwardedAs="a"');
+    expect(result.code).not.toContain('<ButtonWrapper as="a"');
+    // forwardedAs should lower to `as={forwardedAs}` at the rendered intrinsic layer.
+    expect(result.code).toContain("as={forwardedAs}");
+    // Direct forwardedAs should remain a callsite prop (not become element polymorphism).
+    expect(result.code).toContain('<Button forwardedAs="a" href="#">');
+    // `as` and `forwardedAs` can co-exist on wrapper callsites.
+    expect(result.code).toContain('<ButtonWrapper as="section" forwardedAs="a" href="#">');
+  });
+
+  it("should lower forwardedAs for styled(Component) and keep attrs(as) as a fallback", () => {
+    const source = `
+import React from "react";
+import styled from "styled-components";
+
+type BaseProps = {
+  as?: React.ElementType;
+  href?: string;
+  children?: React.ReactNode;
+};
+
+const Base = ({ as: Component = "button", ...rest }: BaseProps) => {
+  return <Component {...rest} />;
+};
+
+const Wrapper = styled(Base).attrs({ as: "span" })\`
+  color: red;
+\`;
+
+export const App = () => (
+  <Wrapper forwardedAs="a" href="#">
+    Link
+  </Wrapper>
+);
+`;
+    const result = transformWithWarnings(
+      { source, path: "test.tsx" },
+      { jscodeshift: j, j, stats: () => {}, report: () => {} },
+      { adapter: fixtureAdapter },
+    );
+    expect(result.code).not.toBeNull();
+    expect(result.code).toContain("forwardedAs?: React.ElementType");
+    expect(result.code).toContain('as={forwardedAs ?? "span"}');
+    expect(result.code).not.toContain('as="span"');
+  });
+
+  it("should lower forwardedAs through styled(Component) when wrapped base is polymorphic", () => {
+    const source = `
+import styled from "styled-components";
+
+const Base = styled.button\`
+  color: red;
+\`;
+
+const Outer = styled(Base)\`
+  background: blue;
+\`;
+
+export const App = () => (
+  <div>
+    <Base as="section">Base polymorphic</Base>
+    <Outer forwardedAs="a" href="#">
+      Outer forwardedAs
+    </Outer>
+  </div>
+);
+`;
+    const result = transformWithWarnings(
+      { source, path: "test.tsx" },
+      { jscodeshift: j, j, stats: () => {}, report: () => {} },
+      { adapter: fixtureAdapter },
+    );
+    expect(result.code).not.toBeNull();
+    expect(result.code).toContain('<Outer forwardedAs="a" href="#">');
+    expect(result.code).toContain("forwardedAs?: React.ElementType");
+    expect(result.code).toContain("as={forwardedAs}");
+  });
+
+  it("should propagate forwardedAs through multi-level styled(Component) wrapper chains", () => {
+    const source = `
+import React from "react";
+import styled from "styled-components";
+
+type LeafProps = {
+  as?: React.ElementType;
+  href?: string;
+  children?: React.ReactNode;
+};
+
+const Leaf = ({ as: Component = "button", ...rest }: LeafProps) => {
+  return <Component {...rest} />;
+};
+
+const Base = styled(Leaf)\`
+  color: red;
+\`;
+
+const Mid = styled(Base)\`
+  background: blue;
+\`;
+
+const Outer = styled(Mid)\`
+  border: 1px solid black;
+\`;
+
+export const App = () => (
+  <div>
+    <Base as="section">Base polymorphic</Base>
+    <Outer forwardedAs="a" href="#">
+      Outer forwardedAs
+    </Outer>
+  </div>
+);
+`;
+    const result = transformWithWarnings(
+      { source, path: "test.tsx" },
+      { jscodeshift: j, j, stats: () => {}, report: () => {} },
+      { adapter: fixtureAdapter },
+    );
+    expect(result.code).not.toBeNull();
+    expect(result.code).toContain('<Outer forwardedAs="a" href="#">');
+    expect(result.code).toContain("function Base");
+    expect(result.code).toContain("as={forwardedAs}");
+  });
+});
+
+describe("self attribute selector handling", () => {
+  it("should bail on bare attribute selector without & (descendant targeting)", () => {
+    const source = `
+import styled from "styled-components";
+
+const Box = styled.div\`
+  opacity: 0;
+  [data-visible="true"] {
+    opacity: 1;
+  }
+\`;
+
+export const App = () => <Box />;
+`;
+    const result = transformWithWarnings(
+      { source, path: "test.tsx" },
+      { jscodeshift: j, j, stats: () => {}, report: () => {} },
+      { adapter: fixtureAdapter },
+    );
     expect(result.code).toBeNull();
   });
 });

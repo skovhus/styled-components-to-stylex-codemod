@@ -2,7 +2,7 @@ import styled from "styled-components";
 
 // Using !important to override inline styles or third-party CSS
 const OverrideButton = styled.button`
-  background: #BF4F74 !important;
+  background: #bf4f74 !important;
   color: white !important;
   border: none !important;
   padding: 8px 16px;
@@ -26,11 +26,11 @@ const MixedStyles = styled.p`
 
 // Important in pseudo-selectors
 const ImportantHover = styled.a`
-  color: #BF4F74;
+  color: #bf4f74;
   text-decoration: none;
 
   &:hover {
-    color: #4F74BF !important;
+    color: #4f74bf !important;
     text-decoration: underline !important;
   }
 `;

@@ -49,7 +49,7 @@ import { toStyleKey, toSuffixFromProp } from "../transform/helpers.js";
 import { cssPropertyToIdentifier, makeCssProperty, makeCssPropKey } from "./shared.js";
 type CommentSource = { leading?: string; trailingLine?: string } | null;
 
-export type InterpolatedDeclarationContext = {
+type InterpolatedDeclarationContext = {
   ctx: DeclProcessingState;
   rule: CssRuleIR;
   d: CssDeclarationIR;
@@ -136,10 +136,10 @@ export function handleInterpolatedDeclaration(args: InterpolatedDeclarationConte
     if (tryHandleAnimation({ j, decl, d, keyframesNames, styleObj })) {
       continue;
     }
-    // Bail on dynamic styles inside pseudo elements (::before/::after).
-    // StyleX generates invalid @property rules for these cases.
+    // Bail only for dynamic styles inside ::before/::after pseudo elements.
+    // StyleX generates invalid @property rules for these specific cases.
     // See: https://github.com/facebook/stylex/issues/1396
-    if (pseudoElement) {
+    if (isUnsupportedDynamicPseudoElement(pseudoElement)) {
       warnings.push({
         severity: "error",
         type: "Dynamic styles inside pseudo elements (::before/::after) are not supported by StyleX. See https://github.com/facebook/stylex/issues/1396",
@@ -579,7 +579,7 @@ export function handleInterpolatedDeclaration(args: InterpolatedDeclarationConte
     //   boxBackgroundColor: (bg) => ({ backgroundColor: (resolved as any)[bg] })
     //
     // This requires a wrapper to consume `bg` without forwarding it to DOM.
-    if (tryHandleThemeIndexedLookup(d, { media, attrTarget, pseudos })) {
+    if (tryHandleThemeIndexedLookup(d, { media, attrTarget, pseudos, pseudoElement })) {
       continue;
     }
 
@@ -1612,4 +1612,13 @@ export function handleInterpolatedDeclaration(args: InterpolatedDeclarationConte
   if (bail) {
     state.markBail();
   }
+}
+
+function isUnsupportedDynamicPseudoElement(pseudoElement: string | null): boolean {
+  return (
+    pseudoElement === "::before" ||
+    pseudoElement === "::after" ||
+    pseudoElement === ":before" ||
+    pseudoElement === ":after"
+  );
 }

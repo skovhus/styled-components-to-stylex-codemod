@@ -53,7 +53,7 @@ export function resolveDynamicNode(
     tryResolveArrowFnHelperCallWithThemeArg(node, ctx) ??
     tryResolveConditionalValue(node, ctx) ??
     tryResolveIndexedThemeWithPropFallback(node, ctx) ??
-    tryResolveConditionalCssBlockTernary(node) ??
+    tryResolveConditionalCssBlockTernary(node, ctx) ??
     tryResolveConditionalCssBlock(node, ctx) ??
     tryResolveArrowFnCallWithSinglePropArg(node) ??
     // Detect theme-dependent template literals before trying to emit style functions

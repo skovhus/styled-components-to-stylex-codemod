@@ -720,15 +720,8 @@ export function tryResolveConditionalCssBlock(
     return null;
   }
   const { left, right } = body;
-  const testPath =
-    (left as { type?: string })?.type === "MemberExpression"
-      ? getMemberPathFromIdentifier(
-          left as Parameters<typeof getMemberPathFromIdentifier>[0],
-          paramName,
-        )
-      : null;
-  const testProp = testPath?.[0];
-  if (!testPath || testPath.length !== 1 || !testProp) {
+  const testProp = extractSinglePropFromTest(left, paramName);
+  if (!testProp) {
     return null;
   }
 
@@ -746,33 +739,16 @@ export function tryResolveConditionalCssBlock(
   }
 
   // Try template literal with theme expressions
-  const templateResult = resolveTemplateLiteralWithTheme(right, paramName, ctx);
-  if (templateResult) {
-    // Extract CSS text from the resolved template to get property names
-    // The template looks like: `property: value ${resolved};`
-    // We need to parse it to build the style object
-    const templateText = templateResult.expr.slice(1, -1); // Remove backticks
-    const parsed = parseCssDeclarationBlockWithTemplateExpr(templateText, ctx.api);
-    if (!parsed) {
-      return null;
-    }
-    return {
-      type: "splitVariants",
-      variants: [
-        {
-          nameHint: "truthy",
-          when: testProp,
-          style: parsed.styleObj,
-          imports: templateResult.imports,
-        },
-      ],
-    };
-  }
-
-  return null;
+  return resolveThemeTemplateToCssVariant(right, paramName, ctx, {
+    nameHint: "truthy",
+    when: testProp,
+  });
 }
 
-export function tryResolveConditionalCssBlockTernary(node: DynamicNode): HandlerResult | null {
+export function tryResolveConditionalCssBlockTernary(
+  node: DynamicNode,
+  ctx: InternalHandlerContext,
+): HandlerResult | null {
   const expr = node.expr;
   if (!isArrowFunctionExpression(expr)) {
     return null;
@@ -1005,7 +981,10 @@ export function tryResolveConditionalCssBlockTernary(node: DynamicNode): Handler
   // Extract variants from the ternary expression
   const result = extractVariantsFromTernary(body);
   if (!result) {
-    return null;
+    // Fallback: handle ternary where one branch is a template literal with theme expressions
+    // and the other is empty (undefined/null/""/false). This is semantically equivalent to
+    // the LogicalExpression && form handled by tryResolveConditionalCssBlock.
+    return tryResolveTemplateLiteralTernaryWithEmptyBranch(body, paramName, ctx);
   }
 
   const { variants, defaultStyle } = result;
@@ -1137,6 +1116,134 @@ export function tryResolveIndexedThemeWithPropFallback(
 }
 
 // --- Non-exported helpers ---
+
+/**
+ * Shared pipeline: resolve a template literal with theme expressions into a
+ * splitVariants result. Used by both the `&&` handler and the ternary handler.
+ *
+ * Steps: resolve template → strip backticks → parse CSS declarations → build variant.
+ */
+function resolveThemeTemplateToCssVariant(
+  templateNode: unknown,
+  paramName: string,
+  ctx: InternalHandlerContext,
+  variant: { nameHint: string; when: string },
+): HandlerResult | null {
+  const templateResult = resolveTemplateLiteralWithTheme(templateNode, paramName, ctx);
+  if (!templateResult) {
+    return null;
+  }
+  const templateText = templateResult.expr.slice(1, -1); // Remove backticks
+  const parsed = parseCssDeclarationBlockWithTemplateExpr(templateText, ctx.api);
+  if (!parsed) {
+    return null;
+  }
+  return {
+    type: "splitVariants",
+    variants: [
+      {
+        nameHint: variant.nameHint,
+        when: variant.when,
+        style: parsed.styleObj,
+        imports: templateResult.imports,
+      },
+    ],
+  };
+}
+
+/**
+ * Extract a single-segment prop path from a test expression (e.g. `props.$x` → `$x`).
+ * Returns the prop name, or null if the test is not a simple single-level member expression.
+ */
+function extractSinglePropFromTest(test: unknown, paramName: string): string | null {
+  if ((test as { type?: string })?.type !== "MemberExpression") {
+    return null;
+  }
+  const testPath = getMemberPathFromIdentifier(
+    test as Parameters<typeof getMemberPathFromIdentifier>[0],
+    paramName,
+  );
+  if (!testPath || testPath.length !== 1 || !testPath[0]) {
+    return null;
+  }
+  return testPath[0];
+}
+
+/**
+ * Check if a conditional branch represents an "empty" CSS value (no styles).
+ * Styled-components treats falsy interpolations as "omit this declaration".
+ */
+function isEmptyCssBranch(node: unknown): boolean {
+  if (!node || typeof node !== "object") {
+    return false;
+  }
+  const n = node as { type?: string; value?: unknown; name?: string; operator?: string };
+  if (n.type === "StringLiteral" && n.value === "") {
+    return true;
+  }
+  if (n.type === "Literal" && n.value === "") {
+    return true;
+  }
+  if (n.type === "NullLiteral") {
+    return true;
+  }
+  if (n.type === "Identifier" && n.name === "undefined") {
+    return true;
+  }
+  if (n.type === "BooleanLiteral" && n.value === false) {
+    return true;
+  }
+  // Only treat `void 0` as empty — arbitrary `void <expr>` may carry side effects.
+  if (n.type === "UnaryExpression" && n.operator === "void") {
+    const arg = (n as { argument?: { type?: string; value?: unknown } }).argument;
+    if (
+      (arg?.type === "NumericLiteral" && arg.value === 0) ||
+      (arg?.type === "Literal" && arg.value === 0)
+    ) {
+      return true;
+    }
+  }
+  return false;
+}
+
+/**
+ * Handle a ternary where one branch is a template literal with theme expressions
+ * and the other is empty (undefined/null/false/""). Resolves the template literal
+ * using the same approach as tryResolveConditionalCssBlock's && handler.
+ */
+function tryResolveTemplateLiteralTernaryWithEmptyBranch(
+  body: { test: unknown; consequent: unknown; alternate: unknown },
+  paramName: string,
+  ctx: InternalHandlerContext,
+): HandlerResult | null {
+  const { consequent, alternate } = body;
+  const consType = (consequent as { type?: string })?.type;
+  const altType = (alternate as { type?: string })?.type;
+  const consIsTemplate = consType === "TemplateLiteral";
+  const altIsTemplate = altType === "TemplateLiteral";
+  const consIsEmpty = isEmptyCssBranch(consequent);
+  const altIsEmpty = isEmptyCssBranch(alternate);
+
+  if (!(consIsTemplate && altIsEmpty) && !(consIsEmpty && altIsTemplate)) {
+    return null;
+  }
+
+  const testProp = extractSinglePropFromTest(body.test, paramName);
+  if (!testProp) {
+    return null;
+  }
+
+  const templateBranch = consIsTemplate ? consequent : alternate;
+  // When the truthy branch is the template, use the test prop directly.
+  // When the falsy branch is the template, negate the condition.
+  const when = consIsTemplate ? testProp : `!${testProp}`;
+  const nameHint = consIsTemplate ? "truthy" : "falsy";
+
+  return resolveThemeTemplateToCssVariant(templateBranch, paramName, ctx, {
+    nameHint,
+    when,
+  });
+}
 
 /**
  * Check whether a given identifier name is actually destructured from the

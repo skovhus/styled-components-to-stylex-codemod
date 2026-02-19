@@ -15,7 +15,7 @@ const styles = stylex.create({
   input: {
     padding: "0.5em",
     margin: "0.5em",
-    color: "#BF4F74",
+    color: "#bf4f74",
     backgroundColor: "papayawhip",
     borderWidth: 0,
     borderStyle: "none",

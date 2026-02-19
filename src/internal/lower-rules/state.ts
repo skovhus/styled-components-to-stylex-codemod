@@ -17,10 +17,12 @@ import { createImportResolver } from "./import-resolution.js";
 import { literalToStaticValue } from "./types.js";
 import { cloneAstNode } from "../utilities/jscodeshift-utils.js";
 
-export type DescendantOverride = {
+export type RelationOverride = {
   parentStyleKey: string;
   childStyleKey: string;
   overrideStyleKey: string;
+  /** Additional style keys (from composed mixins) to search for base values */
+  childExtraStyleKeys?: string[];
 };
 
 export type LowerRulesState = ReturnType<typeof createLowerRulesState>;
@@ -56,14 +58,17 @@ export function createLowerRulesState(ctx: TransformContext) {
 
   const resolvedStyleObjects = new Map<string, unknown>();
   const declByLocalName = new Map(styledDecls.map((d) => [d.localName, d]));
-  const descendantOverrides: DescendantOverride[] = [];
+  const relationOverrides: RelationOverride[] = [];
   const ancestorSelectorParents = new Set<string>();
   // Map<overrideStyleKey, Map<pseudo|null, Record<prop, value>>>
   // null key = base styles, string key = pseudo styles (e.g., ":hover", ":focus-visible")
-  const descendantOverridePseudoBuckets = new Map<
+  const relationOverridePseudoBuckets = new Map<
     string,
     Map<string | null, Record<string, unknown>>
   >();
+  // Map<overrideStyleKey, Set<pseudo>> — pseudos that apply to child element, not ancestor.
+  // These use regular string literal keys (e.g., ":hover") instead of stylex.when.ancestor().
+  const childPseudoMarkers = new Map<string, Set<string>>();
 
   // Pre-compute properties and values defined by each css helper and mixin from their rules.
   // This allows us to know what properties they provide (and their values) before styled
@@ -234,9 +239,10 @@ export function createLowerRulesState(ctx: TransformContext) {
     stringMappingFns,
     resolvedStyleObjects,
     declByLocalName,
-    descendantOverrides,
+    relationOverrides,
     ancestorSelectorParents,
-    descendantOverridePseudoBuckets,
+    relationOverridePseudoBuckets,
+    childPseudoMarkers,
     cssHelperValuesByKey,
     mixinValuesByKey,
     staticPropertyValues,

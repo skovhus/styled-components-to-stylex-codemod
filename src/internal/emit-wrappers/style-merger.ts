@@ -92,6 +92,27 @@ export function emitStyleMerging(args: {
     ancestorSelectorParents,
   });
 
+  // Add stylex.defaultMarker() when any style arg references an ancestor selector parent.
+  // This is needed for merger/verbose paths that bypass the postProcessTransformedAst traversal.
+  if (ancestorSelectorParents && ancestorSelectorParents.size > 0) {
+    const needsMarker = styleArgs.some(
+      (arg: any) =>
+        arg?.type === "MemberExpression" &&
+        arg.object?.type === "Identifier" &&
+        arg.object.name === stylesIdentifier &&
+        arg.property?.type === "Identifier" &&
+        ancestorSelectorParents.has(arg.property.name),
+    );
+    if (needsMarker) {
+      styleArgs.push(
+        j.callExpression(
+          j.memberExpression(j.identifier("stylex"), j.identifier("defaultMarker")),
+          [],
+        ),
+      );
+    }
+  }
+
   if (styleArgs.length === 0) {
     return emitWithoutStylex({
       j,

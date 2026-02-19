@@ -22,27 +22,33 @@ export const fixtureAdapter = defineAdapter({
 
   // Configure external interface for exported components
   externalInterface(ctx): ExternalInterfaceResult {
-    // Enable external styles for exported components in specific test cases where the expected
-    // output includes className/style prop support and HTMLAttributes extension.
+    // Enable external styles + polymorphic `as` prop for test cases that need both
+    if (
+      ["externalStyles-basic", "externalStyles-input"].some((filePath) =>
+        ctx.filePath.includes(filePath),
+      )
+    ) {
+      return { styles: true, as: true };
+    }
+
+    // Enable external styles only (no `as`) for test cases that only need className/style merging
     if (
       [
         "attrs-polymorphicAs",
-        "bug-external-styles-missing-classname",
-        "externalStyles-basic",
-        "externalStyles-input",
         "htmlProp-element",
+        "wrapper-mergerImported",
         "htmlProp-input",
         "transientProp-notForwarded",
       ].some((filePath) => ctx.filePath.includes(filePath))
     ) {
-      return { styles: true };
+      return { styles: true, as: false };
     }
 
-    // wrapper-props-incomplete - TextColor and ThemeText should extend HTMLAttributes
+    // wrapper-propsIncomplete - TextColor and ThemeText should extend HTMLAttributes
     // Highlight wraps a component and shouldn't support external styles
     if (ctx.filePath.includes("wrapper-propsIncomplete")) {
       if (ctx.componentName === "TextColor" || ctx.componentName === "ThemeText") {
-        return { styles: true };
+        return { styles: true, as: false };
       }
     }
 
@@ -53,7 +59,7 @@ export const fixtureAdapter = defineAdapter({
       return { styles: false, as: true };
     }
 
-    return null;
+    return { styles: false, as: false };
   },
 
   resolveValue(ctx) {
@@ -238,6 +244,12 @@ export const fixtureAdapter = defineAdapter({
       };
     }
 
+    // Map helper names to their CSS text for pseudo-selector expansion
+    const helperCssText: Record<string, string> = {
+      truncate: "white-space: nowrap; overflow: hidden; text-overflow: ellipsis;",
+      flexCenter: "display: flex; align-items: center; justify-content: center;",
+      gradient: "background-image: linear-gradient(90deg, #ff6b6b, #5f6cff); color: transparent;",
+    };
     const helperStyleKey = (() => {
       switch (ctx.calleeImportedName) {
         case "gradient":
@@ -251,6 +263,7 @@ export const fixtureAdapter = defineAdapter({
     if (helperStyleKey) {
       // These helpers return StyleX style objects (for standalone interpolations)
       // Explicitly mark as "props" so the codemod knows not to use them as CSS values
+      // Include cssText so the codemod can expand properties for pseudo-selector wrapping
       return {
         usage: "props",
         expr: `helpers.${helperStyleKey}`,
@@ -260,6 +273,7 @@ export const fixtureAdapter = defineAdapter({
             names: [{ imported: "helpers" }],
           },
         ],
+        cssText: helperCssText[helperStyleKey],
       };
     }
 
@@ -399,6 +413,23 @@ export const fixtureAdapter = defineAdapter({
       };
     }
 
+    // Handle `highlight` pseudo-class interpolation: &:${highlight}
+    // Resolves to a pseudoAlias that expands into :active and :hover pseudo style objects,
+    // wrapped in a highlightStyles() function call for runtime selection.
+    if (ctx.importedName === "highlight") {
+      return {
+        kind: "pseudoAlias",
+        values: ["active", "hover"],
+        styleSelectorExpr: "highlightStyles",
+        imports: [
+          {
+            from: { kind: "specifier", value: "./lib/helpers" },
+            names: [{ imported: "highlightStyles" }],
+          },
+        ],
+      };
+    }
+
     return undefined;
   },
 });
@@ -422,33 +453,11 @@ function customResolveSelector(_ctx: SelectorResolveContext): SelectorResolveRes
   return undefined;
 }
 
-// Adapter that mimics a real-world app codebase configuration:
-// - styleMerger: null (uses verbose className merging, not a helper function)
-// - externalInterface returns { styles: true } for all exported components
-// This triggers the verbose `className={[sx.className, className].filter(Boolean).join(" ")}`
-// pattern that exposes TS errors when the base component doesn't accept className.
-// Used for bug-* test cases that reproduce real-world TS errors.
-export const appLikeAdapter = defineAdapter({
-  styleMerger: null,
-  externalInterface(): ExternalInterfaceResult {
-    return { styles: true };
-  },
-  resolveValue(ctx) {
-    return fixtureAdapter.resolveValue?.(ctx);
-  },
-  resolveCall(ctx) {
-    return fixtureAdapter.resolveCall?.(ctx);
-  },
-  resolveSelector(ctx) {
-    return fixtureAdapter.resolveSelector?.(ctx);
-  },
-});
-
 // Test adapters - examples of custom adapter usage
 export const customAdapter = defineAdapter({
   styleMerger: null,
   externalInterface() {
-    return null;
+    return { styles: false, as: false };
   },
   resolveValue: customResolveValue,
   resolveCall(_ctx) {

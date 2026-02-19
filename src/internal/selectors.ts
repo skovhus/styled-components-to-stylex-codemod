@@ -7,7 +7,7 @@ import selectorParser from "postcss-selector-parser";
 /**
  * Result of parsing a selector for StyleX compatibility.
  */
-export type ParsedSelector =
+type ParsedSelector =
   | { kind: "base" } // Just "&"
   | { kind: "pseudo"; pseudos: string[] } // ":hover", ":focus:not(:disabled)", etc.
   | { kind: "pseudoElement"; element: string } // "::before", "::after"
@@ -15,7 +15,13 @@ export type ParsedSelector =
   | { kind: "unsupported"; reason: string };
 
 type ParsedAttributeSelector = {
-  type: "typeCheckbox" | "typeRadio" | "hrefStartsHttps" | "hrefEndsPdf" | "targetBlankAfter";
+  type:
+    | "typeCheckbox"
+    | "typeRadio"
+    | "readonly"
+    | "hrefStartsHttps"
+    | "hrefEndsPdf"
+    | "targetBlankAfter";
   suffix: string;
   pseudoElement?: string | null;
 };
@@ -95,6 +101,7 @@ function parseSingleSelector(selector: selectorParser.Selector): ParsedSelector 
   let hasUniversal = false;
   const pseudoClasses: selectorParser.Pseudo[] = [];
   const pseudoElements: selectorParser.Pseudo[] = [];
+  const attributes: selectorParser.Attribute[] = [];
 
   for (const node of nodes) {
     switch (node.type) {
@@ -126,9 +133,8 @@ function parseSingleSelector(selector: selectorParser.Selector): ParsedSelector 
         }
         break;
       case "attribute":
-        // Attribute selectors like [disabled] - generally unsupported
-        // (handled separately for specific cases like input[type="checkbox"])
-        return { kind: "unsupported", reason: "attribute selector" };
+        attributes.push(node);
+        break;
     }
   }
 
@@ -147,6 +153,22 @@ function parseSingleSelector(selector: selectorParser.Selector): ParsedSelector 
   }
   if (hasUniversal) {
     return { kind: "unsupported", reason: "universal selector" };
+  }
+
+  // Handle self-attribute selectors (e.g., &[data-visible="true"])
+  // StyleX doesn't support bare attribute selector keys, so we wrap them in
+  // :is() to emit as a pseudo-class: ':is([data-visible="true"])'.
+  // Must come before pseudo handling so attr+pseudo combos are caught.
+  // Requires & (nesting) — without it, [attr] is a descendant selector.
+  if (attributes.length > 0) {
+    if (!hasNesting || hasCombinator || hasClass || hasId || hasTag || hasUniversal) {
+      return { kind: "unsupported", reason: "attribute selector" };
+    }
+    if (pseudoClasses.length > 0 || pseudoElements.length > 0) {
+      return { kind: "unsupported", reason: "attribute selector with pseudo" };
+    }
+    const attrStr = attributes.map((a) => a.toString()).join("");
+    return { kind: "pseudo", pseudos: [`:is(${attrStr})`] };
   }
 
   // Must have nesting selector (&) or be just pseudos
@@ -222,6 +244,14 @@ function parseAttributeSelectorInternal(selector: string): ParsedAttributeSelect
   }
   const inside = m[1];
 
+  // [readonly] / [readOnly] → handled as JS prop conditional (not :read-only pseudo-class)
+  // because CSS :read-only matches much more broadly than [readonly]: it also matches
+  // disabled inputs, checkbox/radio, and other inherently non-editable elements.
+  const boolAttr = inside.replace(/\s+/g, "").toLowerCase();
+  if (boolAttr === "readonly") {
+    return { type: "readonly", suffix: "Readonly" };
+  }
+
   // type="checkbox" / type="radio"
   const typeEq = inside.match(/^type\s*=\s*"(checkbox|radio)"$/);
   if (typeEq) {
@@ -266,8 +296,101 @@ function parseAttributeSelectorInternal(selector: string): ParsedAttributeSelect
 }
 
 // =============================================================================
+// Element selector parsing
+// =============================================================================
+
+/**
+ * Parses selectors like "& svg", "& > button", "&:hover svg", "& svg:hover",
+ * "&:focus > button:disabled".
+ *
+ * Both descendant (space) and child (>) combinators are mapped the same way
+ * because `stylex.when.ancestor()` matches ANY ancestor, not just a direct parent.
+ * The child combinator is therefore less strict in the output than the original CSS.
+ *
+ * Returns null if the selector doesn't match an element selector pattern.
+ */
+export function parseElementSelectorPattern(selector: string): {
+  tagName: string;
+  ancestorPseudo: string | null;
+  childPseudo: string | null;
+} | null {
+  const trimmed = selector.trim();
+
+  // Pattern 1: "&" prefix with optional pseudos and combinator
+  //   e.g., "& svg", "&:hover svg", "&>button", "& > button:disabled"
+  const m = trimmed.match(
+    /^&((?::[\w-]+(?:\([^)]*\))?)*)\s*(>?\s*)([a-zA-Z][a-zA-Z0-9]*)((?::[\w-]+(?:\([^)]*\))?)*)$/,
+  );
+  if (m) {
+    const ancestorPseudoRaw = m[1] ?? "";
+    const tagName = m[3]!;
+    const childPseudoRaw = m[4] ?? "";
+    return {
+      tagName,
+      ancestorPseudo: ancestorPseudoRaw || null,
+      childPseudo: childPseudoRaw || null,
+    };
+  }
+
+  // Pattern 2: Bare tag name with optional child pseudo
+  //   (Stylis strips the `&` for simple descendant selectors)
+  //   e.g., "svg", "button", "svg:hover"
+  const bareM = trimmed.match(/^([a-zA-Z][a-zA-Z0-9]*)((?::[\w-]+(?:\([^)]*\))?)*)$/);
+  if (bareM) {
+    const childPseudoRaw = bareM[2] ?? "";
+    return {
+      tagName: bareM[1]!,
+      ancestorPseudo: null,
+      childPseudo: childPseudoRaw || null,
+    };
+  }
+
+  // Pattern 3: Child combinator without `&` prefix (Stylis strips it)
+  //   e.g., ">button", ">button:disabled"
+  const childCombM = trimmed.match(/^>\s*([a-zA-Z][a-zA-Z0-9]*)((?::[\w-]+(?:\([^)]*\))?)*)$/);
+  if (childCombM) {
+    const childPseudoRaw = childCombM[2] ?? "";
+    return {
+      tagName: childCombM[1]!,
+      ancestorPseudo: null,
+      childPseudo: childPseudoRaw || null,
+    };
+  }
+
+  return null;
+}
+
+// =============================================================================
 // Non-parsing utility functions (kept as-is)
 // =============================================================================
+
+/**
+ * Normalize double-ampersand specificity hacks (`&&`) by collapsing to a single `&`.
+ * Only handles `&&` (exactly two). Higher tiers (`&&&`, `&&&&`) are flagged as
+ * `hasHigherTier` because flattening them can change cascade precedence.
+ *
+ * Examples:
+ *   - `&&` → `&` (stripped)
+ *   - `&&:hover` → `&:hover` (stripped)
+ *   - `.wrapper &&` → `.wrapper &` (stripped, but `.wrapper` will be caught later)
+ *   - `&&&` → flagged as hasHigherTier (not normalized)
+ *   - `&:hover` → no change
+ */
+export function normalizeSpecificityHacks(selector: string): {
+  normalized: string;
+  wasStripped: boolean;
+  hasHigherTier: boolean;
+} {
+  if (!selector.includes("&&")) {
+    return { normalized: selector, wasStripped: false, hasHigherTier: false };
+  }
+  // Check for triple-or-more ampersand sequences
+  if (/&{3,}/.test(selector)) {
+    return { normalized: selector, wasStripped: false, hasHigherTier: true };
+  }
+  const normalized = selector.replace(/&&/g, "&");
+  return { normalized, wasStripped: normalized !== selector, hasHigherTier: false };
+}
 
 export function normalizeInterpolatedSelector(selectorRaw: string): string {
   if (!/__SC_EXPR_\d+__/.test(selectorRaw)) {
@@ -281,8 +404,8 @@ export function normalizeInterpolatedSelector(selectorRaw: string): string {
       // Normalize `& &:pseudo` to `&:pseudo` (css helper interpolation + pseudo selector).
       // This handles patterns like `${rowBase}\n&:hover { ... }` where the css helper
       // interpolation becomes `&` and the nested pseudo selector is `&:hover`.
-      // NOTE: We intentionally do NOT normalize `& &` or `&&` without a pseudo, as those
-      // are specificity hacks that should bail (handled in transform.ts).
+      // NOTE: `&&` without a pseudo is a specificity hack and is handled separately
+      // by `normalizeSpecificityHacks()`.
       .replace(/&\s*&:/g, "&:")
       .replace(/&\s*:/g, "&:")
   );
@@ -296,11 +419,11 @@ export function normalizeSelectorForInputAttributePseudos(
     return selector;
   }
 
-  // Convert input attribute selectors into equivalent pseudo-classes so they can live
-  // in the base style object (no wrapper needed).
-  // - &[disabled]  -> &:disabled
-  // - &[readonly]  -> &:read-only
-  // - &[readOnly]  -> &:read-only (defensive)
+  // Convert [disabled] to :disabled (semantically equivalent for <input> elements).
+  // NOTE: [readonly] is NOT converted to :read-only because :read-only matches much
+  // more broadly (disabled inputs, checkbox/radio, etc.) while [readonly] only matches
+  // elements with the readonly attribute explicitly set. [readonly] is instead handled
+  // as a JS prop conditional via the attrWrapper pattern.
   const m = selector.match(/^&\[(.+)\]$/) ?? selector.match(/^\[(.+)\]$/);
   if (!m || !m[1]) {
     return selector;
@@ -308,9 +431,6 @@ export function normalizeSelectorForInputAttributePseudos(
   const inside = m[1].replace(/\s+/g, "");
   if (inside === "disabled") {
     return "&:disabled";
-  }
-  if (inside === "readonly" || inside === "readOnly") {
-    return "&:read-only";
   }
   return selector;
 }

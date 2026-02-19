@@ -1,14 +1,15 @@
 /**
  * Post-processes the transformed JSX tree after style emission.
- * Core concepts: descendant overrides and stylex.props cleanup.
+ * Core concepts: relation overrides (descendant/ancestor) and stylex.props cleanup.
  */
 import type { Collection } from "jscodeshift";
-import type { DescendantOverride } from "./lower-rules.js";
+import type { RelationOverride } from "./lower-rules.js";
+import { getJsxElementName } from "./utilities/jscodeshift-utils.js";
 
 export function postProcessTransformedAst(args: {
   root: Collection<any>;
   j: any;
-  descendantOverrides: DescendantOverride[];
+  relationOverrides: RelationOverride[];
   ancestorSelectorParents: Set<string>;
   /** Map from component local name to its style key (for ancestor selector matching) */
   componentNameToStyleKey?: Map<string, string>;
@@ -23,7 +24,7 @@ export function postProcessTransformedAst(args: {
   const {
     root,
     j,
-    descendantOverrides,
+    relationOverrides,
     ancestorSelectorParents,
     componentNameToStyleKey,
     emptyStyleKeys,
@@ -41,10 +42,10 @@ export function postProcessTransformedAst(args: {
     }
   });
 
-  // Apply descendant override styles that rely on `stylex.when.ancestor()`:
-  // - Add `stylex.defaultMarker()` to ancestor elements.
-  // - Add override style keys to descendant elements' `stylex.props(...)` calls.
-  if (descendantOverrides.length > 0) {
+  // Apply relation override styles that rely on `stylex.when.*()`:
+  // - Add `stylex.defaultMarker()` to elements that need markers (ancestor selectors).
+  // - Add override style keys to descendant/child elements' `stylex.props(...)` calls.
+  if (relationOverrides.length > 0 || ancestorSelectorParents.size > 0) {
     // IMPORTANT: Do not reuse the same AST node instance across multiple insertion points.
     // Recast/jscodeshift expect a tree (no shared references); reuse can corrupt printing.
     const makeDefaultMarkerCall = () =>
@@ -96,23 +97,10 @@ export function postProcessTransformedAst(args: {
       );
     };
 
-    const overridesByChild = new Map<string, DescendantOverride[]>();
-    for (const o of descendantOverrides) {
+    const overridesByChild = new Map<string, RelationOverride[]>();
+    for (const o of relationOverrides) {
       overridesByChild.set(o.childStyleKey, [...(overridesByChild.get(o.childStyleKey) ?? []), o]);
     }
-
-    // Get JSX element name (for JSXIdentifier or JSXMemberExpression)
-    const getJsxElementName = (opening: any): string | null => {
-      const name = opening?.name;
-      if (!name) {
-        return null;
-      }
-      if (name.type === "JSXIdentifier") {
-        return name.name;
-      }
-      // For member expressions like Foo.Bar, just return null for now
-      return null;
-    };
 
     // Track empty ancestor style keys to remove AFTER all descendant matching is done.
     // We defer removal so that ancestor matching can still find the style keys.
@@ -125,7 +113,7 @@ export function postProcessTransformedAst(args: {
       const opening = node.openingElement;
       const attrs = (opening.attributes ?? []) as any[];
       const call = getStylexPropsCallFromAttrs(attrs);
-      const elementName = getJsxElementName(opening);
+      const elementName = getJsxElementName(opening?.name, { allowMemberExpression: false });
       // Get the style key for this element if it's a known component
       const elementStyleKey = elementName ? componentNameToStyleKey?.get(elementName) : null;
 

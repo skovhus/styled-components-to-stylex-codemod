@@ -43,7 +43,7 @@ export const App = () => (
 
 const styles = stylex.create({
   overrideButton: {
-    backgroundColor: "#BF4F74 !important",
+    backgroundColor: "#bf4f74 !important",
     color: "white !important",
     borderWidth: "0 !important",
     borderStyle: "none",
@@ -70,8 +70,8 @@ const styles = stylex.create({
   // Important in pseudo-selectors
   importantHover: {
     color: {
-      default: "#BF4F74",
-      ":hover": "#4F74BF !important",
+      default: "#bf4f74",
+      ":hover": "#4f74bf !important",
     },
     textDecoration: {
       default: "none",

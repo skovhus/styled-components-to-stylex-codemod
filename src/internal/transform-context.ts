@@ -15,6 +15,7 @@ import {
   patternProp as patternPropImpl,
 } from "./transform-utils.js";
 import type { TransformOptions } from "./transform-types.js";
+import type { RelationOverride } from "./lower-rules/state.js";
 
 export type ExportInfo = { exportName: string; isDefault: boolean; isSpecifier: boolean };
 
@@ -65,7 +66,7 @@ export class TransformContext {
   hasUniversalSelectors?: boolean;
   universalSelectorLoc?: { line: number; column: number } | null;
   resolvedStyleObjects?: Map<string, unknown>;
-  descendantOverrides?: any[];
+  relationOverrides?: RelationOverride[];
   ancestorSelectorParents?: Set<string>;
   emptyStyleKeys?: Set<string>;
   stylesIdentifier?: string;
@@ -80,6 +81,10 @@ export class TransformContext {
   newImportLocalNames?: Set<string>;
   newImportSourcesByLocal?: Map<string, Set<string>>;
   needsReactImport?: boolean;
+  /** Inline @keyframes extracted from styled component templates: JS identifier name → frame objects */
+  inlineKeyframes?: Map<string, Record<string, Record<string, unknown>>>;
+  /** Maps CSS @keyframes names to sanitized JS identifier names (e.g. "fade-in" → "fadeIn") */
+  inlineKeyframeNameMap?: Map<string, string>;
 
   constructor(file: FileInfo, api: API, options: TransformOptions) {
     const j = api.jscodeshift;

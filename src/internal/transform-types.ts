@@ -125,6 +125,23 @@ export type StyledDecl = {
   }>;
   needsWrapperComponent?: boolean;
   /**
+   * Pseudo-alias selectors from `&:${expr}` patterns resolved via
+   * `adapter.resolveSelector()` with `kind: "pseudoAlias"`.
+   *
+   * Each entry creates N extra style objects (one per pseudo value),
+   * wrapped in a `styleSelectorExpr` function call for runtime selection.
+   */
+  pseudoAliasSelectors?: Array<{
+    /** Style keys for each pseudo variant, in order matching the adapter's `values` array. */
+    styleKeys: string[];
+    /** Parsed AST node of the runtime selector function. */
+    styleSelectorExpr: unknown;
+    /** Pseudo-class names (without leading colon), in order matching `styleKeys`. */
+    pseudoNames: string[];
+    /** When present, the pseudo-alias call is guarded by a boolean prop condition. */
+    guard?: { when: string };
+  }>;
+  /**
    * When set, the wrapper needs to call `useTheme()` from styled-components
    * to access runtime theme boolean values (e.g., theme.isDark, theme.isHighContrast).
    *
@@ -228,6 +245,7 @@ export type StyledDecl = {
     // Base style key is `styleKey`; other keys are optional.
     checkboxKey?: string;
     radioKey?: string;
+    readonlyKey?: string;
     externalKey?: string;
     httpsKey?: string;
     pdfKey?: string;

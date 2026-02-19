@@ -9,14 +9,22 @@ const LayeredBox = styled.div<{ $zIndex?: number }>`
 // Pattern 2: Simple logical AND with css helper (using destructured props)
 const GrayscaleImage = styled.img<{ $isBw?: boolean }>`
   width: 100px;
-  ${({ $isBw }) => $isBw && css`filter: grayscale(100%);`}
+  ${({ $isBw }) =>
+    $isBw &&
+    css`
+      filter: grayscale(100%);
+    `}
 `;
 
 // Pattern 3: Chained logical expressions with multiple conditions
 const DialogText = styled.p<{ $renderingContext?: "dialog" | "page"; $lines?: number }>`
   font-size: 14px;
   ${(props) =>
-    props.$renderingContext === "dialog" && props.$lines === 1 && css`background-color: hotpink;`}
+    props.$renderingContext === "dialog" &&
+    props.$lines === 1 &&
+    css`
+      background-color: hotpink;
+    `}
 `;
 
 export const App = () => (

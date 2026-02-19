@@ -7,7 +7,11 @@ import { compile } from "stylis";
 import type { Adapter, ImportSource, ImportSpec } from "../../adapter.js";
 import { normalizeStylisAstToIR } from "../css-ir.js";
 import { cssDeclarationToStylexDeclarations } from "../css-prop-mapping.js";
-import { getMemberPathFromIdentifier, getNodeLocStart } from "../utilities/jscodeshift-utils.js";
+import {
+  getMemberPathFromIdentifier,
+  getNodeLocStart,
+  isAstNode,
+} from "../utilities/jscodeshift-utils.js";
 import type { WarningLog, WarningType } from "../logger.js";
 import { parseStyledTemplateLiteral } from "../styled-css.js";
 import { parseSelector } from "../selectors.js";
@@ -338,6 +342,10 @@ export function createCssHelperResolver(args: {
       const selector = (rule.selector ?? "").trim();
       const allowDynamicValues = selector === "&";
       let target = out;
+      // Track pseudo-class context for property-first format (e.g., ":hover")
+      // Pseudo-elements (::before, ::after) use selector-first format in StyleX,
+      // so they use nested target objects instead.
+      let currentPseudoClass: string | null = null;
       if (selector !== "&") {
         const parsed = parseSelector(selector);
 
@@ -352,7 +360,7 @@ export function createCssHelperResolver(args: {
           }
         } else if (parsed.kind === "pseudo" && parsed.pseudos.length === 1) {
           const simplePseudo = parsed.pseudos[0]!;
-          // Handle :before/:after as pseudo-elements
+          // Handle :before/:after as pseudo-elements (selector-first format)
           const normalizedPseudoElement = normalizePseudoElement(
             simplePseudo === ":before" || simplePseudo === ":after" ? simplePseudo : null,
           );
@@ -361,9 +369,9 @@ export function createCssHelperResolver(args: {
             out[normalizedPseudoElement] = nested;
             target = nested;
           } else {
-            const nested = (out[simplePseudo] as any) ?? {};
-            out[simplePseudo] = nested;
-            target = nested;
+            // Pseudo-classes (:hover, :focus, etc.) use property-first format:
+            // { prop: { default: null, ":hover": value } }
+            currentPseudoClass = simplePseudo;
           }
         } else {
           return bail("Conditional `css` block: unsupported selector");
@@ -385,7 +393,11 @@ export function createCssHelperResolver(args: {
                 value = `"${value}"`;
               }
             }
-            (target as any)[mapped.prop] = value as any;
+            (target as any)[mapped.prop] = mergeIntoPseudoContext(
+              value,
+              currentPseudoClass,
+              (target as any)[mapped.prop],
+            ) as any;
           }
           continue;
         }
@@ -438,7 +450,11 @@ export function createCssHelperResolver(args: {
             const templateAst = parseExpr(wrappedExpr);
             if (templateAst) {
               for (const mapped of cssDeclarationToStylexDeclarations(d)) {
-                (target as any)[mapped.prop] = templateAst as any;
+                (target as any)[mapped.prop] = mergeIntoPseudoContext(
+                  templateAst,
+                  currentPseudoClass,
+                  (target as any)[mapped.prop],
+                ) as any;
               }
               continue;
             }
@@ -448,23 +464,19 @@ export function createCssHelperResolver(args: {
             });
           } else {
             for (const mapped of cssDeclarationToStylexDeclarations(d)) {
-              (target as any)[mapped.prop] = resolved.ast as any;
+              (target as any)[mapped.prop] = mergeIntoPseudoContext(
+                resolved.ast,
+                currentPseudoClass,
+                (target as any)[mapped.prop],
+              ) as any;
             }
             continue;
           }
         }
 
         // Handle ConditionalExpression with static parts: ${prop ? val1 : val2}px
-        // We can create variants for each branch
-        // Note: only allowed at root selector level; variants inside pseudo selectors would lose nesting
+        // We can create variants for each branch, wrapping in pseudo context when needed
         if (hasStaticParts && expr && (expr as any).type === "ConditionalExpression") {
-          if (!allowDynamicValues) {
-            // Bail: ternary inside pseudo selector would lose the selector nesting in the variant
-            return bail(
-              "Conditional `css` block: ternary expressions inside pseudo selectors are not supported",
-              { property: d.property },
-            );
-          }
           const ternaryExpr = expr as {
             type: "ConditionalExpression";
             test: any;
@@ -482,46 +494,48 @@ export function createCssHelperResolver(args: {
                 { property: d.property },
               );
             }
-            if (consResolved && altResolved) {
-              const { prefix, suffix } = extractPrefixSuffix(parts);
+            const { prefix, suffix } = extractPrefixSuffix(parts);
 
-              // Create AST for false branch (alternate) as base value
-              const altWrappedExpr = wrapExprWithStaticParts(
-                altResolved.exprString,
-                prefix,
-                suffix,
-              );
-              const altAst = parseExpr(altWrappedExpr);
+            // Create AST for false branch (alternate) as base value
+            const altWrappedExpr = wrapExprWithStaticParts(altResolved.exprString, prefix, suffix);
+            const altAst = parseExpr(altWrappedExpr);
 
-              // Create AST for true branch (consequent) as variant value
-              const consWrappedExpr = wrapExprWithStaticParts(
-                consResolved.exprString,
-                prefix,
-                suffix,
-              );
-              const consAst = parseExpr(consWrappedExpr);
+            // Create AST for true branch (consequent) as variant value
+            const consWrappedExpr = wrapExprWithStaticParts(
+              consResolved.exprString,
+              prefix,
+              suffix,
+            );
+            const consAst = parseExpr(consWrappedExpr);
 
-              if (altAst && consAst) {
-                // Add false branch to base style
-                for (const mapped of cssDeclarationToStylexDeclarations(d)) {
-                  (target as any)[mapped.prop] = altAst as any;
-                }
-
-                // Build variant style for true branch
-                const variantStyle: Record<string, unknown> = {};
-                for (const mapped of cssDeclarationToStylexDeclarations(d)) {
-                  variantStyle[mapped.prop] = consAst;
-                }
-
-                // Add to conditional variants
-                conditionalVariants.push({
-                  when: propName,
-                  propName,
-                  style: variantStyle,
-                });
-
-                continue;
+            if (altAst && consAst) {
+              // Add false branch to base style (with pseudo wrapping when inside pseudo-class)
+              for (const mapped of cssDeclarationToStylexDeclarations(d)) {
+                (target as any)[mapped.prop] = mergeIntoPseudoContext(
+                  altAst,
+                  currentPseudoClass,
+                  (target as any)[mapped.prop],
+                ) as any;
               }
+
+              // Build variant style for true branch (with pseudo wrapping)
+              const variantStyle: Record<string, unknown> = {};
+              for (const mapped of cssDeclarationToStylexDeclarations(d)) {
+                variantStyle[mapped.prop] = mergeIntoPseudoContext(
+                  consAst,
+                  currentPseudoClass,
+                  (target as any)[mapped.prop],
+                );
+              }
+
+              // Add to conditional variants
+              conditionalVariants.push({
+                when: propName,
+                propName,
+                style: variantStyle,
+              });
+
+              continue;
             }
           }
         }
@@ -560,4 +574,41 @@ export function createCssHelperResolver(args: {
   };
 
   return { isCssHelperTaggedTemplate, resolveCssHelperTemplate };
+}
+
+// ---------------------------------------------------------------------------
+// Non-exported helpers
+// ---------------------------------------------------------------------------
+
+/**
+ * Merges a value into a pseudo-class context map for StyleX property-first format.
+ *
+ * When `pseudoClass` is non-null:
+ * - If `existing` is already a pseudo map (plain object, not an AST node),
+ *   adds/overwrites the pseudo entry
+ * - If `existing` is a scalar or AST node, promotes it to `default` and adds the pseudo entry
+ * - Otherwise creates `{ default: null, [pseudoClass]: value }`
+ *
+ * When `pseudoClass` is null (root selector), returns the value unchanged.
+ */
+function mergeIntoPseudoContext(
+  value: unknown,
+  pseudoClass: string | null,
+  existing: unknown,
+): unknown {
+  if (!pseudoClass) {
+    return value;
+  }
+  // Plain objects (not AST nodes, not arrays) are existing pseudo maps — extend them
+  if (
+    existing &&
+    typeof existing === "object" &&
+    !Array.isArray(existing) &&
+    !isAstNode(existing)
+  ) {
+    return { ...(existing as Record<string, unknown>), [pseudoClass]: value };
+  }
+  // Scalar base value, AST node, or no existing value — create a new pseudo map
+  const defaultVal = existing !== undefined ? existing : null;
+  return { default: defaultVal, [pseudoClass]: value };
 }

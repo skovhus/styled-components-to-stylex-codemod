@@ -135,7 +135,28 @@ export function wrapComponent<P extends object>(
 export const Browser = {
   isSafari:
     typeof navigator !== "undefined" && /^((?!chrome|android).)*safari/i.test(navigator.userAgent),
+  isTouchDevice:
+    typeof window !== "undefined" &&
+    "ontouchstart" in window &&
+    !window.matchMedia("(hover: hover)").matches,
 };
+
+/**
+ * Pseudo-class highlight helper: picks "hover" or "active" based on device capability.
+ * On touch devices we use :active for immediate feedback; on pointer devices, :hover.
+ *
+ * Defined as a function so styled-components re-evaluates it on each render,
+ * picking up the current `Browser.isTouchDevice` value set by `TouchDeviceToggle`.
+ */
+export const highlight = () => (Browser.isTouchDevice ? "active" : "hover");
+
+/**
+ * Helper that wraps the conditional pseudo selection in a function call,
+ * making the pairing explicit and enabling lint enforcement.
+ */
+export function highlightStyles<T>(variants: { active: T; hover: T }): T {
+  return Browser.isTouchDevice ? variants.active : variants.hover;
+}
 
 /**
  * Scroll fade mask helper - returns a css`` RuleSet for scroll fade effects.

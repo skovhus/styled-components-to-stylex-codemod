@@ -16,6 +16,8 @@ export type WarningType =
   | "Adapter resolveCall returned StyleX styles for helper call where a CSS value was expected"
   | "Adapter resolveCall returned undefined for helper call"
   | "Adapter resolved StyleX styles cannot be applied under nested selectors/at-rules"
+  | "Adapter resolved StyleX styles inside pseudo selector but did not provide cssText for property expansion — add cssText to resolveCall result to enable pseudo-wrapping"
+  | 'Adapter resolveCall cssText could not be parsed as CSS declarations — expected semicolon-separated property: value pairs (e.g. "white-space: nowrap; overflow: hidden;")'
   | "Adapter resolveValue returned an unparseable value expression"
   | "Adapter resolveValue returned undefined for imported value"
   | "Arrow function: body is not a recognized pattern (expected ternary, logical, call, or member expression)"
@@ -43,14 +45,13 @@ export type WarningType =
   | "Heterogeneous background values (mix of gradients and colors) not currently supported"
   | "Higher-order styled factory wrappers (e.g. hoc(styled)) are not supported"
   | "Imported CSS helper mixins: cannot determine inherited properties for correct pseudo selector handling"
-  | "Static properties on styled components (e.g. Styled.Component) are not supported"
   | "Styled-components specificity hacks like `&&` / `&&&` are not representable in StyleX"
   | "Theme-dependent block-level conditional could not be fully resolved (branches may contain dynamic interpolations)"
   | "Theme-dependant call expression could not be resolved (e.g. theme helper calls like theme.highlight() are not supported)"
   | "Theme value with fallback (props.theme.X ?? / || default) cannot be resolved statically — use adapter.resolveValue to map theme paths to StyleX tokens"
   | "Theme-dependent nested prop access requires a project-specific theme source (e.g. useTheme())"
   | "Theme-dependent template literals require a project-specific theme source (e.g. useTheme())"
-  | "ThemeProvider conversion needs to be handled manually"
+  | "Theme prop overrides on styled components are not supported"
   | "Universal selectors (`*`) are currently unsupported"
   | "Unsupported call expression (expected imported helper(...) or imported helper(...)(...))"
   | "Unsupported conditional test in shouldForwardProp"
@@ -71,6 +72,16 @@ export type WarningType =
   | "Unsupported selector: descendant/child/sibling selector"
   | "Unsupported selector: interpolated pseudo selector"
   | "Unsupported selector: sibling combinator"
+  | "Unsupported selector: ambiguous element selector"
+  | "Unsupported selector: attribute selector on unsupported element"
+  | "Unsupported selector: element selector on exported component"
+  | "Unsupported selector: element selector with combined ancestor and child pseudos"
+  | "Unsupported selector: element selector with dynamic children"
+  | "Unsupported selector: element selector with plain intrinsic children"
+  | "Unsupported selector: element selector pseudo collision"
+  | "Unsupported selector: unresolved interpolation in descendant component selector"
+  | "Unsupported selector: unresolved interpolation in element selector"
+  | "Unsupported selector: unresolved interpolation in reverse component selector"
   | "Unsupported selector: unknown component selector"
   | "Unsupported css`` mixin: after-base mixin style is not a plain object"
   | "Unsupported css`` mixin: nested contextual conditions in after-base mixin"
@@ -93,7 +104,28 @@ export interface CollectedWarning extends WarningLog {
 // Logger
 // ────────────────────────────────────────────────────────────────────────────
 
+/**
+ * When fileCount <= this threshold, warnings are printed per-file inline and
+ * the summary is skipped. Above the threshold only the summary is printed.
+ */
+const FILE_COUNT_INLINE_THRESHOLD = 10;
+
 export class Logger {
+  /**
+   * Set the total number of files being transformed.
+   * Controls whether warnings are printed per-file or only in the summary.
+   */
+  public static setFileCount(count: number): void {
+    Logger.fileCount = count;
+  }
+
+  /**
+   * Set the maximum number of examples shown per warning category in the summary.
+   */
+  public static setMaxExamples(count: number): void {
+    Logger.maxExamples = count;
+  }
+
   /**
    * Log a warning message to stdout.
    * All codemod warnings go through this so tests can mock it.
@@ -105,6 +137,7 @@ export class Logger {
   /**
    * Log an error message to stdout with file path and optional location.
    * Formats like warnings: "Error filepath:line:column\nmessage"
+   * Always prints regardless of file count.
    */
   public static logError(
     message: string,
@@ -118,16 +151,22 @@ export class Logger {
   }
 
   /**
-   * Log transform warnings to stdout and collect them.
+   * Collect transform warnings and optionally print them per-file.
+   * Per-file output is shown when fileCount is unknown or <= threshold.
+   * When fileCount > threshold, warnings are only collected for the summary.
    */
   public static logWarnings(warnings: WarningLog[], filePath: string): void {
+    const printInline =
+      Logger.fileCount === null || Logger.fileCount <= FILE_COUNT_INLINE_THRESHOLD;
     for (const warning of warnings) {
       Logger.collected.push({ ...warning, filePath });
-      const location = warning.loc
-        ? `${filePath}:${warning.loc.line}:${warning.loc.column}`
-        : `${filePath}`;
-      const label = Logger.colorizeSeverityLabel(warning.severity);
-      Logger.writeWithSpacing(`${label} ${location}\n${warning.type}`, warning.context);
+      if (printInline) {
+        const location = warning.loc
+          ? `${filePath}:${warning.loc.line}:${warning.loc.column}`
+          : `${filePath}`;
+        const label = Logger.colorizeSeverityLabel(warning.severity);
+        Logger.writeWithSpacing(`${label} ${location}\n${warning.type}`, warning.context);
+      }
     }
   }
 
@@ -135,17 +174,20 @@ export class Logger {
    * Create a report from all collected warnings.
    */
   public static createReport(): LoggerReport {
-    return new LoggerReport([...Logger.collected]);
+    return new LoggerReport([...Logger.collected], Logger.fileCount, Logger.maxExamples);
   }
 
   /** @internal - for testing only */
   public static _clearCollected(): void {
     Logger.collected = [];
+    Logger.fileCount = null;
   }
 
   // -- Internal state
 
   private static collected: CollectedWarning[] = [];
+  private static fileCount: number | null = null;
+  private static maxExamples = 15;
 
   private static writeWithSpacing(message: string, context?: unknown): void {
     const trimmed = message.replace(/\s+$/u, "");
@@ -206,12 +248,16 @@ interface WarningGroup {
   warnings: WarningWithSnippet[];
 }
 
-export class LoggerReport {
+class LoggerReport {
   private readonly warnings: CollectedWarning[];
+  private readonly fileCount: number | null;
+  private readonly maxExamples: number;
   private fileCache = new Map<string, string[] | null>();
 
-  constructor(warnings: CollectedWarning[]) {
+  constructor(warnings: CollectedWarning[], fileCount: number | null, maxExamples = 15) {
     this.warnings = warnings;
+    this.fileCount = fileCount;
+    this.maxExamples = maxExamples;
   }
 
   getWarnings(): CollectedWarning[] {
@@ -236,7 +282,7 @@ export class LoggerReport {
     );
     lines.push("─".repeat(60));
 
-    const MAX_EXAMPLES = 15;
+    const MAX_EXAMPLES = this.maxExamples;
 
     for (const group of groups) {
       lines.push("");
@@ -277,8 +323,12 @@ export class LoggerReport {
 
   /**
    * Print the formatted warning report to stdout.
+   * Skips the summary when fileCount <= threshold (warnings already shown inline).
    */
   print(): void {
+    if (this.fileCount !== null && this.fileCount <= FILE_COUNT_INLINE_THRESHOLD) {
+      return;
+    }
     const output = this.toString();
     if (output) {
       // Add color codes for terminal output

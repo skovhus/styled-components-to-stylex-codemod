@@ -4,7 +4,7 @@
  */
 import valueParser from "postcss-value-parser";
 
-export type DirectionalEntry = { prop: string; value: string };
+type DirectionalEntry = { prop: string; value: string };
 
 type ValueParserNode = {
   type: string;

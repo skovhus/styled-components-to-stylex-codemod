@@ -5,12 +5,25 @@
  * generated from styled-components usage. Emission builds AST nodes for these
  * wrappers and their props types.
  */
-import type { ASTNode, Collection, JSCodeshift, Property } from "jscodeshift";
+import type { ASTNode, Collection, Identifier, JSCodeshift, Property } from "jscodeshift";
 import type { StyledDecl } from "../transform-types.js";
 import type { ExpressionKind } from "./types.js";
 import type { WrapperEmitter } from "./wrapper-emitter.js";
 
 export type EmitIntrinsicHelpers = {
+  hasForwardedAsUsage: (d: StyledDecl) => boolean;
+  withForwardedAsType: (typeText: string, includeForwardedAs: boolean) => string;
+  splitForwardedAsStaticAttrs: (args: {
+    attrsInfo: StyledDecl["attrsInfo"];
+    includeForwardedAs: boolean;
+  }) => {
+    attrsInfo: StyledDecl["attrsInfo"];
+    forwardedAsStaticFallback?: unknown;
+  };
+  buildForwardedAsValueExpr: (
+    forwardedAsId: Identifier,
+    forwardedAsStaticFallback?: unknown,
+  ) => ExpressionKind;
   emitNamedPropsType: (localName: string, typeExprText: string, genericParams?: string) => boolean;
   emitPropsType: (args: {
     localName: string;
@@ -47,6 +60,7 @@ export type EmitIntrinsicHelpers = {
     tagName: string;
     allowClassNameProp: boolean;
     allowStyleProp: boolean;
+    includeForwardedAs?: boolean;
     extra?: string | null;
   }) => { typeExprText: string; genericParams: string };
   propsTypeHasExistingPolymorphicAs: (d: StyledDecl) => boolean;
@@ -55,7 +69,7 @@ export type EmitIntrinsicHelpers = {
   emitMinimalWrapper: (args: Parameters<WrapperEmitter["emitMinimalWrapper"]>[0]) => ASTNode[];
 };
 
-export type EmitIntrinsicHelpersEnv = {
+type EmitIntrinsicHelpersEnv = {
   emitter: WrapperEmitter;
   root: Collection<ASTNode>;
   j: JSCodeshift;
@@ -80,6 +94,57 @@ export type EmitIntrinsicContext = {
 
 export function createEmitIntrinsicHelpers(env: EmitIntrinsicHelpersEnv): EmitIntrinsicHelpers {
   const { emitter, root, j, stylesIdentifier, emitNamedPropsType, markNeedsReactTypeImport } = env;
+
+  const FORWARDED_AS_TYPE = "{ forwardedAs?: React.ElementType }";
+
+  const hasForwardedAsUsage = (d: StyledDecl): boolean => emitter.hasForwardedAsUsage(d.localName);
+
+  const withForwardedAsType = (typeText: string, includeForwardedAs: boolean): string =>
+    includeForwardedAs ? emitter.joinIntersection(typeText, FORWARDED_AS_TYPE) : typeText;
+
+  const splitForwardedAsStaticAttrs = (args: {
+    attrsInfo: StyledDecl["attrsInfo"];
+    includeForwardedAs: boolean;
+  }): {
+    attrsInfo: StyledDecl["attrsInfo"];
+    forwardedAsStaticFallback?: unknown;
+  } => {
+    const { attrsInfo, includeForwardedAs } = args;
+    if (!attrsInfo || !includeForwardedAs) {
+      return { attrsInfo, forwardedAsStaticFallback: undefined };
+    }
+    const staticAttrs = attrsInfo.staticAttrs ?? {};
+    if (!Object.hasOwn(staticAttrs, "as")) {
+      return { attrsInfo, forwardedAsStaticFallback: undefined };
+    }
+    const { as, ...restStaticAttrs } = staticAttrs;
+    return {
+      attrsInfo: {
+        ...attrsInfo,
+        staticAttrs: restStaticAttrs,
+      },
+      forwardedAsStaticFallback: as,
+    };
+  };
+
+  const buildForwardedAsValueExpr = (
+    forwardedAsId: Identifier,
+    forwardedAsStaticFallback?: unknown,
+  ): ExpressionKind => {
+    if (forwardedAsStaticFallback === undefined) {
+      return forwardedAsId;
+    }
+    if (
+      typeof forwardedAsStaticFallback !== "string" &&
+      typeof forwardedAsStaticFallback !== "number" &&
+      typeof forwardedAsStaticFallback !== "boolean" &&
+      forwardedAsStaticFallback !== null
+    ) {
+      return forwardedAsId;
+    }
+    const fallbackExpr = j.literal(forwardedAsStaticFallback);
+    return j.logicalExpression("??", forwardedAsId, fallbackExpr);
+  };
 
   /**
    * Check if a component can use simpler PropsWithChildren type instead of
@@ -240,9 +305,10 @@ export function createEmitIntrinsicHelpers(env: EmitIntrinsicHelpersEnv): EmitIn
     tagName: string;
     allowClassNameProp: boolean;
     allowStyleProp: boolean;
+    includeForwardedAs?: boolean;
     extra?: string | null;
   }): { typeExprText: string; genericParams: string } => {
-    const { tagName, allowClassNameProp, allowStyleProp, extra } = args;
+    const { tagName, allowClassNameProp, allowStyleProp, includeForwardedAs, extra } = args;
     const genericParams = `C extends React.ElementType = "${tagName}"`;
 
     // Simple polymorphic pattern:
@@ -260,15 +326,16 @@ export function createEmitIntrinsicHelpers(env: EmitIntrinsicHelpersEnv): EmitIn
       omitted.length > 0
         ? `Omit<React.ComponentPropsWithRef<C>, ${omitted.join(" | ")}>`
         : "React.ComponentPropsWithRef<C>";
+    const forwardedAsPart = includeForwardedAs ? ` & ${FORWARDED_AS_TYPE}` : "";
     if (extra) {
       // Omit as from extra since we're adding our own as?: C
       const extraWithoutAs = `Omit<${extra}, "as">`;
       // Combine: base props, then custom props (overriding), then polymorphic as
-      const typeExprText = `${base} & ${extraWithoutAs} & { as?: C }`;
+      const typeExprText = `${base} & ${extraWithoutAs} & { as?: C }${forwardedAsPart}`;
       return { typeExprText, genericParams };
     }
     // Just element props with as?: C
-    const typeExprText = `${base} & { as?: C }`;
+    const typeExprText = `${base} & { as?: C }${forwardedAsPart}`;
     return { typeExprText, genericParams };
   };
 
@@ -377,6 +444,10 @@ export function createEmitIntrinsicHelpers(env: EmitIntrinsicHelpersEnv): EmitIn
   ): ASTNode[] => emitter.emitMinimalWrapper(args);
 
   return {
+    hasForwardedAsUsage,
+    withForwardedAsType,
+    splitForwardedAsStaticAttrs,
+    buildForwardedAsValueExpr,
     emitNamedPropsType,
     emitPropsType,
     emitSimplePropsType,

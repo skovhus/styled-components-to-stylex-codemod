@@ -23,7 +23,7 @@ export const App = () => <StyledLink href="https://example.com">Visit Example</S
 
 const styles = stylex.create({
   link: {
-    color: "#BF4F74",
+    color: "#bf4f74",
     fontWeight: "bold",
     textDecoration: {
       default: "none",
