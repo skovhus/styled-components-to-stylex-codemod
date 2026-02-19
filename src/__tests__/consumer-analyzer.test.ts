@@ -1,5 +1,5 @@
 import { execSync } from "node:child_process";
-import { mkdirSync, mkdtempSync, realpathSync, rmSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, realpathSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { describe, it, expect, beforeAll, afterAll } from "vitest";
@@ -85,6 +85,18 @@ describe("createExternalInterface", () => {
     writeFileSync(
       path.join(componentsDir, "Heading.tsx"),
       'import styled from "styled-components";\nexport const Heading = styled.h1`font-size: 24px;`;',
+    );
+
+    // Non-exported component used with as-prop in same file (should NOT appear in results)
+    writeFileSync(
+      path.join(componentsDir, "Internal.tsx"),
+      'import styled from "styled-components";\nconst Internal = styled.div`color: green;`;\nexport const App = () => <Internal as="span">Text</Internal>;',
+    );
+
+    // Non-exported component wrapped in styled() in same file (should NOT appear in results)
+    writeFileSync(
+      path.join(componentsDir, "Private.tsx"),
+      'import styled from "styled-components";\nconst Private = styled.div`color: red;`;\nconst Extended = styled(Private)`font-weight: bold;`;\nexport const App = () => <Extended />;',
     );
 
     // --- Consumer files ---
@@ -208,6 +220,171 @@ describe("createExternalInterface", () => {
 });
 
 // ---------------------------------------------------------------------------
+// Wildcard exports fallback — monorepo with package.json "exports" wildcards
+// ---------------------------------------------------------------------------
+//
+// Scenario: a monorepo where `@scope/ui` has wildcard exports:
+//   "./*": ["./src/*.ts", "./src/*.tsx"]
+//
+// oxc-resolver resolves `.ts` files fine (first array element matches), but
+// fails for `.tsx` files because it doesn't fall back to the second array
+// element when the first doesn't match a file on disk.
+//
+// This test documents the need for the resolveViaExportsWildcard workaround.
+
+describe("createExternalInterface — wildcard exports in monorepo", () => {
+  let fixtureDir: string;
+  let result: ReturnType<typeof createExternalInterface>;
+
+  beforeAll(() => {
+    assertRgAvailable();
+    fixtureDir = mkdtempSync(path.join(tmpdir(), "consumer-analyzer-wildcard-"));
+
+    // --- Package: @scope/ui ---
+    const pkgDir = path.join(fixtureDir, "packages", "ui");
+    mkdirSync(path.join(pkgDir, "src", "components"), { recursive: true });
+
+    writeFileSync(
+      path.join(pkgDir, "package.json"),
+      JSON.stringify({
+        name: "@scope/ui",
+        exports: {
+          ".": "./src/index.ts",
+          "./*": ["./src/*.ts", "./src/*.tsx"],
+        },
+      }),
+    );
+
+    // .tsx component — only matches second wildcard target ("./src/*.tsx")
+    writeFileSync(
+      path.join(pkgDir, "src", "components", "Button.tsx"),
+      'import styled from "styled-components";\nexport const Button = styled.button`color: red;`;',
+    );
+
+    // .ts component — matches first wildcard target ("./src/*.ts")
+    writeFileSync(
+      path.join(pkgDir, "src", "components", "theme.ts"),
+      "export const theme = { color: 'red' };",
+    );
+
+    // .tsx component with explicit export entry (barrel index)
+    mkdirSync(path.join(pkgDir, "src", "components", "Tooltip"), { recursive: true });
+    writeFileSync(
+      path.join(pkgDir, "src", "components", "Tooltip", "index.ts"),
+      'export { Tooltip } from "./Tooltip";',
+    );
+    writeFileSync(
+      path.join(pkgDir, "src", "components", "Tooltip", "Tooltip.tsx"),
+      'import styled from "styled-components";\nexport const Tooltip = styled.div`z-index: 100;`;',
+    );
+
+    // Another .tsx component
+    writeFileSync(
+      path.join(pkgDir, "src", "components", "Text.tsx"),
+      'import styled from "styled-components";\nexport const Text = styled.span`font-size: 14px;`;',
+    );
+
+    writeFileSync(path.join(pkgDir, "src", "index.ts"), "export {};");
+
+    // --- App directory (consumer) ---
+    const appDir = path.join(fixtureDir, "app", "src");
+    mkdirSync(appDir, { recursive: true });
+
+    // Simulate monorepo node_modules symlink
+    const nodeModulesDir = path.join(fixtureDir, "app", "node_modules", "@scope");
+    mkdirSync(nodeModulesDir, { recursive: true });
+    const symlinkTarget = path.relative(nodeModulesDir, pkgDir);
+    symlinkSync(symlinkTarget, path.join(nodeModulesDir, "ui"));
+
+    writeFileSync(
+      path.join(appDir, "tsconfig.json"),
+      JSON.stringify({ compilerOptions: { baseUrl: "." } }),
+    );
+
+    // Consumer that wraps .tsx Button via styled()
+    writeFileSync(
+      path.join(appDir, "page.tsx"),
+      [
+        'import styled from "styled-components";',
+        'import { Button } from "@scope/ui/components/Button";',
+        "const PrimaryButton = styled(Button)`font-weight: bold;`;",
+        "export const App = () => <PrimaryButton />;",
+      ].join("\n"),
+    );
+
+    // Consumer that wraps .tsx Text via styled()
+    writeFileSync(
+      path.join(appDir, "card.tsx"),
+      [
+        'import styled from "styled-components";',
+        'import { Text } from "@scope/ui/components/Text";',
+        "const Title = styled(Text)`font-size: 24px;`;",
+        "export const App = () => <Title />;",
+      ].join("\n"),
+    );
+
+    // Consumer that uses `as` prop on Button
+    writeFileSync(
+      path.join(appDir, "link.tsx"),
+      [
+        'import { Button } from "@scope/ui/components/Button";',
+        'export const App = () => <Button as="a" href="/">Link</Button>;',
+      ].join("\n"),
+    );
+
+    // Run analysis from the fixture root
+    const originalCwd = process.cwd();
+    try {
+      process.chdir(fixtureDir);
+      result = createExternalInterface({ searchDirs: ["app/", "packages/"] });
+    } finally {
+      process.chdir(originalCwd);
+    }
+  });
+
+  afterAll(() => {
+    if (fixtureDir) {
+      rmSync(fixtureDir, { recursive: true, force: true });
+    }
+  });
+
+  it("detects styled() wrapping of .tsx components imported via wildcard exports", () => {
+    const snapshot = toSnapshot(result.map, fixtureDir);
+    // Button.tsx and Text.tsx are .tsx files — they only match the second
+    // wildcard target ("./src/*.tsx"), NOT the first ("./src/*.ts").
+    // If the resolver can't handle this, styles will be false.
+    expect(snapshot["packages/ui/src/components/Button.tsx:Button"]).toEqual({
+      as: true,
+      styles: true,
+    });
+    expect(snapshot["packages/ui/src/components/Text.tsx:Text"]).toEqual({
+      as: false,
+      styles: true,
+    });
+  });
+
+  it("detects as-prop usage of .tsx components imported via wildcard exports", () => {
+    const snapshot = toSnapshot(result.map, fixtureDir);
+    expect(snapshot["packages/ui/src/components/Button.tsx:Button"]?.as).toBe(true);
+  });
+
+  it("snapshot of full analysis map", () => {
+    expect(toSnapshot(result.map, fixtureDir)).toMatchInlineSnapshot(`
+      {
+        "packages/ui/src/components/Button.tsx:Button": {
+          "as": true,
+          "styles": true,
+        },
+        "packages/ui/src/components/Text.tsx:Text": {
+          "as": false,
+          "styles": true,
+        },
+      }
+    `);
+  });
+});
+
+// ---------------------------------------------------------------------------
 // Snapshot test — on test-cases/
 // ---------------------------------------------------------------------------
 
@@ -220,30 +397,6 @@ describe("createExternalInterface snapshot on test-cases", () => {
     const result = createExternalInterface({ searchDirs: ["test-cases/"] });
     expect(toSnapshot(result.map)).toMatchInlineSnapshot(`
       {
-        "test-cases/asProp-basic.input.tsx:Button": {
-          "as": true,
-          "styles": false,
-        },
-        "test-cases/asProp-basic.input.tsx:StyledText": {
-          "as": true,
-          "styles": false,
-        },
-        "test-cases/asProp-componentRef.input.tsx:AnimatedText": {
-          "as": true,
-          "styles": false,
-        },
-        "test-cases/asProp-forwarded.input.tsx:Button": {
-          "as": true,
-          "styles": false,
-        },
-        "test-cases/asProp-forwarded.input.tsx:ButtonWrapper": {
-          "as": true,
-          "styles": false,
-        },
-        "test-cases/asProp-usage.input.tsx:FullWidthCopyText": {
-          "as": true,
-          "styles": false,
-        },
         "test-cases/externalStyles-input.input.tsx:StyledInput": {
           "as": true,
           "styles": false,
@@ -257,10 +410,6 @@ describe("createExternalInterface snapshot on test-cases", () => {
           "styles": true,
         },
         "test-cases/lib/external-component.tsx:ExternalComponent": {
-          "as": false,
-          "styles": true,
-        },
-        "test-cases/lib/external-component.tsx:Link": {
           "as": false,
           "styles": true,
         },
