@@ -1,0 +1,1 @@
+import{j as i}from"./index-CWJJJUtP.js";function s(e){const{children:r,$dim:n,...t}=e;return i.jsx("span",{...t,...{0:{className:"x4101hi"},1:{className:"x4101hi xbyyjgo"}}[!!n<<0],children:r})}const x=()=>i.jsxs("div",{children:[i.jsx(s,{$dim:!0,children:"Dim"}),i.jsx(s,{$dim:!1,children:"No dim"})]});export{x as App,s as Highlight};
