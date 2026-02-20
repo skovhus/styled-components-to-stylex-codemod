@@ -149,6 +149,15 @@ export type ResolveValueResult = {
    * Note: Only meaningful for `{ kind: "importedValue" }`.
    */
   usage?: "props";
+  /**
+   * When true, this expression is guaranteed to never be `null` or `undefined`.
+   *
+   * The codemod may use this to simplify nullish-fallback expressions:
+   * `resolvedExpr ?? fallback` -> `resolvedExpr`.
+   *
+   * This is only used for `??` simplification (not `||`).
+   */
+  guaranteedNonNullish?: boolean;
 };
 
 export type CallResolveResult = {

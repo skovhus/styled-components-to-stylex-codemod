@@ -74,6 +74,7 @@ export const fixtureAdapter = defineAdapter({
       if (ctx.path === "color") {
         return {
           expr: "$colors",
+          guaranteedNonNullish: true,
           imports: [
             {
               from: { kind: "specifier", value: "./tokens.stylex" },
@@ -86,6 +87,7 @@ export const fixtureAdapter = defineAdapter({
       const lastSegment = ctx.path.split(".").pop();
       return {
         expr: `$colors.${lastSegment}`,
+        guaranteedNonNullish: true,
         imports: [
           {
             from: { kind: "specifier", value: "./tokens.stylex" },

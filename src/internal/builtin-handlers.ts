@@ -598,6 +598,14 @@ function tryResolveInlineStyleValueForLogicalExpression(
       return { type: "keepOriginal", reason: unresolvedThemeFallbackReason };
     }
 
+    if (body.operator === "??" && resolvedThemeValue.guaranteedNonNullish) {
+      return {
+        type: "resolvedValue",
+        expr: resolvedThemeValue.expr,
+        imports: resolvedThemeValue.imports,
+      };
+    }
+
     return {
       type: "resolvedValue",
       expr: `(${resolvedThemeValue.expr}) ${body.operator} ${fallbackExpr}`,

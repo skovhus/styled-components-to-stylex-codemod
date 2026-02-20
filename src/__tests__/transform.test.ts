@@ -1051,6 +1051,109 @@ export const App = () => <Button $active>Click</Button>;
   });
 });
 
+describe("theme logical fallback simplification", () => {
+  it("should drop nullish fallback when adapter marks theme value as guaranteed non-nullish", () => {
+    const source = `
+import styled from "styled-components";
+
+const Box = styled.div\`
+  color: \${(props) => props.theme.color.labelBase ?? "black"};
+\`;
+
+export const App = () => <Box />;
+`;
+
+    const adapterWithGuaranteedThemeValue = {
+      externalInterface() {
+        return { styles: false, as: false };
+      },
+      resolveValue(ctx: ResolveValueContext) {
+        if (ctx.kind !== "theme" || ctx.path !== "color.labelBase") {
+          return undefined;
+        }
+        return {
+          expr: "themeTokens.labelBase",
+          guaranteedNonNullish: true,
+          imports: [
+            {
+              from: { kind: "specifier" as const, value: "./tokens.stylex" },
+              names: [{ imported: "themeTokens" }],
+            },
+          ],
+        };
+      },
+      resolveCall() {
+        return undefined;
+      },
+      resolveSelector() {
+        return undefined;
+      },
+      styleMerger: null,
+    } satisfies Adapter;
+
+    const result = transformWithWarnings(
+      { source, path: "theme-logical-fallback-guaranteed.tsx" },
+      { jscodeshift: j, j, stats: () => {}, report: () => {} },
+      { adapter: adapterWithGuaranteedThemeValue },
+    );
+
+    expect(result.code).not.toBeNull();
+    expect(result.warnings).toHaveLength(0);
+    expect(result.code).toContain("themeTokens.labelBase");
+    expect(result.code).not.toContain('?? "black"');
+  });
+
+  it("should preserve nullish fallback when adapter does not mark non-nullish guarantee", () => {
+    const source = `
+import styled from "styled-components";
+
+const Box = styled.div\`
+  color: \${(props) => props.theme.color.labelBase ?? "black"};
+\`;
+
+export const App = () => <Box />;
+`;
+
+    const adapterWithoutGuaranteedThemeValue = {
+      externalInterface() {
+        return { styles: false, as: false };
+      },
+      resolveValue(ctx: ResolveValueContext) {
+        if (ctx.kind !== "theme" || ctx.path !== "color.labelBase") {
+          return undefined;
+        }
+        return {
+          expr: "themeTokens.labelBase",
+          imports: [
+            {
+              from: { kind: "specifier" as const, value: "./tokens.stylex" },
+              names: [{ imported: "themeTokens" }],
+            },
+          ],
+        };
+      },
+      resolveCall() {
+        return undefined;
+      },
+      resolveSelector() {
+        return undefined;
+      },
+      styleMerger: null,
+    } satisfies Adapter;
+
+    const result = transformWithWarnings(
+      { source, path: "theme-logical-fallback-default.tsx" },
+      { jscodeshift: j, j, stats: () => {}, report: () => {} },
+      { adapter: adapterWithoutGuaranteedThemeValue },
+    );
+
+    expect(result.code).not.toBeNull();
+    expect(result.warnings).toHaveLength(0);
+    expect(result.code).toContain("themeTokens.labelBase");
+    expect(result.code).toContain('?? "black"');
+  });
+});
+
 describe("imported css helper function calls", () => {
   it("should bail on imported function call with pseudo selectors when adapter cannot resolve", () => {
     // When an imported function is called in a styled component with pseudo selectors,
