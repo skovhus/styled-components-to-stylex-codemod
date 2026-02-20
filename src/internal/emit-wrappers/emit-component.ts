@@ -287,6 +287,9 @@ export function emitComponentWrappers(emitter: WrapperEmitter): {
     }
 
     // Add adapter-resolved StyleX styles (emitted directly into stylex.props args).
+    // Intentionally do not pass propDefaults here: component wrappers may forward
+    // destructured props back to the wrapped component, so synthesizing defaults for
+    // style-only condition simplification can change runtime forwarded values.
     if (d.extraStylexPropsArgs) {
       styleArgs.push(
         ...emitter.buildExtraStylexPropsExprs({

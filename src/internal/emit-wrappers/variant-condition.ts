@@ -260,10 +260,10 @@ export function buildExtraStylexPropsExprs(
     if (complementIndex !== null) {
       consumed.add(complementIndex);
       const other = entries[complementIndex]!;
-      const positiveWhen = getPositiveWhen(entry.when, other.when!)!;
-      const { cond } = collectConditionProps(j, { when: positiveWhen, destructureProps });
+      const positiveWhenRaw = getPositiveWhen(entry.when, other.when!)!;
+      const { cond } = collectConditionProps(j, { when: positiveWhenRaw, destructureProps });
 
-      const isEntryPositive = entry.when.trim() === positiveWhen;
+      const isEntryPositive = areEquivalentWhen(entry.when, positiveWhenRaw);
       const trueExpr = isEntryPositive ? entry.expr : other.expr;
       const falseExpr = isEntryPositive ? other.expr : entry.expr;
 
@@ -325,11 +325,75 @@ function findComplementaryEntry(
 function getPositiveWhen(whenA: string, whenB: string): string | null {
   const a = whenA.trim();
   const b = whenB.trim();
-  if (b === `!${a}`) {
+  if (isNegationOf(b, a)) {
     return a;
   }
-  if (a === `!${b}`) {
+  if (isNegationOf(a, b)) {
     return b;
   }
   return null;
+}
+
+function areEquivalentWhen(left: string, right: string): boolean {
+  return normalizeWhenForComparison(left) === normalizeWhenForComparison(right);
+}
+
+function isNegationOf(candidate: string, base: string): boolean {
+  const candidateNormalized = normalizeWhenForComparison(candidate);
+  const baseNormalized = normalizeWhenForComparison(base);
+
+  // Allow bare negation only for atomic expressions like `foo` or `props.foo`.
+  if (isAtomicWhenExpression(baseNormalized) && candidateNormalized === `!${baseNormalized}`) {
+    return true;
+  }
+
+  // For compound expressions, require grouped negation: `!(a || b)`.
+  if (!candidateNormalized.startsWith("!(") || !candidateNormalized.endsWith(")")) {
+    return false;
+  }
+  const grouped = candidateNormalized.slice(1);
+  if (!hasEnclosingParens(grouped)) {
+    return false;
+  }
+  const inner = normalizeWhenForComparison(candidateNormalized.slice(2, -1));
+  return inner === baseNormalized;
+}
+
+function normalizeWhenForComparison(when: string): string {
+  const withoutWhitespace = String(when ?? "").replace(/\s+/g, "");
+  return stripOuterParens(withoutWhitespace);
+}
+
+function stripOuterParens(expr: string): string {
+  let current = expr;
+  while (current.startsWith("(") && current.endsWith(")") && hasEnclosingParens(current)) {
+    current = current.slice(1, -1);
+  }
+  return current;
+}
+
+function hasEnclosingParens(expr: string): boolean {
+  let depth = 0;
+  for (let i = 0; i < expr.length; i++) {
+    const ch = expr[i];
+    if (ch === "(") {
+      depth++;
+      continue;
+    }
+    if (ch !== ")") {
+      continue;
+    }
+    depth--;
+    if (depth < 0) {
+      return false;
+    }
+    if (depth === 0 && i !== expr.length - 1) {
+      return false;
+    }
+  }
+  return depth === 0;
+}
+
+function isAtomicWhenExpression(expr: string): boolean {
+  return /^[A-Za-z_$][0-9A-Za-z_$]*(?:\.[A-Za-z_$][0-9A-Za-z_$]*)*$/.test(expr);
 }

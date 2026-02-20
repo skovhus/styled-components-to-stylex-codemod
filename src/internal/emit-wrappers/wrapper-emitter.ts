@@ -999,7 +999,9 @@ export class WrapperEmitter {
         return;
       }
       if (isIdentifierNode(node)) {
-        expandedDestructureProps.add(node.name);
+        if (node.name !== "undefined") {
+          expandedDestructureProps.add(node.name);
+        }
         return;
       }
       if (

@@ -17,7 +17,7 @@ import { emitStyleMerging } from "./style-merger.js";
 import { sortVariantEntriesBySpecificity, VOID_TAGS } from "./type-helpers.js";
 import { withLeadingCommentsOnFirstFunction } from "./comments.js";
 import type { EmitIntrinsicContext } from "./emit-intrinsic-helpers.js";
-import { cloneAstNode } from "../utilities/jscodeshift-utils.js";
+import { cloneAstNode, collectIdentifiers } from "../utilities/jscodeshift-utils.js";
 import { makeConditionalStyleExpr, parseVariantWhenToAst } from "./variant-condition.js";
 
 export function emitSimpleWithConfigWrappers(ctx: EmitIntrinsicContext): void {
@@ -777,6 +777,13 @@ export function emitSimpleExportedIntrinsicWrappers(ctx: EmitIntrinsicContext): 
       }
     }
 
+    maybeApplySafeTruthyDefaultFromExtraStyleConditionals({
+      j,
+      d,
+      styleArgs,
+      propDefaults,
+    });
+
     // Extract transient props (starting with $) from the explicit type.
     // Only destructure them when we actually spread `rest` into the element.
     const explicitTransientProps: string[] = [];
@@ -985,6 +992,216 @@ export function emitSimpleExportedIntrinsicWrappers(ctx: EmitIntrinsicContext): 
 // ---------------------------------------------------------------------------
 // Shared helpers for theme boolean conditional handling
 // ---------------------------------------------------------------------------
+
+function maybeApplySafeTruthyDefaultFromExtraStyleConditionals(args: {
+  j: JSCodeshift;
+  d: StyledDecl;
+  styleArgs: ExpressionKind[];
+  propDefaults: WrapperPropDefaults;
+}): void {
+  const { j, d, styleArgs, propDefaults } = args;
+  if (!d.extraStylexPropsArgs || d.extraStylexPropsArgs.length === 0) {
+    return;
+  }
+
+  const blockedProps = collectPropsUsedOutsideExtraStyleConditionals(j, d);
+  const candidateIndicesByProp = new Map<string, number[]>();
+
+  for (let i = 0; i < styleArgs.length; i++) {
+    const expr = styleArgs[i];
+    if (!expr || expr.type !== "ConditionalExpression") {
+      continue;
+    }
+    const propName = extractTruthyUndefinedConditionalProp(expr.test as ExpressionKind);
+    if (!propName) {
+      continue;
+    }
+    const existing = candidateIndicesByProp.get(propName) ?? [];
+    existing.push(i);
+    candidateIndicesByProp.set(propName, existing);
+  }
+
+  for (const [propName, indices] of candidateIndicesByProp.entries()) {
+    if (blockedProps.has(propName)) {
+      continue;
+    }
+    const existingDefault = propDefaults.get(propName);
+    if (existingDefault !== undefined && existingDefault !== true) {
+      continue;
+    }
+    if (isPropUsedOutsideCandidateConditionals(styleArgs, propName, new Set(indices))) {
+      continue;
+    }
+    propDefaults.set(propName, true);
+    for (const idx of indices) {
+      const expr = styleArgs[idx];
+      if (!expr || expr.type !== "ConditionalExpression") {
+        continue;
+      }
+      expr.test = j.identifier(propName);
+    }
+  }
+}
+
+function collectPropsUsedOutsideExtraStyleConditionals(
+  j: JSCodeshift,
+  d: StyledDecl,
+): ReadonlySet<string> {
+  const used = new Set<string>();
+  const add = (name: string | null | undefined): void => {
+    if (name) {
+      used.add(name);
+    }
+  };
+
+  for (const [when] of Object.entries(d.variantStyleKeys ?? {})) {
+    const parsed = parseVariantWhenToAst(j, when);
+    for (const prop of parsed.props) {
+      add(prop);
+    }
+  }
+  for (const dim of d.variantDimensions ?? []) {
+    add(dim.propName);
+    add(dim.namespaceBooleanProp);
+  }
+  for (const cv of d.compoundVariants ?? []) {
+    add(cv.outerProp);
+    add(cv.innerProp);
+  }
+  for (const pair of d.styleFnFromProps ?? []) {
+    if (pair.jsxProp !== "__props") {
+      add(pair.jsxProp);
+    }
+  }
+  for (const prop of collectInlineStylePropNames(d.inlineStyleProps ?? [])) {
+    add(prop);
+  }
+  for (const inlineProp of d.inlineStyleProps ?? []) {
+    if (!inlineProp.expr || typeof inlineProp.expr !== "object") {
+      continue;
+    }
+    collectPropsFromPropsMemberAccess(inlineProp.expr as ExpressionKind, used);
+  }
+  for (const attr of d.attrsInfo?.defaultAttrs ?? []) {
+    add(attr.jsxProp);
+  }
+  for (const attr of d.attrsInfo?.conditionalAttrs ?? []) {
+    add(attr.jsxProp);
+  }
+  for (const attr of d.attrsInfo?.invertedBoolAttrs ?? []) {
+    add(attr.jsxProp);
+  }
+
+  return used;
+}
+
+function isPropUsedOutsideCandidateConditionals(
+  styleArgs: ReadonlyArray<ExpressionKind>,
+  propName: string,
+  candidateIndices: ReadonlySet<number>,
+): boolean {
+  for (let i = 0; i < styleArgs.length; i++) {
+    if (candidateIndices.has(i)) {
+      continue;
+    }
+    const expr = styleArgs[i];
+    if (!expr) {
+      continue;
+    }
+    const identifiers = new Set<string>();
+    collectIdentifiers(expr, identifiers);
+    if (identifiers.has(propName)) {
+      return true;
+    }
+  }
+  return false;
+}
+
+function extractTruthyUndefinedConditionalProp(test: ExpressionKind): string | null {
+  if (test.type !== "LogicalExpression" || test.operator !== "||") {
+    return null;
+  }
+
+  const leftProp = extractPropEqUndefined(test.left as ExpressionKind);
+  if (leftProp && isIdentifierNamed(test.right as ExpressionKind, leftProp)) {
+    return leftProp;
+  }
+
+  const rightProp = extractPropEqUndefined(test.right as ExpressionKind);
+  if (rightProp && isIdentifierNamed(test.left as ExpressionKind, rightProp)) {
+    return rightProp;
+  }
+
+  return null;
+}
+
+function extractPropEqUndefined(expr: ExpressionKind): string | null {
+  if (expr.type !== "BinaryExpression" || expr.operator !== "===") {
+    return null;
+  }
+
+  if (isIdentifierNamed(expr.left as ExpressionKind, "undefined")) {
+    return identifierName(expr.right as ExpressionKind);
+  }
+  if (isIdentifierNamed(expr.right as ExpressionKind, "undefined")) {
+    return identifierName(expr.left as ExpressionKind);
+  }
+
+  return null;
+}
+
+function isIdentifierNamed(expr: ExpressionKind, name: string): boolean {
+  return expr.type === "Identifier" && expr.name === name;
+}
+
+function identifierName(expr: ExpressionKind): string | null {
+  return expr.type === "Identifier" ? expr.name : null;
+}
+
+function collectPropsFromPropsMemberAccess(node: ExpressionKind, out: Set<string>): void {
+  const visit = (value: unknown): void => {
+    if (!value || typeof value !== "object") {
+      return;
+    }
+    if (Array.isArray(value)) {
+      for (const child of value) {
+        visit(child);
+      }
+      return;
+    }
+
+    const typed = value as {
+      type?: string;
+      object?: unknown;
+      property?: unknown;
+      computed?: boolean;
+    };
+    if (
+      (typed.type === "MemberExpression" || typed.type === "OptionalMemberExpression") &&
+      typed.object &&
+      typed.property &&
+      typed.computed === false
+    ) {
+      const object = typed.object as { type?: string; name?: string };
+      const property = typed.property as { type?: string; name?: string };
+      if (object.type === "Identifier" && object.name === "props") {
+        if (property.type === "Identifier" && property.name) {
+          out.add(property.name);
+        }
+      }
+    }
+
+    const record = value as Record<string, unknown>;
+    for (const key of Object.keys(record)) {
+      if (key === "loc" || key === "comments") {
+        continue;
+      }
+      visit(record[key]);
+    }
+  };
+
+  visit(node);
+}
 
 /** Appends theme boolean conditional style args (e.g., `theme.isDark ? styles.boxDark : styles.boxLight`) to `styleArgs`. */
 function appendThemeBooleanStyleArgs(
