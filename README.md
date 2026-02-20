@@ -161,6 +161,14 @@ Instead of manually specifying which components need `styles` or `as` support, y
 
 > [!NOTE]
 > Experimental. Requires `rg` installed and available in `$PATH`. Not supported on Windows.
+> `createExternalInterface` also relies on optional dependency `oxc-resolver` for import resolution.
+> Install it when using this feature:
+>
+> ```bash
+> npm install oxc-resolver
+> # or
+> pnpm add oxc-resolver
+> ```
 
 ```ts
 import { defineAdapter, createExternalInterface } from "styled-components-to-stylex-codemod";
