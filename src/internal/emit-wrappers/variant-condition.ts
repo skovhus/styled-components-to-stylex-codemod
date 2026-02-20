@@ -285,8 +285,10 @@ export function buildExtraStylexPropsExprs(
 // --- Non-exported helpers ---
 
 /**
- * Finds an unconsumed entry that has a complementary "when" condition
- * to the entry at `index`. Returns the index if found, null otherwise.
+ * Finds the immediately next unconsumed entry that has a complementary "when"
+ * condition to the entry at `index`. Only checks the adjacent unconsumed entry
+ * to preserve style precedence ordering — merging non-adjacent pairs would
+ * reorder styles relative to entries between them.
  */
 function findComplementaryEntry(
   entries: ReadonlyArray<{ when?: string; expr: ExpressionKind }>,
@@ -298,18 +300,20 @@ function findComplementaryEntry(
     return null;
   }
 
-  for (let k = index + 1; k < entries.length; k++) {
-    if (consumed.has(k)) {
-      continue;
-    }
-    const otherWhen = entries[k]?.when;
-    if (!otherWhen) {
-      continue;
-    }
-    if (getPositiveWhen(when, otherWhen) !== null) {
-      return k;
-    }
+  // Find the next unconsumed entry
+  let next = index + 1;
+  while (next < entries.length && consumed.has(next)) {
+    next++;
   }
+  if (next >= entries.length) {
+    return null;
+  }
+
+  const otherWhen = entries[next]?.when;
+  if (otherWhen && getPositiveWhen(when, otherWhen) !== null) {
+    return next;
+  }
+
   return null;
 }
 

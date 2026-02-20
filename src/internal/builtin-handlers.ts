@@ -355,6 +355,12 @@ function extractStaticLiteralValue(node: unknown): StaticLiteralValue | undefine
     return undefined;
   }
   const type = (node as { type?: string }).type;
+  // Reject function-like nodes — literalToStaticValue coerces zero-arg arrows
+  // to their body's value, but helper call arguments should not undergo that
+  // transformation (the original code passes a function, not a primitive).
+  if (type === "ArrowFunctionExpression" || type === "FunctionExpression") {
+    return undefined;
+  }
   // Handle NullLiteral and Literal-with-null-value explicitly since
   // literalToStaticValue uses null as its failure sentinel.
   if (type === "NullLiteral") {
