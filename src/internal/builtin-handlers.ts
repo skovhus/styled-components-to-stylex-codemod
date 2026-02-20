@@ -211,6 +211,7 @@ function tryResolveArrowFnCallWithConditionalArgs(
   let propName: string | null = null;
   let consequentValue: StaticLiteralValue | undefined;
   let alternateValue: StaticLiteralValue | undefined;
+  let conditionalDefaultTruthy: boolean | null = null;
   // Pre-resolved static values for non-conditional args (avoids callArgFromNode mismatch
   // with literalToStaticValue, which handles TemplateLiterals/TaggedTemplateExpressions/etc.)
   const staticArgValues = new Map<number, StaticLiteralValue>();
@@ -242,15 +243,19 @@ function tryResolveArrowFnCallWithConditionalArgs(
         return null;
       }
 
-      // Bail if the prop has a destructured default — the emitted `when` condition
-      // tests truthiness of the *runtime* prop value, which would be the default
-      // when omitted, silently changing branch selection.
+      // Support destructured defaults when we can statically determine their truthiness.
+      // Destructuring defaults only apply when the prop is `undefined`, so we must
+      // preserve that distinction in the emitted condition.
       if (
         bindings.kind === "destructured" &&
         bindings.defaults &&
         bindings.defaults.has(propName)
       ) {
-        return null;
+        const defaultValue = extractStaticLiteralValue(bindings.defaults.get(propName));
+        if (defaultValue === undefined) {
+          return null;
+        }
+        conditionalDefaultTruthy = Boolean(defaultValue);
       }
 
       // Both branches must be static literals (use extractStaticLiteralValue
@@ -328,11 +333,15 @@ function tryResolveArrowFnCallWithConditionalArgs(
     return null;
   }
 
+  const truthyWhen =
+    conditionalDefaultTruthy === true ? `${propName} === undefined || ${propName}` : propName;
+  const falsyWhen = conditionalDefaultTruthy === true ? `!(${truthyWhen})` : `!${propName}`;
+
   const variants = [
-    { nameHint: "truthy", when: propName, expr: consResult.expr, imports: consResult.imports },
+    { nameHint: "truthy", when: truthyWhen, expr: consResult.expr, imports: consResult.imports },
     {
       nameHint: "falsy",
-      when: `!${propName}`,
+      when: falsyWhen,
       expr: altResult.expr,
       imports: altResult.imports,
     },
