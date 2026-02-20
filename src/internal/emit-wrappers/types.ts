@@ -7,7 +7,7 @@ import type { ASTNode, JSCodeshift } from "jscodeshift";
 export type ExportInfo = { exportName: string; isDefault: boolean; isSpecifier: boolean };
 export type ExpressionKind = Parameters<JSCodeshift["expressionStatement"]>[0];
 export type InlineStyleProp = { prop: string; expr: ExpressionKind; jsxProp?: string };
-export type WrapperPropDefaultValue = string | number;
+export type WrapperPropDefaultValue = string | number | boolean;
 export type WrapperPropDefaults = Map<string, WrapperPropDefaultValue>;
 /**
  * Collects prop identifiers referenced by inline style expressions.
