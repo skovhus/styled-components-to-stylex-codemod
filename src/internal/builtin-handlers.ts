@@ -2,6 +2,7 @@
  * Built-in resolution handlers for dynamic interpolations.
  * Core concepts: adapter hooks, conditional splitting, and StyleX emission.
  */
+import type { CallResolveContext } from "../adapter.js";
 import {
   getArrowFnParamBindings,
   getArrowFnSingleParamName,
@@ -11,6 +12,7 @@ import {
   isArrowFunctionExpression,
   isCallExpressionNode,
   isLogicalExpressionNode,
+  literalToStaticValue,
   resolveIdentifierToPropName,
 } from "./utilities/jscodeshift-utils.js";
 import { sanitizeIdentifier } from "./utilities/string-utils.js";
@@ -20,6 +22,7 @@ import {
   buildResolvedHandlerResult,
   buildUnresolvedHelperResult,
   getArrowFnThemeParamInfo,
+  isAdapterResultCssValue,
   resolveImportedHelperCall,
   tryResolveCallExpression,
 } from "./builtin-handlers/resolver-utils.js";
@@ -51,6 +54,7 @@ export function resolveDynamicNode(
     tryResolveThemeAccess(node, ctx) ??
     tryResolveCallExpression(node, ctx) ??
     tryResolveArrowFnHelperCallWithThemeArg(node, ctx) ??
+    tryResolveArrowFnCallWithConditionalArgs(node, ctx) ??
     tryResolveConditionalValue(node, ctx) ??
     tryResolveIndexedThemeWithPropFallback(node, ctx) ??
     tryResolveConditionalCssBlockTernary(node, ctx) ??
@@ -157,6 +161,207 @@ function tryResolveArrowFnHelperCallWithThemeArg(
 
   if (simple.kind === "unresolved") {
     return buildUnresolvedHelperResult(body.callee, ctx);
+  }
+
+  return null;
+}
+
+/**
+ * Handles arrow functions whose body is a call expression with one conditional argument.
+ *
+ * Pattern: `({ $oneLine }) => truncateMultiline($oneLine ? 1 : 2)`
+ *
+ * The conditional argument must have a prop-based test and literal branches.
+ * All other arguments must be literals. Each branch is resolved independently
+ * via the adapter's resolveCall, and the result is split into conditional variants.
+ */
+function tryResolveArrowFnCallWithConditionalArgs(
+  node: DynamicNode,
+  ctx: InternalHandlerContext,
+): HandlerResult | null {
+  const expr = node.expr;
+  if (!isArrowFunctionExpression(expr)) {
+    return null;
+  }
+
+  const body = getFunctionBodyExpr(expr);
+  if (!isCallExpressionNode(body)) {
+    return null;
+  }
+
+  const callee = body.callee as { type?: string; name?: string } | undefined;
+  if (!callee || callee.type !== "Identifier" || typeof callee.name !== "string") {
+    return null;
+  }
+  const calleeIdent = callee.name;
+
+  const bindings = getArrowFnParamBindings(expr);
+  if (!bindings) {
+    return null;
+  }
+
+  // Inspect arguments: exactly one must be a ConditionalExpression with
+  // a prop-based test and literal branches; remaining args must be literals.
+  const args = body.arguments ?? [];
+  if (args.length === 0) {
+    return null;
+  }
+
+  let conditionalArgIndex = -1;
+  let propName: string | null = null;
+  let consequentValue: string | number | boolean | null = null;
+  let alternateValue: string | number | boolean | null = null;
+  // Pre-resolved static values for non-conditional args (avoids callArgFromNode mismatch
+  // with literalToStaticValue, which handles TemplateLiterals/TaggedTemplateExpressions/etc.)
+  const staticArgValues = new Map<number, string | number | boolean>();
+
+  for (let i = 0; i < args.length; i++) {
+    const arg = args[i] as
+      | { type?: string; test?: unknown; consequent?: unknown; alternate?: unknown }
+      | undefined;
+    if (!arg) {
+      continue;
+    }
+
+    if (arg.type === "ConditionalExpression") {
+      // Only one conditional arg is supported
+      if (conditionalArgIndex !== -1) {
+        return null;
+      }
+      conditionalArgIndex = i;
+
+      // Extract prop name from the conditional test
+      propName = extractPropNameFromCondTest(arg.test, bindings);
+      if (!propName) {
+        return null;
+      }
+
+      // Bail if the prop has a destructured default — the emitted `when` condition
+      // tests truthiness of the *runtime* prop value, which would be the default
+      // when omitted, silently changing branch selection.
+      if (
+        bindings.kind === "destructured" &&
+        bindings.defaults &&
+        bindings.defaults.has(propName)
+      ) {
+        return null;
+      }
+
+      // Both branches must be static literals
+      consequentValue = literalToStaticValue(arg.consequent);
+      alternateValue = literalToStaticValue(arg.alternate);
+      if (consequentValue === null || alternateValue === null) {
+        return null;
+      }
+    } else {
+      // Non-conditional args must be static literals
+      const v = literalToStaticValue(arg);
+      if (v === null) {
+        return null;
+      }
+      staticArgValues.set(i, v);
+    }
+  }
+
+  if (conditionalArgIndex === -1 || !propName) {
+    return null;
+  }
+
+  // Resolve the callee's import
+  const imp = ctx.resolveImport(calleeIdent, callee);
+  if (!imp) {
+    return null;
+  }
+
+  // Build a CallResolveContext for each branch, replacing the conditional arg
+  // with the branch's literal value and using pre-resolved values for other args.
+  const buildBranchContext = (
+    branchValue: string | number | boolean | null,
+  ): CallResolveContext => {
+    const syntheticArgs: CallResolveContext["args"] = args.map((_arg, i) => {
+      if (i === conditionalArgIndex) {
+        return { kind: "literal" as const, value: branchValue };
+      }
+      const v = staticArgValues.get(i);
+      return v !== undefined
+        ? { kind: "literal" as const, value: v }
+        : { kind: "unknown" as const };
+    });
+
+    const loc = body.loc?.start;
+    return {
+      callSiteFilePath: ctx.filePath,
+      calleeImportedName: imp.importedName,
+      calleeSource: imp.source,
+      args: syntheticArgs,
+      ...(loc ? { loc: { line: loc.line, column: loc.column } } : {}),
+      ...(node.css.property ? { cssProperty: node.css.property } : {}),
+    };
+  };
+
+  const consResult = ctx.resolveCall(buildBranchContext(consequentValue));
+  if (!consResult) {
+    return null;
+  }
+
+  const altResult = ctx.resolveCall(buildBranchContext(alternateValue));
+  if (!altResult) {
+    return null;
+  }
+
+  // Both branches must agree on usage type
+  const consIsCss = isAdapterResultCssValue(consResult, node.css.property);
+  const altIsCss = isAdapterResultCssValue(altResult, node.css.property);
+  if (consIsCss !== altIsCss) {
+    return null;
+  }
+
+  const variants = [
+    { nameHint: "truthy", when: propName, expr: consResult.expr, imports: consResult.imports },
+    {
+      nameHint: "falsy",
+      when: `!${propName}`,
+      expr: altResult.expr,
+      imports: altResult.imports,
+    },
+  ];
+
+  return consIsCss
+    ? { type: "splitVariantsResolvedValue", variants }
+    : { type: "splitVariantsResolvedStyles", variants };
+}
+
+/**
+ * Extracts the prop name from a conditional expression's test node.
+ *
+ * Supports:
+ * - Simple param: `props.$oneLine` → `$oneLine`
+ * - Destructured param: `$oneLine` (identifier) → `$oneLine`
+ */
+function extractPropNameFromCondTest(
+  test: unknown,
+  bindings: ReturnType<typeof getArrowFnParamBindings>,
+): string | null {
+  if (!test || typeof test !== "object" || !bindings) {
+    return null;
+  }
+
+  const t = test as { type?: string; name?: string };
+
+  if (bindings.kind === "simple") {
+    if (t.type === "MemberExpression") {
+      const path = getMemberPathFromIdentifier(
+        test as Parameters<typeof getMemberPathFromIdentifier>[0],
+        bindings.paramName,
+      );
+      if (path && path.length === 1 && path[0]) {
+        return path[0];
+      }
+    }
+  } else {
+    if (t.type === "Identifier" && typeof t.name === "string") {
+      return bindings.bindings.get(t.name) ?? null;
+    }
   }
 
   return null;

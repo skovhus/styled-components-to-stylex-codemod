@@ -3,6 +3,8 @@
  * Core concepts: adapter hooks and test-specific resolution.
  */
 import {
+  type CallResolveContext,
+  type CallResolveResult,
   defineAdapter,
   type ExternalInterfaceResult,
   type ResolveValueContext,
@@ -222,26 +224,12 @@ export const fixtureAdapter = defineAdapter({
       throw new Error(`Unknown helper: ${src} ${ctx.calleeImportedName}`);
     }
 
+    if (ctx.calleeImportedName === "truncateMultiline") {
+      return resolveParameterizedHelperCall(ctx, "helpers.truncateMultiline", "helpers");
+    }
+
     if (ctx.calleeImportedName === "scrollFadeMaskStyles") {
-      const argsStr = ctx.args
-        .map((a) =>
-          a.kind === "literal"
-            ? typeof a.value === "string"
-              ? JSON.stringify(a.value)
-              : String(a.value)
-            : "undefined",
-        )
-        .join(", ");
-      return {
-        usage: "props",
-        expr: `scrollFadeMaskStyles(${argsStr})`,
-        imports: [
-          {
-            from: { kind: "specifier", value: "./lib/helpers.stylex" },
-            names: [{ imported: "scrollFadeMaskStyles" }],
-          },
-        ],
-      };
+      return resolveParameterizedHelperCall(ctx, "scrollFadeMaskStyles", "scrollFadeMaskStyles");
     }
 
     // Map helper names to their CSS text for pseudo-selector expansion
@@ -433,6 +421,36 @@ export const fixtureAdapter = defineAdapter({
     return undefined;
   },
 });
+
+/**
+ * Shared helper for parameterized helpers that return StyleX style objects.
+ * Formats call args into a literal expression string and returns a "props" usage result.
+ */
+function resolveParameterizedHelperCall(
+  ctx: CallResolveContext,
+  exprTemplate: string,
+  importName: string,
+): CallResolveResult {
+  const argsStr = ctx.args
+    .map((a) =>
+      a.kind === "literal"
+        ? typeof a.value === "string"
+          ? JSON.stringify(a.value)
+          : String(a.value)
+        : "undefined",
+    )
+    .join(", ");
+  return {
+    usage: "props",
+    expr: `${exprTemplate}(${argsStr})`,
+    imports: [
+      {
+        from: { kind: "specifier", value: "./lib/helpers.stylex" },
+        names: [{ imported: importName }],
+      },
+    ],
+  };
+}
 
 function customResolveValue(ctx: ResolveValueContext): ResolveValueResult | undefined {
   if (ctx.kind !== "theme") {
