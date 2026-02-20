@@ -1331,6 +1331,13 @@ export class WrapperEmitter {
     return vc.makeConditionalStyleExpr(this.j, args);
   }
 
+  buildExtraStylexPropsExprs(args: {
+    entries: ReadonlyArray<{ when?: string; expr: ExpressionKind }>;
+    destructureProps?: string[];
+  }): ExpressionKind[] {
+    return vc.buildExtraStylexPropsExprs(this.j, args);
+  }
+
   private literalExpr(value: unknown): ExpressionKind {
     return jb.literalExpr(this.j, value);
   }

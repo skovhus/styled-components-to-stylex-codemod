@@ -2,6 +2,7 @@
  * Built-in resolution handlers for dynamic interpolations.
  * Core concepts: adapter hooks, conditional splitting, and StyleX emission.
  */
+import type { CallResolveContext } from "../adapter.js";
 import {
   getArrowFnParamBindings,
   getArrowFnSingleParamName,
@@ -11,6 +12,7 @@ import {
   isArrowFunctionExpression,
   isCallExpressionNode,
   isLogicalExpressionNode,
+  literalToStaticValue,
   resolveIdentifierToPropName,
 } from "./utilities/jscodeshift-utils.js";
 import { sanitizeIdentifier } from "./utilities/string-utils.js";
@@ -20,6 +22,7 @@ import {
   buildResolvedHandlerResult,
   buildUnresolvedHelperResult,
   getArrowFnThemeParamInfo,
+  isAdapterResultCssValue,
   resolveImportedHelperCall,
   tryResolveCallExpression,
 } from "./builtin-handlers/resolver-utils.js";
@@ -51,6 +54,7 @@ export function resolveDynamicNode(
     tryResolveThemeAccess(node, ctx) ??
     tryResolveCallExpression(node, ctx) ??
     tryResolveArrowFnHelperCallWithThemeArg(node, ctx) ??
+    tryResolveArrowFnCallWithConditionalArgs(node, ctx) ??
     tryResolveConditionalValue(node, ctx) ??
     tryResolveIndexedThemeWithPropFallback(node, ctx) ??
     tryResolveConditionalCssBlockTernary(node, ctx) ??
@@ -157,6 +161,248 @@ function tryResolveArrowFnHelperCallWithThemeArg(
 
   if (simple.kind === "unresolved") {
     return buildUnresolvedHelperResult(body.callee, ctx);
+  }
+
+  return null;
+}
+
+/**
+ * Handles arrow functions whose body is a call expression with one conditional argument.
+ *
+ * Pattern: `({ $oneLine }) => truncateMultiline($oneLine ? 1 : 2)`
+ *
+ * The conditional argument must have a prop-based test and literal branches.
+ * All other arguments must be literals. Each branch is resolved independently
+ * via the adapter's resolveCall, and the result is split into conditional variants.
+ */
+function tryResolveArrowFnCallWithConditionalArgs(
+  node: DynamicNode,
+  ctx: InternalHandlerContext,
+): HandlerResult | null {
+  const expr = node.expr;
+  if (!isArrowFunctionExpression(expr)) {
+    return null;
+  }
+
+  const body = getFunctionBodyExpr(expr);
+  if (!isCallExpressionNode(body)) {
+    return null;
+  }
+
+  const callee = body.callee as { type?: string; name?: string } | undefined;
+  if (!callee || callee.type !== "Identifier" || typeof callee.name !== "string") {
+    return null;
+  }
+  const calleeIdent = callee.name;
+
+  const bindings = getArrowFnParamBindings(expr);
+  if (!bindings) {
+    return null;
+  }
+
+  // Inspect arguments: exactly one must be a ConditionalExpression with
+  // a prop-based test and literal branches; remaining args must be literals.
+  const args = body.arguments ?? [];
+  if (args.length === 0) {
+    return null;
+  }
+
+  let conditionalArgIndex = -1;
+  let propName: string | null = null;
+  let consequentValue: StaticLiteralValue | undefined;
+  let alternateValue: StaticLiteralValue | undefined;
+  // Pre-resolved static values for non-conditional args (avoids callArgFromNode mismatch
+  // with literalToStaticValue, which handles TemplateLiterals/TaggedTemplateExpressions/etc.)
+  const staticArgValues = new Map<number, StaticLiteralValue>();
+
+  for (let i = 0; i < args.length; i++) {
+    const arg = args[i] as
+      | { type?: string; test?: unknown; consequent?: unknown; alternate?: unknown }
+      | undefined;
+    if (!arg) {
+      continue;
+    }
+
+    if (arg.type === "ConditionalExpression") {
+      // Only one conditional arg is supported
+      if (conditionalArgIndex !== -1) {
+        return null;
+      }
+      conditionalArgIndex = i;
+
+      // Extract prop name from the conditional test
+      propName = extractPropNameFromCondTest(arg.test, bindings);
+      if (!propName) {
+        return null;
+      }
+
+      // Bail if the conditional test depends on `theme` — styled-components theme
+      // context is not a regular component prop and is unavailable after migration.
+      if (propName === "theme") {
+        return null;
+      }
+
+      // Bail if the prop has a destructured default — the emitted `when` condition
+      // tests truthiness of the *runtime* prop value, which would be the default
+      // when omitted, silently changing branch selection.
+      if (
+        bindings.kind === "destructured" &&
+        bindings.defaults &&
+        bindings.defaults.has(propName)
+      ) {
+        return null;
+      }
+
+      // Both branches must be static literals (use extractStaticLiteralValue
+      // to distinguish null literals from extraction failure)
+      consequentValue = extractStaticLiteralValue(arg.consequent);
+      alternateValue = extractStaticLiteralValue(arg.alternate);
+      if (consequentValue === undefined || alternateValue === undefined) {
+        return null;
+      }
+    } else {
+      // Non-conditional args must be static literals
+      const v = extractStaticLiteralValue(arg);
+      if (v === undefined) {
+        return null;
+      }
+      staticArgValues.set(i, v);
+    }
+  }
+
+  if (
+    conditionalArgIndex === -1 ||
+    !propName ||
+    consequentValue === undefined ||
+    alternateValue === undefined
+  ) {
+    return null;
+  }
+
+  // Resolve the callee's import
+  const imp = ctx.resolveImport(calleeIdent, callee);
+  if (!imp) {
+    return null;
+  }
+
+  // Build a CallResolveContext for each branch, replacing the conditional arg
+  // with the branch's literal value and using pre-resolved values for other args.
+  const consValue = consequentValue;
+  const altValue = alternateValue;
+  const buildBranchContext = (branchValue: StaticLiteralValue): CallResolveContext => {
+    const syntheticArgs: CallResolveContext["args"] = args.map((_arg, i) => {
+      if (i === conditionalArgIndex) {
+        return { kind: "literal" as const, value: branchValue };
+      }
+      const v = staticArgValues.get(i);
+      return v !== undefined
+        ? { kind: "literal" as const, value: v }
+        : { kind: "unknown" as const };
+    });
+
+    const loc = body.loc?.start;
+    return {
+      callSiteFilePath: ctx.filePath,
+      calleeImportedName: imp.importedName,
+      calleeSource: imp.source,
+      args: syntheticArgs,
+      ...(loc ? { loc: { line: loc.line, column: loc.column } } : {}),
+      ...(node.css.property ? { cssProperty: node.css.property } : {}),
+    };
+  };
+
+  const consResult = ctx.resolveCall(buildBranchContext(consValue));
+  if (!consResult) {
+    return null;
+  }
+
+  const altResult = ctx.resolveCall(buildBranchContext(altValue));
+  if (!altResult) {
+    return null;
+  }
+
+  // Both branches must agree on usage type
+  const consIsCss = isAdapterResultCssValue(consResult, node.css.property);
+  const altIsCss = isAdapterResultCssValue(altResult, node.css.property);
+  if (consIsCss !== altIsCss) {
+    return null;
+  }
+
+  const variants = [
+    { nameHint: "truthy", when: propName, expr: consResult.expr, imports: consResult.imports },
+    {
+      nameHint: "falsy",
+      when: `!${propName}`,
+      expr: altResult.expr,
+      imports: altResult.imports,
+    },
+  ];
+
+  return consIsCss
+    ? { type: "splitVariantsResolvedValue", variants }
+    : { type: "splitVariantsResolvedStyles", variants };
+}
+
+type StaticLiteralValue = string | number | boolean | null;
+
+/**
+ * Extracts a static literal value from an AST node, distinguishing null literals
+ * from extraction failure. Returns `undefined` when the node is not a recognized
+ * static literal, and the actual value (including `null`) otherwise.
+ */
+function extractStaticLiteralValue(node: unknown): StaticLiteralValue | undefined {
+  if (!node || typeof node !== "object") {
+    return undefined;
+  }
+  const type = (node as { type?: string }).type;
+  // Reject function-like nodes — literalToStaticValue coerces zero-arg arrows
+  // to their body's value, but helper call arguments should not undergo that
+  // transformation (the original code passes a function, not a primitive).
+  if (type === "ArrowFunctionExpression" || type === "FunctionExpression") {
+    return undefined;
+  }
+  // Handle NullLiteral and Literal-with-null-value explicitly since
+  // literalToStaticValue uses null as its failure sentinel.
+  if (type === "NullLiteral") {
+    return null;
+  }
+  if (type === "Literal" && (node as { value?: unknown }).value === null) {
+    return null;
+  }
+  const v = literalToStaticValue(node);
+  return v !== null ? v : undefined;
+}
+
+/**
+ * Extracts the prop name from a conditional expression's test node.
+ *
+ * Supports:
+ * - Simple param: `props.$oneLine` → `$oneLine`
+ * - Destructured param: `$oneLine` (identifier) → `$oneLine`
+ */
+function extractPropNameFromCondTest(
+  test: unknown,
+  bindings: ReturnType<typeof getArrowFnParamBindings>,
+): string | null {
+  if (!test || typeof test !== "object" || !bindings) {
+    return null;
+  }
+
+  // Destructured params: resolveIdentifierToPropName handles the binding lookup
+  const resolved = resolveIdentifierToPropName(test, bindings);
+  if (resolved !== null) {
+    return resolved;
+  }
+
+  // Simple param: extract prop from member expression like `props.$oneLine`
+  if (bindings.kind === "simple" && (test as { type?: string }).type === "MemberExpression") {
+    const path = getMemberPathFromIdentifier(
+      test as Parameters<typeof getMemberPathFromIdentifier>[0],
+      bindings.paramName,
+    );
+    if (path && path.length === 1 && path[0]) {
+      return path[0];
+    }
   }
 
   return null;
