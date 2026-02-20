@@ -270,7 +270,6 @@ export function emitShouldForwardPropWrappers(ctx: EmitIntrinsicContext): void {
       styleArgs.push(
         ...emitter.buildExtraStylexPropsExprs({
           entries: d.extraStylexPropsArgs,
-          propDefaults,
         }),
       );
     }

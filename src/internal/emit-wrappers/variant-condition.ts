@@ -7,7 +7,7 @@
  * for stylex.props().
  */
 import type { JSCodeshift } from "jscodeshift";
-import type { ExpressionKind, WrapperPropDefaults } from "./types.js";
+import type { ExpressionKind } from "./types.js";
 
 export type LogicalExpressionOperand = Parameters<JSCodeshift["logicalExpression"]>[1];
 
@@ -238,10 +238,9 @@ export function buildExtraStylexPropsExprs(
   args: {
     entries: ReadonlyArray<{ when?: string; expr: ExpressionKind }>;
     destructureProps?: string[];
-    propDefaults?: WrapperPropDefaults;
   },
 ): ExpressionKind[] {
-  const { entries, destructureProps, propDefaults } = args;
+  const { entries, destructureProps } = args;
   const result: ExpressionKind[] = [];
   const consumed = new Set<number>();
 
@@ -262,8 +261,7 @@ export function buildExtraStylexPropsExprs(
       consumed.add(complementIndex);
       const other = entries[complementIndex]!;
       const positiveWhenRaw = getPositiveWhen(entry.when, other.when!)!;
-      const positiveWhen = maybeSimplifyTruthyDefaultWhen(positiveWhenRaw, propDefaults);
-      const { cond } = collectConditionProps(j, { when: positiveWhen, destructureProps });
+      const { cond } = collectConditionProps(j, { when: positiveWhenRaw, destructureProps });
 
       const isEntryPositive = areEquivalentWhen(entry.when, positiveWhenRaw);
       const trueExpr = isEntryPositive ? entry.expr : other.expr;
@@ -336,49 +334,28 @@ function getPositiveWhen(whenA: string, whenB: string): string | null {
   return null;
 }
 
-function maybeSimplifyTruthyDefaultWhen(
-  when: string,
-  propDefaults: WrapperPropDefaults | undefined,
-): string {
-  if (!propDefaults) {
-    return when;
-  }
-  const propName = extractTruthyDefaultPropName(when);
-  if (!propName) {
-    return when;
-  }
-  const existingDefault = propDefaults.get(propName);
-  if (existingDefault !== undefined && existingDefault !== true) {
-    return when;
-  }
-  propDefaults.set(propName, true);
-  return propName;
-}
-
-function extractTruthyDefaultPropName(when: string): string | null {
-  const normalized = normalizeWhenForComparison(when);
-  const directMatch = normalized.match(/^([A-Za-z_$][0-9A-Za-z_$]*)===undefined\|\|\1$/);
-  if (directMatch?.[1]) {
-    return directMatch[1];
-  }
-  const reverseMatch = normalized.match(/^([A-Za-z_$][0-9A-Za-z_$]*)\|\|\1===undefined$/);
-  if (reverseMatch?.[1]) {
-    return reverseMatch[1];
-  }
-  return null;
-}
-
 function areEquivalentWhen(left: string, right: string): boolean {
   return normalizeWhenForComparison(left) === normalizeWhenForComparison(right);
 }
 
 function isNegationOf(candidate: string, base: string): boolean {
   const candidateNormalized = normalizeWhenForComparison(candidate);
-  if (!candidateNormalized.startsWith("!")) {
+  const baseNormalized = normalizeWhenForComparison(base);
+
+  // Allow bare negation only for atomic expressions like `foo` or `props.foo`.
+  if (isAtomicWhenExpression(baseNormalized) && candidateNormalized === `!${baseNormalized}`) {
+    return true;
+  }
+
+  // For compound expressions, require grouped negation: `!(a || b)`.
+  if (!candidateNormalized.startsWith("!(") || !candidateNormalized.endsWith(")")) {
     return false;
   }
-  const inner = normalizeWhenForComparison(candidateNormalized.slice(1));
-  const baseNormalized = normalizeWhenForComparison(base);
+  const grouped = candidateNormalized.slice(1);
+  if (!hasEnclosingParens(grouped)) {
+    return false;
+  }
+  const inner = normalizeWhenForComparison(candidateNormalized.slice(2, -1));
   return inner === baseNormalized;
 }
 
@@ -415,4 +392,8 @@ function hasEnclosingParens(expr: string): boolean {
     }
   }
   return depth === 0;
+}
+
+function isAtomicWhenExpression(expr: string): boolean {
+  return /^[A-Za-z_$][0-9A-Za-z_$]*(?:\.[A-Za-z_$][0-9A-Za-z_$]*)*$/.test(expr);
 }
