@@ -1,0 +1,1 @@
+import{R as i,j as a}from"./index-gYMuu76N.js";const o={div:i.forwardRef((r,s)=>a.jsx("div",{ref:s,...r}))};function d({className:r,style:s,size:t="regular",user:e}){return a.jsx("div",{className:r,style:s,children:a.jsxs("span",{children:[e," (",t,")"]})})}export{d as U,o as m};
