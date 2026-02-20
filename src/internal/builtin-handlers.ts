@@ -382,21 +382,20 @@ function extractPropNameFromCondTest(
     return null;
   }
 
-  const t = test as { type?: string; name?: string };
+  // Destructured params: resolveIdentifierToPropName handles the binding lookup
+  const resolved = resolveIdentifierToPropName(test, bindings);
+  if (resolved !== null) {
+    return resolved;
+  }
 
-  if (bindings.kind === "simple") {
-    if (t.type === "MemberExpression") {
-      const path = getMemberPathFromIdentifier(
-        test as Parameters<typeof getMemberPathFromIdentifier>[0],
-        bindings.paramName,
-      );
-      if (path && path.length === 1 && path[0]) {
-        return path[0];
-      }
-    }
-  } else {
-    if (t.type === "Identifier" && typeof t.name === "string") {
-      return bindings.bindings.get(t.name) ?? null;
+  // Simple param: extract prop from member expression like `props.$oneLine`
+  if (bindings.kind === "simple" && (test as { type?: string }).type === "MemberExpression") {
+    const path = getMemberPathFromIdentifier(
+      test as Parameters<typeof getMemberPathFromIdentifier>[0],
+      bindings.paramName,
+    );
+    if (path && path.length === 1 && path[0]) {
+      return path[0];
     }
   }
 
