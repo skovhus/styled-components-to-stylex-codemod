@@ -258,6 +258,9 @@ export function processDeclRules(ctx: DeclProcessingState): void {
       const isHandledComponentPattern =
         hasComponentExpr && // Pattern 1: `__SC_EXPR_N__:pseudo &` — descendant combinator only (space, no +~>)
         (/^__SC_EXPR_\d+__:[a-z][a-z0-9()-]*\s+&\s*$/.test(selectorTrimmed) ||
+          // Pattern 1b: comma-separated reverse selectors where each part matches Pattern 1
+          // e.g., `__SC_EXPR_0__:focus-visible &, __SC_EXPR_1__:active &`
+          isCommaGroupedReverseSelectorPattern(selectorTrimmed) ||
           // Pattern 2: starts with & (forward descendant/pseudo pattern)
           selectorTrimmed.startsWith("&") ||
           // Pattern 3: standalone component selector `${Child} { ... }`
@@ -356,19 +359,37 @@ export function processDeclRules(ctx: DeclProcessingState): void {
       // and the referenced component is the ancestor.
       //
       // The selector MUST be: `__SC_EXPR_N__:pseudo <space> &` (descendant combinator only).
-      // Reject non-descendant combinators like `+`, `~`, `>` (e.g., `${Link}:focus + &`),
-      // and reject grouped selectors (commas) since only a single pseudo can be captured.
+      // Reject non-descendant combinators like `+`, `~`, `>` (e.g., `${Link}:focus + &`).
+      //
+      // Also supports comma-grouped patterns like `${Link}:focus-visible &, ${Link}:active &`,
+      // where each part references the same component with a different pseudo — the same
+      // declarations are registered under multiple pseudo buckets.
       const isReverseSelectorPattern =
         selTrim2.startsWith("__SC_EXPR_") &&
-        !selTrim2.includes(",") &&
         /^__SC_EXPR_\d+__:[a-z][a-z0-9()-]*\s+&\s*$/.test(selTrim2);
-      if (otherLocal && !isCssHelperPlaceholder && isReverseSelectorPattern) {
-        // Extract the pseudo from the referenced component selector (e.g., `:hover` from `__SC_EXPR_0__:hover &`)
-        const reversePseudoMatch = rule.selector.match(/__SC_EXPR_\d+__(:[a-z-]+(?:\([^)]*\))?)/i);
-        const ancestorPseudo: string | null = reversePseudoMatch?.[1] ?? null;
-
+      const isGroupedReverseSelectorPattern =
+        !isReverseSelectorPattern &&
+        selTrim2.startsWith("__SC_EXPR_") &&
+        isCommaGroupedReverseSelectorPattern(selTrim2);
+      if (
+        otherLocal &&
+        !isCssHelperPlaceholder &&
+        (isReverseSelectorPattern || isGroupedReverseSelectorPattern)
+      ) {
         const parentDecl = declByLocalName.get(otherLocal);
         if (!parentDecl) {
+          state.markBail();
+          warnings.push({
+            severity: "warning",
+            type: "Unsupported selector: unknown component selector",
+            loc: computeSelectorWarningLoc(decl.loc, decl.rawCss, rule.selector),
+          });
+          break;
+        }
+
+        // Extract all ancestor pseudos (one per comma-separated part)
+        const ancestorPseudos = extractReverseSelectorPseudos(rule.selector);
+        if (ancestorPseudos.length === 0) {
           state.markBail();
           warnings.push({
             severity: "warning",
@@ -382,11 +403,12 @@ export function processDeclRules(ctx: DeclProcessingState): void {
         const overrideStyleKey = `${toStyleKey(decl.localName)}In${otherLocal}`;
         ancestorSelectorParents.add(parentDecl.styleKey);
 
-        const bucket = getOrCreateRelationOverrideBucket(
+        // Process declarations once, then register into each pseudo bucket
+        const firstBucket = getOrCreateRelationOverrideBucket(
           overrideStyleKey,
           parentDecl.styleKey,
           decl.styleKey,
-          ancestorPseudo,
+          ancestorPseudos[0]!,
           relationOverrides,
           relationOverridePseudoBuckets,
           decl.extraStyleKeys,
@@ -394,7 +416,7 @@ export function processDeclRules(ctx: DeclProcessingState): void {
 
         const result = processDeclarationsIntoBucket(
           rule,
-          bucket,
+          firstBucket,
           j,
           decl,
           resolveThemeValue,
@@ -409,6 +431,20 @@ export function processDeclRules(ctx: DeclProcessingState): void {
             loc: computeSelectorWarningLoc(decl.loc, decl.rawCss, rule.selector),
           });
           break;
+        }
+
+        // Copy declarations into remaining pseudo buckets
+        for (let i = 1; i < ancestorPseudos.length; i++) {
+          const bucket = getOrCreateRelationOverrideBucket(
+            overrideStyleKey,
+            parentDecl.styleKey,
+            decl.styleKey,
+            ancestorPseudos[i]!,
+            relationOverrides,
+            relationOverridePseudoBuckets,
+            decl.extraStyleKeys,
+          );
+          Object.assign(bucket, firstBucket);
         }
 
         continue;
@@ -1433,4 +1469,52 @@ function extractCssTextFromNode(node: unknown): string | null {
     return (n.quasis ?? []).map((q) => q.value?.raw ?? "").join("");
   }
   return null;
+}
+
+/** Reverse selector pattern for a single part: `__SC_EXPR_N__:pseudo &` */
+const REVERSE_SELECTOR_PART_RE = /^__SC_EXPR_\d+__:[a-z][a-z0-9()-]*\s+&$/;
+
+/**
+ * Checks if a comma-separated selector has all parts matching the reverse
+ * component selector pattern (`__SC_EXPR_N__:pseudo &`). Different slot IDs
+ * are allowed since Stylis assigns each `${Component}` reference its own slot.
+ *
+ * Example: `__SC_EXPR_0__:focus-visible &, __SC_EXPR_1__:active &`
+ */
+function isCommaGroupedReverseSelectorPattern(selector: string): boolean {
+  if (!selector.includes(",")) {
+    return false;
+  }
+  const parts = selector.split(",").map((p) => p.trim());
+  if (parts.length < 2) {
+    return false;
+  }
+  // All parts must match the reverse selector pattern.
+  // Different slot IDs are allowed since each `${Component}` reference in the
+  // template gets its own slot, even when they reference the same local variable.
+  for (const part of parts) {
+    if (!REVERSE_SELECTOR_PART_RE.test(part)) {
+      return false;
+    }
+  }
+  return true;
+}
+
+/**
+ * Extracts all pseudo-classes from a (possibly comma-separated) reverse
+ * component selector. Each part is expected to match `__SC_EXPR_N__:pseudo &`.
+ *
+ * Returns e.g. [":focus-visible", ":active"] for
+ * `__SC_EXPR_0__:focus-visible &, __SC_EXPR_0__:active &`.
+ */
+function extractReverseSelectorPseudos(selector: string): string[] {
+  const parts = selector.split(",").map((p) => p.trim());
+  const pseudos: string[] = [];
+  for (const part of parts) {
+    const match = part.match(/__SC_EXPR_\d+__(:[a-z-]+(?:\([^)]*\))?)/i);
+    if (match?.[1]) {
+      pseudos.push(match[1]);
+    }
+  }
+  return pseudos;
 }

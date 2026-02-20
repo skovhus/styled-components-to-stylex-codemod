@@ -14,6 +14,7 @@ import {
   isLogicalExpressionNode,
   literalToStaticValue,
   resolveIdentifierToPropName,
+  unwrapLogicalFallback,
 } from "./utilities/jscodeshift-utils.js";
 import { sanitizeIdentifier } from "./utilities/string-utils.js";
 import { hasThemeAccessInArrowFn } from "./lower-rules/inline-styles.js";
@@ -85,24 +86,15 @@ function tryResolveThemeAccess(
   if (!info) {
     return null;
   }
-  const body = expr.body;
-  if (body.type !== "MemberExpression") {
+  // Extract the theme member expression from the body.
+  // Handles both direct member access (`props.theme.X`) and logical fallback
+  // patterns (`props.theme.X ?? "default"` / `props.theme.X || "default"`).
+  // The fallback is safe to discard because StyleX theme tokens are always defined.
+  const themeExpr = extractThemeMemberExpression(expr.body);
+  if (!themeExpr) {
     return null;
   }
-  const path = (() => {
-    if (info.kind === "propsParam") {
-      const parts = getMemberPathFromIdentifier(body, info.propsName);
-      if (!parts || parts[0] !== "theme") {
-        return null;
-      }
-      return parts.slice(1).join(".");
-    }
-    const parts = getMemberPathFromIdentifier(body, info.themeName);
-    if (!parts) {
-      return null;
-    }
-    return parts.join(".");
-  })();
+  const path = extractThemePath(themeExpr, info);
   if (!path) {
     return null;
   }
@@ -111,12 +103,65 @@ function tryResolveThemeAccess(
     kind: "theme",
     path,
     filePath: ctx.filePath,
-    loc: getNodeLocStart(body) ?? undefined,
+    loc: getNodeLocStart(themeExpr) ?? undefined,
   });
   if (!res) {
     return null;
   }
   return { type: "resolvedValue", expr: res.expr, imports: res.imports };
+}
+
+/**
+ * Extracts the theme member expression from an arrow function body.
+ *
+ * Supports:
+ * - Direct: `props.theme.color.labelBase` (MemberExpression)
+ * - Logical fallback: `props.theme.color.labelBase ?? "black"` or `|| "default"`
+ *   (LogicalExpression with `??` or `||` and theme access on the left)
+ *
+ * Returns the MemberExpression node, or null if the pattern doesn't match.
+ * The fallback (right side of `??`/`||`) is safe to discard because StyleX theme
+ * tokens are always defined.
+ */
+function extractThemeMemberExpression(body: unknown): { type: "MemberExpression" } | null {
+  if (!body || typeof body !== "object") {
+    return null;
+  }
+  // Try unwrapping logical fallback (e.g., `theme.X ?? "default"`)
+  const unwrapped = unwrapLogicalFallback(body);
+  if (unwrapped && (unwrapped as { type?: string }).type === "MemberExpression") {
+    return unwrapped as { type: "MemberExpression" };
+  }
+  // Direct member expression
+  if ((body as { type?: string }).type === "MemberExpression") {
+    return body as { type: "MemberExpression" };
+  }
+  return null;
+}
+
+/**
+ * Extracts the theme path (e.g., "color.labelBase") from a member expression,
+ * accounting for whether the arrow function uses `props.theme.X` or `{ theme }` destructuring.
+ */
+function extractThemePath(
+  memberExpr: { type: "MemberExpression" },
+  info: ReturnType<typeof getArrowFnThemeParamInfo> & {},
+): string | null {
+  // getMemberPathFromIdentifier performs duck-typed AST traversal; the runtime
+  // type check in extractThemeMemberExpression guarantees this is a MemberExpression.
+  const exprAsAny = memberExpr as Parameters<typeof getMemberPathFromIdentifier>[0];
+  if (info.kind === "propsParam") {
+    const parts = getMemberPathFromIdentifier(exprAsAny, info.propsName);
+    if (!parts || parts[0] !== "theme") {
+      return null;
+    }
+    return parts.slice(1).join(".");
+  }
+  const parts = getMemberPathFromIdentifier(exprAsAny, info.themeName);
+  if (!parts) {
+    return null;
+  }
+  return parts.join(".");
 }
 
 function tryResolveArrowFnHelperCallWithThemeArg(

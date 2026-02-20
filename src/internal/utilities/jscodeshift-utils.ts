@@ -604,6 +604,26 @@ export function isLogicalExpressionNode(
 }
 
 /**
+ * Extracts the left side of a `??` or `||` logical expression when it's a
+ * MemberExpression or OptionalMemberExpression. Returns null if the pattern
+ * doesn't match.
+ *
+ * Used to strip fallback values from theme access patterns like
+ * `props.theme.color.labelBase ?? "black"`, because StyleX theme tokens
+ * are always defined so the fallback is safe to discard.
+ */
+export function unwrapLogicalFallback(expr: unknown): unknown {
+  if (
+    isLogicalExpressionNode(expr) &&
+    (expr.operator === "??" || expr.operator === "||") &&
+    isMemberOrOptionalMemberExpression(expr.left)
+  ) {
+    return expr.left;
+  }
+  return null;
+}
+
+/**
  * Type guard for ConditionalExpression nodes.
  */
 export function isConditionalExpressionNode(node: unknown): node is {
@@ -675,4 +695,14 @@ function isJsxIdentifierNode(node: unknown): node is { type: "JSXIdentifier"; na
   }
   const typed = node as { type?: unknown; name?: unknown };
   return typed.type === "JSXIdentifier" && typeof typed.name === "string";
+}
+
+function isMemberOrOptionalMemberExpression(
+  node: unknown,
+): node is { type: "MemberExpression" | "OptionalMemberExpression" } {
+  if (!node || typeof node !== "object") {
+    return false;
+  }
+  const t = (node as { type?: string }).type;
+  return t === "MemberExpression" || t === "OptionalMemberExpression";
 }

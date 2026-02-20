@@ -6,6 +6,7 @@ import {
   getFunctionBodyExpr,
   getMemberPathFromIdentifier,
   getNodeLocStart,
+  unwrapLogicalFallback,
 } from "../utilities/jscodeshift-utils.js";
 import type { LowerRulesState } from "./state.js";
 
@@ -75,7 +76,10 @@ export function createThemeResolvers(
     if (!bodyExpr) {
       return null;
     }
-    const direct = resolveThemeValue(bodyExpr);
+    // Handle logical fallback patterns: `props.theme.X ?? "default"` / `|| "default"`.
+    // The fallback is safe to discard because StyleX theme tokens are always defined.
+    const themeAccessExpr = unwrapLogicalFallback(bodyExpr) ?? bodyExpr;
+    const direct = resolveThemeValue(themeAccessExpr);
     if (direct) {
       return direct;
     }
@@ -100,7 +104,7 @@ export function createThemeResolvers(
       }
       return cur;
     };
-    const unwrapped = unwrap(bodyExpr);
+    const unwrapped = unwrap(themeAccessExpr);
     if (
       !unwrapped ||
       (unwrapped.type !== "MemberExpression" && unwrapped.type !== "OptionalMemberExpression")
