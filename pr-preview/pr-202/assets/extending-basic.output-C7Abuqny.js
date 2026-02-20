@@ -1,0 +1,1 @@
+import{j as x}from"./index-7MIUcVpt.js";const o=()=>x.jsxs("div",{children:[x.jsx("button",{className:"x1c28xdg xrv4cvt xpzqqvo xauslqb xf1a5up xdh2fpr x1y0btm7 xwoz533 x18zih8k",children:"Normal Button"}),x.jsx("button",{className:"xrv4cvt xpzqqvo xauslqb xf1a5up xdh2fpr x1y0btm7 x18zih8k x1trkj60 x12r9gap",children:"Tomato Button"})]});export{o as App};
