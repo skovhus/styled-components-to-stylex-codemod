@@ -1,0 +1,1 @@
+import{j as x}from"./index-CRl13i-8.js";const s=()=>x.jsxs("a",{href:"#",className:"x78zum5 xe8ttls xd10qfp x1c28xdg x-default-marker",children:[x.jsx("span",{className:"x12ulsxz xdqyycr x1izue6a",children:"Label"}),"Hover me"]});export{s as App};
