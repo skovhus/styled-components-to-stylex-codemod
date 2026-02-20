@@ -66,7 +66,7 @@ export function resolveDynamicNode(
     tryResolveInlineStyleValueForNestedPropAccess(node) ??
     tryResolvePropAccess(node) ??
     tryResolveInlineStyleValueForConditionalExpression(node) ??
-    tryResolveInlineStyleValueForLogicalExpression(node) ??
+    tryResolveInlineStyleValueForLogicalExpression(node, ctx) ??
     tryResolveInlineStyleValueFromArrowFn(node)
   );
 }
@@ -528,7 +528,10 @@ function tryResolveInlineStyleValueForConditionalExpression(
   return { type: "emitInlineStyleValueFromProps" };
 }
 
-function tryResolveInlineStyleValueForLogicalExpression(node: DynamicNode): HandlerResult | null {
+function tryResolveInlineStyleValueForLogicalExpression(
+  node: DynamicNode,
+  ctx: InternalHandlerContext,
+): HandlerResult | null {
   // Conservative fallback for logical expressions (e.g., props.$delay ?? 0)
   // that we can preserve via a wrapper inline style.
   if (!node.css.property) {
@@ -546,20 +549,62 @@ function tryResolveInlineStyleValueForLogicalExpression(node: DynamicNode): Hand
   if (body.operator !== "??" && body.operator !== "||") {
     return null;
   }
-  // IMPORTANT: do not attempt to preserve `props.theme.*` via inline styles.
-  const paramName = getArrowFnSingleParamName(expr);
+
+  const unresolvedThemeFallbackReason =
+    "Theme value with fallback (props.theme.X ?? / || default) cannot be resolved statically — use adapter.resolveValue to map theme paths to StyleX tokens";
+
+  const themeInfo = getArrowFnThemeParamInfo(expr);
   const leftType = (body.left as { type?: string }).type;
-  const leftPath =
-    paramName && leftType === "MemberExpression"
-      ? getMemberPathFromIdentifier(body.left, paramName)
-      : null;
-  if (leftPath && leftPath[0] === "theme") {
+  const themePath = (() => {
+    if (leftType !== "MemberExpression" || !themeInfo) {
+      return null;
+    }
+
+    if (themeInfo.kind === "propsParam") {
+      const parts = getMemberPathFromIdentifier(body.left, themeInfo.propsName);
+      if (!parts || parts[0] !== "theme" || parts.length <= 1) {
+        return null;
+      }
+      return parts.slice(1).join(".");
+    }
+
+    const parts = getMemberPathFromIdentifier(body.left, themeInfo.themeName);
+    if (!parts || parts.length === 0) {
+      return null;
+    }
+    return parts.join(".");
+  })();
+
+  if (themePath) {
+    const fallbackValue = extractStaticLiteralValue(body.right);
+    const fallbackExpr =
+      fallbackValue === undefined || fallbackValue === null || typeof fallbackValue === "boolean"
+        ? null
+        : typeof fallbackValue === "string"
+          ? JSON.stringify(fallbackValue)
+          : String(fallbackValue);
+
+    if (!fallbackExpr) {
+      return { type: "keepOriginal", reason: unresolvedThemeFallbackReason };
+    }
+
+    const resolvedThemeValue = ctx.resolveValue({
+      kind: "theme",
+      path: themePath,
+      filePath: ctx.filePath,
+      loc: getNodeLocStart(body.left) ?? undefined,
+    });
+    if (!resolvedThemeValue) {
+      return { type: "keepOriginal", reason: unresolvedThemeFallbackReason };
+    }
+
     return {
-      type: "keepOriginal",
-      reason:
-        "Theme value with fallback (props.theme.X ?? / || default) cannot be resolved statically — use adapter.resolveValue to map theme paths to StyleX tokens",
+      type: "resolvedValue",
+      expr: `(${resolvedThemeValue.expr}) ${body.operator} ${fallbackExpr}`,
+      imports: resolvedThemeValue.imports,
     };
   }
+
   // Signal to the caller that we can preserve this declaration as an inline style
   return { type: "emitInlineStyleValueFromProps" };
 }
