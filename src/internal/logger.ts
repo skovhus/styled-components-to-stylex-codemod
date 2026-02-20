@@ -135,6 +135,22 @@ export class Logger {
   }
 
   /**
+   * Mark an Error instance as already logged so downstream catch blocks can skip it.
+   */
+  public static markErrorAsLogged(e: unknown): void {
+    if (e instanceof Error) {
+      Logger.loggedErrors.add(e);
+    }
+  }
+
+  /**
+   * Check whether an error was already logged via `markErrorAsLogged`.
+   */
+  public static isErrorLogged(e: unknown): boolean {
+    return e instanceof Error && Logger.loggedErrors.has(e);
+  }
+
+  /**
    * Log an error message to stdout with file path and optional location.
    * Formats like warnings: "Error filepath:line:column\nmessage"
    * Always prints regardless of file count.
@@ -181,6 +197,7 @@ export class Logger {
   public static _clearCollected(): void {
     Logger.collected = [];
     Logger.fileCount = null;
+    Logger.loggedErrors = new WeakSet<Error>();
   }
 
   // -- Internal state
@@ -188,6 +205,7 @@ export class Logger {
   private static collected: CollectedWarning[] = [];
   private static fileCount: number | null = null;
   private static maxExamples = 15;
+  private static loggedErrors = new WeakSet<Error>();
 
   private static writeWithSpacing(message: string, context?: unknown): void {
     const trimmed = message.replace(/\s+$/u, "");
