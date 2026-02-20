@@ -209,11 +209,11 @@ function tryResolveArrowFnCallWithConditionalArgs(
 
   let conditionalArgIndex = -1;
   let propName: string | null = null;
-  let consequentValue: string | number | boolean | null = null;
-  let alternateValue: string | number | boolean | null = null;
+  let consequentValue: StaticLiteralValue | undefined;
+  let alternateValue: StaticLiteralValue | undefined;
   // Pre-resolved static values for non-conditional args (avoids callArgFromNode mismatch
   // with literalToStaticValue, which handles TemplateLiterals/TaggedTemplateExpressions/etc.)
-  const staticArgValues = new Map<number, string | number | boolean>();
+  const staticArgValues = new Map<number, StaticLiteralValue>();
 
   for (let i = 0; i < args.length; i++) {
     const arg = args[i] as
@@ -236,6 +236,12 @@ function tryResolveArrowFnCallWithConditionalArgs(
         return null;
       }
 
+      // Bail if the conditional test depends on `theme` — styled-components theme
+      // context is not a regular component prop and is unavailable after migration.
+      if (propName === "theme") {
+        return null;
+      }
+
       // Bail if the prop has a destructured default — the emitted `when` condition
       // tests truthiness of the *runtime* prop value, which would be the default
       // when omitted, silently changing branch selection.
@@ -247,23 +253,29 @@ function tryResolveArrowFnCallWithConditionalArgs(
         return null;
       }
 
-      // Both branches must be static literals
-      consequentValue = literalToStaticValue(arg.consequent);
-      alternateValue = literalToStaticValue(arg.alternate);
-      if (consequentValue === null || alternateValue === null) {
+      // Both branches must be static literals (use extractStaticLiteralValue
+      // to distinguish null literals from extraction failure)
+      consequentValue = extractStaticLiteralValue(arg.consequent);
+      alternateValue = extractStaticLiteralValue(arg.alternate);
+      if (consequentValue === undefined || alternateValue === undefined) {
         return null;
       }
     } else {
       // Non-conditional args must be static literals
-      const v = literalToStaticValue(arg);
-      if (v === null) {
+      const v = extractStaticLiteralValue(arg);
+      if (v === undefined) {
         return null;
       }
       staticArgValues.set(i, v);
     }
   }
 
-  if (conditionalArgIndex === -1 || !propName) {
+  if (
+    conditionalArgIndex === -1 ||
+    !propName ||
+    consequentValue === undefined ||
+    alternateValue === undefined
+  ) {
     return null;
   }
 
@@ -275,9 +287,9 @@ function tryResolveArrowFnCallWithConditionalArgs(
 
   // Build a CallResolveContext for each branch, replacing the conditional arg
   // with the branch's literal value and using pre-resolved values for other args.
-  const buildBranchContext = (
-    branchValue: string | number | boolean | null,
-  ): CallResolveContext => {
+  const consValue = consequentValue;
+  const altValue = alternateValue;
+  const buildBranchContext = (branchValue: StaticLiteralValue): CallResolveContext => {
     const syntheticArgs: CallResolveContext["args"] = args.map((_arg, i) => {
       if (i === conditionalArgIndex) {
         return { kind: "literal" as const, value: branchValue };
@@ -299,12 +311,12 @@ function tryResolveArrowFnCallWithConditionalArgs(
     };
   };
 
-  const consResult = ctx.resolveCall(buildBranchContext(consequentValue));
+  const consResult = ctx.resolveCall(buildBranchContext(consValue));
   if (!consResult) {
     return null;
   }
 
-  const altResult = ctx.resolveCall(buildBranchContext(alternateValue));
+  const altResult = ctx.resolveCall(buildBranchContext(altValue));
   if (!altResult) {
     return null;
   }
@@ -329,6 +341,30 @@ function tryResolveArrowFnCallWithConditionalArgs(
   return consIsCss
     ? { type: "splitVariantsResolvedValue", variants }
     : { type: "splitVariantsResolvedStyles", variants };
+}
+
+type StaticLiteralValue = string | number | boolean | null;
+
+/**
+ * Extracts a static literal value from an AST node, distinguishing null literals
+ * from extraction failure. Returns `undefined` when the node is not a recognized
+ * static literal, and the actual value (including `null`) otherwise.
+ */
+function extractStaticLiteralValue(node: unknown): StaticLiteralValue | undefined {
+  if (!node || typeof node !== "object") {
+    return undefined;
+  }
+  const type = (node as { type?: string }).type;
+  // Handle NullLiteral and Literal-with-null-value explicitly since
+  // literalToStaticValue uses null as its failure sentinel.
+  if (type === "NullLiteral") {
+    return null;
+  }
+  if (type === "Literal" && (node as { value?: unknown }).value === null) {
+    return null;
+  }
+  const v = literalToStaticValue(node);
+  return v !== null ? v : undefined;
 }
 
 /**
