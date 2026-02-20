@@ -288,19 +288,12 @@ export function emitComponentWrappers(emitter: WrapperEmitter): {
 
     // Add adapter-resolved StyleX styles (emitted directly into stylex.props args).
     if (d.extraStylexPropsArgs) {
-      for (const extra of d.extraStylexPropsArgs) {
-        if (extra.when) {
-          const { cond, isBoolean } = emitter.collectConditionProps({
-            when: extra.when,
-            destructureProps,
-          });
-          styleArgs.push(
-            emitter.makeConditionalStyleExpr({ cond, expr: extra.expr as any, isBoolean }),
-          );
-        } else {
-          styleArgs.push(extra.expr as any);
-        }
-      }
+      styleArgs.push(
+        ...emitter.buildExtraStylexPropsExprs({
+          entries: d.extraStylexPropsArgs,
+          destructureProps,
+        }),
+      );
     }
 
     // Handle pseudo-alias selectors (e.g., &:${highlight})

@@ -13,8 +13,7 @@ function TitleText(props: TitleTextProps) {
     <div
       {...stylex.props(
         styles.titleText,
-        $oneLine ? helpers.truncateMultiline(1) : undefined,
-        !$oneLine && helpers.truncateMultiline(2),
+        $oneLine ? helpers.truncateMultiline(1) : helpers.truncateMultiline(2),
       )}
     >
       {children}

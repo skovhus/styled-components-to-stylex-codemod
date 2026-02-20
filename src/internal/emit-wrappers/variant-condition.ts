@@ -225,3 +225,107 @@ export function makeConditionalStyleExpr(
   }
   return j.conditionalExpression(cond, expr, j.identifier("undefined"));
 }
+
+/**
+ * Builds style expressions from extraStylexPropsArgs entries, merging
+ * complementary boolean condition pairs into single ternary expressions.
+ *
+ * Two entries with `when: "prop"` and `when: "!prop"` are merged into
+ * `prop ? trueExpr : falseExpr` instead of emitting separate conditionals.
+ */
+export function buildExtraStylexPropsExprs(
+  j: JSCodeshift,
+  args: {
+    entries: ReadonlyArray<{ when?: string; expr: ExpressionKind }>;
+    destructureProps?: string[];
+  },
+): ExpressionKind[] {
+  const { entries, destructureProps } = args;
+  const result: ExpressionKind[] = [];
+  const consumed = new Set<number>();
+
+  for (let i = 0; i < entries.length; i++) {
+    if (consumed.has(i)) {
+      continue;
+    }
+    const entry = entries[i]!;
+
+    if (!entry.when) {
+      result.push(entry.expr);
+      continue;
+    }
+
+    // Look for a complementary entry to merge into a single ternary
+    const complementIndex = findComplementaryEntry(entries, i, consumed);
+    if (complementIndex !== null) {
+      consumed.add(complementIndex);
+      const other = entries[complementIndex]!;
+      const positiveWhen = getPositiveWhen(entry.when, other.when!)!;
+      const { cond } = collectConditionProps(j, { when: positiveWhen, destructureProps });
+
+      const isEntryPositive = entry.when.trim() === positiveWhen;
+      const trueExpr = isEntryPositive ? entry.expr : other.expr;
+      const falseExpr = isEntryPositive ? other.expr : entry.expr;
+
+      result.push(j.conditionalExpression(cond, trueExpr, falseExpr));
+      continue;
+    }
+
+    // No complement found — emit standard conditional
+    const { cond, isBoolean } = collectConditionProps(j, {
+      when: entry.when,
+      destructureProps,
+    });
+    result.push(makeConditionalStyleExpr(j, { cond, expr: entry.expr, isBoolean }));
+  }
+
+  return result;
+}
+
+// --- Non-exported helpers ---
+
+/**
+ * Finds an unconsumed entry that has a complementary "when" condition
+ * to the entry at `index`. Returns the index if found, null otherwise.
+ */
+function findComplementaryEntry(
+  entries: ReadonlyArray<{ when?: string; expr: ExpressionKind }>,
+  index: number,
+  consumed: ReadonlySet<number>,
+): number | null {
+  const when = entries[index]?.when;
+  if (!when) {
+    return null;
+  }
+
+  for (let k = index + 1; k < entries.length; k++) {
+    if (consumed.has(k)) {
+      continue;
+    }
+    const otherWhen = entries[k]?.when;
+    if (!otherWhen) {
+      continue;
+    }
+    if (getPositiveWhen(when, otherWhen) !== null) {
+      return k;
+    }
+  }
+  return null;
+}
+
+/**
+ * If two "when" strings represent complementary conditions (e.g., "prop" and
+ * "!prop"), returns the positive (non-negated) condition string. Returns null
+ * otherwise.
+ */
+function getPositiveWhen(whenA: string, whenB: string): string | null {
+  const a = whenA.trim();
+  const b = whenB.trim();
+  if (b === `!${a}`) {
+    return a;
+  }
+  if (a === `!${b}`) {
+    return b;
+  }
+  return null;
+}

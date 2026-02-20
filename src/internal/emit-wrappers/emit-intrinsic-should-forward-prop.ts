@@ -265,16 +265,11 @@ export function emitShouldForwardPropWrappers(ctx: EmitIntrinsicContext): void {
 
     // Add adapter-resolved StyleX styles (emitted directly into stylex.props args).
     if (d.extraStylexPropsArgs) {
-      for (const extra of d.extraStylexPropsArgs) {
-        if (extra.when) {
-          const { cond, isBoolean } = emitter.collectConditionProps({ when: extra.when });
-          styleArgs.push(
-            emitter.makeConditionalStyleExpr({ cond, expr: extra.expr as any, isBoolean }),
-          );
-        } else {
-          styleArgs.push(extra.expr as any);
-        }
-      }
+      styleArgs.push(
+        ...emitter.buildExtraStylexPropsExprs({
+          entries: d.extraStylexPropsArgs,
+        }),
+      );
     }
 
     // Handle pseudo-alias selectors (e.g., &:${highlight})
