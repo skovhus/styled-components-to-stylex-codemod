@@ -3,11 +3,12 @@
 // createExternalInterface — scan consumer directories, return adapter callback + raw map
 import { execSync } from "node:child_process";
 import { readFileSync } from "node:fs";
+import { createRequire } from "node:module";
 import path from "node:path";
 
-import { ResolverFactory } from "oxc-resolver";
-
 import type { ExternalInterfaceContext, ExternalInterfaceResult } from "./adapter.js";
+
+const require = createRequire(import.meta.url);
 
 /**
  * Scans consumer code with `rg` to detect which styled-components are re-styled
@@ -264,7 +265,42 @@ function resolveReStyledDefinitions(
 type Resolve = (specifier: string, fromFile: string) => string | null;
 type CachedReader = (filePath: string) => string;
 
+const OPTIONAL_RESOLVER_DEPENDENCY = "oxc-resolver";
+const MISSING_RESOLVER_ERROR_MESSAGE = [
+  "[styled-components-to-stylex-codemod] createExternalInterface requires the optional dependency `oxc-resolver`.",
+  "Install it to enable external interface auto-detection:",
+  "  npm install oxc-resolver",
+  "  # or",
+  "  pnpm add oxc-resolver",
+].join("\n");
+
+interface OxcResolverResult {
+  error?: unknown;
+  path?: string;
+}
+
+interface OxcResolverInstance {
+  resolveFileSync(fromFilePath: string, specifier: string): OxcResolverResult;
+}
+
+interface OxcResolverOptions {
+  extensions: string[];
+  conditionNames: string[];
+  mainFields: string[];
+  extensionAlias: Record<string, string[]>;
+  tsconfig: "auto";
+}
+
+interface OxcResolverFactory {
+  new (options: OxcResolverOptions): OxcResolverInstance;
+}
+
+interface OxcResolverModule {
+  ResolverFactory?: OxcResolverFactory;
+}
+
 function createResolver(): Resolve {
+  const ResolverFactory = loadResolverFactory();
   const factory = new ResolverFactory({
     extensions: [".tsx", ".ts", ".jsx", ".js"],
     conditionNames: ["import", "types", "default"],
@@ -286,6 +322,38 @@ function createResolver(): Resolve {
     }
     return path.relative(process.cwd(), result.path);
   };
+}
+
+function loadResolverFactory(): OxcResolverFactory {
+  try {
+    const module = require(OPTIONAL_RESOLVER_DEPENDENCY) as OxcResolverModule;
+    if (typeof module.ResolverFactory !== "function") {
+      throw new Error(
+        `Invalid optional dependency \`${OPTIONAL_RESOLVER_DEPENDENCY}\`: missing \`ResolverFactory\` export.`,
+      );
+    }
+    return module.ResolverFactory;
+  } catch (error) {
+    if (isMissingModuleError(error, OPTIONAL_RESOLVER_DEPENDENCY)) {
+      process.stderr.write(`${MISSING_RESOLVER_ERROR_MESSAGE}\n`);
+      throw new Error(MISSING_RESOLVER_ERROR_MESSAGE, { cause: error });
+    }
+    throw error;
+  }
+}
+
+function isMissingModuleError(error: unknown, moduleName: string): boolean {
+  if (!(error instanceof Error)) {
+    return false;
+  }
+  const moduleError = error as Error & { code?: string };
+  if (moduleError.code !== "MODULE_NOT_FOUND") {
+    return false;
+  }
+  return (
+    moduleError.message.includes(`'${moduleName}'`) ||
+    moduleError.message.includes(`"${moduleName}"`)
+  );
 }
 
 interface ImportInfo {
