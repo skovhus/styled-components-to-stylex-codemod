@@ -9,14 +9,13 @@ type TitleTextProps = React.PropsWithChildren<{
 // Destructured default should preserve `undefined` semantics:
 // omitted $oneLine uses the default true branch.
 function TitleText(props: TitleTextProps) {
-  const { children, $oneLine } = props;
+  const { children, $oneLine = true } = props;
 
   return (
     <div
       {...stylex.props(
         styles.titleText,
-        $oneLine === undefined || $oneLine ? helpers.truncateMultiline(1) : undefined,
-        !($oneLine === undefined || $oneLine) && helpers.truncateMultiline(2),
+        $oneLine ? helpers.truncateMultiline(1) : helpers.truncateMultiline(2),
       )}
     >
       {children}

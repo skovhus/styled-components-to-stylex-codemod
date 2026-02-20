@@ -668,6 +668,7 @@ export function emitSimpleExportedIntrinsicWrappers(ctx: EmitIntrinsicContext): 
         ...emitter.buildExtraStylexPropsExprs({
           entries: d.extraStylexPropsArgs,
           destructureProps,
+          propDefaults,
         }),
       );
     }

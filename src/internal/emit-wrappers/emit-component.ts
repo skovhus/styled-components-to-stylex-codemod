@@ -292,6 +292,7 @@ export function emitComponentWrappers(emitter: WrapperEmitter): {
         ...emitter.buildExtraStylexPropsExprs({
           entries: d.extraStylexPropsArgs,
           destructureProps,
+          propDefaults,
         }),
       );
     }

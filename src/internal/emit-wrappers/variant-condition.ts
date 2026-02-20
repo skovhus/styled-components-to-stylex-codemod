@@ -7,7 +7,7 @@
  * for stylex.props().
  */
 import type { JSCodeshift } from "jscodeshift";
-import type { ExpressionKind } from "./types.js";
+import type { ExpressionKind, WrapperPropDefaults } from "./types.js";
 
 export type LogicalExpressionOperand = Parameters<JSCodeshift["logicalExpression"]>[1];
 
@@ -238,9 +238,10 @@ export function buildExtraStylexPropsExprs(
   args: {
     entries: ReadonlyArray<{ when?: string; expr: ExpressionKind }>;
     destructureProps?: string[];
+    propDefaults?: WrapperPropDefaults;
   },
 ): ExpressionKind[] {
-  const { entries, destructureProps } = args;
+  const { entries, destructureProps, propDefaults } = args;
   const result: ExpressionKind[] = [];
   const consumed = new Set<number>();
 
@@ -260,10 +261,11 @@ export function buildExtraStylexPropsExprs(
     if (complementIndex !== null) {
       consumed.add(complementIndex);
       const other = entries[complementIndex]!;
-      const positiveWhen = getPositiveWhen(entry.when, other.when!)!;
+      const positiveWhenRaw = getPositiveWhen(entry.when, other.when!)!;
+      const positiveWhen = maybeSimplifyTruthyDefaultWhen(positiveWhenRaw, propDefaults);
       const { cond } = collectConditionProps(j, { when: positiveWhen, destructureProps });
 
-      const isEntryPositive = entry.when.trim() === positiveWhen;
+      const isEntryPositive = areEquivalentWhen(entry.when, positiveWhenRaw);
       const trueExpr = isEntryPositive ? entry.expr : other.expr;
       const falseExpr = isEntryPositive ? other.expr : entry.expr;
 
@@ -325,11 +327,92 @@ function findComplementaryEntry(
 function getPositiveWhen(whenA: string, whenB: string): string | null {
   const a = whenA.trim();
   const b = whenB.trim();
-  if (b === `!${a}`) {
+  if (isNegationOf(b, a)) {
     return a;
   }
-  if (a === `!${b}`) {
+  if (isNegationOf(a, b)) {
     return b;
   }
   return null;
+}
+
+function maybeSimplifyTruthyDefaultWhen(
+  when: string,
+  propDefaults: WrapperPropDefaults | undefined,
+): string {
+  if (!propDefaults) {
+    return when;
+  }
+  const propName = extractTruthyDefaultPropName(when);
+  if (!propName) {
+    return when;
+  }
+  const existingDefault = propDefaults.get(propName);
+  if (existingDefault !== undefined && existingDefault !== true) {
+    return when;
+  }
+  propDefaults.set(propName, true);
+  return propName;
+}
+
+function extractTruthyDefaultPropName(when: string): string | null {
+  const normalized = normalizeWhenForComparison(when);
+  const directMatch = normalized.match(/^([A-Za-z_$][0-9A-Za-z_$]*)===undefined\|\|\1$/);
+  if (directMatch?.[1]) {
+    return directMatch[1];
+  }
+  const reverseMatch = normalized.match(/^([A-Za-z_$][0-9A-Za-z_$]*)\|\|\1===undefined$/);
+  if (reverseMatch?.[1]) {
+    return reverseMatch[1];
+  }
+  return null;
+}
+
+function areEquivalentWhen(left: string, right: string): boolean {
+  return normalizeWhenForComparison(left) === normalizeWhenForComparison(right);
+}
+
+function isNegationOf(candidate: string, base: string): boolean {
+  const candidateNormalized = normalizeWhenForComparison(candidate);
+  if (!candidateNormalized.startsWith("!")) {
+    return false;
+  }
+  const inner = normalizeWhenForComparison(candidateNormalized.slice(1));
+  const baseNormalized = normalizeWhenForComparison(base);
+  return inner === baseNormalized;
+}
+
+function normalizeWhenForComparison(when: string): string {
+  const withoutWhitespace = String(when ?? "").replace(/\s+/g, "");
+  return stripOuterParens(withoutWhitespace);
+}
+
+function stripOuterParens(expr: string): string {
+  let current = expr;
+  while (current.startsWith("(") && current.endsWith(")") && hasEnclosingParens(current)) {
+    current = current.slice(1, -1);
+  }
+  return current;
+}
+
+function hasEnclosingParens(expr: string): boolean {
+  let depth = 0;
+  for (let i = 0; i < expr.length; i++) {
+    const ch = expr[i];
+    if (ch === "(") {
+      depth++;
+      continue;
+    }
+    if (ch !== ")") {
+      continue;
+    }
+    depth--;
+    if (depth < 0) {
+      return false;
+    }
+    if (depth === 0 && i !== expr.length - 1) {
+      return false;
+    }
+  }
+  return depth === 0;
 }

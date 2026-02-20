@@ -160,6 +160,7 @@ export function emitIntrinsicPolymorphicWrappers(ctx: EmitIntrinsicContext): voi
           ...emitter.buildExtraStylexPropsExprs({
             entries: d.extraStylexPropsArgs,
             destructureProps,
+            propDefaults,
           }),
         );
       }

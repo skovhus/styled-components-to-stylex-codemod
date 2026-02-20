@@ -1336,6 +1336,7 @@ export class WrapperEmitter {
   buildExtraStylexPropsExprs(args: {
     entries: ReadonlyArray<{ when?: string; expr: ExpressionKind }>;
     destructureProps?: string[];
+    propDefaults?: WrapperPropDefaults;
   }): ExpressionKind[] {
     return vc.buildExtraStylexPropsExprs(this.j, args);
   }
