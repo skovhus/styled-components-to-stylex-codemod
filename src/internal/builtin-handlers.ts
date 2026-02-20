@@ -66,7 +66,7 @@ export function resolveDynamicNode(
     tryResolveInlineStyleValueForNestedPropAccess(node) ??
     tryResolvePropAccess(node) ??
     tryResolveInlineStyleValueForConditionalExpression(node) ??
-    tryResolveInlineStyleValueForLogicalExpression(node) ??
+    tryResolveInlineStyleValueForLogicalExpression(node, ctx) ??
     tryResolveInlineStyleValueFromArrowFn(node)
   );
 }
@@ -89,20 +89,7 @@ function tryResolveThemeAccess(
   if (body.type !== "MemberExpression") {
     return null;
   }
-  const path = (() => {
-    if (info.kind === "propsParam") {
-      const parts = getMemberPathFromIdentifier(body, info.propsName);
-      if (!parts || parts[0] !== "theme") {
-        return null;
-      }
-      return parts.slice(1).join(".");
-    }
-    const parts = getMemberPathFromIdentifier(body, info.themeName);
-    if (!parts) {
-      return null;
-    }
-    return parts.join(".");
-  })();
+  const path = getThemePathFromMemberExpression(body, info);
   if (!path) {
     return null;
   }
@@ -117,6 +104,37 @@ function tryResolveThemeAccess(
     return null;
   }
   return { type: "resolvedValue", expr: res.expr, imports: res.imports };
+}
+
+function getThemePathFromMemberExpression(
+  memberExpr: unknown,
+  info: ReturnType<typeof getArrowFnThemeParamInfo>,
+): string | null {
+  if (!info || !memberExpr || typeof memberExpr !== "object") {
+    return null;
+  }
+  const exprType = (memberExpr as { type?: string }).type;
+  if (exprType !== "MemberExpression" && exprType !== "OptionalMemberExpression") {
+    return null;
+  }
+  if (info.kind === "propsParam") {
+    const parts = getMemberPathFromIdentifier(
+      memberExpr as Parameters<typeof getMemberPathFromIdentifier>[0],
+      info.propsName,
+    );
+    if (!parts || parts[0] !== "theme") {
+      return null;
+    }
+    return parts.slice(1).join(".");
+  }
+  const parts = getMemberPathFromIdentifier(
+    memberExpr as Parameters<typeof getMemberPathFromIdentifier>[0],
+    info.themeName,
+  );
+  if (!parts) {
+    return null;
+  }
+  return parts.join(".");
 }
 
 function tryResolveArrowFnHelperCallWithThemeArg(
@@ -528,7 +546,10 @@ function tryResolveInlineStyleValueForConditionalExpression(
   return { type: "emitInlineStyleValueFromProps" };
 }
 
-function tryResolveInlineStyleValueForLogicalExpression(node: DynamicNode): HandlerResult | null {
+function tryResolveInlineStyleValueForLogicalExpression(
+  node: DynamicNode,
+  ctx: InternalHandlerContext,
+): HandlerResult | null {
   // Conservative fallback for logical expressions (e.g., props.$delay ?? 0)
   // that we can preserve via a wrapper inline style.
   if (!node.css.property) {
@@ -546,14 +567,32 @@ function tryResolveInlineStyleValueForLogicalExpression(node: DynamicNode): Hand
   if (body.operator !== "??" && body.operator !== "||") {
     return null;
   }
-  // IMPORTANT: do not attempt to preserve `props.theme.*` via inline styles.
-  const paramName = getArrowFnSingleParamName(expr);
-  const leftType = (body.left as { type?: string }).type;
-  const leftPath =
-    paramName && leftType === "MemberExpression"
-      ? getMemberPathFromIdentifier(body.left, paramName)
-      : null;
-  if (leftPath && leftPath[0] === "theme") {
+
+  // Prefer static resolution when the left side is a theme member access.
+  // This preserves the fallback operator while removing runtime theme dependency.
+  const themeInfo = getArrowFnThemeParamInfo(expr);
+  const themePath = getThemePathFromMemberExpression(body.left, themeInfo);
+  if (themePath) {
+    const resolvedTheme = ctx.resolveValue({
+      kind: "theme",
+      path: themePath,
+      filePath: ctx.filePath,
+      loc: getNodeLocStart(body.left) ?? undefined,
+    });
+    const fallbackValue = extractStaticLiteralValue(body.right);
+    const hasSupportedFallback =
+      fallbackValue !== undefined && fallbackValue !== null && typeof fallbackValue !== "boolean";
+
+    if (resolvedTheme && hasSupportedFallback) {
+      const fallbackExpr =
+        typeof fallbackValue === "string" ? JSON.stringify(fallbackValue) : String(fallbackValue);
+      return {
+        type: "resolvedValue",
+        expr: `${resolvedTheme.expr} ${body.operator} ${fallbackExpr}`,
+        imports: resolvedTheme.imports,
+      };
+    }
+
     return {
       type: "keepOriginal",
       reason:
