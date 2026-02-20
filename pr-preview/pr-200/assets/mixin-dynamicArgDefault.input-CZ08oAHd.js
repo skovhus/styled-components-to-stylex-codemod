@@ -1,0 +1,4 @@
+import{j as e,a as l}from"./index-DxqwzYz9.js";import{l as n}from"./helpers-BlIx-fBA.js";const i=l.div`
+  line-height: 1rem;
+  ${({$oneLine:t=!0})=>n(t?1:2)};
+`,o=()=>e.jsxs("div",{style:{display:"flex",flexDirection:"column",gap:"8px",padding:"16px"},children:[e.jsx(i,{children:"Default (should use 1-line)"}),e.jsx(i,{$oneLine:!1,children:"Two-line truncated"})]});export{o as App};
