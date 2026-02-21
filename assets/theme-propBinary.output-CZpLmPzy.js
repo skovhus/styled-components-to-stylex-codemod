@@ -1,0 +1,1 @@
+import{j as x,Z as o}from"./index-DKY3sXmx.js";function a(e){const{children:s}=e,t=o();return x.jsx("div",{...{0:{className:"xpyat2d x1exxlbk x1mqxbix"},1:{className:"xpyat2d x1exxlbk x1awj2ng"}}[(t.mode==="dark")<<0],children:s})}const n=()=>x.jsx(a,{children:"Theme mode"});export{n as App};
