@@ -58,12 +58,8 @@ function getTestCases(): FixtureCase[] {
   for (const { inputSuffix, outputSuffix, parser } of FIXTURE_EXTENSIONS) {
     // Exclude bail-out fixtures from main test cases
     // Convention: `_unsupported.<case>.input.*` and `_unimplemented.<case>.input.*` have NO output file.
-    const inputFiles = files.filter(
-      (f) => f.endsWith(inputSuffix) && !isBailOutFixture(f) && !f.startsWith("unsupported-"),
-    );
-    const outputFiles = files.filter(
-      (f) => f.endsWith(outputSuffix) && !isBailOutFixture(f) && !f.startsWith("unsupported-"),
-    );
+    const inputFiles = files.filter((f) => f.endsWith(inputSuffix) && !isBailOutFixture(f));
+    const outputFiles = files.filter((f) => f.endsWith(outputSuffix) && !isBailOutFixture(f));
 
     const inputNames = new Set(inputFiles.map((f) => f.replace(inputSuffix, "")));
     const outputNames = new Set(outputFiles.map((f) => f.replace(outputSuffix, "")));

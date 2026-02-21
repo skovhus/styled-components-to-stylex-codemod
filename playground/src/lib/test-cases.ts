@@ -7,7 +7,6 @@ const inputs = import.meta.glob<string>(
     // Exclude bail-out fixtures from bundling (these may contain intentionally broken imports).
     "!../../../test-cases/_unsupported.*.input.tsx",
     "!../../../test-cases/_unimplemented.*.input.tsx",
-    "!../../../test-cases/unsupported-*.input.tsx",
   ],
   {
     query: "?raw",
@@ -26,13 +25,11 @@ const inputModuleLoaders = import.meta.glob<TestCaseModule>([
   "../../../test-cases/*.input.tsx",
   "!../../../test-cases/_unsupported.*.input.tsx",
   "!../../../test-cases/_unimplemented.*.input.tsx",
-  "!../../../test-cases/unsupported-*.input.tsx",
 ]);
 const outputModuleLoaders = import.meta.glob<TestCaseModule>([
   "../../../test-cases/*.output.tsx",
   "!../../../test-cases/_unsupported.*.output.tsx",
   "!../../../test-cases/_unimplemented.*.output.tsx",
-  "!../../../test-cases/unsupported-*.output.tsx",
 ]);
 
 interface TestCase {
