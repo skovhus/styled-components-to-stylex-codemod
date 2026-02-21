@@ -299,20 +299,36 @@ function parseAttributeSelectorInternal(selector: string): ParsedAttributeSelect
 // Element selector parsing
 // =============================================================================
 
+/** Tags on which `[disabled]` is equivalent to `:disabled`. */
+const DISABLEABLE_TAGS = new Set(["button", "input", "select", "textarea", "fieldset"]);
+/** Tags on which `[checked]` is equivalent to `:checked`. */
+const CHECKABLE_TAGS = new Set(["input"]);
+/** Tags on which `[required]` is equivalent to `:required`. */
+const REQUIRABLE_TAGS = new Set(["input", "select", "textarea"]);
+
 /**
- * Maps an HTML boolean attribute selector to its CSS pseudo-class equivalent.
- * Returns null if the attribute has no standard pseudo-class mapping.
+ * Maps an HTML boolean attribute selector to its CSS pseudo-class equivalent,
+ * restricted to tags where the mapping is provably equivalent.
+ *
+ * `[readonly]` is intentionally excluded — CSS `:read-only` matches much more
+ * broadly (disabled inputs, checkbox/radio, inherently non-editable elements),
+ * so the mapping would be a behavioral change.
+ *
+ * Returns null if the attribute has no safe pseudo-class mapping for this tag.
  */
-function mapAttributeToPseudo(attr: string): string | null {
+function mapAttributeToPseudo(attr: string, tagName: string): string | null {
   const normalized = attr.replace(/\s+/g, "").toLowerCase();
-  const mapping: Record<string, string> = {
-    disabled: ":disabled",
-    checked: ":checked",
-    required: ":required",
-    "read-only": ":read-only",
-    readonly: ":read-only",
-  };
-  return mapping[normalized] ?? null;
+  const tag = tagName.toLowerCase();
+  if (normalized === "disabled" && DISABLEABLE_TAGS.has(tag)) {
+    return ":disabled";
+  }
+  if (normalized === "checked" && CHECKABLE_TAGS.has(tag)) {
+    return ":checked";
+  }
+  if (normalized === "required" && REQUIRABLE_TAGS.has(tag)) {
+    return ":required";
+  }
+  return null;
 }
 
 /**
@@ -345,7 +361,7 @@ export function parseElementSelectorPattern(selector: string): {
     const tagName = m[3]!;
     const attrRaw = m[4] ?? "";
     const childPseudoRaw = m[5] ?? "";
-    const childPseudo = resolveChildPseudoWithAttr(childPseudoRaw, attrRaw);
+    const childPseudo = resolveChildPseudoWithAttr(childPseudoRaw, attrRaw, tagName);
     if (childPseudo === undefined) {
       return null;
     }
@@ -363,14 +379,15 @@ export function parseElementSelectorPattern(selector: string): {
     /^([a-zA-Z][a-zA-Z0-9]*)((?:\[[^\]]+\])?)((?::[\w-]+(?:\([^)]*\))?)*)$/,
   );
   if (bareM) {
+    const bareTagName = bareM[1]!;
     const attrRaw = bareM[2] ?? "";
     const childPseudoRaw = bareM[3] ?? "";
-    const childPseudo = resolveChildPseudoWithAttr(childPseudoRaw, attrRaw);
+    const childPseudo = resolveChildPseudoWithAttr(childPseudoRaw, attrRaw, bareTagName);
     if (childPseudo === undefined) {
       return null;
     }
     return {
-      tagName: bareM[1]!,
+      tagName: bareTagName,
       ancestorPseudo: null,
       childPseudo,
     };
@@ -382,14 +399,15 @@ export function parseElementSelectorPattern(selector: string): {
     /^>\s*([a-zA-Z][a-zA-Z0-9]*)((?:\[[^\]]+\])?)((?::[\w-]+(?:\([^)]*\))?)*)$/,
   );
   if (childCombM) {
+    const combTagName = childCombM[1]!;
     const attrRaw = childCombM[2] ?? "";
     const childPseudoRaw = childCombM[3] ?? "";
-    const childPseudo = resolveChildPseudoWithAttr(childPseudoRaw, attrRaw);
+    const childPseudo = resolveChildPseudoWithAttr(childPseudoRaw, attrRaw, combTagName);
     if (childPseudo === undefined) {
       return null;
     }
     return {
-      tagName: childCombM[1]!,
+      tagName: combTagName,
       ancestorPseudo: null,
       childPseudo,
     };
@@ -401,17 +419,21 @@ export function parseElementSelectorPattern(selector: string): {
 /**
  * Combines an explicit pseudo-class string with an optional attribute selector.
  * Returns the combined pseudo string, null if neither is present,
- * or undefined if the attribute can't be mapped to a pseudo-class.
+ * or undefined if the attribute can't be safely mapped for this tag.
  */
-function resolveChildPseudoWithAttr(pseudoRaw: string, attrRaw: string): string | null | undefined {
+function resolveChildPseudoWithAttr(
+  pseudoRaw: string,
+  attrRaw: string,
+  tagName: string,
+): string | null | undefined {
   const pseudo = pseudoRaw || null;
   if (!attrRaw) {
     return pseudo;
   }
   const attrInner = attrRaw.slice(1, -1); // strip [ and ]
-  const attrPseudo = mapAttributeToPseudo(attrInner);
+  const attrPseudo = mapAttributeToPseudo(attrInner, tagName);
   if (!attrPseudo) {
-    return undefined; // unrecognized attribute → can't parse
+    return undefined; // unrecognized attribute or wrong tag → can't parse
   }
   // Combine: if both exist, concatenate (e.g., ":disabled:focus")
   return pseudo ? `${attrPseudo}${pseudo}` : attrPseudo;
