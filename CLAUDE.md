@@ -76,7 +76,7 @@ Unsupported test cases can be named `_unsupported.<case>.input.tsx` and should N
 
 When promoting an `_unsupported` test case to a supported one (adding codemod support for a previously unsupported pattern):
 
-- **Preserve the original input semantics**: Do NOT add extra CSS properties, change the styled-component definition, or alter the transformation being tested. The codemod should handle the original input as-is.
+- **Preserve the original input code**: Keep the original styled-component definition and CSS as-is. The codemod must handle the original input. You may extend the test case (e.g., add more CSS properties or variations), but do not modify or remove the original code.
 - Remove `@expected-warning` comments and update descriptive comments as needed (these are not semantic changes).
 - It is OK to minimally improve the `App` component for visibility (e.g., adding text content to an empty `<Box />`), since that doesn't change the styled-component transformation being tested.
 - Create the matching `.output.tsx` using `node scripts/regenerate-test-case-outputs.mts --only <case>`.
