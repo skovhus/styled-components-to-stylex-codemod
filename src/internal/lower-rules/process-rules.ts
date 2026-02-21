@@ -338,6 +338,14 @@ export function processDeclRules(ctx: DeclProcessingState): void {
         //     in the same file also uses defaultMarker() (e.g. for ancestor overrides),
         //     its marker could incorrectly activate this component's sibling styles.
         //     Use stylex.defineMarker() for strict scoping (not yet implemented).
+        const combinator = selfSiblingMatch[1]; // "+" or "~"
+        if (combinator === "+") {
+          warnings.push({
+            severity: "info",
+            type: "Sibling selector broadened: & + & (adjacent) becomes general sibling (~) in StyleX — interleaved non-matching elements will no longer block the match",
+            loc: computeSelectorWarningLoc(decl.loc, decl.rawCss, rule.selector),
+          });
+        }
         const siblingKeyExpr = makeSiblingKey(j);
 
         // Mark this component for defaultMarker() so siblings can observe it
@@ -1596,6 +1604,9 @@ function extractReverseSelectorPseudos(selector: string): string[] {
  * The `:is(*)` pseudo is a universal match required by the StyleX Babel plugin
  * (which mandates a pseudo argument starting with `:`) but has no effect on
  * specificity or matching — it is equivalent to calling with no pseudo.
+ *
+ * TODO: Remove the `:is(*)` workaround if the StyleX Babel plugin adds support
+ * for no-arg `siblingBefore()` calls (currently crashes in `validatePseudoSelector`).
  */
 function makeSiblingKey(j: JSCodeshift) {
   return j.callExpression(

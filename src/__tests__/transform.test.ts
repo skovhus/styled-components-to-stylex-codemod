@@ -526,6 +526,60 @@ export const App = () => <Container />;
     expect(typeof warning.loc?.line).toBe("number");
     expect(typeof warning.loc?.column).toBe("number");
   });
+
+  it("should emit info warning for & + & (adjacent sibling broadens to general)", () => {
+    const source = `
+import styled from "styled-components";
+
+const Thing = styled.div\`
+  color: blue;
+  & + & {
+    color: red;
+  }
+\`;
+
+export const App = () => <Thing />;
+`;
+
+    const result = transformWithWarnings(
+      { source, path: "test.tsx" },
+      { jscodeshift: j, j, stats: () => {}, report: () => {} },
+      { adapter: fixtureAdapter },
+    );
+
+    expect(result.code).not.toBeNull();
+    const infoWarnings = result.warnings.filter((w) => w.severity === "info");
+    expect(infoWarnings).toHaveLength(1);
+    expect(infoWarnings[0]).toMatchObject({
+      severity: "info",
+      type: "Sibling selector broadened: & + & (adjacent) becomes general sibling (~) in StyleX — interleaved non-matching elements will no longer block the match",
+    });
+  });
+
+  it("should NOT emit info warning for & ~ & (general sibling is exact match)", () => {
+    const source = `
+import styled from "styled-components";
+
+const Thing = styled.div\`
+  color: blue;
+  & ~ & {
+    color: red;
+  }
+\`;
+
+export const App = () => <Thing />;
+`;
+
+    const result = transformWithWarnings(
+      { source, path: "test.tsx" },
+      { jscodeshift: j, j, stats: () => {}, report: () => {} },
+      { adapter: fixtureAdapter },
+    );
+
+    expect(result.code).not.toBeNull();
+    const infoWarnings = result.warnings.filter((w) => w.severity === "info");
+    expect(infoWarnings).toHaveLength(0);
+  });
 });
 
 describe("import cleanup safety", () => {
