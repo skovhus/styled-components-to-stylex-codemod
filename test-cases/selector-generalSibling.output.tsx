@@ -15,15 +15,15 @@ const styles = stylex.create({
     paddingInline: "16px",
     borderBottomWidth: {
       default: null,
-      [stylex.when.anySibling(":is(*)")]: "2px",
+      [stylex.when.siblingBefore(":is(*)")]: "2px",
     },
     borderBottomStyle: {
       default: null,
-      [stylex.when.anySibling(":is(*)")]: "solid",
+      [stylex.when.siblingBefore(":is(*)")]: "solid",
     },
     borderBottomColor: {
       default: null,
-      [stylex.when.anySibling(":is(*)")]: "gray",
+      [stylex.when.siblingBefore(":is(*)")]: "gray",
     },
   },
 });

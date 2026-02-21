@@ -327,11 +327,16 @@ export function processDeclRules(ctx: DeclProcessingState): void {
           break;
         }
 
-        // Handle self-referencing sibling selector: collect declarations into perPropComputedMedia
-        const siblingKeyExpr =
-          selfSiblingMatch[1] === "+"
-            ? makeSiblingKey(j, "siblingBefore")
-            : makeSiblingKey(j, "anySibling");
+        // Handle self-referencing sibling selector: collect declarations into perPropComputedMedia.
+        // Both `& + &` (adjacent) and `& ~ &` (general) map to siblingBefore():
+        //   CSS `~` is forward-only — only subsequent siblings match.
+        //   stylex.when.anySibling() matches both directions (uses :has()), so the
+        //   first element would incorrectly get styled. siblingBefore() is forward-only
+        //   ("style me when a sibling before me has the marker"), which correctly leaves
+        //   the first element unstyled — matching CSS `~` semantics.
+        //   For `& + &` (adjacent), siblingBefore() is also correct: with defaultMarker()
+        //   on every instance, any non-first instance has a marked preceding sibling.
+        const siblingKeyExpr = makeSiblingKey(j);
 
         // Mark this component for defaultMarker() so siblings can observe it
         ancestorSelectorParents.add(decl.styleKey);
@@ -1583,20 +1588,18 @@ function extractReverseSelectorPseudos(selector: string): string[] {
 }
 
 /**
- * Builds a `stylex.when.<method>(":is(*)")` AST call expression for sibling selectors.
- *
- * - `"siblingBefore"` → `& + &` (CSS adjacent sibling)
- * - `"anySibling"` → `& ~ &` (CSS general sibling)
+ * Builds a `stylex.when.siblingBefore(":is(*)")` AST call expression.
+ * Used for both `& + &` (adjacent) and `& ~ &` (general) CSS sibling selectors.
  *
  * The `:is(*)` pseudo is a universal match required by the StyleX Babel plugin
  * (which mandates a pseudo argument starting with `:`) but has no effect on
  * specificity or matching — it is equivalent to calling with no pseudo.
  */
-function makeSiblingKey(j: JSCodeshift, method: "siblingBefore" | "anySibling") {
+function makeSiblingKey(j: JSCodeshift) {
   return j.callExpression(
     j.memberExpression(
       j.memberExpression(j.identifier("stylex"), j.identifier("when")),
-      j.identifier(method),
+      j.identifier("siblingBefore"),
     ),
     [j.literal(":is(*)")],
   );
