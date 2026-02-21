@@ -48,7 +48,7 @@ describe("public API runtime validation (DX)", () => {
     );
   });
 
-  it("defineAdapter: throws a helpful message when externalInterface is not a function", () => {
+  it("defineAdapter: throws a helpful message when externalInterface is not a function or 'auto'", () => {
     expect(() =>
       defineAdapter({
         resolveValue() {
@@ -63,6 +63,38 @@ describe("public API runtime validation (DX)", () => {
         externalInterface: "nope",
       } as any),
     ).toThrowError(/externalInterface/);
+    expect(() =>
+      defineAdapter({
+        resolveValue() {
+          return null;
+        },
+        resolveCall() {
+          return null;
+        },
+        resolveSelector() {
+          return undefined;
+        },
+        externalInterface: "nope",
+      } as any),
+    ).toThrowError(/"auto"/);
+  });
+
+  it("defineAdapter: accepts externalInterface 'auto' without throwing", () => {
+    expect(() =>
+      defineAdapter({
+        resolveValue() {
+          return undefined;
+        },
+        resolveCall() {
+          return undefined;
+        },
+        resolveSelector() {
+          return undefined;
+        },
+        externalInterface: "auto",
+        styleMerger: null,
+      }),
+    ).not.toThrow();
   });
 
   it("runTransform: throws a helpful message when options is missing", async () => {

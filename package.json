@@ -26,10 +26,6 @@
       "types": "./dist/index.d.mts",
       "import": "./dist/index.mjs"
     },
-    "./consumer-analyzer": {
-      "types": "./dist/consumer-analyzer.d.mts",
-      "import": "./dist/consumer-analyzer.mjs"
-    },
     "./package.json": "./package.json"
   },
   "scripts": {
@@ -58,6 +54,7 @@
     "build:playground": "vite build --config playground/vite.config.ts"
   },
   "dependencies": {
+    "@babel/parser": "^7.29.0",
     "jscodeshift": "^17.3.0",
     "oxc-resolver": "^11.17.1",
     "postcss-selector-parser": "^7.1.1",
@@ -103,9 +100,6 @@
     "typescript": "^5.9.3",
     "vite": "^7.3.1",
     "vitest": "^4.0.18"
-  },
-  "optionalDependencies": {
-    "oxc-resolver": "^11.17.0"
   },
   "engines": {
     "node": ">=22.20",

@@ -157,31 +157,27 @@ Adapters are the main extension point, see full example above. They let you cont
 
 #### Auto-detecting external interface usage (experimental)
 
-Instead of manually specifying which components need `styles` or `as` support, you can use `createExternalInterface` to auto-detect usage by scanning your consumer code with [ripgrep](https://github.com/BurntSushi/ripgrep) (`rg`).
+Instead of manually specifying which components need `styles` or `as` support, set `externalInterface: "auto"` to auto-detect usage by scanning your consumer code with [ripgrep](https://github.com/BurntSushi/ripgrep) (`rg`).
 
 > [!NOTE]
 > Experimental. Requires `rg` installed and available in `$PATH`. Not supported on Windows.
-> `createExternalInterface` also relies on optional dependency `oxc-resolver` for import resolution.
-> Install it when using this feature:
->
-> ```bash
-> npm install oxc-resolver
-> # or
-> pnpm add oxc-resolver
-> ```
 
 ```ts
-import { defineAdapter, createExternalInterface } from "styled-components-to-stylex-codemod";
+import { runTransform, defineAdapter } from "styled-components-to-stylex-codemod";
 
-const externalInterface = createExternalInterface({ searchDirs: ["src/"] });
-
-export default defineAdapter({
+const adapter = defineAdapter({
   // ...
-  externalInterface: externalInterface.get,
+  externalInterface: "auto",
+});
+
+await runTransform({
+  files: "src/**/*.tsx",
+  consumerPaths: "src/**/*.tsx", // used for both cross-file selectors AND auto external interface
+  adapter,
 });
 ```
 
-This scans the given directories for `styled(Component)` calls and `<Component as={...}>` JSX usage, resolves imports back to the component definition files, and returns the appropriate `{ styles, as }` flags automatically.
+When `externalInterface: "auto"` is set, `runTransform()` scans the directories derived from `files` and `consumerPaths` for `styled(Component)` calls and `<Component as={...}>` JSX usage, resolves imports back to the component definition files, and returns the appropriate `{ styles, as }` flags automatically.
 
 #### Dynamic interpolations
 

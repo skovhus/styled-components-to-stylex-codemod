@@ -20,22 +20,45 @@ export interface ModuleResolver {
   resolve(fromFile: string, specifier: string): string | undefined;
 }
 
+/** Configurable options for module resolution. */
+interface ResolverConfig {
+  extensions?: string[];
+  conditionNames?: string[];
+  mainFields?: string[];
+  extensionAlias?: Record<string, string[]>;
+  tsconfig?: "auto";
+}
+
 /**
- * Create a module resolver with sensible defaults for TypeScript projects.
+ * Shared resolver config for TypeScript projects.
+ *
+ * - `.tsx` before `.ts` so React component files win when both exist
+ * - `"types"` condition for type-aware resolution; `"default"` as fallback
+ * - `tsconfig: "auto"` auto-discovers the nearest tsconfig.json per file
+ *   for path alias resolution
+ * - `extensionAlias` handles ESM `.js`→`.ts` remapping AND `.ts`→`.tsx`
+ *   fallback for package.json `"exports"` wildcards
+ */
+const DEFAULT_CONFIG: ResolverConfig = {
+  extensions: [".tsx", ".ts", ".jsx", ".js"],
+  conditionNames: ["import", "types", "default"],
+  mainFields: ["module", "main"],
+  extensionAlias: {
+    ".js": [".ts", ".tsx", ".js"],
+    ".jsx": [".tsx", ".jsx"],
+    ".ts": [".ts", ".tsx"],
+  },
+  tsconfig: "auto",
+};
+
+/**
+ * Create a module resolver with configurable options.
  *
  * The returned `resolve` function resolves a specifier relative to
  * a source file path, returning the absolute path or `undefined` on failure.
  */
-export function createModuleResolver(): ModuleResolver {
-  const resolver = new ResolverFactory({
-    extensions: [".ts", ".tsx", ".js", ".jsx"],
-    conditionNames: ["import", "node"],
-    mainFields: ["module", "main"],
-    extensionAlias: {
-      ".js": [".ts", ".tsx", ".js"],
-      ".jsx": [".tsx", ".jsx"],
-    },
-  });
+export function createModuleResolver(config: ResolverConfig = DEFAULT_CONFIG): ModuleResolver {
+  const resolver = new ResolverFactory(config);
 
   return {
     resolve(fromFile: string, specifier: string): string | undefined {

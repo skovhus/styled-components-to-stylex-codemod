@@ -4,7 +4,11 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 import { describe, it, expect, beforeAll, afterAll } from "vitest";
 
-import { createExternalInterface } from "../consumer-analyzer.js";
+import type { ExternalInterfaceResult } from "../adapter.js";
+import {
+  analyzeConsumers,
+  extractSearchDirsFromGlobs,
+} from "../internal/prepass/consumer-analyzer.js";
 
 function assertRgAvailable(): void {
   try {
@@ -17,10 +21,7 @@ function assertRgAvailable(): void {
 }
 
 /** Convert analysis Map to a snapshot-friendly sorted record with relative paths */
-const toSnapshot = (
-  map: ReturnType<typeof createExternalInterface>["map"],
-  base = process.cwd(),
-) => {
+const toSnapshot = (map: Map<string, ExternalInterfaceResult>, base = process.cwd()) => {
   const realBase = realpathSync(base);
   return Object.fromEntries(
     [...map.entries()]
@@ -33,12 +34,46 @@ const toSnapshot = (
 };
 
 // ---------------------------------------------------------------------------
+// extractSearchDirsFromGlobs unit tests
+// ---------------------------------------------------------------------------
+
+describe("extractSearchDirsFromGlobs", () => {
+  it("extracts directory prefix before glob metacharacters", () => {
+    expect(extractSearchDirsFromGlobs(["src/**/*.tsx"])).toEqual(["src/"]);
+  });
+
+  it("handles multiple patterns", () => {
+    expect(extractSearchDirsFromGlobs(["src/**/*.tsx", "app/**/*.ts"])).toEqual(["app/", "src/"]);
+  });
+
+  it("de-duplicates subdirectories", () => {
+    expect(extractSearchDirsFromGlobs(["src/**/*.tsx", "src/lib/**/*.ts"])).toEqual(["src/"]);
+  });
+
+  it("handles patterns starting with glob metacharacter", () => {
+    expect(extractSearchDirsFromGlobs(["**/*.tsx"])).toEqual(["./"]);
+  });
+
+  it("handles literal file paths (no glob chars)", () => {
+    expect(extractSearchDirsFromGlobs(["src/index.ts"])).toEqual(["src/"]);
+  });
+
+  it("handles nested directory patterns", () => {
+    expect(extractSearchDirsFromGlobs(["packages/ui/src/**/*.tsx"])).toEqual(["packages/ui/src/"]);
+  });
+
+  it("de-duplicates identical patterns", () => {
+    expect(extractSearchDirsFromGlobs(["src/**/*.tsx", "src/**/*.ts"])).toEqual(["src/"]);
+  });
+});
+
+// ---------------------------------------------------------------------------
 // Integration tests (temp fixture files + rg)
 // ---------------------------------------------------------------------------
 
-describe("createExternalInterface", () => {
+describe("analyzeConsumers", () => {
   let fixtureDir: string;
-  let result: ReturnType<typeof createExternalInterface>;
+  let result: Map<string, ExternalInterfaceResult>;
 
   beforeAll(() => {
     assertRgAvailable();
@@ -170,7 +205,7 @@ describe("createExternalInterface", () => {
     const originalCwd = process.cwd();
     try {
       process.chdir(fixtureDir);
-      result = createExternalInterface({ searchDirs: ["."] });
+      result = analyzeConsumers({ searchDirs: ["."] });
     } finally {
       process.chdir(originalCwd);
     }
@@ -183,7 +218,7 @@ describe("createExternalInterface", () => {
   });
 
   it("detects as-prop and re-styled usage", () => {
-    expect(toSnapshot(result.map, fixtureDir)).toMatchInlineSnapshot(`
+    expect(toSnapshot(result, fixtureDir)).toMatchInlineSnapshot(`
       {
         "components/Badge.tsx:Badge": {
           "as": true,
@@ -217,45 +252,14 @@ describe("createExternalInterface", () => {
     `);
   });
 
-  it("get returns flags for known components", () => {
+  it("lookup returns flags for known components", () => {
     const badgePath = realpathSync(path.join(fixtureDir, "components/Badge.tsx"));
-    expect(
-      result.get({
-        filePath: badgePath,
-        componentName: "Badge",
-        exportName: "Badge",
-        isDefaultExport: false,
-      }),
-    ).toEqual({ as: true, styles: true });
+    const key = `${badgePath}:Badge`;
+    expect(result.get(key)).toEqual({ as: true, styles: true });
   });
 
-  it("get resolves relative file paths", () => {
-    const originalCwd = process.cwd();
-    try {
-      process.chdir(fixtureDir);
-      const relativePath = "components/Badge.tsx";
-      expect(
-        result.get({
-          filePath: relativePath,
-          componentName: "Badge",
-          exportName: "Badge",
-          isDefaultExport: false,
-        }),
-      ).toEqual({ as: true, styles: true });
-    } finally {
-      process.chdir(originalCwd);
-    }
-  });
-
-  it("get returns default for unknown components", () => {
-    expect(
-      result.get({
-        filePath: "/unknown.tsx",
-        componentName: "Foo",
-        exportName: "Foo",
-        isDefaultExport: false,
-      }),
-    ).toEqual({ styles: false, as: false });
+  it("lookup returns undefined for unknown components", () => {
+    expect(result.get("/unknown.tsx:Foo")).toBeUndefined();
   });
 });
 
@@ -272,9 +276,9 @@ describe("createExternalInterface", () => {
 //
 // This test documents the need for the resolveViaExportsWildcard workaround.
 
-describe("createExternalInterface — wildcard exports in monorepo", () => {
+describe("analyzeConsumers — wildcard exports in monorepo", () => {
   let fixtureDir: string;
-  let result: ReturnType<typeof createExternalInterface>;
+  let result: Map<string, ExternalInterfaceResult>;
 
   beforeAll(() => {
     assertRgAvailable();
@@ -376,7 +380,7 @@ describe("createExternalInterface — wildcard exports in monorepo", () => {
     const originalCwd = process.cwd();
     try {
       process.chdir(fixtureDir);
-      result = createExternalInterface({ searchDirs: ["app/", "packages/"] });
+      result = analyzeConsumers({ searchDirs: ["app/", "packages/"] });
     } finally {
       process.chdir(originalCwd);
     }
@@ -389,7 +393,7 @@ describe("createExternalInterface — wildcard exports in monorepo", () => {
   });
 
   it("detects styled() wrapping of .tsx components imported via wildcard exports", () => {
-    const snapshot = toSnapshot(result.map, fixtureDir);
+    const snapshot = toSnapshot(result, fixtureDir);
     // Button.tsx and Text.tsx are .tsx files — they only match the second
     // wildcard target ("./src/*.tsx"), NOT the first ("./src/*.ts").
     // If the resolver can't handle this, styles will be false.
@@ -404,12 +408,12 @@ describe("createExternalInterface — wildcard exports in monorepo", () => {
   });
 
   it("detects as-prop usage of .tsx components imported via wildcard exports", () => {
-    const snapshot = toSnapshot(result.map, fixtureDir);
+    const snapshot = toSnapshot(result, fixtureDir);
     expect(snapshot["packages/ui/src/components/Button.tsx:Button"]?.as).toBe(true);
   });
 
   it("snapshot of full analysis map", () => {
-    expect(toSnapshot(result.map, fixtureDir)).toMatchInlineSnapshot(`
+    expect(toSnapshot(result, fixtureDir)).toMatchInlineSnapshot(`
       {
         "packages/ui/src/components/Button.tsx:Button": {
           "as": true,
@@ -428,14 +432,14 @@ describe("createExternalInterface — wildcard exports in monorepo", () => {
 // Snapshot test — on test-cases/
 // ---------------------------------------------------------------------------
 
-describe("createExternalInterface snapshot on test-cases", () => {
+describe("analyzeConsumers snapshot on test-cases", () => {
   beforeAll(() => {
     assertRgAvailable();
   });
 
   it("matches snapshot for test-cases directory", () => {
-    const result = createExternalInterface({ searchDirs: ["test-cases/"] });
-    expect(toSnapshot(result.map)).toMatchInlineSnapshot(`
+    const result = analyzeConsumers({ searchDirs: ["test-cases/"] });
+    expect(toSnapshot(result)).toMatchInlineSnapshot(`
       {
         "test-cases/externalStyles-input.input.tsx:StyledInput": {
           "as": true,

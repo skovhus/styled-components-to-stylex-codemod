@@ -11,6 +11,7 @@ import { glob } from "node:fs/promises";
 import { spawn } from "node:child_process";
 import type {
   Adapter,
+  AdapterInput,
   CallResolveContext,
   CallResolveResult,
   ResolveValueContext,
@@ -19,7 +20,11 @@ import type {
   SelectorResolveResult,
 } from "./adapter.js";
 import { Logger, type CollectedWarning } from "./internal/logger.js";
-import { assertValidAdapter, describeValue } from "./internal/public-api-validation.js";
+import {
+  analyzeConsumers,
+  extractSearchDirsFromGlobs,
+} from "./internal/prepass/consumer-analyzer.js";
+import { assertValidAdapterInput, describeValue } from "./internal/public-api-validation.js";
 
 export interface RunTransformOptions {
   /**
@@ -40,8 +45,12 @@ export interface RunTransformOptions {
   /**
    * Adapter for customizing the transform.
    * Controls value resolution and resolver-provided imports.
+   *
+   * Use `externalInterface: "auto"` to auto-detect which exported components
+   * need external className/style and polymorphic `as` support by scanning
+   * consumer code specified via `consumerPaths` (or `files`).
    */
-  adapter: Adapter;
+  adapter: AdapterInput;
 
   /**
    * Dry run - don't write changes to files
@@ -187,12 +196,12 @@ export async function runTransform(options: RunTransformOptions): Promise<RunTra
     Logger.setMaxExamples(maxExamples);
   }
 
-  const adapter = options.adapter;
-  assertValidAdapter(adapter, "runTransform(options)");
+  const adapterInput = options.adapter;
+  assertValidAdapterInput(adapterInput, "runTransform(options)");
 
   const resolveValueWithLogging = (ctx: ResolveValueContext): ResolveValueResult | undefined => {
     try {
-      return adapter.resolveValue(ctx);
+      return adapterInput.resolveValue(ctx);
     } catch (e) {
       const msg = `adapter.resolveValue threw an error: ${
         e instanceof Error ? e.message : String(e)
@@ -206,7 +215,7 @@ export async function runTransform(options: RunTransformOptions): Promise<RunTra
 
   const resolveCallWithLogging = (ctx: CallResolveContext): CallResolveResult | undefined => {
     try {
-      return adapter.resolveCall(ctx);
+      return adapterInput.resolveCall(ctx);
     } catch (e) {
       const msg = `adapter.resolveCall threw an error: ${e instanceof Error ? e.message : String(e)}`;
       Logger.logError(msg, ctx.callSiteFilePath, ctx.loc, ctx);
@@ -219,23 +228,13 @@ export async function runTransform(options: RunTransformOptions): Promise<RunTra
     ctx: SelectorResolveContext,
   ): SelectorResolveResult | undefined => {
     try {
-      return adapter.resolveSelector(ctx);
+      return adapterInput.resolveSelector(ctx);
     } catch (e) {
       const msg = `adapter.resolveSelector threw an error: ${e instanceof Error ? e.message : String(e)}`;
       Logger.logError(msg, ctx.filePath, ctx.loc, ctx);
       Logger.markErrorAsLogged(e);
       throw e;
     }
-  };
-
-  const adapterWithLogging: Adapter = {
-    styleMerger: adapter.styleMerger,
-    externalInterface(ctx) {
-      return adapter.externalInterface(ctx);
-    },
-    resolveValue: resolveValueWithLogging,
-    resolveCall: resolveCallWithLogging,
-    resolveSelector: resolveSelectorWithLogging,
   };
 
   // Resolve file paths from glob patterns
@@ -264,17 +263,48 @@ export async function runTransform(options: RunTransformOptions): Promise<RunTra
   Logger.setFileCount(filePaths.length);
 
   // Resolve consumer paths for cross-file selector prepass
-  const consumerFilePaths: string[] = [];
-  if (consumerPathsOption) {
-    const consumerPatterns = Array.isArray(consumerPathsOption)
+  const consumerPatterns = consumerPathsOption
+    ? Array.isArray(consumerPathsOption)
       ? consumerPathsOption
-      : [consumerPathsOption];
-    for (const pattern of consumerPatterns) {
-      for await (const file of glob(pattern, { cwd })) {
-        consumerFilePaths.push(file);
-      }
+      : [consumerPathsOption]
+    : [];
+  const consumerFilePaths: string[] = [];
+  for (const pattern of consumerPatterns) {
+    for await (const file of glob(pattern, { cwd })) {
+      consumerFilePaths.push(file);
     }
   }
+
+  // Create shared module resolver for both prepass phases
+  const { createModuleResolver } = await import("./internal/prepass/resolve-imports.js");
+  const sharedResolver = createModuleResolver();
+
+  // Resolve "auto" externalInterface → concrete function using consumer analysis
+  const resolvedAdapter: Adapter = (() => {
+    if (adapterInput.externalInterface === "auto") {
+      const searchDirs = extractSearchDirsFromGlobs([...patterns, ...consumerPatterns]);
+      const analysisMap = analyzeConsumers({ searchDirs, resolver: sharedResolver });
+      return {
+        ...adapterInput,
+        externalInterface: (ctx) =>
+          analysisMap.get(`${resolve(ctx.filePath)}:${ctx.componentName}`) ?? {
+            styles: false,
+            as: false,
+          },
+      };
+    }
+    return adapterInput as Adapter;
+  })();
+
+  const adapterWithLogging: Adapter = {
+    styleMerger: resolvedAdapter.styleMerger,
+    externalInterface(ctx) {
+      return resolvedAdapter.externalInterface(ctx);
+    },
+    resolveValue: resolveValueWithLogging,
+    resolveCall: resolveCallWithLogging,
+    resolveSelector: resolveSelectorWithLogging,
+  };
 
   // Run cross-file selector prepass to detect ${ImportedComponent} selectors.
   // Always run when there are files — even a single file can import cross-file selectors.
@@ -282,13 +312,16 @@ export async function runTransform(options: RunTransformOptions): Promise<RunTra
     | import("./internal/prepass/scan-cross-file-selectors.js").CrossFileInfo
     | undefined;
   if (filePaths.length > 0) {
-    const { createModuleResolver } = await import("./internal/prepass/resolve-imports.js");
     const { scanCrossFileSelectors } =
       await import("./internal/prepass/scan-cross-file-selectors.js");
     const absoluteFiles = filePaths.map((f) => resolve(f));
     const absoluteConsumers = consumerFilePaths.map((f) => resolve(f));
-    const resolver = createModuleResolver();
-    crossFilePrepassResult = scanCrossFileSelectors(absoluteFiles, absoluteConsumers, resolver);
+    crossFilePrepassResult = scanCrossFileSelectors(
+      absoluteFiles,
+      absoluteConsumers,
+      sharedResolver,
+      parser,
+    );
   }
 
   // Path to the transform module.

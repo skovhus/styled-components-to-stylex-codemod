@@ -1,59 +1,30 @@
 // Utilities for detecting styled-component usage patterns across consumer code.
 //
-// createExternalInterface — scan consumer directories, return adapter callback + raw map
+// analyzeConsumers — scan consumer directories, return map of component → external interface flags
+// extractSearchDirsFromGlobs — derive rg-compatible directory paths from glob patterns
 import { execSync } from "node:child_process";
 import { readFileSync } from "node:fs";
-import { createRequire } from "node:module";
 import path from "node:path";
-
-import type { ExternalInterfaceContext, ExternalInterfaceResult } from "./adapter.js";
-
-const require = createRequire(import.meta.url);
-
-/**
- * Scans consumer code with `rg` to detect which styled-components are re-styled
- * (`styled(Comp)`) or used with the `as` prop, and returns an adapter-compatible
- * callback plus the raw analysis map.
- *
- * @example
- * ```ts
- * import { defineAdapter, createExternalInterface } from "styled-components-to-stylex-codemod";
- *
- * const externalInterface = createExternalInterface({ searchDirs: ["src/"] });
- *
- * export default defineAdapter({
- *   externalInterface: externalInterface.get,
- * });
- * ```
- */
-export function createExternalInterface(options: AnalyzeConsumersOptions): ExternalInterface {
-  const map = analyzeConsumers(options);
-  return {
-    get: (ctx) =>
-      map.get(`${path.resolve(ctx.filePath)}:${ctx.componentName}`) ?? { styles: false, as: false },
-    map,
-  };
-}
+import type { ExternalInterfaceResult } from "../../adapter.js";
+import { createModuleResolver, type ModuleResolver } from "./resolve-imports.js";
+import { addToSetMap } from "../utilities/collection-utils.js";
 
 // ---------------------------------------------------------------------------
-// Internal analysis
+// Public exports
 // ---------------------------------------------------------------------------
 
 interface AnalyzeConsumersOptions {
   /** Directories to search for consumer usage (e.g. ["src/", "app/"]) */
   searchDirs: string[];
+  /** Optional pre-created module resolver (avoids creating a second one) */
+  resolver?: ModuleResolver;
 }
 
-interface ExternalInterface {
-  /** Adapter callback for use with `defineAdapter({ externalInterface: externalInterface.get })` */
-  get: (ctx: ExternalInterfaceContext) => ExternalInterfaceResult;
-  /** Raw analysis map keyed by `"absoluteFilePath:componentName"` */
-  map: Map<string, ExternalInterfaceResult>;
-}
-
-function analyzeConsumers(options: AnalyzeConsumersOptions): Map<string, ExternalInterfaceResult> {
+export function analyzeConsumers(
+  options: AnalyzeConsumersOptions,
+): Map<string, ExternalInterfaceResult> {
   const result = new Map<string, ExternalInterfaceResult>();
-  const resolve = createResolver();
+  const resolve = createResolveAdapter(options.resolver ?? createModuleResolver());
   const read = cachedReader();
 
   const ensure = (filePath: string, name: string) => {
@@ -94,6 +65,36 @@ function analyzeConsumers(options: AnalyzeConsumersOptions): Map<string, Externa
   }
 
   return result;
+}
+
+/**
+ * Derive `rg`-compatible directory paths from glob patterns.
+ *
+ * For each pattern, extracts the directory prefix before the first glob metacharacter
+ * (`*`, `?`, `{`, `[`). De-duplicates subdirectories (e.g. `["src/", "src/lib/"]` → `["src/"]`).
+ */
+export function extractSearchDirsFromGlobs(patterns: string[]): string[] {
+  const dirs: string[] = [];
+  for (const pattern of patterns) {
+    const firstMeta = findFirstGlobMeta(pattern);
+    let dir: string;
+    if (firstMeta === 0) {
+      dir = ".";
+    } else if (firstMeta === -1) {
+      // No glob chars — treat as a literal file path, use its directory
+      dir = path.dirname(pattern);
+    } else {
+      // Extract directory portion up to the glob metacharacter
+      dir = pattern.slice(0, firstMeta);
+      // Trim to last directory separator
+      const lastSep = Math.max(dir.lastIndexOf("/"), dir.lastIndexOf(path.sep));
+      dir = lastSep > 0 ? dir.slice(0, lastSep + 1) : ".";
+    }
+    // Normalize: ensure trailing slash, resolve . → cwd-relative
+    dir = dir.endsWith("/") || dir.endsWith(path.sep) ? dir : dir + "/";
+    dirs.push(dir);
+  }
+  return deduplicateDirs(dirs);
 }
 
 // ---------------------------------------------------------------------------
@@ -265,95 +266,14 @@ function resolveReStyledDefinitions(
 type Resolve = (specifier: string, fromFile: string) => string | null;
 type CachedReader = (filePath: string) => string;
 
-const OPTIONAL_RESOLVER_DEPENDENCY = "oxc-resolver";
-const MISSING_RESOLVER_ERROR_MESSAGE = [
-  "[styled-components-to-stylex-codemod] createExternalInterface requires the optional dependency `oxc-resolver`.",
-  "Install it to enable external interface auto-detection:",
-  "  npm install oxc-resolver",
-  "  # or",
-  "  pnpm add oxc-resolver",
-].join("\n");
-
-interface OxcResolverResult {
-  error?: unknown;
-  path?: string;
-}
-
-interface OxcResolverInstance {
-  resolveFileSync(fromFilePath: string, specifier: string): OxcResolverResult;
-}
-
-interface OxcResolverOptions {
-  extensions: string[];
-  conditionNames: string[];
-  mainFields: string[];
-  extensionAlias: Record<string, string[]>;
-  tsconfig: "auto";
-}
-
-interface OxcResolverFactory {
-  new (options: OxcResolverOptions): OxcResolverInstance;
-}
-
-interface OxcResolverModule {
-  ResolverFactory?: OxcResolverFactory;
-}
-
-function createResolver(): Resolve {
-  const ResolverFactory = loadResolverFactory();
-  const factory = new ResolverFactory({
-    extensions: [".tsx", ".ts", ".jsx", ".js"],
-    conditionNames: ["import", "types", "default"],
-    mainFields: ["module", "main"],
-    // When package.json "exports" wildcards resolve to a .ts path that doesn't
-    // exist (e.g. "./*": ["./src/*.ts", "./src/*.tsx"]), extensionAlias lets
-    // oxc-resolver try .tsx as a fallback during file resolution.
-    extensionAlias: { ".ts": [".ts", ".tsx"] },
-    // Auto-discover the nearest tsconfig.json per file for path alias resolution.
-    tsconfig: "auto",
-  });
-
+function createResolveAdapter(resolver: ModuleResolver): Resolve {
   return (specifier: string, fromFile: string): string | null => {
-    // resolveFileSync (not sync) is required for tsconfig: "auto" to work —
-    // it auto-discovers the nearest tsconfig.json per file.
-    const result = factory.resolveFileSync(path.resolve(fromFile), specifier);
-    if (result.error || !result.path) {
+    const result = resolver.resolve(path.resolve(fromFile), specifier);
+    if (!result) {
       return null;
     }
-    return path.relative(process.cwd(), result.path);
+    return path.relative(process.cwd(), result);
   };
-}
-
-function loadResolverFactory(): OxcResolverFactory {
-  try {
-    const module = require(OPTIONAL_RESOLVER_DEPENDENCY) as OxcResolverModule;
-    if (typeof module.ResolverFactory !== "function") {
-      throw new Error(
-        `Invalid optional dependency \`${OPTIONAL_RESOLVER_DEPENDENCY}\`: missing \`ResolverFactory\` export.`,
-      );
-    }
-    return module.ResolverFactory;
-  } catch (error) {
-    if (isMissingModuleError(error, OPTIONAL_RESOLVER_DEPENDENCY)) {
-      process.stderr.write(`${MISSING_RESOLVER_ERROR_MESSAGE}\n`);
-      throw new Error(MISSING_RESOLVER_ERROR_MESSAGE, { cause: error });
-    }
-    throw error;
-  }
-}
-
-function isMissingModuleError(error: unknown, moduleName: string): boolean {
-  if (!(error instanceof Error)) {
-    return false;
-  }
-  const moduleError = error as Error & { code?: string };
-  if (moduleError.code !== "MODULE_NOT_FOUND") {
-    return false;
-  }
-  return (
-    moduleError.message.includes(`'${moduleName}'`) ||
-    moduleError.message.includes(`"${moduleName}"`)
-  );
 }
 
 interface ImportInfo {
@@ -539,19 +459,34 @@ function fileImportsFrom(
   return false;
 }
 
-function addToSetMap(map: Map<string, Set<string>>, key: string, value: string): void {
-  let set = map.get(key);
-  if (!set) {
-    set = new Set();
-    map.set(key, set);
-  }
-  set.add(value);
-}
-
 function sortedRecord(record: Record<string, string[]>): Record<string, string[]> {
   return Object.fromEntries(
     Object.entries(record)
       .sort(([a], [b]) => a.localeCompare(b))
       .map(([key, values]) => [key, [...values].sort()]),
   );
+}
+
+const GLOB_META_CHARS = new Set(["*", "?", "{", "["]);
+
+function findFirstGlobMeta(pattern: string): number {
+  for (let i = 0; i < pattern.length; i++) {
+    if (GLOB_META_CHARS.has(pattern[i]!)) {
+      return i;
+    }
+  }
+  return -1;
+}
+
+function deduplicateDirs(dirs: string[]): string[] {
+  const unique = [...new Set(dirs)].sort();
+  const result: string[] = [];
+  for (const dir of unique) {
+    // Skip if any previously-added dir is a parent prefix
+    const isSubdir = result.some((parent) => dir.startsWith(parent));
+    if (!isSubdir) {
+      result.push(dir);
+    }
+  }
+  return result;
 }
