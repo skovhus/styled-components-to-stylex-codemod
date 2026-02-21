@@ -5,13 +5,29 @@ import stylex from "@stylexjs/unplugin";
 import * as fs from "node:fs";
 import * as path from "node:path";
 
+// Test cases excluded from Storybook because their output uses StyleX APIs
+// (e.g. stylex.defineMarker()) that the current @stylexjs/babel-plugin cannot
+// process outside of `.stylex` files.  Remove entries as plugin support lands.
+const STORYBOOK_EXCLUDED_CASES = new Set([
+  "selector-sibling",
+  "selector-adjacentSiblingDestructure",
+  "selector-siblingBaseAfter",
+  "selector-siblingInterpolated",
+  "selector-siblingMarkerScoping",
+]);
+
 // Get all test case names from the test-cases directory
 function getTestCaseNames(testCasesDir: string): string[] {
   const files = fs.readdirSync(testCasesDir);
   const testCaseNames = new Set<string>();
   for (const file of files) {
     const match = file.match(/^(.+?)(?:\.flow)?\.(input|output)\.(?:tsx|jsx)$/);
-    if (match && !match[1].startsWith("_unsupported.") && !match[1].startsWith("_unimplemented.")) {
+    if (
+      match &&
+      !match[1].startsWith("_unsupported.") &&
+      !match[1].startsWith("_unimplemented.") &&
+      !STORYBOOK_EXCLUDED_CASES.has(match[1])
+    ) {
       testCaseNames.add(match[1]);
     }
   }

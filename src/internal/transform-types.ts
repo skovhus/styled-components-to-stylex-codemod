@@ -125,6 +125,12 @@ export type StyledDecl = {
   }>;
   needsWrapperComponent?: boolean;
   /**
+   * When set, the component uses `& + &` (adjacent sibling) selectors and needs
+   * a `stylex.defineMarker()` call for proper scoping. The marker is added to
+   * `stylex.props()` so that `stylex.when.siblingBefore(marker)` can match.
+   */
+  siblingMarkerName?: string;
+  /**
    * Pseudo-alias selectors from `&:${expr}` patterns resolved via
    * `adapter.resolveSelector()` with `kind: "pseudoAlias"`.
    *

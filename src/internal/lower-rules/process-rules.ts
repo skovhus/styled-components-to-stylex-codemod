@@ -308,10 +308,18 @@ export function processDeclRules(ctx: DeclProcessingState): void {
         });
         break;
       } else if (/[+~]/.test(s) && !isHandledComponentPattern) {
-        // Sibling combinators (`& + &`, `& ~ &`) are not supported.
+        // Check for self-adjacent-sibling pattern: `& + &`
+        // Uses stylex.when.siblingBefore(marker) with a per-component defineMarker().
+        const isAdjacentSiblingOfSelf = /^&\s*\+\s*&$/.test(s.trim());
+        if (isAdjacentSiblingOfSelf) {
+          const siblingAction = handleAdjacentSiblingSelector(rule, ctx);
+          if (siblingAction === "break") {
+            break;
+          }
+          continue;
+        }
+        // Other sibling patterns (`& ~ &`, component-based siblings) are not supported.
         // `& ~ &`: stylex.when.anySibling() matches both directions while CSS `~` is forward-only.
-        // `& + &`: stylex.when.siblingBefore() uses defaultMarker() which is file-global —
-        //   without defineMarker() per component, the sibling match can't be scoped.
         state.markBail();
         warnings.push({
           severity: "warning",
@@ -1541,4 +1549,90 @@ function extractReverseSelectorPseudos(selector: string): string[] {
     }
   }
   return pseudos;
+}
+
+/**
+ * Handles the adjacent sibling selector `& + &` by processing declarations and
+ * storing them as computed keys using `stylex.when.siblingBefore(marker)`.
+ *
+ * Each component with `& + &` gets a unique `defineMarker()` for scoping.
+ * Returns "break" on error to bail, otherwise the caller should `continue`.
+ */
+function handleAdjacentSiblingSelector(
+  rule: DeclProcessingState["decl"]["rules"][number],
+  ctx: DeclProcessingState,
+): "break" | void {
+  const {
+    state,
+    decl,
+    styleObj,
+    perPropComputedMedia,
+    cssHelperPropValues,
+    getComposedDefaultValue,
+  } = ctx;
+  const { j, warnings, resolveThemeValue, resolveThemeValueFromFn } = state;
+
+  // Bail on sibling selectors inside @media or other at-rules —
+  // StyleX cannot nest @media inside computed sibling keys.
+  if (rule.atRuleStack.length > 0) {
+    state.markBail();
+    warnings.push({
+      severity: "warning",
+      type: "Unsupported selector: sibling combinator",
+      loc: computeSelectorWarningLoc(decl.loc, decl.rawCss, rule.selector),
+    });
+    return "break";
+  }
+
+  const markerName = `${toStyleKey(decl.localName)}Marker`;
+  decl.siblingMarkerName = markerName;
+
+  // Process declarations into a temporary bucket
+  const bucket: Record<string, unknown> = {};
+  const result = processDeclarationsIntoBucket(
+    rule,
+    bucket,
+    j,
+    decl,
+    resolveThemeValue,
+    resolveThemeValueFromFn,
+    { bailOnUnresolved: true },
+  );
+  if (result === "bail") {
+    state.markBail();
+    warnings.push({
+      severity: "warning",
+      type: "Unsupported selector: unresolved interpolation in sibling selector",
+      loc: computeSelectorWarningLoc(decl.loc, decl.rawCss, rule.selector),
+    });
+    return "break";
+  }
+
+  // Build a fresh stylex.when.siblingBefore(marker) AST node per property
+  // to avoid shared AST references which can corrupt recast printing.
+  const makeSiblingKeyExpr = () =>
+    j.callExpression(
+      j.memberExpression(
+        j.memberExpression(j.identifier("stylex"), j.identifier("when")),
+        j.identifier("siblingBefore"),
+      ),
+      [j.identifier(markerName)],
+    );
+
+  // Add each property to perPropComputedMedia with the sibling computed key
+  for (const [prop, value] of Object.entries(bucket)) {
+    let entry = perPropComputedMedia.get(prop);
+    if (!entry) {
+      const existingVal = (styleObj as Record<string, unknown>)[prop];
+      const defaultValue =
+        existingVal !== undefined
+          ? existingVal
+          : cssHelperPropValues.has(prop)
+            ? getComposedDefaultValue(prop)
+            : null;
+      entry = { defaultValue, entries: [] };
+      perPropComputedMedia.set(prop, entry);
+    }
+    entry.entries.push({ keyExpr: makeSiblingKeyExpr(), value });
+  }
 }

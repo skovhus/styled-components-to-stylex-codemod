@@ -72,6 +72,7 @@ export type WarningType =
   | "Unsupported selector: descendant/child/sibling selector"
   | "Unsupported selector: interpolated pseudo selector"
   | "Unsupported selector: sibling combinator"
+  | "Unsupported selector: unresolved interpolation in sibling selector"
   | "Unsupported selector: ambiguous element selector"
   | "Unsupported selector: attribute selector on unsupported element"
   | "Unsupported selector: element selector on exported component"

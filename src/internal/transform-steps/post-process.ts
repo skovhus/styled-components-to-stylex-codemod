@@ -59,6 +59,14 @@ export function postProcessStep(ctx: TransformContext): StepResult {
     componentNameToStyleKey.set(decl.localName, decl.styleKey);
   }
 
+  // Collect sibling markers from components that use & + & selectors
+  const siblingMarkers = new Map<string, string>();
+  for (const decl of styledDecls) {
+    if (decl.siblingMarkerName) {
+      siblingMarkers.set(decl.styleKey, decl.siblingMarkerName);
+    }
+  }
+
   const post = postProcessTransformedAst({
     root,
     j,
@@ -69,6 +77,7 @@ export function postProcessStep(ctx: TransformContext): StepResult {
     preserveReactImport: ctx.preserveReactImport,
     newImportLocalNames,
     newImportSourcesByLocal,
+    siblingMarkers,
   });
   if (post.changed) {
     ctx.markChanged();

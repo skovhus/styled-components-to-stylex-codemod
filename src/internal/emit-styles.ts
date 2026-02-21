@@ -579,6 +579,29 @@ export function emitStylesAndImports(ctx: TransformContext): { emptyStyleKeys: S
     }
   }
 
+  // Emit `export const <name> = stylex.defineMarker()` for components with sibling selectors.
+  // The `export` is required by the StyleX babel plugin (similar to `defineVars`).
+  const siblingMarkerDecls: any[] = [];
+  const emittedMarkerNames = new Set<string>();
+  for (const decl of styledDecls) {
+    if (decl.siblingMarkerName && !emittedMarkerNames.has(decl.siblingMarkerName)) {
+      emittedMarkerNames.add(decl.siblingMarkerName);
+      siblingMarkerDecls.push(
+        j.exportNamedDeclaration(
+          j.variableDeclaration("const", [
+            j.variableDeclarator(
+              j.identifier(decl.siblingMarkerName),
+              j.callExpression(
+                j.memberExpression(j.identifier("stylex"), j.identifier("defineMarker")),
+                [],
+              ),
+            ),
+          ]),
+        ),
+      );
+    }
+  }
+
   const programBody = root.get().node.program.body as any[];
   if (stylesInsertPosition === "afterImports") {
     const lastImportIdx = (() => {
@@ -591,11 +614,17 @@ export function emitStylesAndImports(ctx: TransformContext): { emptyStyleKeys: S
       return last;
     })();
     const insertAt = lastImportIdx >= 0 ? lastImportIdx + 1 : 0;
-    programBody.splice(insertAt, 0, ...inlineKeyframeDecls, stylesDecl as any);
+    programBody.splice(
+      insertAt,
+      0,
+      ...inlineKeyframeDecls,
+      ...siblingMarkerDecls,
+      stylesDecl as any,
+    );
   } else {
-    // Place inline keyframes and `styles` at the very end of the file.
+    // Place inline keyframes, sibling markers, and `styles` at the very end of the file.
     // This keeps component logic first, styles last for better readability.
-    programBody.push(...inlineKeyframeDecls, stylesDecl as any);
+    programBody.push(...inlineKeyframeDecls, ...siblingMarkerDecls, stylesDecl as any);
   }
 
   // Emit separate stylex.create declarations for variant dimensions

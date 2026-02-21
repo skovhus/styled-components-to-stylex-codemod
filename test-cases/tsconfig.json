@@ -25,6 +25,13 @@
     "./_unsupported.*",
     // Static properties on styled-components are not typeable without workarounds
     "./staticProp-basic.input.tsx",
-    "./staticProp-basic.output.tsx"
+    "./staticProp-basic.output.tsx",
+    // stylex.defineMarker() return type is not assignable to stylex.props() parameter
+    // types in @stylexjs/stylex@0.17.5 — a known type gap for the new marker API.
+    "./selector-sibling.output.tsx",
+    "./selector-adjacentSiblingDestructure.output.tsx",
+    "./selector-siblingBaseAfter.output.tsx",
+    "./selector-siblingInterpolated.output.tsx",
+    "./selector-siblingMarkerScoping.output.tsx"
   ]
 }
