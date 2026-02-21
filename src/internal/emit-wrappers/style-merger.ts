@@ -116,11 +116,10 @@ export function emitStyleMerging(args: {
   // Add sibling marker identifiers when any style arg references a style key with a sibling marker.
   // Analogous to the defaultMarker() logic above, but for & + & selectors.
   if (siblingMarkers && siblingMarkers.size > 0) {
-    const markerKeys = new Set(siblingMarkers.keys());
     for (const arg of styleArgs) {
       const key = getStyleArgKey(arg, stylesIdentifier);
-      if (key && markerKeys.has(key)) {
-        const markerName = siblingMarkers.get(key)!;
+      const markerName = key ? siblingMarkers.get(key) : undefined;
+      if (markerName) {
         styleArgs.push(j.identifier(markerName));
       }
     }
