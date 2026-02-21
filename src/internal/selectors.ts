@@ -299,13 +299,48 @@ function parseAttributeSelectorInternal(selector: string): ParsedAttributeSelect
 // Element selector parsing
 // =============================================================================
 
+/** Tags on which `[disabled]` is equivalent to `:disabled`. */
+const DISABLEABLE_TAGS = new Set(["button", "input", "select", "textarea", "fieldset"]);
+/** Tags on which `[checked]` is equivalent to `:checked`. */
+const CHECKABLE_TAGS = new Set(["input"]);
+/** Tags on which `[required]` is equivalent to `:required`. */
+const REQUIRABLE_TAGS = new Set(["input", "select", "textarea"]);
+
+/**
+ * Maps an HTML boolean attribute selector to its CSS pseudo-class equivalent,
+ * restricted to tags where the mapping is provably equivalent.
+ *
+ * `[readonly]` is intentionally excluded — CSS `:read-only` matches much more
+ * broadly (disabled inputs, checkbox/radio, inherently non-editable elements),
+ * so the mapping would be a behavioral change.
+ *
+ * Returns null if the attribute has no safe pseudo-class mapping for this tag.
+ */
+function mapAttributeToPseudo(attr: string, tagName: string): string | null {
+  const normalized = attr.replace(/\s+/g, "").toLowerCase();
+  const tag = tagName.toLowerCase();
+  if (normalized === "disabled" && DISABLEABLE_TAGS.has(tag)) {
+    return ":disabled";
+  }
+  if (normalized === "checked" && CHECKABLE_TAGS.has(tag)) {
+    return ":checked";
+  }
+  if (normalized === "required" && REQUIRABLE_TAGS.has(tag)) {
+    return ":required";
+  }
+  return null;
+}
+
 /**
  * Parses selectors like "& svg", "& > button", "&:hover svg", "& svg:hover",
- * "&:focus > button:disabled".
+ * "&:focus > button:disabled", "& > button[disabled]".
  *
  * Both descendant (space) and child (>) combinators are mapped the same way
  * because `stylex.when.ancestor()` matches ANY ancestor, not just a direct parent.
  * The child combinator is therefore less strict in the output than the original CSS.
+ *
+ * Attribute selectors on child elements (e.g., `button[disabled]`) are mapped to
+ * their pseudo-class equivalents (`:disabled`) for StyleX compatibility.
  *
  * Returns null if the selector doesn't match an element selector pattern.
  */
@@ -317,47 +352,91 @@ export function parseElementSelectorPattern(selector: string): {
   const trimmed = selector.trim();
 
   // Pattern 1: "&" prefix with optional pseudos and combinator
-  //   e.g., "& svg", "&:hover svg", "&>button", "& > button:disabled"
+  //   e.g., "& svg", "&:hover svg", "&>button", "& > button:disabled", "& > button[disabled]"
   const m = trimmed.match(
-    /^&((?::[\w-]+(?:\([^)]*\))?)*)\s*(>?\s*)([a-zA-Z][a-zA-Z0-9]*)((?::[\w-]+(?:\([^)]*\))?)*)$/,
+    /^&((?::[\w-]+(?:\([^)]*\))?)*)\s*(>?\s*)([a-zA-Z][a-zA-Z0-9]*)((?:\[[^\]]+\])?)((?::[\w-]+(?:\([^)]*\))?)*)$/,
   );
   if (m) {
     const ancestorPseudoRaw = m[1] ?? "";
     const tagName = m[3]!;
-    const childPseudoRaw = m[4] ?? "";
+    const attrRaw = m[4] ?? "";
+    const childPseudoRaw = m[5] ?? "";
+    const childPseudo = resolveChildPseudoWithAttr(childPseudoRaw, attrRaw, tagName);
+    if (childPseudo === undefined) {
+      return null;
+    }
     return {
       tagName,
       ancestorPseudo: ancestorPseudoRaw || null,
-      childPseudo: childPseudoRaw || null,
+      childPseudo,
     };
   }
 
-  // Pattern 2: Bare tag name with optional child pseudo
+  // Pattern 2: Bare tag name with optional attribute and child pseudo
   //   (Stylis strips the `&` for simple descendant selectors)
-  //   e.g., "svg", "button", "svg:hover"
-  const bareM = trimmed.match(/^([a-zA-Z][a-zA-Z0-9]*)((?::[\w-]+(?:\([^)]*\))?)*)$/);
+  //   e.g., "svg", "button", "svg:hover", "button[disabled]"
+  const bareM = trimmed.match(
+    /^([a-zA-Z][a-zA-Z0-9]*)((?:\[[^\]]+\])?)((?::[\w-]+(?:\([^)]*\))?)*)$/,
+  );
   if (bareM) {
-    const childPseudoRaw = bareM[2] ?? "";
+    const bareTagName = bareM[1]!;
+    const attrRaw = bareM[2] ?? "";
+    const childPseudoRaw = bareM[3] ?? "";
+    const childPseudo = resolveChildPseudoWithAttr(childPseudoRaw, attrRaw, bareTagName);
+    if (childPseudo === undefined) {
+      return null;
+    }
     return {
-      tagName: bareM[1]!,
+      tagName: bareTagName,
       ancestorPseudo: null,
-      childPseudo: childPseudoRaw || null,
+      childPseudo,
     };
   }
 
   // Pattern 3: Child combinator without `&` prefix (Stylis strips it)
-  //   e.g., ">button", ">button:disabled"
-  const childCombM = trimmed.match(/^>\s*([a-zA-Z][a-zA-Z0-9]*)((?::[\w-]+(?:\([^)]*\))?)*)$/);
+  //   e.g., ">button", ">button:disabled", ">button[disabled]"
+  const childCombM = trimmed.match(
+    /^>\s*([a-zA-Z][a-zA-Z0-9]*)((?:\[[^\]]+\])?)((?::[\w-]+(?:\([^)]*\))?)*)$/,
+  );
   if (childCombM) {
-    const childPseudoRaw = childCombM[2] ?? "";
+    const combTagName = childCombM[1]!;
+    const attrRaw = childCombM[2] ?? "";
+    const childPseudoRaw = childCombM[3] ?? "";
+    const childPseudo = resolveChildPseudoWithAttr(childPseudoRaw, attrRaw, combTagName);
+    if (childPseudo === undefined) {
+      return null;
+    }
     return {
-      tagName: childCombM[1]!,
+      tagName: combTagName,
       ancestorPseudo: null,
-      childPseudo: childPseudoRaw || null,
+      childPseudo,
     };
   }
 
   return null;
+}
+
+/**
+ * Combines an explicit pseudo-class string with an optional attribute selector.
+ * Returns the combined pseudo string, null if neither is present,
+ * or undefined if the attribute can't be safely mapped for this tag.
+ */
+function resolveChildPseudoWithAttr(
+  pseudoRaw: string,
+  attrRaw: string,
+  tagName: string,
+): string | null | undefined {
+  const pseudo = pseudoRaw || null;
+  if (!attrRaw) {
+    return pseudo;
+  }
+  const attrInner = attrRaw.slice(1, -1); // strip [ and ]
+  const attrPseudo = mapAttributeToPseudo(attrInner, tagName);
+  if (!attrPseudo) {
+    return undefined; // unrecognized attribute or wrong tag → can't parse
+  }
+  // Combine: if both exist, concatenate (e.g., ":disabled:focus")
+  return pseudo ? `${attrPseudo}${pseudo}` : attrPseudo;
 }
 
 // =============================================================================

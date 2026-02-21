@@ -10,7 +10,10 @@ const Button = styled.button`
 const StyledCollapseButton = styled(Button)`
   gap: 8px;
 
-  ${CollapseArrowIcon} {
+  ${
+    // @ts-expect-error — styled-components TS types don't support non-styled components as CSS selectors, but it works at runtime
+    CollapseArrowIcon
+  } {
     width: 18px;
     height: auto;
     transition: transform 0.2s;

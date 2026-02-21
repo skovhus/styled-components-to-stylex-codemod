@@ -8,11 +8,11 @@ const Icon = styled.span`
 
 // Forward descendant selector with unresolvable prop-based interpolation.
 // The interpolation can't be resolved to a theme value, so should bail.
-const Button = styled.button`
+const Button = styled.button<{ $color?: string }>`
   padding: 8px;
 
   &:hover ${Icon} {
-    color: ${(props: { $color?: string }) => props.$color ?? "red"};
+    color: ${(props) => props.$color ?? "red"};
   }
 `;
 

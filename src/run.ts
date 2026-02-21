@@ -62,11 +62,11 @@ export interface RunTransformOptions {
   parser?: "babel" | "babylon" | "flow" | "ts" | "tsx";
 
   /**
-   * Command to run after transformation to format the output files.
-   * The transformed file paths will be appended as arguments.
-   * @example "pnpm prettier --write"
+   * Commands to run after transformation to format the output files.
+   * Each command string will be invoked with the transformed file paths appended as arguments.
+   * @example ["pnpm prettier --write", "pnpm eslint --fix"]
    */
-  formatterCommand?: string;
+  formatterCommands?: string[];
 
   /**
    * Maximum number of examples shown per warning category in the summary.
@@ -179,7 +179,7 @@ export async function runTransform(options: RunTransformOptions): Promise<RunTra
     dryRun = false,
     print = false,
     parser = "tsx",
-    formatterCommand,
+    formatterCommands,
     maxExamples,
   } = options;
 
@@ -199,6 +199,7 @@ export async function runTransform(options: RunTransformOptions): Promise<RunTra
       }`;
       const filePath = ctx.filePath ?? "<unknown>";
       Logger.logError(msg, filePath, ctx.loc, ctx);
+      Logger.markErrorAsLogged(e);
       throw e;
     }
   };
@@ -209,6 +210,7 @@ export async function runTransform(options: RunTransformOptions): Promise<RunTra
     } catch (e) {
       const msg = `adapter.resolveCall threw an error: ${e instanceof Error ? e.message : String(e)}`;
       Logger.logError(msg, ctx.callSiteFilePath, ctx.loc, ctx);
+      Logger.markErrorAsLogged(e);
       throw e;
     }
   };
@@ -221,6 +223,7 @@ export async function runTransform(options: RunTransformOptions): Promise<RunTra
     } catch (e) {
       const msg = `adapter.resolveSelector threw an error: ${e instanceof Error ? e.message : String(e)}`;
       Logger.logError(msg, ctx.filePath, ctx.loc, ctx);
+      Logger.markErrorAsLogged(e);
       throw e;
     }
   };
@@ -334,27 +337,29 @@ export async function runTransform(options: RunTransformOptions): Promise<RunTra
     }
   }
 
-  // Run formatter if specified and files were transformed (not in dry run mode)
-  if (formatterCommand && result.ok > 0 && !dryRun) {
-    const [cmd, ...cmdArgs] = formatterCommand.split(/\s+/);
-    if (cmd) {
-      try {
-        await new Promise<void>((resolve, reject) => {
-          const proc = spawn(cmd, [...cmdArgs, ...filePaths], {
-            stdio: "inherit",
-            shell: true,
+  // Run formatter commands if specified and files were transformed (not in dry run mode)
+  if (formatterCommands && formatterCommands.length > 0 && result.ok > 0 && !dryRun) {
+    for (const formatterCommand of formatterCommands) {
+      const [cmd, ...cmdArgs] = formatterCommand.split(/\s+/);
+      if (cmd) {
+        try {
+          await new Promise<void>((resolve, reject) => {
+            const proc = spawn(cmd, [...cmdArgs, ...filePaths], {
+              stdio: "inherit",
+              shell: true,
+            });
+            proc.on("close", (code) => {
+              if (code === 0) {
+                resolve();
+              } else {
+                reject(new Error(`Formatter command exited with code ${code}`));
+              }
+            });
+            proc.on("error", reject);
           });
-          proc.on("close", (code) => {
-            if (code === 0) {
-              resolve();
-            } else {
-              reject(new Error(`Formatter command exited with code ${code}`));
-            }
-          });
-          proc.on("error", reject);
-        });
-      } catch (e) {
-        Logger.warn(`Formatter command failed: ${e instanceof Error ? e.message : String(e)}`);
+        } catch (e) {
+          Logger.warn(`Formatter command failed: ${e instanceof Error ? e.message : String(e)}`);
+        }
       }
     }
   }

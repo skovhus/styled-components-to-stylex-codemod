@@ -10,11 +10,11 @@ const Link = styled.a`
 // Reverse component selector with a prop-based ternary that can't be resolved to a theme value.
 // The interpolation `${props => props.$active ? 'green' : 'gray'}` is not a theme access,
 // so resolveThemeValue returns null and the declaration must not be silently dropped.
-const Badge = styled.span`
+const Badge = styled.span<{ $active?: boolean }>`
   padding: 4px 8px;
 
   ${Link}:hover & {
-    color: ${(props: { $active?: boolean }) => (props.$active ? "green" : "gray")};
+    color: ${(props) => (props.$active ? "green" : "gray")};
   }
 `;
 

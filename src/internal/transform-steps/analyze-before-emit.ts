@@ -360,9 +360,10 @@ export function analyzeBeforeEmitStep(ctx: TransformContext): StepResult {
   // (before emitStylesAndImports for merger import and wrapper generation)
   for (const decl of styledDecls) {
     // 1. If extended by another styled component in this file -> enable external styles
+    //    Leave supportsAsProp unset (undefined) so the emitter can auto-derive `as`
+    //    support for intrinsic-based components.
     if (extendedBy.has(decl.localName)) {
       decl.supportsExternalStyles = true;
-      decl.supportsAsProp = false;
       continue;
     }
 
@@ -381,10 +382,8 @@ export function analyzeBeforeEmitStep(ctx: TransformContext): StepResult {
       exportName: exportInfo.exportName,
       isDefaultExport: exportInfo.isDefault,
     });
-    decl.supportsExternalStyles = extResult?.styles === true;
-    // When styles: true, `as` is implicitly enabled (no `as` property in that branch)
-    // When styles: false, check the explicit `as` property
-    decl.supportsAsProp = extResult?.styles === false && extResult.as === true;
+    decl.supportsExternalStyles = extResult.styles;
+    decl.supportsAsProp = extResult.as;
   }
 
   // Early detection of components used as values (before emitStylesAndImports for merger import)
