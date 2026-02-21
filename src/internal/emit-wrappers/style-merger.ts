@@ -233,16 +233,24 @@ function emitWithoutStylex(args: {
 
   if (allowStyleProp) {
     if (inlineStyleProps.length > 0) {
-      styleAttr = j.objectExpression([
-        j.spreadElement(styleId),
-        ...inlineStyleProps.map((p) => j.property("init", j.identifier(p.prop), p.expr)),
-      ]);
+      styleAttr = maybeCastStyleForCustomProps(
+        j,
+        j.objectExpression([
+          j.spreadElement(styleId),
+          ...inlineStyleProps.map((p) => j.property("init", inlineStylePropKey(j, p.prop), p.expr)),
+        ]),
+        inlineStyleProps,
+      );
     } else {
       styleAttr = styleId;
     }
   } else if (inlineStyleProps.length > 0) {
-    styleAttr = j.objectExpression(
-      inlineStyleProps.map((p) => j.property("init", j.identifier(p.prop), p.expr)),
+    styleAttr = maybeCastStyleForCustomProps(
+      j,
+      j.objectExpression(
+        inlineStyleProps.map((p) => j.property("init", inlineStylePropKey(j, p.prop), p.expr)),
+      ),
+      inlineStyleProps,
     );
   }
 
@@ -306,7 +314,9 @@ function emitWithMerger(args: {
         mergerArgs.push(
           j.objectExpression([
             j.spreadElement(styleId),
-            ...inlineStyleProps.map((p) => j.property("init", j.identifier(p.prop), p.expr)),
+            ...inlineStyleProps.map((p) =>
+              j.property("init", inlineStylePropKey(j, p.prop), p.expr),
+            ),
           ]),
         );
       } else {
@@ -317,7 +327,7 @@ function emitWithMerger(args: {
       mergerArgs.push(j.identifier("undefined"));
       mergerArgs.push(
         j.objectExpression(
-          inlineStyleProps.map((p) => j.property("init", j.identifier(p.prop), p.expr)),
+          inlineStyleProps.map((p) => j.property("init", inlineStylePropKey(j, p.prop), p.expr)),
         ),
       );
     }
@@ -395,9 +405,9 @@ function emitVerbosePattern(args: {
     const spreads: any[] = [
       j.spreadElement(j.memberExpression(j.identifier("sx"), j.identifier("style"))),
       ...(allowStyleProp ? [j.spreadElement(styleId)] : []),
-      ...inlineStyleProps.map((p) => j.property("init", j.identifier(p.prop), p.expr)),
+      ...inlineStyleProps.map((p) => j.property("init", inlineStylePropKey(j, p.prop), p.expr)),
     ];
-    styleAttr = j.objectExpression(spreads);
+    styleAttr = maybeCastStyleForCustomProps(j, j.objectExpression(spreads), inlineStyleProps);
   }
 
   return {
@@ -409,4 +419,26 @@ function emitVerbosePattern(args: {
     classNameBeforeSpread: false,
     styleAttr,
   };
+}
+
+// --- Non-exported helpers ---
+
+/** Returns a string literal key for CSS custom properties (--foo), identifier otherwise. */
+function inlineStylePropKey(j: JSCodeshift, prop: string): ExpressionKind {
+  return prop.startsWith("--") ? j.literal(prop) : j.identifier(prop);
+}
+
+/** Wraps an object expression with `as React.CSSProperties` when it contains CSS custom properties. */
+function maybeCastStyleForCustomProps(
+  j: JSCodeshift,
+  styleExpr: ExpressionKind,
+  inlineStyleProps: Array<{ prop: string }>,
+): ExpressionKind {
+  if (!inlineStyleProps.some((p) => p.prop.startsWith("--"))) {
+    return styleExpr;
+  }
+  return j.tsAsExpression(
+    styleExpr,
+    j.tsTypeReference(j.tsQualifiedName(j.identifier("React"), j.identifier("CSSProperties"))),
+  );
 }

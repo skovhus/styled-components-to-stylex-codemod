@@ -136,10 +136,14 @@ export function handleInterpolatedDeclaration(args: InterpolatedDeclarationConte
     if (tryHandleAnimation({ j, decl, d, keyframesNames, styleObj })) {
       continue;
     }
-    // Bail only for dynamic styles inside ::before/::after pseudo elements.
-    // StyleX generates invalid @property rules for these specific cases.
-    // See: https://github.com/facebook/stylex/issues/1396
-    if (isUnsupportedDynamicPseudoElement(pseudoElement)) {
+    // Dynamic styles inside ::before/::after pseudo-elements are not natively supported
+    // by StyleX (see https://github.com/facebook/stylex/issues/1396).
+    // Workaround: use CSS custom properties set as inline styles on the parent element,
+    // referenced via var() in the pseudo-element's static StyleX styles.
+    if (isPseudoElementSelector(pseudoElement)) {
+      if (tryHandleDynamicPseudoElementViaCustomProperty(args)) {
+        continue;
+      }
       warnings.push({
         severity: "error",
         type: "Dynamic styles inside pseudo elements (::before/::after) are not supported by StyleX. See https://github.com/facebook/stylex/issues/1396",
@@ -1614,11 +1618,81 @@ export function handleInterpolatedDeclaration(args: InterpolatedDeclarationConte
   }
 }
 
-function isUnsupportedDynamicPseudoElement(pseudoElement: string | null): boolean {
+function isPseudoElementSelector(pseudoElement: string | null): boolean {
   return (
     pseudoElement === "::before" ||
     pseudoElement === "::after" ||
     pseudoElement === ":before" ||
     pseudoElement === ":after"
   );
+}
+
+/**
+ * Handles dynamic interpolations inside ::before/::after pseudo-elements by emitting
+ * CSS custom properties on the parent element and referencing them with var() in the
+ * pseudo-element's static StyleX styles.
+ *
+ * Example transform:
+ *   Input:  `&::after { background-color: ${(props) => props.$badgeColor}; }`
+ *   Output: StyleX  → `"::after": { backgroundColor: "var(--backgroundColor)" }`
+ *           Inline  → `style={{ "--backgroundColor": $badgeColor }}`
+ */
+function tryHandleDynamicPseudoElementViaCustomProperty(
+  args: InterpolatedDeclarationContext,
+): boolean {
+  const { ctx, d, applyResolvedPropValue } = args;
+  const { state, decl, inlineStyleProps } = ctx;
+  const { j } = state;
+
+  if (!d.property || d.value.kind !== "interpolated") {
+    return false;
+  }
+
+  const slotPart = d.value.parts.find(
+    (p: { kind?: string }): p is { kind: "slot"; slotId: number } => p.kind === "slot",
+  );
+  if (!slotPart) {
+    return false;
+  }
+
+  const expr = decl.templateExpressions[slotPart.slotId] as { type?: string } | undefined;
+  if (!expr || (expr.type !== "ArrowFunctionExpression" && expr.type !== "FunctionExpression")) {
+    return false;
+  }
+
+  // Theme-based dynamic values inside pseudo-elements cannot be handled this way
+  if (hasThemeAccessInArrowFn(expr)) {
+    return false;
+  }
+
+  // Extract prop references and inline the arrow function body
+  const unwrapped = unwrapArrowFunctionToPropsExpr(j, expr);
+  if (!unwrapped) {
+    return false;
+  }
+
+  const { expr: inlineExpr, propsUsed } = unwrapped;
+
+  // Handle static parts (prefix/suffix like `${value}px`)
+  const { prefix, suffix } = extractStaticParts(d.value);
+  const valueExpr: ExpressionKind =
+    prefix || suffix ? buildTemplateWithStaticParts(j, inlineExpr, prefix, suffix) : inlineExpr;
+
+  // For each CSS output property, generate a custom property and var() reference
+  for (const out of cssDeclarationToStylexDeclarations(d)) {
+    if (!out.prop) {
+      continue;
+    }
+    const customPropName = `--${out.prop}`;
+    applyResolvedPropValue(out.prop, `var(${customPropName})`, null);
+    inlineStyleProps.push({ prop: customPropName, expr: valueExpr });
+  }
+
+  // Mark props to not forward to DOM
+  for (const propName of propsUsed) {
+    ensureShouldForwardPropDrop(decl, propName);
+  }
+
+  decl.needsWrapperComponent = true;
+  return true;
 }
