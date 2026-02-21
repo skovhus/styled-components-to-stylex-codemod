@@ -314,8 +314,7 @@ export function processDeclRules(ctx: DeclProcessingState): void {
         break;
       } else if (/[+~]/.test(s) && !isHandledComponentPattern) {
         // Self-referencing sibling combinators (`& + &`, `& ~ &`) are supported via
-        // stylex.when.siblingBefore() and stylex.when.anySibling().
-        // Non-self-referencing patterns still bail.
+        // stylex.when.siblingBefore(). Non-self-referencing patterns still bail.
         const selfSiblingMatch = s.match(/^&\s*([+~])\s*&$/);
         if (!selfSiblingMatch) {
           state.markBail();
@@ -328,14 +327,17 @@ export function processDeclRules(ctx: DeclProcessingState): void {
         }
 
         // Handle self-referencing sibling selector: collect declarations into perPropComputedMedia.
-        // Both `& + &` (adjacent) and `& ~ &` (general) map to siblingBefore():
-        //   CSS `~` is forward-only — only subsequent siblings match.
-        //   stylex.when.anySibling() matches both directions (uses :has()), so the
-        //   first element would incorrectly get styled. siblingBefore() is forward-only
-        //   ("style me when a sibling before me has the marker"), which correctly leaves
-        //   the first element unstyled — matching CSS `~` semantics.
-        //   For `& + &` (adjacent), siblingBefore() is also correct: with defaultMarker()
-        //   on every instance, any non-first instance has a marked preceding sibling.
+        // Both `& + &` (adjacent) and `& ~ &` (general) map to siblingBefore().
+        //
+        // Known semantic broadenings vs CSS:
+        //  1. siblingBefore() emits `:where(.marker ~ *)` (general sibling), not `+ *`
+        //     (adjacent). For `& + &`, if an unrelated element is interleaved between
+        //     two instances, CSS would NOT match but siblingBefore() WILL.
+        //     StyleX has no adjacent-sibling API, so this is the closest approximation.
+        //  2. defaultMarker() is file-global, not component-scoped. If another component
+        //     in the same file also uses defaultMarker() (e.g. for ancestor overrides),
+        //     its marker could incorrectly activate this component's sibling styles.
+        //     Use stylex.defineMarker() for strict scoping (not yet implemented).
         const siblingKeyExpr = makeSiblingKey(j);
 
         // Mark this component for defaultMarker() so siblings can observe it
