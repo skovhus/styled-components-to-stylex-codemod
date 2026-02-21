@@ -1,0 +1,1 @@
+import{j as s,Z as n}from"./index-ByrUIRfx.js";function r(t){const{children:o}=t,e=n();return s.jsx("div",{...{0:{className:"xhxy2q7"},1:{}}[!!e.isDark<<0],children:o})}const c=()=>s.jsx(r,{});export{c as App};
