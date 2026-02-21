@@ -4,10 +4,6 @@ Transform styled-components to StyleX.
 
 **[Try it in the online playground](https://skovhus.github.io/styled-components-to-stylex-codemod/)** — experiment with the transform in your browser.
 
-> [!WARNING]
->
-> **Very much under construction (alpha):** this codemod is still early in development — expect rough edges! 🚧
-
 ## Installation
 
 ```bash
@@ -24,10 +20,45 @@ Use `runTransform` to transform files matching a glob pattern:
 import { runTransform, defineAdapter } from "styled-components-to-stylex-codemod";
 
 const adapter = defineAdapter({
+  // Map theme paths and CSS variables to StyleX expressions
+  resolveValue(ctx) {
+    return null;
+  },
+  // Map helper function calls to StyleX expressions
+  resolveCall(ctx) {
+    return null;
+  },
+  // Control which components accept external className/style and polymorphic `as`
+  externalInterface(ctx) {
+    return { style: false, as: false };
+  },
+  // Optional: use a helper for merging StyleX styles with external className/style
+  styleMerger: null,
+});
+
+await runTransform({
+  files: "src/**/*.tsx",
+  adapter,
+  dryRun: false,
+  parser: "tsx",
+  formatterCommands: ["pnpm prettier --write"],
+});
+```
+
+<details>
+<summary>Full adapter example</summary>
+
+```ts
+import { runTransform, defineAdapter } from "styled-components-to-stylex-codemod";
+
+const adapter = defineAdapter({
+  /**
+   * Resolve dynamic values in styled template literals to StyleX expressions.
+   * Called for theme access (`props.theme.x`), CSS variables (`var(--x)`),
+   * and imported values. Return `{ expr, imports }` or `null` to skip.
+   */
   resolveValue(ctx) {
     if (ctx.kind === "theme") {
-      // Called for patterns like: ${(props) => props.theme.color.primary}
-      // `ctx.path` is the dotted path after `theme.`
       const varName = ctx.path.replace(/\./g, "_");
       return {
         expr: `tokens.${varName}`,
@@ -41,39 +72,11 @@ const adapter = defineAdapter({
     }
 
     if (ctx.kind === "cssVariable") {
-      // Called for CSS values containing `var(--...)`
-      // Note: `fallback` is the raw fallback string inside `var(--x, <fallback>)` (if present).
-      // Note: `definedValue` is populated when the transformer sees a local `--x: <value>` definition.
-      const { name, fallback, definedValue } = ctx;
+      const toCamelCase = (s: string) =>
+        s.replace(/^--/, "").replace(/-([a-z])/g, (_, c) => c.toUpperCase());
 
-      // Example: lift `var(--base-size)` to StyleX vars, and optionally drop a matching local definition.
-      if (name === "--base-size") {
-        return {
-          expr: "calcVars.baseSize",
-          imports: [
-            {
-              from: { kind: "specifier", value: "./css-calc.stylex" },
-              names: [{ imported: "calcVars" }],
-            },
-          ],
-          ...(definedValue === "16px" ? { dropDefinition: true } : {}),
-        };
-      }
-
-      // Generic mapping: `--kebab-case` -> `vars.kebabCase`
-      // e.g. `--color-primary` -> `vars.colorPrimary`
-      const toCamelCase = (cssVarName: string) =>
-        cssVarName
-          .replace(/^--/, "")
-          .split("-")
-          .filter(Boolean)
-          .map((part, i) => (i === 0 ? part : part[0]?.toUpperCase() + part.slice(1)))
-          .join("");
-
-      // If you care about fallbacks, you can use `fallback` here to decide whether to resolve or not.
-      void fallback;
       return {
-        expr: `vars.${toCamelCase(name)}`,
+        expr: `vars.${toCamelCase(ctx.name)}`,
         imports: [
           {
             from: { kind: "specifier", value: "./css-variables.stylex" },
@@ -86,19 +89,12 @@ const adapter = defineAdapter({
     return null;
   },
 
+  /**
+   * Resolve helper function calls in template interpolations.
+   * e.g. `${transitionSpeed("slow")}` → `transitionSpeedVars.slow`
+   * Return `{ expr, imports }` or `null` to bail the file with a warning.
+   */
   resolveCall(ctx) {
-    // Called for template interpolations like: ${transitionSpeed("slowTransition")}
-    // `calleeImportedName` is the imported symbol name (works even with aliasing).
-    // `calleeSource` tells you where it came from:
-    // - { kind: "absolutePath", value: "/abs/path" } for relative imports
-    // - { kind: "specifier", value: "some-package/foo" } for package imports
-    //
-    // The codemod determines how to use the result based on context:
-    // - If `ctx.cssProperty` exists (e.g., `border: ${helper()}`) → result is used as a CSS value
-    // - If `ctx.cssProperty` is undefined (e.g., `${helper()}`) → result is used as a StyleX style object
-    //
-    // Use `ctx.cssProperty` to return the appropriate expression for the context.
-
     const arg0 = ctx.args[0];
     const key = arg0?.kind === "literal" && typeof arg0.value === "string" ? arg0.value : null;
     if (ctx.calleeImportedName !== "transitionSpeed" || !key) {
@@ -116,27 +112,42 @@ const adapter = defineAdapter({
     };
   },
 
-  externalInterface() {
-    return null;
+  /**
+   * Control which exported components accept external className/style
+   * and/or polymorphic `as` prop. Return `{ styles, as }` flags.
+   */
+  externalInterface(ctx) {
+    if (ctx.filePath.includes("/shared/components/")) {
+      return { styles: true, as: true };
+    }
+    return { styles: false, as: false };
   },
 
-  styleMerger: null,
+  /**
+   * When `externalInterface` enables styles, use a helper to merge
+   * StyleX styles with external className/style props.
+   * See test-cases/lib/mergedSx.ts for a reference implementation.
+   */
+  styleMerger: {
+    functionName: "mergedSx",
+    importSource: { kind: "specifier", value: "./lib/mergedSx" },
+  },
 });
 
-const result = await runTransform({
+await runTransform({
   files: "src/**/*.tsx",
   adapter,
   dryRun: false,
-  parser: "tsx", // "babel" | "babylon" | "flow" | "ts" | "tsx"
-  formatterCommand: "pnpm prettier --write", // optional: format transformed files
+  parser: "tsx",
+  formatterCommands: ["pnpm prettier --write"],
 });
-
-console.log(result);
 ```
+
+</details>
 
 ### Adapter
 
-Adapters are the main extension point. They let you control:
+Adapters are the main extension point, see full example above. They let you control:
 
 - how theme paths, CSS variables, and imported values are turned into StyleX-compatible JS values (`resolveValue`)
 - what extra imports to inject into transformed files (returned from `resolveValue`)
@@ -144,103 +155,60 @@ Adapters are the main extension point. They let you control:
 - which exported components should support external className/style extension and/or polymorphic `as` prop (`externalInterface`)
 - how className/style merging is handled for components accepting external styling (`styleMerger`)
 
-#### Style Merger
+#### Auto-detecting external interface usage (experimental)
 
-When a component accepts external `className` and/or `style` props (e.g., via `shouldSupportExternalStyling`, or when wrapping a base component that already accepts these props), the generated code needs to merge StyleX styles with externally passed values.
+Instead of manually specifying which components need `styles` or `as` support, you can use `createExternalInterface` to auto-detect usage by scanning your consumer code with [ripgrep](https://github.com/BurntSushi/ripgrep) (`rg`).
 
-> **Note:** Allowing external className/style props is generally discouraged in StyleX as it bypasses the type-safe styling system. However, it can be useful during migration to maintain compatibility with existing code that passes these props.
-
-By default, this generates verbose inline merging code. You can provide a `styleMerger` to use a helper function instead for cleaner output:
+> [!NOTE]
+> Experimental. Requires `rg` installed and available in `$PATH`. Not supported on Windows.
+> `createExternalInterface` also relies on optional dependency `oxc-resolver` for import resolution.
+> Install it when using this feature:
+>
+> ```bash
+> npm install oxc-resolver
+> # or
+> pnpm add oxc-resolver
+> ```
 
 ```ts
-const adapter = defineAdapter({
-  resolveValue(ctx) {
-    // ... value resolution logic
-    return null;
-  },
+import { defineAdapter, createExternalInterface } from "styled-components-to-stylex-codemod";
 
-  resolveCall() {
-    return null;
-  },
+const externalInterface = createExternalInterface({ searchDirs: ["src/"] });
 
-  externalInterface(ctx) {
-    if (ctx.filePath.includes("/shared/components/")) {
-      return { styles: true };
-    }
-    return null;
-  },
-
-  // Use a custom merger function for cleaner output
-  styleMerger: {
-    functionName: "mergedSx",
-    importSource: { kind: "specifier", value: "./lib/mergedSx" },
-  },
+export default defineAdapter({
+  // ...
+  externalInterface: externalInterface.get,
 });
 ```
 
-The merger function should have this signature:
+This scans the given directories for `styled(Component)` calls and `<Component as={...}>` JSX usage, resolves imports back to the component definition files, and returns the appropriate `{ styles, as }` flags automatically.
+
+### Cross-file component selectors
+
+When styled-components reference other components as selectors across file boundaries (e.g., `` styled.div`${Icon} { color: red }` `` where `Icon` is imported from another file), the codemod needs to scan consumer files to wire up the cross-file overrides.
+
+Use `consumerPaths` to specify additional files to scan:
 
 ```ts
-function mergedSx(
-  styles: StyleXStyles,
-  className?: string,
-  style?: React.CSSProperties,
-): ReturnType<typeof stylex.props>;
-```
-
-See [`test-cases/lib/mergedSx.ts`](./test-cases/lib/mergedSx.ts) for a reference implementation.
-
-#### External Interface (Styles and Polymorphic `as` Support)
-
-Transformed components are "closed" by default — they don't accept external `className` or `style` props, and exported components only get `as` support when it is used inside the file. Use `externalInterface` to control which exported components should support these features:
-
-```ts
-const adapter = defineAdapter({
-  resolveValue(ctx) {
-    // ... value resolution logic
-    return null;
-  },
-
-  resolveCall() {
-    return null;
-  },
-
-  externalInterface(ctx) {
-    // ctx: { filePath, componentName, exportName, isDefaultExport }
-
-    // Example: Enable styles (and `as`) for all exports in shared components folder
-    if (ctx.filePath.includes("/shared/components/")) {
-      return { styles: true };
-    }
-
-    // Example: Enable only `as` prop (no style merging)
-    if (ctx.componentName === "Typography") {
-      return { styles: false, as: true };
-    }
-
-    // Disable both (default)
-    return null;
-  },
-
-  styleMerger: null,
+await runTransform({
+  files: "src/components/**/*.tsx",
+  consumerPaths: "src/**/*.tsx",
+  adapter,
 });
 ```
 
-The `externalInterface` method returns:
+- **Files in both `files` and `consumerPaths`** use the marker strategy (both sides are transformed).
+- **Files only in `consumerPaths`** trigger the bridge strategy (stable className + toString shim for incremental migration where consumers aren't yet transformed).
 
-- `null` — no external interface (neither className/style nor `as` prop)
-- `{ styles: true }` — accept className/style props AND polymorphic `as` prop
-- `{ styles: false, as: true }` — accept only polymorphic `as` prop (no style merging)
-- `{ styles: false, as: false }` — equivalent to `null`
-
-When `styles: true`, the generated component will:
-
-- Accept `className` and `style` props
-- Merge them with the StyleX-generated styles
-- Forward remaining props via `...rest`
-- Accept polymorphic `as` prop (required for style merging to work correctly)
-
-When `{ styles: false, as: true }`, the generated component will accept a polymorphic `as` prop but won't include className/style merging.
+> [!NOTE]
+> `consumerPaths` requires the optional dependency `oxc-resolver` for import resolution.
+> Install it when using this option:
+>
+> ```bash
+> npm install oxc-resolver
+> # or
+> pnpm add oxc-resolver
+> ```
 
 #### Dynamic interpolations
 
@@ -257,7 +225,7 @@ When the codemod encounters an interpolation inside a styled template literal, i
 - helper calls applied to prop values (e.g. `shadow(props.shadow)`) by emitting a StyleX style function that calls the helper at runtime
 - conditional CSS blocks via ternary (e.g. `props.$dim ? "opacity: 0.5;" : ""`)
 
-If the pipeline can’t resolve an interpolation:
+If the pipeline can't resolve an interpolation:
 
 - for some dynamic value cases, the transform preserves the value as a wrapper inline style so output keeps visual parity (at the cost of using `style={...}` for that prop)
 - otherwise, the declaration containing that interpolation is **dropped** and a warning is produced (manual follow-up required)
@@ -267,6 +235,39 @@ If the pipeline can’t resolve an interpolation:
 - **Flow** type generation is non-existing, works best with TypeScript or plain JS right now. Contributions more than welcome!
 - **createGlobalStyle**: detected usage is reported as an **unsupported-feature** warning (StyleX does not support global styles in the same way).
 - **Theme prop overrides**: passing a `theme` prop directly to styled components (e.g. `<Button theme={...} />`) is not supported and will bail with a warning.
+
+## Migration game plan
+
+### 1. Define your theme and mixins as StyleX
+
+Before running the codemod, convert your theme object and shared style helpers into StyleX equivalents:
+
+```ts
+// tokens.stylex.ts — theme variables
+import * as stylex from "@stylexjs/stylex";
+
+// Before: { colors: { primary: "#0066cc" }, spacing: { sm: "8px" } }
+export const colors = stylex.defineVars({ primary: "#0066cc" });
+export const spacing = stylex.defineVars({ sm: "8px" });
+```
+
+```ts
+// helpers.stylex.ts — shared mixins
+import * as stylex from "@stylexjs/stylex";
+
+// Before: export const truncate = () => `white-space: nowrap; overflow: hidden; ...`
+export const truncate = stylex.create({
+  base: { whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" },
+});
+```
+
+### 2. Write an adapter and run the codemod
+
+The adapter maps your project's `props.theme.*` access, CSS variables, and helper calls to the StyleX equivalents from step 1. See [Usage](#usage) for the full API.
+
+### 3. Verify, iterate, clean up
+
+Build and test your project. Review warnings — they tell you which files were skipped and why. Fix adapter gaps, re-run on remaining files, and repeat until done. [Report issues](https://github.com/skovhus/styled-components-to-stylex-codemod/issues) with input/output examples if the codemod produces incorrect results.
 
 ## License
 

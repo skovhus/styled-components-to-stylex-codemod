@@ -2,6 +2,7 @@
  * Built-in resolution handlers for dynamic interpolations.
  * Core concepts: adapter hooks, conditional splitting, and StyleX emission.
  */
+import type { CallResolveContext } from "../adapter.js";
 import {
   getArrowFnParamBindings,
   getArrowFnSingleParamName,
@@ -11,7 +12,9 @@ import {
   isArrowFunctionExpression,
   isCallExpressionNode,
   isLogicalExpressionNode,
+  literalToStaticValue,
   resolveIdentifierToPropName,
+  unwrapLogicalFallback,
 } from "./utilities/jscodeshift-utils.js";
 import { sanitizeIdentifier } from "./utilities/string-utils.js";
 import { hasThemeAccessInArrowFn } from "./lower-rules/inline-styles.js";
@@ -20,7 +23,9 @@ import {
   buildResolvedHandlerResult,
   buildUnresolvedHelperResult,
   getArrowFnThemeParamInfo,
+  isAdapterResultCssValue,
   resolveImportedHelperCall,
+  resolveTemplateLiteralWithTheme,
   tryResolveCallExpression,
 } from "./builtin-handlers/resolver-utils.js";
 import {
@@ -51,13 +56,14 @@ export function resolveDynamicNode(
     tryResolveThemeAccess(node, ctx) ??
     tryResolveCallExpression(node, ctx) ??
     tryResolveArrowFnHelperCallWithThemeArg(node, ctx) ??
+    tryResolveArrowFnCallWithConditionalArgs(node, ctx) ??
     tryResolveConditionalValue(node, ctx) ??
     tryResolveIndexedThemeWithPropFallback(node, ctx) ??
     tryResolveConditionalCssBlockTernary(node, ctx) ??
     tryResolveConditionalCssBlock(node, ctx) ??
     tryResolveArrowFnCallWithSinglePropArg(node) ??
-    // Detect theme-dependent template literals before trying to emit style functions
-    tryResolveThemeDependentTemplateLiteral(node) ??
+    // Resolve or detect theme-dependent template literals before trying to emit style functions
+    tryResolveThemeDependentTemplateLiteral(node, ctx) ??
     tryResolveStyleFunctionFromTemplateLiteral(node) ??
     tryResolveInlineStyleValueForNestedPropAccess(node) ??
     tryResolvePropAccess(node) ??
@@ -81,24 +87,14 @@ function tryResolveThemeAccess(
   if (!info) {
     return null;
   }
-  const body = expr.body;
-  if (body.type !== "MemberExpression") {
+  // Extract the theme member expression from the body.
+  // Handles both direct member access (`props.theme.X`) and logical fallback
+  // patterns (`props.theme.X ?? "default"` / `props.theme.X || "default"`).
+  const themeExpr = extractThemeMemberExpression(expr.body);
+  if (!themeExpr) {
     return null;
   }
-  const path = (() => {
-    if (info.kind === "propsParam") {
-      const parts = getMemberPathFromIdentifier(body, info.propsName);
-      if (!parts || parts[0] !== "theme") {
-        return null;
-      }
-      return parts.slice(1).join(".");
-    }
-    const parts = getMemberPathFromIdentifier(body, info.themeName);
-    if (!parts) {
-      return null;
-    }
-    return parts.join(".");
-  })();
+  const path = extractThemePath(themeExpr, info);
   if (!path) {
     return null;
   }
@@ -107,12 +103,73 @@ function tryResolveThemeAccess(
     kind: "theme",
     path,
     filePath: ctx.filePath,
-    loc: getNodeLocStart(body) ?? undefined,
+    loc: getNodeLocStart(themeExpr) ?? undefined,
   });
   if (!res) {
     return null;
   }
-  return { type: "resolvedValue", expr: res.expr, imports: res.imports };
+  // Preserve logical fallback (`?? "default"` / `|| "default"`) so users can
+  // review and delete it if their adapter always returns defined values.
+  // Returns null when the fallback is non-literal (e.g., props.fallbackColor) —
+  // bail so a downstream handler can emit keepOriginal or inline style.
+  const resultExpr = appendLogicalFallback(expr.body, res.expr);
+  if (resultExpr === null) {
+    return null;
+  }
+  return { type: "resolvedValue", expr: resultExpr, imports: res.imports };
+}
+
+/**
+ * Extracts the theme member expression from an arrow function body.
+ *
+ * Supports:
+ * - Direct: `props.theme.color.labelBase` (MemberExpression)
+ * - Logical fallback: `props.theme.color.labelBase ?? "black"` or `|| "default"`
+ *   (LogicalExpression with `??` or `||` and theme access on the left)
+ *
+ * Returns the MemberExpression node, or null if the pattern doesn't match.
+ * The fallback (right side of `??`/`||`) is preserved by the caller via
+ * `appendLogicalFallback` so users can review and delete it.
+ */
+function extractThemeMemberExpression(body: unknown): { type: "MemberExpression" } | null {
+  if (!body || typeof body !== "object") {
+    return null;
+  }
+  // Try unwrapping logical fallback (e.g., `theme.X ?? "default"`)
+  const unwrapped = unwrapLogicalFallback(body);
+  if (unwrapped && (unwrapped as { type?: string }).type === "MemberExpression") {
+    return unwrapped as { type: "MemberExpression" };
+  }
+  // Direct member expression
+  if ((body as { type?: string }).type === "MemberExpression") {
+    return body as { type: "MemberExpression" };
+  }
+  return null;
+}
+
+/**
+ * Extracts the theme path (e.g., "color.labelBase") from a member expression,
+ * accounting for whether the arrow function uses `props.theme.X` or `{ theme }` destructuring.
+ */
+function extractThemePath(
+  memberExpr: { type: "MemberExpression" },
+  info: ReturnType<typeof getArrowFnThemeParamInfo> & {},
+): string | null {
+  // getMemberPathFromIdentifier performs duck-typed AST traversal; the runtime
+  // type check in extractThemeMemberExpression guarantees this is a MemberExpression.
+  const exprAsAny = memberExpr as Parameters<typeof getMemberPathFromIdentifier>[0];
+  if (info.kind === "propsParam") {
+    const parts = getMemberPathFromIdentifier(exprAsAny, info.propsName);
+    if (!parts || parts[0] !== "theme") {
+      return null;
+    }
+    return parts.slice(1).join(".");
+  }
+  const parts = getMemberPathFromIdentifier(exprAsAny, info.themeName);
+  if (!parts) {
+    return null;
+  }
+  return parts.join(".");
 }
 
 function tryResolveArrowFnHelperCallWithThemeArg(
@@ -157,6 +214,257 @@ function tryResolveArrowFnHelperCallWithThemeArg(
 
   if (simple.kind === "unresolved") {
     return buildUnresolvedHelperResult(body.callee, ctx);
+  }
+
+  return null;
+}
+
+/**
+ * Handles arrow functions whose body is a call expression with one conditional argument.
+ *
+ * Pattern: `({ $oneLine }) => truncateMultiline($oneLine ? 1 : 2)`
+ *
+ * The conditional argument must have a prop-based test and literal branches.
+ * All other arguments must be literals. Each branch is resolved independently
+ * via the adapter's resolveCall, and the result is split into conditional variants.
+ */
+function tryResolveArrowFnCallWithConditionalArgs(
+  node: DynamicNode,
+  ctx: InternalHandlerContext,
+): HandlerResult | null {
+  const expr = node.expr;
+  if (!isArrowFunctionExpression(expr)) {
+    return null;
+  }
+
+  const body = getFunctionBodyExpr(expr);
+  if (!isCallExpressionNode(body)) {
+    return null;
+  }
+
+  const callee = body.callee as { type?: string; name?: string } | undefined;
+  if (!callee || callee.type !== "Identifier" || typeof callee.name !== "string") {
+    return null;
+  }
+  const calleeIdent = callee.name;
+
+  const bindings = getArrowFnParamBindings(expr);
+  if (!bindings) {
+    return null;
+  }
+
+  // Inspect arguments: exactly one must be a ConditionalExpression with
+  // a prop-based test and literal branches; remaining args must be literals.
+  const args = body.arguments ?? [];
+  if (args.length === 0) {
+    return null;
+  }
+
+  let conditionalArgIndex = -1;
+  let propName: string | null = null;
+  let consequentValue: StaticLiteralValue | undefined;
+  let alternateValue: StaticLiteralValue | undefined;
+  let conditionalDefaultTruthy: boolean | null = null;
+  // Pre-resolved static values for non-conditional args (avoids callArgFromNode mismatch
+  // with literalToStaticValue, which handles TemplateLiterals/TaggedTemplateExpressions/etc.)
+  const staticArgValues = new Map<number, StaticLiteralValue>();
+
+  for (let i = 0; i < args.length; i++) {
+    const arg = args[i] as
+      | { type?: string; test?: unknown; consequent?: unknown; alternate?: unknown }
+      | undefined;
+    if (!arg) {
+      continue;
+    }
+
+    if (arg.type === "ConditionalExpression") {
+      // Only one conditional arg is supported
+      if (conditionalArgIndex !== -1) {
+        return null;
+      }
+      conditionalArgIndex = i;
+
+      // Extract prop name from the conditional test
+      propName = extractPropNameFromCondTest(arg.test, bindings);
+      if (!propName) {
+        return null;
+      }
+
+      // Bail if the conditional test depends on `theme` — styled-components theme
+      // context is not a regular component prop and is unavailable after migration.
+      if (propName === "theme") {
+        return null;
+      }
+
+      // Support destructured defaults when we can statically determine their truthiness.
+      // Destructuring defaults only apply when the prop is `undefined`, so we must
+      // preserve that distinction in the emitted condition.
+      if (
+        bindings.kind === "destructured" &&
+        bindings.defaults &&
+        bindings.defaults.has(propName)
+      ) {
+        const defaultValue = extractStaticLiteralValue(bindings.defaults.get(propName));
+        if (defaultValue === undefined) {
+          return null;
+        }
+        conditionalDefaultTruthy = Boolean(defaultValue);
+      }
+
+      // Both branches must be static literals (use extractStaticLiteralValue
+      // to distinguish null literals from extraction failure)
+      consequentValue = extractStaticLiteralValue(arg.consequent);
+      alternateValue = extractStaticLiteralValue(arg.alternate);
+      if (consequentValue === undefined || alternateValue === undefined) {
+        return null;
+      }
+    } else {
+      // Non-conditional args must be static literals
+      const v = extractStaticLiteralValue(arg);
+      if (v === undefined) {
+        return null;
+      }
+      staticArgValues.set(i, v);
+    }
+  }
+
+  if (
+    conditionalArgIndex === -1 ||
+    !propName ||
+    consequentValue === undefined ||
+    alternateValue === undefined
+  ) {
+    return null;
+  }
+
+  // Resolve the callee's import
+  const imp = ctx.resolveImport(calleeIdent, callee);
+  if (!imp) {
+    return null;
+  }
+
+  // Build a CallResolveContext for each branch, replacing the conditional arg
+  // with the branch's literal value and using pre-resolved values for other args.
+  const consValue = consequentValue;
+  const altValue = alternateValue;
+  const buildBranchContext = (branchValue: StaticLiteralValue): CallResolveContext => {
+    const syntheticArgs: CallResolveContext["args"] = args.map((_arg, i) => {
+      if (i === conditionalArgIndex) {
+        return { kind: "literal" as const, value: branchValue };
+      }
+      const v = staticArgValues.get(i);
+      return v !== undefined
+        ? { kind: "literal" as const, value: v }
+        : { kind: "unknown" as const };
+    });
+
+    const loc = body.loc?.start;
+    return {
+      callSiteFilePath: ctx.filePath,
+      calleeImportedName: imp.importedName,
+      calleeSource: imp.source,
+      args: syntheticArgs,
+      ...(loc ? { loc: { line: loc.line, column: loc.column } } : {}),
+      ...(node.css.property ? { cssProperty: node.css.property } : {}),
+    };
+  };
+
+  const consResult = ctx.resolveCall(buildBranchContext(consValue));
+  if (!consResult) {
+    return null;
+  }
+
+  const altResult = ctx.resolveCall(buildBranchContext(altValue));
+  if (!altResult) {
+    return null;
+  }
+
+  // Both branches must agree on usage type
+  const consIsCss = isAdapterResultCssValue(consResult, node.css.property);
+  const altIsCss = isAdapterResultCssValue(altResult, node.css.property);
+  if (consIsCss !== altIsCss) {
+    return null;
+  }
+
+  const truthyWhen =
+    conditionalDefaultTruthy === true ? `${propName} === undefined || ${propName}` : propName;
+  const falsyWhen = conditionalDefaultTruthy === true ? `!(${truthyWhen})` : `!${propName}`;
+
+  const variants = [
+    { nameHint: "truthy", when: truthyWhen, expr: consResult.expr, imports: consResult.imports },
+    {
+      nameHint: "falsy",
+      when: falsyWhen,
+      expr: altResult.expr,
+      imports: altResult.imports,
+    },
+  ];
+
+  return consIsCss
+    ? { type: "splitVariantsResolvedValue", variants }
+    : { type: "splitVariantsResolvedStyles", variants };
+}
+
+type StaticLiteralValue = string | number | boolean | null;
+
+/**
+ * Extracts a static literal value from an AST node, distinguishing null literals
+ * from extraction failure. Returns `undefined` when the node is not a recognized
+ * static literal, and the actual value (including `null`) otherwise.
+ */
+function extractStaticLiteralValue(node: unknown): StaticLiteralValue | undefined {
+  if (!node || typeof node !== "object") {
+    return undefined;
+  }
+  const type = (node as { type?: string }).type;
+  // Reject function-like nodes — literalToStaticValue coerces zero-arg arrows
+  // to their body's value, but helper call arguments should not undergo that
+  // transformation (the original code passes a function, not a primitive).
+  if (type === "ArrowFunctionExpression" || type === "FunctionExpression") {
+    return undefined;
+  }
+  // Handle NullLiteral and Literal-with-null-value explicitly since
+  // literalToStaticValue uses null as its failure sentinel.
+  if (type === "NullLiteral") {
+    return null;
+  }
+  if (type === "Literal" && (node as { value?: unknown }).value === null) {
+    return null;
+  }
+  const v = literalToStaticValue(node);
+  return v !== null ? v : undefined;
+}
+
+/**
+ * Extracts the prop name from a conditional expression's test node.
+ *
+ * Supports:
+ * - Simple param: `props.$oneLine` → `$oneLine`
+ * - Destructured param: `$oneLine` (identifier) → `$oneLine`
+ */
+function extractPropNameFromCondTest(
+  test: unknown,
+  bindings: ReturnType<typeof getArrowFnParamBindings>,
+): string | null {
+  if (!test || typeof test !== "object" || !bindings) {
+    return null;
+  }
+
+  // Destructured params: resolveIdentifierToPropName handles the binding lookup
+  const resolved = resolveIdentifierToPropName(test, bindings);
+  if (resolved !== null) {
+    return resolved;
+  }
+
+  // Simple param: extract prop from member expression like `props.$oneLine`
+  if (bindings.kind === "simple" && (test as { type?: string }).type === "MemberExpression") {
+    const path = getMemberPathFromIdentifier(
+      test as Parameters<typeof getMemberPathFromIdentifier>[0],
+      bindings.paramName,
+    );
+    if (path && path.length === 1 && path[0]) {
+      return path[0];
+    }
   }
 
   return null;
@@ -309,10 +617,12 @@ function tryResolveInlineStyleValueForLogicalExpression(node: DynamicNode): Hand
   return { type: "emitInlineStyleValueFromProps" };
 }
 
-function tryResolveThemeDependentTemplateLiteral(node: DynamicNode): HandlerResult | null {
-  // Detect theme-dependent template literals and return keepOriginal with a warning.
-  // This catches cases like: ${props => `${props.theme.color.bg}px`}
-  // StyleX output does not have `props.theme` at runtime.
+function tryResolveThemeDependentTemplateLiteral(
+  node: DynamicNode,
+  ctx: InternalHandlerContext,
+): HandlerResult | null {
+  // Handles cases like: ${props => `${props.theme.color.bg}px`}
+  // Tries to resolve theme interpolations via the adapter; bails if unresolvable.
   if (!node.css.property) {
     return null;
   }
@@ -324,15 +634,23 @@ function tryResolveThemeDependentTemplateLiteral(node: DynamicNode): HandlerResu
   if (!body || (body as { type?: string }).type !== "TemplateLiteral") {
     return null;
   }
-  // Use existing utility to check for theme access
-  if (hasThemeAccessInArrowFn(expr)) {
-    return {
-      type: "keepOriginal",
-      reason:
-        "Theme-dependent template literals require a project-specific theme source (e.g. useTheme())",
-    };
+  if (!hasThemeAccessInArrowFn(expr)) {
+    return null;
   }
-  return null;
+  // Try to resolve theme interpolations via the adapter
+  const paramName = getArrowFnSingleParamName(expr);
+  if (paramName) {
+    const resolved = resolveTemplateLiteralWithTheme(body, paramName, ctx);
+    if (resolved) {
+      return { type: "resolvedValue", expr: resolved.expr, imports: resolved.imports };
+    }
+  }
+  // Adapter couldn't resolve — bail with a warning
+  return {
+    type: "keepOriginal",
+    reason:
+      "Theme-dependent template literals require a project-specific theme source (e.g. useTheme())",
+  };
 }
 
 function tryResolveStyleFunctionFromTemplateLiteral(node: DynamicNode): HandlerResult | null {
@@ -542,4 +860,27 @@ function tryResolvePropAccess(node: DynamicNode): HandlerResult | null {
     body: `{ ${Object.keys(styleFromSingleDeclaration(cssProp, "value"))[0]}: value }`,
     call: propName,
   };
+}
+
+/**
+ * If `body` is a logical fallback expression (`X ?? "default"` / `X || "default"`),
+ * appends the operator and fallback literal to the resolved expression string.
+ *
+ * Returns `null` when the body IS a logical expression but the fallback is non-literal
+ * (e.g., `props.fallbackColor`, `null`, `undefined`), signalling to the caller that
+ * it's unsafe to drop the fallback — the caller should bail instead of resolving.
+ *
+ * Returns `resolvedExpr` unchanged when the body is NOT a logical expression (no
+ * fallback to preserve).
+ */
+function appendLogicalFallback(body: unknown, resolvedExpr: string): string | null {
+  if (!isLogicalExpressionNode(body) || (body.operator !== "??" && body.operator !== "||")) {
+    return resolvedExpr;
+  }
+  const fallback = literalToStaticValue(body.right);
+  if (fallback === null) {
+    // Fallback is non-literal — unsafe to drop it silently
+    return null;
+  }
+  return `${resolvedExpr} ${body.operator} ${JSON.stringify(fallback)}`;
 }

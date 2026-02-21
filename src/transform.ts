@@ -65,8 +65,10 @@ export default function transform(file: FileInfo, api: API, options: Options): s
 
     return result.code;
   } catch (e) {
-    const msg = `Transform failed: ${e instanceof Error ? e.message : String(e)}`;
-    Logger.logError(msg, file.path);
+    if (!Logger.isErrorLogged(e)) {
+      const msg = `Transform failed: ${e instanceof Error ? e.message : String(e)}`;
+      Logger.logError(msg, file.path);
+    }
     throw e;
   }
 }

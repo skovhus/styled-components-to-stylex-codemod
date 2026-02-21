@@ -258,9 +258,10 @@ export class WrapperEmitter {
     if (d.supportsAsProp) {
       return true;
     }
-    // supportsExternalStyles enables `as` prop for intrinsic-based components,
-    // but NOT when wrapping another styled component (to avoid TS2590 union complexity).
-    if (d.supportsExternalStyles && d.base.kind !== "component") {
+    // Auto-enable `as` for components extended by other styled components in the same file
+    // (supportsExternalStyles is set but supportsAsProp was not explicitly set by the adapter).
+    // Does NOT apply when wrapping another component (to avoid TS2590 union complexity).
+    if (d.supportsExternalStyles && d.base.kind !== "component" && d.supportsAsProp === undefined) {
       return true;
     }
     // For void tags without explicit opt-in, don't allow `as` prop
@@ -998,7 +999,9 @@ export class WrapperEmitter {
         return;
       }
       if (isIdentifierNode(node)) {
-        expandedDestructureProps.add(node.name);
+        if (node.name !== "undefined") {
+          expandedDestructureProps.add(node.name);
+        }
         return;
       }
       if (
@@ -1328,6 +1331,13 @@ export class WrapperEmitter {
     isBoolean: boolean;
   }): ExpressionKind {
     return vc.makeConditionalStyleExpr(this.j, args);
+  }
+
+  buildExtraStylexPropsExprs(args: {
+    entries: ReadonlyArray<{ when?: string; expr: ExpressionKind }>;
+    destructureProps?: string[];
+  }): ExpressionKind[] {
+    return vc.buildExtraStylexPropsExprs(this.j, args);
   }
 
   private literalExpr(value: unknown): ExpressionKind {

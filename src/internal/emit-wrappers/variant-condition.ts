@@ -225,3 +225,175 @@ export function makeConditionalStyleExpr(
   }
   return j.conditionalExpression(cond, expr, j.identifier("undefined"));
 }
+
+/**
+ * Builds style expressions from extraStylexPropsArgs entries, merging
+ * complementary boolean condition pairs into single ternary expressions.
+ *
+ * Two entries with `when: "prop"` and `when: "!prop"` are merged into
+ * `prop ? trueExpr : falseExpr` instead of emitting separate conditionals.
+ */
+export function buildExtraStylexPropsExprs(
+  j: JSCodeshift,
+  args: {
+    entries: ReadonlyArray<{ when?: string; expr: ExpressionKind }>;
+    destructureProps?: string[];
+  },
+): ExpressionKind[] {
+  const { entries, destructureProps } = args;
+  const result: ExpressionKind[] = [];
+  const consumed = new Set<number>();
+
+  for (let i = 0; i < entries.length; i++) {
+    if (consumed.has(i)) {
+      continue;
+    }
+    const entry = entries[i]!;
+
+    if (!entry.when) {
+      result.push(entry.expr);
+      continue;
+    }
+
+    // Look for a complementary entry to merge into a single ternary
+    const complementIndex = findComplementaryEntry(entries, i, consumed);
+    if (complementIndex !== null) {
+      consumed.add(complementIndex);
+      const other = entries[complementIndex]!;
+      const positiveWhenRaw = getPositiveWhen(entry.when, other.when!)!;
+      const { cond } = collectConditionProps(j, { when: positiveWhenRaw, destructureProps });
+
+      const isEntryPositive = areEquivalentWhen(entry.when, positiveWhenRaw);
+      const trueExpr = isEntryPositive ? entry.expr : other.expr;
+      const falseExpr = isEntryPositive ? other.expr : entry.expr;
+
+      result.push(j.conditionalExpression(cond, trueExpr, falseExpr));
+      continue;
+    }
+
+    // No complement found — emit standard conditional
+    const { cond, isBoolean } = collectConditionProps(j, {
+      when: entry.when,
+      destructureProps,
+    });
+    result.push(makeConditionalStyleExpr(j, { cond, expr: entry.expr, isBoolean }));
+  }
+
+  return result;
+}
+
+// --- Non-exported helpers ---
+
+/**
+ * Finds the immediately next unconsumed entry that has a complementary "when"
+ * condition to the entry at `index`. Only checks the adjacent unconsumed entry
+ * to preserve style precedence ordering — merging non-adjacent pairs would
+ * reorder styles relative to entries between them.
+ */
+function findComplementaryEntry(
+  entries: ReadonlyArray<{ when?: string; expr: ExpressionKind }>,
+  index: number,
+  consumed: ReadonlySet<number>,
+): number | null {
+  const when = entries[index]?.when;
+  if (!when) {
+    return null;
+  }
+
+  // Find the next unconsumed entry
+  let next = index + 1;
+  while (next < entries.length && consumed.has(next)) {
+    next++;
+  }
+  if (next >= entries.length) {
+    return null;
+  }
+
+  const otherWhen = entries[next]?.when;
+  if (otherWhen && getPositiveWhen(when, otherWhen) !== null) {
+    return next;
+  }
+
+  return null;
+}
+
+/**
+ * If two "when" strings represent complementary conditions (e.g., "prop" and
+ * "!prop"), returns the positive (non-negated) condition string. Returns null
+ * otherwise.
+ */
+function getPositiveWhen(whenA: string, whenB: string): string | null {
+  const a = whenA.trim();
+  const b = whenB.trim();
+  if (isNegationOf(b, a)) {
+    return a;
+  }
+  if (isNegationOf(a, b)) {
+    return b;
+  }
+  return null;
+}
+
+function areEquivalentWhen(left: string, right: string): boolean {
+  return normalizeWhenForComparison(left) === normalizeWhenForComparison(right);
+}
+
+function isNegationOf(candidate: string, base: string): boolean {
+  const candidateNormalized = normalizeWhenForComparison(candidate);
+  const baseNormalized = normalizeWhenForComparison(base);
+
+  // Allow bare negation only for atomic expressions like `foo` or `props.foo`.
+  if (isAtomicWhenExpression(baseNormalized) && candidateNormalized === `!${baseNormalized}`) {
+    return true;
+  }
+
+  // For compound expressions, require grouped negation: `!(a || b)`.
+  if (!candidateNormalized.startsWith("!(") || !candidateNormalized.endsWith(")")) {
+    return false;
+  }
+  const grouped = candidateNormalized.slice(1);
+  if (!hasEnclosingParens(grouped)) {
+    return false;
+  }
+  const inner = normalizeWhenForComparison(candidateNormalized.slice(2, -1));
+  return inner === baseNormalized;
+}
+
+function normalizeWhenForComparison(when: string): string {
+  const withoutWhitespace = String(when ?? "").replace(/\s+/g, "");
+  return stripOuterParens(withoutWhitespace);
+}
+
+function stripOuterParens(expr: string): string {
+  let current = expr;
+  while (current.startsWith("(") && current.endsWith(")") && hasEnclosingParens(current)) {
+    current = current.slice(1, -1);
+  }
+  return current;
+}
+
+function hasEnclosingParens(expr: string): boolean {
+  let depth = 0;
+  for (let i = 0; i < expr.length; i++) {
+    const ch = expr[i];
+    if (ch === "(") {
+      depth++;
+      continue;
+    }
+    if (ch !== ")") {
+      continue;
+    }
+    depth--;
+    if (depth < 0) {
+      return false;
+    }
+    if (depth === 0 && i !== expr.length - 1) {
+      return false;
+    }
+  }
+  return depth === 0;
+}
+
+function isAtomicWhenExpression(expr: string): boolean {
+  return /^[A-Za-z_$][0-9A-Za-z_$]*(?:\.[A-Za-z_$][0-9A-Za-z_$]*)*$/.test(expr);
+}
