@@ -22,7 +22,7 @@ function Badge(props: BadgeProps) {
       style={
         {
           ...sx.style,
-          "--backgroundColor": $badgeColor,
+          "--Badge-backgroundColor": $badgeColor,
         } as React.CSSProperties
       }
     >
@@ -60,7 +60,7 @@ const styles = stylex.create({
       borderRadius: "50%",
       top: 0,
       right: 0,
-      backgroundColor: "var(--backgroundColor)",
+      backgroundColor: "var(--Badge-backgroundColor)",
     },
   },
 });

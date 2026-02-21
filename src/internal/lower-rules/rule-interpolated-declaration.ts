@@ -1634,8 +1634,8 @@ function isPseudoElementSelector(pseudoElement: string | null): boolean {
  *
  * Example transform:
  *   Input:  `&::after { background-color: ${(props) => props.$badgeColor}; }`
- *   Output: StyleX  → `"::after": { backgroundColor: "var(--backgroundColor)" }`
- *           Inline  → `style={{ "--backgroundColor": $badgeColor }}`
+ *   Output: StyleX  → `"::after": { backgroundColor: "var(--Badge-backgroundColor)" }`
+ *           Inline  → `style={{ "--Badge-backgroundColor": $badgeColor }}`
  */
 function tryHandleDynamicPseudoElementViaCustomProperty(
   args: InterpolatedDeclarationContext,
@@ -1683,7 +1683,7 @@ function tryHandleDynamicPseudoElementViaCustomProperty(
     if (!out.prop) {
       continue;
     }
-    const customPropName = `--${out.prop}`;
+    const customPropName = `--${decl.localName}-${out.prop}`;
     applyResolvedPropValue(out.prop, `var(${customPropName})`, null);
     inlineStyleProps.push({ prop: customPropName, expr: valueExpr });
   }
