@@ -57,6 +57,10 @@ type Speed = "normal" | "slow" | "fast";
 
 export const transitionSpeed = (speed: Speed) => `var(--speed-${speed})`;
 
+// Intentionally unresolvable constant for testing adapter fallback behavior.
+// The codemod adapter returns undefined for this, causing the transform to bail.
+export const UNKNOWN_CONSTANT = 42;
+
 export const zIndex = {
   modal: 1000,
   popover: 900,

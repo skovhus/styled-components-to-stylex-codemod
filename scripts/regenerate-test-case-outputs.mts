@@ -3,7 +3,7 @@
  *
  * Usage:
  *   node scripts/regenerate-test-case-outputs.mts
- *     Regenerates all supported fixtures (skips _unsupported.* and unsupported-*)
+ *     Regenerates all supported fixtures (skips _unsupported.* and _unimplemented.*)
  *
  *   node scripts/regenerate-test-case-outputs.mts --only attrs
  *     Regenerates a single fixture by name (no extension)
@@ -49,7 +49,7 @@ function parseFixtureName(filename: string): { name: string; ext: string } | nul
 async function listFixtureNames(): Promise<Array<{ name: string; ext: string }>> {
   const files = await readdir(testCasesDir);
   return files
-    .filter((f) => !f.startsWith("_unsupported.") && !f.startsWith("unsupported-"))
+    .filter((f) => !f.startsWith("_unsupported.") && !f.startsWith("_unimplemented."))
     .map(parseFixtureName)
     .filter((x): x is { name: string; ext: string } => x !== null)
     .sort((a, b) => a.name.localeCompare(b.name));
