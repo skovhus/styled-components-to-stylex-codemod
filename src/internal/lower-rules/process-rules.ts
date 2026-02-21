@@ -1565,8 +1565,25 @@ function getOrCreateComputedMediaEntry(prop: string, ctx: DeclProcessingState) {
  * Handles the adjacent sibling selector `& + &` by processing declarations and
  * storing them as computed keys using `stylex.when.siblingBefore(':is(*)')`.
  *
+ * **Semantic approximation:** CSS `& + &` targets only the *immediately adjacent*
+ * sibling, while `stylex.when.siblingBefore()` generates a general sibling rule
+ * (`~`) which matches *any* preceding sibling. This means the styles may apply
+ * even when a non-matching element sits between two instances of the component.
+ * In practice this rarely matters because `& + &` is almost always used with
+ * consecutive homogeneous lists.
+ *
  * Uses `defaultMarker()` (via `ancestorSelectorParents`) instead of per-component
- * `defineMarker()`, avoiding the `.stylex` file requirement.
+ * `defineMarker()`, avoiding the `.stylex` file requirement. Because the marker
+ * is file-global rather than component-scoped, styles from one component could
+ * theoretically leak to another if both use `& + &` and appear as siblings in
+ * the same render tree.
+ *
+ * **`:is(*)` and priority ordering:** The StyleX babel plugin's `SIBLING_BEFORE`
+ * priority regex does not match `:is(*)`, so conditions using this pseudo may
+ * not participate in StyleX's deterministic priority ordering when a property
+ * has multiple relational conditions. In practice this is fine because sibling
+ * selectors are typically the only relational condition on a given property.
+ *
  * Returns "break" on error to bail, otherwise the caller should `continue`.
  */
 function handleAdjacentSiblingSelector(
@@ -1589,7 +1606,6 @@ function handleAdjacentSiblingSelector(
     return "break";
   }
 
-  decl.hasSiblingSelector = true;
   // Add to ancestorSelectorParents so defaultMarker() is injected into stylex.props() calls
   ancestorSelectorParents.add(decl.styleKey);
 

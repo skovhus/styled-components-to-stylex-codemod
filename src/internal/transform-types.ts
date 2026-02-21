@@ -125,13 +125,6 @@ export type StyledDecl = {
   }>;
   needsWrapperComponent?: boolean;
   /**
-   * When true, the component uses `& + &` (adjacent sibling) selectors.
-   * The style key is added to `ancestorSelectorParents` so that
-   * `stylex.defaultMarker()` is injected into `stylex.props()` calls,
-   * and `stylex.when.siblingBefore(':is(*)')` is used as the condition key.
-   */
-  hasSiblingSelector?: boolean;
-  /**
    * Pseudo-alias selectors from `&:${expr}` patterns resolved via
    * `adapter.resolveSelector()` with `kind: "pseudoAlias"`.
    *
