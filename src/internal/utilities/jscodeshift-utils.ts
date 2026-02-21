@@ -608,9 +608,9 @@ export function isLogicalExpressionNode(
  * MemberExpression or OptionalMemberExpression. Returns null if the pattern
  * doesn't match.
  *
- * Used to strip fallback values from theme access patterns like
- * `props.theme.color.labelBase ?? "black"`, because StyleX theme tokens
- * are always defined so the fallback is safe to discard.
+ * Used to extract the theme access part from fallback patterns like
+ * `props.theme.color.labelBase ?? "black"` for resolution. Callers are
+ * responsible for re-wrapping the resolved value with the original fallback.
  */
 export function unwrapLogicalFallback(expr: unknown): unknown {
   if (

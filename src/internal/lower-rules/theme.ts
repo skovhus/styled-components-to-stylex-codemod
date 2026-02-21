@@ -6,6 +6,7 @@ import {
   getFunctionBodyExpr,
   getMemberPathFromIdentifier,
   getNodeLocStart,
+  isLogicalExpressionNode,
   unwrapLogicalFallback,
 } from "../utilities/jscodeshift-utils.js";
 import type { LowerRulesState } from "./state.js";
@@ -76,12 +77,13 @@ export function createThemeResolvers(
     if (!bodyExpr) {
       return null;
     }
-    // Handle logical fallback patterns: `props.theme.X ?? "default"` / `|| "default"`.
-    // The fallback is safe to discard because StyleX theme tokens are always defined.
-    const themeAccessExpr = unwrapLogicalFallback(bodyExpr) ?? bodyExpr;
+    // Detect logical fallback patterns: `props.theme.X ?? "default"` / `|| "default"`.
+    // The fallback is preserved so users can review and delete it if not needed.
+    const unwrappedTheme = unwrapLogicalFallback(bodyExpr);
+    const themeAccessExpr = unwrappedTheme ?? bodyExpr;
     const direct = resolveThemeValue(themeAccessExpr);
     if (direct) {
-      return direct;
+      return wrapWithLogicalFallback(direct, bodyExpr, j);
     }
     const paramName =
       expr.params?.[0]?.type === "Identifier" ? (expr.params[0].name as string) : null;
@@ -136,8 +138,33 @@ export function createThemeResolvers(
     for (const imp of resolved.imports ?? []) {
       resolverImports.set(JSON.stringify(imp), imp);
     }
-    return parseExpr(resolved.expr);
+    return wrapWithLogicalFallback(parseExpr(resolved.expr), bodyExpr, j);
   };
 
   return { hasLocalThemeBinding, resolveThemeValue, resolveThemeValueFromFn };
+}
+
+// --- Non-exported helpers ---
+
+/**
+ * If `originalExpr` was a logical fallback (`X ?? "default"` / `X || "default"`),
+ * wraps the resolved AST node in a LogicalExpression preserving the original
+ * operator and fallback value.
+ */
+function wrapWithLogicalFallback(
+  resolved: unknown,
+  originalExpr: unknown,
+  j: LowerRulesState["j"],
+): unknown {
+  if (
+    !isLogicalExpressionNode(originalExpr) ||
+    (originalExpr.operator !== "??" && originalExpr.operator !== "||")
+  ) {
+    return resolved;
+  }
+  return j.logicalExpression(
+    originalExpr.operator as "??" | "||",
+    resolved as Parameters<typeof j.logicalExpression>[1],
+    originalExpr.right as Parameters<typeof j.logicalExpression>[2],
+  );
 }

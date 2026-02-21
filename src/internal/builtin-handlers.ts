@@ -25,6 +25,7 @@ import {
   getArrowFnThemeParamInfo,
   isAdapterResultCssValue,
   resolveImportedHelperCall,
+  resolveTemplateLiteralWithTheme,
   tryResolveCallExpression,
 } from "./builtin-handlers/resolver-utils.js";
 import {
@@ -61,8 +62,8 @@ export function resolveDynamicNode(
     tryResolveConditionalCssBlockTernary(node, ctx) ??
     tryResolveConditionalCssBlock(node, ctx) ??
     tryResolveArrowFnCallWithSinglePropArg(node) ??
-    // Detect theme-dependent template literals before trying to emit style functions
-    tryResolveThemeDependentTemplateLiteral(node) ??
+    // Resolve or detect theme-dependent template literals before trying to emit style functions
+    tryResolveThemeDependentTemplateLiteral(node, ctx) ??
     tryResolveStyleFunctionFromTemplateLiteral(node) ??
     tryResolveInlineStyleValueForNestedPropAccess(node) ??
     tryResolvePropAccess(node) ??
@@ -89,7 +90,6 @@ function tryResolveThemeAccess(
   // Extract the theme member expression from the body.
   // Handles both direct member access (`props.theme.X`) and logical fallback
   // patterns (`props.theme.X ?? "default"` / `props.theme.X || "default"`).
-  // The fallback is safe to discard because StyleX theme tokens are always defined.
   const themeExpr = extractThemeMemberExpression(expr.body);
   if (!themeExpr) {
     return null;
@@ -108,7 +108,10 @@ function tryResolveThemeAccess(
   if (!res) {
     return null;
   }
-  return { type: "resolvedValue", expr: res.expr, imports: res.imports };
+  // Preserve logical fallback (`?? "default"` / `|| "default"`) so users can
+  // review and delete it if their adapter always returns defined values.
+  const resultExpr = appendLogicalFallback(expr.body, res.expr);
+  return { type: "resolvedValue", expr: resultExpr, imports: res.imports };
 }
 
 /**
@@ -120,8 +123,8 @@ function tryResolveThemeAccess(
  *   (LogicalExpression with `??` or `||` and theme access on the left)
  *
  * Returns the MemberExpression node, or null if the pattern doesn't match.
- * The fallback (right side of `??`/`||`) is safe to discard because StyleX theme
- * tokens are always defined.
+ * The fallback (right side of `??`/`||`) is preserved by the caller via
+ * `appendLogicalFallback` so users can review and delete it.
  */
 function extractThemeMemberExpression(body: unknown): { type: "MemberExpression" } | null {
   if (!body || typeof body !== "object") {
@@ -609,10 +612,12 @@ function tryResolveInlineStyleValueForLogicalExpression(node: DynamicNode): Hand
   return { type: "emitInlineStyleValueFromProps" };
 }
 
-function tryResolveThemeDependentTemplateLiteral(node: DynamicNode): HandlerResult | null {
-  // Detect theme-dependent template literals and return keepOriginal with a warning.
-  // This catches cases like: ${props => `${props.theme.color.bg}px`}
-  // StyleX output does not have `props.theme` at runtime.
+function tryResolveThemeDependentTemplateLiteral(
+  node: DynamicNode,
+  ctx: InternalHandlerContext,
+): HandlerResult | null {
+  // Handles cases like: ${props => `${props.theme.color.bg}px`}
+  // Tries to resolve theme interpolations via the adapter; bails if unresolvable.
   if (!node.css.property) {
     return null;
   }
@@ -624,15 +629,23 @@ function tryResolveThemeDependentTemplateLiteral(node: DynamicNode): HandlerResu
   if (!body || (body as { type?: string }).type !== "TemplateLiteral") {
     return null;
   }
-  // Use existing utility to check for theme access
-  if (hasThemeAccessInArrowFn(expr)) {
-    return {
-      type: "keepOriginal",
-      reason:
-        "Theme-dependent template literals require a project-specific theme source (e.g. useTheme())",
-    };
+  if (!hasThemeAccessInArrowFn(expr)) {
+    return null;
   }
-  return null;
+  // Try to resolve theme interpolations via the adapter
+  const paramName = getArrowFnSingleParamName(expr);
+  if (paramName) {
+    const resolved = resolveTemplateLiteralWithTheme(body, paramName, ctx);
+    if (resolved) {
+      return { type: "resolvedValue", expr: resolved.expr, imports: resolved.imports };
+    }
+  }
+  // Adapter couldn't resolve — bail with a warning
+  return {
+    type: "keepOriginal",
+    reason:
+      "Theme-dependent template literals require a project-specific theme source (e.g. useTheme())",
+  };
 }
 
 function tryResolveStyleFunctionFromTemplateLiteral(node: DynamicNode): HandlerResult | null {
@@ -842,4 +855,22 @@ function tryResolvePropAccess(node: DynamicNode): HandlerResult | null {
     body: `{ ${Object.keys(styleFromSingleDeclaration(cssProp, "value"))[0]}: value }`,
     call: propName,
   };
+}
+
+/**
+ * If `body` is a logical fallback expression (`X ?? "default"` / `X || "default"`),
+ * appends the operator and fallback literal to the resolved expression string.
+ *
+ * This preserves the original fallback so users can review and delete it when
+ * they know their adapter always returns defined values (e.g., StyleX theme tokens).
+ */
+function appendLogicalFallback(body: unknown, resolvedExpr: string): string {
+  if (!isLogicalExpressionNode(body) || (body.operator !== "??" && body.operator !== "||")) {
+    return resolvedExpr;
+  }
+  const fallback = literalToStaticValue(body.right);
+  if (fallback === null) {
+    return resolvedExpr;
+  }
+  return `${resolvedExpr} ${body.operator} ${JSON.stringify(fallback)}`;
 }
