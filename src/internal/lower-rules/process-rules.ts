@@ -438,9 +438,6 @@ export function processDeclRules(ctx: DeclProcessingState): void {
           decl.extraStyleKeys,
         );
 
-        // Snapshot existing keys so we only copy THIS rule's new declarations
-        const existingKeys = new Set(Object.keys(firstBucket));
-
         const result = processDeclarationsIntoBucket(
           rule,
           firstBucket,
@@ -460,9 +457,11 @@ export function processDeclRules(ctx: DeclProcessingState): void {
           break;
         }
 
-        // Copy only the new declarations (from this rule) into remaining pseudo buckets.
-        // Without this guard, pre-existing declarations in firstBucket (from earlier rules
-        // targeting only the first pseudo) would leak into the other pseudo buckets.
+        // Copy only the declarations written by THIS rule into remaining pseudo buckets.
+        // Using the writtenProps set (returned by processDeclarationsIntoBucket) ensures
+        // we propagate overwrites of existing keys while not leaking unrelated declarations
+        // that were already in firstBucket from earlier rules.
+        const writtenProps = result;
         for (let i = 1; i < ancestorPseudos.length; i++) {
           const bucket = getOrCreateRelationOverrideBucket(
             overrideStyleKey,
@@ -473,10 +472,8 @@ export function processDeclRules(ctx: DeclProcessingState): void {
             relationOverridePseudoBuckets,
             decl.extraStyleKeys,
           );
-          for (const key of Object.keys(firstBucket)) {
-            if (!existingKeys.has(key)) {
-              bucket[key] = firstBucket[key];
-            }
+          for (const key of writtenProps) {
+            bucket[key] = firstBucket[key];
           }
         }
 
