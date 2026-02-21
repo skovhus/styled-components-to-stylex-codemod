@@ -1692,7 +1692,10 @@ function tryHandleDynamicPseudoElementViaCustomProperty(
   // Derive a pseudo-element label for the custom property name (e.g., "after", "before")
   const pseudoLabel = pseudoElement ? pseudoElement.replace(/^:+/, "") : "";
 
-  // For each CSS output property, generate a custom property and var() reference
+  // For each CSS output property, generate a custom property and var() reference.
+  // Bail if a custom property with the same name already exists (e.g., same property
+  // in base and @media contexts would produce duplicate keys, with last-one-wins semantics).
+  const existingPropNames = new Set(inlineStyleProps.map((p) => p.prop));
   for (const out of stylexDecls) {
     if (!out.prop) {
       continue;
@@ -1700,6 +1703,9 @@ function tryHandleDynamicPseudoElementViaCustomProperty(
     const customPropName = pseudoLabel
       ? `--${decl.localName}-${pseudoLabel}-${out.prop}`
       : `--${decl.localName}-${out.prop}`;
+    if (existingPropNames.has(customPropName)) {
+      return false;
+    }
     applyResolvedPropValue(out.prop, `var(${customPropName})`, null);
     inlineStyleProps.push({ prop: customPropName, expr: valueExpr });
   }
