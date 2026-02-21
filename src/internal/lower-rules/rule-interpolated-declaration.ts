@@ -1634,13 +1634,15 @@ function isPseudoElementSelector(pseudoElement: string | null): boolean {
  *
  * Example transform:
  *   Input:  `&::after { background-color: ${(props) => props.$badgeColor}; }`
- *   Output: StyleX  → `"::after": { backgroundColor: "var(--Badge-backgroundColor)" }`
- *           Inline  → `style={{ "--Badge-backgroundColor": $badgeColor }}`
+ *   Output: StyleX  → `"::after": { backgroundColor: "var(--Badge-after-backgroundColor)" }`
+ *           Inline  → `style={{ "--Badge-after-backgroundColor": $badgeColor }}`
+ *
+ * Bails (returns false) for unsupported shapes: multi-slot interpolations or CSS shorthands.
  */
 function tryHandleDynamicPseudoElementViaCustomProperty(
   args: InterpolatedDeclarationContext,
 ): boolean {
-  const { ctx, d, applyResolvedPropValue } = args;
+  const { ctx, d, pseudoElement, applyResolvedPropValue } = args;
   const { state, decl, inlineStyleProps } = ctx;
   const { j } = state;
 
@@ -1648,13 +1650,15 @@ function tryHandleDynamicPseudoElementViaCustomProperty(
     return false;
   }
 
-  const slotPart = d.value.parts.find(
-    (p: { kind?: string }): p is { kind: "slot"; slotId: number } => p.kind === "slot",
-  );
-  if (!slotPart) {
+  const parts: Array<{ kind?: string }> = d.value.parts ?? [];
+  const slotParts = parts.filter((p): p is { kind: "slot"; slotId: number } => p.kind === "slot");
+
+  // Bail on multi-slot values (e.g., gradients, template combos)
+  if (slotParts.length !== 1) {
     return false;
   }
 
+  const slotPart = slotParts[0]!;
   const expr = decl.templateExpressions[slotPart.slotId] as { type?: string } | undefined;
   if (!expr || (expr.type !== "ArrowFunctionExpression" && expr.type !== "FunctionExpression")) {
     return false;
@@ -1678,12 +1682,24 @@ function tryHandleDynamicPseudoElementViaCustomProperty(
   const valueExpr: ExpressionKind =
     prefix || suffix ? buildTemplateWithStaticParts(j, inlineExpr, prefix, suffix) : inlineExpr;
 
+  // Expand CSS declaration to StyleX longhand(s); bail on shorthands that can't
+  // be represented as a single var() value (e.g., border, margin, padding).
+  const stylexDecls = cssDeclarationToStylexDeclarations(d);
+  if (stylexDecls.some((out) => UNSUPPORTED_CUSTOM_PROP_SHORTHANDS.has(out.prop))) {
+    return false;
+  }
+
+  // Derive a pseudo-element label for the custom property name (e.g., "after", "before")
+  const pseudoLabel = pseudoElement ? pseudoElement.replace(/^:+/, "") : "";
+
   // For each CSS output property, generate a custom property and var() reference
-  for (const out of cssDeclarationToStylexDeclarations(d)) {
+  for (const out of stylexDecls) {
     if (!out.prop) {
       continue;
     }
-    const customPropName = `--${decl.localName}-${out.prop}`;
+    const customPropName = pseudoLabel
+      ? `--${decl.localName}-${pseudoLabel}-${out.prop}`
+      : `--${decl.localName}-${out.prop}`;
     applyResolvedPropValue(out.prop, `var(${customPropName})`, null);
     inlineStyleProps.push({ prop: customPropName, expr: valueExpr });
   }
@@ -1696,3 +1712,18 @@ function tryHandleDynamicPseudoElementViaCustomProperty(
   decl.needsWrapperComponent = true;
   return true;
 }
+
+/** CSS shorthand properties that cannot be represented as a single var() custom property. */
+const UNSUPPORTED_CUSTOM_PROP_SHORTHANDS = new Set([
+  "border",
+  "margin",
+  "padding",
+  "background",
+  "flex",
+  "overflow",
+  "outline",
+  "borderTop",
+  "borderRight",
+  "borderBottom",
+  "borderLeft",
+]);

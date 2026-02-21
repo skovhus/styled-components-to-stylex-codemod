@@ -61,7 +61,7 @@ export function emitStyleMerging(args: {
   j: JSCodeshift;
   emitter: Pick<
     WrapperEmitter,
-    "styleMerger" | "stylesIdentifier" | "emptyStyleKeys" | "ancestorSelectorParents"
+    "styleMerger" | "stylesIdentifier" | "emptyStyleKeys" | "ancestorSelectorParents" | "emitTypes"
   >;
   styleArgs: ExpressionKind[];
   classNameId: Identifier;
@@ -83,7 +83,8 @@ export function emitStyleMerging(args: {
     staticClassNameExpr,
   } = args;
 
-  const { styleMerger, emptyStyleKeys, stylesIdentifier, ancestorSelectorParents } = emitter;
+  const { styleMerger, emptyStyleKeys, stylesIdentifier, ancestorSelectorParents, emitTypes } =
+    emitter;
 
   const styleArgs = filterEmptyStyleArgs({
     styleArgs: rawStyleArgs,
@@ -122,6 +123,7 @@ export function emitStyleMerging(args: {
       allowStyleProp,
       inlineStyleProps,
       staticClassNameExpr,
+      emitTypes,
     });
   }
 
@@ -157,6 +159,7 @@ export function emitStyleMerging(args: {
       allowClassNameProp,
       allowStyleProp,
       inlineStyleProps,
+      emitTypes,
     });
   }
 
@@ -170,6 +173,7 @@ export function emitStyleMerging(args: {
     allowStyleProp,
     inlineStyleProps,
     staticClassNameExpr,
+    emitTypes,
   });
 }
 
@@ -217,6 +221,7 @@ function emitWithoutStylex(args: {
   allowStyleProp: boolean;
   inlineStyleProps: Array<{ prop: string; expr: ExpressionKind }>;
   staticClassNameExpr?: ExpressionKind;
+  emitTypes: boolean;
 }): StyleMergingResult {
   const {
     j,
@@ -226,6 +231,7 @@ function emitWithoutStylex(args: {
     allowStyleProp,
     inlineStyleProps,
     staticClassNameExpr,
+    emitTypes,
   } = args;
 
   const classNameAttr = allowClassNameProp ? classNameId : (staticClassNameExpr ?? null);
@@ -240,6 +246,7 @@ function emitWithoutStylex(args: {
           ...inlineStyleProps.map((p) => j.property("init", inlineStylePropKey(j, p.prop), p.expr)),
         ]),
         inlineStyleProps,
+        emitTypes,
       );
     } else {
       styleAttr = styleId;
@@ -251,6 +258,7 @@ function emitWithoutStylex(args: {
         inlineStyleProps.map((p) => j.property("init", inlineStylePropKey(j, p.prop), p.expr)),
       ),
       inlineStyleProps,
+      emitTypes,
     );
   }
 
@@ -276,6 +284,7 @@ function emitWithMerger(args: {
   allowClassNameProp: boolean;
   allowStyleProp: boolean;
   inlineStyleProps: Array<{ prop: string; expr: ExpressionKind }>;
+  emitTypes: boolean;
 }): StyleMergingResult {
   const {
     j,
@@ -286,6 +295,7 @@ function emitWithMerger(args: {
     allowClassNameProp,
     allowStyleProp,
     inlineStyleProps,
+    emitTypes,
   } = args;
 
   // Build the styles argument
@@ -312,12 +322,17 @@ function emitWithMerger(args: {
       if (inlineStyleProps.length > 0) {
         // Merge inline style props with the style parameter
         mergerArgs.push(
-          j.objectExpression([
-            j.spreadElement(styleId),
-            ...inlineStyleProps.map((p) =>
-              j.property("init", inlineStylePropKey(j, p.prop), p.expr),
-            ),
-          ]),
+          maybeCastStyleForCustomProps(
+            j,
+            j.objectExpression([
+              j.spreadElement(styleId),
+              ...inlineStyleProps.map((p) =>
+                j.property("init", inlineStylePropKey(j, p.prop), p.expr),
+              ),
+            ]),
+            inlineStyleProps,
+            emitTypes,
+          ),
         );
       } else {
         mergerArgs.push(styleId);
@@ -326,8 +341,13 @@ function emitWithMerger(args: {
       // Only inline style props, no external style
       mergerArgs.push(j.identifier("undefined"));
       mergerArgs.push(
-        j.objectExpression(
-          inlineStyleProps.map((p) => j.property("init", inlineStylePropKey(j, p.prop), p.expr)),
+        maybeCastStyleForCustomProps(
+          j,
+          j.objectExpression(
+            inlineStyleProps.map((p) => j.property("init", inlineStylePropKey(j, p.prop), p.expr)),
+          ),
+          inlineStyleProps,
+          emitTypes,
         ),
       );
     }
@@ -357,6 +377,7 @@ function emitVerbosePattern(args: {
   allowStyleProp: boolean;
   inlineStyleProps: Array<{ prop: string; expr: any }>;
   staticClassNameExpr?: ExpressionKind;
+  emitTypes: boolean;
 }): StyleMergingResult {
   const {
     j,
@@ -367,6 +388,7 @@ function emitVerbosePattern(args: {
     allowStyleProp,
     inlineStyleProps,
     staticClassNameExpr,
+    emitTypes,
   } = args;
 
   // Create the stylex.props() call
@@ -407,7 +429,12 @@ function emitVerbosePattern(args: {
       ...(allowStyleProp ? [j.spreadElement(styleId)] : []),
       ...inlineStyleProps.map((p) => j.property("init", inlineStylePropKey(j, p.prop), p.expr)),
     ];
-    styleAttr = maybeCastStyleForCustomProps(j, j.objectExpression(spreads), inlineStyleProps);
+    styleAttr = maybeCastStyleForCustomProps(
+      j,
+      j.objectExpression(spreads),
+      inlineStyleProps,
+      emitTypes,
+    );
   }
 
   return {
@@ -428,13 +455,14 @@ function inlineStylePropKey(j: JSCodeshift, prop: string): ExpressionKind {
   return prop.startsWith("--") ? j.literal(prop) : j.identifier(prop);
 }
 
-/** Wraps an object expression with `as React.CSSProperties` when it contains CSS custom properties. */
+/** Wraps an object expression with `as React.CSSProperties` when it contains CSS custom properties (TypeScript only). */
 function maybeCastStyleForCustomProps(
   j: JSCodeshift,
   styleExpr: ExpressionKind,
   inlineStyleProps: Array<{ prop: string }>,
+  emitTypes: boolean,
 ): ExpressionKind {
-  if (!inlineStyleProps.some((p) => p.prop.startsWith("--"))) {
+  if (!emitTypes || !inlineStyleProps.some((p) => p.prop.startsWith("--"))) {
     return styleExpr;
   }
   return j.tsAsExpression(
