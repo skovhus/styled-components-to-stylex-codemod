@@ -1,0 +1,1 @@
+import{j as r}from"./index-BSqdPEEM.js";import{E as t}from"./external-component-BHK17r9m.js";function n(){return r.jsx("div",{children:r.jsx(t,{isOpen:!0,className:"xdj266r xv8wvd9 xat24cr x1bawvfr"})})}export{n as App};
