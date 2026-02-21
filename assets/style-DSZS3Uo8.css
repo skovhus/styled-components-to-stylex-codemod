@@ -3323,12 +3323,20 @@ body{font-family:-apple-system,BlinkMacSystemFont,Segoe UI,Roboto,Helvetica Neue
   inset: 0 4px;
 }
 
+.x2coff9:not(#\#):not(#\#):not(#\#):not(#\#):not(#\#):not(#\#):after {
+  border-radius: 50%;
+}
+
 .x1hoezp8:not(#\#):not(#\#):not(#\#):not(#\#):not(#\#):not(#\#):after {
   border-radius: 6px;
 }
 
 .x1kup9pb:not(#\#):not(#\#):not(#\#):not(#\#):not(#\#):not(#\#):not(#\#):after {
   background-color: #ff69b4;
+}
+
+.x15uv3wf:not(#\#):not(#\#):not(#\#):not(#\#):not(#\#):not(#\#):not(#\#):after {
+  background-color: var(--Badge-after-backgroundColor);
 }
 
 .xyijama:not(#\#):not(#\#):not(#\#):not(#\#):not(#\#):not(#\#):not(#\#)::placeholder {
@@ -3371,6 +3379,22 @@ body{font-family:-apple-system,BlinkMacSystemFont,Segoe UI,Roboto,Helvetica Neue
   z-index: -1;
 }
 
+.xf8dsx9:not(#\#):not(#\#):not(#\#):not(#\#):not(#\#):not(#\#):not(#\#):not(#\#):after {
+  height: 8px;
+}
+
+.xnbfe2x:not(#\#):not(#\#):not(#\#):not(#\#):not(#\#):not(#\#):not(#\#):not(#\#):after {
+  right: 0;
+}
+
+.x1m1drc7:not(#\#):not(#\#):not(#\#):not(#\#):not(#\#):not(#\#):not(#\#):not(#\#):after {
+  top: 0;
+}
+
 .x1eir19f:not(#\#):not(#\#):not(#\#):not(#\#):not(#\#):not(#\#):not(#\#):not(#\#)::-webkit-slider-thumb {
   width: 10px;
+}
+
+.x10mnas6:not(#\#):not(#\#):not(#\#):not(#\#):not(#\#):not(#\#):not(#\#):not(#\#):after {
+  width: 8px;
 }
