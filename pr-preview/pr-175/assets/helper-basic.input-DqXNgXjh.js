@@ -1,0 +1,32 @@
+import{j as r,c as t}from"./index-DHeQ_gfE.js";import{h as i,c as o,t as e}from"./helpers-bDTqi06y.js";const n=t.button`
+  padding: 0.5em 1em;
+  background-color: ${o("primaryColor")};
+  color: ${o("textPrimary")};
+  border: 2px solid ${o("bgSub")};
+  border-radius: 4px;
+  cursor: pointer;
+
+  &:hover {
+    background-color: ${o("bgSub")};
+  }
+`,s=t.p`
+  ${e()}
+  max-width: 200px;
+  font-size: 14px;
+  color: ${o("textSecondary")};
+`,c=t.div`
+  ${i()}
+  min-height: 100px;
+  background-color: ${o("bgBase")};
+  border: 1px solid ${o("bgSub")};
+`,d=t.div`
+  padding: 1em;
+  background-color: ${o("bgBase")};
+  border: 1px solid ${o("bgSub")};
+  border-radius: 8px;
+`,a=t.h3`
+  ${e()}
+  margin: 0 0 0.5em 0;
+  color: ${o("primaryColor")};
+  font-size: 18px;
+`,b=()=>r.jsx(c,{children:r.jsxs(d,{children:[r.jsx(a,{children:"This is a very long title that should be truncated"}),r.jsx(s,{children:"This is some text content that will be truncated if it gets too long."}),r.jsx(n,{children:"Click me"})]})});export{b as App};

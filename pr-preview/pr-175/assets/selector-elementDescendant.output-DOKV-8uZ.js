@@ -1,1 +1,0 @@
-import{j as x}from"./index-pX9MaakQ.js";const e=()=>x.jsx("div",{style:{display:"flex",gap:"16px",padding:"16px"},children:x.jsxs("div",{className:"x1tamke2 x12peec7 x-default-marker",children:[x.jsx("svg",{viewBox:"0 0 24 24",className:"xvy4d1p xxk0z11 x1prsl8m",children:x.jsx("circle",{cx:"12",cy:"12",r:"10"})}),x.jsx("span",{children:"With icon"})]})});export{e as App};

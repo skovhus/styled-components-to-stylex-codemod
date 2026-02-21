@@ -1,0 +1,7 @@
+import{j as i,c as d}from"./index-DHeQ_gfE.js";function o(r){const{gap:c,column:l,className:n,style:e,children:s}=r;return i.jsx("div",{className:n,style:{display:"flex",flexDirection:l?"column":"row",gap:c,...e},children:s})}const t=d(o)`
+  width: 480px;
+  max-width: calc(100vw - 32px);
+  margin: 48px;
+  background-color: white;
+  border-radius: 8px;
+`,a=()=>i.jsxs(t,{gap:12,column:!0,children:[i.jsx("div",{children:"Child 1"}),i.jsx("div",{children:"Child 2"}),i.jsx("div",{children:"Child 3"})]});export{a as App,t as Container};
