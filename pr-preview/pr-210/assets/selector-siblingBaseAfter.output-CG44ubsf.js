@@ -1,1 +1,0 @@
-import{j as e}from"./index-ByrUIRfx.js";const x=()=>e.jsxs("div",{style:{display:"flex",flexDirection:"column",gap:4,padding:16},children:[e.jsx("div",{className:"xju2f9n x1o6lflp x1vvogim x1hr3lfm x-default-marker",children:"First (blue)"}),e.jsx("div",{className:"xju2f9n x1o6lflp x1vvogim x1hr3lfm x-default-marker",children:"Second (red - adjacent)"})]});export{x as App};
