@@ -53,15 +53,13 @@ export function postProcessStep(ctx: TransformContext): StepResult {
   ctx.newImportLocalNames = newImportLocalNames;
   ctx.newImportSourcesByLocal = newImportSourcesByLocal;
 
-  // Create a map from component local names to style keys for ancestor selector matching
+  // Build lookup maps from styled declarations in a single pass:
+  // - componentNameToStyleKey: for ancestor selector matching
+  // - siblingMarkers: for & + & sibling selectors
   const componentNameToStyleKey = new Map<string, string>();
-  for (const decl of styledDecls) {
-    componentNameToStyleKey.set(decl.localName, decl.styleKey);
-  }
-
-  // Collect sibling markers from components that use & + & selectors
   const siblingMarkers = new Map<string, string>();
   for (const decl of styledDecls) {
+    componentNameToStyleKey.set(decl.localName, decl.styleKey);
     if (decl.siblingMarkerName) {
       siblingMarkers.set(decl.styleKey, decl.siblingMarkerName);
     }

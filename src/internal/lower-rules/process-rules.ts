@@ -38,7 +38,6 @@ export function processDeclRules(ctx: DeclProcessingState): void {
     styleObj,
     perPropPseudo,
     perPropMedia,
-    perPropComputedMedia,
     nestedSelectors,
     attrBuckets,
     localVarValues,
@@ -797,18 +796,7 @@ export function processDeclRules(ctx: DeclProcessingState): void {
       // Handle resolved selector media (from adapter.resolveSelector)
       // These use computed property keys like [breakpoints.phone]
       if (resolvedSelectorMedia) {
-        let entry = perPropComputedMedia.get(prop);
-        if (!entry) {
-          const existingVal = (styleObj as Record<string, unknown>)[prop];
-          const defaultValue =
-            existingVal !== undefined
-              ? existingVal
-              : cssHelperPropValues.has(prop)
-                ? getComposedDefaultValue(prop)
-                : null;
-          entry = { defaultValue, entries: [] };
-          perPropComputedMedia.set(prop, entry);
-        }
+        const entry = getOrCreateComputedMediaEntry(prop, ctx);
         entry.entries.push({ keyExpr: resolvedSelectorMedia.keyExpr, value });
         return;
       }
@@ -1552,6 +1540,28 @@ function extractReverseSelectorPseudos(selector: string): string[] {
 }
 
 /**
+ * Returns the computed-media entry for `prop`, creating it on first access.
+ * Centralises the get-or-create + default-value logic that both
+ * resolvedSelectorMedia handling and sibling-selector handling need.
+ */
+function getOrCreateComputedMediaEntry(prop: string, ctx: DeclProcessingState) {
+  const { perPropComputedMedia, styleObj, cssHelperPropValues, getComposedDefaultValue } = ctx;
+  let entry = perPropComputedMedia.get(prop);
+  if (!entry) {
+    const existingVal = (styleObj as Record<string, unknown>)[prop];
+    const defaultValue =
+      existingVal !== undefined
+        ? existingVal
+        : cssHelperPropValues.has(prop)
+          ? getComposedDefaultValue(prop)
+          : null;
+    entry = { defaultValue, entries: [] };
+    perPropComputedMedia.set(prop, entry);
+  }
+  return entry;
+}
+
+/**
  * Handles the adjacent sibling selector `& + &` by processing declarations and
  * storing them as computed keys using `stylex.when.siblingBefore(marker)`.
  *
@@ -1562,14 +1572,7 @@ function handleAdjacentSiblingSelector(
   rule: DeclProcessingState["decl"]["rules"][number],
   ctx: DeclProcessingState,
 ): "break" | void {
-  const {
-    state,
-    decl,
-    styleObj,
-    perPropComputedMedia,
-    cssHelperPropValues,
-    getComposedDefaultValue,
-  } = ctx;
+  const { state, decl } = ctx;
   const { j, warnings, resolveThemeValue, resolveThemeValueFromFn } = state;
 
   // Bail on sibling selectors inside @media or other at-rules —
@@ -1621,18 +1624,7 @@ function handleAdjacentSiblingSelector(
 
   // Add each property to perPropComputedMedia with the sibling computed key
   for (const [prop, value] of Object.entries(bucket)) {
-    let entry = perPropComputedMedia.get(prop);
-    if (!entry) {
-      const existingVal = (styleObj as Record<string, unknown>)[prop];
-      const defaultValue =
-        existingVal !== undefined
-          ? existingVal
-          : cssHelperPropValues.has(prop)
-            ? getComposedDefaultValue(prop)
-            : null;
-      entry = { defaultValue, entries: [] };
-      perPropComputedMedia.set(prop, entry);
-    }
+    const entry = getOrCreateComputedMediaEntry(prop, ctx);
     entry.entries.push({ keyExpr: makeSiblingKeyExpr(), value });
   }
 }

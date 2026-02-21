@@ -48,7 +48,7 @@ export function postProcessTransformedAst(args: {
   // Apply relation override styles that rely on `stylex.when.*()`:
   // - Add `stylex.defaultMarker()` to elements that need markers (ancestor selectors).
   // - Add override style keys to descendant/child elements' `stylex.props(...)` calls.
-  const hasSiblingMarkers = siblingMarkers ? siblingMarkers.size > 0 : false;
+  const hasSiblingMarkers = (siblingMarkers?.size ?? 0) > 0;
   if (relationOverrides.length > 0 || ancestorSelectorParents.size > 0 || hasSiblingMarkers) {
     // IMPORTANT: Do not reuse the same AST node instance across multiple insertion points.
     // Recast/jscodeshift expect a tree (no shared references); reuse can corrupt printing.
