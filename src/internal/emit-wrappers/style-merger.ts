@@ -61,11 +61,7 @@ export function emitStyleMerging(args: {
   j: JSCodeshift;
   emitter: Pick<
     WrapperEmitter,
-    | "styleMerger"
-    | "stylesIdentifier"
-    | "emptyStyleKeys"
-    | "ancestorSelectorParents"
-    | "siblingMarkers"
+    "styleMerger" | "stylesIdentifier" | "emptyStyleKeys" | "ancestorSelectorParents"
   >;
   styleArgs: ExpressionKind[];
   classNameId: Identifier;
@@ -87,8 +83,7 @@ export function emitStyleMerging(args: {
     staticClassNameExpr,
   } = args;
 
-  const { styleMerger, emptyStyleKeys, stylesIdentifier, ancestorSelectorParents, siblingMarkers } =
-    emitter;
+  const { styleMerger, emptyStyleKeys, stylesIdentifier, ancestorSelectorParents } = emitter;
 
   const styleArgs = filterEmptyStyleArgs({
     styleArgs: rawStyleArgs,
@@ -110,18 +105,6 @@ export function emitStyleMerging(args: {
           [],
         ),
       );
-    }
-  }
-
-  // Add sibling marker identifiers when any style arg references a style key with a sibling marker.
-  // Analogous to the defaultMarker() logic above, but for & + & selectors.
-  if (siblingMarkers && siblingMarkers.size > 0) {
-    for (const arg of styleArgs) {
-      const key = getStyleArgKey(arg, stylesIdentifier);
-      const markerName = key ? siblingMarkers.get(key) : undefined;
-      if (markerName) {
-        styleArgs.push(j.identifier(markerName));
-      }
     }
   }
 

@@ -1036,11 +1036,11 @@ export const App = () => (
     );
 
     expect(result.code).not.toBeNull();
-    // Merger call should include the sibling marker identifier
-    expect(result.code).toContain("rowMarker");
+    // Merger call should include defaultMarker() for sibling selectors
+    expect(result.code).toContain("defaultMarker");
     expect(result.code).toContain("stylexProps");
-    // The marker should appear in the merger function call arguments
-    expect(result.code).toMatch(/stylexProps\([^)]*rowMarker/);
+    // defaultMarker() should appear in the merger function call arguments
+    expect(result.code).toMatch(/stylexProps\([^)]*defaultMarker/);
   });
 });
 

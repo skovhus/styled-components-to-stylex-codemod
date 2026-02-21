@@ -20,8 +20,6 @@ export function postProcessTransformedAst(args: {
   newImportLocalNames?: Set<string>;
   /** Map of local import names to the module specifiers they were added from */
   newImportSourcesByLocal?: Map<string, Set<string>>;
-  /** Map from style key to sibling marker identifier name (for & + & selectors) */
-  siblingMarkers?: Map<string, string>;
   /** The identifier name used for the stylex.create() object (default: "styles") */
   stylesIdentifier?: string;
 }): { changed: boolean; needsReactImport: boolean } {
@@ -35,7 +33,6 @@ export function postProcessTransformedAst(args: {
     preserveReactImport,
     newImportLocalNames,
     newImportSourcesByLocal,
-    siblingMarkers,
     stylesIdentifier = "styles",
   } = args;
   let changed = false;
@@ -51,8 +48,7 @@ export function postProcessTransformedAst(args: {
   // Apply relation override styles that rely on `stylex.when.*()`:
   // - Add `stylex.defaultMarker()` to elements that need markers (ancestor selectors).
   // - Add override style keys to descendant/child elements' `stylex.props(...)` calls.
-  const hasSiblingMarkers = (siblingMarkers?.size ?? 0) > 0;
-  if (relationOverrides.length > 0 || ancestorSelectorParents.size > 0 || hasSiblingMarkers) {
+  if (relationOverrides.length > 0 || ancestorSelectorParents.size > 0) {
     // IMPORTANT: Do not reuse the same AST node instance across multiple insertion points.
     // Recast/jscodeshift expect a tree (no shared references); reuse can corrupt printing.
     const makeDefaultMarkerCall = () =>
@@ -136,24 +132,6 @@ export function postProcessTransformedAst(args: {
               call.arguments = [...(call.arguments ?? []), makeDefaultMarkerCall()];
               changed = true;
             }
-          }
-        }
-      }
-
-      // Add sibling marker identifiers to elements that use sibling selectors (& + &).
-      // Each component with a sibling marker gets its defineMarker() result appended
-      // to stylex.props() so stylex.when.siblingBefore(marker) can match.
-      if (call && siblingMarkers) {
-        for (const [styleKey, markerName] of siblingMarkers) {
-          if (!hasStyleKeyArg(call, styleKey)) {
-            continue;
-          }
-          const hasMarker = (call.arguments ?? []).some(
-            (a: any) => a?.type === "Identifier" && a.name === markerName,
-          );
-          if (!hasMarker) {
-            call.arguments = [...(call.arguments ?? []), j.identifier(markerName)];
-            changed = true;
           }
         }
       }

@@ -16,14 +16,6 @@ export function emitWrappersStep(ctx: TransformContext): StepResult {
     return CONTINUE;
   }
 
-  // Build sibling markers map for & + & selectors
-  const siblingMarkers = new Map<string, string>();
-  for (const decl of styledDecls) {
-    if (decl.siblingMarkerName) {
-      siblingMarkers.set(decl.styleKey, decl.siblingMarkerName);
-    }
-  }
-
   emitWrappers({
     root: ctx.root,
     j: ctx.j,
@@ -36,7 +28,6 @@ export function emitWrappersStep(ctx: TransformContext): StepResult {
     styleMerger: ctx.adapter.styleMerger,
     emptyStyleKeys: ctx.emptyStyleKeys,
     ancestorSelectorParents: ctx.ancestorSelectorParents,
-    siblingMarkers,
   });
 
   return CONTINUE;

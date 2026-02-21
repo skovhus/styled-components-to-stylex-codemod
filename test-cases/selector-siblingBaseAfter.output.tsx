@@ -2,11 +2,10 @@ import * as stylex from "@stylexjs/stylex";
 
 export const App = () => (
   <div style={{ display: "flex", flexDirection: "column", gap: 4, padding: 16 }}>
-    <div {...stylex.props(styles.thing, thingMarker)}>First (blue)</div>
-    <div {...stylex.props(styles.thing, thingMarker)}>Second (red - adjacent)</div>
+    <div {...stylex.props(styles.thing, stylex.defaultMarker())}>First (blue)</div>
+    <div {...stylex.props(styles.thing, stylex.defaultMarker())}>Second (red - adjacent)</div>
   </div>
 );
-export const thingMarker = stylex.defineMarker();
 
 const styles = stylex.create({
   // The adjacent sibling rule appears BEFORE the base color declaration.
@@ -14,7 +13,7 @@ const styles = stylex.create({
   thing: {
     color: {
       default: "blue",
-      [stylex.when.siblingBefore(thingMarker)]: "red",
+      [stylex.when.siblingBefore(":is(*)")]: "red",
     },
     paddingBlock: "8px",
     paddingInline: "16px",

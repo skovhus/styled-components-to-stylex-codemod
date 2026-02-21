@@ -53,16 +53,10 @@ export function postProcessStep(ctx: TransformContext): StepResult {
   ctx.newImportLocalNames = newImportLocalNames;
   ctx.newImportSourcesByLocal = newImportSourcesByLocal;
 
-  // Build lookup maps from styled declarations in a single pass:
-  // - componentNameToStyleKey: for ancestor selector matching
-  // - siblingMarkers: for & + & sibling selectors
+  // Build lookup map from component local name to its style key (for ancestor selector matching)
   const componentNameToStyleKey = new Map<string, string>();
-  const siblingMarkers = new Map<string, string>();
   for (const decl of styledDecls) {
     componentNameToStyleKey.set(decl.localName, decl.styleKey);
-    if (decl.siblingMarkerName) {
-      siblingMarkers.set(decl.styleKey, decl.siblingMarkerName);
-    }
   }
 
   const post = postProcessTransformedAst({
@@ -75,7 +69,6 @@ export function postProcessStep(ctx: TransformContext): StepResult {
     preserveReactImport: ctx.preserveReactImport,
     newImportLocalNames,
     newImportSourcesByLocal,
-    siblingMarkers,
     stylesIdentifier: ctx.stylesIdentifier,
   });
   if (post.changed) {

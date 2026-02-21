@@ -102,15 +102,6 @@ const inputModules = import.meta.glob<{ App: React.ComponentType }>(
     "!./_unimplemented.*.input.tsx",
     "!./_unimplemented.*.input.jsx",
     "!./_unimplemented.*.flow.input.jsx",
-    // Exclude test cases using stylex.defineMarker() — not processable by
-    // the current @stylexjs/babel-plugin outside of `.stylex` files.
-    "!./selector-sibling.input.tsx",
-    "!./selector-adjacentSiblingDestructure.input.tsx",
-    "!./selector-siblingBaseAfter.input.tsx",
-    "!./selector-siblingInterpolated.input.tsx",
-    "!./selector-siblingMarkerCollision.input.tsx",
-    "!./selector-siblingMarkerScoping.input.tsx",
-    "!./selector-siblingStylexConflict.input.tsx",
   ],
   { eager: true },
 );
@@ -125,14 +116,6 @@ const outputModules = import.meta.glob<{ App: React.ComponentType }>(
     "!./_unimplemented.*.output.tsx",
     "!./_unimplemented.*.output.jsx",
     "!./_unimplemented.*.flow.output.jsx",
-    // Exclude test cases using stylex.defineMarker() (see inputModules above).
-    "!./selector-sibling.output.tsx",
-    "!./selector-adjacentSiblingDestructure.output.tsx",
-    "!./selector-siblingBaseAfter.output.tsx",
-    "!./selector-siblingInterpolated.output.tsx",
-    "!./selector-siblingMarkerCollision.output.tsx",
-    "!./selector-siblingMarkerScoping.output.tsx",
-    "!./selector-siblingStylexConflict.output.tsx",
   ],
   { eager: true },
 );

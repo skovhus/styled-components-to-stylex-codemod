@@ -308,7 +308,7 @@ export function processDeclRules(ctx: DeclProcessingState): void {
         break;
       } else if (/[+~]/.test(s) && !isHandledComponentPattern) {
         // Check for self-adjacent-sibling pattern: `& + &`
-        // Uses stylex.when.siblingBefore(marker) with a per-component defineMarker().
+        // Uses stylex.when.siblingBefore(':is(*)') with defaultMarker().
         const isAdjacentSiblingOfSelf = /^&\s*\+\s*&$/.test(s.trim());
         if (isAdjacentSiblingOfSelf) {
           const siblingAction = handleAdjacentSiblingSelector(rule, ctx);
@@ -1562,49 +1562,11 @@ function getOrCreateComputedMediaEntry(prop: string, ctx: DeclProcessingState) {
 }
 
 /**
- * Generates a unique marker name (`<base>Marker`, `<base>Marker1`, …) that does not
- * collide with existing bindings in the file.  Uses the same AST-scan approach as
- * `analyzeBeforeEmitStep`'s `makeUniqueLocal`.
- */
-function pickUniqueMarkerName(base: string, state: DeclProcessingState["state"]): string {
-  const { root, j, styledDecls } = state;
-  const styledNames = new Set(styledDecls.map((d) => d.localName));
-
-  // Collect names that already exist and should not be shadowed.
-  const occupied = new Set<string>();
-  root.find(j.VariableDeclarator).forEach((p: any) => {
-    const id = p.node.id;
-    if (id?.type === "Identifier" && !styledNames.has(id.name)) {
-      occupied.add(id.name);
-    }
-  });
-  root.find(j.FunctionDeclaration).forEach((p: any) => {
-    const name = p.node.id?.name;
-    if (name && !styledNames.has(name)) {
-      occupied.add(name);
-    }
-  });
-  // Also avoid collisions with markers already assigned to other decls.
-  for (const d of styledDecls) {
-    if (d.siblingMarkerName) {
-      occupied.add(d.siblingMarkerName);
-    }
-  }
-
-  let candidate = `${base}Marker`;
-  let i = 1;
-  while (occupied.has(candidate)) {
-    candidate = `${base}Marker${i}`;
-    i += 1;
-  }
-  return candidate;
-}
-
-/**
  * Handles the adjacent sibling selector `& + &` by processing declarations and
- * storing them as computed keys using `stylex.when.siblingBefore(marker)`.
+ * storing them as computed keys using `stylex.when.siblingBefore(':is(*)')`.
  *
- * Each component with `& + &` gets a unique `defineMarker()` for scoping.
+ * Uses `defaultMarker()` (via `ancestorSelectorParents`) instead of per-component
+ * `defineMarker()`, avoiding the `.stylex` file requirement.
  * Returns "break" on error to bail, otherwise the caller should `continue`.
  */
 function handleAdjacentSiblingSelector(
@@ -1612,7 +1574,8 @@ function handleAdjacentSiblingSelector(
   ctx: DeclProcessingState,
 ): "break" | void {
   const { state, decl } = ctx;
-  const { j, warnings, resolveThemeValue, resolveThemeValueFromFn } = state;
+  const { j, warnings, resolveThemeValue, resolveThemeValueFromFn, ancestorSelectorParents } =
+    state;
 
   // Bail on sibling selectors inside @media or other at-rules —
   // StyleX cannot nest @media inside computed sibling keys.
@@ -1626,8 +1589,9 @@ function handleAdjacentSiblingSelector(
     return "break";
   }
 
-  const markerName = pickUniqueMarkerName(toStyleKey(decl.localName), state);
-  decl.siblingMarkerName = markerName;
+  decl.hasSiblingSelector = true;
+  // Add to ancestorSelectorParents so defaultMarker() is injected into stylex.props() calls
+  ancestorSelectorParents.add(decl.styleKey);
 
   // Process declarations into a temporary bucket
   const bucket: Record<string, unknown> = {};
@@ -1650,15 +1614,16 @@ function handleAdjacentSiblingSelector(
     return "break";
   }
 
-  // Build a fresh stylex.when.siblingBefore(marker) AST node per property
-  // to avoid shared AST references which can corrupt recast printing.
+  // Build a fresh stylex.when.siblingBefore(':is(*)') AST node per property.
+  // ':is(*)' is a universal pseudo that matches all elements, allowing the
+  // sibling selector to work without a scoped defineMarker().
   const makeSiblingKeyExpr = () =>
     j.callExpression(
       j.memberExpression(
         j.memberExpression(j.identifier("stylex"), j.identifier("when")),
         j.identifier("siblingBefore"),
       ),
-      [j.identifier(markerName)],
+      [j.literal(":is(*)")],
     );
 
   // Add each property to perPropComputedMedia with the sibling computed key
