@@ -1,0 +1,1 @@
+import{j as s}from"./index-K_nkAAOe.js";const e=()=>s.jsx("a",{href:"#",className:"x78zum5 xe8ttls xd10qfp x-default-marker",children:s.jsx("span",{className:"x12ulsxz xdqyycr xkn7p67 xtn4b6r x1y0dsa4",children:"Badge (blue on focus-visible OR active)"})});export{e as App};
