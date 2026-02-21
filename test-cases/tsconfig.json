@@ -23,7 +23,6 @@
     "../node_modules",
     "../dist",
     "./_unsupported.*",
-    "./_unimplemented.*",
     // Static properties on styled-components are not typeable without workarounds
     "./staticProp-basic.input.tsx",
     "./staticProp-basic.output.tsx"
