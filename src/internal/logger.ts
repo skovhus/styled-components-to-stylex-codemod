@@ -82,6 +82,7 @@ export type WarningType =
   | "Unsupported selector: unresolved interpolation in descendant component selector"
   | "Unsupported selector: unresolved interpolation in element selector"
   | "Unsupported selector: unresolved interpolation in reverse component selector"
+  | "Unsupported selector: grouped reverse selector references different components"
   | "Unsupported selector: unknown component selector"
   | "Unsupported css`` mixin: after-base mixin style is not a plain object"
   | "Unsupported css`` mixin: nested contextual conditions in after-base mixin"

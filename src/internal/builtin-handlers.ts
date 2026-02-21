@@ -14,6 +14,7 @@ import {
   isLogicalExpressionNode,
   literalToStaticValue,
   resolveIdentifierToPropName,
+  unwrapLogicalFallback,
 } from "./utilities/jscodeshift-utils.js";
 import { sanitizeIdentifier } from "./utilities/string-utils.js";
 import { hasThemeAccessInArrowFn } from "./lower-rules/inline-styles.js";
@@ -24,6 +25,7 @@ import {
   getArrowFnThemeParamInfo,
   isAdapterResultCssValue,
   resolveImportedHelperCall,
+  resolveTemplateLiteralWithTheme,
   tryResolveCallExpression,
 } from "./builtin-handlers/resolver-utils.js";
 import {
@@ -60,8 +62,8 @@ export function resolveDynamicNode(
     tryResolveConditionalCssBlockTernary(node, ctx) ??
     tryResolveConditionalCssBlock(node, ctx) ??
     tryResolveArrowFnCallWithSinglePropArg(node) ??
-    // Detect theme-dependent template literals before trying to emit style functions
-    tryResolveThemeDependentTemplateLiteral(node) ??
+    // Resolve or detect theme-dependent template literals before trying to emit style functions
+    tryResolveThemeDependentTemplateLiteral(node, ctx) ??
     tryResolveStyleFunctionFromTemplateLiteral(node) ??
     tryResolveInlineStyleValueForNestedPropAccess(node) ??
     tryResolvePropAccess(node) ??
@@ -85,24 +87,14 @@ function tryResolveThemeAccess(
   if (!info) {
     return null;
   }
-  const body = expr.body;
-  if (body.type !== "MemberExpression") {
+  // Extract the theme member expression from the body.
+  // Handles both direct member access (`props.theme.X`) and logical fallback
+  // patterns (`props.theme.X ?? "default"` / `props.theme.X || "default"`).
+  const themeExpr = extractThemeMemberExpression(expr.body);
+  if (!themeExpr) {
     return null;
   }
-  const path = (() => {
-    if (info.kind === "propsParam") {
-      const parts = getMemberPathFromIdentifier(body, info.propsName);
-      if (!parts || parts[0] !== "theme") {
-        return null;
-      }
-      return parts.slice(1).join(".");
-    }
-    const parts = getMemberPathFromIdentifier(body, info.themeName);
-    if (!parts) {
-      return null;
-    }
-    return parts.join(".");
-  })();
+  const path = extractThemePath(themeExpr, info);
   if (!path) {
     return null;
   }
@@ -111,12 +103,73 @@ function tryResolveThemeAccess(
     kind: "theme",
     path,
     filePath: ctx.filePath,
-    loc: getNodeLocStart(body) ?? undefined,
+    loc: getNodeLocStart(themeExpr) ?? undefined,
   });
   if (!res) {
     return null;
   }
-  return { type: "resolvedValue", expr: res.expr, imports: res.imports };
+  // Preserve logical fallback (`?? "default"` / `|| "default"`) so users can
+  // review and delete it if their adapter always returns defined values.
+  // Returns null when the fallback is non-literal (e.g., props.fallbackColor) —
+  // bail so a downstream handler can emit keepOriginal or inline style.
+  const resultExpr = appendLogicalFallback(expr.body, res.expr);
+  if (resultExpr === null) {
+    return null;
+  }
+  return { type: "resolvedValue", expr: resultExpr, imports: res.imports };
+}
+
+/**
+ * Extracts the theme member expression from an arrow function body.
+ *
+ * Supports:
+ * - Direct: `props.theme.color.labelBase` (MemberExpression)
+ * - Logical fallback: `props.theme.color.labelBase ?? "black"` or `|| "default"`
+ *   (LogicalExpression with `??` or `||` and theme access on the left)
+ *
+ * Returns the MemberExpression node, or null if the pattern doesn't match.
+ * The fallback (right side of `??`/`||`) is preserved by the caller via
+ * `appendLogicalFallback` so users can review and delete it.
+ */
+function extractThemeMemberExpression(body: unknown): { type: "MemberExpression" } | null {
+  if (!body || typeof body !== "object") {
+    return null;
+  }
+  // Try unwrapping logical fallback (e.g., `theme.X ?? "default"`)
+  const unwrapped = unwrapLogicalFallback(body);
+  if (unwrapped && (unwrapped as { type?: string }).type === "MemberExpression") {
+    return unwrapped as { type: "MemberExpression" };
+  }
+  // Direct member expression
+  if ((body as { type?: string }).type === "MemberExpression") {
+    return body as { type: "MemberExpression" };
+  }
+  return null;
+}
+
+/**
+ * Extracts the theme path (e.g., "color.labelBase") from a member expression,
+ * accounting for whether the arrow function uses `props.theme.X` or `{ theme }` destructuring.
+ */
+function extractThemePath(
+  memberExpr: { type: "MemberExpression" },
+  info: ReturnType<typeof getArrowFnThemeParamInfo> & {},
+): string | null {
+  // getMemberPathFromIdentifier performs duck-typed AST traversal; the runtime
+  // type check in extractThemeMemberExpression guarantees this is a MemberExpression.
+  const exprAsAny = memberExpr as Parameters<typeof getMemberPathFromIdentifier>[0];
+  if (info.kind === "propsParam") {
+    const parts = getMemberPathFromIdentifier(exprAsAny, info.propsName);
+    if (!parts || parts[0] !== "theme") {
+      return null;
+    }
+    return parts.slice(1).join(".");
+  }
+  const parts = getMemberPathFromIdentifier(exprAsAny, info.themeName);
+  if (!parts) {
+    return null;
+  }
+  return parts.join(".");
 }
 
 function tryResolveArrowFnHelperCallWithThemeArg(
@@ -564,10 +617,12 @@ function tryResolveInlineStyleValueForLogicalExpression(node: DynamicNode): Hand
   return { type: "emitInlineStyleValueFromProps" };
 }
 
-function tryResolveThemeDependentTemplateLiteral(node: DynamicNode): HandlerResult | null {
-  // Detect theme-dependent template literals and return keepOriginal with a warning.
-  // This catches cases like: ${props => `${props.theme.color.bg}px`}
-  // StyleX output does not have `props.theme` at runtime.
+function tryResolveThemeDependentTemplateLiteral(
+  node: DynamicNode,
+  ctx: InternalHandlerContext,
+): HandlerResult | null {
+  // Handles cases like: ${props => `${props.theme.color.bg}px`}
+  // Tries to resolve theme interpolations via the adapter; bails if unresolvable.
   if (!node.css.property) {
     return null;
   }
@@ -579,15 +634,23 @@ function tryResolveThemeDependentTemplateLiteral(node: DynamicNode): HandlerResu
   if (!body || (body as { type?: string }).type !== "TemplateLiteral") {
     return null;
   }
-  // Use existing utility to check for theme access
-  if (hasThemeAccessInArrowFn(expr)) {
-    return {
-      type: "keepOriginal",
-      reason:
-        "Theme-dependent template literals require a project-specific theme source (e.g. useTheme())",
-    };
+  if (!hasThemeAccessInArrowFn(expr)) {
+    return null;
   }
-  return null;
+  // Try to resolve theme interpolations via the adapter
+  const paramName = getArrowFnSingleParamName(expr);
+  if (paramName) {
+    const resolved = resolveTemplateLiteralWithTheme(body, paramName, ctx);
+    if (resolved) {
+      return { type: "resolvedValue", expr: resolved.expr, imports: resolved.imports };
+    }
+  }
+  // Adapter couldn't resolve — bail with a warning
+  return {
+    type: "keepOriginal",
+    reason:
+      "Theme-dependent template literals require a project-specific theme source (e.g. useTheme())",
+  };
 }
 
 function tryResolveStyleFunctionFromTemplateLiteral(node: DynamicNode): HandlerResult | null {
@@ -797,4 +860,27 @@ function tryResolvePropAccess(node: DynamicNode): HandlerResult | null {
     body: `{ ${Object.keys(styleFromSingleDeclaration(cssProp, "value"))[0]}: value }`,
     call: propName,
   };
+}
+
+/**
+ * If `body` is a logical fallback expression (`X ?? "default"` / `X || "default"`),
+ * appends the operator and fallback literal to the resolved expression string.
+ *
+ * Returns `null` when the body IS a logical expression but the fallback is non-literal
+ * (e.g., `props.fallbackColor`, `null`, `undefined`), signalling to the caller that
+ * it's unsafe to drop the fallback — the caller should bail instead of resolving.
+ *
+ * Returns `resolvedExpr` unchanged when the body is NOT a logical expression (no
+ * fallback to preserve).
+ */
+function appendLogicalFallback(body: unknown, resolvedExpr: string): string | null {
+  if (!isLogicalExpressionNode(body) || (body.operator !== "??" && body.operator !== "||")) {
+    return resolvedExpr;
+  }
+  const fallback = literalToStaticValue(body.right);
+  if (fallback === null) {
+    // Fallback is non-literal — unsafe to drop it silently
+    return null;
+  }
+  return `${resolvedExpr} ${body.operator} ${JSON.stringify(fallback)}`;
 }

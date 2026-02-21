@@ -72,6 +72,15 @@ Create matching `.input.tsx` and `.output.tsx` files in `test-cases/`. Tests aut
 
 Unsupported test cases can be named `_unsupported.<case>.input.tsx` and should NOT have an output file.
 
+### Promoting Unsupported Test Cases
+
+When promoting an `_unsupported` test case to a supported one (adding codemod support for a previously unsupported pattern):
+
+- **Preserve the original input code**: Keep the original styled-component definition and CSS as-is. The codemod must handle the original input. You may extend the test case (e.g., add more CSS properties or variations), but do not modify or remove the original code.
+- Remove `@expected-warning` comments and update descriptive comments as needed (these are not semantic changes).
+- It is OK to minimally improve the `App` component for visibility (e.g., adding text content to an empty `<Box />`), since that doesn't change the styled-component transformation being tested.
+- Create the matching `.output.tsx` using `node scripts/regenerate-test-case-outputs.mts --only <case>`.
+
 ### Test Case Naming Convention
 
 Test cases follow a `category-variation` naming scheme:
