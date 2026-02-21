@@ -376,6 +376,30 @@ export function processDeclRules(ctx: DeclProcessingState): void {
         !isCssHelperPlaceholder &&
         (isReverseSelectorPattern || isGroupedReverseSelectorPattern)
       ) {
+        // For grouped selectors, verify ALL slot IDs resolve to the same component.
+        // Without this guard, `${Link}:focus &, ${Button}:active &` would silently
+        // attribute all pseudos to Link (the first match).
+        if (isGroupedReverseSelectorPattern) {
+          const allSlotMatches = [...selTrim2.matchAll(/__SC_EXPR_(\d+)__/g)];
+          const allLocal = allSlotMatches.map((m) => {
+            const id = Number(m[1]);
+            const expr = decl.templateExpressions[id] as
+              | { type?: string; name?: string }
+              | undefined;
+            return expr?.type === "Identifier" ? expr.name : null;
+          });
+          const hasDifferentComponents = allLocal.some((name) => name !== otherLocal);
+          if (hasDifferentComponents) {
+            state.markBail();
+            warnings.push({
+              severity: "warning",
+              type: "Unsupported selector: grouped reverse selector references different components",
+              loc: computeSelectorWarningLoc(decl.loc, decl.rawCss, rule.selector),
+            });
+            break;
+          }
+        }
+
         const parentDecl = declByLocalName.get(otherLocal);
         if (!parentDecl) {
           state.markBail();

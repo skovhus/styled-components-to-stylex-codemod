@@ -110,7 +110,12 @@ function tryResolveThemeAccess(
   }
   // Preserve logical fallback (`?? "default"` / `|| "default"`) so users can
   // review and delete it if their adapter always returns defined values.
+  // Returns null when the fallback is non-literal (e.g., props.fallbackColor) —
+  // bail so a downstream handler can emit keepOriginal or inline style.
   const resultExpr = appendLogicalFallback(expr.body, res.expr);
+  if (resultExpr === null) {
+    return null;
+  }
   return { type: "resolvedValue", expr: resultExpr, imports: res.imports };
 }
 
@@ -861,16 +866,21 @@ function tryResolvePropAccess(node: DynamicNode): HandlerResult | null {
  * If `body` is a logical fallback expression (`X ?? "default"` / `X || "default"`),
  * appends the operator and fallback literal to the resolved expression string.
  *
- * This preserves the original fallback so users can review and delete it when
- * they know their adapter always returns defined values (e.g., StyleX theme tokens).
+ * Returns `null` when the body IS a logical expression but the fallback is non-literal
+ * (e.g., `props.fallbackColor`, `null`, `undefined`), signalling to the caller that
+ * it's unsafe to drop the fallback — the caller should bail instead of resolving.
+ *
+ * Returns `resolvedExpr` unchanged when the body is NOT a logical expression (no
+ * fallback to preserve).
  */
-function appendLogicalFallback(body: unknown, resolvedExpr: string): string {
+function appendLogicalFallback(body: unknown, resolvedExpr: string): string | null {
   if (!isLogicalExpressionNode(body) || (body.operator !== "??" && body.operator !== "||")) {
     return resolvedExpr;
   }
   const fallback = literalToStaticValue(body.right);
   if (fallback === null) {
-    return resolvedExpr;
+    // Fallback is non-literal — unsafe to drop it silently
+    return null;
   }
   return `${resolvedExpr} ${body.operator} ${JSON.stringify(fallback)}`;
 }

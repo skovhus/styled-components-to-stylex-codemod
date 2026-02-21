@@ -2484,3 +2484,66 @@ export const App = () => <Box />;
     expect(result.code).toBeNull();
   });
 });
+
+describe("non-literal fallback in theme access", () => {
+  it("should bail when theme access has a non-literal fallback like props.fallbackColor", () => {
+    const source = `
+import styled from "styled-components";
+
+const Box = styled.div\`
+  color: \${(props) => props.theme.color.labelBase ?? props.fallbackColor};
+\`;
+
+export const App = () => <Box fallbackColor="red" />;
+`;
+
+    const result = transformWithWarnings(
+      { source, path: "test.tsx" },
+      { jscodeshift: j, j, stats: () => {}, report: () => {} },
+      { adapter: fixtureAdapter },
+    );
+
+    // Should bail (not silently drop the fallback)
+    expect(result.code).toBeNull();
+  });
+});
+
+describe("grouped reverse selectors with different components", () => {
+  it("should bail when comma-grouped reverse selector references different components", () => {
+    const source = `
+import styled from "styled-components";
+
+const Link = styled.a\`
+  color: blue;
+\`;
+
+const Button = styled.button\`
+  color: green;
+\`;
+
+const Icon = styled.span\`
+  opacity: 0.5;
+
+  \${Link}:focus &, \${Button}:active & {
+    opacity: 1;
+  }
+\`;
+
+export const App = () => (
+  <div>
+    <Link><Icon>link icon</Icon></Link>
+    <Button><Icon>button icon</Icon></Button>
+  </div>
+);
+`;
+
+    const result = transformWithWarnings(
+      { source, path: "test.tsx" },
+      { jscodeshift: j, j, stats: () => {}, report: () => {} },
+      { adapter: fixtureAdapter },
+    );
+
+    // Should bail because Link and Button are different components
+    expect(result.code).toBeNull();
+  });
+});
