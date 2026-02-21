@@ -1,0 +1,1 @@
+import{j as x}from"./index-NDp7hXkD.js";const e=()=>x.jsxs("a",{href:"#",className:"x78zum5 x6s0dn4 xifx94n x1awh872 xd10qfp x1c28xdg x-default-marker",children:[x.jsx("span",{className:"x12ulsxz xdqyycr x5jndhl xsdx111",children:"Label"}),"Hover me"]});export{e as App};
