@@ -1,0 +1,34 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>skovhus/styled-components-to-stylex-codemod</title>
+    <style>
+      * {
+        box-sizing: border-box;
+      }
+      body {
+        margin: 0;
+        padding: 0;
+      }
+    </style>
+    <script>
+      // Some browser-bundled deps (notably `path-browserify`) call `process.cwd()`.
+      // Ensure `process.cwd` exists and is a function before any module code runs.
+      (function () {
+        var p = globalThis.process || (globalThis.process = {});
+        if (typeof p.cwd !== "function")
+          p.cwd = function () {
+            return "/";
+          };
+        if (typeof p.env !== "object" || p.env === null) p.env = {};
+      })();
+    </script>
+    <script type="module" crossorigin src="/styled-components-to-stylex-codemod/pr-preview/pr-211/assets/index-FP_Cx-M0.js"></script>
+    <link rel="stylesheet" crossorigin href="/styled-components-to-stylex-codemod/pr-preview/pr-211/assets/style-DSZS3Uo8.css">
+  </head>
+  <body>
+    <div id="root"></div>
+  </body>
+</html>

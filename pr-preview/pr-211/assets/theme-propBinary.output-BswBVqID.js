@@ -1,0 +1,1 @@
+import{j as x,K as o}from"./index-FP_Cx-M0.js";function a(e){const{children:s}=e,t=o();return x.jsx("div",{...{0:{className:"xpyat2d x1exxlbk x1mqxbix"},1:{className:"xpyat2d x1exxlbk x1awj2ng"}}[(t.mode==="dark")<<0],children:s})}const n=()=>x.jsx(a,{children:"Theme mode"});export{n as App};
