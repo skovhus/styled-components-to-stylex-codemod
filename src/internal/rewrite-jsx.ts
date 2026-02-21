@@ -178,7 +178,7 @@ export function postProcessTransformedAst(args: {
               continue;
             }
             const overrideArg = j.memberExpression(
-              j.identifier("styles"),
+              j.identifier(stylesIdentifier),
               j.identifier(o.overrideStyleKey),
             );
             call.arguments = [...(call.arguments ?? []), overrideArg];
@@ -212,7 +212,7 @@ export function postProcessTransformedAst(args: {
           !(
             a?.type === "MemberExpression" &&
             a.object?.type === "Identifier" &&
-            a.object.name === "styles" &&
+            a.object.name === stylesIdentifier &&
             a.property?.type === "Identifier" &&
             a.property.name === key
           ),
@@ -228,7 +228,7 @@ export function postProcessTransformedAst(args: {
     const isEmptyStyleRef = (a: any): boolean =>
       a?.type === "MemberExpression" &&
       a.object?.type === "Identifier" &&
-      a.object.name === "styles" &&
+      a.object.name === stylesIdentifier &&
       a.property?.type === "Identifier" &&
       emptyStyleKeys.has(a.property.name);
 
