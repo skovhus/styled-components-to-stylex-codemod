@@ -7,6 +7,7 @@ import {
   getMemberPathFromIdentifier,
   getNodeLocStart,
   isLogicalExpressionNode,
+  literalToStaticValue,
   unwrapLogicalFallback,
 } from "../utilities/jscodeshift-utils.js";
 import type { LowerRulesState } from "./state.js";
@@ -150,6 +151,10 @@ export function createThemeResolvers(
  * If `originalExpr` was a logical fallback (`X ?? "default"` / `X || "default"`),
  * wraps the resolved AST node in a LogicalExpression preserving the original
  * operator and fallback value.
+ *
+ * Returns null if the fallback (RHS) is not a static literal, because dynamic
+ * references (e.g., `props.fallbackColor`) would be invalid in a static
+ * `stylex.create()` context where `props` is not in scope.
  */
 function wrapWithLogicalFallback(
   resolved: unknown,
@@ -161,6 +166,11 @@ function wrapWithLogicalFallback(
     (originalExpr.operator !== "??" && originalExpr.operator !== "||")
   ) {
     return resolved;
+  }
+  // Only preserve fallback if RHS is a static value (string/number/boolean literal).
+  // Dynamic references like `props.fallbackColor` are not valid in static StyleX output.
+  if (literalToStaticValue(originalExpr.right) === null) {
+    return null;
   }
   return j.logicalExpression(
     originalExpr.operator as "??" | "||",

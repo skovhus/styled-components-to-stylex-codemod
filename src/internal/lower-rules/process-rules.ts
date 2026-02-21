@@ -457,7 +457,11 @@ export function processDeclRules(ctx: DeclProcessingState): void {
           break;
         }
 
-        // Copy declarations into remaining pseudo buckets
+        // Copy only the declarations written by THIS rule into remaining pseudo buckets.
+        // Using the writtenProps set (returned by processDeclarationsIntoBucket) ensures
+        // we propagate overwrites of existing keys while not leaking unrelated declarations
+        // that were already in firstBucket from earlier rules.
+        const writtenProps = result;
         for (let i = 1; i < ancestorPseudos.length; i++) {
           const bucket = getOrCreateRelationOverrideBucket(
             overrideStyleKey,
@@ -468,7 +472,9 @@ export function processDeclRules(ctx: DeclProcessingState): void {
             relationOverridePseudoBuckets,
             decl.extraStyleKeys,
           );
-          Object.assign(bucket, firstBucket);
+          for (const key of writtenProps) {
+            bucket[key] = firstBucket[key];
+          }
         }
 
         continue;

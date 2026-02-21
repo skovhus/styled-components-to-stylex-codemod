@@ -1,12 +1,15 @@
-// @expected-warning: Dynamic styles inside pseudo elements (::before/::after) are not supported by StyleX. See https://github.com/facebook/stylex/issues/1396
 import styled from "styled-components";
 
 /**
- * Test case for dynamic styles in pseudo elements.
- * Reproduces: https://github.com/facebook/stylex/issues/1396
+ * Test case for dynamic styles in pseudo elements (::before / ::after).
+ * Uses CSS custom properties as a workaround for StyleX's limitation
+ * with dynamic values inside pseudo elements.
+ * See: https://github.com/facebook/stylex/issues/1396
  */
 const Badge = styled.span<{ $badgeColor: string }>`
   position: relative;
+  padding: 8px 16px;
+  background-color: #f0f0f0;
 
   &::after {
     content: "";
@@ -21,8 +24,9 @@ const Badge = styled.span<{ $badgeColor: string }>`
 `;
 
 export const App = () => (
-  <div>
+  <div style={{ display: "flex", gap: "16px", padding: "16px" }}>
     <Badge $badgeColor="red">Notification</Badge>
     <Badge $badgeColor="green">Online</Badge>
+    <Badge $badgeColor="blue">Info</Badge>
   </div>
 );
