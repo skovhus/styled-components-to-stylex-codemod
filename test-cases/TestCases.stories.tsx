@@ -108,7 +108,9 @@ const inputModules = import.meta.glob<{ App: React.ComponentType }>(
     "!./selector-adjacentSiblingDestructure.input.tsx",
     "!./selector-siblingBaseAfter.input.tsx",
     "!./selector-siblingInterpolated.input.tsx",
+    "!./selector-siblingMarkerCollision.input.tsx",
     "!./selector-siblingMarkerScoping.input.tsx",
+    "!./selector-siblingStylexConflict.input.tsx",
   ],
   { eager: true },
 );
@@ -128,7 +130,9 @@ const outputModules = import.meta.glob<{ App: React.ComponentType }>(
     "!./selector-adjacentSiblingDestructure.output.tsx",
     "!./selector-siblingBaseAfter.output.tsx",
     "!./selector-siblingInterpolated.output.tsx",
+    "!./selector-siblingMarkerCollision.output.tsx",
     "!./selector-siblingMarkerScoping.output.tsx",
+    "!./selector-siblingStylexConflict.output.tsx",
   ],
   { eager: true },
 );

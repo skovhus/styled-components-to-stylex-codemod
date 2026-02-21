@@ -76,6 +76,7 @@ export function postProcessStep(ctx: TransformContext): StepResult {
     newImportLocalNames,
     newImportSourcesByLocal,
     siblingMarkers,
+    stylesIdentifier: ctx.stylesIdentifier,
   });
   if (post.changed) {
     ctx.markChanged();

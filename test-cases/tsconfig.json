@@ -32,6 +32,8 @@
     "./selector-adjacentSiblingDestructure.output.tsx",
     "./selector-siblingBaseAfter.output.tsx",
     "./selector-siblingInterpolated.output.tsx",
-    "./selector-siblingMarkerScoping.output.tsx"
+    "./selector-siblingMarkerCollision.output.tsx",
+    "./selector-siblingMarkerScoping.output.tsx",
+    "./selector-siblingStylexConflict.output.tsx"
   ]
 }

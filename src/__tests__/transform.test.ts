@@ -1006,6 +1006,42 @@ export const App = () => <Button>Click</Button>;
     // Should have style spread
     expect(result.code).toContain("...sx.style");
   });
+
+  it("should include sibling marker in merger call when component uses & + &", async () => {
+    const source = `
+import styled from 'styled-components';
+
+export const Row = styled.div\`
+  padding: 8px;
+
+  & + & {
+    border-top-width: 1px;
+    border-top-style: solid;
+    border-top-color: gray;
+  }
+\`;
+
+export const App = () => (
+  <div>
+    <Row>First</Row>
+    <Row>Second</Row>
+  </div>
+);
+`;
+
+    const result = transformWithWarnings(
+      { source, path: "test.tsx" },
+      { jscodeshift: j, j, stats: () => {}, report: () => {} },
+      { adapter: mergerAdapter },
+    );
+
+    expect(result.code).not.toBeNull();
+    // Merger call should include the sibling marker identifier
+    expect(result.code).toContain("rowMarker");
+    expect(result.code).toContain("stylexProps");
+    // The marker should appear in the merger function call arguments
+    expect(result.code).toMatch(/stylexProps\([^)]*rowMarker/);
+  });
 });
 
 describe("conditional value handling", () => {

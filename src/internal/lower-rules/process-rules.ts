@@ -1562,6 +1562,45 @@ function getOrCreateComputedMediaEntry(prop: string, ctx: DeclProcessingState) {
 }
 
 /**
+ * Generates a unique marker name (`<base>Marker`, `<base>Marker1`, …) that does not
+ * collide with existing bindings in the file.  Uses the same AST-scan approach as
+ * `analyzeBeforeEmitStep`'s `makeUniqueLocal`.
+ */
+function pickUniqueMarkerName(base: string, state: DeclProcessingState["state"]): string {
+  const { root, j, styledDecls } = state;
+  const styledNames = new Set(styledDecls.map((d) => d.localName));
+
+  // Collect names that already exist and should not be shadowed.
+  const occupied = new Set<string>();
+  root.find(j.VariableDeclarator).forEach((p: any) => {
+    const id = p.node.id;
+    if (id?.type === "Identifier" && !styledNames.has(id.name)) {
+      occupied.add(id.name);
+    }
+  });
+  root.find(j.FunctionDeclaration).forEach((p: any) => {
+    const name = p.node.id?.name;
+    if (name && !styledNames.has(name)) {
+      occupied.add(name);
+    }
+  });
+  // Also avoid collisions with markers already assigned to other decls.
+  for (const d of styledDecls) {
+    if (d.siblingMarkerName) {
+      occupied.add(d.siblingMarkerName);
+    }
+  }
+
+  let candidate = `${base}Marker`;
+  let i = 1;
+  while (occupied.has(candidate)) {
+    candidate = `${base}Marker${i}`;
+    i += 1;
+  }
+  return candidate;
+}
+
+/**
  * Handles the adjacent sibling selector `& + &` by processing declarations and
  * storing them as computed keys using `stylex.when.siblingBefore(marker)`.
  *
@@ -1587,7 +1626,7 @@ function handleAdjacentSiblingSelector(
     return "break";
   }
 
-  const markerName = `${toStyleKey(decl.localName)}Marker`;
+  const markerName = pickUniqueMarkerName(toStyleKey(decl.localName), state);
   decl.siblingMarkerName = markerName;
 
   // Process declarations into a temporary bucket

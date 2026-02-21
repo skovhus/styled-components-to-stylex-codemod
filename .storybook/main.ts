@@ -13,7 +13,9 @@ const STORYBOOK_EXCLUDED_CASES = new Set([
   "selector-adjacentSiblingDestructure",
   "selector-siblingBaseAfter",
   "selector-siblingInterpolated",
+  "selector-siblingMarkerCollision",
   "selector-siblingMarkerScoping",
+  "selector-siblingStylexConflict",
 ]);
 
 // Get all test case names from the test-cases directory

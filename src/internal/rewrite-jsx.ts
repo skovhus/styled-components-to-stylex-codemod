@@ -22,6 +22,8 @@ export function postProcessTransformedAst(args: {
   newImportSourcesByLocal?: Map<string, Set<string>>;
   /** Map from style key to sibling marker identifier name (for & + & selectors) */
   siblingMarkers?: Map<string, string>;
+  /** The identifier name used for the stylex.create() object (default: "styles") */
+  stylesIdentifier?: string;
 }): { changed: boolean; needsReactImport: boolean } {
   const {
     root,
@@ -34,6 +36,7 @@ export function postProcessTransformedAst(args: {
     newImportLocalNames,
     newImportSourcesByLocal,
     siblingMarkers,
+    stylesIdentifier = "styles",
   } = args;
   let changed = false;
 
@@ -83,7 +86,7 @@ export function postProcessTransformedAst(args: {
         (a: any) =>
           a?.type === "MemberExpression" &&
           a.object?.type === "Identifier" &&
-          a.object.name === "styles" &&
+          a.object.name === stylesIdentifier &&
           a.property?.type === "Identifier" &&
           a.property.name === key,
       );

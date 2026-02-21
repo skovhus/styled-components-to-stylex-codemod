@@ -61,7 +61,11 @@ export function emitStyleMerging(args: {
   j: JSCodeshift;
   emitter: Pick<
     WrapperEmitter,
-    "styleMerger" | "stylesIdentifier" | "emptyStyleKeys" | "ancestorSelectorParents"
+    | "styleMerger"
+    | "stylesIdentifier"
+    | "emptyStyleKeys"
+    | "ancestorSelectorParents"
+    | "siblingMarkers"
   >;
   styleArgs: ExpressionKind[];
   classNameId: Identifier;
@@ -83,7 +87,8 @@ export function emitStyleMerging(args: {
     staticClassNameExpr,
   } = args;
 
-  const { styleMerger, emptyStyleKeys, stylesIdentifier, ancestorSelectorParents } = emitter;
+  const { styleMerger, emptyStyleKeys, stylesIdentifier, ancestorSelectorParents, siblingMarkers } =
+    emitter;
 
   const styleArgs = filterEmptyStyleArgs({
     styleArgs: rawStyleArgs,
@@ -95,13 +100,8 @@ export function emitStyleMerging(args: {
   // Add stylex.defaultMarker() when any style arg references an ancestor selector parent.
   // This is needed for merger/verbose paths that bypass the postProcessTransformedAst traversal.
   if (ancestorSelectorParents && ancestorSelectorParents.size > 0) {
-    const needsMarker = styleArgs.some(
-      (arg: any) =>
-        arg?.type === "MemberExpression" &&
-        arg.object?.type === "Identifier" &&
-        arg.object.name === stylesIdentifier &&
-        arg.property?.type === "Identifier" &&
-        ancestorSelectorParents.has(arg.property.name),
+    const needsMarker = styleArgs.some((arg) =>
+      hasStyleArgKey(arg, stylesIdentifier, ancestorSelectorParents),
     );
     if (needsMarker) {
       styleArgs.push(
@@ -110,6 +110,19 @@ export function emitStyleMerging(args: {
           [],
         ),
       );
+    }
+  }
+
+  // Add sibling marker identifiers when any style arg references a style key with a sibling marker.
+  // Analogous to the defaultMarker() logic above, but for & + & selectors.
+  if (siblingMarkers && siblingMarkers.size > 0) {
+    const markerKeys = new Set(siblingMarkers.keys());
+    for (const arg of styleArgs) {
+      const key = getStyleArgKey(arg, stylesIdentifier);
+      if (key && markerKeys.has(key)) {
+        const markerName = siblingMarkers.get(key)!;
+        styleArgs.push(j.identifier(markerName));
+      }
     }
   }
 
@@ -184,16 +197,10 @@ function filterEmptyStyleArgs(args: {
     return styleArgs;
   }
 
-  const isEmptyStyleRef = (node: any): boolean =>
-    !!(
-      node &&
-      node.type === "MemberExpression" &&
-      node.object?.type === "Identifier" &&
-      node.object.name === stylesIdentifier &&
-      node.property?.type === "Identifier" &&
-      emptyStyleKeys.has(node.property.name) &&
-      !ancestorSelectorParents?.has(node.property.name)
-    );
+  const isEmptyStyleRef = (node: ExpressionKind): boolean => {
+    const key = getStyleArgKey(node, stylesIdentifier);
+    return !!(key && emptyStyleKeys.has(key) && !ancestorSelectorParents?.has(key));
+  };
 
   const isEmptyStyleArg = (node: any): boolean => {
     if (isEmptyStyleRef(node)) {
@@ -409,4 +416,33 @@ function emitVerbosePattern(args: {
     classNameBeforeSpread: false,
     styleAttr,
   };
+}
+
+/**
+ * If `node` is `<stylesIdentifier>.<key>`, returns the key name; otherwise `null`.
+ * Centralises the MemberExpression pattern check used across the style-merger module.
+ */
+function getStyleArgKey(node: ExpressionKind, stylesIdentifier: string): string | null {
+  const n = node as { type?: string; object?: any; property?: any };
+  if (
+    n?.type === "MemberExpression" &&
+    n.object?.type === "Identifier" &&
+    n.object.name === stylesIdentifier &&
+    n.property?.type === "Identifier"
+  ) {
+    return n.property.name as string;
+  }
+  return null;
+}
+
+/**
+ * Returns `true` when at least one style arg references a key in the given set.
+ */
+function hasStyleArgKey(
+  node: ExpressionKind,
+  stylesIdentifier: string,
+  keys: Set<string>,
+): boolean {
+  const key = getStyleArgKey(node, stylesIdentifier);
+  return !!(key && keys.has(key));
 }
