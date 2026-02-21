@@ -44,5 +44,14 @@ export default [
       "stylex/valid-styles": "off",
     },
   },
+  {
+    // stylex.when.anySibling() uses :has() internally which has limited browser
+    // support. The codemod generates this when transforming `& ~ &` (CSS general
+    // sibling selector). Allow it in test case outputs.
+    files: ["test-cases/selector-generalSibling.output.tsx"],
+    rules: {
+      "stylex/no-lookahead-selectors": "off",
+    },
+  },
   ...storybook.configs["flat/recommended"],
 ];
