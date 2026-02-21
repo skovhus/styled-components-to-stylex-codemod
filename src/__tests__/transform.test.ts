@@ -10,6 +10,13 @@ import type { TransformOptions } from "../transform.js";
 import { customAdapter, fixtureAdapter } from "./fixture-adapters.js";
 import type { Adapter, ResolveValueContext } from "../adapter.js";
 
+/** Test case files prefixed with these names are expected to bail out (no output file). */
+const BAIL_OUT_PREFIXES = ["_unsupported.", "_unimplemented."] as const;
+
+function isBailOutFixture(filename: string): boolean {
+  return BAIL_OUT_PREFIXES.some((prefix) => filename.startsWith(prefix));
+}
+
 // Suppress codemod logs in tests
 vi.mock("../internal/logger.js", () => ({
   Logger: {
@@ -49,15 +56,13 @@ function getTestCases(): FixtureCase[] {
   const cases: FixtureCase[] = [];
 
   for (const { inputSuffix, outputSuffix, parser } of FIXTURE_EXTENSIONS) {
-    // Exclude unsupported fixtures from main test cases
-    // Convention: `_unsupported.<case>.input.*` has NO output file.
+    // Exclude bail-out fixtures from main test cases
+    // Convention: `_unsupported.<case>.input.*` and `_unimplemented.<case>.input.*` have NO output file.
     const inputFiles = files.filter(
-      (f) =>
-        f.endsWith(inputSuffix) && !f.startsWith("_unsupported.") && !f.startsWith("unsupported-"),
+      (f) => f.endsWith(inputSuffix) && !isBailOutFixture(f) && !f.startsWith("unsupported-"),
     );
     const outputFiles = files.filter(
-      (f) =>
-        f.endsWith(outputSuffix) && !f.startsWith("_unsupported.") && !f.startsWith("unsupported-"),
+      (f) => f.endsWith(outputSuffix) && !isBailOutFixture(f) && !f.startsWith("unsupported-"),
     );
 
     const inputNames = new Set(inputFiles.map((f) => f.replace(inputSuffix, "")));
@@ -91,8 +96,8 @@ function getTestCases(): FixtureCase[] {
 }
 
 const fixtureCases: FixtureCase[] = getTestCases();
-const unsupportedInputs = readdirSync(testCasesDir)
-  .filter((f) => f.startsWith("_unsupported.") && f.endsWith(".input.tsx"))
+const bailOutInputs = readdirSync(testCasesDir)
+  .filter((f) => isBailOutFixture(f) && f.endsWith(".input.tsx"))
   .sort();
 
 function readTestCase(
@@ -233,7 +238,7 @@ describe("test case file pairing", () => {
   });
 
   it("supported test cases should not have @expected-warning annotation", () => {
-    // @expected-warning is only for _unsupported fixtures that are expected to bail
+    // @expected-warning is only for bail-out fixtures (_unsupported / _unimplemented) that are expected to bail
     // Supported test cases should transform successfully without warnings
     for (const { inputPath, inputFile } of fixtureCases) {
       const content = readFileSync(inputPath, "utf-8");
@@ -246,9 +251,9 @@ describe("test case file pairing", () => {
   });
 });
 
-describe("_unsupported fixtures", () => {
-  it.each(unsupportedInputs)("%s should bail out", (unsupportedInput) => {
-    const inputPath = join(testCasesDir, unsupportedInput);
+describe("bail-out fixtures (_unsupported + _unimplemented)", () => {
+  it.each(bailOutInputs)("%s should bail out", (bailOutInput) => {
+    const inputPath = join(testCasesDir, bailOutInput);
     const input = readFileSync(inputPath, "utf-8");
     const expectedWarning = getExpectedWarningType(input, inputPath);
     const result = transformWithWarnings(

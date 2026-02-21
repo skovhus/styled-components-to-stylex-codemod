@@ -88,7 +88,7 @@ const RenderDebugFrame: React.FC<{ children: React.ReactNode }> = ({ children })
 
 // Auto-discover all test case modules using Vite's glob import
 // Supports .tsx, .jsx, and .flow.jsx extensions
-// Excludes `_unsupported.*` and `unsupported-*` files to avoid import errors
+// Excludes `_unsupported.*`, `_unimplemented.*`, and `unsupported-*` files to avoid import errors
 const inputModules = import.meta.glob<{ App: React.ComponentType }>(
   [
     "./*.input.tsx",
@@ -99,6 +99,9 @@ const inputModules = import.meta.glob<{ App: React.ComponentType }>(
     "!./_unsupported.*.input.tsx",
     "!./_unsupported.*.input.jsx",
     "!./_unsupported.*.flow.input.jsx",
+    "!./_unimplemented.*.input.tsx",
+    "!./_unimplemented.*.input.jsx",
+    "!./_unimplemented.*.flow.input.jsx",
   ],
   { eager: true },
 );
@@ -110,6 +113,9 @@ const outputModules = import.meta.glob<{ App: React.ComponentType }>(
     "!./_unsupported.*.output.tsx",
     "!./_unsupported.*.output.jsx",
     "!./_unsupported.*.flow.output.jsx",
+    "!./_unimplemented.*.output.tsx",
+    "!./_unimplemented.*.output.jsx",
+    "!./_unimplemented.*.flow.output.jsx",
     "!./unsupported-*.output.tsx",
     "!./unsupported-*.output.jsx",
     "!./unsupported-*.flow.output.jsx",
@@ -131,9 +137,9 @@ const testCaseNames = [
     ...Object.keys(outputModules).map(getTestCaseName),
   ]),
 ]
-  // Exclude `_unsupported.*` fixtures from Storybook comparisons.
-  // (We keep these in-repo to document unsupported behavior, but don't render them side-by-side.)
-  .filter((name) => !name.startsWith("_unsupported."))
+  // Exclude bail-out fixtures from Storybook comparisons.
+  // (We keep these in-repo to document unsupported/unimplemented behavior, but don't render them side-by-side.)
+  .filter((name) => !name.startsWith("_unsupported.") && !name.startsWith("_unimplemented."))
   // TODO: Fix transform for this fixture; excluded to avoid runtime error.
   .filter((name) => name !== "complex")
   .sort();

@@ -11,7 +11,12 @@ function getTestCaseNames(testCasesDir: string): string[] {
   const testCaseNames = new Set<string>();
   for (const file of files) {
     const match = file.match(/^(.+?)(?:\.flow)?\.(input|output)\.(?:tsx|jsx)$/);
-    if (match && !match[1].startsWith("_unsupported.") && match[1] !== "complex") {
+    if (
+      match &&
+      !match[1].startsWith("_unsupported.") &&
+      !match[1].startsWith("_unimplemented.") &&
+      match[1] !== "complex"
+    ) {
       testCaseNames.add(match[1]);
     }
   }
