@@ -91,14 +91,16 @@ export function scanCrossFileSelectors(
   return result;
 }
 
-/* ── File scanner ─────────────────────────────────────────────────────── */
+/* ── Exported constants (used by run-prepass.ts) ─────────────────────── */
 
 /**
  * Pre-filter: matches any bare `${Identifier}` template expression.
  * Used to skip files that only contain arrow functions or member expressions
  * in template literals (e.g. `${props => ...}`, `${theme.color}`).
  */
-const BARE_TEMPLATE_IDENTIFIER_RE = /\$\{\s*[a-zA-Z_$][\w$]*\s*\}/;
+export const BARE_TEMPLATE_IDENTIFIER_RE = /\$\{\s*[a-zA-Z_$][\w$]*\s*\}/;
+
+/* ── File scanner ─────────────────────────────────────────────────────── */
 
 /** Placeholder pattern used by styled-components template parsing */
 const PLACEHOLDER_RE = /__SC_EXPR_(\d+)__/g;
@@ -197,9 +199,13 @@ function scanFile(
  * Walk the AST collecting ImportDeclaration and TaggedTemplateExpression nodes.
  *
  * Uses a targeted recursive walk — only descends into node types that can
- * contain these targets (skips into type annotations, etc.).
+ * contain these targets (skips type annotations, comments, etc.).
  */
-function walkForImportsAndTemplates(node: unknown, imports: AstNode[], templates: AstNode[]): void {
+export function walkForImportsAndTemplates(
+  node: unknown,
+  imports: AstNode[],
+  templates: AstNode[],
+): void {
   if (!node || typeof node !== "object") {
     return;
   }
@@ -230,7 +236,7 @@ function walkForImportsAndTemplates(node: unknown, imports: AstNode[], templates
 type ImportEntry = { source: string; importedName: string };
 
 /** Build a map of localName → import info from raw ImportDeclaration nodes. */
-function buildImportMapFromNodes(importNodes: AstNode[]): Map<string, ImportEntry> {
+export function buildImportMapFromNodes(importNodes: AstNode[]): Map<string, ImportEntry> {
   const map = new Map<string, ImportEntry>();
 
   for (const node of importNodes) {
@@ -263,7 +269,7 @@ function buildImportMapFromNodes(importNodes: AstNode[]): Map<string, ImportEntr
 }
 
 /** Find the local name for the styled-components default import. */
-function findStyledImportNameFromNodes(importNodes: AstNode[]): string | undefined {
+export function findStyledImportNameFromNodes(importNodes: AstNode[]): string | undefined {
   for (const node of importNodes) {
     const sourceValue = (node.source as AstNode | undefined)?.value;
     if (sourceValue !== "styled-components") {
@@ -289,7 +295,7 @@ function findStyledImportNameFromNodes(importNodes: AstNode[]): string | undefin
  * Find local names of imported components used as selectors inside
  * styled-components template literals.
  */
-function findComponentSelectorLocalsFromNodes(
+export function findComponentSelectorLocalsFromNodes(
   templateNodes: AstNode[],
   styledImportName: string,
 ): Set<string> {
@@ -467,7 +473,7 @@ function getNodeName(node: AstNode | undefined): string | undefined {
 }
 
 /** Deduplicate and resolve two file lists into a single array of absolute paths. */
-function deduplicateAndResolve(
+export function deduplicateAndResolve(
   filesToTransform: readonly string[],
   consumerPaths: readonly string[],
 ): string[] {

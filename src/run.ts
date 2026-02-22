@@ -5,7 +5,7 @@
 import { run as jscodeshiftRun } from "jscodeshift/src/Runner.js";
 import { fileURLToPath } from "node:url";
 import { dirname, join, resolve } from "node:path";
-import { existsSync } from "node:fs";
+import { existsSync, realpathSync } from "node:fs";
 import { writeFile } from "node:fs/promises";
 import { glob } from "node:fs/promises";
 import { spawn } from "node:child_process";
@@ -20,10 +20,6 @@ import type {
   SelectorResolveResult,
 } from "./adapter.js";
 import { Logger, type CollectedWarning } from "./internal/logger.js";
-import {
-  analyzeConsumers,
-  extractSearchDirsFromGlobs,
-} from "./internal/prepass/consumer-analyzer.js";
 import { assertValidAdapterInput, describeValue } from "./internal/public-api-validation.js";
 
 export interface RunTransformOptions {
@@ -275,22 +271,62 @@ export async function runTransform(options: RunTransformOptions): Promise<RunTra
     }
   }
 
-  // Create shared module resolver for both prepass phases
+  // Create shared module resolver
   const { createModuleResolver } = await import("./internal/prepass/resolve-imports.js");
   const sharedResolver = createModuleResolver();
 
+  // Unified prepass: cross-file selectors + optional consumer analysis in a single pass.
+  // If the prepass crashes (e.g. on Windows, parse errors), log a warning and continue
+  // with empty results — the per-file transform still works, just without cross-file info.
+  const { runPrepass } = await import("./internal/prepass/run-prepass.js");
+  const absoluteFiles = filePaths.map((f) => resolve(f));
+  const absoluteConsumers = consumerFilePaths.map((f) => resolve(f));
+
+  let prepassResult: Awaited<ReturnType<typeof runPrepass>>;
+  try {
+    prepassResult = await runPrepass({
+      filesToTransform: absoluteFiles,
+      consumerPaths: absoluteConsumers,
+      resolver: sharedResolver,
+      parserName: parser,
+      createExternalInterface: adapterInput.externalInterface === "auto",
+    });
+  } catch (err) {
+    Logger.warn(
+      `Prepass failed, continuing without cross-file analysis: ${err instanceof Error ? err.message : String(err)}`,
+    );
+    prepassResult = {
+      crossFileInfo: {
+        selectorUsages: new Map(),
+        componentsNeedingStyleAcceptance: new Map(),
+        componentsNeedingBridge: new Map(),
+      },
+      consumerAnalysis: undefined,
+    };
+  }
+
+  const crossFilePrepassResult = prepassResult.crossFileInfo;
+
   // Resolve "auto" externalInterface → concrete function using consumer analysis
   const resolvedAdapter: Adapter = (() => {
-    if (adapterInput.externalInterface === "auto") {
-      const searchDirs = extractSearchDirsFromGlobs([...patterns, ...consumerPatterns]);
-      const analysisMap = analyzeConsumers({ searchDirs, resolver: sharedResolver });
+    if (adapterInput.externalInterface === "auto" && prepassResult.consumerAnalysis) {
+      const analysisMap = prepassResult.consumerAnalysis;
       return {
         ...adapterInput,
-        externalInterface: (ctx) =>
-          analysisMap.get(`${resolve(ctx.filePath)}:${ctx.componentName}`) ?? {
-            styles: false,
-            as: false,
-          },
+        externalInterface: (ctx) => {
+          let realPath: string;
+          try {
+            realPath = realpathSync(resolve(ctx.filePath));
+          } catch {
+            realPath = resolve(ctx.filePath);
+          }
+          return (
+            analysisMap.get(`${realPath}:${ctx.componentName}`) ?? {
+              styles: false,
+              as: false,
+            }
+          );
+        },
       };
     }
     return adapterInput as Adapter;
@@ -305,24 +341,6 @@ export async function runTransform(options: RunTransformOptions): Promise<RunTra
     resolveCall: resolveCallWithLogging,
     resolveSelector: resolveSelectorWithLogging,
   };
-
-  // Run cross-file selector prepass to detect ${ImportedComponent} selectors.
-  // Always run when there are files — even a single file can import cross-file selectors.
-  let crossFilePrepassResult:
-    | import("./internal/prepass/scan-cross-file-selectors.js").CrossFileInfo
-    | undefined;
-  if (filePaths.length > 0) {
-    const { scanCrossFileSelectors } =
-      await import("./internal/prepass/scan-cross-file-selectors.js");
-    const absoluteFiles = filePaths.map((f) => resolve(f));
-    const absoluteConsumers = consumerFilePaths.map((f) => resolve(f));
-    crossFilePrepassResult = scanCrossFileSelectors(
-      absoluteFiles,
-      absoluteConsumers,
-      sharedResolver,
-      parser,
-    );
-  }
 
   // Path to the transform module.
   // - In published builds, `dist/index.mjs` and `dist/transform.mjs` live together.

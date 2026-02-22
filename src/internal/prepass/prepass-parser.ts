@@ -4,7 +4,7 @@
  * Uses @babel/parser directly with `tokens: false` for ~35% faster parsing
  * compared to jscodeshift's getParser (which enables token generation).
  *
- * Both scan-cross-file-selectors and consumer-analyzer can share this parser
+ * Both scan-cross-file-selectors and extract-external-interface can share this parser
  * to avoid duplicate parser initialization.
  */
 import { parse, type ParserPlugin } from "@babel/parser";

@@ -1,23 +1,44 @@
 import { execSync } from "node:child_process";
-import { mkdirSync, mkdtempSync, realpathSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
+import {
+  mkdirSync,
+  mkdtempSync,
+  readdirSync,
+  realpathSync,
+  rmSync,
+  symlinkSync,
+  writeFileSync,
+} from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { describe, it, expect, beforeAll, afterAll } from "vitest";
 
 import type { ExternalInterfaceResult } from "../adapter.js";
-import {
-  analyzeConsumers,
-  extractSearchDirsFromGlobs,
-} from "../internal/prepass/consumer-analyzer.js";
+import { extractSearchDirsFromGlobs } from "../internal/prepass/extract-external-interface.js";
+import { createModuleResolver } from "../internal/prepass/resolve-imports.js";
+import { runPrepass } from "../internal/prepass/run-prepass.js";
 
 function assertRgAvailable(): void {
   try {
     execSync("rg --version", { stdio: "ignore" });
   } catch {
     throw new Error(
-      "ripgrep (rg) is required to run consumer-analyzer tests. Install it: https://github.com/BurntSushi/ripgrep",
+      "ripgrep (rg) is required to run extract-external-interface tests. Install it: https://github.com/BurntSushi/ripgrep",
     );
   }
+}
+
+/** Recursively collect all .tsx/.ts/.jsx files in a directory. */
+function collectFiles(dir: string): string[] {
+  const files: string[] = [];
+  for (const entry of readdirSync(dir, { withFileTypes: true })) {
+    const fullPath = path.join(dir, entry.name);
+    if (entry.isDirectory()) {
+      files.push(...collectFiles(fullPath));
+    } else if (/\.(tsx?|jsx)$/.test(entry.name)) {
+      files.push(fullPath);
+    }
+  }
+  return files;
 }
 
 /** Convert analysis Map to a snapshot-friendly sorted record with relative paths */
@@ -68,16 +89,16 @@ describe("extractSearchDirsFromGlobs", () => {
 });
 
 // ---------------------------------------------------------------------------
-// Integration tests (temp fixture files + rg)
+// Integration tests (temp fixture files + runPrepass)
 // ---------------------------------------------------------------------------
 
-describe("analyzeConsumers", () => {
+describe("runPrepass createExternalInterface", () => {
   let fixtureDir: string;
   let result: Map<string, ExternalInterfaceResult>;
 
-  beforeAll(() => {
+  beforeAll(async () => {
     assertRgAvailable();
-    fixtureDir = mkdtempSync(path.join(tmpdir(), "consumer-analyzer-test-"));
+    fixtureDir = mkdtempSync(path.join(tmpdir(), "extract-external-interface-test-"));
 
     // Create a minimal tsconfig so oxc-resolver can work
     writeFileSync(
@@ -201,11 +222,19 @@ describe("analyzeConsumers", () => {
       'import styled from "styled-components";\nimport { default as Link } from "../components/Link";\nconst FancyLink = styled(Link)`text-decoration: underline;`;\nexport const App = () => <FancyLink />;',
     );
 
-    // Run analysis once for all tests
+    // Run unified prepass
     const originalCwd = process.cwd();
     try {
       process.chdir(fixtureDir);
-      result = analyzeConsumers({ searchDirs: ["."] });
+      const allFiles = collectFiles(fixtureDir);
+      const resolver = createModuleResolver();
+      const prepassResult = await runPrepass({
+        filesToTransform: allFiles,
+        consumerPaths: [],
+        resolver,
+        createExternalInterface: true,
+      });
+      result = prepassResult.consumerAnalysis!;
     } finally {
       process.chdir(originalCwd);
     }
@@ -276,13 +305,13 @@ describe("analyzeConsumers", () => {
 //
 // This test documents the need for the resolveViaExportsWildcard workaround.
 
-describe("analyzeConsumers — wildcard exports in monorepo", () => {
+describe("runPrepass createExternalInterface — wildcard exports in monorepo", () => {
   let fixtureDir: string;
   let result: Map<string, ExternalInterfaceResult>;
 
-  beforeAll(() => {
+  beforeAll(async () => {
     assertRgAvailable();
-    fixtureDir = mkdtempSync(path.join(tmpdir(), "consumer-analyzer-wildcard-"));
+    fixtureDir = mkdtempSync(path.join(tmpdir(), "extract-external-interface-wildcard-"));
 
     // --- Package: @scope/ui ---
     const pkgDir = path.join(fixtureDir, "packages", "ui");
@@ -376,11 +405,22 @@ describe("analyzeConsumers — wildcard exports in monorepo", () => {
       ].join("\n"),
     );
 
-    // Run analysis from the fixture root
+    // Run unified prepass from the fixture root
     const originalCwd = process.cwd();
     try {
       process.chdir(fixtureDir);
-      result = analyzeConsumers({ searchDirs: ["app/", "packages/"] });
+      const allFiles = [
+        ...collectFiles(path.join(fixtureDir, "app", "src")),
+        ...collectFiles(path.join(fixtureDir, "packages")),
+      ];
+      const resolver = createModuleResolver();
+      const prepassResult = await runPrepass({
+        filesToTransform: allFiles,
+        consumerPaths: [],
+        resolver,
+        createExternalInterface: true,
+      });
+      result = prepassResult.consumerAnalysis!;
     } finally {
       process.chdir(originalCwd);
     }
@@ -432,14 +472,22 @@ describe("analyzeConsumers — wildcard exports in monorepo", () => {
 // Snapshot test — on test-cases/
 // ---------------------------------------------------------------------------
 
-describe("analyzeConsumers snapshot on test-cases", () => {
+describe("runPrepass createExternalInterface snapshot on test-cases", () => {
   beforeAll(() => {
     assertRgAvailable();
   });
 
-  it("matches snapshot for test-cases directory", () => {
-    const result = analyzeConsumers({ searchDirs: ["test-cases/"] });
-    expect(toSnapshot(result)).toMatchInlineSnapshot(`
+  it("matches snapshot for test-cases directory", async () => {
+    const testCasesDir = path.resolve("test-cases");
+    const allFiles = collectFiles(testCasesDir);
+    const resolver = createModuleResolver();
+    const prepassResult = await runPrepass({
+      filesToTransform: allFiles,
+      consumerPaths: [],
+      resolver,
+      createExternalInterface: true,
+    });
+    expect(toSnapshot(prepassResult.consumerAnalysis!)).toMatchInlineSnapshot(`
       {
         "test-cases/externalStyles-input.input.tsx:StyledInput": {
           "as": true,
