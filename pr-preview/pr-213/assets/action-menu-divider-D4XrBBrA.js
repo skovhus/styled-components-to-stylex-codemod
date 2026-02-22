@@ -1,0 +1,1 @@
+import{j as n}from"./index-CtDxFjjp.js";const s=t=>{const{text:e,...r}=t;return n.jsx("div",{...r,children:e})};s.HEIGHT=30;const i=t=>{const{title:e,...r}=t;return n.jsx("div",{...r,children:e})};i.HEIGHT=28;export{s as A,i as a};
