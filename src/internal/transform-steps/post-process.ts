@@ -53,7 +53,7 @@ export function postProcessStep(ctx: TransformContext): StepResult {
   ctx.newImportLocalNames = newImportLocalNames;
   ctx.newImportSourcesByLocal = newImportSourcesByLocal;
 
-  // Create a map from component local names to style keys for ancestor selector matching
+  // Build lookup map from component local name to its style key (for ancestor selector matching)
   const componentNameToStyleKey = new Map<string, string>();
   for (const decl of styledDecls) {
     componentNameToStyleKey.set(decl.localName, decl.styleKey);
@@ -69,6 +69,7 @@ export function postProcessStep(ctx: TransformContext): StepResult {
     preserveReactImport: ctx.preserveReactImport,
     newImportLocalNames,
     newImportSourcesByLocal,
+    stylesIdentifier: ctx.stylesIdentifier,
     crossFileMarkers: ctx.crossFileMarkers,
   });
   if (post.changed) {

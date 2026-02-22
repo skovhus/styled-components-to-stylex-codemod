@@ -96,13 +96,8 @@ export function emitStyleMerging(args: {
   // Add stylex.defaultMarker() when any style arg references an ancestor selector parent.
   // This is needed for merger/verbose paths that bypass the postProcessTransformedAst traversal.
   if (ancestorSelectorParents && ancestorSelectorParents.size > 0) {
-    const needsMarker = styleArgs.some(
-      (arg: any) =>
-        arg?.type === "MemberExpression" &&
-        arg.object?.type === "Identifier" &&
-        arg.object.name === stylesIdentifier &&
-        arg.property?.type === "Identifier" &&
-        ancestorSelectorParents.has(arg.property.name),
+    const needsMarker = styleArgs.some((arg) =>
+      hasStyleArgKey(arg, stylesIdentifier, ancestorSelectorParents),
     );
     if (needsMarker) {
       styleArgs.push(
@@ -188,16 +183,10 @@ function filterEmptyStyleArgs(args: {
     return styleArgs;
   }
 
-  const isEmptyStyleRef = (node: any): boolean =>
-    !!(
-      node &&
-      node.type === "MemberExpression" &&
-      node.object?.type === "Identifier" &&
-      node.object.name === stylesIdentifier &&
-      node.property?.type === "Identifier" &&
-      emptyStyleKeys.has(node.property.name) &&
-      !ancestorSelectorParents?.has(node.property.name)
-    );
+  const isEmptyStyleRef = (node: ExpressionKind): boolean => {
+    const key = getStyleArgKey(node, stylesIdentifier);
+    return !!(key && emptyStyleKeys.has(key) && !ancestorSelectorParents?.has(key));
+  };
 
   const isEmptyStyleArg = (node: any): boolean => {
     if (isEmptyStyleRef(node)) {
@@ -469,4 +458,33 @@ function maybeCastStyleForCustomProps(
     styleExpr,
     j.tsTypeReference(j.tsQualifiedName(j.identifier("React"), j.identifier("CSSProperties"))),
   );
+}
+
+/**
+ * If `node` is `<stylesIdentifier>.<key>`, returns the key name; otherwise `null`.
+ * Centralises the MemberExpression pattern check used across the style-merger module.
+ */
+function getStyleArgKey(node: ExpressionKind, stylesIdentifier: string): string | null {
+  const n = node as { type?: string; object?: any; property?: any };
+  if (
+    n?.type === "MemberExpression" &&
+    n.object?.type === "Identifier" &&
+    n.object.name === stylesIdentifier &&
+    n.property?.type === "Identifier"
+  ) {
+    return n.property.name as string;
+  }
+  return null;
+}
+
+/**
+ * Returns `true` when at least one style arg references a key in the given set.
+ */
+function hasStyleArgKey(
+  node: ExpressionKind,
+  stylesIdentifier: string,
+  keys: Set<string>,
+): boolean {
+  const key = getStyleArgKey(node, stylesIdentifier);
+  return !!(key && keys.has(key));
 }

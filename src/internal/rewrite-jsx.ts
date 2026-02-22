@@ -21,6 +21,8 @@ export function postProcessTransformedAst(args: {
   newImportLocalNames?: Set<string>;
   /** Map of local import names to the module specifiers they were added from */
   newImportSourcesByLocal?: Map<string, Set<string>>;
+  /** The identifier name used for the stylex.create() object (default: "styles") */
+  stylesIdentifier?: string;
   /** Cross-file marker variables: parentStyleKey → markerVarName */
   crossFileMarkers?: Map<string, string>;
 }): { changed: boolean; needsReactImport: boolean } {
@@ -34,6 +36,7 @@ export function postProcessTransformedAst(args: {
     preserveReactImport,
     newImportLocalNames,
     newImportSourcesByLocal,
+    stylesIdentifier = "styles",
     crossFileMarkers,
   } = args;
   let changed = false;
@@ -103,7 +106,7 @@ export function postProcessTransformedAst(args: {
         (a: any) =>
           a?.type === "MemberExpression" &&
           a.object?.type === "Identifier" &&
-          a.object.name === "styles" &&
+          a.object.name === stylesIdentifier &&
           a.property?.type === "Identifier" &&
           a.property.name === key,
       );
@@ -192,7 +195,7 @@ export function postProcessTransformedAst(args: {
               continue;
             }
             const overrideArg = j.memberExpression(
-              j.identifier("styles"),
+              j.identifier(stylesIdentifier),
               j.identifier(o.overrideStyleKey),
             );
             call.arguments = [...(call.arguments ?? []), overrideArg];
@@ -285,7 +288,7 @@ export function postProcessTransformedAst(args: {
           !(
             a?.type === "MemberExpression" &&
             a.object?.type === "Identifier" &&
-            a.object.name === "styles" &&
+            a.object.name === stylesIdentifier &&
             a.property?.type === "Identifier" &&
             a.property.name === key
           ),
@@ -301,7 +304,7 @@ export function postProcessTransformedAst(args: {
     const isEmptyStyleRef = (a: any): boolean =>
       a?.type === "MemberExpression" &&
       a.object?.type === "Identifier" &&
-      a.object.name === "styles" &&
+      a.object.name === stylesIdentifier &&
       a.property?.type === "Identifier" &&
       emptyStyleKeys.has(a.property.name);
 
