@@ -38,6 +38,7 @@ const adapter = defineAdapter({
 
 await runTransform({
   files: "src/**/*.tsx",
+  consumerPaths: null, // set to a glob to enable cross-file selector support
   adapter,
   dryRun: false,
   parser: "tsx",
@@ -136,6 +137,7 @@ const adapter = defineAdapter({
 
 await runTransform({
   files: "src/**/*.tsx",
+  consumerPaths: null,
   adapter,
   dryRun: false,
   parser: "tsx",
@@ -155,33 +157,56 @@ Adapters are the main extension point, see full example above. They let you cont
 - which exported components should support external className/style extension and/or polymorphic `as` prop (`externalInterface`)
 - how className/style merging is handled for components accepting external styling (`styleMerger`)
 
-#### Auto-detecting external interface usage (experimental)
+#### Cross-file selectors (`consumerPaths`)
 
-Instead of manually specifying which components need `styles` or `as` support, you can use `createExternalInterface` to auto-detect usage by scanning your consumer code with [ripgrep](https://github.com/BurntSushi/ripgrep) (`rg`).
+`consumerPaths` is required. Pass `null` to opt out, or a glob pattern to enable cross-file selector scanning.
 
-> [!NOTE]
-> Experimental. Requires `rg` installed and available in `$PATH`. Not supported on Windows.
-> `createExternalInterface` also relies on optional dependency `oxc-resolver` for import resolution.
-> Install it when using this feature:
->
-> ```bash
-> npm install oxc-resolver
-> # or
-> pnpm add oxc-resolver
-> ```
+When transforming a subset of files, other files may reference your styled components as CSS selectors (e.g. `${Icon} { fill: red }`). Pass `consumerPaths` to scan those files and wire up cross-file selectors automatically:
 
 ```ts
-import { defineAdapter, createExternalInterface } from "styled-components-to-stylex-codemod";
-
-const externalInterface = createExternalInterface({ searchDirs: ["src/"] });
-
-export default defineAdapter({
-  // ...
-  externalInterface: externalInterface.get,
+await runTransform({
+  files: "src/components/**/*.tsx", // files to transform
+  consumerPaths: "src/**/*.tsx", // additional files to scan for cross-file usage
+  adapter,
 });
 ```
 
-This scans the given directories for `styled(Component)` calls and `<Component as={...}>` JSX usage, resolves imports back to the component definition files, and returns the appropriate `{ styles, as }` flags automatically.
+- Files in **both** `files` and `consumerPaths` use the **marker sidecar** strategy (both consumer and target are transformed, using `stylex.defineMarker()`).
+- Files in `consumerPaths` but **not** in `files` use the **bridge** strategy (a stable `className` is added to the converted component so unconverted consumers' selectors still work).
+
+#### Auto-detecting external interface usage (experimental)
+
+Instead of manually specifying which components need `styles` or `as` support, set `externalInterface: "auto"` to auto-detect usage by scanning consumer code.
+
+> [!NOTE]
+> Experimental. Requires `consumerPaths` and a successful prepass scan.
+> If prepass fails, `runTransform()` throws (fail-fast) when `externalInterface: "auto"` is used.
+
+```ts
+import { runTransform, defineAdapter } from "styled-components-to-stylex-codemod";
+
+const adapter = defineAdapter({
+  // ...
+  externalInterface: "auto",
+});
+
+await runTransform({
+  files: "src/**/*.tsx",
+  consumerPaths: "src/**/*.tsx", // required for auto-detection
+  adapter,
+});
+```
+
+When `externalInterface: "auto"` is set, `runTransform()` scans `files` and `consumerPaths` for `styled(Component)` calls and `<Component as={...}>` JSX usage, resolves imports back to the component definition files, and returns the appropriate `{ styles, as }` flags automatically.
+
+If that prepass scan fails, `runTransform()` stops and throws an actionable error rather than silently falling back to non-auto behavior.
+
+Troubleshooting prepass failures with `"auto"`:
+
+- verify `consumerPaths` globs match the files you expect
+- confirm the selected parser matches your source syntax (`parser: "tsx"`, `parser: "ts"`, etc.)
+- check resolver inputs (import paths, tsconfig path aliases, and related module resolution config)
+- if needed, switch to a manual `externalInterface(ctx)` function to continue migration while you fix prepass inputs
 
 #### Dynamic interpolations
 

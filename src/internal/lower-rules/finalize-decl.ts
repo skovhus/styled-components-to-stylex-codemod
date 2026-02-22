@@ -14,6 +14,7 @@ import {
 } from "../utilities/jscodeshift-utils.js";
 import { resolveDynamicNode } from "../builtin-handlers.js";
 import { parseCssDeclarationBlock } from "../builtin-handlers/css-parsing.js";
+import { PLACEHOLDER_RE } from "../styled-css.js";
 import { ensureShouldForwardPropDrop } from "./types.js";
 import type { DeclProcessingState } from "./decl-setup.js";
 import { getOrCreateRelationOverrideBucket } from "./shared.js";
@@ -167,7 +168,7 @@ export function finalizeDeclProcessing(ctx: DeclProcessingState): void {
         const value = m[2].trim();
         // Skip values that contain unresolved interpolation placeholders - these should
         // be handled by the IR handler which has proper theme resolution
-        if (/__SC_EXPR_\d+__/.test(value)) {
+        if (PLACEHOLDER_RE.test(value)) {
           continue;
         }
         // Convert CSS property name to camelCase (e.g., outline-offset -> outlineOffset)

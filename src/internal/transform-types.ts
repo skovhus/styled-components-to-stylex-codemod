@@ -14,6 +14,19 @@ import type { TransformContext } from "./transform-context.js";
 export interface TransformResult {
   code: string | null;
   warnings: WarningLog[];
+  /** Content for the sidecar .stylex.ts file (defineMarker declarations). Undefined when no markers needed. */
+  sidecarContent?: string;
+  /** Bridge components emitted for unconverted consumer selectors. */
+  bridgeResults?: BridgeComponentResult[];
+}
+
+/** Describes a bridge className emitted for a component targeted by unconverted consumer selectors. */
+export interface BridgeComponentResult {
+  componentName: string;
+  /** The export name (e.g. "default" for default exports, or the named export identifier). */
+  exportName?: string;
+  className: string;
+  globalSelectorVarName: string;
 }
 
 /**
@@ -51,6 +64,34 @@ export interface TransformOptions extends Options {
    * Controls value resolution and resolver-provided imports.
    */
   adapter: Adapter;
+
+  /**
+   * Cross-file selector information from the prepass.
+   * When present, enables cross-file component selector handling.
+   */
+  crossFileInfo?: CrossFileInfo;
+}
+
+/**
+ * Cross-file selector info passed from the prepass to the per-file transform.
+ * Kept minimal: only what the transform needs to know about this specific file.
+ */
+export interface CrossFileInfo {
+  /** Cross-file selector usages where this file is the consumer */
+  selectorUsages: CrossFileSelectorUsage[];
+  /** Component names in this file that need a global selector bridge className (consumer not transformed) */
+  bridgeComponentNames?: Set<string>;
+}
+
+export interface CrossFileSelectorUsage {
+  /** Local name in the consumer file (e.g. "CollapseArrowIcon") */
+  localName: string;
+  /** Raw import specifier (e.g. "./lib/collapse-arrow-icon") */
+  importSource: string;
+  /** Imported binding name ("default" for default imports, otherwise named) */
+  importedName: string;
+  /** Absolute path of the target module */
+  resolvedPath: string;
 }
 
 type ExpressionKind = Parameters<JSCodeshift["expressionStatement"]>[0];
@@ -295,4 +336,6 @@ export type StyledDecl = {
   };
   // Leading comments (JSDoc, line comments) from the original styled component declaration
   leadingComments?: Comment[];
+  /** Deterministic bridge CSS class name for unconverted consumer selectors */
+  bridgeClassName?: string;
 };

@@ -4,6 +4,7 @@
  */
 import type { Collection } from "jscodeshift";
 import type { RelationOverride } from "./lower-rules.js";
+import { toStyleKey } from "./transform/helpers.js";
 import { getJsxElementName } from "./utilities/jscodeshift-utils.js";
 
 export function postProcessTransformedAst(args: {
@@ -20,6 +21,8 @@ export function postProcessTransformedAst(args: {
   newImportLocalNames?: Set<string>;
   /** Map of local import names to the module specifiers they were added from */
   newImportSourcesByLocal?: Map<string, Set<string>>;
+  /** Cross-file marker variables: parentStyleKey → markerVarName */
+  crossFileMarkers?: Map<string, string>;
 }): { changed: boolean; needsReactImport: boolean } {
   const {
     root,
@@ -31,6 +34,7 @@ export function postProcessTransformedAst(args: {
     preserveReactImport,
     newImportLocalNames,
     newImportSourcesByLocal,
+    crossFileMarkers,
   } = args;
   let changed = false;
 
@@ -45,6 +49,7 @@ export function postProcessTransformedAst(args: {
   // Apply relation override styles that rely on `stylex.when.*()`:
   // - Add `stylex.defaultMarker()` to elements that need markers (ancestor selectors).
   // - Add override style keys to descendant/child elements' `stylex.props(...)` calls.
+  // - For cross-file selectors: use `defineMarker()` and add overrides to imported child JSX.
   if (relationOverrides.length > 0 || ancestorSelectorParents.size > 0) {
     // IMPORTANT: Do not reuse the same AST node instance across multiple insertion points.
     // Recast/jscodeshift expect a tree (no shared references); reuse can corrupt printing.
@@ -53,6 +58,25 @@ export function postProcessTransformedAst(args: {
         j.memberExpression(j.identifier("stylex"), j.identifier("defaultMarker")),
         [],
       );
+
+    // Build cross-file override lookups, split by direction:
+    // - Forward: imported component is the child → apply override styles to its JSX
+    // - Reverse: imported component is the parent → apply marker to its JSX
+    // We distinguish by checking if the component's synthetic style key matches parentStyleKey
+    // (reverse) or childStyleKey (forward).
+    const crossFileChildOverrides = new Map<string, RelationOverride[]>();
+    const crossFileParentMarkers = new Map<string, RelationOverride[]>();
+    for (const o of relationOverrides) {
+      if (!o.crossFile || !o.crossFileComponentLocalName) {
+        continue;
+      }
+      const componentStyleKey = componentNameToStyleKey?.get(o.crossFileComponentLocalName);
+      const isReverse =
+        componentStyleKey === o.parentStyleKey ||
+        o.parentStyleKey === toStyleKey(o.crossFileComponentLocalName);
+      const targetMap = isReverse ? crossFileParentMarkers : crossFileChildOverrides;
+      appendToMapList(targetMap, o.crossFileComponentLocalName, o);
+    }
 
     const isStylexPropsCall = (n: any): n is any =>
       n?.type === "CallExpression" &&
@@ -85,6 +109,9 @@ export function postProcessTransformedAst(args: {
       );
     };
 
+    const hasIdentifierArg = (call: any, name: string): boolean =>
+      (call.arguments ?? []).some((a: any) => a?.type === "Identifier" && a.name === name);
+
     const hasDefaultMarker = (call: any): boolean => {
       return (call.arguments ?? []).some(
         (a: any) =>
@@ -101,6 +128,18 @@ export function postProcessTransformedAst(args: {
     for (const o of relationOverrides) {
       overridesByChild.set(o.childStyleKey, [...(overridesByChild.get(o.childStyleKey) ?? []), o]);
     }
+
+    /** Check if any ancestor in the JSX tree contains the given parent style key. */
+    const ancestorHasParentKey = (ancestors: any[], parentStyleKey: string): boolean => {
+      // For cross-file reverse selectors, the ancestor has a marker variable instead of styles.X
+      const markerVarName = crossFileMarkers?.get(parentStyleKey);
+      return ancestors.some(
+        (a: any) =>
+          (a?.call && hasStyleKeyArg(a.call, parentStyleKey)) ||
+          (a?.elementStyleKey && a.elementStyleKey === parentStyleKey) ||
+          (markerVarName && a?.markerVarName === markerVarName),
+      );
+    };
 
     // Track empty ancestor style keys to remove AFTER all descendant matching is done.
     // We defer removal so that ancestor matching can still find the style keys.
@@ -124,8 +163,15 @@ export function postProcessTransformedAst(args: {
             if (emptyStyleKeys?.has(parentKey)) {
               pendingEmptyKeyRemovals.push({ call, key: parentKey });
             }
-            // Add defaultMarker if not already present
-            if (!hasDefaultMarker(call)) {
+            // For cross-file parents, use the defineMarker variable; otherwise defaultMarker
+            const markerVarName = crossFileMarkers?.get(parentKey);
+            if (markerVarName) {
+              // Add the marker variable reference if not already present
+              if (!hasIdentifierArg(call, markerVarName)) {
+                call.arguments = [...(call.arguments ?? []), j.identifier(markerVarName)];
+                changed = true;
+              }
+            } else if (!hasDefaultMarker(call)) {
               call.arguments = [...(call.arguments ?? []), makeDefaultMarkerCall()];
               changed = true;
             }
@@ -139,14 +185,7 @@ export function postProcessTransformedAst(args: {
             continue;
           }
           for (const o of list) {
-            // Check if any ancestor has a stylex.props call with the parent style key,
-            // OR if any ancestor is a component whose style key matches the parent style key
-            const matched = ancestors.some(
-              (a: any) =>
-                (a?.call && hasStyleKeyArg(a.call, o.parentStyleKey)) ||
-                (a?.elementStyleKey && a.elementStyleKey === o.parentStyleKey),
-            );
-            if (!matched) {
+            if (!ancestorHasParentKey(ancestors, o.parentStyleKey)) {
               continue;
             }
             if (hasStyleKeyArg(call, o.overrideStyleKey)) {
@@ -162,7 +201,66 @@ export function postProcessTransformedAst(args: {
         }
       }
 
-      const nextAncestors = [...ancestors, { call, elementStyleKey }];
+      // Cross-file forward child: add override styles to imported child JSX
+      const childOverrides = elementName ? crossFileChildOverrides.get(elementName) : undefined;
+      if (childOverrides) {
+        const overrideArgs: any[] = [];
+        for (const o of childOverrides) {
+          if (!ancestorHasParentKey(ancestors, o.parentStyleKey)) {
+            continue;
+          }
+          overrideArgs.push(
+            j.memberExpression(j.identifier("styles"), j.identifier(o.overrideStyleKey)),
+          );
+        }
+        if (overrideArgs.length > 0) {
+          // Merge into an existing stylex.props() spread if present, otherwise create a new one
+          const existingCall = getStylexPropsCallFromAttrs(opening.attributes ?? []);
+          if (existingCall) {
+            existingCall.arguments = [...(existingCall.arguments ?? []), ...overrideArgs];
+          } else {
+            const newCall = j.callExpression(
+              j.memberExpression(j.identifier("stylex"), j.identifier("props")),
+              overrideArgs,
+            );
+            opening.attributes = [...(opening.attributes ?? []), j.jsxSpreadAttribute(newCall)];
+          }
+          changed = true;
+        }
+      }
+
+      // Cross-file reverse parent: add marker to imported parent JSX
+      let addedMarkerVarName: string | undefined;
+      const parentMarkers = elementName ? crossFileParentMarkers.get(elementName) : undefined;
+      if (parentMarkers) {
+        for (const o of parentMarkers) {
+          if (!o.markerVarName) {
+            continue;
+          }
+          addedMarkerVarName = o.markerVarName;
+          const markerIdent = j.identifier(o.markerVarName);
+          if (call) {
+            // Parent already has stylex.props(...) — append marker to its arguments
+            if (!hasIdentifierArg(call, o.markerVarName)) {
+              call.arguments = [...(call.arguments ?? []), markerIdent];
+              changed = true;
+            }
+          } else {
+            // Parent has no stylex.props() — add a new spread
+            const markerCall = j.callExpression(
+              j.memberExpression(j.identifier("stylex"), j.identifier("props")),
+              [markerIdent],
+            );
+            opening.attributes = [...(opening.attributes ?? []), j.jsxSpreadAttribute(markerCall)];
+            changed = true;
+          }
+        }
+      }
+
+      const nextAncestors = [
+        ...ancestors,
+        { call, elementStyleKey, markerVarName: addedMarkerVarName },
+      ];
       for (const c of node.children ?? []) {
         if (c?.type === "JSXElement") {
           visit(c, nextAncestors);
@@ -171,7 +269,7 @@ export function postProcessTransformedAst(args: {
     };
 
     root.find(j.JSXElement).forEach((p: any) => {
-      if (j(p).closest(j.JSXElement).size() > 1) {
+      if (j(p).closest(j.JSXElement).size() > 0) {
         return;
       }
       visit(p.node, []);
@@ -414,4 +512,15 @@ export function postProcessTransformedAst(args: {
   const usesReactIdent = root.find(j.Identifier, { name: "React" } as any).size() > 0;
 
   return { changed, needsReactImport: usesReactIdent && !hasReactImport };
+}
+
+// --- Non-exported helpers ---
+
+function appendToMapList<K, V>(map: Map<K, V[]>, key: K, value: V): void {
+  const list = map.get(key);
+  if (list) {
+    list.push(value);
+  } else {
+    map.set(key, [value]);
+  }
 }

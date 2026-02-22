@@ -2,13 +2,16 @@ import { describe, it, expect, vi } from "vitest";
 import { applyTransform } from "jscodeshift/src/testUtils.js";
 import jscodeshift from "jscodeshift";
 import { readdirSync, readFileSync, existsSync } from "node:fs";
-import { join, dirname } from "node:path";
+import { join, dirname, resolve as pathResolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { format } from "oxfmt";
 import transform, { transformWithWarnings } from "../transform.js";
 import type { TransformOptions } from "../transform.js";
 import { customAdapter, fixtureAdapter } from "./fixture-adapters.js";
 import type { Adapter, ResolveValueContext } from "../adapter.js";
+import { scanCrossFileSelectors } from "../internal/prepass/scan-cross-file-selectors.js";
+import { createModuleResolver } from "../internal/prepass/resolve-imports.js";
+import type { CrossFileInfo } from "../internal/transform-types.js";
 
 /** Test case files prefixed with these names are expected to bail out (no output file). */
 const BAIL_OUT_PREFIXES = ["_unsupported.", "_unimplemented."] as const;
@@ -96,6 +99,24 @@ const bailOutInputs = readdirSync(testCasesDir)
   .filter((f) => isBailOutFixture(f) && f.endsWith(".input.tsx"))
   .sort();
 
+// Run cross-file prepass once for all test cases (fast, no-op for non-cross-file cases)
+const prepassResolver = createModuleResolver();
+const prepassResult = scanCrossFileSelectors(
+  fixtureCases.map((c) => c.inputPath),
+  [],
+  prepassResolver,
+);
+
+/** Extract per-file cross-file info from the prepass result. */
+function getCrossFileInfo(filePath: string): CrossFileInfo | undefined {
+  const absPath = pathResolve(filePath);
+  const usages = prepassResult.selectorUsages.get(absPath);
+  if (!usages || usages.length === 0) {
+    return undefined;
+  }
+  return { selectorUsages: usages };
+}
+
 function readTestCase(
   name: string,
   inputPath?: string,
@@ -163,7 +184,7 @@ function runTransformWithDiagnostics(
   options: TestTransformOptions = {},
   filePath: string = "test.tsx",
   parser: "tsx" | "babel" | "flow" = "tsx",
-): { code: string | null; warnings: ReturnType<typeof transformWithWarnings>["warnings"] } {
+): ReturnType<typeof transformWithWarnings> {
   const opts: TransformOptions = {
     adapter: fixtureAdapter,
     ...options,
@@ -307,7 +328,8 @@ describe("output invariants", () => {
 describe("transform", () => {
   it.each(fixtureCases)("$outputFile", async ({ name, inputPath, outputPath, parser }) => {
     const { input, output } = readTestCase(name, inputPath, outputPath);
-    const diagnostics = runTransformWithDiagnostics(input, {}, inputPath, parser);
+    const crossFileInfo = getCrossFileInfo(inputPath);
+    const diagnostics = runTransformWithDiagnostics(input, { crossFileInfo }, inputPath, parser);
     const result = diagnostics.code || input;
 
     // Transform must produce a change - no bailing allowed
@@ -344,6 +366,16 @@ describe("transform", () => {
     // Compare against expected output fixture
     const normalizedExpected = await normalizeCode(output, outputPath);
     expect(normalizedResult).toEqual(normalizedExpected);
+
+    // Compare sidecar .stylex.ts content if the test case has one
+    const sidecarPath = inputPath.replace(/\.\w+$/, ".stylex.ts");
+    if (existsSync(sidecarPath)) {
+      const expectedSidecar = readFileSync(sidecarPath, "utf-8");
+      expect(diagnostics.sidecarContent).toBeDefined();
+      expect(diagnostics.sidecarContent).toEqual(expectedSidecar);
+    } else {
+      expect(diagnostics.sidecarContent).toBeUndefined();
+    }
   });
 });
 

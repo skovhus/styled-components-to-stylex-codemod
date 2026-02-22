@@ -3,7 +3,7 @@
  * Core concepts: value resolution hooks and adapter validation.
  */
 
-import { assertValidAdapter } from "./internal/public-api-validation.js";
+import { assertValidAdapterInput } from "./internal/public-api-validation.js";
 
 // ────────────────────────────────────────────────────────────────────────────
 // Value Resolution
@@ -412,6 +412,35 @@ export interface Adapter {
 }
 
 // ────────────────────────────────────────────────────────────────────────────
+// Adapter Input (user-facing, allows "auto" for externalInterface)
+// ────────────────────────────────────────────────────────────────────────────
+
+/**
+ * User-facing adapter input type accepted by `defineAdapter()`.
+ *
+ * Same as `Adapter` except `externalInterface` may also be the string `"auto"`.
+ * When `"auto"` is used, `runTransform()` automatically scans consumer code
+ * (using `consumerPaths` / `files` globs) to detect which exported components
+ * are re-styled or used with the `as` prop.
+ */
+export interface AdapterInput {
+  resolveValue: Adapter["resolveValue"];
+  resolveCall: Adapter["resolveCall"];
+  resolveSelector: Adapter["resolveSelector"];
+
+  /**
+   * Called for exported styled components to determine their external interface.
+   *
+   * - Pass a function for manual control.
+   * - Pass `"auto"` to auto-detect usage from consumer code (requires `consumerPaths`
+   *   in `runTransform()`).
+   */
+  externalInterface: "auto" | Adapter["externalInterface"];
+
+  styleMerger: Adapter["styleMerger"];
+}
+
+// ────────────────────────────────────────────────────────────────────────────
 // Helper for User Authoring
 // ────────────────────────────────────────────────────────────────────────────
 
@@ -466,9 +495,9 @@ export interface Adapter {
  *     styleMerger: null,
  *   });
  */
-export function defineAdapter(adapter: Adapter): Adapter {
+export function defineAdapter<T extends AdapterInput>(adapter: T): T {
   // Runtime guard for JS users (no TypeScript help at call sites).
   // Keep this lightweight and dependency-free.
-  assertValidAdapter(adapter, "defineAdapter(adapter)");
+  assertValidAdapterInput(adapter, "defineAdapter(adapter)");
   return adapter;
 }

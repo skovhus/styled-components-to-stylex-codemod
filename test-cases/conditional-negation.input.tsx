@@ -10,7 +10,6 @@ export const Tooltip = styled.div<{ $open?: boolean }>`
 
 // Pattern: !props.$prop ? "cssA;" : "cssB;" (both branches have styles)
 export const Overlay = styled.div<{ $visible?: boolean }>`
-  position: fixed;
   inset: 0;
   ${(props) => (!props.$visible ? "opacity: 0;" : "opacity: 1;")}
 `;
