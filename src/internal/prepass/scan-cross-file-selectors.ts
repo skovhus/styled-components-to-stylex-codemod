@@ -19,6 +19,7 @@ import { createPrepassParser, type AstNode, type PrepassParserName } from "./pre
 import type { ModuleResolver } from "./resolve-imports.js";
 import type { CrossFileSelectorUsage as CoreUsage } from "../transform-types.js";
 import { addToSetMap } from "../utilities/collection-utils.js";
+import { PLACEHOLDER_RE } from "../styled-css.js";
 import { isSelectorContext } from "../utilities/selector-context-heuristic.js";
 
 /* ── Public types ─────────────────────────────────────────────────────── */
@@ -107,8 +108,8 @@ export const BARE_TEMPLATE_IDENTIFIER_RE = /\$\{\s*[a-zA-Z_$][\w$]*\s*\}/;
 
 /* ── File scanner ─────────────────────────────────────────────────────── */
 
-/** Placeholder pattern used by styled-components template parsing */
-const PLACEHOLDER_RE = /__SC_EXPR_(\d+)__/g;
+/** Global version for matchAll/replace operations */
+const PLACEHOLDER_RE_G = new RegExp(PLACEHOLDER_RE.source, "g");
 
 function scanFile(
   filePath: string,
@@ -334,7 +335,7 @@ export function findComponentSelectorLocalsFromNodes(
     const rawCss = rawParts.join("");
 
     // Find placeholders used as selectors (not as values)
-    for (const match of rawCss.matchAll(PLACEHOLDER_RE)) {
+    for (const match of rawCss.matchAll(PLACEHOLDER_RE_G)) {
       const exprIndex = Number(match[1]);
       const pos = match.index;
 
@@ -389,7 +390,7 @@ function isPlaceholderInSelectorContext(rawCss: string, pos: number, length: num
   // Replace placeholders in `before` with a valid CSS identifier so that
   // `&:__SC_EXPR_N__` is recognized as a pseudo-selector (like `&:hover`)
   // rather than a property-value colon context.
-  return isSelectorContext(before.replace(PLACEHOLDER_RE, "hover"), after);
+  return isSelectorContext(before.replace(PLACEHOLDER_RE_G, "hover"), after);
 }
 
 /* ── Debug logging ────────────────────────────────────────────────────── */

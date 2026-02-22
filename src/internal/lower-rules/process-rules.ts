@@ -28,6 +28,7 @@ import { capitalize, kebabToCamelCase } from "../utilities/string-utils.js";
 import { getOrCreateRelationOverrideBucket } from "./shared.js";
 import type { RelationOverride } from "./state.js";
 import { createPropTestHelpers } from "./variant-utils.js";
+import { PLACEHOLDER_RE } from "../styled-css.js";
 import { parseCssDeclarationBlock } from "../builtin-handlers/css-parsing.js";
 import { ensureShouldForwardPropDrop } from "./types.js";
 import type { ExpressionKind } from "./decl-types.js";
@@ -347,7 +348,7 @@ export function processDeclRules(ctx: DeclProcessingState): void {
     // NOTE: This function intentionally mirrors existing logic from `transform.ts`.
 
     if (typeof rule.selector === "string" && rule.selector.includes("__SC_EXPR_")) {
-      const slotMatch = rule.selector.match(/__SC_EXPR_(\d+)__/);
+      const slotMatch = rule.selector.match(PLACEHOLDER_RE);
       const slotId = slotMatch ? Number(slotMatch[1]) : null;
       const slotExpr = slotId !== null ? (decl.templateExpressions[slotId] as any) : null;
       const otherLocal = slotExpr?.type === "Identifier" ? (slotExpr.name as string) : null;
@@ -381,7 +382,7 @@ export function processDeclRules(ctx: DeclProcessingState): void {
         // Without this guard, `${Link}:focus &, ${Button}:active &` would silently
         // attribute all pseudos to Link (the first match).
         if (isGroupedReverseSelectorPattern) {
-          const allSlotMatches = [...selTrim2.matchAll(/__SC_EXPR_(\d+)__/g)];
+          const allSlotMatches = [...selTrim2.matchAll(new RegExp(PLACEHOLDER_RE.source, "g"))];
           const allLocal = allSlotMatches.map((m) => {
             const id = Number(m[1]);
             const expr = decl.templateExpressions[id] as
@@ -1420,7 +1421,7 @@ function recoverStandaloneInterpolationsInPseudoBlock(
   }
 
   // Extract pseudo slot ID from rule selector
-  const pseudoSlotMatch = rule.selector.match(/__SC_EXPR_(\d+)__/);
+  const pseudoSlotMatch = rule.selector.match(PLACEHOLDER_RE);
   if (!pseudoSlotMatch) {
     return null;
   }
@@ -1434,7 +1435,7 @@ function recoverStandaloneInterpolationsInPseudoBlock(
   }
 
   // Find standalone __SC_EXPR_N__ in the block content
-  const standaloneSlotRegex = /__SC_EXPR_(\d+)__/g;
+  const standaloneSlotRegex = new RegExp(PLACEHOLDER_RE.source, "g");
   const slots: number[] = [];
   let slotMatch;
   while ((slotMatch = standaloneSlotRegex.exec(blockMatch[1])) !== null) {

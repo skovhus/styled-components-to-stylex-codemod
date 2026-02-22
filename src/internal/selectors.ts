@@ -3,6 +3,7 @@
  * Core concepts: pseudo/attribute parsing and selector normalization.
  */
 import selectorParser from "postcss-selector-parser";
+import { PLACEHOLDER_RE } from "./styled-css.js";
 
 /**
  * Result of parsing a selector for StyleX compatibility.
@@ -472,12 +473,12 @@ export function normalizeSpecificityHacks(selector: string): {
 }
 
 export function normalizeInterpolatedSelector(selectorRaw: string): string {
-  if (!/__SC_EXPR_\d+__/.test(selectorRaw)) {
+  if (!PLACEHOLDER_RE.test(selectorRaw)) {
     return selectorRaw;
   }
   return (
     selectorRaw
-      .replace(/__SC_EXPR_\d+__/g, "&")
+      .replace(new RegExp(PLACEHOLDER_RE.source, "g"), "&")
       .replace(/\s+/g, " ")
       .trim()
       // Normalize `& &:pseudo` to `&:pseudo` (css helper interpolation + pseudo selector).
