@@ -25,6 +25,7 @@ pnpm check       # Run lint + tsc + test
 - always run "pnpm run ci" to validate changes
 - when fixing bugs or addressing review comments, add a test case or unit test to document the regression and prevent future breakage
 - before making any changes, explore the codebase to find ALL files that contain the pattern I'm about to describe. List every file, show the relevant code, and confirm you understand the full scope. Then propose a complete change plan covering every file.
+- when `adapter.externalInterface` is `"auto"`, treat prepass as required: if prepass fails, throw (do not silently fall back); only function-based `externalInterface` may continue on prepass failure with a warning
 
 ## Code guidelines
 

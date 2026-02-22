@@ -179,7 +179,8 @@ await runTransform({
 Instead of manually specifying which components need `styles` or `as` support, set `externalInterface: "auto"` to auto-detect usage by scanning consumer code.
 
 > [!NOTE]
-> Experimental. Requires `consumerPaths` to be set.
+> Experimental. Requires `consumerPaths` and a successful prepass scan.
+> If prepass fails, `runTransform()` throws (fail-fast) when `externalInterface: "auto"` is used.
 
 ```ts
 import { runTransform, defineAdapter } from "styled-components-to-stylex-codemod";
@@ -197,6 +198,15 @@ await runTransform({
 ```
 
 When `externalInterface: "auto"` is set, `runTransform()` scans `files` and `consumerPaths` for `styled(Component)` calls and `<Component as={...}>` JSX usage, resolves imports back to the component definition files, and returns the appropriate `{ styles, as }` flags automatically.
+
+If that prepass scan fails, `runTransform()` stops and throws an actionable error rather than silently falling back to non-auto behavior.
+
+Troubleshooting prepass failures with `"auto"`:
+
+- verify `consumerPaths` globs match the files you expect
+- confirm the selected parser matches your source syntax (`parser: "tsx"`, `parser: "ts"`, etc.)
+- check resolver inputs (import paths, tsconfig path aliases, and related module resolution config)
+- if needed, switch to a manual `externalInterface(ctx)` function to continue migration while you fix prepass inputs
 
 #### Dynamic interpolations
 

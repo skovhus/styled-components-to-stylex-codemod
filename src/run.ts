@@ -51,6 +51,9 @@ export interface RunTransformOptions {
    * Use `externalInterface: "auto"` to auto-detect which exported components
    * need external className/style and polymorphic `as` support by scanning
    * consumer code specified via `consumerPaths` (or `files`).
+   *
+   * Note: `"auto"` requires prepass scanning to succeed. If prepass fails,
+   * runTransform throws instead of silently falling back.
    */
   adapter: AdapterInput;
 
@@ -317,8 +320,9 @@ export async function runTransform(options: RunTransformOptions): Promise<RunTra
   const sharedResolver = createModuleResolver();
 
   // Unified prepass: cross-file selectors + optional consumer analysis in a single pass.
-  // If the prepass crashes (e.g. on Windows, parse errors), log a warning and continue
-  // with empty results — the per-file transform still works, just without cross-file info.
+  // Contract:
+  // - externalInterface: "auto" -> prepass is required; fail fast if it crashes.
+  // - externalInterface: function -> prepass is best-effort; warn and continue with empty results.
   const { runPrepass } = await import("./internal/prepass/run-prepass.js");
   const absoluteFiles = filePaths.map((f) => resolve(f));
   const absoluteConsumers = consumerFilePaths.map((f) => resolve(f));
@@ -334,6 +338,10 @@ export async function runTransform(options: RunTransformOptions): Promise<RunTra
       enableAstCache: true,
     });
   } catch (err) {
+    if (adapterInput.externalInterface === "auto") {
+      throw createAutoPrepassFailureError(err, consumerPatterns, parser);
+    }
+
     Logger.warn(
       `Prepass failed, continuing without cross-file analysis: ${err instanceof Error ? err.message : String(err)}`,
     );
@@ -479,6 +487,29 @@ export async function runTransform(options: RunTransformOptions): Promise<RunTra
 }
 
 // --- Non-exported helpers ---
+
+function createAutoPrepassFailureError(
+  err: unknown,
+  consumerPatterns: readonly string[],
+  parser: "babel" | "babylon" | "flow" | "ts" | "tsx",
+): Error {
+  const reason = err instanceof Error ? err.message : String(err);
+  return new Error(
+    [
+      'runTransform(options): prepass failed while using externalInterface: "auto".',
+      '"auto" depends on successful prepass scanning and cannot continue without it.',
+      `Underlying error: ${reason}`,
+      "",
+      "Troubleshooting:",
+      "  - Verify `consumerPaths` glob(s) and file syntax.",
+      `  - Confirm parser setting matches your code (current parser: ${JSON.stringify(parser)}).`,
+      "  - Check module resolution inputs (tsconfig paths / imports).",
+      "  - Use a manual `externalInterface(ctx)` function to continue without auto-detection.",
+      "",
+      `consumerPaths: ${consumerPatterns.length > 0 ? consumerPatterns.join(", ") : "(none)"}`,
+    ].join("\n"),
+  );
+}
 
 /** Run formatter commands on a list of files, logging warnings on failure. */
 async function runFormatters(commands: string[], files: string[]): Promise<void> {
