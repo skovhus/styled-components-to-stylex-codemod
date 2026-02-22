@@ -23,14 +23,33 @@ import { format } from "oxfmt";
 // We register a tiny resolver hook, then dynamically import the TS sources.
 register(new URL("./src-ts-specifier-loader.mjs", import.meta.url).href, pathToFileURL(".."));
 
-const [{ default: transform }, { fixtureAdapter }] = await Promise.all([
+const [
+  { default: transform },
+  { fixtureAdapter, appLikeAdapter },
+  { scanCrossFileSelectors },
+  { createModuleResolver },
+] = await Promise.all([
   import("../src/transform.ts"),
   import("../src/__tests__/fixture-adapters.ts"),
+  import("../src/internal/prepass/scan-cross-file-selectors.ts"),
+  import("../src/internal/prepass/resolve-imports.ts"),
 ]);
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const repoRoot = join(__dirname, "..");
 const testCasesDir = join(repoRoot, "test-cases");
+
+// Test cases that use the app-like adapter (styleMerger: null) to reproduce
+// real-world TS errors with the verbose className/style merging pattern.
+const APP_LIKE_ADAPTER_FIXTURES = new Set([
+  "bug-data-style-src-not-accepted",
+  "bug-data-style-src-incompatible-component",
+  "bug-external-styles-missing-classname",
+]);
+
+function selectAdapter(name: string) {
+  return APP_LIKE_ADAPTER_FIXTURES.has(name) ? appLikeAdapter : fixtureAdapter;
+}
 
 async function normalizeCode(code: string, ext: string) {
   const { code: formatted } = await format(`test.${ext}`, code);
@@ -63,15 +82,29 @@ async function updateFixture(name: string, ext: string) {
   // Determine parser based on filename pattern
   const parser = name.includes(".flow") ? "flow" : ext === "jsx" ? "babel" : "tsx";
 
-  const adapter = fixtureAdapter;
+  // Select adapter: appLikeAdapter (styleMerger: null, externalInterface
+  // returns { styles: true }) mimics a real-world app config to reproduce
+  // TS errors from the verbose className merging pattern.
+  const adapter = selectAdapter(name);
+  const crossFilePrepassResult = {
+    selectorUsages: prepassResult.selectorUsages,
+    componentsNeedingGlobalSelectorBridge: prepassResult.componentsNeedingGlobalSelectorBridge,
+  };
+  const sidecarFiles = new Map<string, string>();
   const result = applyTransform(
     transform,
-    { adapter },
+    { adapter, crossFilePrepassResult, sidecarFiles },
     { source: input, path: inputPath },
     { parser },
   );
   const out = result || input;
   await writeFile(outputPath, await normalizeCode(out, ext), "utf-8");
+
+  // Write sidecar .stylex.ts files (defineMarker declarations)
+  for (const [sidecarPath, content] of sidecarFiles) {
+    await writeFile(sidecarPath, content, "utf-8");
+  }
+
   return outputPath;
 }
 
@@ -79,6 +112,11 @@ const args = new Set(process.argv.slice(2));
 const only = args.has("--only") ? process.argv[process.argv.indexOf("--only") + 1] : null;
 
 const allFixtures = await listFixtureNames();
+
+// Run cross-file prepass for all fixtures (fast, no-op for non-cross-file cases)
+const prepassResolver = createModuleResolver();
+const allInputPaths = allFixtures.map((f) => join(testCasesDir, `${f.name}.input.${f.ext}`));
+const prepassResult = scanCrossFileSelectors(allInputPaths, [], prepassResolver);
 
 const targetFixtures = (() => {
   if (only) {

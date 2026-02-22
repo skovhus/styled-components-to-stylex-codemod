@@ -3,7 +3,7 @@
  * Core concepts: declaration/value modeling and selector normalization.
  */
 import type { Element } from "stylis";
-import type { StyledInterpolationSlot } from "./styled-css.js";
+import { PLACEHOLDER_RE, type StyledInterpolationSlot } from "./styled-css.js";
 
 export type CssValuePart = { kind: "static"; value: string } | { kind: "slot"; slotId: number };
 
@@ -379,7 +379,7 @@ function parseCssValue(valueRaw: string, slotByPlaceholder: Map<string, number>)
     return { kind: "interpolated", parts: [{ kind: "slot", slotId: directSlot }] };
   }
 
-  const placeholderPattern = /__SC_EXPR_(\d+)__/g;
+  const placeholderPattern = new RegExp(PLACEHOLDER_RE.source, "g");
   const parts: CssValuePart[] = [];
   let lastIndex = 0;
   let match: RegExpExecArray | null;
@@ -569,7 +569,7 @@ export function findSelectorLineOffset(rawCss: string, selector: string): number
   }
 
   // For interpolated selectors (__SC_EXPR_N__), try to find them
-  const exprMatch = selector.match(/__SC_EXPR_\d+__/);
+  const exprMatch = selector.match(PLACEHOLDER_RE);
   if (exprMatch) {
     const idx = rawCss.indexOf(exprMatch[0]);
     if (idx !== -1) {

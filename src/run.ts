@@ -4,12 +4,14 @@
  */
 import { run as jscodeshiftRun } from "jscodeshift/src/Runner.js";
 import { fileURLToPath } from "node:url";
-import { dirname, join } from "node:path";
-import { existsSync } from "node:fs";
+import { dirname, join, resolve } from "node:path";
+import { existsSync, readFileSync, realpathSync } from "node:fs";
+import { writeFile } from "node:fs/promises";
 import { glob } from "node:fs/promises";
 import { spawn } from "node:child_process";
 import type {
   Adapter,
+  AdapterInput,
   CallResolveContext,
   CallResolveResult,
   ResolveValueContext,
@@ -18,7 +20,7 @@ import type {
   SelectorResolveResult,
 } from "./adapter.js";
 import { Logger, type CollectedWarning } from "./internal/logger.js";
-import { assertValidAdapter, describeValue } from "./internal/public-api-validation.js";
+import { assertValidAdapterInput, describeValue } from "./internal/public-api-validation.js";
 
 export interface RunTransformOptions {
   /**
@@ -28,10 +30,32 @@ export interface RunTransformOptions {
   files: string | string[];
 
   /**
+   * File glob(s) to scan for cross-file component selector usage, or `null` to opt out.
+   *
+   * When set to a glob pattern, files matching this glob that are NOT in `files` trigger
+   * the bridge strategy (stable bridge className for incremental migration when consumers
+   * are not transformed). Files in both globs use the marker sidecar strategy (both
+   * consumer and target are transformed).
+   *
+   * Required when `externalInterface` is `"auto"`.
+   *
+   * @example "src/**\/*.tsx"
+   * @example null  // opt out of cross-file scanning
+   */
+  consumerPaths: string | string[] | null;
+
+  /**
    * Adapter for customizing the transform.
    * Controls value resolution and resolver-provided imports.
+   *
+   * Use `externalInterface: "auto"` to auto-detect which exported components
+   * need external className/style and polymorphic `as` support by scanning
+   * consumer code specified via `consumerPaths` (or `files`).
+   *
+   * Note: `"auto"` requires prepass scanning to succeed. If prepass fails,
+   * runTransform throws instead of silently falling back.
    */
-  adapter: Adapter;
+  adapter: AdapterInput;
 
   /**
    * Dry run - don't write changes to files
@@ -103,6 +127,7 @@ const __dirname = dirname(__filename);
  *
  * await runTransform({
  *   files: 'src/**\/*.tsx',
+ *   consumerPaths: null,
  *   adapter,
  *   dryRun: true,
  * });
@@ -119,7 +144,7 @@ export async function runTransform(options: RunTransformOptions): Promise<RunTra
         "Example (plain JS):",
         '  import { runTransform, defineAdapter } from "styled-components-to-stylex-codemod";',
         "  const adapter = defineAdapter({ resolveValue() { return null; } });",
-        '  await runTransform({ files: "src/**/*.tsx", adapter });',
+        '  await runTransform({ files: "src/**/*.tsx", consumerPaths: null, adapter });',
       ].join("\n"),
     );
   }
@@ -163,8 +188,22 @@ export async function runTransform(options: RunTransformOptions): Promise<RunTra
     }
   }
 
+  // Validate consumerPaths is explicitly provided (null to opt out, or a glob string/array).
+  const consumerPathsRaw = (options as { consumerPaths?: unknown }).consumerPaths;
+  if (consumerPathsRaw === undefined) {
+    throw new Error(
+      [
+        "runTransform(options): `consumerPaths` is required.",
+        "Pass a glob pattern to enable cross-file selector scanning, or `null` to opt out.",
+        'Example: consumerPaths: "src/**/*.tsx"  // scan for cross-file usage',
+        "Example: consumerPaths: null             // opt out",
+      ].join("\n"),
+    );
+  }
+
   const {
     files,
+    consumerPaths: consumerPathsOption,
     dryRun = false,
     print = false,
     parser = "tsx",
@@ -176,12 +215,23 @@ export async function runTransform(options: RunTransformOptions): Promise<RunTra
     Logger.setMaxExamples(maxExamples);
   }
 
-  const adapter = options.adapter;
-  assertValidAdapter(adapter, "runTransform(options)");
+  const adapterInput = options.adapter;
+  assertValidAdapterInput(adapterInput, "runTransform(options)");
+
+  // externalInterface: "auto" requires consumerPaths to know where to scan
+  if (adapterInput.externalInterface === "auto" && consumerPathsOption === null) {
+    throw new Error(
+      [
+        'runTransform(options): externalInterface is "auto" but consumerPaths is null.',
+        "Auto-detection needs consumer file globs to scan for styled(Component) and as-prop usage.",
+        'Example: consumerPaths: "src/**/*.tsx"',
+      ].join("\n"),
+    );
+  }
 
   const resolveValueWithLogging = (ctx: ResolveValueContext): ResolveValueResult | undefined => {
     try {
-      return adapter.resolveValue(ctx);
+      return adapterInput.resolveValue(ctx);
     } catch (e) {
       const msg = `adapter.resolveValue threw an error: ${
         e instanceof Error ? e.message : String(e)
@@ -195,7 +245,7 @@ export async function runTransform(options: RunTransformOptions): Promise<RunTra
 
   const resolveCallWithLogging = (ctx: CallResolveContext): CallResolveResult | undefined => {
     try {
-      return adapter.resolveCall(ctx);
+      return adapterInput.resolveCall(ctx);
     } catch (e) {
       const msg = `adapter.resolveCall threw an error: ${e instanceof Error ? e.message : String(e)}`;
       Logger.logError(msg, ctx.callSiteFilePath, ctx.loc, ctx);
@@ -208,23 +258,13 @@ export async function runTransform(options: RunTransformOptions): Promise<RunTra
     ctx: SelectorResolveContext,
   ): SelectorResolveResult | undefined => {
     try {
-      return adapter.resolveSelector(ctx);
+      return adapterInput.resolveSelector(ctx);
     } catch (e) {
       const msg = `adapter.resolveSelector threw an error: ${e instanceof Error ? e.message : String(e)}`;
       Logger.logError(msg, ctx.filePath, ctx.loc, ctx);
       Logger.markErrorAsLogged(e);
       throw e;
     }
-  };
-
-  const adapterWithLogging: Adapter = {
-    styleMerger: adapter.styleMerger,
-    externalInterface(ctx) {
-      return adapter.externalInterface(ctx);
-    },
-    resolveValue: resolveValueWithLogging,
-    resolveCall: resolveCallWithLogging,
-    resolveSelector: resolveSelectorWithLogging,
   };
 
   // Resolve file paths from glob patterns
@@ -252,6 +292,106 @@ export async function runTransform(options: RunTransformOptions): Promise<RunTra
 
   Logger.setFileCount(filePaths.length);
 
+  // Resolve consumer paths for cross-file selector prepass
+  const consumerPatterns = consumerPathsOption
+    ? Array.isArray(consumerPathsOption)
+      ? consumerPathsOption
+      : [consumerPathsOption]
+    : [];
+  const consumerFilePaths: string[] = [];
+  for (const pattern of consumerPatterns) {
+    for await (const file of glob(pattern, { cwd })) {
+      consumerFilePaths.push(file);
+    }
+  }
+
+  if (consumerPatterns.length > 0 && consumerFilePaths.length === 0) {
+    throw new Error(
+      [
+        "runTransform(options): consumerPaths matched no files.",
+        `Pattern(s): ${consumerPatterns.join(", ")}`,
+        "Check that the glob pattern is correct and files exist.",
+      ].join("\n"),
+    );
+  }
+
+  // Create shared module resolver
+  const { createModuleResolver } = await import("./internal/prepass/resolve-imports.js");
+  const sharedResolver = createModuleResolver();
+
+  // Unified prepass: cross-file selectors + optional consumer analysis in a single pass.
+  // Contract:
+  // - externalInterface: "auto" -> prepass is required; fail fast if it crashes.
+  // - externalInterface: function -> prepass is best-effort; warn and continue with empty results.
+  const { runPrepass } = await import("./internal/prepass/run-prepass.js");
+  const absoluteFiles = filePaths.map((f) => resolve(f));
+  const absoluteConsumers = consumerFilePaths.map((f) => resolve(f));
+
+  let prepassResult: Awaited<ReturnType<typeof runPrepass>>;
+  try {
+    prepassResult = await runPrepass({
+      filesToTransform: absoluteFiles,
+      consumerPaths: absoluteConsumers,
+      resolver: sharedResolver,
+      parserName: parser,
+      createExternalInterface: adapterInput.externalInterface === "auto",
+      enableAstCache: true,
+    });
+  } catch (err) {
+    if (adapterInput.externalInterface === "auto") {
+      throw createAutoPrepassFailureError(err, consumerPatterns, parser);
+    }
+
+    Logger.warn(
+      `Prepass failed, continuing without cross-file analysis: ${err instanceof Error ? err.message : String(err)}`,
+    );
+    prepassResult = {
+      crossFileInfo: {
+        selectorUsages: new Map(),
+        componentsNeedingMarkerSidecar: new Map(),
+        componentsNeedingGlobalSelectorBridge: new Map(),
+      },
+      consumerAnalysis: undefined,
+    };
+  }
+
+  const crossFilePrepassResult = prepassResult.crossFileInfo;
+
+  // Resolve "auto" externalInterface → concrete function using consumer analysis
+  const resolvedAdapter: Adapter = (() => {
+    if (adapterInput.externalInterface === "auto" && prepassResult.consumerAnalysis) {
+      const analysisMap = prepassResult.consumerAnalysis;
+      return {
+        ...adapterInput,
+        externalInterface: (ctx) => {
+          let realPath: string;
+          try {
+            realPath = realpathSync(resolve(ctx.filePath));
+          } catch {
+            realPath = resolve(ctx.filePath);
+          }
+          return (
+            analysisMap.get(`${realPath}:${ctx.componentName}`) ?? {
+              styles: false,
+              as: false,
+            }
+          );
+        },
+      };
+    }
+    return adapterInput as Adapter;
+  })();
+
+  const adapterWithLogging: Adapter = {
+    styleMerger: resolvedAdapter.styleMerger,
+    externalInterface(ctx) {
+      return resolvedAdapter.externalInterface(ctx);
+    },
+    resolveValue: resolveValueWithLogging,
+    resolveCall: resolveCallWithLogging,
+    resolveSelector: resolveSelectorWithLogging,
+  };
+
   // Path to the transform module.
   // - In published builds, `dist/index.mjs` and `dist/transform.mjs` live together.
   // - In-repo tests/dev, `src/transform.mjs` doesn't exist, but `dist/transform.mjs` usually does
@@ -276,41 +416,63 @@ export async function runTransform(options: RunTransformOptions): Promise<RunTra
     );
   })();
 
+  // Map populated by the per-file transform to collect sidecar .stylex.ts files
+  const sidecarFiles = new Map<string, string>();
+
+  // Map populated by the per-file transform to collect bridge results for consumer patching
+  const bridgeResults = new Map<
+    string,
+    import("./internal/transform-types.js").BridgeComponentResult[]
+  >();
+
   const result = await jscodeshiftRun(transformPath, filePaths, {
     parser,
     dry: dryRun,
     print,
     adapter: adapterWithLogging,
+    crossFilePrepassResult,
+    sidecarFiles,
+    bridgeResults,
     // Programmatic use passes an Adapter object (functions). That cannot be
     // serialized across process boundaries, so we must run in-band.
     runInBand: true,
   });
 
-  // Run formatter commands if specified and files were transformed (not in dry run mode)
-  if (formatterCommands && formatterCommands.length > 0 && result.ok > 0 && !dryRun) {
-    for (const formatterCommand of formatterCommands) {
-      const [cmd, ...cmdArgs] = formatterCommand.split(/\s+/);
-      if (cmd) {
-        try {
-          await new Promise<void>((resolve, reject) => {
-            const proc = spawn(cmd, [...cmdArgs, ...filePaths], {
-              stdio: "inherit",
-              shell: true,
-            });
-            proc.on("close", (code) => {
-              if (code === 0) {
-                resolve();
-              } else {
-                reject(new Error(`Formatter command exited with code ${code}`));
-              }
-            });
-            proc.on("error", reject);
-          });
-        } catch (e) {
-          Logger.warn(`Formatter command failed: ${e instanceof Error ? e.message : String(e)}`);
-        }
+  // Write sidecar .stylex.ts files (defineMarker declarations)
+  // Merge with existing content to avoid clobbering user-owned exports (e.g. defineVars).
+  if (sidecarFiles.size > 0 && !dryRun) {
+    for (const [sidecarPath, content] of sidecarFiles) {
+      const merged = mergeSidecarContent(sidecarPath, content);
+      await writeFile(sidecarPath, merged, "utf-8");
+    }
+  }
+
+  // Patch unconverted consumer files that reference bridge components via CSS selectors
+  if (bridgeResults.size > 0 && !dryRun) {
+    const { buildConsumerReplacements, patchConsumerFile } =
+      await import("./internal/bridge-consumer-patcher.js");
+    const consumerReplacements = buildConsumerReplacements(
+      crossFilePrepassResult.selectorUsages,
+      bridgeResults,
+    );
+    const patchedFiles: string[] = [];
+    for (const [consumerPath, replacements] of consumerReplacements) {
+      const patched = patchConsumerFile(consumerPath, replacements);
+      if (patched !== null) {
+        await writeFile(consumerPath, patched, "utf-8");
+        patchedFiles.push(consumerPath);
       }
     }
+
+    // Include patched consumer files in formatter commands
+    if (formatterCommands && patchedFiles.length > 0) {
+      await runFormatters(formatterCommands, patchedFiles);
+    }
+  }
+
+  // Run formatter commands if specified and files were transformed (not in dry run mode)
+  if (formatterCommands && formatterCommands.length > 0 && result.ok > 0 && !dryRun) {
+    await runFormatters(formatterCommands, filePaths);
   }
 
   const report = Logger.createReport();
@@ -324,4 +486,105 @@ export async function runTransform(options: RunTransformOptions): Promise<RunTra
     timeElapsed: parseFloat(result.timeElapsed) || 0,
     warnings: report.getWarnings(),
   };
+}
+
+// --- Non-exported helpers ---
+
+function createAutoPrepassFailureError(
+  err: unknown,
+  consumerPatterns: readonly string[],
+  parser: "babel" | "babylon" | "flow" | "ts" | "tsx",
+): Error {
+  const reason = err instanceof Error ? err.message : String(err);
+  return new Error(
+    [
+      'runTransform(options): prepass failed while using externalInterface: "auto".',
+      '"auto" depends on successful prepass scanning and cannot continue without it.',
+      `Underlying error: ${reason}`,
+      "",
+      "Troubleshooting:",
+      "  - Verify `consumerPaths` glob(s) and file syntax.",
+      `  - Confirm parser setting matches your code (current parser: ${JSON.stringify(parser)}).`,
+      "  - Check module resolution inputs (tsconfig paths / imports).",
+      "  - Use a manual `externalInterface(ctx)` function to continue without auto-detection.",
+      "",
+      `consumerPaths: ${consumerPatterns.length > 0 ? consumerPatterns.join(", ") : "(none)"}`,
+    ].join("\n"),
+  );
+}
+
+/**
+ * Merge new sidecar marker content into an existing .stylex.ts file, preserving
+ * user-owned exports (e.g. defineVars). If the file doesn't exist, returns content as-is.
+ *
+ * New marker declarations (`export const XMarker = stylex.defineMarker()`) are
+ * appended only if they don't already exist in the file. The stylex import is
+ * ensured at the top.
+ */
+export function mergeSidecarContent(sidecarPath: string, newContent: string): string {
+  let existing: string;
+  try {
+    existing = readFileSync(sidecarPath, "utf-8");
+  } catch {
+    // File doesn't exist yet — use new content as-is
+    return newContent;
+  }
+
+  // Extract marker export lines from the new content
+  const markerLineRe = /^export const \w+ = stylex\.defineMarker\(\);$/gm;
+  const newMarkers: string[] = [];
+  for (const m of newContent.matchAll(markerLineRe)) {
+    newMarkers.push(m[0]);
+  }
+
+  if (newMarkers.length === 0) {
+    return newContent;
+  }
+
+  // Filter out markers already present in the existing file
+  const markersToAdd = newMarkers.filter((line) => !existing.includes(line));
+
+  if (markersToAdd.length === 0) {
+    // All markers already exist — no changes needed
+    return existing;
+  }
+
+  // Ensure the stylex import exists
+  let merged = existing;
+  if (!merged.includes("@stylexjs/stylex")) {
+    merged = `import * as stylex from "@stylexjs/stylex";\n\n${merged}`;
+  }
+
+  // Append new marker declarations at end
+  const trailingNewline = merged.endsWith("\n") ? "" : "\n";
+  merged = merged + trailingNewline + markersToAdd.join("\n") + "\n";
+
+  return merged;
+}
+
+/** Run formatter commands on a list of files, logging warnings on failure. */
+async function runFormatters(commands: string[], files: string[]): Promise<void> {
+  for (const formatterCommand of commands) {
+    const [cmd, ...cmdArgs] = formatterCommand.split(/\s+/);
+    if (cmd) {
+      try {
+        await new Promise<void>((res, rej) => {
+          const proc = spawn(cmd, [...cmdArgs, ...files], {
+            stdio: "inherit",
+            shell: true,
+          });
+          proc.on("close", (code) => {
+            if (code === 0) {
+              res();
+            } else {
+              rej(new Error(`Formatter command exited with code ${code}`));
+            }
+          });
+          proc.on("error", rej);
+        });
+      } catch (e) {
+        Logger.warn(`Formatter command failed: ${e instanceof Error ? e.message : String(e)}`);
+      }
+    }
+  }
 }

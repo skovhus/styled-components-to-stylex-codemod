@@ -80,6 +80,7 @@ export type WarningType =
   | "Unsupported selector: element selector with dynamic children"
   | "Unsupported selector: element selector with plain intrinsic children"
   | "Unsupported selector: element selector pseudo collision"
+  | "Unsupported selector: unresolved interpolation in cross-file component selector"
   | "Unsupported selector: unresolved interpolation in descendant component selector"
   | "Unsupported selector: unresolved interpolation in element selector"
   | "Unsupported selector: unresolved interpolation in reverse component selector"

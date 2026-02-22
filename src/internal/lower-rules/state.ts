@@ -4,7 +4,7 @@
  */
 import type { ImportSource } from "../../adapter.js";
 import type { TransformContext } from "../transform-context.js";
-import type { StyledDecl } from "../transform-types.js";
+import type { CrossFileSelectorUsage, StyledDecl } from "../transform-types.js";
 import type { WarningType } from "../logger.js";
 import { createCssHelperResolver } from "./css-helper.js";
 import { createThemeResolvers } from "./theme.js";
@@ -23,6 +23,12 @@ export type RelationOverride = {
   overrideStyleKey: string;
   /** Additional style keys (from composed mixins) to search for base values */
   childExtraStyleKeys?: string[];
+  /** When true, this override involves a cross-file component and uses defineMarker() */
+  crossFile?: boolean;
+  /** Variable name of the marker for cross-file overrides (e.g. "ButtonMarker") */
+  markerVarName?: string;
+  /** Local name of the imported cross-file component (child in forward, parent in reverse) */
+  crossFileComponentLocalName?: string;
 };
 
 export type LowerRulesState = ReturnType<typeof createLowerRulesState>;
@@ -217,6 +223,14 @@ export function createLowerRulesState(ctx: TransformContext) {
     importMap,
   });
 
+  // Build cross-file selector lookup: localName → usage info
+  const crossFileSelectorsByLocal = new Map<string, CrossFileSelectorUsage>();
+  if (ctx.crossFileSelectorUsages) {
+    for (const usage of ctx.crossFileSelectorUsages) {
+      crossFileSelectorsByLocal.set(usage.localName, usage);
+    }
+  }
+
   const state = {
     api,
     j,
@@ -256,6 +270,7 @@ export function createLowerRulesState(ctx: TransformContext) {
     resolveCssHelperTemplate,
     resolveImportInScope,
     resolveImportForExpr,
+    crossFileSelectorsByLocal,
     bail: false,
     markBail: () => {
       state.bail = true;

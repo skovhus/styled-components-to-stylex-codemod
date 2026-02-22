@@ -159,3 +159,7 @@ test-cases/*.actual.tsx
 dist-playground/*
 TODO.md
 local-setup.sh
+
+# Local benchmark scripts
+scripts/bench-prepass*.mts
+scripts/bench-prepass*.json

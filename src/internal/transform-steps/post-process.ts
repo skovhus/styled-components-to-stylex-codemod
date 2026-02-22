@@ -70,6 +70,7 @@ export function postProcessStep(ctx: TransformContext): StepResult {
     newImportLocalNames,
     newImportSourcesByLocal,
     stylesIdentifier: ctx.stylesIdentifier,
+    crossFileMarkers: ctx.crossFileMarkers,
   });
   if (post.changed) {
     ctx.markChanged();
