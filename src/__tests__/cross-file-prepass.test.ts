@@ -22,6 +22,11 @@ import {
   buildConsumerReplacements,
   patchConsumerFile,
 } from "../internal/bridge-consumer-patcher.js";
+import {
+  detectBridgeExports,
+  findStaleBridgeComponents,
+  removeStaleBridgeArtifacts,
+} from "../internal/bridge-cleanup.js";
 
 // Suppress codemod logs in tests
 vi.mock("../internal/logger.js", () => ({
@@ -763,5 +768,207 @@ describe("prepass parse error handling", () => {
 
     // Should complete without error, just returning empty selectors for that file
     expect(result.crossFileInfo.selectorUsages.size).toBe(0);
+  });
+});
+
+/* ── Bridge cleanup: detectBridgeExports ─────────────────────────────── */
+
+describe("detectBridgeExports", () => {
+  it("detects GlobalSelector exports in source code", () => {
+    const source = [
+      'import * as stylex from "@stylexjs/stylex";',
+      "",
+      "const styles = stylex.create({ icon: { width: 16 } });",
+      "",
+      "/** @deprecated Migrate consumer to stylex.defineMarker() — bridge className for unconverted styled-components consumers */",
+      'export const CollapseArrowIconGlobalSelector = ".sc2sx-CollapseArrowIcon-a1b2c3d4";',
+    ].join("\n");
+
+    const names = detectBridgeExports(source);
+    expect(names).toEqual(["CollapseArrowIcon"]);
+  });
+
+  it("detects multiple bridge exports", () => {
+    const source = [
+      'export const FooGlobalSelector = ".sc2sx-Foo-11111111";',
+      'export const BarGlobalSelector = ".sc2sx-Bar-22222222";',
+    ].join("\n");
+
+    const names = detectBridgeExports(source);
+    expect(names).toEqual(["Foo", "Bar"]);
+  });
+
+  it("returns empty array when no bridges exist", () => {
+    const source = [
+      'import * as stylex from "@stylexjs/stylex";',
+      "const styles = stylex.create({ icon: { width: 16 } });",
+    ].join("\n");
+
+    expect(detectBridgeExports(source)).toEqual([]);
+  });
+
+  it("does not match non-bridge exports with similar names", () => {
+    const source = 'export const FooGlobalSelector = "some-other-value";';
+    expect(detectBridgeExports(source)).toEqual([]);
+  });
+});
+
+/* ── Bridge cleanup: findStaleBridgeComponents ───────────────────────── */
+
+describe("findStaleBridgeComponents", () => {
+  it("returns all bridges as stale when no bridges are needed", () => {
+    const stale = findStaleBridgeComponents(["Foo", "Bar"], undefined, "");
+    expect(stale).toEqual(["Foo", "Bar"]);
+  });
+
+  it("returns all bridges as stale when needed set is empty", () => {
+    const stale = findStaleBridgeComponents(["Foo"], new Set(), "");
+    expect(stale).toEqual(["Foo"]);
+  });
+
+  it("keeps bridges that are still needed", () => {
+    const stale = findStaleBridgeComponents(["Foo", "Bar"], new Set(["Foo"]), "");
+    expect(stale).toEqual(["Bar"]);
+  });
+
+  it("keeps bridge for default-exported component when 'default' is in needed set", () => {
+    const source = "export default CollapseArrowIcon;";
+    const stale = findStaleBridgeComponents(["CollapseArrowIcon"], new Set(["default"]), source);
+    expect(stale).toEqual([]);
+  });
+
+  it("marks bridge as stale when 'default' is needed but component is not the default export", () => {
+    const source = "export default OtherComponent;";
+    const stale = findStaleBridgeComponents(["CollapseArrowIcon"], new Set(["default"]), source);
+    expect(stale).toEqual(["CollapseArrowIcon"]);
+  });
+});
+
+/* ── Bridge cleanup: removeStaleBridgeArtifacts ──────────────────────── */
+
+describe("removeStaleBridgeArtifacts", () => {
+  it("removes GlobalSelector export with JSDoc comment", () => {
+    const source = [
+      'import * as stylex from "@stylexjs/stylex";',
+      "",
+      "const styles = stylex.create({ icon: { width: 16 } });",
+      "",
+      "export const CollapseArrowIcon = (props) => <svg {...stylex.props(styles.icon)} />;",
+      "",
+      "/** @deprecated Migrate consumer to stylex.defineMarker() — bridge className for unconverted styled-components consumers */",
+      'export const CollapseArrowIconGlobalSelector = ".sc2sx-CollapseArrowIcon-a1b2c3d4";',
+    ].join("\n");
+
+    const result = removeStaleBridgeArtifacts(source, ["CollapseArrowIcon"]);
+    expect(result).not.toBeNull();
+    expect(result).not.toContain("GlobalSelector");
+    expect(result).not.toContain("@deprecated");
+    // Preserves the rest of the file
+    expect(result).toContain("stylex.create");
+    expect(result).toContain("export const CollapseArrowIcon");
+  });
+
+  it("removes GlobalSelector export without JSDoc comment", () => {
+    const source = [
+      "const styles = stylex.create({ icon: { width: 16 } });",
+      "",
+      'export const FooGlobalSelector = ".sc2sx-Foo-a1b2c3d4";',
+    ].join("\n");
+
+    const result = removeStaleBridgeArtifacts(source, ["Foo"]);
+    expect(result).not.toBeNull();
+    expect(result).not.toContain("GlobalSelector");
+  });
+
+  it("removes bridge className from array join expression", () => {
+    const source = 'className={["sc2sx-Foo-a1b2c3d4", sx.className].filter(Boolean).join(" ")}';
+
+    const result = removeStaleBridgeArtifacts(source, ["Foo"]);
+    expect(result).not.toBeNull();
+    expect(result).not.toContain("sc2sx-Foo");
+    // Should simplify [sx.className].filter(Boolean).join(" ") → sx.className
+    expect(result).toContain("className={sx.className}");
+  });
+
+  it("removes bridge className from array with external className merge", () => {
+    const source =
+      'className={["sc2sx-Foo-a1b2c3d4", sx.className, className].filter(Boolean).join(" ")}';
+
+    const result = removeStaleBridgeArtifacts(source, ["Foo"]);
+    expect(result).not.toBeNull();
+    expect(result).not.toContain("sc2sx-Foo");
+    // Should keep the remaining merge
+    expect(result).toContain('[sx.className, className].filter(Boolean).join(" ")');
+  });
+
+  it("removes standalone bridge className attribute", () => {
+    const source = '<svg className={"sc2sx-Foo-a1b2c3d4"} {...sx} />';
+
+    const result = removeStaleBridgeArtifacts(source, ["Foo"]);
+    expect(result).not.toBeNull();
+    expect(result).not.toContain("sc2sx-Foo");
+    expect(result).not.toContain("className");
+  });
+
+  it("removes only stale bridges, keeps active ones", () => {
+    const source = [
+      "/** @deprecated Migrate consumer to stylex.defineMarker() — bridge className for unconverted styled-components consumers */",
+      'export const FooGlobalSelector = ".sc2sx-Foo-11111111";',
+      "/** @deprecated Migrate consumer to stylex.defineMarker() — bridge className for unconverted styled-components consumers */",
+      'export const BarGlobalSelector = ".sc2sx-Bar-22222222";',
+    ].join("\n");
+
+    const result = removeStaleBridgeArtifacts(source, ["Foo"]);
+    expect(result).not.toBeNull();
+    expect(result).not.toContain("FooGlobalSelector");
+    expect(result).toContain("BarGlobalSelector");
+  });
+
+  it("returns null when no changes are needed", () => {
+    const source = "const x = 1;";
+    expect(removeStaleBridgeArtifacts(source, ["Foo"])).toBeNull();
+  });
+
+  it("returns null for empty stale list", () => {
+    const source = 'export const FooGlobalSelector = ".sc2sx-Foo-a1b2c3d4";';
+    expect(removeStaleBridgeArtifacts(source, [])).toBeNull();
+  });
+
+  it("handles full transformed file with bridge artifacts", () => {
+    const source = [
+      'import * as stylex from "@stylexjs/stylex";',
+      "",
+      "const styles = stylex.create({",
+      "  icon: {",
+      "    width: 16,",
+      "    height: 16,",
+      "    fill: 'currentColor',",
+      "  },",
+      "});",
+      "",
+      "export const CollapseArrowIcon = ({ className, ...props }) => {",
+      "  const sx = stylex.props(styles.icon);",
+      "  return (",
+      '    <svg {...sx} className={["sc2sx-CollapseArrowIcon-a1b2c3d4", sx.className, className].filter(Boolean).join(" ")} {...props} />',
+      "  );",
+      "};",
+      "",
+      "export default CollapseArrowIcon;",
+      "",
+      "/** @deprecated Migrate consumer to stylex.defineMarker() — bridge className for unconverted styled-components consumers */",
+      'export const CollapseArrowIconGlobalSelector = ".sc2sx-CollapseArrowIcon-a1b2c3d4";',
+    ].join("\n");
+
+    const result = removeStaleBridgeArtifacts(source, ["CollapseArrowIcon"]);
+    expect(result).not.toBeNull();
+    expect(result).not.toContain("sc2sx-CollapseArrowIcon");
+    expect(result).not.toContain("GlobalSelector");
+    expect(result).not.toContain("@deprecated");
+    // className merge should still work for external className
+    expect(result).toContain('[sx.className, className].filter(Boolean).join(" ")');
+    // Rest of file preserved
+    expect(result).toContain("stylex.create");
+    expect(result).toContain("export const CollapseArrowIcon");
+    expect(result).toContain("export default CollapseArrowIcon");
   });
 });
