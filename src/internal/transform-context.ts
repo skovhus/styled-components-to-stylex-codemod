@@ -83,10 +83,14 @@ export class TransformContext {
   needsReactImport?: boolean;
   /** Cross-file selector usages where this file is the consumer */
   crossFileSelectorUsages?: import("./transform-types.js").CrossFileSelectorUsage[];
+  /** Component names in this file that need a global selector bridge className */
+  bridgeComponentNames?: Set<string>;
   /** Marker variable names generated for cross-file parent components (parentStyleKey → markerName) */
   crossFileMarkers?: Map<string, string>;
   /** Content for the sidecar .stylex.ts file (defineMarker declarations), populated by emitStylesStep */
   sidecarStylexContent?: string;
+  /** Bridge components emitted for unconverted consumer selectors. */
+  bridgeResults?: import("./transform-types.js").BridgeComponentResult[];
   /** Inline @keyframes extracted from styled component templates: JS identifier name → frame objects */
   inlineKeyframes?: Map<string, Record<string, Record<string, unknown>>>;
   /** Maps CSS @keyframes names to sanitized JS identifier names (e.g. "fade-in" → "fadeIn") */
@@ -156,6 +160,7 @@ export class TransformContext {
     // Wire cross-file info from options
     if (options.crossFileInfo) {
       this.crossFileSelectorUsages = options.crossFileInfo.selectorUsages;
+      this.bridgeComponentNames = options.crossFileInfo.bridgeComponentNames;
     }
   }
 

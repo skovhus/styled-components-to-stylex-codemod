@@ -32,8 +32,8 @@ export interface RunTransformOptions {
   /**
    * Additional file glob(s) to scan for cross-file component selector usage.
    * Files matching this glob that are NOT in `files` trigger the bridge strategy
-   * (Scenario B: stable className + toString shim for incremental migration).
-   * Files in both globs use the marker strategy (Scenario A).
+   * (stable bridge className for incremental migration when consumers are not transformed).
+   * Files in both globs use the marker sidecar strategy (both consumer and target are transformed).
    * @example "src/**\/*.tsx"
    */
   consumerPaths?: string | string[];
@@ -298,8 +298,8 @@ export async function runTransform(options: RunTransformOptions): Promise<RunTra
     prepassResult = {
       crossFileInfo: {
         selectorUsages: new Map(),
-        componentsNeedingStyleAcceptance: new Map(),
-        componentsNeedingBridge: new Map(),
+        componentsNeedingMarkerSidecar: new Map(),
+        componentsNeedingGlobalSelectorBridge: new Map(),
       },
       consumerAnalysis: undefined,
     };
@@ -369,6 +369,12 @@ export async function runTransform(options: RunTransformOptions): Promise<RunTra
   // Map populated by the per-file transform to collect sidecar .stylex.ts files
   const sidecarFiles = new Map<string, string>();
 
+  // Map populated by the per-file transform to collect bridge results for consumer patching
+  const bridgeResults = new Map<
+    string,
+    import("./internal/transform-types.js").BridgeComponentResult[]
+  >();
+
   const result = await jscodeshiftRun(transformPath, filePaths, {
     parser,
     dry: dryRun,
@@ -376,6 +382,7 @@ export async function runTransform(options: RunTransformOptions): Promise<RunTra
     adapter: adapterWithLogging,
     crossFilePrepassResult,
     sidecarFiles,
+    bridgeResults,
     // Programmatic use passes an Adapter object (functions). That cannot be
     // serialized across process boundaries, so we must run in-band.
     runInBand: true,
@@ -388,31 +395,32 @@ export async function runTransform(options: RunTransformOptions): Promise<RunTra
     }
   }
 
-  // Run formatter commands if specified and files were transformed (not in dry run mode)
-  if (formatterCommands && formatterCommands.length > 0 && result.ok > 0 && !dryRun) {
-    for (const formatterCommand of formatterCommands) {
-      const [cmd, ...cmdArgs] = formatterCommand.split(/\s+/);
-      if (cmd) {
-        try {
-          await new Promise<void>((resolve, reject) => {
-            const proc = spawn(cmd, [...cmdArgs, ...filePaths], {
-              stdio: "inherit",
-              shell: true,
-            });
-            proc.on("close", (code) => {
-              if (code === 0) {
-                resolve();
-              } else {
-                reject(new Error(`Formatter command exited with code ${code}`));
-              }
-            });
-            proc.on("error", reject);
-          });
-        } catch (e) {
-          Logger.warn(`Formatter command failed: ${e instanceof Error ? e.message : String(e)}`);
-        }
+  // Patch unconverted consumer files that reference bridge components via CSS selectors
+  if (bridgeResults.size > 0 && !dryRun) {
+    const { buildConsumerReplacements, patchConsumerFile } =
+      await import("./internal/bridge-consumer-patcher.js");
+    const consumerReplacements = buildConsumerReplacements(
+      crossFilePrepassResult.selectorUsages,
+      bridgeResults,
+    );
+    const patchedFiles: string[] = [];
+    for (const [consumerPath, replacements] of consumerReplacements) {
+      const patched = patchConsumerFile(consumerPath, replacements);
+      if (patched !== null) {
+        await writeFile(consumerPath, patched, "utf-8");
+        patchedFiles.push(consumerPath);
       }
     }
+
+    // Include patched consumer files in formatter commands
+    if (formatterCommands && patchedFiles.length > 0) {
+      await runFormatters(formatterCommands, patchedFiles);
+    }
+  }
+
+  // Run formatter commands if specified and files were transformed (not in dry run mode)
+  if (formatterCommands && formatterCommands.length > 0 && result.ok > 0 && !dryRun) {
+    await runFormatters(formatterCommands, filePaths);
   }
 
   const report = Logger.createReport();
@@ -426,4 +434,33 @@ export async function runTransform(options: RunTransformOptions): Promise<RunTra
     timeElapsed: parseFloat(result.timeElapsed) || 0,
     warnings: report.getWarnings(),
   };
+}
+
+// --- Non-exported helpers ---
+
+/** Run formatter commands on a list of files, logging warnings on failure. */
+async function runFormatters(commands: string[], files: string[]): Promise<void> {
+  for (const formatterCommand of commands) {
+    const [cmd, ...cmdArgs] = formatterCommand.split(/\s+/);
+    if (cmd) {
+      try {
+        await new Promise<void>((res, rej) => {
+          const proc = spawn(cmd, [...cmdArgs, ...files], {
+            stdio: "inherit",
+            shell: true,
+          });
+          proc.on("close", (code) => {
+            if (code === 0) {
+              res();
+            } else {
+              rej(new Error(`Formatter command exited with code ${code}`));
+            }
+          });
+          proc.on("error", rej);
+        });
+      } catch (e) {
+        Logger.warn(`Formatter command failed: ${e instanceof Error ? e.message : String(e)}`);
+      }
+    }
+  }
 }

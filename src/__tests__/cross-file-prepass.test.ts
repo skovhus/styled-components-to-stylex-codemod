@@ -1,5 +1,5 @@
 import { describe, it, expect, vi } from "vitest";
-import { join } from "node:path";
+import { join, resolve as pathResolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { dirname } from "node:path";
 import jscodeshift from "jscodeshift";
@@ -11,6 +11,11 @@ import {
 } from "../internal/prepass/scan-cross-file-selectors.js";
 import { transformWithWarnings } from "../transform.js";
 import { fixtureAdapter } from "./fixture-adapters.js";
+import {
+  generateBridgeClassName,
+  bridgeExportName,
+} from "../internal/utilities/bridge-classname.js";
+import { buildConsumerReplacements } from "../internal/bridge-consumer-patcher.js";
 
 // Suppress codemod logs in tests
 vi.mock("../internal/logger.js", () => ({
@@ -50,14 +55,14 @@ describe("scanCrossFileSelectors", () => {
     });
 
     // Target should need style acceptance (both files being transformed)
-    const styleAcceptance = info.componentsNeedingStyleAcceptance.get(
+    const styleAcceptance = info.componentsNeedingMarkerSidecar.get(
       fixture("lib/collapse-arrow-icon.tsx"),
     );
     expect(styleAcceptance).toBeDefined();
     expect(styleAcceptance!.has("CollapseArrowIcon")).toBe(true);
 
     // No bridge needed (consumer is transformed)
-    expect(info.componentsNeedingBridge.size).toBe(0);
+    expect(info.componentsNeedingGlobalSelectorBridge.size).toBe(0);
   });
 
   it("flags bridge when consumer is NOT in the transform set", () => {
@@ -72,20 +77,22 @@ describe("scanCrossFileSelectors", () => {
     expect(usages![0]!.consumerIsTransformed).toBe(false);
 
     // Target should need a bridge (consumer is NOT transformed)
-    const bridge = info.componentsNeedingBridge.get(fixture("lib/collapse-arrow-icon.tsx"));
+    const bridge = info.componentsNeedingGlobalSelectorBridge.get(
+      fixture("lib/collapse-arrow-icon.tsx"),
+    );
     expect(bridge).toBeDefined();
     expect(bridge!.has("CollapseArrowIcon")).toBe(true);
 
     // No style acceptance needed (consumer is not transformed)
-    expect(info.componentsNeedingStyleAcceptance.size).toBe(0);
+    expect(info.componentsNeedingMarkerSidecar.size).toBe(0);
   });
 
   it("returns empty info for files with no cross-file selectors", () => {
     const info = scanCrossFileSelectors([fixture("no-cross-file.tsx")], [], resolver);
 
     expect(info.selectorUsages.size).toBe(0);
-    expect(info.componentsNeedingStyleAcceptance.size).toBe(0);
-    expect(info.componentsNeedingBridge.size).toBe(0);
+    expect(info.componentsNeedingMarkerSidecar.size).toBe(0);
+    expect(info.componentsNeedingGlobalSelectorBridge.size).toBe(0);
   });
 
   it("skips files that don't use styled-components", () => {
@@ -202,7 +209,7 @@ describe("scanCrossFileSelectors corner cases", () => {
 const j = jscodeshift.withParser("tsx");
 const api = { jscodeshift: j, j, stats: () => {}, report: () => {} };
 
-describe("cross-file transform (Scenario A)", () => {
+describe("cross-file transform (both consumer and target transformed)", () => {
   // Tests 1-4 and 6-7 (forward selector, same-file sanity, aliased, two-parents,
   // base-only, reverse) are now covered by test-cases/:
   //   selector-crossFileComponent, selector-crossFileAliased,
@@ -260,5 +267,215 @@ export const App = () => (
     expect(code).toContain("__LinkMarker");
     // It should appear as an argument inside stylex.props, not as a separate spread
     expect(code).toMatch(/stylex\.props\([^)]*__LinkMarker/);
+  });
+});
+
+/* ── Bridge className utilities ──────────────────────────────────────── */
+
+describe("generateBridgeClassName", () => {
+  it("produces a deterministic className", () => {
+    const a = generateBridgeClassName("/src/foo.tsx", "Foo");
+    const b = generateBridgeClassName("/src/foo.tsx", "Foo");
+    expect(a).toBe(b);
+  });
+
+  it("produces different classNames for different components", () => {
+    const a = generateBridgeClassName("/src/foo.tsx", "Foo");
+    const b = generateBridgeClassName("/src/foo.tsx", "Bar");
+    expect(a).not.toBe(b);
+  });
+
+  it("produces different classNames for different files", () => {
+    const a = generateBridgeClassName("/src/foo.tsx", "Foo");
+    const b = generateBridgeClassName("/src/bar.tsx", "Foo");
+    expect(a).not.toBe(b);
+  });
+
+  it("has the expected format: sc2sx-ComponentName-hash", () => {
+    const cn = generateBridgeClassName("/src/foo.tsx", "MyComponent");
+    expect(cn).toMatch(/^sc2sx-MyComponent-[0-9a-f]{8}$/);
+  });
+});
+
+describe("bridgeExportName", () => {
+  it("appends GlobalSelector suffix", () => {
+    expect(bridgeExportName("Foo")).toBe("FooGlobalSelector");
+    expect(bridgeExportName("CollapseArrowIcon")).toBe("CollapseArrowIconGlobalSelector");
+  });
+});
+
+/* ── Bridge transform (end-to-end) ───────────────────────────────────── */
+
+describe("cross-file bridge transform (consumer not transformed)", () => {
+  it("emits bridge className and GlobalSelector export for bridge components", () => {
+    const source = `
+import styled from "styled-components";
+
+export const CollapseArrowIcon = styled.svg\`
+  width: 16px;
+  height: 16px;
+  fill: currentColor;
+\`;
+
+export const App = () => <CollapseArrowIcon />;
+`;
+
+    const absPath = pathResolve("/src/lib/collapse-arrow-icon.tsx");
+    const bridgeComponentNames = new Set(["CollapseArrowIcon"]);
+
+    const result = transformWithWarnings(
+      { source, path: "/src/lib/collapse-arrow-icon.tsx" },
+      api,
+      { adapter: fixtureAdapter, crossFileInfo: { selectorUsages: [], bridgeComponentNames } },
+    );
+
+    expect(result.code).not.toBeNull();
+    const code = result.code!;
+
+    // Should contain the bridge className on the component
+    const bridgeCn = generateBridgeClassName(absPath, "CollapseArrowIcon");
+    expect(code).toContain(bridgeCn);
+
+    // Should export a GlobalSelector variable
+    expect(code).toContain("export const CollapseArrowIconGlobalSelector");
+    expect(code).toContain(`.${bridgeCn}`);
+
+    // Should have bridgeResults
+    expect(result.bridgeResults).toBeDefined();
+    expect(result.bridgeResults).toHaveLength(1);
+    expect(result.bridgeResults![0]).toMatchObject({
+      componentName: "CollapseArrowIcon",
+      className: bridgeCn,
+      globalSelectorVarName: "CollapseArrowIconGlobalSelector",
+    });
+  });
+
+  it("does NOT emit bridge for components not in bridgeComponentNames", () => {
+    const source = `
+import styled from "styled-components";
+
+export const Foo = styled.div\`
+  color: red;
+\`;
+
+export const App = () => <Foo>test</Foo>;
+`;
+
+    const result = transformWithWarnings({ source, path: "/src/foo.tsx" }, api, {
+      adapter: fixtureAdapter,
+      crossFileInfo: { selectorUsages: [], bridgeComponentNames: new Set(["Bar"]) },
+    });
+
+    expect(result.code).not.toBeNull();
+    const code = result.code!;
+
+    // No bridge export
+    expect(code).not.toContain("GlobalSelector");
+    expect(result.bridgeResults).toBeUndefined();
+  });
+});
+
+/* ── Consumer patcher ────────────────────────────────────────────────── */
+
+describe("buildConsumerReplacements", () => {
+  it("maps consumer files to their needed replacements", () => {
+    const selectorUsages = new Map<string, CrossFileSelectorUsage[]>([
+      [
+        "/src/consumer.tsx",
+        [
+          {
+            localName: "Icon",
+            importSource: "./lib/icon",
+            importedName: "Icon",
+            resolvedPath: "/src/lib/icon.tsx",
+            consumerPath: "/src/consumer.tsx",
+            consumerIsTransformed: false,
+          },
+        ],
+      ],
+    ]);
+
+    const bridgeResults = new Map([
+      [
+        "/src/lib/icon.tsx",
+        [
+          {
+            componentName: "Icon",
+            className: "sc2sx-Icon-abc12345",
+            globalSelectorVarName: "IconGlobalSelector",
+          },
+        ],
+      ],
+    ]);
+
+    const result = buildConsumerReplacements(selectorUsages, bridgeResults);
+    expect(result.size).toBe(1);
+    const replacements = result.get("/src/consumer.tsx")!;
+    expect(replacements).toHaveLength(1);
+    expect(replacements[0]).toMatchObject({
+      localName: "Icon",
+      importSource: "./lib/icon",
+      globalSelectorVarName: "IconGlobalSelector",
+    });
+  });
+
+  it("skips consumers where the target bailed (no bridge result)", () => {
+    const selectorUsages = new Map<string, CrossFileSelectorUsage[]>([
+      [
+        "/src/consumer.tsx",
+        [
+          {
+            localName: "Icon",
+            importSource: "./lib/icon",
+            importedName: "Icon",
+            resolvedPath: "/src/lib/icon.tsx",
+            consumerPath: "/src/consumer.tsx",
+            consumerIsTransformed: false,
+          },
+        ],
+      ],
+    ]);
+
+    const bridgeResults = new Map<
+      string,
+      { componentName: string; className: string; globalSelectorVarName: string }[]
+    >();
+
+    const result = buildConsumerReplacements(selectorUsages, bridgeResults);
+    expect(result.size).toBe(0);
+  });
+
+  it("skips transformed consumers (only patch unconverted consumers)", () => {
+    const selectorUsages = new Map<string, CrossFileSelectorUsage[]>([
+      [
+        "/src/consumer.tsx",
+        [
+          {
+            localName: "Icon",
+            importSource: "./lib/icon",
+            importedName: "Icon",
+            resolvedPath: "/src/lib/icon.tsx",
+            consumerPath: "/src/consumer.tsx",
+            consumerIsTransformed: true,
+          },
+        ],
+      ],
+    ]);
+
+    const bridgeResults = new Map([
+      [
+        "/src/lib/icon.tsx",
+        [
+          {
+            componentName: "Icon",
+            className: "sc2sx-Icon-abc12345",
+            globalSelectorVarName: "IconGlobalSelector",
+          },
+        ],
+      ],
+    ]);
+
+    const result = buildConsumerReplacements(selectorUsages, bridgeResults);
+    expect(result.size).toBe(0);
   });
 });

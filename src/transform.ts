@@ -26,6 +26,7 @@ import { detectStringMappingFnsStep } from "./internal/transform-steps/detect-st
 import { detectUnsupportedPatternsStep } from "./internal/transform-steps/detect-unsupported-patterns.js";
 import { rewriteCssHelpersStep } from "./internal/transform-steps/rewrite-css-helpers.js";
 import { emitStylesStep } from "./internal/transform-steps/emit-styles.js";
+import { emitBridgeExportsStep } from "./internal/transform-steps/emit-bridge-exports.js";
 import { emitWrappersStep } from "./internal/transform-steps/emit-wrappers.js";
 import { ensureMergerImportStep } from "./internal/transform-steps/ensure-merger-import.js";
 import { ensureReactImportStep } from "./internal/transform-steps/ensure-react-import.js";
@@ -38,7 +39,11 @@ import { reinsertStaticPropsStep } from "./internal/transform-steps/reinsert-sta
 import { rewriteJsxStep } from "./internal/transform-steps/rewrite-jsx.js";
 import { upgradePolymorphicAsPropTypesStep } from "./internal/transform-steps/upgrade-polymorphic-as-prop-types.js";
 
-export type { TransformOptions, TransformResult } from "./internal/transform-types.js";
+export type {
+  BridgeComponentResult,
+  TransformOptions,
+  TransformResult,
+} from "./internal/transform-types.js";
 
 /**
  * Transform styled-components to StyleX
@@ -60,6 +65,16 @@ export default function transform(file: FileInfo, api: API, options: Options): s
         const dir = dirname(file.path);
         const fileBase = basename(file.path).replace(/\.\w+$/, "");
         sidecarFiles.set(join(dir, `${fileBase}.stylex.ts`), result.sidecarContent);
+      }
+    }
+
+    // Store bridge results in the options side-channel for post-transform consumer patching
+    if (result.bridgeResults && result.bridgeResults.length > 0) {
+      const bridgeResultsMap = (options as Record<string, unknown>).bridgeResults as
+        | Map<string, import("./internal/transform-types.js").BridgeComponentResult[]>
+        | undefined;
+      if (bridgeResultsMap) {
+        bridgeResultsMap.set(pathResolve(file.path), result.bridgeResults);
       }
     }
 
@@ -101,6 +116,7 @@ export function transformWithWarnings(
     collectStaticPropsStep,
     rewriteJsxStep,
     emitWrappersStep,
+    emitBridgeExportsStep,
     upgradePolymorphicAsPropTypesStep,
     ensureMergerImportStep,
     reinsertStaticPropsStep,
@@ -128,6 +144,7 @@ export function transformWithWarnings(
  */
 interface GlobalPrepassResult {
   selectorUsages: Map<string, CrossFileSelectorUsage[]>;
+  componentsNeedingGlobalSelectorBridge: Map<string, Set<string>>;
 }
 
 /**
@@ -151,12 +168,16 @@ function extractCrossFileInfoForFile(
 
   const absPath = pathResolve(filePath);
   const selectorUsages = prepass.selectorUsages.get(absPath);
+  const bridgeComponentNames = prepass.componentsNeedingGlobalSelectorBridge.get(absPath);
 
-  if (!selectorUsages || selectorUsages.length === 0) {
+  if ((!selectorUsages || selectorUsages.length === 0) && !bridgeComponentNames) {
     return options;
   }
 
-  const crossFileInfo: CrossFileInfo = { selectorUsages };
+  const crossFileInfo: CrossFileInfo = {
+    selectorUsages: selectorUsages ?? [],
+    bridgeComponentNames,
+  };
 
   return { ...options, crossFileInfo };
 }

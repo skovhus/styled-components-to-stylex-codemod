@@ -28,6 +28,7 @@ import {
   type CrossFileInfo,
   type CrossFileSelectorUsage,
 } from "./scan-cross-file-selectors.js";
+import { isSelectorContext } from "../utilities/selector-context-heuristic.js";
 
 /* ── Public types ─────────────────────────────────────────────────────── */
 
@@ -102,8 +103,8 @@ export async function runPrepass(options: PrepassOptions): Promise<PrepassResult
 
   // Cross-file selector state
   const selectorUsages = new Map<string, CrossFileSelectorUsage[]>();
-  const componentsNeedingStyleAcceptance = new Map<string, Set<string>>();
-  const componentsNeedingBridge = new Map<string, Set<string>>();
+  const componentsNeedingMarkerSidecar = new Map<string, Set<string>>();
+  const componentsNeedingGlobalSelectorBridge = new Map<string, Set<string>>();
 
   // Consumer analysis state (if createExternalInterface)
   const asUsages = new Map<string, Set<string>>();
@@ -168,9 +169,13 @@ export async function runPrepass(options: PrepassOptions): Promise<PrepassResult
         selectorUsages.set(filePath, usages);
         for (const usage of usages) {
           if (usage.consumerIsTransformed) {
-            addToSetMap(componentsNeedingStyleAcceptance, usage.resolvedPath, usage.importedName);
+            addToSetMap(componentsNeedingMarkerSidecar, usage.resolvedPath, usage.importedName);
           } else {
-            addToSetMap(componentsNeedingBridge, usage.resolvedPath, usage.importedName);
+            addToSetMap(
+              componentsNeedingGlobalSelectorBridge,
+              usage.resolvedPath,
+              usage.importedName,
+            );
           }
         }
       }
@@ -293,8 +298,8 @@ export async function runPrepass(options: PrepassOptions): Promise<PrepassResult
 
   const crossFileInfo: CrossFileInfo = {
     selectorUsages,
-    componentsNeedingStyleAcceptance,
-    componentsNeedingBridge,
+    componentsNeedingMarkerSidecar,
+    componentsNeedingGlobalSelectorBridge,
   };
 
   if (process.env.DEBUG_CODEMOD) {
@@ -320,37 +325,10 @@ function hasRegexSelectorCandidate(source: string): boolean {
   SELECTOR_EXPR_RE.lastIndex = 0;
   for (const m of source.matchAll(SELECTOR_EXPR_RE)) {
     const pos = m.index;
-    const afterExpr = source.slice(pos + m[0].length);
-    const beforeExpr = source.slice(0, pos);
-
-    // Value context check: preceded by `:` with no `{`, `}`, or `;` between
-    const lastSemiOrBrace = Math.max(
-      beforeExpr.lastIndexOf(";"),
-      beforeExpr.lastIndexOf("{"),
-      beforeExpr.lastIndexOf("}"),
-    );
-    const lastColon = beforeExpr.lastIndexOf(":");
-    if (lastColon > lastSemiOrBrace) {
-      const colonContext = beforeExpr.slice(lastColon).trim();
-      if (!/^:[a-z-]+/i.test(colonContext)) {
-        continue; // Value context — skip
-      }
-    }
-
-    // Followed by `{` → selector context
-    const afterTrimmed = afterExpr.trimStart();
-    if (afterTrimmed.startsWith("{")) {
+    const before = source.slice(0, pos).trimEnd();
+    const after = source.slice(pos + m[0].length).trimStart();
+    if (isSelectorContext(before, after)) {
       return true;
-    }
-
-    // `{` appears before next `;` with no value-separator colon between
-    const nextBrace = afterExpr.indexOf("{");
-    const nextSemi = afterExpr.indexOf(";");
-    if (nextBrace !== -1 && (nextSemi === -1 || nextBrace < nextSemi)) {
-      const between = afterExpr.slice(0, nextBrace);
-      if (!/:\s/.test(between)) {
-        return true;
-      }
     }
   }
   return false;
@@ -449,16 +427,16 @@ function logPrepassDebug(
     }
   }
 
-  if (info.componentsNeedingStyleAcceptance.size > 0) {
-    lines.push("  Components needing style acceptance (Scenario A):");
-    for (const [file, names] of info.componentsNeedingStyleAcceptance) {
+  if (info.componentsNeedingMarkerSidecar.size > 0) {
+    lines.push("  Components needing marker sidecar (both consumer and target transformed):");
+    for (const [file, names] of info.componentsNeedingMarkerSidecar) {
       lines.push(`    ${file}: ${[...names].join(", ")}`);
     }
   }
 
-  if (info.componentsNeedingBridge.size > 0) {
-    lines.push("  Components needing bridge className (Scenario B):");
-    for (const [file, names] of info.componentsNeedingBridge) {
+  if (info.componentsNeedingGlobalSelectorBridge.size > 0) {
+    lines.push("  Components needing global selector bridge className (consumer not transformed):");
+    for (const [file, names] of info.componentsNeedingGlobalSelectorBridge) {
       lines.push(`    ${file}: ${[...names].join(", ")}`);
     }
   }

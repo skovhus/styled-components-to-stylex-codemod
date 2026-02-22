@@ -19,6 +19,7 @@ import { createPrepassParser, type AstNode, type PrepassParserName } from "./pre
 import type { ModuleResolver } from "./resolve-imports.js";
 import type { CrossFileSelectorUsage as CoreUsage } from "../transform-types.js";
 import { addToSetMap } from "../utilities/collection-utils.js";
+import { isSelectorContext } from "../utilities/selector-context-heuristic.js";
 
 /* ── Public types ─────────────────────────────────────────────────────── */
 
@@ -26,17 +27,17 @@ import { addToSetMap } from "../utilities/collection-utils.js";
 export interface CrossFileSelectorUsage extends CoreUsage {
   /** Absolute path of the consumer file */
   consumerPath: string;
-  /** Whether the consumer is in the `files` set (Scenario A) */
+  /** Whether the consumer is in the `files` set (both consumer and target are transformed) */
   consumerIsTransformed: boolean;
 }
 
 export interface CrossFileInfo {
   /** Consumer file → its cross-file selector usages */
   selectorUsages: Map<string, CrossFileSelectorUsage[]>;
-  /** Target file → set of exported component names that need style acceptance (Scenario A) */
-  componentsNeedingStyleAcceptance: Map<string, Set<string>>;
-  /** Target file → set of exported component names that need bridge className (Scenario B) */
-  componentsNeedingBridge: Map<string, Set<string>>;
+  /** Target file → exported component names needing marker sidecar (both consumer and target are transformed) */
+  componentsNeedingMarkerSidecar: Map<string, Set<string>>;
+  /** Target file → exported component names needing global selector bridge className (consumer is not transformed) */
+  componentsNeedingGlobalSelectorBridge: Map<string, Set<string>>;
 }
 
 /* ── Public API ───────────────────────────────────────────────────────── */
@@ -59,8 +60,8 @@ export function scanCrossFileSelectors(
   const allFiles = deduplicateAndResolve(filesToTransform, consumerPaths);
 
   const selectorUsages = new Map<string, CrossFileSelectorUsage[]>();
-  const componentsNeedingStyleAcceptance = new Map<string, Set<string>>();
-  const componentsNeedingBridge = new Map<string, Set<string>>();
+  const componentsNeedingMarkerSidecar = new Map<string, Set<string>>();
+  const componentsNeedingGlobalSelectorBridge = new Map<string, Set<string>>();
 
   // Create the parser once, reuse for all files (avoids per-file setup cost)
   const parser = createPrepassParser(parserName);
@@ -75,14 +76,18 @@ export function scanCrossFileSelectors(
 
     for (const usage of usages) {
       if (usage.consumerIsTransformed) {
-        addToSetMap(componentsNeedingStyleAcceptance, usage.resolvedPath, usage.importedName);
+        addToSetMap(componentsNeedingMarkerSidecar, usage.resolvedPath, usage.importedName);
       } else {
-        addToSetMap(componentsNeedingBridge, usage.resolvedPath, usage.importedName);
+        addToSetMap(componentsNeedingGlobalSelectorBridge, usage.resolvedPath, usage.importedName);
       }
     }
   }
 
-  const result = { selectorUsages, componentsNeedingStyleAcceptance, componentsNeedingBridge };
+  const result = {
+    selectorUsages,
+    componentsNeedingMarkerSidecar,
+    componentsNeedingGlobalSelectorBridge,
+  };
 
   if (process.env.DEBUG_CODEMOD) {
     logCrossFileDebug(allFiles, result);
@@ -377,50 +382,11 @@ function isStyledTag(tag: AstNode | undefined, styledName: string): boolean {
   return false;
 }
 
-/**
- * Determine if a placeholder at the given position is in a CSS selector context
- * rather than a property value context.
- *
- * Selector context: followed by `{`, or preceded by `&:pseudo ` and followed by `{` eventually.
- * Value context: after `:` with no intervening `{`, `}`, or `;`.
- */
+/** Check if a placeholder at the given position is in a CSS selector context. */
 function isPlaceholderInSelectorContext(rawCss: string, pos: number, length: number): boolean {
   const after = rawCss.slice(pos + length).trimStart();
   const before = rawCss.slice(0, pos).trimEnd();
-
-  // If preceded by `:` with no `{`, `}`, or `;` between, it's a value context
-  // (but `:hover`, `:focus` etc. are pseudo-selectors, not values)
-  const lastSemiOrBrace = Math.max(
-    before.lastIndexOf(";"),
-    before.lastIndexOf("{"),
-    before.lastIndexOf("}"),
-  );
-  const lastColon = before.lastIndexOf(":");
-  if (lastColon > lastSemiOrBrace) {
-    const colonContext = before.slice(lastColon).trim();
-    if (!/^:[a-z-]+/i.test(colonContext)) {
-      return false;
-    }
-  }
-
-  // Followed by `{` → definitely a selector
-  if (after.startsWith("{")) {
-    return true;
-  }
-
-  // A `{` appears before the next `;` → likely a selector context.
-  // Reject if there's a value-separator colon (`:` followed by whitespace),
-  // but allow pseudo-selector colons (`:hover`, `::before`, `:nth-child()`).
-  const afterUpToBrace = after.split("{")[0] ?? "";
-  const afterUpToSemi = after.split(";")[0] ?? "";
-  if (afterUpToBrace.length < afterUpToSemi.length) {
-    const hasValueSeparatorColon = /:\s|:$/.test(afterUpToBrace);
-    if (!hasValueSeparatorColon) {
-      return true;
-    }
-  }
-
-  return false;
+  return isSelectorContext(before, after);
 }
 
 /* ── Debug logging ────────────────────────────────────────────────────── */
@@ -442,16 +408,16 @@ function logCrossFileDebug(scannedFiles: string[], info: CrossFileInfo): void {
     }
   }
 
-  if (info.componentsNeedingStyleAcceptance.size > 0) {
-    lines.push("  Components needing style acceptance (Scenario A):");
-    for (const [file, names] of info.componentsNeedingStyleAcceptance) {
+  if (info.componentsNeedingMarkerSidecar.size > 0) {
+    lines.push("  Components needing marker sidecar (both consumer and target transformed):");
+    for (const [file, names] of info.componentsNeedingMarkerSidecar) {
       lines.push(`    ${file}: ${[...names].join(", ")}`);
     }
   }
 
-  if (info.componentsNeedingBridge.size > 0) {
-    lines.push("  Components needing bridge className (Scenario B):");
-    for (const [file, names] of info.componentsNeedingBridge) {
+  if (info.componentsNeedingGlobalSelectorBridge.size > 0) {
+    lines.push("  Components needing global selector bridge className (consumer not transformed):");
+    for (const [file, names] of info.componentsNeedingGlobalSelectorBridge) {
       lines.push(`    ${file}: ${[...names].join(", ")}`);
     }
   }

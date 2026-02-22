@@ -16,6 +16,15 @@ export interface TransformResult {
   warnings: WarningLog[];
   /** Content for the sidecar .stylex.ts file (defineMarker declarations). Undefined when no markers needed. */
   sidecarContent?: string;
+  /** Bridge components emitted for unconverted consumer selectors. */
+  bridgeResults?: BridgeComponentResult[];
+}
+
+/** Describes a bridge className emitted for a component targeted by unconverted consumer selectors. */
+export interface BridgeComponentResult {
+  componentName: string;
+  className: string;
+  globalSelectorVarName: string;
 }
 
 /**
@@ -68,6 +77,8 @@ export interface TransformOptions extends Options {
 export interface CrossFileInfo {
   /** Cross-file selector usages where this file is the consumer */
   selectorUsages: CrossFileSelectorUsage[];
+  /** Component names in this file that need a global selector bridge className (consumer not transformed) */
+  bridgeComponentNames?: Set<string>;
 }
 
 export interface CrossFileSelectorUsage {
@@ -323,4 +334,6 @@ export type StyledDecl = {
   };
   // Leading comments (JSDoc, line comments) from the original styled component declaration
   leadingComments?: Comment[];
+  /** Deterministic bridge CSS class name for unconverted consumer selectors */
+  bridgeClassName?: string;
 };

@@ -3,6 +3,7 @@
  * Core concepts: wrapper decisions, export mapping, and styles identifier selection.
  */
 import type { JSCodeshift, JSXAttribute, JSXSpreadAttribute } from "jscodeshift";
+import { resolve as pathResolve } from "node:path";
 import { CONTINUE, type StepResult } from "../transform-types.js";
 import type { StyledDecl } from "../transform-types.js";
 import { TransformContext, type ExportInfo } from "../transform-context.js";
@@ -10,6 +11,7 @@ import {
   isComponentUsedInJsx,
   propagateDelegationWrapperRequirements,
 } from "../utilities/delegation-utils.js";
+import { generateBridgeClassName } from "../utilities/bridge-classname.js";
 import { getRootJsxIdentifierName, isFunctionNode } from "../utilities/jscodeshift-utils.js";
 import { typeContainsPolymorphicAs } from "../utilities/polymorphic-as-detection.js";
 
@@ -156,6 +158,21 @@ export function analyzeBeforeEmitStep(ctx: TransformContext): StepResult {
     // Exported components must keep a wrapper to preserve the module's public API.
     if (exportedComponents.has(decl.localName)) {
       decl.needsWrapperComponent = true;
+    }
+
+    // Bridge className injection: components referenced by unconverted consumer selectors
+    // get a deterministic className so the consumer's `${Component} { ... }` still works.
+    if (ctx.bridgeComponentNames?.has(decl.localName)) {
+      const absPath = pathResolve(file.path);
+      decl.bridgeClassName = generateBridgeClassName(absPath, decl.localName);
+      if (!decl.attrsInfo) {
+        decl.attrsInfo = { staticAttrs: {}, conditionalAttrs: [] };
+      }
+      const existing =
+        typeof decl.attrsInfo.staticAttrs.className === "string"
+          ? decl.attrsInfo.staticAttrs.className + " "
+          : "";
+      decl.attrsInfo.staticAttrs.className = existing + decl.bridgeClassName;
     }
   }
 
