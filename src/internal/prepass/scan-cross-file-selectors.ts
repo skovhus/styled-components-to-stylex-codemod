@@ -14,7 +14,7 @@
  * bare `${Identifier}` template expressions.
  */
 import { readFileSync } from "node:fs";
-import { resolve as pathResolve } from "node:path";
+import { relative, resolve as pathResolve } from "node:path";
 import { createPrepassParser, type AstNode, type PrepassParserName } from "./prepass-parser.js";
 import type { ModuleResolver } from "./resolve-imports.js";
 import type { CrossFileSelectorUsage as CoreUsage } from "../transform-types.js";
@@ -396,6 +396,9 @@ function isPlaceholderInSelectorContext(rawCss: string, pos: number, length: num
 /* ── Debug logging ────────────────────────────────────────────────────── */
 
 function logCrossFileDebug(scannedFiles: string[], info: CrossFileInfo): void {
+  const cwd = process.cwd();
+  const rel = (p: string): string => relative(cwd, p);
+
   const lines: string[] = ["[DEBUG_CODEMOD] Cross-file selector prepass:"];
   lines.push(`  Scanned ${scannedFiles.length} file(s)`);
 
@@ -406,7 +409,7 @@ function logCrossFileDebug(scannedFiles: string[], info: CrossFileInfo): void {
     for (const [consumer, usages] of info.selectorUsages) {
       for (const u of usages) {
         lines.push(
-          `    ${consumer} → ${u.importedName} (from ${u.resolvedPath}, transformed=${u.consumerIsTransformed})`,
+          `    ${rel(consumer)} → ${u.importedName} (from ${rel(u.resolvedPath)}, transformed=${u.consumerIsTransformed})`,
         );
       }
     }
@@ -415,14 +418,14 @@ function logCrossFileDebug(scannedFiles: string[], info: CrossFileInfo): void {
   if (info.componentsNeedingMarkerSidecar.size > 0) {
     lines.push("  Components needing marker sidecar (both consumer and target transformed):");
     for (const [file, names] of info.componentsNeedingMarkerSidecar) {
-      lines.push(`    ${file}: ${[...names].join(", ")}`);
+      lines.push(`    ${rel(file)}: ${[...names].join(", ")}`);
     }
   }
 
   if (info.componentsNeedingGlobalSelectorBridge.size > 0) {
     lines.push("  Components needing global selector bridge className (consumer not transformed):");
     for (const [file, names] of info.componentsNeedingGlobalSelectorBridge) {
-      lines.push(`    ${file}: ${[...names].join(", ")}`);
+      lines.push(`    ${rel(file)}: ${[...names].join(", ")}`);
     }
   }
 
