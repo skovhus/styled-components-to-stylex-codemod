@@ -107,11 +107,22 @@ export async function runPrepass(options: PrepassOptions): Promise<PrepassResult
       }
     : (p: string): string => pathResolve(p);
 
+  const _t: Record<string, number> = {};
+  const _mark = (label: string) => {
+    _t[label] = performance.now();
+  };
+  const _elapsed = (label: string) => ((performance.now() - _t[label]!) | 0) + "ms";
+  _mark("prepass-total");
+
+  _mark("dedup");
   const transformSet = new Set(filesToTransform.map(toRealPath));
   const allFiles = deduplicateAndResolve(filesToTransform, consumerPaths).map(toRealPath);
   const allFilesSet = new Set(allFiles);
   const uniqueAllFiles = [...allFilesSet];
   const parser = createPrepassParser(parserName);
+  process.stderr.write(
+    `  [prepass] dedup+resolve: ${_elapsed("dedup")} (${uniqueAllFiles.length} unique files)\n`,
+  );
 
   const resolve: Resolve = (specifier, fromFile) => {
     const result = resolver.resolve(pathResolve(fromFile), specifier);
@@ -147,20 +158,33 @@ export async function runPrepass(options: PrepassOptions): Promise<PrepassResult
   };
 
   // Phase 1: Single pass — read all files, classify by content, analyze relevant ones.
+  _mark("phase1");
+  let _phase1ReadCount = 0;
+  let _phase1StyledCount = 0;
+  let _phase1AstCount = 0;
+  let _phase1ReadTime = 0;
+  let _phase1RegexTime = 0;
+  let _phase1AstTime = 0;
   for (const filePath of uniqueAllFiles) {
+    const _r0 = performance.now();
     let source: string;
     try {
       source = readFileSync(filePath, "utf-8");
     } catch {
       continue;
     }
+    _phase1ReadTime += performance.now() - _r0;
 
+    _phase1ReadCount++;
+    const _rx0 = performance.now();
     const hasStyled = source.includes("styled-components");
     const hasAsProp = createExternalInterface && AS_PROP_RE.test(source);
 
     if (!hasStyled && !hasAsProp) {
+      _phase1RegexTime += performance.now() - _rx0;
       continue;
     }
+    _phase1StyledCount++;
 
     // Cache source for cross-referencing in Phase 2
     fileContents.set(filePath, source);
@@ -174,6 +198,9 @@ export async function runPrepass(options: PrepassOptions): Promise<PrepassResult
       BARE_TEMPLATE_IDENTIFIER_RE.test(source) &&
       hasRegexSelectorCandidate(source)
     ) {
+      _phase1RegexTime += performance.now() - _rx0;
+      _phase1AstCount++;
+      const _a0 = performance.now();
       const usages = scanFileForSelectorsAst(
         filePath,
         source,
@@ -183,6 +210,7 @@ export async function runPrepass(options: PrepassOptions): Promise<PrepassResult
         toRealPath,
         astCache,
       );
+      _phase1AstTime += performance.now() - _a0;
       if (usages.length > 0) {
         selectorUsages.set(filePath, usages);
         for (const usage of usages) {
@@ -197,6 +225,8 @@ export async function runPrepass(options: PrepassOptions): Promise<PrepassResult
           }
         }
       }
+    } else {
+      _phase1RegexTime += performance.now() - _rx0;
     }
 
     if (createExternalInterface && hasStyled) {
@@ -228,7 +258,15 @@ export async function runPrepass(options: PrepassOptions): Promise<PrepassResult
     }
   }
 
+  process.stderr.write(
+    `  [prepass] phase1: ${_elapsed("phase1")} (${_phase1ReadCount} read, ${_phase1StyledCount} styled, ${_phase1AstCount} AST-parsed)\n`,
+  );
+  process.stderr.write(
+    `    readFS: ${_phase1ReadTime | 0}ms, regex: ${_phase1RegexTime | 0}ms, AST: ${_phase1AstTime | 0}ms\n`,
+  );
+
   // Phase 2: Cross-referencing consumer usages (if createExternalInterface)
+  _mark("phase2");
   let consumerAnalysis: Map<string, ExternalInterfaceResult> | undefined;
 
   if (createExternalInterface) {
@@ -313,6 +351,9 @@ export async function runPrepass(options: PrepassOptions): Promise<PrepassResult
       }
     }
   }
+
+  process.stderr.write(`  [prepass] phase2: ${_elapsed("phase2")}\n`);
+  process.stderr.write(`  [prepass] total: ${_elapsed("prepass-total")}\n`);
 
   const crossFileInfo: CrossFileInfo = {
     selectorUsages,

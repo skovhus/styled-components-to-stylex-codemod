@@ -111,4 +111,34 @@ describe("public API runtime validation (DX)", () => {
       /expected an adapter object/i,
     );
   });
+
+  it('runTransform: throws when externalInterface is "auto" but consumerPaths is not set', async () => {
+    const adapter = {
+      resolveValue: () => undefined,
+      resolveCall: () => undefined,
+      resolveSelector: () => undefined,
+      externalInterface: "auto" as const,
+      styleMerger: null,
+    };
+    await expect(
+      runTransform({ files: "src/__tests__/fixtures/**/*.tsx", adapter }),
+    ).rejects.toThrowError(/consumerPaths is not set/);
+  });
+
+  it("runTransform: throws when consumerPaths matches no files", async () => {
+    const adapter = {
+      resolveValue: () => undefined,
+      resolveCall: () => undefined,
+      resolveSelector: () => undefined,
+      externalInterface: "auto" as const,
+      styleMerger: null,
+    };
+    await expect(
+      runTransform({
+        files: "src/__tests__/fixtures/**/*.tsx",
+        consumerPaths: "nonexistent-dir-xyz/**/*.tsx",
+        adapter,
+      }),
+    ).rejects.toThrowError(/consumerPaths matched no files/);
+  });
 });

@@ -195,6 +195,17 @@ export async function runTransform(options: RunTransformOptions): Promise<RunTra
   const adapterInput = options.adapter;
   assertValidAdapterInput(adapterInput, "runTransform(options)");
 
+  // externalInterface: "auto" requires consumerPaths to know where to scan
+  if (adapterInput.externalInterface === "auto" && !consumerPathsOption) {
+    throw new Error(
+      [
+        'runTransform(options): externalInterface is "auto" but consumerPaths is not set.',
+        "Auto-detection needs consumer file globs to scan for styled(Component) and as-prop usage.",
+        'Example: consumerPaths: "src/**/*.tsx"',
+      ].join("\n"),
+    );
+  }
+
   const resolveValueWithLogging = (ctx: ResolveValueContext): ResolveValueResult | undefined => {
     try {
       return adapterInput.resolveValue(ctx);
@@ -233,7 +244,14 @@ export async function runTransform(options: RunTransformOptions): Promise<RunTra
     }
   };
 
+  const _t: Record<string, number> = {};
+  const _mark = (label: string) => {
+    _t[label] = performance.now();
+  };
+  const _elapsed = (label: string) => ((performance.now() - _t[label]!) | 0) + "ms";
+
   // Resolve file paths from glob patterns
+  _mark("glob-files");
   const patterns = Array.isArray(files) ? files : [files];
   const filePaths: string[] = [];
 
@@ -243,6 +261,9 @@ export async function runTransform(options: RunTransformOptions): Promise<RunTra
       filePaths.push(file);
     }
   }
+  process.stderr.write(
+    `[perf] glob files: ${_elapsed("glob-files")} (${filePaths.length} files)\n`,
+  );
 
   if (filePaths.length === 0) {
     Logger.warn("No files matched the provided glob pattern(s)");
@@ -259,6 +280,7 @@ export async function runTransform(options: RunTransformOptions): Promise<RunTra
   Logger.setFileCount(filePaths.length);
 
   // Resolve consumer paths for cross-file selector prepass
+  _mark("glob-consumers");
   const consumerPatterns = consumerPathsOption
     ? Array.isArray(consumerPathsOption)
       ? consumerPathsOption
@@ -271,13 +293,30 @@ export async function runTransform(options: RunTransformOptions): Promise<RunTra
     }
   }
 
+  process.stderr.write(
+    `[perf] glob consumers: ${_elapsed("glob-consumers")} (${consumerFilePaths.length} files)\n`,
+  );
+
+  if (consumerPatterns.length > 0 && consumerFilePaths.length === 0) {
+    throw new Error(
+      [
+        "runTransform(options): consumerPaths matched no files.",
+        `Pattern(s): ${consumerPatterns.join(", ")}`,
+        "Check that the glob pattern is correct and files exist.",
+      ].join("\n"),
+    );
+  }
+
   // Create shared module resolver
+  _mark("resolver");
   const { createModuleResolver } = await import("./internal/prepass/resolve-imports.js");
   const sharedResolver = createModuleResolver();
+  process.stderr.write(`[perf] create resolver: ${_elapsed("resolver")}\n`);
 
   // Unified prepass: cross-file selectors + optional consumer analysis in a single pass.
   // If the prepass crashes (e.g. on Windows, parse errors), log a warning and continue
   // with empty results — the per-file transform still works, just without cross-file info.
+  _mark("prepass");
   const { runPrepass } = await import("./internal/prepass/run-prepass.js");
   const absoluteFiles = filePaths.map((f) => resolve(f));
   const absoluteConsumers = consumerFilePaths.map((f) => resolve(f));
@@ -305,6 +344,8 @@ export async function runTransform(options: RunTransformOptions): Promise<RunTra
       consumerAnalysis: undefined,
     };
   }
+
+  process.stderr.write(`[perf] prepass: ${_elapsed("prepass")}\n`);
 
   const crossFilePrepassResult = prepassResult.crossFileInfo;
 
