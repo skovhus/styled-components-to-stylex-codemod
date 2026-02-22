@@ -1,3 +1,3 @@
 import * as stylex from "@stylexjs/stylex";
 
-export const __IconButtonMarker = stylex.defineMarker();
+export const IconButtonMarker = stylex.defineMarker();

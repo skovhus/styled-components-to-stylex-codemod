@@ -1,12 +1,12 @@
 import * as stylex from "@stylexjs/stylex";
 import { CrossFileLink } from "./lib/cross-file-icon.styled";
 
-import { __CrossFileLinkMarker } from "./selector-crossFileReverse.input.stylex";
+import { CrossFileLinkMarker } from "./selector-crossFileReverse.input.stylex";
 
 export function App() {
   return (
     <div style={{ padding: 16 }}>
-      <CrossFileLink href="#" {...stylex.props(__CrossFileLinkMarker)}>
+      <CrossFileLink href="#" {...stylex.props(CrossFileLinkMarker)}>
         <span {...stylex.props(styles.badge, styles.badgeInCrossFileLink)} />
         Hover me
       </CrossFileLink>
@@ -25,7 +25,7 @@ const styles = stylex.create({
   badgeInCrossFileLink: {
     backgroundColor: {
       default: "gray",
-      [stylex.when.ancestor(":hover", __CrossFileLinkMarker)]: "rebeccapurple",
+      [stylex.when.ancestor(":hover", CrossFileLinkMarker)]: "rebeccapurple",
     },
   },
 });

@@ -116,7 +116,7 @@ function emitDefineMarkerDeclarations(
   const fileBase = basename(ctx.file.path).replace(/\.\w+$/, "");
   const sidecarImportPath = `./${fileBase}.stylex`;
 
-  // Insert `import { __XMarker, ... } from "./file.stylex"` after existing imports
+  // Insert `import { XMarker, ... } from "./file.stylex"` after existing imports
   const importDecl = j.importDeclaration(
     markerNames.map((name) => j.importSpecifier(j.identifier(name))),
     j.literal(sidecarImportPath),

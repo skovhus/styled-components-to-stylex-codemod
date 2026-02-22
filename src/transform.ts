@@ -168,7 +168,7 @@ function extractCrossFileInfoForFile(
 
   const absPath = pathResolve(filePath);
   const selectorUsages = prepass.selectorUsages.get(absPath);
-  const bridgeComponentNames = prepass.componentsNeedingGlobalSelectorBridge.get(absPath);
+  const bridgeComponentNames = prepass.componentsNeedingGlobalSelectorBridge?.get(absPath);
 
   if ((!selectorUsages || selectorUsages.length === 0) && !bridgeComponentNames) {
     return options;

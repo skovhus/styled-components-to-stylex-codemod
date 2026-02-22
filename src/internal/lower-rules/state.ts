@@ -25,7 +25,7 @@ export type RelationOverride = {
   childExtraStyleKeys?: string[];
   /** When true, this override involves a cross-file component and uses defineMarker() */
   crossFile?: boolean;
-  /** Variable name of the marker for cross-file overrides (e.g. "__ButtonMarker") */
+  /** Variable name of the marker for cross-file overrides (e.g. "ButtonMarker") */
   markerVarName?: string;
   /** Local name of the imported cross-file component (child in forward, parent in reverse) */
   crossFileComponentLocalName?: string;

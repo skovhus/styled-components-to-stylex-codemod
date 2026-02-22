@@ -1,13 +1,13 @@
 import * as stylex from "@stylexjs/stylex";
 import { CrossFileIcon } from "./lib/cross-file-icon.styled";
 
-import { __IconButtonMarker } from "./selector-crossFileComponent.input.stylex";
+import { IconButtonMarker } from "./selector-crossFileComponent.input.stylex";
 
 export function App() {
   return (
     <div style={{ display: "flex", gap: 16, padding: 16 }}>
       <CrossFileIcon />
-      <button {...stylex.props(styles.button, styles.iconButton, __IconButtonMarker)}>
+      <button {...stylex.props(styles.button, styles.iconButton, IconButtonMarker)}>
         <CrossFileIcon {...stylex.props(styles.crossFileIconInIconButton)} />
         Hover
       </button>
@@ -33,7 +33,7 @@ const styles = stylex.create({
     transition: "transform 0.2s",
     transform: {
       default: null,
-      [stylex.when.ancestor(":hover", __IconButtonMarker)]: "rotate(180deg)",
+      [stylex.when.ancestor(":hover", IconButtonMarker)]: "rotate(180deg)",
     },
   },
 });

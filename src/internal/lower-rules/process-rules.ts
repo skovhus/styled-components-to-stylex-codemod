@@ -434,7 +434,7 @@ export function processDeclRules(ctx: DeclProcessingState): void {
         ancestorSelectorParents.add(parentStyleKey);
 
         // For cross-file reverse, register a defineMarker for the imported parent
-        const reverseMarkerVarName = crossFileParent ? `__${otherLocal}Marker` : undefined;
+        const reverseMarkerVarName = crossFileParent ? `${otherLocal}Marker` : undefined;
 
         const overrideCountBeforeReverse = relationOverrides.length;
         // Process declarations once, then register into each pseudo bucket
@@ -530,7 +530,7 @@ export function processDeclRules(ctx: DeclProcessingState): void {
 
         // For cross-file, compute the marker variable name (stored on RelationOverride,
         // derived into crossFileMarkers map by lowerRules after processing completes)
-        const markerVarName = crossFileUsage ? `__${decl.localName}Marker` : undefined;
+        const markerVarName = crossFileUsage ? `${decl.localName}Marker` : undefined;
 
         // getOrCreateRelationOverrideBucket creates the RelationOverride entry on first
         // call for this overrideStyleKey. Track count to detect new entries.

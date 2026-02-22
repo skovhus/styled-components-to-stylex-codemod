@@ -5,6 +5,7 @@
  * Reads each file once, classifies by content (styled-components / as-prop),
  * and runs AST parsing + consumer analysis only on relevant files.
  */
+import { createHash } from "node:crypto";
 import { readFileSync, realpathSync } from "node:fs";
 import { resolve as pathResolve } from "node:path";
 import type { ExternalInterfaceResult } from "../../adapter.js";
@@ -39,11 +40,20 @@ interface PrepassOptions {
   parserName?: PrepassParserName;
   /** When true, also detect as-prop + styled() wrapping patterns */
   createExternalInterface: boolean;
+  /** When true, cache AST-derived data (importMap, styledImportName, selectorLocals) keyed by content hash */
+  enableAstCache?: boolean;
 }
 
 interface PrepassResult {
   crossFileInfo: CrossFileInfo;
   consumerAnalysis: Map<string, ExternalInterfaceResult> | undefined;
+}
+
+/** Cached AST-derived data for a single file, keyed by content hash. */
+interface AstCacheEntry {
+  importMap: Map<string, { source: string; importedName: string }>;
+  styledImportName: string | undefined;
+  selectorLocals: Set<string>;
 }
 
 /* ── Regex patterns (compiled once at module scope) ───────────────────── */
@@ -57,8 +67,15 @@ const JSX_AS_COMPONENT_RE = /<([A-Z][A-Za-z0-9]*)\b[^<>]*\bas[={]/g;
 /* ── Public API ───────────────────────────────────────────────────────── */
 
 export async function runPrepass(options: PrepassOptions): Promise<PrepassResult> {
-  const { filesToTransform, consumerPaths, resolver, parserName, createExternalInterface } =
-    options;
+  const {
+    filesToTransform,
+    consumerPaths,
+    resolver,
+    parserName,
+    createExternalInterface,
+    enableAstCache,
+  } = options;
+  const astCache = enableAstCache ? new Map<string, AstCacheEntry>() : undefined;
   // Normalize paths to real paths to handle macOS /var → /private/var symlinks.
   // Probe the first file — if realpath matches, skip realpathSync entirely.
   const needsRealpath = (() => {
@@ -164,6 +181,7 @@ export async function runPrepass(options: PrepassOptions): Promise<PrepassResult
         resolver,
         parser,
         toRealPath,
+        astCache,
       );
       if (usages.length > 0) {
         selectorUsages.set(filePath, usages);
@@ -342,38 +360,50 @@ function scanFileForSelectorsAst(
   resolver: ModuleResolver,
   parser: ReturnType<typeof createPrepassParser>,
   toRealPath: (p: string) => string,
+  cache?: Map<string, AstCacheEntry>,
 ): CrossFileSelectorUsage[] {
-  let ast: AstNode;
-  try {
-    ast = parser.parse(source) as AstNode;
-  } catch {
+  // Check cache by content hash (same content at different paths → one parse)
+  const hash = cache ? createHash("md5").update(source).digest("hex") : undefined;
+  const cached = cache && hash ? cache.get(hash) : undefined;
+
+  let importMap: Map<string, { source: string; importedName: string }>;
+  let styledImportName: string | undefined;
+  let selectorLocals: Set<string>;
+
+  if (cached) {
+    importMap = cached.importMap;
+    styledImportName = cached.styledImportName;
+    selectorLocals = cached.selectorLocals;
+  } else {
+    let ast: AstNode;
+    try {
+      ast = parser.parse(source) as AstNode;
+    } catch {
+      return [];
+    }
+
+    const program = (ast.program ?? ast) as AstNode;
+
+    const importNodes: AstNode[] = [];
+    const taggedTemplateNodes: AstNode[] = [];
+    walkForImportsAndTemplates(program, importNodes, taggedTemplateNodes);
+
+    importMap = buildImportMapFromNodes(importNodes);
+    styledImportName = findStyledImportNameFromNodes(importNodes);
+    selectorLocals = styledImportName
+      ? findComponentSelectorLocalsFromNodes(taggedTemplateNodes, styledImportName)
+      : new Set();
+
+    if (cache && hash) {
+      cache.set(hash, { importMap, styledImportName, selectorLocals });
+    }
+  }
+
+  if (importMap.size === 0 || !styledImportName || selectorLocals.size === 0) {
     return [];
   }
 
-  const program = (ast.program ?? ast) as AstNode;
-
-  const importNodes: AstNode[] = [];
-  const taggedTemplateNodes: AstNode[] = [];
-  walkForImportsAndTemplates(program, importNodes, taggedTemplateNodes);
-
-  const importMap = buildImportMapFromNodes(importNodes);
-  if (importMap.size === 0) {
-    return [];
-  }
-
-  const styledImportName = findStyledImportNameFromNodes(importNodes);
-  if (!styledImportName) {
-    return [];
-  }
-
-  const selectorLocals = findComponentSelectorLocalsFromNodes(
-    taggedTemplateNodes,
-    styledImportName,
-  );
-  if (selectorLocals.size === 0) {
-    return [];
-  }
-
+  // Resolve loop always runs — depends on filePath + resolver, not just file content
   const consumerIsTransformed = transformSet.has(filePath);
   const usages: CrossFileSelectorUsage[] = [];
   for (const localName of selectorLocals) {

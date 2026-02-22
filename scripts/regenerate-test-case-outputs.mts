@@ -86,7 +86,10 @@ async function updateFixture(name: string, ext: string) {
   // returns { styles: true }) mimics a real-world app config to reproduce
   // TS errors from the verbose className merging pattern.
   const adapter = selectAdapter(name);
-  const crossFilePrepassResult = { selectorUsages: prepassResult.selectorUsages };
+  const crossFilePrepassResult = {
+    selectorUsages: prepassResult.selectorUsages,
+    componentsNeedingGlobalSelectorBridge: prepassResult.componentsNeedingGlobalSelectorBridge,
+  };
   const sidecarFiles = new Map<string, string>();
   const result = applyTransform(
     transform,

@@ -1,3 +1,3 @@
 import * as stylex from "@stylexjs/stylex";
 
-export const __CardMarker = stylex.defineMarker();
+export const CardMarker = stylex.defineMarker();

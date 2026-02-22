@@ -155,12 +155,27 @@ Adapters are the main extension point, see full example above. They let you cont
 - which exported components should support external className/style extension and/or polymorphic `as` prop (`externalInterface`)
 - how className/style merging is handled for components accepting external styling (`styleMerger`)
 
+#### Cross-file selectors (`consumerPaths`)
+
+When transforming a subset of files, other files may reference your styled components as CSS selectors (e.g. `${Icon} { fill: red }`). Pass `consumerPaths` to scan those files and wire up cross-file selectors automatically:
+
+```ts
+await runTransform({
+  files: "src/components/**/*.tsx", // files to transform
+  consumerPaths: "src/**/*.tsx", // additional files to scan for cross-file usage
+  adapter,
+});
+```
+
+- Files in **both** `files` and `consumerPaths` use the **marker sidecar** strategy (both consumer and target are transformed, using `stylex.defineMarker()`).
+- Files in `consumerPaths` but **not** in `files` use the **bridge** strategy (a stable `className` is added to the converted component so unconverted consumers' selectors still work).
+
 #### Auto-detecting external interface usage (experimental)
 
-Instead of manually specifying which components need `styles` or `as` support, set `externalInterface: "auto"` to auto-detect usage by scanning your consumer code with [ripgrep](https://github.com/BurntSushi/ripgrep) (`rg`).
+Instead of manually specifying which components need `styles` or `as` support, set `externalInterface: "auto"` to auto-detect usage by scanning consumer code.
 
 > [!NOTE]
-> Experimental. Requires `rg` installed and available in `$PATH`. Not supported on Windows.
+> Experimental. Requires `consumerPaths` to be set.
 
 ```ts
 import { runTransform, defineAdapter } from "styled-components-to-stylex-codemod";
@@ -172,12 +187,12 @@ const adapter = defineAdapter({
 
 await runTransform({
   files: "src/**/*.tsx",
-  consumerPaths: "src/**/*.tsx", // used for both cross-file selectors AND auto external interface
+  consumerPaths: "src/**/*.tsx", // required for auto-detection
   adapter,
 });
 ```
 
-When `externalInterface: "auto"` is set, `runTransform()` scans the directories derived from `files` and `consumerPaths` for `styled(Component)` calls and `<Component as={...}>` JSX usage, resolves imports back to the component definition files, and returns the appropriate `{ styles, as }` flags automatically.
+When `externalInterface: "auto"` is set, `runTransform()` scans `files` and `consumerPaths` for `styled(Component)` calls and `<Component as={...}>` JSX usage, resolves imports back to the component definition files, and returns the appropriate `{ styles, as }` flags automatically.
 
 #### Dynamic interpolations
 

@@ -1,16 +1,16 @@
 import * as stylex from "@stylexjs/stylex";
 import { CrossFileIcon } from "./lib/cross-file-icon.styled";
 
-import { __ButtonAMarker, __ButtonBMarker } from "./selector-crossFileTwoParents.input.stylex";
+import { ButtonAMarker, ButtonBMarker } from "./selector-crossFileTwoParents.input.stylex";
 
 export function App() {
   return (
     <div style={{ display: "flex", gap: 16, padding: 16 }}>
-      <button {...stylex.props(styles.buttonA, __ButtonAMarker)}>
+      <button {...stylex.props(styles.buttonA, ButtonAMarker)}>
         <CrossFileIcon {...stylex.props(styles.crossFileIconInButtonA)} />
         Parent A
       </button>
-      <button {...stylex.props(styles.buttonB, __ButtonBMarker)}>
+      <button {...stylex.props(styles.buttonB, ButtonBMarker)}>
         <CrossFileIcon {...stylex.props(styles.crossFileIconInButtonB)} />
         Parent B
       </button>

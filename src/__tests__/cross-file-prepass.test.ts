@@ -264,9 +264,9 @@ export const App = () => (
     const code = result.code!;
 
     // The marker should be added to the existing stylex.props call on <Link>
-    expect(code).toContain("__LinkMarker");
+    expect(code).toContain("LinkMarker");
     // It should appear as an argument inside stylex.props, not as a separate spread
-    expect(code).toMatch(/stylex\.props\([^)]*__LinkMarker/);
+    expect(code).toMatch(/stylex\.props\([^)]*LinkMarker/);
   });
 });
 

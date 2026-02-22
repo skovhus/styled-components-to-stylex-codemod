@@ -290,6 +290,7 @@ export async function runTransform(options: RunTransformOptions): Promise<RunTra
       resolver: sharedResolver,
       parserName: parser,
       createExternalInterface: adapterInput.externalInterface === "auto",
+      enableAstCache: true,
     });
   } catch (err) {
     Logger.warn(
