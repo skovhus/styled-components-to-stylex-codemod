@@ -106,13 +106,19 @@ describe("public API runtime validation (DX)", () => {
     await expect(runTransform({ adapter: {} } as any)).rejects.toThrowError(/`files` is required/);
   });
 
-  it("runTransform: throws a helpful message when adapter is missing", async () => {
-    await expect(runTransform({ files: "src/**/*.tsx" } as any)).rejects.toThrowError(
-      /expected an adapter object/i,
+  it("runTransform: throws a helpful message when consumerPaths is missing", async () => {
+    await expect(runTransform({ files: "src/**/*.tsx", adapter: {} } as any)).rejects.toThrowError(
+      /`consumerPaths` is required/,
     );
   });
 
-  it('runTransform: throws when externalInterface is "auto" but consumerPaths is not set', async () => {
+  it("runTransform: throws a helpful message when adapter is missing", async () => {
+    await expect(
+      runTransform({ files: "src/**/*.tsx", consumerPaths: null } as any),
+    ).rejects.toThrowError(/expected an adapter object/i);
+  });
+
+  it('runTransform: throws when externalInterface is "auto" but consumerPaths is null', async () => {
     const adapter = {
       resolveValue: () => undefined,
       resolveCall: () => undefined,
@@ -121,8 +127,8 @@ describe("public API runtime validation (DX)", () => {
       styleMerger: null,
     };
     await expect(
-      runTransform({ files: "src/__tests__/fixtures/**/*.tsx", adapter }),
-    ).rejects.toThrowError(/consumerPaths is not set/);
+      runTransform({ files: "src/__tests__/fixtures/**/*.tsx", consumerPaths: null, adapter }),
+    ).rejects.toThrowError(/consumerPaths is null/);
   });
 
   it("runTransform: throws when consumerPaths matches no files", async () => {

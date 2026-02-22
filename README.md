@@ -38,6 +38,7 @@ const adapter = defineAdapter({
 
 await runTransform({
   files: "src/**/*.tsx",
+  consumerPaths: null, // set to a glob to enable cross-file selector support
   adapter,
   dryRun: false,
   parser: "tsx",
@@ -136,6 +137,7 @@ const adapter = defineAdapter({
 
 await runTransform({
   files: "src/**/*.tsx",
+  consumerPaths: null,
   adapter,
   dryRun: false,
   parser: "tsx",
@@ -156,6 +158,8 @@ Adapters are the main extension point, see full example above. They let you cont
 - how className/style merging is handled for components accepting external styling (`styleMerger`)
 
 #### Cross-file selectors (`consumerPaths`)
+
+`consumerPaths` is required. Pass `null` to opt out, or a glob pattern to enable cross-file selector scanning.
 
 When transforming a subset of files, other files may reference your styled components as CSS selectors (e.g. `${Icon} { fill: red }`). Pass `consumerPaths` to scan those files and wire up cross-file selectors automatically:
 

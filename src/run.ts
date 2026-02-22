@@ -30,13 +30,19 @@ export interface RunTransformOptions {
   files: string | string[];
 
   /**
-   * Additional file glob(s) to scan for cross-file component selector usage.
-   * Files matching this glob that are NOT in `files` trigger the bridge strategy
-   * (stable bridge className for incremental migration when consumers are not transformed).
-   * Files in both globs use the marker sidecar strategy (both consumer and target are transformed).
+   * File glob(s) to scan for cross-file component selector usage, or `null` to opt out.
+   *
+   * When set to a glob pattern, files matching this glob that are NOT in `files` trigger
+   * the bridge strategy (stable bridge className for incremental migration when consumers
+   * are not transformed). Files in both globs use the marker sidecar strategy (both
+   * consumer and target are transformed).
+   *
+   * Required when `externalInterface` is `"auto"`.
+   *
    * @example "src/**\/*.tsx"
+   * @example null  // opt out of cross-file scanning
    */
-  consumerPaths?: string | string[];
+  consumerPaths: string | string[] | null;
 
   /**
    * Adapter for customizing the transform.
@@ -118,6 +124,7 @@ const __dirname = dirname(__filename);
  *
  * await runTransform({
  *   files: 'src/**\/*.tsx',
+ *   consumerPaths: null,
  *   adapter,
  *   dryRun: true,
  * });
@@ -134,7 +141,7 @@ export async function runTransform(options: RunTransformOptions): Promise<RunTra
         "Example (plain JS):",
         '  import { runTransform, defineAdapter } from "styled-components-to-stylex-codemod";',
         "  const adapter = defineAdapter({ resolveValue() { return null; } });",
-        '  await runTransform({ files: "src/**/*.tsx", adapter });',
+        '  await runTransform({ files: "src/**/*.tsx", consumerPaths: null, adapter });',
       ].join("\n"),
     );
   }
@@ -178,6 +185,19 @@ export async function runTransform(options: RunTransformOptions): Promise<RunTra
     }
   }
 
+  // Validate consumerPaths is explicitly provided (null to opt out, or a glob string/array).
+  const consumerPathsRaw = (options as { consumerPaths?: unknown }).consumerPaths;
+  if (consumerPathsRaw === undefined) {
+    throw new Error(
+      [
+        "runTransform(options): `consumerPaths` is required.",
+        "Pass a glob pattern to enable cross-file selector scanning, or `null` to opt out.",
+        'Example: consumerPaths: "src/**/*.tsx"  // scan for cross-file usage',
+        "Example: consumerPaths: null             // opt out",
+      ].join("\n"),
+    );
+  }
+
   const {
     files,
     consumerPaths: consumerPathsOption,
@@ -196,10 +216,10 @@ export async function runTransform(options: RunTransformOptions): Promise<RunTra
   assertValidAdapterInput(adapterInput, "runTransform(options)");
 
   // externalInterface: "auto" requires consumerPaths to know where to scan
-  if (adapterInput.externalInterface === "auto" && !consumerPathsOption) {
+  if (adapterInput.externalInterface === "auto" && consumerPathsOption === null) {
     throw new Error(
       [
-        'runTransform(options): externalInterface is "auto" but consumerPaths is not set.',
+        'runTransform(options): externalInterface is "auto" but consumerPaths is null.',
         "Auto-detection needs consumer file globs to scan for styled(Component) and as-prop usage.",
         'Example: consumerPaths: "src/**/*.tsx"',
       ].join("\n"),
@@ -244,14 +264,7 @@ export async function runTransform(options: RunTransformOptions): Promise<RunTra
     }
   };
 
-  const _t: Record<string, number> = {};
-  const _mark = (label: string) => {
-    _t[label] = performance.now();
-  };
-  const _elapsed = (label: string) => ((performance.now() - _t[label]!) | 0) + "ms";
-
   // Resolve file paths from glob patterns
-  _mark("glob-files");
   const patterns = Array.isArray(files) ? files : [files];
   const filePaths: string[] = [];
 
@@ -261,9 +274,6 @@ export async function runTransform(options: RunTransformOptions): Promise<RunTra
       filePaths.push(file);
     }
   }
-  process.stderr.write(
-    `[perf] glob files: ${_elapsed("glob-files")} (${filePaths.length} files)\n`,
-  );
 
   if (filePaths.length === 0) {
     Logger.warn("No files matched the provided glob pattern(s)");
@@ -280,7 +290,6 @@ export async function runTransform(options: RunTransformOptions): Promise<RunTra
   Logger.setFileCount(filePaths.length);
 
   // Resolve consumer paths for cross-file selector prepass
-  _mark("glob-consumers");
   const consumerPatterns = consumerPathsOption
     ? Array.isArray(consumerPathsOption)
       ? consumerPathsOption
@@ -293,10 +302,6 @@ export async function runTransform(options: RunTransformOptions): Promise<RunTra
     }
   }
 
-  process.stderr.write(
-    `[perf] glob consumers: ${_elapsed("glob-consumers")} (${consumerFilePaths.length} files)\n`,
-  );
-
   if (consumerPatterns.length > 0 && consumerFilePaths.length === 0) {
     throw new Error(
       [
@@ -308,15 +313,12 @@ export async function runTransform(options: RunTransformOptions): Promise<RunTra
   }
 
   // Create shared module resolver
-  _mark("resolver");
   const { createModuleResolver } = await import("./internal/prepass/resolve-imports.js");
   const sharedResolver = createModuleResolver();
-  process.stderr.write(`[perf] create resolver: ${_elapsed("resolver")}\n`);
 
   // Unified prepass: cross-file selectors + optional consumer analysis in a single pass.
   // If the prepass crashes (e.g. on Windows, parse errors), log a warning and continue
   // with empty results — the per-file transform still works, just without cross-file info.
-  _mark("prepass");
   const { runPrepass } = await import("./internal/prepass/run-prepass.js");
   const absoluteFiles = filePaths.map((f) => resolve(f));
   const absoluteConsumers = consumerFilePaths.map((f) => resolve(f));
@@ -344,8 +346,6 @@ export async function runTransform(options: RunTransformOptions): Promise<RunTra
       consumerAnalysis: undefined,
     };
   }
-
-  process.stderr.write(`[perf] prepass: ${_elapsed("prepass")}\n`);
 
   const crossFilePrepassResult = prepassResult.crossFileInfo;
 
