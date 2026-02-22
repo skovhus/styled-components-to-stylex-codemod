@@ -204,22 +204,27 @@ export function postProcessTransformedAst(args: {
       // Cross-file forward child: add override styles to imported child JSX
       const childOverrides = elementName ? crossFileChildOverrides.get(elementName) : undefined;
       if (childOverrides) {
+        const overrideArgs: any[] = [];
         for (const o of childOverrides) {
           if (!ancestorHasParentKey(ancestors, o.parentStyleKey)) {
             continue;
           }
-          const overrideArg = j.memberExpression(
-            j.identifier("styles"),
-            j.identifier(o.overrideStyleKey),
+          overrideArgs.push(
+            j.memberExpression(j.identifier("styles"), j.identifier(o.overrideStyleKey)),
           );
-          const stylexPropsCall = j.callExpression(
-            j.memberExpression(j.identifier("stylex"), j.identifier("props")),
-            [overrideArg],
-          );
-          opening.attributes = [
-            ...(opening.attributes ?? []),
-            j.jsxSpreadAttribute(stylexPropsCall),
-          ];
+        }
+        if (overrideArgs.length > 0) {
+          // Merge into an existing stylex.props() spread if present, otherwise create a new one
+          const existingCall = getStylexPropsCallFromAttrs(opening.attributes ?? []);
+          if (existingCall) {
+            existingCall.arguments = [...(existingCall.arguments ?? []), ...overrideArgs];
+          } else {
+            const newCall = j.callExpression(
+              j.memberExpression(j.identifier("stylex"), j.identifier("props")),
+              overrideArgs,
+            );
+            opening.attributes = [...(opening.attributes ?? []), j.jsxSpreadAttribute(newCall)];
+          }
           changed = true;
         }
       }

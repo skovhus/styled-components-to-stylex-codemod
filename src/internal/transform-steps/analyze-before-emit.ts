@@ -162,7 +162,13 @@ export function analyzeBeforeEmitStep(ctx: TransformContext): StepResult {
 
     // Bridge className injection: components referenced by unconverted consumer selectors
     // get a deterministic className so the consumer's `${Component} { ... }` still works.
-    if (ctx.bridgeComponentNames?.has(decl.localName)) {
+    // Note: for default imports, the prepass stores "default" as importedName; resolve it
+    // to the actual local name by checking which decl is the default export.
+    const isBridgeComponent =
+      ctx.bridgeComponentNames?.has(decl.localName) ||
+      (ctx.bridgeComponentNames?.has("default") &&
+        exportedComponents.get(decl.localName)?.isDefault);
+    if (isBridgeComponent) {
       const absPath = pathResolve(file.path);
       decl.bridgeClassName = generateBridgeClassName(absPath, decl.localName);
       if (!decl.attrsInfo) {

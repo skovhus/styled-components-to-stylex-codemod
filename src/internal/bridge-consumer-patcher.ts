@@ -32,10 +32,14 @@ export function buildConsumerReplacements(
   const consumerReplacements = new Map<string, ConsumerReplacement[]>();
 
   // Build a lookup: targetPath:componentName → BridgeComponentResult
+  // Also index by exportName (e.g. "default") for default-imported components
   const bridgeLookup = new Map<string, BridgeComponentResult>();
   for (const [targetPath, results] of bridgeResults) {
     for (const result of results) {
       bridgeLookup.set(`${targetPath}:${result.componentName}`, result);
+      if (result.exportName && result.exportName !== result.componentName) {
+        bridgeLookup.set(`${targetPath}:${result.exportName}`, result);
+      }
     }
   }
 

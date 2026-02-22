@@ -268,6 +268,64 @@ export const App = () => (
     // It should appear as an argument inside stylex.props, not as a separate spread
     expect(code).toMatch(/stylex\.props\([^)]*LinkMarker/);
   });
+
+  it("forward cross-file: merges overrides into existing stylex.props() instead of adding new spread", () => {
+    // Issue: cross-file forward overrides appended a new {...stylex.props(...)} spread
+    // instead of merging into the existing one. Later spreads clobber className/style.
+    const source = `
+import * as stylex from "@stylexjs/stylex";
+import styled from "styled-components";
+import { CrossFileIcon } from "./lib/cross-file-icon.styled";
+
+const iconStyles = stylex.create({ icon: { opacity: 0.5 } });
+
+const Container = styled.div\`
+  padding: 16px;
+
+  \${CrossFileIcon} {
+    width: 30px;
+  }
+\`;
+
+export const App = () => (
+  <Container>
+    <CrossFileIcon {...stylex.props(iconStyles.icon)} />
+  </Container>
+);
+`;
+
+    const crossFileInfo = {
+      selectorUsages: [
+        {
+          localName: "CrossFileIcon",
+          importSource: "./lib/cross-file-icon.styled",
+          importedName: "CrossFileIcon",
+          resolvedPath: fixture("lib/cross-file-icon.styled.tsx"),
+        },
+      ],
+    };
+
+    const result = transformWithWarnings(
+      { source, path: fixture("consumer-forward-existing-props.tsx") },
+      api,
+      { adapter: fixtureAdapter, crossFileInfo },
+    );
+
+    expect(result.code).not.toBeNull();
+    const code = result.code!;
+
+    // The override should be merged INTO the existing stylex.props() call
+    // NOT added as a second {...stylex.props(...)} spread
+    const stylexPropsCount = (code.match(/stylex\.props\(/g) ?? []).length;
+
+    // There should be exactly 2 stylex.props calls: one on <div> (Container) and one on <CrossFileIcon>
+    // NOT 3 (which would indicate a separate spread was added)
+    expect(stylexPropsCount).toBeLessThanOrEqual(2);
+
+    // The CrossFileIcon's stylex.props should contain both the existing iconStyles.icon
+    // AND the override styles.crossFileIconInContainer
+    expect(code).toMatch(/stylex\.props\(iconStyles\.icon.*styles\./);
+  });
 });
 
 /* ── Bridge className utilities ──────────────────────────────────────── */
@@ -348,6 +406,48 @@ export const App = () => <CollapseArrowIcon />;
       className: bridgeCn,
       globalSelectorVarName: "CollapseArrowIconGlobalSelector",
     });
+  });
+
+  it("emits bridge for default-exported component when bridgeComponentNames has 'default'", () => {
+    // Issue: scanner stores importedName: "default" for default imports, but
+    // bridge matching checked decl.localName, silently missing default-exported components.
+    const source = `
+import styled from "styled-components";
+
+const CollapseArrowIcon = styled.svg\`
+  width: 16px;
+  height: 16px;
+  fill: currentColor;
+\`;
+
+export default CollapseArrowIcon;
+
+export const App = () => <CollapseArrowIcon />;
+`;
+
+    const absPath = pathResolve("/src/lib/collapse-arrow-icon.tsx");
+    // The prepass stores "default" as the importedName for default imports
+    const bridgeComponentNames = new Set(["default"]);
+
+    const result = transformWithWarnings(
+      { source, path: "/src/lib/collapse-arrow-icon.tsx" },
+      api,
+      { adapter: fixtureAdapter, crossFileInfo: { selectorUsages: [], bridgeComponentNames } },
+    );
+
+    expect(result.code).not.toBeNull();
+    const code = result.code!;
+
+    // Should contain the bridge className
+    const bridgeCn = generateBridgeClassName(absPath, "CollapseArrowIcon");
+    expect(code).toContain(bridgeCn);
+
+    // Should export a GlobalSelector variable
+    expect(code).toContain("GlobalSelector");
+
+    // Should have bridgeResults
+    expect(result.bridgeResults).toBeDefined();
+    expect(result.bridgeResults).toHaveLength(1);
   });
 
   it("does NOT emit bridge for components not in bridgeComponentNames", () => {
@@ -477,5 +577,49 @@ describe("buildConsumerReplacements", () => {
 
     const result = buildConsumerReplacements(selectorUsages, bridgeResults);
     expect(result.size).toBe(0);
+  });
+
+  it("matches default-imported component (importedName='default') to bridge result", () => {
+    // Issue: scanner stores importedName: "default" for default imports,
+    // but bridge results use componentName (the local name). The lookup must handle both.
+    const selectorUsages = new Map<string, CrossFileSelectorUsage[]>([
+      [
+        "/src/consumer.tsx",
+        [
+          {
+            localName: "Icon",
+            importSource: "./lib/icon",
+            importedName: "default",
+            resolvedPath: "/src/lib/icon.tsx",
+            consumerPath: "/src/consumer.tsx",
+            consumerIsTransformed: false,
+          },
+        ],
+      ],
+    ]);
+
+    const bridgeResults = new Map([
+      [
+        "/src/lib/icon.tsx",
+        [
+          {
+            componentName: "Icon",
+            exportName: "default" as const,
+            className: "sc2sx-Icon-abc12345",
+            globalSelectorVarName: "IconGlobalSelector",
+          },
+        ],
+      ],
+    ]);
+
+    const result = buildConsumerReplacements(selectorUsages, bridgeResults);
+    expect(result.size).toBe(1);
+    const replacements = result.get("/src/consumer.tsx")!;
+    expect(replacements).toHaveLength(1);
+    expect(replacements[0]).toMatchObject({
+      localName: "Icon",
+      importSource: "./lib/icon",
+      globalSelectorVarName: "IconGlobalSelector",
+    });
   });
 });

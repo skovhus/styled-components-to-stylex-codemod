@@ -55,6 +55,7 @@ export function emitBridgeExportsStep(ctx: TransformContext): StepResult {
 
     bridgeResults.push({
       componentName: decl.localName,
+      exportName: ctx.exportedComponents?.get(decl.localName)?.exportName,
       className,
       globalSelectorVarName: varName,
     });

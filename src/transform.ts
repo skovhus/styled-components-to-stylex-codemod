@@ -4,6 +4,7 @@
  */
 import type { API, FileInfo, Options } from "jscodeshift";
 import { basename, dirname, join, resolve as pathResolve } from "node:path";
+import { realpathSync } from "node:fs";
 
 import { Logger } from "./internal/logger.js";
 import { TransformContext } from "./internal/transform-context.js";
@@ -68,13 +69,14 @@ export default function transform(file: FileInfo, api: API, options: Options): s
       }
     }
 
-    // Store bridge results in the options side-channel for post-transform consumer patching
+    // Store bridge results in the options side-channel for post-transform consumer patching.
+    // Use realpath to match the prepass key normalization (handles symlinks).
     if (result.bridgeResults && result.bridgeResults.length > 0) {
       const bridgeResultsMap = (options as Record<string, unknown>).bridgeResults as
         | Map<string, import("./internal/transform-types.js").BridgeComponentResult[]>
         | undefined;
       if (bridgeResultsMap) {
-        bridgeResultsMap.set(pathResolve(file.path), result.bridgeResults);
+        bridgeResultsMap.set(toRealPath(file.path), result.bridgeResults);
       }
     }
 
@@ -166,7 +168,10 @@ function extractCrossFileInfoForFile(
     return options;
   }
 
-  const absPath = pathResolve(filePath);
+  // Normalize to the same path form the prepass used. The prepass resolves to
+  // real paths (handling macOS /var → /private/var symlinks), so try pathResolve
+  // first and fall back to realpathSync if the key isn't found.
+  const absPath = resolveToPrepassKey(filePath, prepass);
   const selectorUsages = prepass.selectorUsages.get(absPath);
   const bridgeComponentNames = prepass.componentsNeedingGlobalSelectorBridge?.get(absPath);
 
@@ -180,4 +185,41 @@ function extractCrossFileInfoForFile(
   };
 
   return { ...options, crossFileInfo };
+}
+
+/**
+ * Resolve a file path to the key form used by the prepass maps.
+ * Tries pathResolve first; falls back to realpathSync if the key isn't found
+ * (handles macOS /var → /private/var and similar symlink divergences).
+ */
+function resolveToPrepassKey(filePath: string, prepass: GlobalPrepassResult): string {
+  const resolved = pathResolve(filePath);
+  if (
+    prepass.selectorUsages.has(resolved) ||
+    prepass.componentsNeedingGlobalSelectorBridge?.has(resolved)
+  ) {
+    return resolved;
+  }
+  try {
+    const real = realpathSync(resolved);
+    if (real !== resolved) {
+      return real;
+    }
+  } catch {
+    // File may not exist yet (e.g. dry-run); keep the resolved path
+  }
+  return resolved;
+}
+
+/**
+ * Resolve a file path to its real (symlink-resolved) absolute path.
+ * Falls back to pathResolve if realpathSync fails.
+ */
+function toRealPath(filePath: string): string {
+  const resolved = pathResolve(filePath);
+  try {
+    return realpathSync(resolved);
+  } catch {
+    return resolved;
+  }
 }

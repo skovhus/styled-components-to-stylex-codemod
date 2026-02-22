@@ -23,6 +23,8 @@ export interface TransformResult {
 /** Describes a bridge className emitted for a component targeted by unconverted consumer selectors. */
 export interface BridgeComponentResult {
   componentName: string;
+  /** The export name (e.g. "default" for default exports, or the named export identifier). */
+  exportName?: string;
   className: string;
   globalSelectorVarName: string;
 }
