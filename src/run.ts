@@ -470,6 +470,46 @@ export async function runTransform(options: RunTransformOptions): Promise<RunTra
     }
   }
 
+  // Clean up stale bridge artifacts from previous runs.
+  // When a consumer is later transformed (switching from bridge to marker path),
+  // the target's bridge className and GlobalSelector export become dead code.
+  if (!dryRun) {
+    const { detectBridgeExports, findStaleBridgeComponents, removeStaleBridgeArtifacts } =
+      await import("./internal/bridge-cleanup.js");
+
+    const cleanedFiles: string[] = [];
+    for (const filePath of absoluteFiles) {
+      let source: string;
+      try {
+        source = readFileSync(filePath, "utf-8");
+      } catch {
+        continue;
+      }
+
+      const existingBridges = detectBridgeExports(source);
+      if (existingBridges.length === 0) {
+        continue;
+      }
+
+      const stillNeeded =
+        crossFilePrepassResult.componentsNeedingGlobalSelectorBridge.get(filePath);
+      const staleBridges = findStaleBridgeComponents(existingBridges, stillNeeded, source);
+      if (staleBridges.length === 0) {
+        continue;
+      }
+
+      const cleaned = removeStaleBridgeArtifacts(source, staleBridges);
+      if (cleaned) {
+        await writeFile(filePath, cleaned, "utf-8");
+        cleanedFiles.push(filePath);
+      }
+    }
+
+    if (formatterCommands && cleanedFiles.length > 0) {
+      await runFormatters(formatterCommands, cleanedFiles);
+    }
+  }
+
   // Run formatter commands if specified and files were transformed (not in dry run mode)
   if (formatterCommands && formatterCommands.length > 0 && result.ok > 0 && !dryRun) {
     await runFormatters(formatterCommands, filePaths);
