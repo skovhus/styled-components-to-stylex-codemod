@@ -5,6 +5,7 @@
  * Reads each file once, classifies by content (styled-components / as-prop),
  * and runs AST parsing + consumer analysis only on relevant files.
  */
+import { execSync } from "node:child_process";
 import { createHash } from "node:crypto";
 import { readFileSync, realpathSync } from "node:fs";
 import { resolve as pathResolve } from "node:path";
@@ -107,22 +108,11 @@ export async function runPrepass(options: PrepassOptions): Promise<PrepassResult
       }
     : (p: string): string => pathResolve(p);
 
-  const _t: Record<string, number> = {};
-  const _mark = (label: string) => {
-    _t[label] = performance.now();
-  };
-  const _elapsed = (label: string) => ((performance.now() - _t[label]!) | 0) + "ms";
-  _mark("prepass-total");
-
-  _mark("dedup");
   const transformSet = new Set(filesToTransform.map(toRealPath));
   const allFiles = deduplicateAndResolve(filesToTransform, consumerPaths).map(toRealPath);
   const allFilesSet = new Set(allFiles);
   const uniqueAllFiles = [...allFilesSet];
   const parser = createPrepassParser(parserName);
-  process.stderr.write(
-    `  [prepass] dedup+resolve: ${_elapsed("dedup")} (${uniqueAllFiles.length} unique files)\n`,
-  );
 
   const resolve: Resolve = (specifier, fromFile) => {
     const result = resolver.resolve(pathResolve(fromFile), specifier);
@@ -157,34 +147,29 @@ export async function runPrepass(options: PrepassOptions): Promise<PrepassResult
     }
   };
 
+  // Optional rg pre-filter: skip reading files that don't contain relevant patterns
+  const rgFiltered = rgPreFilter(uniqueAllFiles);
+
   // Phase 1: Single pass — read all files, classify by content, analyze relevant ones.
-  _mark("phase1");
-  let _phase1ReadCount = 0;
-  let _phase1StyledCount = 0;
-  let _phase1AstCount = 0;
-  let _phase1ReadTime = 0;
-  let _phase1RegexTime = 0;
-  let _phase1AstTime = 0;
   for (const filePath of uniqueAllFiles) {
-    const _r0 = performance.now();
+    // If rg pre-filter is available and file is not in the result set, skip it
+    if (rgFiltered && !rgFiltered.has(filePath)) {
+      continue;
+    }
+
     let source: string;
     try {
       source = readFileSync(filePath, "utf-8");
     } catch {
       continue;
     }
-    _phase1ReadTime += performance.now() - _r0;
 
-    _phase1ReadCount++;
-    const _rx0 = performance.now();
     const hasStyled = source.includes("styled-components");
     const hasAsProp = createExternalInterface && AS_PROP_RE.test(source);
 
     if (!hasStyled && !hasAsProp) {
-      _phase1RegexTime += performance.now() - _rx0;
       continue;
     }
-    _phase1StyledCount++;
 
     // Cache source for cross-referencing in Phase 2
     fileContents.set(filePath, source);
@@ -198,9 +183,6 @@ export async function runPrepass(options: PrepassOptions): Promise<PrepassResult
       BARE_TEMPLATE_IDENTIFIER_RE.test(source) &&
       hasRegexSelectorCandidate(source)
     ) {
-      _phase1RegexTime += performance.now() - _rx0;
-      _phase1AstCount++;
-      const _a0 = performance.now();
       const usages = scanFileForSelectorsAst(
         filePath,
         source,
@@ -210,7 +192,6 @@ export async function runPrepass(options: PrepassOptions): Promise<PrepassResult
         toRealPath,
         astCache,
       );
-      _phase1AstTime += performance.now() - _a0;
       if (usages.length > 0) {
         selectorUsages.set(filePath, usages);
         for (const usage of usages) {
@@ -225,8 +206,6 @@ export async function runPrepass(options: PrepassOptions): Promise<PrepassResult
           }
         }
       }
-    } else {
-      _phase1RegexTime += performance.now() - _rx0;
     }
 
     if (createExternalInterface && hasStyled) {
@@ -258,15 +237,7 @@ export async function runPrepass(options: PrepassOptions): Promise<PrepassResult
     }
   }
 
-  process.stderr.write(
-    `  [prepass] phase1: ${_elapsed("phase1")} (${_phase1ReadCount} read, ${_phase1StyledCount} styled, ${_phase1AstCount} AST-parsed)\n`,
-  );
-  process.stderr.write(
-    `    readFS: ${_phase1ReadTime | 0}ms, regex: ${_phase1RegexTime | 0}ms, AST: ${_phase1AstTime | 0}ms\n`,
-  );
-
   // Phase 2: Cross-referencing consumer usages (if createExternalInterface)
-  _mark("phase2");
   let consumerAnalysis: Map<string, ExternalInterfaceResult> | undefined;
 
   if (createExternalInterface) {
@@ -351,9 +322,6 @@ export async function runPrepass(options: PrepassOptions): Promise<PrepassResult
       }
     }
   }
-
-  process.stderr.write(`  [prepass] phase2: ${_elapsed("phase2")}\n`);
-  process.stderr.write(`  [prepass] total: ${_elapsed("prepass-total")}\n`);
 
   const crossFileInfo: CrossFileInfo = {
     selectorUsages,
@@ -473,6 +441,67 @@ function scanFileForSelectorsAst(
   }
 
   return usages;
+}
+
+/* ── ripgrep pre-filter ───────────────────────────────────────────────── */
+
+/**
+ * Use ripgrep to quickly find files containing "styled-components" or `as[={]`.
+ * Returns a Set of absolute file paths, or undefined if rg is not available.
+ */
+function rgPreFilter(files: readonly string[]): Set<string> | undefined {
+  const dirs = deduplicateParentDirs(files);
+  if (dirs.length === 0) {
+    return undefined;
+  }
+
+  try {
+    const pattern = String.raw`(styled-components|\bas[={])`;
+    const globArgs = ["*.tsx", "*.ts", "*.jsx", "*.js", "*.mts", "*.cts", "*.mjs", "*.cjs"]
+      .map((glob) => `--glob ${shellQuote(glob)}`)
+      .join(" ");
+    const cmd = `rg -l ${shellQuote(pattern)} ${globArgs} ${dirs.map(shellQuote).join(" ")}`;
+    const output = execSync(cmd, { encoding: "utf-8", maxBuffer: 10 * 1024 * 1024 });
+    return new Set(
+      output
+        .trim()
+        .split("\n")
+        .filter(Boolean)
+        .map((f) => pathResolve(f)),
+    );
+  } catch (err: unknown) {
+    // rg exit code 1 = no matches (valid result: empty set)
+    if (err instanceof Error && "status" in err && (err as { status: number }).status === 1) {
+      return new Set();
+    }
+    // rg not installed or other error — fall back to reading all files
+    return undefined;
+  }
+}
+
+function shellQuote(s: string): string {
+  return "'" + s.replace(/'/g, "'\\''") + "'";
+}
+
+/**
+ * Given a list of absolute file paths, extract the minimal set of parent directories.
+ * E.g., ["/a/b/c.ts", "/a/b/d.ts", "/a/e/f.ts"] → ["/a/b/", "/a/e/"]
+ * Then dedup so "/a/" subsumes both "/a/b/" and "/a/e/".
+ */
+function deduplicateParentDirs(files: readonly string[]): string[] {
+  const dirSet = new Set<string>();
+  for (const f of files) {
+    dirSet.add(f.slice(0, f.lastIndexOf("/") + 1));
+  }
+  const sorted = [...dirSet].sort();
+  const result: string[] = [];
+  for (const d of sorted) {
+    if (result.length > 0 && d.startsWith(result[result.length - 1]!)) {
+      continue;
+    }
+    result.push(d);
+  }
+  return result;
 }
 
 /* ── Debug logging ────────────────────────────────────────────────────── */
