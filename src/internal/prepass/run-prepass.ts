@@ -76,6 +76,7 @@ export async function runPrepass(options: PrepassOptions): Promise<PrepassResult
     createExternalInterface,
     enableAstCache,
   } = options;
+  const t0 = performance.now();
   const astCache = enableAstCache ? new Map<string, AstCacheEntry>() : undefined;
   // Normalize paths to real paths to handle macOS /var → /private/var symlinks.
   // Probe the first file — if realpath matches, skip realpathSync entirely.
@@ -114,9 +115,19 @@ export async function runPrepass(options: PrepassOptions): Promise<PrepassResult
   const uniqueAllFiles = [...allFilesSet];
   const parser = createPrepassParser(parserName);
 
+  const resolveCache = new Map<string, string | null>();
   const resolve: Resolve = (specifier, fromFile) => {
-    const result = resolver.resolve(pathResolve(fromFile), specifier);
-    return result ? toRealPath(result) : null;
+    const absFromFile = pathResolve(fromFile);
+    const key = `${absFromFile}\0${specifier}`;
+    const cached = resolveCache.get(key);
+    if (cached !== undefined) {
+      return cached;
+    }
+
+    const result = resolver.resolve(absFromFile, specifier);
+    const normalized = result ? toRealPath(result) : null;
+    resolveCache.set(key, normalized);
+    return normalized;
   };
 
   // Cross-file selector state
@@ -329,6 +340,22 @@ export async function runPrepass(options: PrepassOptions): Promise<PrepassResult
     componentsNeedingGlobalSelectorBridge,
   };
 
+  // Summary log
+  {
+    const elapsed = ((performance.now() - t0) / 1000).toFixed(1);
+    const reStyled = consumerAnalysis
+      ? [...consumerAnalysis.values()].filter((v) => v.styles).length
+      : 0;
+    const asProp = consumerAnalysis ? [...consumerAnalysis.values()].filter((v) => v.as).length : 0;
+    process.stdout.write(
+      `Prepass: scanned ${uniqueAllFiles.length} files in ${elapsed}s` +
+        ` — ${fileContents.size} with styled-components` +
+        `, ${selectorUsages.size} cross-file selectors` +
+        `, ${reStyled} re-styled` +
+        `, ${asProp} as-prop\n`,
+    );
+  }
+
   if (process.env.DEBUG_CODEMOD) {
     logPrepassDebug(uniqueAllFiles, crossFileInfo, consumerAnalysis);
   }
@@ -340,6 +367,9 @@ export async function runPrepass(options: PrepassOptions): Promise<PrepassResult
 
 /** Matches `${Identifier}` in source — used to find potential selector expressions. */
 const SELECTOR_EXPR_RE = /\$\{\s*([A-Za-z_$][\w$]*)\s*\}/g;
+/** Matches static `import ... from "..."` declarations (multi-line safe). */
+const IMPORT_DECLARATION_RE = /import\s+[\s\S]*?\s+from\s+["'][^"']+["']/g;
+const IMPORT_IDENTIFIER_RE_CACHE = new Map<string, RegExp>();
 
 /**
  * Fast regex pre-filter: checks if the source contains any `${Identifier}`
@@ -349,8 +379,17 @@ const SELECTOR_EXPR_RE = /\$\{\s*([A-Za-z_$][\w$]*)\s*\}/g;
  * saving ~120ms of babel parsing time per run.
  */
 function hasRegexSelectorCandidate(source: string): boolean {
+  const importText = collectImportDeclarationText(source);
+  if (importText.length === 0) {
+    return false;
+  }
+
   SELECTOR_EXPR_RE.lastIndex = 0;
   for (const m of source.matchAll(SELECTOR_EXPR_RE)) {
+    const identifier = m[1];
+    if (!identifier || !importTextMentionsIdentifier(importText, identifier)) {
+      continue;
+    }
     const pos = m.index;
     const before = source.slice(0, pos).trimEnd();
     const after = source.slice(pos + m[0].length).trimStart();
@@ -359,6 +398,30 @@ function hasRegexSelectorCandidate(source: string): boolean {
     }
   }
   return false;
+}
+
+function collectImportDeclarationText(source: string): string {
+  IMPORT_DECLARATION_RE.lastIndex = 0;
+  const blocks: string[] = [];
+  for (const match of source.matchAll(IMPORT_DECLARATION_RE)) {
+    if (match[0]) {
+      blocks.push(match[0]);
+    }
+  }
+  return blocks.join("\n");
+}
+
+function importTextMentionsIdentifier(importText: string, identifier: string): boolean {
+  let re = IMPORT_IDENTIFIER_RE_CACHE.get(identifier);
+  if (!re) {
+    re = new RegExp(`(?:^|[^A-Za-z0-9_$])${escapeRegexForRegExp(identifier)}(?:$|[^A-Za-z0-9_$])`);
+    IMPORT_IDENTIFIER_RE_CACHE.set(identifier, re);
+  }
+  return re.test(importText);
+}
+
+function escapeRegexForRegExp(s: string): string {
+  return s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 }
 
 /** Scan a single file for cross-file selector usages using AST parsing. */
