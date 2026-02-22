@@ -126,6 +126,10 @@ Run `pnpm storybook` to start the dev server and visually compare transformation
 
 To verify rendering programmatically, run `node scripts/verify-storybook-rendering.mts`. The script is self-contained: it builds Storybook, starts a static file server, and auto-installs Playwright Chromium. Use `--only-changed` to check only test cases changed on the current branch, or `--save-diffs` to save diff images for mismatches.
 
+## Environment Variables
+
+- `DEBUG_CODEMOD=1` — Enables verbose prepass diagnostic logging to stderr. Dumps every cross-file selector usage with full paths, components needing marker sidecars or global selector bridges, and consumer analysis entries. Useful for debugging cross-file resolution issues.
+
 ## Skills
 
 Skills are located in `.claude/skills/`.
