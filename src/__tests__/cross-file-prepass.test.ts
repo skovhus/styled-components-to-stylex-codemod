@@ -190,6 +190,19 @@ describe("scanCrossFileSelectors corner cases", () => {
     expect(usages![0]!.localName).toBe("CollapseArrowIcon");
   });
 
+  it("detects selector preceded by interpolated pseudo-class (&:${expr} ${Comp})", () => {
+    const info = scanCrossFileSelectors(
+      [fixture("consumer-interpolated-pseudo.tsx"), fixture("lib/collapse-arrow-icon.tsx")],
+      [],
+      resolver,
+    );
+
+    const usages = info.selectorUsages.get(fixture("consumer-interpolated-pseudo.tsx"));
+    expect(usages).toBeDefined();
+    expect(usages).toHaveLength(1);
+    expect(usages![0]!.localName).toBe("CollapseArrowIcon");
+  });
+
   it("detects selector with renamed styled import (import styledComponents from ...)", () => {
     const info = scanCrossFileSelectors(
       [fixture("consumer-renamed-styled.tsx"), fixture("lib/collapse-arrow-icon.tsx")],

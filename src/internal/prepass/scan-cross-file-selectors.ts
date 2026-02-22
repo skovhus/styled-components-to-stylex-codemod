@@ -386,7 +386,10 @@ function isStyledTag(tag: AstNode | undefined, styledName: string): boolean {
 function isPlaceholderInSelectorContext(rawCss: string, pos: number, length: number): boolean {
   const after = rawCss.slice(pos + length).trimStart();
   const before = rawCss.slice(0, pos).trimEnd();
-  return isSelectorContext(before, after);
+  // Replace placeholders in `before` with a valid CSS identifier so that
+  // `&:__SC_EXPR_N__` is recognized as a pseudo-selector (like `&:hover`)
+  // rather than a property-value colon context.
+  return isSelectorContext(before.replace(PLACEHOLDER_RE, "hover"), after);
 }
 
 /* ── Debug logging ────────────────────────────────────────────────────── */
