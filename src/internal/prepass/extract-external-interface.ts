@@ -2,8 +2,6 @@
 //
 // Exports helpers used by run-prepass.ts for consumer analysis:
 //   findImportSource, resolveBarrelReExport, fileExports, fileImportsFrom
-// Also exports:
-//   extractSearchDirsFromGlobs — derive rg-compatible directory paths from glob patterns
 import path from "node:path";
 // ---------------------------------------------------------------------------
 // Public exports
@@ -182,62 +180,4 @@ function getFileImportsFromRes(name: string): [RegExp, RegExp] {
     fileImportsFromReCache.set(name, cached);
   }
   return cached;
-}
-
-/**
- * Derive `rg`-compatible directory paths from glob patterns.
- *
- * For each pattern, extracts the directory prefix before the first glob metacharacter
- * (`*`, `?`, `{`, `[`). De-duplicates subdirectories (e.g. `["src/", "src/lib/"]` → `["src/"]`).
- */
-export function extractSearchDirsFromGlobs(patterns: string[]): string[] {
-  const dirs: string[] = [];
-  for (const pattern of patterns) {
-    const firstMeta = findFirstGlobMeta(pattern);
-    let dir: string;
-    if (firstMeta === 0) {
-      dir = ".";
-    } else if (firstMeta === -1) {
-      // No glob chars — treat as a literal file path, use its directory
-      dir = path.dirname(pattern);
-    } else {
-      // Extract directory portion up to the glob metacharacter
-      dir = pattern.slice(0, firstMeta);
-      // Trim to last directory separator
-      const lastSep = Math.max(dir.lastIndexOf("/"), dir.lastIndexOf(path.sep));
-      dir = lastSep > 0 ? dir.slice(0, lastSep + 1) : ".";
-    }
-    // Normalize: ensure trailing slash, resolve . → cwd-relative
-    dir = dir.endsWith("/") || dir.endsWith(path.sep) ? dir : dir + "/";
-    dirs.push(dir);
-  }
-  return deduplicateDirs(dirs);
-}
-
-// ---------------------------------------------------------------------------
-// Glob helpers (private)
-// ---------------------------------------------------------------------------
-
-const GLOB_META_CHARS = new Set(["*", "?", "{", "["]);
-
-function findFirstGlobMeta(pattern: string): number {
-  for (let i = 0; i < pattern.length; i++) {
-    if (GLOB_META_CHARS.has(pattern[i]!)) {
-      return i;
-    }
-  }
-  return -1;
-}
-
-function deduplicateDirs(dirs: string[]): string[] {
-  const unique = [...new Set(dirs)].sort();
-  const result: string[] = [];
-  for (const dir of unique) {
-    // Skip if any previously-added dir is a parent prefix
-    const isSubdir = result.some((parent) => dir.startsWith(parent));
-    if (!isSubdir) {
-      result.push(dir);
-    }
-  }
-  return result;
 }

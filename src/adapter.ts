@@ -433,7 +433,7 @@ export interface AdapterInput {
    *
    * - Pass a function for manual control.
    * - Pass `"auto"` to auto-detect usage from consumer code (requires `consumerPaths`
-   *   or `files` in `runTransform()`). Requires `rg` (ripgrep) in `$PATH`.
+   *   in `runTransform()`).
    */
   externalInterface: "auto" | Adapter["externalInterface"];
 

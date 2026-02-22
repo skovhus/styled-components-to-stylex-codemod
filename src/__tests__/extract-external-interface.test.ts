@@ -1,4 +1,3 @@
-import { execSync } from "node:child_process";
 import {
   mkdirSync,
   mkdtempSync,
@@ -13,19 +12,8 @@ import path from "node:path";
 import { describe, it, expect, beforeAll, afterAll } from "vitest";
 
 import type { ExternalInterfaceResult } from "../adapter.js";
-import { extractSearchDirsFromGlobs } from "../internal/prepass/extract-external-interface.js";
 import { createModuleResolver } from "../internal/prepass/resolve-imports.js";
 import { runPrepass } from "../internal/prepass/run-prepass.js";
-
-function assertRgAvailable(): void {
-  try {
-    execSync("rg --version", { stdio: "ignore" });
-  } catch {
-    throw new Error(
-      "ripgrep (rg) is required to run extract-external-interface tests. Install it: https://github.com/BurntSushi/ripgrep",
-    );
-  }
-}
 
 /** Recursively collect all .tsx/.ts/.jsx files in a directory. */
 function collectFiles(dir: string): string[] {
@@ -55,40 +43,6 @@ const toSnapshot = (map: Map<string, ExternalInterfaceResult>, base = process.cw
 };
 
 // ---------------------------------------------------------------------------
-// extractSearchDirsFromGlobs unit tests
-// ---------------------------------------------------------------------------
-
-describe("extractSearchDirsFromGlobs", () => {
-  it("extracts directory prefix before glob metacharacters", () => {
-    expect(extractSearchDirsFromGlobs(["src/**/*.tsx"])).toEqual(["src/"]);
-  });
-
-  it("handles multiple patterns", () => {
-    expect(extractSearchDirsFromGlobs(["src/**/*.tsx", "app/**/*.ts"])).toEqual(["app/", "src/"]);
-  });
-
-  it("de-duplicates subdirectories", () => {
-    expect(extractSearchDirsFromGlobs(["src/**/*.tsx", "src/lib/**/*.ts"])).toEqual(["src/"]);
-  });
-
-  it("handles patterns starting with glob metacharacter", () => {
-    expect(extractSearchDirsFromGlobs(["**/*.tsx"])).toEqual(["./"]);
-  });
-
-  it("handles literal file paths (no glob chars)", () => {
-    expect(extractSearchDirsFromGlobs(["src/index.ts"])).toEqual(["src/"]);
-  });
-
-  it("handles nested directory patterns", () => {
-    expect(extractSearchDirsFromGlobs(["packages/ui/src/**/*.tsx"])).toEqual(["packages/ui/src/"]);
-  });
-
-  it("de-duplicates identical patterns", () => {
-    expect(extractSearchDirsFromGlobs(["src/**/*.tsx", "src/**/*.ts"])).toEqual(["src/"]);
-  });
-});
-
-// ---------------------------------------------------------------------------
 // Integration tests (temp fixture files + runPrepass)
 // ---------------------------------------------------------------------------
 
@@ -97,7 +51,6 @@ describe("runPrepass createExternalInterface", () => {
   let result: Map<string, ExternalInterfaceResult>;
 
   beforeAll(async () => {
-    assertRgAvailable();
     fixtureDir = mkdtempSync(path.join(tmpdir(), "extract-external-interface-test-"));
 
     // Create a minimal tsconfig so oxc-resolver can work
@@ -310,7 +263,6 @@ describe("runPrepass createExternalInterface — wildcard exports in monorepo", 
   let result: Map<string, ExternalInterfaceResult>;
 
   beforeAll(async () => {
-    assertRgAvailable();
     fixtureDir = mkdtempSync(path.join(tmpdir(), "extract-external-interface-wildcard-"));
 
     // --- Package: @scope/ui ---
@@ -473,10 +425,6 @@ describe("runPrepass createExternalInterface — wildcard exports in monorepo", 
 // ---------------------------------------------------------------------------
 
 describe("runPrepass createExternalInterface snapshot on test-cases", () => {
-  beforeAll(() => {
-    assertRgAvailable();
-  });
-
   it("matches snapshot for test-cases directory", async () => {
     const testCasesDir = path.resolve("test-cases");
     const allFiles = collectFiles(testCasesDir);
