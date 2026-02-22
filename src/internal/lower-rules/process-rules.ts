@@ -31,7 +31,9 @@ import {
 } from "../transform/helpers.js";
 import { capitalize, kebabToCamelCase } from "../utilities/string-utils.js";
 import { getOrCreateRelationOverrideBucket } from "./shared.js";
+import type { RelationOverride } from "./state.js";
 import { createPropTestHelpers } from "./variant-utils.js";
+import { PLACEHOLDER_RE } from "../styled-css.js";
 import { parseCssDeclarationBlock } from "../builtin-handlers/css-parsing.js";
 import { ensureShouldForwardPropDrop } from "./types.js";
 import type { ExpressionKind } from "./decl-types.js";
@@ -400,7 +402,7 @@ export function processDeclRules(ctx: DeclProcessingState): void {
     // NOTE: This function intentionally mirrors existing logic from `transform.ts`.
 
     if (typeof rule.selector === "string" && rule.selector.includes("__SC_EXPR_")) {
-      const slotMatch = rule.selector.match(/__SC_EXPR_(\d+)__/);
+      const slotMatch = rule.selector.match(PLACEHOLDER_RE);
       const slotId = slotMatch ? Number(slotMatch[1]) : null;
       const slotExpr = slotId !== null ? (decl.templateExpressions[slotId] as any) : null;
       const otherLocal = slotExpr?.type === "Identifier" ? (slotExpr.name as string) : null;
@@ -434,7 +436,7 @@ export function processDeclRules(ctx: DeclProcessingState): void {
         // Without this guard, `${Link}:focus &, ${Button}:active &` would silently
         // attribute all pseudos to Link (the first match).
         if (isGroupedReverseSelectorPattern) {
-          const allSlotMatches = [...selTrim2.matchAll(/__SC_EXPR_(\d+)__/g)];
+          const allSlotMatches = [...selTrim2.matchAll(new RegExp(PLACEHOLDER_RE.source, "g"))];
           const allLocal = allSlotMatches.map((m) => {
             const id = Number(m[1]);
             const expr = decl.templateExpressions[id] as
@@ -455,7 +457,10 @@ export function processDeclRules(ctx: DeclProcessingState): void {
         }
 
         const parentDecl = declByLocalName.get(otherLocal);
-        if (!parentDecl) {
+        const crossFileParent = !parentDecl
+          ? state.crossFileSelectorsByLocal.get(otherLocal)
+          : undefined;
+        if (!parentDecl && !crossFileParent) {
           state.markBail();
           warnings.push({
             severity: "warning",
@@ -477,19 +482,33 @@ export function processDeclRules(ctx: DeclProcessingState): void {
           break;
         }
 
-        // Declare self as child, referenced component as ancestor parent
+        // Declare self as child, referenced component as ancestor parent.
+        // For cross-file parents, use a synthetic style key based on the local name.
+        const parentStyleKey = parentDecl ? parentDecl.styleKey : toStyleKey(otherLocal);
         const overrideStyleKey = `${toStyleKey(decl.localName)}In${otherLocal}`;
-        ancestorSelectorParents.add(parentDecl.styleKey);
+        ancestorSelectorParents.add(parentStyleKey);
 
+        // For cross-file reverse, register a defineMarker for the imported parent
+        const reverseMarkerVarName = crossFileParent ? `${otherLocal}Marker` : undefined;
+
+        const overrideCountBeforeReverse = relationOverrides.length;
         // Process declarations once, then register into each pseudo bucket
         const firstBucket = getOrCreateRelationOverrideBucket(
           overrideStyleKey,
-          parentDecl.styleKey,
+          parentStyleKey,
           decl.styleKey,
           ancestorPseudos[0]!,
           relationOverrides,
           relationOverridePseudoBuckets,
           decl.extraStyleKeys,
+        );
+
+        // Tag newly-created relation override as cross-file (reverse direction)
+        tagCrossFileOverride(
+          relationOverrides,
+          overrideCountBeforeReverse,
+          reverseMarkerVarName,
+          otherLocal,
         );
 
         const result = processDeclarationsIntoBucket(
@@ -511,18 +530,24 @@ export function processDeclRules(ctx: DeclProcessingState): void {
           break;
         }
 
-        // Copy declarations into remaining pseudo buckets
+        // Copy only the declarations written by THIS rule into remaining pseudo buckets.
+        // Using the writtenProps set (returned by processDeclarationsIntoBucket) ensures
+        // we propagate overwrites of existing keys while not leaking unrelated declarations
+        // that were already in firstBucket from earlier rules.
+        const writtenProps = result;
         for (let i = 1; i < ancestorPseudos.length; i++) {
           const bucket = getOrCreateRelationOverrideBucket(
             overrideStyleKey,
-            parentDecl.styleKey,
+            parentStyleKey,
             decl.styleKey,
             ancestorPseudos[i]!,
             relationOverrides,
             relationOverridePseudoBuckets,
             decl.extraStyleKeys,
           );
-          Object.assign(bucket, firstBucket);
+          for (const key of writtenProps) {
+            bucket[key] = firstBucket[key];
+          }
         }
 
         continue;
@@ -535,10 +560,13 @@ export function processDeclRules(ctx: DeclProcessingState): void {
         selTrim2.startsWith("&") || /^__SC_EXPR_\d+__$/.test(selTrim2);
       if (otherLocal && !isCssHelperPlaceholder && isComponentSelectorPattern) {
         const childDecl = declByLocalName.get(otherLocal);
+        const crossFileUsage = !childDecl
+          ? state.crossFileSelectorsByLocal.get(otherLocal)
+          : undefined;
         // Extract the actual pseudo-selector (e.g., ":hover", ":focus-visible")
         const pseudoMatch = rule.selector.match(/&(:[a-z-]+(?:\([^)]*\))?)/i);
         const ancestorPseudo: string | null = pseudoMatch?.[1] ?? null;
-        if (!childDecl) {
+        if (!childDecl && !crossFileUsage) {
           state.markBail();
           warnings.push({
             severity: "warning",
@@ -547,37 +575,52 @@ export function processDeclRules(ctx: DeclProcessingState): void {
           });
           break;
         }
-        if (childDecl) {
-          const overrideStyleKey = `${toStyleKey(otherLocal)}In${decl.localName}`;
-          ancestorSelectorParents.add(decl.styleKey);
 
-          const bucket = getOrCreateRelationOverrideBucket(
-            overrideStyleKey,
-            decl.styleKey,
-            childDecl.styleKey,
-            ancestorPseudo,
-            relationOverrides,
-            relationOverridePseudoBuckets,
-          );
+        // For cross-file selectors, the child's style key is synthetic (just the local name
+        // lowered to a style key). The override style objects will be applied to the
+        // imported component via JSX spread in rewrite-jsx.
+        const childStyleKey = childDecl ? childDecl.styleKey : toStyleKey(otherLocal);
+        const overrideStyleKey = `${toStyleKey(otherLocal)}In${decl.localName}`;
+        ancestorSelectorParents.add(decl.styleKey);
 
-          const forwardResult = processDeclarationsIntoBucket(
-            rule,
-            bucket,
-            j,
-            decl,
-            resolveThemeValue,
-            resolveThemeValueFromFn,
-            { bailOnUnresolved: true },
-          );
-          if (forwardResult === "bail") {
-            state.markBail();
-            warnings.push({
-              severity: "warning",
-              type: "Unsupported selector: unresolved interpolation in descendant component selector",
-              loc: computeSelectorWarningLoc(decl.loc, decl.rawCss, rule.selector),
-            });
-            break;
-          }
+        // For cross-file, compute the marker variable name (stored on RelationOverride,
+        // derived into crossFileMarkers map by lowerRules after processing completes)
+        const markerVarName = crossFileUsage ? `${decl.localName}Marker` : undefined;
+
+        // getOrCreateRelationOverrideBucket creates the RelationOverride entry on first
+        // call for this overrideStyleKey. Track count to detect new entries.
+        const overrideCountBefore = relationOverrides.length;
+        const bucket = getOrCreateRelationOverrideBucket(
+          overrideStyleKey,
+          decl.styleKey,
+          childStyleKey,
+          ancestorPseudo,
+          relationOverrides,
+          relationOverridePseudoBuckets,
+        );
+
+        // Tag newly-created relation override as cross-file
+        tagCrossFileOverride(relationOverrides, overrideCountBefore, markerVarName, otherLocal);
+
+        const forwardResult = processDeclarationsIntoBucket(
+          rule,
+          bucket,
+          j,
+          decl,
+          resolveThemeValue,
+          resolveThemeValueFromFn,
+          { bailOnUnresolved: true },
+        );
+        if (forwardResult === "bail") {
+          state.markBail();
+          warnings.push({
+            severity: "warning",
+            type: crossFileUsage
+              ? "Unsupported selector: unresolved interpolation in cross-file component selector"
+              : "Unsupported selector: unresolved interpolation in descendant component selector",
+            loc: computeSelectorWarningLoc(decl.loc, decl.rawCss, rule.selector),
+          });
+          break;
         }
         continue;
       }
@@ -1394,6 +1437,28 @@ function handlePseudoAlias(
 }
 
 /**
+ * If a new relation override was created (array grew), tag it with cross-file metadata.
+ * Used for both forward and reverse cross-file selector patterns.
+ */
+function tagCrossFileOverride(
+  relationOverrides: RelationOverride[],
+  countBefore: number,
+  markerVarName: string | undefined,
+  componentLocalName: string,
+): void {
+  if (!markerVarName || relationOverrides.length <= countBefore) {
+    return;
+  }
+  const created = relationOverrides.at(-1);
+  if (!created) {
+    return;
+  }
+  created.crossFile = true;
+  created.markerVarName = markerVarName;
+  created.crossFileComponentLocalName = componentLocalName;
+}
+
+/**
  * Recovers standalone conditional interpolations from inside a pseudo-alias block.
  *
  * When Stylis drops standalone placeholders at brace depth > 0, the pseudo-alias
@@ -1410,7 +1475,7 @@ function recoverStandaloneInterpolationsInPseudoBlock(
   }
 
   // Extract pseudo slot ID from rule selector
-  const pseudoSlotMatch = rule.selector.match(/__SC_EXPR_(\d+)__/);
+  const pseudoSlotMatch = rule.selector.match(PLACEHOLDER_RE);
   if (!pseudoSlotMatch) {
     return null;
   }
@@ -1424,7 +1489,7 @@ function recoverStandaloneInterpolationsInPseudoBlock(
   }
 
   // Find standalone __SC_EXPR_N__ in the block content
-  const standaloneSlotRegex = /__SC_EXPR_(\d+)__/g;
+  const standaloneSlotRegex = new RegExp(PLACEHOLDER_RE.source, "g");
   const slots: number[] = [];
   let slotMatch;
   while ((slotMatch = standaloneSlotRegex.exec(blockMatch[1])) !== null) {

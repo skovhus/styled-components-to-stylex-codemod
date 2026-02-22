@@ -3,10 +3,18 @@
  * Core concepts: ordered transform steps, context orchestration, and logging.
  */
 import type { API, FileInfo, Options } from "jscodeshift";
+import { basename, dirname, join, resolve as pathResolve } from "node:path";
+import { realpathSync } from "node:fs";
 
 import { Logger } from "./internal/logger.js";
 import { TransformContext } from "./internal/transform-context.js";
-import type { TransformOptions, TransformResult } from "./internal/transform-types.js";
+import type {
+  CrossFileInfo,
+  CrossFileSelectorUsage,
+  TransformOptions,
+  TransformResult,
+  TransformStep,
+} from "./internal/transform-types.js";
 import { analyzeAfterEmitStep } from "./internal/transform-steps/analyze-after-emit.js";
 import { analyzeBeforeEmitStep } from "./internal/transform-steps/analyze-before-emit.js";
 import { applyPolicyGates } from "./internal/transform-steps/apply-policy-gates.js";
@@ -19,6 +27,7 @@ import { detectStringMappingFnsStep } from "./internal/transform-steps/detect-st
 import { detectUnsupportedPatternsStep } from "./internal/transform-steps/detect-unsupported-patterns.js";
 import { rewriteCssHelpersStep } from "./internal/transform-steps/rewrite-css-helpers.js";
 import { emitStylesStep } from "./internal/transform-steps/emit-styles.js";
+import { emitBridgeExportsStep } from "./internal/transform-steps/emit-bridge-exports.js";
 import { emitWrappersStep } from "./internal/transform-steps/emit-wrappers.js";
 import { ensureMergerImportStep } from "./internal/transform-steps/ensure-merger-import.js";
 import { ensureReactImportStep } from "./internal/transform-steps/ensure-react-import.js";
@@ -30,9 +39,12 @@ import { preflight } from "./internal/transform-steps/preflight.js";
 import { reinsertStaticPropsStep } from "./internal/transform-steps/reinsert-static-props.js";
 import { rewriteJsxStep } from "./internal/transform-steps/rewrite-jsx.js";
 import { upgradePolymorphicAsPropTypesStep } from "./internal/transform-steps/upgrade-polymorphic-as-prop-types.js";
-import type { TransformStep } from "./internal/transform-types.js";
 
-export type { TransformOptions, TransformResult } from "./internal/transform-types.js";
+export type {
+  BridgeComponentResult,
+  TransformOptions,
+  TransformResult,
+} from "./internal/transform-types.js";
 
 /**
  * Transform styled-components to StyleX
@@ -44,6 +56,30 @@ export default function transform(file: FileInfo, api: API, options: Options): s
   try {
     const result = transformWithWarnings(file, api, options as TransformOptions);
     Logger.logWarnings(result.warnings, file.path);
+
+    // Store sidecar .stylex.ts content in the options side-channel for the runner to write
+    if (result.sidecarContent) {
+      const sidecarFiles = (options as Record<string, unknown>).sidecarFiles as
+        | Map<string, string>
+        | undefined;
+      if (sidecarFiles) {
+        const dir = dirname(file.path);
+        const fileBase = basename(file.path).replace(/\.\w+$/, "");
+        sidecarFiles.set(join(dir, `${fileBase}.stylex.ts`), result.sidecarContent);
+      }
+    }
+
+    // Store bridge results in the options side-channel for post-transform consumer patching.
+    // Use realpath to match the prepass key normalization (handles symlinks).
+    if (result.bridgeResults && result.bridgeResults.length > 0) {
+      const bridgeResultsMap = (options as Record<string, unknown>).bridgeResults as
+        | Map<string, import("./internal/transform-types.js").BridgeComponentResult[]>
+        | undefined;
+      if (bridgeResultsMap) {
+        bridgeResultsMap.set(toRealPath(file.path), result.bridgeResults);
+      }
+    }
+
     return result.code;
   } catch (e) {
     if (!Logger.isErrorLogged(e)) {
@@ -62,7 +98,9 @@ export function transformWithWarnings(
   api: API,
   options: TransformOptions,
 ): TransformResult {
-  const ctx = new TransformContext(file, api, options);
+  // Extract per-file cross-file info from the global prepass result
+  const enrichedOptions = extractCrossFileInfoForFile(file.path, options);
+  const ctx = new TransformContext(file, api, enrichedOptions);
   const pipeline: TransformStep[] = [
     preflight,
     applyPolicyGates,
@@ -80,6 +118,7 @@ export function transformWithWarnings(
     collectStaticPropsStep,
     rewriteJsxStep,
     emitWrappersStep,
+    emitBridgeExportsStep,
     upgradePolymorphicAsPropTypesStep,
     ensureMergerImportStep,
     reinsertStaticPropsStep,
@@ -96,4 +135,91 @@ export function transformWithWarnings(
   }
 
   return finalize(ctx);
+}
+
+// --- Non-exported helpers ---
+
+/**
+ * Shape of the global prepass result attached to jscodeshift options by runTransform.
+ * This is an untyped passthrough from jscodeshift's options bag, so we define
+ * the expected shape here to avoid scattered inline type assertions.
+ */
+interface GlobalPrepassResult {
+  selectorUsages: Map<string, CrossFileSelectorUsage[]>;
+  componentsNeedingGlobalSelectorBridge: Map<string, Set<string>>;
+}
+
+/**
+ * Extract per-file cross-file info from the global prepass result stored in jscodeshift options.
+ * The prepass result (if any) is passed via `options.crossFilePrepassResult` from runTransform.
+ */
+function extractCrossFileInfoForFile(
+  filePath: string,
+  options: TransformOptions,
+): TransformOptions {
+  // jscodeshift passes arbitrary options through; we access the prepass result
+  // that runTransform attached. This is the one place we need an assertion
+  // because jscodeshift's Options type doesn't know about our custom field.
+  const prepass = (options as Record<string, unknown>).crossFilePrepassResult as
+    | GlobalPrepassResult
+    | undefined;
+
+  if (!prepass) {
+    return options;
+  }
+
+  // Normalize to the same path form the prepass used. The prepass resolves to
+  // real paths (handling macOS /var → /private/var symlinks), so try pathResolve
+  // first and fall back to realpathSync if the key isn't found.
+  const absPath = resolveToPrepassKey(filePath, prepass);
+  const selectorUsages = prepass.selectorUsages.get(absPath);
+  const bridgeComponentNames = prepass.componentsNeedingGlobalSelectorBridge?.get(absPath);
+
+  if ((!selectorUsages || selectorUsages.length === 0) && !bridgeComponentNames) {
+    return options;
+  }
+
+  const crossFileInfo: CrossFileInfo = {
+    selectorUsages: selectorUsages ?? [],
+    bridgeComponentNames,
+  };
+
+  return { ...options, crossFileInfo };
+}
+
+/**
+ * Resolve a file path to the key form used by the prepass maps.
+ * Tries pathResolve first; falls back to realpathSync if the key isn't found
+ * (handles macOS /var → /private/var and similar symlink divergences).
+ */
+function resolveToPrepassKey(filePath: string, prepass: GlobalPrepassResult): string {
+  const resolved = pathResolve(filePath);
+  if (
+    prepass.selectorUsages.has(resolved) ||
+    prepass.componentsNeedingGlobalSelectorBridge?.has(resolved)
+  ) {
+    return resolved;
+  }
+  try {
+    const real = realpathSync(resolved);
+    if (real !== resolved) {
+      return real;
+    }
+  } catch {
+    // File may not exist yet (e.g. dry-run); keep the resolved path
+  }
+  return resolved;
+}
+
+/**
+ * Resolve a file path to its real (symlink-resolved) absolute path.
+ * Falls back to pathResolve if realpathSync fails.
+ */
+function toRealPath(filePath: string): string {
+  const resolved = pathResolve(filePath);
+  try {
+    return realpathSync(resolved);
+  } catch {
+    return resolved;
+  }
 }

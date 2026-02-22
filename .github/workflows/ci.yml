@@ -27,9 +27,6 @@ jobs:
           node-version: 22
           cache: "pnpm"
 
-      - name: Install ripgrep
-        run: sudo apt-get install -y ripgrep
-
       - name: Install dependencies
         run: pnpm install
 
