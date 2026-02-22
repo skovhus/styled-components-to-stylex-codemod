@@ -5,7 +5,7 @@
 import { run as jscodeshiftRun } from "jscodeshift/src/Runner.js";
 import { fileURLToPath } from "node:url";
 import { dirname, join, resolve } from "node:path";
-import { existsSync, realpathSync } from "node:fs";
+import { existsSync, readFileSync, realpathSync } from "node:fs";
 import { writeFile } from "node:fs/promises";
 import { glob } from "node:fs/promises";
 import { spawn } from "node:child_process";
@@ -439,9 +439,11 @@ export async function runTransform(options: RunTransformOptions): Promise<RunTra
   });
 
   // Write sidecar .stylex.ts files (defineMarker declarations)
+  // Merge with existing content to avoid clobbering user-owned exports (e.g. defineVars).
   if (sidecarFiles.size > 0 && !dryRun) {
     for (const [sidecarPath, content] of sidecarFiles) {
-      await writeFile(sidecarPath, content, "utf-8");
+      const merged = mergeSidecarContent(sidecarPath, content);
+      await writeFile(sidecarPath, merged, "utf-8");
     }
   }
 
@@ -509,6 +511,55 @@ function createAutoPrepassFailureError(
       `consumerPaths: ${consumerPatterns.length > 0 ? consumerPatterns.join(", ") : "(none)"}`,
     ].join("\n"),
   );
+}
+
+/**
+ * Merge new sidecar marker content into an existing .stylex.ts file, preserving
+ * user-owned exports (e.g. defineVars). If the file doesn't exist, returns content as-is.
+ *
+ * New marker declarations (`export const XMarker = stylex.defineMarker()`) are
+ * appended only if they don't already exist in the file. The stylex import is
+ * ensured at the top.
+ */
+export function mergeSidecarContent(sidecarPath: string, newContent: string): string {
+  let existing: string;
+  try {
+    existing = readFileSync(sidecarPath, "utf-8");
+  } catch {
+    // File doesn't exist yet — use new content as-is
+    return newContent;
+  }
+
+  // Extract marker export lines from the new content
+  const markerLineRe = /^export const \w+ = stylex\.defineMarker\(\);$/gm;
+  const newMarkers: string[] = [];
+  for (const m of newContent.matchAll(markerLineRe)) {
+    newMarkers.push(m[0]);
+  }
+
+  if (newMarkers.length === 0) {
+    return newContent;
+  }
+
+  // Filter out markers already present in the existing file
+  const markersToAdd = newMarkers.filter((line) => !existing.includes(line));
+
+  if (markersToAdd.length === 0) {
+    // All markers already exist — no changes needed
+    return existing;
+  }
+
+  // Ensure the stylex import exists
+  let merged = existing;
+  if (!merged.includes("@stylexjs/stylex")) {
+    merged = `import * as stylex from "@stylexjs/stylex";\n\n${merged}`;
+  }
+
+  // Append new marker declarations at end
+  const trailingNewline = merged.endsWith("\n") ? "" : "\n";
+  merged = merged + trailingNewline + markersToAdd.join("\n") + "\n";
+
+  return merged;
 }
 
 /** Run formatter commands on a list of files, logging warnings on failure. */

@@ -1,9 +1,12 @@
-import { describe, it, expect, vi } from "vitest";
+import { afterEach, beforeEach, describe, it, expect, vi } from "vitest";
 import { join, resolve as pathResolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { dirname } from "node:path";
+import { mkdtempSync, writeFileSync, rmSync } from "node:fs";
+import { tmpdir } from "node:os";
 import jscodeshift from "jscodeshift";
 import { createModuleResolver } from "../internal/prepass/resolve-imports.js";
+import { runPrepass } from "../internal/prepass/run-prepass.js";
 import {
   scanCrossFileSelectors,
   type CrossFileInfo,
@@ -15,7 +18,10 @@ import {
   generateBridgeClassName,
   bridgeExportName,
 } from "../internal/utilities/bridge-classname.js";
-import { buildConsumerReplacements } from "../internal/bridge-consumer-patcher.js";
+import {
+  buildConsumerReplacements,
+  patchConsumerFile,
+} from "../internal/bridge-consumer-patcher.js";
 
 // Suppress codemod logs in tests
 vi.mock("../internal/logger.js", () => ({
@@ -634,5 +640,128 @@ describe("buildConsumerReplacements", () => {
       importSource: "./lib/icon",
       globalSelectorVarName: "IconGlobalSelector",
     });
+  });
+});
+
+/* ── patchConsumerFile: substring import matching ────────────────────── */
+
+describe("patchConsumerFile import merging", () => {
+  let tmpDir: string;
+
+  function writeTmp(name: string, content: string): string {
+    const filePath = join(tmpDir, name);
+    writeFileSync(filePath, content, "utf-8");
+    return filePath;
+  }
+
+  beforeEach(() => {
+    tmpDir = mkdtempSync(join(tmpdir(), "consumer-patcher-"));
+  });
+
+  afterEach(() => {
+    rmSync(tmpDir, { recursive: true, force: true });
+  });
+
+  it("does not treat substring match as existing import (IconGlobalSelectorOld vs IconGlobalSelector)", () => {
+    // Issue: existingNames.includes(name) is substring-based, so
+    // "IconGlobalSelectorOld" satisfies "IconGlobalSelector".
+    // This causes the import to not be added, producing a missing identifier.
+    const source = [
+      'import styled from "styled-components";',
+      'import { Icon, IconGlobalSelectorOld } from "./icon";',
+      "",
+      "const Container = styled.div`",
+      "  ${Icon} {",
+      "    color: red;",
+      "  }",
+      "`;",
+    ].join("\n");
+
+    const filePath = writeTmp("consumer.tsx", source);
+    const result = patchConsumerFile(filePath, [
+      {
+        localName: "Icon",
+        importSource: "./icon",
+        globalSelectorVarName: "IconGlobalSelector",
+        importedName: "Icon",
+      },
+    ]);
+
+    expect(result).not.toBeNull();
+    // Both the old and new names must be present as separate identifiers in the import
+    expect(result).toContain("IconGlobalSelectorOld");
+    // Verify IconGlobalSelector appears as a distinct import specifier (not just as substring of Old)
+    // The import should contain both: { Icon, IconGlobalSelectorOld, IconGlobalSelector }
+    const importMatch = result!.match(/import\s*\{([^}]+)\}\s*from\s*["']\.\/icon["']/);
+    expect(importMatch).not.toBeNull();
+    const importedNames = importMatch![1]!.split(",").map((s) => s.trim());
+    expect(importedNames).toContain("IconGlobalSelector");
+    expect(importedNames).toContain("IconGlobalSelectorOld");
+  });
+});
+
+/* ── Prepass parse error handling ────────────────────────────────────── */
+
+describe("prepass parse error handling", () => {
+  const resolver = createModuleResolver();
+  let tmpDir: string;
+
+  beforeEach(() => {
+    tmpDir = mkdtempSync(join(tmpdir(), "prepass-parse-error-"));
+  });
+
+  afterEach(() => {
+    rmSync(tmpDir, { recursive: true, force: true });
+  });
+
+  function writeInvalidConsumer(): string {
+    // File has styled-components imports and selector usage but invalid syntax
+    // (unclosed brace) that will cause parse failure.
+    const content = [
+      'import styled from "styled-components";',
+      'import { CollapseArrowIcon } from "./lib/collapse-arrow-icon";',
+      "",
+      "const Container = styled.div`",
+      "  ${CollapseArrowIcon} {",
+      "    color: red;",
+      "  }",
+      "`;",
+      "",
+      "export const App = () => {",
+      "  return <Container />;",
+    ].join("\n");
+    const filePath = join(tmpDir, "consumer-invalid.tsx");
+    writeFileSync(filePath, content, "utf-8");
+    return filePath;
+  }
+
+  it("throws on parse errors in consumer files when createExternalInterface is true (auto mode)", async () => {
+    // Issue: scanFileForSelectorsAst silently returns [] on parse errors,
+    // bypassing the fail-fast contract for externalInterface "auto".
+    const invalidFile = writeInvalidConsumer();
+    await expect(
+      runPrepass({
+        filesToTransform: [fixture("lib/collapse-arrow-icon.tsx")],
+        consumerPaths: [invalidFile],
+        resolver,
+        parserName: "tsx",
+        createExternalInterface: true,
+      }),
+    ).rejects.toThrow();
+  });
+
+  it("silently skips parse errors in consumer files when createExternalInterface is false", async () => {
+    // When not in "auto" mode, parse errors are tolerated (best-effort).
+    const invalidFile = writeInvalidConsumer();
+    const result = await runPrepass({
+      filesToTransform: [fixture("lib/collapse-arrow-icon.tsx")],
+      consumerPaths: [invalidFile],
+      resolver,
+      parserName: "tsx",
+      createExternalInterface: false,
+    });
+
+    // Should complete without error, just returning empty selectors for that file
+    expect(result.crossFileInfo.selectorUsages.size).toBe(0);
   });
 });

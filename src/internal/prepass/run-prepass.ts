@@ -202,6 +202,7 @@ export async function runPrepass(options: PrepassOptions): Promise<PrepassResult
         parser,
         toRealPath,
         astCache,
+        createExternalInterface,
       );
       if (usages.length > 0) {
         selectorUsages.set(filePath, usages);
@@ -433,6 +434,7 @@ function scanFileForSelectorsAst(
   parser: ReturnType<typeof createPrepassParser>,
   toRealPath: (p: string) => string,
   cache?: Map<string, AstCacheEntry>,
+  failOnParseError?: boolean,
 ): CrossFileSelectorUsage[] {
   // Check cache by content hash (same content at different paths → one parse)
   const hash = cache ? createHash("md5").update(source).digest("hex") : undefined;
@@ -450,7 +452,11 @@ function scanFileForSelectorsAst(
     let ast: AstNode;
     try {
       ast = parser.parse(source) as AstNode;
-    } catch {
+    } catch (err) {
+      if (failOnParseError) {
+        const reason = err instanceof Error ? err.message : String(err);
+        throw new Error(`Failed to parse ${filePath}: ${reason}`);
+      }
       return [];
     }
 

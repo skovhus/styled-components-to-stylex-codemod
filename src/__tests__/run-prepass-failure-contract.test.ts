@@ -1,4 +1,7 @@
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { join } from "node:path";
+import { mkdtempSync, writeFileSync, rmSync } from "node:fs";
+import { tmpdir } from "node:os";
 
 const SAMPLE_FILE = "src/__tests__/fixtures/cross-file/no-styled.tsx";
 const PREPASS_FAILURE_MESSAGE = "simulated prepass crash";
@@ -34,6 +37,71 @@ function createLoggerMock(warnMock: ReturnType<typeof vi.fn>) {
     }),
   };
 }
+
+/* ── Sidecar file merge ───────────────────────────────────────────────── */
+
+describe("mergeSidecarContent", () => {
+  let tmpDir: string;
+
+  beforeEach(() => {
+    tmpDir = mkdtempSync(join(tmpdir(), "sidecar-merge-"));
+  });
+
+  afterEach(() => {
+    rmSync(tmpDir, { recursive: true, force: true });
+  });
+
+  it("returns new content when sidecar file does not exist", async () => {
+    const { mergeSidecarContent } = await import("../run.js");
+    const newContent = `import * as stylex from "@stylexjs/stylex";\n\nexport const ButtonMarker = stylex.defineMarker();\n`;
+    const result = mergeSidecarContent(join(tmpDir, "nonexistent.stylex.ts"), newContent);
+    expect(result).toBe(newContent);
+  });
+
+  it("preserves existing exports and appends new markers", async () => {
+    const { mergeSidecarContent } = await import("../run.js");
+    const existing = [
+      'import * as stylex from "@stylexjs/stylex";',
+      "",
+      "export const themeVars = stylex.defineVars({ color: 'red' });",
+      "",
+    ].join("\n");
+    const sidecarPath = join(tmpDir, "component.stylex.ts");
+    writeFileSync(sidecarPath, existing, "utf-8");
+
+    const newContent = `import * as stylex from "@stylexjs/stylex";\n\nexport const ButtonMarker = stylex.defineMarker();\n`;
+    const result = mergeSidecarContent(sidecarPath, newContent);
+
+    // Existing content must be preserved
+    expect(result).toContain("themeVars");
+    expect(result).toContain("defineVars");
+    // New marker must be added
+    expect(result).toContain("export const ButtonMarker = stylex.defineMarker();");
+  });
+
+  it("does not duplicate markers that already exist", async () => {
+    const { mergeSidecarContent } = await import("../run.js");
+    const existing = [
+      'import * as stylex from "@stylexjs/stylex";',
+      "",
+      "export const ButtonMarker = stylex.defineMarker();",
+      "",
+    ].join("\n");
+    const sidecarPath = join(tmpDir, "component.stylex.ts");
+    writeFileSync(sidecarPath, existing, "utf-8");
+
+    const newContent = `import * as stylex from "@stylexjs/stylex";\n\nexport const ButtonMarker = stylex.defineMarker();\n`;
+    const result = mergeSidecarContent(sidecarPath, newContent);
+
+    // Should return existing file unchanged
+    expect(result).toBe(existing);
+    // Should not duplicate the marker
+    const count = (result.match(/ButtonMarker/g) ?? []).length;
+    expect(count).toBe(1);
+  });
+});
+
+/* ── Prepass failure contract ────────────────────────────────────────── */
 
 describe("runTransform prepass failure contract", () => {
   beforeEach(() => {

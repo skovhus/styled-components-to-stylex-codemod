@@ -125,7 +125,7 @@ export function patchConsumerFile(
       const namedMatch = modified.match(namedImportRegex);
       if (namedMatch) {
         const existingNames = namedMatch[2]!;
-        const newNames = varNames.filter((name) => !existingNames.includes(name));
+        const newNames = varNames.filter((name) => !hasExactImportName(existingNames, name));
         if (newNames.length > 0) {
           const separator = existingNames.trimEnd().endsWith(",") ? " " : ", ";
           modified = modified.replace(
@@ -195,6 +195,12 @@ function isInStyledTemplateSelectorContext(
   const after = source.slice(offset + length).trimStart();
   const before = source.slice(Math.max(0, offset - 200), offset).trimEnd();
   return isSelectorContext(before, after);
+}
+
+/** Check if a name appears as a distinct identifier in an import specifier list string. */
+function hasExactImportName(importSpecifiers: string, name: string): boolean {
+  const re = new RegExp(`(?:^|[^A-Za-z0-9_$])${escapeRegExp(name)}(?:$|[^A-Za-z0-9_$])`);
+  return re.test(importSpecifiers);
 }
 
 function escapeRegExp(s: string): string {
