@@ -1,0 +1,1 @@
+import{j as s,Z as n}from"./index-JVBYEk7O.js";function a(e){const{children:t}=e,x=n();return s.jsx("span",{...{0:{className:"xfifm61 xvbvf6b xw05z1l"},1:{className:"xfifm61 x1o403v5 xutcngd"}}[!!x.isDark<<0],children:t})}const o=()=>s.jsx(a,{children:"Label"});export{o as App};

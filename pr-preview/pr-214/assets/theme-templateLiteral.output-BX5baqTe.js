@@ -1,0 +1,1 @@
+import{j as e}from"./index-JVBYEk7O.js";const i=()=>e.jsx("div",{style:{display:"flex",gap:12,padding:16},children:e.jsx("div",{className:"x1tamke2 x56w1b4 x1o403v5",children:"Template literal with theme"})});export{i as App};
