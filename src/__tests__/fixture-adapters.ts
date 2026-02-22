@@ -46,6 +46,11 @@ export const fixtureAdapter = defineAdapter({
       return { styles: true, as: false };
     }
 
+    // Enable styles + as to reproduce duplicate declaration bug
+    if (ctx.filePath.includes("naming-duplicateDeclaration")) {
+      return { styles: true, as: true };
+    }
+
     // wrapper-propsIncomplete - TextColor and ThemeText should extend HTMLAttributes
     // Highlight wraps a component and shouldn't support external styles
     if (ctx.filePath.includes("wrapper-propsIncomplete")) {
