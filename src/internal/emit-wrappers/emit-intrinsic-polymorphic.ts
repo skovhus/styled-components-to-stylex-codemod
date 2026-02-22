@@ -36,6 +36,11 @@ export function emitIntrinsicPolymorphicWrappers(ctx: EmitIntrinsicContext): voi
     if (d.attrWrapper) {
       return false;
     }
+    // Skip components with shouldForwardProp - the SFP emitter handles them
+    // (including polymorphic `as` prop support when supportsAsProp is true)
+    if (d.shouldForwardProp) {
+      return false;
+    }
     // Skip components whose props type already has `as?: React.ElementType` -
     // these are designed for runtime polymorphism and upgrading them to our generic
     // pattern can cause TypeScript inference issues with custom props
