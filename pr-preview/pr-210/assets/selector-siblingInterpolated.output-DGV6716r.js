@@ -1,0 +1,1 @@
+import{j as e}from"./index-CusZkLsc.js";const r=()=>e.jsxs("div",{style:{padding:16},children:[e.jsx("div",{className:"xju2f9n x1kk4a09 x-default-marker",children:"First"}),e.jsx("div",{className:"xju2f9n x1kk4a09 x-default-marker",children:"Second (theme color)"})]});export{r as App};

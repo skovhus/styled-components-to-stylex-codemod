@@ -1,1 +1,0 @@
-import{j as s}from"./index-DeUnwoPj.js";const r=()=>s.jsxs("div",{style:{padding:16},children:[s.jsx("div",{className:"xju2f9n xe8ttls x18so4qo x-default-marker",children:"First"}),s.jsx("div",{className:"xju2f9n xe8ttls x18so4qo x-default-marker",children:"Second (margin-top on wide screens)"})]});export{r as App};

@@ -1,0 +1,1 @@
+import{j as x}from"./index-CusZkLsc.js";const e=()=>x.jsxs("div",{className:"x78zum5 xdt5ytf x1jnr06f",children:[x.jsx("div",{className:"xju2f9n xe8ttls x1nq1fro xm35quw x15otxcs x-default-marker",children:"First"}),x.jsx("div",{className:"xju2f9n xe8ttls x1nq1fro xm35quw x15otxcs x-default-marker",children:"Second (should have border-top)"})]});export{e as App};
