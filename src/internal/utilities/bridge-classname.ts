@@ -3,7 +3,19 @@
  * Used when a converted component needs to remain targetable by unconverted
  * styled-components consumers via CSS selectors.
  */
-import { createHash } from "node:crypto";
+/**
+ * Simple FNV-1a hash producing an 8-char hex string.
+ * Not cryptographic — just deterministic and collision-resistant enough
+ * for generating stable CSS class names. Works in both Node.js and browsers.
+ */
+function fnv1aHex(input: string): string {
+  let hash = 0x811c9dc5; // FNV offset basis (32-bit)
+  for (let i = 0; i < input.length; i++) {
+    hash ^= input.charCodeAt(i);
+    hash = Math.imul(hash, 0x01000193); // FNV prime (32-bit)
+  }
+  return (hash >>> 0).toString(16).padStart(8, "0");
+}
 
 /**
  * Generate a deterministic, stable CSS class name for a bridge component.
@@ -11,10 +23,7 @@ import { createHash } from "node:crypto";
  * across runs but unique across different components.
  */
 export function generateBridgeClassName(filePath: string, componentName: string): string {
-  const hash = createHash("sha256")
-    .update(`${filePath}:${componentName}`)
-    .digest("hex")
-    .slice(0, 8);
+  const hash = fnv1aHex(`${filePath}:${componentName}`);
   return `sc2sx-${componentName}-${hash}`;
 }
 
