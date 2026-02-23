@@ -9,11 +9,13 @@ import { getMemberPathFromIdentifier, getNodeLocStart } from "../utilities/jscod
 import type { StyledDecl } from "../transform-types.js";
 import type { WarningType } from "../logger.js";
 import {
+  BORDER_STYLES,
   parseBorderShorthandParts,
   parseInterpolatedBorderStaticParts,
 } from "../css-prop-mapping.js";
 import { extractStaticParts } from "./interpolations.js";
 import { toSuffixFromProp } from "../transform/helpers.js";
+import { looksLikeLength } from "../utilities/string-utils.js";
 import type { LowerRulesState } from "./state.js";
 
 type BorderHandlerContext = Pick<
@@ -98,6 +100,119 @@ export function tryHandleInterpolatedBorder(
     return false;
   }
   const tokens = d.valueRaw.trim().split(/\s+/).filter(Boolean);
+
+  // Shared resolver: wraps resolveDynamicNode with the component and handler context
+  // common to all border resolution code paths (multi-slot and single-slot).
+  const callResolveDynamicNode = (
+    slotId: number,
+    expr: unknown,
+    loc?: { line: number; column: number } | null,
+  ) => {
+    return resolveDynamicNode(
+      {
+        slotId,
+        expr,
+        css: {
+          kind: "declaration",
+          selector: "&",
+          atRuleStack: [],
+          property: prop,
+          valueRaw: d.valueRaw,
+        },
+        component:
+          decl.base.kind === "intrinsic"
+            ? { localName: decl.localName, base: "intrinsic", tagOrIdent: decl.base.tagName }
+            : { localName: decl.localName, base: "component", tagOrIdent: decl.base.ident },
+        usage: { jsxUsages: 0, hasPropsSpread: false },
+        ...(loc ? { loc } : {}),
+      },
+      {
+        api,
+        filePath,
+        resolveValue,
+        resolveCall,
+        resolveImport: (localName: string) => importMap.get(localName) ?? null,
+      } satisfies InternalHandlerContext,
+    );
+  };
+
+  // Handle two-slot border pattern: ${width} <style> ${color}
+  //   border: ${thinPixel()} solid ${color("bgBorderFaint")}
+  //   → borderWidth: pixelVars.thin, borderStyle: "solid", borderColor: $colors.bgBorderFaint
+  {
+    const slotIndices: Array<{ idx: number; slotId: number }> = [];
+    for (let i = 0; i < tokens.length; i++) {
+      const m = (tokens[i] as string).match(/^__SC_EXPR_(\d+)__$/);
+      if (m?.[1]) {
+        slotIndices.push({ idx: i, slotId: Number(m[1]) });
+      }
+    }
+
+    if (slotIndices.length === 2 && tokens.length === 3) {
+      const [slot0, slot1] = slotIndices as [
+        { idx: number; slotId: number },
+        { idx: number; slotId: number },
+      ];
+      if (slot0.idx === 0 && slot1.idx === 2) {
+        const middleStyle = (tokens[1] as string).trim();
+        if (BORDER_STYLES.has(middleStyle)) {
+          const widthProp = `border${direction}Width`;
+          const styleProp = `border${direction}Style`;
+          const colorProp = `border${direction}Color`;
+
+          const slot0Expr = decl.templateExpressions[slot0.slotId];
+          const slot1Expr = decl.templateExpressions[slot1.slotId];
+          const slot0Res = callResolveDynamicNode(slot0.slotId, slot0Expr);
+          const slot1Res = callResolveDynamicNode(slot1.slotId, slot1Expr);
+
+          if (slot0Res?.type === "resolvedValue" && slot1Res?.type === "resolvedValue") {
+            for (const imp of [...(slot0Res.imports ?? []), ...(slot1Res.imports ?? [])]) {
+              resolverImports.set(JSON.stringify(imp), imp);
+            }
+            const slot0Ast = parseExpr(slot0Res.expr);
+            const slot1Ast = parseExpr(slot1Res.expr);
+            if (slot0Ast && slot1Ast) {
+              // Classify each resolved expression as "width" or "color" when possible.
+              // CSS border shorthand allows any order, so we can't assume positional roles.
+              // When a slot resolves to a string literal, use looksLikeLength to determine
+              // its role. For opaque expressions (variables, member expressions), use the
+              // conventional positional assumption: slot0=width, slot1=color.
+              const slot0Role = classifyBorderSlotRole(slot0Ast);
+              const slot1Role = classifyBorderSlotRole(slot1Ast);
+
+              // Bail if both are classified to the same role (ambiguous)
+              if (slot0Role && slot1Role && slot0Role === slot1Role) {
+                bailUnsupportedWithContext(
+                  "Multi-slot border interpolation could not be resolved",
+                  { property: prop },
+                  getNodeLocStart(slot0Expr) ?? getNodeLocStart(slot1Expr),
+                );
+                return true;
+              }
+
+              // Determine if we need to swap: slot0 is color or slot1 is width
+              const shouldSwap = slot0Role === "color" || slot1Role === "width";
+              const widthAst = shouldSwap ? slot1Ast : slot0Ast;
+              const colorAst = shouldSwap ? slot0Ast : slot1Ast;
+
+              applyResolvedPropValue(widthProp, widthAst);
+              applyResolvedPropValue(styleProp, middleStyle);
+              applyResolvedPropValue(colorProp, colorAst);
+              return true;
+            }
+          }
+
+          bailUnsupportedWithContext(
+            "Multi-slot border interpolation could not be resolved",
+            { property: prop },
+            getNodeLocStart(slot0Expr) ?? getNodeLocStart(slot1Expr),
+          );
+          return true;
+        }
+      }
+    }
+  }
+
   const slotTok = tokens.find((t: string) => /^__SC_EXPR_(\d+)__$/.test(t));
   if (!slotTok) {
     return false;
@@ -291,38 +406,7 @@ export function tryHandleInterpolatedBorder(
 
     const resolveBorderExpr = (node: any): ResolveBorderExprResult => {
       const loc = getNodeLocStart(node);
-      const res = resolveDynamicNode(
-        {
-          slotId,
-          expr: node,
-          css: {
-            kind: "declaration",
-            selector: "&",
-            atRuleStack: [],
-            // Pass original CSS property (e.g., "border-left") rather than expanded property
-            // (e.g., "borderLeftColor") so adapters can detect directional borders and return
-            // appropriate CSS values vs StyleX style objects
-            property: prop,
-            valueRaw: d.valueRaw,
-          },
-          component:
-            decl.base.kind === "intrinsic"
-              ? { localName: decl.localName, base: "intrinsic", tagOrIdent: decl.base.tagName }
-              : { localName: decl.localName, base: "component", tagOrIdent: decl.base.ident },
-          usage: { jsxUsages: 0, hasPropsSpread: false },
-          ...(loc ? { loc } : {}),
-        },
-        {
-          api,
-          filePath,
-          resolveValue,
-          resolveCall,
-          resolveImport: (localName: string, _identNode?: unknown) => {
-            const v = importMap.get(localName);
-            return v ? v : null;
-          },
-        } satisfies InternalHandlerContext,
-      );
+      const res = callResolveDynamicNode(slotId, node, loc);
       if (!res) {
         return { kind: "warn", warning: unresolvedCallWarning };
       }
@@ -635,4 +719,23 @@ export function tryHandleInterpolatedBorder(
     return true;
   }
   return false;
+}
+
+// --- Non-exported helpers ---
+
+/**
+ * Classify a resolved border slot expression as "width" or "color" when possible.
+ * Only string literals can be reliably classified: `looksLikeLength("0.5px")` → "width",
+ * anything else → "color". Returns null for opaque expressions (variables, member
+ * expressions) that cannot be classified at compile time.
+ */
+function classifyBorderSlotRole(ast: unknown): "width" | "color" | null {
+  const node = ast as { type?: string; value?: unknown };
+  if (
+    (node.type === "StringLiteral" || node.type === "Literal") &&
+    typeof node.value === "string"
+  ) {
+    return looksLikeLength(node.value) ? "width" : "color";
+  }
+  return null;
 }
