@@ -1057,8 +1057,8 @@ export const App = () => (
     expect(code).toContain("IconMarker");
     expect(code).toMatch(/<Icon\s[^>]*stylex\.props\([^)]*IconMarker/);
 
-    // Badge should have the override style
-    expect(code).toContain("badgeInCollapseArrowIcon");
+    // Badge should have the override style (uses local alias, not canonical name)
+    expect(code).toContain("badgeInIcon");
 
     // Hover pseudo preserved
     expect(code).toContain('stylex.when.ancestor(":hover"');
@@ -1066,5 +1066,73 @@ export const App = () => (
     // GlobalSelector import removed
     expect(code).not.toContain("CollapseArrowIconGlobalSelector");
     expect(code).not.toContain("IconSel");
+  });
+
+  it("aliased bridge overrideStyleKey does not collide with local component of same canonical name", () => {
+    // Issue: `import { CollapseArrowIcon as Icon, CollapseArrowIconGlobalSelector as IconSel }`
+    // plus a local `const CollapseArrowIcon = styled.div...` in the same parent.
+    // Both `${IconSel}` and `${CollapseArrowIcon}` would produce overrideStyleKey
+    // "collapseArrowIconInContainer" if bridgeComponentName is used, causing collision.
+    const source = `
+import styled from "styled-components";
+import { CollapseArrowIcon as Icon, CollapseArrowIconGlobalSelector as IconSel } from "./lib/converted-stylex-component";
+
+const CollapseArrowIcon = styled.div\`
+  padding: 8px;
+\`;
+
+const Container = styled.div\`
+  padding: 16px;
+
+  \${IconSel} {
+    color: red;
+  }
+
+  \${CollapseArrowIcon} {
+    color: blue;
+  }
+\`;
+
+export const App = () => (
+  <Container>
+    <Icon />
+    <CollapseArrowIcon />
+  </Container>
+);
+`;
+
+    const crossFileInfo = {
+      selectorUsages: [
+        {
+          localName: "IconSel",
+          importSource: "./lib/converted-stylex-component",
+          importedName: "CollapseArrowIconGlobalSelector",
+          resolvedPath: fixture("lib/converted-stylex-component.tsx"),
+          bridgeComponentName: "CollapseArrowIcon",
+          bridgeComponentLocalName: "Icon",
+        },
+      ],
+    };
+
+    const result = transformWithWarnings(
+      { source, path: fixture("consumer-bridge-collision.tsx") },
+      api,
+      { adapter: fixtureAdapter, crossFileInfo },
+    );
+
+    expect(result.code).not.toBeNull();
+    const code = result.code!;
+
+    // Both overrides must produce DISTINCT style keys (no collision)
+    // Bridge child (Icon) should use "iconInContainer"
+    expect(code).toContain("iconInContainer");
+    // Local child (CollapseArrowIcon) should use "collapseArrowIconInContainer"
+    expect(code).toContain("collapseArrowIconInContainer");
+    // They must be different keys
+    expect("iconInContainer").not.toBe("collapseArrowIconInContainer");
+
+    // Both color values must be present (collision would drop one)
+    expect(code).toContain('"red"');
+    expect(code).toContain('"blue"');
   });
 });

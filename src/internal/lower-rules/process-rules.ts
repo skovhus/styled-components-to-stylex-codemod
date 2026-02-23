@@ -433,14 +433,12 @@ export function processDeclRules(ctx: DeclProcessingState): void {
         }
 
         // Declare self as child, referenced component as ancestor parent.
-        // For cross-file parents, use a synthetic style key based on the local name.
-        // For bridge GlobalSelector usages, use the original component name for cosmetic
-        // style key naming, but the JSX local name for parentStyleKey (must match
-        // crossFileComponentLocalName for correct reverse classification in rewrite-jsx).
-        const resolvedParentName = crossFileParent?.bridgeComponentName ?? otherLocal;
+        // For cross-file parents, use the JSX-targeted local binding for style keys
+        // to avoid collisions when both an aliased bridge import and a local component
+        // of the same canonical name exist in one file.
         const jsxParentName = crossFileParent?.bridgeComponentLocalName ?? otherLocal;
         const parentStyleKey = parentDecl ? parentDecl.styleKey : toStyleKey(jsxParentName);
-        const overrideStyleKey = `${toStyleKey(decl.localName)}In${resolvedParentName}`;
+        const overrideStyleKey = `${toStyleKey(decl.localName)}In${jsxParentName}`;
         ancestorSelectorParents.add(parentStyleKey);
 
         // For cross-file reverse, register a defineMarker for the imported parent
@@ -534,19 +532,17 @@ export function processDeclRules(ctx: DeclProcessingState): void {
         // For cross-file selectors, the child's style key is synthetic (just the local name
         // lowered to a style key). The override style objects will be applied to the
         // imported component via JSX spread in rewrite-jsx.
-        // For bridge GlobalSelector usages, use the original component name (not the
-        // "...GlobalSelector" name) for style keys and JSX matching.
-        const effectiveChildName = crossFileUsage?.bridgeComponentName ?? otherLocal;
-        const childStyleKey = childDecl ? childDecl.styleKey : toStyleKey(effectiveChildName);
-        const overrideStyleKey = `${toStyleKey(effectiveChildName)}In${decl.localName}`;
+        // For bridge GlobalSelector usages, use the JSX-targeted local binding (not the
+        // canonical component name) for style keys to avoid collisions when both an aliased
+        // bridge import and a local component of the same canonical name exist in one file.
+        const jsxLocalName = crossFileUsage?.bridgeComponentLocalName ?? otherLocal;
+        const childStyleKey = childDecl ? childDecl.styleKey : toStyleKey(jsxLocalName);
+        const overrideStyleKey = `${toStyleKey(jsxLocalName)}In${decl.localName}`;
         ancestorSelectorParents.add(decl.styleKey);
 
         // For cross-file, compute the marker variable name (stored on RelationOverride,
         // derived into crossFileMarkers map by lowerRules after processing completes)
         const markerVarName = crossFileUsage ? `${decl.localName}Marker` : undefined;
-
-        // For JSX matching, use the local name of the actual component (not the GlobalSelector)
-        const jsxLocalName = crossFileUsage?.bridgeComponentLocalName ?? otherLocal;
 
         // getOrCreateRelationOverrideBucket creates the RelationOverride entry on first
         // call for this overrideStyleKey. Track count to detect new entries.
