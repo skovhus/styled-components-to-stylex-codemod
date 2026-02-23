@@ -21,14 +21,17 @@ import {
 import { createPrepassParser, type AstNode, type PrepassParserName } from "./prepass-parser.js";
 import type { ModuleResolver } from "./resolve-imports.js";
 import {
+  applyBridgeFields,
   BARE_TEMPLATE_IDENTIFIER_RE,
   buildImportMapFromNodes,
+  categorizeSelectorUsages,
   deduplicateAndResolve,
   findComponentSelectorLocalsFromNodes,
   findStyledImportNameFromNodes,
   walkForImportsAndTemplates,
   type CrossFileInfo,
   type CrossFileSelectorUsage,
+  type ImportEntry,
 } from "./scan-cross-file-selectors.js";
 import { isSelectorContext } from "../utilities/selector-context-heuristic.js";
 
@@ -52,7 +55,7 @@ interface PrepassResult {
 
 /** Cached AST-derived data for a single file, keyed by content hash. */
 interface AstCacheEntry {
-  importMap: Map<string, { source: string; importedName: string }>;
+  importMap: Map<string, ImportEntry>;
   styledImportName: string | undefined;
   selectorLocals: Set<string>;
 }
@@ -202,22 +205,17 @@ export async function runPrepass(options: PrepassOptions): Promise<PrepassResult
         resolver,
         parser,
         toRealPath,
+        cachedRead,
         astCache,
         createExternalInterface,
       );
       if (usages.length > 0) {
         selectorUsages.set(filePath, usages);
-        for (const usage of usages) {
-          if (usage.consumerIsTransformed) {
-            addToSetMap(componentsNeedingMarkerSidecar, usage.resolvedPath, usage.importedName);
-          } else {
-            addToSetMap(
-              componentsNeedingGlobalSelectorBridge,
-              usage.resolvedPath,
-              usage.importedName,
-            );
-          }
-        }
+        categorizeSelectorUsages(
+          usages,
+          componentsNeedingMarkerSidecar,
+          componentsNeedingGlobalSelectorBridge,
+        );
       }
     }
 
@@ -606,6 +604,7 @@ function scanFileForSelectorsAst(
   resolver: ModuleResolver,
   parser: ReturnType<typeof createPrepassParser>,
   toRealPath: (p: string) => string,
+  readFile: (path: string) => string,
   cache?: Map<string, AstCacheEntry>,
   failOnParseError?: boolean,
 ): CrossFileSelectorUsage[] {
@@ -613,7 +612,7 @@ function scanFileForSelectorsAst(
   const hash = cache ? createHash("md5").update(source).digest("hex") : undefined;
   const cached = cache && hash ? cache.get(hash) : undefined;
 
-  let importMap: Map<string, { source: string; importedName: string }>;
+  let importMap: Map<string, ImportEntry>;
   let styledImportName: string | undefined;
   let selectorLocals: Set<string>;
 
@@ -672,14 +671,19 @@ function scanFileForSelectorsAst(
       continue;
     }
 
-    usages.push({
+    const usage: CrossFileSelectorUsage = {
       localName,
       importSource: imp.source,
       importedName: imp.importedName,
       resolvedPath: realResolved,
       consumerPath: filePath,
       consumerIsTransformed,
-    });
+    };
+
+    // Check if this is a bridge GlobalSelector from an already-converted StyleX file
+    applyBridgeFields(usage, imp.importedName, localName, realResolved, importMap, readFile);
+
+    usages.push(usage);
   }
 
   return usages;

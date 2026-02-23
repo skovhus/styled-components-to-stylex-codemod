@@ -92,6 +92,10 @@ export interface CrossFileSelectorUsage {
   importedName: string;
   /** Absolute path of the target module */
   resolvedPath: string;
+  /** Original component name for bridge GlobalSelector (e.g., "Foo" for "FooGlobalSelector") */
+  bridgeComponentName?: string;
+  /** Local name of the actual component in the consumer file (for JSX matching) */
+  bridgeComponentLocalName?: string;
 }
 
 type ExpressionKind = Parameters<JSCodeshift["expressionStatement"]>[0];

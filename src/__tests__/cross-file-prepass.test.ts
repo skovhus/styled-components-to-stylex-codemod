@@ -2,12 +2,13 @@ import { afterEach, beforeEach, describe, it, expect, vi } from "vitest";
 import { join, resolve as pathResolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { dirname } from "node:path";
-import { mkdtempSync, writeFileSync, rmSync } from "node:fs";
+import { mkdtempSync, readFileSync, writeFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import jscodeshift from "jscodeshift";
 import { createModuleResolver } from "../internal/prepass/resolve-imports.js";
 import { runPrepass } from "../internal/prepass/run-prepass.js";
 import {
+  detectBridgeGlobalSelector,
   scanCrossFileSelectors,
   type CrossFileInfo,
   type CrossFileSelectorUsage,
@@ -763,5 +764,375 @@ describe("prepass parse error handling", () => {
 
     // Should complete without error, just returning empty selectors for that file
     expect(result.crossFileInfo.selectorUsages.size).toBe(0);
+  });
+});
+
+/* ── Bridge GlobalSelector detection ─────────────────────────────────── */
+
+describe("bridge GlobalSelector detection", () => {
+  const resolver = createModuleResolver();
+
+  it("detects bridge and maps to original component name", () => {
+    const info = scanCrossFileSelectors(
+      [fixture("consumer-bridge-forward.tsx"), fixture("lib/converted-stylex-component.tsx")],
+      [],
+      resolver,
+    );
+
+    const usages = info.selectorUsages.get(fixture("consumer-bridge-forward.tsx"));
+    expect(usages).toBeDefined();
+    expect(usages).toHaveLength(1);
+
+    const usage = usages![0]!;
+    expect(usage.localName).toBe("CollapseArrowIconGlobalSelector");
+    expect(usage.importedName).toBe("CollapseArrowIconGlobalSelector");
+    expect(usage.bridgeComponentName).toBe("CollapseArrowIcon");
+    expect(usage.bridgeComponentLocalName).toBe("CollapseArrowIcon");
+  });
+
+  it("does NOT trigger for non-StyleX target files", () => {
+    const readFile = (p: string) => readFileSync(p, "utf-8");
+    const result = detectBridgeGlobalSelector(
+      "CollapseArrowIconGlobalSelector",
+      fixture("lib/non-stylex-component.tsx"),
+      readFile,
+    );
+    expect(result).toBeNull();
+  });
+
+  it("does NOT trigger for non-.sc2sx- exports", () => {
+    const readFile = (p: string) => readFileSync(p, "utf-8");
+    const result = detectBridgeGlobalSelector(
+      "CollapseArrowIconGlobalSelector",
+      fixture("lib/stylex-no-bridge-export.tsx"),
+      readFile,
+    );
+    expect(result).toBeNull();
+  });
+
+  it("handles aliased imports (as ArrowSel)", () => {
+    const info = scanCrossFileSelectors(
+      [fixture("consumer-bridge-aliased.tsx"), fixture("lib/converted-stylex-component.tsx")],
+      [],
+      resolver,
+    );
+
+    const usages = info.selectorUsages.get(fixture("consumer-bridge-aliased.tsx"));
+    expect(usages).toBeDefined();
+    expect(usages).toHaveLength(1);
+
+    const usage = usages![0]!;
+    // Local name is the alias
+    expect(usage.localName).toBe("ArrowSel");
+    // Imported name is the original
+    expect(usage.importedName).toBe("CollapseArrowIconGlobalSelector");
+    // Bridge maps to the component name
+    expect(usage.bridgeComponentName).toBe("CollapseArrowIcon");
+    expect(usage.bridgeComponentLocalName).toBe("CollapseArrowIcon");
+  });
+
+  it("sets bridgeComponentLocalName when component is also imported", () => {
+    const info = scanCrossFileSelectors(
+      [fixture("consumer-bridge-forward.tsx"), fixture("lib/converted-stylex-component.tsx")],
+      [],
+      resolver,
+    );
+
+    const usages = info.selectorUsages.get(fixture("consumer-bridge-forward.tsx"));
+    expect(usages).toBeDefined();
+    const usage = usages![0]!;
+
+    // The consumer also imports CollapseArrowIcon (the component) from the same source
+    expect(usage.bridgeComponentLocalName).toBe("CollapseArrowIcon");
+  });
+
+  it("detects non-first bridge export from multi-export file", () => {
+    // Issue: content.match(BRIDGE_EXPORT_RE) only returns the first export.
+    // If the imported name is the *second* export, the match fails.
+    const info = scanCrossFileSelectors(
+      [fixture("consumer-bridge-second-export.tsx"), fixture("lib/converted-multi-export.tsx")],
+      [],
+      resolver,
+    );
+
+    const usages = info.selectorUsages.get(fixture("consumer-bridge-second-export.tsx"));
+    expect(usages).toBeDefined();
+    expect(usages).toHaveLength(1);
+
+    const usage = usages![0]!;
+    expect(usage.localName).toBe("SecondLinkGlobalSelector");
+    expect(usage.importedName).toBe("SecondLinkGlobalSelector");
+    expect(usage.bridgeComponentName).toBe("SecondLink");
+    expect(usage.bridgeComponentLocalName).toBe("SecondLink");
+  });
+
+  it("detects bridge via detectBridgeGlobalSelector for non-first export", () => {
+    // Direct unit test for detectBridgeGlobalSelector with multi-export file
+    const readFile = (p: string) => readFileSync(p, "utf-8");
+
+    // First export should still work
+    const first = detectBridgeGlobalSelector(
+      "FirstIconGlobalSelector",
+      fixture("lib/converted-multi-export.tsx"),
+      readFile,
+    );
+    expect(first).toBe("FirstIcon");
+
+    // Second export must also work (this was the bug)
+    const second = detectBridgeGlobalSelector(
+      "SecondLinkGlobalSelector",
+      fixture("lib/converted-multi-export.tsx"),
+      readFile,
+    );
+    expect(second).toBe("SecondLink");
+  });
+
+  it("sets bridgeComponentLocalName for default import with different local name", () => {
+    // Issue: `import Icon, { CollapseArrowIconGlobalSelector } from "./lib/component"`
+    // Icon is a default import (importedName="default") with localName="Icon".
+    // bridgeName="CollapseArrowIcon". The old check compared otherLocal ("Icon") to
+    // bridgeName ("CollapseArrowIcon"), which fails. Default imports should match by
+    // being the default export from the same source.
+    const info = scanCrossFileSelectors(
+      [fixture("consumer-bridge-default-import.tsx"), fixture("lib/converted-default-export.tsx")],
+      [],
+      resolver,
+    );
+
+    const usages = info.selectorUsages.get(fixture("consumer-bridge-default-import.tsx"));
+    expect(usages).toBeDefined();
+    expect(usages).toHaveLength(1);
+
+    const usage = usages![0]!;
+    expect(usage.bridgeComponentName).toBe("CollapseArrowIcon");
+    // bridgeComponentLocalName must be "Icon" (the default import's local name)
+    expect(usage.bridgeComponentLocalName).toBe("Icon");
+  });
+
+  it("prefers named import over default import for bridgeComponentLocalName", () => {
+    // Issue: `import Util, { CollapseArrowIcon, CollapseArrowIconGlobalSelector } from "..."`
+    // The loop matched Util (default import) before CollapseArrowIcon (named import),
+    // setting bridgeComponentLocalName to "Util" instead of "CollapseArrowIcon".
+    const info = scanCrossFileSelectors(
+      [
+        fixture("consumer-bridge-default-plus-named.tsx"),
+        fixture("lib/converted-default-plus-named.tsx"),
+      ],
+      [],
+      resolver,
+    );
+
+    const usages = info.selectorUsages.get(fixture("consumer-bridge-default-plus-named.tsx"));
+    expect(usages).toBeDefined();
+    expect(usages).toHaveLength(1);
+
+    const usage = usages![0]!;
+    expect(usage.bridgeComponentName).toBe("CollapseArrowIcon");
+    // Must match the named import, NOT the unrelated default import "Util"
+    expect(usage.bridgeComponentLocalName).toBe("CollapseArrowIcon");
+  });
+
+  it("skips bridge usages from componentsNeedingMarkerSidecar/Bridge", () => {
+    const info = scanCrossFileSelectors(
+      [fixture("consumer-bridge-forward.tsx"), fixture("lib/converted-stylex-component.tsx")],
+      [],
+      resolver,
+    );
+
+    // Bridge usages should NOT populate componentsNeedingMarkerSidecar or Bridge
+    expect(info.componentsNeedingMarkerSidecar.size).toBe(0);
+    expect(info.componentsNeedingGlobalSelectorBridge.size).toBe(0);
+  });
+});
+
+/* ── Bridge GlobalSelector transform (end-to-end) ───────────────────── */
+
+describe("bridge GlobalSelector transform", () => {
+  it("transforms bridge forward selector with correct style key and JSX matching", () => {
+    const source = `
+import styled from "styled-components";
+import { CollapseArrowIcon, CollapseArrowIconGlobalSelector } from "./lib/converted-stylex-component";
+
+const Container = styled.div\`
+  padding: 16px;
+
+  &:hover \${CollapseArrowIconGlobalSelector} {
+    background-color: rebeccapurple;
+  }
+\`;
+
+export const App = () => (
+  <Container>
+    <CollapseArrowIcon />
+  </Container>
+);
+`;
+
+    const crossFileInfo = {
+      selectorUsages: [
+        {
+          localName: "CollapseArrowIconGlobalSelector",
+          importSource: "./lib/converted-stylex-component",
+          importedName: "CollapseArrowIconGlobalSelector",
+          resolvedPath: fixture("lib/converted-stylex-component.tsx"),
+          bridgeComponentName: "CollapseArrowIcon",
+          bridgeComponentLocalName: "CollapseArrowIcon",
+        },
+      ],
+    };
+
+    const result = transformWithWarnings(
+      { source, path: fixture("consumer-bridge-forward.tsx") },
+      api,
+      { adapter: fixtureAdapter, crossFileInfo },
+    );
+
+    expect(result.code).not.toBeNull();
+    const code = result.code!;
+
+    // Style key uses original component name, not GlobalSelector
+    expect(code).toContain("collapseArrowIconInContainer");
+    expect(code).not.toContain("GlobalSelector");
+
+    // JSX applies styles to CollapseArrowIcon (the component)
+    expect(code).toMatch(/<CollapseArrowIcon\s[^>]*stylex\.props/);
+
+    // Hover pseudo is preserved via stylex.when.ancestor
+    expect(code).toContain('stylex.when.ancestor(":hover"');
+
+    // Marker is generated for the consumer
+    expect(code).toContain("ContainerMarker");
+
+    // CollapseArrowIconGlobalSelector import is removed
+    expect(code).not.toContain("CollapseArrowIconGlobalSelector");
+  });
+
+  it("reverse bridge selector with aliased import classifies correctly and injects marker", () => {
+    // Issue: When bridgeComponentName ("Foo") differs from bridgeComponentLocalName ("Icon")
+    // due to aliased imports, the reverse selector classification fails because
+    // parentStyleKey (toStyleKey("Foo")) !== toStyleKey(crossFileComponentLocalName ("Icon")).
+    const source = `
+import styled from "styled-components";
+import { CollapseArrowIcon as Icon, CollapseArrowIconGlobalSelector as IconSel } from "./lib/converted-stylex-component";
+
+const Badge = styled.span\`
+  color: gray;
+
+  \${IconSel}:hover & {
+    color: rebeccapurple;
+  }
+\`;
+
+export const App = () => (
+  <Icon>
+    <Badge>Hello</Badge>
+  </Icon>
+);
+`;
+
+    const crossFileInfo = {
+      selectorUsages: [
+        {
+          localName: "IconSel",
+          importSource: "./lib/converted-stylex-component",
+          importedName: "CollapseArrowIconGlobalSelector",
+          resolvedPath: fixture("lib/converted-stylex-component.tsx"),
+          bridgeComponentName: "CollapseArrowIcon",
+          bridgeComponentLocalName: "Icon",
+        },
+      ],
+    };
+
+    const result = transformWithWarnings(
+      { source, path: fixture("consumer-bridge-reverse-aliased.tsx") },
+      api,
+      { adapter: fixtureAdapter, crossFileInfo },
+    );
+
+    expect(result.code).not.toBeNull();
+    const code = result.code!;
+
+    // The marker should be applied to the parent component (Icon) in JSX
+    // This requires correct reverse classification so the marker is injected on <Icon>
+    expect(code).toContain("IconMarker");
+    expect(code).toMatch(/<Icon\s[^>]*stylex\.props\([^)]*IconMarker/);
+
+    // Badge should have the override style (uses local alias, not canonical name)
+    expect(code).toContain("badgeInIcon");
+
+    // Hover pseudo preserved
+    expect(code).toContain('stylex.when.ancestor(":hover"');
+
+    // GlobalSelector import removed
+    expect(code).not.toContain("CollapseArrowIconGlobalSelector");
+    expect(code).not.toContain("IconSel");
+  });
+
+  it("aliased bridge overrideStyleKey does not collide with local component of same canonical name", () => {
+    // Issue: `import { CollapseArrowIcon as Icon, CollapseArrowIconGlobalSelector as IconSel }`
+    // plus a local `const CollapseArrowIcon = styled.div...` in the same parent.
+    // Both `${IconSel}` and `${CollapseArrowIcon}` would produce overrideStyleKey
+    // "collapseArrowIconInContainer" if bridgeComponentName is used, causing collision.
+    const source = `
+import styled from "styled-components";
+import { CollapseArrowIcon as Icon, CollapseArrowIconGlobalSelector as IconSel } from "./lib/converted-stylex-component";
+
+const CollapseArrowIcon = styled.div\`
+  padding: 8px;
+\`;
+
+const Container = styled.div\`
+  padding: 16px;
+
+  \${IconSel} {
+    color: red;
+  }
+
+  \${CollapseArrowIcon} {
+    color: blue;
+  }
+\`;
+
+export const App = () => (
+  <Container>
+    <Icon />
+    <CollapseArrowIcon />
+  </Container>
+);
+`;
+
+    const crossFileInfo = {
+      selectorUsages: [
+        {
+          localName: "IconSel",
+          importSource: "./lib/converted-stylex-component",
+          importedName: "CollapseArrowIconGlobalSelector",
+          resolvedPath: fixture("lib/converted-stylex-component.tsx"),
+          bridgeComponentName: "CollapseArrowIcon",
+          bridgeComponentLocalName: "Icon",
+        },
+      ],
+    };
+
+    const result = transformWithWarnings(
+      { source, path: fixture("consumer-bridge-collision.tsx") },
+      api,
+      { adapter: fixtureAdapter, crossFileInfo },
+    );
+
+    expect(result.code).not.toBeNull();
+    const code = result.code!;
+
+    // Both overrides must produce DISTINCT style keys (no collision)
+    // Bridge child (Icon) should use "iconInContainer"
+    expect(code).toContain("iconInContainer");
+    // Local child (CollapseArrowIcon) should use "collapseArrowIconInContainer"
+    expect(code).toContain("collapseArrowIconInContainer");
+    // They must be different keys
+    expect("iconInContainer").not.toBe("collapseArrowIconInContainer");
+
+    // Both color values must be present (collision would drop one)
+    expect(code).toContain('"red"');
+    expect(code).toContain('"blue"');
   });
 });

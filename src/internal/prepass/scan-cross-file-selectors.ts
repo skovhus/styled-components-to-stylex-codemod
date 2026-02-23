@@ -66,22 +66,20 @@ export function scanCrossFileSelectors(
 
   // Create the parser once, reuse for all files (avoids per-file setup cost)
   const parser = createPrepassParser(parserName);
+  const cachedReadFile = createCachedFileReader();
 
   for (const filePath of allFiles) {
-    const usages = scanFile(filePath, transformSet, resolver, parser);
+    const usages = scanFile(filePath, transformSet, resolver, parser, cachedReadFile);
     if (usages.length === 0) {
       continue;
     }
 
     selectorUsages.set(filePath, usages);
-
-    for (const usage of usages) {
-      if (usage.consumerIsTransformed) {
-        addToSetMap(componentsNeedingMarkerSidecar, usage.resolvedPath, usage.importedName);
-      } else {
-        addToSetMap(componentsNeedingGlobalSelectorBridge, usage.resolvedPath, usage.importedName);
-      }
-    }
+    categorizeSelectorUsages(
+      usages,
+      componentsNeedingMarkerSidecar,
+      componentsNeedingGlobalSelectorBridge,
+    );
   }
 
   const result = {
@@ -106,16 +104,155 @@ export function scanCrossFileSelectors(
  */
 export const BARE_TEMPLATE_IDENTIFIER_RE = /\$\{\s*[a-zA-Z_$][\w$]*\s*\}/;
 
+/**
+ * Categorize cross-file selector usages into marker sidecar and global selector bridge maps.
+ *
+ * Bridge usages (from already-converted files) are skipped — the consumer handles marker
+ * generation via the forward selector handler, so no sidecar/bridge is needed on the target.
+ */
+export function categorizeSelectorUsages(
+  usages: readonly CrossFileSelectorUsage[],
+  componentsNeedingMarkerSidecar: Map<string, Set<string>>,
+  componentsNeedingGlobalSelectorBridge: Map<string, Set<string>>,
+): void {
+  for (const usage of usages) {
+    if (usage.bridgeComponentName) {
+      continue;
+    }
+    if (usage.consumerIsTransformed) {
+      addToSetMap(componentsNeedingMarkerSidecar, usage.resolvedPath, usage.importedName);
+    } else {
+      addToSetMap(componentsNeedingGlobalSelectorBridge, usage.resolvedPath, usage.importedName);
+    }
+  }
+}
+
+/* ── Bridge GlobalSelector detection ─────────────────────────────────── */
+
+/** Regex matching `export const XGlobalSelector = ".sc2sx-` pattern (global for matchAll). */
+const BRIDGE_EXPORT_RE = /export\s+const\s+(\w+GlobalSelector)\s*=\s*["']\.sc2sx-/g;
+
+/**
+ * Detect whether an imported name is a bridge GlobalSelector from an
+ * already-converted StyleX file.
+ *
+ * Detection criteria (hybrid fast + safe):
+ * 1. Variable name ends with "GlobalSelector" AND the stripped name starts uppercase
+ * 2. Target file contains "@stylexjs/stylex" (string check, no parse)
+ * 3. Target file has a matching `export const XGlobalSelector = ".sc2sx-"` pattern
+ *
+ * @returns The stripped component name (e.g., "CollapseArrowIcon" for
+ *   "CollapseArrowIconGlobalSelector"), or null if not a bridge.
+ */
+export function detectBridgeGlobalSelector(
+  importedName: string,
+  resolvedPath: string,
+  readFile: (path: string) => string,
+): string | null {
+  // Check 1: name ends with "GlobalSelector" and stripped name starts uppercase
+  if (!importedName.endsWith("GlobalSelector")) {
+    return null;
+  }
+  const stripped = importedName.slice(0, -"GlobalSelector".length);
+  if (!stripped || !/^[A-Z]/.test(stripped)) {
+    return null;
+  }
+
+  // Check 2 & 3: target file contains StyleX and matching export
+  const content = readFile(resolvedPath);
+  if (!content || !content.includes("@stylexjs/stylex")) {
+    return null;
+  }
+  let found = false;
+  for (const m of content.matchAll(BRIDGE_EXPORT_RE)) {
+    if (m[1] === importedName) {
+      found = true;
+      break;
+    }
+  }
+  if (!found) {
+    return null;
+  }
+
+  return stripped;
+}
+
+export type ImportEntry = { source: string; importedName: string };
+
+/**
+ * If `importedName` is a bridge GlobalSelector, populate bridge fields on `usage`
+ * and find the corresponding component import from the same source.
+ */
+export function applyBridgeFields(
+  usage: CrossFileSelectorUsage | CoreUsage,
+  importedName: string,
+  localName: string,
+  resolvedPath: string,
+  importMap: ReadonlyMap<string, ImportEntry>,
+  readFile: (path: string) => string,
+): void {
+  const bridgeName = detectBridgeGlobalSelector(importedName, resolvedPath, readFile);
+  if (!bridgeName) {
+    return;
+  }
+  usage.bridgeComponentName = bridgeName;
+  // Find the actual component import from the same source
+  const imp = importMap.get(localName);
+  if (!imp) {
+    return;
+  }
+  // Prefer named import matching bridgeName; fall back to default import.
+  // This avoids matching an unrelated default export when the named component is also imported
+  // (e.g., `import Util, { Foo, FooGlobalSelector }` — Foo should win over Util).
+  let defaultImportLocal: string | undefined;
+  for (const [otherLocal, otherImp] of importMap) {
+    if (otherImp.source !== imp.source || otherLocal === localName) {
+      continue;
+    }
+    if (otherImp.importedName === bridgeName) {
+      usage.bridgeComponentLocalName = otherLocal;
+      defaultImportLocal = undefined;
+      break;
+    }
+    if (otherImp.importedName === "default" && defaultImportLocal === undefined) {
+      defaultImportLocal = otherLocal;
+    }
+  }
+  if (defaultImportLocal !== undefined) {
+    usage.bridgeComponentLocalName = defaultImportLocal;
+  }
+}
+
 /* ── File scanner ─────────────────────────────────────────────────────── */
 
 /** Global version for matchAll/replace operations */
 const PLACEHOLDER_RE_G = new RegExp(PLACEHOLDER_RE.source, "g");
+
+/** Create a cached file reader scoped to a single scan invocation. */
+function createCachedFileReader(): (path: string) => string {
+  const cache = new Map<string, string>();
+  return (filePath: string): string => {
+    const cached = cache.get(filePath);
+    if (cached !== undefined) {
+      return cached;
+    }
+    try {
+      const content = readFileSync(filePath, "utf-8");
+      cache.set(filePath, content);
+      return content;
+    } catch {
+      cache.set(filePath, "");
+      return "";
+    }
+  };
+}
 
 function scanFile(
   filePath: string,
   transformSet: ReadonlySet<string>,
   resolver: ModuleResolver,
   parser: ReturnType<typeof createPrepassParser>,
+  readFile: (path: string) => string,
 ): CrossFileSelectorUsage[] {
   let source: string;
   try {
@@ -186,14 +323,20 @@ function scanFile(
       continue;
     }
 
-    usages.push({
+    const absResolved = pathResolve(resolvedPath);
+    const usage: CrossFileSelectorUsage = {
       localName,
       importSource: imp.source,
       importedName: imp.importedName,
-      resolvedPath: pathResolve(resolvedPath),
+      resolvedPath: absResolved,
       consumerPath: filePath,
       consumerIsTransformed,
-    });
+    };
+
+    // Check if this is a bridge GlobalSelector from an already-converted StyleX file
+    applyBridgeFields(usage, imp.importedName, localName, absResolved, importMap, readFile);
+
+    usages.push(usage);
   }
 
   return usages;
@@ -238,8 +381,6 @@ export function walkForImportsAndTemplates(
     }
   }
 }
-
-type ImportEntry = { source: string; importedName: string };
 
 /** Build a map of localName → import info from raw ImportDeclaration nodes. */
 export function buildImportMapFromNodes(importNodes: AstNode[]): Map<string, ImportEntry> {

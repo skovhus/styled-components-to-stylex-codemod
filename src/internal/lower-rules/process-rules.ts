@@ -433,13 +433,16 @@ export function processDeclRules(ctx: DeclProcessingState): void {
         }
 
         // Declare self as child, referenced component as ancestor parent.
-        // For cross-file parents, use a synthetic style key based on the local name.
-        const parentStyleKey = parentDecl ? parentDecl.styleKey : toStyleKey(otherLocal);
-        const overrideStyleKey = `${toStyleKey(decl.localName)}In${otherLocal}`;
+        // For cross-file parents, use the JSX-targeted local binding for style keys
+        // to avoid collisions when both an aliased bridge import and a local component
+        // of the same canonical name exist in one file.
+        const jsxParentName = crossFileParent?.bridgeComponentLocalName ?? otherLocal;
+        const parentStyleKey = parentDecl ? parentDecl.styleKey : toStyleKey(jsxParentName);
+        const overrideStyleKey = `${toStyleKey(decl.localName)}In${jsxParentName}`;
         ancestorSelectorParents.add(parentStyleKey);
 
         // For cross-file reverse, register a defineMarker for the imported parent
-        const reverseMarkerVarName = crossFileParent ? `${otherLocal}Marker` : undefined;
+        const reverseMarkerVarName = crossFileParent ? `${jsxParentName}Marker` : undefined;
 
         const overrideCountBeforeReverse = relationOverrides.length;
         // Process declarations once, then register into each pseudo bucket
@@ -458,7 +461,7 @@ export function processDeclRules(ctx: DeclProcessingState): void {
           relationOverrides,
           overrideCountBeforeReverse,
           reverseMarkerVarName,
-          otherLocal,
+          jsxParentName,
         );
 
         const result = processDeclarationsIntoBucket(
@@ -529,8 +532,12 @@ export function processDeclRules(ctx: DeclProcessingState): void {
         // For cross-file selectors, the child's style key is synthetic (just the local name
         // lowered to a style key). The override style objects will be applied to the
         // imported component via JSX spread in rewrite-jsx.
-        const childStyleKey = childDecl ? childDecl.styleKey : toStyleKey(otherLocal);
-        const overrideStyleKey = `${toStyleKey(otherLocal)}In${decl.localName}`;
+        // For bridge GlobalSelector usages, use the JSX-targeted local binding (not the
+        // canonical component name) for style keys to avoid collisions when both an aliased
+        // bridge import and a local component of the same canonical name exist in one file.
+        const jsxLocalName = crossFileUsage?.bridgeComponentLocalName ?? otherLocal;
+        const childStyleKey = childDecl ? childDecl.styleKey : toStyleKey(jsxLocalName);
+        const overrideStyleKey = `${toStyleKey(jsxLocalName)}In${decl.localName}`;
         ancestorSelectorParents.add(decl.styleKey);
 
         // For cross-file, compute the marker variable name (stored on RelationOverride,
@@ -550,7 +557,7 @@ export function processDeclRules(ctx: DeclProcessingState): void {
         );
 
         // Tag newly-created relation override as cross-file
-        tagCrossFileOverride(relationOverrides, overrideCountBefore, markerVarName, otherLocal);
+        tagCrossFileOverride(relationOverrides, overrideCountBefore, markerVarName, jsxLocalName);
 
         const forwardResult = processDeclarationsIntoBucket(
           rule,
