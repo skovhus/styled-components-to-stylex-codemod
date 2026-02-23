@@ -278,8 +278,9 @@ export async function runPrepass(options: PrepassOptions): Promise<PrepassResult
       // Then scan uncached files that matched the rg pre-filter.
       // Only read files not already cached from Phase 1 — these are consumer
       // files without styled-components (e.g., .stories.tsx, page components).
+      // Intersect with allFilesSet to avoid scanning files outside the requested scope.
       const filesToScan = rgHits
-        ? [...rgHits].filter((f) => !fileContents.has(f))
+        ? [...rgHits].filter((f) => allFilesSet.has(f) && !fileContents.has(f))
         : uniqueAllFiles.filter((f) => !fileContents.has(f));
 
       for (const filePath of filesToScan) {
@@ -505,25 +506,61 @@ function escapeRegexForRegExp(s: string): string {
 /** Quick pre-check: does this source mention className or style in a JSX prop context? */
 const CLASSNAME_STYLE_QUICK_RE = /\b(className|style)\s*[={]/;
 
+/** Matches `import { Original as Local, ... }` — captures original and local names. */
+const IMPORT_ALIAS_ENTRY_RE = /\b(\w+)\s+as\s+(\w+)/g;
+
+/**
+ * Build a mapping from local alias names to original imported names for a source file.
+ * Only includes PascalCase names that differ from their original (actual aliases).
+ */
+function buildLocalToImportedMap(source: string): Map<string, string> {
+  const map = new Map<string, string>();
+  IMPORT_ALIAS_ENTRY_RE.lastIndex = 0;
+  for (const m of source.matchAll(IMPORT_ALIAS_ENTRY_RE)) {
+    const original = m[1]!;
+    const local = m[2]!;
+    if (original !== local && /^[A-Z]/.test(local)) {
+      map.set(local, original);
+    }
+  }
+  return map;
+}
+
 /**
  * Scan source for JSX usage of specific components with className or style props.
  * Uses a two-step approach: first quick-checks for className/style keywords,
  * then scans JSX open tags to match component names — avoids building a huge
  * alternation regex when there are hundreds of component names.
+ * Handles aliased imports (e.g., `import { Alert as MyAlert }`) by resolving
+ * local tag names back to their original exported names.
  */
 function scanClassNameStyleUsages(source: string, componentNames: ReadonlySet<string>): string[] {
   if (!CLASSNAME_STYLE_QUICK_RE.test(source)) {
     return [];
   }
 
+  // Build alias map lazily — only if needed
+  let aliasMap: Map<string, string> | undefined;
+
   // Match JSX open tags: `<ComponentName ... className=` or `<ComponentName ... style=`
   // We use a generic tag regex and check the name against the set.
   const matches: string[] = [];
   const tagRe = /<([A-Z][A-Za-z0-9]*)\b[^<>]*\b(?:className|style)\s*[={]/gs;
   for (const m of source.matchAll(tagRe)) {
-    const name = m[1];
-    if (name && componentNames.has(name)) {
-      matches.push(name);
+    const tagName = m[1];
+    if (!tagName) {
+      continue;
+    }
+    // Direct match: tag name is the original exported name
+    if (componentNames.has(tagName)) {
+      matches.push(tagName);
+      continue;
+    }
+    // Alias match: tag name is a local alias — resolve to original imported name
+    aliasMap ??= buildLocalToImportedMap(source);
+    const originalName = aliasMap.get(tagName);
+    if (originalName && componentNames.has(originalName)) {
+      matches.push(originalName);
     }
   }
   return matches;

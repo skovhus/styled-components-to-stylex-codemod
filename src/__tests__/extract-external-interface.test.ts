@@ -413,6 +413,16 @@ describe("runPrepass createExternalInterface — className/style detection", () 
       'import styled from "styled-components";\nexport const SameFile = styled.div`color: blue;`;\nexport const App = () => <SameFile className="local">Text</SameFile>;',
     );
 
+    // Aliased import with className (import { Box as MyBox })
+    writeFileSync(
+      path.join(componentsDir, "Aliased.tsx"),
+      'import styled from "styled-components";\nexport const Aliased = styled.div`color: green;`;',
+    );
+    writeFileSync(
+      path.join(consumersDir, "aliased-className.tsx"),
+      'import { Aliased as MyAliased } from "../components/Aliased";\nexport const App = () => <MyAliased className="extra">Text</MyAliased>;',
+    );
+
     const originalCwd = process.cwd();
     try {
       process.chdir(fixtureDir);
@@ -469,9 +479,19 @@ describe("runPrepass createExternalInterface — className/style detection", () 
     expect(snapshot["components/SameFile.tsx:SameFile"]).toEqual({ as: false, styles: true });
   });
 
+  it("detects aliased import className usage", () => {
+    // import { Aliased as MyAliased } → <MyAliased className="extra">
+    const snapshot = toSnapshot(result, fixtureDir);
+    expect(snapshot["components/Aliased.tsx:Aliased"]).toEqual({ as: false, styles: true });
+  });
+
   it("full snapshot", () => {
     expect(toSnapshot(result, fixtureDir)).toMatchInlineSnapshot(`
       {
+        "components/Aliased.tsx:Aliased": {
+          "as": false,
+          "styles": true,
+        },
         "components/Box.tsx:Box": {
           "as": false,
           "styles": true,
