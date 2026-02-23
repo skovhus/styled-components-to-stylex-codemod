@@ -21,6 +21,7 @@ import {
 import { createPrepassParser, type AstNode, type PrepassParserName } from "./prepass-parser.js";
 import type { ModuleResolver } from "./resolve-imports.js";
 import {
+  applyBridgeFields,
   BARE_TEMPLATE_IDENTIFIER_RE,
   buildImportMapFromNodes,
   deduplicateAndResolve,
@@ -201,12 +202,18 @@ export async function runPrepass(options: PrepassOptions): Promise<PrepassResult
         resolver,
         parser,
         toRealPath,
+        cachedRead,
         astCache,
         createExternalInterface,
       );
       if (usages.length > 0) {
         selectorUsages.set(filePath, usages);
         for (const usage of usages) {
+          // Bridge usages reference already-converted files; the consumer handles marker
+          // generation via the forward selector handler — no sidecar/bridge needed on target.
+          if (usage.bridgeComponentName) {
+            continue;
+          }
           if (usage.consumerIsTransformed) {
             addToSetMap(componentsNeedingMarkerSidecar, usage.resolvedPath, usage.importedName);
           } else {
@@ -433,6 +440,7 @@ function scanFileForSelectorsAst(
   resolver: ModuleResolver,
   parser: ReturnType<typeof createPrepassParser>,
   toRealPath: (p: string) => string,
+  readFile: (path: string) => string,
   cache?: Map<string, AstCacheEntry>,
   failOnParseError?: boolean,
 ): CrossFileSelectorUsage[] {
@@ -499,14 +507,19 @@ function scanFileForSelectorsAst(
       continue;
     }
 
-    usages.push({
+    const usage: CrossFileSelectorUsage = {
       localName,
       importSource: imp.source,
       importedName: imp.importedName,
       resolvedPath: realResolved,
       consumerPath: filePath,
       consumerIsTransformed,
-    });
+    };
+
+    // Check if this is a bridge GlobalSelector from an already-converted StyleX file
+    applyBridgeFields(usage, imp.importedName, localName, realResolved, importMap, readFile);
+
+    usages.push(usage);
   }
 
   return usages;
