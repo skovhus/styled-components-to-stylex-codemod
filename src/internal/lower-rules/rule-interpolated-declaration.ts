@@ -1619,12 +1619,7 @@ export function handleInterpolatedDeclaration(args: InterpolatedDeclarationConte
 }
 
 function isPseudoElementSelector(pseudoElement: string | null): boolean {
-  return (
-    pseudoElement === "::before" ||
-    pseudoElement === "::after" ||
-    pseudoElement === ":before" ||
-    pseudoElement === ":after"
-  );
+  return pseudoElement === "::before" || pseudoElement === "::after";
 }
 
 /**

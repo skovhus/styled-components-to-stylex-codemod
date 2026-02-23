@@ -12,8 +12,15 @@ type ParsedSelector =
   | { kind: "base" } // Just "&"
   | { kind: "pseudo"; pseudos: string[] } // ":hover", ":focus:not(:disabled)", etc.
   | { kind: "pseudoElement"; element: string } // "::before", "::after"
+  | { kind: "pseudoElements"; elements: string[] } // comma-separated: "::before", "::after"
   | { kind: "attribute"; attr: ParsedAttributeSelector }
   | { kind: "unsupported"; reason: string };
+
+/**
+ * CSS2 pseudo-elements that browsers accept with single-colon syntax.
+ * These must be normalized to double-colon for StyleX compatibility.
+ */
+const CSS2_PSEUDO_ELEMENTS = new Set([":before", ":after", ":first-line", ":first-letter"]);
 
 type ParsedAttributeSelector = {
   type:
@@ -55,19 +62,31 @@ export function parseSelector(selector: string): ParsedSelector {
       return { kind: "base" };
     }
 
-    // For comma-separated selectors, each must be a valid pseudo on &
+    // For comma-separated selectors, each must be a valid pseudo-class or pseudo-element on &
     if (selectors.length > 1) {
       const pseudos: string[] = [];
+      const pseudoElementValues: string[] = [];
       for (const sel of selectors) {
         const result = parseSingleSelector(sel);
-        const firstPseudo = result.kind === "pseudo" ? result.pseudos[0] : undefined;
-        if (result.kind !== "pseudo" || result.pseudos.length !== 1 || !firstPseudo) {
+        if (result.kind === "pseudo" && result.pseudos.length === 1 && result.pseudos[0]) {
+          pseudos.push(result.pseudos[0]);
+        } else if (result.kind === "pseudoElement") {
+          pseudoElementValues.push(result.element);
+        } else {
           return {
             kind: "unsupported",
-            reason: "comma-separated selectors must all be simple pseudos",
+            reason: "comma-separated selectors must all be simple pseudos or pseudo-elements",
           };
         }
-        pseudos.push(firstPseudo);
+      }
+      if (pseudos.length > 0 && pseudoElementValues.length > 0) {
+        return {
+          kind: "unsupported",
+          reason: "mixed pseudo-classes and pseudo-elements in comma-separated selector",
+        };
+      }
+      if (pseudoElementValues.length > 0) {
+        return { kind: "pseudoElements", elements: pseudoElementValues };
       }
       return { kind: "pseudo", pseudos };
     }
@@ -127,7 +146,7 @@ function parseSingleSelector(selector: selectorParser.Selector): ParsedSelector 
         hasUniversal = true;
         break;
       case "pseudo":
-        if (node.value.startsWith("::")) {
+        if (node.value.startsWith("::") || CSS2_PSEUDO_ELEMENTS.has(node.value)) {
           pseudoElements.push(node);
         } else {
           pseudoClasses.push(node);
@@ -190,7 +209,7 @@ function parseSingleSelector(selector: selectorParser.Selector): ParsedSelector 
     if (!firstPseudoEl) {
       return { kind: "unsupported", reason: "pseudo-element access error" };
     }
-    return { kind: "pseudoElement", element: firstPseudoEl.value };
+    return { kind: "pseudoElement", element: normalizePseudoElementColon(firstPseudoEl.value) };
   }
 
   // Handle pseudo-classes
@@ -438,6 +457,18 @@ function resolveChildPseudoWithAttr(
   }
   // Combine: if both exist, concatenate (e.g., ":disabled:focus")
   return pseudo ? `${attrPseudo}${pseudo}` : attrPseudo;
+}
+
+/**
+ * Normalize CSS2 single-colon pseudo-element values to double-colon.
+ * E.g., ":before" → "::before", ":after" → "::after".
+ * Already-double-colon values pass through unchanged.
+ */
+function normalizePseudoElementColon(value: string): string {
+  if (CSS2_PSEUDO_ELEMENTS.has(value)) {
+    return `:${value}`; // ":before" → "::before"
+  }
+  return value;
 }
 
 // =============================================================================
