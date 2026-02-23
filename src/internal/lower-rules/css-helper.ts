@@ -308,11 +308,15 @@ export function createCssHelperResolver(args: {
     dynamicProps: Array<{ jsxProp: string; stylexProp: string }>;
     conditionalVariants: ConditionalVariant[];
   } | null => {
-    const bail = (type: WarningType, context?: { property?: string }): null => {
+    const bail = (
+      type: WarningType,
+      context?: { property?: string },
+      exprLoc?: { line: number; column: number } | null,
+    ): null => {
       warnings.push({
         severity: "warning",
         type,
-        loc,
+        loc: exprLoc ?? loc,
         context,
       });
       return null;
@@ -424,16 +428,21 @@ export function createCssHelperResolver(args: {
             property: d.property,
           });
         }
+        const exprLoc = (expr as { loc?: { start?: { line: number; column: number } } }).loc?.start;
         if (hasCallExpressionInExpr(expr)) {
-          return bail("Conditional `css` block: failed to parse expression", {
-            property: d.property,
-          });
+          return bail(
+            "Conditional `css` block: failed to parse expression",
+            { property: d.property },
+            exprLoc,
+          );
         }
         const resolved = resolveHelperExprToAst(expr as any, paramName);
         if (!resolved && hasThemeAccessInExpr(expr, paramName)) {
-          return bail("Conditional `css` block: failed to parse expression", {
-            property: d.property,
-          });
+          return bail(
+            "Conditional `css` block: failed to parse expression",
+            { property: d.property },
+            exprLoc,
+          );
         }
         if (resolved) {
           if (hasStaticParts) {
@@ -452,9 +461,11 @@ export function createCssHelperResolver(args: {
               continue;
             }
             // Fall through if parsing failed
-            return bail("Conditional `css` block: failed to parse expression", {
-              property: d.property,
-            });
+            return bail(
+              "Conditional `css` block: failed to parse expression",
+              { property: d.property },
+              exprLoc,
+            );
           } else {
             for (const mapped of cssDeclarationToStylexDeclarations(d)) {
               (target as any)[mapped.prop] = mergeIntoPseudoContext(

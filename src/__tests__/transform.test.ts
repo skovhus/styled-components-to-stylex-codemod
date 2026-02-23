@@ -2732,3 +2732,61 @@ export const App = () => <Box1>Test</Box1>;
     expect(result1.code).toBe(result2.code);
   });
 });
+
+describe("two-slot border interpolation ordering", () => {
+  it("should correctly assign slots when width and color are in reverse CSS position", () => {
+    // Regression test: CSS border shorthand allows any order for width/style/color,
+    // so the codemod must classify resolved values rather than assuming positional roles.
+    const source = `
+import React from "react";
+import styled from "styled-components";
+import { borderColor, borderWidth } from "./lib/helpers";
+
+const Container = styled.div\`
+  border: \${borderColor()} solid \${borderWidth()};
+\`;
+
+export function App() {
+  return <Container>Hello</Container>;
+}
+`;
+
+    const adapterWithLiteralResolves: Adapter = {
+      externalInterface() {
+        return { styles: false, as: false };
+      },
+      resolveCall(ctx) {
+        if (ctx.calleeImportedName === "borderWidth") {
+          return { expr: '"0.5px"', imports: [] };
+        }
+        if (ctx.calleeImportedName === "borderColor") {
+          return { expr: '"red"', imports: [] };
+        }
+        return undefined;
+      },
+      resolveValue() {
+        return undefined;
+      },
+      resolveSelector() {
+        return undefined;
+      },
+      styleMerger: null,
+    };
+
+    const result = transformWithWarnings(
+      { source, path: "border-order-test.tsx" },
+      { jscodeshift: j, j, stats: () => {}, report: () => {} },
+      { adapter: adapterWithLiteralResolves },
+    );
+
+    expect(result.code).not.toBeNull();
+    // The classification should detect that "red" is NOT a length and "0.5px" IS a length,
+    // and swap the assignments correctly
+    expect(result.code).toContain('borderWidth: "0.5px"');
+    expect(result.code).toContain('borderStyle: "solid"');
+    expect(result.code).toContain('borderColor: "red"');
+    // Should NOT have the reversed (wrong) assignment
+    expect(result.code).not.toContain('borderWidth: "red"');
+    expect(result.code).not.toContain('borderColor: "0.5px"');
+  });
+});

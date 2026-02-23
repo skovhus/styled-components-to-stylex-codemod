@@ -5,6 +5,7 @@
 import type { CallResolveContext, CallResolveResult, ImportSpec } from "../../adapter.js";
 import {
   type CallExpressionNode,
+  extractRootAndPath,
   getMemberPathFromIdentifier,
   getNodeLocStart,
   isCallExpressionNode,
@@ -278,32 +279,31 @@ export function resolveImportedHelperCall(
   ctx: InternalHandlerContext,
   propsParamName?: string,
   cssProperty?: string,
+  themeBindingName?: string,
 ): ResolveImportedHelperCallResult {
   const callee = callExpr.callee;
   if (!callee || typeof callee !== "object") {
     return { kind: "keepOriginal" };
   }
-  const calleeType = (callee as { type?: string }).type;
-  if (calleeType !== "Identifier") {
+  // Support both Identifier callees (helper()) and MemberExpression callees (Obj.method())
+  const calleeInfo = extractRootAndPath(callee);
+  if (!calleeInfo) {
     return { kind: "keepOriginal" };
   }
-  const calleeIdent = (callee as { name?: string }).name;
-  if (typeof calleeIdent !== "string") {
-    return { kind: "keepOriginal" };
-  }
-  const imp = ctx.resolveImport(calleeIdent, callee);
+  const imp = ctx.resolveImport(calleeInfo.rootName, calleeInfo.rootNode);
   const calleeImportedName = imp?.importedName;
   const calleeSource = imp?.source;
   if (!calleeImportedName || !calleeSource) {
     return { kind: "keepOriginal" };
   }
-  const args = callArgsFromNode(callExpr.arguments, propsParamName);
+  const args = callArgsFromNode(callExpr.arguments, propsParamName, themeBindingName);
   const loc = callExpr.loc?.start;
   const resolveCallContext: CallResolveContext = {
     callSiteFilePath: ctx.filePath,
     calleeImportedName,
     calleeSource,
     args,
+    ...(calleeInfo.path.length > 0 ? { calleeMemberPath: calleeInfo.path } : {}),
     ...(loc ? { loc: { line: loc.line, column: loc.column } } : {}),
     ...(cssProperty ? { cssProperty } : {}),
   };
@@ -399,15 +399,26 @@ function getCalleeIdentName(callee: unknown): string | null {
 function callArgFromNode(
   node: unknown,
   propsParamName?: string,
+  themeBindingName?: string,
 ): CallResolveContext["args"][number] {
   if (!node || typeof node !== "object") {
     return { kind: "unknown" };
   }
   const type = (node as { type?: string }).type;
-  if (type === "MemberExpression" && typeof propsParamName === "string" && propsParamName) {
-    const parts = getMemberPathFromIdentifier(node as any, propsParamName);
-    if (parts && parts[0] === "theme" && parts.length > 1) {
-      return { kind: "theme", path: parts.slice(1).join(".") };
+  if (type === "MemberExpression") {
+    // Pattern: (props) => helper(props.theme.color.X) — path starts with "theme"
+    if (typeof propsParamName === "string" && propsParamName) {
+      const parts = getMemberPathFromIdentifier(node as any, propsParamName);
+      if (parts && parts[0] === "theme" && parts.length > 1) {
+        return { kind: "theme", path: parts.slice(1).join(".") };
+      }
+    }
+    // Pattern: ({ theme }) => helper(theme.color.X) — root IS the theme binding
+    if (typeof themeBindingName === "string" && themeBindingName) {
+      const parts = getMemberPathFromIdentifier(node as any, themeBindingName);
+      if (parts && parts.length > 0) {
+        return { kind: "theme", path: parts.join(".") };
+      }
     }
   }
   if (type === "StringLiteral") {
@@ -431,9 +442,13 @@ function callArgFromNode(
   return { kind: "unknown" };
 }
 
-function callArgsFromNode(args: unknown, propsParamName?: string): CallResolveContext["args"] {
+function callArgsFromNode(
+  args: unknown,
+  propsParamName?: string,
+  themeBindingName?: string,
+): CallResolveContext["args"] {
   if (!Array.isArray(args)) {
     return [];
   }
-  return args.map((arg) => callArgFromNode(arg, propsParamName));
+  return args.map((arg) => callArgFromNode(arg, propsParamName, themeBindingName));
 }

@@ -84,7 +84,7 @@ export interface RunTransformOptions {
 
   /**
    * Maximum number of examples shown per warning category in the summary.
-   * @default 15
+   * @default 3
    */
   maxExamples?: number;
 }

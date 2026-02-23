@@ -39,6 +39,7 @@ export type WarningType =
   | "Conditional `css` block: ternary expressions inside pseudo selectors are not supported"
   | "Conditional `css` block: unsupported selector"
   | "Directional border helper styles are not supported"
+  | "Multi-slot border interpolation could not be resolved"
   | "createGlobalStyle is not supported in StyleX. Global styles should be handled separately (e.g., in a CSS file or using CSS reset libraries)"
   | "Dynamic styles inside pseudo elements (::before/::after) are not supported by StyleX. See https://github.com/facebook/stylex/issues/1396"
   | "Failed to parse theme expressions"
@@ -208,7 +209,7 @@ export class Logger {
 
   private static collected: CollectedWarning[] = [];
   private static fileCount: number | null = null;
-  private static maxExamples = 15;
+  private static maxExamples = 3;
   private static loggedErrors = new WeakSet<Error>();
 
   private static writeWithSpacing(message: string, context?: unknown): void {
@@ -276,7 +277,7 @@ class LoggerReport {
   private readonly maxExamples: number;
   private fileCache = new Map<string, string[] | null>();
 
-  constructor(warnings: CollectedWarning[], fileCount: number | null, maxExamples = 15) {
+  constructor(warnings: CollectedWarning[], fileCount: number | null, maxExamples = 3) {
     this.warnings = warnings;
     this.fileCount = fileCount;
     this.maxExamples = maxExamples;
