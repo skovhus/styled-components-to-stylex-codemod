@@ -846,6 +846,47 @@ describe("bridge GlobalSelector detection", () => {
     expect(usage.bridgeComponentLocalName).toBe("CollapseArrowIcon");
   });
 
+  it("detects non-first bridge export from multi-export file", () => {
+    // Issue: content.match(BRIDGE_EXPORT_RE) only returns the first export.
+    // If the imported name is the *second* export, the match fails.
+    const info = scanCrossFileSelectors(
+      [fixture("consumer-bridge-second-export.tsx"), fixture("lib/converted-multi-export.tsx")],
+      [],
+      resolver,
+    );
+
+    const usages = info.selectorUsages.get(fixture("consumer-bridge-second-export.tsx"));
+    expect(usages).toBeDefined();
+    expect(usages).toHaveLength(1);
+
+    const usage = usages![0]!;
+    expect(usage.localName).toBe("SecondLinkGlobalSelector");
+    expect(usage.importedName).toBe("SecondLinkGlobalSelector");
+    expect(usage.bridgeComponentName).toBe("SecondLink");
+    expect(usage.bridgeComponentLocalName).toBe("SecondLink");
+  });
+
+  it("detects bridge via detectBridgeGlobalSelector for non-first export", () => {
+    // Direct unit test for detectBridgeGlobalSelector with multi-export file
+    const readFile = (p: string) => readFileSync(p, "utf-8");
+
+    // First export should still work
+    const first = detectBridgeGlobalSelector(
+      "FirstIconGlobalSelector",
+      fixture("lib/converted-multi-export.tsx"),
+      readFile,
+    );
+    expect(first).toBe("FirstIcon");
+
+    // Second export must also work (this was the bug)
+    const second = detectBridgeGlobalSelector(
+      "SecondLinkGlobalSelector",
+      fixture("lib/converted-multi-export.tsx"),
+      readFile,
+    );
+    expect(second).toBe("SecondLink");
+  });
+
   it("skips bridge usages from componentsNeedingMarkerSidecar/Bridge", () => {
     const info = scanCrossFileSelectors(
       [fixture("consumer-bridge-forward.tsx"), fixture("lib/converted-stylex-component.tsx")],

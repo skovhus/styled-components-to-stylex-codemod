@@ -114,8 +114,8 @@ export const BARE_TEMPLATE_IDENTIFIER_RE = /\$\{\s*[a-zA-Z_$][\w$]*\s*\}/;
 
 /* ── Bridge GlobalSelector detection ─────────────────────────────────── */
 
-/** Regex matching `export const XGlobalSelector = ".sc2sx-` pattern. */
-const BRIDGE_EXPORT_RE = /export\s+const\s+(\w+GlobalSelector)\s*=\s*["']\.sc2sx-/;
+/** Regex matching `export const XGlobalSelector = ".sc2sx-` pattern (global for matchAll). */
+const BRIDGE_EXPORT_RE = /export\s+const\s+(\w+GlobalSelector)\s*=\s*["']\.sc2sx-/g;
 
 /**
  * Detect whether an imported name is a bridge GlobalSelector from an
@@ -148,8 +148,14 @@ export function detectBridgeGlobalSelector(
   if (!content || !content.includes("@stylexjs/stylex")) {
     return null;
   }
-  const exportMatch = content.match(BRIDGE_EXPORT_RE);
-  if (!exportMatch || exportMatch[1] !== importedName) {
+  let found = false;
+  for (const m of content.matchAll(BRIDGE_EXPORT_RE)) {
+    if (m[1] === importedName) {
+      found = true;
+      break;
+    }
+  }
+  if (!found) {
     return null;
   }
 
