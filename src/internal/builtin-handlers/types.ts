@@ -15,6 +15,20 @@ import type { WarningType } from "../logger.js";
 
 export type ExpressionKind = Parameters<JSCodeshift["expressionStatement"]>[0];
 
+/**
+ * Value transform that wraps a style function parameter in a helper call.
+ * When `resolvedExpr` is present, the adapter has remapped the callee and its import;
+ * otherwise the original `calleeIdent` is used as-is.
+ */
+export type CallValueTransform = {
+  kind: "call";
+  calleeIdent: string;
+  /** Adapter-resolved expression to use as the callee (replaces calleeIdent when present). */
+  resolvedExpr?: string;
+  /** Imports required by the resolved expression. */
+  resolvedImports?: ImportSpec[];
+};
+
 export type DynamicNode = {
   slotId: number;
   expr: unknown;
@@ -108,7 +122,7 @@ export type HandlerResult =
        *   box-shadow: ${(props) => shadow(props.shadow)};
        * by emitting a style function that computes: `shadow(value)`.
        */
-      valueTransform?: { kind: "call"; calleeIdent: string };
+      valueTransform?: CallValueTransform;
       /**
        * Wrap the computed value in a template literal (e.g. `${expr}`) to satisfy
        * StyleX lint rules that require string literals.
@@ -136,7 +150,7 @@ export type HandlerResult =
       body: string;
       call: string;
       defaultValue: unknown;
-      valueTransform?: { kind: "call"; calleeIdent: string };
+      valueTransform?: CallValueTransform;
       wrapValueInTemplateLiteral?: boolean;
     }
   | {

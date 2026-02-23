@@ -336,6 +336,33 @@ export const fixtureAdapter = defineAdapter({
       };
     }
 
+    // Handle shadow() helper — demonstrates dynamic prop arg resolution.
+    // shadow("dark") → $shadow.dark (literal arg)
+    // shadow(props.level) → $shadow(level) (dynamic arg — adapter remaps callee)
+    if (ctx.calleeImportedName === "shadow") {
+      if (key) {
+        return {
+          expr: `$shadow.${key}`,
+          imports: [
+            {
+              from: { kind: "specifier", value: "./tokens.stylex" },
+              names: [{ imported: "$shadow" }],
+            },
+          ],
+        };
+      }
+      // Dynamic arg — return the variable so the callee gets remapped
+      return {
+        expr: "$shadow",
+        imports: [
+          {
+            from: { kind: "specifier", value: "./tokens.stylex" },
+            names: [{ imported: "$shadow" }],
+          },
+        ],
+      };
+    }
+
     if (!key) {
       return undefined;
     }

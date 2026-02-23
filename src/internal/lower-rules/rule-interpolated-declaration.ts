@@ -4,6 +4,7 @@
  */
 import type { CssDeclarationIR, CssRuleIR } from "../css-ir.js";
 import type { ResolveValueContext } from "../../adapter.js";
+import type { CallValueTransform } from "../builtin-handlers/types.js";
 import type { StyledDecl } from "../transform-types.js";
 import type { WarningType } from "../logger.js";
 import type { ExpressionKind } from "./decl-types.js";
@@ -1287,9 +1288,19 @@ export function handleInterpolatedDeclaration(args: InterpolatedDeclarationConte
             // prop value, e.g. `${value}px`, `opacity ${value}ms`.
             const buildValueExpr = (): any => {
               const transformed = (() => {
-                const vt = (res as { valueTransform?: { kind: string; calleeIdent?: string } })
-                  .valueTransform;
+                const vt = (res as { valueTransform?: CallValueTransform }).valueTransform;
                 if (vt?.kind === "call" && typeof vt.calleeIdent === "string") {
+                  // Add adapter-resolved imports if present
+                  if (vt.resolvedImports) {
+                    for (const imp of vt.resolvedImports) {
+                      resolverImports.set(JSON.stringify(imp), imp);
+                    }
+                  }
+                  // Use adapter-resolved expression with computed member access
+                  // (e.g., $shadow[boxShadow] instead of shadow(boxShadow))
+                  if (vt.resolvedExpr) {
+                    return j.memberExpression(parseExpr(vt.resolvedExpr), valueId, true);
+                  }
                   return j.callExpression(j.identifier(vt.calleeIdent), [valueId]);
                 }
                 return valueId;
