@@ -909,6 +909,29 @@ describe("bridge GlobalSelector detection", () => {
     expect(usage.bridgeComponentLocalName).toBe("Icon");
   });
 
+  it("prefers named import over default import for bridgeComponentLocalName", () => {
+    // Issue: `import Util, { CollapseArrowIcon, CollapseArrowIconGlobalSelector } from "..."`
+    // The loop matched Util (default import) before CollapseArrowIcon (named import),
+    // setting bridgeComponentLocalName to "Util" instead of "CollapseArrowIcon".
+    const info = scanCrossFileSelectors(
+      [
+        fixture("consumer-bridge-default-plus-named.tsx"),
+        fixture("lib/converted-default-plus-named.tsx"),
+      ],
+      [],
+      resolver,
+    );
+
+    const usages = info.selectorUsages.get(fixture("consumer-bridge-default-plus-named.tsx"));
+    expect(usages).toBeDefined();
+    expect(usages).toHaveLength(1);
+
+    const usage = usages![0]!;
+    expect(usage.bridgeComponentName).toBe("CollapseArrowIcon");
+    // Must match the named import, NOT the unrelated default import "Util"
+    expect(usage.bridgeComponentLocalName).toBe("CollapseArrowIcon");
+  });
+
   it("skips bridge usages from componentsNeedingMarkerSidecar/Bridge", () => {
     const info = scanCrossFileSelectors(
       [fixture("consumer-bridge-forward.tsx"), fixture("lib/converted-stylex-component.tsx")],

@@ -186,15 +186,25 @@ export function applyBridgeFields(
   if (!imp) {
     return;
   }
+  // Prefer named import matching bridgeName; fall back to default import.
+  // This avoids matching an unrelated default export when the named component is also imported
+  // (e.g., `import Util, { Foo, FooGlobalSelector }` — Foo should win over Util).
+  let defaultImportLocal: string | undefined;
   for (const [otherLocal, otherImp] of importMap) {
-    if (otherImp.source === imp.source && otherLocal !== localName) {
-      // Default imports always match — a module has one default export, which is the component.
-      // Named imports match by exported name.
-      if (otherImp.importedName === "default" || otherImp.importedName === bridgeName) {
-        usage.bridgeComponentLocalName = otherLocal;
-        break;
-      }
+    if (otherImp.source !== imp.source || otherLocal === localName) {
+      continue;
     }
+    if (otherImp.importedName === bridgeName) {
+      usage.bridgeComponentLocalName = otherLocal;
+      defaultImportLocal = undefined;
+      break;
+    }
+    if (otherImp.importedName === "default" && defaultImportLocal === undefined) {
+      defaultImportLocal = otherLocal;
+    }
+  }
+  if (defaultImportLocal !== undefined) {
+    usage.bridgeComponentLocalName = defaultImportLocal;
   }
 }
 
