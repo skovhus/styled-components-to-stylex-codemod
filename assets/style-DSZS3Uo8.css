@@ -80,12 +80,12 @@ body{font-family:-apple-system,BlinkMacSystemFont,Segoe UI,Roboto,Helvetica Neue
   inherits: false
 }
 
-@property --x---component-width {
+@property --x-flexShrink {
   syntax: "*";
   inherits: false
 }
 
-@property --x-flexShrink {
+@property --x---component-width {
   syntax: "*";
   inherits: false
 }
@@ -874,6 +874,10 @@ body{font-family:-apple-system,BlinkMacSystemFont,Segoe UI,Roboto,Helvetica Neue
   transition: background-color .25s;
 }
 
+.x1h2kqdt:not(#\#):not(#\#) {
+  transition: background-color .2s;
+}
+
 .x4lopbt:not(#\#):not(#\#) {
   transition: color var(--x1gjurbz);
 }
@@ -1268,6 +1272,10 @@ body{font-family:-apple-system,BlinkMacSystemFont,Segoe UI,Roboto,Helvetica Neue
 
 .xubpbjk:not(#\#):not(#\#):not(#\#), .x9oods1:not(#\#):not(#\#):not(#\#) {
   background-color: #4f74bf;
+}
+
+.x13attxa:not(#\#):not(#\#):not(#\#) {
+  background-color: #999;
 }
 
 .xju9k8e:not(#\#):not(#\#):not(#\#) {
@@ -2225,7 +2233,7 @@ body{font-family:-apple-system,BlinkMacSystemFont,Segoe UI,Roboto,Helvetica Neue
   outline-offset: 5px;
 }
 
-.x1308hcw.x1308hcw:where(.x19pepp0:hover *):not(#\#):not(#\#):not(#\#) {
+.xry1jez.xry1jez:where(.x1rnikca:hover *):not(#\#):not(#\#):not(#\#), .x1308hcw.x1308hcw:where(.x19pepp0:hover *):not(#\#):not(#\#):not(#\#) {
   background-color: #639;
 }
 
