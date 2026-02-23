@@ -867,6 +867,51 @@ export const App = () => <Box level="high">Hello</Box>;
     expect(code).toContain("./shadow-utils");
     expect(code).not.toContain("computeBoxShadow");
   });
+
+  it("should not bail when adapter returns undefined for optional prop-arg helper resolution", () => {
+    const source = `
+import styled from "styled-components";
+import { color } from "./lib/helpers.ts";
+
+const Box = styled.div<{ tone: string }>\`
+  background-color: \${(props) => color(props.tone)};
+  padding: 8px;
+\`;
+
+export const App = () => <Box tone="muted">Hello</Box>;
+`;
+
+    // Adapter that does NOT handle the "color" helper — returns undefined.
+    // The optional prop-arg resolution should gracefully fall back,
+    // NOT trigger the global bail flag.
+    const adapterWithNoColorResolution = {
+      externalInterface() {
+        return { styles: false, as: false };
+      },
+      resolveValue() {
+        return undefined;
+      },
+      resolveCall() {
+        return undefined;
+      },
+      resolveSelector() {
+        return undefined;
+      },
+      styleMerger: null,
+    } satisfies Adapter;
+
+    const result = transformWithWarnings(
+      { source, path: join(testCasesDir, "helper-propArgNoBail.input.tsx") },
+      { jscodeshift: j, j, stats: () => {}, report: () => {} },
+      { adapter: adapterWithNoColorResolution },
+    );
+
+    // Should NOT bail — the prop-arg pattern should fall back to preserving the original call
+    expect(result.code).not.toBeNull();
+    const code = result.code ?? "";
+    // Original helper call should be preserved since the adapter didn't remap it
+    expect(code).toContain("color(");
+  });
 });
 
 describe("import resolution scope", () => {
