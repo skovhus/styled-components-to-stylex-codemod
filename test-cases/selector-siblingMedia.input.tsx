@@ -1,17 +1,19 @@
-// @expected-warning: Unsupported selector: sibling combinator
 import styled from "styled-components";
 
 const Thing = styled.div`
   color: blue;
+  padding: 8px;
 
-  & + & {
-    color: ${(props) => props.theme.color.labelBase};
+  @media (min-width: 768px) {
+    & + & {
+      margin-top: 16px;
+    }
   }
 `;
 
 export const App = () => (
   <div style={{ padding: 16 }}>
     <Thing>First</Thing>
-    <Thing>Second (theme color)</Thing>
+    <Thing>Second (margin-top on wide screens)</Thing>
   </div>
 );

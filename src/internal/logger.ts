@@ -72,6 +72,7 @@ export type WarningType =
   | "Unsupported selector: descendant/child/sibling selector"
   | "Unsupported selector: interpolated pseudo selector"
   | "Unsupported selector: sibling combinator"
+  | "Unsupported selector: unresolved interpolation in sibling selector"
   | "Unsupported selector: ambiguous element selector"
   | "Unsupported selector: attribute selector on unsupported element"
   | "Unsupported selector: element selector on exported component"
@@ -89,6 +90,7 @@ export type WarningType =
   | "Unsupported css`` mixin: nested contextual conditions in after-base mixin"
   | "Unsupported css`` mixin: cannot infer base default for after-base contextual override (base value is non-literal)"
   | "css`` helper function interpolation references closure variable that cannot be hoisted"
+  | "Sibling selector broadened: & + & (adjacent) becomes general sibling (~) in StyleX — interleaved non-matching elements will no longer block the match"
   | "Using styled-components components as mixins is not supported; use css`` mixins or strings instead";
 
 export interface WarningLog {
