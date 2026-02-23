@@ -425,6 +425,10 @@ export async function runTransform(options: RunTransformOptions): Promise<RunTra
     import("./internal/transform-types.js").BridgeComponentResult[]
   >();
 
+  // Set populated by the per-file transform to track which files were actually transformed.
+  // Used to detect consumers that were expected to transform but bailed, so they can be bridge-patched.
+  const transformedFiles = new Set<string>();
+
   const result = await jscodeshiftRun(transformPath, filePaths, {
     parser,
     dry: dryRun,
@@ -433,6 +437,7 @@ export async function runTransform(options: RunTransformOptions): Promise<RunTra
     crossFilePrepassResult,
     sidecarFiles,
     bridgeResults,
+    transformedFiles,
     // Programmatic use passes an Adapter object (functions). That cannot be
     // serialized across process boundaries, so we must run in-band.
     runInBand: true,
@@ -454,6 +459,7 @@ export async function runTransform(options: RunTransformOptions): Promise<RunTra
     const consumerReplacements = buildConsumerReplacements(
       crossFilePrepassResult.selectorUsages,
       bridgeResults,
+      transformedFiles,
     );
     const patchedFiles: string[] = [];
     for (const [consumerPath, replacements] of consumerReplacements) {

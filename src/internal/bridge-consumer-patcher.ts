@@ -24,10 +24,15 @@ interface ConsumerReplacement {
 /**
  * Build a mapping from consumer file paths to their required replacements,
  * cross-referencing prepass selector usages with successful bridge results.
+ *
+ * @param transformedFiles  Set of files that were actually transformed successfully.
+ *   When provided, consumers in this set are skipped (they used the marker path).
+ *   When absent, falls back to the prepass `consumerIsTransformed` flag.
  */
 export function buildConsumerReplacements(
   selectorUsages: Map<string, CrossFileSelectorUsage[]>,
   bridgeResults: Map<string, BridgeComponentResult[]>,
+  transformedFiles?: ReadonlySet<string>,
 ): Map<string, ConsumerReplacement[]> {
   const consumerReplacements = new Map<string, ConsumerReplacement[]>();
 
@@ -45,8 +50,13 @@ export function buildConsumerReplacements(
 
   for (const [consumerPath, usages] of selectorUsages) {
     for (const usage of usages) {
-      // Only patch unconverted consumers
-      if (usage.consumerIsTransformed) {
+      // Skip consumers that were actually transformed — they use the marker path.
+      // When transformedFiles is available, use the actual result (handles bailed consumers).
+      // Otherwise fall back to the prepass prediction.
+      const wasTransformed = transformedFiles
+        ? transformedFiles.has(usage.consumerPath)
+        : usage.consumerIsTransformed;
+      if (wasTransformed) {
         continue;
       }
 

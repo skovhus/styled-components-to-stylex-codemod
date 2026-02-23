@@ -69,8 +69,12 @@ describe("scanCrossFileSelectors", () => {
     expect(styleAcceptance).toBeDefined();
     expect(styleAcceptance!.has("CollapseArrowIcon")).toBe(true);
 
-    // No bridge needed (consumer is transformed)
-    expect(info.componentsNeedingGlobalSelectorBridge.size).toBe(0);
+    // Bridge is also emitted as fallback (in case consumer bails during transform)
+    const bridge = info.componentsNeedingGlobalSelectorBridge.get(
+      fixture("lib/collapse-arrow-icon.tsx"),
+    );
+    expect(bridge).toBeDefined();
+    expect(bridge!.has("CollapseArrowIcon")).toBe(true);
   });
 
   it("flags bridge when consumer is NOT in the transform set", () => {
@@ -584,7 +588,7 @@ describe("buildConsumerReplacements", () => {
     expect(result.size).toBe(0);
   });
 
-  it("skips transformed consumers (only patch unconverted consumers)", () => {
+  it("skips consumers that were actually transformed (in transformedFiles set)", () => {
     const selectorUsages = new Map<string, CrossFileSelectorUsage[]>([
       [
         "/src/consumer.tsx",
@@ -614,6 +618,85 @@ describe("buildConsumerReplacements", () => {
       ],
     ]);
 
+    const transformedFiles = new Set(["/src/consumer.tsx"]);
+    const result = buildConsumerReplacements(selectorUsages, bridgeResults, transformedFiles);
+    expect(result.size).toBe(0);
+  });
+
+  it("patches consumer that was in filesToTransform but bailed (not in transformedFiles)", () => {
+    const selectorUsages = new Map<string, CrossFileSelectorUsage[]>([
+      [
+        "/src/consumer.tsx",
+        [
+          {
+            localName: "Icon",
+            importSource: "./lib/icon",
+            importedName: "Icon",
+            resolvedPath: "/src/lib/icon.tsx",
+            consumerPath: "/src/consumer.tsx",
+            consumerIsTransformed: true, // prepass predicted it would be transformed
+          },
+        ],
+      ],
+    ]);
+
+    const bridgeResults = new Map([
+      [
+        "/src/lib/icon.tsx",
+        [
+          {
+            componentName: "Icon",
+            className: "sc2sx-Icon-abc12345",
+            globalSelectorVarName: "IconGlobalSelector",
+          },
+        ],
+      ],
+    ]);
+
+    // Consumer bailed — not in transformedFiles
+    const transformedFiles = new Set<string>();
+    const result = buildConsumerReplacements(selectorUsages, bridgeResults, transformedFiles);
+    expect(result.size).toBe(1);
+    const replacements = result.get("/src/consumer.tsx")!;
+    expect(replacements).toHaveLength(1);
+    expect(replacements[0]).toMatchObject({
+      localName: "Icon",
+      importSource: "./lib/icon",
+      globalSelectorVarName: "IconGlobalSelector",
+    });
+  });
+
+  it("falls back to consumerIsTransformed when transformedFiles is not provided", () => {
+    const selectorUsages = new Map<string, CrossFileSelectorUsage[]>([
+      [
+        "/src/consumer.tsx",
+        [
+          {
+            localName: "Icon",
+            importSource: "./lib/icon",
+            importedName: "Icon",
+            resolvedPath: "/src/lib/icon.tsx",
+            consumerPath: "/src/consumer.tsx",
+            consumerIsTransformed: true,
+          },
+        ],
+      ],
+    ]);
+
+    const bridgeResults = new Map([
+      [
+        "/src/lib/icon.tsx",
+        [
+          {
+            componentName: "Icon",
+            className: "sc2sx-Icon-abc12345",
+            globalSelectorVarName: "IconGlobalSelector",
+          },
+        ],
+      ],
+    ]);
+
+    // No transformedFiles — should fall back to consumerIsTransformed flag
     const result = buildConsumerReplacements(selectorUsages, bridgeResults);
     expect(result.size).toBe(0);
   });

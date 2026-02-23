@@ -80,6 +80,16 @@ export default function transform(file: FileInfo, api: API, options: Options): s
       }
     }
 
+    // Track successfully transformed files so bailed consumers can be bridge-patched
+    if (result.code !== null) {
+      const transformedFiles = (options as Record<string, unknown>).transformedFiles as
+        | Set<string>
+        | undefined;
+      if (transformedFiles) {
+        transformedFiles.add(toRealPath(file.path));
+      }
+    }
+
     return result.code;
   } catch (e) {
     if (!Logger.isErrorLogged(e)) {
