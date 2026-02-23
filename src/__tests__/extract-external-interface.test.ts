@@ -114,6 +114,18 @@ describe("runPrepass createExternalInterface", () => {
       'import styled from "styled-components";\nconst Private = styled.div`color: red;`;\nconst Extended = styled(Private)`font-weight: bold;`;\nexport const App = () => <Extended />;',
     );
 
+    // Component consumed only via className prop (no as-prop, no styled() wrapping)
+    writeFileSync(
+      path.join(componentsDir, "Alert.tsx"),
+      'import styled from "styled-components";\nexport const Alert = styled.div`background: yellow;`;',
+    );
+
+    // Component consumed via style prop (no as-prop, no styled() wrapping)
+    writeFileSync(
+      path.join(componentsDir, "Panel.tsx"),
+      'import styled from "styled-components";\nexport const Panel = styled.section`border: 1px solid;`;',
+    );
+
     // --- Consumer files ---
     const consumersDir = path.join(fixtureDir, "consumers");
     mkdirSync(consumersDir, { recursive: true });
@@ -175,6 +187,39 @@ describe("runPrepass createExternalInterface", () => {
       'import styled from "styled-components";\nimport { default as Link } from "../components/Link";\nconst FancyLink = styled(Link)`text-decoration: underline;`;\nexport const App = () => <FancyLink />;',
     );
 
+    // Consumer that passes className to Alert (NO styled-components import — Phase 1 skips it)
+    writeFileSync(
+      path.join(consumersDir, "className-consumer.tsx"),
+      'import { Alert } from "../components/Alert";\nexport const App = () => <Alert className="custom">Warning</Alert>;',
+    );
+
+    // Consumer that passes style to Panel (NO styled-components import — Phase 1 skips it)
+    writeFileSync(
+      path.join(consumersDir, "style-consumer.tsx"),
+      'import { Panel } from "../components/Panel";\nexport const App = () => <Panel style={{ opacity: 0.5 }}>Content</Panel>;',
+    );
+
+    // Consumer with multiline JSX passing className (component name on different line than className=)
+    writeFileSync(
+      path.join(consumersDir, "multiline-className.tsx"),
+      [
+        'import { Alert } from "../components/Alert";',
+        "export const App = () => (",
+        "  <Alert",
+        '    className="highlighted"',
+        "  >",
+        "    Multiline",
+        "  </Alert>",
+        ");",
+      ].join("\n"),
+    );
+
+    // Consumer that passes className to a non-exported component (should NOT trigger styles: true)
+    writeFileSync(
+      path.join(consumersDir, "non-exported-className.tsx"),
+      'import { Internal } from "../components/Internal";\nexport const App = () => <Internal className="x">Text</Internal>;',
+    );
+
     // Run unified prepass
     const originalCwd = process.cwd();
     try {
@@ -199,9 +244,13 @@ describe("runPrepass createExternalInterface", () => {
     }
   });
 
-  it("detects as-prop and re-styled usage", () => {
+  it("detects as-prop, re-styled, and className/style usage", () => {
     expect(toSnapshot(result, fixtureDir)).toMatchInlineSnapshot(`
       {
+        "components/Alert.tsx:Alert": {
+          "as": false,
+          "styles": true,
+        },
         "components/Badge.tsx:Badge": {
           "as": true,
           "styles": true,
@@ -226,6 +275,10 @@ describe("runPrepass createExternalInterface", () => {
           "as": true,
           "styles": true,
         },
+        "components/Panel.tsx:Panel": {
+          "as": false,
+          "styles": true,
+        },
         "components/Tag.tsx:Tag": {
           "as": false,
           "styles": true,
@@ -240,8 +293,199 @@ describe("runPrepass createExternalInterface", () => {
     expect(result.get(key)).toEqual({ as: true, styles: true });
   });
 
+  it("detects className consumer (no styled-components import)", () => {
+    const alertPath = realpathSync(path.join(fixtureDir, "components/Alert.tsx"));
+    const key = `${alertPath}:Alert`;
+    expect(result.get(key)).toEqual({ as: false, styles: true });
+  });
+
+  it("detects style consumer (no styled-components import)", () => {
+    const panelPath = realpathSync(path.join(fixtureDir, "components/Panel.tsx"));
+    const key = `${panelPath}:Panel`;
+    expect(result.get(key)).toEqual({ as: false, styles: true });
+  });
+
+  it("does not detect className on non-exported components", () => {
+    const internalPath = realpathSync(path.join(fixtureDir, "components/Internal.tsx"));
+    // Internal is not exported (const Internal = ..., but only App is exported)
+    // so className usage should not trigger styles: true
+    const key = `${internalPath}:Internal`;
+    const entry = result.get(key);
+    // Internal gets as: true from same-file as-prop usage, but styles should not
+    // be set by the cross-file className consumer (Internal is not exported)
+    expect(entry?.styles).not.toBe(true);
+  });
+
   it("lookup returns undefined for unknown components", () => {
     expect(result.get("/unknown.tsx:Foo")).toBeUndefined();
+  });
+});
+
+// ---------------------------------------------------------------------------
+// className/style prop detection — dedicated test with isolated fixture
+// ---------------------------------------------------------------------------
+
+describe("runPrepass createExternalInterface — className/style detection", () => {
+  let fixtureDir: string;
+  let result: Map<string, ExternalInterfaceResult>;
+
+  beforeAll(async () => {
+    fixtureDir = mkdtempSync(path.join(tmpdir(), "extract-external-interface-classname-"));
+
+    writeFileSync(
+      path.join(fixtureDir, "tsconfig.json"),
+      JSON.stringify({ compilerOptions: { baseUrl: "." } }),
+    );
+
+    const componentsDir = path.join(fixtureDir, "components");
+    mkdirSync(componentsDir, { recursive: true });
+
+    // Exported styled component
+    writeFileSync(
+      path.join(componentsDir, "Box.tsx"),
+      'import styled from "styled-components";\nexport const Box = styled.div`display: flex;`;',
+    );
+
+    // Exported styled component (only consumed via style prop)
+    writeFileSync(
+      path.join(componentsDir, "Wrapper.tsx"),
+      'import styled from "styled-components";\nexport const Wrapper = styled.div`padding: 16px;`;',
+    );
+
+    // Non-exported styled component
+    writeFileSync(
+      path.join(componentsDir, "Secret.tsx"),
+      'import styled from "styled-components";\nconst Secret = styled.div`color: red;`;\nexport const App = () => <Secret />;',
+    );
+
+    // Exported styled component NOT consumed with className/style (control)
+    writeFileSync(
+      path.join(componentsDir, "Plain.tsx"),
+      'import styled from "styled-components";\nexport const Plain = styled.div`margin: 0;`;',
+    );
+
+    const consumersDir = path.join(fixtureDir, "consumers");
+    mkdirSync(consumersDir, { recursive: true });
+
+    // Consumer with className (NO styled-components import)
+    writeFileSync(
+      path.join(consumersDir, "use-box.tsx"),
+      'import { Box } from "../components/Box";\nexport const App = () => <Box className="extra">Content</Box>;',
+    );
+
+    // Consumer with style prop (NO styled-components import)
+    writeFileSync(
+      path.join(consumersDir, "use-wrapper.tsx"),
+      'import { Wrapper } from "../components/Wrapper";\nexport const App = () => <Wrapper style={{ margin: 10 }}>Content</Wrapper>;',
+    );
+
+    // Consumer with multiline JSX className (component on different line than className=)
+    writeFileSync(
+      path.join(consumersDir, "multiline.tsx"),
+      [
+        'import { Box } from "../components/Box";',
+        "export const App = () => (",
+        "  <Box",
+        '    className="stretched"',
+        "    data-testid='box'",
+        "  >",
+        "    Multiline",
+        "  </Box>",
+        ");",
+      ].join("\n"),
+    );
+
+    // Consumer passing className to non-exported Secret (should NOT trigger)
+    writeFileSync(
+      path.join(consumersDir, "use-secret.tsx"),
+      'import { Secret } from "../components/Secret";\nexport const App = () => <Secret className="x">Text</Secret>;',
+    );
+
+    // Consumer that uses Plain without className/style (control — should NOT appear)
+    writeFileSync(
+      path.join(consumersDir, "use-plain.tsx"),
+      'import { Plain } from "../components/Plain";\nexport const App = () => <Plain>Text</Plain>;',
+    );
+
+    // Same-file className usage (component + JSX in same file)
+    writeFileSync(
+      path.join(componentsDir, "SameFile.tsx"),
+      'import styled from "styled-components";\nexport const SameFile = styled.div`color: blue;`;\nexport const App = () => <SameFile className="local">Text</SameFile>;',
+    );
+
+    const originalCwd = process.cwd();
+    try {
+      process.chdir(fixtureDir);
+      const allFiles = collectFiles(fixtureDir);
+      const resolver = createModuleResolver();
+      const prepassResult = await runPrepass({
+        filesToTransform: allFiles,
+        consumerPaths: [],
+        resolver,
+        createExternalInterface: true,
+      });
+      result = prepassResult.consumerAnalysis!;
+    } finally {
+      process.chdir(originalCwd);
+    }
+  });
+
+  afterAll(() => {
+    if (fixtureDir) {
+      rmSync(fixtureDir, { recursive: true, force: true });
+    }
+  });
+
+  it("detects cross-file className usage (consumer has no styled-components import)", () => {
+    const snapshot = toSnapshot(result, fixtureDir);
+    expect(snapshot["components/Box.tsx:Box"]).toEqual({ as: false, styles: true });
+  });
+
+  it("detects cross-file style prop usage", () => {
+    const snapshot = toSnapshot(result, fixtureDir);
+    expect(snapshot["components/Wrapper.tsx:Wrapper"]).toEqual({ as: false, styles: true });
+  });
+
+  it("detects multiline JSX className usage", () => {
+    // The regex should match `<Box\n    className=` across lines
+    const snapshot = toSnapshot(result, fixtureDir);
+    expect(snapshot["components/Box.tsx:Box"]?.styles).toBe(true);
+  });
+
+  it("does not detect className on non-exported component", () => {
+    const snapshot = toSnapshot(result, fixtureDir);
+    // Secret is not exported, so className usage should not trigger styles: true
+    expect(snapshot["components/Secret.tsx:Secret"]).toBeUndefined();
+  });
+
+  it("does not detect components without className/style usage", () => {
+    const snapshot = toSnapshot(result, fixtureDir);
+    // Plain has no className/style consumers, should not appear
+    expect(snapshot["components/Plain.tsx:Plain"]).toBeUndefined();
+  });
+
+  it("detects same-file className usage", () => {
+    const snapshot = toSnapshot(result, fixtureDir);
+    expect(snapshot["components/SameFile.tsx:SameFile"]).toEqual({ as: false, styles: true });
+  });
+
+  it("full snapshot", () => {
+    expect(toSnapshot(result, fixtureDir)).toMatchInlineSnapshot(`
+      {
+        "components/Box.tsx:Box": {
+          "as": false,
+          "styles": true,
+        },
+        "components/SameFile.tsx:SameFile": {
+          "as": false,
+          "styles": true,
+        },
+        "components/Wrapper.tsx:Wrapper": {
+          "as": false,
+          "styles": true,
+        },
+      }
+    `);
   });
 });
 
@@ -437,9 +681,25 @@ describe("runPrepass createExternalInterface snapshot on test-cases", () => {
     });
     expect(toSnapshot(prepassResult.consumerAnalysis!)).toMatchInlineSnapshot(`
       {
+        "test-cases/conditional-multiProp.input.tsx:Spacer": {
+          "as": false,
+          "styles": true,
+        },
+        "test-cases/cssVariable-flexShrinkFallback.input.tsx:ColumnContainer": {
+          "as": false,
+          "styles": true,
+        },
+        "test-cases/externalStyles-element.input.tsx:ColorBadge": {
+          "as": false,
+          "styles": true,
+        },
         "test-cases/externalStyles-input.input.tsx:StyledInput": {
           "as": true,
           "styles": false,
+        },
+        "test-cases/htmlProp-element.input.tsx:TextColor": {
+          "as": false,
+          "styles": true,
         },
         "test-cases/lib/action-menu-divider.tsx:ActionMenuGroupHeader": {
           "as": false,
@@ -462,6 +722,26 @@ describe("runPrepass createExternalInterface snapshot on test-cases", () => {
           "styles": true,
         },
         "test-cases/lib/user-avatar.tsx:UserAvatar": {
+          "as": false,
+          "styles": true,
+        },
+        "test-cases/staticProp-basic.input.tsx:ExtendedButton": {
+          "as": false,
+          "styles": true,
+        },
+        "test-cases/staticProp-basic.input.tsx:ListItem": {
+          "as": false,
+          "styles": true,
+        },
+        "test-cases/typeHandling-duplicateIdentifier.input.tsx:Card": {
+          "as": false,
+          "styles": true,
+        },
+        "test-cases/wrapper-propsIncomplete.input.tsx:Highlight": {
+          "as": false,
+          "styles": true,
+        },
+        "test-cases/wrapper-propsIncomplete.input.tsx:TextColor": {
           "as": false,
           "styles": true,
         },

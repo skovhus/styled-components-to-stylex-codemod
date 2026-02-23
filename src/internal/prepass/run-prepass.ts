@@ -139,6 +139,7 @@ export async function runPrepass(options: PrepassOptions): Promise<PrepassResult
   const asUsages = new Map<string, Set<string>>();
   const styledCallUsages: { file: string; name: string }[] = [];
   const styledDefFiles = new Map<string, Set<string>>();
+  const classNameStyleUsages = new Map<string, Set<string>>();
 
   // File content cache — populated on-demand, used for cross-referencing in Phase 2
   const fileContents = new Map<string, string>();
@@ -249,6 +250,50 @@ export async function runPrepass(options: PrepassOptions): Promise<PrepassResult
     }
   }
 
+  const styledFileCount = fileContents.size;
+
+  // Phase 1.5: Targeted className/style prop detection in consumer files.
+  // After Phase 1 identified all styled component definitions, scan files that
+  // weren't processed (no styled-components, no as-prop) for JSX usage of those
+  // components with className or style props.
+  if (createExternalInterface && styledDefFiles.size > 0) {
+    const allStyledNames = new Set<string>();
+    for (const names of styledDefFiles.values()) {
+      for (const name of names) {
+        allStyledNames.add(name);
+      }
+    }
+
+    if (allStyledNames.size > 0) {
+      // Use targeted rg to find files containing className/style props (fast, small pattern)
+      const rgHits = rgClassNameStyleFilter(uniqueAllFiles);
+
+      // Scan files already cached from Phase 1 first (no I/O cost)
+      for (const [filePath, source] of fileContents) {
+        for (const name of scanClassNameStyleUsages(source, allStyledNames)) {
+          addToSetMap(classNameStyleUsages, name, filePath);
+        }
+      }
+
+      // Then scan uncached files that matched the rg pre-filter.
+      // Only read files not already cached from Phase 1 — these are consumer
+      // files without styled-components (e.g., .stories.tsx, page components).
+      const filesToScan = rgHits
+        ? [...rgHits].filter((f) => !fileContents.has(f))
+        : uniqueAllFiles.filter((f) => !fileContents.has(f));
+
+      for (const filePath of filesToScan) {
+        const source = cachedRead(filePath);
+        if (!source) {
+          continue;
+        }
+        for (const name of scanClassNameStyleUsages(source, allStyledNames)) {
+          addToSetMap(classNameStyleUsages, name, filePath);
+        }
+      }
+    }
+  }
+
   // Phase 2: Cross-referencing consumer usages (if createExternalInterface)
   let consumerAnalysis: Map<string, ExternalInterfaceResult> | undefined;
 
@@ -289,6 +334,37 @@ export async function runPrepass(options: PrepassOptions): Promise<PrepassResult
           for (const usageFile of usageFiles) {
             if (fileImportsFrom(cachedRead(usageFile), usageFile, name, defFile, resolve)) {
               ensure(defFile, name).as = true;
+              break;
+            }
+          }
+        }
+      }
+    }
+
+    // className/style prop: match definitions to usages
+    if (classNameStyleUsages.size > 0) {
+      for (const [defFile, names] of styledDefFiles) {
+        const defSrc = cachedRead(defFile);
+        for (const name of names) {
+          const usageFiles = classNameStyleUsages.get(name);
+          if (!usageFiles) {
+            continue;
+          }
+
+          if (!fileExports(defSrc, name)) {
+            continue;
+          }
+
+          // Same-file usage — no import needed
+          if (usageFiles.has(defFile)) {
+            ensure(defFile, name).styles = true;
+            continue;
+          }
+
+          // Cross-file — must be imported by a usage file
+          for (const usageFile of usageFiles) {
+            if (fileImportsFrom(cachedRead(usageFile), usageFile, name, defFile, resolve)) {
+              ensure(defFile, name).styles = true;
               break;
             }
           }
@@ -350,10 +426,11 @@ export async function runPrepass(options: PrepassOptions): Promise<PrepassResult
     const asProp = consumerAnalysis ? [...consumerAnalysis.values()].filter((v) => v.as).length : 0;
     process.stdout.write(
       `Prepass: scanned ${uniqueAllFiles.length} files in ${elapsed}s` +
-        ` — ${fileContents.size} with styled-components` +
+        ` — ${styledFileCount} with styled-components` +
         `, ${selectorUsages.size} cross-file selectors` +
         `, ${reStyled} re-styled` +
-        `, ${asProp} as-prop\n`,
+        `, ${asProp} as-prop` +
+        `, ${classNameStyleUsages.size} className/style\n`,
     );
   }
 
@@ -423,6 +500,65 @@ function importTextMentionsIdentifier(importText: string, identifier: string): b
 
 function escapeRegexForRegExp(s: string): string {
   return s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
+/** Quick pre-check: does this source mention className or style in a JSX prop context? */
+const CLASSNAME_STYLE_QUICK_RE = /\b(className|style)\s*[={]/;
+
+/**
+ * Scan source for JSX usage of specific components with className or style props.
+ * Uses a two-step approach: first quick-checks for className/style keywords,
+ * then scans JSX open tags to match component names — avoids building a huge
+ * alternation regex when there are hundreds of component names.
+ */
+function scanClassNameStyleUsages(source: string, componentNames: ReadonlySet<string>): string[] {
+  if (!CLASSNAME_STYLE_QUICK_RE.test(source)) {
+    return [];
+  }
+
+  // Match JSX open tags: `<ComponentName ... className=` or `<ComponentName ... style=`
+  // We use a generic tag regex and check the name against the set.
+  const matches: string[] = [];
+  const tagRe = /<([A-Z][A-Za-z0-9]*)\b[^<>]*\b(?:className|style)\s*[={]/gs;
+  for (const m of source.matchAll(tagRe)) {
+    const name = m[1];
+    if (name && componentNames.has(name)) {
+      matches.push(name);
+    }
+  }
+  return matches;
+}
+
+/**
+ * Use ripgrep to find files containing `className` or `style` props.
+ * Searches for the prop keywords (not component names) to keep the pattern
+ * small and fast — the full component-name regex narrows results down.
+ */
+function rgClassNameStyleFilter(files: readonly string[]): Set<string> | undefined {
+  const dirs = deduplicateParentDirs(files);
+  if (dirs.length === 0) {
+    return undefined;
+  }
+
+  try {
+    const globArgs = ["*.tsx", "*.ts", "*.jsx", "*.js", "*.mts", "*.cts", "*.mjs", "*.cjs"]
+      .map((glob) => `--glob ${shellQuote(glob)}`)
+      .join(" ");
+    const cmd = `rg -l ${shellQuote(String.raw`\b(className|style)\s*[={]`)} ${globArgs} ${dirs.map(shellQuote).join(" ")}`;
+    const output = execSync(cmd, { encoding: "utf-8", maxBuffer: 10 * 1024 * 1024 });
+    return new Set(
+      output
+        .trim()
+        .split("\n")
+        .filter(Boolean)
+        .map((f) => pathResolve(f)),
+    );
+  } catch (err: unknown) {
+    if (err instanceof Error && "status" in err && (err as { status: number }).status === 1) {
+      return new Set();
+    }
+    return undefined;
+  }
 }
 
 /** Scan a single file for cross-file selector usages using AST parsing. */
