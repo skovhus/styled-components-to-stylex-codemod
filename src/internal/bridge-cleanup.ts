@@ -8,30 +8,14 @@
  *
  * This module detects and removes these stale artifacts.
  */
-import { bridgeExportName } from "./utilities/bridge-classname.js";
+import { bridgeExportName, extractBridgeComponentNames } from "./utilities/bridge-classname.js";
 import { escapeRegex } from "./utilities/string-utils.js";
 
-export { detectBridgeExports, findStaleBridgeComponents, removeStaleBridgeArtifacts };
-
-// ---------------------------------------------------------------------------
-// Detection
-// ---------------------------------------------------------------------------
-
-/** Regex matching bridge GlobalSelector export statements. */
-const BRIDGE_EXPORT_RE =
-  /export\s+const\s+(\w+)GlobalSelector\s*=\s*"\.sc2sx-\w+-[0-9a-f]{8}"\s*;/g;
-
-/**
- * Scan source code for existing bridge GlobalSelector exports.
- * Returns the component names that have bridge artifacts (e.g. "Foo" from "FooGlobalSelector").
- */
-function detectBridgeExports(source: string): string[] {
-  const names: string[] = [];
-  for (const match of source.matchAll(BRIDGE_EXPORT_RE)) {
-    names.push(match[1]!);
-  }
-  return names;
-}
+export {
+  extractBridgeComponentNames as detectBridgeExports,
+  findStaleBridgeComponents,
+  removeStaleBridgeArtifacts,
+};
 
 /**
  * Determine which bridge components in a file are stale.

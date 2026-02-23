@@ -21,6 +21,10 @@ import type { CrossFileSelectorUsage as CoreUsage } from "../transform-types.js"
 import { addToSetMap } from "../utilities/collection-utils.js";
 import { PLACEHOLDER_RE } from "../styled-css.js";
 import { isSelectorContext } from "../utilities/selector-context-heuristic.js";
+import {
+  GLOBAL_SELECTOR_SUFFIX,
+  hasBridgeGlobalSelectorExport,
+} from "../utilities/bridge-classname.js";
 
 /* ── Public types ─────────────────────────────────────────────────────── */
 
@@ -129,9 +133,6 @@ export function categorizeSelectorUsages(
 
 /* ── Bridge GlobalSelector detection ─────────────────────────────────── */
 
-/** Regex matching `export const XGlobalSelector = ".sc2sx-` pattern (global for matchAll). */
-const BRIDGE_EXPORT_RE = /export\s+const\s+(\w+GlobalSelector)\s*=\s*["']\.sc2sx-/g;
-
 /**
  * Detect whether an imported name is a bridge GlobalSelector from an
  * already-converted StyleX file.
@@ -150,10 +151,10 @@ export function detectBridgeGlobalSelector(
   readFile: (path: string) => string,
 ): string | null {
   // Check 1: name ends with "GlobalSelector" and stripped name starts uppercase
-  if (!importedName.endsWith("GlobalSelector")) {
+  if (!importedName.endsWith(GLOBAL_SELECTOR_SUFFIX)) {
     return null;
   }
-  const stripped = importedName.slice(0, -"GlobalSelector".length);
+  const stripped = importedName.slice(0, -GLOBAL_SELECTOR_SUFFIX.length);
   if (!stripped || !/^[A-Z]/.test(stripped)) {
     return null;
   }
@@ -163,14 +164,7 @@ export function detectBridgeGlobalSelector(
   if (!content || !content.includes("@stylexjs/stylex")) {
     return null;
   }
-  let found = false;
-  for (const m of content.matchAll(BRIDGE_EXPORT_RE)) {
-    if (m[1] === importedName) {
-      found = true;
-      break;
-    }
-  }
-  if (!found) {
+  if (!hasBridgeGlobalSelectorExport(content, importedName)) {
     return null;
   }
 
