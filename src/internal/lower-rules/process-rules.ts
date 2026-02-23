@@ -23,12 +23,7 @@ import {
   getArrowFnParamBindings,
   getNodeLocStart,
 } from "../utilities/jscodeshift-utils.js";
-import {
-  cssValueToJs,
-  toStyleKey,
-  toSuffixFromProp,
-  type ComputedKeyEntry,
-} from "../transform/helpers.js";
+import { cssValueToJs, toStyleKey, toSuffixFromProp } from "../transform/helpers.js";
 import { capitalize, kebabToCamelCase } from "../utilities/string-utils.js";
 import { getOrCreateRelationOverrideBucket } from "./shared.js";
 import type { RelationOverride } from "./state.js";
@@ -45,7 +40,6 @@ export function processDeclRules(ctx: DeclProcessingState): void {
     styleObj,
     perPropPseudo,
     perPropMedia,
-    perPropComputedMedia,
     nestedSelectors,
     attrBuckets,
     localVarValues,
@@ -317,64 +311,20 @@ export function processDeclRules(ctx: DeclProcessingState): void {
       } else if (/[+~]/.test(s) && !isHandledComponentPattern) {
         // Self-referencing sibling combinators (`& + &`, `& ~ &`) are supported via
         // stylex.when.siblingBefore(). Non-self-referencing patterns still bail.
-        const selfSiblingMatch = s.match(/^&\s*([+~])\s*&$/);
-        if (!selfSiblingMatch) {
-          state.markBail();
-          warnings.push({
-            severity: "warning",
-            type: "Unsupported selector: sibling combinator",
-            loc: computeSelectorWarningLoc(decl.loc, decl.rawCss, rule.selector),
-          });
-          break;
+        if (/^&\s*[+~]\s*&$/.test(s)) {
+          const siblingAction = handleSiblingSelector(s, rule, ctx);
+          if (siblingAction === "break") {
+            break;
+          }
+          continue;
         }
-
-        // Handle self-referencing sibling selector: collect declarations into perPropComputedMedia.
-        // Both `& + &` (adjacent) and `& ~ &` (general) map to siblingBefore().
-        //
-        // Known semantic broadenings vs CSS:
-        //  1. siblingBefore() emits `:where(.marker ~ *)` (general sibling), not `+ *`
-        //     (adjacent). For `& + &`, if an unrelated element is interleaved between
-        //     two instances, CSS would NOT match but siblingBefore() WILL.
-        //     StyleX has no adjacent-sibling API, so this is the closest approximation.
-        //  2. defaultMarker() is file-global, not component-scoped. If another component
-        //     in the same file also uses defaultMarker() (e.g. for ancestor overrides),
-        //     its marker could incorrectly activate this component's sibling styles.
-        //     Use stylex.defineMarker() for strict scoping (not yet implemented).
-        const combinator = selfSiblingMatch[1]; // "+" or "~"
-        if (combinator === "+") {
-          warnings.push({
-            severity: "info",
-            type: "Sibling selector broadened: & + & (adjacent) becomes general sibling (~) in StyleX — interleaved non-matching elements will no longer block the match",
-            loc: computeSelectorWarningLoc(decl.loc, decl.rawCss, rule.selector),
-          });
-        }
-        const siblingKeyExpr = makeSiblingKey(j);
-
-        // Mark this component for defaultMarker() so siblings can observe it
-        ancestorSelectorParents.add(decl.styleKey);
-
-        const siblingMedia = rule.atRuleStack.find((a) => a.startsWith("@media"));
-        const siblingResult = processSiblingDeclarations(
-          rule,
-          j,
-          decl,
-          siblingKeyExpr,
-          siblingMedia ?? null,
-          perPropComputedMedia,
-          styleObj,
-          resolveThemeValue,
-          resolveThemeValueFromFn,
-        );
-        if (siblingResult === "bail") {
-          state.markBail();
-          warnings.push({
-            severity: "warning",
-            type: "Unsupported selector: sibling combinator",
-            loc: computeSelectorWarningLoc(decl.loc, decl.rawCss, rule.selector),
-          });
-          break;
-        }
-        continue;
+        state.markBail();
+        warnings.push({
+          severity: "warning",
+          type: "Unsupported selector: sibling combinator",
+          loc: computeSelectorWarningLoc(decl.loc, decl.rawCss, rule.selector),
+        });
+        break;
       } else if (/\s+[a-zA-Z.#]/.test(s) && !isHandledComponentPattern) {
         // Before bailing on descendant selectors, try to resolve element selectors
         // like `& svg`, `& > button`, `&:hover svg`, `& svg:hover` to a styled component
@@ -886,18 +836,7 @@ export function processDeclRules(ctx: DeclProcessingState): void {
       // Handle resolved selector media (from adapter.resolveSelector)
       // These use computed property keys like [breakpoints.phone]
       if (resolvedSelectorMedia) {
-        let entry = perPropComputedMedia.get(prop);
-        if (!entry) {
-          const existingVal = (styleObj as Record<string, unknown>)[prop];
-          const defaultValue =
-            existingVal !== undefined
-              ? existingVal
-              : cssHelperPropValues.has(prop)
-                ? getComposedDefaultValue(prop)
-                : null;
-          entry = { defaultValue, entries: [] };
-          perPropComputedMedia.set(prop, entry);
-        }
+        const entry = getOrCreateComputedMediaEntry(prop, ctx);
         entry.entries.push({ keyExpr: resolvedSelectorMedia.keyExpr, value });
         return;
       }
@@ -1663,100 +1602,112 @@ function extractReverseSelectorPseudos(selector: string): string[] {
 }
 
 /**
- * Builds a `stylex.when.siblingBefore(":is(*)")` AST call expression.
- * Used for both `& + &` (adjacent) and `& ~ &` (general) CSS sibling selectors.
- *
- * The `:is(*)` pseudo is a universal match required by the StyleX Babel plugin
- * (which mandates a pseudo argument starting with `:`) but has no effect on
- * specificity or matching — it is equivalent to calling with no pseudo.
- *
- * TODO: Remove the `:is(*)` workaround if the StyleX Babel plugin adds support
- * for no-arg `siblingBefore()` calls (currently crashes in `validatePseudoSelector`).
+ * Returns the computed-media entry for `prop`, creating it on first access.
+ * Centralises the get-or-create + default-value logic that both
+ * resolvedSelectorMedia handling and sibling-selector handling need.
  */
-function makeSiblingKey(j: JSCodeshift) {
-  return j.callExpression(
-    j.memberExpression(
-      j.memberExpression(j.identifier("stylex"), j.identifier("when")),
-      j.identifier("siblingBefore"),
-    ),
-    [j.literal(":is(*)")],
-  );
-}
-
-type ComputedMediaMap = Map<string, { defaultValue: unknown; entries: ComputedKeyEntry[] }>;
-
-/**
- * Processes declarations from a self-referencing sibling rule (`& + &` or `& ~ &`)
- * into `perPropComputedMedia` entries with the appropriate sibling key expression.
- *
- * Handles both static values and interpolated (theme-resolved) values.
- * When the rule is inside a `@media` block, wraps the value in a media condition object.
- *
- * Returns "bail" if any interpolated declaration cannot be resolved.
- */
-function processSiblingDeclarations(
-  rule: { declarations: CssDeclarationIR[] },
-  j: JSCodeshift,
-  decl: { templateExpressions: unknown[]; styleKey: string },
-  siblingKeyExpr: unknown,
-  media: string | null,
-  perPropComputedMedia: ComputedMediaMap,
-  styleObj: Record<string, unknown>,
-  resolveThemeValue: (expr: unknown) => unknown,
-  resolveThemeValueFromFn: (expr: unknown) => unknown,
-): "bail" | void {
-  for (const d of rule.declarations) {
-    if (d.value.kind === "static") {
-      for (const out of cssDeclarationToStylexDeclarations(d)) {
-        if (out.value.kind !== "static") {
-          continue;
-        }
-        const v = cssValueToJs(out.value, d.important, out.prop);
-        const siblingValue = media ? { default: null, [media]: v } : v;
-        addSiblingComputedEntry(
-          perPropComputedMedia,
-          out.prop,
-          styleObj,
-          siblingKeyExpr,
-          siblingValue,
-        );
-      }
-    } else if (d.value.kind === "interpolated" && d.property) {
-      const resolveResult = resolveAllSlots(d, decl, resolveThemeValue, resolveThemeValueFromFn);
-      if (resolveResult === "bail") {
-        return "bail";
-      }
-      if (resolveResult) {
-        for (const out of cssDeclarationToStylexDeclarations(d)) {
-          const interpolatedValue = buildInterpolatedValue(j, d, resolveResult);
-          const siblingValue = media
-            ? { default: null, [media]: interpolatedValue }
-            : interpolatedValue;
-          addSiblingComputedEntry(
-            perPropComputedMedia,
-            out.prop,
-            styleObj,
-            siblingKeyExpr,
-            siblingValue,
-          );
-        }
-      }
-    }
-  }
-}
-
-/** Adds a computed key entry for a sibling selector to the perPropComputedMedia map. */
-function addSiblingComputedEntry(
-  perPropComputedMedia: ComputedMediaMap,
-  prop: string,
-  styleObj: Record<string, unknown>,
-  keyExpr: unknown,
-  value: unknown,
-): void {
+function getOrCreateComputedMediaEntry(prop: string, ctx: DeclProcessingState) {
+  const { perPropComputedMedia, styleObj, cssHelperPropValues, getComposedDefaultValue } = ctx;
   let entry = perPropComputedMedia.get(prop);
   if (!entry) {
-    entry = { defaultValue: styleObj[prop] ?? null, entries: [] };
+    const existingVal = (styleObj as Record<string, unknown>)[prop];
+    const defaultValue =
+      existingVal !== undefined
+        ? existingVal
+        : cssHelperPropValues.has(prop)
+          ? getComposedDefaultValue(prop)
+          : null;
+    entry = { defaultValue, entries: [] };
     perPropComputedMedia.set(prop, entry);
   }
-  entry.entries.push({ keyExpr, value });
+  return entry;
+}
+
+/**
+ * Handles a self-referencing sibling selector (`& + &` or `& ~ &`) by processing
+ * declarations and storing them as computed keys using `stylex.when.siblingBefore(':is(*)')`.
+ *
+ * **Semantic approximation:** CSS `& + &` targets only the *immediately adjacent*
+ * sibling, while `stylex.when.siblingBefore()` generates a general sibling rule
+ * (`~`) which matches *any* preceding sibling. This means the styles may apply
+ * even when a non-matching element sits between two instances of the component.
+ * In practice this rarely matters because `& + &` is almost always used with
+ * consecutive homogeneous lists. For `& ~ &`, the mapping is semantically exact.
+ *
+ * Uses `defaultMarker()` (via `ancestorSelectorParents`) instead of per-component
+ * `defineMarker()`, avoiding the `.stylex` file requirement. Because the marker
+ * is file-global rather than component-scoped, styles from one component could
+ * theoretically leak to another if both use sibling selectors and appear as
+ * siblings in the same render tree.
+ *
+ * **`:is(*)` workaround:** The StyleX Babel plugin mandates a pseudo argument
+ * starting with `:` for `siblingBefore()`. `:is(*)` is a universal match with
+ * no effect on specificity or matching.
+ * TODO: Remove the `:is(*)` workaround if the StyleX Babel plugin adds support
+ * for no-arg `siblingBefore()` calls (currently crashes in `validatePseudoSelector`).
+ *
+ * Returns "break" on error to bail, otherwise the caller should `continue`.
+ */
+function handleSiblingSelector(
+  selector: string,
+  rule: DeclProcessingState["decl"]["rules"][number],
+  ctx: DeclProcessingState,
+): "break" | void {
+  const { state, decl } = ctx;
+  const { j, warnings, resolveThemeValue, resolveThemeValueFromFn, ancestorSelectorParents } =
+    state;
+
+  // Emit info warning for `& + &` since adjacent becomes general sibling
+  const isAdjacent = /\+/.test(selector);
+  if (isAdjacent) {
+    warnings.push({
+      severity: "info",
+      type: "Sibling selector broadened: & + & (adjacent) becomes general sibling (~) in StyleX — interleaved non-matching elements will no longer block the match",
+      loc: computeSelectorWarningLoc(decl.loc, decl.rawCss, rule.selector),
+    });
+  }
+
+  // Add to ancestorSelectorParents so defaultMarker() is injected into stylex.props() calls
+  ancestorSelectorParents.add(decl.styleKey);
+
+  // Process declarations into a temporary bucket using the shared helper
+  const bucket: Record<string, unknown> = {};
+  const result = processDeclarationsIntoBucket(
+    rule,
+    bucket,
+    j,
+    decl,
+    resolveThemeValue,
+    resolveThemeValueFromFn,
+    { bailOnUnresolved: true },
+  );
+  if (result === "bail") {
+    state.markBail();
+    warnings.push({
+      severity: "warning",
+      type: "Unsupported selector: unresolved interpolation in sibling selector",
+      loc: computeSelectorWarningLoc(decl.loc, decl.rawCss, rule.selector),
+    });
+    return "break";
+  }
+
+  // Build a fresh stylex.when.siblingBefore(':is(*)') AST node per property.
+  const makeSiblingKeyExpr = () =>
+    j.callExpression(
+      j.memberExpression(
+        j.memberExpression(j.identifier("stylex"), j.identifier("when")),
+        j.identifier("siblingBefore"),
+      ),
+      [j.literal(":is(*)")],
+    );
+
+  // Wrap values in media condition objects when inside an @media at-rule
+  const media = rule.atRuleStack.find((a) => a.startsWith("@media"));
+
+  // Add each property to perPropComputedMedia with the sibling computed key
+  for (const [prop, value] of Object.entries(bucket)) {
+    const siblingValue = media ? { default: null, [media]: value } : value;
+    const entry = getOrCreateComputedMediaEntry(prop, ctx);
+    entry.entries.push({ keyExpr: makeSiblingKeyExpr(), value: siblingValue });
+  }
 }
