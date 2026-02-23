@@ -39,6 +39,7 @@ describe("runTransform (e2e)", () => {
 
     const result = await runTransform({
       files: targetFile,
+      consumerPaths: null,
       adapter: fixtureAdapter,
       dryRun: false,
       print: false,

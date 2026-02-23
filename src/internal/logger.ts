@@ -72,6 +72,7 @@ export type WarningType =
   | "Unsupported selector: descendant/child/sibling selector"
   | "Unsupported selector: interpolated pseudo selector"
   | "Unsupported selector: sibling combinator"
+  | "Unsupported selector: unresolved interpolation in sibling selector"
   | "Unsupported selector: ambiguous element selector"
   | "Unsupported selector: attribute selector on unsupported element"
   | "Unsupported selector: element selector on exported component"
@@ -79,14 +80,17 @@ export type WarningType =
   | "Unsupported selector: element selector with dynamic children"
   | "Unsupported selector: element selector with plain intrinsic children"
   | "Unsupported selector: element selector pseudo collision"
+  | "Unsupported selector: unresolved interpolation in cross-file component selector"
   | "Unsupported selector: unresolved interpolation in descendant component selector"
   | "Unsupported selector: unresolved interpolation in element selector"
   | "Unsupported selector: unresolved interpolation in reverse component selector"
+  | "Unsupported selector: grouped reverse selector references different components"
   | "Unsupported selector: unknown component selector"
   | "Unsupported css`` mixin: after-base mixin style is not a plain object"
   | "Unsupported css`` mixin: nested contextual conditions in after-base mixin"
   | "Unsupported css`` mixin: cannot infer base default for after-base contextual override (base value is non-literal)"
   | "css`` helper function interpolation references closure variable that cannot be hoisted"
+  | "Sibling selector broadened: & + & (adjacent) becomes general sibling (~) in StyleX — interleaved non-matching elements will no longer block the match"
   | "Using styled-components components as mixins is not supported; use css`` mixins or strings instead";
 
 export interface WarningLog {
@@ -132,6 +136,22 @@ export class Logger {
    */
   public static warn(message: string, context?: unknown): void {
     Logger.writeWithSpacing(message, context);
+  }
+
+  /**
+   * Mark an Error instance as already logged so downstream catch blocks can skip it.
+   */
+  public static markErrorAsLogged(e: unknown): void {
+    if (e instanceof Error) {
+      Logger.loggedErrors.add(e);
+    }
+  }
+
+  /**
+   * Check whether an error was already logged via `markErrorAsLogged`.
+   */
+  public static isErrorLogged(e: unknown): boolean {
+    return e instanceof Error && Logger.loggedErrors.has(e);
   }
 
   /**
@@ -181,13 +201,15 @@ export class Logger {
   public static _clearCollected(): void {
     Logger.collected = [];
     Logger.fileCount = null;
+    Logger.loggedErrors = new WeakSet<Error>();
   }
 
   // -- Internal state
 
   private static collected: CollectedWarning[] = [];
   private static fileCount: number | null = null;
-  private static maxExamples = 15;
+  private static maxExamples = 3;
+  private static loggedErrors = new WeakSet<Error>();
 
   private static writeWithSpacing(message: string, context?: unknown): void {
     const trimmed = message.replace(/\s+$/u, "");
@@ -254,7 +276,7 @@ class LoggerReport {
   private readonly maxExamples: number;
   private fileCache = new Map<string, string[] | null>();
 
-  constructor(warnings: CollectedWarning[], fileCount: number | null, maxExamples = 15) {
+  constructor(warnings: CollectedWarning[], fileCount: number | null, maxExamples = 3) {
     this.warnings = warnings;
     this.fileCount = fileCount;
     this.maxExamples = maxExamples;

@@ -9,13 +9,7 @@ type TextProps = React.PropsWithChildren<{
   style?: React.CSSProperties;
 }>;
 
-function Text(
-  props: TextProps & {
-    className?: string;
-    style?: React.CSSProperties;
-    children?: React.ReactNode;
-  },
-) {
+function Text(props: React.ComponentProps<"span"> & TextProps) {
   const { className, children, style } = props;
 
   return <span {...mergedSx(styles.text, className, style)}>{children}</span>;

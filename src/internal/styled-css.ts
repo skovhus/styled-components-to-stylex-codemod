@@ -6,6 +6,9 @@ import type { Expression, TemplateLiteral } from "jscodeshift";
 import { compile } from "stylis";
 import type { Element } from "stylis";
 
+/** Matches `__SC_EXPR_N__` and captures the slot index in group 1. */
+export const PLACEHOLDER_RE = /__SC_EXPR_(\d+)__/;
+
 export type StyledInterpolationSlot = {
   index: number;
   placeholder: string;

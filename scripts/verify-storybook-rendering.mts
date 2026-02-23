@@ -111,7 +111,7 @@ function discoverAllTestCases(): string[] {
   const names = new Set<string>();
   for (const f of files) {
     const match = f.match(/^(.+)\.input\.tsx$/);
-    if (match && !f.startsWith("_unsupported.")) {
+    if (match && !f.startsWith("_unsupported.") && !f.startsWith("_unimplemented.")) {
       if (files.includes(`${match[1]}.output.tsx`)) {
         names.add(match[1]!);
       }
@@ -131,7 +131,11 @@ function discoverChangedTestCases(): string[] {
       continue;
     }
     const match = line.match(/test-cases\/(.+)\.input\.tsx$/);
-    if (match && !match[1]!.startsWith("_unsupported.")) {
+    if (
+      match &&
+      !match[1]!.startsWith("_unsupported.") &&
+      !match[1]!.startsWith("_unimplemented.")
+    ) {
       names.push(match[1]!);
     }
   }

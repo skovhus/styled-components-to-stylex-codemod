@@ -48,7 +48,7 @@ describe("public API runtime validation (DX)", () => {
     );
   });
 
-  it("defineAdapter: throws a helpful message when externalInterface is not a function", () => {
+  it("defineAdapter: throws a helpful message when externalInterface is not a function or 'auto'", () => {
     expect(() =>
       defineAdapter({
         resolveValue() {
@@ -63,6 +63,38 @@ describe("public API runtime validation (DX)", () => {
         externalInterface: "nope",
       } as any),
     ).toThrowError(/externalInterface/);
+    expect(() =>
+      defineAdapter({
+        resolveValue() {
+          return null;
+        },
+        resolveCall() {
+          return null;
+        },
+        resolveSelector() {
+          return undefined;
+        },
+        externalInterface: "nope",
+      } as any),
+    ).toThrowError(/"auto"/);
+  });
+
+  it("defineAdapter: accepts externalInterface 'auto' without throwing", () => {
+    expect(() =>
+      defineAdapter({
+        resolveValue() {
+          return undefined;
+        },
+        resolveCall() {
+          return undefined;
+        },
+        resolveSelector() {
+          return undefined;
+        },
+        externalInterface: "auto",
+        styleMerger: null,
+      }),
+    ).not.toThrow();
   });
 
   it("runTransform: throws a helpful message when options is missing", async () => {
@@ -74,9 +106,45 @@ describe("public API runtime validation (DX)", () => {
     await expect(runTransform({ adapter: {} } as any)).rejects.toThrowError(/`files` is required/);
   });
 
-  it("runTransform: throws a helpful message when adapter is missing", async () => {
-    await expect(runTransform({ files: "src/**/*.tsx" } as any)).rejects.toThrowError(
-      /expected an adapter object/i,
+  it("runTransform: throws a helpful message when consumerPaths is missing", async () => {
+    await expect(runTransform({ files: "src/**/*.tsx", adapter: {} } as any)).rejects.toThrowError(
+      /`consumerPaths` is required/,
     );
+  });
+
+  it("runTransform: throws a helpful message when adapter is missing", async () => {
+    await expect(
+      runTransform({ files: "src/**/*.tsx", consumerPaths: null } as any),
+    ).rejects.toThrowError(/expected an adapter object/i);
+  });
+
+  it('runTransform: throws when externalInterface is "auto" but consumerPaths is null', async () => {
+    const adapter = {
+      resolveValue: () => undefined,
+      resolveCall: () => undefined,
+      resolveSelector: () => undefined,
+      externalInterface: "auto" as const,
+      styleMerger: null,
+    };
+    await expect(
+      runTransform({ files: "src/__tests__/fixtures/**/*.tsx", consumerPaths: null, adapter }),
+    ).rejects.toThrowError(/consumerPaths is null/);
+  });
+
+  it("runTransform: throws when consumerPaths matches no files", async () => {
+    const adapter = {
+      resolveValue: () => undefined,
+      resolveCall: () => undefined,
+      resolveSelector: () => undefined,
+      externalInterface: "auto" as const,
+      styleMerger: null,
+    };
+    await expect(
+      runTransform({
+        files: "src/__tests__/fixtures/**/*.tsx",
+        consumerPaths: "nonexistent-dir-xyz/**/*.tsx",
+        adapter,
+      }),
+    ).rejects.toThrowError(/consumerPaths matched no files/);
   });
 });

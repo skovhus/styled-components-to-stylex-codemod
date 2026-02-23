@@ -3,6 +3,7 @@
  * Core concepts: wrapper decisions, export mapping, and styles identifier selection.
  */
 import type { JSCodeshift, JSXAttribute, JSXSpreadAttribute } from "jscodeshift";
+import { resolve as pathResolve } from "node:path";
 import { CONTINUE, type StepResult } from "../transform-types.js";
 import type { StyledDecl } from "../transform-types.js";
 import { TransformContext, type ExportInfo } from "../transform-context.js";
@@ -10,6 +11,7 @@ import {
   isComponentUsedInJsx,
   propagateDelegationWrapperRequirements,
 } from "../utilities/delegation-utils.js";
+import { generateBridgeClassName } from "../utilities/bridge-classname.js";
 import { getRootJsxIdentifierName, isFunctionNode } from "../utilities/jscodeshift-utils.js";
 import { typeContainsPolymorphicAs } from "../utilities/polymorphic-as-detection.js";
 
@@ -156,6 +158,27 @@ export function analyzeBeforeEmitStep(ctx: TransformContext): StepResult {
     // Exported components must keep a wrapper to preserve the module's public API.
     if (exportedComponents.has(decl.localName)) {
       decl.needsWrapperComponent = true;
+    }
+
+    // Bridge className injection: components referenced by unconverted consumer selectors
+    // get a deterministic className so the consumer's `${Component} { ... }` still works.
+    // Note: for default imports, the prepass stores "default" as importedName; resolve it
+    // to the actual local name by checking which decl is the default export.
+    const isBridgeComponent =
+      ctx.bridgeComponentNames?.has(decl.localName) ||
+      (ctx.bridgeComponentNames?.has("default") &&
+        exportedComponents.get(decl.localName)?.isDefault);
+    if (isBridgeComponent) {
+      const absPath = pathResolve(file.path);
+      decl.bridgeClassName = generateBridgeClassName(absPath, decl.localName);
+      if (!decl.attrsInfo) {
+        decl.attrsInfo = { staticAttrs: {}, conditionalAttrs: [] };
+      }
+      const existing =
+        typeof decl.attrsInfo.staticAttrs.className === "string"
+          ? decl.attrsInfo.staticAttrs.className + " "
+          : "";
+      decl.attrsInfo.staticAttrs.className = existing + decl.bridgeClassName;
     }
   }
 
@@ -360,9 +383,10 @@ export function analyzeBeforeEmitStep(ctx: TransformContext): StepResult {
   // (before emitStylesAndImports for merger import and wrapper generation)
   for (const decl of styledDecls) {
     // 1. If extended by another styled component in this file -> enable external styles
+    //    Leave supportsAsProp unset (undefined) so the emitter can auto-derive `as`
+    //    support for intrinsic-based components.
     if (extendedBy.has(decl.localName)) {
       decl.supportsExternalStyles = true;
-      decl.supportsAsProp = false;
       continue;
     }
 
@@ -381,10 +405,8 @@ export function analyzeBeforeEmitStep(ctx: TransformContext): StepResult {
       exportName: exportInfo.exportName,
       isDefaultExport: exportInfo.isDefault,
     });
-    decl.supportsExternalStyles = extResult?.styles === true;
-    // When styles: true, `as` is implicitly enabled (no `as` property in that branch)
-    // When styles: false, check the explicit `as` property
-    decl.supportsAsProp = extResult?.styles === false && extResult.as === true;
+    decl.supportsExternalStyles = extResult.styles;
+    decl.supportsAsProp = extResult.as;
   }
 
   // Early detection of components used as values (before emitStylesAndImports for merger import)

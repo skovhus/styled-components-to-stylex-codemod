@@ -16,6 +16,12 @@ export const helpers = stylex.create({
     backgroundImage: "linear-gradient(90deg, #ff6b6b, #5f6cff)",
     color: "transparent",
   },
+  truncateMultiline: (lines: number) => ({
+    display: "-webkit-box" as const,
+    WebkitLineClamp: lines,
+    WebkitBoxOrient: "vertical" as const,
+    overflow: "hidden" as const,
+  }),
 });
 
 // Scroll fade mask styles - parameterized with size and direction.

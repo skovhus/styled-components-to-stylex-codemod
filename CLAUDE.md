@@ -25,6 +25,7 @@ pnpm check       # Run lint + tsc + test
 - always run "pnpm run ci" to validate changes
 - when fixing bugs or addressing review comments, add a test case or unit test to document the regression and prevent future breakage
 - before making any changes, explore the codebase to find ALL files that contain the pattern I'm about to describe. List every file, show the relevant code, and confirm you understand the full scope. Then propose a complete change plan covering every file.
+- when `adapter.externalInterface` is `"auto"`, treat prepass as required: if prepass fails, throw (do not silently fall back); only function-based `externalInterface` may continue on prepass failure with a warning
 
 ## Code guidelines
 
@@ -70,7 +71,21 @@ Run repo scripts directly with `node`, see `scripts` folder
 
 Create matching `.input.tsx` and `.output.tsx` files in `test-cases/`. Tests auto-discover all pairs and fail if any file is missing its counterpart.
 
-Unsupported test cases can be named `_unsupported.<case>.input.tsx` and should NOT have an output file.
+Test cases that the codemod cannot transform use two prefixes to distinguish the reason:
+
+- **`_unsupported.<case>.input.tsx`** — StyleX **architecturally cannot express** this CSS pattern (e.g., descendant/child combinators, `createGlobalStyle`, specificity hacks), or a static codemod **fundamentally cannot resolve** it at build time. These will likely never be supported.
+- **`_unimplemented.<case>.input.tsx`** — StyleX **has the APIs** to express this, but the codemod **hasn't built the transform yet** (e.g., sibling selectors via `stylex.when.siblingBefore()`, cross-file component selectors via `stylex.defineMarker()`). These are planned future work.
+
+Both prefixes should **NOT** have an output file. Both are excluded from supported test runs, Storybook, and the playground.
+
+### Promoting Bail-Out Test Cases
+
+When promoting an `_unsupported` or `_unimplemented` test case to a supported one (adding codemod support for a previously unsupported pattern):
+
+- **Preserve the original input code**: Keep the original styled-component definition and CSS as-is. The codemod must handle the original input. You may extend the test case (e.g., add more CSS properties or variations), but do not modify or remove the original code.
+- Remove `@expected-warning` comments and update descriptive comments as needed (these are not semantic changes).
+- It is OK to minimally improve the `App` component for visibility (e.g., adding text content to an empty `<Box />`), since that doesn't change the styled-component transformation being tested.
+- Create the matching `.output.tsx` using `node scripts/regenerate-test-case-outputs.mts --only <case>`.
 
 ### Test Case Naming Convention
 
@@ -84,7 +99,7 @@ Test cases follow a `category-variation` naming scheme:
 
 Examples: `attrs-polymorphicAs`, `conditional-enumIfChain`, `wrapper-basic`, `theme-destructure`
 
-For `_unsupported.*` files, keep the `_unsupported.` prefix and apply the same `category-variation` scheme after it: `_unsupported.selector-complex`, `_unsupported.theme-adhoc`
+For bail-out files, keep the appropriate prefix (`_unsupported.` or `_unimplemented.`) and apply the same `category-variation` scheme after it: `_unsupported.selector-complex`, `_unimplemented.selector-sibling`
 
 **Categories**: `basic`, `extending`, `attrs`, `asProp`, `conditional`, `interpolation`, `mixin`, `cssHelper`, `selector`, `theme`, `useTheme`, `wrapper`, `externalStyles`, `helper`, `cssVariable`, `mediaQuery`, `transientProp`, `shouldForwardProp`, `withConfig`, `keyframes`, `variant`, `css`, `htmlProp`, `typeHandling`, `import`, `staticProp`, `ref`, `styleObject`, `naming`, `example`
 
@@ -110,6 +125,10 @@ Storybook renders all test cases side-by-side (input with styled-components, out
 Run `pnpm storybook` to start the dev server and visually compare transformations.
 
 To verify rendering programmatically, run `node scripts/verify-storybook-rendering.mts`. The script is self-contained: it builds Storybook, starts a static file server, and auto-installs Playwright Chromium. Use `--only-changed` to check only test cases changed on the current branch, or `--save-diffs` to save diff images for mismatches.
+
+## Environment Variables
+
+- `DEBUG_CODEMOD=1` — Enables verbose prepass diagnostic logging to stderr. Dumps every cross-file selector usage with full paths, components needing marker sidecars or global selector bridges, and consumer analysis entries. Useful for debugging cross-file resolution issues.
 
 ## Skills
 

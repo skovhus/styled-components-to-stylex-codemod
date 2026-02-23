@@ -15,12 +15,7 @@ export function App() {
 App.displayName = "App";
 
 function Sentence<C extends React.ElementType = "div">(
-  props: React.PropsWithChildren<{
-    className?: string;
-    style?: React.CSSProperties;
-    ref?: React.Ref<HTMLDivElement>;
-    as?: C;
-  }>,
+  props: React.ComponentProps<"div"> & { as?: C },
 ) {
   const { as: Component = "div", className, children, style } = props;
 

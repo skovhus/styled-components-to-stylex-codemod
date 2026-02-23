@@ -10,6 +10,7 @@ import {
   type ExpressionKind,
   type WrapperPropDefaults,
 } from "./types.js";
+import { withLeadingComments } from "./comments.js";
 import type { JsxAttr, StatementKind } from "./wrapper-emitter.js";
 import { emitStyleMerging } from "./style-merger.js";
 import { sortVariantEntriesBySpecificity, VOID_TAGS } from "./type-helpers.js";
@@ -34,6 +35,11 @@ export function emitIntrinsicPolymorphicWrappers(ctx: EmitIntrinsicContext): voi
     }
     // Skip specialized wrappers (input/link with attrWrapper) - they have their own handlers
     if (d.attrWrapper) {
+      return false;
+    }
+    // Skip components with shouldForwardProp - the SFP emitter handles them
+    // (including polymorphic `as` prop support when supportsAsProp is true)
+    if (d.shouldForwardProp) {
       return false;
     }
     // Skip components whose props type already has `as?: React.ElementType` -
@@ -156,19 +162,12 @@ export function emitIntrinsicPolymorphicWrappers(ctx: EmitIntrinsicContext): voi
 
       // Add adapter-resolved StyleX styles (emitted directly into stylex.props args).
       if (d.extraStylexPropsArgs) {
-        for (const extra of d.extraStylexPropsArgs) {
-          if (extra.when) {
-            const { cond, isBoolean } = emitter.collectConditionProps({
-              when: extra.when,
-              destructureProps,
-            });
-            styleArgs.push(
-              emitter.makeConditionalStyleExpr({ cond, expr: extra.expr as any, isBoolean }),
-            );
-          } else {
-            styleArgs.push(extra.expr as any);
-          }
-        }
+        styleArgs.push(
+          ...emitter.buildExtraStylexPropsExprs({
+            entries: d.extraStylexPropsArgs,
+            destructureProps,
+          }),
+        );
       }
 
       // Handle pseudo-alias selectors (e.g., &:${highlight})
@@ -313,12 +312,15 @@ export function emitIntrinsicPolymorphicWrappers(ctx: EmitIntrinsicContext): voi
           : undefined;
 
       emitted.push(
-        emitter.buildWrapperFunction({
-          localName: d.localName,
-          params: [propsParamId],
-          bodyStmts: fnBodyStmts,
-          typeParameters: polymorphicFnTypeParams,
-        }),
+        withLeadingComments(
+          emitter.buildWrapperFunction({
+            localName: d.localName,
+            params: [propsParamId],
+            bodyStmts: fnBodyStmts,
+            typeParameters: polymorphicFnTypeParams,
+          }),
+          d,
+        ),
       );
     }
   }

@@ -262,19 +262,16 @@ export function emitShouldForwardPropWrappers(ctx: EmitIntrinsicContext): void {
       j.memberExpression(j.identifier(stylesIdentifier), j.identifier(d.styleKey)),
       ...extraStyleArgsAfterBase,
     ];
+    // Track default values for props (for destructuring defaults)
+    const propDefaults: WrapperPropDefaults = new Map();
 
     // Add adapter-resolved StyleX styles (emitted directly into stylex.props args).
     if (d.extraStylexPropsArgs) {
-      for (const extra of d.extraStylexPropsArgs) {
-        if (extra.when) {
-          const { cond, isBoolean } = emitter.collectConditionProps({ when: extra.when });
-          styleArgs.push(
-            emitter.makeConditionalStyleExpr({ cond, expr: extra.expr as any, isBoolean }),
-          );
-        } else {
-          styleArgs.push(extra.expr as any);
-        }
-      }
+      styleArgs.push(
+        ...emitter.buildExtraStylexPropsExprs({
+          entries: d.extraStylexPropsArgs,
+        }),
+      );
     }
 
     // Handle pseudo-alias selectors (e.g., &:${highlight})
@@ -331,10 +328,8 @@ export function emitShouldForwardPropWrappers(ctx: EmitIntrinsicContext): void {
     }
     const dropPrefix = d.shouldForwardProp?.dropPrefix;
 
-    // Initialize destructureParts and propDefaults early so buildVariantDimensionLookups can populate them
+    // Initialize destructureParts early so buildVariantDimensionLookups can populate them
     const destructureParts: string[] = [];
-    // Track default values for props (for destructuring defaults)
-    const propDefaults: WrapperPropDefaults = new Map();
     for (const p of dropProps) {
       destructureParts.push(p);
     }

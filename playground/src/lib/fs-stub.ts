@@ -10,7 +10,12 @@ export function existsSync(): boolean {
   return false;
 }
 
+export function realpathSync(p: string): string {
+  return p;
+}
+
 export default {
   readFileSync,
   existsSync,
+  realpathSync,
 };

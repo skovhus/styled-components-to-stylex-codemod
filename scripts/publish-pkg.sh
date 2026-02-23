@@ -31,5 +31,11 @@ echo ""
 echo "📤 Pushing to origin..."
 git push origin HEAD:main --follow-tags
 
+VERSION="v$(node -p "require('./package.json').version")"
+
+echo ""
+echo "📝 Creating GitHub release for $VERSION..."
+gh release create "$VERSION" --generate-notes
+
 echo ""
 echo "✅ Done!"

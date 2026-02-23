@@ -3,7 +3,7 @@
  * Core concepts: value resolution hooks and adapter validation.
  */
 
-import { assertValidAdapter } from "./internal/public-api-validation.js";
+import { assertValidAdapterInput } from "./internal/public-api-validation.js";
 
 // ────────────────────────────────────────────────────────────────────────────
 // Value Resolution
@@ -311,15 +311,12 @@ export interface ExternalInterfaceContext {
 /**
  * Result type for `adapter.externalInterface(...)`.
  *
- * - `null` → no external interface support (neither styles nor `as`)
- * - `{ styles: true }` → enable className/style support AND polymorphic `as` prop
+ * - `{ styles: true, as: false }` → enable className/style support only
+ * - `{ styles: true, as: true }` → enable className/style support AND polymorphic `as` prop
  * - `{ styles: false, as: true }` → enable only polymorphic `as` prop (no style merging)
- * - `{ styles: false, as: false }` → equivalent to `null`
- *
- * Note: When `styles: true`, the `as` prop is always enabled because the style
- * merging implementation requires polymorphic rendering support.
+ * - `{ styles: false, as: false }` → no external interface support
  */
-export type ExternalInterfaceResult = { styles: true } | { styles: false; as: boolean } | null;
+export type ExternalInterfaceResult = { styles: boolean; as: boolean };
 
 // ────────────────────────────────────────────────────────────────────────────
 // Style Merger Configuration
@@ -395,10 +392,10 @@ export interface Adapter {
    * Called for exported styled components to determine their external interface.
    *
    * Return:
-   * - `null` → no external interface (neither styles nor `as`)
-   * - `{ styles: true }` → accept className/style props AND polymorphic `as` prop
+   * - `{ styles: false, as: false }` → no external interface
+   * - `{ styles: true, as: false }` → accept className/style props only
+   * - `{ styles: true, as: true }` → accept className/style props AND polymorphic `as` prop
    * - `{ styles: false, as: true }` → accept only polymorphic `as` prop
-   * - `{ styles: false, as: false }` → equivalent to `null`
    */
   externalInterface: (context: ExternalInterfaceContext) => ExternalInterfaceResult;
 
@@ -418,6 +415,35 @@ export interface Adapter {
    * ```
    */
   styleMerger: StyleMergerConfig | null;
+}
+
+// ────────────────────────────────────────────────────────────────────────────
+// Adapter Input (user-facing, allows "auto" for externalInterface)
+// ────────────────────────────────────────────────────────────────────────────
+
+/**
+ * User-facing adapter input type accepted by `defineAdapter()`.
+ *
+ * Same as `Adapter` except `externalInterface` may also be the string `"auto"`.
+ * When `"auto"` is used, `runTransform()` automatically scans consumer code
+ * (using `consumerPaths` / `files` globs) to detect which exported components
+ * are re-styled or used with the `as` prop.
+ */
+export interface AdapterInput {
+  resolveValue: Adapter["resolveValue"];
+  resolveCall: Adapter["resolveCall"];
+  resolveSelector: Adapter["resolveSelector"];
+
+  /**
+   * Called for exported styled components to determine their external interface.
+   *
+   * - Pass a function for manual control.
+   * - Pass `"auto"` to auto-detect usage from consumer code (requires `consumerPaths`
+   *   in `runTransform()`).
+   */
+  externalInterface: "auto" | Adapter["externalInterface"];
+
+  styleMerger: Adapter["styleMerger"];
 }
 
 // ────────────────────────────────────────────────────────────────────────────
@@ -464,20 +490,20 @@ export interface Adapter {
  *
  *     // Configure external interface for exported components
  *     externalInterface(ctx) {
- *       // Example: Enable styles (and `as`) for shared components folder
+ *       // Example: Enable styles and `as` for shared components folder
  *       if (ctx.filePath.includes("/shared/components/")) {
- *         return { styles: true };
+ *         return { styles: true, as: true };
  *       }
- *       return null;
+ *       return { styles: false, as: false };
  *     },
  *
  *     // Optional: provide a custom merger, or use `null` for the default verbose merge output
  *     styleMerger: null,
  *   });
  */
-export function defineAdapter(adapter: Adapter): Adapter {
+export function defineAdapter<T extends AdapterInput>(adapter: T): T {
   // Runtime guard for JS users (no TypeScript help at call sites).
   // Keep this lightweight and dependency-free.
-  assertValidAdapter(adapter, "defineAdapter(adapter)");
+  assertValidAdapterInput(adapter, "defineAdapter(adapter)");
   return adapter;
 }

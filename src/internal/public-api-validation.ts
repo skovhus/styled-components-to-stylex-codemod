@@ -2,7 +2,7 @@
  * Validates adapter/public API inputs and formats errors.
  * Core concepts: shape checks and readable diagnostics.
  */
-import type { Adapter } from "../adapter.js";
+import type { Adapter, AdapterInput } from "../adapter.js";
 
 export function describeValue(value: unknown): string {
   if (value === null) {
@@ -45,10 +45,23 @@ export function describeValue(value: unknown): string {
   return "[Unknown]";
 }
 
+/** Validates that the candidate is a fully-resolved `Adapter` (externalInterface must be a function). */
 export function assertValidAdapter(
   candidate: unknown,
   where: string,
 ): asserts candidate is Adapter {
+  assertAdapterShape(candidate, where, false);
+}
+
+/** Validates that the candidate is a valid `AdapterInput` (externalInterface may be `"auto"` or a function). */
+export function assertValidAdapterInput(
+  candidate: unknown,
+  where: string,
+): asserts candidate is AdapterInput {
+  assertAdapterShape(candidate, where, true);
+}
+
+function assertAdapterShape(candidate: unknown, where: string, allowAutoExtIf: boolean): void {
   const obj = candidate as Record<string, unknown>;
   const resolveValue = obj?.resolveValue;
   const resolveCall = obj?.resolveCall;
@@ -134,10 +147,15 @@ export function assertValidAdapter(
     );
   }
 
-  if (typeof externalInterface !== "function") {
+  const isValidExtIf =
+    typeof externalInterface === "function" || (allowAutoExtIf && externalInterface === "auto");
+  if (!isValidExtIf) {
+    const expected = allowAutoExtIf
+      ? 'adapter.externalInterface must be a function or "auto".'
+      : "adapter.externalInterface must be a function.";
     throw new Error(
       [
-        `${where}: adapter.externalInterface must be a function.`,
+        `${where}: ${expected}`,
         `Received: externalInterface=${describeValue(externalInterface)}`,
       ].join("\n"),
     );

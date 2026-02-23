@@ -11,7 +11,7 @@ function getTestCaseNames(testCasesDir: string): string[] {
   const testCaseNames = new Set<string>();
   for (const file of files) {
     const match = file.match(/^(.+?)(?:\.flow)?\.(input|output)\.(?:tsx|jsx)$/);
-    if (match && !match[1].startsWith("_unsupported.") && match[1] !== "complex") {
+    if (match && !match[1].startsWith("_unsupported.") && !match[1].startsWith("_unimplemented.")) {
       testCaseNames.add(match[1]);
     }
   }
@@ -107,7 +107,6 @@ const config: StorybookConfig = {
   viteFinal: async (config) => {
     config.plugins = config.plugins || [];
 
-    // Add StyleX plugin for processing .stylex.ts files
     config.plugins.unshift(
       stylex.vite({
         dev: true,

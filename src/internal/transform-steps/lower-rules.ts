@@ -20,6 +20,7 @@ export function lowerRulesStep(ctx: TransformContext): StepResult {
   ctx.resolvedStyleObjects = lowered.resolvedStyleObjects;
   ctx.relationOverrides = lowered.relationOverrides;
   ctx.ancestorSelectorParents = lowered.ancestorSelectorParents;
+  ctx.crossFileMarkers = lowered.crossFileMarkers;
 
   if (lowered.bail || ctx.resolveValueBailRef.value) {
     return returnResult({ code: null, warnings: ctx.warnings }, "bail");

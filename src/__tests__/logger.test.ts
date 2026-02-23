@@ -114,31 +114,7 @@ describe("Logger", () => {
 
           /path/file02.tsx
 
-          /path/file03.tsx
-
-          /path/file04.tsx
-
-          /path/file05.tsx
-
-          /path/file06.tsx
-
-          /path/file07.tsx
-
-          /path/file08.tsx
-
-          /path/file09.tsx
-
-          /path/file10.tsx
-
-          /path/file11.tsx
-
-          /path/file12.tsx
-
-          /path/file13.tsx
-
-          /path/file14.tsx
-
-          ... and 2 more file(s)
+          ... and 14 more file(s)
         "
       `);
     });
@@ -210,6 +186,29 @@ describe("Logger", () => {
       Logger.setFileCount(15);
       Logger.logError("Something broke", "/path/a.tsx");
       expect(writeSpy).toHaveBeenCalledWith(expect.stringContaining("Something broke"));
+    });
+  });
+
+  describe("error deduplication (markErrorAsLogged / isErrorLogged)", () => {
+    it("tracks Error instances", () => {
+      const err = new Error("boom");
+      expect(Logger.isErrorLogged(err)).toBe(false);
+      Logger.markErrorAsLogged(err);
+      expect(Logger.isErrorLogged(err)).toBe(true);
+    });
+
+    it("does not track non-Error values", () => {
+      const str = "not an error";
+      Logger.markErrorAsLogged(str);
+      expect(Logger.isErrorLogged(str)).toBe(false);
+    });
+
+    it("_clearCollected resets tracked errors", () => {
+      const err = new Error("boom");
+      Logger.markErrorAsLogged(err);
+      expect(Logger.isErrorLogged(err)).toBe(true);
+      Logger._clearCollected();
+      expect(Logger.isErrorLogged(err)).toBe(false);
     });
   });
 });

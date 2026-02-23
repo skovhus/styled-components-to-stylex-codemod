@@ -4,9 +4,9 @@ import type { ComponentType } from "react";
 const inputs = import.meta.glob<string>(
   [
     "../../../test-cases/*.input.tsx",
-    // Exclude `_unsupported.*` fixtures from bundling (these may contain intentionally broken imports).
+    // Exclude bail-out fixtures from bundling (these may contain intentionally broken imports).
     "!../../../test-cases/_unsupported.*.input.tsx",
-    "!../../../test-cases/unsupported-*.input.tsx",
+    "!../../../test-cases/_unimplemented.*.input.tsx",
   ],
   {
     query: "?raw",
@@ -24,12 +24,12 @@ type TestCaseModuleLoader = () => Promise<TestCaseModule>;
 const inputModuleLoaders = import.meta.glob<TestCaseModule>([
   "../../../test-cases/*.input.tsx",
   "!../../../test-cases/_unsupported.*.input.tsx",
-  "!../../../test-cases/unsupported-*.input.tsx",
+  "!../../../test-cases/_unimplemented.*.input.tsx",
 ]);
 const outputModuleLoaders = import.meta.glob<TestCaseModule>([
   "../../../test-cases/*.output.tsx",
   "!../../../test-cases/_unsupported.*.output.tsx",
-  "!../../../test-cases/unsupported-*.output.tsx",
+  "!../../../test-cases/_unimplemented.*.output.tsx",
 ]);
 
 interface TestCase {
@@ -43,9 +43,9 @@ export const testCases: TestCase[] = Object.entries(inputs)
     name: path.match(/\/([^/]+)\.input\.tsx$/)?.[1] ?? path,
     content,
   }))
-  // Exclude `_unsupported.*` fixtures from the playground UI.
-  // (These exist to document unsupported behavior and often have no `.output.tsx`.)
-  .filter((t) => !t.name.startsWith("_unsupported."))
+  // Exclude bail-out fixtures from the playground UI.
+  // (These exist to document unsupported/unimplemented behavior and have no `.output.tsx`.)
+  .filter((t) => !t.name.startsWith("_unsupported.") && !t.name.startsWith("_unimplemented."))
   // Sort alphabetically
   .sort((a, b) => {
     return a.name.localeCompare(b.name);
@@ -59,7 +59,7 @@ export async function loadTestCaseModule(
     return null;
   }
 
-  if (name.startsWith("_unsupported.")) {
+  if (name.startsWith("_unsupported.") || name.startsWith("_unimplemented.")) {
     return null;
   }
 

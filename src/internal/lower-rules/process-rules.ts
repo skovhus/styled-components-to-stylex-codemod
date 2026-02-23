@@ -26,7 +26,9 @@ import {
 import { cssValueToJs, toStyleKey, toSuffixFromProp } from "../transform/helpers.js";
 import { capitalize, kebabToCamelCase } from "../utilities/string-utils.js";
 import { getOrCreateRelationOverrideBucket } from "./shared.js";
+import type { RelationOverride } from "./state.js";
 import { createPropTestHelpers } from "./variant-utils.js";
+import { PLACEHOLDER_RE } from "../styled-css.js";
 import { parseCssDeclarationBlock } from "../builtin-handlers/css-parsing.js";
 import { ensureShouldForwardPropDrop } from "./types.js";
 import type { ExpressionKind } from "./decl-types.js";
@@ -38,7 +40,6 @@ export function processDeclRules(ctx: DeclProcessingState): void {
     styleObj,
     perPropPseudo,
     perPropMedia,
-    perPropComputedMedia,
     nestedSelectors,
     attrBuckets,
     localVarValues,
@@ -258,6 +259,9 @@ export function processDeclRules(ctx: DeclProcessingState): void {
       const isHandledComponentPattern =
         hasComponentExpr && // Pattern 1: `__SC_EXPR_N__:pseudo &` — descendant combinator only (space, no +~>)
         (/^__SC_EXPR_\d+__:[a-z][a-z0-9()-]*\s+&\s*$/.test(selectorTrimmed) ||
+          // Pattern 1b: comma-separated reverse selectors where each part matches Pattern 1
+          // e.g., `__SC_EXPR_0__:focus-visible &, __SC_EXPR_1__:active &`
+          isCommaGroupedReverseSelectorPattern(selectorTrimmed) ||
           // Pattern 2: starts with & (forward descendant/pseudo pattern)
           selectorTrimmed.startsWith("&") ||
           // Pattern 3: standalone component selector `${Child} { ... }`
@@ -305,10 +309,15 @@ export function processDeclRules(ctx: DeclProcessingState): void {
         });
         break;
       } else if (/[+~]/.test(s) && !isHandledComponentPattern) {
-        // Sibling combinators (`& + &`, `& ~ &`) are not supported.
-        // `& ~ &`: stylex.when.anySibling() matches both directions while CSS `~` is forward-only.
-        // `& + &`: stylex.when.siblingBefore() uses defaultMarker() which is file-global —
-        //   without defineMarker() per component, the sibling match can't be scoped.
+        // Self-referencing sibling combinators (`& + &`, `& ~ &`) are supported via
+        // stylex.when.siblingBefore(). Non-self-referencing patterns still bail.
+        if (/^&\s*[+~]\s*&$/.test(s)) {
+          const siblingAction = handleSiblingSelector(s, rule, ctx);
+          if (siblingAction === "break") {
+            break;
+          }
+          continue;
+        }
         state.markBail();
         warnings.push({
           severity: "warning",
@@ -343,7 +352,7 @@ export function processDeclRules(ctx: DeclProcessingState): void {
     // NOTE: This function intentionally mirrors existing logic from `transform.ts`.
 
     if (typeof rule.selector === "string" && rule.selector.includes("__SC_EXPR_")) {
-      const slotMatch = rule.selector.match(/__SC_EXPR_(\d+)__/);
+      const slotMatch = rule.selector.match(PLACEHOLDER_RE);
       const slotId = slotMatch ? Number(slotMatch[1]) : null;
       const slotExpr = slotId !== null ? (decl.templateExpressions[slotId] as any) : null;
       const otherLocal = slotExpr?.type === "Identifier" ? (slotExpr.name as string) : null;
@@ -356,19 +365,52 @@ export function processDeclRules(ctx: DeclProcessingState): void {
       // and the referenced component is the ancestor.
       //
       // The selector MUST be: `__SC_EXPR_N__:pseudo <space> &` (descendant combinator only).
-      // Reject non-descendant combinators like `+`, `~`, `>` (e.g., `${Link}:focus + &`),
-      // and reject grouped selectors (commas) since only a single pseudo can be captured.
+      // Reject non-descendant combinators like `+`, `~`, `>` (e.g., `${Link}:focus + &`).
+      //
+      // Also supports comma-grouped patterns like `${Link}:focus-visible &, ${Link}:active &`,
+      // where each part references the same component with a different pseudo — the same
+      // declarations are registered under multiple pseudo buckets.
       const isReverseSelectorPattern =
         selTrim2.startsWith("__SC_EXPR_") &&
-        !selTrim2.includes(",") &&
         /^__SC_EXPR_\d+__:[a-z][a-z0-9()-]*\s+&\s*$/.test(selTrim2);
-      if (otherLocal && !isCssHelperPlaceholder && isReverseSelectorPattern) {
-        // Extract the pseudo from the referenced component selector (e.g., `:hover` from `__SC_EXPR_0__:hover &`)
-        const reversePseudoMatch = rule.selector.match(/__SC_EXPR_\d+__(:[a-z-]+(?:\([^)]*\))?)/i);
-        const ancestorPseudo: string | null = reversePseudoMatch?.[1] ?? null;
+      const isGroupedReverseSelectorPattern =
+        !isReverseSelectorPattern &&
+        selTrim2.startsWith("__SC_EXPR_") &&
+        isCommaGroupedReverseSelectorPattern(selTrim2);
+      if (
+        otherLocal &&
+        !isCssHelperPlaceholder &&
+        (isReverseSelectorPattern || isGroupedReverseSelectorPattern)
+      ) {
+        // For grouped selectors, verify ALL slot IDs resolve to the same component.
+        // Without this guard, `${Link}:focus &, ${Button}:active &` would silently
+        // attribute all pseudos to Link (the first match).
+        if (isGroupedReverseSelectorPattern) {
+          const allSlotMatches = [...selTrim2.matchAll(new RegExp(PLACEHOLDER_RE.source, "g"))];
+          const allLocal = allSlotMatches.map((m) => {
+            const id = Number(m[1]);
+            const expr = decl.templateExpressions[id] as
+              | { type?: string; name?: string }
+              | undefined;
+            return expr?.type === "Identifier" ? expr.name : null;
+          });
+          const hasDifferentComponents = allLocal.some((name) => name !== otherLocal);
+          if (hasDifferentComponents) {
+            state.markBail();
+            warnings.push({
+              severity: "warning",
+              type: "Unsupported selector: grouped reverse selector references different components",
+              loc: computeSelectorWarningLoc(decl.loc, decl.rawCss, rule.selector),
+            });
+            break;
+          }
+        }
 
         const parentDecl = declByLocalName.get(otherLocal);
-        if (!parentDecl) {
+        const crossFileParent = !parentDecl
+          ? state.crossFileSelectorsByLocal.get(otherLocal)
+          : undefined;
+        if (!parentDecl && !crossFileParent) {
           state.markBail();
           warnings.push({
             severity: "warning",
@@ -378,23 +420,50 @@ export function processDeclRules(ctx: DeclProcessingState): void {
           break;
         }
 
-        // Declare self as child, referenced component as ancestor parent
-        const overrideStyleKey = `${toStyleKey(decl.localName)}In${otherLocal}`;
-        ancestorSelectorParents.add(parentDecl.styleKey);
+        // Extract all ancestor pseudos (one per comma-separated part)
+        const ancestorPseudos = extractReverseSelectorPseudos(rule.selector);
+        if (ancestorPseudos.length === 0) {
+          state.markBail();
+          warnings.push({
+            severity: "warning",
+            type: "Unsupported selector: unknown component selector",
+            loc: computeSelectorWarningLoc(decl.loc, decl.rawCss, rule.selector),
+          });
+          break;
+        }
 
-        const bucket = getOrCreateRelationOverrideBucket(
+        // Declare self as child, referenced component as ancestor parent.
+        // For cross-file parents, use a synthetic style key based on the local name.
+        const parentStyleKey = parentDecl ? parentDecl.styleKey : toStyleKey(otherLocal);
+        const overrideStyleKey = `${toStyleKey(decl.localName)}In${otherLocal}`;
+        ancestorSelectorParents.add(parentStyleKey);
+
+        // For cross-file reverse, register a defineMarker for the imported parent
+        const reverseMarkerVarName = crossFileParent ? `${otherLocal}Marker` : undefined;
+
+        const overrideCountBeforeReverse = relationOverrides.length;
+        // Process declarations once, then register into each pseudo bucket
+        const firstBucket = getOrCreateRelationOverrideBucket(
           overrideStyleKey,
-          parentDecl.styleKey,
+          parentStyleKey,
           decl.styleKey,
-          ancestorPseudo,
+          ancestorPseudos[0]!,
           relationOverrides,
           relationOverridePseudoBuckets,
           decl.extraStyleKeys,
         );
 
+        // Tag newly-created relation override as cross-file (reverse direction)
+        tagCrossFileOverride(
+          relationOverrides,
+          overrideCountBeforeReverse,
+          reverseMarkerVarName,
+          otherLocal,
+        );
+
         const result = processDeclarationsIntoBucket(
           rule,
-          bucket,
+          firstBucket,
           j,
           decl,
           resolveThemeValue,
@@ -411,6 +480,26 @@ export function processDeclRules(ctx: DeclProcessingState): void {
           break;
         }
 
+        // Copy only the declarations written by THIS rule into remaining pseudo buckets.
+        // Using the writtenProps set (returned by processDeclarationsIntoBucket) ensures
+        // we propagate overwrites of existing keys while not leaking unrelated declarations
+        // that were already in firstBucket from earlier rules.
+        const writtenProps = result;
+        for (let i = 1; i < ancestorPseudos.length; i++) {
+          const bucket = getOrCreateRelationOverrideBucket(
+            overrideStyleKey,
+            parentStyleKey,
+            decl.styleKey,
+            ancestorPseudos[i]!,
+            relationOverrides,
+            relationOverridePseudoBuckets,
+            decl.extraStyleKeys,
+          );
+          for (const key of writtenProps) {
+            bucket[key] = firstBucket[key];
+          }
+        }
+
         continue;
       }
 
@@ -421,10 +510,13 @@ export function processDeclRules(ctx: DeclProcessingState): void {
         selTrim2.startsWith("&") || /^__SC_EXPR_\d+__$/.test(selTrim2);
       if (otherLocal && !isCssHelperPlaceholder && isComponentSelectorPattern) {
         const childDecl = declByLocalName.get(otherLocal);
+        const crossFileUsage = !childDecl
+          ? state.crossFileSelectorsByLocal.get(otherLocal)
+          : undefined;
         // Extract the actual pseudo-selector (e.g., ":hover", ":focus-visible")
         const pseudoMatch = rule.selector.match(/&(:[a-z-]+(?:\([^)]*\))?)/i);
         const ancestorPseudo: string | null = pseudoMatch?.[1] ?? null;
-        if (!childDecl) {
+        if (!childDecl && !crossFileUsage) {
           state.markBail();
           warnings.push({
             severity: "warning",
@@ -433,37 +525,52 @@ export function processDeclRules(ctx: DeclProcessingState): void {
           });
           break;
         }
-        if (childDecl) {
-          const overrideStyleKey = `${toStyleKey(otherLocal)}In${decl.localName}`;
-          ancestorSelectorParents.add(decl.styleKey);
 
-          const bucket = getOrCreateRelationOverrideBucket(
-            overrideStyleKey,
-            decl.styleKey,
-            childDecl.styleKey,
-            ancestorPseudo,
-            relationOverrides,
-            relationOverridePseudoBuckets,
-          );
+        // For cross-file selectors, the child's style key is synthetic (just the local name
+        // lowered to a style key). The override style objects will be applied to the
+        // imported component via JSX spread in rewrite-jsx.
+        const childStyleKey = childDecl ? childDecl.styleKey : toStyleKey(otherLocal);
+        const overrideStyleKey = `${toStyleKey(otherLocal)}In${decl.localName}`;
+        ancestorSelectorParents.add(decl.styleKey);
 
-          const forwardResult = processDeclarationsIntoBucket(
-            rule,
-            bucket,
-            j,
-            decl,
-            resolveThemeValue,
-            resolveThemeValueFromFn,
-            { bailOnUnresolved: true },
-          );
-          if (forwardResult === "bail") {
-            state.markBail();
-            warnings.push({
-              severity: "warning",
-              type: "Unsupported selector: unresolved interpolation in descendant component selector",
-              loc: computeSelectorWarningLoc(decl.loc, decl.rawCss, rule.selector),
-            });
-            break;
-          }
+        // For cross-file, compute the marker variable name (stored on RelationOverride,
+        // derived into crossFileMarkers map by lowerRules after processing completes)
+        const markerVarName = crossFileUsage ? `${decl.localName}Marker` : undefined;
+
+        // getOrCreateRelationOverrideBucket creates the RelationOverride entry on first
+        // call for this overrideStyleKey. Track count to detect new entries.
+        const overrideCountBefore = relationOverrides.length;
+        const bucket = getOrCreateRelationOverrideBucket(
+          overrideStyleKey,
+          decl.styleKey,
+          childStyleKey,
+          ancestorPseudo,
+          relationOverrides,
+          relationOverridePseudoBuckets,
+        );
+
+        // Tag newly-created relation override as cross-file
+        tagCrossFileOverride(relationOverrides, overrideCountBefore, markerVarName, otherLocal);
+
+        const forwardResult = processDeclarationsIntoBucket(
+          rule,
+          bucket,
+          j,
+          decl,
+          resolveThemeValue,
+          resolveThemeValueFromFn,
+          { bailOnUnresolved: true },
+        );
+        if (forwardResult === "bail") {
+          state.markBail();
+          warnings.push({
+            severity: "warning",
+            type: crossFileUsage
+              ? "Unsupported selector: unresolved interpolation in cross-file component selector"
+              : "Unsupported selector: unresolved interpolation in descendant component selector",
+            loc: computeSelectorWarningLoc(decl.loc, decl.rawCss, rule.selector),
+          });
+          break;
         }
         continue;
       }
@@ -729,18 +836,7 @@ export function processDeclRules(ctx: DeclProcessingState): void {
       // Handle resolved selector media (from adapter.resolveSelector)
       // These use computed property keys like [breakpoints.phone]
       if (resolvedSelectorMedia) {
-        let entry = perPropComputedMedia.get(prop);
-        if (!entry) {
-          const existingVal = (styleObj as Record<string, unknown>)[prop];
-          const defaultValue =
-            existingVal !== undefined
-              ? existingVal
-              : cssHelperPropValues.has(prop)
-                ? getComposedDefaultValue(prop)
-                : null;
-          entry = { defaultValue, entries: [] };
-          perPropComputedMedia.set(prop, entry);
-        }
+        const entry = getOrCreateComputedMediaEntry(prop, ctx);
         entry.entries.push({ keyExpr: resolvedSelectorMedia.keyExpr, value });
         return;
       }
@@ -1280,6 +1376,28 @@ function handlePseudoAlias(
 }
 
 /**
+ * If a new relation override was created (array grew), tag it with cross-file metadata.
+ * Used for both forward and reverse cross-file selector patterns.
+ */
+function tagCrossFileOverride(
+  relationOverrides: RelationOverride[],
+  countBefore: number,
+  markerVarName: string | undefined,
+  componentLocalName: string,
+): void {
+  if (!markerVarName || relationOverrides.length <= countBefore) {
+    return;
+  }
+  const created = relationOverrides.at(-1);
+  if (!created) {
+    return;
+  }
+  created.crossFile = true;
+  created.markerVarName = markerVarName;
+  created.crossFileComponentLocalName = componentLocalName;
+}
+
+/**
  * Recovers standalone conditional interpolations from inside a pseudo-alias block.
  *
  * When Stylis drops standalone placeholders at brace depth > 0, the pseudo-alias
@@ -1296,7 +1414,7 @@ function recoverStandaloneInterpolationsInPseudoBlock(
   }
 
   // Extract pseudo slot ID from rule selector
-  const pseudoSlotMatch = rule.selector.match(/__SC_EXPR_(\d+)__/);
+  const pseudoSlotMatch = rule.selector.match(PLACEHOLDER_RE);
   if (!pseudoSlotMatch) {
     return null;
   }
@@ -1310,7 +1428,7 @@ function recoverStandaloneInterpolationsInPseudoBlock(
   }
 
   // Find standalone __SC_EXPR_N__ in the block content
-  const standaloneSlotRegex = /__SC_EXPR_(\d+)__/g;
+  const standaloneSlotRegex = new RegExp(PLACEHOLDER_RE.source, "g");
   const slots: number[] = [];
   let slotMatch;
   while ((slotMatch = standaloneSlotRegex.exec(blockMatch[1])) !== null) {
@@ -1433,4 +1551,163 @@ function extractCssTextFromNode(node: unknown): string | null {
     return (n.quasis ?? []).map((q) => q.value?.raw ?? "").join("");
   }
   return null;
+}
+
+/** Reverse selector pattern for a single part: `__SC_EXPR_N__:pseudo &` */
+const REVERSE_SELECTOR_PART_RE = /^__SC_EXPR_\d+__:[a-z][a-z0-9()-]*\s+&$/;
+
+/**
+ * Checks if a comma-separated selector has all parts matching the reverse
+ * component selector pattern (`__SC_EXPR_N__:pseudo &`). Different slot IDs
+ * are allowed since Stylis assigns each `${Component}` reference its own slot.
+ *
+ * Example: `__SC_EXPR_0__:focus-visible &, __SC_EXPR_1__:active &`
+ */
+function isCommaGroupedReverseSelectorPattern(selector: string): boolean {
+  if (!selector.includes(",")) {
+    return false;
+  }
+  const parts = selector.split(",").map((p) => p.trim());
+  if (parts.length < 2) {
+    return false;
+  }
+  // All parts must match the reverse selector pattern.
+  // Different slot IDs are allowed since each `${Component}` reference in the
+  // template gets its own slot, even when they reference the same local variable.
+  for (const part of parts) {
+    if (!REVERSE_SELECTOR_PART_RE.test(part)) {
+      return false;
+    }
+  }
+  return true;
+}
+
+/**
+ * Extracts all pseudo-classes from a (possibly comma-separated) reverse
+ * component selector. Each part is expected to match `__SC_EXPR_N__:pseudo &`.
+ *
+ * Returns e.g. [":focus-visible", ":active"] for
+ * `__SC_EXPR_0__:focus-visible &, __SC_EXPR_0__:active &`.
+ */
+function extractReverseSelectorPseudos(selector: string): string[] {
+  const parts = selector.split(",").map((p) => p.trim());
+  const pseudos: string[] = [];
+  for (const part of parts) {
+    const match = part.match(/__SC_EXPR_\d+__(:[a-z-]+(?:\([^)]*\))?)/i);
+    if (match?.[1]) {
+      pseudos.push(match[1]);
+    }
+  }
+  return pseudos;
+}
+
+/**
+ * Returns the computed-media entry for `prop`, creating it on first access.
+ * Centralises the get-or-create + default-value logic that both
+ * resolvedSelectorMedia handling and sibling-selector handling need.
+ */
+function getOrCreateComputedMediaEntry(prop: string, ctx: DeclProcessingState) {
+  const { perPropComputedMedia, styleObj, cssHelperPropValues, getComposedDefaultValue } = ctx;
+  let entry = perPropComputedMedia.get(prop);
+  if (!entry) {
+    const existingVal = (styleObj as Record<string, unknown>)[prop];
+    const defaultValue =
+      existingVal !== undefined
+        ? existingVal
+        : cssHelperPropValues.has(prop)
+          ? getComposedDefaultValue(prop)
+          : null;
+    entry = { defaultValue, entries: [] };
+    perPropComputedMedia.set(prop, entry);
+  }
+  return entry;
+}
+
+/**
+ * Handles a self-referencing sibling selector (`& + &` or `& ~ &`) by processing
+ * declarations and storing them as computed keys using `stylex.when.siblingBefore(':is(*)')`.
+ *
+ * **Semantic approximation:** CSS `& + &` targets only the *immediately adjacent*
+ * sibling, while `stylex.when.siblingBefore()` generates a general sibling rule
+ * (`~`) which matches *any* preceding sibling. This means the styles may apply
+ * even when a non-matching element sits between two instances of the component.
+ * In practice this rarely matters because `& + &` is almost always used with
+ * consecutive homogeneous lists. For `& ~ &`, the mapping is semantically exact.
+ *
+ * Uses `defaultMarker()` (via `ancestorSelectorParents`) instead of per-component
+ * `defineMarker()`, avoiding the `.stylex` file requirement. Because the marker
+ * is file-global rather than component-scoped, styles from one component could
+ * theoretically leak to another if both use sibling selectors and appear as
+ * siblings in the same render tree.
+ *
+ * **`:is(*)` workaround:** The StyleX Babel plugin mandates a pseudo argument
+ * starting with `:` for `siblingBefore()`. `:is(*)` is a universal match with
+ * no effect on specificity or matching.
+ * TODO: Remove the `:is(*)` workaround if the StyleX Babel plugin adds support
+ * for no-arg `siblingBefore()` calls (currently crashes in `validatePseudoSelector`).
+ *
+ * Returns "break" on error to bail, otherwise the caller should `continue`.
+ */
+function handleSiblingSelector(
+  selector: string,
+  rule: DeclProcessingState["decl"]["rules"][number],
+  ctx: DeclProcessingState,
+): "break" | void {
+  const { state, decl } = ctx;
+  const { j, warnings, resolveThemeValue, resolveThemeValueFromFn, ancestorSelectorParents } =
+    state;
+
+  // Emit info warning for `& + &` since adjacent becomes general sibling
+  const isAdjacent = /\+/.test(selector);
+  if (isAdjacent) {
+    warnings.push({
+      severity: "info",
+      type: "Sibling selector broadened: & + & (adjacent) becomes general sibling (~) in StyleX — interleaved non-matching elements will no longer block the match",
+      loc: computeSelectorWarningLoc(decl.loc, decl.rawCss, rule.selector),
+    });
+  }
+
+  // Add to ancestorSelectorParents so defaultMarker() is injected into stylex.props() calls
+  ancestorSelectorParents.add(decl.styleKey);
+
+  // Process declarations into a temporary bucket using the shared helper
+  const bucket: Record<string, unknown> = {};
+  const result = processDeclarationsIntoBucket(
+    rule,
+    bucket,
+    j,
+    decl,
+    resolveThemeValue,
+    resolveThemeValueFromFn,
+    { bailOnUnresolved: true },
+  );
+  if (result === "bail") {
+    state.markBail();
+    warnings.push({
+      severity: "warning",
+      type: "Unsupported selector: unresolved interpolation in sibling selector",
+      loc: computeSelectorWarningLoc(decl.loc, decl.rawCss, rule.selector),
+    });
+    return "break";
+  }
+
+  // Build a fresh stylex.when.siblingBefore(':is(*)') AST node per property.
+  const makeSiblingKeyExpr = () =>
+    j.callExpression(
+      j.memberExpression(
+        j.memberExpression(j.identifier("stylex"), j.identifier("when")),
+        j.identifier("siblingBefore"),
+      ),
+      [j.literal(":is(*)")],
+    );
+
+  // Wrap values in media condition objects when inside an @media at-rule
+  const media = rule.atRuleStack.find((a) => a.startsWith("@media"));
+
+  // Add each property to perPropComputedMedia with the sibling computed key
+  for (const [prop, value] of Object.entries(bucket)) {
+    const siblingValue = media ? { default: null, [media]: value } : value;
+    const entry = getOrCreateComputedMediaEntry(prop, ctx);
+    entry.entries.push({ keyExpr: makeSiblingKeyExpr(), value: siblingValue });
+  }
 }

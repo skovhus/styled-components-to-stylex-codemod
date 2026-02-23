@@ -2,13 +2,23 @@ import { describe, it, expect, vi } from "vitest";
 import { applyTransform } from "jscodeshift/src/testUtils.js";
 import jscodeshift from "jscodeshift";
 import { readdirSync, readFileSync, existsSync } from "node:fs";
-import { join, dirname } from "node:path";
+import { join, dirname, resolve as pathResolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { format } from "oxfmt";
 import transform, { transformWithWarnings } from "../transform.js";
 import type { TransformOptions } from "../transform.js";
 import { customAdapter, fixtureAdapter } from "./fixture-adapters.js";
 import type { Adapter, ResolveValueContext } from "../adapter.js";
+import { scanCrossFileSelectors } from "../internal/prepass/scan-cross-file-selectors.js";
+import { createModuleResolver } from "../internal/prepass/resolve-imports.js";
+import type { CrossFileInfo } from "../internal/transform-types.js";
+
+/** Test case files prefixed with these names are expected to bail out (no output file). */
+const BAIL_OUT_PREFIXES = ["_unsupported.", "_unimplemented."] as const;
+
+function isBailOutFixture(filename: string): boolean {
+  return BAIL_OUT_PREFIXES.some((prefix) => filename.startsWith(prefix));
+}
 
 // Suppress codemod logs in tests
 vi.mock("../internal/logger.js", () => ({
@@ -49,16 +59,10 @@ function getTestCases(): FixtureCase[] {
   const cases: FixtureCase[] = [];
 
   for (const { inputSuffix, outputSuffix, parser } of FIXTURE_EXTENSIONS) {
-    // Exclude unsupported fixtures from main test cases
-    // Convention: `_unsupported.<case>.input.*` has NO output file.
-    const inputFiles = files.filter(
-      (f) =>
-        f.endsWith(inputSuffix) && !f.startsWith("_unsupported.") && !f.startsWith("unsupported-"),
-    );
-    const outputFiles = files.filter(
-      (f) =>
-        f.endsWith(outputSuffix) && !f.startsWith("_unsupported.") && !f.startsWith("unsupported-"),
-    );
+    // Exclude bail-out fixtures from main test cases
+    // Convention: `_unsupported.<case>.input.*` and `_unimplemented.<case>.input.*` have NO output file.
+    const inputFiles = files.filter((f) => f.endsWith(inputSuffix) && !isBailOutFixture(f));
+    const outputFiles = files.filter((f) => f.endsWith(outputSuffix) && !isBailOutFixture(f));
 
     const inputNames = new Set(inputFiles.map((f) => f.replace(inputSuffix, "")));
     const outputNames = new Set(outputFiles.map((f) => f.replace(outputSuffix, "")));
@@ -91,9 +95,27 @@ function getTestCases(): FixtureCase[] {
 }
 
 const fixtureCases: FixtureCase[] = getTestCases();
-const unsupportedInputs = readdirSync(testCasesDir)
-  .filter((f) => f.startsWith("_unsupported.") && f.endsWith(".input.tsx"))
+const bailOutInputs = readdirSync(testCasesDir)
+  .filter((f) => isBailOutFixture(f) && f.endsWith(".input.tsx"))
   .sort();
+
+// Run cross-file prepass once for all test cases (fast, no-op for non-cross-file cases)
+const prepassResolver = createModuleResolver();
+const prepassResult = scanCrossFileSelectors(
+  fixtureCases.map((c) => c.inputPath),
+  [],
+  prepassResolver,
+);
+
+/** Extract per-file cross-file info from the prepass result. */
+function getCrossFileInfo(filePath: string): CrossFileInfo | undefined {
+  const absPath = pathResolve(filePath);
+  const usages = prepassResult.selectorUsages.get(absPath);
+  if (!usages || usages.length === 0) {
+    return undefined;
+  }
+  return { selectorUsages: usages };
+}
 
 function readTestCase(
   name: string,
@@ -162,7 +184,7 @@ function runTransformWithDiagnostics(
   options: TestTransformOptions = {},
   filePath: string = "test.tsx",
   parser: "tsx" | "babel" | "flow" = "tsx",
-): { code: string | null; warnings: ReturnType<typeof transformWithWarnings>["warnings"] } {
+): ReturnType<typeof transformWithWarnings> {
   const opts: TransformOptions = {
     adapter: fixtureAdapter,
     ...options,
@@ -233,7 +255,7 @@ describe("test case file pairing", () => {
   });
 
   it("supported test cases should not have @expected-warning annotation", () => {
-    // @expected-warning is only for _unsupported fixtures that are expected to bail
+    // @expected-warning is only for bail-out fixtures (_unsupported / _unimplemented) that are expected to bail
     // Supported test cases should transform successfully without warnings
     for (const { inputPath, inputFile } of fixtureCases) {
       const content = readFileSync(inputPath, "utf-8");
@@ -246,9 +268,9 @@ describe("test case file pairing", () => {
   });
 });
 
-describe("_unsupported fixtures", () => {
-  it.each(unsupportedInputs)("%s should bail out", (unsupportedInput) => {
-    const inputPath = join(testCasesDir, unsupportedInput);
+describe("bail-out fixtures (_unsupported + _unimplemented)", () => {
+  it.each(bailOutInputs)("%s should bail out", (bailOutInput) => {
+    const inputPath = join(testCasesDir, bailOutInput);
     const input = readFileSync(inputPath, "utf-8");
     const expectedWarning = getExpectedWarningType(input, inputPath);
     const result = transformWithWarnings(
@@ -306,7 +328,8 @@ describe("output invariants", () => {
 describe("transform", () => {
   it.each(fixtureCases)("$outputFile", async ({ name, inputPath, outputPath, parser }) => {
     const { input, output } = readTestCase(name, inputPath, outputPath);
-    const diagnostics = runTransformWithDiagnostics(input, {}, inputPath, parser);
+    const crossFileInfo = getCrossFileInfo(inputPath);
+    const diagnostics = runTransformWithDiagnostics(input, { crossFileInfo }, inputPath, parser);
     const result = diagnostics.code || input;
 
     // Transform must produce a change - no bailing allowed
@@ -343,6 +366,16 @@ describe("transform", () => {
     // Compare against expected output fixture
     const normalizedExpected = await normalizeCode(output, outputPath);
     expect(normalizedResult).toEqual(normalizedExpected);
+
+    // Compare sidecar .stylex.ts content if the test case has one
+    const sidecarPath = inputPath.replace(/\.\w+$/, ".stylex.ts");
+    if (existsSync(sidecarPath)) {
+      const expectedSidecar = readFileSync(sidecarPath, "utf-8");
+      expect(diagnostics.sidecarContent).toBeDefined();
+      expect(diagnostics.sidecarContent).toEqual(expectedSidecar);
+    } else {
+      expect(diagnostics.sidecarContent).toBeUndefined();
+    }
   });
 });
 
@@ -525,6 +558,60 @@ export const App = () => <Container />;
     expect(typeof warning.loc?.line).toBe("number");
     expect(typeof warning.loc?.column).toBe("number");
   });
+
+  it("should emit info warning for & + & (adjacent sibling broadens to general)", () => {
+    const source = `
+import styled from "styled-components";
+
+const Thing = styled.div\`
+  color: blue;
+  & + & {
+    color: red;
+  }
+\`;
+
+export const App = () => <Thing />;
+`;
+
+    const result = transformWithWarnings(
+      { source, path: "test.tsx" },
+      { jscodeshift: j, j, stats: () => {}, report: () => {} },
+      { adapter: fixtureAdapter },
+    );
+
+    expect(result.code).not.toBeNull();
+    const infoWarnings = result.warnings.filter((w) => w.severity === "info");
+    expect(infoWarnings).toHaveLength(1);
+    expect(infoWarnings[0]).toMatchObject({
+      severity: "info",
+      type: "Sibling selector broadened: & + & (adjacent) becomes general sibling (~) in StyleX — interleaved non-matching elements will no longer block the match",
+    });
+  });
+
+  it("should NOT emit info warning for & ~ & (general sibling is exact match)", () => {
+    const source = `
+import styled from "styled-components";
+
+const Thing = styled.div\`
+  color: blue;
+  & ~ & {
+    color: red;
+  }
+\`;
+
+export const App = () => <Thing />;
+`;
+
+    const result = transformWithWarnings(
+      { source, path: "test.tsx" },
+      { jscodeshift: j, j, stats: () => {}, report: () => {} },
+      { adapter: fixtureAdapter },
+    );
+
+    expect(result.code).not.toBeNull();
+    const infoWarnings = result.warnings.filter((w) => w.severity === "info");
+    expect(infoWarnings).toHaveLength(0);
+  });
 });
 
 describe("import cleanup safety", () => {
@@ -632,7 +719,7 @@ export const App = () => <Box $on />;
 
     const adapterWithBadThemeExpr = {
       externalInterface() {
-        return null;
+        return { styles: false, as: false };
       },
       resolveValue(ctx: ResolveValueContext) {
         if (ctx.kind !== "theme") {
@@ -691,7 +778,7 @@ export const App = () => (
 
     const adapterWithoutCallResolution = {
       externalInterface() {
-        return null;
+        return { styles: false, as: false };
       },
       resolveValue(ctx: ResolveValueContext) {
         // Intentionally do not resolve any calls.
@@ -781,7 +868,7 @@ export const App = () => <Button>Click</Button>;
 describe("styleMerger configuration", () => {
   const mergerAdapter = {
     externalInterface() {
-      return { styles: true } as const;
+      return { styles: true, as: false } as const;
     },
     resolveValue() {
       return undefined;
@@ -799,7 +886,7 @@ describe("styleMerger configuration", () => {
   };
   const noExternalMergerAdapter = {
     externalInterface() {
-      return null;
+      return { styles: false, as: false };
     },
     resolveValue() {
       return undefined;
@@ -968,7 +1055,7 @@ export const App = () => <Box $delay={100} />;
     const adapterWithoutMerger = {
       styleMerger: null,
       externalInterface() {
-        return { styles: true } as const;
+        return { styles: true, as: false } as const;
       },
       resolveValue() {
         return undefined;
@@ -1168,7 +1255,7 @@ export const App = () => <Text>Hello</Text>;
 
     const adapterWithoutCssText = {
       externalInterface() {
-        return null;
+        return { styles: false, as: false };
       },
       resolveValue() {
         return undefined;
@@ -1229,7 +1316,7 @@ export const App = () => <Text>Hello</Text>;
 
     const adapterResolving = {
       externalInterface() {
-        return null;
+        return { styles: false, as: false };
       },
       resolveValue() {
         return undefined;
@@ -1279,7 +1366,7 @@ export const App = () => <Text>Hello</Text>;
 
     const adapterWithCssText = {
       externalInterface() {
-        return null;
+        return { styles: false, as: false };
       },
       resolveValue() {
         return undefined;
@@ -1335,7 +1422,7 @@ export const App = () => <Text>Hello</Text>;
 
     const adapterWithCssText = {
       externalInterface() {
-        return null;
+        return { styles: false, as: false };
       },
       resolveValue() {
         return undefined;
@@ -1398,7 +1485,7 @@ export const App = () => <Text>Hello</Text>;
 
     const adapterWithCssText = {
       externalInterface() {
-        return null;
+        return { styles: false, as: false };
       },
       resolveValue() {
         return undefined;
@@ -1456,7 +1543,7 @@ export const App = () => <Text>Hello</Text>;
 
     const adapterWithBadCssText = {
       externalInterface() {
-        return null;
+        return { styles: false, as: false };
       },
       resolveValue() {
         return undefined;
@@ -1511,7 +1598,7 @@ export const App = () => <Text>Hello</Text>;
 
     const adapterReturningUndefined = {
       externalInterface() {
-        return null;
+        return { styles: false, as: false };
       },
       resolveValue() {
         return undefined;
@@ -2481,6 +2568,69 @@ export const App = () => <Box />;
       { jscodeshift: j, j, stats: () => {}, report: () => {} },
       { adapter: fixtureAdapter },
     );
+    expect(result.code).toBeNull();
+  });
+});
+
+describe("non-literal fallback in theme access", () => {
+  it("should bail when theme access has a non-literal fallback like props.fallbackColor", () => {
+    const source = `
+import styled from "styled-components";
+
+const Box = styled.div\`
+  color: \${(props) => props.theme.color.labelBase ?? props.fallbackColor};
+\`;
+
+export const App = () => <Box fallbackColor="red" />;
+`;
+
+    const result = transformWithWarnings(
+      { source, path: "test.tsx" },
+      { jscodeshift: j, j, stats: () => {}, report: () => {} },
+      { adapter: fixtureAdapter },
+    );
+
+    // Should bail (not silently drop the fallback)
+    expect(result.code).toBeNull();
+  });
+});
+
+describe("grouped reverse selectors with different components", () => {
+  it("should bail when comma-grouped reverse selector references different components", () => {
+    const source = `
+import styled from "styled-components";
+
+const Link = styled.a\`
+  color: blue;
+\`;
+
+const Button = styled.button\`
+  color: green;
+\`;
+
+const Icon = styled.span\`
+  opacity: 0.5;
+
+  \${Link}:focus &, \${Button}:active & {
+    opacity: 1;
+  }
+\`;
+
+export const App = () => (
+  <div>
+    <Link><Icon>link icon</Icon></Link>
+    <Button><Icon>button icon</Icon></Button>
+  </div>
+);
+`;
+
+    const result = transformWithWarnings(
+      { source, path: "test.tsx" },
+      { jscodeshift: j, j, stats: () => {}, report: () => {} },
+      { adapter: fixtureAdapter },
+    );
+
+    // Should bail because Link and Button are different components
     expect(result.code).toBeNull();
   });
 });
