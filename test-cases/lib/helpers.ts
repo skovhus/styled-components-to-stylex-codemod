@@ -211,3 +211,13 @@ export const scrollFadeMaskStyles = (size: number, direction?: "top" | "bottom" 
     ${direction === "bottom" || direction === "both" ? "black calc(100% - var(--fade-size)), transparent" : ""}
   );
 `;
+
+// Shadow helper — returns a box-shadow CSS string for a given level.
+// Used to test adapter resolution for dynamic prop args.
+export const shadow = (level: string): string => {
+  const shadows: Record<string, string> = {
+    dark: "0 4px 12px rgba(0,0,0,0.3)",
+    light: "0 2px 4px rgba(0,0,0,0.1)",
+  };
+  return shadows[level] ?? "none";
+};

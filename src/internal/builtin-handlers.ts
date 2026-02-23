@@ -2,7 +2,7 @@
  * Built-in resolution handlers for dynamic interpolations.
  * Core concepts: adapter hooks, conditional splitting, and StyleX emission.
  */
-import type { CallResolveContext } from "../adapter.js";
+import type { CallResolveContext, ImportSpec } from "../adapter.js";
 import {
   getArrowFnParamBindings,
   getArrowFnSingleParamName,
@@ -61,7 +61,7 @@ export function resolveDynamicNode(
     tryResolveIndexedThemeWithPropFallback(node, ctx) ??
     tryResolveConditionalCssBlockTernary(node, ctx) ??
     tryResolveConditionalCssBlock(node, ctx) ??
-    tryResolveArrowFnCallWithSinglePropArg(node) ??
+    tryResolveArrowFnCallWithSinglePropArg(node, ctx) ??
     // Resolve or detect theme-dependent template literals before trying to emit style functions
     tryResolveThemeDependentTemplateLiteral(node, ctx) ??
     tryResolveStyleFunctionFromTemplateLiteral(node) ??
@@ -495,7 +495,10 @@ function extractPropNameFromCondTest(
   return null;
 }
 
-function tryResolveArrowFnCallWithSinglePropArg(node: DynamicNode): HandlerResult | null {
+function tryResolveArrowFnCallWithSinglePropArg(
+  node: DynamicNode,
+  ctx: InternalHandlerContext,
+): HandlerResult | null {
   if (!node.css.property) {
     return null;
   }
@@ -530,14 +533,69 @@ function tryResolveArrowFnCallWithSinglePropArg(node: DynamicNode): HandlerResul
     return null;
   }
 
+  // Try to resolve the callee through the adapter so imports can be remapped
+  const adapterResolution = tryResolveCalleeViaAdapter(calleeIdent, body.callee, node, ctx);
+
   return {
     type: "emitStyleFunction",
     nameHint: `${sanitizeIdentifier(node.css.property)}FromProp`,
     params: "value: any",
     body: `{ ${Object.keys(styleFromSingleDeclaration(node.css.property, "value"))[0]}: value }`,
     call: propName,
-    valueTransform: { kind: "call", calleeIdent },
+    valueTransform: {
+      kind: "call",
+      calleeIdent,
+      ...adapterResolution,
+    },
   };
+}
+
+/**
+ * Attempts to resolve a callee identifier through the adapter's resolveCall hook.
+ * Uses `resolveCallOptional` (non-bailing) so that an unhandled helper does NOT
+ * trigger the global bail flag — the caller falls back to preserving the original call.
+ * Returns resolved expression and imports if the adapter handles it,
+ * or an empty object to fall back to preserving the original helper call.
+ */
+function tryResolveCalleeViaAdapter(
+  calleeIdent: string,
+  calleeNode: unknown,
+  node: DynamicNode,
+  ctx: InternalHandlerContext,
+):
+  | {
+      resolvedExpr: string;
+      resolvedImports: ImportSpec[];
+      resolvedUsage?: "call" | "memberAccess";
+    }
+  | Record<string, never> {
+  const resolveCall = ctx.resolveCallOptional;
+  if (!resolveCall) {
+    return {};
+  }
+  const imp = ctx.resolveImport(calleeIdent, calleeNode);
+  if (!imp) {
+    return {};
+  }
+  try {
+    const result = resolveCall({
+      callSiteFilePath: ctx.filePath,
+      calleeImportedName: imp.importedName,
+      calleeSource: imp.source,
+      args: [{ kind: "unknown" }],
+      cssProperty: node.css.property,
+    });
+    if (result) {
+      return {
+        resolvedExpr: result.expr,
+        resolvedImports: result.imports,
+        ...(result.dynamicArgUsage ? { resolvedUsage: result.dynamicArgUsage } : {}),
+      };
+    }
+  } catch {
+    // Adapter threw — fall back to preserving the original call
+  }
+  return {};
 }
 
 function tryResolveInlineStyleValueForConditionalExpression(

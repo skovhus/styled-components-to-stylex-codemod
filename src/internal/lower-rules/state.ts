@@ -48,6 +48,9 @@ export function createLowerRulesState(ctx: TransformContext) {
   const filePath = file.path;
   const resolveValue = ctx.resolveValueSafe;
   const resolveCall = ctx.resolveCallSafe;
+  // Non-bailing version: calls the adapter directly without triggering the global bail flag.
+  // Used for speculative/optional resolution (e.g., prop-arg helper remapping).
+  const resolveCallOptional = ctx.adapter.resolveCall.bind(ctx.adapter);
   const resolveSelector = ctx.resolveSelectorSafe;
   const importMap =
     ctx.importMap ?? new Map<string, { importedName: string; source: ImportSource }>();
@@ -244,6 +247,7 @@ export function createLowerRulesState(ctx: TransformContext) {
     rewriteCssVarsInStyleObject,
     resolveValue,
     resolveCall,
+    resolveCallOptional,
     resolveSelector,
     importMap,
     styledDecls,

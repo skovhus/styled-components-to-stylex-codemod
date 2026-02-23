@@ -30,6 +30,7 @@ export function createDeclProcessingState(state: LowerRulesState, decl: StyledDe
     parseExpr,
     resolveValue,
     resolveCall,
+    resolveCallOptional,
     importMap,
     cssHelperFunctions,
     stringMappingFns,
@@ -151,6 +152,7 @@ export function createDeclProcessingState(state: LowerRulesState, decl: StyledDe
     filePath,
     resolveValue,
     resolveCall,
+    resolveCallOptional,
     resolveImport: resolveImportInScope,
     hasImportIgnoringShadowing: (localName: string) => importMap.has(localName),
   };

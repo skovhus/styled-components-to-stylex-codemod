@@ -15,6 +15,26 @@ import type { WarningType } from "../logger.js";
 
 export type ExpressionKind = Parameters<JSCodeshift["expressionStatement"]>[0];
 
+/**
+ * Value transform that wraps a style function parameter in a helper call.
+ * When `resolvedExpr` is present, the adapter has remapped the callee and its import;
+ * otherwise the original `calleeIdent` is used as-is.
+ */
+export type CallValueTransform = {
+  kind: "call";
+  calleeIdent: string;
+  /** Adapter-resolved expression to use as the callee (replaces calleeIdent when present). */
+  resolvedExpr?: string;
+  /** Imports required by the resolved expression. */
+  resolvedImports?: ImportSpec[];
+  /**
+   * How to combine the resolved expression with the dynamic argument:
+   * - `"call"` (default): `resolvedExpr(arg)` — treat as a function call
+   * - `"memberAccess"`: `resolvedExpr[arg]` — treat as a computed member access
+   */
+  resolvedUsage?: "call" | "memberAccess";
+};
+
 export type DynamicNode = {
   slotId: number;
   expr: unknown;
@@ -108,7 +128,7 @@ export type HandlerResult =
        *   box-shadow: ${(props) => shadow(props.shadow)};
        * by emitting a style function that computes: `shadow(value)`.
        */
-      valueTransform?: { kind: "call"; calleeIdent: string };
+      valueTransform?: CallValueTransform;
       /**
        * Wrap the computed value in a template literal (e.g. `${expr}`) to satisfy
        * StyleX lint rules that require string literals.
@@ -136,7 +156,7 @@ export type HandlerResult =
       body: string;
       call: string;
       defaultValue: unknown;
-      valueTransform?: { kind: "call"; calleeIdent: string };
+      valueTransform?: CallValueTransform;
       wrapValueInTemplateLiteral?: boolean;
     }
   | {
@@ -315,6 +335,12 @@ export type InternalHandlerContext = {
   filePath: string;
   resolveValue: (context: ResolveValueContext) => ResolveValueResult | undefined;
   resolveCall: (context: CallResolveContext) => CallResolveResult | undefined;
+  /**
+   * Like `resolveCall` but does NOT trigger the global bail flag when the adapter
+   * returns `undefined`. Use this for optional/speculative resolution where a
+   * missing adapter result should fall back to preserving the original code.
+   */
+  resolveCallOptional?: (context: CallResolveContext) => CallResolveResult | undefined;
   resolveImport: (
     localName: string,
     identNode?: unknown,

@@ -191,6 +191,17 @@ export type CallResolveResult = {
   usage?: "create" | "props";
 
   /**
+   * When the resolved expression is combined with a dynamic argument (e.g., from a prop),
+   * this field controls how they are joined:
+   * - `"call"` (default): `resolvedExpr(arg)` — treat as a function call
+   * - `"memberAccess"`: `resolvedExpr[arg]` — treat as a computed member access
+   *
+   * Only relevant when the original code uses a pattern like `${(props) => helper(props.x)}`
+   * and the adapter returns a resolved expression for the helper.
+   */
+  dynamicArgUsage?: "call" | "memberAccess";
+
+  /**
    * Optional raw CSS text for helpers that return CSS declaration blocks.
    *
    * When provided alongside `usage: "props"`, the codemod can expand the CSS

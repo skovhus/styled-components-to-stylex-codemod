@@ -809,6 +809,109 @@ export const App = () => (
       ),
     ).toBe(true);
   });
+
+  it("should use call expression when adapter returns a function-like resolvedExpr for dynamic prop arg", () => {
+    const source = `
+import styled from "styled-components";
+import { computeBoxShadow } from "./lib/helpers.ts";
+
+const Box = styled.div<{ level: string }>\`
+  box-shadow: \${(props) => computeBoxShadow(props.level)};
+  padding: 8px;
+\`;
+
+export const App = () => <Box level="high">Hello</Box>;
+`;
+
+    const adapterWithCallableResolution = {
+      externalInterface() {
+        return { styles: false, as: false };
+      },
+      resolveValue() {
+        return undefined;
+      },
+      resolveCall(ctx: { calleeImportedName: string; args: Array<{ kind: string }> }) {
+        if (ctx.calleeImportedName === "computeBoxShadow") {
+          // Return a callable expression — should be emitted as getShadow(level), not getShadow[level]
+          return {
+            usage: "create" as const,
+            expr: "getShadow",
+            imports: [
+              {
+                from: { kind: "specifier" as const, value: "./shadow-utils" },
+                names: [{ imported: "getShadow" }],
+              },
+            ],
+          };
+        }
+        return undefined;
+      },
+      resolveSelector() {
+        return undefined;
+      },
+      styleMerger: null,
+    } satisfies Adapter;
+
+    const result = transformWithWarnings(
+      { source, path: join(testCasesDir, "helper-callPropArgResolved.input.tsx") },
+      { jscodeshift: j, j, stats: () => {}, report: () => {} },
+      { adapter: adapterWithCallableResolution },
+    );
+
+    expect(result.code).not.toBeNull();
+    const code = result.code ?? "";
+    // The adapter returned a callable expr; consumer should emit getShadow(boxShadow), not getShadow[boxShadow]
+    expect(code).toContain("getShadow(");
+    expect(code).not.toContain("getShadow[");
+    // Import should be remapped
+    expect(code).toContain("./shadow-utils");
+    expect(code).not.toContain("computeBoxShadow");
+  });
+
+  it("should not bail when adapter returns undefined for optional prop-arg helper resolution", () => {
+    const source = `
+import styled from "styled-components";
+import { color } from "./lib/helpers.ts";
+
+const Box = styled.div<{ tone: string }>\`
+  background-color: \${(props) => color(props.tone)};
+  padding: 8px;
+\`;
+
+export const App = () => <Box tone="muted">Hello</Box>;
+`;
+
+    // Adapter that does NOT handle the "color" helper — returns undefined.
+    // The optional prop-arg resolution should gracefully fall back,
+    // NOT trigger the global bail flag.
+    const adapterWithNoColorResolution = {
+      externalInterface() {
+        return { styles: false, as: false };
+      },
+      resolveValue() {
+        return undefined;
+      },
+      resolveCall() {
+        return undefined;
+      },
+      resolveSelector() {
+        return undefined;
+      },
+      styleMerger: null,
+    } satisfies Adapter;
+
+    const result = transformWithWarnings(
+      { source, path: join(testCasesDir, "helper-propArgNoBail.input.tsx") },
+      { jscodeshift: j, j, stats: () => {}, report: () => {} },
+      { adapter: adapterWithNoColorResolution },
+    );
+
+    // Should NOT bail — the prop-arg pattern should fall back to preserving the original call
+    expect(result.code).not.toBeNull();
+    const code = result.code ?? "";
+    // Original helper call should be preserved since the adapter didn't remap it
+    expect(code).toContain("color(");
+  });
 });
 
 describe("import resolution scope", () => {
