@@ -68,7 +68,7 @@ export type WarningType =
   | "Unsupported prop-based inline style props.theme access is not supported"
   | "Unsupported selector interpolation: imported value in selector position"
   | "Unsupported selector: class selector"
-  | "Unsupported selector: comma-separated selectors must all be simple pseudos"
+  | "Unsupported selector: comma-separated selectors must all be simple pseudos or pseudo-elements"
   | "Unsupported selector: descendant pseudo selector (space before pseudo)"
   | "Unsupported selector: descendant/child/sibling selector"
   | "Unsupported selector: interpolated pseudo selector"

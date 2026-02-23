@@ -2635,6 +2635,104 @@ export const App = () => (
   });
 });
 
+describe("comma-separated pseudo-element handling", () => {
+  it("should not leak properties between pseudo-elements in css helper blocks", () => {
+    // P1 regression: When a css helper has individual pseudo-element rules BEFORE a
+    // comma-separated rule, the Object.assign approach was copying stale state from
+    // earlier rules to subsequent pseudo-element targets.
+    const source = `
+import styled, { css } from "styled-components";
+
+const Box = styled.div<{ $decorated?: boolean }>\`
+  width: 48px;
+  height: 16px;
+
+  \${(props) =>
+    props.$decorated &&
+    css\`
+      &:before {
+        top: -8px;
+      }
+      &:before,
+      &:after {
+        content: "";
+        position: absolute;
+      }
+      &:after {
+        bottom: -8px;
+      }
+    \`}
+\`;
+
+export const App = () => (
+  <div>
+    <Box>Normal</Box>
+    <Box $decorated>Decorated</Box>
+  </div>
+);
+`;
+
+    const result = transformWithWarnings(
+      { source, path: "test.tsx" },
+      { jscodeshift: j, j, stats: () => {}, report: () => {} },
+      { adapter: fixtureAdapter },
+    );
+
+    expect(result.code).not.toBeNull();
+    // ::after should NOT have "top" — that was only set on ::before
+    expect(result.code).not.toMatch(/"::after":\s*\{[^}]*top/);
+    // ::before SHOULD have "top"
+    expect(result.code).toMatch(/"::before":\s*\{[^}]*top/);
+  });
+
+  it("should produce order-independent results for comma-separated pseudo-elements", () => {
+    // P2 regression: &:before, &:after should produce the same result as &:after, &:before
+    const source1 = `
+import styled from "styled-components";
+
+const Box1 = styled.div\`
+  &:before,
+  &:after {
+    content: "";
+    position: absolute;
+  }
+\`;
+
+export const App = () => <Box1>Test</Box1>;
+`;
+
+    const source2 = `
+import styled from "styled-components";
+
+const Box1 = styled.div\`
+  &:after,
+  &:before {
+    content: "";
+    position: absolute;
+  }
+\`;
+
+export const App = () => <Box1>Test</Box1>;
+`;
+
+    const result1 = transformWithWarnings(
+      { source: source1, path: "test.tsx" },
+      { jscodeshift: j, j, stats: () => {}, report: () => {} },
+      { adapter: fixtureAdapter },
+    );
+    const result2 = transformWithWarnings(
+      { source: source2, path: "test.tsx" },
+      { jscodeshift: j, j, stats: () => {}, report: () => {} },
+      { adapter: fixtureAdapter },
+    );
+
+    expect(result1.code).not.toBeNull();
+    expect(result2.code).not.toBeNull();
+    // Both should produce identical output (same ::before and ::after blocks)
+    expect(result1.code).toBe(result2.code);
+  });
+});
+
 describe("two-slot border interpolation ordering", () => {
   it("should correctly assign slots when width and color are in reverse CSS position", () => {
     // Regression test: CSS border shorthand allows any order for width/style/color,
