@@ -59,9 +59,10 @@ export function buildStaticClassNameExpr(
   bridgeClassVar: string | undefined,
 ): ExpressionKind | undefined {
   if (staticClassName && bridgeClassVar) {
+    const raw = escapeTemplateRaw(`${staticClassName} `);
     return j.templateLiteral(
       [
-        j.templateElement({ raw: `${staticClassName} `, cooked: `${staticClassName} ` }, false),
+        j.templateElement({ raw, cooked: `${staticClassName} ` }, false),
         j.templateElement({ raw: "", cooked: "" }, true),
       ],
       [j.identifier(bridgeClassVar)],
@@ -456,4 +457,13 @@ export function collectDestructurePropsFromStyleFns(
       destructureProps.push(prop);
     }
   }
+}
+
+// ---------------------------------------------------------------------------
+// Template literal escaping
+// ---------------------------------------------------------------------------
+
+/** Escape characters that are special inside template literal quasi strings. */
+function escapeTemplateRaw(s: string): string {
+  return s.replace(/\\|`|\$\{/g, "\\$&");
 }
