@@ -148,70 +148,67 @@ export function tryHandleInterpolatedBorder(
       }
     }
 
-    if (
-      slotIndices.length === 2 &&
-      tokens.length === 3 &&
-      slotIndices[0]!.idx === 0 &&
-      slotIndices[1]!.idx === 2
-    ) {
+    if (slotIndices.length === 2 && tokens.length === 3) {
       const [slot0, slot1] = slotIndices as [
         { idx: number; slotId: number },
         { idx: number; slotId: number },
       ];
-      const middleStyle = (tokens[1] as string).trim();
-      if (BORDER_STYLES.has(middleStyle)) {
-        const widthProp = `border${direction}Width`;
-        const styleProp = `border${direction}Style`;
-        const colorProp = `border${direction}Color`;
+      if (slot0.idx === 0 && slot1.idx === 2) {
+        const middleStyle = (tokens[1] as string).trim();
+        if (BORDER_STYLES.has(middleStyle)) {
+          const widthProp = `border${direction}Width`;
+          const styleProp = `border${direction}Style`;
+          const colorProp = `border${direction}Color`;
 
-        const slot0Expr = (decl as any).templateExpressions[slot0.slotId];
-        const slot1Expr = (decl as any).templateExpressions[slot1.slotId];
-        const slot0Res = callResolveDynamicNode(slot0.slotId, slot0Expr);
-        const slot1Res = callResolveDynamicNode(slot1.slotId, slot1Expr);
+          const slot0Expr = decl.templateExpressions[slot0.slotId];
+          const slot1Expr = decl.templateExpressions[slot1.slotId];
+          const slot0Res = callResolveDynamicNode(slot0.slotId, slot0Expr);
+          const slot1Res = callResolveDynamicNode(slot1.slotId, slot1Expr);
 
-        if (slot0Res?.type === "resolvedValue" && slot1Res?.type === "resolvedValue") {
-          for (const imp of [...(slot0Res.imports ?? []), ...(slot1Res.imports ?? [])]) {
-            resolverImports.set(JSON.stringify(imp), imp);
-          }
-          const slot0Ast = parseExpr(slot0Res.expr);
-          const slot1Ast = parseExpr(slot1Res.expr);
-          if (slot0Ast && slot1Ast) {
-            // Classify each resolved expression as "width" or "color" when possible.
-            // CSS border shorthand allows any order, so we can't assume positional roles.
-            // When a slot resolves to a string literal, use looksLikeLength to determine
-            // its role. For opaque expressions (variables, member expressions), use the
-            // conventional positional assumption: slot0=width, slot1=color.
-            const slot0Role = classifyBorderSlotRole(slot0Ast);
-            const slot1Role = classifyBorderSlotRole(slot1Ast);
+          if (slot0Res?.type === "resolvedValue" && slot1Res?.type === "resolvedValue") {
+            for (const imp of [...(slot0Res.imports ?? []), ...(slot1Res.imports ?? [])]) {
+              resolverImports.set(JSON.stringify(imp), imp);
+            }
+            const slot0Ast = parseExpr(slot0Res.expr);
+            const slot1Ast = parseExpr(slot1Res.expr);
+            if (slot0Ast && slot1Ast) {
+              // Classify each resolved expression as "width" or "color" when possible.
+              // CSS border shorthand allows any order, so we can't assume positional roles.
+              // When a slot resolves to a string literal, use looksLikeLength to determine
+              // its role. For opaque expressions (variables, member expressions), use the
+              // conventional positional assumption: slot0=width, slot1=color.
+              const slot0Role = classifyBorderSlotRole(slot0Ast);
+              const slot1Role = classifyBorderSlotRole(slot1Ast);
 
-            // Bail if both are classified to the same role (ambiguous)
-            if (slot0Role && slot1Role && slot0Role === slot1Role) {
-              bailUnsupportedWithContext(
-                "Multi-slot border interpolation could not be resolved",
-                { property: prop },
-                getNodeLocStart(slot0Expr) ?? getNodeLocStart(slot1Expr),
-              );
+              // Bail if both are classified to the same role (ambiguous)
+              if (slot0Role && slot1Role && slot0Role === slot1Role) {
+                bailUnsupportedWithContext(
+                  "Multi-slot border interpolation could not be resolved",
+                  { property: prop },
+                  getNodeLocStart(slot0Expr) ?? getNodeLocStart(slot1Expr),
+                );
+                return true;
+              }
+
+              // Determine if we need to swap: slot0 is color or slot1 is width
+              const shouldSwap = slot0Role === "color" || slot1Role === "width";
+              const widthAst = shouldSwap ? slot1Ast : slot0Ast;
+              const colorAst = shouldSwap ? slot0Ast : slot1Ast;
+
+              applyResolvedPropValue(widthProp, widthAst);
+              applyResolvedPropValue(styleProp, middleStyle);
+              applyResolvedPropValue(colorProp, colorAst);
               return true;
             }
-
-            // Determine if we need to swap: slot0 is color or slot1 is width
-            const shouldSwap = slot0Role === "color" || slot1Role === "width";
-            const widthAst = shouldSwap ? slot1Ast : slot0Ast;
-            const colorAst = shouldSwap ? slot0Ast : slot1Ast;
-
-            applyResolvedPropValue(widthProp, widthAst);
-            applyResolvedPropValue(styleProp, middleStyle);
-            applyResolvedPropValue(colorProp, colorAst);
-            return true;
           }
-        }
 
-        bailUnsupportedWithContext(
-          "Multi-slot border interpolation could not be resolved",
-          { property: prop },
-          getNodeLocStart(slot0Expr) ?? getNodeLocStart(slot1Expr),
-        );
-        return true;
+          bailUnsupportedWithContext(
+            "Multi-slot border interpolation could not be resolved",
+            { property: prop },
+            getNodeLocStart(slot0Expr) ?? getNodeLocStart(slot1Expr),
+          );
+          return true;
+        }
       }
     }
   }
