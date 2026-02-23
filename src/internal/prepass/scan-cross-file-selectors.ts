@@ -121,9 +121,11 @@ export function categorizeSelectorUsages(
     }
     if (usage.consumerIsTransformed) {
       addToSetMap(componentsNeedingMarkerSidecar, usage.resolvedPath, usage.importedName);
-    } else {
-      addToSetMap(componentsNeedingGlobalSelectorBridge, usage.resolvedPath, usage.importedName);
     }
+    // Always add bridge as fallback — if a consumer that was supposed to be transformed
+    // bails during transformation, the bridge patching path kicks in instead.
+    // Marker sidecar and bridge are orthogonal and don't conflict.
+    addToSetMap(componentsNeedingGlobalSelectorBridge, usage.resolvedPath, usage.importedName);
   }
 }
 
