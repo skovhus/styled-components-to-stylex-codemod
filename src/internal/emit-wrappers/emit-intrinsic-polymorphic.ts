@@ -10,6 +10,7 @@ import {
   type ExpressionKind,
   type WrapperPropDefaults,
 } from "./types.js";
+import { withLeadingComments } from "./comments.js";
 import type { JsxAttr, StatementKind } from "./wrapper-emitter.js";
 import { emitStyleMerging } from "./style-merger.js";
 import { sortVariantEntriesBySpecificity, VOID_TAGS } from "./type-helpers.js";
@@ -311,12 +312,15 @@ export function emitIntrinsicPolymorphicWrappers(ctx: EmitIntrinsicContext): voi
           : undefined;
 
       emitted.push(
-        emitter.buildWrapperFunction({
-          localName: d.localName,
-          params: [propsParamId],
-          bodyStmts: fnBodyStmts,
-          typeParameters: polymorphicFnTypeParams,
-        }),
+        withLeadingComments(
+          emitter.buildWrapperFunction({
+            localName: d.localName,
+            params: [propsParamId],
+            bodyStmts: fnBodyStmts,
+            typeParameters: polymorphicFnTypeParams,
+          }),
+          d,
+        ),
       );
     }
   }

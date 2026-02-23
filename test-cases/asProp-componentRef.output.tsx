@@ -22,6 +22,8 @@ const animated = {
   )),
 };
 
+// When as={animated.span} is used, the component should render as animated.span
+// This pattern is common with animation libraries like react-spring
 function AnimatedText<C extends React.ElementType = "span">(
   props: Omit<React.ComponentPropsWithRef<C>, "className"> & { as?: C },
 ) {
