@@ -434,14 +434,16 @@ export function processDeclRules(ctx: DeclProcessingState): void {
 
         // Declare self as child, referenced component as ancestor parent.
         // For cross-file parents, use a synthetic style key based on the local name.
-        // For bridge GlobalSelector usages, use the original component name.
+        // For bridge GlobalSelector usages, use the original component name for cosmetic
+        // style key naming, but the JSX local name for parentStyleKey (must match
+        // crossFileComponentLocalName for correct reverse classification in rewrite-jsx).
         const resolvedParentName = crossFileParent?.bridgeComponentName ?? otherLocal;
-        const parentStyleKey = parentDecl ? parentDecl.styleKey : toStyleKey(resolvedParentName);
+        const jsxParentName = crossFileParent?.bridgeComponentLocalName ?? otherLocal;
+        const parentStyleKey = parentDecl ? parentDecl.styleKey : toStyleKey(jsxParentName);
         const overrideStyleKey = `${toStyleKey(decl.localName)}In${resolvedParentName}`;
         ancestorSelectorParents.add(parentStyleKey);
 
         // For cross-file reverse, register a defineMarker for the imported parent
-        const jsxParentName = crossFileParent?.bridgeComponentLocalName ?? otherLocal;
         const reverseMarkerVarName = crossFileParent ? `${jsxParentName}Marker` : undefined;
 
         const overrideCountBeforeReverse = relationOverrides.length;

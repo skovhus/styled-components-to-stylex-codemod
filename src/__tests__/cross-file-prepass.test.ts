@@ -887,6 +887,28 @@ describe("bridge GlobalSelector detection", () => {
     expect(second).toBe("SecondLink");
   });
 
+  it("sets bridgeComponentLocalName for default import with different local name", () => {
+    // Issue: `import Icon, { CollapseArrowIconGlobalSelector } from "./lib/component"`
+    // Icon is a default import (importedName="default") with localName="Icon".
+    // bridgeName="CollapseArrowIcon". The old check compared otherLocal ("Icon") to
+    // bridgeName ("CollapseArrowIcon"), which fails. Default imports should match by
+    // being the default export from the same source.
+    const info = scanCrossFileSelectors(
+      [fixture("consumer-bridge-default-import.tsx"), fixture("lib/converted-default-export.tsx")],
+      [],
+      resolver,
+    );
+
+    const usages = info.selectorUsages.get(fixture("consumer-bridge-default-import.tsx"));
+    expect(usages).toBeDefined();
+    expect(usages).toHaveLength(1);
+
+    const usage = usages![0]!;
+    expect(usage.bridgeComponentName).toBe("CollapseArrowIcon");
+    // bridgeComponentLocalName must be "Icon" (the default import's local name)
+    expect(usage.bridgeComponentLocalName).toBe("Icon");
+  });
+
   it("skips bridge usages from componentsNeedingMarkerSidecar/Bridge", () => {
     const info = scanCrossFileSelectors(
       [fixture("consumer-bridge-forward.tsx"), fixture("lib/converted-stylex-component.tsx")],
@@ -960,5 +982,66 @@ export const App = () => (
 
     // CollapseArrowIconGlobalSelector import is removed
     expect(code).not.toContain("CollapseArrowIconGlobalSelector");
+  });
+
+  it("reverse bridge selector with aliased import classifies correctly and injects marker", () => {
+    // Issue: When bridgeComponentName ("Foo") differs from bridgeComponentLocalName ("Icon")
+    // due to aliased imports, the reverse selector classification fails because
+    // parentStyleKey (toStyleKey("Foo")) !== toStyleKey(crossFileComponentLocalName ("Icon")).
+    const source = `
+import styled from "styled-components";
+import { CollapseArrowIcon as Icon, CollapseArrowIconGlobalSelector as IconSel } from "./lib/converted-stylex-component";
+
+const Badge = styled.span\`
+  color: gray;
+
+  \${IconSel}:hover & {
+    color: rebeccapurple;
+  }
+\`;
+
+export const App = () => (
+  <Icon>
+    <Badge>Hello</Badge>
+  </Icon>
+);
+`;
+
+    const crossFileInfo = {
+      selectorUsages: [
+        {
+          localName: "IconSel",
+          importSource: "./lib/converted-stylex-component",
+          importedName: "CollapseArrowIconGlobalSelector",
+          resolvedPath: fixture("lib/converted-stylex-component.tsx"),
+          bridgeComponentName: "CollapseArrowIcon",
+          bridgeComponentLocalName: "Icon",
+        },
+      ],
+    };
+
+    const result = transformWithWarnings(
+      { source, path: fixture("consumer-bridge-reverse-aliased.tsx") },
+      api,
+      { adapter: fixtureAdapter, crossFileInfo },
+    );
+
+    expect(result.code).not.toBeNull();
+    const code = result.code!;
+
+    // The marker should be applied to the parent component (Icon) in JSX
+    // This requires correct reverse classification so the marker is injected on <Icon>
+    expect(code).toContain("IconMarker");
+    expect(code).toMatch(/<Icon\s[^>]*stylex\.props\([^)]*IconMarker/);
+
+    // Badge should have the override style
+    expect(code).toContain("badgeInCollapseArrowIcon");
+
+    // Hover pseudo preserved
+    expect(code).toContain('stylex.when.ancestor(":hover"');
+
+    // GlobalSelector import removed
+    expect(code).not.toContain("CollapseArrowIconGlobalSelector");
+    expect(code).not.toContain("IconSel");
   });
 });

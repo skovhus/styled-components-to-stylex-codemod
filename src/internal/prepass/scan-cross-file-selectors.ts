@@ -188,10 +188,9 @@ export function applyBridgeFields(
   }
   for (const [otherLocal, otherImp] of importMap) {
     if (otherImp.source === imp.source && otherLocal !== localName) {
-      // For default imports, match by local name; for named imports, match by imported name
-      const otherExportedName =
-        otherImp.importedName === "default" ? otherLocal : otherImp.importedName;
-      if (otherExportedName === bridgeName) {
+      // Default imports always match — a module has one default export, which is the component.
+      // Named imports match by exported name.
+      if (otherImp.importedName === "default" || otherImp.importedName === bridgeName) {
         usage.bridgeComponentLocalName = otherLocal;
         break;
       }
