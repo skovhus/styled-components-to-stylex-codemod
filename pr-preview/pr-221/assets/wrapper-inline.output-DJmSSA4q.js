@@ -1,0 +1,1 @@
+import{j as r}from"./index-CXS6u18h.js";import{E as t}from"./external-component-Bels_ajm.js";function n(){return r.jsx("div",{children:r.jsx(t,{isOpen:!0,className:"xdj266r xv8wvd9 xat24cr x1bawvfr"})})}export{n as App};
