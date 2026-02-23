@@ -81,6 +81,12 @@ export type CallResolveContext = {
    */
   calleeImportedName: string;
   /**
+   * Member path segments on the callee (e.g., for `ColorConverter.cssWithAlpha()`, `["cssWithAlpha"]`).
+   * Only present when the callee is a member expression. The root object's import info
+   * is in `calleeImportedName`/`calleeSource`.
+   */
+  calleeMemberPath?: string[];
+  /**
    * Import source for this call: either an absolute file path (relative imports)
    * or the module specifier (package imports).
    */
