@@ -15,6 +15,7 @@ import {
 } from "../css-prop-mapping.js";
 import { extractStaticParts } from "./interpolations.js";
 import { toSuffixFromProp } from "../transform/helpers.js";
+import { looksLikeLength } from "../utilities/string-utils.js";
 import type { LowerRulesState } from "./state.js";
 
 type BorderHandlerContext = Pick<
@@ -153,7 +154,7 @@ export function tryHandleInterpolatedBorder(
       slotIndices[0]!.idx === 0 &&
       slotIndices[1]!.idx === 2
     ) {
-      const [widthSlot, colorSlot] = slotIndices as [
+      const [slot0, slot1] = slotIndices as [
         { idx: number; slotId: number },
         { idx: number; slotId: number },
       ];
@@ -163,18 +164,41 @@ export function tryHandleInterpolatedBorder(
         const styleProp = `border${direction}Style`;
         const colorProp = `border${direction}Color`;
 
-        const widthExpr = (decl as any).templateExpressions[widthSlot.slotId];
-        const colorExpr = (decl as any).templateExpressions[colorSlot.slotId];
-        const widthRes = callResolveDynamicNode(widthSlot.slotId, widthExpr);
-        const colorRes = callResolveDynamicNode(colorSlot.slotId, colorExpr);
+        const slot0Expr = (decl as any).templateExpressions[slot0.slotId];
+        const slot1Expr = (decl as any).templateExpressions[slot1.slotId];
+        const slot0Res = callResolveDynamicNode(slot0.slotId, slot0Expr);
+        const slot1Res = callResolveDynamicNode(slot1.slotId, slot1Expr);
 
-        if (widthRes?.type === "resolvedValue" && colorRes?.type === "resolvedValue") {
-          for (const imp of [...(widthRes.imports ?? []), ...(colorRes.imports ?? [])]) {
+        if (slot0Res?.type === "resolvedValue" && slot1Res?.type === "resolvedValue") {
+          for (const imp of [...(slot0Res.imports ?? []), ...(slot1Res.imports ?? [])]) {
             resolverImports.set(JSON.stringify(imp), imp);
           }
-          const widthAst = parseExpr(widthRes.expr);
-          const colorAst = parseExpr(colorRes.expr);
-          if (widthAst && colorAst) {
+          const slot0Ast = parseExpr(slot0Res.expr);
+          const slot1Ast = parseExpr(slot1Res.expr);
+          if (slot0Ast && slot1Ast) {
+            // Classify each resolved expression as "width" or "color" when possible.
+            // CSS border shorthand allows any order, so we can't assume positional roles.
+            // When a slot resolves to a string literal, use looksLikeLength to determine
+            // its role. For opaque expressions (variables, member expressions), use the
+            // conventional positional assumption: slot0=width, slot1=color.
+            const slot0Role = classifyBorderSlotRole(slot0Ast);
+            const slot1Role = classifyBorderSlotRole(slot1Ast);
+
+            // Bail if both are classified to the same role (ambiguous)
+            if (slot0Role && slot1Role && slot0Role === slot1Role) {
+              bailUnsupportedWithContext(
+                "Multi-slot border interpolation could not be resolved",
+                { property: prop },
+                getNodeLocStart(slot0Expr) ?? getNodeLocStart(slot1Expr),
+              );
+              return true;
+            }
+
+            // Determine if we need to swap: slot0 is color or slot1 is width
+            const shouldSwap = slot0Role === "color" || slot1Role === "width";
+            const widthAst = shouldSwap ? slot1Ast : slot0Ast;
+            const colorAst = shouldSwap ? slot0Ast : slot1Ast;
+
             applyResolvedPropValue(widthProp, widthAst);
             applyResolvedPropValue(styleProp, middleStyle);
             applyResolvedPropValue(colorProp, colorAst);
@@ -185,7 +209,7 @@ export function tryHandleInterpolatedBorder(
         bailUnsupportedWithContext(
           "Multi-slot border interpolation could not be resolved",
           { property: prop },
-          getNodeLocStart(widthExpr) ?? getNodeLocStart(colorExpr),
+          getNodeLocStart(slot0Expr) ?? getNodeLocStart(slot1Expr),
         );
         return true;
       }
@@ -698,4 +722,23 @@ export function tryHandleInterpolatedBorder(
     return true;
   }
   return false;
+}
+
+// --- Non-exported helpers ---
+
+/**
+ * Classify a resolved border slot expression as "width" or "color" when possible.
+ * Only string literals can be reliably classified: `looksLikeLength("0.5px")` → "width",
+ * anything else → "color". Returns null for opaque expressions (variables, member
+ * expressions) that cannot be classified at compile time.
+ */
+function classifyBorderSlotRole(ast: unknown): "width" | "color" | null {
+  const node = ast as { type?: string; value?: unknown };
+  if (
+    (node.type === "StringLiteral" || node.type === "Literal") &&
+    typeof node.value === "string"
+  ) {
+    return looksLikeLength(node.value) ? "width" : "color";
+  }
+  return null;
 }
