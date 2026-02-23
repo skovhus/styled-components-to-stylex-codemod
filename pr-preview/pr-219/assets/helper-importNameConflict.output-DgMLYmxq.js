@@ -1,1 +1,0 @@
-import{j as s}from"./index-OWC8_a5P.js";import{e}from"./helpers-CFU2-iCr.js";const t=e("fast"),p=()=>s.jsxs("div",{children:[s.jsx("div",{children:t}),s.jsx("div",{className:"x4lopbt"})]});export{p as App};
