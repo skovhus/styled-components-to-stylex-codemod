@@ -308,11 +308,15 @@ export function createCssHelperResolver(args: {
     dynamicProps: Array<{ jsxProp: string; stylexProp: string }>;
     conditionalVariants: ConditionalVariant[];
   } | null => {
-    const bail = (type: WarningType, context?: { property?: string }): null => {
+    const bail = (
+      type: WarningType,
+      context?: { property?: string },
+      exprLoc?: { line: number; column: number } | null,
+    ): null => {
       warnings.push({
         severity: "warning",
         type,
-        loc,
+        loc: exprLoc ?? loc,
         context,
       });
       return null;
@@ -325,16 +329,6 @@ export function createCssHelperResolver(args: {
     const dynamicPropKeys = new Set<string>();
     const conditionalVariants: ConditionalVariant[] = [];
 
-    const normalizePseudoElement = (pseudo: string | null): string | null => {
-      if (!pseudo) {
-        return null;
-      }
-      if (pseudo === ":before" || pseudo === ":after") {
-        return `::${pseudo.slice(1)}`;
-      }
-      return pseudo.startsWith("::") ? pseudo : null;
-    };
-
     for (const rule of rules) {
       if (rule.atRuleStack.length > 0) {
         return bail("Conditional `css` block: @-rules (e.g., @media, @supports) are not supported");
@@ -346,37 +340,40 @@ export function createCssHelperResolver(args: {
       // Pseudo-elements (::before, ::after) use selector-first format in StyleX,
       // so they use nested target objects instead.
       let currentPseudoClass: string | null = null;
+      // For comma-separated pseudo-elements (e.g., "&:before, &:after"),
+      // declarations are duplicated into each pseudo-element's nested object.
+      let pseudoElementTargets: Array<{ key: string; obj: Record<string, unknown> }> | null = null;
       if (selector !== "&") {
         const parsed = parseSelector(selector);
 
         if (parsed.kind === "pseudoElement") {
-          const normalizedPseudoElement = normalizePseudoElement(parsed.element);
-          if (normalizedPseudoElement) {
-            const nested = (out[normalizedPseudoElement] as any) ?? {};
-            out[normalizedPseudoElement] = nested;
-            target = nested;
-          } else {
-            return bail("Conditional `css` block: unsupported selector");
-          }
+          const nested = (out[parsed.element] as Record<string, unknown>) ?? {};
+          out[parsed.element] = nested;
+          target = nested;
+        } else if (parsed.kind === "pseudoElements") {
+          pseudoElementTargets = parsed.elements.map((el) => {
+            const nested = (out[el] as Record<string, unknown>) ?? {};
+            out[el] = nested;
+            return { key: el, obj: nested };
+          });
+          // Use the first pseudo-element's target as the primary target for iteration below
+          target = pseudoElementTargets[0]?.obj ?? out;
         } else if (parsed.kind === "pseudo" && parsed.pseudos.length === 1) {
           const simplePseudo = parsed.pseudos[0]!;
-          // Handle :before/:after as pseudo-elements (selector-first format)
-          const normalizedPseudoElement = normalizePseudoElement(
-            simplePseudo === ":before" || simplePseudo === ":after" ? simplePseudo : null,
-          );
-          if (normalizedPseudoElement) {
-            const nested = (out[normalizedPseudoElement] as any) ?? {};
-            out[normalizedPseudoElement] = nested;
-            target = nested;
-          } else {
-            // Pseudo-classes (:hover, :focus, etc.) use property-first format:
-            // { prop: { default: null, ":hover": value } }
-            currentPseudoClass = simplePseudo;
-          }
+          // Pseudo-classes (:hover, :focus, etc.) use property-first format:
+          // { prop: { default: null, ":hover": value } }
+          currentPseudoClass = simplePseudo;
         } else {
           return bail("Conditional `css` block: unsupported selector");
         }
       }
+
+      // Snapshot existing keys so we only duplicate NEW properties set by this rule
+      // (not stale state accumulated from earlier rules).
+      const preRuleKeys =
+        pseudoElementTargets && pseudoElementTargets.length > 1
+          ? new Set(Object.keys(pseudoElementTargets[0]!.obj))
+          : null;
 
       for (const d of rule.declarations) {
         if (!d.property) {
@@ -431,16 +428,21 @@ export function createCssHelperResolver(args: {
             property: d.property,
           });
         }
+        const exprLoc = (expr as { loc?: { start?: { line: number; column: number } } }).loc?.start;
         if (hasCallExpressionInExpr(expr)) {
-          return bail("Conditional `css` block: failed to parse expression", {
-            property: d.property,
-          });
+          return bail(
+            "Conditional `css` block: failed to parse expression",
+            { property: d.property },
+            exprLoc,
+          );
         }
         const resolved = resolveHelperExprToAst(expr as any, paramName);
         if (!resolved && hasThemeAccessInExpr(expr, paramName)) {
-          return bail("Conditional `css` block: failed to parse expression", {
-            property: d.property,
-          });
+          return bail(
+            "Conditional `css` block: failed to parse expression",
+            { property: d.property },
+            exprLoc,
+          );
         }
         if (resolved) {
           if (hasStaticParts) {
@@ -459,9 +461,11 @@ export function createCssHelperResolver(args: {
               continue;
             }
             // Fall through if parsing failed
-            return bail("Conditional `css` block: failed to parse expression", {
-              property: d.property,
-            });
+            return bail(
+              "Conditional `css` block: failed to parse expression",
+              { property: d.property },
+              exprLoc,
+            );
           } else {
             for (const mapped of cssDeclarationToStylexDeclarations(d)) {
               (target as any)[mapped.prop] = mergeIntoPseudoContext(
@@ -565,6 +569,19 @@ export function createCssHelperResolver(args: {
           if (!dynamicPropKeys.has(key)) {
             dynamicPropKeys.add(key);
             dynamicProps.push({ jsxProp, stylexProp: mapped.prop });
+          }
+        }
+      }
+
+      // For comma-separated pseudo-elements, duplicate only the declarations
+      // added by THIS rule (not stale state from earlier rules) to remaining targets.
+      if (pseudoElementTargets && pseudoElementTargets.length > 1 && preRuleKeys) {
+        const source = pseudoElementTargets[0]!.obj;
+        for (const key of Object.keys(source)) {
+          if (!preRuleKeys.has(key)) {
+            for (let i = 1; i < pseudoElementTargets.length; i++) {
+              pseudoElementTargets[i]!.obj[key] = source[key];
+            }
           }
         }
       }

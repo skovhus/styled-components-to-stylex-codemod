@@ -100,3 +100,9 @@ export const $config = stylex.defineVars({
   "ui.spacing.medium": "8px",
   "ui.spacing.large": "16px",
 });
+
+// Shadow variables — used by helper-callPropArgResolved test case
+export const $shadow = stylex.defineVars({
+  dark: "0 4px 12px rgba(0,0,0,0.3)",
+  light: "0 2px 4px rgba(0,0,0,0.1)",
+});

@@ -4,6 +4,7 @@
  */
 import type { CssDeclarationIR, CssRuleIR } from "../css-ir.js";
 import type { ResolveValueContext } from "../../adapter.js";
+import type { CallValueTransform } from "../builtin-handlers/types.js";
 import type { StyledDecl } from "../transform-types.js";
 import type { WarningType } from "../logger.js";
 import type { ExpressionKind } from "./decl-types.js";
@@ -1287,9 +1288,23 @@ export function handleInterpolatedDeclaration(args: InterpolatedDeclarationConte
             // prop value, e.g. `${value}px`, `opacity ${value}ms`.
             const buildValueExpr = (): any => {
               const transformed = (() => {
-                const vt = (res as { valueTransform?: { kind: string; calleeIdent?: string } })
-                  .valueTransform;
+                const vt = (res as { valueTransform?: CallValueTransform }).valueTransform;
                 if (vt?.kind === "call" && typeof vt.calleeIdent === "string") {
+                  // Add adapter-resolved imports if present
+                  if (vt.resolvedImports) {
+                    for (const imp of vt.resolvedImports) {
+                      resolverImports.set(JSON.stringify(imp), imp);
+                    }
+                  }
+                  // Use adapter-resolved expression, choosing call or member access
+                  // based on resolvedUsage (default: "call")
+                  if (vt.resolvedExpr) {
+                    const resolvedCallee = parseExpr(vt.resolvedExpr);
+                    if (vt.resolvedUsage === "memberAccess") {
+                      return j.memberExpression(resolvedCallee, valueId, true);
+                    }
+                    return j.callExpression(resolvedCallee, [valueId]);
+                  }
                   return j.callExpression(j.identifier(vt.calleeIdent), [valueId]);
                 }
                 return valueId;
@@ -1619,12 +1634,7 @@ export function handleInterpolatedDeclaration(args: InterpolatedDeclarationConte
 }
 
 function isPseudoElementSelector(pseudoElement: string | null): boolean {
-  return (
-    pseudoElement === "::before" ||
-    pseudoElement === "::after" ||
-    pseudoElement === ":before" ||
-    pseudoElement === ":after"
-  );
+  return pseudoElement === "::before" || pseudoElement === "::after";
 }
 
 /**

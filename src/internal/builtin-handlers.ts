@@ -2,7 +2,7 @@
  * Built-in resolution handlers for dynamic interpolations.
  * Core concepts: adapter hooks, conditional splitting, and StyleX emission.
  */
-import type { CallResolveContext } from "../adapter.js";
+import type { CallResolveContext, ImportSpec } from "../adapter.js";
 import {
   getArrowFnParamBindings,
   getArrowFnSingleParamName,
@@ -61,7 +61,7 @@ export function resolveDynamicNode(
     tryResolveIndexedThemeWithPropFallback(node, ctx) ??
     tryResolveConditionalCssBlockTernary(node, ctx) ??
     tryResolveConditionalCssBlock(node, ctx) ??
-    tryResolveArrowFnCallWithSinglePropArg(node) ??
+    tryResolveArrowFnCallWithSinglePropArg(node, ctx) ??
     // Resolve or detect theme-dependent template literals before trying to emit style functions
     tryResolveThemeDependentTemplateLiteral(node, ctx) ??
     tryResolveStyleFunctionFromTemplateLiteral(node) ??
@@ -179,32 +179,57 @@ function tryResolveArrowFnHelperCallWithThemeArg(
   if (!node.css.property) {
     return null;
   }
-  const expr: any = node.expr as any;
+  const expr = node.expr;
   if (!isArrowFunctionExpression(expr)) {
     return null;
   }
-  const propsParamName = getArrowFnSingleParamName(expr);
-  if (!propsParamName) {
+
+  // Support both (props) => ... and ({ theme }) => ...
+  const info = getArrowFnThemeParamInfo(expr);
+  if (!info) {
     return null;
   }
-  const body: any = expr.body as any;
+
+  // Use getFunctionBodyExpr to also handle block-body arrows with single return
+  const body = getFunctionBodyExpr(expr);
   if (!isCallExpressionNode(body)) {
     return null;
   }
   const args = body.arguments ?? [];
-  if (args.length !== 1) {
-    return null;
-  }
-  const arg0 = args[0] as any;
-  if (!arg0 || arg0.type !== "MemberExpression") {
-    return null;
-  }
-  const parts = getMemberPathFromIdentifier(arg0, propsParamName);
-  if (!parts || parts[0] !== "theme" || parts.length <= 1) {
+  if (args.length === 0) {
     return null;
   }
 
-  const simple = resolveImportedHelperCall(body, ctx, propsParamName, node.css.property);
+  // Determine param names based on parameter style
+  const propsParamName = info.kind === "propsParam" ? info.propsName : undefined;
+  const themeBindingName = info.kind === "themeBinding" ? info.themeName : undefined;
+
+  // Verify at least one arg is a theme member access
+  const hasThemeArg = args.some((arg: any) => {
+    if (!arg || arg.type !== "MemberExpression") {
+      return false;
+    }
+    if (propsParamName) {
+      const parts = getMemberPathFromIdentifier(arg, propsParamName);
+      return parts !== null && parts[0] === "theme" && parts.length > 1;
+    }
+    if (themeBindingName) {
+      const parts = getMemberPathFromIdentifier(arg, themeBindingName);
+      return parts !== null && parts.length > 0;
+    }
+    return false;
+  });
+  if (!hasThemeArg) {
+    return null;
+  }
+
+  const simple = resolveImportedHelperCall(
+    body,
+    ctx,
+    propsParamName,
+    node.css.property,
+    themeBindingName,
+  );
   if (simple.kind === "resolved") {
     return buildResolvedHandlerResult(simple.result, node.css.property, {
       resolveCallContext: simple.resolveCallContext,
@@ -470,7 +495,10 @@ function extractPropNameFromCondTest(
   return null;
 }
 
-function tryResolveArrowFnCallWithSinglePropArg(node: DynamicNode): HandlerResult | null {
+function tryResolveArrowFnCallWithSinglePropArg(
+  node: DynamicNode,
+  ctx: InternalHandlerContext,
+): HandlerResult | null {
   if (!node.css.property) {
     return null;
   }
@@ -505,14 +533,69 @@ function tryResolveArrowFnCallWithSinglePropArg(node: DynamicNode): HandlerResul
     return null;
   }
 
+  // Try to resolve the callee through the adapter so imports can be remapped
+  const adapterResolution = tryResolveCalleeViaAdapter(calleeIdent, body.callee, node, ctx);
+
   return {
     type: "emitStyleFunction",
     nameHint: `${sanitizeIdentifier(node.css.property)}FromProp`,
     params: "value: any",
     body: `{ ${Object.keys(styleFromSingleDeclaration(node.css.property, "value"))[0]}: value }`,
     call: propName,
-    valueTransform: { kind: "call", calleeIdent },
+    valueTransform: {
+      kind: "call",
+      calleeIdent,
+      ...adapterResolution,
+    },
   };
+}
+
+/**
+ * Attempts to resolve a callee identifier through the adapter's resolveCall hook.
+ * Uses `resolveCallOptional` (non-bailing) so that an unhandled helper does NOT
+ * trigger the global bail flag — the caller falls back to preserving the original call.
+ * Returns resolved expression and imports if the adapter handles it,
+ * or an empty object to fall back to preserving the original helper call.
+ */
+function tryResolveCalleeViaAdapter(
+  calleeIdent: string,
+  calleeNode: unknown,
+  node: DynamicNode,
+  ctx: InternalHandlerContext,
+):
+  | {
+      resolvedExpr: string;
+      resolvedImports: ImportSpec[];
+      resolvedUsage?: "call" | "memberAccess";
+    }
+  | Record<string, never> {
+  const resolveCall = ctx.resolveCallOptional;
+  if (!resolveCall) {
+    return {};
+  }
+  const imp = ctx.resolveImport(calleeIdent, calleeNode);
+  if (!imp) {
+    return {};
+  }
+  try {
+    const result = resolveCall({
+      callSiteFilePath: ctx.filePath,
+      calleeImportedName: imp.importedName,
+      calleeSource: imp.source,
+      args: [{ kind: "unknown" }],
+      cssProperty: node.css.property,
+    });
+    if (result) {
+      return {
+        resolvedExpr: result.expr,
+        resolvedImports: result.imports,
+        ...(result.dynamicArgUsage ? { resolvedUsage: result.dynamicArgUsage } : {}),
+      };
+    }
+  } catch {
+    // Adapter threw — fall back to preserving the original call
+  }
+  return {};
 }
 
 function tryResolveInlineStyleValueForConditionalExpression(

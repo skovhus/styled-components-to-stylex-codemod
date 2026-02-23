@@ -37,6 +37,7 @@ export const fixtureAdapter = defineAdapter({
     if (
       [
         "attrs-polymorphicAs",
+        "basic-jsdocExported",
         "htmlProp-element",
         "wrapper-mergerImported",
         "htmlProp-input",
@@ -305,6 +306,59 @@ export const fixtureAdapter = defineAdapter({
           {
             from: { kind: "specifier", value: "./tokens.stylex" },
             names: [{ imported: "$colors" }],
+          },
+        ],
+      };
+    }
+
+    // Handle ColorConverter.cssWithAlpha(theme.color.*, alpha) helper
+    // ColorConverter.cssWithAlpha(theme.color.bgBase, 0.4) -> `color-mix(in srgb, ${$colors.bgBase} 40%, transparent)`
+    // Note: inlined as a template literal because stylex.create() requires statically analyzable values
+    // (function calls like ColorConverter.cssWithAlpha() are not supported by the StyleX babel plugin)
+    if (
+      ctx.calleeImportedName === "ColorConverter" &&
+      ctx.calleeMemberPath?.[0] === "cssWithAlpha" &&
+      themeColorKey
+    ) {
+      const alphaLiteral = ctx.args.find(
+        (a): a is { kind: "literal"; value: number } =>
+          a.kind === "literal" && typeof a.value === "number",
+      );
+      const alphaPercent = alphaLiteral ? alphaLiteral.value * 100 : 100;
+      return {
+        expr: `\`color-mix(in srgb, \${$colors.${themeColorKey}} ${alphaPercent}%, transparent)\``,
+        imports: [
+          {
+            from: { kind: "specifier", value: "./tokens.stylex" },
+            names: [{ imported: "$colors" }],
+          },
+        ],
+      };
+    }
+
+    // Handle shadow() helper — demonstrates dynamic prop arg resolution.
+    // shadow("dark") → $shadow.dark (literal arg)
+    // shadow(props.level) → $shadow[level] (dynamic arg — adapter remaps callee with member access)
+    if (ctx.calleeImportedName === "shadow") {
+      if (key) {
+        return {
+          expr: `$shadow.${key}`,
+          imports: [
+            {
+              from: { kind: "specifier", value: "./tokens.stylex" },
+              names: [{ imported: "$shadow" }],
+            },
+          ],
+        };
+      }
+      // Dynamic arg — return the vars object with memberAccess usage
+      return {
+        expr: "$shadow",
+        dynamicArgUsage: "memberAccess",
+        imports: [
+          {
+            from: { kind: "specifier", value: "./tokens.stylex" },
+            names: [{ imported: "$shadow" }],
           },
         ],
       };

@@ -287,13 +287,13 @@ export function processDeclRules(ctx: DeclProcessingState): void {
       }
 
       if (s.includes(",") && !isHandledComponentPattern) {
-        // Comma-separated selectors: bail unless ALL parts are valid pseudo-selectors
+        // Comma-separated selectors: bail unless ALL parts are valid pseudo-selectors or pseudo-elements
         const parsed = parseSelector(s);
-        if (parsed.kind !== "pseudo") {
+        if (parsed.kind !== "pseudo" && parsed.kind !== "pseudoElements") {
           state.markBail();
           warnings.push({
             severity: "warning",
-            type: "Unsupported selector: comma-separated selectors must all be simple pseudos",
+            type: "Unsupported selector: comma-separated selectors must all be simple pseudos or pseudo-elements",
             loc: computeSelectorWarningLoc(decl.loc, decl.rawCss, rule.selector),
           });
           break;
@@ -701,6 +701,8 @@ export function processDeclRules(ctx: DeclProcessingState): void {
 
     const pseudos = parsedSelector.kind === "pseudo" ? parsedSelector.pseudos : null;
     const pseudoElement = parsedSelector.kind === "pseudoElement" ? parsedSelector.element : null;
+    const pseudoElementsList =
+      parsedSelector.kind === "pseudoElements" ? parsedSelector.elements : null;
     const attrSel =
       parsedSelector.kind === "attribute"
         ? {
@@ -874,16 +876,19 @@ export function processDeclRules(ctx: DeclProcessingState): void {
         return;
       }
 
-      if (pseudoElement) {
-        nestedSelectors[pseudoElement] ??= {};
-        const pseudoSelector = nestedSelectors[pseudoElement];
-        if (pseudoSelector) {
-          pseudoSelector[prop] = value;
-          if (commentSource) {
-            addPropComments(pseudoSelector, prop, {
-              leading: commentSource.leading,
-              trailingLine: commentSource.trailingLine,
-            });
+      const pseudoElementsToApply = pseudoElement ? [pseudoElement] : pseudoElementsList;
+      if (pseudoElementsToApply) {
+        for (const pe of pseudoElementsToApply) {
+          nestedSelectors[pe] ??= {};
+          const pseudoSelector = nestedSelectors[pe];
+          if (pseudoSelector) {
+            pseudoSelector[prop] = value;
+            if (commentSource) {
+              addPropComments(pseudoSelector, prop, {
+                leading: commentSource.leading,
+                trailingLine: commentSource.trailingLine,
+              });
+            }
           }
         }
         return;
@@ -903,7 +908,7 @@ export function processDeclRules(ctx: DeclProcessingState): void {
       rule,
       media,
       pseudos,
-      pseudoElement,
+      pseudoElement: pseudoElement ?? (pseudoElementsList ? (pseudoElementsList[0] ?? null) : null),
       attrTarget,
       resolvedSelectorMedia,
       applyResolvedPropValue,

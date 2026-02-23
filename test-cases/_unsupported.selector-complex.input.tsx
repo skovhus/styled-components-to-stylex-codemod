@@ -1,4 +1,4 @@
-// @expected-warning: Unsupported selector: comma-separated selectors must all be simple pseudos
+// @expected-warning: Unsupported selector: comma-separated selectors must all be simple pseudos or pseudo-elements
 import styled from "styled-components";
 
 // Class selectors with comma-separated (not pure pseudo-selectors)

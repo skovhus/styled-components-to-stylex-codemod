@@ -809,6 +809,109 @@ export const App = () => (
       ),
     ).toBe(true);
   });
+
+  it("should use call expression when adapter returns a function-like resolvedExpr for dynamic prop arg", () => {
+    const source = `
+import styled from "styled-components";
+import { computeBoxShadow } from "./lib/helpers.ts";
+
+const Box = styled.div<{ level: string }>\`
+  box-shadow: \${(props) => computeBoxShadow(props.level)};
+  padding: 8px;
+\`;
+
+export const App = () => <Box level="high">Hello</Box>;
+`;
+
+    const adapterWithCallableResolution = {
+      externalInterface() {
+        return { styles: false, as: false };
+      },
+      resolveValue() {
+        return undefined;
+      },
+      resolveCall(ctx: { calleeImportedName: string; args: Array<{ kind: string }> }) {
+        if (ctx.calleeImportedName === "computeBoxShadow") {
+          // Return a callable expression — should be emitted as getShadow(level), not getShadow[level]
+          return {
+            usage: "create" as const,
+            expr: "getShadow",
+            imports: [
+              {
+                from: { kind: "specifier" as const, value: "./shadow-utils" },
+                names: [{ imported: "getShadow" }],
+              },
+            ],
+          };
+        }
+        return undefined;
+      },
+      resolveSelector() {
+        return undefined;
+      },
+      styleMerger: null,
+    } satisfies Adapter;
+
+    const result = transformWithWarnings(
+      { source, path: join(testCasesDir, "helper-callPropArgResolved.input.tsx") },
+      { jscodeshift: j, j, stats: () => {}, report: () => {} },
+      { adapter: adapterWithCallableResolution },
+    );
+
+    expect(result.code).not.toBeNull();
+    const code = result.code ?? "";
+    // The adapter returned a callable expr; consumer should emit getShadow(boxShadow), not getShadow[boxShadow]
+    expect(code).toContain("getShadow(");
+    expect(code).not.toContain("getShadow[");
+    // Import should be remapped
+    expect(code).toContain("./shadow-utils");
+    expect(code).not.toContain("computeBoxShadow");
+  });
+
+  it("should not bail when adapter returns undefined for optional prop-arg helper resolution", () => {
+    const source = `
+import styled from "styled-components";
+import { color } from "./lib/helpers.ts";
+
+const Box = styled.div<{ tone: string }>\`
+  background-color: \${(props) => color(props.tone)};
+  padding: 8px;
+\`;
+
+export const App = () => <Box tone="muted">Hello</Box>;
+`;
+
+    // Adapter that does NOT handle the "color" helper — returns undefined.
+    // The optional prop-arg resolution should gracefully fall back,
+    // NOT trigger the global bail flag.
+    const adapterWithNoColorResolution = {
+      externalInterface() {
+        return { styles: false, as: false };
+      },
+      resolveValue() {
+        return undefined;
+      },
+      resolveCall() {
+        return undefined;
+      },
+      resolveSelector() {
+        return undefined;
+      },
+      styleMerger: null,
+    } satisfies Adapter;
+
+    const result = transformWithWarnings(
+      { source, path: join(testCasesDir, "helper-propArgNoBail.input.tsx") },
+      { jscodeshift: j, j, stats: () => {}, report: () => {} },
+      { adapter: adapterWithNoColorResolution },
+    );
+
+    // Should NOT bail — the prop-arg pattern should fall back to preserving the original call
+    expect(result.code).not.toBeNull();
+    const code = result.code ?? "";
+    // Original helper call should be preserved since the adapter didn't remap it
+    expect(code).toContain("color(");
+  });
 });
 
 describe("import resolution scope", () => {
@@ -2632,5 +2735,161 @@ export const App = () => (
 
     // Should bail because Link and Button are different components
     expect(result.code).toBeNull();
+  });
+});
+
+describe("comma-separated pseudo-element handling", () => {
+  it("should not leak properties between pseudo-elements in css helper blocks", () => {
+    // P1 regression: When a css helper has individual pseudo-element rules BEFORE a
+    // comma-separated rule, the Object.assign approach was copying stale state from
+    // earlier rules to subsequent pseudo-element targets.
+    const source = `
+import styled, { css } from "styled-components";
+
+const Box = styled.div<{ $decorated?: boolean }>\`
+  width: 48px;
+  height: 16px;
+
+  \${(props) =>
+    props.$decorated &&
+    css\`
+      &:before {
+        top: -8px;
+      }
+      &:before,
+      &:after {
+        content: "";
+        position: absolute;
+      }
+      &:after {
+        bottom: -8px;
+      }
+    \`}
+\`;
+
+export const App = () => (
+  <div>
+    <Box>Normal</Box>
+    <Box $decorated>Decorated</Box>
+  </div>
+);
+`;
+
+    const result = transformWithWarnings(
+      { source, path: "test.tsx" },
+      { jscodeshift: j, j, stats: () => {}, report: () => {} },
+      { adapter: fixtureAdapter },
+    );
+
+    expect(result.code).not.toBeNull();
+    // ::after should NOT have "top" — that was only set on ::before
+    expect(result.code).not.toMatch(/"::after":\s*\{[^}]*top/);
+    // ::before SHOULD have "top"
+    expect(result.code).toMatch(/"::before":\s*\{[^}]*top/);
+  });
+
+  it("should produce order-independent results for comma-separated pseudo-elements", () => {
+    // P2 regression: &:before, &:after should produce the same result as &:after, &:before
+    const source1 = `
+import styled from "styled-components";
+
+const Box1 = styled.div\`
+  &:before,
+  &:after {
+    content: "";
+    position: absolute;
+  }
+\`;
+
+export const App = () => <Box1>Test</Box1>;
+`;
+
+    const source2 = `
+import styled from "styled-components";
+
+const Box1 = styled.div\`
+  &:after,
+  &:before {
+    content: "";
+    position: absolute;
+  }
+\`;
+
+export const App = () => <Box1>Test</Box1>;
+`;
+
+    const result1 = transformWithWarnings(
+      { source: source1, path: "test.tsx" },
+      { jscodeshift: j, j, stats: () => {}, report: () => {} },
+      { adapter: fixtureAdapter },
+    );
+    const result2 = transformWithWarnings(
+      { source: source2, path: "test.tsx" },
+      { jscodeshift: j, j, stats: () => {}, report: () => {} },
+      { adapter: fixtureAdapter },
+    );
+
+    expect(result1.code).not.toBeNull();
+    expect(result2.code).not.toBeNull();
+    // Both should produce identical output (same ::before and ::after blocks)
+    expect(result1.code).toBe(result2.code);
+  });
+});
+
+describe("two-slot border interpolation ordering", () => {
+  it("should correctly assign slots when width and color are in reverse CSS position", () => {
+    // Regression test: CSS border shorthand allows any order for width/style/color,
+    // so the codemod must classify resolved values rather than assuming positional roles.
+    const source = `
+import React from "react";
+import styled from "styled-components";
+import { borderColor, borderWidth } from "./lib/helpers";
+
+const Container = styled.div\`
+  border: \${borderColor()} solid \${borderWidth()};
+\`;
+
+export function App() {
+  return <Container>Hello</Container>;
+}
+`;
+
+    const adapterWithLiteralResolves: Adapter = {
+      externalInterface() {
+        return { styles: false, as: false };
+      },
+      resolveCall(ctx) {
+        if (ctx.calleeImportedName === "borderWidth") {
+          return { expr: '"0.5px"', imports: [] };
+        }
+        if (ctx.calleeImportedName === "borderColor") {
+          return { expr: '"red"', imports: [] };
+        }
+        return undefined;
+      },
+      resolveValue() {
+        return undefined;
+      },
+      resolveSelector() {
+        return undefined;
+      },
+      styleMerger: null,
+    };
+
+    const result = transformWithWarnings(
+      { source, path: "border-order-test.tsx" },
+      { jscodeshift: j, j, stats: () => {}, report: () => {} },
+      { adapter: adapterWithLiteralResolves },
+    );
+
+    expect(result.code).not.toBeNull();
+    // The classification should detect that "red" is NOT a length and "0.5px" IS a length,
+    // and swap the assignments correctly
+    expect(result.code).toContain('borderWidth: "0.5px"');
+    expect(result.code).toContain('borderStyle: "solid"');
+    expect(result.code).toContain('borderColor: "red"');
+    // Should NOT have the reversed (wrong) assignment
+    expect(result.code).not.toContain('borderWidth: "red"');
+    expect(result.code).not.toContain('borderColor: "0.5px"');
   });
 });

@@ -169,4 +169,22 @@ describe("findSelectorLineOffset", () => {
     expect(findSelectorLineOffset(css, "&:hover")).toBe(0);
     expect(findSelectorLineOffset(css, "&:focus")).toBe(1);
   });
+
+  it("finds element selectors (Stylis '& svg' → raw 'svg {')", () => {
+    const css = `padding: 16px;
+
+  svg {
+    fill: blue;
+  }`;
+    expect(findSelectorLineOffset(css, "& svg")).toBe(2);
+  });
+
+  it("finds child combinator element selectors (Stylis '& > button' → raw '> button {')", () => {
+    const css = `color: red;
+
+  > button {
+    opacity: 0.5;
+  }`;
+    expect(findSelectorLineOffset(css, "& > button")).toBe(2);
+  });
 });
