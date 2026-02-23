@@ -27,6 +27,12 @@ export type CallValueTransform = {
   resolvedExpr?: string;
   /** Imports required by the resolved expression. */
   resolvedImports?: ImportSpec[];
+  /**
+   * How to combine the resolved expression with the dynamic argument:
+   * - `"call"` (default): `resolvedExpr(arg)` — treat as a function call
+   * - `"memberAccess"`: `resolvedExpr[arg]` — treat as a computed member access
+   */
+  resolvedUsage?: "call" | "memberAccess";
 };
 
 export type DynamicNode = {

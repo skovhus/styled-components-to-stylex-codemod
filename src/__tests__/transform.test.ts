@@ -809,6 +809,64 @@ export const App = () => (
       ),
     ).toBe(true);
   });
+
+  it("should use call expression when adapter returns a function-like resolvedExpr for dynamic prop arg", () => {
+    const source = `
+import styled from "styled-components";
+import { computeBoxShadow } from "./lib/helpers.ts";
+
+const Box = styled.div<{ level: string }>\`
+  box-shadow: \${(props) => computeBoxShadow(props.level)};
+  padding: 8px;
+\`;
+
+export const App = () => <Box level="high">Hello</Box>;
+`;
+
+    const adapterWithCallableResolution = {
+      externalInterface() {
+        return { styles: false, as: false };
+      },
+      resolveValue() {
+        return undefined;
+      },
+      resolveCall(ctx: { calleeImportedName: string; args: Array<{ kind: string }> }) {
+        if (ctx.calleeImportedName === "computeBoxShadow") {
+          // Return a callable expression — should be emitted as getShadow(level), not getShadow[level]
+          return {
+            usage: "create" as const,
+            expr: "getShadow",
+            imports: [
+              {
+                from: { kind: "specifier" as const, value: "./shadow-utils" },
+                names: [{ imported: "getShadow" }],
+              },
+            ],
+          };
+        }
+        return undefined;
+      },
+      resolveSelector() {
+        return undefined;
+      },
+      styleMerger: null,
+    } satisfies Adapter;
+
+    const result = transformWithWarnings(
+      { source, path: join(testCasesDir, "helper-callPropArgResolved.input.tsx") },
+      { jscodeshift: j, j, stats: () => {}, report: () => {} },
+      { adapter: adapterWithCallableResolution },
+    );
+
+    expect(result.code).not.toBeNull();
+    const code = result.code ?? "";
+    // The adapter returned a callable expr; consumer should emit getShadow(boxShadow), not getShadow[boxShadow]
+    expect(code).toContain("getShadow(");
+    expect(code).not.toContain("getShadow[");
+    // Import should be remapped
+    expect(code).toContain("./shadow-utils");
+    expect(code).not.toContain("computeBoxShadow");
+  });
 });
 
 describe("import resolution scope", () => {

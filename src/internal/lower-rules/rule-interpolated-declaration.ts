@@ -1296,10 +1296,14 @@ export function handleInterpolatedDeclaration(args: InterpolatedDeclarationConte
                       resolverImports.set(JSON.stringify(imp), imp);
                     }
                   }
-                  // Use adapter-resolved expression with computed member access
-                  // (e.g., $shadow[boxShadow] instead of shadow(boxShadow))
+                  // Use adapter-resolved expression, choosing call or member access
+                  // based on resolvedUsage (default: "call")
                   if (vt.resolvedExpr) {
-                    return j.memberExpression(parseExpr(vt.resolvedExpr), valueId, true);
+                    const resolvedCallee = parseExpr(vt.resolvedExpr);
+                    if (vt.resolvedUsage === "memberAccess") {
+                      return j.memberExpression(resolvedCallee, valueId, true);
+                    }
+                    return j.callExpression(resolvedCallee, [valueId]);
                   }
                   return j.callExpression(j.identifier(vt.calleeIdent), [valueId]);
                 }

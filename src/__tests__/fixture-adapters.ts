@@ -338,7 +338,7 @@ export const fixtureAdapter = defineAdapter({
 
     // Handle shadow() helper — demonstrates dynamic prop arg resolution.
     // shadow("dark") → $shadow.dark (literal arg)
-    // shadow(props.level) → $shadow(level) (dynamic arg — adapter remaps callee)
+    // shadow(props.level) → $shadow[level] (dynamic arg — adapter remaps callee with member access)
     if (ctx.calleeImportedName === "shadow") {
       if (key) {
         return {
@@ -351,9 +351,10 @@ export const fixtureAdapter = defineAdapter({
           ],
         };
       }
-      // Dynamic arg — return the variable so the callee gets remapped
+      // Dynamic arg — return the vars object with memberAccess usage
       return {
         expr: "$shadow",
+        dynamicArgUsage: "memberAccess",
         imports: [
           {
             from: { kind: "specifier", value: "./tokens.stylex" },

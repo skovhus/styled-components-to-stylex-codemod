@@ -560,7 +560,13 @@ function tryResolveCalleeViaAdapter(
   calleeNode: unknown,
   node: DynamicNode,
   ctx: InternalHandlerContext,
-): { resolvedExpr: string; resolvedImports: ImportSpec[] } | Record<string, never> {
+):
+  | {
+      resolvedExpr: string;
+      resolvedImports: ImportSpec[];
+      resolvedUsage?: "call" | "memberAccess";
+    }
+  | Record<string, never> {
   const imp = ctx.resolveImport(calleeIdent, calleeNode);
   if (!imp) {
     return {};
@@ -574,7 +580,11 @@ function tryResolveCalleeViaAdapter(
       cssProperty: node.css.property,
     });
     if (result) {
-      return { resolvedExpr: result.expr, resolvedImports: result.imports };
+      return {
+        resolvedExpr: result.expr,
+        resolvedImports: result.imports,
+        ...(result.dynamicArgUsage ? { resolvedUsage: result.dynamicArgUsage } : {}),
+      };
     }
   } catch {
     // Adapter threw — fall back to preserving the original call
