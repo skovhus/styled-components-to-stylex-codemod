@@ -9,6 +9,7 @@ import { getMemberPathFromIdentifier, getNodeLocStart } from "../utilities/jscod
 import type { StyledDecl } from "../transform-types.js";
 import type { WarningType } from "../logger.js";
 import {
+  BORDER_STYLES,
   parseBorderShorthandParts,
   parseInterpolatedBorderStaticParts,
 } from "../css-prop-mapping.js";
@@ -98,6 +99,99 @@ export function tryHandleInterpolatedBorder(
     return false;
   }
   const tokens = d.valueRaw.trim().split(/\s+/).filter(Boolean);
+
+  // Shared resolver: wraps resolveDynamicNode with the component and handler context
+  // common to all border resolution code paths (multi-slot and single-slot).
+  const callResolveDynamicNode = (
+    slotId: number,
+    expr: unknown,
+    loc?: { line: number; column: number } | null,
+  ) => {
+    return resolveDynamicNode(
+      {
+        slotId,
+        expr,
+        css: {
+          kind: "declaration",
+          selector: "&",
+          atRuleStack: [],
+          property: prop,
+          valueRaw: d.valueRaw,
+        },
+        component:
+          decl.base.kind === "intrinsic"
+            ? { localName: decl.localName, base: "intrinsic", tagOrIdent: decl.base.tagName }
+            : { localName: decl.localName, base: "component", tagOrIdent: decl.base.ident },
+        usage: { jsxUsages: 0, hasPropsSpread: false },
+        ...(loc ? { loc } : {}),
+      },
+      {
+        api,
+        filePath,
+        resolveValue,
+        resolveCall,
+        resolveImport: (localName: string) => importMap.get(localName) ?? null,
+      } satisfies InternalHandlerContext,
+    );
+  };
+
+  // Handle two-slot border pattern: ${width} <style> ${color}
+  //   border: ${thinPixel()} solid ${color("bgBorderFaint")}
+  //   → borderWidth: pixelVars.thin, borderStyle: "solid", borderColor: $colors.bgBorderFaint
+  {
+    const slotIndices: Array<{ idx: number; slotId: number }> = [];
+    for (let i = 0; i < tokens.length; i++) {
+      const m = (tokens[i] as string).match(/^__SC_EXPR_(\d+)__$/);
+      if (m?.[1]) {
+        slotIndices.push({ idx: i, slotId: Number(m[1]) });
+      }
+    }
+
+    if (
+      slotIndices.length === 2 &&
+      tokens.length === 3 &&
+      slotIndices[0]!.idx === 0 &&
+      slotIndices[1]!.idx === 2
+    ) {
+      const [widthSlot, colorSlot] = slotIndices as [
+        { idx: number; slotId: number },
+        { idx: number; slotId: number },
+      ];
+      const middleStyle = (tokens[1] as string).trim();
+      if (BORDER_STYLES.has(middleStyle)) {
+        const widthProp = `border${direction}Width`;
+        const styleProp = `border${direction}Style`;
+        const colorProp = `border${direction}Color`;
+
+        const widthExpr = (decl as any).templateExpressions[widthSlot.slotId];
+        const colorExpr = (decl as any).templateExpressions[colorSlot.slotId];
+        const widthRes = callResolveDynamicNode(widthSlot.slotId, widthExpr);
+        const colorRes = callResolveDynamicNode(colorSlot.slotId, colorExpr);
+
+        if (widthRes?.type === "resolvedValue" && colorRes?.type === "resolvedValue") {
+          for (const imp of [...(widthRes.imports ?? []), ...(colorRes.imports ?? [])]) {
+            resolverImports.set(JSON.stringify(imp), imp);
+          }
+          const widthAst = parseExpr(widthRes.expr);
+          const colorAst = parseExpr(colorRes.expr);
+          if (widthAst && colorAst) {
+            applyResolvedPropValue(widthProp, widthAst);
+            applyResolvedPropValue(styleProp, middleStyle);
+            applyResolvedPropValue(colorProp, colorAst);
+            return true;
+          }
+        }
+
+        bailUnsupportedWithContext(
+          "Multi-slot border interpolation could not be resolved",
+          { property: prop },
+          getNodeLocStart(widthExpr) ?? getNodeLocStart(colorExpr),
+        );
+        return true;
+      }
+    }
+  }
+
   const slotTok = tokens.find((t: string) => /^__SC_EXPR_(\d+)__$/.test(t));
   if (!slotTok) {
     return false;
@@ -291,38 +385,7 @@ export function tryHandleInterpolatedBorder(
 
     const resolveBorderExpr = (node: any): ResolveBorderExprResult => {
       const loc = getNodeLocStart(node);
-      const res = resolveDynamicNode(
-        {
-          slotId,
-          expr: node,
-          css: {
-            kind: "declaration",
-            selector: "&",
-            atRuleStack: [],
-            // Pass original CSS property (e.g., "border-left") rather than expanded property
-            // (e.g., "borderLeftColor") so adapters can detect directional borders and return
-            // appropriate CSS values vs StyleX style objects
-            property: prop,
-            valueRaw: d.valueRaw,
-          },
-          component:
-            decl.base.kind === "intrinsic"
-              ? { localName: decl.localName, base: "intrinsic", tagOrIdent: decl.base.tagName }
-              : { localName: decl.localName, base: "component", tagOrIdent: decl.base.ident },
-          usage: { jsxUsages: 0, hasPropsSpread: false },
-          ...(loc ? { loc } : {}),
-        },
-        {
-          api,
-          filePath,
-          resolveValue,
-          resolveCall,
-          resolveImport: (localName: string, _identNode?: unknown) => {
-            const v = importMap.get(localName);
-            return v ? v : null;
-          },
-        } satisfies InternalHandlerContext,
-      );
+      const res = callResolveDynamicNode(slotId, node, loc);
       if (!res) {
         return { kind: "warn", warning: unresolvedCallWarning };
       }
