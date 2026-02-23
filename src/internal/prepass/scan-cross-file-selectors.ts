@@ -75,19 +75,11 @@ export function scanCrossFileSelectors(
     }
 
     selectorUsages.set(filePath, usages);
-
-    for (const usage of usages) {
-      // Bridge usages reference already-converted files; the consumer handles marker
-      // generation via the forward selector handler — no sidecar/bridge needed on target.
-      if (usage.bridgeComponentName) {
-        continue;
-      }
-      if (usage.consumerIsTransformed) {
-        addToSetMap(componentsNeedingMarkerSidecar, usage.resolvedPath, usage.importedName);
-      } else {
-        addToSetMap(componentsNeedingGlobalSelectorBridge, usage.resolvedPath, usage.importedName);
-      }
-    }
+    categorizeSelectorUsages(
+      usages,
+      componentsNeedingMarkerSidecar,
+      componentsNeedingGlobalSelectorBridge,
+    );
   }
 
   const result = {
@@ -111,6 +103,29 @@ export function scanCrossFileSelectors(
  * in template literals (e.g. `${props => ...}`, `${theme.color}`).
  */
 export const BARE_TEMPLATE_IDENTIFIER_RE = /\$\{\s*[a-zA-Z_$][\w$]*\s*\}/;
+
+/**
+ * Categorize cross-file selector usages into marker sidecar and global selector bridge maps.
+ *
+ * Bridge usages (from already-converted files) are skipped — the consumer handles marker
+ * generation via the forward selector handler, so no sidecar/bridge is needed on the target.
+ */
+export function categorizeSelectorUsages(
+  usages: readonly CrossFileSelectorUsage[],
+  componentsNeedingMarkerSidecar: Map<string, Set<string>>,
+  componentsNeedingGlobalSelectorBridge: Map<string, Set<string>>,
+): void {
+  for (const usage of usages) {
+    if (usage.bridgeComponentName) {
+      continue;
+    }
+    if (usage.consumerIsTransformed) {
+      addToSetMap(componentsNeedingMarkerSidecar, usage.resolvedPath, usage.importedName);
+    } else {
+      addToSetMap(componentsNeedingGlobalSelectorBridge, usage.resolvedPath, usage.importedName);
+    }
+  }
+}
 
 /* ── Bridge GlobalSelector detection ─────────────────────────────────── */
 
@@ -162,7 +177,7 @@ export function detectBridgeGlobalSelector(
   return stripped;
 }
 
-type ImportEntry = { source: string; importedName: string };
+export type ImportEntry = { source: string; importedName: string };
 
 /**
  * If `importedName` is a bridge GlobalSelector, populate bridge fields on `usage`

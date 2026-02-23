@@ -24,12 +24,14 @@ import {
   applyBridgeFields,
   BARE_TEMPLATE_IDENTIFIER_RE,
   buildImportMapFromNodes,
+  categorizeSelectorUsages,
   deduplicateAndResolve,
   findComponentSelectorLocalsFromNodes,
   findStyledImportNameFromNodes,
   walkForImportsAndTemplates,
   type CrossFileInfo,
   type CrossFileSelectorUsage,
+  type ImportEntry,
 } from "./scan-cross-file-selectors.js";
 import { isSelectorContext } from "../utilities/selector-context-heuristic.js";
 
@@ -53,7 +55,7 @@ interface PrepassResult {
 
 /** Cached AST-derived data for a single file, keyed by content hash. */
 interface AstCacheEntry {
-  importMap: Map<string, { source: string; importedName: string }>;
+  importMap: Map<string, ImportEntry>;
   styledImportName: string | undefined;
   selectorLocals: Set<string>;
 }
@@ -209,22 +211,11 @@ export async function runPrepass(options: PrepassOptions): Promise<PrepassResult
       );
       if (usages.length > 0) {
         selectorUsages.set(filePath, usages);
-        for (const usage of usages) {
-          // Bridge usages reference already-converted files; the consumer handles marker
-          // generation via the forward selector handler — no sidecar/bridge needed on target.
-          if (usage.bridgeComponentName) {
-            continue;
-          }
-          if (usage.consumerIsTransformed) {
-            addToSetMap(componentsNeedingMarkerSidecar, usage.resolvedPath, usage.importedName);
-          } else {
-            addToSetMap(
-              componentsNeedingGlobalSelectorBridge,
-              usage.resolvedPath,
-              usage.importedName,
-            );
-          }
-        }
+        categorizeSelectorUsages(
+          usages,
+          componentsNeedingMarkerSidecar,
+          componentsNeedingGlobalSelectorBridge,
+        );
       }
     }
 
@@ -621,7 +612,7 @@ function scanFileForSelectorsAst(
   const hash = cache ? createHash("md5").update(source).digest("hex") : undefined;
   const cached = cache && hash ? cache.get(hash) : undefined;
 
-  let importMap: Map<string, { source: string; importedName: string }>;
+  let importMap: Map<string, ImportEntry>;
   let styledImportName: string | undefined;
   let selectorLocals: Set<string>;
 
