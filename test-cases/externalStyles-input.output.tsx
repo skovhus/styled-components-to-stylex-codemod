@@ -2,6 +2,14 @@ import React from "react";
 import * as stylex from "@stylexjs/stylex";
 import { mergedSx } from "./lib/mergedSx";
 
+/**
+ * Test case for styled.input with externalInterface: style: true (without .attrs)
+ *
+ * Key issues to test:
+ * 1. Rest props should be forwarded to the input element
+ * 2. The "as" prop should be allowed (for polymorphism)
+ * 3. External styles (className, style) should be supported
+ */
 export function StyledInput<C extends React.ElementType = "input">(
   props: React.ComponentPropsWithRef<C> & { as?: C },
 ) {

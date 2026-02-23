@@ -2,6 +2,7 @@ import * as React from "react";
 import * as stylex from "@stylexjs/stylex";
 import { Text } from "./lib/text";
 
+// Pattern 1: styled.element with as prop at call site
 function Button<C extends React.ElementType = "button">(
   props: Omit<React.ComponentPropsWithRef<C>, "className" | "style"> & { as?: C },
 ) {

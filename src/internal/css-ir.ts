@@ -586,6 +586,16 @@ export function findSelectorLineOffset(rawCss: string, selector: string): number
     }
   }
 
+  // For element selectors: Stylis produces "& svg" from "svg { ... }".
+  // Strip the "& " prefix and search for the tag name followed by whitespace or {.
+  const stripped = selector.replace(/^&\s+/, "").replace(/^&\s*>\s*/, "");
+  if (stripped !== selector) {
+    const tagMatch = rawCss.match(new RegExp(`(?:^|\\s)${escapeRegExp(stripped)}\\s*[{,]`, "m"));
+    if (tagMatch) {
+      return countNewlinesBefore(rawCss, tagMatch.index! + 1);
+    }
+  }
+
   // Fallback: not found
   return 0;
 }
