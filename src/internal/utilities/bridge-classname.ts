@@ -34,3 +34,22 @@ export function generateBridgeClassName(filePath: string, componentName: string)
 export function bridgeExportName(componentName: string): string {
   return `${componentName}GlobalSelector`;
 }
+
+/**
+ * Generate the internal const variable name for the bridge class value.
+ * E.g., "Foo" → "fooBridgeClass", "ScrollableDiv" → "scrollableDivBridgeClass"
+ */
+export function bridgeClassVarName(componentName: string): string {
+  return `${componentName.charAt(0).toLowerCase()}${componentName.slice(1)}BridgeClass`;
+}
+
+/**
+ * If a declaration has a bridge className, return the internal const variable
+ * name that references it. Returns `undefined` when no bridge is needed.
+ */
+export function getBridgeClassVar(decl: {
+  bridgeClassName?: string;
+  localName: string;
+}): string | undefined {
+  return decl.bridgeClassName ? bridgeClassVarName(decl.localName) : undefined;
+}

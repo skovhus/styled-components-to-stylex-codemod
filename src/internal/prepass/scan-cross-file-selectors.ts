@@ -129,8 +129,13 @@ export function categorizeSelectorUsages(
 
 /* ── Bridge GlobalSelector detection ─────────────────────────────────── */
 
-/** Regex matching `export const XGlobalSelector = ".sc2sx-` pattern (global for matchAll). */
-const BRIDGE_EXPORT_RE = /export\s+const\s+(\w+GlobalSelector)\s*=\s*["']\.sc2sx-/g;
+/**
+ * Regex matching bridge GlobalSelector export patterns (global for matchAll).
+ * Matches both:
+ *   - Old format: `export const XGlobalSelector = ".sc2sx-..."`
+ *   - New format: `` export const XGlobalSelector = `.${xBridgeClass}` ``
+ */
+const BRIDGE_EXPORT_RE = /export\s+const\s+(\w+GlobalSelector)\s*=\s*(?:["']\.sc2sx-|`\.\$\{)/g;
 
 /**
  * Detect whether an imported name is a bridge GlobalSelector from an
@@ -294,16 +299,18 @@ function scanFile(
     return [];
   }
 
-  // Step 3: Find the styled default import name
+  // Step 3: Find the styled default import name and css helper names
   const styledImportName = findStyledImportNameFromNodes(importNodes);
-  if (!styledImportName) {
+  const cssImportNames = findCssImportNamesFromNodes(importNodes);
+  if (!styledImportName && cssImportNames.size === 0) {
     return [];
   }
 
   // Step 4: Find template expressions used as selectors
   const selectorLocals = findComponentSelectorLocalsFromNodes(
     taggedTemplateNodes,
-    styledImportName,
+    styledImportName ?? "",
+    cssImportNames,
   );
   if (selectorLocals.size === 0) {
     return [];
@@ -365,7 +372,7 @@ export function walkForImportsAndTemplates(
   }
   if (n.type === "TaggedTemplateExpression") {
     templates.push(n);
-    return; // No need to descend further
+    // Continue descending to find nested templates (e.g., css`` inside styled.div``)
   }
   for (const key of Object.keys(n)) {
     if (key === "type" || key === "start" || key === "end" || key === "loc") {
@@ -439,17 +446,51 @@ export function findStyledImportNameFromNodes(importNodes: AstNode[]): string | 
 }
 
 /**
+ * Find local names of `css` imported from styled-components.
+ * Handles aliased imports like `import { css as sc } from "styled-components"`.
+ */
+export function findCssImportNamesFromNodes(importNodes: AstNode[]): Set<string> {
+  const names = new Set<string>();
+  for (const node of importNodes) {
+    const sourceValue = (node.source as AstNode | undefined)?.value;
+    if (sourceValue !== "styled-components") {
+      continue;
+    }
+    const specifiers = node.specifiers as AstNode[] | undefined;
+    if (!specifiers) {
+      continue;
+    }
+    for (const spec of specifiers) {
+      if (spec.type === "ImportSpecifier") {
+        const importedName = getNodeName(spec.imported as AstNode | undefined);
+        if (importedName === "css") {
+          const localName = getNodeName(spec.local as AstNode | undefined);
+          if (localName) {
+            names.add(localName);
+          }
+        }
+      }
+    }
+  }
+  return names;
+}
+
+/**
  * Find local names of imported components used as selectors inside
- * styled-components template literals.
+ * styled-components template literals (both `styled` and `css` tagged templates).
  */
 export function findComponentSelectorLocalsFromNodes(
   templateNodes: AstNode[],
   styledImportName: string,
+  cssImportNames?: ReadonlySet<string>,
 ): Set<string> {
   const selectorLocals = new Set<string>();
 
   for (const node of templateNodes) {
-    if (!isStyledTag(node.tag as AstNode, styledImportName)) {
+    if (
+      !isStyledTag(node.tag as AstNode, styledImportName) &&
+      !isCssTag(node.tag as AstNode, cssImportNames)
+    ) {
       continue;
     }
 
@@ -522,6 +563,14 @@ function isStyledTag(tag: AstNode | undefined, styledName: string): boolean {
   }
 
   return false;
+}
+
+/** Check if a template tag is the `css` helper from styled-components. */
+function isCssTag(tag: AstNode | undefined, cssImportNames?: ReadonlySet<string>): boolean {
+  if (!tag || !cssImportNames || cssImportNames.size === 0) {
+    return false;
+  }
+  return tag.type === "Identifier" && typeof tag.name === "string" && cssImportNames.has(tag.name);
 }
 
 /** Check if a placeholder at the given position is in a CSS selector context. */

@@ -5,6 +5,7 @@
  * wrapper functions so the chosen element type drives allowed props.
  */
 import type { StyledDecl } from "../transform-types.js";
+import { getBridgeClassVar } from "../utilities/bridge-classname.js";
 import {
   collectInlineStylePropNames,
   type ExpressionKind,
@@ -256,7 +257,10 @@ export function emitIntrinsicPolymorphicWrappers(ctx: EmitIntrinsicContext): voi
         ),
       ]);
 
-      const { attrsInfo, staticClassNameExpr } = emitter.splitAttrsInfo(d.attrsInfo);
+      const { attrsInfo, staticClassNameExpr } = emitter.splitAttrsInfo(
+        d.attrsInfo,
+        getBridgeClassVar(d),
+      );
       const { attrsInfo: attrsInfoWithoutForwardedAsStatic, forwardedAsStaticFallback } =
         splitForwardedAsStaticAttrs({
           attrsInfo,

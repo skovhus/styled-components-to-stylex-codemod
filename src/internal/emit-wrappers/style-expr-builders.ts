@@ -48,36 +48,83 @@ export function splitExtraStyleArgs(
 // ---------------------------------------------------------------------------
 
 /**
+ * Build a static className expression combining an optional literal string
+ * and/or a bridge class variable identifier.
+ *
+ * Returns `undefined` when neither is provided.
+ */
+export function buildStaticClassNameExpr(
+  j: JSCodeshift,
+  staticClassName: string | undefined,
+  bridgeClassVar: string | undefined,
+): ExpressionKind | undefined {
+  if (staticClassName && bridgeClassVar) {
+    const raw = escapeTemplateRaw(`${staticClassName} `);
+    return j.templateLiteral(
+      [
+        j.templateElement({ raw, cooked: `${staticClassName} ` }, false),
+        j.templateElement({ raw: "", cooked: "" }, true),
+      ],
+      [j.identifier(bridgeClassVar)],
+    );
+  }
+  if (bridgeClassVar) {
+    return j.identifier(bridgeClassVar);
+  }
+  if (staticClassName) {
+    return j.literal(staticClassName) as ExpressionKind;
+  }
+  return undefined;
+}
+
+/**
  * Extracts a static className value (if present) from attrsInfo.staticAttrs
  * so it can be passed to the style merger separately, and returns the
  * remaining attrsInfo without that className entry.
+ *
+ * When `bridgeClassVar` is provided, it is used as an identifier expression
+ * for the bridge class name. If a static className also exists, a template
+ * literal combining both is produced.
  */
 export function splitAttrsInfo(
   j: JSCodeshift,
   attrsInfo: StyledDecl["attrsInfo"],
+  bridgeClassVar?: string,
 ): {
   attrsInfo: StyledDecl["attrsInfo"];
   staticClassNameExpr?: ExpressionKind;
 } {
   const className = attrsInfo?.staticAttrs?.className;
   if (!attrsInfo) {
-    return { attrsInfo, staticClassNameExpr: undefined };
+    return {
+      attrsInfo,
+      staticClassNameExpr: buildStaticClassNameExpr(j, undefined, bridgeClassVar),
+    };
   }
   const normalized = {
     ...attrsInfo,
     staticAttrs: attrsInfo.staticAttrs ?? {},
     conditionalAttrs: attrsInfo.conditionalAttrs ?? [],
   };
-  if (typeof className !== "string") {
+  const hasStaticClassName = typeof className === "string";
+  if (!hasStaticClassName && !bridgeClassVar) {
     return { attrsInfo: normalized, staticClassNameExpr: undefined };
   }
-  const { className: _omit, ...rest } = normalized.staticAttrs;
+
+  const strippedAttrsInfo = hasStaticClassName
+    ? (() => {
+        const { className: _omit, ...rest } = normalized.staticAttrs;
+        return { ...normalized, staticAttrs: rest };
+      })()
+    : normalized;
+
   return {
-    attrsInfo: {
-      ...normalized,
-      staticAttrs: rest,
-    },
-    staticClassNameExpr: j.literal(className) as ExpressionKind,
+    attrsInfo: strippedAttrsInfo,
+    staticClassNameExpr: buildStaticClassNameExpr(
+      j,
+      hasStaticClassName ? (className as string) : undefined,
+      bridgeClassVar,
+    ),
   };
 }
 
@@ -410,4 +457,13 @@ export function collectDestructurePropsFromStyleFns(
       destructureProps.push(prop);
     }
   }
+}
+
+// ---------------------------------------------------------------------------
+// Template literal escaping
+// ---------------------------------------------------------------------------
+
+/** Escape characters that are special inside template literal quasi strings. */
+function escapeTemplateRaw(s: string): string {
+  return s.replace(/\\|`|\$\{/g, "\\$&");
 }
