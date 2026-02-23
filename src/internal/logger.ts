@@ -208,7 +208,7 @@ export class Logger {
 
   private static collected: CollectedWarning[] = [];
   private static fileCount: number | null = null;
-  private static maxExamples = 15;
+  private static maxExamples = 3;
   private static loggedErrors = new WeakSet<Error>();
 
   private static writeWithSpacing(message: string, context?: unknown): void {
@@ -276,7 +276,7 @@ class LoggerReport {
   private readonly maxExamples: number;
   private fileCache = new Map<string, string[] | null>();
 
-  constructor(warnings: CollectedWarning[], fileCount: number | null, maxExamples = 15) {
+  constructor(warnings: CollectedWarning[], fileCount: number | null, maxExamples = 3) {
     this.warnings = warnings;
     this.fileCount = fileCount;
     this.maxExamples = maxExamples;
