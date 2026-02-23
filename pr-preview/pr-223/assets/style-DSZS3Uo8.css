@@ -110,22 +110,22 @@ body{font-family:-apple-system,BlinkMacSystemFont,Segoe UI,Roboto,Helvetica Neue
   inherits: false
 }
 
-@property --x-animationDelay {
-  syntax: "*";
-  inherits: false
-}
-
-@property --x-126kuz7 {
-  syntax: "*";
-  inherits: false
-}
-
 @property --x-1113oo7 {
   syntax: "*";
   inherits: false
 }
 
 @property --x-64unvl {
+  syntax: "*";
+  inherits: false
+}
+
+@property --x-animationDelay {
+  syntax: "*";
+  inherits: false
+}
+
+@property --x-126kuz7 {
   syntax: "*";
   inherits: false
 }
@@ -2233,7 +2233,7 @@ body{font-family:-apple-system,BlinkMacSystemFont,Segoe UI,Roboto,Helvetica Neue
   outline-offset: 5px;
 }
 
-.x1308hcw.x1308hcw:where(.x19pepp0:hover *):not(#\#):not(#\#):not(#\#), .xry1jez.xry1jez:where(.x1rnikca:hover *):not(#\#):not(#\#):not(#\#) {
+.xry1jez.xry1jez:where(.x1rnikca:hover *):not(#\#):not(#\#):not(#\#), .x1308hcw.x1308hcw:where(.x19pepp0:hover *):not(#\#):not(#\#):not(#\#) {
   background-color: #639;
 }
 
@@ -3249,7 +3249,7 @@ body{font-family:-apple-system,BlinkMacSystemFont,Segoe UI,Roboto,Helvetica Neue
   border-bottom-color: var(--settings-list-view-border-color);
 }
 
-.xzdg7oe:not(:only-child):not(#\#):not(#\#):not(#\#):not(#\#), .x14ums3o.x14ums3o:where(.x-default-marker:is(*) ~ *):not(#\#):not(#\#):not(#\#):not(#\#) {
+.x14ums3o.x14ums3o:where(.x-default-marker:is(*) ~ *):not(#\#):not(#\#):not(#\#):not(#\#), .xzdg7oe:not(:only-child):not(#\#):not(#\#):not(#\#):not(#\#) {
   border-bottom-style: solid;
 }
 
