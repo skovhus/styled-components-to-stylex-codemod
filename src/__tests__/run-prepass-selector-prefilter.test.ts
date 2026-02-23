@@ -49,6 +49,7 @@ describe("runPrepass selector prefilter", () => {
     const files = [
       fixture("consumer-basic.tsx"),
       fixture("consumer-aliased-import.tsx"),
+      fixture("consumer-css-helper-selector.tsx"),
       fixture("consumer-interpolated-pseudo.tsx"),
       fixture("consumer-multiline-import.tsx"),
       fixture("consumer-renamed-styled.tsx"),
