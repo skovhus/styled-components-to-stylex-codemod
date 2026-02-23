@@ -7,6 +7,8 @@
 export {
   generateBridgeClassName,
   bridgeExportName,
+  bridgeClassVarName,
+  getBridgeClassVar,
   extractBridgeComponentNames,
   hasBridgeGlobalSelectorExport,
   GLOBAL_SELECTOR_SUFFIX,
@@ -18,11 +20,12 @@ export {
 const GLOBAL_SELECTOR_SUFFIX = "GlobalSelector";
 
 /**
- * Regex matching bridge GlobalSelector export statements.
- * Captures the full export name (e.g., "FooGlobalSelector").
- * Global flag for matchAll usage.
+ * Regex matching bridge GlobalSelector export patterns (global for matchAll).
+ * Matches both:
+ *   - Old format: `export const XGlobalSelector = ".sc2sx-..."`
+ *   - New format: `` export const XGlobalSelector = `.${xBridgeClass}` ``
  */
-const BRIDGE_EXPORT_RE = /export\s+const\s+(\w+GlobalSelector)\s*=\s*["']\.sc2sx-/g;
+const BRIDGE_EXPORT_RE = /export\s+const\s+(\w+GlobalSelector)\s*=\s*(?:["']\.sc2sx-|`\.\$\{)/g;
 
 /* ── Public API ───────────────────────────────────────────────────────── */
 
@@ -73,6 +76,25 @@ function hasBridgeGlobalSelectorExport(source: string, globalSelectorName: strin
     }
   }
   return false;
+}
+
+/**
+ * Generate the internal const variable name for the bridge class value.
+ * E.g., "Foo" → "fooBridgeClass", "ScrollableDiv" → "scrollableDivBridgeClass"
+ */
+function bridgeClassVarName(componentName: string): string {
+  return `${componentName.charAt(0).toLowerCase()}${componentName.slice(1)}BridgeClass`;
+}
+
+/**
+ * If a declaration has a bridge className, return the internal const variable
+ * name that references it. Returns `undefined` when no bridge is needed.
+ */
+function getBridgeClassVar(decl: {
+  bridgeClassName?: string;
+  localName: string;
+}): string | undefined {
+  return decl.bridgeClassName ? bridgeClassVarName(decl.localName) : undefined;
 }
 
 /* ── Non-exported helpers ─────────────────────────────────────────────── */

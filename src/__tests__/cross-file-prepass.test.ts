@@ -17,6 +17,7 @@ import { transformWithWarnings } from "../transform.js";
 import { fixtureAdapter } from "./fixture-adapters.js";
 import {
   generateBridgeClassName,
+  bridgeClassVarName,
   bridgeExportName,
 } from "../internal/utilities/bridge-classname.js";
 import {
@@ -227,6 +228,20 @@ describe("scanCrossFileSelectors corner cases", () => {
     expect(usages).toHaveLength(1);
     expect(usages![0]!.localName).toBe("CollapseArrowIcon");
   });
+
+  it("detects selector inside nested css`` helper template", () => {
+    const info = scanCrossFileSelectors(
+      [fixture("consumer-css-helper-selector.tsx"), fixture("lib/collapse-arrow-icon.tsx")],
+      [],
+      resolver,
+    );
+
+    const usages = info.selectorUsages.get(fixture("consumer-css-helper-selector.tsx"));
+    expect(usages).toBeDefined();
+    expect(usages).toHaveLength(1);
+    expect(usages![0]!.localName).toBe("CollapseArrowIcon");
+    expect(usages![0]!.importedName).toBe("CollapseArrowIcon");
+  });
 });
 
 /* ── Cross-file transform (end-to-end) ───────────────────────────────── */
@@ -415,13 +430,17 @@ export const App = () => <CollapseArrowIcon />;
     expect(result.code).not.toBeNull();
     const code = result.code!;
 
-    // Should contain the bridge className on the component
+    // Should contain the bridge className value as an internal const
     const bridgeCn = generateBridgeClassName(absPath, "CollapseArrowIcon");
-    expect(code).toContain(bridgeCn);
+    const internalVar = bridgeClassVarName("CollapseArrowIcon");
+    expect(code).toContain(`const ${internalVar} = "${bridgeCn}"`);
 
-    // Should export a GlobalSelector variable
+    // Should reference the internal const in the className expression
+    expect(code).toContain(internalVar);
+
+    // Should export a GlobalSelector variable using template literal
     expect(code).toContain("export const CollapseArrowIconGlobalSelector");
-    expect(code).toContain(`.${bridgeCn}`);
+    expect(code).toContain(`\`.${`\${${internalVar}}`}\``);
 
     // Should have bridgeResults
     expect(result.bridgeResults).toBeDefined();

@@ -6,6 +6,7 @@
  */
 import type { JSCodeshift } from "jscodeshift";
 import type { StyledDecl } from "../transform-types.js";
+import { getBridgeClassVar } from "../utilities/bridge-classname.js";
 import {
   collectInlineStylePropNames,
   type ExpressionKind,
@@ -266,6 +267,7 @@ export function emitSimpleWithConfigWrappers(ctx: EmitIntrinsicContext): void {
             staticAttrs: d.attrsInfo?.staticAttrs ?? {},
             inlineStyleProps: (d.inlineStyleProps ?? []) as InlineStyleProp[],
             attrsAsTag: d.attrsInfo?.attrsAsTag,
+            bridgeClassVar: getBridgeClassVar(d),
           }),
           d,
         ),
@@ -289,7 +291,10 @@ export function emitSimpleWithConfigWrappers(ctx: EmitIntrinsicContext): void {
     ]);
 
     // Use the style merger helper
-    const { attrsInfo, staticClassNameExpr } = emitter.splitAttrsInfo(d.attrsInfo);
+    const { attrsInfo, staticClassNameExpr } = emitter.splitAttrsInfo(
+      d.attrsInfo,
+      getBridgeClassVar(d),
+    );
     const merging = emitStyleMerging({
       j,
       emitter,
@@ -886,7 +891,10 @@ export function emitSimpleExportedIntrinsicWrappers(ctx: EmitIntrinsicContext): 
       ]);
 
       // Use the style merger helper
-      const { attrsInfo, staticClassNameExpr } = emitter.splitAttrsInfo(d.attrsInfo);
+      const { attrsInfo, staticClassNameExpr } = emitter.splitAttrsInfo(
+        d.attrsInfo,
+        getBridgeClassVar(d),
+      );
       const { attrsInfo: attrsInfoWithoutForwardedAsStatic, forwardedAsStaticFallback } =
         splitForwardedAsStaticAttrs({
           attrsInfo,
@@ -982,6 +990,7 @@ export function emitSimpleExportedIntrinsicWrappers(ctx: EmitIntrinsicContext): 
           staticAttrs: d.attrsInfo?.staticAttrs ?? {},
           inlineStyleProps: (d.inlineStyleProps ?? []) as InlineStyleProp[],
           attrsAsTag: d.attrsInfo?.attrsAsTag,
+          bridgeClassVar: getBridgeClassVar(d),
         }),
         d,
       ),

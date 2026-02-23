@@ -971,6 +971,8 @@ export class WrapperEmitter {
     inlineStyleProps?: InlineStyleProp[];
     /** Component reference from `.attrs({ as: Component })` — overrides the rendered tag. */
     attrsAsTag?: string;
+    /** Bridge class variable name to reference in the className expression. */
+    bridgeClassVar?: string;
   }): ASTNode[] {
     const {
       localName,
@@ -990,6 +992,7 @@ export class WrapperEmitter {
       staticAttrs = {},
       inlineStyleProps = [],
       attrsAsTag,
+      bridgeClassVar,
     } = args;
 
     const { j } = this;
@@ -1161,6 +1164,7 @@ export class WrapperEmitter {
       const { className: _omitClassName, ...rest } = staticAttrs;
       return rest;
     })();
+    const staticClassNameExpr = seb.buildStaticClassNameExpr(j, staticClassName, bridgeClassVar);
     const merging = emitStyleMerging({
       j,
       emitter: this,
@@ -1170,7 +1174,7 @@ export class WrapperEmitter {
       allowClassNameProp,
       allowStyleProp,
       inlineStyleProps,
-      staticClassNameExpr: staticClassName ? j.literal(staticClassName) : undefined,
+      staticClassNameExpr,
     });
 
     const jsxAttrs: Array<JSXAttribute | JSXSpreadAttribute> = [];
@@ -1420,8 +1424,8 @@ export class WrapperEmitter {
     return seb.splitExtraStyleArgs(this.j, this.stylesIdentifier, d);
   }
 
-  splitAttrsInfo(attrsInfo: StyledDecl["attrsInfo"]) {
-    return seb.splitAttrsInfo(this.j, attrsInfo);
+  splitAttrsInfo(attrsInfo: StyledDecl["attrsInfo"], bridgeClassVar?: string) {
+    return seb.splitAttrsInfo(this.j, attrsInfo, bridgeClassVar);
   }
 
   buildVariantDimensionLookups(args: {

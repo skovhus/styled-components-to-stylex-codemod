@@ -171,14 +171,6 @@ export function analyzeBeforeEmitStep(ctx: TransformContext): StepResult {
     if (isBridgeComponent) {
       const absPath = pathResolve(file.path);
       decl.bridgeClassName = generateBridgeClassName(absPath, decl.localName);
-      if (!decl.attrsInfo) {
-        decl.attrsInfo = { staticAttrs: {}, conditionalAttrs: [] };
-      }
-      const existing =
-        typeof decl.attrsInfo.staticAttrs.className === "string"
-          ? decl.attrsInfo.staticAttrs.className + " "
-          : "";
-      decl.attrsInfo.staticAttrs.className = existing + decl.bridgeClassName;
     }
   }
 

@@ -27,6 +27,7 @@ import {
   categorizeSelectorUsages,
   deduplicateAndResolve,
   findComponentSelectorLocalsFromNodes,
+  findCssImportNamesFromNodes,
   findStyledImportNameFromNodes,
   walkForImportsAndTemplates,
   type CrossFileInfo,
@@ -57,6 +58,7 @@ interface PrepassResult {
 interface AstCacheEntry {
   importMap: Map<string, ImportEntry>;
   styledImportName: string | undefined;
+  cssImportNames: Set<string>;
   selectorLocals: Set<string>;
 }
 
@@ -614,11 +616,13 @@ function scanFileForSelectorsAst(
 
   let importMap: Map<string, ImportEntry>;
   let styledImportName: string | undefined;
+  let cssImportNames: Set<string>;
   let selectorLocals: Set<string>;
 
   if (cached) {
     importMap = cached.importMap;
     styledImportName = cached.styledImportName;
+    cssImportNames = cached.cssImportNames;
     selectorLocals = cached.selectorLocals;
   } else {
     let ast: AstNode;
@@ -640,16 +644,26 @@ function scanFileForSelectorsAst(
 
     importMap = buildImportMapFromNodes(importNodes);
     styledImportName = findStyledImportNameFromNodes(importNodes);
-    selectorLocals = styledImportName
-      ? findComponentSelectorLocalsFromNodes(taggedTemplateNodes, styledImportName)
-      : new Set();
+    cssImportNames = findCssImportNamesFromNodes(importNodes);
+    selectorLocals =
+      styledImportName || cssImportNames.size > 0
+        ? findComponentSelectorLocalsFromNodes(
+            taggedTemplateNodes,
+            styledImportName ?? "",
+            cssImportNames,
+          )
+        : new Set();
 
     if (cache && hash) {
-      cache.set(hash, { importMap, styledImportName, selectorLocals });
+      cache.set(hash, { importMap, styledImportName, cssImportNames, selectorLocals });
     }
   }
 
-  if (importMap.size === 0 || !styledImportName || selectorLocals.size === 0) {
+  if (
+    importMap.size === 0 ||
+    (!styledImportName && cssImportNames.size === 0) ||
+    selectorLocals.size === 0
+  ) {
     return [];
   }
 

@@ -4,6 +4,7 @@
  */
 import type { ASTNode, Property } from "jscodeshift";
 import type { StyledDecl } from "../transform-types.js";
+import { getBridgeClassVar } from "../utilities/bridge-classname.js";
 import { emitStyleMerging } from "./style-merger.js";
 import { withLeadingComments } from "./comments.js";
 import {
@@ -519,7 +520,10 @@ export function emitComponentWrappers(emitter: WrapperEmitter): {
       jsxTagName = j.jsxIdentifier(renderedComponent);
     }
 
-    const { attrsInfo, staticClassNameExpr } = emitter.splitAttrsInfo(d.attrsInfo);
+    const { attrsInfo, staticClassNameExpr } = emitter.splitAttrsInfo(
+      d.attrsInfo,
+      getBridgeClassVar(d),
+    );
     const defaultAttrs = attrsInfo?.defaultAttrs ?? [];
     const staticAttrs = attrsInfo?.staticAttrs ?? {};
     const needsSxVar =
