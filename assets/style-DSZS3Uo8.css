@@ -80,12 +80,12 @@ body{font-family:-apple-system,BlinkMacSystemFont,Segoe UI,Roboto,Helvetica Neue
   inherits: false
 }
 
-@property --x---component-width {
+@property --x-flexShrink {
   syntax: "*";
   inherits: false
 }
 
-@property --x-flexShrink {
+@property --x---component-width {
   syntax: "*";
   inherits: false
 }
@@ -2256,6 +2256,18 @@ body{font-family:-apple-system,BlinkMacSystemFont,Segoe UI,Roboto,Helvetica Neue
   accent-color: #bf4f74;
 }
 
+.x1ogqw4i.x1ogqw4i:where(.x-default-marker:is(*) ~ *):not(#\#):not(#\#):not(#\#) {
+  background-color: #0f0;
+}
+
+.x1o6lflp.x1o6lflp:where(.x-default-marker:is(*) ~ *):not(#\#):not(#\#):not(#\#) {
+  color: red;
+}
+
+.x1kk4a09.x1kk4a09:where(.x-default-marker:is(*) ~ *):not(#\#):not(#\#):not(#\#) {
+  color: var(--xvyasvk);
+}
+
 .x1ke1ukj[data-visible="true"]:not(#\#):not(#\#):not(#\#) {
   opacity: 1;
 }
@@ -3212,16 +3224,40 @@ body{font-family:-apple-system,BlinkMacSystemFont,Segoe UI,Roboto,Helvetica Neue
   width: var(--x-width);
 }
 
+.xua4m1z.xua4m1z:where(.x-default-marker:is(*) ~ *):not(#\#):not(#\#):not(#\#):not(#\#) {
+  border-bottom-color: gray;
+}
+
 .x1lycu2g:not(:only-child):not(#\#):not(#\#):not(#\#):not(#\#) {
   border-bottom-color: var(--settings-list-view-border-color);
 }
 
-.xzdg7oe:not(:only-child):not(#\#):not(#\#):not(#\#):not(#\#) {
+.xzdg7oe:not(:only-child):not(#\#):not(#\#):not(#\#):not(#\#), .x14ums3o.x14ums3o:where(.x-default-marker:is(*) ~ *):not(#\#):not(#\#):not(#\#):not(#\#) {
   border-bottom-style: solid;
+}
+
+.x1ecct6m.x1ecct6m:where(.x-default-marker:is(*) ~ *):not(#\#):not(#\#):not(#\#):not(#\#) {
+  border-bottom-width: 2px;
 }
 
 .x16mddsm:not(:only-child):not(#\#):not(#\#):not(#\#):not(#\#) {
   border-bottom-width: var(--xdppooy);
+}
+
+.x15otxcs.x15otxcs:where(.x-default-marker:is(*) ~ *):not(#\#):not(#\#):not(#\#):not(#\#) {
+  border-top-color: gray;
+}
+
+.xm35quw.xm35quw:where(.x-default-marker:is(*) ~ *):not(#\#):not(#\#):not(#\#):not(#\#) {
+  border-top-style: solid;
+}
+
+.x1nq1fro.x1nq1fro:where(.x-default-marker:is(*) ~ *):not(#\#):not(#\#):not(#\#):not(#\#) {
+  border-top-width: 1px;
+}
+
+.x6gnr5x.x6gnr5x:where(.x-default-marker:is(*) ~ *):not(#\#):not(#\#):not(#\#):not(#\#) {
+  margin-top: 16px;
 }
 
 .xygu3y4:hover:not(#\#):not(#\#):not(#\#):not(#\#) {
@@ -3361,6 +3397,10 @@ body{font-family:-apple-system,BlinkMacSystemFont,Segoe UI,Roboto,Helvetica Neue
 @media (width >= 768px) {
   .xowshl7.xowshl7:not(#\#):not(#\#):not(#\#):not(#\#) {
     width: auto;
+  }
+
+  .x18so4qo.x18so4qo.x18so4qo:where(.x-default-marker:is(*) ~ *):not(#\#):not(#\#):not(#\#):not(#\#) {
+    margin-top: 16px;
   }
 }
 
