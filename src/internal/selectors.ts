@@ -86,6 +86,8 @@ export function parseSelector(selector: string): ParsedSelector {
         };
       }
       if (pseudoElementValues.length > 0) {
+        // Sort to produce deterministic output regardless of source order
+        pseudoElementValues.sort();
         return { kind: "pseudoElements", elements: pseudoElementValues };
       }
       return { kind: "pseudo", pseudos };

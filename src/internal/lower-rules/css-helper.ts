@@ -364,6 +364,13 @@ export function createCssHelperResolver(args: {
         }
       }
 
+      // Snapshot existing keys so we only duplicate NEW properties set by this rule
+      // (not stale state accumulated from earlier rules).
+      const preRuleKeys =
+        pseudoElementTargets && pseudoElementTargets.length > 1
+          ? new Set(Object.keys(pseudoElementTargets[0]!.obj))
+          : null;
+
       for (const d of rule.declarations) {
         if (!d.property) {
           return bail("Conditional `css` block: missing CSS property name");
@@ -555,12 +562,16 @@ export function createCssHelperResolver(args: {
         }
       }
 
-      // For comma-separated pseudo-elements, duplicate declarations from the
-      // first target to all remaining targets.
-      if (pseudoElementTargets && pseudoElementTargets.length > 1) {
+      // For comma-separated pseudo-elements, duplicate only the declarations
+      // added by THIS rule (not stale state from earlier rules) to remaining targets.
+      if (pseudoElementTargets && pseudoElementTargets.length > 1 && preRuleKeys) {
         const source = pseudoElementTargets[0]!.obj;
-        for (let i = 1; i < pseudoElementTargets.length; i++) {
-          Object.assign(pseudoElementTargets[i]!.obj, source);
+        for (const key of Object.keys(source)) {
+          if (!preRuleKeys.has(key)) {
+            for (let i = 1; i < pseudoElementTargets.length; i++) {
+              pseudoElementTargets[i]!.obj[key] = source[key];
+            }
+          }
         }
       }
     }

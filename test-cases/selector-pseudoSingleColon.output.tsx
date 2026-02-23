@@ -18,16 +18,6 @@ const styles = stylex.create({
     height: "16px",
     backgroundColor: "#bf4f74",
     borderRadius: "2px",
-    "::before": {
-      content: '""',
-      position: "absolute",
-      left: 0,
-      height: "8px",
-      width: "48px",
-      backgroundColor: "rgba(191, 79, 116, 0.5)",
-      zIndex: 1,
-      top: "-12px",
-    },
     "::after": {
       content: '""',
       position: "absolute",
@@ -37,6 +27,16 @@ const styles = stylex.create({
       backgroundColor: "rgba(191, 79, 116, 0.5)",
       zIndex: 1,
       bottom: "-12px",
+    },
+    "::before": {
+      content: '""',
+      position: "absolute",
+      left: 0,
+      height: "8px",
+      width: "48px",
+      backgroundColor: "rgba(191, 79, 116, 0.5)",
+      zIndex: 1,
+      top: "-12px",
     },
   },
 });
