@@ -12,7 +12,7 @@ import {
   type BridgeComponentResult,
 } from "../transform-types.js";
 import { TransformContext } from "../transform-context.js";
-import { bridgeExportName } from "../utilities/bridge-classname.js";
+import { bridgeClassVarName, bridgeExportName } from "../utilities/bridge-classname.js";
 
 export function emitBridgeExportsStep(ctx: TransformContext): StepResult {
   const styledDecls = ctx.styledDecls as StyledDecl[] | undefined;
@@ -31,14 +31,27 @@ export function emitBridgeExportsStep(ctx: TransformContext): StepResult {
   const bridgeResults: BridgeComponentResult[] = [];
 
   for (const decl of bridgeDecls) {
-    const varName = bridgeExportName(decl.localName);
+    const exportVarName = bridgeExportName(decl.localName);
+    const internalVarName = bridgeClassVarName(decl.localName);
     const className = decl.bridgeClassName;
 
-    // Build: export const FooGlobalSelector = ".sc2sx-Foo-a1b2c3";
-    const declaration = j.variableDeclaration("const", [
-      j.variableDeclarator(j.identifier(varName), j.stringLiteral(`.${className}`)),
+    // Build: const fooBridgeClass = "sc2sx-Foo-a1b2c3";
+    const internalDecl = j.variableDeclaration("const", [
+      j.variableDeclarator(j.identifier(internalVarName), j.stringLiteral(className)),
     ]);
-    const exportDecl = j.exportNamedDeclaration(declaration);
+
+    // Build: export const FooGlobalSelector = `.${fooBridgeClass}`;
+    const templateLiteral = j.templateLiteral(
+      [
+        j.templateElement({ raw: ".", cooked: "." }, false),
+        j.templateElement({ raw: "", cooked: "" }, true),
+      ],
+      [j.identifier(internalVarName)],
+    );
+    const exportDeclaration = j.variableDeclaration("const", [
+      j.variableDeclarator(j.identifier(exportVarName), templateLiteral),
+    ]);
+    const exportDecl = j.exportNamedDeclaration(exportDeclaration);
 
     // Add JSDoc deprecation comment
     (exportDecl as any).comments = [
@@ -51,13 +64,14 @@ export function emitBridgeExportsStep(ctx: TransformContext): StepResult {
 
     // Insert at the end of the program body
     const body = root.find(j.Program).get().node.body;
+    body.push(internalDecl);
     body.push(exportDecl);
 
     bridgeResults.push({
       componentName: decl.localName,
       exportName: ctx.exportedComponents?.get(decl.localName)?.exportName,
       className,
-      globalSelectorVarName: varName,
+      globalSelectorVarName: exportVarName,
     });
   }
 

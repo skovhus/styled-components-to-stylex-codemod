@@ -5,6 +5,7 @@
  * AST for the remaining props.
  */
 import type { StyledDecl } from "../transform-types.js";
+import { getBridgeClassVar } from "../utilities/bridge-classname.js";
 import { buildStyleFnConditionExpr } from "../utilities/jscodeshift-utils.js";
 import { type ExpressionKind, type InlineStyleProp, type WrapperPropDefaults } from "./types.js";
 import type { JsxAttr, StatementKind } from "./wrapper-emitter.js";
@@ -512,7 +513,10 @@ export function emitShouldForwardPropWrappers(ctx: EmitIntrinsicContext): void {
         ? buildPrefixCleanupStatements(j, restId, dropPrefix)
         : null;
 
-      const { attrsInfo, staticClassNameExpr } = emitter.splitAttrsInfo(d.attrsInfo);
+      const { attrsInfo, staticClassNameExpr } = emitter.splitAttrsInfo(
+        d.attrsInfo,
+        getBridgeClassVar(d),
+      );
       const { attrsInfo: attrsInfoWithoutForwardedAsStatic, forwardedAsStaticFallback } =
         splitForwardedAsStaticAttrs({
           attrsInfo,
