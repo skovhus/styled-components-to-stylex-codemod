@@ -143,6 +143,7 @@ export function createCssHelperConditionalHandler(ctx: CssHelperConditionalConte
     resolverImports,
     componentInfo,
     handlerContext,
+    warnings,
   };
 
   return (d: any): boolean => {
@@ -931,6 +932,7 @@ export function createCssHelperConditionalHandler(ctx: CssHelperConditionalConte
         resolverImports,
         componentInfo,
         handlerContext,
+        warnings,
       });
       if (handled) {
         return true;
@@ -1430,6 +1432,7 @@ type BlockThemeConditionalArgs = Pick<
   | "isCssHelperTaggedTemplate"
   | "isPlainTemplateLiteral"
   | "resolveStaticCssBlock"
+  | "warnings"
 > & {
   conditional: { test: ExpressionKind; consequent: ExpressionKind; alternate: ExpressionKind };
   paramName: string | null;
@@ -1464,6 +1467,7 @@ function tryResolveBlockLevelThemeConditional(args: BlockThemeConditionalArgs): 
     resolverImports,
     componentInfo,
     handlerContext,
+    warnings,
   } = args;
 
   const cons = conditional.consequent;
@@ -1481,6 +1485,7 @@ function tryResolveBlockLevelThemeConditional(args: BlockThemeConditionalArgs): 
     resolverImports,
     componentInfo: componentInfo as TemplateLiteralContext["componentInfo"],
     handlerContext,
+    warnings,
   };
 
   const resolveTemplateNode = (

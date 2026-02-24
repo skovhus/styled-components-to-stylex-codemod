@@ -28,6 +28,8 @@ import { buildTemplateWithStaticParts } from "./inline-styles.js";
 import { literalToStaticValue } from "./types.js";
 import { cssValueToJs } from "../transform/helpers.js";
 import type { ExpressionKind } from "./decl-types.js";
+import type { WarningLog } from "../logger.js";
+import { mergeMediaIntoStyles } from "./utils.js";
 
 type ImportMeta = { importedName: string; source: ImportSource };
 
@@ -75,6 +77,7 @@ export type TemplateLiteralContext = {
   resolverImports: Map<string, ImportSpec>;
   componentInfo: ComponentInfo;
   handlerContext: InternalHandlerContext;
+  warnings?: WarningLog[];
 };
 
 export function resolveTemplateLiteralBranch(
@@ -106,15 +109,36 @@ export function resolveTemplateLiteralBranch(
   const style: Record<string, unknown> = {};
   const dynamicEntries: TemplateDynamicEntry[] = [];
   const inlineEntries: TemplateInlineEntry[] = [];
+  // Track @media values per property: mediaQuery → prop → value
+  const mediaStyles = new Map<string, Record<string, unknown>>();
 
   for (const rule of rules) {
-    if (rule.atRuleStack.length > 0) {
+    const media = rule.atRuleStack.find((a) => a.startsWith("@media"));
+    // Only support @media at-rules; bail on others (@supports, @container, etc.)
+    if (rule.atRuleStack.length > 0 && !media) {
+      ctx.warnings?.push({
+        severity: "warning",
+        type: "CSS block contains unsupported at-rule (only @media is supported; @supports, @container, etc. require manual handling)",
+        loc: null,
+      });
       return null;
     }
     const selector = (rule.selector ?? "").trim();
     if (selector !== "&") {
       return null;
     }
+
+    // Helper to set a value into the correct target (base style or media-scoped)
+    const setStyleValue = (prop: string, value: unknown): void => {
+      if (media) {
+        const target = mediaStyles.get(media) ?? {};
+        mediaStyles.set(media, target);
+        target[prop] = value;
+      } else {
+        style[prop] = value;
+      }
+    };
+
     for (const d of rule.declarations) {
       if (!d.property) {
         return null;
@@ -130,7 +154,7 @@ export function resolveTemplateLiteralBranch(
               value = `"${value}"`;
             }
           }
-          style[mapped.prop] = value;
+          setStyleValue(mapped.prop, value);
         }
         continue;
       }
@@ -227,9 +251,15 @@ export function resolveTemplateLiteralBranch(
             ? expressions[0]
             : j.templateLiteral(quasis, expressions);
         for (const mapped of cssDeclarationToStylexDeclarations(d)) {
-          style[mapped.prop] = styleValue;
+          setStyleValue(mapped.prop, styleValue);
         }
         continue;
+      }
+
+      // Dynamic entries (prop-based) inside @media are not supported —
+      // the downstream style function machinery doesn't handle nested media objects
+      if (media) {
+        return null;
       }
 
       if (slotParts.length !== 1) {
@@ -286,6 +316,10 @@ export function resolveTemplateLiteralBranch(
       }
     }
   }
+
+  // Merge @media values into the base style as nested StyleX objects
+  mergeMediaIntoStyles(style, mediaStyles);
+
   return { style, dynamicEntries, inlineEntries };
 }
 
