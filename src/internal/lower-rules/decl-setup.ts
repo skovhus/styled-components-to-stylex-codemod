@@ -11,6 +11,7 @@ import { createCssHelperHandlers } from "./css-helper-handlers.js";
 import type { ExpressionKind, StyleFnFromPropsEntry, TestInfo } from "./decl-types.js";
 import { createTypeInferenceHelpers, ensureShouldForwardPropDrop } from "./types.js";
 import { createCssHelperConditionalHandler } from "./css-helper-conditional.js";
+import { mergeMediaIntoStyles } from "./utils.js";
 import { createValuePatternHandlers } from "./value-patterns.js";
 import { createVariantApplier } from "./variant-utils.js";
 import type { LowerRulesState } from "./state.js";
@@ -196,8 +197,17 @@ export function createDeclProcessingState(state: LowerRulesState, decl: StyledDe
       rawCss: wrappedRawCss,
     });
     const out: Record<string, unknown> = {};
+    // Track @media values per property: mediaQuery → prop → value
+    const mediaStyles = new Map<string, Record<string, unknown>>();
     for (const rule of rules) {
-      if (rule.atRuleStack.length > 0) {
+      const media = rule.atRuleStack.find((a) => a.startsWith("@media"));
+      // Only support @media at-rules; bail on others (@supports, @container, etc.)
+      if (rule.atRuleStack.length > 0 && !media) {
+        warnings.push({
+          severity: "warning",
+          type: "CSS block contains unsupported at-rule (only @media is supported; @supports, @container, etc. require manual handling)",
+          loc: decl.loc,
+        });
         return null;
       }
       const selector = (rule.selector ?? "").trim();
@@ -221,10 +231,18 @@ export function createDeclProcessingState(state: LowerRulesState, decl: StyledDe
               value = `"${value}"`;
             }
           }
-          out[mapped.prop] = value;
+          if (media) {
+            const target = mediaStyles.get(media) ?? {};
+            mediaStyles.set(media, target);
+            target[mapped.prop] = value;
+          } else {
+            out[mapped.prop] = value;
+          }
         }
       }
     }
+    // Merge @media values into the output as nested StyleX objects
+    mergeMediaIntoStyles(out, mediaStyles);
     return out;
   };
 

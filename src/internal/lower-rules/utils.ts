@@ -5,6 +5,23 @@
 import { isAstNode } from "../utilities/jscodeshift-utils.js";
 
 /**
+ * Merges tracked @media values into a base style object as nested StyleX objects.
+ * Each property that has media-scoped values is wrapped in:
+ * `{ default: baseValue, "@media (...)": mediaValue }`
+ */
+export function mergeMediaIntoStyles(
+  base: Record<string, unknown>,
+  mediaStyles: Map<string, Record<string, unknown>>,
+): void {
+  for (const [mediaQuery, mediaStyle] of mediaStyles) {
+    for (const [prop, mediaValue] of Object.entries(mediaStyle)) {
+      const baseValue = base[prop];
+      base[prop] = { default: baseValue ?? null, [mediaQuery]: mediaValue };
+    }
+  }
+}
+
+/**
  * Recursively merges style objects, combining nested objects rather than overwriting.
  *
  * Note: Security scanners may flag this as prototype pollution, but this is a false positive.

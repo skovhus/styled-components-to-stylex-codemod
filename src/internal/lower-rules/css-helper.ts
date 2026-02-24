@@ -582,11 +582,19 @@ export function createCssHelperResolver(args: {
             ? getMemberPathFromIdentifier(expr as any, paramName)
             : null;
         if (!allowDynamicValues || !propPath || propPath.length !== 1) {
-          return null;
+          return bail(
+            "Conditional `css` block: dynamic interpolation could not be resolved to a single component prop",
+            { property: d.property },
+            exprLoc,
+          );
         }
         const jsxProp = propPath[0]!;
         if (jsxProp === "theme") {
-          return null;
+          return bail(
+            "Conditional `css` block: failed to parse expression",
+            { property: d.property },
+            exprLoc,
+          );
         }
         for (const mapped of cssDeclarationToStylexDeclarations(d)) {
           const key = `${jsxProp}:${mapped.prop}`;
