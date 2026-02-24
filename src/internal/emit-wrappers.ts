@@ -78,6 +78,9 @@ export function emitWrappers(args: {
     if (out.needsReactTypeImport) {
       needsReactTypeImport = true;
     }
+    if (out.needsUseThemeImport) {
+      needsUseThemeImport = true;
+    }
   }
 
   insertEmittedWrappers({

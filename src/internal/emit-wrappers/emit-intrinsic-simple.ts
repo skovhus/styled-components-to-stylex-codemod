@@ -145,7 +145,7 @@ export function emitSimpleWithConfigWrappers(ctx: EmitIntrinsicContext): void {
       styleArgs,
       j,
       stylesIdentifier,
-      ctx,
+      () => ctx.markNeedsUseThemeImport(),
     );
 
     // Handle pseudo-alias selectors (e.g., &:${highlight})
@@ -688,7 +688,7 @@ export function emitSimpleExportedIntrinsicWrappers(ctx: EmitIntrinsicContext): 
       styleArgs,
       j,
       stylesIdentifier,
-      ctx,
+      () => ctx.markNeedsUseThemeImport(),
     );
 
     // Handle pseudo-alias selectors (e.g., &:${highlight})
@@ -1301,17 +1301,17 @@ function collectPropsFromPropsMemberAccess(node: ExpressionKind, out: Set<string
 }
 
 /** Appends theme boolean conditional style args (e.g., `theme.isDark ? styles.boxDark : styles.boxLight`) to `styleArgs`. */
-function appendThemeBooleanStyleArgs(
+export function appendThemeBooleanStyleArgs(
   hooks: StyledDecl["needsUseThemeHook"],
   styleArgs: ExpressionKind[],
   j: JSCodeshift,
   stylesIdentifier: string,
-  ctx: EmitIntrinsicContext,
+  markNeedsUseThemeImport: () => void,
 ): boolean {
   if (!hooks || hooks.length === 0) {
     return false;
   }
-  ctx.markNeedsUseThemeImport();
+  markNeedsUseThemeImport();
   for (const entry of hooks) {
     // Skip entries used only for triggering useTheme import/declaration
     // (e.g., when the theme conditional uses inline styles instead of style buckets)
@@ -1384,7 +1384,7 @@ export function appendPseudoAliasStyleArgs(
 }
 
 /** Builds a `const theme = useTheme();` variable declaration. */
-function buildUseThemeDeclaration(j: JSCodeshift): StatementKind {
+export function buildUseThemeDeclaration(j: JSCodeshift): StatementKind {
   return j.variableDeclaration("const", [
     j.variableDeclarator(j.identifier("theme"), j.callExpression(j.identifier("useTheme"), [])),
   ]);
