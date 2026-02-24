@@ -1,0 +1,3 @@
+import{j as o,c as s}from"./index-ci0uDiW-.js";import{a as i}from"./helpers-DK12XOIO.js";const p=s.div`
+  ${t=>t.theme.isDark?"":`padding: ${i()};`}
+`,m=()=>o.jsx(p,{});export{m as App};

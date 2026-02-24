@@ -70,6 +70,16 @@ body{font-family:-apple-system,BlinkMacSystemFont,Segoe UI,Roboto,Helvetica Neue
   inherits: false
 }
 
+@property --x-fontSize {
+  syntax: "*";
+  inherits: false
+}
+
+@property --x-lineHeight {
+  syntax: "*";
+  inherits: false
+}
+
 @property --x-19zvkyr {
   syntax: "*";
   inherits: false
@@ -91,16 +101,6 @@ body{font-family:-apple-system,BlinkMacSystemFont,Segoe UI,Roboto,Helvetica Neue
 }
 
 @property --x-maxHeight {
-  syntax: "*";
-  inherits: false
-}
-
-@property --x-fontSize {
-  syntax: "*";
-  inherits: false
-}
-
-@property --x-lineHeight {
   syntax: "*";
   inherits: false
 }
@@ -219,10 +219,10 @@ body{font-family:-apple-system,BlinkMacSystemFont,Segoe UI,Roboto,Helvetica Neue
   }
 }
 
-@keyframes x18b0m8j-B {
+@keyframes x1q428r6-B {
   0% {
     opacity: 0;
-    transform: scale(.5);
+    transform: scale(0);
   }
 
   100% {
@@ -231,10 +231,10 @@ body{font-family:-apple-system,BlinkMacSystemFont,Segoe UI,Roboto,Helvetica Neue
   }
 }
 
-@keyframes x1q428r6-B {
+@keyframes x18b0m8j-B {
   0% {
     opacity: 0;
-    transform: scale(0);
+    transform: scale(.5);
   }
 
   100% {
@@ -253,10 +253,10 @@ body{font-family:-apple-system,BlinkMacSystemFont,Segoe UI,Roboto,Helvetica Neue
   }
 }
 
-@keyframes x11hjej0-B {
+@keyframes xo1myv-B {
   from {
     opacity: 0;
-    transform: translateY(20px);
+    transform: translateY(-20px);
   }
 
   to {
@@ -265,10 +265,10 @@ body{font-family:-apple-system,BlinkMacSystemFont,Segoe UI,Roboto,Helvetica Neue
   }
 }
 
-@keyframes xo1myv-B {
+@keyframes x11hjej0-B {
   from {
     opacity: 0;
-    transform: translateY(-20px);
+    transform: translateY(20px);
   }
 
   to {
@@ -506,6 +506,12 @@ body{font-family:-apple-system,BlinkMacSystemFont,Segoe UI,Roboto,Helvetica Neue
 @media (width <= 768px) {
   .xikmuw8.xikmuw8:not(#\#) {
     padding: 10px;
+  }
+}
+
+@media (width >= 768px) {
+  .x1ko3yv6.x1ko3yv6:not(#\#) {
+    padding: 12px;
   }
 }
 
@@ -2610,9 +2616,25 @@ body{font-family:-apple-system,BlinkMacSystemFont,Segoe UI,Roboto,Helvetica Neue
   }
 }
 
+@media (width >= 768px) {
+  .xd6clff.xd6clff:not(#\#):not(#\#):not(#\#) {
+    font-size: 14px;
+  }
+
+  .xdb7hz3.xdb7hz3:not(#\#):not(#\#):not(#\#) {
+    font-size: 16px;
+  }
+}
+
 @media (width >= 1024px) {
   .x3fsydd.x3fsydd:not(#\#):not(#\#):not(#\#) {
     font-size: 2.5rem;
+  }
+}
+
+@media (width >= 768px) {
+  .x1wvhpy5.x1wvhpy5:not(#\#):not(#\#):not(#\#) {
+    font-size: 24px;
   }
 }
 
