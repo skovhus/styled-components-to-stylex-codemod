@@ -211,6 +211,9 @@ export function handleInterpolatedDeclaration(args: InterpolatedDeclarationConte
       if (!resolved) {
         return false;
       }
+      // Preserve static text surrounding the interpolation slot (e.g. "0 0 0 1px ${theme} , ...")
+      const { prefix, suffix } = extractStaticParts(d.value);
+      const finalValue = buildTemplateWithStaticParts(j, resolved, prefix, suffix);
       for (const out of cssDeclarationToStylexDeclarations(d)) {
         perPropPseudo[out.prop] ??= {};
         const existing = perPropPseudo[out.prop]!;
@@ -248,7 +251,7 @@ export function handleInterpolatedDeclaration(args: InterpolatedDeclarationConte
           }
         }
         for (const ps of pseudos) {
-          existing[ps] = resolved;
+          existing[ps] = finalValue;
         }
       }
       return true;
