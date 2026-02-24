@@ -670,7 +670,7 @@ function emitVariantDimensionDecl(j: any, dimension: VariantDimension): any {
 // ---------------------------------------------------------------------------
 
 /** Mapping from CSS shorthand to the longhands that conflict with it */
-const SHORTHAND_LONGHANDS: Record<string, { physical: string[]; logical: string[] }> = {
+export const SHORTHAND_LONGHANDS: Record<string, { physical: string[]; logical: string[] }> = {
   margin: {
     physical: ["marginTop", "marginRight", "marginBottom", "marginLeft"],
     logical: ["marginBlock", "marginInline"],
@@ -678,6 +678,19 @@ const SHORTHAND_LONGHANDS: Record<string, { physical: string[]; logical: string[
   padding: {
     physical: ["paddingTop", "paddingRight", "paddingBottom", "paddingLeft"],
     logical: ["paddingBlock", "paddingInline"],
+  },
+  scrollMargin: {
+    physical: ["scrollMarginTop", "scrollMarginRight", "scrollMarginBottom", "scrollMarginLeft"],
+    logical: ["scrollMarginBlock", "scrollMarginInline"],
+  },
+  scrollPadding: {
+    physical: [
+      "scrollPaddingTop",
+      "scrollPaddingRight",
+      "scrollPaddingBottom",
+      "scrollPaddingLeft",
+    ],
+    logical: ["scrollPaddingBlock", "scrollPaddingInline"],
   },
 };
 
@@ -908,7 +921,7 @@ function expandShorthandInStyle(
   if (useLogical) {
     // Use splitDirectionalProperty to correctly parse multi-value shorthands
     // into block/inline components (e.g., "8px 12px" → block: "8px", inline: "12px")
-    const prop = shorthand as "margin" | "padding" | "scrollMargin";
+    const prop = shorthand as "margin" | "padding" | "scrollMargin" | "scrollPadding";
     const entries = splitDirectionalProperty({
       prop,
       rawValue: typeof value === "number" ? String(value) : value,
