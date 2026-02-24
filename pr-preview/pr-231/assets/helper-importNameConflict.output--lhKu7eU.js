@@ -1,0 +1,1 @@
+import{j as s}from"./index-C_-QBXu0.js";import{e}from"./helpers-CsHokX3f.js";const t=e("fast"),p=()=>s.jsxs("div",{children:[s.jsx("div",{children:t}),s.jsx("div",{className:"x4lopbt"})]});export{p as App};
