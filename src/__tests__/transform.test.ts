@@ -630,7 +630,6 @@ export const x = 1;
 `;
     const result = runTransform(source, {}, "css-import-safety.tsx");
     const expected = `import * as stylex from "@stylexjs/stylex";
-import { mergedSx } from "./lib/mergedSx";
 
 const styles = stylex.create({
   helper: {
@@ -1030,6 +1029,59 @@ export const App = () => <Button>Click</Button>;
     expect(result.code).not.toMatch(/const\s+sx\s*=\s*stylex\.props/);
     // Should NOT have the verbose className merging
     expect(result.code).not.toContain(".filter(Boolean).join");
+  });
+
+  it("should use merger when static className attrs are present", async () => {
+    const source = `
+import styled from 'styled-components';
+
+export const Button = styled.button.attrs({
+  className: 'static-class',
+})\`
+  color: blue;
+\`;
+
+export const App = () => <Button className="external">Click</Button>;
+`;
+
+    const result = transformWithWarnings(
+      { source, path: "test.tsx" },
+      { jscodeshift: j, j, stats: () => {}, report: () => {} },
+      { adapter: mergerAdapter },
+    );
+
+    expect(result.code).not.toBeNull();
+    expect(result.code).toContain("stylexProps");
+    expect(result.code).not.toMatch(/const\s+sx\s*=\s*stylex\.props/);
+    expect(result.code).toContain("static-class");
+  });
+
+  it("should use merger when bridge className is present", async () => {
+    const source = `
+import styled from 'styled-components';
+
+export const Button = styled.button\`
+  color: blue;
+\`;
+
+export const App = () => <Button className="external">Click</Button>;
+`;
+
+    const result = transformWithWarnings(
+      { source, path: "test.tsx" },
+      { jscodeshift: j, j, stats: () => {}, report: () => {} },
+      {
+        adapter: mergerAdapter,
+        crossFileInfo: {
+          selectorUsages: [],
+          bridgeComponentNames: new Set(["Button"]),
+        },
+      },
+    );
+
+    expect(result.code).not.toBeNull();
+    expect(result.code).toContain("stylexProps");
+    expect(result.code).not.toMatch(/const\s+sx\s*=\s*stylex\.props/);
   });
 
   it("should import the merger function from configured source", async () => {

@@ -12,13 +12,12 @@ import type { TransformContext } from "./transform-context.js";
 import { splitDirectionalProperty } from "./stylex-shorthands.js";
 
 export function emitStylesAndImports(ctx: TransformContext): { emptyStyleKeys: Set<string> } {
-  const { root, j, file, resolverImports, adapter } = ctx;
+  const { root, j, file, resolverImports } = ctx;
   const filePath = file.path;
   const styledImports = ctx.styledImports!;
   const resolvedStyleObjects = ctx.resolvedStyleObjects ?? new Map();
   const styledDecls = ctx.styledDecls as StyledDecl[];
   const stylesIdentifier = ctx.stylesIdentifier ?? "styles";
-  const styleMerger = adapter.styleMerger;
   const stylesInsertPosition = ctx.stylesInsertPosition ?? "end";
 
   // Preserve file header directives (e.g. `// oxlint-disable ...`). Depending on the parser/printer,
@@ -441,32 +440,6 @@ export function emitStylesAndImports(ctx: TransformContext): { emptyStyleKeys: S
 
     for (const spec of resolverImports.values() as Iterable<ImportSpec>) {
       ensureImportDecl(spec);
-    }
-
-    // Add style merger function import if configured and at least one component needs className/style merging.
-    // Requirements:
-    // 1. Component must have a wrapper (needsWrapperComponent) - inlined components don't merge
-    // 2. Component must NOT be a polymorphic intrinsic wrapper - these pass style through directly
-    // 3. Component must accept external styles (supportsExternalStyles, usedAsValue, or receivesClassNameOrStyleInJsx)
-    const needsMergerImport = styledDecls.some((d) => {
-      // Must have a wrapper to use the merger
-      if (!d.needsWrapperComponent) {
-        return false;
-      }
-      // Polymorphic intrinsic wrappers only need the merger when they support external styling.
-      if ((d as any).isPolymorphicIntrinsicWrapper) {
-        return (
-          d.supportsExternalStyles || d.usedAsValue || (d as any).receivesClassNameOrStyleInJsx
-        );
-      }
-      // Component must support external styling to need the merger
-      return d.supportsExternalStyles || d.usedAsValue || (d as any).receivesClassNameOrStyleInJsx;
-    });
-    if (styleMerger && needsMergerImport) {
-      ensureImportDecl({
-        from: styleMerger.importSource,
-        names: [{ imported: styleMerger.functionName }],
-      });
     }
   }
 

@@ -3,7 +3,6 @@
  * Core concepts: identifier usage scanning and import injection.
  */
 import { CONTINUE, type StepResult } from "../transform-types.js";
-import { isIdentifierReference } from "../transform/css-helpers.js";
 import { TransformContext } from "../transform-context.js";
 
 /**
@@ -12,28 +11,32 @@ import { TransformContext } from "../transform-context.js";
 export function ensureMergerImportStep(ctx: TransformContext): StepResult {
   const { root, j, adapter } = ctx;
 
-  // Ensure the style merger import is present whenever the merger function is referenced.
-  // This covers cases where wrapper emission uses the merger even when earlier heuristics
-  // didn't mark it as required.
+  // Ensure the style merger import is present whenever the merger function is actually called.
+  // We intentionally key this off call expressions (not identifier-name matches) so local
+  // bindings with the same name do not cause false-positive imports.
   if (adapter.styleMerger?.functionName && adapter.styleMerger.importSource) {
     const mergerName = adapter.styleMerger.functionName;
-    const hasMergerUsage =
+    const hasMergerCall =
       root
-        .find(j.Identifier, { name: mergerName } as any)
-        .filter((p: any) => isIdentifierReference(p))
-        .size() > 0;
-    const hasMergerImport =
-      root
-        .find(j.ImportSpecifier, {
-          imported: { type: "Identifier", name: mergerName },
+        .find(j.CallExpression, {
+          callee: { type: "Identifier", name: mergerName },
         } as any)
         .size() > 0;
-    const hasLocalBinding =
-      root.find(j.FunctionDeclaration, { id: { name: mergerName } } as any).size() > 0 ||
+    const hasMergerImportBinding =
       root
-        .find(j.VariableDeclarator, { id: { type: "Identifier", name: mergerName } } as any)
+        .find(j.ImportDeclaration)
+        .filter((p: any) =>
+          ((p.node.specifiers ?? []) as any[]).some((s: any) => {
+            if (s?.type !== "ImportSpecifier") {
+              return false;
+            }
+            return s.local?.type === "Identifier" && s.local.name === mergerName;
+          }),
+        )
         .size() > 0;
-    if (hasMergerUsage && !hasMergerImport && !hasLocalBinding) {
+    const hasTopLevelBinding = hasTopLevelValueBinding(root, mergerName);
+
+    if (hasMergerCall && !hasMergerImportBinding && !hasTopLevelBinding) {
       const source = adapter.styleMerger.importSource;
       if (source.kind === "specifier") {
         const decl = j.importDeclaration(
@@ -59,4 +62,38 @@ export function ensureMergerImportStep(ctx: TransformContext): StepResult {
   }
 
   return CONTINUE;
+}
+
+function hasTopLevelValueBinding(root: any, localName: string): boolean {
+  const body = root.get().node.program.body as any[];
+  const hasBindingInDeclaration = (decl: any): boolean => {
+    if (!decl || typeof decl !== "object") {
+      return false;
+    }
+    if (
+      (decl.type === "FunctionDeclaration" || decl.type === "ClassDeclaration") &&
+      decl.id?.type === "Identifier" &&
+      decl.id.name === localName
+    ) {
+      return true;
+    }
+    if (decl.type === "VariableDeclaration") {
+      return (decl.declarations ?? []).some(
+        (d: any) => d?.id?.type === "Identifier" && d.id.name === localName,
+      );
+    }
+    return false;
+  };
+
+  for (const stmt of body) {
+    if (hasBindingInDeclaration(stmt)) {
+      return true;
+    }
+    if (stmt?.type === "ExportNamedDeclaration" || stmt?.type === "ExportDefaultDeclaration") {
+      if (hasBindingInDeclaration(stmt.declaration)) {
+        return true;
+      }
+    }
+  }
+  return false;
 }
