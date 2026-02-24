@@ -264,12 +264,77 @@ export function postProcessTransformedAst(args: {
         ...ancestors,
         { call, elementStyleKey, markerVarName: addedMarkerVarName },
       ];
-      for (const c of node.children ?? []) {
-        if (c?.type === "JSXElement") {
-          visit(c, nextAncestors);
-        }
+      for (const child of node.children ?? []) {
+        visitJsxChild(child, nextAncestors);
       }
     };
+
+    function visitJsxChild(node: any, ancestors: any[]): void {
+      if (!node || typeof node !== "object") {
+        return;
+      }
+      if (node.type === "JSXElement") {
+        visit(node, ancestors);
+        return;
+      }
+      if (node.type === "JSXFragment") {
+        visitJsxFragment(node, ancestors);
+        return;
+      }
+      if (node.type === "JSXExpressionContainer") {
+        visitJsxInExpression(node.expression, ancestors);
+      }
+    }
+
+    function visitJsxFragment(node: any, ancestors: any[]): void {
+      for (const child of node.children ?? []) {
+        visitJsxChild(child, ancestors);
+      }
+    }
+
+    function visitJsxInExpression(node: any, ancestors: any[]): void {
+      if (!node || typeof node !== "object") {
+        return;
+      }
+      if (node.type === "JSXElement") {
+        visit(node, ancestors);
+        return;
+      }
+      if (node.type === "JSXFragment") {
+        visitJsxFragment(node, ancestors);
+        return;
+      }
+      if (node.type === "ConditionalExpression") {
+        visitJsxInExpression(node.consequent, ancestors);
+        visitJsxInExpression(node.alternate, ancestors);
+        return;
+      }
+      if (node.type === "LogicalExpression") {
+        visitJsxInExpression(node.left, ancestors);
+        visitJsxInExpression(node.right, ancestors);
+        return;
+      }
+      if (node.type === "SequenceExpression") {
+        for (const expr of node.expressions ?? []) {
+          visitJsxInExpression(expr, ancestors);
+        }
+        return;
+      }
+      if (node.type === "ArrayExpression") {
+        for (const expr of node.elements ?? []) {
+          visitJsxInExpression(expr, ancestors);
+        }
+        return;
+      }
+      if (
+        node.type === "ParenthesizedExpression" ||
+        node.type === "TSAsExpression" ||
+        node.type === "TSTypeAssertion" ||
+        node.type === "TSNonNullExpression"
+      ) {
+        visitJsxInExpression(node.expression, ancestors);
+      }
+    }
 
     root.find(j.JSXElement).forEach((p: any) => {
       if (j(p).closest(j.JSXElement).size() > 0) {

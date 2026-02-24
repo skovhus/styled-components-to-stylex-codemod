@@ -365,6 +365,64 @@ export const App = () => (
     // AND the override styles.crossFileIconInContainer
     expect(code).toMatch(/stylex\.props\(iconStyles\.icon.*styles\./);
   });
+
+  it("bridge forward in conditional JSX: adds marker on parent and override on imported child", () => {
+    const source = `
+import styled from "styled-components";
+import { Button } from "./lib/button";
+import { CollapseArrowIcon, CollapseArrowIconGlobalSelector } from "./lib/converted-collapse-icon";
+
+const TitleContainer = styled(Button)\`
+  &:hover \${CollapseArrowIconGlobalSelector} {
+    background-color: rebeccapurple;
+  }
+\`;
+
+export const App = ({ show = true }: { show?: boolean }) => (
+  <div>
+    {show ? (
+      <TitleContainer>
+        <CollapseArrowIcon />
+      </TitleContainer>
+    ) : null}
+  </div>
+);
+`;
+
+    const crossFileInfo = {
+      selectorUsages: [
+        {
+          localName: "CollapseArrowIconGlobalSelector",
+          importSource: "./lib/converted-collapse-icon",
+          importedName: "CollapseArrowIconGlobalSelector",
+          resolvedPath: fixture("lib/converted-collapse-icon.tsx"),
+          bridgeComponentName: "CollapseArrowIcon",
+          bridgeComponentLocalName: "CollapseArrowIcon",
+        },
+      ],
+    };
+
+    const result = transformWithWarnings(
+      { source, path: fixture("consumer-bridge-conditional.tsx") },
+      api,
+      { adapter: fixtureAdapter, crossFileInfo },
+    );
+
+    expect(result.code).not.toBeNull();
+    const code = result.code!;
+
+    // Bridge selector import is consumed during conversion.
+    expect(code).not.toContain("CollapseArrowIconGlobalSelector");
+
+    // Parent marker must be attached even when JSX is nested in a conditional expression.
+    // (When the parent has no base styles, stylex.props may contain only the marker.)
+    expect(code).toMatch(/<Button[^>]*stylex\.props\([^)]*TitleContainerMarker/);
+
+    // Imported bridge child must receive the override style at its JSX usage site.
+    expect(code).toMatch(
+      /CollapseArrowIcon\s*\{\.\.\.stylex\.props\(styles\.collapseArrowIconInTitleContainer\)\}/,
+    );
+  });
 });
 
 /* ── Bridge className utilities ──────────────────────────────────────── */
