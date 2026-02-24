@@ -1004,6 +1004,27 @@ describe("styleMerger configuration", () => {
       importSource: { kind: "specifier" as const, value: "@company/ui-utils" },
     },
   };
+  const absolutePathMergerAdapter = {
+    externalInterface() {
+      return { styles: true, as: false } as const;
+    },
+    resolveValue() {
+      return undefined;
+    },
+    resolveCall() {
+      return undefined;
+    },
+    resolveSelector() {
+      return undefined;
+    },
+    styleMerger: {
+      functionName: "stylexProps",
+      importSource: {
+        kind: "absolutePath" as const,
+        value: pathResolve(__dirname, "fixtures", "stylexProps.ts"),
+      },
+    },
+  };
 
   it("should use merger function instead of verbose pattern when configured", async () => {
     const source = `
@@ -1104,6 +1125,29 @@ export const App = () => <Button>Click</Button>;
     expect(result.code).not.toBeNull();
     // Should import stylexProps from @company/ui-utils
     expect(result.code).toMatch(/import\s*{\s*stylexProps\s*}\s*from\s*["']@company\/ui-utils["']/);
+  });
+
+  it("should import merger from absolutePath source when merger call is emitted", async () => {
+    const source = `
+import styled from 'styled-components';
+
+export const Button = styled.button\`
+  color: blue;
+\`;
+
+export const App = () => <Button>Click</Button>;
+`;
+    const testPath = pathResolve(__dirname, "fixtures", "components", "test.tsx");
+
+    const result = transformWithWarnings(
+      { source, path: testPath },
+      { jscodeshift: j, j, stats: () => {}, report: () => {} },
+      { adapter: absolutePathMergerAdapter },
+    );
+
+    expect(result.code).not.toBeNull();
+    expect(result.code).toContain("stylexProps(");
+    expect(result.code).toContain('import { stylexProps } from "../stylexProps.ts";');
   });
 
   it("should wrap multiple styles in array", async () => {

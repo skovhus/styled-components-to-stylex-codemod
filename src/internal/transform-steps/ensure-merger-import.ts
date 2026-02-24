@@ -2,6 +2,8 @@
  * Step: ensure style merger import exists when referenced.
  * Core concepts: identifier usage scanning and import injection.
  */
+import path from "node:path";
+import type { ImportSource } from "../../adapter.js";
 import { CONTINUE, type StepResult } from "../transform-types.js";
 import { TransformContext } from "../transform-context.js";
 
@@ -9,7 +11,7 @@ import { TransformContext } from "../transform-context.js";
  * Ensures the style merger import is present when the merger function is referenced.
  */
 export function ensureMergerImportStep(ctx: TransformContext): StepResult {
-  const { root, j, adapter } = ctx;
+  const { root, j, adapter, file } = ctx;
 
   // Ensure the style merger import is present whenever the merger function is actually called.
   // We intentionally key this off call expressions (not identifier-name matches) so local
@@ -38,30 +40,65 @@ export function ensureMergerImportStep(ctx: TransformContext): StepResult {
 
     if (hasMergerCall && !hasMergerImportBinding && !hasTopLevelBinding) {
       const source = adapter.styleMerger.importSource;
-      if (source.kind === "specifier") {
-        const decl = j.importDeclaration(
-          [j.importSpecifier(j.identifier(mergerName))],
-          j.literal(source.value),
-        );
-        const stylexImport = root.find(j.ImportDeclaration, {
-          source: { value: "@stylexjs/stylex" },
-        } as any);
-        if (stylexImport.size() > 0) {
-          stylexImport.at(stylexImport.size() - 1).insertAfter(decl);
+      const moduleSpecifier = toModuleSpecifier(source, file.path);
+      const decl = j.importDeclaration(
+        [j.importSpecifier(j.identifier(mergerName))],
+        j.literal(moduleSpecifier),
+      );
+      const stylexImport = root.find(j.ImportDeclaration, {
+        source: { value: "@stylexjs/stylex" },
+      } as any);
+      if (stylexImport.size() > 0) {
+        stylexImport.at(stylexImport.size() - 1).insertAfter(decl);
+      } else {
+        const firstImport = root.find(j.ImportDeclaration).at(0);
+        if (firstImport.size() > 0) {
+          firstImport.insertBefore(decl);
         } else {
-          const firstImport = root.find(j.ImportDeclaration).at(0);
-          if (firstImport.size() > 0) {
-            firstImport.insertBefore(decl);
-          } else {
-            root.get().node.program.body.unshift(decl);
-          }
+          root.get().node.program.body.unshift(decl);
         }
-        ctx.markChanged();
       }
+      ctx.markChanged();
     }
   }
 
   return CONTINUE;
+}
+
+function toModuleSpecifier(from: ImportSource, filePath: string): string {
+  if (from.kind === "specifier") {
+    if (typeof from.value !== "string" || from.value.trim() === "") {
+      throw new Error(
+        `Invalid styleMerger import specifier: expected non-empty string, got ${JSON.stringify(
+          from.value,
+        )}`,
+      );
+    }
+    return from.value;
+  }
+
+  if (typeof from.value !== "string" || from.value.trim() === "") {
+    throw new Error(
+      `Invalid styleMerger import absolutePath: expected non-empty string, got ${JSON.stringify(
+        from.value,
+      )}`,
+    );
+  }
+  if (!path.isAbsolute(from.value)) {
+    throw new Error(
+      `Invalid styleMerger import absolutePath: expected absolute path, got ${JSON.stringify(
+        from.value,
+      )}`,
+    );
+  }
+
+  const baseDir = path.dirname(String(filePath));
+  let rel = path.relative(baseDir, from.value);
+  rel = rel.split(path.sep).join("/");
+  if (!rel.startsWith(".")) {
+    rel = `./${rel}`;
+  }
+  return rel;
 }
 
 function hasTopLevelValueBinding(root: any, localName: string): boolean {
