@@ -201,6 +201,22 @@ export function resolveTemplateLiteralBranch(
           continue;
         }
 
+        // Try bare theme member resolution (e.g., props.theme.color.bgShade inside css`` blocks)
+        if (paramName) {
+          const themeExprAst = resolveThemeFromPropsMember({
+            expr,
+            paramName,
+            filePath,
+            parseExpr,
+            resolveValue,
+            resolverImports,
+          });
+          if (themeExprAst) {
+            resolvedSlots.set(slotId, { kind: "static", exprAst: themeExprAst });
+            continue;
+          }
+        }
+
         const resolvedExprAst = resolveStaticTemplateExpressionAst({
           expr,
           property: d.property,

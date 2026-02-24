@@ -1,10 +1,9 @@
-// Function interpolation inside a pseudo selector returning css blocks should not be silently dropped.
-import * as React from "react";
-import { useTheme } from "styled-components";
+import React from "react";
 import * as stylex from "@stylexjs/stylex";
+import { useTheme } from "styled-components";
 import { $colors } from "./tokens.stylex";
 
-function Tab(props: React.PropsWithChildren<{ ref?: React.Ref<HTMLButtonElement> }>) {
+function Tab(props: Omit<React.ComponentProps<"button">, "className" | "style">) {
   const { children, ...rest } = props;
 
   const theme = useTheme();
@@ -12,7 +11,7 @@ function Tab(props: React.PropsWithChildren<{ ref?: React.Ref<HTMLButtonElement>
   return (
     <button
       {...rest}
-      {...stylex.props(styles.tab, theme.isDark ? styles.tabActiveDark : styles.tabActiveLight)}
+      {...stylex.props(styles.tab, theme.isDark ? styles.tabDark : styles.tabLight)}
     >
       {children}
     </button>
@@ -30,21 +29,26 @@ const styles = stylex.create({
   tab: {
     color: "#111",
     borderRadius: "5px",
-    boxShadow: {
-      default: "none",
-      ':is([data-state="active"])': `0 0 0 1px ${$colors.bgBorderThin}`,
-    },
+    boxShadow: "none",
   },
-  tabActiveDark: {
+  tabDark: {
     backgroundColor: {
       default: null,
       ':is([data-state="active"])': $colors.bgShade,
     },
+    boxShadow: {
+      default: null,
+      ':is([data-state="active"])': `0 0 0 1px ${$colors.bgBorderThin}`,
+    },
   },
-  tabActiveLight: {
+  tabLight: {
     backgroundColor: {
       default: null,
       ':is([data-state="active"])': $colors.bgBase,
+    },
+    boxShadow: {
+      default: null,
+      ':is([data-state="active"])': `0 0 0 1px ${$colors.bgBorderThin}`,
     },
   },
 });

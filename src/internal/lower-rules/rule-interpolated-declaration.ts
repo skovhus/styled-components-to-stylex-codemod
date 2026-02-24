@@ -213,7 +213,12 @@ export function handleInterpolatedDeclaration(args: InterpolatedDeclarationConte
       }
       // Preserve static text surrounding the interpolation slot (e.g. "0 0 0 1px ${theme} , ...")
       const { prefix, suffix } = extractStaticParts(d.value);
-      const finalValue = buildTemplateWithStaticParts(j, resolved, prefix, suffix);
+      const finalValue = buildTemplateWithStaticParts(
+        j,
+        resolved as ExpressionKind,
+        prefix,
+        suffix,
+      );
       for (const out of cssDeclarationToStylexDeclarations(d)) {
         perPropPseudo[out.prop] ??= {};
         const existing = perPropPseudo[out.prop]!;
@@ -519,9 +524,9 @@ export function handleInterpolatedDeclaration(args: InterpolatedDeclarationConte
     if (tryHandlePropertyTernaryTemplateLiteral(d)) {
       continue;
     }
-    // Only apply to base declarations; variant expansion for pseudo/media/attr buckets is more complex.
-    if (!media && !attrTarget && !pseudos?.length) {
-      if (tryHandleCssHelperConditionalBlock(d)) {
+    // Apply to base declarations and pseudo/attr selectors (not media).
+    if (!media && !attrTarget) {
+      if (tryHandleCssHelperConditionalBlock(d, pseudos ?? null)) {
         continue;
       }
     }

@@ -146,7 +146,7 @@ export function createCssHelperConditionalHandler(ctx: CssHelperConditionalConte
     warnings,
   };
 
-  return (d: any): boolean => {
+  return (d: any, pseudos?: string[] | null): boolean => {
     if (d.value.kind !== "interpolated") {
       return false;
     }
@@ -923,6 +923,7 @@ export function createCssHelperConditionalHandler(ctx: CssHelperConditionalConte
         resolveStaticCssBlock,
         decl,
         extraStyleObjects,
+        pseudos: pseudos ?? null,
         j,
         filePath,
         parseExpr,
@@ -947,6 +948,13 @@ export function createCssHelperConditionalHandler(ctx: CssHelperConditionalConte
       });
       markBail();
       return true;
+    }
+
+    // Inside pseudo selectors, only theme conditionals are handled here.
+    // Non-theme cases (call expressions, css blocks, template literals) fall
+    // through to the existing pseudo-aware resolution paths.
+    if (pseudos?.length) {
+      return false;
     }
 
     const cons = conditional.consequent;
@@ -1439,6 +1447,7 @@ type BlockThemeConditionalArgs = Pick<
   replaceParamWithProps: (exprNode: ExpressionKind) => ExpressionKind;
   isEmptyCssBranch: (node: ExpressionKind) => boolean;
   componentInfo: { localName: string; base: string; tagOrIdent: string };
+  pseudos: string[] | null;
 };
 
 /**
@@ -1458,6 +1467,7 @@ function tryResolveBlockLevelThemeConditional(args: BlockThemeConditionalArgs): 
     resolveStaticCssBlock,
     decl,
     extraStyleObjects,
+    pseudos,
     j,
     filePath,
     parseExpr,
@@ -1558,11 +1568,32 @@ function tryResolveBlockLevelThemeConditional(args: BlockThemeConditionalArgs): 
   const trueStyleKey = hasTrue ? trueKey : null;
   const falseStyleKey = hasFalse ? falseKey : null;
 
-  if (trueStyleKey) {
-    extraStyleObjects.set(trueStyleKey, consStyle);
-  }
-  if (falseStyleKey) {
-    extraStyleObjects.set(falseStyleKey, altStyle);
+  // When inside a pseudo selector (e.g., &[data-state="active"]), wrap each resolved
+  // property value with the pseudo selector map: { default: null, pseudo: value }
+  if (pseudos?.length) {
+    const wrapWithPseudo = (style: Record<string, unknown>): Record<string, unknown> => {
+      const wrapped: Record<string, unknown> = {};
+      for (const [prop, value] of Object.entries(style)) {
+        wrapped[prop] = {
+          default: null,
+          ...Object.fromEntries(pseudos.map((p) => [p, value])),
+        };
+      }
+      return wrapped;
+    };
+    if (trueStyleKey) {
+      extraStyleObjects.set(trueStyleKey, wrapWithPseudo(consStyle));
+    }
+    if (falseStyleKey) {
+      extraStyleObjects.set(falseStyleKey, wrapWithPseudo(altStyle));
+    }
+  } else {
+    if (trueStyleKey) {
+      extraStyleObjects.set(trueStyleKey, consStyle);
+    }
+    if (falseStyleKey) {
+      extraStyleObjects.set(falseStyleKey, altStyle);
+    }
   }
 
   if (!decl.needsUseThemeHook) {
