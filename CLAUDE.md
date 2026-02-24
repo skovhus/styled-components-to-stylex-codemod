@@ -78,6 +78,50 @@ Test cases that the codemod cannot transform use two prefixes to distinguish the
 
 Both prefixes should **NOT** have an output file. Both are excluded from supported test runs, Storybook, and the playground.
 
+### Creating a Test Case Step-by-Step
+
+1. **Write the `.input.tsx` file** in `test-cases/` with a styled-components example:
+   - First line should be a short comment describing what pattern is being tested
+   - Import `styled` from `"styled-components"` (and `* as React` if needed)
+   - Define styled component(s) demonstrating the pattern
+   - Export `const App` or `function App` rendering all variations with visible CSS
+   - For theme access, use `props.theme.color.<key>` or `props.theme.isDark` — the fixture adapter resolves `theme.color.*` to `$colors.*` from `./tokens.stylex`
+
+2. **Generate the `.output.tsx` file** using the regeneration script:
+
+   ```bash
+   node scripts/regenerate-test-case-outputs.mts --only <case-name>
+   ```
+
+   This runs the codemod with the fixture adapter and writes the output. Verify it's correct.
+
+3. **For bug-reproduction test cases** where the codemod produces wrong output:
+   - Write the `.output.tsx` manually showing the **correct** expected transformation
+   - The test will fail, clearly showing the diff between actual (buggy) and expected (correct) output
+   - Use `node scripts/debug-test.mts` to generate `.actual.tsx` files for comparison
+
+4. **Run and verify**:
+   ```bash
+   pnpm test:run                    # All tests
+   npx vitest run -t "<case-name>"  # Single test case
+   pnpm storybook                   # Visual comparison
+   ```
+
+**Key conventions for output files:**
+
+- Import `* as stylex from "@stylexjs/stylex"` and `{ mergedSx } from "./lib/mergedSx"` when the component accepts external className/style
+- Theme colors become `$colors.<key>` from `"./tokens.stylex"`
+- CSS shorthand properties must be expanded (e.g., `padding: "4px 8px"` → `paddingBlock: "4px"`, `paddingInline: "8px"`)
+- Unexported intrinsic-only styled components get inlined (no wrapper function)
+- Exported or component-wrapping styled components become function components
+- Conditional styles use separate style objects: `styles.base`, `styles.baseActive`
+
+**Fixture adapter limitations** (vs the Linear production adapter):
+
+- Only resolves `props.theme.color.*` and `props.theme.isDark` for theme access
+- Helper calls must be registered in `src/__tests__/fixture-adapters.ts`
+- Complex prop expressions like `props.a && !props.b` may cause bail-out
+
 ### Promoting Bail-Out Test Cases
 
 When promoting an `_unsupported` or `_unimplemented` test case to a supported one (adding codemod support for a previously unsupported pattern):
