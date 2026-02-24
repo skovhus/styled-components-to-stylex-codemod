@@ -1,0 +1,1 @@
+import{j as s}from"./index-chE0-_M2.js";import{u as e,a}from"./react-spring-BJfZ51eU.js";function n(){const[t]=e(()=>({d:"M2 3L11 5L20 3",y:0}));return s.jsx("svg",{width:"22",height:"6",children:s.jsx(a.path,{d:t.d,className:"x73je2i xvlca1e x1owpc8m"})})}const i=()=>s.jsx(n,{});export{i as App};
