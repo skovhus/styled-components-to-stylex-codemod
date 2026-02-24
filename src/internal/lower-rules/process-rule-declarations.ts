@@ -6,7 +6,7 @@ import type { CssRuleIR } from "../css-ir.js";
 import type { DeclProcessingState } from "./decl-setup.js";
 import { cssDeclarationToStylexDeclarations } from "../css-prop-mapping.js";
 import { cssValueToJs } from "../transform/helpers.js";
-import { expandStaticAnimationShorthand } from "../keyframes.js";
+import { cssKeyframeNameToIdentifier, expandStaticAnimationShorthand } from "../keyframes.js";
 import { handleInterpolatedDeclaration } from "./rule-interpolated-declaration.js";
 
 type CommentSource = { leading?: string; trailingLine?: string } | null;
@@ -52,6 +52,24 @@ export function processRuleDeclarations(args: RuleDeclarationContext): void {
         break;
       }
       continue;
+    }
+
+    // Handle static `animation-name` longhand that references inline @keyframes.
+    if (
+      d.property === "animation-name" &&
+      d.value.kind === "static" &&
+      state.keyframesNames.size > 0
+    ) {
+      const rawName = d.valueRaw.trim();
+      if (state.keyframesNames.has(rawName)) {
+        const jsName = cssKeyframeNameToIdentifier(rawName);
+        const commentSource = {
+          leading: (d as any).leadingComment,
+          trailingLine: (d as any).trailingLineComment,
+        };
+        applyResolvedPropValue("animationName", state.j.identifier(jsName), commentSource);
+        continue;
+      }
     }
 
     // Handle static `animation` shorthand that references inline @keyframes.
