@@ -162,6 +162,30 @@ export function cssDeclarationToStylexDeclarations(decl: CssDeclarationIR): Styl
     }
   }
 
+  if (prop === "scroll-padding" && decl.value.kind === "static") {
+    const entries = splitDirectionalProperty({
+      prop: "scrollPadding",
+      rawValue: decl.valueRaw.trim(),
+      important: decl.important,
+      alwaysExpand: true,
+    });
+    if (entries.length > 0) {
+      const order = new Map([
+        ["scrollPaddingLeft", 0],
+        ["scrollPaddingTop", 1],
+        ["scrollPaddingRight", 2],
+        ["scrollPaddingBottom", 3],
+      ]);
+      return entries
+        .slice()
+        .sort((a, b) => (order.get(a.prop) ?? 99) - (order.get(b.prop) ?? 99))
+        .map((entry) => ({
+          prop: entry.prop,
+          value: { kind: "static", value: entry.value },
+        }));
+    }
+  }
+
   if (prop === "background") {
     const stylexProp = resolveBackgroundStylexProp(decl.valueRaw ?? "");
     return [{ prop: stylexProp, value: decl.value }];

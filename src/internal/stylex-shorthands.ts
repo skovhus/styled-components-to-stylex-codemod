@@ -13,7 +13,7 @@ type ValueParserNode = {
 };
 
 // Single source of truth for longhand-only shorthands in StyleX.
-const STYLEX_LONGHAND_ONLY_SHORTHANDS = new Set([
+export const STYLEX_LONGHAND_ONLY_SHORTHANDS = new Set([
   "border",
   "border-top",
   "border-right",
@@ -23,6 +23,7 @@ const STYLEX_LONGHAND_ONLY_SHORTHANDS = new Set([
   "padding",
   "background",
   "scroll-margin",
+  "scroll-padding",
 ]);
 
 export function isStylexLonghandOnlyShorthand(prop: string): boolean {
@@ -89,7 +90,7 @@ function splitDirectionalShorthands(rawValue: string | number, allowImportant = 
 }
 
 export function splitDirectionalProperty(args: {
-  prop: "padding" | "margin" | "scrollMargin";
+  prop: "padding" | "margin" | "scrollMargin" | "scrollPadding";
   rawValue: string | number;
   important?: boolean;
   preferInline?: boolean;
