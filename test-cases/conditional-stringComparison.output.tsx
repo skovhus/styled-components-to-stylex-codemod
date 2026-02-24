@@ -18,7 +18,7 @@ function StyledIconButton(props: StyledIconButtonProps) {
       {...rest}
       {...stylex.props(
         styles.iconButton,
-        useRoundStyle !== false && styles.iconButtonUseRoundStyleNotFalse,
+        useRoundStyle !== false && styles.iconButtonUseRoundStyle,
       )}
     >
       {children}
@@ -32,7 +32,7 @@ const styles = stylex.create({
   iconButton: {
     padding: "4px",
   },
-  iconButtonUseRoundStyleNotFalse: {
+  iconButtonUseRoundStyle: {
     borderRadius: "100%",
   },
 });

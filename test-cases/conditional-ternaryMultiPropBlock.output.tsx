@@ -1,4 +1,3 @@
-// Ternary that returns multi-line CSS blocks (multiple declarations per branch).
 import * as React from "react";
 import * as stylex from "@stylexjs/stylex";
 
@@ -14,7 +13,7 @@ function ErrorMessage(props: ErrorMessageProps) {
       {...rest}
       {...stylex.props(
         styles.errorMessage,
-        $inline === true ? styles.errorMessageInline : styles.errorMessageBlock,
+        $inline === true ? styles.errorMessageInline : styles.errorMessageNotInline,
       )}
     >
       {children}
@@ -42,7 +41,7 @@ const styles = stylex.create({
     right: "4px",
     top: "4px",
   },
-  errorMessageBlock: {
+  errorMessageNotInline: {
     marginTop: "8px",
     paddingBlock: "4px",
     paddingInline: 0,

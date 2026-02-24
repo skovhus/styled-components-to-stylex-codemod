@@ -169,8 +169,16 @@ export function toSuffixFromProp(propName: string): string {
     if (rhsRaw && !isSimpleRhs) {
       return "CondTruthy";
     }
-    const rhs = rhsRaw || (eq === "!==" ? "NotMatch" : "Match");
     const lhsSuffix = lhs.charAt(0).toUpperCase() + lhs.slice(1);
+    // Boolean literal RHS: treat as simple boolean condition
+    // $x === true → X, $x !== true → NotX, $x === false → NotX, $x !== false → X
+    if (rhsRaw === "true") {
+      return eq === "===" ? lhsSuffix : `Not${lhsSuffix}`;
+    }
+    if (rhsRaw === "false") {
+      return eq === "===" ? `Not${lhsSuffix}` : lhsSuffix;
+    }
+    const rhs = rhsRaw || (eq === "!==" ? "NotMatch" : "Match");
     const rhsSuffix = rhs.charAt(0).toUpperCase() + rhs.slice(1);
     const combined = eq === "!==" ? `${lhsSuffix}Not${rhsSuffix}` : `${lhsSuffix}${rhsSuffix}`;
     return dedupeWords(combined);

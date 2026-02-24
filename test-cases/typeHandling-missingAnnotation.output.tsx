@@ -20,8 +20,7 @@ export function Box(props: React.PropsWithChildren<BoxProps>) {
       {...rest}
       {...stylex.props(
         styles.box,
-        !bordered && styles.boxNotBordered,
-        bordered ? styles.boxBordered : undefined,
+        bordered ? styles.boxBordered : styles.boxNotBordered,
         bg != null && styles.boxBackgroundColor(bg),
       )}
     >
