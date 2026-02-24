@@ -1,0 +1,82 @@
+import * as React from "react";
+import * as stylex from "@stylexjs/stylex";
+import { Browser } from "./lib/helpers";
+
+type EmojiContainerProps = Omit<React.ComponentProps<"div">, "className" | "style"> & {
+  $size: number;
+};
+
+/** A container for emojis that standardizes sizing across browsers */
+export function EmojiContainer(props: EmojiContainerProps) {
+  const { children, $size, ...rest } = props;
+
+  return (
+    <div
+      {...rest}
+      {...stylex.props(
+        styles.emojiContainer,
+        Browser.isSafari
+          ? styles.emojiContainerBrowserIsSafari({
+              size: $size,
+            })
+          : styles.emojiContainerDefault({
+              size: $size,
+            }),
+        styles.emojiContainerWidth($size),
+        styles.emojiContainerMaxWidth($size),
+        styles.emojiContainerMaxHeight($size),
+      )}
+    >
+      {children}
+    </div>
+  );
+}
+
+export const App = () => (
+  <div style={{ display: "flex", flexDirection: "column", gap: 8, padding: 16 }}>
+    <EmojiContainer $size={16}>🎉</EmojiContainer>
+    <EmojiContainer $size={24}>🚀</EmojiContainer>
+    <EmojiContainer $size={32}>✨</EmojiContainer>
+  </div>
+);
+
+const styles = stylex.create({
+  emojiContainerBrowserIsSafari: (props: { size: number }) => ({
+    fontSize: {
+      default: `${props.size - 4}px`,
+      "@media (-webkit-min-device-pixel-ratio: 2),(min-resolution: 192dpi)": `${props.size - 3}px`,
+    },
+    lineHeight: {
+      default: 1,
+      "@media (-webkit-min-device-pixel-ratio: 2),(min-resolution: 192dpi)": `${props.size - 1}px`,
+    },
+  }),
+  emojiContainerDefault: (props: { size: number }) => ({
+    fontSize: {
+      default: `${props.size - 3}px`,
+      "@media (-webkit-min-device-pixel-ratio: 2),(min-resolution: 192dpi)": `${props.size - 1}px`,
+    },
+    lineHeight: {
+      default: `${props.size}px`,
+      "@media (-webkit-min-device-pixel-ratio: 2),(min-resolution: 192dpi)": `${props.size}px`,
+    },
+  }),
+  /** A container for emojis that standardizes sizing across browsers */
+  emojiContainer: {
+    display: "inline-flex",
+    justifyContent: "center",
+    alignItems: "center",
+    flexShrink: 0,
+    wordBreak: "keep-all",
+    height: "auto",
+  },
+  emojiContainerWidth: (width: number) => ({
+    width: `${width}px`,
+  }),
+  emojiContainerMaxWidth: (maxWidth: number) => ({
+    maxWidth: `${maxWidth}px`,
+  }),
+  emojiContainerMaxHeight: (maxHeight: number) => ({
+    maxHeight: `${maxHeight}px`,
+  }),
+});
