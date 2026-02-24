@@ -406,9 +406,24 @@ export function createCssHelperConditionalHandler(ctx: CssHelperConditionalConte
 
       const { rules, slotExprById } = parseCssTemplateToRules(tpl);
       const out = new Map<string, ExpressionKind>();
+      // Track @media values per property: Map<cssProp, Map<mediaQuery, ExpressionKind>>
+      const mediaValues = new Map<string, Map<string, ExpressionKind>>();
+
+      const setValueForProp = (prop: string, value: ExpressionKind, media: string | undefined) => {
+        if (media) {
+          if (!mediaValues.has(prop)) {
+            mediaValues.set(prop, new Map());
+          }
+          mediaValues.get(prop)!.set(media, value);
+        } else {
+          out.set(prop, value);
+        }
+      };
 
       for (const rule of rules) {
-        if (rule.atRuleStack.length > 0) {
+        const media = rule.atRuleStack.find((a) => a.startsWith("@media"));
+        // Only support @media at-rules; bail on others (@supports, @keyframes, etc.)
+        if (rule.atRuleStack.length > 0 && !media) {
           return null;
         }
         const selector = (rule.selector ?? "").trim();
@@ -438,7 +453,11 @@ export function createCssHelperConditionalHandler(ctx: CssHelperConditionalConte
                 typeof value === "number" ||
                 typeof value === "boolean"
               ) {
-                out.set(mapped.prop, staticValueToLiteral(j, value) as ExpressionKind);
+                setValueForProp(
+                  mapped.prop,
+                  staticValueToLiteral(j, value) as ExpressionKind,
+                  media,
+                );
               } else {
                 return null;
               }
@@ -465,10 +484,28 @@ export function createCssHelperConditionalHandler(ctx: CssHelperConditionalConte
           const valueExpr =
             prefix || suffix ? buildTemplateWithStaticParts(j, rawExpr, prefix, suffix) : rawExpr;
           for (const mapped of cssDeclarationToStylexDeclarations(d)) {
-            out.set(mapped.prop, valueExpr);
+            setValueForProp(mapped.prop, valueExpr, media);
           }
         }
       }
+
+      // Merge @media values into the output map as nested StyleX objects:
+      // { default: baseValue, "@media (...)": mediaValue }
+      for (const [prop, queries] of mediaValues) {
+        const baseValue = out.get(prop);
+        const properties = [
+          j.property(
+            "init",
+            j.identifier("default"),
+            baseValue ?? (j.literal(null) as unknown as ExpressionKind),
+          ),
+        ];
+        for (const [query, value] of queries) {
+          properties.push(j.property("init", j.literal(query), value));
+        }
+        out.set(prop, j.objectExpression(properties) as unknown as ExpressionKind);
+      }
+
       return out;
     };
 

@@ -330,7 +330,9 @@ export function createCssHelperResolver(args: {
     const conditionalVariants: ConditionalVariant[] = [];
 
     for (const rule of rules) {
-      if (rule.atRuleStack.length > 0) {
+      const media = rule.atRuleStack.find((a) => a.startsWith("@media"));
+      // Only support @media at-rules; bail on others (@supports, @keyframes, etc.)
+      if (rule.atRuleStack.length > 0 && !media) {
         return bail("Conditional `css` block: @-rules (e.g., @media, @supports) are not supported");
       }
       const selector = (rule.selector ?? "").trim();
@@ -368,6 +370,32 @@ export function createCssHelperResolver(args: {
         }
       }
 
+      // Merge a value into the appropriate nested context (pseudo-class and/or @media).
+      // Handles all combinations: base, pseudo-only, media-only, pseudo+media.
+      const mergeIntoContext = (
+        value: unknown,
+        prop: string,
+        targetObj: Record<string, unknown>,
+      ): unknown => {
+        const existing = targetObj[prop];
+        if (media && currentPseudoClass) {
+          // Nested pseudo + media: { ":hover": { default: null, "@media (...)": value } }
+          const pseudoExisting =
+            existing &&
+            typeof existing === "object" &&
+            !Array.isArray(existing) &&
+            !isAstNode(existing)
+              ? (existing as Record<string, unknown>)[currentPseudoClass]
+              : undefined;
+          const mediaWrapped = mergeIntoPseudoContext(value, media, pseudoExisting);
+          return mergeIntoPseudoContext(mediaWrapped, currentPseudoClass, existing);
+        }
+        if (media) {
+          return mergeIntoPseudoContext(value, media, existing);
+        }
+        return mergeIntoPseudoContext(value, currentPseudoClass, existing);
+      };
+
       // Snapshot existing keys so we only duplicate NEW properties set by this rule
       // (not stale state accumulated from earlier rules).
       const preRuleKeys =
@@ -390,10 +418,10 @@ export function createCssHelperResolver(args: {
                 value = `"${value}"`;
               }
             }
-            (target as any)[mapped.prop] = mergeIntoPseudoContext(
+            (target as any)[mapped.prop] = mergeIntoContext(
               value,
-              currentPseudoClass,
-              (target as any)[mapped.prop],
+              mapped.prop,
+              target as any,
             ) as any;
           }
           continue;
@@ -452,10 +480,10 @@ export function createCssHelperResolver(args: {
             const templateAst = parseExpr(wrappedExpr);
             if (templateAst) {
               for (const mapped of cssDeclarationToStylexDeclarations(d)) {
-                (target as any)[mapped.prop] = mergeIntoPseudoContext(
+                (target as any)[mapped.prop] = mergeIntoContext(
                   templateAst,
-                  currentPseudoClass,
-                  (target as any)[mapped.prop],
+                  mapped.prop,
+                  target as any,
                 ) as any;
               }
               continue;
@@ -468,10 +496,10 @@ export function createCssHelperResolver(args: {
             );
           } else {
             for (const mapped of cssDeclarationToStylexDeclarations(d)) {
-              (target as any)[mapped.prop] = mergeIntoPseudoContext(
+              (target as any)[mapped.prop] = mergeIntoContext(
                 resolved.ast,
-                currentPseudoClass,
-                (target as any)[mapped.prop],
+                mapped.prop,
+                target as any,
               ) as any;
             }
             continue;
@@ -513,23 +541,19 @@ export function createCssHelperResolver(args: {
             const consAst = parseExpr(consWrappedExpr);
 
             if (altAst && consAst) {
-              // Add false branch to base style (with pseudo wrapping when inside pseudo-class)
+              // Add false branch to base style (with pseudo/media wrapping)
               for (const mapped of cssDeclarationToStylexDeclarations(d)) {
-                (target as any)[mapped.prop] = mergeIntoPseudoContext(
+                (target as any)[mapped.prop] = mergeIntoContext(
                   altAst,
-                  currentPseudoClass,
-                  (target as any)[mapped.prop],
+                  mapped.prop,
+                  target as any,
                 ) as any;
               }
 
-              // Build variant style for true branch (with pseudo wrapping)
+              // Build variant style for true branch (with pseudo/media wrapping)
               const variantStyle: Record<string, unknown> = {};
               for (const mapped of cssDeclarationToStylexDeclarations(d)) {
-                variantStyle[mapped.prop] = mergeIntoPseudoContext(
-                  consAst,
-                  currentPseudoClass,
-                  (target as any)[mapped.prop],
-                );
+                variantStyle[mapped.prop] = mergeIntoContext(consAst, mapped.prop, target as any);
               }
 
               // Add to conditional variants
