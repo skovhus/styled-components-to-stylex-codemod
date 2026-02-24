@@ -1,5 +1,4 @@
 import * as stylex from "@stylexjs/stylex";
-import { mergedSx } from "./lib/mergedSx";
 import { $colors } from "./tokens.stylex";
 
 const styles = stylex.create({

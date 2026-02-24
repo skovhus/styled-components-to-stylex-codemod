@@ -1,6 +1,5 @@
 import React from "react";
 import * as stylex from "@stylexjs/stylex";
-import { mergedSx } from "./lib/mergedSx";
 import { color } from "./lib/helpers";
 
 // Test: When a local function shadows an imported helper inside a nested scope,

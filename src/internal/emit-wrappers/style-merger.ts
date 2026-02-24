@@ -143,8 +143,9 @@ export function emitStyleMerging(args: {
     };
   }
 
-  // If a merger function is configured and external className/style merging is needed, use it
-  if (styleMerger && (allowClassNameProp || allowStyleProp) && !staticClassNameExpr) {
+  // If a merger function is configured and external className/style merging is needed, use it.
+  // Static className expressions (attrs/bridge class) are folded into the merger's className arg.
+  if (styleMerger && (allowClassNameProp || allowStyleProp)) {
     return emitWithMerger({
       j,
       styleMerger,
@@ -154,6 +155,7 @@ export function emitStyleMerging(args: {
       allowClassNameProp,
       allowStyleProp,
       inlineStyleProps,
+      staticClassNameExpr,
       emitTypes,
     });
   }
@@ -273,6 +275,7 @@ function emitWithMerger(args: {
   allowClassNameProp: boolean;
   allowStyleProp: boolean;
   inlineStyleProps: Array<{ prop: string; expr: ExpressionKind }>;
+  staticClassNameExpr?: ExpressionKind;
   emitTypes: boolean;
 }): StyleMergingResult {
   const {
@@ -284,6 +287,7 @@ function emitWithMerger(args: {
     allowClassNameProp,
     allowStyleProp,
     inlineStyleProps,
+    staticClassNameExpr,
     emitTypes,
   } = args;
 
@@ -297,11 +301,17 @@ function emitWithMerger(args: {
   // Build the merger function call arguments
   // Signature: merger(styles, className?, style?)
   const mergerArgs: ExpressionKind[] = [stylesArg];
+  const classNameArg = buildMergerClassNameArg({
+    j,
+    classNameId,
+    allowClassNameProp,
+    staticClassNameExpr,
+  });
 
-  if (allowClassNameProp || allowStyleProp) {
+  if (allowClassNameProp || allowStyleProp || classNameArg) {
     // Add className argument (or undefined if not needed but style is)
-    if (allowClassNameProp) {
-      mergerArgs.push(classNameId);
+    if (classNameArg) {
+      mergerArgs.push(classNameArg);
     } else if (allowStyleProp) {
       mergerArgs.push(j.identifier("undefined"));
     }
@@ -352,6 +362,38 @@ function emitWithMerger(args: {
     classNameBeforeSpread: false,
     styleAttr: null,
   };
+}
+
+function buildMergerClassNameArg(args: {
+  j: JSCodeshift;
+  classNameId: Identifier;
+  allowClassNameProp: boolean;
+  staticClassNameExpr?: ExpressionKind;
+}): ExpressionKind | null {
+  const { j, classNameId, allowClassNameProp, staticClassNameExpr } = args;
+  const parts: ExpressionKind[] = [];
+  if (staticClassNameExpr) {
+    parts.push(staticClassNameExpr);
+  }
+  if (allowClassNameProp) {
+    parts.push(classNameId);
+  }
+  if (parts.length === 0) {
+    return null;
+  }
+  if (parts.length === 1) {
+    const first = parts[0];
+    return first ?? null;
+  }
+  return j.callExpression(
+    j.memberExpression(
+      j.callExpression(j.memberExpression(j.arrayExpression(parts), j.identifier("filter")), [
+        j.identifier("Boolean"),
+      ]),
+      j.identifier("join"),
+    ),
+    [j.literal(" ")],
+  );
 }
 
 /**
