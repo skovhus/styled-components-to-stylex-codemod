@@ -120,12 +120,12 @@ body{font-family:-apple-system,BlinkMacSystemFont,Segoe UI,Roboto,Helvetica Neue
   inherits: false
 }
 
-@property --x-animationDelay {
+@property --x-126kuz7 {
   syntax: "*";
   inherits: false
 }
 
-@property --x-126kuz7 {
+@property --x-animationDelay {
   syntax: "*";
   inherits: false
 }
@@ -160,22 +160,22 @@ body{font-family:-apple-system,BlinkMacSystemFont,Segoe UI,Roboto,Helvetica Neue
   }
 }
 
-@keyframes xekv6nw-B {
-  0% {
-    opacity: 0;
-  }
-
-  100% {
-    opacity: 1;
-  }
-}
-
 @keyframes x18re5ia-B {
   from {
     opacity: 0;
   }
 
   to {
+    opacity: 1;
+  }
+}
+
+@keyframes xekv6nw-B {
+  0% {
+    opacity: 0;
+  }
+
+  100% {
     opacity: 1;
   }
 }
@@ -204,6 +204,18 @@ body{font-family:-apple-system,BlinkMacSystemFont,Segoe UI,Roboto,Helvetica Neue
   }
 }
 
+@keyframes x1q428r6-B {
+  0% {
+    opacity: 0;
+    transform: scale(0);
+  }
+
+  100% {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
 @keyframes x18b0m8j-B {
   0% {
     opacity: 0;
@@ -223,6 +235,18 @@ body{font-family:-apple-system,BlinkMacSystemFont,Segoe UI,Roboto,Helvetica Neue
 
   to {
     transform: translateX(0);
+  }
+}
+
+@keyframes xo1myv-B {
+  from {
+    opacity: 0;
+    transform: translateY(-20px);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateY(0);
   }
 }
 
@@ -1202,6 +1226,10 @@ body{font-family:-apple-system,BlinkMacSystemFont,Segoe UI,Roboto,Helvetica Neue
   animation-name: x18re5ia-B;
 }
 
+.xbpkrbd:not(#\#):not(#\#):not(#\#) {
+  animation-name: x1q428r6-B;
+}
+
 .x1aerksh:not(#\#):not(#\#):not(#\#) {
   animation-name: x1wc8ddo-B;
 }
@@ -1216,6 +1244,10 @@ body{font-family:-apple-system,BlinkMacSystemFont,Segoe UI,Roboto,Helvetica Neue
 
 .x5jrfqv:not(#\#):not(#\#):not(#\#) {
   animation-name: xke37qf-B;
+}
+
+.x1pqhjpz:not(#\#):not(#\#):not(#\#) {
+  animation-name: xo1myv-B;
 }
 
 .x1dk39qq:not(#\#):not(#\#):not(#\#) {
@@ -1240,6 +1272,10 @@ body{font-family:-apple-system,BlinkMacSystemFont,Segoe UI,Roboto,Helvetica Neue
 
 .xtrn9k1:not(#\#):not(#\#):not(#\#) {
   animation-timing-function: cubic-bezier(.68, -.55, .27, 1.55);
+}
+
+.x4hg4is:not(#\#):not(#\#):not(#\#) {
+  animation-timing-function: ease-in-out;
 }
 
 .x1flh53z:not(#\#):not(#\#):not(#\#) {
@@ -1420,6 +1456,14 @@ body{font-family:-apple-system,BlinkMacSystemFont,Segoe UI,Roboto,Helvetica Neue
 
 .x1rrn4n9:not(#\#):not(#\#):not(#\#) {
   background-color: #90ee90;
+}
+
+.xalp5ej:not(#\#):not(#\#):not(#\#) {
+  background-color: #ffa07a;
+}
+
+.x19pma9y:not(#\#):not(#\#):not(#\#) {
+  background-color: #b0c4de;
 }
 
 .xg3vklh:not(#\#):not(#\#):not(#\#) {
