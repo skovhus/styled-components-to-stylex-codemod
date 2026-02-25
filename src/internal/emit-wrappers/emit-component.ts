@@ -676,16 +676,19 @@ export function emitComponentWrappers(emitter: WrapperEmitter): {
           pushForwardedProp(propName);
         }
       }
-      // Forward required base-component props that were destructured for styling.
+      // Forward base-component props (required or optional) that were destructured for styling.
+      // Destructuring removes them from `...rest`, so they must be explicitly re-forwarded.
+      const baseExplicitProps = baseComponentPropsType
+        ? emitter.getExplicitPropNames(baseComponentPropsType)
+        : null;
+
       for (const propName of destructureProps) {
-        if (
-          propName &&
-          propName !== "children" &&
-          !propName.startsWith("$") &&
-          baseComponentPropsType &&
-          emitter.isPropRequiredInPropsTypeLiteral(baseComponentPropsType, propName)
-        ) {
-          pushForwardedProp(propName);
+        if (propName && propName !== "children" && !propName.startsWith("$")) {
+          // Forward if base accepts this prop (required or optional), or if we can't resolve
+          // the base type (imported component) — safer to forward than silently drop.
+          if (!baseExplicitProps || baseExplicitProps.has(propName)) {
+            pushForwardedProp(propName);
+          }
         }
       }
       // Re-forward non-transient defaultAttrs props when jsxProp !== attrName.
