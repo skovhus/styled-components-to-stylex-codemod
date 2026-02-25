@@ -1,5 +1,11 @@
 import { describe, it, expect } from "vitest";
-import { findUniversalSelectorLineOffset, findSelectorLineOffset } from "../internal/css-ir.js";
+import { compile } from "stylis";
+import {
+  findUniversalSelectorLineOffset,
+  findSelectorLineOffset,
+  normalizeStylisAstToIR,
+} from "../internal/css-ir.js";
+import type { StyledInterpolationSlot } from "../internal/styled-css.js";
 
 describe("findUniversalSelectorLineOffset", () => {
   it("returns 0 for universal selector on first line", () => {
@@ -186,5 +192,63 @@ describe("findSelectorLineOffset", () => {
     opacity: 0.5;
   }`;
     expect(findSelectorLineOffset(css, "& > button")).toBe(2);
+  });
+});
+
+/** Helper to create a minimal slot for testing (expression is unused by the IR). */
+function makeSlot(index: number): StyledInterpolationSlot {
+  return {
+    index,
+    placeholder: `__SC_EXPR_${index}__`,
+    expression: null as never,
+    startOffset: 0,
+    endOffset: 0,
+  };
+}
+
+describe("normalizeStylisAstToIR – recovered placeholders preserve @media scope", () => {
+  it("placeholder inside @media + selector gets the @media at-rule", () => {
+    const rawCss = `& {
+@media (min-width: 600px) {
+  &[data-state="active"] {
+    __SC_EXPR_0__;
+  }
+}
+}`;
+    const slots = [makeSlot(0)];
+    const rules = normalizeStylisAstToIR(compile(rawCss), slots, { rawCss });
+    const recovered = rules.find((r) =>
+      r.declarations.some((d) => d.property === "" && d.value.kind === "interpolated"),
+    );
+    expect(recovered).toBeDefined();
+    expect(recovered!.atRuleStack).toEqual(["@media (min-width: 600px)"]);
+  });
+
+  it("placeholder at top level inside @media (no selector) gets @media scope", () => {
+    const rawCss = `& {
+@media (min-width: 600px) {
+  __SC_EXPR_0__;
+}
+}`;
+    const slots = [makeSlot(0)];
+    const rules = normalizeStylisAstToIR(compile(rawCss), slots, { rawCss });
+    const recovered = rules.find((r) =>
+      r.declarations.some((d) => d.property === "" && d.value.kind === "interpolated"),
+    );
+    expect(recovered).toBeDefined();
+    expect(recovered!.atRuleStack).toEqual(["@media (min-width: 600px)"]);
+  });
+
+  it("placeholder outside @media has empty at-rule stack", () => {
+    const rawCss = `& {
+  __SC_EXPR_0__;
+}`;
+    const slots = [makeSlot(0)];
+    const rules = normalizeStylisAstToIR(compile(rawCss), slots, { rawCss });
+    const recovered = rules.find((r) =>
+      r.declarations.some((d) => d.property === "" && d.value.kind === "interpolated"),
+    );
+    expect(recovered).toBeDefined();
+    expect(recovered!.atRuleStack).toEqual([]);
   });
 });

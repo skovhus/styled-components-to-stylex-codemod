@@ -244,10 +244,11 @@ export function normalizeStylisAstToIR(
     const placeholderLineRe = /^__SC_EXPR_(\d+)__\s*;?\s*$/;
     let depth = 0;
     let line = "";
-    // Track selector context for nested blocks (depth > 0)
+    // Track selector and at-rule context for nested blocks (depth > 0)
     const selectorStack: string[] = [];
+    const recoveryAtRuleStack: string[] = [];
 
-    const recoverPlaceholder = (trimmed: string, selector: string) => {
+    const recoverPlaceholder = (trimmed: string, selector: string, recoveryAtRules: string[]) => {
       const m = trimmed.match(placeholderLineRe);
       if (!m) {
         return;
@@ -258,7 +259,7 @@ export function normalizeStylisAstToIR(
       if (mapped === undefined) {
         return;
       }
-      const targetRule = ensureRule(selector, []);
+      const targetRule = ensureRule(selector, recoveryAtRules);
       const alreadyDeclared = targetRule.declarations.some((decl) => {
         if (decl.property !== "" || decl.value.kind !== "interpolated") {
           return false;
@@ -282,31 +283,42 @@ export function normalizeStylisAstToIR(
     const flushLine = () => {
       const trimmed = line.trim();
       if (depth === 0) {
-        recoverPlaceholder(trimmed, "&");
+        recoverPlaceholder(trimmed, "&", recoveryAtRuleStack);
       } else if (selectorStack.length > 0) {
         // Recover standalone placeholders inside nested selector blocks (e.g., &[data-state="active"] { __SC_EXPR_0__; }).
         // Skip simple pseudo-class selectors (&:hover, &:focus, etc.) since those are already
         // handled by tryResolveConditionalHelperCallInPseudo in finalize-decl.ts via rawCss regex.
         const currentSelector = selectorStack[selectorStack.length - 1]!;
         if (!/^&:[a-z]/i.test(currentSelector)) {
-          recoverPlaceholder(trimmed, currentSelector);
+          recoverPlaceholder(trimmed, currentSelector, recoveryAtRuleStack);
         }
       }
       line = "";
     };
 
+    // Track whether each depth level is an at-rule or a selector so we pop the right stack on `}`
+    const blockKindStack: ("at-rule" | "selector")[] = [];
+
     for (let i = 0; i < rawCss.length; i++) {
       const ch = rawCss[i]!;
       if (ch === "{") {
-        // Text accumulated before { is the selector for this nesting level
-        const selector = line.trim();
-        if (selector) {
-          selectorStack.push(selector);
+        const blockHeader = line.trim();
+        if (blockHeader.startsWith("@")) {
+          recoveryAtRuleStack.push(blockHeader);
+          blockKindStack.push("at-rule");
+        } else {
+          if (blockHeader) {
+            selectorStack.push(blockHeader);
+          }
+          blockKindStack.push("selector");
         }
         depth++;
       } else if (ch === "}") {
         depth = Math.max(0, depth - 1);
-        if (selectorStack.length > 0) {
+        const kind = blockKindStack.pop();
+        if (kind === "at-rule") {
+          recoveryAtRuleStack.pop();
+        } else if (selectorStack.length > 0) {
           selectorStack.pop();
         }
       }
