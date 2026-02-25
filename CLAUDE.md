@@ -116,12 +116,6 @@ Both prefixes should **NOT** have an output file. Both are excluded from support
 - Exported or component-wrapping styled components become function components
 - Conditional styles use separate style objects: `styles.base`, `styles.baseActive`
 
-**Fixture adapter limitations** (vs the Linear production adapter):
-
-- Only resolves `props.theme.color.*` and `props.theme.isDark` for theme access
-- Helper calls must be registered in `src/__tests__/fixture-adapters.ts`
-- Complex prop expressions like `props.a && !props.b` may cause bail-out
-
 ### Promoting Bail-Out Test Cases
 
 When promoting an `_unsupported` or `_unimplemented` test case to a supported one (adding codemod support for a previously unsupported pattern):

@@ -10,13 +10,13 @@ const Tab = styled.button`
     ${(props) => {
       if (props.theme.isDark) {
         return css`
-          background: ${props.theme.color.bgShade};
-          box-shadow: 0 0 0 1px ${props.theme.color.bgBorderThin};
+          background: ${props.theme.color.bgSub};
+          box-shadow: 0 0 0 1px ${props.theme.color.bgBorderFaint};
         `;
       }
       return css`
         background: ${props.theme.color.bgBase};
-        box-shadow: 0 0 0 1px ${props.theme.color.bgBorderThin};
+        box-shadow: 0 0 0 1px ${props.theme.color.bgBorderFaint};
       `;
     }}
   }

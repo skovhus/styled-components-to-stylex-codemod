@@ -34,11 +34,11 @@ const styles = stylex.create({
   tabDark: {
     backgroundColor: {
       default: null,
-      ':is([data-state="active"])': $colors.bgShade,
+      ':is([data-state="active"])': $colors.bgSub,
     },
     boxShadow: {
       default: null,
-      ':is([data-state="active"])': `0 0 0 1px ${$colors.bgBorderThin}`,
+      ':is([data-state="active"])': `0 0 0 1px ${$colors.bgBorderFaint}`,
     },
   },
   tabLight: {
@@ -48,7 +48,7 @@ const styles = stylex.create({
     },
     boxShadow: {
       default: null,
-      ':is([data-state="active"])': `0 0 0 1px ${$colors.bgBorderThin}`,
+      ':is([data-state="active"])': `0 0 0 1px ${$colors.bgBorderFaint}`,
     },
   },
 });
