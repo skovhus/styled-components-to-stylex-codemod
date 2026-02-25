@@ -41,10 +41,10 @@ const styles = stylex.create({
     borderRadius: "6px",
   },
   containerDark: {
-    background: $colors.bgBase,
+    backgroundColor: $colors.bgBase,
   },
   containerLight: {
-    background: $colors.bgSub,
+    backgroundColor: $colors.bgSub,
   },
   tab: {
     flex: "1",

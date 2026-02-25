@@ -11,6 +11,23 @@ import { literalToAst, objectToAst } from "./transform/helpers.js";
 import type { TransformContext } from "./transform-context.js";
 import { splitDirectionalProperty } from "./stylex-shorthands.js";
 
+/**
+ * CSS shorthands that must NEVER appear as property names in stylex.create() output.
+ * These are shorthands that StyleX cannot handle at all — they must always be expanded
+ * to longhands by the codemod.
+ *
+ * Note: `margin`/`padding`/`scrollMargin`/`scrollPadding` are NOT listed because
+ * StyleX's Babel plugin accepts them as single-value shorthands.
+ */
+const FORBIDDEN_STYLEX_SHORTHANDS = new Set([
+  "border",
+  "borderTop",
+  "borderRight",
+  "borderBottom",
+  "borderLeft",
+  "background",
+]);
+
 export function emitStylesAndImports(ctx: TransformContext): { emptyStyleKeys: Set<string> } {
   const { root, j, file, resolverImports } = ctx;
   const filePath = file.path;
@@ -472,6 +489,11 @@ export function emitStylesAndImports(ctx: TransformContext): { emptyStyleKeys: S
   // longhands (physical or logical).
   normalizeShorthandLonghandConflicts(styledDecls, resolvedStyleObjects);
 
+  // Safety net: assert no unexpanded CSS shorthands leaked into style objects.
+  // Shorthands in FORBIDDEN_STYLEX_SHORTHANDS (border/background) should have been
+  // expanded by cssDeclarationToStylexDeclarations() or equivalent handlers upstream.
+  assertNoUnexpandedShorthands(resolvedStyleObjects);
+
   // Compute the set of empty style keys (style objects with no properties)
   const emptyStyleKeys = new Set<string>();
   for (const [k, v] of resolvedStyleObjects.entries()) {
@@ -739,6 +761,35 @@ function replacePropsInPlace(
  * Expand shorthand properties in style objects when they conflict with longhands
  * in other style objects of the same component.
  *
+ * Safety net: detects unexpanded CSS shorthands that leaked into resolved style objects.
+ * Should never fire in production — if it does, it indicates a missing shorthand expansion
+ * in one of the CSS-to-StyleX transform paths.
+ *
+ * Only checks shorthands that StyleX truly cannot handle:
+ * - `border`/`borderTop`/etc. must always expand to width/style/color
+ * - `background` must always map to `backgroundColor` or `backgroundImage`
+ *
+ * Note: `margin`/`padding`/`scrollMargin`/`scrollPadding` as single values are valid
+ * in StyleX (its Babel plugin expands them), so they are NOT checked here.
+ */
+function assertNoUnexpandedShorthands(resolvedStyleObjects: Map<string, unknown>): void {
+  for (const [styleKey, style] of resolvedStyleObjects) {
+    if (!style || typeof style !== "object" || isAstNode(style)) {
+      continue;
+    }
+    for (const prop of Object.keys(style as Record<string, unknown>)) {
+      if (FORBIDDEN_STYLEX_SHORTHANDS.has(prop)) {
+        throw new Error(
+          `Unexpanded CSS shorthand "${prop}" in style object "${styleKey}". ` +
+            `This property must be expanded to longhands before reaching StyleX output. ` +
+            `Use cssDeclarationToStylexDeclarations() or the appropriate shorthand handler.`,
+        );
+      }
+    }
+  }
+}
+
+/**
  * Example: component has base `marginBottom: "8px"` and conditional `margin: "24px"`.
  * StyleX's atomic CSS won't reliably resolve `margin` overriding `marginBottom`,
  * so we expand `margin: "24px"` → `marginTop/Right/Bottom/Left: "24px"`.
