@@ -835,6 +835,8 @@ export class WrapperEmitter {
     allowStyleProp: boolean;
     wrappedComponentIsInternalWrapper?: boolean;
     hasExplicitPropsType?: boolean;
+    forceClassNameOptional?: boolean;
+    forceStyleOptional?: boolean;
   }): string {
     const {
       d,
@@ -842,6 +844,8 @@ export class WrapperEmitter {
       allowStyleProp,
       wrappedComponentIsInternalWrapper,
       hasExplicitPropsType,
+      forceClassNameOptional,
+      forceStyleOptional,
     } = args;
     const lines: string[] = [];
     // When external styles are EXPLICITLY enabled via adapter (d.supportsExternalStyles) and
@@ -854,10 +858,13 @@ export class WrapperEmitter {
     // Skip adding here if there's an explicit props type - it will be merged there instead.
     const shouldAddStyleProps =
       d.supportsExternalStyles && !wrappedComponentIsInternalWrapper && !hasExplicitPropsType;
-    if (shouldAddStyleProps && allowClassNameProp) {
+    // When forceClassNameOptional/forceStyleOptional is set, the wrapped component has
+    // className/style that may be required. We need to explicitly add them as optional
+    // so the wrapper doesn't inherit requiredness from the wrapped component.
+    if ((shouldAddStyleProps && allowClassNameProp) || forceClassNameOptional) {
       lines.push("className?: string");
     }
-    if (shouldAddStyleProps && allowStyleProp) {
+    if ((shouldAddStyleProps && allowStyleProp) || forceStyleOptional) {
       lines.push("style?: React.CSSProperties");
     }
     if (this.hasForwardedAsUsage(d.localName)) {
@@ -867,10 +874,11 @@ export class WrapperEmitter {
     const propsTarget = d.attrsInfo?.attrsAsTag ?? (d.base as any).ident;
     const base = `React.ComponentPropsWithRef<typeof ${propsTarget}>`;
     const omitted: string[] = [];
-    if (!allowClassNameProp) {
+    // When forcing optional, always omit from base to prevent inheriting requiredness
+    if (!allowClassNameProp || forceClassNameOptional) {
       omitted.push('"className"');
     }
-    if (!allowStyleProp) {
+    if (!allowStyleProp || forceStyleOptional) {
       omitted.push('"style"');
     }
     const baseMaybeOmitted = omitted.length ? `Omit<${base}, ${omitted.join(" | ")}>` : base;
