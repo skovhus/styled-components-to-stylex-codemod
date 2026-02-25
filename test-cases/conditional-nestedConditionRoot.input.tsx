@@ -13,10 +13,10 @@ const Layer = styled.div<LayerTransientProps>`
 
 export const App = () => (
   <div style={{ display: "flex", gap: 8, padding: 8 }}>
-    <Layer $layer={{ isTop: true }} $zIndex={3}>
+    <Layer $layer={{ isTop: true }} $zIndex="3">
       Top layer
     </Layer>
-    <Layer $layer={{ isTop: false }} $zIndex={1}>
+    <Layer $layer={{ isTop: false }} $zIndex="1">
       Base layer
     </Layer>
   </div>

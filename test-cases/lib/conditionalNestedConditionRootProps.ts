@@ -1,6 +1,6 @@
 export type LayerTransientProps = {
-  $layer?: {
-    isTop?: boolean;
+  $layer: {
+    isTop: boolean;
   };
-  $zIndex?: number;
+  $zIndex: string;
 };
