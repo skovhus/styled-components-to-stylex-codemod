@@ -1,5 +1,6 @@
 import * as React from "react";
 import * as stylex from "@stylexjs/stylex";
+import { mergedSx } from "./lib/mergedSx";
 
 interface FlexProps {
   gap?: number;
@@ -24,19 +25,23 @@ function Flex(props: FlexProps) {
   );
 }
 
-type ContainerProps = Omit<React.ComponentPropsWithRef<typeof Flex>, "className" | "style"> & {
+type ContainerProps = React.ComponentPropsWithRef<typeof Flex> & {
   $color?: string;
 };
 
 export function Container(props: ContainerProps) {
-  const { children, $color, ...rest } = props;
+  const { className, children, style, $color, ...rest } = props;
 
   return (
     <Flex
       {...rest}
-      {...stylex.props(
-        styles.container,
-        props.$color ? styles.containerBackgroundColor(props.$color) : undefined,
+      {...mergedSx(
+        [
+          styles.container,
+          props.$color ? styles.containerBackgroundColor(props.$color) : undefined,
+        ],
+        className,
+        style,
       )}
     >
       {children}

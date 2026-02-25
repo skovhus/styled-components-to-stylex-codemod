@@ -24,17 +24,16 @@ function Badge_({
   );
 }
 
-function Badge(
-  props: {
-    selected?: boolean;
-    highlighted?: boolean;
-  } & React.ComponentProps<typeof Badge_>,
-) {
-  const { className, style, selected, highlighted, ...rest } = props;
+type BadgeProps = React.ComponentPropsWithRef<typeof Badge_> & {
+  selected?: boolean;
+  highlighted?: boolean;
+};
+
+function Badge(props: BadgeProps) {
+  const { className, children, style, highlighted, ...rest } = props;
 
   return (
     <Badge_
-      selected={selected}
       highlighted={highlighted}
       {...rest}
       {...mergedSx(
@@ -42,7 +41,9 @@ function Badge(
         className,
         style,
       )}
-    />
+    >
+      {children}
+    </Badge_>
   );
 }
 
