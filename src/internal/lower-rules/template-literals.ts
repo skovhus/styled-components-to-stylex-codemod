@@ -10,6 +10,7 @@ import {
   cssDeclarationToStylexDeclarations,
   cssPropertyToStylexProp,
   parseInterpolatedBorderStaticParts,
+  resolveBackgroundStylexProp,
 } from "../css-prop-mapping.js";
 import { isStylexLonghandOnlyShorthand } from "../stylex-shorthands.js";
 import { normalizeStylisAstToIR } from "../css-ir.js";
@@ -266,6 +267,27 @@ export function resolveTemplateLiteralBranch(
           expressions.length === 1 && quasis.every((q) => !q.value.raw && !q.value.cooked)
             ? expressions[0]
             : j.templateLiteral(quasis, expressions);
+        // Handle border shorthand expansion for static interpolated values
+        const propName = d.property?.trim() ?? "";
+        const { prefix, suffix } = extractStaticParts(d.value, { property: propName });
+        const borderParts = parseInterpolatedBorderStaticParts({ prop: propName, prefix, suffix });
+        if (borderParts) {
+          if (borderParts.width) {
+            setStyleValue(borderParts.widthProp, borderParts.width);
+          }
+          if (borderParts.style) {
+            setStyleValue(borderParts.styleProp, borderParts.style);
+          }
+          // Use just the expression for color (static prefix/suffix already extracted as width/style)
+          const colorValue = expressions.length === 1 ? expressions[0] : styleValue;
+          setStyleValue(borderParts.colorProp, colorValue);
+          continue;
+        }
+        // Handle background shorthand → backgroundColor/backgroundImage
+        if (propName === "background") {
+          setStyleValue(resolveBackgroundStylexProp(d.valueRaw ?? ""), styleValue);
+          continue;
+        }
         for (const mapped of cssDeclarationToStylexDeclarations(d)) {
           setStyleValue(mapped.prop, styleValue);
         }

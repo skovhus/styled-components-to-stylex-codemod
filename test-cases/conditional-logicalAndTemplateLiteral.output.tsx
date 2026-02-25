@@ -108,7 +108,9 @@ const styles = stylex.create({
     padding: "16px",
   },
   cardHighlighted: {
-    border: `1px solid ${$colors.primaryColor}`,
+    borderWidth: "1px",
+    borderStyle: "solid",
+    borderColor: $colors.primaryColor,
     boxShadow: `0 0 8px ${$colors.bgSub}`,
   },
   statusBar: {
