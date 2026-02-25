@@ -40,9 +40,9 @@ const styles = stylex.create({
     borderRadius: "6px",
   },
   styledListDark: {
-    background: $colors.bgBase,
+    backgroundColor: $colors.bgBase,
   },
   styledListLight: {
-    background: $colors.bgSub,
+    backgroundColor: $colors.bgSub,
   },
 });

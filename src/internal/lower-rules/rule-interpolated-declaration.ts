@@ -13,6 +13,7 @@ import { resolveDynamicNode } from "../builtin-handlers.js";
 import {
   cssDeclarationToStylexDeclarations,
   cssPropertyToStylexProp,
+  resolveBackgroundStylexProp,
 } from "../css-prop-mapping.js";
 import { buildThemeStyleKeys } from "../utilities/style-key-naming.js";
 import {
@@ -726,8 +727,11 @@ export function handleInterpolatedDeclaration(args: InterpolatedDeclarationConte
         resolverImports.set(JSON.stringify(imp), imp);
       }
 
-      // Map CSS prop to StyleX prop
-      const stylexProp = cssPropertyToStylexProp(res.cssProp);
+      // Map CSS prop to StyleX prop (background shorthand → backgroundColor/backgroundImage)
+      const stylexProp =
+        res.cssProp === "background"
+          ? resolveBackgroundStylexProp(d?.valueRaw ?? "")
+          : cssPropertyToStylexProp(res.cssProp);
 
       const { trueKey: trueStyleKey, falseKey: falseStyleKey } = buildThemeStyleKeys(
         decl.styleKey,
