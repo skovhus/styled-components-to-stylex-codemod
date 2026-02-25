@@ -40,6 +40,8 @@ export function IconWithTransform(
 
   return (
     <Icon_
+      noDate={noDate}
+      selected={selected}
       status={status}
       {...rest}
       {...stylex.props(
