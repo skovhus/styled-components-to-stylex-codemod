@@ -758,11 +758,11 @@ export function handleInterpolatedDeclaration(args: InterpolatedDeclarationConte
       const falseStyle = extraStyleObjects.get(falseStyleKey) ?? {};
 
       // Expand CSS shorthands (border → width/style/color, background → backgroundColor)
-      if (!applyThemeBooleanValue(j, res.cssProp, res.trueValue, trueStyle, d?.valueRaw ?? "")) {
+      if (!applyThemeBooleanValue(j, res.cssProp, res.trueValue, trueStyle)) {
         bail = true;
         continue;
       }
-      if (!applyThemeBooleanValue(j, res.cssProp, res.falseValue, falseStyle, d?.valueRaw ?? "")) {
+      if (!applyThemeBooleanValue(j, res.cssProp, res.falseValue, falseStyle)) {
         bail = true;
         continue;
       }
@@ -1772,49 +1772,46 @@ function applyThemeBooleanValue(
   cssProp: string,
   value: unknown,
   target: Record<string, unknown>,
-  valueRaw: string,
 ): boolean {
+  // Try to extract string value from AST node (shared across border/background paths)
+  const node = value as { type?: string; value?: unknown; expression?: unknown } | null;
+  const unwrapped = node?.type === "ExpressionStatement" ? (node.expression as typeof node) : node;
+  const strValue =
+    unwrapped &&
+    (unwrapped.type === "StringLiteral" || unwrapped.type === "Literal") &&
+    typeof unwrapped.value === "string"
+      ? unwrapped.value
+      : null;
+
   // Border shorthand → expand to width/style/color
   const borderMatch = cssProp.match(/^border(-top|-right|-bottom|-left)?$/);
   if (borderMatch) {
+    if (strValue === null) {
+      return false;
+    }
     const direction = borderMatch[1]
       ? borderMatch[1].slice(1).charAt(0).toUpperCase() + borderMatch[1].slice(2)
       : "";
-    const widthProp = `border${direction}Width`;
-    const styleProp = `border${direction}Style`;
-    const colorProp = `border${direction}Color`;
-
-    // Try to extract string value from AST node
-    const node = value as { type?: string; value?: unknown; expression?: unknown } | null;
-    const unwrapped =
-      node?.type === "ExpressionStatement" ? (node.expression as typeof node) : node;
-    if (
-      unwrapped &&
-      (unwrapped.type === "StringLiteral" || unwrapped.type === "Literal") &&
-      typeof unwrapped.value === "string"
-    ) {
-      const parsed = parseBorderShorthandParts(unwrapped.value);
-      if (!parsed) {
-        return false;
-      }
-      if (parsed.width) {
-        target[widthProp] = j.literal(parsed.width);
-      }
-      if (parsed.style) {
-        target[styleProp] = j.literal(parsed.style);
-      }
-      if (parsed.color) {
-        target[colorProp] = j.literal(parsed.color);
-      }
-      return true;
+    const parsed = parseBorderShorthandParts(strValue);
+    if (!parsed) {
+      return false;
     }
-    // Non-string-literal border values can't be expanded — bail
-    return false;
+    if (parsed.width) {
+      target[`border${direction}Width`] = j.literal(parsed.width);
+    }
+    if (parsed.style) {
+      target[`border${direction}Style`] = j.literal(parsed.style);
+    }
+    if (parsed.color) {
+      target[`border${direction}Color`] = j.literal(parsed.color);
+    }
+    return true;
   }
 
   // Background shorthand → backgroundColor or backgroundImage
+  // Use the actual branch value (not valueRaw which contains placeholders)
   if (cssProp === "background") {
-    target[resolveBackgroundStylexProp(valueRaw)] = value;
+    target[resolveBackgroundStylexProp(strValue ?? "")] = value;
     return true;
   }
 
