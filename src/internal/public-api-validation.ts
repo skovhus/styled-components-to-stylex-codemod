@@ -183,48 +183,100 @@ function assertAdapterShape(candidate: unknown, where: string, allowAutoExtIf: b
       functionName?: unknown;
       importSource?: unknown;
     };
+    assertFunctionNameAndImportSource({
+      where,
+      configPath: "adapter.styleMerger",
+      functionName,
+      importSource,
+      specifierExample: "@company/ui-utils",
+      absolutePathExample: "/path/to/module.ts",
+    });
+  }
 
-    if (typeof functionName !== "string" || !functionName.trim()) {
+  // Validate themeHook config (null/undefined or object with functionName/importSource)
+  const themeHook = obj?.themeHook;
+  if (themeHook !== null && themeHook !== undefined) {
+    if (typeof themeHook !== "object") {
       throw new Error(
         [
-          `${where}: adapter.styleMerger.functionName must be a non-empty string.`,
-          `Received: functionName=${describeValue(functionName)}`,
-        ].join("\n"),
-      );
-    }
-
-    if (!importSource || typeof importSource !== "object") {
-      throw new Error(
-        [
-          `${where}: adapter.styleMerger.importSource must be an object.`,
-          `Received: importSource=${describeValue(importSource)}`,
+          `${where}: adapter.themeHook must be an object when provided.`,
+          `Received: themeHook=${describeValue(themeHook)}`,
           "",
           "Expected shape:",
-          '  { kind: "specifier", value: "@company/ui-utils" }',
-          "  or",
-          '  { kind: "absolutePath", value: "/path/to/module.ts" }',
+          "  {",
+          '    functionName: "useTheme",',
+          '    importSource: { kind: "specifier", value: "@company/theme-hooks" }',
+          "  }",
         ].join("\n"),
       );
     }
 
-    const { kind, value } = importSource as { kind?: unknown; value?: unknown };
-    if (kind !== "specifier" && kind !== "absolutePath") {
-      throw new Error(
-        [
-          `${where}: adapter.styleMerger.importSource.kind must be "specifier" or "absolutePath".`,
-          `Received: kind=${describeValue(kind)}`,
-        ].join("\n"),
-      );
-    }
+    const { functionName, importSource } = themeHook as {
+      functionName?: unknown;
+      importSource?: unknown;
+    };
+    assertFunctionNameAndImportSource({
+      where,
+      configPath: "adapter.themeHook",
+      functionName,
+      importSource,
+      specifierExample: "@company/theme-hooks",
+      absolutePathExample: "/path/to/theme-hooks.ts",
+    });
+  }
+}
 
-    if (typeof value !== "string" || !value.trim()) {
-      throw new Error(
-        [
-          `${where}: adapter.styleMerger.importSource.value must be a non-empty string.`,
-          `Received: value=${describeValue(value)}`,
-        ].join("\n"),
-      );
-    }
+function assertFunctionNameAndImportSource(args: {
+  where: string;
+  configPath: string;
+  functionName: unknown;
+  importSource: unknown;
+  specifierExample: string;
+  absolutePathExample: string;
+}): void {
+  const { where, configPath, functionName, importSource, specifierExample, absolutePathExample } =
+    args;
+
+  if (typeof functionName !== "string" || !functionName.trim()) {
+    throw new Error(
+      [
+        `${where}: ${configPath}.functionName must be a non-empty string.`,
+        `Received: functionName=${describeValue(functionName)}`,
+      ].join("\n"),
+    );
+  }
+
+  if (!importSource || typeof importSource !== "object") {
+    throw new Error(
+      [
+        `${where}: ${configPath}.importSource must be an object.`,
+        `Received: importSource=${describeValue(importSource)}`,
+        "",
+        "Expected shape:",
+        `  { kind: "specifier", value: "${specifierExample}" }`,
+        "  or",
+        `  { kind: "absolutePath", value: "${absolutePathExample}" }`,
+      ].join("\n"),
+    );
+  }
+
+  const { kind, value } = importSource as { kind?: unknown; value?: unknown };
+  if (kind !== "specifier" && kind !== "absolutePath") {
+    throw new Error(
+      [
+        `${where}: ${configPath}.importSource.kind must be "specifier" or "absolutePath".`,
+        `Received: kind=${describeValue(kind)}`,
+      ].join("\n"),
+    );
+  }
+
+  if (typeof value !== "string" || !value.trim()) {
+    throw new Error(
+      [
+        `${where}: ${configPath}.importSource.value must be a non-empty string.`,
+        `Received: value=${describeValue(value)}`,
+      ].join("\n"),
+    );
   }
 }
 

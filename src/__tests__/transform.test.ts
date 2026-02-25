@@ -2238,6 +2238,153 @@ export const App = () => <Box />;
 });
 
 describe("theme boolean conditionals", () => {
+  it("should use adapter-configured theme hook import and function name", () => {
+    const source = `
+import styled from "styled-components";
+
+const Box = styled.div\`
+  opacity: \${(props) => props.theme.isDark ? 1 : 0.8};
+\`;
+
+export const App = () => <Box>Hello</Box>;
+`;
+
+    const adapterWithCustomThemeHook = {
+      externalInterface() {
+        return { styles: false, as: false };
+      },
+      resolveValue() {
+        return undefined;
+      },
+      resolveCall() {
+        return undefined;
+      },
+      resolveSelector() {
+        return undefined;
+      },
+      styleMerger: null,
+      themeHook: {
+        functionName: "useDesignTheme",
+        importSource: { kind: "specifier" as const, value: "@company/theme-hooks" },
+      },
+    } as Adapter;
+
+    const result = transformWithWarnings(
+      { source, path: "theme-custom-hook.tsx" },
+      { jscodeshift: j, j, stats: () => {}, report: () => {} },
+      { adapter: adapterWithCustomThemeHook },
+    );
+
+    expect(result.code).not.toBeNull();
+    expect(result.code).toContain('import { useDesignTheme } from "@company/theme-hooks";');
+    expect(result.code).toContain("const theme = useDesignTheme();");
+    expect(result.code).not.toContain('import { useTheme } from "styled-components";');
+  });
+
+  it("should support absolutePath importSource for adapter-configured theme hook", () => {
+    const source = `
+import styled from "styled-components";
+
+const Box = styled.div\`
+  opacity: \${(props) => props.theme.isDark ? 1 : 0.8};
+\`;
+
+export const App = () => <Box>Hello</Box>;
+`;
+
+    const inputPath = pathResolve(__dirname, "fixtures", "components", "theme-custom-hook-abs.tsx");
+    const adapterWithAbsoluteThemeHook = {
+      externalInterface() {
+        return { styles: false, as: false };
+      },
+      resolveValue() {
+        return undefined;
+      },
+      resolveCall() {
+        return undefined;
+      },
+      resolveSelector() {
+        return undefined;
+      },
+      styleMerger: null,
+      themeHook: {
+        functionName: "useDesignTheme",
+        importSource: {
+          kind: "absolutePath" as const,
+          value: pathResolve(__dirname, "fixtures", "theme-hooks.ts"),
+        },
+      },
+    } as Adapter;
+
+    const result = transformWithWarnings(
+      { source, path: inputPath },
+      { jscodeshift: j, j, stats: () => {}, report: () => {} },
+      { adapter: adapterWithAbsoluteThemeHook },
+    );
+
+    expect(result.code).not.toBeNull();
+    expect(result.code).toContain('import { useDesignTheme } from "../theme-hooks.ts";');
+    expect(result.code).toContain("const theme = useDesignTheme();");
+  });
+
+  it("should not inject duplicate local binding when configured hook is already imported via alias", () => {
+    const source = `
+import styled from "styled-components";
+import { useDesignTheme as useTheme } from "@company/theme-hooks";
+
+const Box = styled.div\`
+  opacity: \${(props) => props.theme.isDark ? 1 : 0.8};
+\`;
+
+export const App = () => <Box>Hello</Box>;
+`;
+
+    const adapterWithAliasedThemeHookImport = {
+      externalInterface() {
+        return { styles: false, as: false };
+      },
+      resolveValue() {
+        return undefined;
+      },
+      resolveCall() {
+        return undefined;
+      },
+      resolveSelector() {
+        return undefined;
+      },
+      styleMerger: null,
+      themeHook: {
+        functionName: "useTheme",
+        importSource: { kind: "specifier" as const, value: "@company/theme-hooks" },
+      },
+    } as Adapter;
+
+    const result = transformWithWarnings(
+      { source, path: "theme-hook-alias-existing.tsx" },
+      { jscodeshift: j, j, stats: () => {}, report: () => {} },
+      { adapter: adapterWithAliasedThemeHookImport },
+    );
+
+    expect(result.code).not.toBeNull();
+    expect(result.code).toContain("const theme = useTheme();");
+    const outputRoot = j(result.code ?? "");
+    let useThemeLocalBindingCount = 0;
+    outputRoot
+      .find(j.ImportDeclaration, { source: { value: "@company/theme-hooks" } } as any)
+      .forEach((importPath: any) => {
+        for (const specifier of (importPath.node.specifiers ?? []) as any[]) {
+          if (specifier.type !== "ImportSpecifier") {
+            continue;
+          }
+          const localName = specifier.local?.name ?? specifier.imported?.name;
+          if (localName === "useTheme") {
+            useThemeLocalBindingCount++;
+          }
+        }
+      });
+    expect(useThemeLocalBindingCount).toBe(1);
+  });
+
   it("should handle negated !theme.isDark conditional", () => {
     const source = `
 import styled from "styled-components";

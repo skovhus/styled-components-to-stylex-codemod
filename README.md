@@ -34,6 +34,12 @@ const adapter = defineAdapter({
   },
   // Optional: use a helper for merging StyleX styles with external className/style
   styleMerger: null,
+  // Optional: customize the runtime theme hook import/call used for theme conditionals
+  // Defaults to { functionName: "useTheme", importSource: { kind: "specifier", value: "styled-components" } }
+  themeHook: {
+    functionName: "useTheme",
+    importSource: { kind: "specifier", value: "styled-components" },
+  },
 });
 
 await runTransform({
@@ -133,6 +139,15 @@ const adapter = defineAdapter({
     functionName: "mergedSx",
     importSource: { kind: "specifier", value: "./lib/mergedSx" },
   },
+
+  /**
+   * Optional: customize the runtime theme hook used when wrappers need theme booleans.
+   * Defaults to useTheme from styled-components.
+   */
+  themeHook: {
+    functionName: "useDesignTheme",
+    importSource: { kind: "specifier", value: "@company/theme-hooks" },
+  },
 });
 
 await runTransform({
@@ -156,6 +171,7 @@ Adapters are the main extension point, see full example above. They let you cont
 - how helper calls are resolved (via `resolveCall({ ... })` returning `{ expr, imports }`; `null`/`undefined` bails the file)
 - which exported components should support external className/style extension and/or polymorphic `as` prop (`externalInterface`)
 - how className/style merging is handled for components accepting external styling (`styleMerger`)
+- which runtime theme hook import/call to use for emitted wrapper theme conditionals (`themeHook`)
 
 #### Cross-file selectors (`consumerPaths`)
 

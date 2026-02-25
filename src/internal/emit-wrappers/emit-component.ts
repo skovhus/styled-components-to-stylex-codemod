@@ -616,7 +616,7 @@ export function emitComponentWrappers(emitter: WrapperEmitter): {
 
       const stmts: StatementKind[] = [declStmt];
       if (needsUseTheme) {
-        stmts.push(buildUseThemeDeclaration(j));
+        stmts.push(buildUseThemeDeclaration(j, emitter.themeHook.functionName));
       }
       if (merging.sxDecl) {
         stmts.push(merging.sxDecl);
@@ -770,7 +770,9 @@ export function emitComponentWrappers(emitter: WrapperEmitter): {
             localName: d.localName,
             params: [propsParamId],
             bodyStmts: [
-              ...(needsUseTheme ? [buildUseThemeDeclaration(j)] : []),
+              ...(needsUseTheme
+                ? [buildUseThemeDeclaration(j, emitter.themeHook.functionName)]
+                : []),
               j.returnStatement(jsx as any),
             ],
             typeParameters: polymorphicFnTypeParams,
