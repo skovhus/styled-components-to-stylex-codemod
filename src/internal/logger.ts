@@ -94,7 +94,8 @@ export type WarningType =
   | "Unsupported css`` mixin: cannot infer base default for after-base contextual override (base value is non-literal)"
   | "css`` helper function interpolation references closure variable that cannot be hoisted"
   | "Sibling selector broadened: & + & (adjacent) becomes general sibling (~) in StyleX — interleaved non-matching elements will no longer block the match"
-  | "Using styled-components components as mixins is not supported; use css`` mixins or strings instead";
+  | "Using styled-components components as mixins is not supported; use css`` mixins or strings instead"
+  | "styled(ImportedComponent) wraps a component whose file contains internal styled-components — convert the base component's file first to avoid CSS cascade conflicts";
 
 export interface WarningLog {
   severity: Severity;
