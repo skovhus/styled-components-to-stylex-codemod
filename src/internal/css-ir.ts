@@ -237,62 +237,90 @@ export function normalizeStylisAstToIR(
   // In these cases, the placeholder never appears in the compiled AST, so we must recover it
   // from the raw template CSS and emit a synthetic dynamic-block declaration.
   //
-  // We only recover placeholders at top-level (brace depth 0) to avoid accidentally pulling
-  // placeholders from nested selector blocks or at-rules.
+  // Stylis can completely drop "standalone" placeholders that appear as their own statement.
+  // We recover them from the raw template CSS and emit synthetic dynamic-block declarations.
   if (rawCss) {
     // Accept optional trailing semicolon since templates often include `${expr};`
     const placeholderLineRe = /^__SC_EXPR_(\d+)__\s*;?\s*$/;
     let depth = 0;
     let line = "";
+    // Track selector and at-rule context for nested blocks (depth > 0)
+    const selectorStack: string[] = [];
+    const recoveryAtRuleStack: string[] = [];
+
+    const recoverPlaceholder = (trimmed: string, selector: string, recoveryAtRules: string[]) => {
+      const m = trimmed.match(placeholderLineRe);
+      if (!m) {
+        return;
+      }
+      const slotId = Number(m[1]);
+      const placeholder = `__SC_EXPR_${slotId}__`;
+      const mapped = slotByPlaceholder.get(placeholder);
+      if (mapped === undefined) {
+        return;
+      }
+      const targetRule = ensureRule(selector, recoveryAtRules);
+      const alreadyDeclared = targetRule.declarations.some((decl) => {
+        if (decl.property !== "" || decl.value.kind !== "interpolated") {
+          return false;
+        }
+        const parts = decl.value.parts;
+        return parts.length === 1 && parts[0]?.kind === "slot" && parts[0].slotId === mapped;
+      });
+      if (alreadyDeclared) {
+        return;
+      }
+      const decl: CssDeclarationIR = {
+        property: "",
+        value: { kind: "interpolated", parts: [{ kind: "slot", slotId: mapped }] },
+        important: false,
+        valueRaw: placeholder,
+      };
+      targetRule.declarations.push(decl);
+      lastDecl = decl;
+    };
 
     const flushLine = () => {
       const trimmed = line.trim();
       if (depth === 0) {
-        const m = trimmed.match(placeholderLineRe);
-        if (m) {
-          const slotId = Number(m[1]);
-          const placeholder = `__SC_EXPR_${slotId}__`;
-          // Only emit if this placeholder corresponds to a known slot.
-          const mapped = slotByPlaceholder.get(placeholder);
-          if (mapped !== undefined) {
-            const alreadyDeclared = rules.some(
-              (rule) =>
-                rule.selector === "&" &&
-                rule.atRuleStack.length === 0 &&
-                rule.declarations.some((decl) => {
-                  if (decl.property !== "" || decl.value.kind !== "interpolated") {
-                    return false;
-                  }
-                  const parts = decl.value.parts;
-                  return (
-                    parts.length === 1 && parts[0]?.kind === "slot" && parts[0].slotId === mapped
-                  );
-                }),
-            );
-            if (alreadyDeclared) {
-              line = "";
-              return;
-            }
-            const decl: CssDeclarationIR = {
-              property: "",
-              value: { kind: "interpolated", parts: [{ kind: "slot", slotId: mapped }] },
-              important: false,
-              valueRaw: placeholder,
-            };
-            ensureRule("&", []).declarations.push(decl);
-            lastDecl = decl;
-          }
+        recoverPlaceholder(trimmed, "&", recoveryAtRuleStack);
+      } else if (selectorStack.length > 0) {
+        // Recover standalone placeholders inside nested selector blocks (e.g., &[data-state="active"] { __SC_EXPR_0__; }).
+        // Skip simple pseudo-class selectors (&:hover, &:focus, etc.) since those are already
+        // handled by tryResolveConditionalHelperCallInPseudo in finalize-decl.ts via rawCss regex.
+        const currentSelector = selectorStack[selectorStack.length - 1]!;
+        if (!/^&:[a-z]/i.test(currentSelector)) {
+          recoverPlaceholder(trimmed, currentSelector, recoveryAtRuleStack);
         }
       }
       line = "";
     };
 
+    // Track whether each depth level is an at-rule or a selector so we pop the right stack on `}`
+    const blockKindStack: ("at-rule" | "selector")[] = [];
+
     for (let i = 0; i < rawCss.length; i++) {
       const ch = rawCss[i]!;
       if (ch === "{") {
+        const blockHeader = line.trim();
+        if (blockHeader.startsWith("@")) {
+          recoveryAtRuleStack.push(blockHeader);
+          blockKindStack.push("at-rule");
+        } else {
+          if (blockHeader) {
+            selectorStack.push(blockHeader);
+          }
+          blockKindStack.push("selector");
+        }
         depth++;
       } else if (ch === "}") {
         depth = Math.max(0, depth - 1);
+        const kind = blockKindStack.pop();
+        if (kind === "at-rule") {
+          recoveryAtRuleStack.pop();
+        } else if (selectorStack.length > 0) {
+          selectorStack.pop();
+        }
       }
       if (ch === "\n") {
         flushLine();

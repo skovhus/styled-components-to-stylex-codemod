@@ -9,13 +9,13 @@ type MixedBackgroundProps = React.PropsWithChildren<{
 // (which need backgroundColor) in the same conditional. Each variant
 // is emitted with its appropriate StyleX property.
 function MixedBackground(props: MixedBackgroundProps) {
-  const { children, $useGradient } = props;
+  const { children, $useGradient, ...rest } = props;
 
   return (
     <div
+      {...rest}
       {...stylex.props(
-        !$useGradient && styles.mixedBackgroundNotUseGradient,
-        $useGradient ? styles.mixedBackgroundUseGradient : undefined,
+        $useGradient ? styles.mixedBackgroundUseGradient : styles.mixedBackgroundNotUseGradient,
       )}
     >
       {children}

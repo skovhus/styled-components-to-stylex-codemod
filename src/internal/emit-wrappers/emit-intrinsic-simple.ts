@@ -19,7 +19,12 @@ import { sortVariantEntriesBySpecificity, VOID_TAGS } from "./type-helpers.js";
 import { withLeadingCommentsOnFirstFunction } from "./comments.js";
 import type { EmitIntrinsicContext } from "./emit-intrinsic-helpers.js";
 import { cloneAstNode, collectIdentifiers } from "../utilities/jscodeshift-utils.js";
-import { makeConditionalStyleExpr, parseVariantWhenToAst } from "./variant-condition.js";
+import {
+  areEquivalentWhen,
+  getPositiveWhen,
+  makeConditionalStyleExpr,
+  parseVariantWhenToAst,
+} from "./variant-condition.js";
 
 export function emitSimpleWithConfigWrappers(ctx: EmitIntrinsicContext): void {
   const { emitter, j, emitTypes, wrapperDecls, wrapperNames, stylesIdentifier, emitted } = ctx;
@@ -140,7 +145,7 @@ export function emitSimpleWithConfigWrappers(ctx: EmitIntrinsicContext): void {
       styleArgs,
       j,
       stylesIdentifier,
-      ctx,
+      () => ctx.markNeedsUseThemeImport(),
     );
 
     // Handle pseudo-alias selectors (e.g., &:${highlight})
@@ -683,7 +688,7 @@ export function emitSimpleExportedIntrinsicWrappers(ctx: EmitIntrinsicContext): 
       styleArgs,
       j,
       stylesIdentifier,
-      ctx,
+      () => ctx.markNeedsUseThemeImport(),
     );
 
     // Handle pseudo-alias selectors (e.g., &:${highlight})
@@ -708,11 +713,46 @@ export function emitSimpleExportedIntrinsicWrappers(ctx: EmitIntrinsicContext): 
 
     if (d.variantStyleKeys) {
       const sortedEntries = sortVariantEntriesBySpecificity(Object.entries(d.variantStyleKeys));
-      for (const [when, variantKey] of sortedEntries) {
+      const consumedVariantIndices = new Set<number>();
+      for (let vi = 0; vi < sortedEntries.length; vi++) {
+        if (consumedVariantIndices.has(vi)) {
+          continue;
+        }
+        const [when, variantKey] = sortedEntries[vi]!;
         // Skip keys handled by compound variants
         if (compoundVariantKeys.has(when)) {
           continue;
         }
+
+        // Look for a complementary pair to merge into a ternary expression
+        const complementIdx = findComplementaryVariantEntry(
+          sortedEntries,
+          vi,
+          consumedVariantIndices,
+        );
+        if (complementIdx !== null) {
+          consumedVariantIndices.add(complementIdx);
+          const complementEntry = sortedEntries[complementIdx];
+          const otherWhen = complementEntry?.[0] ?? "";
+          const otherKey = complementEntry?.[1] ?? "";
+          const positiveWhen = getPositiveWhen(when, otherWhen) ?? when;
+          const { cond } = emitter.collectConditionProps({ when: positiveWhen, destructureProps });
+
+          const isCurrentPositive = areEquivalentWhen(when, positiveWhen);
+          const trueKey = isCurrentPositive ? variantKey : otherKey;
+          const falseKey = isCurrentPositive ? otherKey : variantKey;
+          const trueExpr = j.memberExpression(
+            j.identifier(stylesIdentifier),
+            j.identifier(trueKey),
+          );
+          const falseExpr = j.memberExpression(
+            j.identifier(stylesIdentifier),
+            j.identifier(falseKey),
+          );
+          styleArgs.push(j.conditionalExpression(cond, trueExpr, falseExpr));
+          continue;
+        }
+
         const { cond, isBoolean } = emitter.collectConditionProps({ when, destructureProps });
         const styleExpr = j.memberExpression(
           j.identifier(stylesIdentifier),
@@ -831,6 +871,11 @@ export function emitSimpleExportedIntrinsicWrappers(ctx: EmitIntrinsicContext): 
       hasExplicitPropsToPassThrough,
       ignoreTransientAttrs: true,
     });
+    // Components with complementary variant pairs (two-branch conditional CSS blocks)
+    // are behavioral wrappers that should preserve prop forwarding
+    if (hasComplementaryVariantPairs(d)) {
+      shouldIncludeRest = true;
+    }
     // When defaultAttrs reference element props (like tabIndex: props.tabIndex ?? 0),
     // include rest spread so user can pass/override these props
     if (hasElementPropsInDefaultAttrs(d)) {
@@ -1052,6 +1097,49 @@ function maybeApplySafeTruthyDefaultFromExtraStyleConditionals(args: {
   }
 }
 
+/**
+ * Finds the next unconsumed entry in sorted variant entries that has a
+ * complementary "when" condition to the entry at `index`.
+ */
+function findComplementaryVariantEntry(
+  entries: ReadonlyArray<readonly [string, string]>,
+  index: number,
+  consumed: ReadonlySet<number>,
+): number | null {
+  const when = entries[index]?.[0];
+  if (!when) {
+    return null;
+  }
+  let next = index + 1;
+  while (next < entries.length && consumed.has(next)) {
+    next++;
+  }
+  if (next >= entries.length) {
+    return null;
+  }
+  const otherWhen = entries[next]?.[0];
+  if (otherWhen && getPositiveWhen(when, otherWhen) !== null) {
+    return next;
+  }
+  return null;
+}
+
+/**
+ * Checks whether a StyledDecl has at least one complementary variant pair
+ * (e.g., `"$inline === true"` and `"!($inline === true)"`).
+ */
+function hasComplementaryVariantPairs(d: StyledDecl): boolean {
+  const keys = Object.keys(d.variantStyleKeys ?? {});
+  for (let i = 0; i < keys.length; i++) {
+    for (let k = i + 1; k < keys.length; k++) {
+      if (getPositiveWhen(keys[i]!, keys[k]!) !== null) {
+        return true;
+      }
+    }
+  }
+  return false;
+}
+
 function collectPropsUsedOutsideExtraStyleConditionals(
   j: JSCodeshift,
   d: StyledDecl,
@@ -1213,17 +1301,17 @@ function collectPropsFromPropsMemberAccess(node: ExpressionKind, out: Set<string
 }
 
 /** Appends theme boolean conditional style args (e.g., `theme.isDark ? styles.boxDark : styles.boxLight`) to `styleArgs`. */
-function appendThemeBooleanStyleArgs(
+export function appendThemeBooleanStyleArgs(
   hooks: StyledDecl["needsUseThemeHook"],
   styleArgs: ExpressionKind[],
   j: JSCodeshift,
   stylesIdentifier: string,
-  ctx: EmitIntrinsicContext,
+  markNeedsUseThemeImport: () => void,
 ): boolean {
   if (!hooks || hooks.length === 0) {
     return false;
   }
-  ctx.markNeedsUseThemeImport();
+  markNeedsUseThemeImport();
   for (const entry of hooks) {
     // Skip entries used only for triggering useTheme import/declaration
     // (e.g., when the theme conditional uses inline styles instead of style buckets)
@@ -1296,7 +1384,7 @@ export function appendPseudoAliasStyleArgs(
 }
 
 /** Builds a `const theme = useTheme();` variable declaration. */
-function buildUseThemeDeclaration(j: JSCodeshift): StatementKind {
+export function buildUseThemeDeclaration(j: JSCodeshift): StatementKind {
   return j.variableDeclaration("const", [
     j.variableDeclarator(j.identifier("theme"), j.callExpression(j.identifier("useTheme"), [])),
   ]);

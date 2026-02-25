@@ -24,11 +24,7 @@ export function Card(props: Omit<React.ComponentProps<"div">, "style"> & CardPro
     <div
       {...rest}
       {...mergedSx(
-        [
-          styles.card,
-          !highlighted && styles.cardNotHighlighted,
-          highlighted ? styles.cardHighlighted : undefined,
-        ],
+        [styles.card, highlighted ? styles.cardHighlighted : styles.cardNotHighlighted],
         className,
       )}
     >

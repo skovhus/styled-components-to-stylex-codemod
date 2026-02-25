@@ -211,6 +211,14 @@ export function handleInterpolatedDeclaration(args: InterpolatedDeclarationConte
       if (!resolved) {
         return false;
       }
+      // Preserve static text surrounding the interpolation slot (e.g. "0 0 0 1px ${theme} , ...")
+      const { prefix, suffix } = extractStaticParts(d.value);
+      const finalValue = buildTemplateWithStaticParts(
+        j,
+        resolved as ExpressionKind,
+        prefix,
+        suffix,
+      );
       for (const out of cssDeclarationToStylexDeclarations(d)) {
         perPropPseudo[out.prop] ??= {};
         const existing = perPropPseudo[out.prop]!;
@@ -248,7 +256,7 @@ export function handleInterpolatedDeclaration(args: InterpolatedDeclarationConte
           }
         }
         for (const ps of pseudos) {
-          existing[ps] = resolved;
+          existing[ps] = finalValue;
         }
       }
       return true;
@@ -516,9 +524,9 @@ export function handleInterpolatedDeclaration(args: InterpolatedDeclarationConte
     if (tryHandlePropertyTernaryTemplateLiteral(d)) {
       continue;
     }
-    // Only apply to base declarations; variant expansion for pseudo/media/attr buckets is more complex.
-    if (!media && !attrTarget && !pseudos?.length) {
-      if (tryHandleCssHelperConditionalBlock(d)) {
+    // Apply to base declarations and pseudo/attr selectors (not media).
+    if (!media && !attrTarget) {
+      if (tryHandleCssHelperConditionalBlock(d, pseudos ?? null)) {
         continue;
       }
     }
@@ -831,12 +839,32 @@ export function handleInterpolatedDeclaration(args: InterpolatedDeclarationConte
         // Pattern: prop === "a" ? A : prop === "b" ? B : C
         // → C is default, A and B are conditional
         const neg = negVariants[0]!;
-        Object.assign(styleObj, neg.style);
+
+        // Check whether the neg variant's CSS properties overlap with the pos variants'.
+        // When they differ (e.g., truthy sets padding/position, falsy sets margin/border),
+        // both branches are meaningful variant buckets — folding neg into base would lose it.
+        const negPropKeys = Object.keys(neg.style);
+        const allPosPropKeys = new Set(posVariants.flatMap((v) => Object.keys(v.style)));
+        // Fold neg into base when: neg is empty (no-op), or neg has the same property
+        // set as the pos variants (classic default/conditional pattern).
+        const shouldFoldNegIntoBase =
+          negPropKeys.length === 0 ||
+          (negPropKeys.length === allPosPropKeys.size &&
+            negPropKeys.every((k) => allPosPropKeys.has(k)));
+
+        // Process pos variants (same in both branches)
         for (const pos of posVariants) {
           variantBuckets.set(pos.when, { ...variantBuckets.get(pos.when), ...pos.style });
-          // toSuffixFromProp handles both simple props ($dim → Dim) and
-          // comparison expressions (variant === "micro" → VariantMicro)
           variantStyleKeys[pos.when] ??= `${decl.styleKey}${toSuffixFromProp(pos.when)}`;
+        }
+
+        if (shouldFoldNegIntoBase) {
+          // Same property sets — fold neg into base (default branch)
+          Object.assign(styleObj, neg.style);
+        } else {
+          // Different property sets — keep neg as a variant bucket too
+          variantBuckets.set(neg.when, { ...variantBuckets.get(neg.when), ...neg.style });
+          variantStyleKeys[neg.when] ??= `${decl.styleKey}${toSuffixFromProp(neg.when)}`;
         }
       } else if (negVariants.length === 1 && posVariants.length === 0) {
         // Only negated variant: style is conditional on !prop

@@ -12,14 +12,14 @@ type BannerProps = React.PropsWithChildren<{
  * ternary with plain template literal branches).
  */
 function Banner(props: BannerProps) {
-  const { children, $prominent } = props;
+  const { children, $prominent, ...rest } = props;
 
   return (
     <div
+      {...rest}
       {...stylex.props(
         styles.banner,
-        $prominent ? styles.bannerProminent : undefined,
-        !$prominent && styles.bannerNotProminent,
+        $prominent ? styles.bannerProminent : styles.bannerNotProminent,
       )}
     >
       {children}

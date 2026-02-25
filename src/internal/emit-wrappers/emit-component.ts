@@ -14,7 +14,11 @@ import {
   type WrapperPropDefaults,
 } from "./types.js";
 import type { JsxAttr, JsxTagName, StatementKind, WrapperEmitter } from "./wrapper-emitter.js";
-import { appendPseudoAliasStyleArgs } from "./emit-intrinsic-simple.js";
+import {
+  appendPseudoAliasStyleArgs,
+  appendThemeBooleanStyleArgs,
+  buildUseThemeDeclaration,
+} from "./emit-intrinsic-simple.js";
 import {
   getAttrsAsString,
   injectRefPropIntoTypeLiteralString,
@@ -31,6 +35,7 @@ import {
 export function emitComponentWrappers(emitter: WrapperEmitter): {
   emitted: ASTNode[];
   needsReactTypeImport: boolean;
+  needsUseThemeImport: boolean;
 } {
   const root = emitter.root;
   const j = emitter.j;
@@ -43,6 +48,7 @@ export function emitComponentWrappers(emitter: WrapperEmitter): {
 
   const emitted: ASTNode[] = [];
   let needsReactTypeImport = false;
+  let needsUseThemeImport = false;
 
   const emitNamedPropsType = (localName: string, typeExprText: string, genericParams?: string) =>
     emitter.emitNamedPropsType({ localName, typeExprText, genericParams, emitted });
@@ -299,6 +305,17 @@ export function emitComponentWrappers(emitter: WrapperEmitter): {
         }),
       );
     }
+
+    // Handle theme boolean conditionals (e.g., theme.isDark ? styles.boxDark : styles.boxLight)
+    const needsUseTheme = appendThemeBooleanStyleArgs(
+      d.needsUseThemeHook,
+      styleArgs,
+      j,
+      stylesIdentifier,
+      () => {
+        needsUseThemeImport = true;
+      },
+    );
 
     // Handle pseudo-alias selectors (e.g., &:${highlight})
     for (const gp of appendPseudoAliasStyleArgs(
@@ -598,6 +615,9 @@ export function emitComponentWrappers(emitter: WrapperEmitter): {
       });
 
       const stmts: StatementKind[] = [declStmt];
+      if (needsUseTheme) {
+        stmts.push(buildUseThemeDeclaration(j));
+      }
       if (merging.sxDecl) {
         stmts.push(merging.sxDecl);
       }
@@ -737,7 +757,10 @@ export function emitComponentWrappers(emitter: WrapperEmitter): {
           emitter.buildWrapperFunction({
             localName: d.localName,
             params: [propsParamId],
-            bodyStmts: [j.returnStatement(jsx as any)],
+            bodyStmts: [
+              ...(needsUseTheme ? [buildUseThemeDeclaration(j)] : []),
+              j.returnStatement(jsx as any),
+            ],
             typeParameters: polymorphicFnTypeParams,
           }),
           d,
@@ -746,5 +769,5 @@ export function emitComponentWrappers(emitter: WrapperEmitter): {
     }
   }
 
-  return { emitted, needsReactTypeImport };
+  return { emitted, needsReactTypeImport, needsUseThemeImport };
 }
