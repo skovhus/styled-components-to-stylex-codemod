@@ -53,7 +53,15 @@ export function buildImportMap(args: {
       if (!s) {
         continue;
       }
-      if (s.type === "ImportSpecifier") {
+      if (s.type === "ImportDefaultSpecifier") {
+        const localName = s.local?.type === "Identifier" ? s.local.name : undefined;
+        if (localName) {
+          importMap.set(localName, {
+            importedName: "default",
+            source: resolvedSource,
+          });
+        }
+      } else if (s.type === "ImportSpecifier") {
         const importedNode = s.imported as { type?: string; name?: string; value?: unknown };
         const importedName =
           importedNode.type === "Identifier"

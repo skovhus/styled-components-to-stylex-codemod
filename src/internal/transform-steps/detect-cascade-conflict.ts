@@ -43,10 +43,12 @@ export function detectCascadeConflictStep(ctx: TransformContext): StepResult {
 
     const importedPath = importEntry.source.value;
 
-    // Check if the imported file contains styled-components
-    const styledNames = styledDefFiles
-      ? resolveStyledDefFile(importedPath, styledDefFiles)
-      : scanFileForStyledDefs(importedPath);
+    // Check if the imported file contains styled-components.
+    // Prefer prepass data when available, but fall back to direct file scan if the
+    // prepass map misses the path (e.g., file outside the configured prepass set).
+    const styledNames =
+      (styledDefFiles && resolveStyledDefFile(importedPath, styledDefFiles)) ||
+      scanFileForStyledDefs(importedPath);
 
     if (!styledNames) {
       continue;
