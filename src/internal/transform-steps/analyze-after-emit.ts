@@ -325,7 +325,8 @@ export function analyzeAfterEmitStep(ctx: TransformContext): StepResult {
     );
     if (!hasDelegate) {
       parentDecl.supportsExternalStyles = false;
-      parentDecl.supportsAsProp = false;
+      // Leave supportsAsProp untouched (undefined for extendedBy parents) so that
+      // shouldAllowAsPropForIntrinsic can still auto-derive `as` from JSX usage.
     }
   }
 
