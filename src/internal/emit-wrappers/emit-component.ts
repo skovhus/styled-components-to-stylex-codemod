@@ -649,6 +649,15 @@ export function emitComponentWrappers(emitter: WrapperEmitter): {
         }),
       );
       const forwardedProps = new Set<string>();
+      // Pre-populate with attr names already emitted as JSX attributes above.
+      // defaultAttrs are emitted by buildDefaultAttrsFromProps (e.g., column={column ?? true}).
+      for (const attr of defaultAttrs) {
+        forwardedProps.add(attr.attrName);
+      }
+      // staticAttrs are emitted by buildStaticAttrsFromRecord (e.g., column={true}).
+      for (const key of Object.keys(staticAttrsWithoutForwardedAsFallback)) {
+        forwardedProps.add(key);
+      }
       const pushForwardedProp = (propName: string) => {
         if (forwardedProps.has(propName)) {
           return;

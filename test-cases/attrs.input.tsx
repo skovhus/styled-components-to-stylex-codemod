@@ -108,6 +108,14 @@ const Box = styled.div.attrs((props) => ({
   overflow: auto;
 `;
 
+// Pattern 8: defaultAttrs with same-name prop that IS in base component's explicit props
+// Verifies no duplication when attrName === jsxProp and prop is in baseExplicitProps
+export const AlignedFlex = styled(Flex).attrs((props) => ({
+  column: props.column ?? true,
+}))<{}>`
+  align-items: center;
+`;
+
 export const App = () => (
   <>
     <Input $small placeholder="Small" />
@@ -119,5 +127,6 @@ export const App = () => (
     <ScrollableWithType gutter="stable">Type alias scrollable</ScrollableWithType>
     <FocusableScroll focusIndex={5}>Focus content</FocusableScroll>
     <Box>Box content</Box>
+    <AlignedFlex>Aligned content</AlignedFlex>
   </>
 );

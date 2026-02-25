@@ -149,6 +149,20 @@ function Box(props: Omit<React.ComponentProps<"div">, "className" | "style">) {
   );
 }
 
+type AlignedFlexProps = Omit<React.ComponentPropsWithRef<typeof Flex>, "className" | "style">;
+
+// Pattern 8: defaultAttrs with same-name prop that IS in base component's explicit props
+// Verifies no duplication when attrName === jsxProp and prop is in baseExplicitProps
+export function AlignedFlex(props: AlignedFlexProps) {
+  const { children, column, ...rest } = props;
+
+  return (
+    <Flex column={column ?? true} {...rest} {...stylex.props(styles.alignedFlex)}>
+      {children}
+    </Flex>
+  );
+}
+
 export const App = () => (
   <>
     <Input $small placeholder="Small" />
@@ -160,6 +174,7 @@ export const App = () => (
     <ScrollableWithType gutter="stable">Type alias scrollable</ScrollableWithType>
     <FocusableScroll focusIndex={5}>Focus content</FocusableScroll>
     <Box>Box content</Box>
+    <AlignedFlex>Aligned content</AlignedFlex>
   </>
 );
 
@@ -210,5 +225,8 @@ const styles = stylex.create({
   },
   box: {
     overflow: "auto",
+  },
+  alignedFlex: {
+    alignItems: "center",
   },
 });
