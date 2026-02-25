@@ -394,7 +394,10 @@ export function emitShouldForwardPropWrappers(ctx: EmitIntrinsicContext): void {
         [callArg],
       );
       if (p.conditionWhen) {
-        const { cond, isBoolean } = emitter.collectConditionProps({ when: p.conditionWhen });
+        const { cond, isBoolean } = emitter.collectConditionProps({
+          when: p.conditionWhen,
+          destructureProps: destructureParts,
+        });
         styleArgs.push(emitter.makeConditionalStyleExpr({ cond, expr: call, isBoolean }));
       } else {
         const isRequired =
