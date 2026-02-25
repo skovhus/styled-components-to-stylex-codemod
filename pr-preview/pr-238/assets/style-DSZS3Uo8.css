@@ -25,6 +25,26 @@ body{font-family:-apple-system,BlinkMacSystemFont,Segoe UI,Roboto,Helvetica Neue
   inherits: false
 }
 
+@property --x-top {
+  syntax: "*";
+  inherits: false
+}
+
+@property --x-right {
+  syntax: "*";
+  inherits: false
+}
+
+@property --x-bottom {
+  syntax: "*";
+  inherits: false
+}
+
+@property --x-left {
+  syntax: "*";
+  inherits: false
+}
+
 @property --x-maxWidth {
   syntax: "*";
   inherits: false
@@ -131,26 +151,6 @@ body{font-family:-apple-system,BlinkMacSystemFont,Segoe UI,Roboto,Helvetica Neue
 }
 
 @property --x-1e2mv7m {
-  syntax: "*";
-  inherits: false
-}
-
-@property --x-top {
-  syntax: "*";
-  inherits: false
-}
-
-@property --x-right {
-  syntax: "*";
-  inherits: false
-}
-
-@property --x-bottom {
-  syntax: "*";
-  inherits: false
-}
-
-@property --x-left {
   syntax: "*";
   inherits: false
 }
@@ -2342,7 +2342,7 @@ body{font-family:-apple-system,BlinkMacSystemFont,Segoe UI,Roboto,Helvetica Neue
   outline-offset: 5px;
 }
 
-.x1308hcw.x1308hcw:where(.x19pepp0:hover *):not(#\#):not(#\#):not(#\#), .xry1jez.xry1jez:where(.x1rnikca:hover *):not(#\#):not(#\#):not(#\#) {
+.xry1jez.xry1jez:where(.x1rnikca:hover *):not(#\#):not(#\#):not(#\#), .x1308hcw.x1308hcw:where(.x19pepp0:hover *):not(#\#):not(#\#):not(#\#) {
   background-color: #639;
 }
 
