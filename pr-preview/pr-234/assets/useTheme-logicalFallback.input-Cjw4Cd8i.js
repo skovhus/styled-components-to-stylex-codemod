@@ -1,0 +1,3 @@
+import{j as t,c}from"./index-D5v1rHO9.js";const s=c.div`
+  color: ${o=>o.theme.color.labelBase??"black"};
+`,l=()=>t.jsx(s,{children:"Fallback test"});export{l as App};
