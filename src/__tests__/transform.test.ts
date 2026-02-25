@@ -2327,6 +2327,64 @@ export const App = () => <Box>Hello</Box>;
     expect(result.code).toContain("const theme = useDesignTheme();");
   });
 
+  it("should not inject duplicate local binding when configured hook is already imported via alias", () => {
+    const source = `
+import styled from "styled-components";
+import { useDesignTheme as useTheme } from "@company/theme-hooks";
+
+const Box = styled.div\`
+  opacity: \${(props) => props.theme.isDark ? 1 : 0.8};
+\`;
+
+export const App = () => <Box>Hello</Box>;
+`;
+
+    const adapterWithAliasedThemeHookImport = {
+      externalInterface() {
+        return { styles: false, as: false };
+      },
+      resolveValue() {
+        return undefined;
+      },
+      resolveCall() {
+        return undefined;
+      },
+      resolveSelector() {
+        return undefined;
+      },
+      styleMerger: null,
+      themeHook: {
+        functionName: "useTheme",
+        importSource: { kind: "specifier" as const, value: "@company/theme-hooks" },
+      },
+    } as Adapter;
+
+    const result = transformWithWarnings(
+      { source, path: "theme-hook-alias-existing.tsx" },
+      { jscodeshift: j, j, stats: () => {}, report: () => {} },
+      { adapter: adapterWithAliasedThemeHookImport },
+    );
+
+    expect(result.code).not.toBeNull();
+    expect(result.code).toContain("const theme = useTheme();");
+    const outputRoot = j(result.code ?? "");
+    let useThemeLocalBindingCount = 0;
+    outputRoot
+      .find(j.ImportDeclaration, { source: { value: "@company/theme-hooks" } } as any)
+      .forEach((importPath: any) => {
+        for (const specifier of (importPath.node.specifiers ?? []) as any[]) {
+          if (specifier.type !== "ImportSpecifier") {
+            continue;
+          }
+          const localName = specifier.local?.name ?? specifier.imported?.name;
+          if (localName === "useTheme") {
+            useThemeLocalBindingCount++;
+          }
+        }
+      });
+    expect(useThemeLocalBindingCount).toBe(1);
+  });
+
   it("should handle negated !theme.isDark conditional", () => {
     const source = `
 import styled from "styled-components";

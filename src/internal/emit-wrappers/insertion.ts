@@ -254,7 +254,10 @@ export function insertEmittedWrappers(args: {
           const importedName =
             specifierPath.node.imported?.name ?? specifierPath.node.imported?.value;
           const localName = specifierPath.node.local?.name ?? importedName;
-          return importedName === themeHookFunctionName && localName === themeHookFunctionName;
+          // Local binding identity is what matters for wrapper calls.
+          // Aliased imports like `import { useDesignTheme as useTheme } ...`
+          // already provide the `useTheme` local symbol and should not trigger injection.
+          return localName === themeHookFunctionName;
         })
         .size() > 0;
 
