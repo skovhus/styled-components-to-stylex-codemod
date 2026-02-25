@@ -284,6 +284,33 @@ describe("bail-out fixtures (_unsupported + _unimplemented)", () => {
   });
 });
 
+describe("cascade conflict detection", () => {
+  const WARNING_TYPE =
+    "styled(ImportedComponent) wraps a component whose file contains internal styled-components — convert the base component's file first to avoid CSS cascade conflicts";
+
+  it("bails on default-imported component wrapping internal styled-components", () => {
+    const source = `
+import * as React from "react";
+import styled from "styled-components";
+import GroupHeader from "./lib/styled-group-header";
+
+const CustomGroupHeader = styled(GroupHeader)\`
+  padding-inline: 14px;
+\`;
+
+export const App = () => <CustomGroupHeader label="test" id="t" />;
+`;
+    const result = transformWithWarnings(
+      { source, path: join(testCasesDir, "cascade-default.input.tsx") },
+      { jscodeshift: j, j, stats: () => {}, report: () => {} },
+      { adapter: fixtureAdapter },
+    );
+    expect(result.code).toBeNull();
+    expect(result.warnings).toHaveLength(1);
+    expect(result.warnings[0]?.type).toBe(WARNING_TYPE);
+  });
+});
+
 describe("test case exports", () => {
   it.each(fixtureCases)(
     "$outputFile should export App in both input and output",

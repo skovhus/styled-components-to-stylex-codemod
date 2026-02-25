@@ -39,6 +39,8 @@ export interface CrossFileInfo {
   componentsNeedingMarkerSidecar: Map<string, Set<string>>;
   /** Target file → exported component names needing global selector bridge className (consumer is not transformed) */
   componentsNeedingGlobalSelectorBridge: Map<string, Set<string>>;
+  /** Files that define styled-components → set of local names. Used for cascade conflict detection. */
+  styledDefFiles?: Map<string, Set<string>>;
 }
 
 /* ── Public API ───────────────────────────────────────────────────────── */
