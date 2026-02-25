@@ -416,6 +416,7 @@ export async function runPrepass(options: PrepassOptions): Promise<PrepassResult
     selectorUsages,
     componentsNeedingMarkerSidecar,
     componentsNeedingGlobalSelectorBridge,
+    styledDefFiles: createExternalInterface ? styledDefFiles : undefined,
   };
 
   // Summary log

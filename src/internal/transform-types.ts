@@ -81,6 +81,8 @@ export interface CrossFileInfo {
   selectorUsages: CrossFileSelectorUsage[];
   /** Component names in this file that need a global selector bridge className (consumer not transformed) */
   bridgeComponentNames?: Set<string>;
+  /** Global map: files that define styled-components → set of local names. Used for cascade conflict detection. */
+  styledDefFiles?: Map<string, Set<string>>;
 }
 
 export interface CrossFileSelectorUsage {

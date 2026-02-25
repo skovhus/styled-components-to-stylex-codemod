@@ -23,6 +23,7 @@ import { cleanupCssImportStep } from "./internal/transform-steps/cleanup-css-imp
 import { collectStaticPropsStep } from "./internal/transform-steps/collect-static-props.js";
 import { collectStyledDeclsStep } from "./internal/transform-steps/collect-styled-decls.js";
 import { convertKeyframesStep } from "./internal/transform-steps/convert-keyframes.js";
+import { detectCascadeConflictStep } from "./internal/transform-steps/detect-cascade-conflict.js";
 import { detectStringMappingFnsStep } from "./internal/transform-steps/detect-string-mapping-fns.js";
 import { detectUnsupportedPatternsStep } from "./internal/transform-steps/detect-unsupported-patterns.js";
 import { rewriteCssHelpersStep } from "./internal/transform-steps/rewrite-css-helpers.js";
@@ -120,6 +121,7 @@ export function transformWithWarnings(
     detectStringMappingFnsStep,
     detectUnsupportedPatternsStep,
     collectStyledDeclsStep,
+    detectCascadeConflictStep,
     lowerRulesStep,
     analyzeBeforeEmitStep,
     rewriteCssHelpersStep,
@@ -157,6 +159,7 @@ export function transformWithWarnings(
 interface GlobalPrepassResult {
   selectorUsages: Map<string, CrossFileSelectorUsage[]>;
   componentsNeedingGlobalSelectorBridge: Map<string, Set<string>>;
+  styledDefFiles?: Map<string, Set<string>>;
 }
 
 /**
@@ -185,13 +188,20 @@ function extractCrossFileInfoForFile(
   const selectorUsages = prepass.selectorUsages.get(absPath);
   const bridgeComponentNames = prepass.componentsNeedingGlobalSelectorBridge?.get(absPath);
 
-  if ((!selectorUsages || selectorUsages.length === 0) && !bridgeComponentNames) {
+  const hasStyledDefFiles = prepass.styledDefFiles && prepass.styledDefFiles.size > 0;
+
+  if (
+    (!selectorUsages || selectorUsages.length === 0) &&
+    !bridgeComponentNames &&
+    !hasStyledDefFiles
+  ) {
     return options;
   }
 
   const crossFileInfo: CrossFileInfo = {
     selectorUsages: selectorUsages ?? [],
     bridgeComponentNames,
+    styledDefFiles: prepass.styledDefFiles,
   };
 
   return { ...options, crossFileInfo };
