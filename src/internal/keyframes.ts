@@ -6,7 +6,7 @@ import type { ASTNode, Collection, ImportDeclaration, JSCodeshift } from "jscode
 import valueParser from "postcss-value-parser";
 import { compile } from "stylis";
 import type { CssRuleIR } from "./css-ir.js";
-import { cssPropertyToStylexProp, resolveBackgroundStylexProp } from "./css-prop-mapping.js";
+import { cssDeclarationToStylexDeclarations } from "./css-prop-mapping.js";
 import { classifyAnimationTokens } from "./lower-rules/animation.js";
 
 export function convertStyledKeyframes(args: {
@@ -81,10 +81,7 @@ function parseKeyframesTemplate(args: {
           continue;
         }
         const raw = propRaw.trim();
-        const prop = cssPropertyToStylexProp(
-          raw === "background" ? resolveBackgroundStylexProp(valueRaw) : raw,
-        );
-        styleObj[prop] = /^-?\d+(\.\d+)?$/.test(valueRaw) ? Number(valueRaw) : valueRaw;
+        applyStaticDeclsToStyleObj(styleObj, raw, valueRaw);
       }
 
       frames[frameKey] = styleObj;
@@ -216,16 +213,34 @@ export function extractInlineKeyframes(
     const frameKey = rule.selector.trim();
     const styleObj: Record<string, unknown> = frames[frameKey] ?? {};
     for (const d of rule.declarations) {
-      const prop = cssPropertyToStylexProp(
-        d.property === "background" ? resolveBackgroundStylexProp(d.valueRaw) : d.property,
-      );
-      const valueRaw = d.valueRaw.trim();
-      styleObj[prop] = /^-?\d+(\.\d+)?$/.test(valueRaw) ? Number(valueRaw) : valueRaw;
+      applyStaticDeclsToStyleObj(styleObj, d.property, d.valueRaw);
     }
     frames[frameKey] = styleObj;
   }
 
   return result;
+}
+
+/**
+ * Expands static CSS declarations into a style object via cssDeclarationToStylexDeclarations.
+ * Handles shorthand expansion and coerces numeric strings to numbers.
+ */
+function applyStaticDeclsToStyleObj(
+  styleObj: Record<string, unknown>,
+  property: string,
+  valueRaw: string,
+): void {
+  for (const out of cssDeclarationToStylexDeclarations({
+    property,
+    value: { kind: "static", value: valueRaw },
+    important: false,
+    valueRaw,
+  })) {
+    if (out.value.kind === "static") {
+      const v = out.value.value.trim();
+      styleObj[out.prop] = /^-?\d+(\.\d+)?$/.test(v) ? Number(v) : v;
+    }
+  }
 }
 
 /**
