@@ -161,70 +161,78 @@ function assertAdapterShape(candidate: unknown, where: string, allowAutoExtIf: b
     );
   }
 
+  // Validate useThemeHook config (null/undefined or object with functionName/importSource)
+  validateHookConfig(obj?.useThemeHook, where, "useThemeHook");
+
   // Validate styleMerger config (null or object with functionName/importSource)
-  const styleMerger = obj?.styleMerger;
-  if (styleMerger !== null && styleMerger !== undefined) {
-    if (typeof styleMerger !== "object") {
-      throw new Error(
-        [
-          `${where}: adapter.styleMerger must be null or an object.`,
-          `Received: styleMerger=${describeValue(styleMerger)}`,
-          "",
-          "Expected shape:",
-          "  {",
-          '    functionName: "stylexProps",',
-          '    importSource: { kind: "specifier", value: "@company/ui-utils" }',
-          "  }",
-        ].join("\n"),
-      );
-    }
+  validateHookConfig(obj?.styleMerger, where, "styleMerger");
+}
 
-    const { functionName, importSource } = styleMerger as {
-      functionName?: unknown;
-      importSource?: unknown;
-    };
+function validateHookConfig(value: unknown, where: string, fieldName: string): void {
+  if (value === null || value === undefined) {
+    return;
+  }
 
-    if (typeof functionName !== "string" || !functionName.trim()) {
-      throw new Error(
-        [
-          `${where}: adapter.styleMerger.functionName must be a non-empty string.`,
-          `Received: functionName=${describeValue(functionName)}`,
-        ].join("\n"),
-      );
-    }
+  if (typeof value !== "object") {
+    throw new Error(
+      [
+        `${where}: adapter.${fieldName} must be null or an object.`,
+        `Received: ${fieldName}=${describeValue(value)}`,
+        "",
+        "Expected shape:",
+        "  {",
+        '    functionName: "useTheme",',
+        '    importSource: { kind: "specifier", value: "@company/theme" }',
+        "  }",
+      ].join("\n"),
+    );
+  }
 
-    if (!importSource || typeof importSource !== "object") {
-      throw new Error(
-        [
-          `${where}: adapter.styleMerger.importSource must be an object.`,
-          `Received: importSource=${describeValue(importSource)}`,
-          "",
-          "Expected shape:",
-          '  { kind: "specifier", value: "@company/ui-utils" }',
-          "  or",
-          '  { kind: "absolutePath", value: "/path/to/module.ts" }',
-        ].join("\n"),
-      );
-    }
+  const { functionName, importSource } = value as {
+    functionName?: unknown;
+    importSource?: unknown;
+  };
 
-    const { kind, value } = importSource as { kind?: unknown; value?: unknown };
-    if (kind !== "specifier" && kind !== "absolutePath") {
-      throw new Error(
-        [
-          `${where}: adapter.styleMerger.importSource.kind must be "specifier" or "absolutePath".`,
-          `Received: kind=${describeValue(kind)}`,
-        ].join("\n"),
-      );
-    }
+  if (typeof functionName !== "string" || !functionName.trim()) {
+    throw new Error(
+      [
+        `${where}: adapter.${fieldName}.functionName must be a non-empty string.`,
+        `Received: functionName=${describeValue(functionName)}`,
+      ].join("\n"),
+    );
+  }
 
-    if (typeof value !== "string" || !value.trim()) {
-      throw new Error(
-        [
-          `${where}: adapter.styleMerger.importSource.value must be a non-empty string.`,
-          `Received: value=${describeValue(value)}`,
-        ].join("\n"),
-      );
-    }
+  if (!importSource || typeof importSource !== "object") {
+    throw new Error(
+      [
+        `${where}: adapter.${fieldName}.importSource must be an object.`,
+        `Received: importSource=${describeValue(importSource)}`,
+        "",
+        "Expected shape:",
+        '  { kind: "specifier", value: "@company/theme" }',
+        "  or",
+        '  { kind: "absolutePath", value: "/path/to/module.ts" }',
+      ].join("\n"),
+    );
+  }
+
+  const { kind, value: importValue } = importSource as { kind?: unknown; value?: unknown };
+  if (kind !== "specifier" && kind !== "absolutePath") {
+    throw new Error(
+      [
+        `${where}: adapter.${fieldName}.importSource.kind must be "specifier" or "absolutePath".`,
+        `Received: kind=${describeValue(kind)}`,
+      ].join("\n"),
+    );
+  }
+
+  if (typeof importValue !== "string" || !importValue.trim()) {
+    throw new Error(
+      [
+        `${where}: adapter.${fieldName}.importSource.value must be a non-empty string.`,
+        `Received: value=${describeValue(importValue)}`,
+      ].join("\n"),
+    );
   }
 }
 

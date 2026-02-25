@@ -2,7 +2,9 @@
  * Inserts emitted wrapper nodes into the AST and preserves comments.
  * Core concepts: wrapper ordering and React type import management.
  */
+import path from "node:path";
 import type { ASTNode, Comment } from "jscodeshift";
+import type { UseThemeHookConfig } from "../../adapter.js";
 import type { WrapperEmitter } from "./wrapper-emitter.js";
 import { ensureReactBinding } from "../utilities/ensure-react-binding.js";
 import { extractDefaultAsTagFromDestructure } from "../utilities/polymorphic-as-detection.js";
@@ -232,42 +234,78 @@ export function insertEmittedWrappers(args: {
     ensureReactBinding({ root, j, useNamespaceStyle: true });
   }
 
-  // Add useTheme import from styled-components when needed for theme boolean conditionals
   if (needsUseThemeImport) {
-    // Check if useTheme is already imported from styled-components
-    // Filter out type-only imports (import type) since we need a runtime binding
-    const existingImport = root
-      .find(j.ImportDeclaration, {
-        source: { value: "styled-components" },
-      } as any)
-      .filter((path: any) => path.node.importKind !== "type");
+    ensureUseThemeImport(emitter);
+  }
+}
 
-    if (existingImport.size() > 0) {
-      // Check if useTheme is already in the import
-      const hasUseTheme = existingImport.find(j.ImportSpecifier, {
-        imported: { name: "useTheme" },
-      } as any);
+// ────────────────────────────────────────────────────────────────────────────
+// useTheme import helpers
+// ────────────────────────────────────────────────────────────────────────────
 
-      if (hasUseTheme.size() === 0) {
-        // Add useTheme to existing import (only the first non-type import)
-        existingImport.at(0).forEach((path: any) => {
-          const specifiers = path.node.specifiers ?? [];
-          specifiers.push(j.importSpecifier(j.identifier("useTheme")));
-        });
+function resolveUseThemeConfig(config: UseThemeHookConfig | null | undefined): {
+  functionName: string;
+  moduleSpecifier: string;
+} {
+  if (config) {
+    const moduleSpecifier =
+      config.importSource.kind === "specifier"
+        ? config.importSource.value
+        : config.importSource.value;
+    return { functionName: config.functionName, moduleSpecifier };
+  }
+  return { functionName: "useTheme", moduleSpecifier: "styled-components" };
+}
+
+function toModuleSpecifier(config: UseThemeHookConfig, filePath: string): string {
+  if (config.importSource.kind === "specifier") {
+    return config.importSource.value;
+  }
+  const baseDir = path.dirname(filePath);
+  let rel = path.relative(baseDir, config.importSource.value);
+  rel = rel.split(path.sep).join("/");
+  if (!rel.startsWith(".")) {
+    rel = `./${rel}`;
+  }
+  return rel;
+}
+
+function ensureUseThemeImport(emitter: WrapperEmitter): void {
+  const { root, j, useThemeHook, filePath } = emitter;
+  const { functionName, moduleSpecifier } = useThemeHook
+    ? {
+        functionName: useThemeHook.functionName,
+        moduleSpecifier: toModuleSpecifier(useThemeHook, filePath),
       }
+    : resolveUseThemeConfig(null);
+
+  const existingImport = root
+    .find(j.ImportDeclaration, {
+      source: { value: moduleSpecifier },
+    } as any)
+    .filter((p: any) => p.node.importKind !== "type");
+
+  if (existingImport.size() > 0) {
+    const hasHook = existingImport.find(j.ImportSpecifier, {
+      imported: { name: functionName },
+    } as any);
+
+    if (hasHook.size() === 0) {
+      existingImport.at(0).forEach((p: any) => {
+        const specifiers = p.node.specifiers ?? [];
+        specifiers.push(j.importSpecifier(j.identifier(functionName)));
+      });
+    }
+  } else {
+    const hookImport = j.importDeclaration(
+      [j.importSpecifier(j.identifier(functionName))],
+      j.literal(moduleSpecifier),
+    );
+    const firstImport = root.find(j.ImportDeclaration).at(0);
+    if (firstImport.size() > 0) {
+      firstImport.insertAfter(hookImport);
     } else {
-      // No runtime import from styled-components exists, create a new one
-      const useThemeImport = j.importDeclaration(
-        [j.importSpecifier(j.identifier("useTheme"))],
-        j.literal("styled-components"),
-      );
-      // Insert after the first import
-      const firstImport = root.find(j.ImportDeclaration).at(0);
-      if (firstImport.size() > 0) {
-        firstImport.insertAfter(useThemeImport);
-      } else {
-        root.get().node.program.body.unshift(useThemeImport);
-      }
+      root.get().node.program.body.unshift(hookImport);
     }
   }
 }

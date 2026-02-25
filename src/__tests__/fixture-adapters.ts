@@ -22,6 +22,9 @@ export const fixtureAdapter = defineAdapter({
     importSource: { kind: "specifier", value: "./lib/mergedSx" },
   },
 
+  // Use default useTheme from styled-components (null = default behavior)
+  useThemeHook: null,
+
   // Configure external interface for exported components
   externalInterface(ctx): ExternalInterfaceResult {
     // Enable external styles + polymorphic `as` prop for test cases that need both

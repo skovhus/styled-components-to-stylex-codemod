@@ -342,7 +342,7 @@ export function emitSimpleWithConfigWrappers(ctx: EmitIntrinsicContext): void {
 
     const bodyStmts: StatementKind[] = [declStmt];
     if (needsUseThemeWithConfig) {
-      bodyStmts.push(buildUseThemeDeclaration(j));
+      bodyStmts.push(buildUseThemeDeclaration(j, emitter.useThemeHook?.functionName));
     }
     if (merging.sxDecl) {
       bodyStmts.push(merging.sxDecl);
@@ -985,7 +985,7 @@ export function emitSimpleExportedIntrinsicWrappers(ctx: EmitIntrinsicContext): 
 
       const bodyStmts: StatementKind[] = [declStmt];
       if (needsUseTheme) {
-        bodyStmts.push(buildUseThemeDeclaration(j));
+        bodyStmts.push(buildUseThemeDeclaration(j, emitter.useThemeHook?.functionName));
       }
       if (merging.sxDecl) {
         bodyStmts.push(merging.sxDecl);
@@ -1383,9 +1383,9 @@ export function appendPseudoAliasStyleArgs(
   return guardProps;
 }
 
-/** Builds a `const theme = useTheme();` variable declaration. */
-export function buildUseThemeDeclaration(j: JSCodeshift): StatementKind {
+/** Builds a `const theme = <hookName>();` variable declaration. */
+export function buildUseThemeDeclaration(j: JSCodeshift, hookName = "useTheme"): StatementKind {
   return j.variableDeclaration("const", [
-    j.variableDeclarator(j.identifier("theme"), j.callExpression(j.identifier("useTheme"), [])),
+    j.variableDeclarator(j.identifier("theme"), j.callExpression(j.identifier(hookName), [])),
   ]);
 }

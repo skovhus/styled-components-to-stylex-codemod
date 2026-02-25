@@ -356,6 +356,34 @@ export interface StyleMergerConfig {
 }
 
 // ────────────────────────────────────────────────────────────────────────────
+// useTheme Hook Configuration
+// ────────────────────────────────────────────────────────────────────────────
+
+/**
+ * Configuration for a custom `useTheme` hook import.
+ *
+ * When configured, the codemod imports the specified hook instead of
+ * `useTheme` from `"styled-components"`.
+ *
+ * Example:
+ *   `useThemeHook: { functionName: "useTheme", importSource: { kind: "specifier", value: "@company/theme" } }`
+ * generates:
+ *   `import { useTheme } from "@company/theme";`
+ */
+export interface UseThemeHookConfig {
+  /**
+   * Function name for the hook (e.g., "useTheme" or "useMyTheme").
+   */
+  functionName: string;
+
+  /**
+   * Import source for the hook.
+   * Example: `{ kind: "specifier", value: "@company/theme" }`
+   */
+  importSource: ImportSource;
+}
+
+// ────────────────────────────────────────────────────────────────────────────
 // Adapter Interface
 // ────────────────────────────────────────────────────────────────────────────
 
@@ -426,6 +454,24 @@ export interface Adapter {
    * ```
    */
   styleMerger: StyleMergerConfig | null;
+
+  /**
+   * Custom hook for accessing the theme at runtime.
+   *
+   * When provided, the codemod imports the specified hook instead of
+   * `useTheme` from `"styled-components"`.
+   *
+   * Set to `null` or omit to use the default (`useTheme` from `"styled-components"`).
+   *
+   * Example:
+   * ```typescript
+   * useThemeHook: {
+   *   functionName: "useTheme",
+   *   importSource: { kind: "specifier", value: "@company/theme" }
+   * }
+   * ```
+   */
+  useThemeHook?: UseThemeHookConfig | null;
 }
 
 // ────────────────────────────────────────────────────────────────────────────
@@ -455,6 +501,12 @@ export interface AdapterInput {
   externalInterface: "auto" | Adapter["externalInterface"];
 
   styleMerger: Adapter["styleMerger"];
+
+  /**
+   * Custom hook for accessing the theme at runtime.
+   * Same as `Adapter["useThemeHook"]`.
+   */
+  useThemeHook?: Adapter["useThemeHook"];
 }
 
 // ────────────────────────────────────────────────────────────────────────────
@@ -510,6 +562,12 @@ export interface AdapterInput {
  *
  *     // Optional: provide a custom merger, or use `null` for the default verbose merge output
  *     styleMerger: null,
+ *
+ *     // Optional: provide a custom useTheme hook, or omit/set null for the default (styled-components)
+ *     useThemeHook: {
+ *       functionName: "useTheme",
+ *       importSource: { kind: "specifier", value: "@company/theme" },
+ *     },
  *   });
  */
 export function defineAdapter<T extends AdapterInput>(adapter: T): T {
