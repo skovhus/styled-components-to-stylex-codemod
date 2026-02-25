@@ -21,12 +21,10 @@ ListItem.HEIGHT = 42;
 ListItem.PADDING = 8;
 
 // Pattern 2: styled(BaseComponent) with static props defined in same file
-function BaseButton<C extends React.ElementType = "button">(
-  props: React.ComponentProps<"button"> & { as?: C },
-) {
-  const { as: Component = "button", className, children, style } = props;
+function BaseButton(props: React.ComponentProps<"button">) {
+  const { className, children, style } = props;
 
-  return <Component {...mergedSx(styles.baseButton, className, style)}>{children}</Component>;
+  return <button {...mergedSx(styles.baseButton, className, style)}>{children}</button>;
 }
 
 BaseButton.HEIGHT = 36;
