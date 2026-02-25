@@ -5,7 +5,7 @@ import type { LayerTransientProps } from "./lib/conditionalNestedConditionRootPr
 type LayerProps = React.PropsWithChildren<LayerTransientProps>;
 
 function Layer(props: LayerProps) {
-  const { children, $layer, $zIndex } = props;
+  const { children, $zIndex, $layer } = props;
 
   return (
     <div {...stylex.props(styles.layer, $layer.isTop ? styles.layerZIndex($zIndex) : undefined)}>
