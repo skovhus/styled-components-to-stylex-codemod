@@ -971,6 +971,18 @@ body{font-family:-apple-system,BlinkMacSystemFont,Segoe UI,Roboto,Helvetica Neue
   outline: 2px solid var(--xvyasvk);
 }
 
+.x1o1ix2k.x1o1ix2k:where(.x-default-marker:hover *):not(#\#):not(#\#) {
+  border-color: var(--xufgxy3);
+}
+
+.x2xw8so.x2xw8so:where(.x-default-marker:hover *):not(#\#):not(#\#) {
+  border-style: solid;
+}
+
+.xj5psce.xj5psce:where(.x-default-marker:hover *):not(#\#):not(#\#) {
+  border-width: 2px;
+}
+
 .x1xzfv2i:hover:not(:disabled):not(:focus):not(#\#):not(#\#) {
   border-color: #999;
 }
