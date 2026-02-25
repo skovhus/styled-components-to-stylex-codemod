@@ -2,7 +2,7 @@
  * Finalizes per-declaration style objects after rule processing.
  * Core concepts: merge pseudo/media buckets, rewrite CSS vars, and emit variants.
  */
-import { cssPropertyToStylexProp, resolveBackgroundStylexProp } from "../css-prop-mapping.js";
+import { cssDeclarationToStylexDeclarations } from "../css-prop-mapping.js";
 import { cssValueToJs, toStyleKey, toSuffixFromProp } from "../transform/helpers.js";
 import { extractUnionLiteralValues, groupVariantBucketsIntoDimensions } from "./variants.js";
 import {
@@ -171,12 +171,19 @@ export function finalizeDeclProcessing(ctx: DeclProcessingState): void {
         if (PLACEHOLDER_RE.test(value)) {
           continue;
         }
-        // Convert CSS property name to camelCase (e.g., outline-offset -> outlineOffset)
-        const outProp = cssPropertyToStylexProp(
-          prop === "background" ? resolveBackgroundStylexProp(value) : prop,
-        );
-        const jsVal = cssValueToJs({ kind: "static", value } as any, false, outProp);
-        (bucket as Record<string, unknown>)[outProp] = jsVal;
+        // Use cssDeclarationToStylexDeclarations for proper shorthand expansion
+        // (border → borderWidth/Style/Color, background → backgroundColor, etc.)
+        for (const out of cssDeclarationToStylexDeclarations({
+          property: prop,
+          value: { kind: "static", value },
+          important: false,
+          valueRaw: value,
+        })) {
+          if (out.value.kind === "static") {
+            const jsVal = cssValueToJs(out.value, false, out.prop);
+            (bucket as Record<string, unknown>)[out.prop] = jsVal;
+          }
+        }
       }
     };
 

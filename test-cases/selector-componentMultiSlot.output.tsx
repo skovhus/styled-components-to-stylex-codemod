@@ -26,9 +26,17 @@ const styles = stylex.create({
       default: null,
       [stylex.when.ancestor(":hover")]: `0 4px 8px ${$colors.labelBase}`,
     },
-    border: {
+    borderWidth: {
       default: null,
-      [stylex.when.ancestor(":hover")]: `2px solid ${$colors.bgSub}`,
+      [stylex.when.ancestor(":hover")]: "2px",
+    },
+    borderStyle: {
+      default: null,
+      [stylex.when.ancestor(":hover")]: "solid",
+    },
+    borderColor: {
+      default: null,
+      [stylex.when.ancestor(":hover")]: $colors.bgSub,
     },
   },
 });

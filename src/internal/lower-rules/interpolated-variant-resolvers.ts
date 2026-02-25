@@ -246,73 +246,82 @@ export function handleSplitVariantsResolvedValue(ctx: SplitVariantsContext): boo
     target: Record<string, unknown>,
     parsed: { exprAst: unknown; imports: any[] },
     stylexPropOverride?: string,
-  ): void => {
+  ): boolean => {
     const effectiveStylexProp = stylexPropOverride ?? stylexProp;
     for (const imp of parsed.imports) {
       resolverImports.set(JSON.stringify(imp), imp);
     }
+
+    // Helper: apply a single prop value to target, respecting media/pseudo context.
+    const applyWithContext = (prop: string, valueAst: unknown): void => {
+      if (media) {
+        const existing = target[prop];
+        const map =
+          existing &&
+          typeof existing === "object" &&
+          !Array.isArray(existing) &&
+          !isAstNode(existing)
+            ? (existing as Record<string, unknown>)
+            : ({} as Record<string, unknown>);
+        if (!("default" in map)) {
+          const baseValue = existing ?? styleObj[prop];
+          map.default = baseValue ?? null;
+        }
+        map[media] = valueAst as any;
+        target[prop] = map;
+        return;
+      }
+      if (pseudos?.length) {
+        const existing = target[prop];
+        const map =
+          existing &&
+          typeof existing === "object" &&
+          !Array.isArray(existing) &&
+          !isAstNode(existing)
+            ? (existing as Record<string, unknown>)
+            : ({} as Record<string, unknown>);
+        if (!("default" in map)) {
+          const baseValue = existing ?? styleObj[prop];
+          map.default = baseValue ?? null;
+        }
+        for (const ps of pseudos) {
+          map[ps] = valueAst as any;
+        }
+        target[prop] = map;
+        return;
+      }
+      target[prop] = valueAst as any;
+    };
+
     // Special handling for border shorthand (including directional borders)
     const borderMatch = cssProp.match(/^border(-top|-right|-bottom|-left)?$/);
     if (borderMatch) {
       const direction = borderMatch[1]
         ? borderMatch[1].slice(1).charAt(0).toUpperCase() + borderMatch[1].slice(2)
         : "";
-      if (expandBorderShorthand(target, parsed.exprAst, direction)) {
-        return;
+      const tempBucket: Record<string, unknown> = {};
+      if (expandBorderShorthand(tempBucket, parsed.exprAst, direction)) {
+        for (const [prop, val] of Object.entries(tempBucket)) {
+          applyWithContext(prop, val);
+        }
+        return true;
       }
+      // Border shorthand couldn't be expanded — bail to prevent shorthand leak
+      return false;
     }
-    if (
-      (cssProp === "padding" || cssProp === "margin") &&
-      expandBoxShorthand(target, parsed.exprAst, cssProp)
-    ) {
-      return;
-    }
-    // Default: use the property from cssDeclarationToStylexDeclarations.
-    // Preserve media/pseudo selectors by writing a per-prop map instead of
-    // overwriting the base/default value.
-    if (media) {
-      const existing = target[effectiveStylexProp];
-      const map =
-        existing && typeof existing === "object" && !Array.isArray(existing) && !isAstNode(existing)
-          ? (existing as Record<string, unknown>)
-          : ({} as Record<string, unknown>);
-      // Set default from target first, then fall back to base styleObj.
-      // Only use null if neither has a value (for properties like outlineStyle that need explicit null).
-      if (!("default" in map)) {
-        const baseValue = existing ?? styleObj[effectiveStylexProp];
-        map.default = baseValue ?? null;
+    if (cssProp === "padding" || cssProp === "margin") {
+      const tempBucket: Record<string, unknown> = {};
+      if (expandBoxShorthand(tempBucket, parsed.exprAst, cssProp)) {
+        for (const [prop, val] of Object.entries(tempBucket)) {
+          applyWithContext(prop, val);
+        }
+        return true;
       }
-      map[media] = parsed.exprAst as any;
-      target[effectiveStylexProp] = map;
-      return;
-    }
-    if (pseudos?.length) {
-      const existing = target[effectiveStylexProp];
-      // `existing` may be:
-      // - a scalar (string/number)
-      // - an AST node (e.g. { type: "StringLiteral", ... })
-      // - an already-built pseudo map (plain object with `default` / `:hover` keys)
-      //
-      // Only treat it as an existing pseudo map when it's a plain object *and* not an AST node.
-      const map =
-        existing && typeof existing === "object" && !Array.isArray(existing) && !isAstNode(existing)
-          ? (existing as Record<string, unknown>)
-          : ({} as Record<string, unknown>);
-      // Set default from target first, then fall back to base styleObj.
-      // Only use null if neither has a value (for properties like outlineStyle that need explicit null).
-      if (!("default" in map)) {
-        const baseValue = existing ?? styleObj[effectiveStylexProp];
-        map.default = baseValue ?? null;
-      }
-      // Apply to all pseudos (e.g., both :hover and :focus for "&:hover, &:focus")
-      for (const ps of pseudos) {
-        map[ps] = parsed.exprAst as any;
-      }
-      target[effectiveStylexProp] = map;
-      return;
+      // Fall through to default handler — StyleX accepts single-value margin/padding
     }
 
-    target[effectiveStylexProp] = parsed.exprAst as any;
+    applyWithContext(effectiveStylexProp, parsed.exprAst);
+    return true;
   };
 
   // IMPORTANT: stage parsing first. If either branch fails to parse, skip this declaration entirely
@@ -382,7 +391,10 @@ export function handleSplitVariantsResolvedValue(ctx: SplitVariantsContext): boo
   }
 
   if (negParsed) {
-    applyParsed(styleObj as any, negParsed);
+    if (!applyParsed(styleObj as any, negParsed)) {
+      setBail();
+      return true;
+    }
   }
   // Apply all positive variants
   // For nested ternaries (multiple variants), use simpler nameHint-based naming.
@@ -391,7 +403,10 @@ export function handleSplitVariantsResolvedValue(ctx: SplitVariantsContext): boo
   for (const { when, nameHint, parsed } of allPosParsed) {
     const whenClean = when.replace(/^!/, "");
     const bucket = { ...variantBuckets.get(whenClean) } as Record<string, unknown>;
-    applyParsed(bucket, parsed);
+    if (!applyParsed(bucket, parsed)) {
+      setBail();
+      return true;
+    }
     variantBuckets.set(whenClean, bucket);
     // Use nameHint only for nested ternaries and when it's meaningful.
     // Generic hints like "truthy", "falsy", "default", "match" should fall back to toSuffixFromProp
@@ -449,6 +464,12 @@ export function handleSplitMultiPropVariantsResolvedValue(ctx: SplitVariantsCont
     stylexPropMulti = resolved;
   } else {
     stylexPropMulti = cssPropertyToStylexProp(cssProp);
+  }
+
+  // Bail on border shorthands — compound variant expansion for these is unsupported
+  if (/^border(Top|Right|Bottom|Left)?$/.test(stylexPropMulti)) {
+    setBail();
+    return true;
   }
 
   // Extract static prefix/suffix from CSS value for wrapping resolved values

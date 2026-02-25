@@ -952,7 +952,15 @@ function processDeclarationsIntoBucket(
       }
       if (resolveResult) {
         for (const out of cssDeclarationToStylexDeclarations(d)) {
-          bucket[out.prop] = buildInterpolatedValue(j, d, resolveResult);
+          if (out.value.kind === "static") {
+            // Shorthand expansion produced a static component (e.g., borderWidth from border)
+            const v = cssValueToJs(out.value, d.important, out.prop);
+            bucket[out.prop] = v;
+          } else {
+            // Build interpolated value using the output's parts (may differ from original d
+            // when shorthand expansion strips the static prefix, e.g., border → borderColor)
+            bucket[out.prop] = buildInterpolatedValue(j, { value: out.value }, resolveResult);
+          }
           writtenProps.add(out.prop);
         }
       }
