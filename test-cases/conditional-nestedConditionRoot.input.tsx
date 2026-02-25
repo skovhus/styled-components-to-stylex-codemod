@@ -1,7 +1,8 @@
 // Nested condition root prop with z-index interpolation should preserve all referenced props
 import styled from "styled-components";
+import type { LayerTransientProps } from "./lib/conditionalNestedConditionRootProps";
 
-const Layer = styled.div`
+const Layer = styled.div<LayerTransientProps>`
   position: relative;
   width: 100px;
   height: 60px;

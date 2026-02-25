@@ -1,11 +1,8 @@
 import * as React from "react";
 import * as stylex from "@stylexjs/stylex";
+import type { LayerTransientProps } from "./lib/conditionalNestedConditionRootProps";
 
-type LayerProps = React.PropsWithChildren<{
-  ref?: React.Ref<HTMLDivElement>;
-  $layer?: any;
-  $zIndex?: any;
-}>;
+type LayerProps = React.PropsWithChildren<LayerTransientProps>;
 
 function Layer(props: LayerProps) {
   const { children, $layer, $zIndex } = props;
@@ -36,7 +33,7 @@ const styles = stylex.create({
     backgroundColor: "#ddd",
     color: "#222",
   },
-  layerZIndex: (zIndex: string) => ({
+  layerZIndex: (zIndex: number | undefined) => ({
     zIndex,
   }),
 });
