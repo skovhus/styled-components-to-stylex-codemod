@@ -220,41 +220,31 @@ export function emitIntrinsicPolymorphicWrappers(ctx: EmitIntrinsicContext): voi
       const styleId = j.identifier("style");
       const forwardedAsId = j.identifier("forwardedAs");
 
-      const declStmt = j.variableDeclaration("const", [
-        j.variableDeclarator(
-          j.objectPattern([
-            ...(allowAsProp
-              ? [
-                  j.property.from({
-                    kind: "init",
-                    key: j.identifier("as"),
-                    value: j.assignmentPattern(j.identifier("Component"), j.literal(tagName)),
-                    shorthand: false,
-                  }),
-                ]
-              : []),
-            ...(includesForwardedAs ? [ctx.patternProp("forwardedAs", forwardedAsId)] : []),
-            ...(allowClassNameProp ? [ctx.patternProp("className", classNameId)] : []),
-            ...(includeChildren ? [ctx.patternProp("children", childrenId)] : []),
-            ...(allowStyleProp ? [ctx.patternProp("style", styleId)] : []),
-            // Add variant props to destructuring (with defaults when available)
-            ...destructureProps.filter(Boolean).map((name) => {
-              const defaultVal = propDefaults.get(name);
-              if (defaultVal !== undefined) {
-                // Create property with default: { name = "defaultValue" }
-                return j.property.from({
+      const patternProps = emitter.buildDestructurePatternProps({
+        baseProps: [
+          ...(allowAsProp
+            ? [
+                j.property.from({
                   kind: "init",
-                  key: j.identifier(name),
-                  value: j.assignmentPattern(j.identifier(name), j.literal(defaultVal)),
+                  key: j.identifier("as"),
+                  value: j.assignmentPattern(j.identifier("Component"), j.literal(tagName)),
                   shorthand: false,
-                });
-              }
-              return ctx.patternProp(name);
-            }),
-            j.restElement(restId),
-          ] as any),
-          propsId,
-        ),
+                }),
+              ]
+            : []),
+          ...(includesForwardedAs ? [ctx.patternProp("forwardedAs", forwardedAsId)] : []),
+          ...(allowClassNameProp ? [ctx.patternProp("className", classNameId)] : []),
+          ...(includeChildren ? [ctx.patternProp("children", childrenId)] : []),
+          ...(allowStyleProp ? [ctx.patternProp("style", styleId)] : []),
+        ],
+        destructureProps,
+        propDefaults,
+        includeRest: true,
+        restId,
+      });
+
+      const declStmt = j.variableDeclaration("const", [
+        j.variableDeclarator(j.objectPattern(patternProps as any), propsId),
       ]);
 
       const { attrsInfo, staticClassNameExpr } = emitter.splitAttrsInfo(

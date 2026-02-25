@@ -1,5 +1,6 @@
 import React from "react";
 import * as stylex from "@stylexjs/stylex";
+import { mergedSx } from "./lib/mergedSx";
 
 // A component with static sub-components (like Select.Option, Select.Group)
 const BaseSelect = (props: { children: React.ReactNode; className?: string }) => (
@@ -14,10 +15,14 @@ BaseSelect.Group = (props: { children: React.ReactNode; label: string }) => (
 BaseSelect.Separator = () => <hr />;
 
 // Styled version that extends BaseSelect - inherits static properties
-function StyledSelect(
-  props: Omit<React.ComponentPropsWithRef<typeof BaseSelect>, "className" | "style">,
-) {
-  return <BaseSelect {...props} {...stylex.props(styles.styledSelect)} />;
+function StyledSelect(props: Omit<React.ComponentPropsWithRef<typeof BaseSelect>, "style">) {
+  const { className, children, ...rest } = props;
+
+  return (
+    <BaseSelect {...rest} {...mergedSx(styles.styledSelect, className)}>
+      {children}
+    </BaseSelect>
+  );
 }
 
 StyledSelect.Option = (BaseSelect as any).Option;

@@ -125,8 +125,31 @@ export function emitComponentWrappers(emitter: WrapperEmitter): {
     const supportsAsProp = d.supportsAsProp ?? false;
     const shouldAllowAsProp = wrapperNames.has(d.localName) || supportsAsProp;
     const isPolymorphicComponentWrapper = shouldAllowAsProp && !wrappedComponentHasAs;
-    const allowClassNameProp = emitter.shouldAllowClassNameProp(d);
-    const allowStyleProp = emitter.shouldAllowStyleProp(d);
+    // Check if the wrapped component's props explicitly include className/style.
+    // When true, the wrapper should accept and forward these props so the wrapped
+    // component's className/style are not silently dropped by the styled() layer.
+    const wrappedHasClassName = localComponentHasProp(wrappedComponent, "className");
+    const wrappedHasStyle = localComponentHasProp(wrappedComponent, "style");
+    const shouldAllowClassName = emitter.shouldAllowClassNameProp(d);
+    const shouldAllowStyle = emitter.shouldAllowStyleProp(d);
+    const allowClassNameProp = shouldAllowClassName || wrappedHasClassName;
+    const allowStyleProp = shouldAllowStyle || wrappedHasStyle;
+    // When the wrapped component has className/style as REQUIRED props, we must
+    // force them to be optional in the wrapper's type. Otherwise, the wrapper would
+    // inherit the requiredness, breaking call sites that don't pass className/style
+    // (styled-components injects them automatically).
+    // This applies regardless of whether allowClassNameProp is true - even if call
+    // sites pass className, the wrapper should accept it as optional.
+    const wrappedClassNameRequired =
+      wrappedHasClassName &&
+      baseComponentPropsType &&
+      emitter.isPropRequiredInPropsTypeLiteral(baseComponentPropsType, "className");
+    const wrappedStyleRequired =
+      wrappedHasStyle &&
+      baseComponentPropsType &&
+      emitter.isPropRequiredInPropsTypeLiteral(baseComponentPropsType, "style");
+    const forceClassNameOptional = !!wrappedClassNameRequired;
+    const forceStyleOptional = !!wrappedStyleRequired;
     const hasForwardedAsUsage = emitter.hasForwardedAsUsage(d.localName);
     const shouldLowerForwardedAs = hasForwardedAsUsage && !wrappedComponentHasAs;
     const propsIdForExpr = j.identifier("props");
@@ -151,16 +174,29 @@ export function emitComponentWrappers(emitter: WrapperEmitter): {
         const baseTypeText = (() => {
           const base = `React.ComponentPropsWithRef<typeof ${renderedComponent}>`;
           const omitted: string[] = [];
-          if (!allowClassNameProp) {
+          // When forcing optional, always omit to prevent inheriting requiredness
+          if (!allowClassNameProp || forceClassNameOptional) {
             omitted.push('"className"');
           }
-          if (!allowStyleProp) {
+          if (!allowStyleProp || forceStyleOptional) {
             omitted.push('"style"');
           }
           const baseWithOmit = omitted.length ? `Omit<${base}, ${omitted.join(" | ")}>` : base;
-          return hasForwardedAsUsage
-            ? emitter.joinIntersection(baseWithOmit, "{ forwardedAs?: React.ElementType }")
-            : baseWithOmit;
+          // Add optional className/style when forcing optional
+          const optionalProps: string[] = [];
+          if (forceClassNameOptional) {
+            optionalProps.push("className?: string");
+          }
+          if (forceStyleOptional) {
+            optionalProps.push("style?: React.CSSProperties");
+          }
+          if (hasForwardedAsUsage) {
+            optionalProps.push("forwardedAs?: React.ElementType");
+          }
+          if (optionalProps.length > 0) {
+            return emitter.joinIntersection(baseWithOmit, `{ ${optionalProps.join("; ")} }`);
+          }
+          return baseWithOmit;
         })();
         // Extend the existing type in-place so the wrapper can reuse it.
         const interfaceExtended = emitter.extendExistingInterface(explicitTypeName, baseTypeText);
@@ -170,7 +206,18 @@ export function emitComponentWrappers(emitter: WrapperEmitter): {
         functionParamTypeName = explicitTypeName;
       } else {
         if (isPolymorphicComponentWrapper) {
-          const baseProps = `React.ComponentPropsWithRef<typeof ${renderedComponent}>`;
+          const basePropsRaw = `React.ComponentPropsWithRef<typeof ${renderedComponent}>`;
+          // When forcing optional, omit className/style from base to prevent inheriting requiredness
+          const baseOmitted: string[] = [];
+          if (forceClassNameOptional) {
+            baseOmitted.push('"className"');
+          }
+          if (forceStyleOptional) {
+            baseOmitted.push('"style"');
+          }
+          const baseProps = baseOmitted.length
+            ? `Omit<${basePropsRaw}, ${baseOmitted.join(" | ")}>`
+            : basePropsRaw;
           const omitted: string[] = [];
           if (!allowClassNameProp) {
             omitted.push('"className"');
@@ -178,11 +225,20 @@ export function emitComponentWrappers(emitter: WrapperEmitter): {
           if (!allowStyleProp) {
             omitted.push('"style"');
           }
+          // Add optional className/style when forcing optional
+          const optionalStyleProps: string[] = [];
+          if (forceClassNameOptional) {
+            optionalStyleProps.push("className?: string");
+          }
+          if (forceStyleOptional) {
+            optionalStyleProps.push("style?: React.CSSProperties");
+          }
           const typeText = [
             baseProps,
-            `Omit<React.ComponentPropsWithRef<C>, keyof ${baseProps} | "className" | "style">`,
+            `Omit<React.ComponentPropsWithRef<C>, keyof ${basePropsRaw} | "className" | "style">`,
             "{\n  as?: C;\n}",
             ...(hasForwardedAsUsage ? ["{ forwardedAs?: React.ElementType }"] : []),
+            ...(optionalStyleProps.length > 0 ? [`{ ${optionalStyleProps.join("; ")} }`] : []),
             // Include user's explicit props type if it exists
             ...(explicit ? [explicit] : []),
           ].join(" & ");
@@ -197,10 +253,6 @@ export function emitComponentWrappers(emitter: WrapperEmitter): {
           const wrappedComponentIsStyledWrapper = wrapperDecls.some(
             (decl) => decl.localName === wrappedComponent,
           );
-          // Check if the wrapped component is a local React component that already has className/style.
-          // This avoids adding redundant props for components that already accept them.
-          const wrappedHasClassName = localComponentHasProp(wrappedComponent, "className");
-          const wrappedHasStyle = localComponentHasProp(wrappedComponent, "style");
           const skipStyleProps =
             wrappedComponentIsStyledWrapper || (wrappedHasClassName && wrappedHasStyle);
           const hasExplicitPropsType = !!explicit;
@@ -210,6 +262,8 @@ export function emitComponentWrappers(emitter: WrapperEmitter): {
             allowStyleProp,
             wrappedComponentIsInternalWrapper: skipStyleProps,
             hasExplicitPropsType,
+            forceClassNameOptional,
+            forceStyleOptional,
           });
           // Add ref support when .attrs({ as: "element" }) is used
           const attrsAs = getAttrsAsString(d);
