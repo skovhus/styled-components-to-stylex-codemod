@@ -125,8 +125,13 @@ export function emitComponentWrappers(emitter: WrapperEmitter): {
     const supportsAsProp = d.supportsAsProp ?? false;
     const shouldAllowAsProp = wrapperNames.has(d.localName) || supportsAsProp;
     const isPolymorphicComponentWrapper = shouldAllowAsProp && !wrappedComponentHasAs;
-    const allowClassNameProp = emitter.shouldAllowClassNameProp(d);
-    const allowStyleProp = emitter.shouldAllowStyleProp(d);
+    // Check if the wrapped component's props explicitly include className/style.
+    // When true, the wrapper should accept and forward these props so the wrapped
+    // component's className/style are not silently dropped by the styled() layer.
+    const wrappedHasClassName = localComponentHasProp(wrappedComponent, "className");
+    const wrappedHasStyle = localComponentHasProp(wrappedComponent, "style");
+    const allowClassNameProp = emitter.shouldAllowClassNameProp(d) || wrappedHasClassName;
+    const allowStyleProp = emitter.shouldAllowStyleProp(d) || wrappedHasStyle;
     const hasForwardedAsUsage = emitter.hasForwardedAsUsage(d.localName);
     const shouldLowerForwardedAs = hasForwardedAsUsage && !wrappedComponentHasAs;
     const propsIdForExpr = j.identifier("props");
@@ -197,10 +202,6 @@ export function emitComponentWrappers(emitter: WrapperEmitter): {
           const wrappedComponentIsStyledWrapper = wrapperDecls.some(
             (decl) => decl.localName === wrappedComponent,
           );
-          // Check if the wrapped component is a local React component that already has className/style.
-          // This avoids adding redundant props for components that already accept them.
-          const wrappedHasClassName = localComponentHasProp(wrappedComponent, "className");
-          const wrappedHasStyle = localComponentHasProp(wrappedComponent, "style");
           const skipStyleProps =
             wrappedComponentIsStyledWrapper || (wrappedHasClassName && wrappedHasStyle);
           const hasExplicitPropsType = !!explicit;

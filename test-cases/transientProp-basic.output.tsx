@@ -21,14 +21,16 @@ const Link = ({ className, text, ...props }: { className?: string; text: string 
   </a>
 );
 
-type StyledLinkProps = Omit<React.ComponentPropsWithRef<typeof Link>, "className" | "style"> & {
+type StyledLinkProps = Omit<React.ComponentPropsWithRef<typeof Link>, "style"> & {
   $red?: boolean;
 };
 
 function StyledLink(props: StyledLinkProps) {
-  const { $red, ...rest } = props;
+  const { className, $red, ...rest } = props;
 
-  return <Link {...rest} {...stylex.props(styles.link, $red ? styles.linkRed : undefined)} />;
+  return (
+    <Link {...rest} {...mergedSx([styles.link, $red ? styles.linkRed : undefined], className)} />
+  );
 }
 
 type PointProps = Omit<React.ComponentProps<"div">, "className"> & {
@@ -115,10 +117,10 @@ function AnimatedContainer(props: AnimatedContainerProps) {
   );
 }
 
-function StyledAnimatedContainer(
-  props: Omit<React.ComponentPropsWithRef<typeof AnimatedContainer>, "className" | "style">,
-) {
-  return <AnimatedContainer {...props} {...stylex.props(styles.animatedContainer)} />;
+function StyledAnimatedContainer(props: React.ComponentPropsWithRef<typeof AnimatedContainer>) {
+  const { className, style, ...rest } = props;
+
+  return <AnimatedContainer {...rest} {...mergedSx(styles.animatedContainer, className, style)} />;
 }
 
 const styles = stylex.create({
