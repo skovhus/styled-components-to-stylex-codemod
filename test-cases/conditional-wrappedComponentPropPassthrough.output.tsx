@@ -36,9 +36,9 @@ export function Icon(
 
   return (
     <IconBase
-      variant={variant}
-      selected={selected}
       compact={compact}
+      selected={selected}
+      variant={variant}
       {...rest}
       {...stylex.props(
         compact && !selected && variant !== "active"
