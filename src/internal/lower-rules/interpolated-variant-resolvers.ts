@@ -246,7 +246,7 @@ export function handleSplitVariantsResolvedValue(ctx: SplitVariantsContext): boo
     target: Record<string, unknown>,
     parsed: { exprAst: unknown; imports: any[] },
     stylexPropOverride?: string,
-  ): void => {
+  ): boolean => {
     const effectiveStylexProp = stylexPropOverride ?? stylexProp;
     for (const imp of parsed.imports) {
       resolverImports.set(JSON.stringify(imp), imp);
@@ -258,14 +258,16 @@ export function handleSplitVariantsResolvedValue(ctx: SplitVariantsContext): boo
         ? borderMatch[1].slice(1).charAt(0).toUpperCase() + borderMatch[1].slice(2)
         : "";
       if (expandBorderShorthand(target, parsed.exprAst, direction)) {
-        return;
+        return true;
       }
+      // Border shorthand couldn't be expanded — bail to prevent shorthand leak
+      return false;
     }
-    if (
-      (cssProp === "padding" || cssProp === "margin") &&
-      expandBoxShorthand(target, parsed.exprAst, cssProp)
-    ) {
-      return;
+    if (cssProp === "padding" || cssProp === "margin") {
+      if (expandBoxShorthand(target, parsed.exprAst, cssProp)) {
+        return true;
+      }
+      // Fall through to default handler — StyleX accepts single-value margin/padding
     }
     // Default: use the property from cssDeclarationToStylexDeclarations.
     // Preserve media/pseudo selectors by writing a per-prop map instead of
@@ -284,7 +286,7 @@ export function handleSplitVariantsResolvedValue(ctx: SplitVariantsContext): boo
       }
       map[media] = parsed.exprAst as any;
       target[effectiveStylexProp] = map;
-      return;
+      return true;
     }
     if (pseudos?.length) {
       const existing = target[effectiveStylexProp];
@@ -309,10 +311,11 @@ export function handleSplitVariantsResolvedValue(ctx: SplitVariantsContext): boo
         map[ps] = parsed.exprAst as any;
       }
       target[effectiveStylexProp] = map;
-      return;
+      return true;
     }
 
     target[effectiveStylexProp] = parsed.exprAst as any;
+    return true;
   };
 
   // IMPORTANT: stage parsing first. If either branch fails to parse, skip this declaration entirely
@@ -382,7 +385,10 @@ export function handleSplitVariantsResolvedValue(ctx: SplitVariantsContext): boo
   }
 
   if (negParsed) {
-    applyParsed(styleObj as any, negParsed);
+    if (!applyParsed(styleObj as any, negParsed)) {
+      setBail();
+      return true;
+    }
   }
   // Apply all positive variants
   // For nested ternaries (multiple variants), use simpler nameHint-based naming.
@@ -391,7 +397,10 @@ export function handleSplitVariantsResolvedValue(ctx: SplitVariantsContext): boo
   for (const { when, nameHint, parsed } of allPosParsed) {
     const whenClean = when.replace(/^!/, "");
     const bucket = { ...variantBuckets.get(whenClean) } as Record<string, unknown>;
-    applyParsed(bucket, parsed);
+    if (!applyParsed(bucket, parsed)) {
+      setBail();
+      return true;
+    }
     variantBuckets.set(whenClean, bucket);
     // Use nameHint only for nested ternaries and when it's meaningful.
     // Generic hints like "truthy", "falsy", "default", "match" should fall back to toSuffixFromProp
@@ -449,6 +458,12 @@ export function handleSplitMultiPropVariantsResolvedValue(ctx: SplitVariantsCont
     stylexPropMulti = resolved;
   } else {
     stylexPropMulti = cssPropertyToStylexProp(cssProp);
+  }
+
+  // Bail on border shorthands — compound variant expansion for these is unsupported
+  if (/^border(Top|Right|Bottom|Left)?$/.test(stylexPropMulti)) {
+    setBail();
+    return true;
   }
 
   // Extract static prefix/suffix from CSS value for wrapping resolved values

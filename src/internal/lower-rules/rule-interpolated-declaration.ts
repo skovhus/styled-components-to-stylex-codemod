@@ -13,6 +13,7 @@ import { resolveDynamicNode } from "../builtin-handlers.js";
 import {
   cssDeclarationToStylexDeclarations,
   cssPropertyToStylexProp,
+  parseBorderShorthandParts,
   resolveBackgroundStylexProp,
 } from "../css-prop-mapping.js";
 import { buildThemeStyleKeys } from "../utilities/style-key-naming.js";
@@ -727,12 +728,6 @@ export function handleInterpolatedDeclaration(args: InterpolatedDeclarationConte
         resolverImports.set(JSON.stringify(imp), imp);
       }
 
-      // Map CSS prop to StyleX prop (background shorthand → backgroundColor/backgroundImage)
-      const stylexProp =
-        res.cssProp === "background"
-          ? resolveBackgroundStylexProp(d?.valueRaw ?? "")
-          : cssPropertyToStylexProp(res.cssProp);
-
       const { trueKey: trueStyleKey, falseKey: falseStyleKey } = buildThemeStyleKeys(
         decl.styleKey,
         res.themeProp,
@@ -762,8 +757,15 @@ export function handleInterpolatedDeclaration(args: InterpolatedDeclarationConte
       const trueStyle = extraStyleObjects.get(trueStyleKey) ?? {};
       const falseStyle = extraStyleObjects.get(falseStyleKey) ?? {};
 
-      trueStyle[stylexProp] = res.trueValue;
-      falseStyle[stylexProp] = res.falseValue;
+      // Expand CSS shorthands (border → width/style/color, background → backgroundColor)
+      if (!applyThemeBooleanValue(j, res.cssProp, res.trueValue, trueStyle, d?.valueRaw ?? "")) {
+        bail = true;
+        continue;
+      }
+      if (!applyThemeBooleanValue(j, res.cssProp, res.falseValue, falseStyle, d?.valueRaw ?? "")) {
+        bail = true;
+        continue;
+      }
 
       extraStyleObjects.set(trueStyleKey, trueStyle);
       extraStyleObjects.set(falseStyleKey, falseStyle);
@@ -1758,6 +1760,66 @@ function tryHandleDynamicPseudoElementViaCustomProperty(
   }
 
   decl.needsWrapperComponent = true;
+  return true;
+}
+
+/**
+ * Apply a resolved theme boolean value to a style object, expanding CSS shorthands.
+ * Returns false if the value cannot be expanded (caller should bail).
+ */
+function applyThemeBooleanValue(
+  j: { literal: (value: string) => unknown },
+  cssProp: string,
+  value: unknown,
+  target: Record<string, unknown>,
+  valueRaw: string,
+): boolean {
+  // Border shorthand → expand to width/style/color
+  const borderMatch = cssProp.match(/^border(-top|-right|-bottom|-left)?$/);
+  if (borderMatch) {
+    const direction = borderMatch[1]
+      ? borderMatch[1].slice(1).charAt(0).toUpperCase() + borderMatch[1].slice(2)
+      : "";
+    const widthProp = `border${direction}Width`;
+    const styleProp = `border${direction}Style`;
+    const colorProp = `border${direction}Color`;
+
+    // Try to extract string value from AST node
+    const node = value as { type?: string; value?: unknown; expression?: unknown } | null;
+    const unwrapped =
+      node?.type === "ExpressionStatement" ? (node.expression as typeof node) : node;
+    if (
+      unwrapped &&
+      (unwrapped.type === "StringLiteral" || unwrapped.type === "Literal") &&
+      typeof unwrapped.value === "string"
+    ) {
+      const parsed = parseBorderShorthandParts(unwrapped.value);
+      if (!parsed) {
+        return false;
+      }
+      if (parsed.width) {
+        target[widthProp] = j.literal(parsed.width);
+      }
+      if (parsed.style) {
+        target[styleProp] = j.literal(parsed.style);
+      }
+      if (parsed.color) {
+        target[colorProp] = j.literal(parsed.color);
+      }
+      return true;
+    }
+    // Non-string-literal border values can't be expanded — bail
+    return false;
+  }
+
+  // Background shorthand → backgroundColor or backgroundImage
+  if (cssProp === "background") {
+    target[resolveBackgroundStylexProp(valueRaw)] = value;
+    return true;
+  }
+
+  // Default: camelCase the property name
+  target[cssPropertyToStylexProp(cssProp)] = value;
   return true;
 }
 
