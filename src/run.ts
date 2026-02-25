@@ -384,6 +384,7 @@ export async function runTransform(options: RunTransformOptions): Promise<RunTra
 
   const adapterWithLogging: Adapter = {
     styleMerger: resolvedAdapter.styleMerger,
+    themeHook: resolvedAdapter.themeHook,
     externalInterface(ctx) {
       return resolvedAdapter.externalInterface(ctx);
     },

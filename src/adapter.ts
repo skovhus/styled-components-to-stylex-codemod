@@ -355,6 +355,32 @@ export interface StyleMergerConfig {
   importSource: ImportSource;
 }
 
+/**
+ * Configuration for the theme hook used when wrapper emission needs runtime theme access
+ * (e.g. theme boolean conditionals that cannot be fully lowered statically).
+ *
+ * Defaults to:
+ * - functionName: "useTheme"
+ * - importSource: { kind: "specifier", value: "styled-components" }
+ */
+export interface ThemeHookConfig {
+  /**
+   * Function name to call in emitted wrappers (e.g. "useTheme", "useDesignSystemTheme").
+   */
+  functionName: string;
+
+  /**
+   * Import source for the hook function.
+   * Example: `{ kind: "specifier", value: "@company/theme" }`
+   */
+  importSource: ImportSource;
+}
+
+export const DEFAULT_THEME_HOOK: ThemeHookConfig = {
+  functionName: "useTheme",
+  importSource: { kind: "specifier", value: "styled-components" },
+};
+
 // ────────────────────────────────────────────────────────────────────────────
 // Adapter Interface
 // ────────────────────────────────────────────────────────────────────────────
@@ -426,6 +452,14 @@ export interface Adapter {
    * ```
    */
   styleMerger: StyleMergerConfig | null;
+
+  /**
+   * Optional theme hook import/call customization for wrapper code that needs runtime theme access.
+   *
+   * When omitted, defaults to:
+   * `{ functionName: "useTheme", importSource: { kind: "specifier", value: "styled-components" } }`
+   */
+  themeHook?: ThemeHookConfig;
 }
 
 // ────────────────────────────────────────────────────────────────────────────
@@ -455,6 +489,7 @@ export interface AdapterInput {
   externalInterface: "auto" | Adapter["externalInterface"];
 
   styleMerger: Adapter["styleMerger"];
+  themeHook?: Adapter["themeHook"];
 }
 
 // ────────────────────────────────────────────────────────────────────────────
@@ -510,6 +545,12 @@ export interface AdapterInput {
  *
  *     // Optional: provide a custom merger, or use `null` for the default verbose merge output
  *     styleMerger: null,
+ *
+ *     // Optional: customize runtime theme hook import/call used by emitted wrappers
+ *     themeHook: {
+ *       functionName: "useTheme",
+ *       importSource: { kind: "specifier", value: "styled-components" },
+ *     },
  *   });
  */
 export function defineAdapter<T extends AdapterInput>(adapter: T): T {
