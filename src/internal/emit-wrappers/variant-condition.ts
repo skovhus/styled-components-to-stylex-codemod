@@ -80,7 +80,10 @@ export function parseVariantWhenToAst(j: JSCodeshift, when: string): VariantCond
       }
       const memberExpr = buildMemberExpr(trimmedRaw);
       if (memberExpr) {
-        return { propName: null, expr: memberExpr };
+        // Treat dotted refs as prop-root conditions (e.g., user.role, $layer.isTop)
+        // so wrapper emitters can destructure the root identifier. Theme refs are
+        // resolved via useTheme and should not be pulled from component props.
+        return { propName: root === "theme" ? null : (root ?? null), expr: memberExpr };
       }
       return { propName: null, expr: j.identifier(trimmedRaw) };
     }

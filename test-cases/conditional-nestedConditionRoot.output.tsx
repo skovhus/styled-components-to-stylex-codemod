@@ -8,7 +8,7 @@ function Layer(props: LayerProps) {
   const { children, $layer, $zIndex } = props;
 
   return (
-    <div {...stylex.props(styles.layer, $layer?.isTop ? styles.layerZIndex($zIndex) : undefined)}>
+    <div {...stylex.props(styles.layer, $layer.isTop ? styles.layerZIndex($zIndex) : undefined)}>
       {children}
     </div>
   );
@@ -33,7 +33,7 @@ const styles = stylex.create({
     backgroundColor: "#ddd",
     color: "#222",
   },
-  layerZIndex: (zIndex: number | undefined) => ({
+  layerZIndex: (zIndex: string) => ({
     zIndex,
   }),
 });
