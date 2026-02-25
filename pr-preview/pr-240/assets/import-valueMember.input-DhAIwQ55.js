@@ -1,7 +1,0 @@
-import{j as o,c as i}from"./index-4T0f_i3n.js";import{z as t}from"./helpers-DIu0cGQQ.js";const n=380,r=i.div`
-  border-radius: 8px;
-  padding: 6px;
-  max-width: ${n}px;
-  position: fixed;
-  z-index: ${t.modal};
-`;function d(){return o.jsx(r,{})}export{d as App};
