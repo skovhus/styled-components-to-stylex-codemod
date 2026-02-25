@@ -1,3 +1,0 @@
-import{j as r,c as t}from"./index-BItIq-tL.js";import{j as s}from"./helpers-C9teUw5o.js";const m=t.div`
-  border-bottom: ${o=>s(o.theme.color.bgSub)};
-`,b=()=>r.jsx(m,{});export{b as App};
