@@ -243,26 +243,18 @@ export function insertEmittedWrappers(args: {
 // useTheme import helpers
 // ────────────────────────────────────────────────────────────────────────────
 
-function resolveUseThemeConfig(config: UseThemeHookConfig | null | undefined): {
-  functionName: string;
-  moduleSpecifier: string;
-} {
-  if (config) {
-    const moduleSpecifier =
-      config.importSource.kind === "specifier"
-        ? config.importSource.value
-        : config.importSource.value;
-    return { functionName: config.functionName, moduleSpecifier };
-  }
-  return { functionName: "useTheme", moduleSpecifier: "styled-components" };
-}
+const DEFAULT_USE_THEME_HOOK = "useTheme";
+const DEFAULT_USE_THEME_SOURCE = "styled-components";
 
-function toModuleSpecifier(config: UseThemeHookConfig, filePath: string): string {
-  if (config.importSource.kind === "specifier") {
-    return config.importSource.value;
+function importSourceToSpecifier(
+  source: UseThemeHookConfig["importSource"],
+  filePath: string,
+): string {
+  if (source.kind === "specifier") {
+    return source.value;
   }
   const baseDir = path.dirname(filePath);
-  let rel = path.relative(baseDir, config.importSource.value);
+  let rel = path.relative(baseDir, source.value);
   rel = rel.split(path.sep).join("/");
   if (!rel.startsWith(".")) {
     rel = `./${rel}`;
@@ -272,12 +264,10 @@ function toModuleSpecifier(config: UseThemeHookConfig, filePath: string): string
 
 function ensureUseThemeImport(emitter: WrapperEmitter): void {
   const { root, j, useThemeHook, filePath } = emitter;
-  const { functionName, moduleSpecifier } = useThemeHook
-    ? {
-        functionName: useThemeHook.functionName,
-        moduleSpecifier: toModuleSpecifier(useThemeHook, filePath),
-      }
-    : resolveUseThemeConfig(null);
+  const functionName = useThemeHook?.functionName ?? DEFAULT_USE_THEME_HOOK;
+  const moduleSpecifier = useThemeHook
+    ? importSourceToSpecifier(useThemeHook.importSource, filePath)
+    : DEFAULT_USE_THEME_SOURCE;
 
   const existingImport = root
     .find(j.ImportDeclaration, {
