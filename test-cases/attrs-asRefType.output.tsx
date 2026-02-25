@@ -10,13 +10,7 @@ type TextProps = React.PropsWithChildren<{
 function Text<C extends React.ElementType = "span">(
   props: React.ComponentProps<"span"> & TextProps & { as?: C },
 ) {
-  const {
-    as: Component = "span",
-    className,
-    children,
-    style,
-    variant: variant = "regular",
-  } = props;
+  const { as: Component = "span", className, children, style, variant = "regular" } = props;
 
   return (
     <Component {...mergedSx([styles.text, variants[variant]], className, style)}>
