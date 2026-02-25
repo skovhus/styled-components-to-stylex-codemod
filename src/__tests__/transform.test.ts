@@ -967,6 +967,227 @@ export const App = () => <Button>Click</Button>;
   });
 });
 
+describe("useThemeHook configuration", () => {
+  const customHookAdapter = {
+    externalInterface() {
+      return { styles: false, as: false };
+    },
+    resolveValue(ctx: ResolveValueContext) {
+      if (ctx.kind === "theme") {
+        return {
+          expr: `themeVars.${ctx.path.split(".").pop()}`,
+          imports: [
+            {
+              from: { kind: "specifier" as const, value: "./theme-vars" },
+              names: [{ imported: "themeVars" }],
+            },
+          ],
+        };
+      }
+      return undefined;
+    },
+    resolveCall() {
+      return undefined;
+    },
+    resolveSelector() {
+      return undefined;
+    },
+    styleMerger: null,
+    useThemeHook: {
+      functionName: "useTheme",
+      importSource: { kind: "specifier" as const, value: "@company/theme" },
+    },
+  };
+
+  const renamedHookAdapter = {
+    ...customHookAdapter,
+    useThemeHook: {
+      functionName: "useMyTheme",
+      importSource: { kind: "specifier" as const, value: "@design-system/hooks" },
+    },
+  };
+
+  it("should import useTheme from custom source when useThemeHook is configured", () => {
+    const source = `
+import styled from "styled-components";
+
+const Box = styled.div\`
+  opacity: \${(props) => props.theme.isDark ? 0.9 : 0.7};
+\`;
+
+export const App = () => <Box>Hello</Box>;
+`;
+
+    const result = transformWithWarnings(
+      { source, path: "test.tsx" },
+      { jscodeshift: j, j, stats: () => {}, report: () => {} },
+      { adapter: customHookAdapter },
+    );
+
+    expect(result.code).not.toBeNull();
+    expect(result.code).toMatch(/import\s*{\s*useTheme\s*}\s*from\s*["']@company\/theme["']/);
+    expect(result.code).not.toContain("styled-components");
+    expect(result.code).toContain("const theme = useTheme()");
+  });
+
+  it("should use custom hook function name when configured", () => {
+    const source = `
+import styled from "styled-components";
+
+const Box = styled.div\`
+  opacity: \${(props) => props.theme.isDark ? 0.9 : 0.7};
+\`;
+
+export const App = () => <Box>Hello</Box>;
+`;
+
+    const result = transformWithWarnings(
+      { source, path: "test.tsx" },
+      { jscodeshift: j, j, stats: () => {}, report: () => {} },
+      { adapter: renamedHookAdapter },
+    );
+
+    expect(result.code).not.toBeNull();
+    expect(result.code).toMatch(
+      /import\s*{\s*useMyTheme\s*}\s*from\s*["']@design-system\/hooks["']/,
+    );
+    expect(result.code).not.toContain("styled-components");
+    expect(result.code).toContain("const theme = useMyTheme()");
+  });
+
+  it("should default to useTheme from styled-components when useThemeHook is null", () => {
+    const nullHookAdapter = {
+      ...customHookAdapter,
+      useThemeHook: null,
+    };
+
+    const source = `
+import styled from "styled-components";
+
+const Box = styled.div\`
+  opacity: \${(props) => props.theme.isDark ? 0.9 : 0.7};
+\`;
+
+export const App = () => <Box>Hello</Box>;
+`;
+
+    const result = transformWithWarnings(
+      { source, path: "test.tsx" },
+      { jscodeshift: j, j, stats: () => {}, report: () => {} },
+      { adapter: nullHookAdapter },
+    );
+
+    expect(result.code).not.toBeNull();
+    expect(result.code).toMatch(/import\s*{\s*useTheme\s*}\s*from\s*["']styled-components["']/);
+    expect(result.code).toContain("const theme = useTheme()");
+  });
+
+  it("should default to useTheme from styled-components when useThemeHook is omitted", () => {
+    const noHookAdapter = {
+      externalInterface() {
+        return { styles: false, as: false };
+      },
+      resolveValue() {
+        return undefined;
+      },
+      resolveCall() {
+        return undefined;
+      },
+      resolveSelector() {
+        return undefined;
+      },
+      styleMerger: null,
+    };
+
+    const source = `
+import styled from "styled-components";
+
+const Box = styled.div\`
+  opacity: \${(props) => props.theme.isDark ? 0.9 : 0.7};
+\`;
+
+export const App = () => <Box>Hello</Box>;
+`;
+
+    const result = transformWithWarnings(
+      { source, path: "test.tsx" },
+      { jscodeshift: j, j, stats: () => {}, report: () => {} },
+      { adapter: noHookAdapter },
+    );
+
+    expect(result.code).not.toBeNull();
+    expect(result.code).toMatch(/import\s*{\s*useTheme\s*}\s*from\s*["']styled-components["']/);
+    expect(result.code).toContain("const theme = useTheme()");
+  });
+
+  it("should add hook to existing import from same source", () => {
+    const adapterWithSameSource = {
+      ...customHookAdapter,
+      resolveValue(ctx: ResolveValueContext) {
+        if (ctx.kind === "theme") {
+          return {
+            expr: `themeVars.${ctx.path.split(".").pop()}`,
+            imports: [
+              {
+                from: { kind: "specifier" as const, value: "@company/theme" },
+                names: [{ imported: "themeVars" }],
+              },
+            ],
+          };
+        }
+        return undefined;
+      },
+    };
+
+    const source = `
+import styled from "styled-components";
+
+const Box = styled.div\`
+  color: \${(props) => props.theme.color.primary};
+  opacity: \${(props) => props.theme.isDark ? 0.9 : 0.7};
+\`;
+
+export const App = () => <Box>Hello</Box>;
+`;
+
+    const result = transformWithWarnings(
+      { source, path: "test.tsx" },
+      { jscodeshift: j, j, stats: () => {}, report: () => {} },
+      { adapter: adapterWithSameSource },
+    );
+
+    expect(result.code).not.toBeNull();
+    expect(result.code).toMatch(
+      /import\s*{\s*themeVars,\s*useTheme\s*}\s*from\s*["']@company\/theme["']/,
+    );
+  });
+
+  it("should not duplicate import when hook is already imported", () => {
+    const source = `
+import styled from "styled-components";
+import { useTheme } from "@company/theme";
+
+const Box = styled.div\`
+  opacity: \${(props) => props.theme.isDark ? 0.9 : 0.7};
+\`;
+
+export const App = () => <Box>Hello</Box>;
+`;
+
+    const result = transformWithWarnings(
+      { source, path: "test.tsx" },
+      { jscodeshift: j, j, stats: () => {}, report: () => {} },
+      { adapter: customHookAdapter },
+    );
+
+    expect(result.code).not.toBeNull();
+    const matches = result.code?.match(/useTheme/g) ?? [];
+    const importMatches = result.code?.match(/from\s*["']@company\/theme["']/g) ?? [];
+    expect(importMatches).toHaveLength(1);
+    expect(matches.length).toBeGreaterThanOrEqual(2);
+  });
+});
+
 describe("styleMerger configuration", () => {
   const mergerAdapter = {
     externalInterface() {
