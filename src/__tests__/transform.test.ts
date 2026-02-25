@@ -2237,6 +2237,53 @@ export const App = () => <Box />;
   });
 });
 
+describe("wrapper destructuring default emission", () => {
+  it("should emit shorthand defaults without same-name rename pairs", () => {
+    const source = `
+import * as React from "react";
+import styled from "styled-components";
+
+type BaseProps = React.PropsWithChildren<{
+  className?: string;
+  style?: React.CSSProperties;
+  disabled?: boolean;
+}>;
+
+function BaseButton(props: BaseProps) {
+  const { disabled, ...rest } = props;
+  return <button disabled={disabled} {...rest} />;
+}
+
+const Button = styled(BaseButton)<{ color?: "primary" | "secondary"; disabled?: boolean }>\`
+  appearance: none;
+  border-width: 0;
+  color: white;
+
+  background-color: \${(props) => (props.color === "primary" ? "blue" : "gray")};
+
+  &:hover {
+    background-color: \${(props) => (props.color === "primary" ? "darkblue" : "darkgray")};
+  }
+
+  \${(props) =>
+    props.disabled && "background-color: grey; color: rgb(204, 204, 204); cursor: not-allowed;"}
+\`;
+
+export const App = () => <Button color="primary">Primary</Button>;
+`;
+
+    const result = transformWithWarnings(
+      { source, path: "wrapper-default-destructure.tsx" },
+      { jscodeshift: j, j, stats: () => {}, report: () => {} },
+      { adapter: fixtureAdapter },
+    );
+
+    expect(result.code).not.toBeNull();
+    // We should emit `prop = default` instead of `prop: prop = default`.
+    expect(result.code).not.toMatch(/\b([A-Za-z_$][\w$]*)\s*:\s*\1\s*=/);
+  });
+});
+
 describe("theme boolean conditionals", () => {
   it("should use adapter-configured theme hook import and function name", () => {
     const source = `

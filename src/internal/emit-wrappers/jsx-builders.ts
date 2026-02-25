@@ -272,6 +272,20 @@ export function buildWrapperFunction(
   return fn;
 }
 
+export function buildShorthandDefaultPatternProp(
+  j: JSCodeshift,
+  name: string,
+  defaultVal: string | number | boolean,
+): Property {
+  return j.property.from({
+    kind: "init",
+    key: j.identifier(name),
+    value: j.assignmentPattern(j.identifier(name), j.literal(defaultVal)),
+    // Emit shorthand form (`foo = "bar"`) instead of redundant `foo: foo = "bar"`.
+    shorthand: true,
+  }) as Property;
+}
+
 export function buildDestructurePatternProps(
   j: JSCodeshift,
   patternProp: (keyName: string, valueId?: ASTNode) => Property,
@@ -289,14 +303,7 @@ export function buildDestructurePatternProps(
   for (const name of destructureProps.filter((n): n is string => Boolean(n))) {
     const defaultVal = propDefaults?.get(name);
     if (defaultVal !== undefined) {
-      patternProps.push(
-        j.property.from({
-          kind: "init",
-          key: j.identifier(name),
-          value: j.assignmentPattern(j.identifier(name), j.literal(defaultVal)),
-          shorthand: false,
-        }) as Property,
-      );
+      patternProps.push(buildShorthandDefaultPatternProp(j, name, defaultVal));
     } else {
       patternProps.push(patternProp(name));
     }

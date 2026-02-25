@@ -1120,14 +1120,7 @@ export class WrapperEmitter {
       ) {
         const defaultVal = propDefaults?.get(name);
         if (defaultVal !== undefined) {
-          patternProps.push(
-            j.property.from({
-              kind: "init",
-              key: j.identifier(name),
-              value: j.assignmentPattern(j.identifier(name), j.literal(defaultVal)),
-              shorthand: true,
-            }) as Property,
-          );
+          patternProps.push(jb.buildShorthandDefaultPatternProp(j, name, defaultVal));
         } else {
           patternProps.push(this.patternProp(name));
         }
