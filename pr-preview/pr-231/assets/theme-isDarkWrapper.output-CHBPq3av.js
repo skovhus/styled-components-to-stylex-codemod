@@ -1,1 +1,0 @@
-import{j as s,K as e}from"./index-CBCcZPd5.js";function i(t){return s.jsx("div",{role:"tablist",...t})}function r(t){const n=e();return s.jsx(i,{...t,...{0:{className:"x78zum5 xfawy5m x1kogg8i"},1:{className:"x78zum5 xfawy5m x1kogg8i"}}[!!n.isDark<<0]})}const o=()=>s.jsxs(r,{children:[s.jsx("button",{children:"Tab 1"}),s.jsx("button",{children:"Tab 2"})]});export{o as App};
