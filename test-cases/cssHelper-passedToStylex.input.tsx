@@ -1,6 +1,6 @@
 import * as React from "react";
 import styled from "styled-components";
-import { scrollFadeMaskStyles } from "./lib/helpers";
+import { scrollFadeMaskStyles, flexCenter } from "./lib/helpers";
 
 // Pattern 1: css helper used alongside regular CSS properties
 const Container = styled.div`
@@ -23,6 +23,16 @@ const ComplexFade = styled.div`
   ${scrollFadeMaskStyles(12, "bottom")}
 `;
 
+// Pattern 4: Helper with overlapping property — the static display:block after the helper
+// must override flexCenter's display:flex. If cascade order is wrong, children would be
+// centered (flex) instead of stacking normally (block), producing a visible pixel diff.
+const OverrideDisplay = styled.div`
+  background-color: lightblue;
+  padding: 16px;
+  ${flexCenter()}
+  display: block;
+`;
+
 export const App = () => (
   <>
     <Container>
@@ -34,5 +44,9 @@ export const App = () => (
     <ComplexFade>
       <p>Complex fade example</p>
     </ComplexFade>
+    <OverrideDisplay>
+      <span style={{ background: "coral", padding: 4 }}>A</span>
+      <span style={{ background: "gold", padding: 4 }}>B</span>
+    </OverrideDisplay>
   </>
 );
