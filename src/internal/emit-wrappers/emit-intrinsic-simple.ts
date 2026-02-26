@@ -703,8 +703,11 @@ export function emitSimpleExportedIntrinsicWrappers(ctx: EmitIntrinsicContext): 
       : [];
 
     // Build interleaved before/after-base args using mixinOrder
-    const { beforeBase: extraStyleArgs, afterBase: extraStyleArgsAfterBase } =
-      emitter.buildInterleavedExtraStyleArgs(d, propsArgExprs);
+    const {
+      beforeBase: extraStyleArgs,
+      afterBase: extraStyleArgsAfterBase,
+      afterVariants: afterVariantStyleArgs,
+    } = emitter.buildInterleavedExtraStyleArgs(d, propsArgExprs);
     const styleArgs: ExpressionKind[] = [
       ...(d.extendsStyleKey
         ? [j.memberExpression(j.identifier(stylesIdentifier), j.identifier(d.extendsStyleKey))]
@@ -794,6 +797,12 @@ export function emitSimpleExportedIntrinsicWrappers(ctx: EmitIntrinsicContext): 
         // For boolean conditions, && is used. For non-boolean (could be "" or 0), ternary is used.
         styleArgs.push(emitter.makeConditionalStyleExpr({ cond, expr: styleExpr, isBoolean }));
       }
+    }
+
+    // Add adapter-resolved StyleX styles that should come after variant styles
+    // to preserve CSS cascade order (e.g., unconditional border-bottom after conditional border).
+    if (afterVariantStyleArgs.length > 0) {
+      styleArgs.push(...afterVariantStyleArgs);
     }
 
     // When a defaultAttr (e.g. tabIndex: props.tabIndex ?? 0) is also used in a
@@ -911,6 +920,12 @@ export function emitSimpleExportedIntrinsicWrappers(ctx: EmitIntrinsicContext): 
     // When defaultAttrs reference element props (like tabIndex: props.tabIndex ?? 0),
     // include rest spread so user can pass/override these props
     if (hasElementPropsInDefaultAttrs(d)) {
+      shouldIncludeRest = true;
+    }
+    // Recipe-pattern components with namespace boolean dimensions (e.g.,
+    // disabled ? disabledVariants[color] : enabledVariants[color]) are behavioral
+    // wrappers that need rest spread to forward HTML props (id, onClick, aria-*, etc.)
+    if (d.variantDimensions?.some((dim) => dim.namespaceBooleanProp)) {
       shouldIncludeRest = true;
     }
     // Exported components should always include rest spread so that all element props
