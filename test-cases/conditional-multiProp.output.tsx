@@ -28,16 +28,8 @@ export function Spacer(props: SpacerProps) {
       {...rest}
       {...mergedSx(
         [
-          showProperty(props.width)
-            ? styles.spacerCondTruthyWidth({
-                width: props.width,
-              })
-            : undefined,
-          showProperty(props.height)
-            ? styles.spacerCondTruthyHeight({
-                height: props.height,
-              })
-            : undefined,
+          showProperty(width) ? styles.spacerWithWidth(width) : undefined,
+          showProperty(height) ? styles.spacerWithHeight(height) : undefined,
         ],
         undefined,
         style,
@@ -58,10 +50,10 @@ export const App = () => (
 );
 
 const styles = stylex.create({
-  spacerCondTruthyWidth: (props: { width: number | string | undefined }) => ({
-    width: getSize(props.width),
+  spacerWithWidth: (width: number | string | undefined) => ({
+    width: getSize(width),
   }),
-  spacerCondTruthyHeight: (props: { height: number | string | undefined }) => ({
-    height: getSize(props.height),
+  spacerWithHeight: (height: number | string | undefined) => ({
+    height: getSize(height),
   }),
 });

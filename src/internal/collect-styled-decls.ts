@@ -253,6 +253,31 @@ function collectStyledDeclsImpl(args: {
     | { parsed: StyledDecl["shouldForwardProp"]; unparseable?: false }
     | { parsed?: undefined; unparseable: true };
 
+  const isModuleScopeDeclarator = (path: any): boolean => {
+    if (path?.scope?.isGlobal === true) {
+      return true;
+    }
+
+    // Fallback for parser/path variants where scope metadata is missing:
+    // walk up and ensure we hit Program without entering a function body.
+    let cur = path?.parentPath;
+    while (cur?.node) {
+      const nodeType = cur.node.type;
+      if (nodeType === "Program") {
+        return true;
+      }
+      if (
+        nodeType === "FunctionDeclaration" ||
+        nodeType === "FunctionExpression" ||
+        nodeType === "ArrowFunctionExpression"
+      ) {
+        return false;
+      }
+      cur = cur.parentPath;
+    }
+    return false;
+  };
+
   const parseShouldForwardProp = (arg0: any): ShouldForwardPropResult | undefined => {
     if (!arg0 || arg0.type !== "ObjectExpression") {
       return undefined;
@@ -296,7 +321,7 @@ function collectStyledDeclsImpl(args: {
         return;
       }
 
-      // !["a","b"].includes(prop)
+      // !["a","b"].includes(prop) or !varRef.includes(prop)
       if (expr.type === "UnaryExpression" && expr.operator === "!") {
         const inner = expr.argument;
         if (
@@ -304,19 +329,41 @@ function collectStyledDeclsImpl(args: {
           inner.callee?.type === "MemberExpression" &&
           inner.callee.property?.type === "Identifier" &&
           inner.callee.property.name === "includes" &&
-          inner.callee.object?.type === "ArrayExpression" &&
           inner.arguments?.[0]?.type === "Identifier" &&
           inner.arguments[0].name === paramName
         ) {
-          for (const el of inner.callee.object.elements ?? []) {
-            if (el?.type === "Literal" && typeof el.value === "string") {
-              dropProps.add(el.value);
-            }
-            if (el?.type === "StringLiteral") {
-              dropProps.add(el.value);
+          // Resolve the array — either an inline ArrayExpression or a variable reference.
+          // Restrict to module-scope declarations to avoid resolving shadowed variables
+          // in nested scopes. shouldForwardProp configs and their referenced arrays are
+          // always at module scope.
+          let arrayNode = inner.callee.object;
+          if (arrayNode?.type === "Identifier") {
+            const varName = arrayNode.name;
+            const decls = root.find(j.VariableDeclarator).filter((path) => {
+              const idNode = (path.node as any).id;
+              if (idNode?.type !== "Identifier" || idNode.name !== varName) {
+                return false;
+              }
+              return isModuleScopeDeclarator(path);
+            });
+            if (decls.length > 0) {
+              const init = (decls.get().node as any).init;
+              if (init?.type === "ArrayExpression") {
+                arrayNode = init;
+              }
             }
           }
-          return;
+          if (arrayNode?.type === "ArrayExpression") {
+            for (const el of arrayNode.elements ?? []) {
+              if (el?.type === "Literal" && typeof el.value === "string") {
+                dropProps.add(el.value);
+              }
+              if (el?.type === "StringLiteral") {
+                dropProps.add(el.value);
+              }
+            }
+            return;
+          }
         }
 
         // !prop.startsWith("$")

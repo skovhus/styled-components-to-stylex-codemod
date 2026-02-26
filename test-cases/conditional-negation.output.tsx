@@ -27,7 +27,7 @@ export function Overlay(props: OverlayProps) {
   const { children, $visible, ...rest } = props;
 
   return (
-    <div {...rest} {...stylex.props(styles.overlay, $visible ? styles.overlayVisible : undefined)}>
+    <div {...rest} {...stylex.props(styles.overlay, !$visible && styles.overlayNotVisible)}>
       {children}
     </div>
   );
@@ -50,9 +50,9 @@ const styles = stylex.create({
   },
   overlay: {
     inset: 0,
-    opacity: 0,
-  },
-  overlayVisible: {
     opacity: 1,
+  },
+  overlayNotVisible: {
+    opacity: 0,
   },
 });

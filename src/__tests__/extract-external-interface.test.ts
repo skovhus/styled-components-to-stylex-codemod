@@ -705,6 +705,18 @@ describe("runPrepass createExternalInterface snapshot on test-cases", () => {
           "as": false,
           "styles": true,
         },
+        "test-cases/cssHelper-destructuredDefaultTemplateLiteral.input.tsx:Tile": {
+          "as": false,
+          "styles": true,
+        },
+        "test-cases/cssHelper-dynamicPropertyNameNonProp.input.tsx:Stack": {
+          "as": false,
+          "styles": true,
+        },
+        "test-cases/cssHelper-dynamicPropertyNamePropStatic.input.tsx:Strip": {
+          "as": false,
+          "styles": true,
+        },
         "test-cases/cssVariable-flexShrinkFallback.input.tsx:ColumnContainer": {
           "as": false,
           "styles": true,
@@ -746,6 +758,10 @@ describe("runPrepass createExternalInterface snapshot on test-cases", () => {
           "styles": true,
         },
         "test-cases/lib/user-avatar.tsx:UserAvatar": {
+          "as": false,
+          "styles": true,
+        },
+        "test-cases/shouldForwardProp-dynamicDeclaration.input.tsx:FlexBox": {
           "as": false,
           "styles": true,
         },

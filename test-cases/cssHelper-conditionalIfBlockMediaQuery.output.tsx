@@ -16,12 +16,8 @@ export function EmojiContainer(props: EmojiContainerProps) {
       {...stylex.props(
         styles.emojiContainer,
         Browser.isSafari
-          ? styles.emojiContainerBrowserIsSafari({
-              size: $size,
-            })
-          : styles.emojiContainerDefault({
-              size: $size,
-            }),
+          ? styles.emojiContainerBrowserIsSafari($size)
+          : styles.emojiContainerDefault($size),
         styles.emojiContainerWidth($size),
         styles.emojiContainerMaxWidth($size),
         styles.emojiContainerMaxHeight($size),
@@ -41,24 +37,24 @@ export const App = () => (
 );
 
 const styles = stylex.create({
-  emojiContainerBrowserIsSafari: (props: { size: number }) => ({
+  emojiContainerBrowserIsSafari: (size: number) => ({
     fontSize: {
-      default: `${props.size - 4}px`,
-      "@media (-webkit-min-device-pixel-ratio: 2),(min-resolution: 192dpi)": `${props.size - 3}px`,
+      default: `${size - 4}px`,
+      "@media (-webkit-min-device-pixel-ratio: 2),(min-resolution: 192dpi)": `${size - 3}px`,
     },
     lineHeight: {
       default: 1,
-      "@media (-webkit-min-device-pixel-ratio: 2),(min-resolution: 192dpi)": `${props.size - 1}px`,
+      "@media (-webkit-min-device-pixel-ratio: 2),(min-resolution: 192dpi)": `${size - 1}px`,
     },
   }),
-  emojiContainerDefault: (props: { size: number }) => ({
+  emojiContainerDefault: (size: number) => ({
     fontSize: {
-      default: `${props.size - 3}px`,
-      "@media (-webkit-min-device-pixel-ratio: 2),(min-resolution: 192dpi)": `${props.size - 1}px`,
+      default: `${size - 3}px`,
+      "@media (-webkit-min-device-pixel-ratio: 2),(min-resolution: 192dpi)": `${size - 1}px`,
     },
     lineHeight: {
-      default: `${props.size}px`,
-      "@media (-webkit-min-device-pixel-ratio: 2),(min-resolution: 192dpi)": `${props.size}px`,
+      default: `${size}px`,
+      "@media (-webkit-min-device-pixel-ratio: 2),(min-resolution: 192dpi)": `${size}px`,
     },
   }),
   /** A container for emojis that standardizes sizing across browsers */
