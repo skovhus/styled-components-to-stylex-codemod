@@ -524,15 +524,20 @@ export function normalizeInterpolatedSelector(selectorRaw: string): string {
   );
 }
 
-export function normalizeSelectorForInputAttributePseudos(
+export function normalizeSelectorForAttributePseudos(
   selector: string,
-  isInput: boolean,
+  tagName: string | null,
 ): string {
-  if (!isInput) {
+  if (!tagName) {
     return selector;
   }
 
-  // Convert [disabled] to :disabled (semantically equivalent for <input> elements).
+  // Convert boolean attribute selectors to their pseudo-class equivalents when
+  // the mapping is provably safe for the given tag. For example:
+  //   [disabled] → :disabled  (on button, input, select, textarea, fieldset)
+  //   [checked]  → :checked   (on input)
+  //   [required] → :required  (on input, select, textarea)
+  //
   // NOTE: [readonly] is NOT converted to :read-only because :read-only matches much
   // more broadly (disabled inputs, checkbox/radio, etc.) while [readonly] only matches
   // elements with the readonly attribute explicitly set. [readonly] is instead handled
@@ -542,8 +547,9 @@ export function normalizeSelectorForInputAttributePseudos(
     return selector;
   }
   const inside = m[1].replace(/\s+/g, "");
-  if (inside === "disabled") {
-    return "&:disabled";
+  const pseudo = mapAttributeToPseudo(inside, tagName);
+  if (pseudo) {
+    return `&${pseudo}`;
   }
   return selector;
 }
