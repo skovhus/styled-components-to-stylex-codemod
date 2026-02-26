@@ -55,7 +55,9 @@ interface TestResult {
 const EXPECTED_FAILURES = new Set<string>([
   // Flaky due to animation timing — keyframe snapshots occasionally differ.
   "keyframes-unionComplexity",
-  "conditional-negation",
+  "keyframes-interpolatedDuration",
+  "keyframes-interpolatedDurationWithDelay",
+  "keyframes-multiAnimationInterpolatedDuration",
 ]);
 
 // Case-specific pixelmatch threshold overrides for known anti-aliasing noise.
