@@ -105,6 +105,26 @@ body{font-family:-apple-system,BlinkMacSystemFont,Segoe UI,Roboto,Helvetica Neue
   inherits: false
 }
 
+@property --x-gap {
+  syntax: "*";
+  inherits: false
+}
+
+@property --x-columnGap {
+  syntax: "*";
+  inherits: false
+}
+
+@property --x-marginTop {
+  syntax: "*";
+  inherits: false
+}
+
+@property --x-rowGap {
+  syntax: "*";
+  inherits: false
+}
+
 @property --x---component-width {
   syntax: "*";
   inherits: false
@@ -146,21 +166,6 @@ body{font-family:-apple-system,BlinkMacSystemFont,Segoe UI,Roboto,Helvetica Neue
 }
 
 @property --x-animationDelay {
-  syntax: "*";
-  inherits: false
-}
-
-@property --x-gap {
-  syntax: "*";
-  inherits: false
-}
-
-@property --x-columnGap {
-  syntax: "*";
-  inherits: false
-}
-
-@property --x-rowGap {
   syntax: "*";
   inherits: false
 }
@@ -1863,6 +1868,10 @@ body{font-family:-apple-system,BlinkMacSystemFont,Segoe UI,Roboto,Helvetica Neue
   color: #fff;
 }
 
+.x40hh3e:not(#\#):not(#\#):not(#\#) {
+  column-gap: 16px;
+}
+
 .x1eywl5b:not(#\#):not(#\#):not(#\#) {
   column-gap: var(--x-columnGap);
 }
@@ -2227,6 +2236,10 @@ body{font-family:-apple-system,BlinkMacSystemFont,Segoe UI,Roboto,Helvetica Neue
 
 .x7wzq59:not(#\#):not(#\#):not(#\#) {
   position: sticky;
+}
+
+.xgpatz3:not(#\#):not(#\#):not(#\#) {
+  row-gap: 16px;
 }
 
 .x1r8uycs:not(#\#):not(#\#):not(#\#) {
@@ -3164,6 +3177,10 @@ body{font-family:-apple-system,BlinkMacSystemFont,Segoe UI,Roboto,Helvetica Neue
 
 .x1xmf6yo:not(#\#):not(#\#):not(#\#):not(#\#) {
   margin-top: 8px;
+}
+
+.x1gkbulp:not(#\#):not(#\#):not(#\#):not(#\#) {
+  margin-top: var(--x-marginTop);
 }
 
 .x1aoj0v:not(#\#):not(#\#):not(#\#):not(#\#) {
