@@ -25,6 +25,7 @@ import {
   makeConditionalStyleExpr,
   parseVariantWhenToAst,
 } from "./variant-condition.js";
+import { typeContainsPolymorphicAs } from "../utilities/polymorphic-as-detection.js";
 
 export function emitSimpleWithConfigWrappers(ctx: EmitIntrinsicContext): void {
   const { emitter, j, emitTypes, wrapperDecls, wrapperNames, stylesIdentifier, emitted } = ctx;
@@ -436,7 +437,11 @@ export function emitSimpleExportedIntrinsicWrappers(ctx: EmitIntrinsicContext): 
     // upgrade to our generic pattern (to avoid TypeScript inference issues), but
     // we still need to destructure `as` and use it as the JSX tag so that
     // downstream `.attrs({ as: "element" })` wrappers actually work at runtime.
-    const hasExistingAs = propsTypeHasExistingPolymorphicAs(d);
+    // Use the AST-based check (not the regex-based propsTypeHasExistingPolymorphicAs)
+    // to ensure we only match `as?: React.ElementType`, not narrow string unions.
+    const hasExistingAs = d.propsType
+      ? typeContainsPolymorphicAs({ root: emitter.root, j, typeNode: d.propsType })
+      : false;
     const useAsProp = allowAsProp || hasExistingAs;
     let inlineTypeText: string | undefined;
     // d.isExported is already set from exportedComponents during analyze-before-emit
