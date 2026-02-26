@@ -23,18 +23,18 @@ const styles = stylex.create({
     paddingInline: "16px",
     backgroundColor: {
       default: "#bf4f74",
-      ":disabled": "#ccc",
+      ":is([disabled])": "#ccc",
     },
     color: {
       default: "white",
-      ":disabled": "#666",
+      ":is([disabled])": "#666",
     },
     borderWidth: 0,
     borderStyle: "none",
     borderRadius: "4px",
     cursor: {
       default: "pointer",
-      ":disabled": "not-allowed",
+      ":is([disabled])": "not-allowed",
     },
   },
   select: {
@@ -45,11 +45,11 @@ const styles = stylex.create({
     borderRadius: "4px",
     backgroundColor: {
       default: null,
-      ":disabled": "#f5f5f5",
+      ":is([disabled])": "#f5f5f5",
     },
     color: {
       default: null,
-      ":disabled": "#999",
+      ":is([disabled])": "#999",
     },
   },
   textarea: {
@@ -60,11 +60,11 @@ const styles = stylex.create({
     borderRadius: "4px",
     backgroundColor: {
       default: null,
-      ":disabled": "#f5f5f5",
+      ":is([disabled])": "#f5f5f5",
     },
     color: {
       default: null,
-      ":disabled": "#999",
+      ":is([disabled])": "#999",
     },
   },
 });
