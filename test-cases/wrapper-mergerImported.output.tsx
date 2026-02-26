@@ -7,11 +7,12 @@ export function StyledLoading(
   props: React.ComponentPropsWithRef<typeof Loading> & {
     className?: string;
     style?: React.CSSProperties;
+    sx?: stylex.StyleXStyles | stylex.StyleXStyles[];
   },
 ) {
-  const { className, style, ...rest } = props;
+  const { className, style, sx, ...rest } = props;
 
-  return <Loading {...rest} {...mergedSx(styles.loading, className, style)} />;
+  return <Loading {...rest} {...mergedSx([styles.loading, sx], className, style)} />;
 }
 
 export const App = () => (

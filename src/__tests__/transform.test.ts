@@ -1311,12 +1311,13 @@ export const App = () => <Button>Click</Button>;
     );
 
     expect(result.code).not.toBeNull();
-    // Should use the verbose sx variable pattern
-    expect(result.code).toMatch(/const\s+sx\s*=\s*stylex\.props/);
+    // Should use the verbose _sx variable pattern (renamed from sx to avoid
+    // shadowing the destructured sx prop)
+    expect(result.code).toMatch(/const\s+_sx\s*=\s*stylex\.props/);
     // Should have the verbose className merging
     expect(result.code).toContain(".filter(Boolean).join");
     // Should have style spread
-    expect(result.code).toContain("...sx.style");
+    expect(result.code).toContain("..._sx.style");
   });
 });
 

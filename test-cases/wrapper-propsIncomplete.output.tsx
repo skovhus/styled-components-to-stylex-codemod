@@ -12,13 +12,17 @@ import type { Colors } from "./lib/colors";
 interface TextColorProps {
   /** Custom color prop */
   color: string;
+  sx?: stylex.StyleXStyles | stylex.StyleXStyles[];
 }
 
-export function TextColor(props: React.ComponentProps<"span"> & TextColorProps) {
-  const { className, children, style, color, ...rest } = props;
+export function TextColor(
+  props: React.ComponentProps<"span"> &
+    TextColorProps & { sx?: stylex.StyleXStyles | stylex.StyleXStyles[] },
+) {
+  const { className, children, style, sx, color, ...rest } = props;
 
   return (
-    <span {...rest} {...mergedSx(styles.textColorColor(color), className, style)}>
+    <span {...rest} {...mergedSx([styles.textColorColor(color), sx], className, style)}>
       {children}
     </span>
   );
@@ -66,14 +70,15 @@ export function App() {
 interface ThemeTextProps extends React.ComponentProps<"span"> {
   /** Theme color name */
   themeColor: Colors;
+  sx?: stylex.StyleXStyles | stylex.StyleXStyles[];
 }
 
 /** A text span that gets color from theme */
 export function ThemeText(props: ThemeTextProps) {
-  const { className, children, style, themeColor, ...rest } = props;
+  const { className, children, style, sx, themeColor, ...rest } = props;
 
   return (
-    <span {...rest} {...mergedSx(styles.themeTextColor(themeColor), className, style)}>
+    <span {...rest} {...mergedSx([styles.themeTextColor(themeColor), sx], className, style)}>
       {children}
     </span>
   );
