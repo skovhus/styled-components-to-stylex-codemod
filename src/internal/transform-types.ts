@@ -3,7 +3,7 @@
  * Core concepts: step results, styled declarations, and options.
  */
 import type { ASTNode, Comment, JSCodeshift, Options } from "jscodeshift";
-import type { Adapter } from "../adapter.js";
+import type { Adapter, ResolveBaseComponentResult } from "../adapter.js";
 import type { CssRuleIR } from "./css-ir.js";
 import type { WarningLog } from "./logger.js";
 import type { TransformContext } from "./transform-context.js";
@@ -373,4 +373,9 @@ export type StyledDecl = {
   leadingComments?: Comment[];
   /** Deterministic bridge CSS class name for unconverted consumer selectors */
   bridgeClassName?: string;
+  /**
+   * When present, the base component was resolved and inlined by `adapter.resolveBaseComponent()`.
+   * Contains the resolver result for downstream steps (per-site resolution, import cleanup).
+   */
+  inlinedBaseComponent?: ResolveBaseComponentResult;
 };
