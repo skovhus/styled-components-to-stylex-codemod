@@ -692,15 +692,44 @@ export function createCssHelperConditionalHandler(ctx: CssHelperConditionalConte
     // Helper to apply dynamic style entries from template literal interpolations.
     // When conditionWhen is provided, styles are conditional; otherwise unconditional.
     const applyDynamicEntries = (
-      entries: Array<{ jsxProp: string; stylexProp: string; callArg: ExpressionKind }>,
+      entries: Array<{
+        jsxProp: string;
+        stylexProp: string;
+        callArg: ExpressionKind;
+        condition?: "always";
+      }>,
       conditionWhen?: string,
     ): void => {
+      const inferParamTypeFromCallArg = (callArg: ExpressionKind): ASTNode | null => {
+        if (callArg.type === "TemplateLiteral") {
+          return j.tsStringKeyword();
+        }
+        const staticValue = literalToStaticValue(callArg);
+        if (typeof staticValue === "string") {
+          return j.tsStringKeyword();
+        }
+        if (typeof staticValue === "number") {
+          return j.tsNumberKeyword();
+        }
+        if (typeof staticValue === "boolean") {
+          return j.tsBooleanKeyword();
+        }
+        return null;
+      };
+
       for (const entry of entries) {
         const fnKey = `${decl.styleKey}${toSuffixFromProp(entry.stylexProp)}`;
         if (!styleFnDecls.has(fnKey)) {
           const entryParamName = cssPropertyToIdentifier(entry.stylexProp);
           const param = j.identifier(entryParamName);
-          annotateParamFromJsxProp(param, entry.jsxProp);
+          const inferredParamType = inferParamTypeFromCallArg(entry.callArg);
+          if (inferredParamType) {
+            (param as { typeAnnotation?: unknown }).typeAnnotation = j.tsTypeAnnotation(
+              inferredParamType as any,
+            );
+          } else {
+            annotateParamFromJsxProp(param, entry.jsxProp);
+          }
           const p = makeCssProperty(j, entry.stylexProp, entryParamName);
           const bodyExpr = j.objectExpression([p]);
           styleFnDecls.set(fnKey, j.arrowFunctionExpression([param], bodyExpr));
@@ -714,6 +743,7 @@ export function createCssHelperConditionalHandler(ctx: CssHelperConditionalConte
           styleFnFromProps.push({
             fnKey,
             jsxProp: entry.jsxProp,
+            condition: entry.condition,
             conditionWhen,
             callArg: entry.callArg,
           });
@@ -1349,7 +1379,7 @@ export function createCssHelperConditionalHandler(ctx: CssHelperConditionalConte
       const makeStyleCall = (key: string) => {
         if (useSingleParam) {
           return j.callExpression(j.memberExpression(j.identifier("styles"), j.identifier(key)), [
-            j.identifier(singleParamName) as ExpressionKind,
+            j.identifier(singlePropName) as ExpressionKind,
           ]);
         }
 

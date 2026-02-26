@@ -56,6 +56,7 @@ type TemplateDynamicEntry = {
   jsxProp: string;
   stylexProp: string;
   callArg: ExpressionKind;
+  condition?: "always";
 };
 
 type TemplateInlineEntry = {
@@ -146,6 +147,11 @@ export function resolveTemplateLiteralBranch(
       if (!d.property) {
         return null;
       }
+      // Dynamic property names (slot placeholders in property position) are handled
+      // by higher-level branch splitting logic, not direct template resolution.
+      if (d.property.includes("__SC_EXPR_")) {
+        return null;
+      }
       if (d.value.kind === "static") {
         for (const mapped of cssDeclarationToStylexDeclarations(d)) {
           let value = cssValueToJs(mapped.value, d.important, mapped.prop);
@@ -175,7 +181,7 @@ export function resolveTemplateLiteralBranch(
 
       const resolvedSlots = new Map<
         number,
-        | { kind: "dynamic"; jsxProp: string; callArg: ExpressionKind }
+        | { kind: "dynamic"; jsxProp: string; callArg: ExpressionKind; condition?: "always" }
         | { kind: "static"; exprAst: ExpressionKind }
       >();
 
@@ -201,6 +207,7 @@ export function resolveTemplateLiteralBranch(
             kind: "dynamic",
             jsxProp: propResolved.jsxProp,
             callArg: propResolved.callArg,
+            condition: propResolved.condition,
           });
           continue;
         }
@@ -332,6 +339,7 @@ export function resolveTemplateLiteralBranch(
           jsxProp: resolved.jsxProp,
           stylexProp: borderParts.colorProp,
           callArg: resolved.callArg,
+          condition: resolved.condition,
         });
         continue;
       }
@@ -353,6 +361,7 @@ export function resolveTemplateLiteralBranch(
           jsxProp: resolved.jsxProp,
           stylexProp: mapped.prop,
           callArg,
+          condition: resolved.condition,
         });
       }
     }
@@ -432,7 +441,7 @@ function resolveDynamicTemplateExpr(args: {
   parseExpr: (exprSource: string) => ExpressionKind | null;
   resolveValue: Adapter["resolveValue"];
   resolverImports: Map<string, ImportSpec>;
-}): { jsxProp: string; callArg: ExpressionKind } | null {
+}): { jsxProp: string; callArg: ExpressionKind; condition?: "always" } | null {
   const { j, expr, paramName, bindings, filePath, parseExpr, resolveValue, resolverImports } = args;
 
   // Handle destructured param bindings: bare Identifier matching a destructured prop
@@ -442,7 +451,11 @@ function resolveDynamicTemplateExpr(args: {
     if (bindings.bindings.has(identName)) {
       const jsxProp = bindings.bindings.get(identName)!;
       const defaultValue = bindings.defaults?.get(jsxProp);
-      return { jsxProp, callArg: buildPropAccessExpr(j, jsxProp, defaultValue) };
+      return {
+        jsxProp,
+        callArg: buildPropAccessExpr(j, jsxProp, defaultValue),
+        condition: defaultValue !== undefined ? "always" : undefined,
+      };
     }
   }
 

@@ -13,9 +13,7 @@ function ContainerWrapper(props: ContainerWrapperProps) {
     <div
       {...stylex.props(
         styles.containerWrapper,
-        props.$width || false
-          ? styles.containerWrapperCondTruthyComponentWidth(props.$width)
-          : undefined,
+        $width || false ? styles.containerWrapperCondTruthyComponentWidth($width) : undefined,
       )}
     >
       {children}

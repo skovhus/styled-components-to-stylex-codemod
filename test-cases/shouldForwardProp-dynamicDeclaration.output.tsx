@@ -47,11 +47,11 @@ export function FlexBox(props: FlexBoxProps) {
       {...rest}
       {...mergedSx(
         [
-          typeof gap === "number" ? styles.flexBoxGap(props.gap) : undefined,
+          typeof gap === "number" ? styles.flexBoxGap(gap) : undefined,
           typeof wrapGap === "number"
             ? column
-              ? styles.flexBoxColumnGap(props.wrapGap)
-              : styles.flexBoxRowGap(props.wrapGap)
+              ? styles.flexBoxColumnGap(wrapGap)
+              : styles.flexBoxRowGap(wrapGap)
             : undefined,
           wrap ? styles.flexBoxWrap : undefined,
           alignSelf ? styles.flexBoxAlignSelf(alignSelf) : undefined,
