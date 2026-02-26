@@ -193,7 +193,8 @@ export function tryHandleAnimation(args: {
     // Track interpolated time tokens (e.g., __SC_EXPR_1__ms) for style function emission
     const interpolatedAnimTimes: InterpolatedAnimTime[] = [];
 
-    for (const tokens of segments) {
+    for (let segmentIndex = 0; segmentIndex < segments.length; segmentIndex++) {
+      const tokens = segments[segmentIndex]!;
       if (!tokens.length) {
         return false;
       }
@@ -209,13 +210,35 @@ export function tryHandleAnimation(args: {
       }
       animNames.push({ kind: "ident", name: kf });
 
-      // Extract interpolated time tokens before classification so they don't
-      // fall through to the timeline catch-all regex.
-      const segmentInterpolated: Array<{ slotId: number; unit: string }> = [];
-      for (let i = tokens.length - 1; i >= 0; i--) {
-        const interpMatch = tokens[i]!.match(INTERPOLATED_TIME_RE);
+      // Track ALL time tokens (static and interpolated) with their original indices.
+      // CSS animation shorthand: first time = duration, second time = delay.
+      type TimeSlot =
+        | { kind: "static"; value: string; originalIndex: number }
+        | { kind: "interpolated"; slotId: number; unit: string; originalIndex: number };
+      const timeSlots: TimeSlot[] = [];
+
+      // First pass: collect all time tokens with original indices
+      for (let i = 0; i < tokens.length; i++) {
+        const token = tokens[i]!;
+        const interpMatch = token.match(INTERPOLATED_TIME_RE);
         if (interpMatch) {
-          segmentInterpolated.unshift({ slotId: Number(interpMatch[1]), unit: interpMatch[2]! });
+          timeSlots.push({
+            kind: "interpolated",
+            slotId: Number(interpMatch[1]),
+            unit: interpMatch[2]!,
+            originalIndex: i,
+          });
+        } else if (isTimeToken(token)) {
+          timeSlots.push({ kind: "static", value: token, originalIndex: i });
+        }
+      }
+
+      // Sort by original index to preserve CSS shorthand order
+      timeSlots.sort((a, b) => a.originalIndex - b.originalIndex);
+
+      // Remove interpolated time tokens from the array for classifyAnimationTokens
+      for (let i = tokens.length - 1; i >= 0; i--) {
+        if (INTERPOLATED_TIME_RE.test(tokens[i]!)) {
           tokens.splice(i, 1);
         }
       }
@@ -223,25 +246,39 @@ export function tryHandleAnimation(args: {
       // Classify remaining (non-interpolated) tokens into animation longhand categories
       const classified = classifyAnimationTokens(tokens);
 
-      // Assign interpolated time tokens to unfilled time slots (duration first, then delay)
-      for (const interp of segmentInterpolated) {
+      // Reset duration/delay from classified — we'll reassign based on original order
+      classified.duration = null;
+      classified.delay = null;
+
+      // Assign time tokens to duration/delay based on original CSS shorthand order
+      for (let i = 0; i < timeSlots.length && i < 2; i++) {
+        const slot = timeSlots[i]!;
         const longhand: "animationDuration" | "animationDelay" =
-          classified.duration === null ? "animationDuration" : "animationDelay";
+          i === 0 ? "animationDuration" : "animationDelay";
 
-        const fallbackValue = computeInterpolatedTimeFallback(decl, interp.slotId, interp.unit);
-
-        if (longhand === "animationDuration") {
-          classified.duration = fallbackValue ?? `0${interp.unit}`;
+        if (slot.kind === "static") {
+          if (longhand === "animationDuration") {
+            classified.duration = slot.value;
+          } else {
+            classified.delay = slot.value;
+          }
         } else {
-          classified.delay = fallbackValue ?? `0${interp.unit}`;
-        }
+          const fallbackValue = computeInterpolatedTimeFallback(decl, slot.slotId, slot.unit);
 
-        interpolatedAnimTimes.push({
-          slotId: interp.slotId,
-          unit: interp.unit,
-          longhand,
-          fallbackValue,
-        });
+          if (longhand === "animationDuration") {
+            classified.duration = fallbackValue ?? `0${slot.unit}`;
+          } else {
+            classified.delay = fallbackValue ?? `0${slot.unit}`;
+          }
+
+          interpolatedAnimTimes.push({
+            slotId: slot.slotId,
+            unit: slot.unit,
+            longhand,
+            fallbackValue,
+            segmentIndex,
+          });
+        }
       }
 
       durations.push(classified.duration);
@@ -327,6 +364,8 @@ export function tryHandleAnimation(args: {
       interpolatedAnimTimes,
       styleFnDecls,
       styleFnFromProps,
+      durations,
+      delays,
     );
 
     return true;
@@ -348,6 +387,7 @@ type InterpolatedAnimTime = {
   unit: string;
   longhand: "animationDuration" | "animationDelay";
   fallbackValue: string | null;
+  segmentIndex: number;
 };
 
 /**
@@ -379,6 +419,9 @@ function computeInterpolatedTimeFallback(
  *   `fadeInContainerAnimationDuration: (animationDuration: string) => ({ animationDuration })`
  * and pushes a `styleFnFromProps` entry with a `callArg` that wraps the unwrapped
  * expression with the static unit suffix.
+ *
+ * For multi-animation shorthands, the callArg preserves the full comma-separated list
+ * of durations/delays, with the interpolated segment being dynamic.
  */
 function emitInterpolatedAnimTimeFunctions(
   j: any,
@@ -386,6 +429,8 @@ function emitInterpolatedAnimTimeFunctions(
   interpolatedTimes: InterpolatedAnimTime[],
   styleFnDecls: Map<string, unknown>,
   styleFnFromProps: StyleFnFromPropsEntry[],
+  durations: Array<string | null>,
+  delays: Array<string | null>,
 ): void {
   for (const interp of interpolatedTimes) {
     const expr = (decl as any).templateExpressions[interp.slotId] as any;
@@ -405,7 +450,17 @@ function emitInterpolatedAnimTimeFunctions(
       continue;
     }
 
-    const callArg = buildTemplateWithStaticParts(j, unwrapped.expr, "", interp.unit);
+    // Build the call argument: for multi-animation, include the full comma-separated list
+    const valuesList = interp.longhand === "animationDuration" ? durations : delays;
+    const defaultFallback = interp.longhand === "animationDuration" ? "0s" : "0s";
+    const callArg = buildMultiAnimationCallArg(
+      j,
+      unwrapped.expr,
+      interp.unit,
+      interp.segmentIndex,
+      valuesList,
+      defaultFallback,
+    );
 
     const cssPropId = cssPropertyToIdentifier(interp.longhand);
     const fnKey = `${decl.styleKey}${toSuffixFromProp(interp.longhand)}`;
@@ -423,4 +478,48 @@ function emitInterpolatedAnimTimeFunctions(
 
     decl.needsWrapperComponent = true;
   }
+}
+
+/**
+ * Builds a call argument for multi-animation shorthands.
+ * For single animation, returns a simple template like `${$duration ?? 200}ms`.
+ * For multi-animation, returns a template like `${$duration ?? 200}ms, 1s`
+ * that preserves all animation durations/delays.
+ */
+function buildMultiAnimationCallArg(
+  j: any,
+  interpExpr: any,
+  unit: string,
+  segmentIndex: number,
+  valuesList: Array<string | null>,
+  defaultFallback: string,
+): any {
+  // Single animation: use simple template
+  if (valuesList.length === 1) {
+    return buildTemplateWithStaticParts(j, interpExpr, "", unit);
+  }
+
+  // Multi-animation: build template with full list
+  const quasis: any[] = [];
+  const exprs: any[] = [];
+
+  let prefix = "";
+  for (let i = 0; i < valuesList.length; i++) {
+    if (i > 0) {
+      prefix += ", ";
+    }
+
+    if (i === segmentIndex) {
+      // This is the interpolated segment
+      quasis.push(j.templateElement({ raw: prefix, cooked: prefix }, false));
+      exprs.push(interpExpr);
+      prefix = unit;
+    } else {
+      // Static segment
+      prefix += valuesList[i] ?? defaultFallback;
+    }
+  }
+
+  quasis.push(j.templateElement({ raw: prefix, cooked: prefix }, true));
+  return j.templateLiteral(quasis, exprs);
 }
