@@ -18,10 +18,18 @@ function Container(props: ContainerProps) {
   return (
     <div
       {...rest}
-      {...mergedSx([styles.container, $open ? styles.containerOpen : undefined], className, {
-        transitionDelay: `${$open ? $delay : 0}ms`,
-        ...style,
-      })}
+      {...mergedSx(
+        [
+          styles.container,
+          $open ? styles.containerOpen : undefined,
+          styles.containerTransitionDelay({
+            $open,
+            $delay,
+          }),
+        ],
+        className,
+        style,
+      )}
     >
       {children}
     </div>
@@ -51,4 +59,7 @@ const styles = stylex.create({
   containerOpen: {
     opacity: 1,
   },
+  containerTransitionDelay: (props) => ({
+    transitionDelay: `${props.$open ? props.$delay : 0}ms`,
+  }),
 });

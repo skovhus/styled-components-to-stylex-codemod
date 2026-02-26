@@ -1264,7 +1264,13 @@ export function handleInterpolatedDeclaration(args: InterpolatedDeclarationConte
           }
           const fnKey = `${decl.styleKey}${toSuffixFromProp(out.prop)}`;
           if (!styleFnDecls.has(fnKey)) {
-            const valueExpr = cloneAstNode(bodyExpr);
+            const valueExprRaw = cloneAstNode(bodyExpr);
+            // Apply CSS value prefix/suffix (e.g., `${...}ms`) to the expression
+            const { prefix, suffix } = extractStaticParts(d.value);
+            const valueExpr =
+              prefix || suffix
+                ? buildTemplateWithStaticParts(j, valueExprRaw, prefix, suffix)
+                : valueExprRaw;
             const param = j.identifier(paramName);
             const body = j.objectExpression([
               j.property(
