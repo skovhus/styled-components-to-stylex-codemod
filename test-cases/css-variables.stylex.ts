@@ -9,10 +9,3 @@ export const vars = stylex.defineVars({
   spacingLg: "24px",
   borderRadius: "4px",
 });
-
-// Variables with fallbacks that may not be defined
-export const textVars = stylex.defineVars({
-  textColor: "#333",
-  fontSize: "16px",
-  lineHeight: "1.5",
-});
