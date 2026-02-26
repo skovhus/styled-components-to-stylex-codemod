@@ -10,22 +10,19 @@ type FlexContainerProps = Omit<React.ComponentProps<"div">, "className" | "style
 function FlexContainer(props: FlexContainerProps) {
   const { children, column, reverse, ...rest } = props;
 
-  const sx = stylex.props(styles.flexContainer);
-
   return (
     <div
       {...rest}
-      {...sx}
-      style={{
-        ...sx.style,
-        flexDirection: props.column
-          ? props.reverse
-            ? "column-reverse"
-            : "column"
-          : props.reverse
-            ? "row-reverse"
-            : "row",
-      }}
+      {...stylex.props(
+        styles.flexContainer,
+        column
+          ? reverse
+            ? styles.flexContainerColumnReverse
+            : styles.flexContainerColumn
+          : reverse
+            ? styles.flexContainerReverse
+            : styles.flexContainerDefault,
+      )}
     >
       {children}
     </div>
@@ -59,5 +56,17 @@ const styles = stylex.create({
     gap: "8px",
     padding: "16px",
     backgroundColor: "#f0f0f0",
+  },
+  flexContainerColumnReverse: {
+    flexDirection: "column-reverse",
+  },
+  flexContainerColumn: {
+    flexDirection: "column",
+  },
+  flexContainerReverse: {
+    flexDirection: "row-reverse",
+  },
+  flexContainerDefault: {
+    flexDirection: "row",
   },
 });

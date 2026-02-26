@@ -37,6 +37,7 @@ import {
   isFunctionNode,
   isIdentifierNode,
 } from "../utilities/jscodeshift-utils.js";
+import { mergeOrderedEntries, type OrderedStyleEntry } from "./style-expr-builders.js";
 
 export function emitComponentWrappers(emitter: WrapperEmitter): {
   emitted: ASTNode[];
@@ -350,6 +351,10 @@ export function emitComponentWrappers(emitter: WrapperEmitter): {
       ...extraStyleArgsAfterBase,
     ];
 
+    // Collect variant and styleFn expressions with source order for interleaving.
+    const hasSourceOrder = !!(d.variantSourceOrder && Object.keys(d.variantSourceOrder).length > 0);
+    const orderedEntries: OrderedStyleEntry[] = [];
+
     // Add variant style arguments if this component has variants
     if (d.variantStyleKeys) {
       const sortedEntries = sortVariantEntriesBySpecificity(Object.entries(d.variantStyleKeys));
@@ -361,7 +366,13 @@ export function emitComponentWrappers(emitter: WrapperEmitter): {
         );
         // Use makeConditionalStyleExpr to handle boolean vs non-boolean conditions correctly.
         // For boolean conditions, && is used. For non-boolean (could be "" or 0), ternary is used.
-        styleArgs.push(emitter.makeConditionalStyleExpr({ cond, expr: styleExpr, isBoolean }));
+        const expr = emitter.makeConditionalStyleExpr({ cond, expr: styleExpr, isBoolean });
+        const order = d.variantSourceOrder?.[when];
+        if (hasSourceOrder && order !== undefined) {
+          orderedEntries.push({ order, expr });
+        } else {
+          styleArgs.push(expr);
+        }
       }
     }
 
@@ -373,6 +384,7 @@ export function emitComponentWrappers(emitter: WrapperEmitter): {
         destructureProps,
         propDefaults,
         namespaceBooleanProps,
+        orderedEntries: hasSourceOrder ? orderedEntries : undefined,
       });
     }
 
@@ -412,7 +424,11 @@ export function emitComponentWrappers(emitter: WrapperEmitter): {
       destructureProps,
       propExprBuilder: (prop) => j.memberExpression(propsIdForExpr, j.identifier(prop)),
       propsIdentifier: propsIdForExpr,
+      orderedEntries: hasSourceOrder ? orderedEntries : undefined,
     });
+
+    // Merge ordered entries (variants + styleFns) by source order to preserve CSS cascade
+    mergeOrderedEntries(orderedEntries, styleArgs);
 
     // For component wrappers, filter out transient props ($-prefixed) that are NOT used in styling.
     // In styled-components, transient props are automatically filtered before passing to wrapped component.

@@ -19,8 +19,8 @@ function createThemedComponents() {
       <div
         className={className}
         style={{
-          ...style,
           backgroundColor: color("ff0000"),
+          ...style,
         }}
       >
         {children}

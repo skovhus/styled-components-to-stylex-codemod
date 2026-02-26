@@ -721,6 +721,10 @@ describe("runPrepass createExternalInterface snapshot on test-cases", () => {
           "as": false,
           "styles": true,
         },
+        "test-cases/example-flex.input.tsx:Flex": {
+          "as": false,
+          "styles": true,
+        },
         "test-cases/externalStyles-element.input.tsx:ColorBadge": {
           "as": false,
           "styles": true,

@@ -15,8 +15,8 @@ function Button(props: ButtonProps) {
       {...rest}
       {...stylex.props(
         styles.button,
-        size === "large" && styles.buttonSizeLarge,
         color != null && styles.buttonBackgroundColor(color),
+        size === "large" && styles.buttonSizeLarge,
       )}
     >
       {children}
@@ -77,9 +77,9 @@ function Card(props: CardProps) {
       {...rest}
       {...stylex.props(
         styles.card,
-        rounded ? styles.cardRounded : undefined,
         variant === "primary" && styles.cardVariantPrimary,
         styles.cardBoxShadow(props),
+        rounded ? styles.cardRounded : undefined,
       )}
     >
       {children}

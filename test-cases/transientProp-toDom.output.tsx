@@ -18,8 +18,8 @@ export function Box(props: BoxProps) {
       {...rest}
       {...stylex.props(
         styles.box,
-        $isActive ? styles.boxActive : undefined,
         $size === "large" && styles.boxSizeLarge,
+        $isActive ? styles.boxActive : undefined,
       )}
     >
       {children}

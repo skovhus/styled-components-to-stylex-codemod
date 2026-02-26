@@ -43,11 +43,13 @@ import {
 import { addStyleKeyMixin, trackMixinPropertyValues } from "./precompute.js";
 import { buildSafeIndexedParamName } from "./import-resolution.js";
 import {
+  handleDualBranchCompoundVariantsResolvedValue,
   handleSplitMultiPropVariantsResolvedValue,
   handleSplitVariantsResolvedValue,
 } from "./interpolated-variant-resolvers.js";
 import { handleInlineStyleValueFromProps } from "./inline-style-props.js";
 import { buildPseudoMediaPropValue } from "./variant-utils.js";
+import { extractUnionLiteralValues } from "./variants.js";
 import { toStyleKey, toSuffixFromProp } from "../transform/helpers.js";
 import { cssPropertyToIdentifier, makeCssProperty, makeCssPropKey } from "./shared.js";
 type CommentSource = { leading?: string; trailingLine?: string } | null;
@@ -88,7 +90,9 @@ export function handleInterpolatedDeclaration(args: InterpolatedDeclarationConte
     tryHandleCssHelperFunctionSwitchBlock,
     tryHandleCssHelperConditionalBlock,
     findJsxPropTsType,
+    findJsxPropTsTypeForVariantExtraction,
     annotateParamFromJsxProp,
+    applyVariant,
     notifyResolvedStylesArg,
   } = ctx;
   const {
@@ -128,6 +132,37 @@ export function handleInterpolatedDeclaration(args: InterpolatedDeclarationConte
   const bailUnsupportedLocal = (declArg: StyledDecl, type: WarningType) => {
     bail = true;
     state.bailUnsupported(declArg, type);
+  };
+
+  /**
+   * Try to convert an identity prop with a finite string union type into static variant
+   * buckets. Returns true if the optimization applied and the caller should `continue`.
+   * @param skipValue — For props with a default, the default value is handled as base style
+   *   and should be skipped in the variant buckets.
+   */
+  const tryEmitIdentityVariantBuckets = (
+    jsxProp: string,
+    stylexProp: string,
+    skipValue?: string,
+  ): boolean => {
+    const propType = findJsxPropTsTypeForVariantExtraction(jsxProp);
+    const unionValues = extractUnionLiteralValues(propType);
+    if (!unionValues || unionValues.length < 2 || unionValues.length > 20) {
+      return false;
+    }
+    for (const value of unionValues) {
+      if (value === skipValue) {
+        continue;
+      }
+      applyVariant(
+        { when: `${jsxProp} === "${value}"`, propName: jsxProp },
+        { [stylexProp]: value },
+      );
+    }
+    if (jsxProp.startsWith("$")) {
+      ensureShouldForwardPropDrop(decl, jsxProp);
+    }
+    return true;
   };
 
   for (let _i = 0; _i < 1; _i++) {
@@ -993,6 +1028,29 @@ export function handleInterpolatedDeclaration(args: InterpolatedDeclarationConte
       continue;
     }
 
+    if (
+      handleDualBranchCompoundVariantsResolvedValue({
+        j,
+        decl,
+        d,
+        res,
+        styleObj,
+        variantBuckets,
+        variantStyleKeys,
+        pseudos,
+        media,
+        parseExpr,
+        resolverImports,
+        warnings,
+        setBail: () => {
+          bail = true;
+        },
+        bailUnsupported: bailUnsupportedLocal,
+      })
+    ) {
+      continue;
+    }
+
     if (res && res.type === "emitConditionalIndexedThemeFunction") {
       // Handle conditional indexed theme lookup:
       //   props.textColor ? props.theme.color[props.textColor] : props.theme.color.labelTitle
@@ -1275,6 +1333,24 @@ export function handleInterpolatedDeclaration(args: InterpolatedDeclarationConte
       // Extract the static default value
       const defaultStaticValue = literalToStaticValue(res.defaultValue);
 
+      // Identity prop with default + finite union type → static variant lookups
+      // (e.g., `({ padding = "16px" }) => padding` with `padding: "8px" | "16px" | "24px"`)
+      if (
+        !res.valueTransform &&
+        !res.wrapValueInTemplateLiteral &&
+        !media &&
+        (!pseudos || pseudos.length === 0) &&
+        outs.length === 1 &&
+        defaultStaticValue !== null &&
+        typeof defaultStaticValue === "string"
+      ) {
+        const out = outs[0]!;
+        if (tryEmitIdentityVariantBuckets(jsxProp, out.prop, defaultStaticValue)) {
+          styleObj[out.prop] = defaultStaticValue;
+          continue;
+        }
+      }
+
       for (let i = 0; i < outs.length; i++) {
         const out = outs[i]!;
 
@@ -1307,6 +1383,21 @@ export function handleInterpolatedDeclaration(args: InterpolatedDeclarationConte
 
     if (res && res.type === "emitStyleFunction") {
       const jsxProp = res.call;
+
+      // Identity prop with finite union type → static variant lookups
+      // (e.g., `align-items: ${({ align }) => align}` with `align: "stretch" | "center" | ...`)
+      if (
+        !res.valueTransform &&
+        !res.wrapValueInTemplateLiteral &&
+        !media &&
+        (!pseudos || pseudos.length === 0)
+      ) {
+        const outs = cssDeclarationToStylexDeclarations(d);
+        if (outs.length === 1 && tryEmitIdentityVariantBuckets(jsxProp, outs[0]!.prop)) {
+          continue;
+        }
+      }
+
       {
         const outs = cssDeclarationToStylexDeclarations(d);
         for (let i = 0; i < outs.length; i++) {

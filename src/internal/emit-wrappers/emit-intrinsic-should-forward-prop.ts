@@ -12,8 +12,9 @@ import { SX_PROP_TYPE_TEXT, type JsxAttr, type StatementKind } from "./wrapper-e
 import { emitStyleMerging } from "./style-merger.js";
 import { sortVariantEntriesBySpecificity, VOID_TAGS } from "./type-helpers.js";
 import { withLeadingComments } from "./comments.js";
-import type { EmitIntrinsicContext } from "./emit-intrinsic-helpers.js";
+import { getCompoundVariantWhenKeys, type EmitIntrinsicContext } from "./emit-intrinsic-helpers.js";
 import { appendPseudoAliasStyleArgs } from "./emit-intrinsic-simple.js";
+import { mergeOrderedEntries, type OrderedStyleEntry } from "./style-expr-builders.js";
 import type { JSCodeshift, Identifier } from "jscodeshift";
 
 /**
@@ -299,10 +300,15 @@ export function emitShouldForwardPropWrappers(ctx: EmitIntrinsicContext): void {
     // Collect keys used by compound variants (they're handled separately)
     const compoundVariantKeys = new Set<string>();
     for (const cv of d.compoundVariants ?? []) {
-      compoundVariantKeys.add(cv.outerProp);
-      compoundVariantKeys.add(`${cv.innerProp}True`);
-      compoundVariantKeys.add(`${cv.innerProp}False`);
+      for (const k of getCompoundVariantWhenKeys(cv)) {
+        compoundVariantKeys.add(k);
+      }
     }
+
+    // Collect variant and styleFn expressions with source order for interleaving.
+    // When source order is available, entries are sorted to preserve CSS cascade order.
+    const hasSourceOrder = !!(d.variantSourceOrder && Object.keys(d.variantSourceOrder).length > 0);
+    const orderedEntries: OrderedStyleEntry[] = [];
 
     if (d.variantStyleKeys) {
       const sortedEntries = sortVariantEntriesBySpecificity(Object.entries(d.variantStyleKeys));
@@ -318,14 +324,14 @@ export function emitShouldForwardPropWrappers(ctx: EmitIntrinsicContext): void {
         );
         // Use makeConditionalStyleExpr to handle boolean vs non-boolean conditions correctly.
         // For boolean conditions, && is used. For non-boolean (could be "" or 0), ternary is used.
-        styleArgs.push(emitter.makeConditionalStyleExpr({ cond, expr: styleExpr, isBoolean }));
+        const expr = emitter.makeConditionalStyleExpr({ cond, expr: styleExpr, isBoolean });
+        const order = d.variantSourceOrder?.[when];
+        if (hasSourceOrder && order !== undefined) {
+          orderedEntries.push({ order, expr });
+        } else {
+          styleArgs.push(expr);
+        }
       }
-    }
-
-    // Add adapter-resolved StyleX styles that should come after variant styles
-    // to preserve CSS cascade order (e.g., unconditional border-bottom after conditional border).
-    if (afterVariantStyleArgs.length > 0) {
-      styleArgs.push(...afterVariantStyleArgs);
     }
 
     const dropProps = d.shouldForwardProp?.dropProps ?? [];
@@ -384,6 +390,7 @@ export function emitShouldForwardPropWrappers(ctx: EmitIntrinsicContext): void {
         styleArgs,
         destructureProps: destructureParts,
         propDefaults,
+        orderedEntries: hasSourceOrder ? orderedEntries : undefined,
       });
     }
 
@@ -412,19 +419,23 @@ export function emitShouldForwardPropWrappers(ctx: EmitIntrinsicContext): void {
         j.memberExpression(j.identifier(stylesIdentifier), j.identifier(p.fnKey)),
         [callArg],
       );
+      let expr: ExpressionKind;
       if (p.conditionWhen) {
         const { cond, isBoolean } = emitter.collectConditionProps({
           when: p.conditionWhen,
           destructureProps: destructureParts,
         });
-        styleArgs.push(emitter.makeConditionalStyleExpr({ cond, expr: call, isBoolean }));
+        expr = emitter.makeConditionalStyleExpr({ cond, expr: call, isBoolean });
       } else {
         const isRequired =
           p.jsxProp === "__props" ||
           emitter.isPropRequiredInPropsTypeLiteral(d.propsType, p.jsxProp);
-        styleArgs.push(
-          buildStyleFnConditionExpr({ j, condition: p.condition, propExpr, call, isRequired }),
-        );
+        expr = buildStyleFnConditionExpr({ j, condition: p.condition, propExpr, call, isRequired });
+      }
+      if (hasSourceOrder && p.sourceOrder !== undefined) {
+        orderedEntries.push({ order: p.sourceOrder, expr });
+      } else {
+        styleArgs.push(expr);
       }
       // Ensure the prop is destructured from props
       if (
@@ -435,6 +446,15 @@ export function emitShouldForwardPropWrappers(ctx: EmitIntrinsicContext): void {
       ) {
         destructureParts.push(p.jsxProp);
       }
+    }
+
+    // Merge ordered entries (variants + styleFns) by source order to preserve CSS cascade
+    mergeOrderedEntries(orderedEntries, styleArgs);
+
+    // Add adapter-resolved StyleX styles that should come after variant styles
+    // to preserve CSS cascade order (e.g., unconditional border-bottom after conditional border).
+    if (afterVariantStyleArgs.length > 0) {
+      styleArgs.push(...afterVariantStyleArgs);
     }
     for (const p of knownPrefixProps) {
       if (!destructureParts.includes(p)) {

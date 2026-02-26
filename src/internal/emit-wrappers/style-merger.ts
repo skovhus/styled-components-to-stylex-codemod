@@ -236,8 +236,8 @@ function emitWithoutStylex(args: {
       styleAttr = maybeCastStyleForCustomProps(
         j,
         j.objectExpression([
-          j.spreadElement(styleId),
           ...inlineStyleProps.map((p) => j.property("init", inlineStylePropKey(j, p.prop), p.expr)),
+          j.spreadElement(styleId),
         ]),
         inlineStyleProps,
         emitTypes,
@@ -327,10 +327,10 @@ function emitWithMerger(args: {
           maybeCastStyleForCustomProps(
             j,
             j.objectExpression([
-              j.spreadElement(styleId),
               ...inlineStyleProps.map((p) =>
                 j.property("init", inlineStylePropKey(j, p.prop), p.expr),
               ),
+              j.spreadElement(styleId),
             ]),
             inlineStyleProps,
             emitTypes,
@@ -466,8 +466,8 @@ function emitVerbosePattern(args: {
   if (allowStyleProp || inlineStyleProps.length > 0) {
     const spreads: any[] = [
       j.spreadElement(j.memberExpression(j.identifier(sxVarName), j.identifier("style"))),
-      ...(allowStyleProp ? [j.spreadElement(styleId)] : []),
       ...inlineStyleProps.map((p) => j.property("init", inlineStylePropKey(j, p.prop), p.expr)),
+      ...(allowStyleProp ? [j.spreadElement(styleId)] : []),
     ];
     styleAttr = maybeCastStyleForCustomProps(
       j,

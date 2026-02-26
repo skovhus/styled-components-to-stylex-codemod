@@ -10,6 +10,25 @@ import type { StyledDecl } from "../transform-types.js";
 import type { ExpressionKind } from "./types.js";
 import { SX_PROP_TYPE_TEXT, type WrapperEmitter } from "./wrapper-emitter.js";
 
+/**
+ * Returns the variant bucket "when" keys for a compound variant entry.
+ * Used to exclude these entries from regular variant emission (they are
+ * emitted as a single compound ternary expression instead).
+ */
+export function getCompoundVariantWhenKeys(
+  cv: NonNullable<StyledDecl["compoundVariants"]>[number],
+): string[] {
+  if (cv.kind === "4branch") {
+    return [
+      `${cv.outerProp}_${cv.innerProp}`,
+      `${cv.outerProp}_!${cv.innerProp}`,
+      `!${cv.outerProp}_${cv.innerProp}`,
+      `!${cv.outerProp}_!${cv.innerProp}`,
+    ];
+  }
+  return [cv.outerProp, `${cv.innerProp}True`, `${cv.innerProp}False`];
+}
+
 export type EmitIntrinsicHelpers = {
   hasForwardedAsUsage: (d: StyledDecl) => boolean;
   withForwardedAsType: (typeText: string, includeForwardedAs: boolean) => string;
@@ -234,29 +253,31 @@ export function createEmitIntrinsicHelpers(env: EmitIntrinsicHelpersEnv): EmitIn
         }
       }
 
-      // Build: outerProp ? styles.outerKey : innerProp ? styles.innerTrueKey : styles.innerFalseKey
       const outerPropId = j.identifier(cv.outerProp);
       const innerPropId = j.identifier(cv.innerProp);
-      const outerStyle = j.memberExpression(
-        j.identifier(stylesIdentifier),
-        j.identifier(cv.outerTruthyKey),
-      );
-      const innerTrueStyle = j.memberExpression(
-        j.identifier(stylesIdentifier),
-        j.identifier(cv.innerTruthyKey),
-      );
-      const innerFalseStyle = j.memberExpression(
-        j.identifier(stylesIdentifier),
-        j.identifier(cv.innerFalsyKey),
-      );
+      const stylesId = j.identifier(stylesIdentifier);
 
-      // Build inner ternary: innerProp ? innerTrueStyle : innerFalseStyle
-      const innerTernary = j.conditionalExpression(innerPropId, innerTrueStyle, innerFalseStyle);
-
-      // Build outer ternary: outerProp ? outerStyle : innerTernary
-      const outerTernary = j.conditionalExpression(outerPropId, outerStyle, innerTernary);
-
-      styleArgs.push(outerTernary);
+      if (cv.kind === "4branch") {
+        // Build: outer ? (inner ? styles.OTIT : styles.OTIF) : (inner ? styles.OFIT : styles.OFIF)
+        const outerTrue = j.conditionalExpression(
+          innerPropId,
+          j.memberExpression(stylesId, j.identifier(cv.outerTruthyInnerTruthyKey)),
+          j.memberExpression(stylesId, j.identifier(cv.outerTruthyInnerFalsyKey)),
+        );
+        const outerFalse = j.conditionalExpression(
+          j.identifier(cv.innerProp),
+          j.memberExpression(stylesId, j.identifier(cv.outerFalsyInnerTruthyKey)),
+          j.memberExpression(stylesId, j.identifier(cv.outerFalsyInnerFalsyKey)),
+        );
+        styleArgs.push(j.conditionalExpression(outerPropId, outerTrue, outerFalse));
+      } else {
+        // 3-branch: outerProp ? styles.outerKey : innerProp ? styles.innerTrueKey : styles.innerFalseKey
+        const outerStyle = j.memberExpression(stylesId, j.identifier(cv.outerTruthyKey));
+        const innerTrueStyle = j.memberExpression(stylesId, j.identifier(cv.innerTruthyKey));
+        const innerFalseStyle = j.memberExpression(stylesId, j.identifier(cv.innerFalsyKey));
+        const innerTernary = j.conditionalExpression(innerPropId, innerTrueStyle, innerFalseStyle);
+        styleArgs.push(j.conditionalExpression(outerPropId, outerStyle, innerTernary));
+      }
     }
   };
 
