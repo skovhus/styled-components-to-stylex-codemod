@@ -83,6 +83,12 @@ export interface CrossFileInfo {
   bridgeComponentNames?: Set<string>;
   /** Global map: files that define styled-components → set of local names. Used for cascade conflict detection. */
   styledDefFiles?: Map<string, Set<string>>;
+  /**
+   * Local names of imported components that are StyleX-backed (will have an `sx` prop
+   * after transformation). When wrapping such a component with `styled()`, styles should
+   * be passed via the `sx` prop instead of being converted to `className`/`style`.
+   */
+  sxBackedImports?: Set<string>;
 }
 
 export interface CrossFileSelectorUsage {
@@ -236,6 +242,12 @@ export type StyledDecl = {
    * True if: (1) extended by another styled component, or (2) exported and adapter opts-in.
    */
   supportsExternalStyles?: boolean;
+  /**
+   * True when the wrapped component (`base.kind === "component"`) is itself a StyleX-backed
+   * component (transformed by the codemod with an `sx` prop). When true, the emitter
+   * passes styles via the `sx` prop instead of converting them to `className`/`style`.
+   */
+  wrapsStylexComponent?: boolean;
   /**
    * Whether this component should support an `as` prop at its public boundary.
    * True when exported and the adapter opts-in.

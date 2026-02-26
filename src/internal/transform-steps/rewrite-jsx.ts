@@ -473,15 +473,25 @@ export function rewriteJsxStep(ctx: TransformContext): StepResult {
           }
         }
 
-        // Build final rest with stylex.props inserted after last spread
-        const stylexSpread = j.jsxSpreadAttribute(
-          j.callExpression(j.memberExpression(j.identifier("stylex"), j.identifier("props")), [
-            ...styleArgs,
-          ]),
-        );
+        // Build final rest with stylex.props (or sx prop for sx-backed components)
+        // inserted after last spread
+        const stylexAttr = decl.wrapsStylexComponent
+          ? j.jsxAttribute(
+              j.jsxIdentifier("sx"),
+              j.jsxExpressionContainer(
+                styleArgs.length === 1 && styleArgs[0]
+                  ? styleArgs[0]
+                  : j.arrayExpression(styleArgs),
+              ),
+            )
+          : j.jsxSpreadAttribute(
+              j.callExpression(j.memberExpression(j.identifier("stylex"), j.identifier("props")), [
+                ...styleArgs,
+              ]),
+            );
         const finalRest = [
           ...keptRestAfterVariants.slice(0, finalInsertIndex),
-          stylexSpread,
+          stylexAttr,
           ...keptRestAfterVariants.slice(finalInsertIndex),
         ];
 

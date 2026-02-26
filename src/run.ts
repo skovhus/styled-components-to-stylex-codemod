@@ -352,6 +352,7 @@ export async function runTransform(options: RunTransformOptions): Promise<RunTra
         componentsNeedingGlobalSelectorBridge: new Map(),
       },
       consumerAnalysis: undefined,
+      styledCallResolutions: new Map(),
     };
   }
 
@@ -392,6 +393,20 @@ export async function runTransform(options: RunTransformOptions): Promise<RunTra
     resolveCall: resolveCallWithLogging,
     resolveSelector: resolveSelectorWithLogging,
   };
+
+  // Compute which imported components in each file are StyleX-backed.
+  // A component is sx-backed when it's defined in a transform-set file AND the
+  // resolved adapter says it supports external styles (will get an sx prop).
+  const sxBackedImports = computeSxBackedImports(
+    prepassResult.styledCallResolutions,
+    prepassResult.crossFileInfo.styledDefFiles,
+    resolvedAdapter,
+  );
+  // Attach sx-backed imports to the prepass result passed through jscodeshift options.
+  // The GlobalPrepassResult interface in transform.ts mirrors this shape.
+  (
+    crossFilePrepassResult as unknown as { sxBackedImports: Map<string, Set<string>> }
+  ).sxBackedImports = sxBackedImports;
 
   // Path to the transform module.
   // - In published builds, `dist/index.mjs` and `dist/transform.mjs` live together.
@@ -567,6 +582,57 @@ export function mergeSidecarContent(sidecarPath: string, newContent: string): st
   merged = merged + trailingNewline + markersToAdd.join("\n") + "\n";
 
   return merged;
+}
+
+/**
+ * Determine which imported components in each consumer file are StyleX-backed.
+ * A component is sx-backed when:
+ * 1. Its definition file is in the transform set (will be transformed)
+ * 2. It's a styled component (in styledDefFiles)
+ * 3. The adapter's externalInterface returns styles: true (will get sx prop)
+ *
+ * Returns: Map<consumerFilePath, Set<localComponentName>>
+ */
+function computeSxBackedImports(
+  styledCallResolutions: Map<
+    string,
+    Array<{ localName: string; defFile: string; exportedName: string }>
+  >,
+  styledDefFiles: Map<string, Set<string>> | undefined,
+  adapter: Adapter,
+): Map<string, Set<string>> {
+  const result = new Map<string, Set<string>>();
+
+  for (const [consumerFile, resolutions] of styledCallResolutions) {
+    for (const { localName, defFile, exportedName } of resolutions) {
+      // Check if the component is actually a styled component definition
+      const defNames = styledDefFiles?.get(defFile);
+      if (!defNames?.has(exportedName)) {
+        continue;
+      }
+
+      // Ask the adapter if this component will support external styles (sx prop)
+      const extResult = adapter.externalInterface({
+        filePath: defFile,
+        componentName: exportedName,
+        exportName: exportedName,
+        isDefaultExport: false,
+      });
+
+      if (!extResult.styles) {
+        continue;
+      }
+
+      let set = result.get(consumerFile);
+      if (!set) {
+        set = new Set();
+        result.set(consumerFile, set);
+      }
+      set.add(localName);
+    }
+  }
+
+  return result;
 }
 
 /** Run formatter commands on a list of files, logging warnings on failure. */

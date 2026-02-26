@@ -413,6 +413,27 @@ export function analyzeBeforeEmitStep(ctx: TransformContext): StepResult {
     decl.supportsAsProp = extResult.as;
   }
 
+  // Determine wrapsStylexComponent: whether a styled(Component) wrapper targets a component
+  // that will have an `sx` prop after transformation. Enables passing styles via `sx` instead
+  // of converting to className/style.
+  for (const decl of styledDecls) {
+    if (decl.isCssHelper || decl.base.kind !== "component") {
+      continue;
+    }
+
+    // Cross-file: check if the imported component is sx-backed (from prepass)
+    if (ctx.sxBackedImports?.has(decl.base.ident)) {
+      decl.wrapsStylexComponent = true;
+      continue;
+    }
+
+    // Same-file: check if the wrapped component is another styled wrapper with sx support
+    const baseDecl = declByLocal.get(decl.base.ident);
+    if (baseDecl?.supportsExternalStyles) {
+      decl.wrapsStylexComponent = true;
+    }
+  }
+
   // Early detection of components used as values (before emitStylesAndImports for merger import)
   // Components passed as props (e.g., <Component elementType={StyledDiv} />) need className/style merging
   for (const decl of styledDecls) {

@@ -635,12 +635,14 @@ export function emitComponentWrappers(emitter: WrapperEmitter): {
     // Children flows through naturally via {...props} spread, no explicit handling needed
     // Attrs are handled separately (added as JSX attributes before/after the props spread)
     // Also need to destructure when defaultAttrs exist, to properly handle nullish coalescing
+    // sx-backed wrappers need destructuring when allowSxProp is true (to merge external sx)
     const needsDestructure =
       destructureProps.length > 0 ||
       needsSxVar ||
       isPolymorphicComponentWrapper ||
       defaultAttrs.length > 0 ||
-      shouldLowerForwardedAs;
+      shouldLowerForwardedAs ||
+      (d.wrapsStylexComponent && allowSxProp);
     const includeChildren =
       !isPolymorphicComponentWrapper && emitter.hasJsxChildrenUsage(d.localName);
 
@@ -693,26 +695,9 @@ export function emitComponentWrappers(emitter: WrapperEmitter): {
         j.variableDeclarator(j.objectPattern(patternProps), propsId),
       ]);
 
-      // Use the style merger helper
-      const merging = emitStyleMerging({
-        j,
-        emitter,
-        styleArgs,
-        classNameId,
-        styleId,
-        allowClassNameProp,
-        allowStyleProp,
-        allowSxProp,
-        inlineStyleProps: (d.inlineStyleProps ?? []) as InlineStyleProp[],
-        staticClassNameExpr,
-      });
-
       const stmts: StatementKind[] = [declStmt];
       if (needsUseTheme) {
         stmts.push(buildUseThemeDeclaration(j, emitter.themeHook.functionName));
-      }
-      if (merging.sxDecl) {
-        stmts.push(merging.sxDecl);
       }
 
       const openingAttrs: JsxAttr[] = [];
@@ -821,7 +806,40 @@ export function emitComponentWrappers(emitter: WrapperEmitter): {
           j.jsxAttribute(j.jsxIdentifier("as"), j.jsxExpressionContainer(forwardedAsValueExpr)),
         );
       }
-      emitter.appendMergingAttrs(openingAttrs, merging);
+
+      if (d.wrapsStylexComponent) {
+        // sx-backed path: pass StyleX styles via the `sx` prop directly instead
+        // of converting them to className/style through mergedSx/stylex.props.
+        appendSxBackedAttrs({
+          j,
+          openingAttrs,
+          styleArgs,
+          classNameId,
+          styleId,
+          allowClassNameProp,
+          allowStyleProp,
+          inlineStyleProps: (d.inlineStyleProps ?? []) as InlineStyleProp[],
+          staticClassNameExpr,
+        });
+      } else {
+        // Standard path: merge styles via emitStyleMerging
+        const merging = emitStyleMerging({
+          j,
+          emitter,
+          styleArgs,
+          classNameId,
+          styleId,
+          allowClassNameProp,
+          allowStyleProp,
+          allowSxProp,
+          inlineStyleProps: (d.inlineStyleProps ?? []) as InlineStyleProp[],
+          staticClassNameExpr,
+        });
+        if (merging.sxDecl) {
+          stmts.push(merging.sxDecl);
+        }
+        emitter.appendMergingAttrs(openingAttrs, merging);
+      }
 
       const jsx = emitter.buildJsxElement({
         tagName: jsxTagName,
@@ -850,7 +868,14 @@ export function emitComponentWrappers(emitter: WrapperEmitter): {
       openingAttrs.push(
         ...emitter.buildStaticAttrsFromRecord(staticAttrs, { booleanTrueAsShorthand: false }),
       );
-      openingAttrs.push(j.jsxSpreadAttribute(stylexPropsCall));
+      if (d.wrapsStylexComponent) {
+        // sx-backed: pass StyleX styles via sx prop directly
+        const sxValue =
+          styleArgs.length === 1 && styleArgs[0] ? styleArgs[0] : j.arrayExpression(styleArgs);
+        openingAttrs.push(j.jsxAttribute(j.jsxIdentifier("sx"), j.jsxExpressionContainer(sxValue)));
+      } else {
+        openingAttrs.push(j.jsxSpreadAttribute(stylexPropsCall));
+      }
 
       const jsx = emitter.buildJsxElement({
         tagName: jsxTagName,
@@ -877,4 +902,104 @@ export function emitComponentWrappers(emitter: WrapperEmitter): {
   }
 
   return { emitted, needsReactTypeImport, needsUseThemeImport };
+}
+
+// --- Non-exported helpers ---
+
+/**
+ * Appends JSX attributes for the sx-backed component wrapping pattern.
+ *
+ * Instead of converting StyleX styles to className/style via mergedSx/stylex.props,
+ * passes them directly as the `sx` prop. External className and style are forwarded
+ * as separate attributes so the inner component can merge everything in its own
+ * mergedSx/stylex.props call.
+ */
+function appendSxBackedAttrs(args: {
+  j: WrapperEmitter["j"];
+  openingAttrs: JsxAttr[];
+  styleArgs: ExpressionKind[];
+  classNameId: ExpressionKind;
+  styleId: ExpressionKind;
+  allowClassNameProp: boolean;
+  allowStyleProp: boolean;
+  inlineStyleProps: InlineStyleProp[];
+  staticClassNameExpr?: ExpressionKind;
+}): void {
+  const {
+    j,
+    openingAttrs,
+    styleArgs,
+    classNameId,
+    styleId,
+    allowClassNameProp,
+    allowStyleProp,
+    inlineStyleProps,
+    staticClassNameExpr,
+  } = args;
+
+  // Build sx prop value from all style arguments
+  if (styleArgs.length > 0) {
+    const sxValue =
+      styleArgs.length === 1 && styleArgs[0] ? styleArgs[0] : j.arrayExpression(styleArgs);
+    openingAttrs.push(j.jsxAttribute(j.jsxIdentifier("sx"), j.jsxExpressionContainer(sxValue)));
+  }
+
+  // Forward className (with static class name merged if present)
+  if (allowClassNameProp || staticClassNameExpr) {
+    const parts: ExpressionKind[] = [];
+    if (staticClassNameExpr) {
+      parts.push(staticClassNameExpr);
+    }
+    if (allowClassNameProp) {
+      parts.push(classNameId);
+    }
+    const classNameValue =
+      parts.length === 1 && parts[0]
+        ? parts[0]
+        : j.callExpression(
+            j.memberExpression(
+              j.callExpression(
+                j.memberExpression(j.arrayExpression(parts), j.identifier("filter")),
+                [j.identifier("Boolean")],
+              ),
+              j.identifier("join"),
+            ),
+            [j.literal(" ")],
+          );
+    openingAttrs.push(
+      j.jsxAttribute(j.jsxIdentifier("className"), j.jsxExpressionContainer(classNameValue)),
+    );
+  }
+
+  // Forward style (with inline style props merged if present)
+  if (allowStyleProp || inlineStyleProps.length > 0) {
+    let styleValue: ExpressionKind;
+    if (inlineStyleProps.length > 0 && allowStyleProp) {
+      styleValue = j.objectExpression([
+        ...inlineStyleProps.map((p) =>
+          j.property(
+            "init",
+            p.prop.startsWith("--") ? j.literal(p.prop) : j.identifier(p.prop),
+            p.expr,
+          ),
+        ),
+        j.spreadElement(styleId as ExpressionKind),
+      ]);
+    } else if (inlineStyleProps.length > 0) {
+      styleValue = j.objectExpression(
+        inlineStyleProps.map((p) =>
+          j.property(
+            "init",
+            p.prop.startsWith("--") ? j.literal(p.prop) : j.identifier(p.prop),
+            p.expr,
+          ),
+        ),
+      );
+    } else {
+      styleValue = styleId;
+    }
+    openingAttrs.push(
+      j.jsxAttribute(j.jsxIdentifier("style"), j.jsxExpressionContainer(styleValue)),
+    );
+  }
 }

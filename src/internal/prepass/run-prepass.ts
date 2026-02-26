@@ -52,6 +52,15 @@ interface PrepassOptions {
 interface PrepassResult {
   crossFileInfo: CrossFileInfo;
   consumerAnalysis: Map<string, ExternalInterfaceResult> | undefined;
+  /**
+   * Resolved `styled(ImportedComponent)` calls: maps consumer file → list of
+   * imported component resolutions. Used by run.ts to determine which imported
+   * components are StyleX-backed (will have an `sx` prop after transformation).
+   */
+  styledCallResolutions: Map<
+    string,
+    Array<{ localName: string; defFile: string; exportedName: string }>
+  >;
 }
 
 /** Cached AST-derived data for a single file, keyed by content hash. */
@@ -146,6 +155,12 @@ export async function runPrepass(options: PrepassOptions): Promise<PrepassResult
   const styledDefFiles = new Map<string, Set<string>>();
   const classNameStyleUsages = new Map<string, Set<string>>();
 
+  // Resolved styled(Component) wrapping info — always populated (needed for sx prop detection)
+  const styledCallResolutions = new Map<
+    string,
+    Array<{ localName: string; defFile: string; exportedName: string }>
+  >();
+
   // File content cache — populated on-demand, used for cross-referencing in Phase 2
   const fileContents = new Map<string, string>();
 
@@ -221,8 +236,9 @@ export async function runPrepass(options: PrepassOptions): Promise<PrepassResult
       }
     }
 
-    if (createExternalInterface && hasStyled) {
-      // Detect styled(Component) calls
+    if (hasStyled) {
+      // Detect styled(Component) calls — needed both for consumer analysis (auto interface)
+      // and for sx prop detection (whether wrapped component is StyleX-backed)
       STYLED_CALL_RE.lastIndex = 0;
       for (const m of source.matchAll(STYLED_CALL_RE)) {
         if (m[1]) {
@@ -230,7 +246,7 @@ export async function runPrepass(options: PrepassOptions): Promise<PrepassResult
         }
       }
 
-      // Detect styled component definitions (for as-prop matching)
+      // Detect styled component definitions — needed for as-prop matching and sx prop detection
       STYLED_DEF_RE.lastIndex = 0;
       for (const m of source.matchAll(STYLED_DEF_RE)) {
         if (m[1]) {
@@ -412,6 +428,54 @@ export async function runPrepass(options: PrepassOptions): Promise<PrepassResult
     }
   }
 
+  // Phase 2.5: Resolve styled(Component) calls for sx prop detection.
+  // This runs regardless of createExternalInterface — we always need to know
+  // which wrapped components are from transform-set files (StyleX-backed).
+  {
+    const seen = new Set<string>();
+    for (const { file, name } of styledCallUsages) {
+      const importInfo = findImportSource(cachedRead(file), name);
+      if (!importInfo) {
+        continue;
+      }
+
+      const { source: importSource, exportedName } = importInfo;
+
+      let defFile = resolve(importSource, file);
+      if (!defFile) {
+        continue;
+      }
+
+      defFile = resolveBarrelReExport(defFile, exportedName, resolve, cachedRead) ?? defFile;
+
+      // Only track components from files being transformed
+      if (!transformSet.has(defFile)) {
+        continue;
+      }
+
+      const key = `${file}\0${name}`;
+      if (seen.has(key)) {
+        continue;
+      }
+      seen.add(key);
+
+      try {
+        if (!fileExports(cachedRead(defFile), exportedName)) {
+          continue;
+        }
+      } catch {
+        continue;
+      }
+
+      let entries = styledCallResolutions.get(file);
+      if (!entries) {
+        entries = [];
+        styledCallResolutions.set(file, entries);
+      }
+      entries.push({ localName: name, defFile, exportedName });
+    }
+  }
+
   const crossFileInfo: CrossFileInfo = {
     selectorUsages,
     componentsNeedingMarkerSidecar,
@@ -440,7 +504,7 @@ export async function runPrepass(options: PrepassOptions): Promise<PrepassResult
     logPrepassDebug(uniqueAllFiles, crossFileInfo, consumerAnalysis);
   }
 
-  return { crossFileInfo, consumerAnalysis };
+  return { crossFileInfo, consumerAnalysis, styledCallResolutions };
 }
 
 /* ── Phase helpers ────────────────────────────────────────────────────── */

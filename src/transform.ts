@@ -160,6 +160,7 @@ interface GlobalPrepassResult {
   selectorUsages: Map<string, CrossFileSelectorUsage[]>;
   componentsNeedingGlobalSelectorBridge: Map<string, Set<string>>;
   styledDefFiles?: Map<string, Set<string>>;
+  sxBackedImports?: Map<string, Set<string>>;
 }
 
 /**
@@ -187,13 +188,15 @@ function extractCrossFileInfoForFile(
   const absPath = resolveToPrepassKey(filePath, prepass);
   const selectorUsages = prepass.selectorUsages.get(absPath);
   const bridgeComponentNames = prepass.componentsNeedingGlobalSelectorBridge?.get(absPath);
+  const sxBackedImports = prepass.sxBackedImports?.get(absPath);
 
   const hasStyledDefFiles = prepass.styledDefFiles && prepass.styledDefFiles.size > 0;
 
   if (
     (!selectorUsages || selectorUsages.length === 0) &&
     !bridgeComponentNames &&
-    !hasStyledDefFiles
+    !hasStyledDefFiles &&
+    !sxBackedImports
   ) {
     return options;
   }
@@ -202,6 +205,7 @@ function extractCrossFileInfoForFile(
     selectorUsages: selectorUsages ?? [],
     bridgeComponentNames,
     styledDefFiles: prepass.styledDefFiles,
+    sxBackedImports,
   };
 
   return { ...options, crossFileInfo };

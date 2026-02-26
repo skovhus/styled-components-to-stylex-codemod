@@ -95,6 +95,8 @@ export class TransformContext {
   inlineKeyframes?: Map<string, Record<string, Record<string, unknown>>>;
   /** Maps CSS @keyframes names to sanitized JS identifier names (e.g. "fade-in" → "fadeIn") */
   inlineKeyframeNameMap?: Map<string, string>;
+  /** Local names of imported components that are StyleX-backed (have sx prop after transformation) */
+  sxBackedImports?: Set<string>;
 
   constructor(file: FileInfo, api: API, options: TransformOptions) {
     const j = api.jscodeshift;
@@ -161,6 +163,7 @@ export class TransformContext {
     if (options.crossFileInfo) {
       this.crossFileSelectorUsages = options.crossFileInfo.selectorUsages;
       this.bridgeComponentNames = options.crossFileInfo.bridgeComponentNames;
+      this.sxBackedImports = options.crossFileInfo.sxBackedImports;
     }
   }
 
