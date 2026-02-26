@@ -43,6 +43,7 @@ import {
 import { addStyleKeyMixin, trackMixinPropertyValues } from "./precompute.js";
 import { buildSafeIndexedParamName } from "./import-resolution.js";
 import {
+  handleDualBranchCompoundVariantsResolvedValue,
   handleSplitMultiPropVariantsResolvedValue,
   handleSplitVariantsResolvedValue,
 } from "./interpolated-variant-resolvers.js";
@@ -1006,6 +1007,29 @@ export function handleInterpolatedDeclaration(args: InterpolatedDeclarationConte
 
     if (
       handleSplitMultiPropVariantsResolvedValue({
+        j,
+        decl,
+        d,
+        res,
+        styleObj,
+        variantBuckets,
+        variantStyleKeys,
+        pseudos,
+        media,
+        parseExpr,
+        resolverImports,
+        warnings,
+        setBail: () => {
+          bail = true;
+        },
+        bailUnsupported: bailUnsupportedLocal,
+      })
+    ) {
+      continue;
+    }
+
+    if (
+      handleDualBranchCompoundVariantsResolvedValue({
         j,
         decl,
         d,

@@ -355,6 +355,36 @@ export function tryResolveConditionalValue(
     return branchToExpr(value);
   };
 
+  // Helper: resolve a 4-branch compound ternary once both the outer prop and inner prop
+  // have been identified. Returns null if leaf branches can't all be resolved as "create".
+  const tryBuildDualBranchResult = (outerProp: string, innerProp: string): HandlerResult | null => {
+    const otit = getBranch((consequent as any).consequent);
+    const otif = getBranch((consequent as any).alternate);
+    const ofit = getBranch((alternate as any).consequent);
+    const ofif = getBranch((alternate as any).alternate);
+    if (
+      !otit ||
+      !otif ||
+      !ofit ||
+      !ofif ||
+      otit.usage !== "create" ||
+      otif.usage !== "create" ||
+      ofit.usage !== "create" ||
+      ofif.usage !== "create"
+    ) {
+      return null;
+    }
+    return {
+      type: "dualBranchCompoundVariantsResolvedValue",
+      outerProp,
+      innerProp,
+      outerTruthyInnerTruthy: { expr: otit.expr, imports: otit.imports },
+      outerTruthyInnerFalsy: { expr: otif.expr, imports: otif.imports },
+      outerFalsyInnerTruthy: { expr: ofit.expr, imports: ofit.imports },
+      outerFalsyInnerFalsy: { expr: ofif.expr, imports: ofif.imports },
+    };
+  };
+
   // Helper to extract condition info from a binary expression test.
   // Supports both `props.foo === "x"` (MemberExpression) and destructured `foo === "x"` (Identifier).
   type CondInfo = { propName: string; rhsValue: string; rhsRaw: unknown; cond: string } | null;
@@ -544,6 +574,42 @@ export function tryResolveConditionalValue(
       }
     }
 
+    // Check for 4-branch compound ternary: outerProp ? (innerProp ? A : B) : (innerProp ? C : D)
+    // where both consequent and alternate are conditionals testing the same inner prop
+    if (
+      !cons &&
+      !alt &&
+      consequent.type === "ConditionalExpression" &&
+      alternate.type === "ConditionalExpression" &&
+      paramName
+    ) {
+      const consInnerTest = (consequent as any).test;
+      const altInnerTest = (alternate as any).test;
+      const consInnerPath =
+        consInnerTest?.type === "MemberExpression"
+          ? getMemberPathFromIdentifier(consInnerTest, paramName)
+          : null;
+      const altInnerPath =
+        altInnerTest?.type === "MemberExpression"
+          ? getMemberPathFromIdentifier(altInnerTest, paramName)
+          : null;
+      const consInnerProp = consInnerPath?.[0];
+      const altInnerProp = altInnerPath?.[0];
+
+      if (
+        consInnerPath?.length === 1 &&
+        altInnerPath?.length === 1 &&
+        consInnerProp &&
+        consInnerProp === altInnerProp &&
+        consInnerProp !== outerProp
+      ) {
+        const result = tryBuildDualBranchResult(outerProp, consInnerProp);
+        if (result) {
+          return result;
+        }
+      }
+    }
+
     // Check for conditional indexed theme lookup:
     //   props.textColor ? props.theme.color[props.textColor] : props.theme.color.labelTitle
     // Where the test prop is also used as the index into a theme object.
@@ -653,6 +719,24 @@ export function tryResolveConditionalValue(
           return usage === "props"
             ? { type: "splitVariantsResolvedStyles", variants }
             : { type: "splitVariantsResolvedValue", variants };
+        }
+      }
+
+      // 4-branch compound ternary with destructured params:
+      //   ({ column, reverse }) => column ? (reverse ? A : B) : (reverse ? C : D)
+      if (
+        !cons &&
+        !alt &&
+        consequent.type === "ConditionalExpression" &&
+        alternate.type === "ConditionalExpression"
+      ) {
+        const innerPropCons = resolveIdentifierToPropName((consequent as any).test, paramBindings);
+        const innerPropAlt = resolveIdentifierToPropName((alternate as any).test, paramBindings);
+        if (innerPropCons && innerPropCons === innerPropAlt && innerPropCons !== resolvedProp) {
+          const result = tryBuildDualBranchResult(resolvedProp, innerPropCons);
+          if (result) {
+            return result;
+          }
         }
       }
     }

@@ -17,7 +17,7 @@ import { SX_PROP_TYPE_TEXT, type JsxAttr, type StatementKind } from "./wrapper-e
 import { emitStyleMerging } from "./style-merger.js";
 import { sortVariantEntriesBySpecificity, VOID_TAGS } from "./type-helpers.js";
 import { withLeadingCommentsOnFirstFunction } from "./comments.js";
-import type { EmitIntrinsicContext } from "./emit-intrinsic-helpers.js";
+import { getCompoundVariantWhenKeys, type EmitIntrinsicContext } from "./emit-intrinsic-helpers.js";
 import { cloneAstNode, collectIdentifiers } from "../utilities/jscodeshift-utils.js";
 import {
   areEquivalentWhen,
@@ -753,9 +753,9 @@ export function emitSimpleExportedIntrinsicWrappers(ctx: EmitIntrinsicContext): 
     // Collect keys used by compound variants (they're handled separately)
     const compoundVariantKeys = new Set<string>();
     for (const cv of d.compoundVariants ?? []) {
-      compoundVariantKeys.add(cv.outerProp);
-      compoundVariantKeys.add(`${cv.innerProp}True`);
-      compoundVariantKeys.add(`${cv.innerProp}False`);
+      for (const k of getCompoundVariantWhenKeys(cv)) {
+        compoundVariantKeys.add(k);
+      }
     }
 
     // Collect variant and styleFn expressions with source order for interleaving.

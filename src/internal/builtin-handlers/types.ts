@@ -220,6 +220,25 @@ export type HandlerResult =
     }
   | {
       /**
+       * Split a 4-branch compound ternary where both branches of the outer test
+       * are themselves ternaries testing the same inner boolean prop.
+       *
+       * Pattern: `outer ? (inner ? A : B) : (inner ? C : D)`
+       *
+       * Example: `column ? (reverse ? "column-reverse" : "column") : (reverse ? "row-reverse" : "row")`
+       *
+       * Each of the 4 leaf values becomes a static StyleX style variant.
+       */
+      type: "dualBranchCompoundVariantsResolvedValue";
+      outerProp: string;
+      innerProp: string;
+      outerTruthyInnerTruthy: { expr: string; imports: ImportSpec[] };
+      outerTruthyInnerFalsy: { expr: string; imports: ImportSpec[] };
+      outerFalsyInnerTruthy: { expr: string; imports: ImportSpec[] };
+      outerFalsyInnerFalsy: { expr: string; imports: ImportSpec[] };
+    }
+  | {
+      /**
        * Signal that this handler does not know how to transform the node.
        *
        * The caller typically falls back to other strategies (or drops the declaration)

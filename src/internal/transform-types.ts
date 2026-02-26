@@ -168,13 +168,25 @@ export type StyledDecl = {
    * Each entry contains variant style keys for all three branches and
    * instructs the emit phase to generate a compound ternary expression.
    */
-  compoundVariants?: Array<{
-    outerProp: string;
-    outerTruthyKey: string;
-    innerProp: string;
-    innerTruthyKey: string;
-    innerFalsyKey: string;
-  }>;
+  compoundVariants?: Array<
+    | {
+        kind: "3branch";
+        outerProp: string;
+        outerTruthyKey: string;
+        innerProp: string;
+        innerTruthyKey: string;
+        innerFalsyKey: string;
+      }
+    | {
+        kind: "4branch";
+        outerProp: string;
+        innerProp: string;
+        outerTruthyInnerTruthyKey: string;
+        outerTruthyInnerFalsyKey: string;
+        outerFalsyInnerTruthyKey: string;
+        outerFalsyInnerFalsyKey: string;
+      }
+  >;
   needsWrapperComponent?: boolean;
   /**
    * Pseudo-alias selectors from `&:${expr}` patterns resolved via

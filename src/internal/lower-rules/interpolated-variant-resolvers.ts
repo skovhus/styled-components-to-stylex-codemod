@@ -564,11 +564,151 @@ export function handleSplitMultiPropVariantsResolvedValue(ctx: SplitVariantsCont
   // Store compound variant info for emit phase
   decl.compoundVariants ??= [];
   decl.compoundVariants.push({
+    kind: "3branch",
     outerProp: res.outerProp,
     outerTruthyKey: outerKey,
     innerProp: res.innerProp,
     innerTruthyKey,
     innerFalsyKey,
+  });
+
+  decl.needsWrapperComponent = true;
+  return true;
+}
+
+export function handleDualBranchCompoundVariantsResolvedValue(ctx: SplitVariantsContext): boolean {
+  const {
+    decl,
+    d,
+    res,
+    variantBuckets,
+    variantStyleKeys,
+    pseudos,
+    parseExpr,
+    resolverImports,
+    warnings,
+    setBail,
+    bailUnsupported,
+  } = ctx;
+
+  if (!res || res.type !== "dualBranchCompoundVariantsResolvedValue") {
+    return false;
+  }
+
+  const cssProp = (d.property ?? "").trim();
+  const stylexProp = cssPropertyToStylexProp(cssProp);
+
+  // Bail on border shorthands — compound variant expansion for these is unsupported
+  if (/^border(Top|Right|Bottom|Left)?$/.test(stylexProp)) {
+    setBail();
+    return true;
+  }
+
+  // Extract static prefix/suffix from CSS value for wrapping resolved values
+  const { prefix: staticPrefix, suffix: staticSuffix } = extractStaticParts(d.value, {
+    skipForProperty: /^border(-top|-right|-bottom|-left)?-color$/,
+    property: cssProp,
+  });
+
+  const parseResolved = (
+    expr: string,
+    imports: any[],
+  ): { exprAst: unknown; imports: any[] } | null => {
+    const wrappedExpr = wrapExprWithStaticParts(expr, staticPrefix, staticSuffix);
+    const exprAst = parseExpr(wrappedExpr);
+    if (!exprAst) {
+      warnings.push({
+        severity: "error",
+        type: "Adapter resolveCall returned an unparseable styles expression",
+        loc: decl.loc,
+        context: { localName: decl.localName, expr },
+      });
+      return null;
+    }
+    return { exprAst, imports: imports ?? [] };
+  };
+
+  const applyParsed = (
+    target: Record<string, unknown>,
+    parsed: { exprAst: unknown; imports: any[] },
+  ): void => {
+    for (const imp of parsed.imports) {
+      resolverImports.set(JSON.stringify(imp), imp);
+    }
+    if (pseudos?.length) {
+      const existing = target[stylexProp];
+      const map =
+        existing && typeof existing === "object" && !Array.isArray(existing) && !isAstNode(existing)
+          ? (existing as Record<string, unknown>)
+          : ({} as Record<string, unknown>);
+      if (!("default" in map)) {
+        map.default = existing ?? null;
+      }
+      for (const ps of pseudos) {
+        map[ps] = parsed.exprAst as any;
+      }
+      target[stylexProp] = map;
+      return;
+    }
+    target[stylexProp] = parsed.exprAst as any;
+  };
+
+  // Parse all four branches
+  const otitParsed = parseResolved(
+    res.outerTruthyInnerTruthy.expr,
+    res.outerTruthyInnerTruthy.imports,
+  );
+  const otifParsed = parseResolved(
+    res.outerTruthyInnerFalsy.expr,
+    res.outerTruthyInnerFalsy.imports,
+  );
+  const ofitParsed = parseResolved(
+    res.outerFalsyInnerTruthy.expr,
+    res.outerFalsyInnerTruthy.imports,
+  );
+  const ofifParsed = parseResolved(res.outerFalsyInnerFalsy.expr, res.outerFalsyInnerFalsy.imports);
+
+  if (!otitParsed || !otifParsed || !ofitParsed || !ofifParsed) {
+    bailUnsupported(decl, "Adapter resolveCall returned an unparseable styles expression");
+    setBail();
+    return true;
+  }
+
+  // Generate style keys for each of the 4 branches
+  const outerCap = capitalize(res.outerProp);
+  const innerCap = capitalize(res.innerProp);
+  const otitKey = `${decl.styleKey}${outerCap}${innerCap}`;
+  const otifKey = `${decl.styleKey}${outerCap}`;
+  const ofitKey = `${decl.styleKey}${innerCap}`;
+  const ofifKey = `${decl.styleKey}Default`;
+
+  // Create variant buckets with compound "when" keys
+  const applyBucket = (
+    when: string,
+    styleKey: string,
+    parsed: { exprAst: unknown; imports: any[] },
+  ): void => {
+    const bucket = { ...variantBuckets.get(when) } as Record<string, unknown>;
+    applyParsed(bucket, parsed);
+    variantBuckets.set(when, bucket);
+    variantStyleKeys[when] ??= styleKey;
+  };
+
+  applyBucket(`${res.outerProp}_${res.innerProp}`, otitKey, otitParsed);
+  applyBucket(`${res.outerProp}_!${res.innerProp}`, otifKey, otifParsed);
+  applyBucket(`!${res.outerProp}_${res.innerProp}`, ofitKey, ofitParsed);
+  applyBucket(`!${res.outerProp}_!${res.innerProp}`, ofifKey, ofifParsed);
+
+  // Store compound variant info for emit phase
+  decl.compoundVariants ??= [];
+  decl.compoundVariants.push({
+    kind: "4branch",
+    outerProp: res.outerProp,
+    innerProp: res.innerProp,
+    outerTruthyInnerTruthyKey: otitKey,
+    outerTruthyInnerFalsyKey: otifKey,
+    outerFalsyInnerTruthyKey: ofitKey,
+    outerFalsyInnerFalsyKey: ofifKey,
   });
 
   decl.needsWrapperComponent = true;

@@ -120,6 +120,13 @@ export function Flex(props: FlexProps) {
               ? styles.flexColumnGap(wrapGap)
               : styles.flexRowGap(wrapGap)
             : undefined,
+          column
+            ? reverse
+              ? styles.flexColumnReverse
+              : styles.flexColumn
+            : reverse
+              ? styles.flexReverse
+              : styles.flexDefault,
           inline ? styles.flexInline : undefined,
           auto ? styles.flexAuto : undefined,
           align != null && alignVariants[align],
@@ -132,16 +139,7 @@ export function Flex(props: FlexProps) {
           noMinHeight ? styles.flexNoMinHeight : undefined,
         ],
         undefined,
-        {
-          flexDirection: props.column
-            ? props.reverse
-              ? "column-reverse"
-              : "column"
-            : props.reverse
-              ? "row-reverse"
-              : "row",
-          ...style,
-        },
+        style,
       )}
     >
       {children}
@@ -340,6 +338,18 @@ const styles = stylex.create({
   },
   flexAuto: {
     flex: "1 1 auto",
+  },
+  flexColumnReverse: {
+    flexDirection: "column-reverse",
+  },
+  flexColumn: {
+    flexDirection: "column",
+  },
+  flexReverse: {
+    flexDirection: "row-reverse",
+  },
+  flexDefault: {
+    flexDirection: "row",
   },
   flexCenter: {
     alignItems: "center",
