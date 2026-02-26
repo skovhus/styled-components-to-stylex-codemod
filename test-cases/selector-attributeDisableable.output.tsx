@@ -31,6 +31,7 @@ const styles = stylex.create({
     },
     borderWidth: 0,
     borderStyle: "none",
+    borderColor: "initial",
     borderRadius: "4px",
     cursor: {
       default: "pointer",
