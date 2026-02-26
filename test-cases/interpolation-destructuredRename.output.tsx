@@ -7,17 +7,10 @@ type ButtonProps = Omit<React.ComponentProps<"button">, "className" | "style"> &
 
 // Simple renamed destructured prop
 function Button(props: ButtonProps) {
-  const { children, ...rest } = props;
+  const { children, color } = props;
 
   return (
-    <button
-      {...rest}
-      style={{
-        color: props.color || "hotpink",
-      }}
-    >
-      {children}
-    </button>
+    <button {...stylex.props(styles.buttonColor(props.color || "hotpink"))}>{children}</button>
   );
 }
 
@@ -37,6 +30,9 @@ export const App = () => (
 );
 
 const styles = stylex.create({
+  buttonColor: (color: string | undefined) => ({
+    color,
+  }),
   linkFontSize: (fontSize: string) => ({
     fontSize,
   }),

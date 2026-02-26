@@ -19,9 +19,10 @@ import {
 import { buildPseudoMediaPropValue } from "./variant-utils.js";
 import { extractStaticParts } from "./interpolations.js";
 import { cssDeclarationToStylexDeclarations } from "../css-prop-mapping.js";
+import { isStylexShorthandCamelCase } from "../stylex-shorthands.js";
 import { ensureShouldForwardPropDrop } from "./types.js";
 import { cloneAstNode, getFunctionBodyExpr } from "../utilities/jscodeshift-utils.js";
-import { makeCssPropKey } from "./shared.js";
+import { cssPropertyToIdentifier, makeCssPropKey } from "./shared.js";
 import { toSuffixFromProp } from "../transform/helpers.js";
 
 type InlineStyleFromPropsContext = {
@@ -211,11 +212,45 @@ export function handleInlineStyleValueFromProps(ctx: InlineStyleFromPropsContext
     const { prefix, suffix } = extractStaticParts(d.value);
     const valueExpr =
       prefix || suffix ? buildTemplateWithStaticParts(j, baseExpr, prefix, suffix) : baseExpr;
-    for (const out of cssDeclarationToStylexDeclarations(d)) {
-      if (!out.prop) {
-        continue;
+    const outs = cssDeclarationToStylexDeclarations(d);
+    const allNonShorthand = outs.every((out) => out.prop && !isStylexShorthandCamelCase(out.prop));
+
+    if (allNonShorthand) {
+      // Emit StyleX dynamic functions instead of inline styles
+      for (const out of outs) {
+        if (!out.prop) {
+          continue;
+        }
+        const fnKey = `${decl.styleKey}${toSuffixFromProp(out.prop)}`;
+        if (!styleFnDecls.has(fnKey)) {
+          const paramName = cssPropertyToIdentifier(out.prop);
+          const param = j.identifier(paramName);
+          if (/\.(ts|tsx)$/.test(filePath)) {
+            (param as any).typeAnnotation = j.tsTypeAnnotation(
+              j.tsUnionType([j.tsStringKeyword(), j.tsUndefinedKeyword()]),
+            );
+          }
+          const propKey = makeCssPropKey(j, out.prop);
+          const p = j.property("init", propKey, j.identifier(paramName)) as any;
+          p.shorthand = propKey.type === "Identifier" && paramName === out.prop;
+          const body = j.objectExpression([p]);
+          styleFnDecls.set(fnKey, j.arrowFunctionExpression([param], body));
+        }
+        styleFnFromProps.push({
+          fnKey,
+          jsxProp: "__props",
+          callArg: cloneAstNode(valueExpr) as ExpressionKind,
+          condition: "always",
+        });
       }
-      inlineStyleProps.push({ prop: out.prop, expr: valueExpr });
+    } else {
+      // Shorthand properties — keep as inline styles
+      for (const out of outs) {
+        if (!out.prop) {
+          continue;
+        }
+        inlineStyleProps.push({ prop: out.prop, expr: valueExpr });
+      }
     }
     return true;
   }

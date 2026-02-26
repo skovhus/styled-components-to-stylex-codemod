@@ -30,6 +30,12 @@ export function isStylexLonghandOnlyShorthand(prop: string): boolean {
   return STYLEX_LONGHAND_ONLY_SHORTHANDS.has(prop);
 }
 
+/** Accepts a camelCase property name (e.g. `borderTop`) and checks the kebab-case set. */
+export function isStylexShorthandCamelCase(prop: string): boolean {
+  const kebab = prop.replace(/[A-Z]/g, (m) => `-${m.toLowerCase()}`);
+  return STYLEX_LONGHAND_ONLY_SHORTHANDS.has(kebab);
+}
+
 function printNode(node: ValueParserNode): string {
   switch (node.type) {
     case "word":

@@ -9,15 +9,10 @@ type ButtonProps = Omit<React.ComponentProps<"button">, "className" | "style"> &
 // When color is undefined, should use "hotpink" (default)
 // When color is falsy but defined (e.g., ""), should use "blue" (|| fallback)
 function Button(props: ButtonProps) {
-  const { children, ...rest } = props;
+  const { children, color } = props;
 
   return (
-    <button
-      {...rest}
-      style={{
-        color: (props.color ?? "hotpink") || "blue",
-      }}
-    >
+    <button {...stylex.props(styles.buttonColor((props.color ?? "hotpink") || "blue"))}>
       {children}
     </button>
   );
@@ -77,4 +72,9 @@ export const App = () => (
     <Box margin={20}>20px</Box>
   </>
 );
-const styles = stylex.create({});
+
+const styles = stylex.create({
+  buttonColor: (color: string | undefined) => ({
+    color,
+  }),
+});
