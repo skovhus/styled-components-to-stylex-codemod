@@ -126,6 +126,9 @@ export type VariantDimension = {
   isDisabledNamespace?: boolean;
   /** Whether the prop is optional (has ? in its type annotation) - used for emitting destructuring defaults */
   isOptional?: boolean;
+  /** Minimum source order from the original variant entries that were grouped into this dimension.
+   * Used to preserve CSS cascade order when interleaving with other variant/styleFn entries. */
+  sourceOrder?: number;
 };
 
 export type StyledDecl = {
@@ -150,6 +153,8 @@ export type StyledDecl = {
   styleKey: string;
   extendsStyleKey?: string;
   variantStyleKeys?: Record<string, string>; // conditionProp -> styleKey
+  /** Source order indices for variant style keys, used to interleave with styleFnFromProps during emission. */
+  variantSourceOrder?: Record<string, number>;
   /**
    * Variant dimensions for StyleX variants recipe pattern.
    * When present, generates separate `stylex.create` calls per dimension
@@ -235,6 +240,8 @@ export type StyledDecl = {
     condition?: "truthy" | "always";
     conditionWhen?: string;
     callArg?: ExpressionKind;
+    /** Source order index for CSS cascade ordering against variant entries. */
+    sourceOrder?: number;
   }>;
   shouldForwardProp?: { dropProps: string[]; dropPrefix?: string };
   /**

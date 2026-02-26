@@ -20,4 +20,6 @@ export type StyleFnFromPropsEntry = {
   condition?: "truthy" | "always";
   conditionWhen?: string;
   callArg?: ExpressionKind;
+  /** Source order index for CSS cascade ordering against variant entries. */
+  sourceOrder?: number;
 };

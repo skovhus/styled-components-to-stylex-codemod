@@ -17,6 +17,7 @@ import { emitStyleMerging } from "./style-merger.js";
 import { sortVariantEntriesBySpecificity, VOID_TAGS } from "./type-helpers.js";
 import type { EmitIntrinsicContext } from "./emit-intrinsic-helpers.js";
 import { appendPseudoAliasStyleArgs } from "./emit-intrinsic-simple.js";
+import { mergeOrderedEntries, type OrderedStyleEntry } from "./style-expr-builders.js";
 
 export function emitIntrinsicPolymorphicWrappers(ctx: EmitIntrinsicContext): void {
   const { emitter, j, emitTypes, wrapperDecls, wrapperNames, stylesIdentifier, emitted } = ctx;
@@ -145,6 +146,12 @@ export function emitIntrinsicPolymorphicWrappers(ctx: EmitIntrinsicContext): voi
         compoundVariantKeys.add(`${cv.innerProp}False`);
       }
 
+      // Collect variant and styleFn expressions with source order for interleaving.
+      const hasSourceOrder = !!(
+        d.variantSourceOrder && Object.keys(d.variantSourceOrder).length > 0
+      );
+      const orderedEntries: OrderedStyleEntry[] = [];
+
       // Add variant style arguments if this component has variants
       if (d.variantStyleKeys) {
         const sortedEntries = sortVariantEntriesBySpecificity(Object.entries(d.variantStyleKeys));
@@ -160,7 +167,13 @@ export function emitIntrinsicPolymorphicWrappers(ctx: EmitIntrinsicContext): voi
           );
           // Use makeConditionalStyleExpr to handle boolean vs non-boolean conditions correctly.
           // For boolean conditions, && is used. For non-boolean (could be "" or 0), ternary is used.
-          styleArgs.push(emitter.makeConditionalStyleExpr({ cond, expr: styleExpr, isBoolean }));
+          const expr = emitter.makeConditionalStyleExpr({ cond, expr: styleExpr, isBoolean });
+          const order = d.variantSourceOrder?.[when];
+          if (hasSourceOrder && order !== undefined) {
+            orderedEntries.push({ order, expr });
+          } else {
+            styleArgs.push(expr);
+          }
         }
       }
 
@@ -171,6 +184,7 @@ export function emitIntrinsicPolymorphicWrappers(ctx: EmitIntrinsicContext): voi
           styleArgs,
           destructureProps,
           propDefaults,
+          orderedEntries: hasSourceOrder ? orderedEntries : undefined,
         });
       }
 
@@ -202,8 +216,12 @@ export function emitIntrinsicPolymorphicWrappers(ctx: EmitIntrinsicContext): voi
         d,
         styleArgs,
         destructureProps,
+        orderedEntries: hasSourceOrder ? orderedEntries : undefined,
       });
       emitter.collectDestructurePropsFromStyleFns({ d, styleArgs, destructureProps });
+
+      // Merge ordered entries (variants + styleFns) by source order to preserve CSS cascade
+      mergeOrderedEntries(orderedEntries, styleArgs);
 
       const isVoidTag = VOID_TAGS.has(tagName);
       // When allowAsProp is true, include children support even for void tags

@@ -1520,6 +1520,7 @@ export class WrapperEmitter {
     destructureProps?: string[];
     propDefaults?: WrapperPropDefaults;
     namespaceBooleanProps?: string[];
+    orderedEntries?: seb.OrderedStyleEntry[];
   }): void {
     seb.buildVariantDimensionLookups(this.j, args);
   }
@@ -1530,6 +1531,7 @@ export class WrapperEmitter {
     destructureProps?: string[];
     propExprBuilder?: (jsxProp: string) => ExpressionKind;
     propsIdentifier?: ExpressionKind;
+    orderedEntries?: seb.OrderedStyleEntry[];
   }): void {
     seb.buildStyleFnExpressions(this, args);
   }

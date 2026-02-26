@@ -247,9 +247,19 @@ export function buildVariantDimensionLookups(
     destructureProps?: string[];
     propDefaults?: WrapperPropDefaults;
     namespaceBooleanProps?: string[];
+    orderedEntries?: OrderedStyleEntry[];
   },
 ): void {
   const { dimensions, styleArgs, destructureProps, propDefaults, namespaceBooleanProps } = args;
+
+  /** Push a style expression to orderedEntries (if source order available) or styleArgs. */
+  const pushExpr = (expr: ExpressionKind, dim: VariantDimension): void => {
+    if (args.orderedEntries && dim.sourceOrder !== undefined) {
+      args.orderedEntries.push({ order: dim.sourceOrder, expr });
+    } else {
+      styleArgs.push(expr);
+    }
+  };
 
   // Group namespace dimensions by their boolean prop and propName
   const namespacePairs = new Map<
@@ -293,13 +303,13 @@ export function buildVariantDimensionLookups(
         j.identifier(dim.variantObjectName),
         j.identifier("default"),
       );
-      styleArgs.push(j.logicalExpression("??", lookup, defaultAccess));
+      pushExpr(j.logicalExpression("??", lookup, defaultAccess), dim);
     } else {
       if (dim.defaultValue && dim.isOptional && propDefaults) {
         propDefaults.set(dim.propName, dim.defaultValue);
       }
       const lookup = j.memberExpression(variantsId, propId, true /* computed */);
-      styleArgs.push(lookup);
+      pushExpr(lookup, dim);
     }
   }
 
@@ -320,7 +330,7 @@ export function buildVariantDimensionLookups(
           j.identifier(dim.propName),
           true,
         );
-        styleArgs.push(lookup);
+        pushExpr(lookup, dim);
       }
       continue;
     }
@@ -363,13 +373,33 @@ export function buildVariantDimensionLookups(
       true,
     );
 
-    styleArgs.push(j.conditionalExpression(boolPropId, disabledLookup, enabledLookup));
+    pushExpr(j.conditionalExpression(boolPropId, disabledLookup, enabledLookup), enabled);
   }
 }
 
 // ---------------------------------------------------------------------------
 // Style-function expressions from props
 // ---------------------------------------------------------------------------
+
+/** Entry with a source-order tag for CSS cascade interleaving. */
+export type OrderedStyleEntry = { order: number; expr: ExpressionKind };
+
+/**
+ * Sort ordered entries by source order and append them to styleArgs.
+ * Used to merge variant and styleFn entries while preserving CSS cascade order.
+ */
+export function mergeOrderedEntries(
+  orderedEntries: OrderedStyleEntry[],
+  styleArgs: ExpressionKind[],
+): void {
+  if (orderedEntries.length === 0) {
+    return;
+  }
+  orderedEntries.sort((a, b) => a.order - b.order);
+  for (const entry of orderedEntries) {
+    styleArgs.push(entry.expr);
+  }
+}
 
 /**
  * Build style function call expressions for dynamic prop-based styles.
@@ -382,6 +412,8 @@ export function buildVariantDimensionLookups(
  * @param args.destructureProps - Optional array to track props that need destructuring
  * @param args.propExprBuilder - Function to build the expression for accessing a prop
  * @param args.propsIdentifier - Identifier to use for "props" in __props case (defaults to "props")
+ * @param args.orderedEntries - When provided, entries with sourceOrder are pushed here instead
+ *   of styleArgs. The caller is responsible for sorting and merging them into styleArgs.
  */
 export function buildStyleFnExpressions(
   emitter: WrapperEmitter,
@@ -391,6 +423,7 @@ export function buildStyleFnExpressions(
     destructureProps?: string[];
     propExprBuilder?: (jsxProp: string) => ExpressionKind;
     propsIdentifier?: ExpressionKind;
+    orderedEntries?: OrderedStyleEntry[];
   },
 ): void {
   const { j, stylesIdentifier } = emitter;
@@ -483,15 +516,29 @@ export function buildStyleFnExpressions(
         when: p.conditionWhen,
         destructureProps,
       });
-      styleArgs.push(makeConditionalStyleExpr(j, { cond, expr: call, isBoolean }));
+      const expr = makeConditionalStyleExpr(j, { cond, expr: call, isBoolean });
+      if (args.orderedEntries && p.sourceOrder !== undefined) {
+        args.orderedEntries.push({ order: p.sourceOrder, expr });
+      } else {
+        styleArgs.push(expr);
+      }
       continue;
     }
 
     const isRequired =
       p.jsxProp === "__props" || emitter.isPropRequiredInPropsTypeLiteral(d.propsType, p.jsxProp);
-    styleArgs.push(
-      buildStyleFnConditionExpr({ j, condition: p.condition, propExpr, call, isRequired }),
-    );
+    const expr = buildStyleFnConditionExpr({
+      j,
+      condition: p.condition,
+      propExpr,
+      call,
+      isRequired,
+    });
+    if (args.orderedEntries && p.sourceOrder !== undefined) {
+      args.orderedEntries.push({ order: p.sourceOrder, expr });
+    } else {
+      styleArgs.push(expr);
+    }
   }
 }
 

@@ -30,6 +30,7 @@ export function finalizeDeclProcessing(ctx: DeclProcessingState): void {
     nestedSelectors,
     variantBuckets,
     variantStyleKeys,
+    variantSourceOrder,
     extraStyleObjects,
     styleFnFromProps,
     styleFnDecls,
@@ -416,6 +417,25 @@ export function finalizeDeclProcessing(ctx: DeclProcessingState): void {
 
   // Store dimensions for separate stylex.create calls
   if (dimensions.length > 0) {
+    // Compute source order for each dimension from its constituent variant entries.
+    // Entries consumed by dimensions were removed from remainingStyleKeys but their
+    // original source order is still in variantSourceOrder.
+    if (Object.keys(variantSourceOrder).length > 0) {
+      for (const dim of dimensions) {
+        let minOrder: number | undefined;
+        for (const [when, order] of Object.entries(variantSourceOrder)) {
+          // Match variant entries belonging to this dimension (e.g., "size === \"tiny\"" for propName "size")
+          if (when.startsWith(`${dim.propName} ===`) || when === dim.propName) {
+            if (minOrder === undefined || order < minOrder) {
+              minOrder = order;
+            }
+          }
+        }
+        if (minOrder !== undefined) {
+          dim.sourceOrder = minOrder;
+        }
+      }
+    }
     decl.variantDimensions = dimensions;
     decl.needsWrapperComponent = true;
     // Remove CSS props that were moved to variant dimensions from base styles
@@ -434,6 +454,18 @@ export function finalizeDeclProcessing(ctx: DeclProcessingState): void {
   }
   if (Object.keys(remainingStyleKeys).length) {
     decl.variantStyleKeys = remainingStyleKeys;
+    // Copy source order for variant keys that survived into remainingStyleKeys
+    if (Object.keys(variantSourceOrder).length > 0) {
+      const filteredOrder: Record<string, number> = {};
+      for (const key of Object.keys(remainingStyleKeys)) {
+        if (key in variantSourceOrder) {
+          filteredOrder[key] = variantSourceOrder[key]!;
+        }
+      }
+      if (Object.keys(filteredOrder).length > 0) {
+        decl.variantSourceOrder = filteredOrder;
+      }
+    }
     // If we have variant styles keyed off props (e.g. `disabled`),
     // we need a wrapper component to evaluate those conditions at runtime and
     // avoid forwarding custom variant props to DOM nodes.

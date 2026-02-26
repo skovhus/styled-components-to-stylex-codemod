@@ -26,6 +26,7 @@ import {
   parseVariantWhenToAst,
 } from "./variant-condition.js";
 import { typeContainsPolymorphicAs } from "../utilities/polymorphic-as-detection.js";
+import { mergeOrderedEntries, type OrderedStyleEntry } from "./style-expr-builders.js";
 
 export function emitSimpleWithConfigWrappers(ctx: EmitIntrinsicContext): void {
   const { emitter, j, emitTypes, wrapperDecls, wrapperNames, stylesIdentifier, emitted } = ctx;
@@ -757,6 +758,11 @@ export function emitSimpleExportedIntrinsicWrappers(ctx: EmitIntrinsicContext): 
       compoundVariantKeys.add(`${cv.innerProp}False`);
     }
 
+    // Collect variant and styleFn expressions with source order for interleaving.
+    // When source order is available, entries are sorted to preserve CSS cascade order.
+    const hasSourceOrder = !!(d.variantSourceOrder && Object.keys(d.variantSourceOrder).length > 0);
+    const orderedEntries: OrderedStyleEntry[] = [];
+
     if (d.variantStyleKeys) {
       const sortedEntries = sortVariantEntriesBySpecificity(Object.entries(d.variantStyleKeys));
       const consumedVariantIndices = new Set<number>();
@@ -795,7 +801,13 @@ export function emitSimpleExportedIntrinsicWrappers(ctx: EmitIntrinsicContext): 
             j.identifier(stylesIdentifier),
             j.identifier(falseKey),
           );
-          styleArgs.push(j.conditionalExpression(cond, trueExpr, falseExpr));
+          const expr = j.conditionalExpression(cond, trueExpr, falseExpr);
+          const order = d.variantSourceOrder?.[when];
+          if (hasSourceOrder && order !== undefined) {
+            orderedEntries.push({ order, expr });
+          } else {
+            styleArgs.push(expr);
+          }
           continue;
         }
 
@@ -806,14 +818,14 @@ export function emitSimpleExportedIntrinsicWrappers(ctx: EmitIntrinsicContext): 
         );
         // Use makeConditionalStyleExpr to handle boolean vs non-boolean conditions correctly.
         // For boolean conditions, && is used. For non-boolean (could be "" or 0), ternary is used.
-        styleArgs.push(emitter.makeConditionalStyleExpr({ cond, expr: styleExpr, isBoolean }));
+        const expr = emitter.makeConditionalStyleExpr({ cond, expr: styleExpr, isBoolean });
+        const order = d.variantSourceOrder?.[when];
+        if (hasSourceOrder && order !== undefined) {
+          orderedEntries.push({ order, expr });
+        } else {
+          styleArgs.push(expr);
+        }
       }
-    }
-
-    // Add adapter-resolved StyleX styles that should come after variant styles
-    // to preserve CSS cascade order (e.g., unconditional border-bottom after conditional border).
-    if (afterVariantStyleArgs.length > 0) {
-      styleArgs.push(...afterVariantStyleArgs);
     }
 
     // When a defaultAttr (e.g. tabIndex: props.tabIndex ?? 0) is also used in a
@@ -837,6 +849,7 @@ export function emitSimpleExportedIntrinsicWrappers(ctx: EmitIntrinsicContext): 
         styleArgs,
         destructureProps,
         propDefaults,
+        orderedEntries: hasSourceOrder ? orderedEntries : undefined,
       });
     }
 
@@ -856,8 +869,18 @@ export function emitSimpleExportedIntrinsicWrappers(ctx: EmitIntrinsicContext): 
       d,
       styleArgs,
       destructureProps,
+      orderedEntries: hasSourceOrder ? orderedEntries : undefined,
     });
     emitter.collectDestructurePropsFromStyleFns({ d, styleArgs, destructureProps });
+
+    // Merge ordered entries (variants + styleFns) by source order to preserve CSS cascade
+    mergeOrderedEntries(orderedEntries, styleArgs);
+
+    // Add adapter-resolved StyleX styles that should come after variant styles
+    // to preserve CSS cascade order (e.g., unconditional border-bottom after conditional border).
+    if (afterVariantStyleArgs.length > 0) {
+      styleArgs.push(...afterVariantStyleArgs);
+    }
 
     if (d.attrsInfo?.conditionalAttrs?.length) {
       for (const c of d.attrsInfo.conditionalAttrs) {

@@ -55,9 +55,40 @@ export function createDeclProcessingState(state: LowerRulesState, decl: StyledDe
   >();
   const nestedSelectors: Record<string, Record<string, unknown>> = {};
   const variantBuckets = new Map<string, Record<string, unknown>>();
-  const variantStyleKeys: Record<string, string> = {};
+  const variantSourceOrder: Record<string, number> = {};
+  /** Monotonically increasing counter for tracking CSS source order of variants and styleFns. */
+  let dynamicSlotOrder = 0;
+  // Use a Proxy to automatically record source order when a variant key is first set.
+  // This avoids changing every `variantStyleKeys[when] ??= ...` call site.
+  const variantStyleKeysRaw: Record<string, string> = {};
+  const variantStyleKeys: Record<string, string> = new Proxy(variantStyleKeysRaw, {
+    set(target, prop, value) {
+      if (typeof prop === "string" && !(prop in target)) {
+        variantSourceOrder[prop] = dynamicSlotOrder++;
+      }
+      target[prop as string] = value;
+      return true;
+    },
+  });
   const extraStyleObjects = new Map<string, Record<string, unknown>>();
-  const styleFnFromProps: StyleFnFromPropsEntry[] = [];
+  // Use a Proxy to automatically record source order on styleFnFromProps entries.
+  const styleFnFromPropsRaw: StyleFnFromPropsEntry[] = [];
+  const styleFnFromProps: StyleFnFromPropsEntry[] = new Proxy(styleFnFromPropsRaw, {
+    get(target, prop, receiver) {
+      if (prop === "push") {
+        return (...entries: StyleFnFromPropsEntry[]) => {
+          for (const entry of entries) {
+            if (entry.sourceOrder === undefined) {
+              entry.sourceOrder = dynamicSlotOrder++;
+            }
+            target.push(entry);
+          }
+          return target.length;
+        };
+      }
+      return Reflect.get(target, prop, receiver);
+    },
+  });
   const styleFnDecls = new Map<string, any>();
   const attrBuckets = new Map<string, Record<string, unknown>>();
   const inlineStyleProps: Array<{ prop: string; expr: ExpressionKind; jsxProp?: string }> = [];
@@ -339,6 +370,7 @@ export function createDeclProcessingState(state: LowerRulesState, decl: StyledDe
     nestedSelectors,
     variantBuckets,
     variantStyleKeys,
+    variantSourceOrder,
     extraStyleObjects,
     styleFnFromProps,
     styleFnDecls,

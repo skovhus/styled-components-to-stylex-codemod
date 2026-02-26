@@ -111,6 +111,7 @@ export function Flex(props: FlexProps) {
       {...rest}
       {...mergedSx(
         [
+          styles.flex,
           typeof grow === "number" ? styles.flexGrow(grow) : undefined,
           typeof shrink === "number" ? styles.flexShrink(shrink) : undefined,
           typeof gap === "number" ? styles.flexGap(gap) : undefined,
@@ -119,20 +120,20 @@ export function Flex(props: FlexProps) {
               ? styles.flexColumnGap(wrapGap)
               : styles.flexRowGap(wrapGap)
             : undefined,
+          inline ? styles.flexInline : undefined,
+          auto ? styles.flexAuto : undefined,
+          align != null && styles.flexAlignItems(align),
+          justify != null && styles.flexJustifyContent(justify),
           center === true && styles.flexCenter,
           wrap ? styles.flexWrap : undefined,
+          alignSelf ? styles.flexAlignSelf(alignSelf) : undefined,
           overflowHidden ? styles.flexOverflowHidden : undefined,
           noMinWidth ? styles.flexNoMinWidth : undefined,
           noMinHeight ? styles.flexNoMinHeight : undefined,
-          align != null && styles.flexAlignItems(align),
-          justify != null && styles.flexJustifyContent(justify),
-          alignSelf ? styles.flexAlignSelf(alignSelf) : undefined,
         ],
         undefined,
         {
           ...style,
-          display: props.inline ? "inline-flex" : "flex",
-          flex: props.auto ? "1 1 auto" : "initial",
           flexDirection: props.column
             ? props.reverse
               ? "column-reverse"
@@ -327,6 +328,19 @@ const styles = stylex.create({
   flexRowGap: (wrapGap: number | undefined) => ({
     rowGap: `${wrapGap}px`,
   }),
+  /**
+   * Generic flexbox div component.
+   */
+  flex: {
+    display: "flex",
+    flex: "initial",
+  },
+  flexInline: {
+    display: "inline-flex",
+  },
+  flexAuto: {
+    flex: "1 1 auto",
+  },
   flexCenter: {
     alignItems: "center",
     justifyContent: "center",
