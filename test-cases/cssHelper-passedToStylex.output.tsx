@@ -7,7 +7,11 @@ function Container(props: React.PropsWithChildren<{ ref?: React.Ref<HTMLDivEleme
   const { children } = props;
 
   return (
-    <div {...stylex.props(styles.container, scrollFadeMaskStyles(18, "both"))}>{children}</div>
+    <div
+      {...stylex.props(styles.container, scrollFadeMaskStyles(18, "both"), styles.containerAfter1)}
+    >
+      {children}
+    </div>
   );
 }
 
@@ -27,6 +31,7 @@ function ComplexFade(props: React.PropsWithChildren<{ ref?: React.Ref<HTMLDivEle
       {...stylex.props(
         styles.complexFade,
         scrollFadeMaskStyles(12, "top"),
+        styles.complexFadeAfter1,
         scrollFadeMaskStyles(12, "bottom"),
       )}
     >
@@ -53,10 +58,14 @@ const styles = stylex.create({
   container: {
     display: "flex",
     flexDirection: "column",
+  },
+  containerAfter1: {
     padding: "16px",
   },
   complexFade: {
     position: "relative",
+  },
+  complexFadeAfter1: {
     backgroundColor: "white",
   },
 });
