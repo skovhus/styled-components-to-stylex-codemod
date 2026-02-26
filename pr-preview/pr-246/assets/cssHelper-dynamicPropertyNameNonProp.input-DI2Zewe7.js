@@ -1,0 +1,4 @@
+import{j as d,c as o}from"./index-TgDrUwmX.js";const a=o.div`
+  display: flex;
+  ${({gap:i=8,column:n})=>`${n?"column":"row"}-gap: ${i}px; margin-top: ${i}px;`};
+`,r=()=>d.jsxs("div",{style:{display:"flex",flexDirection:"column",gap:12,padding:12},children:[d.jsxs(a,{gap:10,style:{background:"#d6efff",padding:8},children:[d.jsx("div",{style:{background:"#4ea8de",color:"white",padding:8},children:"Row gap + margin top"}),d.jsx("div",{style:{background:"#4ea8de",color:"white",padding:8},children:"Row gap + margin top"})]}),d.jsxs(a,{column:!0,gap:12,style:{background:"#ffe4cf",padding:8},children:[d.jsx("div",{style:{background:"#f9844a",color:"white",padding:8},children:"Column gap + margin top"}),d.jsx("div",{style:{background:"#f9844a",color:"white",padding:8},children:"Column gap + margin top"})]})]});export{r as App,a as Stack};
