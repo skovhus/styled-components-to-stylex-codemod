@@ -67,6 +67,7 @@ export function resolveDynamicNode(
     tryResolveStyleFunctionFromTemplateLiteral(node) ??
     tryResolveInlineStyleValueForNestedPropAccess(node) ??
     tryResolvePropAccess(node) ??
+    tryResolveConditionalPropStyleFunction(node) ??
     tryResolveInlineStyleValueForConditionalExpression(node) ??
     tryResolveInlineStyleValueForLogicalExpression(node) ??
     tryResolveInlineStyleValueFromArrowFn(node)
@@ -639,25 +640,8 @@ function tryResolveInlineStyleValueForConditionalExpression(
   // IMPORTANT: boolean values in conditional branches are not valid CSS values.
   // In styled-components, falsy interpolations like `false` mean "omit this declaration",
   // so we should bail rather than emitting invalid CSS like `cursor: false`.
-  {
-    const consType = (body.consequent as { type?: string } | undefined)?.type;
-    const altType = (body.alternate as { type?: string } | undefined)?.type;
-    if (consType === "BooleanLiteral" || altType === "BooleanLiteral") {
-      return null;
-    }
-    // Also check estree-style Literal with boolean value
-    if (consType === "Literal") {
-      const v = (body.consequent as { value?: unknown }).value;
-      if (typeof v === "boolean") {
-        return null;
-      }
-    }
-    if (altType === "Literal") {
-      const v = (body.alternate as { value?: unknown }).value;
-      if (typeof v === "boolean") {
-        return null;
-      }
-    }
+  if (hasBooleanBranch(body.consequent) || hasBooleanBranch(body.alternate)) {
+    return null;
   }
   // Signal to the caller that we can preserve this declaration as an inline style
   // by calling the function with `props`.
@@ -736,6 +720,59 @@ function tryResolveThemeDependentTemplateLiteral(
   };
 }
 
+/**
+ * Walks AST nodes and collects prop names accessed via `paramName.X` member
+ * expressions. Shared by template-literal and conditional prop style function handlers.
+ */
+function collectPropsFromExprTree(
+  nodes: Iterable<unknown>,
+  paramName: string,
+): { hasUsableProps: boolean; hasNonTransientProps: boolean; props: string[] } {
+  const seen = new Set<string>();
+  const props: string[] = [];
+  const addProp = (name: string): void => {
+    if (seen.has(name)) {
+      return;
+    }
+    seen.add(name);
+    props.push(name);
+  };
+  const visit = (node: unknown): void => {
+    if (!node || typeof node !== "object") {
+      return;
+    }
+    if (Array.isArray(node)) {
+      for (const child of node) {
+        visit(child);
+      }
+      return;
+    }
+    const n = node as { type?: string };
+    if (n.type === "MemberExpression" || n.type === "OptionalMemberExpression") {
+      const path = getMemberPathFromIdentifier(node as any, paramName);
+      const firstPathPart = path?.[0];
+      if (path && path.length > 0 && firstPathPart) {
+        addProp(firstPathPart);
+      }
+    }
+    for (const key of Object.keys(n)) {
+      if (key === "loc" || key === "comments") {
+        continue;
+      }
+      const child = (node as Record<string, unknown>)[key];
+      visit(child);
+    }
+  };
+  for (const expr of nodes) {
+    visit(expr);
+  }
+  return {
+    hasUsableProps: props.length > 0,
+    hasNonTransientProps: props.some((name) => !name.startsWith("$")),
+    props,
+  };
+}
+
 function tryResolveStyleFunctionFromTemplateLiteral(node: DynamicNode): HandlerResult | null {
   if (!node.css.property) {
     return null;
@@ -759,52 +796,10 @@ function tryResolveStyleFunctionFromTemplateLiteral(node: DynamicNode): HandlerR
   if (expressions.length === 0) {
     return null;
   }
-  const { hasUsableProps, hasNonTransientProps, props } = (() => {
-    const seen = new Set<string>();
-    const props: string[] = [];
-    const addProp = (name: string): void => {
-      if (seen.has(name)) {
-        return;
-      }
-      seen.add(name);
-      props.push(name);
-    };
-    const visit = (node: unknown): void => {
-      if (!node || typeof node !== "object") {
-        return;
-      }
-      if (Array.isArray(node)) {
-        for (const child of node) {
-          visit(child);
-        }
-        return;
-      }
-      const n = node as { type?: string };
-      if (n.type === "MemberExpression" || n.type === "OptionalMemberExpression") {
-        const path = getMemberPathFromIdentifier(node as any, paramName);
-        const firstPathPart = path?.[0];
-        if (path && path.length > 0 && firstPathPart) {
-          addProp(firstPathPart);
-          // Keep walking to collect other props.
-        }
-      }
-      for (const key of Object.keys(n)) {
-        if (key === "loc" || key === "comments") {
-          continue;
-        }
-        const child = (node as Record<string, unknown>)[key];
-        visit(child);
-      }
-    };
-    for (const expr of expressions) {
-      visit(expr);
-    }
-    return {
-      hasUsableProps: props.length > 0,
-      hasNonTransientProps: props.some((name) => !name.startsWith("$")),
-      props,
-    };
-  })();
+  const { hasUsableProps, hasNonTransientProps, props } = collectPropsFromExprTree(
+    expressions,
+    paramName,
+  );
   if (!hasUsableProps) {
     return null;
   }
@@ -815,6 +810,165 @@ function tryResolveStyleFunctionFromTemplateLiteral(node: DynamicNode): HandlerR
     return null;
   }
   return { type: "emitStyleFunctionFromPropsObject", props };
+}
+
+/**
+ * Handles arrow functions with conditional expression bodies that reference props.
+ *
+ * Pattern: `(props) => (props.$open ? props.$delay : 0)`
+ *
+ * When the conditional branches contain prop references that can't be resolved
+ * statically (e.g., `props.$delay`), this emits a StyleX style function instead
+ * of falling through to the inline style fallback.
+ */
+function tryResolveConditionalPropStyleFunction(node: DynamicNode): HandlerResult | null {
+  if (!node.css.property) {
+    return null;
+  }
+  const expr = node.expr;
+  if (!isArrowFunctionExpression(expr)) {
+    return null;
+  }
+  // Only support simple Identifier params — bail on destructured ObjectPattern
+  const paramName = getArrowFnSingleParamName(expr);
+  if (!paramName) {
+    return null;
+  }
+  const body = getFunctionBodyExpr(expr);
+  if (!body || (body as { type?: string }).type !== "ConditionalExpression") {
+    return null;
+  }
+  // Bail if the expression references theme — theme is unavailable at runtime after migration
+  if (hasThemeAccessInArrowFn(expr)) {
+    return null;
+  }
+  // Bail if either branch is a boolean literal — in styled-components, falsy interpolations
+  // like `false` mean "omit this declaration", which can't be expressed as a StyleX style function.
+  const condBody = body as {
+    test?: unknown;
+    consequent?: { type?: string; value?: unknown };
+    alternate?: { type?: string; value?: unknown };
+  };
+  if (hasBooleanBranch(condBody.consequent) || hasBooleanBranch(condBody.alternate)) {
+    return null;
+  }
+
+  // Try to decompose: one branch is static, the other is dynamic.
+  // This enables merging the dynamic branch with an existing variant bucket
+  // instead of emitting a redundant style function that passes the condition prop.
+  // Skip when pseudo/media context is present — the decomposed handler writes to
+  // base styleObj and emits style functions without buildPseudoMediaPropValue wrapping.
+  // Falling through to emitStyleFunctionFromPropsObject handles pseudo/media correctly.
+  const hasPseudoOrMedia =
+    node.css.selector !== "&" || node.css.atRuleStack.some((a) => a.startsWith("@"));
+  if (!hasPseudoOrMedia) {
+    const decomposed = tryDecomposeConditionalBranches(condBody, paramName);
+    if (decomposed) {
+      return decomposed;
+    }
+  }
+
+  const { hasUsableProps, hasNonTransientProps, props } = collectPropsFromExprTree(
+    [body],
+    paramName,
+  );
+  if (!hasUsableProps) {
+    return null;
+  }
+  // For non-transient props: if shouldForwardProp is configured, let the fallback in
+  // lower-rules.ts handle it (creates style functions that take props as argument).
+  // Otherwise, emit style functions here.
+  if (hasNonTransientProps && node.component.withConfig?.shouldForwardProp) {
+    return null;
+  }
+  return { type: "emitStyleFunctionFromPropsObject", props };
+}
+
+/**
+ * Attempts to decompose a conditional expression into a static branch and a dynamic branch.
+ *
+ * When exactly one branch is a static literal and the other references props, returns
+ * `splitConditionalWithDynamicBranch` so the caller can merge the dynamic branch with
+ * existing variant buckets instead of emitting a separate style function.
+ *
+ * Returns null if both branches are dynamic or the pattern doesn't match.
+ */
+function tryDecomposeConditionalBranches(
+  condBody: {
+    test?: unknown;
+    consequent?: unknown;
+    alternate?: unknown;
+  },
+  paramName: string,
+): HandlerResult | null {
+  // Extract condition prop from the test expression
+  const test = condBody.test;
+  if (!test || typeof test !== "object") {
+    return null;
+  }
+  const testNode = test as { type?: string };
+  let conditionProp: string | null = null;
+  if (testNode.type === "MemberExpression") {
+    const path = getMemberPathFromIdentifier(
+      test as Parameters<typeof getMemberPathFromIdentifier>[0],
+      paramName,
+    );
+    if (path && path.length === 1 && path[0]) {
+      conditionProp = path[0];
+    }
+  }
+  if (!conditionProp) {
+    return null;
+  }
+
+  // Try to extract a static value from each branch
+  const consStatic = literalToStaticValue(condBody.consequent);
+  const altStatic = literalToStaticValue(condBody.alternate);
+
+  // We need exactly one static branch and one dynamic branch
+  const consIsStatic = consStatic !== null;
+  const altIsStatic = altStatic !== null;
+  if (consIsStatic === altIsStatic) {
+    // Both static (handled by splitVariants) or both dynamic (fall through)
+    return null;
+  }
+
+  const staticValue = consIsStatic ? consStatic : altStatic;
+  const dynamicBranch = consIsStatic ? condBody.alternate : condBody.consequent;
+  const isStaticWhenFalse = !consIsStatic; // static is in the alternate (false) branch
+
+  if (staticValue === undefined || staticValue === null) {
+    return null;
+  }
+  // Only support string/number static values (not booleans)
+  if (typeof staticValue !== "string" && typeof staticValue !== "number") {
+    return null;
+  }
+
+  // Collect props from the dynamic branch (excluding the condition prop)
+  const { hasUsableProps, props: dynamicProps } = collectPropsFromExprTree(
+    [dynamicBranch],
+    paramName,
+  );
+  if (!hasUsableProps) {
+    return null;
+  }
+  // Ensure there's at least one prop beyond the condition for a useful decomposition.
+  // Don't filter conditionProp — it may be referenced in the dynamic branch expression
+  // (e.g., nested ternary `props.$open ? props.$delay * (props.$open ? 1 : 2) : 0`).
+  const hasNonConditionProp = dynamicProps.some((p) => p !== conditionProp);
+  if (!hasNonConditionProp) {
+    return null;
+  }
+
+  return {
+    type: "splitConditionalWithDynamicBranch",
+    conditionProp,
+    staticValue,
+    dynamicBranchExpr: dynamicBranch,
+    dynamicProps,
+    isStaticWhenFalse,
+  };
 }
 
 function tryResolveInlineStyleValueForNestedPropAccess(node: DynamicNode): HandlerResult | null {
@@ -943,6 +1097,24 @@ function tryResolvePropAccess(node: DynamicNode): HandlerResult | null {
     body: `{ ${Object.keys(styleFromSingleDeclaration(cssProp, "value"))[0]}: value }`,
     call: propName,
   };
+}
+
+/**
+ * Checks whether an AST node is a boolean literal (`true`/`false`).
+ * Handles both BooleanLiteral (Babel AST) and Literal with boolean value (estree).
+ */
+function hasBooleanBranch(node: unknown): boolean {
+  if (!node || typeof node !== "object") {
+    return false;
+  }
+  const n = node as { type?: string; value?: unknown };
+  if (n.type === "BooleanLiteral") {
+    return true;
+  }
+  if (n.type === "Literal" && typeof n.value === "boolean") {
+    return true;
+  }
+  return false;
 }
 
 /**

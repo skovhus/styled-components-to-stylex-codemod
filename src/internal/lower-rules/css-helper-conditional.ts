@@ -12,7 +12,7 @@ import type { LowerRulesState } from "./state.js";
 import { resolveDynamicNode } from "../builtin-handlers.js";
 import { cssDeclarationToStylexDeclarations } from "../css-prop-mapping.js";
 import { parseCssTemplateToRules, type ConditionalVariant } from "./css-helper.js";
-import { extractStaticParts } from "./interpolations.js";
+import { extractStaticPartsForDecl } from "./interpolations.js";
 import {
   buildTemplateWithStaticParts,
   collectPropsFromArrowFn,
@@ -484,7 +484,7 @@ export function createCssHelperConditionalHandler(ctx: CssHelperConditionalConte
             return null;
           }
           const rawExpr = replaceParamWithProps(slotExpr as ExpressionKind);
-          const { prefix, suffix } = extractStaticParts(d.value);
+          const { prefix, suffix } = extractStaticPartsForDecl(d);
           const valueExpr =
             prefix || suffix ? buildTemplateWithStaticParts(j, rawExpr, prefix, suffix) : rawExpr;
           for (const mapped of cssDeclarationToStylexDeclarations(d)) {

@@ -141,7 +141,7 @@ export function emitSimpleWithConfigWrappers(ctx: EmitIntrinsicContext): void {
         ? [j.memberExpression(j.identifier(stylesIdentifier), j.identifier(d.extendsStyleKey))]
         : []),
       ...extraStyleArgs,
-      j.memberExpression(j.identifier(stylesIdentifier), j.identifier(d.styleKey)),
+      ...emitter.baseStyleExpr(d),
       ...extraStyleArgsAfterBase,
     ];
 
@@ -725,7 +725,7 @@ export function emitSimpleExportedIntrinsicWrappers(ctx: EmitIntrinsicContext): 
         ? [j.memberExpression(j.identifier(stylesIdentifier), j.identifier(d.extendsStyleKey))]
         : []),
       ...extraStyleArgs,
-      j.memberExpression(j.identifier(stylesIdentifier), j.identifier(d.styleKey)),
+      ...emitter.baseStyleExpr(d),
       ...extraStyleArgsAfterBase,
     ];
 

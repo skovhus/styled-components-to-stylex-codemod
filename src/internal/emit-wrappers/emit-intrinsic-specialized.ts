@@ -56,7 +56,7 @@ export function emitInputWrappers(ctx: EmitIntrinsicContext): void {
         emitter.splitExtraStyleArgs(d);
       const styleArgs: ExpressionKind[] = [
         ...extraStyleArgs,
-        j.memberExpression(j.identifier(stylesIdentifier), j.identifier(d.styleKey)),
+        ...emitter.baseStyleExpr(d),
         ...extraStyleArgsAfterBase,
         ...(aw.checkboxKey
           ? [
@@ -258,10 +258,9 @@ export function emitLinkWrappers(ctx: EmitIntrinsicContext): void {
       const aw = d.attrWrapper!;
       const { beforeBase: extraStyleArgs, afterBase: extraStyleArgsAfterBase } =
         emitter.splitExtraStyleArgs(d);
-      const base = j.memberExpression(j.identifier(stylesIdentifier), j.identifier(d.styleKey));
       const styleArgs: ExpressionKind[] = [
         ...extraStyleArgs,
-        base,
+        ...emitter.baseStyleExpr(d),
         ...extraStyleArgsAfterBase,
         ...(aw.externalKey
           ? [

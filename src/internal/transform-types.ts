@@ -188,6 +188,9 @@ export type StyledDecl = {
       }
   >;
   needsWrapperComponent?: boolean;
+  /** When true, the base `styles.{styleKey}` reference is omitted from `stylex.props()` because
+   *  the styleKey is a dynamic function (not a static style object). */
+  skipBaseStyleRef?: boolean;
   /**
    * Pseudo-alias selectors from `&:${expr}` patterns resolved via
    * `adapter.resolveSelector()` with `kind: "pseudoAlias"`.

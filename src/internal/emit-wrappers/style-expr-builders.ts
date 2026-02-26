@@ -14,6 +14,26 @@ import { collectConditionProps, makeConditionalStyleExpr } from "./variant-condi
 import type { WrapperEmitter } from "./wrapper-emitter.js";
 
 // ---------------------------------------------------------------------------
+// Base style member expression
+// ---------------------------------------------------------------------------
+
+/**
+ * Returns the `styles.{styleKey}` member expression for the base style,
+ * or an empty array when the key is a dynamic function (no static styles).
+ * Suitable for spreading into `styleArgs`.
+ */
+export function baseStyleExpr(
+  j: JSCodeshift,
+  stylesIdentifier: string,
+  d: StyledDecl,
+): ExpressionKind[] {
+  if (d.skipBaseStyleRef) {
+    return [];
+  }
+  return [j.memberExpression(j.identifier(stylesIdentifier), j.identifier(d.styleKey))];
+}
+
+// ---------------------------------------------------------------------------
 // Extra style key splitting
 // ---------------------------------------------------------------------------
 

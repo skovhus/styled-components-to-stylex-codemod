@@ -285,7 +285,7 @@ export function emitShouldForwardPropWrappers(ctx: EmitIntrinsicContext): void {
         ? [j.memberExpression(j.identifier(stylesIdentifier), j.identifier(d.extendsStyleKey))]
         : []),
       ...extraStyleArgs,
-      j.memberExpression(j.identifier(stylesIdentifier), j.identifier(d.styleKey)),
+      ...emitter.baseStyleExpr(d),
       ...extraStyleArgsAfterBase,
     ];
 
