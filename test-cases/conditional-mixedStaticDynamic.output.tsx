@@ -8,12 +8,14 @@ const MAIN_PAGE_MARGIN = 24;
 
 type Position = "fixed" | "relative";
 
-interface ContainerProps extends Omit<React.ComponentProps<"div">, "className" | "style"> {
+interface ContainerProps {
   $sidebarCollapsed: boolean;
   $position?: Position;
 }
 
-function Container(props: ContainerProps) {
+function Container(
+  props: ContainerProps & Omit<React.ComponentProps<"div">, "className" | "style">,
+) {
   const { children, $sidebarCollapsed, $position } = props;
 
   return (

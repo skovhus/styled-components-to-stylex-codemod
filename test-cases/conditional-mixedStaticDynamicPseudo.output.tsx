@@ -12,9 +12,7 @@ interface Props {
   $enabled: boolean;
 }
 
-type ContainerProps = React.PropsWithChildren<Props>;
-
-function Container(props: ContainerProps) {
+function Container(props: Props & Omit<React.ComponentProps<"div">, "className" | "style">) {
   const { children, $collapsed, $enabled } = props;
 
   return (

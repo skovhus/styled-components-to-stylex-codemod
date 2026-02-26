@@ -9,9 +9,10 @@ type Props = {
   hollow?: boolean;
   size?: Size;
 };
-type ColorBadgeProps = Omit<React.ComponentProps<"div">, "className" | "style"> & Props;
 
-export function ColorBadge(props: ColorBadgeProps) {
+export function ColorBadge(
+  props: Props & Omit<React.ComponentProps<"div">, "className" | "style">,
+) {
   const { children, hollow, color, size = "normal", ...rest } = props;
 
   return (

@@ -83,6 +83,7 @@ export type EmitIntrinsicHelpers = {
     allowSxProp?: boolean;
     includeForwardedAs?: boolean;
     extra?: string | null;
+    extraFirst?: boolean;
   }) => { typeExprText: string; genericParams: string };
   propsTypeHasExistingPolymorphicAs: (d: StyledDecl) => boolean;
   shouldAllowAsProp: (d: StyledDecl, tagName: string) => boolean;
@@ -331,9 +332,18 @@ export function createEmitIntrinsicHelpers(env: EmitIntrinsicHelpersEnv): EmitIn
     allowSxProp?: boolean;
     includeForwardedAs?: boolean;
     extra?: string | null;
+    /** When true, place the user's existing type first in the intersection for readability. */
+    extraFirst?: boolean;
   }): { typeExprText: string; genericParams: string } => {
-    const { tagName, allowClassNameProp, allowStyleProp, allowSxProp, includeForwardedAs, extra } =
-      args;
+    const {
+      tagName,
+      allowClassNameProp,
+      allowStyleProp,
+      allowSxProp,
+      includeForwardedAs,
+      extra,
+      extraFirst,
+    } = args;
     const genericParams = `C extends React.ElementType = "${tagName}"`;
 
     // Simple polymorphic pattern:
@@ -354,11 +364,16 @@ export function createEmitIntrinsicHelpers(env: EmitIntrinsicHelpersEnv): EmitIn
     const forwardedAsPart = includeForwardedAs ? ` & ${FORWARDED_AS_TYPE}` : "";
     const sxPropPart = allowSxProp ? `${SX_PROP_TYPE_TEXT}; ` : "";
     if (extra) {
-      // Omit as from extra since we're adding our own as?: C
-      const extraWithoutAs = `Omit<${extra}, "as">`;
       // Omit extra's keys from base so custom props take precedence over native element props
       const allOmitted = [...omitted, `keyof (${extra})`];
       const baseWithExtraOmit = `Omit<React.ComponentPropsWithRef<C>, ${allOmitted.join(" | ")}>`;
+      if (extraFirst) {
+        // User's existing type first for readability (e.g. Props & Omit<...> & { as?: C })
+        const typeExprText = `${extra} & ${baseWithExtraOmit} & { ${sxPropPart}as?: C }${forwardedAsPart}`;
+        return { typeExprText, genericParams };
+      }
+      // Omit as from extra since we're adding our own as?: C
+      const extraWithoutAs = `Omit<${extra}, "as">`;
       const typeExprText = `${baseWithExtraOmit} & ${extraWithoutAs} & { ${sxPropPart}as?: C }${forwardedAsPart}`;
       return { typeExprText, genericParams };
     }

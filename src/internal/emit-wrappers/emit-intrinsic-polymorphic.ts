@@ -71,6 +71,8 @@ export function emitIntrinsicPolymorphicWrappers(ctx: EmitIntrinsicContext): voi
       // influences allowed props (e.g. htmlFor when as="label", react-spring style props when as={animated.span}).
       // Detect if there are no custom user-defined props (just intrinsic element props)
       const hasNoCustomProps = !explicit;
+      // When the user already has a well-named type, skip creating a new type alias
+      const explicitIsExistingTypeRef = !!emitter.getExplicitTypeNameIfExists(d.propsType);
 
       const typeText = (() => {
         const base = "React.ComponentPropsWithRef<C>";
@@ -101,15 +103,21 @@ export function emitIntrinsicPolymorphicWrappers(ctx: EmitIntrinsicContext): voi
             ? emitter.joinIntersection(baseMaybeOmitted, `{ ${asPropParts.join("; ")} }`)
             : baseMaybeOmitted;
         const withForwardedAs = withForwardedAsType(withAs, includesForwardedAs);
-        return explicit ? emitter.joinIntersection(withForwardedAs, explicit) : withForwardedAs;
+        if (!explicit) {
+          return withForwardedAs;
+        }
+        // Put user's existing type first for readability when it's a named type in the file
+        return explicitIsExistingTypeRef
+          ? emitter.joinIntersection(explicit, withForwardedAs)
+          : emitter.joinIntersection(withForwardedAs, explicit);
       })();
 
       // When there are no custom props, skip generating a named type.
       // The function parameter will use inline `React.ComponentPropsWithRef<C> & { as?: C }`.
-      // When there ARE custom props but a user-defined type already exists, the inline
-      // function parameter will use the intersection pattern instead.
+      // When the user already has a well-named type (explicitIsExistingTypeRef), also skip
+      // creating a new type alias — use the existing type inline instead.
       let typeAliasEmitted = false;
-      if (!hasNoCustomProps) {
+      if (!hasNoCustomProps && !explicitIsExistingTypeRef) {
         typeAliasEmitted = emitNamedPropsType(
           d.localName,
           typeText,

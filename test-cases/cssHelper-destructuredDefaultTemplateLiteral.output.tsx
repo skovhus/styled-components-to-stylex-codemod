@@ -3,13 +3,13 @@ import * as React from "react";
 import * as stylex from "@stylexjs/stylex";
 import { mergedSx } from "./lib/mergedSx";
 
-type TileProps = Omit<React.ComponentProps<"div">, "className"> & {
+type TileProps = {
   gap?: number;
   className?: string;
   children?: React.ReactNode;
 };
 
-export function Tile(props: TileProps) {
+export function Tile(props: TileProps & Omit<React.ComponentProps<"div">, "className">) {
   const { children, style, gap, ...rest } = props;
 
   return (

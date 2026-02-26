@@ -8,7 +8,7 @@ type Props = {
 
 // Test case: tabIndex used in BOTH attrs (with default) AND in styles
 // The default value should be preserved when destructuring
-export function Component(props: Omit<React.ComponentProps<"div">, "className" | "style"> & Props) {
+export function Component(props: Props & Omit<React.ComponentProps<"div">, "className" | "style">) {
   const { children, $applyBackground, tabIndex = 0, ...rest } = props;
 
   return (

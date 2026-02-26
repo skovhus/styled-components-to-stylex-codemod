@@ -12,7 +12,7 @@ export interface ButtonProps {
 
 export type ButtonVariant = ButtonProps["variant"];
 
-function Button(props: React.ComponentProps<"button"> & ButtonProps) {
+function Button(props: ButtonProps & React.ComponentProps<"button">) {
   const { className, children, style, size, variant, ...rest } = props;
 
   return (

@@ -36,7 +36,7 @@ export interface TextInputProps {
 }
 
 export function TextInput(
-  props: Omit<React.ComponentProps<"input">, "className" | "style"> & TextInputProps,
+  props: TextInputProps & Omit<React.ComponentProps<"input">, "className" | "style">,
 ) {
   const { allowPMAutofill, ...rest } = props;
 

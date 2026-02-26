@@ -3,14 +3,14 @@ import * as React from "react";
 import * as stylex from "@stylexjs/stylex";
 import { mergedSx } from "./lib/mergedSx";
 
-type StripProps = Omit<React.ComponentProps<"div">, "className"> & {
+type StripProps = {
   enabled?: boolean;
   column?: boolean;
   className?: string;
   children?: React.ReactNode;
 };
 
-export function Strip(props: StripProps) {
+export function Strip(props: StripProps & Omit<React.ComponentProps<"div">, "className">) {
   const { children, style, enabled, column, ...rest } = props;
 
   return (

@@ -17,7 +17,7 @@ export interface CardProps {
 }
 
 // The styled component uses the existing props interface
-export function Card(props: Omit<React.ComponentProps<"div">, "style"> & CardProps) {
+export function Card(props: CardProps & Omit<React.ComponentProps<"div">, "style">) {
   const { className, children, highlighted, ...rest } = props;
 
   return (
