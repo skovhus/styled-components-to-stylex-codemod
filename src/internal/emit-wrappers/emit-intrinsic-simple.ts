@@ -9,6 +9,7 @@ import type { StyledDecl } from "../transform-types.js";
 import { getBridgeClassVar } from "../utilities/bridge-classname.js";
 import {
   collectInlineStylePropNames,
+  SX_PROP_TYPE_DECL,
   type ExpressionKind,
   type InlineStyleProp,
   type WrapperPropDefaults,
@@ -605,7 +606,7 @@ export function emitSimpleExportedIntrinsicWrappers(ctx: EmitIntrinsicContext): 
       })();
       const allowSxPropForType = emitter.shouldAllowSxProp(d);
       const typeTextWithSx = allowSxPropForType
-        ? emitter.joinIntersection(typeText, "{ sx?: stylex.StyleXStyles | stylex.StyleXStyles[] }")
+        ? emitter.joinIntersection(typeText, `{ ${SX_PROP_TYPE_DECL} }`)
         : typeText;
       const typeTextWithForwardedAs = withForwardedAsType(typeTextWithSx, includesForwardedAs);
 
@@ -638,13 +639,8 @@ export function emitSimpleExportedIntrinsicWrappers(ctx: EmitIntrinsicContext): 
       if (!typeAliasEmitted && allowSxPropForType) {
         const existingTypeName = emitter.propsTypeNameFor(d.localName);
         if (emitter.typeExistsInFile(existingTypeName)) {
-          emitter.injectPropsIntoInterfaceBody(existingTypeName, [
-            "sx?: stylex.StyleXStyles | stylex.StyleXStyles[]",
-          ]);
-          emitter.extendExistingTypeAlias(
-            existingTypeName,
-            "{ sx?: stylex.StyleXStyles | stylex.StyleXStyles[] }",
-          );
+          emitter.injectPropsIntoInterfaceBody(existingTypeName, [SX_PROP_TYPE_DECL]);
+          emitter.extendExistingTypeAlias(existingTypeName, `{ ${SX_PROP_TYPE_DECL} }`);
         }
       }
 

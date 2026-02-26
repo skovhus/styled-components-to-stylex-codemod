@@ -15,7 +15,13 @@ import type {
 import type { StyleMergerConfig, ThemeHookConfig } from "../../adapter.js";
 import type { StyledDecl, VariantDimension } from "../transform-types.js";
 import { emitStyleMerging } from "./style-merger.js";
-import type { ExportInfo, ExpressionKind, InlineStyleProp, WrapperPropDefaults } from "./types.js";
+import {
+  SX_PROP_TYPE_DECL,
+  type ExportInfo,
+  type ExpressionKind,
+  type InlineStyleProp,
+  type WrapperPropDefaults,
+} from "./types.js";
 import { TAG_TO_HTML_ELEMENT, VOID_TAGS } from "./type-helpers.js";
 import { isIdentifierNode } from "../utilities/jscodeshift-utils.js";
 import type { JsxAttr, JsxTagName, StatementKind } from "./jsx-builders.js";
@@ -817,7 +823,7 @@ export class WrapperEmitter {
         lines.push(`style?: React.CSSProperties`);
       }
       if (allowSxProp) {
-        lines.push(`sx?: stylex.StyleXStyles | stylex.StyleXStyles[]`);
+        lines.push(SX_PROP_TYPE_DECL);
       }
       const elementType = TAG_TO_HTML_ELEMENT[tagName] ?? "HTMLElement";
       lines.push(`ref?: React.Ref<${elementType}>`);
@@ -918,7 +924,7 @@ export class WrapperEmitter {
       lines.push("style?: React.CSSProperties");
     }
     if (shouldAddStyleProps && allowSxProp) {
-      lines.push("sx?: stylex.StyleXStyles | stylex.StyleXStyles[]");
+      lines.push(SX_PROP_TYPE_DECL);
     }
     if (this.hasForwardedAsUsage(d.localName)) {
       lines.push("forwardedAs?: React.ElementType");

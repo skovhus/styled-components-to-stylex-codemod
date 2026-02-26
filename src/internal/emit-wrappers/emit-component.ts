@@ -9,6 +9,7 @@ import { emitStyleMerging } from "./style-merger.js";
 import { withLeadingComments } from "./comments.js";
 import {
   collectInlineStylePropNames,
+  SX_PROP_TYPE_DECL,
   type ExpressionKind,
   type InlineStyleProp,
   type WrapperPropDefaults,
@@ -191,7 +192,7 @@ export function emitComponentWrappers(emitter: WrapperEmitter): {
           optionalProps.push("style?: React.CSSProperties");
         }
         if (allowSxProp) {
-          optionalProps.push("sx?: stylex.StyleXStyles | stylex.StyleXStyles[]");
+          optionalProps.push(SX_PROP_TYPE_DECL);
         }
         if (hasForwardedAsUsage) {
           optionalProps.push("forwardedAs?: React.ElementType");
@@ -241,7 +242,7 @@ export function emitComponentWrappers(emitter: WrapperEmitter): {
             optionalStyleProps.push("style?: React.CSSProperties");
           }
           if (allowSxProp) {
-            optionalStyleProps.push("sx?: stylex.StyleXStyles | stylex.StyleXStyles[]");
+            optionalStyleProps.push(SX_PROP_TYPE_DECL);
           }
           const typeText = [
             baseProps,

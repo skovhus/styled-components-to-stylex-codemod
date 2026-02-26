@@ -7,7 +7,7 @@
  */
 import type { ASTNode, Collection, Identifier, JSCodeshift, Property } from "jscodeshift";
 import type { StyledDecl } from "../transform-types.js";
-import type { ExpressionKind } from "./types.js";
+import { SX_PROP_TYPE_DECL, type ExpressionKind } from "./types.js";
 import type { WrapperEmitter } from "./wrapper-emitter.js";
 
 export type EmitIntrinsicHelpers = {
@@ -331,7 +331,7 @@ export function createEmitIntrinsicHelpers(env: EmitIntrinsicHelpersEnv): EmitIn
         ? `Omit<React.ComponentPropsWithRef<C>, ${omitted.join(" | ")}>`
         : "React.ComponentPropsWithRef<C>";
     const forwardedAsPart = includeForwardedAs ? ` & ${FORWARDED_AS_TYPE}` : "";
-    const sxPart = allowSxProp ? "sx?: stylex.StyleXStyles | stylex.StyleXStyles[]" : "";
+    const sxPart = allowSxProp ? SX_PROP_TYPE_DECL : "";
     if (extra) {
       // Omit as from extra since we're adding our own as?: C
       const extraWithoutAs = `Omit<${extra}, "as">`;

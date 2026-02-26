@@ -5,6 +5,9 @@
 import type { ASTNode, JSCodeshift } from "jscodeshift";
 
 export type ExportInfo = { exportName: string; isDefault: boolean; isSpecifier: boolean };
+
+/** TypeScript prop declaration for the sx prop used in generated wrapper component types. */
+export const SX_PROP_TYPE_DECL = "sx?: stylex.StyleXStyles | stylex.StyleXStyles[]";
 export type ExpressionKind = Parameters<JSCodeshift["expressionStatement"]>[0];
 export type InlineStyleProp = { prop: string; expr: ExpressionKind; jsxProp?: string };
 export type WrapperPropDefaultValue = string | number | boolean;

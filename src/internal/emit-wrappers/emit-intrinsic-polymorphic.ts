@@ -8,6 +8,7 @@ import type { StyledDecl } from "../transform-types.js";
 import { getBridgeClassVar } from "../utilities/bridge-classname.js";
 import {
   collectInlineStylePropNames,
+  SX_PROP_TYPE_DECL,
   type ExpressionKind,
   type WrapperPropDefaults,
 } from "./types.js";
@@ -89,7 +90,7 @@ export function emitIntrinsicPolymorphicWrappers(ctx: EmitIntrinsicContext): voi
           asParts.push("as?: C");
         }
         if (allowSxPropForType) {
-          asParts.push("sx?: stylex.StyleXStyles | stylex.StyleXStyles[]");
+          asParts.push(SX_PROP_TYPE_DECL);
         }
         const withAs =
           asParts.length > 0

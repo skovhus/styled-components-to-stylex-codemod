@@ -8,7 +8,7 @@ import type { StyledDecl } from "./transform-types.js";
 import { emitComponentWrappers } from "./emit-wrappers/emit-component.js";
 import { emitIntrinsicWrappers } from "./emit-wrappers/emit-intrinsic.js";
 import { insertEmittedWrappers } from "./emit-wrappers/insertion.js";
-import type { ExportInfo } from "./emit-wrappers/types.js";
+import { SX_PROP_TYPE_DECL, type ExportInfo } from "./emit-wrappers/types.js";
 import { WrapperEmitter } from "./emit-wrappers/wrapper-emitter.js";
 
 export function emitWrappers(args: {
@@ -103,13 +103,8 @@ export function emitWrappers(args: {
       if (explicitProps.has("sx")) {
         continue;
       }
-      emitter.injectPropsIntoInterfaceBody(typeName, [
-        "sx?: stylex.StyleXStyles | stylex.StyleXStyles[]",
-      ]);
-      emitter.extendExistingTypeAlias(
-        typeName,
-        "{ sx?: stylex.StyleXStyles | stylex.StyleXStyles[] }",
-      );
+      emitter.injectPropsIntoInterfaceBody(typeName, [SX_PROP_TYPE_DECL]);
+      emitter.extendExistingTypeAlias(typeName, `{ ${SX_PROP_TYPE_DECL} }`);
     }
   }
 
