@@ -459,7 +459,10 @@ export function finalizeDeclProcessing(ctx: DeclProcessingState): void {
       const filteredOrder: Record<string, number> = {};
       for (const key of Object.keys(remainingStyleKeys)) {
         if (key in variantSourceOrder) {
-          filteredOrder[key] = variantSourceOrder[key]!;
+          const order = variantSourceOrder[key];
+          if (order !== undefined) {
+            filteredOrder[key] = order;
+          }
         }
       }
       if (Object.keys(filteredOrder).length > 0) {

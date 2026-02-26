@@ -771,7 +771,9 @@ export function tryResolveConditionalCssBlock(
   // Resolve test to a prop name: props.$x → $x, or bare Identifier → prop name via bindings
   const testProp = paramName
     ? extractSinglePropFromTest(left, paramName)
-    : resolveIdentifierToPropFromTest(left, bindings);
+    : bindings?.kind === "destructured"
+      ? resolveIdentifierToPropName(left, bindings)
+      : null;
   if (!testProp) {
     return null;
   }
@@ -1253,20 +1255,6 @@ function extractSinglePropFromTest(test: unknown, paramName: string): string | n
     return null;
   }
   return testPath[0];
-}
-
-/**
- * Resolve a bare Identifier test to a prop name using destructured param bindings.
- * For `({ wrap }) => wrap && "flex-wrap: wrap;"`, resolves `wrap` to the prop name "wrap".
- */
-function resolveIdentifierToPropFromTest(
-  test: unknown,
-  bindings: ArrowFnParamBindings | null,
-): string | null {
-  if (!bindings || bindings.kind !== "destructured") {
-    return null;
-  }
-  return resolveIdentifierToPropName(test, bindings);
 }
 
 /**

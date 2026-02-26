@@ -510,35 +510,36 @@ export function buildStyleFnExpressions(
       destructureProps.push(p.jsxProp);
     }
 
+    /** Push a style expression to orderedEntries (if source order available) or styleArgs. */
+    const pushExpr = (expr: ExpressionKind): void => {
+      if (args.orderedEntries && p.sourceOrder !== undefined) {
+        args.orderedEntries.push({ order: p.sourceOrder, expr });
+      } else {
+        styleArgs.push(expr);
+      }
+    };
+
     // Handle conditional style based on conditionWhen
     if (p.conditionWhen) {
       const { cond, isBoolean } = collectConditionProps(j, {
         when: p.conditionWhen,
         destructureProps,
       });
-      const expr = makeConditionalStyleExpr(j, { cond, expr: call, isBoolean });
-      if (args.orderedEntries && p.sourceOrder !== undefined) {
-        args.orderedEntries.push({ order: p.sourceOrder, expr });
-      } else {
-        styleArgs.push(expr);
-      }
+      pushExpr(makeConditionalStyleExpr(j, { cond, expr: call, isBoolean }));
       continue;
     }
 
     const isRequired =
       p.jsxProp === "__props" || emitter.isPropRequiredInPropsTypeLiteral(d.propsType, p.jsxProp);
-    const expr = buildStyleFnConditionExpr({
-      j,
-      condition: p.condition,
-      propExpr,
-      call,
-      isRequired,
-    });
-    if (args.orderedEntries && p.sourceOrder !== undefined) {
-      args.orderedEntries.push({ order: p.sourceOrder, expr });
-    } else {
-      styleArgs.push(expr);
-    }
+    pushExpr(
+      buildStyleFnConditionExpr({
+        j,
+        condition: p.condition,
+        propExpr,
+        call,
+        isRequired,
+      }),
+    );
   }
 }
 
