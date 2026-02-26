@@ -601,8 +601,12 @@ export function tryHandleInterpolatedBorder(
           extraStyleObjects.set(extraKey, bucket);
 
           decl.extraStylexPropsArgs ??= [];
+          // When variant style keys already exist (from earlier conditional declarations),
+          // this unconditional style must come after variants to preserve CSS cascade order.
+          const afterVariants = Object.keys(variantStyleKeys).length > 0;
           decl.extraStylexPropsArgs.push({
             expr: j.memberExpression(j.identifier("styles"), j.identifier(extraKey)),
+            ...(afterVariants ? { afterVariants } : {}),
           });
           // `extraStylexPropsArgs` are only emitted for wrapper components.
           // If this styled component would otherwise be eligible for inlining, we'd drop the extra

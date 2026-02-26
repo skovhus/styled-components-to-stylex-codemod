@@ -323,7 +323,14 @@ export type StyledDecl = {
    * These are emitted as extra args (optionally guarded by `when`) rather than being placed
    * inside `stylex.create(...)`.
    */
-  extraStylexPropsArgs?: Array<{ when?: string; expr: ExpressionKind; afterBase?: boolean }>;
+  extraStylexPropsArgs?: Array<{
+    when?: string;
+    expr: ExpressionKind;
+    afterBase?: boolean;
+    /** When true, this entry should be placed after variant conditional styles to preserve CSS cascade order. */
+    afterVariants?: boolean;
+  }>;
+
   /**
    * Tracks the interleaved order of extra mixins. Each entry indicates which array
    * to take the next item from: 'styleKey' for extraStyleKeys, 'propsArg' for extraStylexPropsArgs.

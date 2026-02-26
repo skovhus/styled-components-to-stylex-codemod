@@ -8,10 +8,11 @@ type ButtonProps = Omit<React.ComponentProps<"button">, "className" | "style"> &
 
 // Using shouldForwardProp to filter props (v5 pattern)
 function Button(props: ButtonProps) {
-  const { children, color, size } = props;
+  const { children, color, size, ...rest } = props;
 
   return (
     <button
+      {...rest}
       {...stylex.props(
         styles.button,
         size === "large" && styles.buttonSizeLarge,
@@ -38,17 +39,18 @@ function Link(props: LinkProps) {
   );
 }
 
-type BoxProps = React.PropsWithChildren<{
+type BoxProps = Omit<React.ComponentProps<"div">, "className" | "style"> & {
   $background?: string;
   $padding?: string;
-}>;
+};
 
 // Custom prop filtering logic (transient props pattern)
 function Box(props: BoxProps) {
-  const { children, $background, $padding } = props;
+  const { children, $background, $padding, ...rest } = props;
 
   return (
     <div
+      {...rest}
       {...stylex.props(
         styles.box,
         $background != null && styles.boxBackgroundColor($background),
@@ -68,10 +70,11 @@ type CardProps = Omit<React.ComponentProps<"div">, "className" | "style"> & {
 
 // Filter multiple custom props
 function Card(props: CardProps) {
-  const { children, variant, elevation, rounded } = props;
+  const { children, variant, elevation, rounded, ...rest } = props;
 
   return (
     <div
+      {...rest}
       {...stylex.props(
         styles.card,
         rounded ? styles.cardRounded : undefined,
