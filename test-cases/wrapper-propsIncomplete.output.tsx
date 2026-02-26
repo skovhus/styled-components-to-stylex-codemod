@@ -12,9 +12,13 @@ import type { Colors } from "./lib/colors";
 interface TextColorProps {
   /** Custom color prop */
   color: string;
+  sx?: stylex.StyleXStyles | stylex.StyleXStyles[];
 }
 
-export function TextColor(props: React.ComponentProps<"span"> & TextColorProps) {
+export function TextColor(
+  props: React.ComponentProps<"span"> &
+    TextColorProps & { sx?: stylex.StyleXStyles | stylex.StyleXStyles[] },
+) {
   const { className, children, style, sx, color, ...rest } = props;
 
   return (
@@ -66,6 +70,7 @@ export function App() {
 interface ThemeTextProps extends React.ComponentProps<"span"> {
   /** Theme color name */
   themeColor: Colors;
+  sx?: stylex.StyleXStyles | stylex.StyleXStyles[];
 }
 
 /** A text span that gets color from theme */

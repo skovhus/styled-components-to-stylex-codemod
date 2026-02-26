@@ -24,6 +24,7 @@ function Text<C extends React.ElementType = "span">(props: TextProps & { as?: C 
 }
 
 type LabelProps = React.ComponentPropsWithRef<typeof Text> & {
+  sx?: stylex.StyleXStyles | stylex.StyleXStyles[];
   htmlFor?: string;
   ref?: React.Ref<HTMLLabelElement>;
 };

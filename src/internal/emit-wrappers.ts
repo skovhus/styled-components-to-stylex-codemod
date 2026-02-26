@@ -86,6 +86,33 @@ export function emitWrappers(args: {
     }
   }
 
+  // Inject sx prop into existing type definitions for components with external styles.
+  // This handles cases where the type already exists in the file and couldn't be re-emitted.
+  if (emitter.emitTypes) {
+    for (const d of wrapperDecls) {
+      if (!d.supportsExternalStyles) {
+        continue;
+      }
+      const typeName = emitter.propsTypeNameFor(d.localName);
+      if (!emitter.typeExistsInFile(typeName)) {
+        continue;
+      }
+      const explicitProps = emitter.getExplicitPropNames(
+        emitter.j.tsTypeReference(emitter.j.identifier(typeName)) as any,
+      );
+      if (explicitProps.has("sx")) {
+        continue;
+      }
+      emitter.injectPropsIntoInterfaceBody(typeName, [
+        "sx?: stylex.StyleXStyles | stylex.StyleXStyles[]",
+      ]);
+      emitter.extendExistingTypeAlias(
+        typeName,
+        "{ sx?: stylex.StyleXStyles | stylex.StyleXStyles[] }",
+      );
+    }
+  }
+
   insertEmittedWrappers({
     emitter,
     emitted,

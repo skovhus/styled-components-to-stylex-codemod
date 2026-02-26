@@ -286,14 +286,20 @@ export function emitComponentWrappers(emitter: WrapperEmitter): {
               refElementType,
             );
           }
-          // Inject className/style into explicit props when external styles are explicitly enabled
+          // Inject className/style/sx into explicit props when external styles are explicitly enabled
           // via adapter (d.supportsExternalStyles) and the wrapped component doesn't already have them
-          if (explicitWithExtras && d.supportsExternalStyles && !skipStyleProps) {
-            explicitWithExtras = injectStylePropsIntoTypeLiteralString(explicitWithExtras, {
-              className: allowClassNameProp && !wrappedHasClassName,
-              style: allowStyleProp && !wrappedHasStyle,
+          if (explicitWithExtras && d.supportsExternalStyles) {
+            const injectOptions = {
+              className: !skipStyleProps && allowClassNameProp && !wrappedHasClassName,
+              style: !skipStyleProps && allowStyleProp && !wrappedHasStyle,
               sx: allowSxProp,
-            });
+            };
+            if (injectOptions.className || injectOptions.style || injectOptions.sx) {
+              explicitWithExtras = injectStylePropsIntoTypeLiteralString(
+                explicitWithExtras,
+                injectOptions,
+              );
+            }
           }
           const explicitWithRef =
             explicitWithExtras ??

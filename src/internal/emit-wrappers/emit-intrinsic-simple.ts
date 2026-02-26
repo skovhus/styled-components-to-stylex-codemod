@@ -126,6 +126,7 @@ export function emitSimpleWithConfigWrappers(ctx: EmitIntrinsicContext): void {
         allowAsProp,
         allowClassNameProp,
         allowStyleProp,
+        allowSxProp: emitter.shouldAllowSxProp(d),
       });
     }
     const { beforeBase: extraStyleArgs, afterBase: extraStyleArgsAfterBase } =
@@ -602,13 +603,18 @@ export function emitSimpleExportedIntrinsicWrappers(ctx: EmitIntrinsicContext): 
         // Wrap the explicit type with PropsWithChildren since the wrapper may need children
         return emitter.withChildren(explicit);
       })();
-      const typeTextWithForwardedAs = withForwardedAsType(typeText, includesForwardedAs);
+      const allowSxPropForType = emitter.shouldAllowSxProp(d);
+      const typeTextWithSx = allowSxPropForType
+        ? emitter.joinIntersection(typeText, "{ sx?: stylex.StyleXStyles | stylex.StyleXStyles[] }")
+        : typeText;
+      const typeTextWithForwardedAs = withForwardedAsType(typeTextWithSx, includesForwardedAs);
 
       // Emit the public props type.
       // For exported components that support `as`, use the full polymorphic pattern.
       // For non-exported components, use simple `as?: React.ElementType` without generics.
       // Detect if there are no custom user-defined props (just intrinsic element props)
-      const hasNoCustomProps = !explicit && customStyleDrivingPropsTypeText === "{}";
+      const hasNoCustomProps =
+        !explicit && customStyleDrivingPropsTypeText === "{}" && !allowSxPropForType;
       let typeAliasEmitted: boolean;
       if (usePolymorphicPattern) {
         typeAliasEmitted = emitPropsType({
@@ -618,12 +624,28 @@ export function emitSimpleExportedIntrinsicWrappers(ctx: EmitIntrinsicContext): 
           allowAsProp,
           allowClassNameProp,
           allowStyleProp,
+          allowSxProp: emitter.shouldAllowSxProp(d),
           hasNoCustomProps,
         });
       } else if (!hasNoCustomProps) {
         typeAliasEmitted = emitSimplePropsType(d.localName, typeTextWithForwardedAs, allowAsProp);
       } else {
         typeAliasEmitted = false;
+      }
+
+      // When the named props type already exists and sx prop is needed,
+      // inject sx into the existing type definition.
+      if (!typeAliasEmitted && allowSxPropForType) {
+        const existingTypeName = emitter.propsTypeNameFor(d.localName);
+        if (emitter.typeExistsInFile(existingTypeName)) {
+          emitter.injectPropsIntoInterfaceBody(existingTypeName, [
+            "sx?: stylex.StyleXStyles | stylex.StyleXStyles[]",
+          ]);
+          emitter.extendExistingTypeAlias(
+            existingTypeName,
+            "{ sx?: stylex.StyleXStyles | stylex.StyleXStyles[] }",
+          );
+        }
       }
 
       // If we couldn't emit the named `${localName}Props` type (because it already exists in-file

@@ -32,6 +32,7 @@ export type EmitIntrinsicHelpers = {
     allowAsProp: boolean;
     allowClassNameProp: boolean;
     allowStyleProp: boolean;
+    allowSxProp?: boolean;
     /** When true, there are no custom user-defined props. Skip generating a named type for polymorphic wrappers. */
     hasNoCustomProps?: boolean;
   }) => boolean;
@@ -392,6 +393,7 @@ export function createEmitIntrinsicHelpers(env: EmitIntrinsicHelpersEnv): EmitIn
     allowAsProp: boolean;
     allowClassNameProp: boolean;
     allowStyleProp: boolean;
+    allowSxProp?: boolean;
     /** When true, there are no custom user-defined props. Skip generating a named type for polymorphic wrappers. */
     hasNoCustomProps?: boolean;
   }): boolean => {
@@ -402,6 +404,7 @@ export function createEmitIntrinsicHelpers(env: EmitIntrinsicHelpersEnv): EmitIn
       allowAsProp,
       allowClassNameProp,
       allowStyleProp,
+      allowSxProp,
       hasNoCustomProps,
     } = args;
     if (!allowAsProp) {
@@ -421,6 +424,7 @@ export function createEmitIntrinsicHelpers(env: EmitIntrinsicHelpersEnv): EmitIn
       tagName,
       allowClassNameProp,
       allowStyleProp,
+      allowSxProp,
       extra: typeText,
     });
     // Try to emit a named props type. If it already exists (user-defined), the inline

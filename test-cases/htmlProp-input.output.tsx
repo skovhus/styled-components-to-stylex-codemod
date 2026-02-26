@@ -1,6 +1,10 @@
-import React from "react";
+import * as React from "react";
 import * as stylex from "@stylexjs/stylex";
 import { mergedSx } from "./lib/mergedSx";
+
+type RangeInputProps = React.ComponentProps<"input"> & {
+  sx?: stylex.StyleXStyles | stylex.StyleXStyles[];
+};
 
 // Pattern: styled("input") needs HTML input attributes (max, min, type, etc.)
 // The generated type must extend React.InputHTMLAttributes<HTMLInputElement>
@@ -9,7 +13,7 @@ import { mergedSx } from "./lib/mergedSx";
  * A range input component.
  * Should accept all HTML input attributes like max, min, type, value, onChange, etc.
  */
-export function RangeInput(props: React.ComponentProps<"input">) {
+export function RangeInput(props: RangeInputProps) {
   const { className, style, sx, ...rest } = props;
 
   return <input {...rest} {...mergedSx([styles.rangeInput, sx], className, style)} />;
