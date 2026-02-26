@@ -133,7 +133,6 @@ export function Flex(props: FlexProps) {
         ],
         undefined,
         {
-          ...style,
           flexDirection: props.column
             ? props.reverse
               ? "column-reverse"
@@ -141,6 +140,7 @@ export function Flex(props: FlexProps) {
             : props.reverse
               ? "row-reverse"
               : "row",
+          ...style,
         },
       )}
     >
