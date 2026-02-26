@@ -127,11 +127,6 @@ export const fixtureAdapter = defineAdapter({
         "--spacing-lg": "spacingLg",
         "--border-radius": "borderRadius",
       };
-      const textVarsMap: Record<string, string> = {
-        "--text-color": "textColor",
-        "--font-size": "fontSize",
-        "--line-height": "lineHeight",
-      };
       const fontWeightVarsMap: Record<string, string> = {
         "--font-weight-medium": "fontWeightVars.medium",
       };
@@ -143,19 +138,7 @@ export const fixtureAdapter = defineAdapter({
           imports: [
             {
               from: { kind: "specifier" as const, value: "./css-variables.stylex" },
-              names: [{ imported: "vars" }, { imported: "textVars" }],
-            },
-          ],
-        };
-      }
-      const t = textVarsMap[name];
-      if (t) {
-        return {
-          expr: `textVars.${t}`,
-          imports: [
-            {
-              from: { kind: "specifier" as const, value: "./css-variables.stylex" },
-              names: [{ imported: "textVars" }],
+              names: [{ imported: "vars" }],
             },
           ],
         };

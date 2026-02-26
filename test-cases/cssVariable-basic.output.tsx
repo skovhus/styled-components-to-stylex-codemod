@@ -1,6 +1,6 @@
 import "./cssVariable-basic.css";
 import * as stylex from "@stylexjs/stylex";
-import { vars, textVars } from "./css-variables.stylex";
+import { vars } from "./css-variables.stylex";
 
 export const App = () => (
   <div {...stylex.props(styles.card)}>
@@ -33,8 +33,8 @@ const styles = stylex.create({
   },
   // Using CSS variables with fallbacks
   text: {
-    color: textVars.textColor,
-    fontSize: textVars.fontSize,
-    lineHeight: textVars.lineHeight,
+    color: "var(--text-color, #333)",
+    fontSize: "var(--font-size, 16px)",
+    lineHeight: "var(--line-height, 1.5)",
   },
 });
