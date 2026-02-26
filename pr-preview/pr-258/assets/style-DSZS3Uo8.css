@@ -70,16 +70,6 @@ body{font-family:-apple-system,BlinkMacSystemFont,Segoe UI,Roboto,Helvetica Neue
   inherits: false
 }
 
-@property --x-fontSize {
-  syntax: "*";
-  inherits: false
-}
-
-@property --x-lineHeight {
-  syntax: "*";
-  inherits: false
-}
-
 @property --x-19zvkyr {
   syntax: "*";
   inherits: false
@@ -101,6 +91,16 @@ body{font-family:-apple-system,BlinkMacSystemFont,Segoe UI,Roboto,Helvetica Neue
 }
 
 @property --x-maxHeight {
+  syntax: "*";
+  inherits: false
+}
+
+@property --x-fontSize {
+  syntax: "*";
+  inherits: false
+}
+
+@property --x-lineHeight {
   syntax: "*";
   inherits: false
 }
@@ -171,6 +171,11 @@ body{font-family:-apple-system,BlinkMacSystemFont,Segoe UI,Roboto,Helvetica Neue
 }
 
 @property --x-64unvl {
+  syntax: "*";
+  inherits: false
+}
+
+@property --x-animationDuration {
   syntax: "*";
   inherits: false
 }
@@ -1243,6 +1248,10 @@ body{font-family:-apple-system,BlinkMacSystemFont,Segoe UI,Roboto,Helvetica Neue
   animation-delay: .2s;
 }
 
+.xfjzax6:not(#\#):not(#\#):not(#\#) {
+  animation-delay: .5s;
+}
+
 .x8lr22k:not(#\#):not(#\#):not(#\#) {
   animation-delay: 0s, .1s;
 }
@@ -1265,6 +1274,10 @@ body{font-family:-apple-system,BlinkMacSystemFont,Segoe UI,Roboto,Helvetica Neue
 
 .xsi7d5w:not(#\#):not(#\#):not(#\#) {
   animation-direction: normal, reverse;
+}
+
+.x2hnoke:not(#\#):not(#\#):not(#\#) {
+  animation-duration: .2s, 1s;
 }
 
 .x5hsz1j:not(#\#):not(#\#):not(#\#) {
@@ -1297,6 +1310,10 @@ body{font-family:-apple-system,BlinkMacSystemFont,Segoe UI,Roboto,Helvetica Neue
 
 .x1c74tu6:not(#\#):not(#\#):not(#\#) {
   animation-duration: 2s;
+}
+
+.xg6skn9:not(#\#):not(#\#):not(#\#) {
+  animation-duration: var(--x-animationDuration);
 }
 
 .xovne76:not(#\#):not(#\#):not(#\#) {
@@ -1397,6 +1414,10 @@ body{font-family:-apple-system,BlinkMacSystemFont,Segoe UI,Roboto,Helvetica Neue
 
 .xa3vuyk:not(#\#):not(#\#):not(#\#) {
   animation-timing-function: ease-out;
+}
+
+.x13n8bbw:not(#\#):not(#\#):not(#\#) {
+  animation-timing-function: ease, linear;
 }
 
 .x1debuo4:not(#\#):not(#\#):not(#\#) {
