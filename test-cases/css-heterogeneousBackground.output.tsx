@@ -77,3 +77,5 @@ const $colorVariants = stylex.create({
     backgroundColor: "gray",
   },
 });
+
+type $colorVariant = keyof typeof $colorVariants;

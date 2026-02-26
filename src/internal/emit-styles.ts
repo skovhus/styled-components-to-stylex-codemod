@@ -6,7 +6,7 @@ import type { StyledDecl, VariantDimension } from "./transform-types.js";
 import path from "node:path";
 import type { ImportSource, ImportSpec } from "../adapter.js";
 import { isAstNode } from "./utilities/jscodeshift-utils.js";
-import { lowerFirst } from "./utilities/string-utils.js";
+import { capitalize, lowerFirst } from "./utilities/string-utils.js";
 import { literalToAst, objectToAst } from "./transform/helpers.js";
 import type { TransformContext } from "./transform-context.js";
 import { splitDirectionalProperty } from "./stylex-shorthands.js";
@@ -636,7 +636,9 @@ export function emitStylesAndImports(ctx: TransformContext): { emptyStyleKeys: S
   }
 
   // Third pass: emit declarations (dedupe by final name and content)
+  const isTypeScript = filePath.endsWith(".ts") || filePath.endsWith(".tsx");
   const emittedDimensions = new Map<string, string>(); // name → contentKey
+  const emittedTypeNames = new Set<string>();
   for (const decl of styledDecls) {
     if (!decl.variantDimensions) {
       continue;
@@ -654,6 +656,22 @@ export function emitStylesAndImports(ctx: TransformContext): { emptyStyleKeys: S
 
       const variantDecl = emitVariantDimensionDecl(j, dimension);
       programBody.push(variantDecl as any);
+
+      // Emit `type FooVariant = keyof typeof fooVariants` for TypeScript files
+      if (isTypeScript) {
+        const typeName = deriveVariantTypeName(dimension);
+        if (
+          typeName &&
+          !emittedTypeNames.has(typeName) &&
+          root
+            .find(j.TSTypeAliasDeclaration, { id: { type: "Identifier", name: typeName } } as any)
+            .size() === 0
+        ) {
+          emittedTypeNames.add(typeName);
+          const typeAlias = emitVariantTypeAlias(j, typeName, dimension.variantObjectName);
+          programBody.push(typeAlias as any);
+        }
+      }
     }
   }
 
@@ -689,6 +707,54 @@ function emitVariantDimensionDecl(j: any, dimension: VariantDimension): any {
   ]);
 
   return variantDecl;
+}
+
+/**
+ * Derive a type alias name from a variant dimension.
+ * Returns `null` for disabled namespace dimensions (the enabled counterpart owns the type).
+ *
+ * Examples:
+ *  - `alignVariants`                → `AlignVariant`
+ *  - `buttonColorEnabledVariants`   → `ButtonColorVariant`
+ *  - `enabledVariants` (prop=variant) → `Variant`
+ *  - disabled namespace             → `null`
+ */
+function deriveVariantTypeName(dim: VariantDimension): string | null {
+  if (dim.isDisabledNamespace) {
+    return null;
+  }
+
+  let base = dim.variantObjectName;
+
+  // Strip trailing "Variants" / "variants"
+  if (base.endsWith("Variants")) {
+    base = base.slice(0, -"Variants".length);
+  } else if (base.endsWith("variants")) {
+    base = base.slice(0, -"variants".length);
+  }
+
+  // For namespace pairs, strip trailing "Enabled" / "enabled"
+  if (dim.namespaceBooleanProp) {
+    if (base.endsWith("Enabled")) {
+      base = base.slice(0, -"Enabled".length);
+    } else if (base.endsWith("enabled")) {
+      base = base.slice(0, -"enabled".length);
+    }
+  }
+
+  return `${capitalize(base)}Variant`;
+}
+
+/**
+ * Build AST for: `type AlignVariant = keyof typeof alignVariants;`
+ */
+function emitVariantTypeAlias(j: any, typeName: string, variantObjectName: string): any {
+  const keyofTypeofExpr = {
+    type: "TSTypeOperator",
+    operator: "keyof",
+    typeAnnotation: j.tsTypeQuery(j.identifier(variantObjectName)),
+  };
+  return j.tsTypeAliasDeclaration(j.identifier(typeName), keyofTypeofExpr as any);
 }
 
 // ---------------------------------------------------------------------------

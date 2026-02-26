@@ -79,3 +79,5 @@ const variants = stylex.create({
     fontSize: "14px",
   },
 });
+
+type Variant = keyof typeof variants;

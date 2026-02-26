@@ -51,3 +51,5 @@ const $stateVariants = stylex.create({
     transform: "scaleY(1)",
   },
 });
+
+type $stateVariant = keyof typeof $stateVariants;

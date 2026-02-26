@@ -394,6 +394,8 @@ const alignVariants = stylex.create({
   },
 });
 
+type AlignVariant = keyof typeof alignVariants;
+
 const justifyVariants = stylex.create({
   center: {
     justifyContent: "center",
@@ -417,3 +419,5 @@ const justifyVariants = stylex.create({
     justifyContent: "flex-end",
   },
 });
+
+type JustifyVariant = keyof typeof justifyVariants;

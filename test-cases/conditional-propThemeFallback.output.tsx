@@ -75,3 +75,5 @@ const sizeVariants = stylex.create({
     height: "12px",
   },
 });
+
+type SizeVariant = keyof typeof sizeVariants;

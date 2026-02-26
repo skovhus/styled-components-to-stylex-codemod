@@ -105,6 +105,8 @@ const buttonColorEnabledVariants = stylex.create({
   },
 });
 
+type ButtonColorVariant = keyof typeof buttonColorEnabledVariants;
+
 const buttonColorDisabledVariants = stylex.create({
   primary: {
     backgroundColor: {
@@ -137,6 +139,8 @@ const sizeVariants = stylex.create({
   },
 });
 
+type SizeVariant = keyof typeof sizeVariants;
+
 const linkColorEnabledVariants = stylex.create({
   primary: {
     color: {
@@ -151,6 +155,8 @@ const linkColorEnabledVariants = stylex.create({
     },
   },
 });
+
+type LinkColorVariant = keyof typeof linkColorEnabledVariants;
 
 const linkColorDisabledVariants = stylex.create({
   primary: {

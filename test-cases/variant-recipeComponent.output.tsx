@@ -72,6 +72,8 @@ const colorEnabledVariants = stylex.create({
   },
 });
 
+type ColorVariant = keyof typeof colorEnabledVariants;
+
 const colorDisabledVariants = stylex.create({
   primary: {
     backgroundColor: {
