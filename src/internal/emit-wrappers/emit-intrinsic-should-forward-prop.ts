@@ -594,6 +594,9 @@ export function emitShouldForwardPropWrappers(ctx: EmitIntrinsicContext): void {
     // When allowAsProp is true, include children support even for void tags
     // because the user might use `as="textarea"` which requires children
     const includeChildrenOuter = allowAsProp || !isVoidTag;
+    const allowSxProp = emitter.shouldAllowSxProp(d);
+    const sxId = allowSxProp ? j.identifier("sx") : undefined;
+
     const patternProps = emitter.buildDestructurePatternProps({
       baseProps: [
         ...(allowAsProp ? [asDestructureProp(tagName)] : []),
@@ -601,6 +604,7 @@ export function emitShouldForwardPropWrappers(ctx: EmitIntrinsicContext): void {
         ...(allowClassNameProp ? [ctx.patternProp("className", classNameId)] : []),
         ...(includeChildrenOuter ? [ctx.patternProp("children", childrenId)] : []),
         ...(allowStyleProp ? [ctx.patternProp("style", styleId)] : []),
+        ...(allowSxProp && sxId ? [ctx.patternProp("sx", sxId)] : []),
       ],
       destructureProps: destructureParts,
       propDefaults,
@@ -632,6 +636,7 @@ export function emitShouldForwardPropWrappers(ctx: EmitIntrinsicContext): void {
       allowClassNameProp,
       allowStyleProp,
       inlineStyleProps: (d.inlineStyleProps ?? []) as InlineStyleProp[],
+      sxPropId: sxId,
     });
 
     // Build attrs: {...rest} then {...mergedStylexProps(...)} so stylex styles override

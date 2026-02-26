@@ -33,10 +33,10 @@ type LabelProps = React.ComponentPropsWithRef<typeof Text> & {
  * The wrapper should use label-specific props (htmlFor)
  */
 export function Label(props: LabelProps) {
-  const { className, children, style, ...rest } = props;
+  const { className, children, style, sx, ...rest } = props;
 
   return (
-    <Text as="label" {...rest} {...mergedSx(styles.label, className, style)}>
+    <Text as="label" {...rest} {...mergedSx([styles.label, sx], className, style)}>
       {children}
     </Text>
   );

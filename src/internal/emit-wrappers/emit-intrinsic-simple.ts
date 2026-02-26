@@ -280,12 +280,16 @@ export function emitSimpleWithConfigWrappers(ctx: EmitIntrinsicContext): void {
       continue;
     }
 
+    const allowSxProp = emitter.shouldAllowSxProp(d);
+    const sxId = allowSxProp ? j.identifier("sx") : undefined;
+
     const patternProps = emitter.buildDestructurePatternProps({
       baseProps: [
         ...(allowAsProp ? [asDestructureProp(tagName)] : []),
         emitter.patternProp("className", classNameId),
         ...(isVoidTag ? [] : [emitter.patternProp("children", childrenId)]),
         emitter.patternProp("style", styleId),
+        ...(allowSxProp && sxId ? [emitter.patternProp("sx", sxId)] : []),
       ],
       destructureProps: [...pseudoGuardProps],
       includeRest: true,
@@ -310,6 +314,7 @@ export function emitSimpleWithConfigWrappers(ctx: EmitIntrinsicContext): void {
       allowStyleProp,
       inlineStyleProps: [],
       staticClassNameExpr,
+      sxPropId: sxId,
     });
 
     const openingAttrs: JsxAttr[] = [
@@ -633,6 +638,7 @@ export function emitSimpleExportedIntrinsicWrappers(ctx: EmitIntrinsicContext): 
               tagName,
               allowClassNameProp,
               allowStyleProp,
+              allowSxProp: emitter.shouldAllowSxProp(d),
               includeForwardedAs: includesForwardedAs,
             });
             inlineTypeText = poly.typeExprText;
@@ -643,6 +649,7 @@ export function emitSimpleExportedIntrinsicWrappers(ctx: EmitIntrinsicContext): 
               tagName,
               allowClassNameProp,
               allowStyleProp,
+              allowSxProp: emitter.shouldAllowSxProp(d),
               includeForwardedAs: includesForwardedAs,
               extra: explicit,
             });
@@ -896,6 +903,8 @@ export function emitSimpleExportedIntrinsicWrappers(ctx: EmitIntrinsicContext): 
 
     if (allowAsProp || allowClassNameProp || allowStyleProp || needsUseTheme) {
       const isVoidTag = VOID_TAGS.has(tagName);
+      const allowSxProp = emitter.shouldAllowSxProp(d);
+      const sxId = allowSxProp ? j.identifier("sx") : undefined;
       // When allowAsProp is true, include children support even for void tags
       // because the user might use `as="textarea"` which requires children
       const includeChildren = allowAsProp || !isVoidTag;
@@ -925,6 +934,7 @@ export function emitSimpleExportedIntrinsicWrappers(ctx: EmitIntrinsicContext): 
           ...(allowClassNameProp ? [ctx.patternProp("className", classNameId)] : []),
           ...(includeChildren ? [ctx.patternProp("children", childrenId)] : []),
           ...(allowStyleProp ? [ctx.patternProp("style", styleId)] : []),
+          ...(allowSxProp && sxId ? [ctx.patternProp("sx", sxId)] : []),
         ],
         destructureProps,
         propDefaults,
@@ -955,6 +965,7 @@ export function emitSimpleExportedIntrinsicWrappers(ctx: EmitIntrinsicContext): 
         allowStyleProp,
         inlineStyleProps: (d.inlineStyleProps ?? []) as InlineStyleProp[],
         staticClassNameExpr,
+        sxPropId: sxId,
       });
 
       const openingAttrs: JsxAttr[] = [

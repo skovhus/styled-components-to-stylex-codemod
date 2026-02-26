@@ -16,7 +16,7 @@ function SizeBox<C extends React.ElementType = "div">(
     $size: number;
   } & React.ComponentPropsWithRef<C> & { as?: C },
 ) {
-  const { as: Component = "div", className, children, style, $size, ...rest } = props;
+  const { as: Component = "div", className, children, style, sx, $size, ...rest } = props;
 
   return (
     <Component
@@ -27,6 +27,7 @@ function SizeBox<C extends React.ElementType = "div">(
           styles.sizeBoxWidth($size),
           styles.sizeBoxMaxWidth($size),
           styles.sizeBoxMaxHeight($size),
+          sx,
         ],
         className,
         style,

@@ -256,6 +256,10 @@ export class WrapperEmitter {
     return used.has("*") || used.has("style");
   }
 
+  shouldAllowSxProp(d: StyledDecl): boolean {
+    return !!d.supportsExternalStyles;
+  }
+
   shouldAllowAsPropForIntrinsic(d: StyledDecl, tagName: string): boolean {
     // Allow `as` prop when explicitly requested via adapter, even for void tags
     if (d.supportsAsProp) {
@@ -464,9 +468,16 @@ export class WrapperEmitter {
     if (interfaces.size() === 0) {
       return false;
     }
-    // Parse the base type into a TSExpressionWithTypeArguments node
-    const parsed = j(`interface X extends ${baseTypeText} {}`).get().node.program.body[0] as any;
-    const extendsClause = parsed?.extends?.[0];
+    // Parse the base type into a TSExpressionWithTypeArguments node.
+    // This may fail for inline object type literals (e.g., `{ sx?: ... }`)
+    // which are not valid in `extends` clauses — fall back to type alias extension.
+    let extendsClause: unknown;
+    try {
+      const parsed = j(`interface X extends ${baseTypeText} {}`).get().node.program.body[0] as any;
+      extendsClause = parsed?.extends?.[0];
+    } catch {
+      return false;
+    }
     if (!extendsClause) {
       return false;
     }
@@ -528,6 +539,37 @@ export class WrapperEmitter {
       }
     });
     return true;
+  }
+
+  /**
+   * Inject property signatures into an existing interface body.
+   * Each prop string should be like "sx?: stylex.StyleXStyles".
+   */
+  injectPropsIntoInterfaceBody(typeName: string, props: string[]): void {
+    const { root, j } = this;
+    if (!this.emitTypes || props.length === 0) {
+      return;
+    }
+    const interfaces = root.find(j.TSInterfaceDeclaration, {
+      id: { type: "Identifier", name: typeName },
+    } as any);
+    if (interfaces.size() === 0) {
+      return;
+    }
+    const membersSource = `interface _Tmp { ${props.join("; ")} }`;
+    let newMembers: unknown[];
+    try {
+      const parsed = j(membersSource).get().node.program.body[0] as any;
+      newMembers = parsed?.body?.body ?? [];
+    } catch {
+      return;
+    }
+    interfaces.forEach((path: any) => {
+      const body = path.node.body?.body;
+      if (Array.isArray(body)) {
+        body.push(...newMembers);
+      }
+    });
   }
 
   /**
@@ -764,6 +806,7 @@ export class WrapperEmitter {
     const { d, tagName, allowClassNameProp, allowStyleProp, skipProps } = args;
     const used = this.getUsedAttrs(d.localName);
     const needsBroadAttrs = used.has("*") || !!(d as any).usedAsValue;
+    const allowSxProp = this.shouldAllowSxProp(d);
 
     const lines: string[] = [];
     if (!needsBroadAttrs) {
@@ -772,6 +815,9 @@ export class WrapperEmitter {
       }
       if (allowStyleProp) {
         lines.push(`style?: React.CSSProperties`);
+      }
+      if (allowSxProp) {
+        lines.push(`sx?: stylex.StyleXStyles | stylex.StyleXStyles[]`);
       }
       const elementType = TAG_TO_HTML_ELEMENT[tagName] ?? "HTMLElement";
       lines.push(`ref?: React.Ref<${elementType}>`);
@@ -850,6 +896,7 @@ export class WrapperEmitter {
       forceClassNameOptional,
       forceStyleOptional,
     } = args;
+    const allowSxProp = this.shouldAllowSxProp(d);
     const lines: string[] = [];
     // When external styles are EXPLICITLY enabled via adapter (d.supportsExternalStyles) and
     // the wrapped component is NOT one of our generated wrappers, add className/style to the type.
@@ -869,6 +916,9 @@ export class WrapperEmitter {
     }
     if ((shouldAddStyleProps && allowStyleProp) || forceStyleOptional) {
       lines.push("style?: React.CSSProperties");
+    }
+    if (shouldAddStyleProps && allowSxProp) {
+      lines.push("sx?: stylex.StyleXStyles | stylex.StyleXStyles[]");
     }
     if (this.hasForwardedAsUsage(d.localName)) {
       lines.push("forwardedAs?: React.ElementType");
@@ -973,6 +1023,7 @@ export class WrapperEmitter {
     propDefaults?: WrapperPropDefaults;
     allowClassNameProp?: boolean;
     allowStyleProp?: boolean;
+    allowSxProp?: boolean;
     allowAsProp?: boolean;
     includeRest?: boolean;
     defaultAttrs?: Array<{ jsxProp: string; attrName: string; value: unknown }>;
@@ -995,6 +1046,7 @@ export class WrapperEmitter {
       propDefaults,
       allowClassNameProp = false,
       allowStyleProp = false,
+      allowSxProp = false,
       allowAsProp = false,
       includeRest = true,
       defaultAttrs = [],
@@ -1119,11 +1171,15 @@ export class WrapperEmitter {
     if (allowStyleProp) {
       patternProps.push(this.patternProp("style"));
     }
+    if (allowSxProp) {
+      patternProps.push(this.patternProp("sx"));
+    }
     for (const name of expandedDestructureProps) {
       if (
         name !== "children" &&
         name !== "style" &&
         name !== "className" &&
+        name !== "sx" &&
         name !== "forwardedAs"
       ) {
         const defaultVal = propDefaults?.get(name);
@@ -1169,6 +1225,7 @@ export class WrapperEmitter {
       return rest;
     })();
     const staticClassNameExpr = seb.buildStaticClassNameExpr(j, staticClassName, bridgeClassVar);
+    const sxId = allowSxProp ? j.identifier("sx") : undefined;
     const merging = emitStyleMerging({
       j,
       emitter: this,
@@ -1179,6 +1236,7 @@ export class WrapperEmitter {
       allowStyleProp,
       inlineStyleProps,
       staticClassNameExpr,
+      sxPropId: sxId,
     });
 
     const jsxAttrs: Array<JSXAttribute | JSXSpreadAttribute> = [];

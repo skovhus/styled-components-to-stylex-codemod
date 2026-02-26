@@ -60,6 +60,7 @@ export type EmitIntrinsicHelpers = {
     tagName: string;
     allowClassNameProp: boolean;
     allowStyleProp: boolean;
+    allowSxProp?: boolean;
     includeForwardedAs?: boolean;
     extra?: string | null;
   }) => { typeExprText: string; genericParams: string };
@@ -305,10 +306,12 @@ export function createEmitIntrinsicHelpers(env: EmitIntrinsicHelpersEnv): EmitIn
     tagName: string;
     allowClassNameProp: boolean;
     allowStyleProp: boolean;
+    allowSxProp?: boolean;
     includeForwardedAs?: boolean;
     extra?: string | null;
   }): { typeExprText: string; genericParams: string } => {
-    const { tagName, allowClassNameProp, allowStyleProp, includeForwardedAs, extra } = args;
+    const { tagName, allowClassNameProp, allowStyleProp, allowSxProp, includeForwardedAs, extra } =
+      args;
     const genericParams = `C extends React.ElementType = "${tagName}"`;
 
     // Simple polymorphic pattern:
@@ -327,15 +330,18 @@ export function createEmitIntrinsicHelpers(env: EmitIntrinsicHelpersEnv): EmitIn
         ? `Omit<React.ComponentPropsWithRef<C>, ${omitted.join(" | ")}>`
         : "React.ComponentPropsWithRef<C>";
     const forwardedAsPart = includeForwardedAs ? ` & ${FORWARDED_AS_TYPE}` : "";
+    const sxPart = allowSxProp ? "sx?: stylex.StyleXStyles | stylex.StyleXStyles[]" : "";
     if (extra) {
       // Omit as from extra since we're adding our own as?: C
       const extraWithoutAs = `Omit<${extra}, "as">`;
       // Combine: base props, then custom props (overriding), then polymorphic as
-      const typeExprText = `${base} & ${extraWithoutAs} & { as?: C }${forwardedAsPart}`;
+      const asParts = ["as?: C", ...(sxPart ? [sxPart] : [])].join("; ");
+      const typeExprText = `${base} & ${extraWithoutAs} & { ${asParts} }${forwardedAsPart}`;
       return { typeExprText, genericParams };
     }
     // Just element props with as?: C
-    const typeExprText = `${base} & { as?: C }${forwardedAsPart}`;
+    const asParts = ["as?: C", ...(sxPart ? [sxPart] : [])].join("; ");
+    const typeExprText = `${base} & { ${asParts} }${forwardedAsPart}`;
     return { typeExprText, genericParams };
   };
 

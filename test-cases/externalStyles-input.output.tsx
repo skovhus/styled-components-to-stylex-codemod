@@ -11,12 +11,15 @@ import { mergedSx } from "./lib/mergedSx";
  * 3. External styles (className, style) should be supported
  */
 export function StyledInput<C extends React.ElementType = "input">(
-  props: React.ComponentPropsWithRef<C> & { as?: C },
+  props: React.ComponentPropsWithRef<C> & {
+    as?: C;
+    sx?: stylex.StyleXStyles | stylex.StyleXStyles[];
+  },
 ) {
-  const { as: Component = "input", className, children, style, ...rest } = props;
+  const { as: Component = "input", className, children, style, sx, ...rest } = props;
 
   return (
-    <Component {...rest} {...mergedSx(styles.styledInput, className, style)}>
+    <Component {...rest} {...mergedSx([styles.styledInput, sx], className, style)}>
       {children}
     </Component>
   );

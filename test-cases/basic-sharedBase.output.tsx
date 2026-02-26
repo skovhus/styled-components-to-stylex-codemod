@@ -20,7 +20,7 @@ type PositionBaseProps<C extends React.ElementType = "div"> = React.ComponentPro
 function PositionBase<C extends React.ElementType = "div">(
   props: PositionProps & React.ComponentPropsWithRef<C> & { as?: C },
 ) {
-  const { as: Component = "div", className, children, style, top, right, bottom, left } = props;
+  const { as: Component = "div", className, children, style, sx, top, right, bottom, left } = props;
 
   return (
     <Component
@@ -30,6 +30,7 @@ function PositionBase<C extends React.ElementType = "div">(
           right ? styles.positionBaseRight(right) : undefined,
           bottom ? styles.positionBaseBottom(bottom) : undefined,
           left ? styles.positionBaseLeft(left) : undefined,
+          sx,
         ],
         className,
         style,

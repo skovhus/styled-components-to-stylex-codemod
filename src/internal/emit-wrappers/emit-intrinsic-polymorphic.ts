@@ -70,6 +70,8 @@ export function emitIntrinsicPolymorphicWrappers(ctx: EmitIntrinsicContext): voi
       // Detect if there are no custom user-defined props (just intrinsic element props)
       const hasNoCustomProps = !explicit;
 
+      const allowSxPropForType = emitter.shouldAllowSxProp(d);
+
       const typeText = (() => {
         const base = "React.ComponentPropsWithRef<C>";
         // Omit className/style only when we don't want to support them.
@@ -82,9 +84,17 @@ export function emitIntrinsicPolymorphicWrappers(ctx: EmitIntrinsicContext): voi
         }
         const baseMaybeOmitted =
           omitted.length > 0 ? `Omit<${base}, ${omitted.join(" | ")}>` : base;
-        const withAs = allowAsProp
-          ? emitter.joinIntersection(baseMaybeOmitted, "{ as?: C }")
-          : baseMaybeOmitted;
+        const asParts: string[] = [];
+        if (allowAsProp) {
+          asParts.push("as?: C");
+        }
+        if (allowSxPropForType) {
+          asParts.push("sx?: stylex.StyleXStyles | stylex.StyleXStyles[]");
+        }
+        const withAs =
+          asParts.length > 0
+            ? emitter.joinIntersection(baseMaybeOmitted, `{ ${asParts.join("; ")} }`)
+            : baseMaybeOmitted;
         const withForwardedAs = withForwardedAsType(withAs, includesForwardedAs);
         return explicit ? emitter.joinIntersection(withForwardedAs, explicit) : withForwardedAs;
       })();
@@ -220,6 +230,9 @@ export function emitIntrinsicPolymorphicWrappers(ctx: EmitIntrinsicContext): voi
       const styleId = j.identifier("style");
       const forwardedAsId = j.identifier("forwardedAs");
 
+      const allowSxProp = emitter.shouldAllowSxProp(d);
+      const sxId = allowSxProp ? j.identifier("sx") : undefined;
+
       const patternProps = emitter.buildDestructurePatternProps({
         baseProps: [
           ...(allowAsProp
@@ -236,6 +249,7 @@ export function emitIntrinsicPolymorphicWrappers(ctx: EmitIntrinsicContext): voi
           ...(allowClassNameProp ? [ctx.patternProp("className", classNameId)] : []),
           ...(includeChildren ? [ctx.patternProp("children", childrenId)] : []),
           ...(allowStyleProp ? [ctx.patternProp("style", styleId)] : []),
+          ...(allowSxProp && sxId ? [ctx.patternProp("sx", sxId)] : []),
         ],
         destructureProps,
         propDefaults,
@@ -266,6 +280,7 @@ export function emitIntrinsicPolymorphicWrappers(ctx: EmitIntrinsicContext): voi
         allowStyleProp,
         inlineStyleProps: [],
         staticClassNameExpr,
+        sxPropId: sxId,
       });
 
       const attrs: JsxAttr[] = [

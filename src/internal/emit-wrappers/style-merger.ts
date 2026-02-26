@@ -70,6 +70,8 @@ export function emitStyleMerging(args: {
   allowStyleProp: boolean;
   inlineStyleProps?: Array<{ prop: string; expr: ExpressionKind }>;
   staticClassNameExpr?: ExpressionKind;
+  /** When provided, the sx prop identifier is appended after local styles in stylex.props(). */
+  sxPropId?: Identifier;
 }): StyleMergingResult {
   const {
     j,
@@ -81,6 +83,7 @@ export function emitStyleMerging(args: {
     allowStyleProp,
     inlineStyleProps = [],
     staticClassNameExpr,
+    sxPropId,
   } = args;
 
   const { styleMerger, emptyStyleKeys, stylesIdentifier, ancestorSelectorParents, emitTypes } =
@@ -107,6 +110,11 @@ export function emitStyleMerging(args: {
         ),
       );
     }
+  }
+
+  // Append the sx prop after all local styles so external overrides take precedence.
+  if (sxPropId) {
+    styleArgs.push(sxPropId);
   }
 
   if (styleArgs.length === 0) {
@@ -171,6 +179,7 @@ export function emitStyleMerging(args: {
     inlineStyleProps,
     staticClassNameExpr,
     emitTypes,
+    hasSxProp: !!sxPropId,
   });
 }
 
@@ -409,6 +418,8 @@ function emitVerbosePattern(args: {
   inlineStyleProps: Array<{ prop: string; expr: any }>;
   staticClassNameExpr?: ExpressionKind;
   emitTypes: boolean;
+  /** When true, the component has an `sx` prop — use `sxResult` to avoid the naming conflict. */
+  hasSxProp?: boolean;
 }): StyleMergingResult {
   const {
     j,
@@ -420,7 +431,11 @@ function emitVerbosePattern(args: {
     inlineStyleProps,
     staticClassNameExpr,
     emitTypes,
+    hasSxProp,
   } = args;
+
+  // When the component has an `sx` prop, avoid the naming conflict with `const sx = stylex.props(...)`.
+  const sxVarName = hasSxProp ? "sxResult" : "sx";
 
   // Create the stylex.props() call
   const stylexPropsCall = j.callExpression(
@@ -430,7 +445,7 @@ function emitVerbosePattern(args: {
 
   // Create the sx variable declaration
   const sxDecl = j.variableDeclaration("const", [
-    j.variableDeclarator(j.identifier("sx"), stylexPropsCall),
+    j.variableDeclarator(j.identifier(sxVarName), stylexPropsCall),
   ]);
 
   // Create className merging expression if needed
@@ -438,7 +453,7 @@ function emitVerbosePattern(args: {
   if (allowClassNameProp || staticClassNameExpr) {
     const parts = [
       ...(staticClassNameExpr ? [staticClassNameExpr] : []),
-      j.memberExpression(j.identifier("sx"), j.identifier("className")),
+      j.memberExpression(j.identifier(sxVarName), j.identifier("className")),
       ...(allowClassNameProp ? [classNameId] : []),
     ];
     classNameAttr = j.callExpression(
@@ -456,7 +471,7 @@ function emitVerbosePattern(args: {
   let styleAttr: any = null;
   if (allowStyleProp || inlineStyleProps.length > 0) {
     const spreads: any[] = [
-      j.spreadElement(j.memberExpression(j.identifier("sx"), j.identifier("style"))),
+      j.spreadElement(j.memberExpression(j.identifier(sxVarName), j.identifier("style"))),
       ...(allowStyleProp ? [j.spreadElement(styleId)] : []),
       ...inlineStyleProps.map((p) => j.property("init", inlineStylePropKey(j, p.prop), p.expr)),
     ];
@@ -471,7 +486,7 @@ function emitVerbosePattern(args: {
   return {
     needsSxVar: true,
     sxDecl,
-    jsxSpreadExpr: j.identifier("sx"),
+    jsxSpreadExpr: j.identifier(sxVarName),
     classNameAttr,
     // Always emit the merged className AFTER `{...sx}` so it cannot be overwritten by `sx.className`.
     classNameBeforeSpread: false,

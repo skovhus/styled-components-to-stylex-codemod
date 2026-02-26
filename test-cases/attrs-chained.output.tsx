@@ -22,9 +22,9 @@ type StyledButtonProps = React.ComponentPropsWithRef<typeof Text> & {
 // The chain-flattening logic must NOT flatten A to Text, because
 // B's wrapper semantics (as="button") would be lost.
 function StyledButton(props: StyledButtonProps) {
-  const { className, style, ...rest } = props;
+  const { className, style, sx, ...rest } = props;
 
-  return <Text as="button" {...rest} {...mergedSx(styles.styledButton, className, style)} />;
+  return <Text as="button" {...rest} {...mergedSx([styles.styledButton, sx], className, style)} />;
 }
 
 // A extends B - this MUST preserve B's as="button" semantics
