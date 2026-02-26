@@ -648,10 +648,7 @@ export function emitSimpleExportedIntrinsicWrappers(ctx: EmitIntrinsicContext): 
       if (!typeAliasEmitted && allowSxProp) {
         const propsTypeName = emitter.propsTypeNameFor(d.localName);
         if (emitter.typeExistsInFile(propsTypeName)) {
-          const injected = emitter.injectMembersIntoInterface(propsTypeName, [SX_PROP_TYPE_TEXT]);
-          if (!injected) {
-            emitter.extendExistingTypeAlias(propsTypeName, `{ ${SX_PROP_TYPE_TEXT} }`);
-          }
+          emitter.injectSxPropIntoExistingType(propsTypeName);
         }
       }
 

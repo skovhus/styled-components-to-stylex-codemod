@@ -543,6 +543,13 @@ export class WrapperEmitter {
     return true;
   }
 
+  injectSxPropIntoExistingType(typeName: string): void {
+    const injected = this.injectMembersIntoInterface(typeName, [SX_PROP_TYPE_TEXT]);
+    if (!injected) {
+      this.extendExistingTypeAlias(typeName, `{ ${SX_PROP_TYPE_TEXT} }`);
+    }
+  }
+
   extendExistingTypeAlias(typeName: string, baseTypeText: string): boolean {
     const { root, j } = this;
     if (!this.emitTypes) {

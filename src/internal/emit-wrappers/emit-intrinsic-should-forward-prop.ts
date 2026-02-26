@@ -8,7 +8,7 @@ import type { StyledDecl } from "../transform-types.js";
 import { getBridgeClassVar } from "../utilities/bridge-classname.js";
 import { buildStyleFnConditionExpr } from "../utilities/jscodeshift-utils.js";
 import { type ExpressionKind, type InlineStyleProp, type WrapperPropDefaults } from "./types.js";
-import { SX_PROP_TYPE_TEXT, type JsxAttr, type StatementKind } from "./wrapper-emitter.js";
+import type { JsxAttr, StatementKind } from "./wrapper-emitter.js";
 import { emitStyleMerging } from "./style-merger.js";
 import { sortVariantEntriesBySpecificity, VOID_TAGS } from "./type-helpers.js";
 import { withLeadingComments } from "./comments.js";
@@ -254,10 +254,7 @@ export function emitShouldForwardPropWrappers(ctx: EmitIntrinsicContext): void {
       })();
       emitter.extendExistingType(propsTypeName, extendBaseTypeText);
       if (allowSxProp) {
-        const injected = emitter.injectMembersIntoInterface(propsTypeName, [SX_PROP_TYPE_TEXT]);
-        if (!injected) {
-          emitter.extendExistingTypeAlias(propsTypeName, `{ ${SX_PROP_TYPE_TEXT} }`);
-        }
+        emitter.injectSxPropIntoExistingType(propsTypeName);
       }
     }
     ctx.markNeedsReactTypeImport();
