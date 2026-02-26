@@ -21,6 +21,7 @@ import {
   isCallExpressionNode,
   isConditionalExpressionNode,
   isLogicalExpressionNode,
+  type ArrowFnParamBindings,
   type CallExpressionNode,
 } from "../utilities/jscodeshift-utils.js";
 import { parseStyledTemplateLiteral } from "../styled-css.js";
@@ -83,7 +84,7 @@ export type TemplateLiteralContext = {
 
 export function resolveTemplateLiteralBranch(
   ctx: TemplateLiteralContext,
-  args: { node: TemplateLiteral; paramName: string | null },
+  args: { node: TemplateLiteral; paramName: string | null; bindings?: ArrowFnParamBindings },
 ): TemplateLiteralBranchResult | null {
   const {
     j,
@@ -96,7 +97,7 @@ export function resolveTemplateLiteralBranch(
     componentInfo,
     handlerContext,
   } = ctx;
-  const { node, paramName } = args;
+  const { node, paramName, bindings } = args;
 
   const parsed = parseStyledTemplateLiteral(node);
   const wrappedRawCss = `& { ${parsed.rawCss} }`;
@@ -188,6 +189,7 @@ export function resolveTemplateLiteralBranch(
           j,
           expr,
           paramName,
+          bindings,
           filePath,
           parseExpr,
           resolveValue,
@@ -424,12 +426,24 @@ function resolveDynamicTemplateExpr(args: {
   j: JSCodeshift;
   expr: Expression;
   paramName: string | null;
+  bindings?: ArrowFnParamBindings;
   filePath: string;
   parseExpr: (exprSource: string) => ExpressionKind | null;
   resolveValue: Adapter["resolveValue"];
   resolverImports: Map<string, ImportSpec>;
 }): { jsxProp: string; callArg: ExpressionKind } | null {
-  const { j, expr, paramName, filePath, parseExpr, resolveValue, resolverImports } = args;
+  const { j, expr, paramName, bindings, filePath, parseExpr, resolveValue, resolverImports } = args;
+
+  // Handle destructured param bindings: bare Identifier matching a destructured prop
+  // e.g., ({ alignSelf }) => `align-self: ${alignSelf};`
+  if (!paramName && bindings?.kind === "destructured" && expr.type === "Identifier") {
+    const identName = (expr as unknown as { name: string }).name;
+    if (bindings.bindings.has(identName)) {
+      const jsxProp = bindings.bindings.get(identName)!;
+      return { jsxProp, callArg: buildPropAccessExpr(j, jsxProp) };
+    }
+  }
+
   if (!paramName) {
     return null;
   }

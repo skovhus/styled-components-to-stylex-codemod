@@ -248,6 +248,19 @@ export function extractConditionName(test: ExpressionKind): string | null {
     return left && right ? `${left}And${right}` : null;
   }
 
+  // Binary comparison with typeof: typeof gap === "number" → "Gap"
+  if (
+    test.type === "BinaryExpression" &&
+    (test.operator === "===" || test.operator === "!==") &&
+    (test.left as ExpressionKind).type === "UnaryExpression" &&
+    (test.left as { operator?: string }).operator === "typeof"
+  ) {
+    const inner = extractConditionName((test.left as { argument: ExpressionKind }).argument);
+    if (inner) {
+      return inner;
+    }
+  }
+
   // Call expression with no arguments: Browser.isSafari() → "BrowserIsSafari"
   if (test.type === "CallExpression") {
     const args = test.arguments ?? [];

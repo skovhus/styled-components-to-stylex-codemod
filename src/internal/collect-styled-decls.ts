@@ -296,7 +296,7 @@ function collectStyledDeclsImpl(args: {
         return;
       }
 
-      // !["a","b"].includes(prop)
+      // !["a","b"].includes(prop) or !varRef.includes(prop)
       if (expr.type === "UnaryExpression" && expr.operator === "!") {
         const inner = expr.argument;
         if (
@@ -304,19 +304,35 @@ function collectStyledDeclsImpl(args: {
           inner.callee?.type === "MemberExpression" &&
           inner.callee.property?.type === "Identifier" &&
           inner.callee.property.name === "includes" &&
-          inner.callee.object?.type === "ArrayExpression" &&
           inner.arguments?.[0]?.type === "Identifier" &&
           inner.arguments[0].name === paramName
         ) {
-          for (const el of inner.callee.object.elements ?? []) {
-            if (el?.type === "Literal" && typeof el.value === "string") {
-              dropProps.add(el.value);
-            }
-            if (el?.type === "StringLiteral") {
-              dropProps.add(el.value);
+          // Resolve the array — either an inline ArrayExpression or a variable reference
+          let arrayNode = inner.callee.object;
+          if (arrayNode?.type === "Identifier") {
+            const varName = arrayNode.name;
+            const decls = root.find(j.VariableDeclarator).filter((path) => {
+              const idNode = (path.node as any).id;
+              return idNode?.type === "Identifier" && idNode.name === varName;
+            });
+            if (decls.length > 0) {
+              const init = (decls.get().node as any).init;
+              if (init?.type === "ArrayExpression") {
+                arrayNode = init;
+              }
             }
           }
-          return;
+          if (arrayNode?.type === "ArrayExpression") {
+            for (const el of arrayNode.elements ?? []) {
+              if (el?.type === "Literal" && typeof el.value === "string") {
+                dropProps.add(el.value);
+              }
+              if (el?.type === "StringLiteral") {
+                dropProps.add(el.value);
+              }
+            }
+            return;
+          }
         }
 
         // !prop.startsWith("$")

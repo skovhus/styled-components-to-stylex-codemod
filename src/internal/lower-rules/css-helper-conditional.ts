@@ -435,6 +435,10 @@ export function createCssHelperConditionalHandler(ctx: CssHelperConditionalConte
           if (!d.property) {
             return null;
           }
+          // Reject property names containing slot placeholders (ternary in property position)
+          if (d.property.includes("__SC_EXPR_")) {
+            return null;
+          }
           if (d.important) {
             return null;
           }
@@ -602,6 +606,7 @@ export function createCssHelperConditionalHandler(ctx: CssHelperConditionalConte
           const resolved = resolveTemplateLiteralBranch(tplCtx, {
             node: body.right,
             paramName,
+            bindings,
           });
           if (!resolved) {
             return false;
@@ -779,6 +784,7 @@ export function createCssHelperConditionalHandler(ctx: CssHelperConditionalConte
       const resolved = resolveTemplateLiteralBranch(tplCtx, {
         node: body,
         paramName,
+        bindings,
       });
 
       if (!resolved) {
@@ -965,6 +971,138 @@ export function createCssHelperConditionalHandler(ctx: CssHelperConditionalConte
     const altIsTpl = isPlainTemplateLiteral(alt);
     const consIsEmpty = isEmptyCssBranch(cons);
     const altIsEmpty = isEmptyCssBranch(alt);
+    const isNonEmptyStringLiteral = (node: ExpressionKind): boolean =>
+      (node.type === "StringLiteral" && node.value !== "") ||
+      (node.type === "Literal" &&
+        typeof (node as { value?: unknown }).value === "string" &&
+        (node as { value: string }).value !== "");
+    const consIsStr = isNonEmptyStringLiteral(cons);
+    const altIsStr = isNonEmptyStringLiteral(alt);
+
+    // Shared helper: replace `props.X` member expressions with bare `X` identifiers
+    // in a cloned AST node. Used when converting from object-param to single-param style.
+    const replacePropsWithBareIdent = (node: ExpressionKind): ExpressionKind => {
+      const cloned = cloneAstNode(node);
+      const visit = (n: unknown): unknown => {
+        if (!n || typeof n !== "object") {
+          return n;
+        }
+        if (Array.isArray(n)) {
+          return n.map((c) => visit(c));
+        }
+        const rec = n as ASTNodeRecord;
+        if (
+          (rec.type === "MemberExpression" || rec.type === "OptionalMemberExpression") &&
+          (rec.object as { type?: string; name?: string })?.type === "Identifier" &&
+          (rec.object as { name?: string })?.name === "props" &&
+          (rec.property as { type?: string; name?: string })?.type === "Identifier" &&
+          !rec.computed
+        ) {
+          return j.identifier((rec.property as { name: string }).name);
+        }
+        for (const key of Object.keys(rec)) {
+          if (key === "loc" || key === "comments") {
+            continue;
+          }
+          const child = rec[key];
+          if (child && typeof child === "object") {
+            rec[key] = visit(child);
+          }
+        }
+        return rec;
+      };
+      return visit(cloned) as ExpressionKind;
+    };
+
+    // Shared helper: detect a ternary expression in the CSS property name position of a
+    // template literal, and return substituted templates for each branch.
+    // e.g., `${column ? "column" : "row"}-gap: ${wrapGap}px` →
+    //   consTpl: `column-gap: ${wrapGap}px`, altTpl: `row-gap: ${wrapGap}px`
+    const findTernaryPropertySplit = (
+      tplNode: ExpressionKind,
+    ): {
+      ternaryTest: ExpressionKind;
+      consTpl: ExpressionKind;
+      altTpl: ExpressionKind;
+      ternaryCondName: string | null;
+    } | null => {
+      const tpl = tplNode as {
+        type: string;
+        quasis?: Array<{ value?: { raw?: string; cooked?: string } }>;
+        expressions?: ExpressionKind[];
+      };
+      if (tpl.type !== "TemplateLiteral") {
+        return null;
+      }
+      const quasis = tpl.quasis ?? [];
+      const expressions = tpl.expressions ?? [];
+
+      // Find a ConditionalExpression whose next quasi contains ":" (property name position)
+      let ternaryIdx = -1;
+      for (let i = 0; i < expressions.length; i++) {
+        const exprNode = expressions[i]!;
+        if (exprNode.type !== "ConditionalExpression") {
+          continue;
+        }
+        const cond = exprNode as {
+          test: ExpressionKind;
+          consequent: ExpressionKind;
+          alternate: ExpressionKind;
+        };
+        const consVal = literalToStaticValue(cond.consequent);
+        const altVal = literalToStaticValue(cond.alternate);
+        if (typeof consVal !== "string" || typeof altVal !== "string") {
+          continue;
+        }
+        const nextQuasi = quasis[i + 1];
+        const nextRaw = nextQuasi?.value?.raw ?? nextQuasi?.value?.cooked ?? "";
+        if (nextRaw.includes(":")) {
+          ternaryIdx = i;
+          break;
+        }
+      }
+      if (ternaryIdx < 0) {
+        return null;
+      }
+
+      const ternaryExpr = expressions[ternaryIdx]! as {
+        test: ExpressionKind;
+        consequent: ExpressionKind;
+        alternate: ExpressionKind;
+      };
+      const consStrVal = literalToStaticValue(ternaryExpr.consequent) as string;
+      const altStrVal = literalToStaticValue(ternaryExpr.alternate) as string;
+
+      // Build a substituted template by replacing the ternary with each branch's string
+      const buildSubstitutedTpl = (branchValue: string) => {
+        const newQuasis: Array<ReturnType<typeof j.templateElement>> = [];
+        const newExpressions: ExpressionKind[] = [];
+        for (let i = 0; i < quasis.length; i++) {
+          const raw = quasis[i]?.value?.raw ?? quasis[i]?.value?.cooked ?? "";
+          if (i === ternaryIdx) {
+            const nextRaw = quasis[i + 1]?.value?.raw ?? quasis[i + 1]?.value?.cooked ?? "";
+            const merged = raw + branchValue + nextRaw;
+            newQuasis.push(
+              j.templateElement({ raw: merged, cooked: merged }, i + 1 === quasis.length - 1),
+            );
+            i++;
+          } else {
+            newQuasis.push(j.templateElement({ raw, cooked: raw }, i === quasis.length - 1));
+          }
+          if (i < expressions.length && i !== ternaryIdx) {
+            newExpressions.push(expressions[i]!);
+          }
+        }
+        return j.templateLiteral(newQuasis, newExpressions);
+      };
+
+      return {
+        ternaryTest: ternaryExpr.test,
+        consTpl: buildSubstitutedTpl(consStrVal) as ExpressionKind,
+        altTpl: buildSubstitutedTpl(altStrVal) as ExpressionKind,
+        ternaryCondName: extractConditionName(ternaryExpr.test),
+      };
+    };
 
     if (!testInfo) {
       // Non-prop conditional: generate StyleX parameterized style functions.
@@ -974,6 +1112,161 @@ export function createCssHelperConditionalHandler(ctx: CssHelperConditionalConte
       const altMap =
         altIsCss || altIsTpl ? resolveCssBranchToInlineMap(alt) : altIsEmpty ? new Map() : null;
       if (!consMap || !altMap) {
+        // Fallback: try splitting dynamic property name ternaries in the template literal
+        const failedTplNode = consIsTpl && !consMap ? cons : altIsTpl && !altMap ? alt : null;
+        const otherIsEmpty =
+          consIsTpl && !consMap ? altIsEmpty : altIsTpl && !altMap ? consIsEmpty : false;
+        if (failedTplNode && otherIsEmpty) {
+          const splitResult = findTernaryPropertySplit(failedTplNode);
+          if (splitResult) {
+            const { ternaryTest, ternaryCondName } = splitResult;
+            const splitConsMap = resolveCssBranchToInlineMap(splitResult.consTpl);
+            const splitAltMap = resolveCssBranchToInlineMap(splitResult.altTpl);
+            if (!splitConsMap || !splitAltMap) {
+              return false;
+            }
+
+            const propsUsed = collectPropsFromArrowFn(expr);
+            collectPropsFromExpressions(
+              [...splitConsMap.values(), ...splitAltMap.values()],
+              propsUsed,
+            );
+            const valuePropParams = Array.from(propsUsed);
+
+            const conditionIdentifiers = new Set<string>();
+            collectIdentifiers(conditional.test, conditionIdentifiers);
+
+            // Create style function and call for a single-entry map
+            const makeBranchFnAndCall = (
+              map: Map<string, ExpressionKind>,
+              label: string,
+            ): ExpressionKind => {
+              if (map.size === 0) {
+                return j.identifier("undefined") as ExpressionKind;
+              }
+              const [cssProp, valueExpr] = Array.from(map.entries())[0]!;
+              const branchSuffix = `${label}${capitalize(cssPropertyToIdentifier(cssProp))}`;
+              const fnKey = `${decl.styleKey}${branchSuffix}`;
+              if (!resolvedStyleObjects.has(fnKey)) {
+                if (valuePropParams.length === 1) {
+                  const singleProp = valuePropParams[0]!;
+                  const paramIdent = singleProp.startsWith("$") ? singleProp.slice(1) : singleProp;
+                  const param = j.identifier(paramIdent);
+                  (param as { typeAnnotation?: unknown }).typeAnnotation = j.tsTypeAnnotation(
+                    resolveStyleFnPropType(singleProp) as any,
+                  );
+                  const finalExpr = replacePropsWithBareIdent(normalizeDollarProps(j, valueExpr));
+                  resolvedStyleObjects.set(
+                    fnKey,
+                    j.arrowFunctionExpression(
+                      [param],
+                      j.objectExpression([
+                        j.property("init", makeCssPropKey(j, cssProp), finalExpr),
+                      ]),
+                    ),
+                  );
+                } else {
+                  const propsTypeProperties = valuePropParams.map((p) => {
+                    const propName = p.startsWith("$") ? p.slice(1) : p;
+                    return j.tsPropertySignature(
+                      j.identifier(propName),
+                      j.tsTypeAnnotation(resolveStyleFnPropType(p) as any),
+                    );
+                  });
+                  const propsParam = j.identifier("props");
+                  (propsParam as { typeAnnotation?: unknown }).typeAnnotation = j.tsTypeAnnotation(
+                    j.tsTypeLiteral(propsTypeProperties),
+                  );
+                  resolvedStyleObjects.set(
+                    fnKey,
+                    j.arrowFunctionExpression(
+                      [propsParam],
+                      j.objectExpression([
+                        j.property(
+                          "init",
+                          makeCssPropKey(j, cssProp),
+                          normalizeDollarProps(j, valueExpr),
+                        ),
+                      ]),
+                    ),
+                  );
+                }
+              }
+              // Build call expression
+              if (valuePropParams.length === 1) {
+                const singleProp = valuePropParams[0]!;
+                const arg: ExpressionKind = conditionIdentifiers.has(singleProp)
+                  ? j.memberExpression(j.identifier("props"), j.identifier(singleProp))
+                  : (j.identifier(singleProp) as ExpressionKind);
+                return j.callExpression(
+                  j.memberExpression(j.identifier("styles"), j.identifier(fnKey)),
+                  [arg],
+                );
+              }
+              const callArgProperties = valuePropParams.map((p) => {
+                const propName = p.startsWith("$") ? p.slice(1) : p;
+                const propIsInCondition = conditionIdentifiers.has(p);
+                if (propIsInCondition) {
+                  return j.property.from({
+                    kind: "init",
+                    key: j.identifier(propName),
+                    value: j.memberExpression(j.identifier("props"), j.identifier(p)),
+                    shorthand: false,
+                  });
+                }
+                return j.property.from({
+                  kind: "init",
+                  key: j.identifier(propName),
+                  value: j.identifier(p),
+                  shorthand: propName === p,
+                });
+              });
+              return j.callExpression(
+                j.memberExpression(j.identifier("styles"), j.identifier(fnKey)),
+                [j.objectExpression(callArgProperties) as unknown as ExpressionKind],
+              );
+            };
+
+            // When the ternary splits on the CSS property name, the properties already
+            // differ (e.g. columnGap vs rowGap), so an extra condition label is redundant.
+            const consLabel = ternaryCondName
+              ? ""
+              : capitalize(cssPropertyToIdentifier(Array.from(splitConsMap.keys())[0] ?? ""));
+            const altLabel = ternaryCondName
+              ? ""
+              : capitalize(cssPropertyToIdentifier(Array.from(splitAltMap.keys())[0] ?? ""));
+            const consCallExpr = makeBranchFnAndCall(splitConsMap, consLabel);
+            const altCallExpr = makeBranchFnAndCall(splitAltMap, altLabel);
+
+            // Build inner ternary: ternaryTest ? consCall : altCall
+            const innerTernary = j.conditionalExpression(
+              cloneAstNode(ternaryTest) as ExpressionKind,
+              consCallExpr,
+              altCallExpr,
+            );
+
+            // Build outer conditional: outerTest ? innerTernary : undefined
+            const outerCondExpr = j.conditionalExpression(
+              cloneAstNode(conditional.test) as ExpressionKind,
+              innerTernary,
+              j.identifier("undefined") as ExpressionKind,
+            );
+
+            decl.extraStylexPropsArgs ??= [];
+            decl.extraStylexPropsArgs.push({ expr: outerCondExpr });
+            decl.needsWrapperComponent = true;
+
+            for (const propName of propsUsed) {
+              ensureShouldForwardPropDrop(decl, propName);
+            }
+            const ternaryIdents = new Set<string>();
+            collectIdentifiers(ternaryTest, ternaryIdents);
+            for (const ident of ternaryIdents) {
+              ensureShouldForwardPropDrop(decl, ident);
+            }
+            return true;
+          }
+        }
         return false;
       }
 
@@ -988,8 +1281,30 @@ export function createCssHelperConditionalHandler(ctx: CssHelperConditionalConte
         return true;
       }
 
-      // Create parameterized StyleX style function with props object parameter
+      // Single-prop case: use direct parameter instead of props object
+      // e.g., (gap: number) => ({ gap: `${gap}px` }) instead of (props: { gap: number }) => (...)
+      const useSingleParam = valuePropParams.length === 1;
+      const singlePropName = useSingleParam ? valuePropParams[0]! : "";
+      const singleParamName = useSingleParam
+        ? singlePropName.startsWith("$")
+          ? singlePropName.slice(1)
+          : singlePropName
+        : "";
+
       const createStyleFn = (map: Map<string, ExpressionKind>) => {
+        if (useSingleParam) {
+          const param = j.identifier(singleParamName);
+          (param as { typeAnnotation?: unknown }).typeAnnotation = j.tsTypeAnnotation(
+            resolveStyleFnPropType(singlePropName) as any,
+          );
+
+          const properties = Array.from(map.entries()).map(([prop, propExpr]) => {
+            const replacedExpr = replacePropsWithBareIdent(normalizeDollarProps(j, propExpr));
+            return j.property("init", makeCssPropKey(j, prop), replacedExpr);
+          });
+          return j.arrowFunctionExpression([param], j.objectExpression(properties));
+        }
+
         const propsTypeProperties = valuePropParams.map((p) => {
           const propName = p.startsWith("$") ? p.slice(1) : p;
           const prop = j.tsPropertySignature(
@@ -1043,6 +1358,17 @@ export function createCssHelperConditionalHandler(ctx: CssHelperConditionalConte
       collectIdentifiers(conditional.test, conditionIdentifiers);
 
       const makeStyleCall = (key: string) => {
+        if (useSingleParam) {
+          // Single-param case: pass the prop identifier directly
+          const propIsInCondition = conditionIdentifiers.has(singlePropName);
+          const arg: ExpressionKind = propIsInCondition
+            ? j.memberExpression(j.identifier("props"), j.identifier(singlePropName))
+            : (j.identifier(singlePropName) as ExpressionKind);
+          return j.callExpression(j.memberExpression(j.identifier("styles"), j.identifier(key)), [
+            arg,
+          ]);
+        }
+
         const callArgProperties = valuePropParams.map((p) => {
           const propName = p.startsWith("$") ? p.slice(1) : p;
           // Only use props.X when the prop is referenced in the condition (for type narrowing)
@@ -1093,9 +1419,18 @@ export function createCssHelperConditionalHandler(ctx: CssHelperConditionalConte
     const consIsCall = isCallExpressionNode(cons);
     const altIsCall = isCallExpressionNode(alt);
 
-    // Note: String literal branches (StringLiteral CSS values) are NOT handled here.
-    // They fall through to tryResolveConditionalCssBlockTernary in builtin-handlers.ts.
-    if (!(consIsCss || altIsCss || consIsTpl || altIsTpl || consIsCall || altIsCall)) {
+    if (
+      !(
+        consIsCss ||
+        altIsCss ||
+        consIsTpl ||
+        altIsTpl ||
+        consIsCall ||
+        altIsCall ||
+        consIsStr ||
+        altIsStr
+      )
+    ) {
       return false;
     }
 
@@ -1178,6 +1513,115 @@ export function createCssHelperConditionalHandler(ctx: CssHelperConditionalConte
       return true;
     }
 
+    // Attempt to resolve a template literal with a ternary-based CSS property name
+    // by splitting into separate style functions for each ternary branch.
+    // e.g., `${column ? "column" : "row"}-gap: ${wrapGap}px` splits into
+    // separate "column-gap" and "row-gap" style functions.
+    const tryResolveDynamicPropertyNameTpl = (tplNode: ExpressionKind): boolean => {
+      const split = findTernaryPropertySplit(tplNode);
+      if (!split) {
+        return false;
+      }
+      const { ternaryTest, ternaryCondName } = split;
+
+      const consResolved = resolveTemplateLiteralBranch(tplCtx, {
+        node: split.consTpl as Parameters<typeof resolveTemplateLiteralBranch>[1]["node"],
+        paramName,
+        bindings,
+      });
+      const altResolved = resolveTemplateLiteralBranch(tplCtx, {
+        node: split.altTpl as Parameters<typeof resolveTemplateLiteralBranch>[1]["node"],
+        paramName,
+        bindings,
+      });
+      if (!consResolved || !altResolved) {
+        return false;
+      }
+
+      // Both branches must have exactly one dynamic entry (the value prop)
+      // and no inline entries or static styles
+      if (consResolved.inlineEntries.length > 0 || altResolved.inlineEntries.length > 0) {
+        return false;
+      }
+
+      // Create style functions for each branch's dynamic entries
+      const allDynamicEntries = [
+        ...consResolved.dynamicEntries.map((e) => ({ ...e, branch: "cons" as const })),
+        ...altResolved.dynamicEntries.map((e) => ({ ...e, branch: "alt" as const })),
+      ];
+
+      // Build conditional call expression wrapping the inner ternary
+      // Result: column ? styles.flexBoxColumnGap(wrapGap) : styles.flexBoxRowGap(wrapGap)
+      const consCallExprs: ExpressionKind[] = [];
+      const altCallExprs: ExpressionKind[] = [];
+
+      for (const entry of allDynamicEntries) {
+        const branchCondName = ternaryCondName
+          ? entry.branch === "cons"
+            ? ternaryCondName
+            : `Not${ternaryCondName}`
+          : capitalize(cssPropertyToIdentifier(entry.stylexProp));
+        const fnKey = `${decl.styleKey}${branchCondName}${capitalize(cssPropertyToIdentifier(entry.stylexProp))}`;
+        if (!styleFnDecls.has(fnKey)) {
+          const entryParamName = cssPropertyToIdentifier(entry.stylexProp);
+          const param = j.identifier(entryParamName);
+          annotateParamFromJsxProp(param, entry.jsxProp);
+          const p = makeCssProperty(j, entry.stylexProp, entryParamName);
+          const bodyExpr = j.objectExpression([p]);
+          styleFnDecls.set(fnKey, j.arrowFunctionExpression([param], bodyExpr));
+        }
+        const callExpr = j.callExpression(
+          j.memberExpression(j.identifier("styles"), j.identifier(fnKey)),
+          [entry.callArg],
+        );
+        if (entry.branch === "cons") {
+          consCallExprs.push(callExpr);
+        } else {
+          altCallExprs.push(callExpr);
+        }
+        ensureShouldForwardPropDrop(decl, entry.jsxProp);
+      }
+
+      // Apply static styles as variants
+      if (Object.keys(consResolved.style).length > 0) {
+        applyVariant(testInfo, consResolved.style);
+      }
+      if (Object.keys(altResolved.style).length > 0) {
+        applyVariant(testInfo, altResolved.style);
+      }
+
+      // Build inner ternary: column ? styles.fnA(arg) : styles.fnB(arg)
+      if (consCallExprs.length > 0 || altCallExprs.length > 0) {
+        const consExpr: ExpressionKind =
+          consCallExprs.length === 1
+            ? consCallExprs[0]!
+            : (j.identifier("undefined") as ExpressionKind);
+        const altExpr: ExpressionKind =
+          altCallExprs.length === 1
+            ? altCallExprs[0]!
+            : (j.identifier("undefined") as ExpressionKind);
+
+        const innerTernary = j.conditionalExpression(
+          cloneAstNode(ternaryTest) as ExpressionKind,
+          consExpr,
+          altExpr,
+        );
+
+        decl.extraStylexPropsArgs ??= [];
+        decl.extraStylexPropsArgs.push({ when: testInfo.when, expr: innerTernary });
+        decl.needsWrapperComponent = true;
+
+        // Collect ternary test identifiers for shouldForwardProp
+        const ternaryIdents = new Set<string>();
+        collectIdentifiers(ternaryTest, ternaryIdents);
+        for (const ident of ternaryIdents) {
+          ensureShouldForwardPropDrop(decl, ident);
+        }
+      }
+
+      return true;
+    };
+
     // Check altIsEmpty BEFORE altIsTpl since empty templates are also template literals
     // and the altIsEmpty case doesn't require invertWhen (which fails for compound conditions)
     if (consIsTpl && altIsEmpty) {
@@ -1185,8 +1629,13 @@ export function createCssHelperConditionalHandler(ctx: CssHelperConditionalConte
       const consResolved = resolveTemplateLiteralBranch(tplCtx, {
         node: cons as any,
         paramName,
+        bindings,
       });
       if (!consResolved) {
+        // Fallback: try splitting dynamic property name ternaries
+        if (tryResolveDynamicPropertyNameTpl(cons)) {
+          return true;
+        }
         return false;
       }
       if (Object.keys(consResolved.style).length > 0) {
@@ -1206,10 +1655,12 @@ export function createCssHelperConditionalHandler(ctx: CssHelperConditionalConte
       const consResolved = resolveTemplateLiteralBranch(tplCtx, {
         node: cons as any,
         paramName,
+        bindings,
       });
       const altResolved = resolveTemplateLiteralBranch(tplCtx, {
         node: alt as any,
         paramName,
+        bindings,
       });
       if (!consResolved || !altResolved) {
         return false;
@@ -1244,6 +1695,7 @@ export function createCssHelperConditionalHandler(ctx: CssHelperConditionalConte
       const altResolved = resolveTemplateLiteralBranch(tplCtx, {
         node: alt as any,
         paramName,
+        bindings,
       });
       if (!altResolved) {
         return false;
@@ -1264,10 +1716,48 @@ export function createCssHelperConditionalHandler(ctx: CssHelperConditionalConte
       return true;
     }
 
-    // Note: String literal CSS branches (consIsStr && altIsEmpty, consIsEmpty && altIsStr,
-    // and consIsStr && altIsStr) are NOT handled here - they fall through to
-    // tryResolveConditionalCssBlockTernary in builtin-handlers.ts, which handles them
-    // correctly with proper component type generation.
+    // Handle StringLiteral CSS branches: props.wrap ? "flex-wrap: wrap;" : ""
+    if (consIsStr && altIsEmpty) {
+      const rawCss = (cons as { value: string }).value;
+      const consStyle = resolveStaticCssBlock(rawCss);
+      if (!consStyle) {
+        return false;
+      }
+      if (Object.keys(consStyle).length > 0) {
+        applyVariant(testInfo, consStyle);
+      }
+      dropAllTestInfoProps(testInfo);
+      return true;
+    }
+
+    if (consIsEmpty && altIsStr) {
+      const rawCss = (alt as { value: string }).value;
+      const altStyle = resolveStaticCssBlock(rawCss);
+      if (!altStyle) {
+        return false;
+      }
+      const invertedWhen = invertWhen(testInfo.when);
+      if (!invertedWhen) {
+        return false;
+      }
+      if (Object.keys(altStyle).length > 0) {
+        applyVariant({ ...testInfo, when: invertedWhen }, altStyle);
+      }
+      dropAllTestInfoProps(testInfo);
+      return true;
+    }
+
+    if (consIsStr && altIsStr) {
+      const consStyle = resolveStaticCssBlock((cons as { value: string }).value);
+      const altStyle = resolveStaticCssBlock((alt as { value: string }).value);
+      if (!consStyle || !altStyle) {
+        return false;
+      }
+      mergeStyleObjects(styleObj, altStyle);
+      applyVariant(testInfo, consStyle);
+      dropAllTestInfoProps(testInfo);
+      return true;
+    }
 
     // Handle CallExpression branches: props.$x ? truncate() : ""
     // These are helpers that return StyleX style objects (usage: "props")

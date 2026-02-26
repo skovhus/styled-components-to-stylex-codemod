@@ -749,6 +749,10 @@ describe("runPrepass createExternalInterface snapshot on test-cases", () => {
           "as": false,
           "styles": true,
         },
+        "test-cases/shouldForwardProp-dynamicDeclaration.input.tsx:FlexBox": {
+          "as": false,
+          "styles": true,
+        },
         "test-cases/staticProp-basic.input.tsx:ExtendedButton": {
           "as": false,
           "styles": true,
