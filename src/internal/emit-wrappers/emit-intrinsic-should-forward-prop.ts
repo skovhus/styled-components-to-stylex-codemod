@@ -487,9 +487,13 @@ export function emitShouldForwardPropWrappers(ctx: EmitIntrinsicContext): void {
       dropProps.every((p: string) => p.startsWith("$")) &&
       !usedAttrs.has("*") &&
       [...usedAttrs].every((n) => n === "children" || dropProps.includes(n));
-    // Exported components should always include rest spread so that all element props
-    // (id, onClick, aria-*, etc.) are forwarded to the element.
-    const includeRest = isExportedComponent || (!shouldOmitRestSpread && shouldIncludeRest);
+    // Exported components and components extended by other styled components should
+    // always include rest spread so that all element props (id, onClick, aria-*, etc.)
+    // are forwarded to the element.
+    const includeRest =
+      isExportedComponent ||
+      (d.supportsExternalStyles ?? false) ||
+      (!shouldOmitRestSpread && shouldIncludeRest);
 
     if (!allowClassNameProp && !allowStyleProp) {
       const isVoid = VOID_TAGS.has(tagName);

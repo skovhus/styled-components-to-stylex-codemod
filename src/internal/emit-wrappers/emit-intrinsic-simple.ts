@@ -918,6 +918,11 @@ export function emitSimpleExportedIntrinsicWrappers(ctx: EmitIntrinsicContext): 
     if (isExportedComponent) {
       shouldIncludeRest = true;
     }
+    // Components extended by other styled components (supportsExternalStyles) need rest
+    // spread so extending components can pass through HTML attributes (aria-*, data-*, id, etc.)
+    if (d.supportsExternalStyles) {
+      shouldIncludeRest = true;
+    }
     if (shouldIncludeRest) {
       for (const name of explicitTransientProps) {
         if (!destructureProps.includes(name)) {
