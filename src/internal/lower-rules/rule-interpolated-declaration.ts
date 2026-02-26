@@ -74,6 +74,7 @@ export function handleInterpolatedDeclaration(args: InterpolatedDeclarationConte
     perPropPseudo,
     variantBuckets,
     variantStyleKeys,
+    variantSourceOrder,
     extraStyleObjects,
     styleFnFromProps,
     styleFnDecls,
@@ -1220,6 +1221,120 @@ export function handleInterpolatedDeclaration(args: InterpolatedDeclarationConte
 
       decl.needsWrapperComponent = true;
       continue;
+    }
+
+    if (res && res.type === "splitConditionalWithDynamicBranch") {
+      if (!d.property) {
+        // Only intended for value interpolations on concrete properties.
+      } else {
+        const { conditionProp, staticValue, dynamicBranchExpr, dynamicProps, isStaticWhenFalse } =
+          res;
+
+        // --- A. Static branch → base style ---
+        const { prefix, suffix } = extractStaticParts(d.value);
+        const cssValueStr = `${prefix}${staticValue}${suffix}`;
+        for (const out of cssDeclarationToStylexDeclarations(d)) {
+          styleObj[out.prop] = cssValueStr;
+        }
+
+        // --- B. Dynamic branch → merge with existing variant or create new ---
+        const clonedDynamic = cloneAstNode(dynamicBranchExpr) as ExpressionKind;
+        const dynamicValueExpr =
+          prefix || suffix
+            ? buildTemplateWithStaticParts(j, clonedDynamic, prefix, suffix)
+            : clonedDynamic;
+
+        // Mark dynamic props for DOM exclusion
+        for (const propName of dynamicProps) {
+          ensureShouldForwardPropDrop(decl, propName);
+        }
+        // Also mark the condition prop for DOM exclusion
+        ensureShouldForwardPropDrop(decl, conditionProp);
+
+        const conditionWhen = isStaticWhenFalse ? conditionProp : `!${conditionProp}`;
+
+        // Build call argument: object shorthand for dynamic props only
+        const callArg = j.objectExpression(
+          dynamicProps.map((name) => {
+            const prop = j.property("init", j.identifier(name), j.identifier(name)) as any;
+            prop.shorthand = true;
+            return prop;
+          }),
+        );
+
+        const existingBucket = variantBuckets.get(conditionProp);
+        if (existingBucket) {
+          // --- Merge path: combine existing variant bucket with dynamic branch ---
+          const existingFnKey = variantStyleKeys[conditionProp];
+          if (!existingFnKey) {
+            // Shouldn't happen, but bail gracefully
+            break;
+          }
+          const capturedSourceOrder = variantSourceOrder[conditionProp];
+
+          // Build combined arrow function: (props) => ({ ...existingStatic, ...newDynamic })
+          const properties: unknown[] = [];
+
+          // Clone existing static properties from the variant bucket.
+          // Values may be raw primitives or AST nodes depending on how they were inserted.
+          for (const [propKey, propValue] of Object.entries(existingBucket)) {
+            const valueNode =
+              propValue !== null && typeof propValue === "object" && "type" in propValue
+                ? (cloneAstNode(propValue) as ExpressionKind)
+                : (staticValueToLiteral(
+                    j,
+                    propValue as string | number | boolean,
+                  ) as ExpressionKind);
+            properties.push(j.property("init", makeCssPropKey(j, propKey), valueNode));
+          }
+
+          // Add the new dynamic properties
+          for (const out of cssDeclarationToStylexDeclarations(d)) {
+            properties.push(
+              j.property("init", makeCssPropKey(j, out.prop), dynamicValueExpr as any),
+            );
+          }
+
+          const param = j.identifier("props");
+          const body = j.objectExpression(properties as any);
+          styleFnDecls.set(existingFnKey, j.arrowFunctionExpression([param], body));
+
+          // Remove from variant buckets — now handled as a style function
+          variantBuckets.delete(conditionProp);
+          delete variantStyleKeys[conditionProp];
+
+          styleFnFromProps.push({
+            fnKey: existingFnKey,
+            jsxProp: "__props",
+            callArg,
+            conditionWhen,
+            ...(capturedSourceOrder !== undefined ? { sourceOrder: capturedSourceOrder } : {}),
+          });
+        } else {
+          // --- Standalone path: create new conditional style function ---
+          for (const out of cssDeclarationToStylexDeclarations(d)) {
+            const fnKey = `${decl.styleKey}${toSuffixFromProp(out.prop)}`;
+            if (!styleFnDecls.has(fnKey)) {
+              const param = j.identifier("props");
+              const body = j.objectExpression([
+                j.property("init", makeCssPropKey(j, out.prop), dynamicValueExpr as any),
+              ]);
+              styleFnDecls.set(fnKey, j.arrowFunctionExpression([param], body));
+            }
+            if (!styleFnFromProps.some((p) => p.fnKey === fnKey)) {
+              styleFnFromProps.push({
+                fnKey,
+                jsxProp: "__props",
+                callArg,
+                conditionWhen,
+              });
+            }
+          }
+        }
+
+        decl.needsWrapperComponent = true;
+        continue;
+      }
     }
 
     if (res && res.type === "emitStyleFunctionFromPropsObject") {

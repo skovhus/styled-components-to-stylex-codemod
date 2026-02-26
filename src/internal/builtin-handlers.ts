@@ -845,12 +845,22 @@ function tryResolveConditionalPropStyleFunction(node: DynamicNode): HandlerResul
   // Bail if either branch is a boolean literal — in styled-components, falsy interpolations
   // like `false` mean "omit this declaration", which can't be expressed as a StyleX style function.
   const condBody = body as {
+    test?: unknown;
     consequent?: { type?: string; value?: unknown };
     alternate?: { type?: string; value?: unknown };
   };
   if (hasBooleanBranch(condBody.consequent) || hasBooleanBranch(condBody.alternate)) {
     return null;
   }
+
+  // Try to decompose: one branch is static, the other is dynamic.
+  // This enables merging the dynamic branch with an existing variant bucket
+  // instead of emitting a redundant style function that passes the condition prop.
+  const decomposed = tryDecomposeConditionalBranches(condBody, paramName);
+  if (decomposed) {
+    return decomposed;
+  }
+
   const { hasUsableProps, hasNonTransientProps, props } = collectPropsFromExprTree(
     [body],
     paramName,
@@ -865,6 +875,92 @@ function tryResolveConditionalPropStyleFunction(node: DynamicNode): HandlerResul
     return null;
   }
   return { type: "emitStyleFunctionFromPropsObject", props };
+}
+
+/**
+ * Attempts to decompose a conditional expression into a static branch and a dynamic branch.
+ *
+ * When exactly one branch is a static literal and the other references props, returns
+ * `splitConditionalWithDynamicBranch` so the caller can merge the dynamic branch with
+ * existing variant buckets instead of emitting a separate style function.
+ *
+ * Returns null if both branches are dynamic or the pattern doesn't match.
+ */
+function tryDecomposeConditionalBranches(
+  condBody: {
+    test?: unknown;
+    consequent?: unknown;
+    alternate?: unknown;
+  },
+  paramName: string,
+): HandlerResult | null {
+  // Extract condition prop from the test expression
+  const test = condBody.test;
+  if (!test || typeof test !== "object") {
+    return null;
+  }
+  const testNode = test as { type?: string };
+  let conditionProp: string | null = null;
+  if (testNode.type === "MemberExpression") {
+    const path = getMemberPathFromIdentifier(
+      test as Parameters<typeof getMemberPathFromIdentifier>[0],
+      paramName,
+    );
+    if (path && path.length === 1 && path[0]) {
+      conditionProp = path[0];
+    }
+  }
+  if (!conditionProp) {
+    return null;
+  }
+
+  // Try to extract a static value from each branch
+  const consStatic = literalToStaticValue(condBody.consequent);
+  const altStatic = literalToStaticValue(condBody.alternate);
+
+  // We need exactly one static branch and one dynamic branch
+  const consIsStatic = consStatic !== null;
+  const altIsStatic = altStatic !== null;
+  if (consIsStatic === altIsStatic) {
+    // Both static (handled by splitVariants) or both dynamic (fall through)
+    return null;
+  }
+
+  const staticValue = consIsStatic ? consStatic : altStatic;
+  const dynamicBranch = consIsStatic ? condBody.alternate : condBody.consequent;
+  const isStaticWhenFalse = !consIsStatic; // static is in the alternate (false) branch
+
+  if (staticValue === undefined || staticValue === null) {
+    return null;
+  }
+  // Only support string/number static values (not booleans)
+  if (typeof staticValue !== "string" && typeof staticValue !== "number") {
+    return null;
+  }
+
+  // Collect props from the dynamic branch (excluding the condition prop)
+  const { hasUsableProps, props: dynamicProps } = collectPropsFromExprTree(
+    [dynamicBranch],
+    paramName,
+  );
+  if (!hasUsableProps) {
+    return null;
+  }
+  // Filter out the condition prop — it's used in the test, not the value
+  const filteredProps = dynamicProps.filter((p) => p !== conditionProp);
+  if (filteredProps.length === 0) {
+    // All props are just the condition prop — not a useful decomposition
+    return null;
+  }
+
+  return {
+    type: "splitConditionalWithDynamicBranch",
+    conditionProp,
+    staticValue,
+    dynamicBranchExpr: dynamicBranch,
+    dynamicProps: filteredProps,
+    isStaticWhenFalse,
+  };
 }
 
 function tryResolveInlineStyleValueForNestedPropAccess(node: DynamicNode): HandlerResult | null {

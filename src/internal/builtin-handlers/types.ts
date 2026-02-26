@@ -239,6 +239,29 @@ export type HandlerResult =
     }
   | {
       /**
+       * Decompose a conditional interpolation where one branch is a static literal
+       * and the other is a dynamic expression referencing props.
+       *
+       * Pattern: `(props) => (props.$open ? props.$delay : 0)`
+       *
+       * The static branch becomes a base style value (e.g., `transitionDelay: "0ms"`),
+       * and the dynamic branch merges into an existing variant bucket or creates a new
+       * conditional style function.
+       */
+      type: "splitConditionalWithDynamicBranch";
+      /** Prop name used in the ternary test (e.g., "$open") */
+      conditionProp: string;
+      /** The static branch's literal value */
+      staticValue: string | number;
+      /** AST node for the dynamic branch expression */
+      dynamicBranchExpr: unknown;
+      /** Prop names referenced in the dynamic branch (e.g., ["$delay"]) */
+      dynamicProps: string[];
+      /** true = the false/alternate branch is the static one */
+      isStaticWhenFalse: boolean;
+    }
+  | {
+      /**
        * Signal that this handler does not know how to transform the node.
        *
        * The caller typically falls back to other strategies (or drops the declaration)

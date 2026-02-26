@@ -13,7 +13,7 @@ type ContainerProps = React.ComponentProps<"div"> & {
  * The codemod should convert number 0 to "0ms" string for CSS properties.
  */
 function Container(props: ContainerProps) {
-  const { className, children, style, $open, $delay, ...rest } = props;
+  const { className, children, style, $delay, $open, ...rest } = props;
 
   return (
     <div
@@ -21,11 +21,11 @@ function Container(props: ContainerProps) {
       {...mergedSx(
         [
           styles.container,
-          $open ? styles.containerOpen : undefined,
-          styles.containerTransitionDelay({
-            $open,
-            $delay,
-          }),
+          $open
+            ? styles.containerOpen({
+                $delay,
+              })
+            : undefined,
         ],
         className,
         style,
@@ -55,11 +55,10 @@ const styles = stylex.create({
   container: {
     opacity: 0,
     transition: "opacity 200ms ease-out",
+    transitionDelay: "0ms",
   },
-  containerOpen: {
+  containerOpen: (props) => ({
     opacity: 1,
-  },
-  containerTransitionDelay: (props) => ({
-    transitionDelay: `${props.$open ? props.$delay : 0}ms`,
+    transitionDelay: `${props.$delay}ms`,
   }),
 });
