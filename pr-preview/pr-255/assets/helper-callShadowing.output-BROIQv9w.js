@@ -1,0 +1,1 @@
+import{j as t}from"./index-gqWIiMyG.js";import"./helpers-B4THYE8B.js";function m(){const o=e=>`#${e}`;function r(e){const{className:n,children:s,style:c}=e;return t.jsx("div",{className:n,style:{backgroundColor:o("ff0000"),...c},children:s})}return r}const l=()=>{const o=m();return t.jsx(o,{children:"Colored text"})};export{l as App};
