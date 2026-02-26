@@ -70,16 +70,6 @@ body{font-family:-apple-system,BlinkMacSystemFont,Segoe UI,Roboto,Helvetica Neue
   inherits: false
 }
 
-@property --x-fontSize {
-  syntax: "*";
-  inherits: false
-}
-
-@property --x-lineHeight {
-  syntax: "*";
-  inherits: false
-}
-
 @property --x-19zvkyr {
   syntax: "*";
   inherits: false
@@ -101,6 +91,16 @@ body{font-family:-apple-system,BlinkMacSystemFont,Segoe UI,Roboto,Helvetica Neue
 }
 
 @property --x-maxHeight {
+  syntax: "*";
+  inherits: false
+}
+
+@property --x-fontSize {
+  syntax: "*";
+  inherits: false
+}
+
+@property --x-lineHeight {
   syntax: "*";
   inherits: false
 }
@@ -2409,7 +2409,7 @@ body{font-family:-apple-system,BlinkMacSystemFont,Segoe UI,Roboto,Helvetica Neue
   outline-offset: 5px;
 }
 
-.xry1jez.xry1jez:where(.x1rnikca:hover *):not(#\#):not(#\#):not(#\#), .x1308hcw.x1308hcw:where(.x19pepp0:hover *):not(#\#):not(#\#):not(#\#) {
+.x1308hcw.x1308hcw:where(.x19pepp0:hover *):not(#\#):not(#\#):not(#\#), .xry1jez.xry1jez:where(.x1rnikca:hover *):not(#\#):not(#\#):not(#\#) {
   background-color: #639;
 }
 
