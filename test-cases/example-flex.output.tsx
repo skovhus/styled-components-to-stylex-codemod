@@ -122,8 +122,8 @@ export function Flex(props: FlexProps) {
             : undefined,
           inline ? styles.flexInline : undefined,
           auto ? styles.flexAuto : undefined,
-          align != null && styles.flexAlignItems(align),
-          justify != null && styles.flexJustifyContent(justify),
+          align != null && alignVariants[align],
+          justify != null && justifyVariants[justify],
           center === true && styles.flexCenter,
           wrap ? styles.flexWrap : undefined,
           alignSelf ? styles.flexAlignSelf(alignSelf) : undefined,
@@ -357,17 +357,53 @@ const styles = stylex.create({
   flexNoMinHeight: {
     minHeight: "0px",
   },
-  flexAlignItems: (alignItems: AlignValues) => ({
-    alignItems,
-  }),
-  flexJustifyContent: (justifyContent: JustifyValues) => ({
-    justifyContent,
-  }),
   flexAlignSelf: (alignSelf: AlignValues) => ({
     alignSelf,
   }),
   flexSpacer: {
     display: "flex",
     flex: "auto",
+  },
+});
+
+const alignVariants = stylex.create({
+  stretch: {
+    alignItems: "stretch",
+  },
+  center: {
+    alignItems: "center",
+  },
+  baseline: {
+    alignItems: "baseline",
+  },
+  "flex-start": {
+    alignItems: "flex-start",
+  },
+  "flex-end": {
+    alignItems: "flex-end",
+  },
+});
+
+const justifyVariants = stylex.create({
+  center: {
+    justifyContent: "center",
+  },
+  stretch: {
+    justifyContent: "stretch",
+  },
+  "space-around": {
+    justifyContent: "space-around",
+  },
+  "space-between": {
+    justifyContent: "space-between",
+  },
+  "space-evenly": {
+    justifyContent: "space-evenly",
+  },
+  "flex-start": {
+    justifyContent: "flex-start",
+  },
+  "flex-end": {
+    justifyContent: "flex-end",
   },
 });

@@ -666,9 +666,13 @@ export function emitStylesAndImports(ctx: TransformContext): { emptyStyleKeys: S
  */
 function emitVariantDimensionDecl(j: any, dimension: VariantDimension): any {
   const properties = Object.entries(dimension.variants).map(([variantValue, styles]) => {
+    // Use identifier for valid JS identifiers, string literal for hyphenated/special keys
+    const key = /^[a-zA-Z_$][a-zA-Z0-9_$]*$/.test(variantValue)
+      ? j.identifier(variantValue)
+      : j.literal(variantValue);
     return j.property(
       "init",
-      j.identifier(variantValue),
+      key,
       styles && typeof styles === "object" && !isAstNode(styles)
         ? objectToAst(j, styles as Record<string, unknown>)
         : literalToAst(j, styles),

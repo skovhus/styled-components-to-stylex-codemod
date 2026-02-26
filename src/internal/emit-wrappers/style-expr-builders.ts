@@ -309,7 +309,13 @@ export function buildVariantDimensionLookups(
         propDefaults.set(dim.propName, dim.defaultValue);
       }
       const lookup = j.memberExpression(variantsId, propId, true /* computed */);
-      pushExpr(lookup, dim);
+      // Guard optional props without defaults to avoid `undefined` index type error
+      if (dim.isOptional && !dim.defaultValue) {
+        const guard = j.binaryExpression("!=", j.identifier(dim.propName), j.literal(null));
+        pushExpr(j.logicalExpression("&&", guard, lookup), dim);
+      } else {
+        pushExpr(lookup, dim);
+      }
     }
   }
 
