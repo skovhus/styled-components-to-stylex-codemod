@@ -1502,6 +1502,10 @@ export class WrapperEmitter {
     return jb.buildDestructurePatternProps(this.j, this.patternProp, args);
   }
 
+  baseStyleExpr(d: StyledDecl) {
+    return seb.baseStyleExpr(this.j, this.stylesIdentifier, d);
+  }
+
   splitExtraStyleArgs(d: StyledDecl) {
     return seb.splitExtraStyleArgs(this.j, this.stylesIdentifier, d);
   }

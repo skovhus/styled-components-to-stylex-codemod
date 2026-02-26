@@ -347,9 +347,7 @@ export function emitComponentWrappers(emitter: WrapperEmitter): {
       emitter.buildInterleavedExtraStyleArgs(d, propsArgExprs);
     const styleArgs: ExpressionKind[] = [
       ...extraStyleArgs,
-      ...(d.skipBaseStyleRef
-        ? []
-        : [j.memberExpression(j.identifier(stylesIdentifier), j.identifier(d.styleKey))]),
+      ...emitter.baseStyleExpr(d),
       ...extraStyleArgsAfterBase,
     ];
 

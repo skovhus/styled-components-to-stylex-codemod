@@ -134,9 +134,7 @@ export function emitIntrinsicPolymorphicWrappers(ctx: EmitIntrinsicContext): voi
           ? [j.memberExpression(j.identifier(stylesIdentifier), j.identifier(d.extendsStyleKey))]
           : []),
         ...extraStyleArgs,
-        ...(d.skipBaseStyleRef
-          ? []
-          : [j.memberExpression(j.identifier(stylesIdentifier), j.identifier(d.styleKey))]),
+        ...emitter.baseStyleExpr(d),
         ...extraStyleArgsAfterBase,
       ];
 
