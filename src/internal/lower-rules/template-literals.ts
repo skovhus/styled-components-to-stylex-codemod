@@ -15,6 +15,7 @@ import {
 import { isStylexLonghandOnlyShorthand } from "../stylex-shorthands.js";
 import { normalizeStylisAstToIR } from "../css-ir.js";
 import {
+  cloneAstNode,
   extractRootAndPath,
   getMemberPathFromIdentifier,
   getNodeLocStart,
@@ -440,7 +441,8 @@ function resolveDynamicTemplateExpr(args: {
     const identName = (expr as unknown as { name: string }).name;
     if (bindings.bindings.has(identName)) {
       const jsxProp = bindings.bindings.get(identName)!;
-      return { jsxProp, callArg: buildPropAccessExpr(j, jsxProp) };
+      const defaultValue = bindings.defaults?.get(jsxProp);
+      return { jsxProp, callArg: buildPropAccessExpr(j, jsxProp, defaultValue) };
     }
   }
 
@@ -695,9 +697,17 @@ function resolveStaticTemplateExpressionAst(args: {
   return null;
 }
 
-function buildPropAccessExpr(j: JSCodeshift, propName: string): ExpressionKind {
+function buildPropAccessExpr(
+  j: JSCodeshift,
+  propName: string,
+  defaultValue?: unknown,
+): ExpressionKind {
   const isIdent = /^[$A-Z_][0-9A-Z_$]*$/i.test(propName);
-  return isIdent
-    ? j.identifier(propName)
-    : j.memberExpression(j.identifier("props"), j.literal(propName), true);
+  const baseExpr = isIdent
+    ? (j.identifier(propName) as ExpressionKind)
+    : (j.memberExpression(j.identifier("props"), j.literal(propName), true) as ExpressionKind);
+  if (defaultValue !== undefined) {
+    return j.logicalExpression("??", baseExpr, cloneAstNode(defaultValue) as ExpressionKind);
+  }
+  return baseExpr;
 }

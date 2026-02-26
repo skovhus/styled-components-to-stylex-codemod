@@ -28,8 +28,8 @@ export function Spacer(props: SpacerProps) {
       {...rest}
       {...mergedSx(
         [
-          showProperty(props.width) ? styles.spacerCondTruthyWidth(props.width) : undefined,
-          showProperty(props.height) ? styles.spacerCondTruthyHeight(props.height) : undefined,
+          showProperty(width) ? styles.spacerCondTruthyWidth(width) : undefined,
+          showProperty(height) ? styles.spacerCondTruthyHeight(height) : undefined,
         ],
         undefined,
         style,
