@@ -105,6 +105,11 @@ body{font-family:-apple-system,BlinkMacSystemFont,Segoe UI,Roboto,Helvetica Neue
   inherits: false
 }
 
+@property --x-gap {
+  syntax: "*";
+  inherits: false
+}
+
 @property --x-columnGap {
   syntax: "*";
   inherits: false
@@ -116,11 +121,6 @@ body{font-family:-apple-system,BlinkMacSystemFont,Segoe UI,Roboto,Helvetica Neue
 }
 
 @property --x-rowGap {
-  syntax: "*";
-  inherits: false
-}
-
-@property --x-gap {
   syntax: "*";
   inherits: false
 }
@@ -310,12 +310,6 @@ body{font-family:-apple-system,BlinkMacSystemFont,Segoe UI,Roboto,Helvetica Neue
 :root, .x1p9vp2r {
   --x1f1yon1: 1000;
   --xdughlu: 900;
-}
-
-:root, .xqpb2fl {
-  --x1i0kj6l: #333;
-  --x1bwga4g: 16px;
-  --x5g869a: 1.5;
 }
 
 :root, .x1hn0dvb {
@@ -1840,6 +1834,10 @@ body{font-family:-apple-system,BlinkMacSystemFont,Segoe UI,Roboto,Helvetica Neue
   color: #0000;
 }
 
+.x1md1b2w:not(#\#):not(#\#):not(#\#) {
+  color: var(--text-color, #333);
+}
+
 .x14rh7hd:not(#\#):not(#\#):not(#\#) {
   color: var(--x-color);
 }
@@ -1850,10 +1848,6 @@ body{font-family:-apple-system,BlinkMacSystemFont,Segoe UI,Roboto,Helvetica Neue
 
 .xgfgdi1:not(#\#):not(#\#):not(#\#) {
   color: var(--x1e13nsu);
-}
-
-.xddgtn9:not(#\#):not(#\#):not(#\#) {
-  color: var(--x1i0kj6l);
 }
 
 .x1id9yul:not(#\#):not(#\#):not(#\#) {
@@ -2056,16 +2050,16 @@ body{font-family:-apple-system,BlinkMacSystemFont,Segoe UI,Roboto,Helvetica Neue
   font-size: 50px;
 }
 
+.xofnbgl:not(#\#):not(#\#):not(#\#) {
+  font-size: var(--font-size, 16px);
+}
+
 .xww4jgc:not(#\#):not(#\#):not(#\#) {
   font-size: var(--x-19zvkyr);
 }
 
 .xdmh292:not(#\#):not(#\#):not(#\#) {
   font-size: var(--x-fontSize);
-}
-
-.x1l5wq1u:not(#\#):not(#\#):not(#\#) {
-  font-size: var(--x1bwga4g);
 }
 
 .xrkoupw:not(#\#):not(#\#):not(#\#) {
@@ -2168,16 +2162,16 @@ body{font-family:-apple-system,BlinkMacSystemFont,Segoe UI,Roboto,Helvetica Neue
   line-height: 1rem;
 }
 
+.xd8k45:not(#\#):not(#\#):not(#\#) {
+  line-height: var(--line-height, 1.5);
+}
+
 .x7ne374:not(#\#):not(#\#):not(#\#) {
   line-height: var(--x-12ploh);
 }
 
 .x15dsfln:not(#\#):not(#\#):not(#\#) {
   line-height: var(--x-lineHeight);
-}
-
-.xvfwx5f:not(#\#):not(#\#):not(#\#) {
-  line-height: var(--x5g869a);
 }
 
 .xvc5jky:not(#\#):not(#\#):not(#\#) {
