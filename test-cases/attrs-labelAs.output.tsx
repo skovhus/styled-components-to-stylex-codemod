@@ -10,9 +10,9 @@ type TextProps = React.PropsWithChildren<{
 }>;
 
 function Text(props: React.ComponentProps<"span"> & TextProps) {
-  const { className, children, style } = props;
+  const { as: Component = "span", className, children, style } = props;
 
-  return <span {...mergedSx(styles.text, className, style)}>{children}</span>;
+  return <Component {...mergedSx(styles.text, className, style)}>{children}</Component>;
 }
 
 type LabelProps = Omit<React.ComponentPropsWithRef<typeof Text>, "className" | "style"> & {
