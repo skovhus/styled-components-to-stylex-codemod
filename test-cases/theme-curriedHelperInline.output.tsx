@@ -13,8 +13,8 @@ function Box(props: BoxProps) {
     <div
       {...stylex.props(
         styles.box,
-        styles.borderBottom,
         position === "top" && styles.boxPositionTop,
+        styles.borderBottom,
       )}
     >
       {children}

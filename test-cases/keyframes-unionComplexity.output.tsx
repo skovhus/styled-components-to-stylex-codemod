@@ -18,20 +18,20 @@ type LoaderCaretProps<C extends React.ElementType = "div"> = React.ComponentProp
       $delay?: number;
     },
     "as"
-  > & { as?: C };
+  > & { sx?: stylex.StyleXStyles; as?: C };
 
 export function LoaderCaret<C extends React.ElementType = "div">(
   props: {
     $delay?: number;
-  } & React.ComponentPropsWithRef<C> & { as?: C },
+  } & React.ComponentPropsWithRef<C> & { sx?: stylex.StyleXStyles; as?: C },
 ) {
-  const { as: Component = "div", className, children, style, $delay, ...rest } = props;
+  const { as: Component = "div", className, children, style, sx, $delay, ...rest } = props;
 
   return (
     <Component
       {...rest}
       {...mergedSx(
-        [styles.loaderCaret, styles.loaderCaretAnimationDelay(`${$delay ?? 1000}ms`)],
+        [styles.loaderCaret, styles.loaderCaretAnimationDelay(`${$delay ?? 1000}ms`), sx],
         className,
         style,
       )}

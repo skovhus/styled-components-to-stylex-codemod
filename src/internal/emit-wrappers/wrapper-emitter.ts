@@ -26,6 +26,8 @@ import * as seb from "./style-expr-builders.js";
 
 export type { JsxAttr, JsxTagName, StatementKind };
 
+export const SX_PROP_TYPE_TEXT = "sx?: stylex.StyleXStyles";
+
 type TsTypeAnnotationInput = Parameters<JSCodeshift["tsTypeAnnotation"]>[0];
 type BlockStatementBody = Parameters<JSCodeshift["blockStatement"]>[0];
 type AstNodeOrNull = ASTNode | null | undefined;
@@ -256,6 +258,10 @@ export class WrapperEmitter {
     return used.has("*") || used.has("style");
   }
 
+  shouldAllowSxProp(d: StyledDecl): boolean {
+    return d.supportsExternalStyles ?? false;
+  }
+
   shouldAllowAsPropForIntrinsic(d: StyledDecl, tagName: string): boolean {
     // Allow `as` prop when explicitly requested via adapter, even for void tags
     if (d.supportsAsProp) {
@@ -464,9 +470,16 @@ export class WrapperEmitter {
     if (interfaces.size() === 0) {
       return false;
     }
-    // Parse the base type into a TSExpressionWithTypeArguments node
-    const parsed = j(`interface X extends ${baseTypeText} {}`).get().node.program.body[0] as any;
-    const extendsClause = parsed?.extends?.[0];
+    // Parse the base type into a TSExpressionWithTypeArguments node.
+    // Intersection types (A & B) are not valid in `extends` clauses, so
+    // gracefully fall back to type alias extension on parse failure.
+    let extendsClause: unknown;
+    try {
+      const parsed = j(`interface X extends ${baseTypeText} {}`).get().node.program.body[0] as any;
+      extendsClause = parsed?.extends?.[0];
+    } catch {
+      return false;
+    }
     if (!extendsClause) {
       return false;
     }
@@ -485,6 +498,56 @@ export class WrapperEmitter {
       iface.extends = [...existingExtends, extendsClause];
     });
     return true;
+  }
+
+  injectMembersIntoInterface(typeName: string, memberTexts: string[]): boolean {
+    const { root, j } = this;
+    if (!this.emitTypes || memberTexts.length === 0) {
+      return false;
+    }
+    const interfaces = root.find(j.TSInterfaceDeclaration, {
+      id: { type: "Identifier", name: typeName },
+    } as any);
+    if (interfaces.size() === 0) {
+      return false;
+    }
+    const membersSource = `interface _Tmp { ${memberTexts.join("; ")} }`;
+    let newMembers: unknown[];
+    try {
+      const parsed = j(membersSource).get().node.program.body[0] as any;
+      newMembers = parsed?.body?.body ?? [];
+    } catch {
+      return false;
+    }
+    if (newMembers.length === 0) {
+      return false;
+    }
+    interfaces.forEach((path: any) => {
+      const iface = path.node;
+      const existingMembers = iface.body?.body ?? [];
+      const existingNames = new Set(
+        existingMembers
+          .filter((m: any) => m?.type === "TSPropertySignature" && m.key?.type === "Identifier")
+          .map((m: any) => m.key.name),
+      );
+      const filtered = newMembers.filter((m: any) => {
+        if (m?.type !== "TSPropertySignature" || m.key?.type !== "Identifier") {
+          return true;
+        }
+        return !existingNames.has(m.key.name);
+      });
+      if (filtered.length > 0) {
+        iface.body.body = [...existingMembers, ...filtered];
+      }
+    });
+    return true;
+  }
+
+  injectSxPropIntoExistingType(typeName: string): void {
+    const injected = this.injectMembersIntoInterface(typeName, [SX_PROP_TYPE_TEXT]);
+    if (!injected) {
+      this.extendExistingTypeAlias(typeName, `{ ${SX_PROP_TYPE_TEXT} }`);
+    }
   }
 
   extendExistingTypeAlias(typeName: string, baseTypeText: string): boolean {
@@ -759,9 +822,10 @@ export class WrapperEmitter {
     tagName: string;
     allowClassNameProp: boolean;
     allowStyleProp: boolean;
+    allowSxProp?: boolean;
     skipProps?: Set<string>;
   }): string {
-    const { d, tagName, allowClassNameProp, allowStyleProp, skipProps } = args;
+    const { d, tagName, allowClassNameProp, allowStyleProp, allowSxProp, skipProps } = args;
     const used = this.getUsedAttrs(d.localName);
     const needsBroadAttrs = used.has("*") || !!(d as any).usedAsValue;
 
@@ -773,8 +837,13 @@ export class WrapperEmitter {
       if (allowStyleProp) {
         lines.push(`style?: React.CSSProperties`);
       }
+      if (allowSxProp) {
+        lines.push(SX_PROP_TYPE_TEXT);
+      }
       const elementType = TAG_TO_HTML_ELEMENT[tagName] ?? "HTMLElement";
       lines.push(`ref?: React.Ref<${elementType}>`);
+    } else if (allowSxProp) {
+      lines.push(SX_PROP_TYPE_TEXT);
     }
 
     for (const attr of [...used].sort((a, b) => a.localeCompare(b))) {
@@ -814,7 +883,11 @@ export class WrapperEmitter {
         if (!allowStyleProp) {
           omitted.push('"style"');
         }
-        return omitted.length ? `Omit<${base}, ${omitted.join(" | ")}>` : base;
+        const baseType = omitted.length ? `Omit<${base}, ${omitted.join(" | ")}>` : base;
+        if (allowSxProp) {
+          return this.joinIntersection(baseType, `{ ${SX_PROP_TYPE_TEXT} }`);
+        }
+        return baseType;
       }
       return this.withChildren(literal);
     }
@@ -836,6 +909,7 @@ export class WrapperEmitter {
     d: StyledDecl;
     allowClassNameProp: boolean;
     allowStyleProp: boolean;
+    allowSxProp?: boolean;
     wrappedComponentIsInternalWrapper?: boolean;
     hasExplicitPropsType?: boolean;
     forceClassNameOptional?: boolean;
@@ -845,6 +919,7 @@ export class WrapperEmitter {
       d,
       allowClassNameProp,
       allowStyleProp,
+      allowSxProp,
       wrappedComponentIsInternalWrapper,
       hasExplicitPropsType,
       forceClassNameOptional,
@@ -869,6 +944,9 @@ export class WrapperEmitter {
     }
     if ((shouldAddStyleProps && allowStyleProp) || forceStyleOptional) {
       lines.push("style?: React.CSSProperties");
+    }
+    if (shouldAddStyleProps && allowSxProp) {
+      lines.push(SX_PROP_TYPE_TEXT);
     }
     if (this.hasForwardedAsUsage(d.localName)) {
       lines.push("forwardedAs?: React.ElementType");
@@ -1426,6 +1504,10 @@ export class WrapperEmitter {
 
   splitExtraStyleArgs(d: StyledDecl) {
     return seb.splitExtraStyleArgs(this.j, this.stylesIdentifier, d);
+  }
+
+  buildInterleavedExtraStyleArgs(d: StyledDecl, propsArgExprs: ExpressionKind[]) {
+    return seb.buildInterleavedExtraStyleArgs(this.j, this.stylesIdentifier, d, propsArgExprs);
   }
 
   splitAttrsInfo(attrsInfo: StyledDecl["attrsInfo"], bridgeClassVar?: string) {

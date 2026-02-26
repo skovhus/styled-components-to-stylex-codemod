@@ -13,7 +13,13 @@ import {
   type InlineStyleProp,
   type WrapperPropDefaults,
 } from "./types.js";
-import type { JsxAttr, JsxTagName, StatementKind, WrapperEmitter } from "./wrapper-emitter.js";
+import {
+  SX_PROP_TYPE_TEXT,
+  type JsxAttr,
+  type JsxTagName,
+  type StatementKind,
+  type WrapperEmitter,
+} from "./wrapper-emitter.js";
 import {
   appendPseudoAliasStyleArgs,
   appendThemeBooleanStyleArgs,
@@ -132,6 +138,7 @@ export function emitComponentWrappers(emitter: WrapperEmitter): {
     const wrappedHasStyle = localComponentHasProp(wrappedComponent, "style");
     const shouldAllowClassName = emitter.shouldAllowClassNameProp(d);
     const shouldAllowStyle = emitter.shouldAllowStyleProp(d);
+    const allowSxProp = emitter.shouldAllowSxProp(d);
     const allowClassNameProp = shouldAllowClassName || wrappedHasClassName;
     const allowStyleProp = shouldAllowStyle || wrappedHasStyle;
     // When the wrapped component has className/style as REQUIRED props, we must
@@ -171,36 +178,42 @@ export function emitComponentWrappers(emitter: WrapperEmitter): {
       const explicitTypeExists = explicitTypeName && emitter.typeExistsInFile(explicitTypeName);
 
       if (explicitTypeExists && explicit && explicitTypeName && !isPolymorphicComponentWrapper) {
-        const baseTypeText = (() => {
-          const base = `React.ComponentPropsWithRef<typeof ${renderedComponent}>`;
-          const omitted: string[] = [];
-          // When forcing optional, always omit to prevent inheriting requiredness
-          if (!allowClassNameProp || forceClassNameOptional) {
-            omitted.push('"className"');
-          }
-          if (!allowStyleProp || forceStyleOptional) {
-            omitted.push('"style"');
-          }
-          const baseWithOmit = omitted.length ? `Omit<${base}, ${omitted.join(" | ")}>` : base;
-          // Add optional className/style when forcing optional
-          const optionalProps: string[] = [];
-          if (forceClassNameOptional) {
-            optionalProps.push("className?: string");
-          }
-          if (forceStyleOptional) {
-            optionalProps.push("style?: React.CSSProperties");
-          }
-          if (hasForwardedAsUsage) {
-            optionalProps.push("forwardedAs?: React.ElementType");
-          }
-          if (optionalProps.length > 0) {
-            return emitter.joinIntersection(baseWithOmit, `{ ${optionalProps.join("; ")} }`);
-          }
-          return baseWithOmit;
-        })();
+        const base = `React.ComponentPropsWithRef<typeof ${renderedComponent}>`;
+        const omitted: string[] = [];
+        if (!allowClassNameProp || forceClassNameOptional) {
+          omitted.push('"className"');
+        }
+        if (!allowStyleProp || forceStyleOptional) {
+          omitted.push('"style"');
+        }
+        const baseWithOmit = omitted.length ? `Omit<${base}, ${omitted.join(" | ")}>` : base;
+        const optionalProps: string[] = [];
+        if (forceClassNameOptional) {
+          optionalProps.push("className?: string");
+        }
+        if (forceStyleOptional) {
+          optionalProps.push("style?: React.CSSProperties");
+        }
+        if (allowSxProp) {
+          optionalProps.push(SX_PROP_TYPE_TEXT);
+        }
+        if (hasForwardedAsUsage) {
+          optionalProps.push("forwardedAs?: React.ElementType");
+        }
         // Extend the existing type in-place so the wrapper can reuse it.
-        const interfaceExtended = emitter.extendExistingInterface(explicitTypeName, baseTypeText);
-        if (!interfaceExtended) {
+        // For interfaces, use `extends` for the base type and inject optional props
+        // as members (since `extends` clauses don't support intersection types).
+        // For type aliases, use an intersection of everything.
+        const interfaceExtended = emitter.extendExistingInterface(explicitTypeName, baseWithOmit);
+        if (interfaceExtended) {
+          if (optionalProps.length > 0) {
+            emitter.injectMembersIntoInterface(explicitTypeName, optionalProps);
+          }
+        } else {
+          const baseTypeText =
+            optionalProps.length > 0
+              ? emitter.joinIntersection(baseWithOmit, `{ ${optionalProps.join("; ")} }`)
+              : baseWithOmit;
           emitter.extendExistingTypeAlias(explicitTypeName, baseTypeText);
         }
         functionParamTypeName = explicitTypeName;
@@ -225,13 +238,16 @@ export function emitComponentWrappers(emitter: WrapperEmitter): {
           if (!allowStyleProp) {
             omitted.push('"style"');
           }
-          // Add optional className/style when forcing optional
+          // Add optional className/style/sx when forcing optional or when sx is enabled
           const optionalStyleProps: string[] = [];
           if (forceClassNameOptional) {
             optionalStyleProps.push("className?: string");
           }
           if (forceStyleOptional) {
             optionalStyleProps.push("style?: React.CSSProperties");
+          }
+          if (allowSxProp) {
+            optionalStyleProps.push(SX_PROP_TYPE_TEXT);
           }
           const typeText = [
             baseProps,
@@ -260,6 +276,7 @@ export function emitComponentWrappers(emitter: WrapperEmitter): {
             d,
             allowClassNameProp,
             allowStyleProp,
+            allowSxProp,
             wrappedComponentIsInternalWrapper: skipStyleProps,
             hasExplicitPropsType,
             forceClassNameOptional,
@@ -276,12 +293,15 @@ export function emitComponentWrappers(emitter: WrapperEmitter): {
               refElementType,
             );
           }
-          // Inject className/style into explicit props when external styles are explicitly enabled
-          // via adapter (d.supportsExternalStyles) and the wrapped component doesn't already have them
-          if (explicitWithExtras && d.supportsExternalStyles && !skipStyleProps) {
+          // Inject className/style/sx into explicit props when external styles are explicitly
+          // enabled via adapter (d.supportsExternalStyles).
+          // className/style are skipped when the wrapped component already has them.
+          // sx is always injected when allowSxProp is true (it's a new StyleX-specific prop).
+          if (explicitWithExtras && d.supportsExternalStyles) {
             explicitWithExtras = injectStylePropsIntoTypeLiteralString(explicitWithExtras, {
-              className: allowClassNameProp && !wrappedHasClassName,
-              style: allowStyleProp && !wrappedHasStyle,
+              className: !skipStyleProps && allowClassNameProp && !wrappedHasClassName,
+              style: !skipStyleProps && allowStyleProp && !wrappedHasStyle,
+              sx: allowSxProp,
             });
           }
           const explicitWithRef =
@@ -306,20 +326,29 @@ export function emitComponentWrappers(emitter: WrapperEmitter): {
     }
     // For component wrappers, don't include extendsStyleKey because
     // the wrapped component already applies its own styles.
-    const { beforeBase: extraStyleArgs, afterBase: extraStyleArgsAfterBase } =
-      emitter.splitExtraStyleArgs(d);
-    const styleArgs: ExpressionKind[] = [
-      ...extraStyleArgs,
-      j.memberExpression(j.identifier(stylesIdentifier), j.identifier(d.styleKey)),
-      ...extraStyleArgsAfterBase,
-    ];
-
     // Track props that need to be destructured for conditional styles
     const destructureProps: string[] = [];
     // Track default values for props (used for destructuring defaults on optional props)
     const propDefaults: WrapperPropDefaults = new Map();
     // Track namespace boolean props (like 'disabled') that need to be passed to wrapped component
     const namespaceBooleanProps: string[] = [];
+
+    // Build propsArg expressions first (may be needed for interleaving)
+    const propsArgExprs = d.extraStylexPropsArgs
+      ? emitter.buildExtraStylexPropsExprs({
+          entries: d.extraStylexPropsArgs,
+          destructureProps,
+        })
+      : [];
+
+    // Build interleaved before/after-base args using mixinOrder
+    const { beforeBase: extraStyleArgs, afterBase: extraStyleArgsAfterBase } =
+      emitter.buildInterleavedExtraStyleArgs(d, propsArgExprs);
+    const styleArgs: ExpressionKind[] = [
+      ...extraStyleArgs,
+      j.memberExpression(j.identifier(stylesIdentifier), j.identifier(d.styleKey)),
+      ...extraStyleArgsAfterBase,
+    ];
 
     // Add variant style arguments if this component has variants
     if (d.variantStyleKeys) {
@@ -345,19 +374,6 @@ export function emitComponentWrappers(emitter: WrapperEmitter): {
         propDefaults,
         namespaceBooleanProps,
       });
-    }
-
-    // Add adapter-resolved StyleX styles (emitted directly into stylex.props args).
-    // Intentionally do not pass propDefaults here: component wrappers may forward
-    // destructured props back to the wrapped component, so synthesizing defaults for
-    // style-only condition simplification can change runtime forwarded values.
-    if (d.extraStylexPropsArgs) {
-      styleArgs.push(
-        ...emitter.buildExtraStylexPropsExprs({
-          entries: d.extraStylexPropsArgs,
-          destructureProps,
-        }),
-      );
     }
 
     // Handle theme boolean conditionals (e.g., theme.isDark ? styles.boxDark : styles.boxLight)
@@ -616,10 +632,15 @@ export function emitComponentWrappers(emitter: WrapperEmitter): {
       const childrenId = j.identifier("children");
       const classNameId = j.identifier("className");
       const styleId = j.identifier("style");
+      const sxId = j.identifier("sx");
       const restId = j.identifier("rest");
       const componentId = j.identifier("Component");
       const forwardedAsId = j.identifier("forwardedAs");
       const wrappedComponentExpr = buildWrappedComponentExpr();
+
+      if (allowSxProp) {
+        styleArgs.push(sxId);
+      }
 
       // Add defaultAttrs props to destructureProps for nullish coalescing patterns
       // (e.g., tabIndex: props.tabIndex ?? 0 needs tabIndex destructured)
@@ -643,6 +664,7 @@ export function emitComponentWrappers(emitter: WrapperEmitter): {
           ...(allowClassNameProp ? [patternProp("className", classNameId)] : []),
           ...(includeChildren ? [patternProp("children", childrenId)] : []),
           ...(allowStyleProp ? [patternProp("style", styleId)] : []),
+          ...(allowSxProp ? [patternProp("sx", sxId)] : []),
           ...(shouldLowerForwardedAs ? [patternProp("forwardedAs", forwardedAsId)] : []),
         ],
         destructureProps,
@@ -664,6 +686,7 @@ export function emitComponentWrappers(emitter: WrapperEmitter): {
         styleId,
         allowClassNameProp,
         allowStyleProp,
+        allowSxProp,
         inlineStyleProps: (d.inlineStyleProps ?? []) as InlineStyleProp[],
         staticClassNameExpr,
       });

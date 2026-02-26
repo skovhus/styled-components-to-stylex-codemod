@@ -14,6 +14,7 @@ import { createCssHelperConditionalHandler } from "./css-helper-conditional.js";
 import { mergeMediaIntoStyles } from "./utils.js";
 import { createValuePatternHandlers } from "./value-patterns.js";
 import { createVariantApplier } from "./variant-utils.js";
+import { addStyleKeyMixin } from "./precompute.js";
 import type { LowerRulesState } from "./state.js";
 import { extractRootAndPath } from "../utilities/jscodeshift-utils.js";
 import { cssValueToJs, toStyleKey, type ComputedKeyEntry } from "../transform/helpers.js";
@@ -64,6 +65,39 @@ export function createDeclProcessingState(state: LowerRulesState, decl: StyledDe
   // Track properties defined by composed css helpers along with their values
   // so we can set proper default values for pseudo selectors.
   const cssHelperPropValues = new Map<string, unknown>();
+
+  // Tracks the current target for base static CSS properties.
+  // When a resolvedStyles helper is encountered mid-template, subsequent static
+  // properties are redirected to an "after-base" segment to preserve CSS cascade order.
+  let afterBaseStyleTarget: Record<string, unknown> | null = null;
+  let afterBaseSegmentCounter = 0;
+
+  /**
+   * Returns the current target object for base static CSS properties.
+   * Normally this is `styleObj`, but after a resolvedStyles helper is encountered,
+   * it returns the current after-base segment.
+   */
+  const getBaseStyleTarget = (): Record<string, unknown> => afterBaseStyleTarget ?? styleObj;
+
+  /**
+   * Called when a resolvedStyles helper arg is added to extraStylexPropsArgs.
+   * Creates a new after-base segment so that subsequent static properties
+   * are placed after the helper in the stylex.props() call, preserving cascade order.
+   */
+  const notifyResolvedStylesArg = (): void => {
+    const hasStaticPropsInBase = Object.keys(styleObj).length > 0 || afterBaseStyleTarget !== null;
+    if (!hasStaticPropsInBase) {
+      // Helper appears before any static properties — no segment split needed.
+      // It will naturally be placed before or alongside the base.
+      return;
+    }
+    afterBaseSegmentCounter++;
+    const segmentKey = `${decl.styleKey}After${afterBaseSegmentCounter}`;
+    const segment: Record<string, unknown> = {};
+    extraStyleObjects.set(segmentKey, segment);
+    afterBaseStyleTarget = segment;
+    addStyleKeyMixin(decl, segmentKey, { afterBase: true });
+  };
 
   const resolveComposedDefaultValue = (helperVal: unknown, propName: string): unknown => {
     if (helperVal === undefined) {
@@ -333,5 +367,7 @@ export function createDeclProcessingState(state: LowerRulesState, decl: StyledDe
     isPlainTemplateLiteral,
     isThemeAccessTest,
     tryHandleCssHelperConditionalBlock,
+    getBaseStyleTarget,
+    notifyResolvedStylesArg,
   };
 }

@@ -1311,12 +1311,61 @@ export const App = () => <Button>Click</Button>;
     );
 
     expect(result.code).not.toBeNull();
-    // Should use the verbose sx variable pattern
-    expect(result.code).toMatch(/const\s+sx\s*=\s*stylex\.props/);
+    // Should use the verbose _sx variable pattern (renamed from sx to avoid
+    // shadowing the destructured sx prop)
+    expect(result.code).toMatch(/const\s+_sx\s*=\s*stylex\.props/);
     // Should have the verbose className merging
     expect(result.code).toContain(".filter(Boolean).join");
     // Should have style spread
-    expect(result.code).toContain("...sx.style");
+    expect(result.code).toContain("..._sx.style");
+  });
+
+  it("should include sx in polymorphic shouldForwardProp wrapper type", async () => {
+    const adapterWithSxAndAs = {
+      styleMerger: {
+        functionName: "mergedSx",
+        importSource: { kind: "specifier" as const, value: "./lib/mergedSx" },
+      },
+      externalInterface() {
+        return { styles: true, as: true } as const;
+      },
+      resolveValue() {
+        return undefined;
+      },
+      resolveCall() {
+        return undefined;
+      },
+      resolveSelector() {
+        return undefined;
+      },
+    };
+
+    const source = `
+import styled from 'styled-components';
+
+interface BoxProps {
+  $color?: string;
+}
+
+export const Box = styled.div.withConfig({
+  shouldForwardProp: (prop) => !prop.startsWith('$'),
+})<BoxProps>\`
+  color: \${(props) => props.$color ?? 'black'};
+\`;
+
+export const App = () => <Box $color="red">Hello</Box>;
+`;
+
+    const result = transformWithWarnings(
+      { source, path: "test.tsx" },
+      { jscodeshift: j, j, stats: () => {}, report: () => {} },
+      { adapter: adapterWithSxAndAs },
+    );
+
+    expect(result.code).not.toBeNull();
+    // The polymorphic type should include sx alongside as
+    expect(result.code).toContain("sx?: stylex.StyleXStyles");
+    expect(result.code).toContain("as?: C");
   });
 });
 

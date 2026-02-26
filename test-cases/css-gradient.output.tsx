@@ -6,7 +6,7 @@ export function GradientText(props: React.PropsWithChildren<{ ref?: React.Ref<HT
   const { children, ...rest } = props;
 
   return (
-    <span {...rest} {...stylex.props(styles.gradientText, helpers.gradient)}>
+    <span {...rest} {...stylex.props(helpers.gradient, styles.gradientText)}>
       {children}
     </span>
   );

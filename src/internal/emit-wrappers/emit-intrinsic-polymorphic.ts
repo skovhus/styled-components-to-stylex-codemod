@@ -12,7 +12,7 @@ import {
   type WrapperPropDefaults,
 } from "./types.js";
 import { withLeadingComments } from "./comments.js";
-import type { JsxAttr, StatementKind } from "./wrapper-emitter.js";
+import { SX_PROP_TYPE_TEXT, type JsxAttr, type StatementKind } from "./wrapper-emitter.js";
 import { emitStyleMerging } from "./style-merger.js";
 import { sortVariantEntriesBySpecificity, VOID_TAGS } from "./type-helpers.js";
 import type { EmitIntrinsicContext } from "./emit-intrinsic-helpers.js";
@@ -61,6 +61,7 @@ export function emitIntrinsicPolymorphicWrappers(ctx: EmitIntrinsicContext): voi
       const tagName = d.base.tagName;
       const allowClassNameProp = emitter.shouldAllowClassNameProp(d);
       const allowStyleProp = emitter.shouldAllowStyleProp(d);
+      const allowSxProp = emitter.shouldAllowSxProp(d);
       const allowAsProp = shouldAllowAsProp(d, tagName);
       const includesForwardedAs = hasForwardedAsUsage(d);
       const explicit = emitter.stringifyTsType(d.propsType);
@@ -82,9 +83,17 @@ export function emitIntrinsicPolymorphicWrappers(ctx: EmitIntrinsicContext): voi
         }
         const baseMaybeOmitted =
           omitted.length > 0 ? `Omit<${base}, ${omitted.join(" | ")}>` : base;
-        const withAs = allowAsProp
-          ? emitter.joinIntersection(baseMaybeOmitted, "{ as?: C }")
-          : baseMaybeOmitted;
+        const asPropParts: string[] = [];
+        if (allowSxProp) {
+          asPropParts.push(SX_PROP_TYPE_TEXT);
+        }
+        if (allowAsProp) {
+          asPropParts.push("as?: C");
+        }
+        const withAs =
+          asPropParts.length > 0
+            ? emitter.joinIntersection(baseMaybeOmitted, `{ ${asPropParts.join("; ")} }`)
+            : baseMaybeOmitted;
         const withForwardedAs = withForwardedAsType(withAs, includesForwardedAs);
         return explicit ? emitter.joinIntersection(withForwardedAs, explicit) : withForwardedAs;
       })();
@@ -103,8 +112,22 @@ export function emitIntrinsicPolymorphicWrappers(ctx: EmitIntrinsicContext): voi
       }
       ctx.markNeedsReactTypeImport();
 
+      // Track props that need to be destructured for variant styles
+      const destructureProps: string[] = [];
+      // Track default values for props (for destructuring defaults)
+      const propDefaults: WrapperPropDefaults = new Map();
+
+      // Build propsArg expressions first (may be needed for interleaving)
+      const propsArgExprs = d.extraStylexPropsArgs
+        ? emitter.buildExtraStylexPropsExprs({
+            entries: d.extraStylexPropsArgs,
+            destructureProps,
+          })
+        : [];
+
+      // Build interleaved before/after-base args using mixinOrder
       const { beforeBase: extraStyleArgs, afterBase: extraStyleArgsAfterBase } =
-        emitter.splitExtraStyleArgs(d);
+        emitter.buildInterleavedExtraStyleArgs(d, propsArgExprs);
       const styleArgs: ExpressionKind[] = [
         ...(d.extendsStyleKey
           ? [j.memberExpression(j.identifier(stylesIdentifier), j.identifier(d.extendsStyleKey))]
@@ -113,11 +136,6 @@ export function emitIntrinsicPolymorphicWrappers(ctx: EmitIntrinsicContext): voi
         j.memberExpression(j.identifier(stylesIdentifier), j.identifier(d.styleKey)),
         ...extraStyleArgsAfterBase,
       ];
-
-      // Track props that need to be destructured for variant styles
-      const destructureProps: string[] = [];
-      // Track default values for props (for destructuring defaults)
-      const propDefaults: WrapperPropDefaults = new Map();
 
       // Collect keys used by compound variants (they're handled separately)
       const compoundVariantKeys = new Set<string>();
@@ -159,16 +177,6 @@ export function emitIntrinsicPolymorphicWrappers(ctx: EmitIntrinsicContext): voi
       // Add compound variant expressions (multi-prop nested ternaries)
       if (d.compoundVariants) {
         buildCompoundVariantExpressions(d.compoundVariants, styleArgs, destructureProps);
-      }
-
-      // Add adapter-resolved StyleX styles (emitted directly into stylex.props args).
-      if (d.extraStylexPropsArgs) {
-        styleArgs.push(
-          ...emitter.buildExtraStylexPropsExprs({
-            entries: d.extraStylexPropsArgs,
-            destructureProps,
-          }),
-        );
       }
 
       // Handle pseudo-alias selectors (e.g., &:${highlight})
@@ -218,7 +226,12 @@ export function emitIntrinsicPolymorphicWrappers(ctx: EmitIntrinsicContext): voi
       const restId = j.identifier("rest");
       const classNameId = j.identifier("className");
       const styleId = j.identifier("style");
+      const sxId = j.identifier("sx");
       const forwardedAsId = j.identifier("forwardedAs");
+
+      if (allowSxProp) {
+        styleArgs.push(sxId);
+      }
 
       const patternProps = emitter.buildDestructurePatternProps({
         baseProps: [
@@ -236,6 +249,7 @@ export function emitIntrinsicPolymorphicWrappers(ctx: EmitIntrinsicContext): voi
           ...(allowClassNameProp ? [ctx.patternProp("className", classNameId)] : []),
           ...(includeChildren ? [ctx.patternProp("children", childrenId)] : []),
           ...(allowStyleProp ? [ctx.patternProp("style", styleId)] : []),
+          ...(allowSxProp ? [ctx.patternProp("sx", sxId)] : []),
         ],
         destructureProps,
         propDefaults,
@@ -264,6 +278,7 @@ export function emitIntrinsicPolymorphicWrappers(ctx: EmitIntrinsicContext): voi
         styleId,
         allowClassNameProp,
         allowStyleProp,
+        allowSxProp,
         inlineStyleProps: [],
         staticClassNameExpr,
       });

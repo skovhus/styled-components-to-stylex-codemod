@@ -12,7 +12,7 @@ import { cssDeclarationToStylexDeclarations } from "../css-prop-mapping.js";
 import { addPropComments } from "./comments.js";
 import { processRuleDeclarations } from "./process-rule-declarations.js";
 import {
-  normalizeSelectorForInputAttributePseudos,
+  normalizeSelectorForAttributePseudos,
   normalizeInterpolatedSelector,
   normalizeSpecificityHacks,
   parseElementSelectorPattern,
@@ -641,8 +641,8 @@ export function processDeclRules(ctx: DeclProcessingState): void {
 
     let media = rule.atRuleStack.find((a) => a.startsWith("@media"));
 
-    const isInputIntrinsic = decl.base.kind === "intrinsic" && decl.base.tagName === "input";
-    let selector = normalizeSelectorForInputAttributePseudos(rule.selector, isInputIntrinsic);
+    const intrinsicTagName = decl.base.kind === "intrinsic" ? decl.base.tagName : null;
+    let selector = normalizeSelectorForAttributePseudos(rule.selector, intrinsicTagName);
     selector = normalizeInterpolatedSelector(selector);
     // Normalize specificity hacks (&&) to base selector (&).
     // Higher tiers (&&&) are caught in the heuristic check above.
@@ -890,9 +890,12 @@ export function processDeclRules(ctx: DeclProcessingState): void {
         return;
       }
 
-      styleObj[prop] = value;
+      // Use getBaseStyleTarget() to respect after-base segments created by
+      // resolvedStyles helpers, preserving CSS cascade order.
+      const target = ctx.getBaseStyleTarget();
+      target[prop] = value;
       if (commentSource) {
-        addPropComments(styleObj, prop, {
+        addPropComments(target, prop, {
           leading: commentSource.leading,
           trailingLine: commentSource.trailingLine,
         });

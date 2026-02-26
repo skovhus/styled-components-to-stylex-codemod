@@ -44,6 +44,7 @@ const styles = stylex.create({
     paddingInline: "16px",
     borderWidth: 0,
     borderStyle: "none",
+    borderColor: "initial",
     borderRadius: "4px",
   },
   card: {
@@ -87,6 +88,7 @@ const styles = stylex.create({
     paddingInline: "16px",
     borderWidth: 0,
     borderStyle: "none",
+    borderColor: "initial",
     borderRadius: "4px",
   },
 });

@@ -7,12 +7,12 @@ import { mergedSx } from "./lib/mergedSx";
  * className/style/rest merging for external style extension support.
  **/
 export function ExportedButton<C extends React.ElementType = "button">(
-  props: React.ComponentPropsWithRef<C> & { as?: C },
+  props: React.ComponentPropsWithRef<C> & { sx?: stylex.StyleXStyles; as?: C },
 ) {
-  const { as: Component = "button", className, children, style, ...rest } = props;
+  const { as: Component = "button", className, children, style, sx, ...rest } = props;
 
   return (
-    <Component {...rest} {...mergedSx(styles.exportedButton, className, style)}>
+    <Component {...rest} {...mergedSx([styles.exportedButton, sx], className, style)}>
       {children}
     </Component>
   );
@@ -33,6 +33,7 @@ const styles = stylex.create({
     paddingInline: "16px",
     borderWidth: 0,
     borderStyle: "none",
+    borderColor: "initial",
     borderRadius: "4px",
   },
 

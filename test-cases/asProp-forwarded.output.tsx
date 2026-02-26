@@ -3,12 +3,14 @@ import * as stylex from "@stylexjs/stylex";
 import { mergedSx } from "./lib/mergedSx";
 
 function Button<C extends React.ElementType = "button">(
-  props: React.ComponentPropsWithRef<C> & { as?: C } & { forwardedAs?: React.ElementType },
+  props: React.ComponentPropsWithRef<C> & { sx?: stylex.StyleXStyles; as?: C } & {
+    forwardedAs?: React.ElementType;
+  },
 ) {
-  const { as: Component = "button", forwardedAs, className, children, style, ...rest } = props;
+  const { as: Component = "button", forwardedAs, className, children, style, sx, ...rest } = props;
 
   return (
-    <Component {...rest} as={forwardedAs} {...mergedSx(styles.button, className, style)}>
+    <Component {...rest} as={forwardedAs} {...mergedSx([styles.button, sx], className, style)}>
       {children}
     </Component>
   );
@@ -48,6 +50,7 @@ const styles = stylex.create({
     color: "white",
     borderWidth: 0,
     borderStyle: "none",
+    borderColor: "initial",
     borderRadius: "4px",
     textDecoration: "none",
     cursor: "pointer",

@@ -327,7 +327,11 @@ export function rewriteJsxStep(ctx: TransformContext): StepResult {
               const arg = extraStylexPropsArgs[propsArgIdx];
               propsArgIdx++;
               if (arg) {
-                extraMixinArgs.push(arg.expr);
+                if (arg.afterBase) {
+                  extraAfterBaseArgs.push(arg.expr);
+                } else {
+                  extraMixinArgs.push(arg.expr);
+                }
               }
             }
           }
