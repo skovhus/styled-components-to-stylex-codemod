@@ -70,6 +70,16 @@ body{font-family:-apple-system,BlinkMacSystemFont,Segoe UI,Roboto,Helvetica Neue
   inherits: false
 }
 
+@property --x-fontSize {
+  syntax: "*";
+  inherits: false
+}
+
+@property --x-lineHeight {
+  syntax: "*";
+  inherits: false
+}
+
 @property --x-19zvkyr {
   syntax: "*";
   inherits: false
@@ -95,12 +105,7 @@ body{font-family:-apple-system,BlinkMacSystemFont,Segoe UI,Roboto,Helvetica Neue
   inherits: false
 }
 
-@property --x-fontSize {
-  syntax: "*";
-  inherits: false
-}
-
-@property --x-lineHeight {
+@property --x-gap {
   syntax: "*";
   inherits: false
 }
@@ -116,11 +121,6 @@ body{font-family:-apple-system,BlinkMacSystemFont,Segoe UI,Roboto,Helvetica Neue
 }
 
 @property --x-rowGap {
-  syntax: "*";
-  inherits: false
-}
-
-@property --x-gap {
   syntax: "*";
   inherits: false
 }
@@ -1971,8 +1971,16 @@ body{font-family:-apple-system,BlinkMacSystemFont,Segoe UI,Roboto,Helvetica Neue
   filter: opacity(.65);
 }
 
+.x3ieub6:not(#\#):not(#\#):not(#\#) {
+  flex-direction: column-reverse;
+}
+
 .xdt5ytf:not(#\#):not(#\#):not(#\#) {
   flex-direction: column;
+}
+
+.x15zctf7:not(#\#):not(#\#):not(#\#) {
+  flex-direction: row-reverse;
 }
 
 .x1q0g3np:not(#\#):not(#\#):not(#\#) {
