@@ -3,13 +3,12 @@ import * as stylex from "@stylexjs/stylex";
 import { mergedSx } from "./lib/mergedSx";
 
 // A polymorphic Text component that defaults to span
-type TextProps = { sx?: stylex.StyleXStyles | stylex.StyleXStyles[] } & React.PropsWithChildren<{
+type TextProps = { sx?: stylex.StyleXStyles } & React.PropsWithChildren<{
   variant?: "small" | "regular" | "large";
 }>;
 
 function Text<C extends React.ElementType = "span">(
-  props: React.ComponentProps<"span"> &
-    TextProps & { sx?: stylex.StyleXStyles | stylex.StyleXStyles[] } & { as?: C },
+  props: React.ComponentProps<"span"> & TextProps & { sx?: stylex.StyleXStyles } & { as?: C },
 ) {
   const {
     as: Component = "span",

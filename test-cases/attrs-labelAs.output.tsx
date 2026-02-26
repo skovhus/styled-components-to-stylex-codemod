@@ -3,16 +3,13 @@ import * as stylex from "@stylexjs/stylex";
 import { mergedSx } from "./lib/mergedSx";
 
 // Simplified Text component for test case
-type TextProps = { sx?: stylex.StyleXStyles | stylex.StyleXStyles[] } & React.PropsWithChildren<{
+type TextProps = { sx?: stylex.StyleXStyles } & React.PropsWithChildren<{
   as?: React.ElementType;
   className?: string;
   style?: React.CSSProperties;
 }>;
 
-function Text(
-  props: React.ComponentProps<"span"> &
-    TextProps & { sx?: stylex.StyleXStyles | stylex.StyleXStyles[] },
-) {
+function Text(props: React.ComponentProps<"span"> & TextProps & { sx?: stylex.StyleXStyles }) {
   const { className, children, style, sx, ...rest } = props;
 
   return (

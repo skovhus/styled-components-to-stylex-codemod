@@ -26,7 +26,7 @@ import * as seb from "./style-expr-builders.js";
 
 export type { JsxAttr, JsxTagName, StatementKind };
 
-export const SX_PROP_TYPE_TEXT = "sx?: stylex.StyleXStyles | stylex.StyleXStyles[]";
+export const SX_PROP_TYPE_TEXT = "sx?: stylex.StyleXStyles";
 
 type TsTypeAnnotationInput = Parameters<JSCodeshift["tsTypeAnnotation"]>[0];
 type BlockStatementBody = Parameters<JSCodeshift["blockStatement"]>[0];

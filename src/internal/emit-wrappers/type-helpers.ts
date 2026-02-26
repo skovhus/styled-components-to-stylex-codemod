@@ -3,6 +3,7 @@
  * Core concepts: variant sorting and intrinsic tag classification.
  */
 import type { StyledDecl } from "../transform-types.js";
+import { SX_PROP_TYPE_TEXT } from "./wrapper-emitter.js";
 
 /**
  * Sorts variant style entries by condition specificity.
@@ -106,7 +107,7 @@ export function injectStylePropsIntoTypeLiteralString(
     propsToAdd.push("style?: React.CSSProperties");
   }
   if (options.sx && !/\bsx\s*\??\s*:/.test(typeText)) {
-    propsToAdd.push("sx?: stylex.StyleXStyles | stylex.StyleXStyles[]");
+    propsToAdd.push(SX_PROP_TYPE_TEXT);
   }
   if (propsToAdd.length === 0) {
     return typeText;

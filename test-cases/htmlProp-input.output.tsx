@@ -9,9 +9,7 @@ import { mergedSx } from "./lib/mergedSx";
  * A range input component.
  * Should accept all HTML input attributes like max, min, type, value, onChange, etc.
  */
-export function RangeInput(
-  props: React.ComponentProps<"input"> & { sx?: stylex.StyleXStyles | stylex.StyleXStyles[] },
-) {
+export function RangeInput(props: React.ComponentProps<"input"> & { sx?: stylex.StyleXStyles }) {
   const { className, style, sx, ...rest } = props;
 
   return <input {...rest} {...mergedSx([styles.rangeInput, sx], className, style)} />;

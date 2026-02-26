@@ -7,10 +7,7 @@ import { mergedSx } from "./lib/mergedSx";
  * className/style/rest merging for external style extension support.
  **/
 export function ExportedButton<C extends React.ElementType = "button">(
-  props: React.ComponentPropsWithRef<C> & {
-    sx?: stylex.StyleXStyles | stylex.StyleXStyles[];
-    as?: C;
-  },
+  props: React.ComponentPropsWithRef<C> & { sx?: stylex.StyleXStyles; as?: C },
 ) {
   const { as: Component = "button", className, children, style, sx, ...rest } = props;
 

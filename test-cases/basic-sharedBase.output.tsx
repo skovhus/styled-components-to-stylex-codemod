@@ -15,10 +15,7 @@ interface PositionProps {
 }
 
 type PositionBaseProps<C extends React.ElementType = "div"> = React.ComponentPropsWithRef<C> &
-  Omit<React.PropsWithChildren<PositionProps>, "as"> & {
-    sx?: stylex.StyleXStyles | stylex.StyleXStyles[];
-    as?: C;
-  };
+  Omit<React.PropsWithChildren<PositionProps>, "as"> & { sx?: stylex.StyleXStyles; as?: C };
 
 function PositionBase<C extends React.ElementType = "div">(
   props: PositionProps & React.ComponentPropsWithRef<C> & { as?: C },

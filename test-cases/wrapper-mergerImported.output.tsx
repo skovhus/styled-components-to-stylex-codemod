@@ -7,7 +7,7 @@ export function StyledLoading(
   props: React.ComponentPropsWithRef<typeof Loading> & {
     className?: string;
     style?: React.CSSProperties;
-    sx?: stylex.StyleXStyles | stylex.StyleXStyles[];
+    sx?: stylex.StyleXStyles;
   },
 ) {
   const { className, style, sx, ...rest } = props;

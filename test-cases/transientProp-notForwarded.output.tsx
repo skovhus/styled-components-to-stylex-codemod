@@ -35,7 +35,7 @@ function Flex(props: FlexProps) {
 interface ScrollableProps extends React.ComponentPropsWithRef<typeof Flex> {
   /** Whether to apply background color - used only for styling */
   $applyBackground?: boolean;
-  sx?: stylex.StyleXStyles | stylex.StyleXStyles[];
+  sx?: stylex.StyleXStyles;
 }
 
 /**

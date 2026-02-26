@@ -8,7 +8,7 @@ type SizeBoxProps<C extends React.ElementType = "div"> = React.ComponentPropsWit
       $size: number;
     },
     "as"
-  > & { sx?: stylex.StyleXStyles | stylex.StyleXStyles[]; as?: C };
+  > & { sx?: stylex.StyleXStyles; as?: C };
 
 /** A container that scales based on a dynamic size prop */
 function SizeBox<C extends React.ElementType = "div">(

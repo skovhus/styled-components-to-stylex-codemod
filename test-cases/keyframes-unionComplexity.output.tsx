@@ -18,7 +18,7 @@ type LoaderCaretProps<C extends React.ElementType = "div"> = React.ComponentProp
       $delay?: number;
     },
     "as"
-  > & { sx?: stylex.StyleXStyles | stylex.StyleXStyles[]; as?: C };
+  > & { sx?: stylex.StyleXStyles; as?: C };
 
 export function LoaderCaret<C extends React.ElementType = "div">(
   props: {
