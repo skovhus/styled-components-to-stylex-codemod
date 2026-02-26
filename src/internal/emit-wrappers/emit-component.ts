@@ -326,20 +326,29 @@ export function emitComponentWrappers(emitter: WrapperEmitter): {
     }
     // For component wrappers, don't include extendsStyleKey because
     // the wrapped component already applies its own styles.
-    const { beforeBase: extraStyleArgs, afterBase: extraStyleArgsAfterBase } =
-      emitter.splitExtraStyleArgs(d);
-    const styleArgs: ExpressionKind[] = [
-      ...extraStyleArgs,
-      j.memberExpression(j.identifier(stylesIdentifier), j.identifier(d.styleKey)),
-      ...extraStyleArgsAfterBase,
-    ];
-
     // Track props that need to be destructured for conditional styles
     const destructureProps: string[] = [];
     // Track default values for props (used for destructuring defaults on optional props)
     const propDefaults: WrapperPropDefaults = new Map();
     // Track namespace boolean props (like 'disabled') that need to be passed to wrapped component
     const namespaceBooleanProps: string[] = [];
+
+    // Build propsArg expressions first (may be needed for interleaving)
+    const propsArgExprs = d.extraStylexPropsArgs
+      ? emitter.buildExtraStylexPropsExprs({
+          entries: d.extraStylexPropsArgs,
+          destructureProps,
+        })
+      : [];
+
+    // Build interleaved before/after-base args using mixinOrder
+    const { beforeBase: extraStyleArgs, afterBase: extraStyleArgsAfterBase } =
+      emitter.buildInterleavedExtraStyleArgs(d, propsArgExprs);
+    const styleArgs: ExpressionKind[] = [
+      ...extraStyleArgs,
+      j.memberExpression(j.identifier(stylesIdentifier), j.identifier(d.styleKey)),
+      ...extraStyleArgsAfterBase,
+    ];
 
     // Add variant style arguments if this component has variants
     if (d.variantStyleKeys) {
@@ -365,19 +374,6 @@ export function emitComponentWrappers(emitter: WrapperEmitter): {
         propDefaults,
         namespaceBooleanProps,
       });
-    }
-
-    // Add adapter-resolved StyleX styles (emitted directly into stylex.props args).
-    // Intentionally do not pass propDefaults here: component wrappers may forward
-    // destructured props back to the wrapped component, so synthesizing defaults for
-    // style-only condition simplification can change runtime forwarded values.
-    if (d.extraStylexPropsArgs) {
-      styleArgs.push(
-        ...emitter.buildExtraStylexPropsExprs({
-          entries: d.extraStylexPropsArgs,
-          destructureProps,
-        }),
-      );
     }
 
     // Handle theme boolean conditionals (e.g., theme.isDark ? styles.boxDark : styles.boxLight)

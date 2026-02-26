@@ -259,8 +259,19 @@ export function emitShouldForwardPropWrappers(ctx: EmitIntrinsicContext): void {
     }
     ctx.markNeedsReactTypeImport();
 
+    // Track default values for props (for destructuring defaults)
+    const propDefaults: WrapperPropDefaults = new Map();
+
+    // Build propsArg expressions first (may be needed for interleaving)
+    const propsArgExprs = d.extraStylexPropsArgs
+      ? emitter.buildExtraStylexPropsExprs({
+          entries: d.extraStylexPropsArgs,
+        })
+      : [];
+
+    // Build interleaved before/after-base args using mixinOrder
     const { beforeBase: extraStyleArgs, afterBase: extraStyleArgsAfterBase } =
-      emitter.splitExtraStyleArgs(d);
+      emitter.buildInterleavedExtraStyleArgs(d, propsArgExprs);
     const styleArgs: ExpressionKind[] = [
       ...(d.extendsStyleKey
         ? [j.memberExpression(j.identifier(stylesIdentifier), j.identifier(d.extendsStyleKey))]
@@ -269,17 +280,6 @@ export function emitShouldForwardPropWrappers(ctx: EmitIntrinsicContext): void {
       j.memberExpression(j.identifier(stylesIdentifier), j.identifier(d.styleKey)),
       ...extraStyleArgsAfterBase,
     ];
-    // Track default values for props (for destructuring defaults)
-    const propDefaults: WrapperPropDefaults = new Map();
-
-    // Add adapter-resolved StyleX styles (emitted directly into stylex.props args).
-    if (d.extraStylexPropsArgs) {
-      styleArgs.push(
-        ...emitter.buildExtraStylexPropsExprs({
-          entries: d.extraStylexPropsArgs,
-        }),
-      );
-    }
 
     // Handle pseudo-alias selectors (e.g., &:${highlight})
     const pseudoGuardProps = appendPseudoAliasStyleArgs(

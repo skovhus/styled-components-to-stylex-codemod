@@ -1506,6 +1506,10 @@ export class WrapperEmitter {
     return seb.splitExtraStyleArgs(this.j, this.stylesIdentifier, d);
   }
 
+  buildInterleavedExtraStyleArgs(d: StyledDecl, propsArgExprs: ExpressionKind[]) {
+    return seb.buildInterleavedExtraStyleArgs(this.j, this.stylesIdentifier, d, propsArgExprs);
+  }
+
   splitAttrsInfo(attrsInfo: StyledDecl["attrsInfo"], bridgeClassVar?: string) {
     return seb.splitAttrsInfo(this.j, attrsInfo, bridgeClassVar);
   }

@@ -690,8 +690,21 @@ export function emitSimpleExportedIntrinsicWrappers(ctx: EmitIntrinsicContext): 
         }
       }
     }
+    const destructureProps: string[] = [];
+    // Track default values for props (for destructuring defaults)
+    const propDefaults: WrapperPropDefaults = new Map();
+
+    // Build propsArg expressions first (may be needed for interleaving)
+    const propsArgExprs = d.extraStylexPropsArgs
+      ? emitter.buildExtraStylexPropsExprs({
+          entries: d.extraStylexPropsArgs,
+          destructureProps,
+        })
+      : [];
+
+    // Build interleaved before/after-base args using mixinOrder
     const { beforeBase: extraStyleArgs, afterBase: extraStyleArgsAfterBase } =
-      emitter.splitExtraStyleArgs(d);
+      emitter.buildInterleavedExtraStyleArgs(d, propsArgExprs);
     const styleArgs: ExpressionKind[] = [
       ...(d.extendsStyleKey
         ? [j.memberExpression(j.identifier(stylesIdentifier), j.identifier(d.extendsStyleKey))]
@@ -700,20 +713,6 @@ export function emitSimpleExportedIntrinsicWrappers(ctx: EmitIntrinsicContext): 
       j.memberExpression(j.identifier(stylesIdentifier), j.identifier(d.styleKey)),
       ...extraStyleArgsAfterBase,
     ];
-
-    const destructureProps: string[] = [];
-    // Track default values for props (for destructuring defaults)
-    const propDefaults: WrapperPropDefaults = new Map();
-
-    // Add adapter-resolved StyleX styles (emitted directly into stylex.props args).
-    if (d.extraStylexPropsArgs) {
-      styleArgs.push(
-        ...emitter.buildExtraStylexPropsExprs({
-          entries: d.extraStylexPropsArgs,
-          destructureProps,
-        }),
-      );
-    }
 
     // Handle theme boolean conditionals - add conditional true/false style args
     const needsUseTheme = appendThemeBooleanStyleArgs(

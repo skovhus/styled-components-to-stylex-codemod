@@ -890,9 +890,12 @@ export function processDeclRules(ctx: DeclProcessingState): void {
         return;
       }
 
-      styleObj[prop] = value;
+      // Use getBaseStyleTarget() to respect after-base segments created by
+      // resolvedStyles helpers, preserving CSS cascade order.
+      const target = ctx.getBaseStyleTarget();
+      target[prop] = value;
       if (commentSource) {
-        addPropComments(styleObj, prop, {
+        addPropComments(target, prop, {
           leading: commentSource.leading,
           trailingLine: commentSource.trailingLine,
         });

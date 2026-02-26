@@ -112,8 +112,22 @@ export function emitIntrinsicPolymorphicWrappers(ctx: EmitIntrinsicContext): voi
       }
       ctx.markNeedsReactTypeImport();
 
+      // Track props that need to be destructured for variant styles
+      const destructureProps: string[] = [];
+      // Track default values for props (for destructuring defaults)
+      const propDefaults: WrapperPropDefaults = new Map();
+
+      // Build propsArg expressions first (may be needed for interleaving)
+      const propsArgExprs = d.extraStylexPropsArgs
+        ? emitter.buildExtraStylexPropsExprs({
+            entries: d.extraStylexPropsArgs,
+            destructureProps,
+          })
+        : [];
+
+      // Build interleaved before/after-base args using mixinOrder
       const { beforeBase: extraStyleArgs, afterBase: extraStyleArgsAfterBase } =
-        emitter.splitExtraStyleArgs(d);
+        emitter.buildInterleavedExtraStyleArgs(d, propsArgExprs);
       const styleArgs: ExpressionKind[] = [
         ...(d.extendsStyleKey
           ? [j.memberExpression(j.identifier(stylesIdentifier), j.identifier(d.extendsStyleKey))]
@@ -122,11 +136,6 @@ export function emitIntrinsicPolymorphicWrappers(ctx: EmitIntrinsicContext): voi
         j.memberExpression(j.identifier(stylesIdentifier), j.identifier(d.styleKey)),
         ...extraStyleArgsAfterBase,
       ];
-
-      // Track props that need to be destructured for variant styles
-      const destructureProps: string[] = [];
-      // Track default values for props (for destructuring defaults)
-      const propDefaults: WrapperPropDefaults = new Map();
 
       // Collect keys used by compound variants (they're handled separately)
       const compoundVariantKeys = new Set<string>();
@@ -168,16 +177,6 @@ export function emitIntrinsicPolymorphicWrappers(ctx: EmitIntrinsicContext): voi
       // Add compound variant expressions (multi-prop nested ternaries)
       if (d.compoundVariants) {
         buildCompoundVariantExpressions(d.compoundVariants, styleArgs, destructureProps);
-      }
-
-      // Add adapter-resolved StyleX styles (emitted directly into stylex.props args).
-      if (d.extraStylexPropsArgs) {
-        styleArgs.push(
-          ...emitter.buildExtraStylexPropsExprs({
-            entries: d.extraStylexPropsArgs,
-            destructureProps,
-          }),
-        );
       }
 
       // Handle pseudo-alias selectors (e.g., &:${highlight})

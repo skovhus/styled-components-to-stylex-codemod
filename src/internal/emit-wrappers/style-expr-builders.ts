@@ -43,6 +43,80 @@ export function splitExtraStyleArgs(
   return { beforeBase, afterBase };
 }
 
+/**
+ * Builds interleaved before-base and after-base style args using mixinOrder
+ * to correctly interleave extra style keys and extra stylex.props args.
+ *
+ * When mixinOrder is present, it dictates the precise ordering of both
+ * style keys and props args. The afterBase flag on props args determines
+ * whether they appear before or after the base style.
+ */
+export function buildInterleavedExtraStyleArgs(
+  j: JSCodeshift,
+  stylesIdentifier: string,
+  d: StyledDecl,
+  propsArgExprs: ExpressionKind[],
+): {
+  beforeBase: ExpressionKind[];
+  afterBase: ExpressionKind[];
+} {
+  const mixinOrder = d.mixinOrder;
+  const afterBaseKeys = new Set(d.extraStyleKeysAfterBase ?? []);
+  const extraStyleKeys = d.extraStyleKeys ?? [];
+  const propsArgs = d.extraStylexPropsArgs ?? [];
+
+  if (!mixinOrder || mixinOrder.length === 0) {
+    // No mixinOrder: fall back to legacy behavior
+    const { beforeBase, afterBase } = splitExtraStyleArgs(j, stylesIdentifier, d);
+    // Legacy: all propsArgs go after base
+    afterBase.push(...propsArgExprs);
+    return { beforeBase, afterBase };
+  }
+
+  const beforeBase: ExpressionKind[] = [];
+  const afterBase: ExpressionKind[] = [];
+  let styleKeyIdx = 0;
+  let propsArgIdx = 0;
+
+  for (const entry of mixinOrder) {
+    if (entry === "styleKey" && styleKeyIdx < extraStyleKeys.length) {
+      const key = extraStyleKeys[styleKeyIdx]!;
+      styleKeyIdx++;
+      const expr = j.memberExpression(j.identifier(stylesIdentifier), j.identifier(key));
+      if (afterBaseKeys.has(key)) {
+        afterBase.push(expr);
+      } else {
+        beforeBase.push(expr);
+      }
+    } else if (entry === "propsArg" && propsArgIdx < propsArgExprs.length) {
+      const arg = propsArgs[propsArgIdx];
+      const argExpr = propsArgExprs[propsArgIdx]!;
+      propsArgIdx++;
+      if (arg?.afterBase) {
+        afterBase.push(argExpr);
+      } else {
+        beforeBase.push(argExpr);
+      }
+    }
+  }
+
+  // Append any remaining items not covered by mixinOrder
+  for (; styleKeyIdx < extraStyleKeys.length; styleKeyIdx++) {
+    const key = extraStyleKeys[styleKeyIdx]!;
+    const expr = j.memberExpression(j.identifier(stylesIdentifier), j.identifier(key));
+    if (afterBaseKeys.has(key)) {
+      afterBase.push(expr);
+    } else {
+      beforeBase.push(expr);
+    }
+  }
+  for (; propsArgIdx < propsArgExprs.length; propsArgIdx++) {
+    afterBase.push(propsArgExprs[propsArgIdx]!);
+  }
+
+  return { beforeBase, afterBase };
+}
+
 // ---------------------------------------------------------------------------
 // Attrs-info / static-className splitting
 // ---------------------------------------------------------------------------

@@ -89,6 +89,7 @@ export function handleInterpolatedDeclaration(args: InterpolatedDeclarationConte
     tryHandleCssHelperConditionalBlock,
     findJsxPropTsType,
     annotateParamFromJsxProp,
+    notifyResolvedStylesArg,
   } = ctx;
   const {
     api,
@@ -665,8 +666,20 @@ export function handleInterpolatedDeclaration(args: InterpolatedDeclarationConte
         });
         continue;
       }
+      // Track mixinOrder for correct cascade interleaving
+      const hasStaticPropsBefore =
+        Object.keys(styleObj).length > 0 || ctx.getBaseStyleTarget() !== styleObj;
+      const order = decl.mixinOrder ?? [];
+      order.push("propsArg");
+      decl.mixinOrder = order;
       decl.extraStylexPropsArgs ??= [];
-      decl.extraStylexPropsArgs.push({ expr: exprAst as any });
+      decl.extraStylexPropsArgs.push({
+        expr: exprAst as any,
+        afterBase: hasStaticPropsBefore,
+      });
+      // Create an after-base segment so subsequent static properties
+      // are placed after this helper in the stylex.props() call
+      notifyResolvedStylesArg();
       decl.needsWrapperComponent = true;
       continue;
     }
