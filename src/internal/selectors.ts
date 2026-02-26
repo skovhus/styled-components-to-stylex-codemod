@@ -524,19 +524,33 @@ export function normalizeInterpolatedSelector(selectorRaw: string): string {
   );
 }
 
-export function normalizeSelectorForInputAttributePseudos(
+export function normalizeSelectorForAttributePseudos(
   selector: string,
-  isInput: boolean,
+  tagName: string | null,
 ): string {
-  if (!isInput) {
+  if (!tagName) {
     return selector;
   }
 
-  // Convert [disabled] to :disabled (semantically equivalent for <input> elements).
+  // Only convert [disabled] → :disabled for <input> elements.
+  //
+  // While [disabled] and :disabled are semantically equivalent when the attribute
+  // is set directly, :disabled also matches elements disabled *indirectly* (e.g.,
+  // a <button> inside <fieldset disabled>). This broader matching would change the
+  // CSS behavior for non-input form elements, so we only apply this conversion for
+  // <input> where the tradeoff is accepted and where other attribute-specific
+  // handling (type=checkbox, type=radio, readonly) is already in place.
+  //
+  // Non-input elements with [disabled] fall through to parseSelector() which wraps
+  // them in :is([disabled]) — a lossless, semantically-equivalent transformation.
+  //
   // NOTE: [readonly] is NOT converted to :read-only because :read-only matches much
   // more broadly (disabled inputs, checkbox/radio, etc.) while [readonly] only matches
   // elements with the readonly attribute explicitly set. [readonly] is instead handled
   // as a JS prop conditional via the attrWrapper pattern.
+  if (tagName.toLowerCase() !== "input") {
+    return selector;
+  }
   const m = selector.match(/^&\[(.+)\]$/) ?? selector.match(/^\[(.+)\]$/);
   if (!m || !m[1]) {
     return selector;

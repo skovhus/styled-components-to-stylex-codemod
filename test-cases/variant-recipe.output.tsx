@@ -13,10 +13,11 @@ type Props = {
 type ButtonProps = Omit<React.ComponentProps<"button">, "className" | "style"> & Props;
 
 function Button(props: ButtonProps) {
-  const { children, size = "small", color = "secondary", disabled } = props;
+  const { children, size = "small", color = "secondary", disabled, ...rest } = props;
 
   return (
     <button
+      {...rest}
       disabled={disabled}
       {...stylex.props(
         styles.button,

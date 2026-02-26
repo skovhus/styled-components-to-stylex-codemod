@@ -173,9 +173,13 @@ export function emitShouldForwardPropWrappers(ctx: EmitIntrinsicContext): void {
     })();
     const finalTypeText = (() => {
       if (explicit) {
-        // For non-exported components that only use transient props ($-prefixed),
-        // use simple PropsWithChildren instead of verbose intersection type
+        // For non-exported components that only use transient props ($-prefixed)
+        // and were NOT user-configured via withConfig({ shouldForwardProp }),
+        // use simple PropsWithChildren instead of verbose intersection type.
+        // User-configured shouldForwardProp always needs full element props type
+        // because it implies rest spread forwarding of HTML attributes.
         if (
+          !d.shouldForwardPropFromWithConfig &&
           canUseSimplePropsType({
             isExported: d.isExported ?? false,
             usedAttrs,
@@ -270,8 +274,11 @@ export function emitShouldForwardPropWrappers(ctx: EmitIntrinsicContext): void {
       : [];
 
     // Build interleaved before/after-base args using mixinOrder
-    const { beforeBase: extraStyleArgs, afterBase: extraStyleArgsAfterBase } =
-      emitter.buildInterleavedExtraStyleArgs(d, propsArgExprs);
+    const {
+      beforeBase: extraStyleArgs,
+      afterBase: extraStyleArgsAfterBase,
+      afterVariants: afterVariantStyleArgs,
+    } = emitter.buildInterleavedExtraStyleArgs(d, propsArgExprs);
     const styleArgs: ExpressionKind[] = [
       ...(d.extendsStyleKey
         ? [j.memberExpression(j.identifier(stylesIdentifier), j.identifier(d.extendsStyleKey))]
@@ -313,6 +320,12 @@ export function emitShouldForwardPropWrappers(ctx: EmitIntrinsicContext): void {
         // For boolean conditions, && is used. For non-boolean (could be "" or 0), ternary is used.
         styleArgs.push(emitter.makeConditionalStyleExpr({ cond, expr: styleExpr, isBoolean }));
       }
+    }
+
+    // Add adapter-resolved StyleX styles that should come after variant styles
+    // to preserve CSS cascade order (e.g., unconditional border-bottom after conditional border).
+    if (afterVariantStyleArgs.length > 0) {
+      styleArgs.push(...afterVariantStyleArgs);
     }
 
     const dropProps = d.shouldForwardProp?.dropProps ?? [];
@@ -487,10 +500,17 @@ export function emitShouldForwardPropWrappers(ctx: EmitIntrinsicContext): void {
       dropProps.every((p: string) => p.startsWith("$")) &&
       !usedAttrs.has("*") &&
       [...usedAttrs].every((n) => n === "children" || dropProps.includes(n));
-    // Exported components and components extended by other styled components should
-    // always include rest spread so that all element props (id, onClick, aria-*, etc.)
-    // are forwarded to the element.
+    // For user-configured shouldForwardProp (withConfig), always include rest spread.
+    // The purpose of shouldForwardProp is to filter specific props from the DOM;
+    // all other props (id, onClick, aria-*, data-*, etc.) should be forwarded.
+    // Auto-inferred shouldForwardProp (from lower-rules) keeps original heuristics,
+    // except for recipe-pattern components with namespace boolean dimensions
+    // (e.g., disabled ? disabledVariants[color] : enabledVariants[color]).
+    // Components extended by other styled components (supportsExternalStyles) also
+    // need rest spread so extending wrappers can pass through HTML attributes.
     const includeRest =
+      d.shouldForwardPropFromWithConfig ||
+      d.variantDimensions?.some((dim) => dim.namespaceBooleanProp) ||
       isExportedComponent ||
       (d.supportsExternalStyles ?? false) ||
       (!shouldOmitRestSpread && shouldIncludeRest);

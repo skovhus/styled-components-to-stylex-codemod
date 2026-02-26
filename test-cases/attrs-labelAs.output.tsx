@@ -10,12 +10,12 @@ type TextProps = { sx?: stylex.StyleXStyles } & React.PropsWithChildren<{
 }>;
 
 function Text(props: React.ComponentProps<"span"> & TextProps & { sx?: stylex.StyleXStyles }) {
-  const { className, children, style, sx, ...rest } = props;
+  const { as: Component = "span", className, children, style, sx, ...rest } = props;
 
   return (
-    <span {...rest} {...mergedSx([styles.text, sx], className, style)}>
+    <Component {...rest} {...mergedSx([styles.text, sx], className, style)}>
       {children}
-    </span>
+    </Component>
   );
 }
 

@@ -9,8 +9,9 @@ export { literalToStaticValue } from "../utilities/jscodeshift-utils.js";
 export function ensureShouldForwardPropDrop(decl: StyledDecl, propName: string): void {
   // Ensure we generate a wrapper so we can consume the styling prop without forwarding it to DOM.
   decl.needsWrapperComponent = true;
-  // This is an internally-inferred drop (not user-configured via withConfig).
-  decl.shouldForwardPropFromWithConfig = false;
+  // Only mark as auto-inferred if not already user-configured via withConfig.
+  // Preserves the original `true` value when the component uses withConfig({ shouldForwardProp }).
+  decl.shouldForwardPropFromWithConfig ??= false;
   const existing = decl.shouldForwardProp ?? { dropProps: [] as string[] };
   const dropProps = new Set<string>(existing.dropProps ?? []);
   dropProps.add(propName);

@@ -69,6 +69,7 @@ const styles = stylex.create({
     color: "white",
     borderWidth: 0,
     borderStyle: "none",
+    borderColor: "initial",
     borderRadius: "4px",
   },
   contentInContainerLink: {

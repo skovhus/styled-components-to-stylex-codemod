@@ -25,6 +25,7 @@ import {
   makeConditionalStyleExpr,
   parseVariantWhenToAst,
 } from "./variant-condition.js";
+import { typeContainsPolymorphicAs } from "../utilities/polymorphic-as-detection.js";
 
 export function emitSimpleWithConfigWrappers(ctx: EmitIntrinsicContext): void {
   const { emitter, j, emitTypes, wrapperDecls, wrapperNames, stylesIdentifier, emitted } = ctx;
@@ -444,6 +445,16 @@ export function emitSimpleExportedIntrinsicWrappers(ctx: EmitIntrinsicContext): 
     const usedAttrsForType = emitter.getUsedAttrs(d.localName);
     const includesForwardedAs = hasForwardedAsUsage(d);
     const allowAsProp = shouldAllowAsProp(d, tagName);
+    // When the user's props type already has `as?: React.ElementType`, we don't
+    // upgrade to our generic pattern (to avoid TypeScript inference issues), but
+    // we still need to destructure `as` and use it as the JSX tag so that
+    // downstream `.attrs({ as: "element" })` wrappers actually work at runtime.
+    // Use the AST-based check (not the regex-based propsTypeHasExistingPolymorphicAs)
+    // to ensure we only match `as?: React.ElementType`, not narrow string unions.
+    const hasExistingAs = d.propsType
+      ? typeContainsPolymorphicAs({ root: emitter.root, j, typeNode: d.propsType })
+      : false;
+    const useAsProp = allowAsProp || hasExistingAs;
     let inlineTypeText: string | undefined;
     // d.isExported is already set from exportedComponents during analyze-before-emit
     const isExportedComponent = d.isExported ?? false;
@@ -703,8 +714,11 @@ export function emitSimpleExportedIntrinsicWrappers(ctx: EmitIntrinsicContext): 
       : [];
 
     // Build interleaved before/after-base args using mixinOrder
-    const { beforeBase: extraStyleArgs, afterBase: extraStyleArgsAfterBase } =
-      emitter.buildInterleavedExtraStyleArgs(d, propsArgExprs);
+    const {
+      beforeBase: extraStyleArgs,
+      afterBase: extraStyleArgsAfterBase,
+      afterVariants: afterVariantStyleArgs,
+    } = emitter.buildInterleavedExtraStyleArgs(d, propsArgExprs);
     const styleArgs: ExpressionKind[] = [
       ...(d.extendsStyleKey
         ? [j.memberExpression(j.identifier(stylesIdentifier), j.identifier(d.extendsStyleKey))]
@@ -794,6 +808,12 @@ export function emitSimpleExportedIntrinsicWrappers(ctx: EmitIntrinsicContext): 
         // For boolean conditions, && is used. For non-boolean (could be "" or 0), ternary is used.
         styleArgs.push(emitter.makeConditionalStyleExpr({ cond, expr: styleExpr, isBoolean }));
       }
+    }
+
+    // Add adapter-resolved StyleX styles that should come after variant styles
+    // to preserve CSS cascade order (e.g., unconditional border-bottom after conditional border).
+    if (afterVariantStyleArgs.length > 0) {
+      styleArgs.push(...afterVariantStyleArgs);
     }
 
     // When a defaultAttr (e.g. tabIndex: props.tabIndex ?? 0) is also used in a
@@ -913,6 +933,12 @@ export function emitSimpleExportedIntrinsicWrappers(ctx: EmitIntrinsicContext): 
     if (hasElementPropsInDefaultAttrs(d)) {
       shouldIncludeRest = true;
     }
+    // Recipe-pattern components with namespace boolean dimensions (e.g.,
+    // disabled ? disabledVariants[color] : enabledVariants[color]) are behavioral
+    // wrappers that need rest spread to forward HTML props (id, onClick, aria-*, etc.)
+    if (d.variantDimensions?.some((dim) => dim.namespaceBooleanProp)) {
+      shouldIncludeRest = true;
+    }
     // Exported components should always include rest spread so that all element props
     // (id, onClick, aria-*, etc.) are forwarded to the element.
     if (isExportedComponent) {
@@ -931,11 +957,11 @@ export function emitSimpleExportedIntrinsicWrappers(ctx: EmitIntrinsicContext): 
       }
     }
 
-    if (allowAsProp || allowClassNameProp || allowStyleProp || needsUseTheme) {
+    if (useAsProp || allowClassNameProp || allowStyleProp || needsUseTheme) {
       const isVoidTag = VOID_TAGS.has(tagName);
-      // When allowAsProp is true, include children support even for void tags
+      // When useAsProp is true, include children support even for void tags
       // because the user might use `as="textarea"` which requires children
-      const includeChildren = allowAsProp || !isVoidTag;
+      const includeChildren = useAsProp || !isVoidTag;
       const propsParamId = j.identifier("props");
       emitter.annotatePropsParam(propsParamId, d.localName, inlineTypeText);
       const propsId = j.identifier("props");
@@ -953,7 +979,7 @@ export function emitSimpleExportedIntrinsicWrappers(ctx: EmitIntrinsicContext): 
 
       const patternProps = emitter.buildDestructurePatternProps({
         baseProps: [
-          ...(allowAsProp
+          ...(useAsProp
             ? [
                 j.property.from({
                   kind: "init",
@@ -1021,7 +1047,7 @@ export function emitSimpleExportedIntrinsicWrappers(ctx: EmitIntrinsicContext): 
       emitter.appendMergingAttrs(openingAttrs, merging);
 
       const jsx = emitter.buildJsxElement({
-        tagName: allowAsProp ? "Component" : tagName,
+        tagName: useAsProp ? "Component" : tagName,
         attrs: openingAttrs,
         includeChildren,
         childrenExpr: childrenId,
