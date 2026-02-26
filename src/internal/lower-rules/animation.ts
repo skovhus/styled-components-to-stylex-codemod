@@ -4,7 +4,17 @@
  */
 import valueParser from "postcss-value-parser";
 import type { StyledDecl } from "../transform-types.js";
+import type { StyleFnFromPropsEntry } from "./decl-types.js";
 import { cssDeclarationToStylexDeclarations } from "../css-prop-mapping.js";
+import { getFunctionBodyExpr, literalToStaticValue } from "../utilities/jscodeshift-utils.js";
+import {
+  buildTemplateWithStaticParts,
+  collectPropsFromArrowFn,
+  unwrapArrowFunctionToPropsExpr,
+} from "./inline-styles.js";
+import { ensureShouldForwardPropDrop } from "./types.js";
+import { cssPropertyToIdentifier, makeCssProperty } from "./shared.js";
+import { toSuffixFromProp } from "../transform/helpers.js";
 
 // --- Shared animation token classifiers ---
 
@@ -68,8 +78,11 @@ export function tryHandleAnimation(args: {
   d: any;
   keyframesNames: Set<string>;
   styleObj: Record<string, unknown>;
+  styleFnDecls: Map<string, unknown>;
+  styleFnFromProps: StyleFnFromPropsEntry[];
+  filePath: string;
 }): boolean {
-  const { j, decl, d, keyframesNames, styleObj } = args;
+  const { j, decl, d, keyframesNames, styleObj, styleFnDecls, styleFnFromProps } = args;
   // Handle keyframes-based animation declarations before handler pipeline.
   if (!keyframesNames.size) {
     return false;
@@ -177,6 +190,9 @@ export function tryHandleAnimation(args: {
     const playStates: Array<string | null> = [];
     const timelines: Array<string | null> = [];
 
+    // Track interpolated time tokens (e.g., __SC_EXPR_1__ms) for style function emission
+    const interpolatedAnimTimes: InterpolatedAnimTime[] = [];
+
     for (const tokens of segments) {
       if (!tokens.length) {
         return false;
@@ -193,8 +209,41 @@ export function tryHandleAnimation(args: {
       }
       animNames.push({ kind: "ident", name: kf });
 
-      // Classify remaining tokens into animation longhand categories
+      // Extract interpolated time tokens before classification so they don't
+      // fall through to the timeline catch-all regex.
+      const segmentInterpolated: Array<{ slotId: number; unit: string }> = [];
+      for (let i = tokens.length - 1; i >= 0; i--) {
+        const interpMatch = tokens[i]!.match(INTERPOLATED_TIME_RE);
+        if (interpMatch) {
+          segmentInterpolated.unshift({ slotId: Number(interpMatch[1]), unit: interpMatch[2]! });
+          tokens.splice(i, 1);
+        }
+      }
+
+      // Classify remaining (non-interpolated) tokens into animation longhand categories
       const classified = classifyAnimationTokens(tokens);
+
+      // Assign interpolated time tokens to unfilled time slots (duration first, then delay)
+      for (const interp of segmentInterpolated) {
+        const longhand: "animationDuration" | "animationDelay" =
+          classified.duration === null ? "animationDuration" : "animationDelay";
+
+        const fallbackValue = computeInterpolatedTimeFallback(decl, interp.slotId, interp.unit);
+
+        if (longhand === "animationDuration") {
+          classified.duration = fallbackValue ?? `0${interp.unit}`;
+        } else {
+          classified.delay = fallbackValue ?? `0${interp.unit}`;
+        }
+
+        interpolatedAnimTimes.push({
+          slotId: interp.slotId,
+          unit: interp.unit,
+          longhand,
+          fallbackValue,
+        });
+      }
+
       durations.push(classified.duration);
       delays.push(classified.delay);
       timings.push(classified.timing);
@@ -212,6 +261,10 @@ export function tryHandleAnimation(args: {
           return true;
         }
         if (!/^[a-zA-Z_][\w-]*$/.test(t)) {
+          return false;
+        }
+        // Exclude placeholder-containing tokens (already handled above)
+        if (PLACEHOLDER_TOKEN_RE.test(t)) {
           return false;
         }
         return (
@@ -266,8 +319,108 @@ export function tryHandleAnimation(args: {
     if (anyValues(timelines)) {
       styleObj.animationTimeline = joinWithDefaults(timelines, "auto");
     }
+
+    // Emit style functions for interpolated animation time tokens
+    emitInterpolatedAnimTimeFunctions(
+      j,
+      decl,
+      interpolatedAnimTimes,
+      styleFnDecls,
+      styleFnFromProps,
+    );
+
     return true;
   }
 
   return false;
+}
+
+// --- Interpolated animation time helpers ---
+
+/** Matches placeholder tokens with optional time unit suffix (e.g., `__SC_EXPR_1__ms`). */
+const INTERPOLATED_TIME_RE = /^__SC_EXPR_(\d+)__(ms|s)$/;
+
+/** Matches any placeholder token (with or without suffix) to exclude from timeline detection. */
+const PLACEHOLDER_TOKEN_RE = /__SC_EXPR_\d+__/;
+
+type InterpolatedAnimTime = {
+  slotId: number;
+  unit: string;
+  longhand: "animationDuration" | "animationDelay";
+  fallbackValue: string | null;
+};
+
+/**
+ * Computes a static fallback value from an interpolated expression's default.
+ * E.g., `(props) => props.$fadeInDuration ?? 200` with unit `ms` → `"200ms"`.
+ */
+function computeInterpolatedTimeFallback(
+  decl: StyledDecl,
+  slotId: number,
+  unit: string,
+): string | null {
+  const expr = (decl as any).templateExpressions[slotId] as any;
+  if (!expr || expr.type !== "ArrowFunctionExpression") {
+    return null;
+  }
+  const bodyExpr = getFunctionBodyExpr(expr);
+  if (bodyExpr?.type === "LogicalExpression" && bodyExpr.operator === "??") {
+    const staticVal = literalToStaticValue(bodyExpr.right);
+    if (staticVal !== null) {
+      return `${staticVal}${unit}`;
+    }
+  }
+  return null;
+}
+
+/**
+ * Emits dynamic style functions for interpolated animation time tokens.
+ * For each interpolated token, creates a style function like:
+ *   `fadeInContainerAnimationDuration: (animationDuration: string) => ({ animationDuration })`
+ * and pushes a `styleFnFromProps` entry with a `callArg` that wraps the unwrapped
+ * expression with the static unit suffix.
+ */
+function emitInterpolatedAnimTimeFunctions(
+  j: any,
+  decl: StyledDecl,
+  interpolatedTimes: InterpolatedAnimTime[],
+  styleFnDecls: Map<string, unknown>,
+  styleFnFromProps: StyleFnFromPropsEntry[],
+): void {
+  for (const interp of interpolatedTimes) {
+    const expr = (decl as any).templateExpressions[interp.slotId] as any;
+    if (!expr || expr.type !== "ArrowFunctionExpression") {
+      continue;
+    }
+
+    const propsUsed = collectPropsFromArrowFn(expr);
+    for (const p of propsUsed) {
+      if (p.startsWith("$")) {
+        ensureShouldForwardPropDrop(decl, p);
+      }
+    }
+
+    const unwrapped = unwrapArrowFunctionToPropsExpr(j, expr);
+    if (!unwrapped) {
+      continue;
+    }
+
+    const callArg = buildTemplateWithStaticParts(j, unwrapped.expr, "", interp.unit);
+
+    const cssPropId = cssPropertyToIdentifier(interp.longhand);
+    const fnKey = `${decl.styleKey}${toSuffixFromProp(interp.longhand)}`;
+    if (!styleFnDecls.has(fnKey)) {
+      const param = j.identifier(cssPropId);
+      (param as any).typeAnnotation = j.tsTypeAnnotation(j.tsStringKeyword());
+      const body = j.objectExpression([makeCssProperty(j, interp.longhand, cssPropId)]);
+      styleFnDecls.set(fnKey, j.arrowFunctionExpression([param], body));
+    }
+
+    const jsxProp = [...propsUsed][0];
+    if (jsxProp) {
+      styleFnFromProps.push({ fnKey, jsxProp, callArg });
+    }
+
+    decl.needsWrapperComponent = true;
+  }
 }

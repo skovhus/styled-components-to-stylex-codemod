@@ -173,7 +173,18 @@ export function handleInterpolatedDeclaration(args: InterpolatedDeclarationConte
     if (tryHandleMappedFunctionColor(d)) {
       continue;
     }
-    if (tryHandleAnimation({ j, decl, d, keyframesNames, styleObj })) {
+    if (
+      tryHandleAnimation({
+        j,
+        decl,
+        d,
+        keyframesNames,
+        styleObj,
+        styleFnDecls,
+        styleFnFromProps,
+        filePath,
+      })
+    ) {
       continue;
     }
     // Dynamic styles inside ::before/::after pseudo-elements are not natively supported
