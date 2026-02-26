@@ -5,7 +5,7 @@
 import type { StyledDecl } from "../transform-types.js";
 import type { ExpressionKind, StyleFnFromPropsEntry } from "./decl-types.js";
 import { cssDeclarationToStylexDeclarations } from "../css-prop-mapping.js";
-import { extractStaticParts } from "./interpolations.js";
+import { extractStaticPartsForDecl } from "./interpolations.js";
 import { buildTemplateWithStaticParts } from "./inline-styles.js";
 import { ensureShouldForwardPropDrop, literalToStaticValue } from "./types.js";
 import {
@@ -186,7 +186,7 @@ export const createValuePatternHandlers = (ctx: ValuePatternContext) => {
     }
 
     // Extract static prefix/suffix (e.g., unit suffixes like "ms" or "px")
-    const { prefix, suffix } = extractStaticParts(d.value);
+    const { prefix, suffix } = extractStaticPartsForDecl(d);
     const hasStaticParts = !!(prefix || suffix);
 
     // When there are static parts, we need a wrapper component to evaluate the template literal at runtime

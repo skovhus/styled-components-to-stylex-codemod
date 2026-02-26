@@ -27,7 +27,7 @@ import {
 import { tryHandleAnimation } from "./animation.js";
 import { tryHandleInterpolatedBorder } from "./borders.js";
 import {
-  extractStaticParts,
+  extractStaticPartsForDecl,
   tryHandleInterpolatedStringValue,
   wrapExprWithStaticParts,
 } from "./interpolations.js";
@@ -251,7 +251,7 @@ export function handleInterpolatedDeclaration(args: InterpolatedDeclarationConte
         return false;
       }
       // Preserve static text surrounding the interpolation slot (e.g. "0 0 0 1px ${theme} , ...")
-      const { prefix, suffix } = extractStaticParts(d.value);
+      const { prefix, suffix } = extractStaticPartsForDecl(d);
       const finalValue = buildTemplateWithStaticParts(
         j,
         resolved as ExpressionKind,
@@ -726,11 +726,7 @@ export function handleInterpolatedDeclaration(args: InterpolatedDeclarationConte
       }
 
       // Extract and wrap static prefix/suffix (skip for border-color since expansion handled it)
-      const cssProp = (d.property ?? "").trim();
-      const { prefix, suffix } = extractStaticParts(d.value, {
-        skipForProperty: /^border(-top|-right|-bottom|-left)?-color$/,
-        property: cssProp,
-      });
+      const { prefix, suffix } = extractStaticPartsForDecl(d);
       const wrappedExpr = wrapExprWithStaticParts(res.expr, prefix, suffix);
 
       const exprAst = parseExpr(wrappedExpr);
@@ -1231,7 +1227,7 @@ export function handleInterpolatedDeclaration(args: InterpolatedDeclarationConte
           res;
 
         // --- A. Static branch → base style ---
-        const { prefix, suffix } = extractStaticParts(d.value);
+        const { prefix, suffix } = extractStaticPartsForDecl(d);
         const cssValueStr = `${prefix}${staticValue}${suffix}`;
         for (const out of cssDeclarationToStylexDeclarations(d)) {
           styleObj[out.prop] = cssValueStr;
@@ -1381,7 +1377,7 @@ export function handleInterpolatedDeclaration(args: InterpolatedDeclarationConte
           if (!styleFnDecls.has(fnKey)) {
             const valueExprRaw = cloneAstNode(bodyExpr);
             // Apply CSS value prefix/suffix (e.g., `${...}ms`) to the expression
-            const { prefix, suffix } = extractStaticParts(d.value);
+            const { prefix, suffix } = extractStaticPartsForDecl(d);
             const valueExpr =
               prefix || suffix
                 ? buildTemplateWithStaticParts(j, valueExprRaw, prefix, suffix)
@@ -1741,7 +1737,7 @@ export function handleInterpolatedDeclaration(args: InterpolatedDeclarationConte
           baseExpr = inlineExpr;
         }
         // Build template literal when there's static prefix/suffix (e.g., `${...}ms`)
-        const { prefix, suffix } = extractStaticParts(d.value);
+        const { prefix, suffix } = extractStaticPartsForDecl(d);
         const expr =
           prefix || suffix ? buildTemplateWithStaticParts(j, baseExpr, prefix, suffix) : baseExpr;
         const fnKey = `${decl.styleKey}${toSuffixFromProp(out.prop)}`;
@@ -1948,7 +1944,7 @@ function tryHandleDynamicPseudoElementViaCustomProperty(
   const { expr: inlineExpr, propsUsed } = unwrapped;
 
   // Handle static parts (prefix/suffix like `${value}px`)
-  const { prefix, suffix } = extractStaticParts(d.value);
+  const { prefix, suffix } = extractStaticPartsForDecl(d);
   const valueExpr: ExpressionKind =
     prefix || suffix ? buildTemplateWithStaticParts(j, inlineExpr, prefix, suffix) : inlineExpr;
 

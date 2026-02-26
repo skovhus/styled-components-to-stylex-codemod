@@ -17,7 +17,7 @@ import {
   unwrapArrowFunctionToPropsExpr,
 } from "./inline-styles.js";
 import { buildPseudoMediaPropValue } from "./variant-utils.js";
-import { extractStaticParts } from "./interpolations.js";
+import { extractStaticPartsForDecl } from "./interpolations.js";
 import { cssDeclarationToStylexDeclarations } from "../css-prop-mapping.js";
 import { isStylexShorthandCamelCase } from "../stylex-shorthands.js";
 import { ensureShouldForwardPropDrop } from "./types.js";
@@ -132,7 +132,7 @@ export function handleInlineStyleValueFromProps(ctx: InlineStyleFromPropsContext
           return null;
         }
         const baseExpr = inlineExpr;
-        const { prefix, suffix } = extractStaticParts(d.value);
+        const { prefix, suffix } = extractStaticPartsForDecl(d);
         return prefix || suffix
           ? buildTemplateWithStaticParts(j, baseExpr, prefix, suffix)
           : baseExpr;
@@ -211,7 +211,7 @@ export function handleInlineStyleValueFromProps(ctx: InlineStyleFromPropsContext
     decl.needsWrapperComponent = true;
     const baseExpr = inlineExpr;
     // Build template literal when there's static prefix/suffix (e.g., `${...}ms`)
-    const { prefix, suffix } = extractStaticParts(d.value);
+    const { prefix, suffix } = extractStaticPartsForDecl(d);
     const valueExpr =
       prefix || suffix ? buildTemplateWithStaticParts(j, baseExpr, prefix, suffix) : baseExpr;
     const outs = cssDeclarationToStylexDeclarations(d);
@@ -286,7 +286,7 @@ export function handleInlineStyleValueFromProps(ctx: InlineStyleFromPropsContext
 
     if (pseudos?.length || media) {
       const baseExpr = buildRuntimeValueExpr(e as ExpressionKind);
-      const { prefix, suffix } = extractStaticParts(d.value);
+      const { prefix, suffix } = extractStaticPartsForDecl(d);
       const valueExprRaw =
         prefix || suffix ? buildTemplateWithStaticParts(j, baseExpr, prefix, suffix) : baseExpr;
       const propsParam = j.identifier("props");
@@ -332,7 +332,7 @@ export function handleInlineStyleValueFromProps(ctx: InlineStyleFromPropsContext
     const baseExpr = isStaticExpr
       ? cloneAstNode(e as ExpressionKind)
       : buildRuntimeValueExpr(e as ExpressionKind);
-    const { prefix, suffix } = extractStaticParts(d.value);
+    const { prefix, suffix } = extractStaticPartsForDecl(d);
     const valueExpr =
       prefix || suffix ? buildTemplateWithStaticParts(j, baseExpr, prefix, suffix) : baseExpr;
     decl.needsWrapperComponent = true;

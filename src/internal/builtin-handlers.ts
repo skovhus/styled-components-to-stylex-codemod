@@ -856,9 +856,16 @@ function tryResolveConditionalPropStyleFunction(node: DynamicNode): HandlerResul
   // Try to decompose: one branch is static, the other is dynamic.
   // This enables merging the dynamic branch with an existing variant bucket
   // instead of emitting a redundant style function that passes the condition prop.
-  const decomposed = tryDecomposeConditionalBranches(condBody, paramName);
-  if (decomposed) {
-    return decomposed;
+  // Skip when pseudo/media context is present — the decomposed handler writes to
+  // base styleObj and emits style functions without buildPseudoMediaPropValue wrapping.
+  // Falling through to emitStyleFunctionFromPropsObject handles pseudo/media correctly.
+  const hasPseudoOrMedia =
+    node.css.selector !== "&" || node.css.atRuleStack.some((a) => a.startsWith("@"));
+  if (!hasPseudoOrMedia) {
+    const decomposed = tryDecomposeConditionalBranches(condBody, paramName);
+    if (decomposed) {
+      return decomposed;
+    }
   }
 
   const { hasUsableProps, hasNonTransientProps, props } = collectPropsFromExprTree(
@@ -946,10 +953,11 @@ function tryDecomposeConditionalBranches(
   if (!hasUsableProps) {
     return null;
   }
-  // Filter out the condition prop — it's used in the test, not the value
-  const filteredProps = dynamicProps.filter((p) => p !== conditionProp);
-  if (filteredProps.length === 0) {
-    // All props are just the condition prop — not a useful decomposition
+  // Ensure there's at least one prop beyond the condition for a useful decomposition.
+  // Don't filter conditionProp — it may be referenced in the dynamic branch expression
+  // (e.g., nested ternary `props.$open ? props.$delay * (props.$open ? 1 : 2) : 0`).
+  const hasNonConditionProp = dynamicProps.some((p) => p !== conditionProp);
+  if (!hasNonConditionProp) {
     return null;
   }
 
@@ -958,7 +966,7 @@ function tryDecomposeConditionalBranches(
     conditionProp,
     staticValue,
     dynamicBranchExpr: dynamicBranch,
-    dynamicProps: filteredProps,
+    dynamicProps,
     isStaticWhenFalse,
   };
 }

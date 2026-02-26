@@ -14,7 +14,7 @@ import {
   resolveBackgroundStylexProp,
   resolveBackgroundStylexPropForVariants,
 } from "../css-prop-mapping.js";
-import { extractStaticParts, wrapExprWithStaticParts } from "./interpolations.js";
+import { extractStaticPartsForDecl, wrapExprWithStaticParts } from "./interpolations.js";
 import { splitDirectionalProperty } from "../stylex-shorthands.js";
 import { isAstNode } from "../utilities/jscodeshift-utils.js";
 import { toSuffixFromProp } from "../transform/helpers.js";
@@ -85,10 +85,7 @@ export function handleSplitVariantsResolvedValue(ctx: SplitVariantsContext): boo
 
   // Extract static prefix/suffix from CSS value for wrapping resolved values
   // e.g., `rotate(${...})` should wrap the resolved value with `rotate(...)`.
-  const { prefix: staticPrefix, suffix: staticSuffix } = extractStaticParts(d.value, {
-    skipForProperty: /^border(-top|-right|-bottom|-left)?-color$/,
-    property: cssProp,
-  });
+  const { prefix: staticPrefix, suffix: staticSuffix } = extractStaticPartsForDecl(d);
 
   const parseResolved = (
     expr: string,
@@ -473,10 +470,7 @@ export function handleSplitMultiPropVariantsResolvedValue(ctx: SplitVariantsCont
   }
 
   // Extract static prefix/suffix from CSS value for wrapping resolved values
-  const { prefix: staticPrefix, suffix: staticSuffix } = extractStaticParts(d.value, {
-    skipForProperty: /^border(-top|-right|-bottom|-left)?-color$/,
-    property: cssProp,
-  });
+  const { prefix: staticPrefix, suffix: staticSuffix } = extractStaticPartsForDecl(d);
 
   const parseResolved = (
     expr: string,
@@ -605,10 +599,7 @@ export function handleDualBranchCompoundVariantsResolvedValue(ctx: SplitVariants
   }
 
   // Extract static prefix/suffix from CSS value for wrapping resolved values
-  const { prefix: staticPrefix, suffix: staticSuffix } = extractStaticParts(d.value, {
-    skipForProperty: /^border(-top|-right|-bottom|-left)?-color$/,
-    property: cssProp,
-  });
+  const { prefix: staticPrefix, suffix: staticSuffix } = extractStaticPartsForDecl(d);
 
   const parseResolved = (
     expr: string,
