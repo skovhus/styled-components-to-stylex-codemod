@@ -25,26 +25,6 @@ body{font-family:-apple-system,BlinkMacSystemFont,Segoe UI,Roboto,Helvetica Neue
   inherits: false
 }
 
-@property --x-top {
-  syntax: "*";
-  inherits: false
-}
-
-@property --x-right {
-  syntax: "*";
-  inherits: false
-}
-
-@property --x-bottom {
-  syntax: "*";
-  inherits: false
-}
-
-@property --x-left {
-  syntax: "*";
-  inherits: false
-}
-
 @property --x-maxWidth {
   syntax: "*";
   inherits: false
@@ -70,16 +50,6 @@ body{font-family:-apple-system,BlinkMacSystemFont,Segoe UI,Roboto,Helvetica Neue
   inherits: false
 }
 
-@property --x-fontSize {
-  syntax: "*";
-  inherits: false
-}
-
-@property --x-lineHeight {
-  syntax: "*";
-  inherits: false
-}
-
 @property --x-19zvkyr {
   syntax: "*";
   inherits: false
@@ -101,6 +71,16 @@ body{font-family:-apple-system,BlinkMacSystemFont,Segoe UI,Roboto,Helvetica Neue
 }
 
 @property --x-maxHeight {
+  syntax: "*";
+  inherits: false
+}
+
+@property --x-fontSize {
+  syntax: "*";
+  inherits: false
+}
+
+@property --x-lineHeight {
   syntax: "*";
   inherits: false
 }
@@ -166,6 +146,26 @@ body{font-family:-apple-system,BlinkMacSystemFont,Segoe UI,Roboto,Helvetica Neue
 }
 
 @property --x-animationDelay {
+  syntax: "*";
+  inherits: false
+}
+
+@property --x-top {
+  syntax: "*";
+  inherits: false
+}
+
+@property --x-right {
+  syntax: "*";
+  inherits: false
+}
+
+@property --x-bottom {
+  syntax: "*";
+  inherits: false
+}
+
+@property --x-left {
   syntax: "*";
   inherits: false
 }
@@ -310,12 +310,6 @@ body{font-family:-apple-system,BlinkMacSystemFont,Segoe UI,Roboto,Helvetica Neue
 :root, .x1p9vp2r {
   --x1f1yon1: 1000;
   --xdughlu: 900;
-}
-
-:root, .xqpb2fl {
-  --x1i0kj6l: #333;
-  --x1bwga4g: 16px;
-  --x5g869a: 1.5;
 }
 
 :root, .x1hn0dvb {
@@ -602,6 +596,14 @@ body{font-family:-apple-system,BlinkMacSystemFont,Segoe UI,Roboto,Helvetica Neue
 
 .xzppbbw:not(#\#):not(#\#) {
   border-color: gray;
+}
+
+.x1ufp5yf:not(#\#):not(#\#) {
+  border-color: initial !important;
+}
+
+.xhm8nzw:not(#\#):not(#\#) {
+  border-color: initial;
 }
 
 .x71xlcl:not(#\#):not(#\#) {
@@ -1832,6 +1834,10 @@ body{font-family:-apple-system,BlinkMacSystemFont,Segoe UI,Roboto,Helvetica Neue
   color: #0000;
 }
 
+.x1md1b2w:not(#\#):not(#\#):not(#\#) {
+  color: var(--text-color, #333);
+}
+
 .x14rh7hd:not(#\#):not(#\#):not(#\#) {
   color: var(--x-color);
 }
@@ -1842,10 +1848,6 @@ body{font-family:-apple-system,BlinkMacSystemFont,Segoe UI,Roboto,Helvetica Neue
 
 .xgfgdi1:not(#\#):not(#\#):not(#\#) {
   color: var(--x1e13nsu);
-}
-
-.xddgtn9:not(#\#):not(#\#):not(#\#) {
-  color: var(--x1i0kj6l);
 }
 
 .x1id9yul:not(#\#):not(#\#):not(#\#) {
@@ -2048,16 +2050,16 @@ body{font-family:-apple-system,BlinkMacSystemFont,Segoe UI,Roboto,Helvetica Neue
   font-size: 50px;
 }
 
+.xofnbgl:not(#\#):not(#\#):not(#\#) {
+  font-size: var(--font-size, 16px);
+}
+
 .xww4jgc:not(#\#):not(#\#):not(#\#) {
   font-size: var(--x-19zvkyr);
 }
 
 .xdmh292:not(#\#):not(#\#):not(#\#) {
   font-size: var(--x-fontSize);
-}
-
-.x1l5wq1u:not(#\#):not(#\#):not(#\#) {
-  font-size: var(--x1bwga4g);
 }
 
 .xrkoupw:not(#\#):not(#\#):not(#\#) {
@@ -2160,16 +2162,16 @@ body{font-family:-apple-system,BlinkMacSystemFont,Segoe UI,Roboto,Helvetica Neue
   line-height: 1rem;
 }
 
+.xd8k45:not(#\#):not(#\#):not(#\#) {
+  line-height: var(--line-height, 1.5);
+}
+
 .x7ne374:not(#\#):not(#\#):not(#\#) {
   line-height: var(--x-12ploh);
 }
 
 .x15dsfln:not(#\#):not(#\#):not(#\#) {
   line-height: var(--x-lineHeight);
-}
-
-.xvfwx5f:not(#\#):not(#\#):not(#\#) {
-  line-height: var(--x5g869a);
 }
 
 .xvc5jky:not(#\#):not(#\#):not(#\#) {
@@ -2407,7 +2409,7 @@ body{font-family:-apple-system,BlinkMacSystemFont,Segoe UI,Roboto,Helvetica Neue
   outline-offset: 5px;
 }
 
-.x1308hcw.x1308hcw:where(.x19pepp0:hover *):not(#\#):not(#\#):not(#\#), .xry1jez.xry1jez:where(.x1rnikca:hover *):not(#\#):not(#\#):not(#\#) {
+.xry1jez.xry1jez:where(.x1rnikca:hover *):not(#\#):not(#\#):not(#\#), .x1308hcw.x1308hcw:where(.x19pepp0:hover *):not(#\#):not(#\#):not(#\#) {
   background-color: #639;
 }
 
@@ -2447,6 +2449,14 @@ body{font-family:-apple-system,BlinkMacSystemFont,Segoe UI,Roboto,Helvetica Neue
   accent-color: #bf4f74;
 }
 
+.x12f6rq7[disabled]:not(#\#):not(#\#):not(#\#) {
+  background-color: #ccc;
+}
+
+.xeu1bbw[disabled]:not(#\#):not(#\#):not(#\#) {
+  background-color: #f5f5f5;
+}
+
 .x1ogqw4i.x1ogqw4i:where(.x-default-marker:is(*) ~ *):not(#\#):not(#\#):not(#\#) {
   background-color: #0f0;
 }
@@ -2467,7 +2477,11 @@ body{font-family:-apple-system,BlinkMacSystemFont,Segoe UI,Roboto,Helvetica Neue
   box-shadow: 0 0 0 1px var(--x1078q4);
 }
 
-.xnd0d6f[data-state="inactive"]:not(#\#):not(#\#):not(#\#) {
+.x1okvs37[disabled]:not(#\#):not(#\#):not(#\#) {
+  color: #666;
+}
+
+.xnd0d6f[data-state="inactive"]:not(#\#):not(#\#):not(#\#), .x1vnrvbx[disabled]:not(#\#):not(#\#):not(#\#) {
   color: #999;
 }
 
@@ -2477,6 +2491,10 @@ body{font-family:-apple-system,BlinkMacSystemFont,Segoe UI,Roboto,Helvetica Neue
 
 .x1kk4a09.x1kk4a09:where(.x-default-marker:is(*) ~ *):not(#\#):not(#\#):not(#\#) {
   color: var(--xvyasvk);
+}
+
+.xi79bht[disabled]:not(#\#):not(#\#):not(#\#) {
+  cursor: not-allowed;
 }
 
 .x1ke1ukj[data-visible="true"]:not(#\#):not(#\#):not(#\#) {
