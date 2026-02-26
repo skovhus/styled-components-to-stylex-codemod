@@ -18,5 +18,5 @@ export function getPrimaryStyles() {
 }
 
 export const App = () => (
-  <button {...stylex.props(styles.getPrimaryStyles, styles.button)}>Click me</button>
+  <button {...stylex.props(styles.button, styles.getPrimaryStyles)}>Click me</button>
 );

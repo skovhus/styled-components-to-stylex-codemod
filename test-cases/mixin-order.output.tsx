@@ -3,10 +3,10 @@ import { helpers } from "./lib/helpers.stylex";
 
 export const App = () => (
   <div>
-    <div {...stylex.props(styles.localMixin, helpers.truncate, styles.localThenImported)}>
+    <div {...stylex.props(styles.localThenImported, styles.localMixin, helpers.truncate)}>
       Local then imported
     </div>
-    <div {...stylex.props(helpers.truncate, styles.localMixin, styles.importedThenLocal)}>
+    <div {...stylex.props(styles.importedThenLocal, helpers.truncate, styles.localMixin)}>
       Imported then local
     </div>
   </div>

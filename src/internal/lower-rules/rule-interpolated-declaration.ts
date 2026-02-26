@@ -491,7 +491,7 @@ export function handleInterpolatedDeclaration(args: InterpolatedDeclarationConte
               const order = decl.mixinOrder ?? [];
               const parsedExpr = parseExpr(resolved.expr);
               if (parsedExpr) {
-                extras.push({ expr: parsedExpr });
+                extras.push({ expr: parsedExpr, afterBase: true });
                 order.push("propsArg");
                 decl.extraStylexPropsArgs = extras;
                 decl.mixinOrder = order;

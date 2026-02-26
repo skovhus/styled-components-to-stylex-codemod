@@ -106,10 +106,7 @@ export function createLowerRulesState(ctx: TransformContext) {
     cssHelperPropValues: Map<string, unknown>,
     inlineStyleProps: Array<{ prop: string; expr: unknown }>,
   ): void => {
-    const hasBaseRule = helperDecl.rules.some(
-      (rule) => rule.selector.trim() === "&" && rule.declarations.length > 0,
-    );
-    addStyleKeyMixin(decl, helperDecl.styleKey, { afterBase: !hasBaseRule });
+    addStyleKeyMixin(decl, helperDecl.styleKey, { afterBase: true });
     trackMixinPropertyValues(cssHelperValuesByKey.get(helperDecl.styleKey), cssHelperPropValues);
     if (helperDecl.inlineStyleProps?.length) {
       for (const p of helperDecl.inlineStyleProps) {
@@ -135,10 +132,7 @@ export function createLowerRulesState(ctx: TransformContext) {
         if (!nestedDecl?.isCssHelper) {
           continue;
         }
-        const nestedHasBaseRule = nestedDecl.rules.some(
-          (rule) => rule.selector.trim() === "&" && rule.declarations.length > 0,
-        );
-        addStyleKeyMixin(decl, nestedDecl.styleKey, { afterBase: !nestedHasBaseRule });
+        addStyleKeyMixin(decl, nestedDecl.styleKey, { afterBase: true });
         trackMixinPropertyValues(
           cssHelperValuesByKey.get(nestedDecl.styleKey),
           cssHelperPropValues,

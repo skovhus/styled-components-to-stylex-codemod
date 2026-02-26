@@ -2,16 +2,16 @@ import * as stylex from "@stylexjs/stylex";
 
 export const App = () => (
   <div>
-    <div {...stylex.props(styles.cssMixin, styles.backgroundMixin, styles.cssFirst)}>CSS first</div>
-    <div {...stylex.props(styles.backgroundMixin, styles.cssMixin, styles.styledFirst)}>
+    <div {...stylex.props(styles.cssFirst, styles.cssMixin, styles.backgroundMixin)}>CSS first</div>
+    <div {...stylex.props(styles.styledFirst, styles.backgroundMixin, styles.cssMixin)}>
       Styled first
     </div>
     <div
       {...stylex.props(
+        styles.interleaved,
         styles.cssMixin,
         styles.backgroundMixin,
         styles.cssMixin2,
-        styles.interleaved,
       )}
     >
       Interleaved

@@ -3,11 +3,11 @@ import * as stylex from "@stylexjs/stylex";
 export const App = () => (
   <div>
     <div {...stylex.props(styles.hiddenOnMobileMixin)}>Hidden on mobile (base)</div>
-    <div {...stylex.props(styles.hiddenOnMobileMixin, styles.elementWithMixin)}>Red with mixin</div>
-    <div {...stylex.props(styles.colorMixin, styles.elementWithMixinHover)}>
+    <div {...stylex.props(styles.elementWithMixin, styles.hiddenOnMobileMixin)}>Red with mixin</div>
+    <div {...stylex.props(styles.elementWithMixinHover, styles.colorMixin)}>
       Red default, blue hover mixin
     </div>
-    <div {...stylex.props(styles.hiddenOnMobileMixin, styles.anotherMixedElement)}>
+    <div {...stylex.props(styles.anotherMixedElement, styles.hiddenOnMobileMixin)}>
       Blue with mixin
     </div>
   </div>

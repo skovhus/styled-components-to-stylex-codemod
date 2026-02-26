@@ -506,10 +506,13 @@ export function emitShouldForwardPropWrappers(ctx: EmitIntrinsicContext): void {
     // Auto-inferred shouldForwardProp (from lower-rules) keeps original heuristics,
     // except for recipe-pattern components with namespace boolean dimensions
     // (e.g., disabled ? disabledVariants[color] : enabledVariants[color]).
+    // Components extended by other styled components (supportsExternalStyles) also
+    // need rest spread so extending wrappers can pass through HTML attributes.
     const includeRest =
       d.shouldForwardPropFromWithConfig ||
       d.variantDimensions?.some((dim) => dim.namespaceBooleanProp) ||
       isExportedComponent ||
+      (d.supportsExternalStyles ?? false) ||
       (!shouldOmitRestSpread && shouldIncludeRest);
 
     if (!allowClassNameProp && !allowStyleProp) {
@@ -534,10 +537,13 @@ export function emitShouldForwardPropWrappers(ctx: EmitIntrinsicContext): void {
 
       // Generate cleanup loop for prefix props when:
       // - There's a dropPrefix (like "$" for transient props)
-      // - Either: local usage of unknown prefix props, OR exported component (external callers may pass unknown prefix props)
+      // - Either: local usage of unknown prefix props, OR exported/extended component
+      //   (external callers or extending wrappers may pass unknown prefix props)
       // - Rest spread is included
       const needsCleanupLoop =
-        dropPrefix && (isExportedComponent || shouldAllowAnyPrefixProps) && includeRest;
+        dropPrefix &&
+        (isExportedComponent || (d.supportsExternalStyles ?? false) || shouldAllowAnyPrefixProps) &&
+        includeRest;
       const cleanupPrefixStmt = needsCleanupLoop
         ? buildPrefixCleanupStatements(j, restId, dropPrefix)
         : null;
@@ -646,10 +652,13 @@ export function emitShouldForwardPropWrappers(ctx: EmitIntrinsicContext): void {
 
     // Generate cleanup loop for prefix props when:
     // - There's a dropPrefix (like "$" for transient props)
-    // - Either: local usage of unknown prefix props, OR exported component (external callers may pass unknown prefix props)
+    // - Either: local usage of unknown prefix props, OR exported/extended component
+    //   (external callers or extending wrappers may pass unknown prefix props)
     // - Rest spread is included
     const needsCleanupLoopOuter =
-      dropPrefix && (isExportedComponent || shouldAllowAnyPrefixProps) && includeRest;
+      dropPrefix &&
+      (isExportedComponent || (d.supportsExternalStyles ?? false) || shouldAllowAnyPrefixProps) &&
+      includeRest;
     const cleanupPrefixStmt = needsCleanupLoopOuter
       ? buildPrefixCleanupStatements(j, restId, dropPrefix)
       : null;
