@@ -36,6 +36,7 @@ type InlineStyleFromPropsContext = {
   filePath: string;
   loc: { line: number; column: number } | null | undefined;
   warnings: WarningLog[];
+  styleObj: Record<string, unknown>;
   styleFnDecls: Map<string, unknown>;
   styleFnFromProps: Array<{
     fnKey: string;
@@ -66,6 +67,7 @@ export function handleInlineStyleValueFromProps(ctx: InlineStyleFromPropsContext
     filePath,
     loc,
     warnings,
+    styleObj,
     styleFnDecls,
     styleFnFromProps,
     inlineStyleProps,
@@ -217,11 +219,16 @@ export function handleInlineStyleValueFromProps(ctx: InlineStyleFromPropsContext
 
     if (allNonShorthand) {
       // Emit StyleX dynamic functions instead of inline styles
+      // Use the base key when this is the sole style for the component
+      const baseKeyAvailable =
+        outs.length === 1 && Object.keys(styleObj).length === 0 && !styleFnDecls.has(decl.styleKey);
       for (const out of outs) {
         if (!out.prop) {
           continue;
         }
-        const fnKey = `${decl.styleKey}${toSuffixFromProp(out.prop)}`;
+        const fnKey = baseKeyAvailable
+          ? decl.styleKey
+          : `${decl.styleKey}${toSuffixFromProp(out.prop)}`;
         if (!styleFnDecls.has(fnKey)) {
           const paramName = cssPropertyToIdentifier(out.prop);
           const param = j.identifier(paramName);

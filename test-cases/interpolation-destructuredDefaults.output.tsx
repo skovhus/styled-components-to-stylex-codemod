@@ -12,7 +12,7 @@ function Button(props: ButtonProps) {
   const { children, color } = props;
 
   return (
-    <button {...stylex.props(styles.buttonColor((props.color ?? "hotpink") || "blue"))}>
+    <button {...stylex.props(styles.button((props.color ?? "hotpink") || "blue"))}>
       {children}
     </button>
   );
@@ -74,7 +74,7 @@ export const App = () => (
 );
 
 const styles = stylex.create({
-  buttonColor: (color: string | undefined) => ({
+  button: (color: string | undefined) => ({
     color,
   }),
 });

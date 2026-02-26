@@ -1431,6 +1431,7 @@ export function handleInterpolatedDeclaration(args: InterpolatedDeclarationConte
         filePath,
         loc,
         warnings,
+        styleObj,
         styleFnDecls,
         styleFnFromProps,
         inlineStyleProps,
