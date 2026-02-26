@@ -8,7 +8,7 @@ import type { StyledDecl } from "../transform-types.js";
 import { getBridgeClassVar } from "../utilities/bridge-classname.js";
 import { buildStyleFnConditionExpr } from "../utilities/jscodeshift-utils.js";
 import { type ExpressionKind, type InlineStyleProp, type WrapperPropDefaults } from "./types.js";
-import type { JsxAttr, StatementKind } from "./wrapper-emitter.js";
+import { SX_PROP_TYPE_TEXT, type JsxAttr, type StatementKind } from "./wrapper-emitter.js";
 import { emitStyleMerging } from "./style-merger.js";
 import { sortVariantEntriesBySpecificity, VOID_TAGS } from "./type-helpers.js";
 import { withLeadingComments } from "./comments.js";
@@ -448,14 +448,13 @@ export function emitShouldForwardPropWrappers(ctx: EmitIntrinsicContext): void {
     if (allowAsProp && emitTypes) {
       // When there are no custom props, use inline type
       // When there ARE custom props (explicit), use inline intersection with user-defined type
+      const sxPart = allowSxProp ? `${SX_PROP_TYPE_TEXT}; ` : "";
+      const asPropLiteral = `{ ${sxPart}as?: C }`;
+      const forwardedAsPart = includesForwardedAs ? " & { forwardedAs?: React.ElementType }" : "";
       const propsTypeText = hasNoCustomProps
-        ? includesForwardedAs
-          ? "React.ComponentPropsWithRef<C> & { as?: C } & { forwardedAs?: React.ElementType }"
-          : "React.ComponentPropsWithRef<C> & { as?: C }"
+        ? `React.ComponentPropsWithRef<C> & ${asPropLiteral}${forwardedAsPart}`
         : explicit
-          ? includesForwardedAs
-            ? `${explicit} & React.ComponentPropsWithRef<C> & { as?: C } & { forwardedAs?: React.ElementType }`
-            : `${explicit} & React.ComponentPropsWithRef<C> & { as?: C }`
+          ? `${explicit} & React.ComponentPropsWithRef<C> & ${asPropLiteral}${forwardedAsPart}`
           : `${emitter.propsTypeNameFor(d.localName)}<C>`;
       emitter.annotatePropsParam(propsParamId, d.localName, propsTypeText);
     } else {

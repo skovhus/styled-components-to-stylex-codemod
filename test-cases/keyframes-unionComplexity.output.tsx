@@ -23,7 +23,7 @@ type LoaderCaretProps<C extends React.ElementType = "div"> = React.ComponentProp
 export function LoaderCaret<C extends React.ElementType = "div">(
   props: {
     $delay?: number;
-  } & React.ComponentPropsWithRef<C> & { as?: C },
+  } & React.ComponentPropsWithRef<C> & { sx?: stylex.StyleXStyles; as?: C },
 ) {
   const { as: Component = "div", className, children, style, sx, $delay, ...rest } = props;
 

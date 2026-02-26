@@ -18,7 +18,7 @@ type PositionBaseProps<C extends React.ElementType = "div"> = React.ComponentPro
   Omit<React.PropsWithChildren<PositionProps>, "as"> & { sx?: stylex.StyleXStyles; as?: C };
 
 function PositionBase<C extends React.ElementType = "div">(
-  props: PositionProps & React.ComponentPropsWithRef<C> & { as?: C },
+  props: PositionProps & React.ComponentPropsWithRef<C> & { sx?: stylex.StyleXStyles; as?: C },
 ) {
   const { as: Component = "div", className, children, style, sx, top, right, bottom, left } = props;
 
