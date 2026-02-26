@@ -2,7 +2,12 @@ import * as React from "react";
 import * as stylex from "@stylexjs/stylex";
 import { mergedSx } from "./lib/mergedSx";
 
-type SizeBoxProps<C extends React.ElementType = "div"> = React.ComponentPropsWithRef<C> &
+type SizeBoxProps<C extends React.ElementType = "div"> = Omit<
+  React.ComponentPropsWithRef<C>,
+  keyof (React.ComponentProps<"div"> & {
+    $size: number;
+  })
+> &
   Omit<
     React.ComponentProps<"div"> & {
       $size: number;
@@ -14,7 +19,12 @@ type SizeBoxProps<C extends React.ElementType = "div"> = React.ComponentPropsWit
 function SizeBox<C extends React.ElementType = "div">(
   props: {
     $size: number;
-  } & React.ComponentPropsWithRef<C> & { sx?: stylex.StyleXStyles; as?: C },
+  } & Omit<
+    React.ComponentPropsWithRef<C>,
+    keyof {
+      $size: number;
+    }
+  > & { sx?: stylex.StyleXStyles; as?: C },
 ) {
   const { as: Component = "div", className, children, style, sx, $size, ...rest } = props;
 

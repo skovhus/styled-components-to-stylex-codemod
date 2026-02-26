@@ -487,7 +487,7 @@ export function emitShouldForwardPropWrappers(ctx: EmitIntrinsicContext): void {
       const propsTypeText = hasNoCustomProps
         ? `React.ComponentPropsWithRef<C> & ${asPropLiteral}${forwardedAsPart}`
         : explicit
-          ? `${explicit} & React.ComponentPropsWithRef<C> & ${asPropLiteral}${forwardedAsPart}`
+          ? `${explicit} & Omit<React.ComponentPropsWithRef<C>, keyof (${explicit})> & ${asPropLiteral}${forwardedAsPart}`
           : `${emitter.propsTypeNameFor(d.localName)}<C>`;
       emitter.annotatePropsParam(propsParamId, d.localName, propsTypeText);
     } else {

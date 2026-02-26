@@ -82,6 +82,11 @@ export function emitIntrinsicPolymorphicWrappers(ctx: EmitIntrinsicContext): voi
         if (!allowStyleProp) {
           omitted.push('"style"');
         }
+        // When there's a custom props type, omit its keys from element props
+        // so custom props take precedence over native element props
+        if (explicit) {
+          omitted.push(`keyof (${explicit})`);
+        }
         const baseMaybeOmitted =
           omitted.length > 0 ? `Omit<${base}, ${omitted.join(" | ")}>` : base;
         const asPropParts: string[] = [];

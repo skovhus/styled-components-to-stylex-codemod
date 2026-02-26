@@ -356,8 +356,10 @@ export function createEmitIntrinsicHelpers(env: EmitIntrinsicHelpersEnv): EmitIn
     if (extra) {
       // Omit as from extra since we're adding our own as?: C
       const extraWithoutAs = `Omit<${extra}, "as">`;
-      // Combine: base props, then custom props (overriding), then polymorphic as + sx
-      const typeExprText = `${base} & ${extraWithoutAs} & { ${sxPropPart}as?: C }${forwardedAsPart}`;
+      // Omit extra's keys from base so custom props take precedence over native element props
+      const allOmitted = [...omitted, `keyof (${extra})`];
+      const baseWithExtraOmit = `Omit<React.ComponentPropsWithRef<C>, ${allOmitted.join(" | ")}>`;
+      const typeExprText = `${baseWithExtraOmit} & ${extraWithoutAs} & { ${sxPropPart}as?: C }${forwardedAsPart}`;
       return { typeExprText, genericParams };
     }
     // Just element props with as?: C (and optional sx)
