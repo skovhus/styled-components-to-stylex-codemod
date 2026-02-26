@@ -27,11 +27,13 @@ export function Button(props: React.PropsWithChildren<{ ref?: React.Ref<HTMLButt
 
 // Pattern 2: Component with theme access (like TextColor.tsx in a design system)
 // Uses props.theme.color which the adapter resolves to $colors
-interface ThemeSpanProps extends Omit<React.ComponentProps<"span">, "className" | "style"> {
+interface ThemeSpanProps {
   variant: "labelBase" | "labelMuted" | "labelTitle";
 }
 
-export function ThemeSpan(props: ThemeSpanProps) {
+export function ThemeSpan(
+  props: ThemeSpanProps & Omit<React.ComponentProps<"span">, "className" | "style">,
+) {
   const { children, variant, ...rest } = props;
 
   return (

@@ -14,9 +14,7 @@ export type Props = {
   size?: Size;
 };
 
-type ColorBadgeProps = React.ComponentProps<"span"> & Props;
-
-export function ColorBadge(props: ColorBadgeProps) {
+export function ColorBadge(props: Props & React.ComponentProps<"span">) {
   const { className, children, style, ...rest } = props;
 
   return (

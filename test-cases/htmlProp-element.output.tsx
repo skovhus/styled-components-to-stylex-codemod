@@ -13,7 +13,7 @@ interface TextColorProps {
  * When exported, should include HTML span props (className, children, style).
  */
 export function TextColor(
-  props: React.ComponentProps<"span"> & TextColorProps & { sx?: stylex.StyleXStyles },
+  props: TextColorProps & React.ComponentProps<"span"> & { sx?: stylex.StyleXStyles },
 ) {
   const { className, children, style, sx, color, ...rest } = props;
 

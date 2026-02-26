@@ -226,24 +226,28 @@ export function emitShouldForwardPropWrappers(ctx: EmitIntrinsicContext): void {
 
     // Detect if there are no custom user-defined props (just intrinsic element props)
     const hasNoCustomProps = !explicit && extraProps.size === 0;
+    // When the user already has a well-named type, skip creating a new type alias
+    const explicitIsExistingTypeRef = !!emitter.getExplicitTypeNameIfExists(d.propsType);
 
-    // Emit props type (result not used - inline type is always used in function parameter)
-    emitPropsType({
-      localName: d.localName,
-      tagName,
-      typeText: finalTypeTextWithForwardedAs,
-      allowAsProp,
-      allowClassNameProp,
-      allowStyleProp,
-      allowSxProp,
-      hasNoCustomProps,
-    });
+    // Emit props type (skip when user already has a well-named type)
+    if (!explicitIsExistingTypeRef) {
+      emitPropsType({
+        localName: d.localName,
+        tagName,
+        typeText: finalTypeTextWithForwardedAs,
+        allowAsProp,
+        allowClassNameProp,
+        allowStyleProp,
+        allowSxProp,
+        hasNoCustomProps,
+      });
+    }
     // For NON-POLYMORPHIC components (without `as` support), extend user-defined types
     // to include element props like children, className, style.
     // For POLYMORPHIC components (with `as` support), we don't modify the type -
     // instead we add element props as an inline intersection in the function parameter.
+    let sfpInlineTypeText: string | undefined;
     if (!allowAsProp && explicit) {
-      const propsTypeName = emitter.propsTypeNameFor(d.localName);
       const extendBaseTypeText = (() => {
         // Prefer ComponentProps for intrinsic wrappers so event handlers/attrs
         // are typed like real JSX usage (and so we can reliably omit className/style).
@@ -257,9 +261,16 @@ export function emitShouldForwardPropWrappers(ctx: EmitIntrinsicContext): void {
         }
         return omitted.length ? `Omit<${base}, ${omitted.join(" | ")}>` : base;
       })();
-      emitter.extendExistingType(propsTypeName, extendBaseTypeText);
-      if (allowSxProp) {
-        emitter.injectSxPropIntoExistingType(propsTypeName);
+      if (explicitIsExistingTypeRef) {
+        // User's existing type first in the intersection for readability
+        const sxPart = allowSxProp ? `{ ${SX_PROP_TYPE_TEXT} }` : undefined;
+        sfpInlineTypeText = emitter.joinIntersection(explicit, extendBaseTypeText, sxPart);
+      } else {
+        const propsTypeName = emitter.propsTypeNameFor(d.localName);
+        emitter.extendExistingType(propsTypeName, extendBaseTypeText);
+        if (allowSxProp) {
+          emitter.injectSxPropIntoExistingType(propsTypeName);
+        }
       }
     }
     ctx.markNeedsReactTypeImport();
@@ -487,9 +498,11 @@ export function emitShouldForwardPropWrappers(ctx: EmitIntrinsicContext): void {
       const propsTypeText = hasNoCustomProps
         ? `React.ComponentPropsWithRef<C> & ${asPropLiteral}${forwardedAsPart}`
         : explicit
-          ? `${explicit} & React.ComponentPropsWithRef<C> & ${asPropLiteral}${forwardedAsPart}`
+          ? `${explicit} & Omit<React.ComponentPropsWithRef<C>, keyof (${explicit})> & ${asPropLiteral}${forwardedAsPart}`
           : `${emitter.propsTypeNameFor(d.localName)}<C>`;
       emitter.annotatePropsParam(propsParamId, d.localName, propsTypeText);
+    } else if (sfpInlineTypeText) {
+      emitter.annotatePropsParam(propsParamId, d.localName, sfpInlineTypeText);
     } else {
       emitter.annotatePropsParam(propsParamId, d.localName);
     }

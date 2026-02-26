@@ -2,7 +2,7 @@ import * as React from "react";
 import * as stylex from "@stylexjs/stylex";
 
 // Props defined via interface (not TSTypeLiteral)
-interface TransientButtonProps extends Omit<React.ComponentProps<"button">, "className" | "style"> {
+interface TransientButtonProps {
   $variant?: "primary" | "secondary";
   $size?: "small" | "large";
 }
@@ -10,7 +10,9 @@ interface TransientButtonProps extends Omit<React.ComponentProps<"button">, "cla
 // Exported component with shouldForwardProp using dropPrefix pattern
 // Props are defined via interface reference, not inline type literal
 // The cleanup loop should still filter unknown $-prefixed props
-export function TransientButton(props: TransientButtonProps) {
+export function TransientButton(
+  props: TransientButtonProps & Omit<React.ComponentProps<"button">, "className" | "style">,
+) {
   const { children, $variant, $size, ...rest } = props;
 
   const restRecord = rest as Record<string, unknown>;

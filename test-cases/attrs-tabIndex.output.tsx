@@ -6,7 +6,7 @@ type Props = {
   $applyBackground?: boolean;
 };
 
-export function Component(props: Omit<React.ComponentProps<"div">, "className" | "style"> & Props) {
+export function Component(props: Props & Omit<React.ComponentProps<"div">, "className" | "style">) {
   const { children, $applyBackground, tabIndex, ...rest } = props;
 
   return (

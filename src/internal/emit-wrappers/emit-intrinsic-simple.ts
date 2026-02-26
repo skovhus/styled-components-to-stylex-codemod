@@ -638,8 +638,15 @@ export function emitSimpleExportedIntrinsicWrappers(ctx: EmitIntrinsicContext): 
       // For non-exported components, use simple `as?: React.ElementType` without generics.
       // Detect if there are no custom user-defined props (just intrinsic element props)
       const hasNoCustomProps = !explicit && customStyleDrivingPropsTypeText === "{}";
+      // When the user already has a well-named type (e.g. `styled("div")<Props>` where Props
+      // exists in the file), skip creating a new type alias and use the existing type inline.
+      const explicitIsExistingTypeRef = !!emitter.getExplicitTypeNameIfExists(d.propsType);
       let typeAliasEmitted: boolean;
-      if (usePolymorphicPattern) {
+      if (explicitIsExistingTypeRef && !usePolymorphicPattern) {
+        // User already has a well-named type — skip creating a new type alias
+        typeAliasEmitted = false;
+        ctx.markNeedsReactTypeImport();
+      } else if (usePolymorphicPattern) {
         typeAliasEmitted = emitPropsType({
           localName: d.localName,
           tagName,
@@ -648,7 +655,7 @@ export function emitSimpleExportedIntrinsicWrappers(ctx: EmitIntrinsicContext): 
           allowClassNameProp,
           allowStyleProp,
           allowSxProp,
-          hasNoCustomProps,
+          hasNoCustomProps: hasNoCustomProps || explicitIsExistingTypeRef,
         });
       } else if (!hasNoCustomProps) {
         typeAliasEmitted = emitSimplePropsType(d.localName, typeTextWithForwardedAs, allowAsProp);
@@ -690,12 +697,24 @@ export function emitSimpleExportedIntrinsicWrappers(ctx: EmitIntrinsicContext): 
               allowSxProp,
               includeForwardedAs: includesForwardedAs,
               extra: explicit,
+              extraFirst: explicitIsExistingTypeRef,
             });
             inlineTypeText = poly.typeExprText;
           } else {
             // Fallback: use the polymorphic props type with generic (shouldn't happen often)
             inlineTypeText = `${emitter.propsTypeNameFor(d.localName)}<C>`;
           }
+        } else if (explicitIsExistingTypeRef && explicit) {
+          // User's existing type first in the intersection for readability
+          const inlineBase = emitter.joinIntersection(
+            explicit,
+            extendBaseTypeText,
+            sxTypeIntersection,
+          );
+          inlineTypeText = withForwardedAsType(
+            withSimpleAsPropType(inlineBase, allowAsProp),
+            includesForwardedAs,
+          );
         } else {
           // Use the computed typeText (which may be an intersection) as the inline type.
           inlineTypeText = withSimpleAsPropType(typeTextWithForwardedAs, allowAsProp);

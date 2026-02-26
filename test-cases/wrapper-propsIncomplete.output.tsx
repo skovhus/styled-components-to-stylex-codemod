@@ -16,7 +16,7 @@ interface TextColorProps {
 }
 
 export function TextColor(
-  props: React.ComponentProps<"span"> & TextColorProps & { sx?: stylex.StyleXStyles },
+  props: TextColorProps & React.ComponentProps<"span"> & { sx?: stylex.StyleXStyles },
 ) {
   const { className, children, style, sx, color, ...rest } = props;
 
@@ -66,14 +66,15 @@ export function App() {
 
 // Pattern 3: styled("span") with NO local usage - wrapper props should still be extended
 // This matches TextColor.tsx in a design system which doesn't use the component in the same file
-interface ThemeTextProps extends React.ComponentProps<"span"> {
+interface ThemeTextProps {
   /** Theme color name */
   themeColor: Colors;
-  sx?: stylex.StyleXStyles;
 }
 
 /** A text span that gets color from theme */
-export function ThemeText(props: ThemeTextProps) {
+export function ThemeText(
+  props: ThemeTextProps & React.ComponentProps<"span"> & { sx?: stylex.StyleXStyles },
+) {
   const { className, children, style, sx, themeColor, ...rest } = props;
 
   return (

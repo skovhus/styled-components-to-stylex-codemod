@@ -5,14 +5,14 @@ import { mergedSx } from "./lib/mergedSx";
 
 const Browser = { isSafari: true };
 
-type StackProps = Omit<React.ComponentProps<"div">, "className"> & {
+type StackProps = {
   column?: boolean;
   gap?: number;
   className?: string;
   children?: React.ReactNode;
 };
 
-export function Stack(props: StackProps) {
+export function Stack(props: StackProps & Omit<React.ComponentProps<"div">, "className">) {
   const { children, style, gap, column, ...rest } = props;
 
   return (

@@ -8,7 +8,7 @@ type TextProps = { sx?: stylex.StyleXStyles } & React.PropsWithChildren<{
 }>;
 
 function Text<C extends React.ElementType = "span">(
-  props: React.ComponentProps<"span"> & TextProps & { sx?: stylex.StyleXStyles } & { as?: C },
+  props: TextProps & React.ComponentProps<"span"> & { sx?: stylex.StyleXStyles } & { as?: C },
 ) {
   const {
     as: Component = "span",

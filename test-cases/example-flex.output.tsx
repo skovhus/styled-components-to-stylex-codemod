@@ -14,7 +14,7 @@ type JustifyValues =
 type AlignValues = "stretch" | "center" | "baseline" | "flex-start" | "flex-end";
 
 /** Props for the Flex component */
-export type FlexProps = Omit<React.ComponentProps<"div">, "className"> & {
+export type FlexProps = {
   /** Set `flex-direction` to `column` */
   column?: boolean;
   /** Sets flex direction to either `row-reverse` or `column-reverse` (depending on direction of `column` prop) */
@@ -82,7 +82,7 @@ export const flexPropKeys = [
 /**
  * Generic flexbox div component.
  */
-export function Flex(props: FlexProps) {
+export function Flex(props: FlexProps & Omit<React.ComponentProps<"div">, "className">) {
   const {
     children,
     style,
