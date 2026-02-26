@@ -253,6 +253,31 @@ function collectStyledDeclsImpl(args: {
     | { parsed: StyledDecl["shouldForwardProp"]; unparseable?: false }
     | { parsed?: undefined; unparseable: true };
 
+  const isModuleScopeDeclarator = (path: any): boolean => {
+    if (path?.scope?.isGlobal === true) {
+      return true;
+    }
+
+    // Fallback for parser/path variants where scope metadata is missing:
+    // walk up and ensure we hit Program without entering a function body.
+    let cur = path?.parentPath;
+    while (cur?.node) {
+      const nodeType = cur.node.type;
+      if (nodeType === "Program") {
+        return true;
+      }
+      if (
+        nodeType === "FunctionDeclaration" ||
+        nodeType === "FunctionExpression" ||
+        nodeType === "ArrowFunctionExpression"
+      ) {
+        return false;
+      }
+      cur = cur.parentPath;
+    }
+    return false;
+  };
+
   const parseShouldForwardProp = (arg0: any): ShouldForwardPropResult | undefined => {
     if (!arg0 || arg0.type !== "ObjectExpression") {
       return undefined;
@@ -319,9 +344,7 @@ function collectStyledDeclsImpl(args: {
               if (idNode?.type !== "Identifier" || idNode.name !== varName) {
                 return false;
               }
-              // VariableDeclarator → VariableDeclaration → Program|ExportNamedDeclaration
-              const containerType = path.parentPath?.parentPath?.node?.type;
-              return containerType === "Program" || containerType === "ExportNamedDeclaration";
+              return isModuleScopeDeclarator(path);
             });
             if (decls.length > 0) {
               const init = (decls.get().node as any).init;
