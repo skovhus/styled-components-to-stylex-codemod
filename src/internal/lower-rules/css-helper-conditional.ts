@@ -23,7 +23,6 @@ import { mergeStyleObjects } from "./utils.js";
 import { extractConditionName } from "../utilities/style-key-naming.js";
 import {
   cloneAstNode,
-  collectIdentifiers,
   getArrowFnParamBindings,
   getNodeLocStart,
   isCallExpressionNode,
@@ -1282,10 +1281,15 @@ export function createCssHelperConditionalHandler(ctx: CssHelperConditionalConte
             for (const propName of propsUsed) {
               ensureShouldForwardPropDrop(decl, propName);
             }
-            const ternaryIdents = new Set<string>();
-            collectIdentifiers(ternaryTest, ternaryIdents);
-            for (const ident of ternaryIdents) {
-              ensureShouldForwardPropDrop(decl, ident);
+            // Collect only actual prop names from the ternary test expression.
+            // Normalize param refs first (e.g., bare `column` → `props.column`),
+            // then extract props via collectPropsFromExpressions which only picks
+            // up `props.X` member accesses and `$`-prefixed identifiers.
+            const ternaryPropNames = new Set<string>();
+            const normalizedTest = replaceParamWithProps(ternaryTest as ExpressionKind);
+            collectPropsFromExpressions([normalizedTest], ternaryPropNames);
+            for (const prop of ternaryPropNames) {
+              ensureShouldForwardPropDrop(decl, prop);
             }
             return true;
           }
@@ -1350,20 +1354,12 @@ export function createCssHelperConditionalHandler(ctx: CssHelperConditionalConte
 
       // Generate style function keys with descriptive names when possible
       const conditionName = extractConditionName(conditional.test);
-      // When conditionName is null (e.g., call expression conditions), disambiguate keys
-      // using CSS property names to avoid collisions when multiple conditionals exist
-      const propSuffix =
-        !conditionName && consMap.size > 0
-          ? capitalize(cssPropertyToIdentifier(Array.from(consMap.keys())[0]!))
-          : !conditionName && altMap.size > 0
-            ? capitalize(cssPropertyToIdentifier(Array.from(altMap.keys())[0]!))
-            : "";
-      const rawConsKey = conditionName
-        ? `${decl.styleKey}${conditionName}`
-        : `${decl.styleKey}CondTruthy${propSuffix}`;
-      const rawAltKey = conditionName
-        ? `${decl.styleKey}Default`
-        : `${decl.styleKey}CondFalsy${propSuffix}`;
+      const { truthyKey: rawConsKey, falsyKey: rawAltKey } = buildConditionalStyleFnKeys(
+        decl.styleKey,
+        conditionName,
+        consMap,
+        altMap,
+      );
       const consKey = ensureUniqueKey(resolvedStyleObjects, rawConsKey);
       const altKey = ensureUniqueKey(resolvedStyleObjects, rawAltKey);
 
@@ -2087,4 +2083,36 @@ function ensureUniqueKey(map: Map<string, unknown>, key: string): string {
     i++;
   }
   return `${key}${i}`;
+}
+
+function buildConditionalStyleFnKeys(
+  styleKey: string,
+  conditionName: string | null,
+  consMap: Map<string, unknown>,
+  altMap: Map<string, unknown>,
+): { truthyKey: string; falsyKey: string } {
+  if (conditionName) {
+    return {
+      truthyKey: `${styleKey}${conditionName}`,
+      falsyKey: `${styleKey}Default`,
+    };
+  }
+
+  const fallbackSuffix = buildFallbackPropSuffix(consMap, altMap);
+  return {
+    truthyKey: `${styleKey}With${fallbackSuffix}`,
+    falsyKey: `${styleKey}Without${fallbackSuffix}`,
+  };
+}
+
+function buildFallbackPropSuffix(
+  consMap: Map<string, unknown>,
+  altMap: Map<string, unknown>,
+): string {
+  const propName =
+    consMap.size > 0 ? Array.from(consMap.keys())[0] : (Array.from(altMap.keys())[0] ?? null);
+  if (!propName) {
+    return "Styles";
+  }
+  return capitalize(cssPropertyToIdentifier(propName));
 }

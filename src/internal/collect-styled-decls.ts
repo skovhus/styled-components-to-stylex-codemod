@@ -307,13 +307,21 @@ function collectStyledDeclsImpl(args: {
           inner.arguments?.[0]?.type === "Identifier" &&
           inner.arguments[0].name === paramName
         ) {
-          // Resolve the array — either an inline ArrayExpression or a variable reference
+          // Resolve the array — either an inline ArrayExpression or a variable reference.
+          // Restrict to module-scope declarations to avoid resolving shadowed variables
+          // in nested scopes. shouldForwardProp configs and their referenced arrays are
+          // always at module scope.
           let arrayNode = inner.callee.object;
           if (arrayNode?.type === "Identifier") {
             const varName = arrayNode.name;
             const decls = root.find(j.VariableDeclarator).filter((path) => {
               const idNode = (path.node as any).id;
-              return idNode?.type === "Identifier" && idNode.name === varName;
+              if (idNode?.type !== "Identifier" || idNode.name !== varName) {
+                return false;
+              }
+              // VariableDeclarator → VariableDeclaration → Program|ExportNamedDeclaration
+              const containerType = path.parentPath?.parentPath?.node?.type;
+              return containerType === "Program" || containerType === "ExportNamedDeclaration";
             });
             if (decls.length > 0) {
               const init = (decls.get().node as any).init;
