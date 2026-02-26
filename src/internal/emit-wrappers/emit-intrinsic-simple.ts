@@ -570,23 +570,17 @@ export function emitSimpleExportedIntrinsicWrappers(ctx: EmitIntrinsicContext): 
         return `{\n${lines.join("\n")}\n}`;
       })();
 
-      const sxTypeIntersection = allowSxProp ? `{ ${SX_PROP_TYPE_TEXT} }` : undefined;
-
       const typeText = (() => {
         if (!explicit) {
           // If we forward `...rest`, prefer full intrinsic props typing so common
           // props (e.g. onChange) get correct types. Keep any style-driving custom
           // props intersected in so the wrapper can consume them.
           return needsRestForType
-            ? emitter.joinIntersection(
-                extendBaseTypeText,
-                customStyleDrivingPropsTypeText,
-                sxTypeIntersection,
-              )
+            ? emitter.joinIntersection(extendBaseTypeText, customStyleDrivingPropsTypeText)
             : baseTypeText;
         }
         if (VOID_TAGS.has(tagName)) {
-          return emitter.joinIntersection(extendBaseTypeText, explicit, sxTypeIntersection);
+          return emitter.joinIntersection(extendBaseTypeText, explicit);
         }
         if (needsRestForType) {
           // For non-exported components that only use transient props ($-prefixed)
@@ -600,7 +594,7 @@ export function emitSimpleExportedIntrinsicWrappers(ctx: EmitIntrinsicContext): 
           ) {
             return emitter.withChildren(explicit);
           }
-          return emitter.joinIntersection(extendBaseTypeText, explicit, sxTypeIntersection);
+          return emitter.joinIntersection(extendBaseTypeText, explicit);
         }
         if (allowClassNameProp || allowStyleProp) {
           const extras: string[] = [];
@@ -686,7 +680,7 @@ export function emitSimpleExportedIntrinsicWrappers(ctx: EmitIntrinsicContext): 
           }
         } else {
           // Use the computed typeText (which may be an intersection) as the inline type.
-          inlineTypeText = withSimpleAsPropType(typeTextWithForwardedAs, allowAsProp);
+          inlineTypeText = withSimpleAsPropType(typeTextWithForwardedAs, allowAsProp, allowSxProp);
         }
       }
     }

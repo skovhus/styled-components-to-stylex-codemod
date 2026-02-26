@@ -56,7 +56,7 @@ export type EmitIntrinsicHelpers = {
     destructureProps?: string[],
   ) => void;
   hasElementPropsInDefaultAttrs: (d: StyledDecl) => boolean;
-  withSimpleAsPropType: (typeText: string, allowAsProp: boolean) => string;
+  withSimpleAsPropType: (typeText: string, allowAsProp: boolean, allowSxProp?: boolean) => string;
   polymorphicIntrinsicPropsTypeText: (args: {
     tagName: string;
     allowClassNameProp: boolean;
@@ -270,37 +270,64 @@ export function createEmitIntrinsicHelpers(env: EmitIntrinsicHelpersEnv): EmitIn
     return defaultAttrs.some((a) => a.jsxProp && !a.jsxProp.startsWith("$"));
   };
 
-  // Simple `as` prop support: adds `as?: C` where C is the generic type parameter.
+  // Builds a combined `{ sx?: ...; as?: C }` literal for the extra props that
+  // the wrapper adds beyond what the base element/component type provides.
+  const buildExtraPropLiteral = (allowAsProp: boolean, allowSxProp?: boolean): string | null => {
+    const parts: string[] = [];
+    if (allowSxProp) {
+      parts.push(SX_PROP_TYPE_TEXT);
+    }
+    if (allowAsProp) {
+      parts.push("as?: C");
+    }
+    return parts.length > 0 ? `{ ${parts.join("; ")} }` : null;
+  };
+
+  // Adds `as?: C` (and optionally `sx`) to a props type.
   // Used for non-exported components and simple wrappers with polymorphic as support.
-  const mergeAsIntoPropsWithChildren = (typeText: string): string | null => {
+  const mergeAsIntoPropsWithChildren = (typeText: string, extraProps: string): string | null => {
     const prefix = "React.PropsWithChildren<";
     if (!typeText.trim().startsWith(prefix) || !typeText.trim().endsWith(">")) {
       return null;
     }
     const inner = typeText.trim().slice(prefix.length, -1).trim();
+    // Extract content from { ... } to merge
+    const extraInner = extraProps.trim();
+    const extraBody =
+      extraInner.startsWith("{") && extraInner.endsWith("}")
+        ? extraInner.slice(1, -1).trim().replace(/;$/, "").trim()
+        : null;
+    if (!extraBody) {
+      return null;
+    }
     if (inner === "{}") {
-      return `${prefix}{ as?: C }>`;
+      return `${prefix}{ ${extraBody} }>`;
     }
     if (inner.startsWith("{") && inner.endsWith("}")) {
       let body = inner.slice(1, -1).trim();
       if (body.endsWith(";")) {
         body = body.slice(0, -1).trim();
       }
-      const withAs = body.length > 0 ? `${body}; as?: C` : "as?: C";
-      return `${prefix}{ ${withAs} }>`;
+      const merged = body.length > 0 ? `${body}; ${extraBody}` : extraBody;
+      return `${prefix}{ ${merged} }>`;
     }
     return null;
   };
 
-  const withSimpleAsPropType = (typeText: string, allowAsProp: boolean): string => {
-    if (!allowAsProp) {
+  const withSimpleAsPropType = (
+    typeText: string,
+    allowAsProp: boolean,
+    allowSxProp?: boolean,
+  ): string => {
+    const extraLiteral = buildExtraPropLiteral(allowAsProp, allowSxProp);
+    if (!extraLiteral) {
       return typeText;
     }
-    const merged = mergeAsIntoPropsWithChildren(typeText);
+    const merged = mergeAsIntoPropsWithChildren(typeText, extraLiteral);
     if (merged) {
       return merged;
     }
-    return emitter.joinIntersection(typeText, "{ as?: C }");
+    return emitter.joinIntersection(typeText, extraLiteral);
   };
 
   const polymorphicIntrinsicPropsTypeText = (args: {
