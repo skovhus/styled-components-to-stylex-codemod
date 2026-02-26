@@ -5,26 +5,6 @@ body{font-family:-apple-system,BlinkMacSystemFont,Segoe UI,Roboto,Helvetica Neue
   inherits: false
 }
 
-@property --x-backgroundColor {
-  syntax: "*";
-  inherits: false
-}
-
-@property --x-borderColor {
-  syntax: "*";
-  inherits: false
-}
-
-@property --x-boxShadow {
-  syntax: "*";
-  inherits: false
-}
-
-@property --x-width {
-  syntax: "*";
-  inherits: false
-}
-
 @property --x-top {
   syntax: "*";
   inherits: false
@@ -41,6 +21,26 @@ body{font-family:-apple-system,BlinkMacSystemFont,Segoe UI,Roboto,Helvetica Neue
 }
 
 @property --x-left {
+  syntax: "*";
+  inherits: false
+}
+
+@property --x-backgroundColor {
+  syntax: "*";
+  inherits: false
+}
+
+@property --x-borderColor {
+  syntax: "*";
+  inherits: false
+}
+
+@property --x-boxShadow {
+  syntax: "*";
+  inherits: false
+}
+
+@property --x-width {
   syntax: "*";
   inherits: false
 }
@@ -2449,6 +2449,14 @@ body{font-family:-apple-system,BlinkMacSystemFont,Segoe UI,Roboto,Helvetica Neue
   accent-color: #bf4f74;
 }
 
+.x12f6rq7[disabled]:not(#\#):not(#\#):not(#\#) {
+  background-color: #ccc;
+}
+
+.xeu1bbw[disabled]:not(#\#):not(#\#):not(#\#) {
+  background-color: #f5f5f5;
+}
+
 .x1ogqw4i.x1ogqw4i:where(.x-default-marker:is(*) ~ *):not(#\#):not(#\#):not(#\#) {
   background-color: #0f0;
 }
@@ -2469,7 +2477,11 @@ body{font-family:-apple-system,BlinkMacSystemFont,Segoe UI,Roboto,Helvetica Neue
   box-shadow: 0 0 0 1px var(--x1078q4);
 }
 
-.xnd0d6f[data-state="inactive"]:not(#\#):not(#\#):not(#\#) {
+.x1okvs37[disabled]:not(#\#):not(#\#):not(#\#) {
+  color: #666;
+}
+
+.xnd0d6f[data-state="inactive"]:not(#\#):not(#\#):not(#\#), .x1vnrvbx[disabled]:not(#\#):not(#\#):not(#\#) {
   color: #999;
 }
 
@@ -2479,6 +2491,10 @@ body{font-family:-apple-system,BlinkMacSystemFont,Segoe UI,Roboto,Helvetica Neue
 
 .x1kk4a09.x1kk4a09:where(.x-default-marker:is(*) ~ *):not(#\#):not(#\#):not(#\#) {
   color: var(--xvyasvk);
+}
+
+.xi79bht[disabled]:not(#\#):not(#\#):not(#\#) {
+  cursor: not-allowed;
 }
 
 .x1ke1ukj[data-visible="true"]:not(#\#):not(#\#):not(#\#) {
