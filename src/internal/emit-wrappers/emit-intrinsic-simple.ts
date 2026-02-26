@@ -13,7 +13,7 @@ import {
   type InlineStyleProp,
   type WrapperPropDefaults,
 } from "./types.js";
-import type { JsxAttr, StatementKind } from "./wrapper-emitter.js";
+import { SX_PROP_TYPE_TEXT, type JsxAttr, type StatementKind } from "./wrapper-emitter.js";
 import { emitStyleMerging } from "./style-merger.js";
 import { sortVariantEntriesBySpecificity, VOID_TAGS } from "./type-helpers.js";
 import { withLeadingCommentsOnFirstFunction } from "./comments.js";
@@ -73,6 +73,7 @@ export function emitSimpleWithConfigWrappers(ctx: EmitIntrinsicContext): void {
     const supportsExternalStyles = d.supportsExternalStyles ?? false;
     const allowClassNameProp = emitter.shouldAllowClassNameProp(d);
     const allowStyleProp = emitter.shouldAllowStyleProp(d);
+    const allowSxProp = emitter.shouldAllowSxProp(d);
     const allowAsProp = shouldAllowAsProp(d, tagName);
     {
       const explicit = emitter.stringifyTsType(d.propsType);
@@ -93,6 +94,7 @@ export function emitSimpleWithConfigWrappers(ctx: EmitIntrinsicContext): void {
             tagName,
             allowClassNameProp,
             allowStyleProp,
+            allowSxProp,
           })
         : "{}";
 
@@ -111,6 +113,7 @@ export function emitSimpleWithConfigWrappers(ctx: EmitIntrinsicContext): void {
               tagName,
               allowClassNameProp,
               allowStyleProp,
+              allowSxProp,
             });
             ctx.markNeedsReactTypeImport();
             return emitter.joinIntersection(intrinsicBaseType, explicit);
@@ -126,6 +129,7 @@ export function emitSimpleWithConfigWrappers(ctx: EmitIntrinsicContext): void {
         allowAsProp,
         allowClassNameProp,
         allowStyleProp,
+        allowSxProp,
       });
     }
     const { beforeBase: extraStyleArgs, afterBase: extraStyleArgsAfterBase } =
@@ -280,12 +284,18 @@ export function emitSimpleWithConfigWrappers(ctx: EmitIntrinsicContext): void {
       continue;
     }
 
+    const sxId = j.identifier("sx");
+    if (allowSxProp) {
+      styleArgs.push(sxId);
+    }
+
     const patternProps = emitter.buildDestructurePatternProps({
       baseProps: [
         ...(allowAsProp ? [asDestructureProp(tagName)] : []),
         emitter.patternProp("className", classNameId),
         ...(isVoidTag ? [] : [emitter.patternProp("children", childrenId)]),
         emitter.patternProp("style", styleId),
+        ...(allowSxProp ? [emitter.patternProp("sx", sxId)] : []),
       ],
       destructureProps: [...pseudoGuardProps],
       includeRest: true,
@@ -308,6 +318,7 @@ export function emitSimpleWithConfigWrappers(ctx: EmitIntrinsicContext): void {
       styleId,
       allowClassNameProp,
       allowStyleProp,
+      allowSxProp,
       inlineStyleProps: [],
       staticClassNameExpr,
     });
@@ -429,6 +440,7 @@ export function emitSimpleExportedIntrinsicWrappers(ctx: EmitIntrinsicContext): 
     const tagName = d.base.tagName;
     const allowClassNameProp = emitter.shouldAllowClassNameProp(d);
     const allowStyleProp = emitter.shouldAllowStyleProp(d);
+    const allowSxProp = emitter.shouldAllowSxProp(d);
     const usedAttrsForType = emitter.getUsedAttrs(d.localName);
     const includesForwardedAs = hasForwardedAsUsage(d);
     const allowAsProp = shouldAllowAsProp(d, tagName);
@@ -446,6 +458,7 @@ export function emitSimpleExportedIntrinsicWrappers(ctx: EmitIntrinsicContext): 
         tagName,
         allowClassNameProp,
         allowStyleProp,
+        allowSxProp,
         skipProps: explicitPropNames,
       });
 
@@ -557,17 +570,23 @@ export function emitSimpleExportedIntrinsicWrappers(ctx: EmitIntrinsicContext): 
         return `{\n${lines.join("\n")}\n}`;
       })();
 
+      const sxTypeIntersection = allowSxProp ? `{ ${SX_PROP_TYPE_TEXT} }` : undefined;
+
       const typeText = (() => {
         if (!explicit) {
           // If we forward `...rest`, prefer full intrinsic props typing so common
           // props (e.g. onChange) get correct types. Keep any style-driving custom
           // props intersected in so the wrapper can consume them.
           return needsRestForType
-            ? emitter.joinIntersection(extendBaseTypeText, customStyleDrivingPropsTypeText)
+            ? emitter.joinIntersection(
+                extendBaseTypeText,
+                customStyleDrivingPropsTypeText,
+                sxTypeIntersection,
+              )
             : baseTypeText;
         }
         if (VOID_TAGS.has(tagName)) {
-          return emitter.joinIntersection(extendBaseTypeText, explicit);
+          return emitter.joinIntersection(extendBaseTypeText, explicit, sxTypeIntersection);
         }
         if (needsRestForType) {
           // For non-exported components that only use transient props ($-prefixed)
@@ -581,7 +600,7 @@ export function emitSimpleExportedIntrinsicWrappers(ctx: EmitIntrinsicContext): 
           ) {
             return emitter.withChildren(explicit);
           }
-          return emitter.joinIntersection(extendBaseTypeText, explicit);
+          return emitter.joinIntersection(extendBaseTypeText, explicit, sxTypeIntersection);
         }
         if (allowClassNameProp || allowStyleProp) {
           const extras: string[] = [];
@@ -590,6 +609,9 @@ export function emitSimpleExportedIntrinsicWrappers(ctx: EmitIntrinsicContext): 
           }
           if (allowStyleProp) {
             extras.push("style?: React.CSSProperties");
+          }
+          if (allowSxProp) {
+            extras.push(SX_PROP_TYPE_TEXT);
           }
           extras.push("children?: React.ReactNode");
           return emitter.joinIntersection(explicit, `{ ${extras.join("; ")} }`);
@@ -613,12 +635,21 @@ export function emitSimpleExportedIntrinsicWrappers(ctx: EmitIntrinsicContext): 
           allowAsProp,
           allowClassNameProp,
           allowStyleProp,
+          allowSxProp,
           hasNoCustomProps,
         });
       } else if (!hasNoCustomProps) {
         typeAliasEmitted = emitSimplePropsType(d.localName, typeTextWithForwardedAs, allowAsProp);
       } else {
         typeAliasEmitted = false;
+      }
+
+      // When the named type already exists, inject sx prop into it if needed.
+      if (!typeAliasEmitted && allowSxProp) {
+        const propsTypeName = emitter.propsTypeNameFor(d.localName);
+        if (emitter.typeExistsInFile(propsTypeName)) {
+          emitter.injectSxPropIntoExistingType(propsTypeName);
+        }
       }
 
       // If we couldn't emit the named `${localName}Props` type (because it already exists in-file
@@ -633,6 +664,7 @@ export function emitSimpleExportedIntrinsicWrappers(ctx: EmitIntrinsicContext): 
               tagName,
               allowClassNameProp,
               allowStyleProp,
+              allowSxProp,
               includeForwardedAs: includesForwardedAs,
             });
             inlineTypeText = poly.typeExprText;
@@ -643,6 +675,7 @@ export function emitSimpleExportedIntrinsicWrappers(ctx: EmitIntrinsicContext): 
               tagName,
               allowClassNameProp,
               allowStyleProp,
+              allowSxProp,
               includeForwardedAs: includesForwardedAs,
               extra: explicit,
             });
@@ -906,8 +939,13 @@ export function emitSimpleExportedIntrinsicWrappers(ctx: EmitIntrinsicContext): 
       const classNameId = j.identifier("className");
       const childrenId = j.identifier("children");
       const styleId = j.identifier("style");
+      const sxId = j.identifier("sx");
       const restId = shouldIncludeRest ? j.identifier("rest") : null;
       const forwardedAsId = j.identifier("forwardedAs");
+
+      if (allowSxProp) {
+        styleArgs.push(sxId);
+      }
 
       const patternProps = emitter.buildDestructurePatternProps({
         baseProps: [
@@ -925,6 +963,7 @@ export function emitSimpleExportedIntrinsicWrappers(ctx: EmitIntrinsicContext): 
           ...(allowClassNameProp ? [ctx.patternProp("className", classNameId)] : []),
           ...(includeChildren ? [ctx.patternProp("children", childrenId)] : []),
           ...(allowStyleProp ? [ctx.patternProp("style", styleId)] : []),
+          ...(allowSxProp ? [ctx.patternProp("sx", sxId)] : []),
         ],
         destructureProps,
         propDefaults,
@@ -953,6 +992,7 @@ export function emitSimpleExportedIntrinsicWrappers(ctx: EmitIntrinsicContext): 
         styleId,
         allowClassNameProp,
         allowStyleProp,
+        allowSxProp,
         inlineStyleProps: (d.inlineStyleProps ?? []) as InlineStyleProp[],
         staticClassNameExpr,
       });

@@ -15,12 +15,12 @@ interface PositionProps {
 }
 
 type PositionBaseProps<C extends React.ElementType = "div"> = React.ComponentPropsWithRef<C> &
-  Omit<React.PropsWithChildren<PositionProps>, "as"> & { as?: C };
+  Omit<React.PropsWithChildren<PositionProps>, "as"> & { sx?: stylex.StyleXStyles; as?: C };
 
 function PositionBase<C extends React.ElementType = "div">(
-  props: PositionProps & React.ComponentPropsWithRef<C> & { as?: C },
+  props: PositionProps & React.ComponentPropsWithRef<C> & { sx?: stylex.StyleXStyles; as?: C },
 ) {
-  const { as: Component = "div", className, children, style, top, right, bottom, left } = props;
+  const { as: Component = "div", className, children, style, sx, top, right, bottom, left } = props;
 
   return (
     <Component
@@ -30,6 +30,7 @@ function PositionBase<C extends React.ElementType = "div">(
           right ? styles.positionBaseRight(right) : undefined,
           bottom ? styles.positionBaseBottom(bottom) : undefined,
           left ? styles.positionBaseLeft(left) : undefined,
+          sx,
         ],
         className,
         style,

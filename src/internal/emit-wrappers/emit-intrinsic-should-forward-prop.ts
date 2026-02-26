@@ -8,7 +8,7 @@ import type { StyledDecl } from "../transform-types.js";
 import { getBridgeClassVar } from "../utilities/bridge-classname.js";
 import { buildStyleFnConditionExpr } from "../utilities/jscodeshift-utils.js";
 import { type ExpressionKind, type InlineStyleProp, type WrapperPropDefaults } from "./types.js";
-import type { JsxAttr, StatementKind } from "./wrapper-emitter.js";
+import { SX_PROP_TYPE_TEXT, type JsxAttr, type StatementKind } from "./wrapper-emitter.js";
 import { emitStyleMerging } from "./style-merger.js";
 import { sortVariantEntriesBySpecificity, VOID_TAGS } from "./type-helpers.js";
 import { withLeadingComments } from "./comments.js";
@@ -81,6 +81,7 @@ export function emitShouldForwardPropWrappers(ctx: EmitIntrinsicContext): void {
     const tagName = d.base.tagName;
     const allowClassNameProp = emitter.shouldAllowClassNameProp(d);
     const allowStyleProp = emitter.shouldAllowStyleProp(d);
+    const allowSxProp = emitter.shouldAllowSxProp(d);
     const includesForwardedAs = hasForwardedAsUsage(d);
     const allowAsProp = shouldAllowAsProp(d, tagName);
 
@@ -211,6 +212,7 @@ export function emitShouldForwardPropWrappers(ctx: EmitIntrinsicContext): void {
         tagName,
         allowClassNameProp,
         allowStyleProp,
+        allowSxProp,
         skipProps: explicitPropNames,
       });
       return VOID_TAGS.has(tagName) ? inferred : emitter.withChildren(inferred);
@@ -228,6 +230,7 @@ export function emitShouldForwardPropWrappers(ctx: EmitIntrinsicContext): void {
       allowAsProp,
       allowClassNameProp,
       allowStyleProp,
+      allowSxProp,
       hasNoCustomProps,
     });
     // For NON-POLYMORPHIC components (without `as` support), extend user-defined types
@@ -250,6 +253,9 @@ export function emitShouldForwardPropWrappers(ctx: EmitIntrinsicContext): void {
         return omitted.length ? `Omit<${base}, ${omitted.join(" | ")}>` : base;
       })();
       emitter.extendExistingType(propsTypeName, extendBaseTypeText);
+      if (allowSxProp) {
+        emitter.injectSxPropIntoExistingType(propsTypeName);
+      }
     }
     ctx.markNeedsReactTypeImport();
 
@@ -442,14 +448,13 @@ export function emitShouldForwardPropWrappers(ctx: EmitIntrinsicContext): void {
     if (allowAsProp && emitTypes) {
       // When there are no custom props, use inline type
       // When there ARE custom props (explicit), use inline intersection with user-defined type
+      const sxPart = allowSxProp ? `${SX_PROP_TYPE_TEXT}; ` : "";
+      const asPropLiteral = `{ ${sxPart}as?: C }`;
+      const forwardedAsPart = includesForwardedAs ? " & { forwardedAs?: React.ElementType }" : "";
       const propsTypeText = hasNoCustomProps
-        ? includesForwardedAs
-          ? "React.ComponentPropsWithRef<C> & { as?: C } & { forwardedAs?: React.ElementType }"
-          : "React.ComponentPropsWithRef<C> & { as?: C }"
+        ? `React.ComponentPropsWithRef<C> & ${asPropLiteral}${forwardedAsPart}`
         : explicit
-          ? includesForwardedAs
-            ? `${explicit} & React.ComponentPropsWithRef<C> & { as?: C } & { forwardedAs?: React.ElementType }`
-            : `${explicit} & React.ComponentPropsWithRef<C> & { as?: C }`
+          ? `${explicit} & React.ComponentPropsWithRef<C> & ${asPropLiteral}${forwardedAsPart}`
           : `${emitter.propsTypeNameFor(d.localName)}<C>`;
       emitter.annotatePropsParam(propsParamId, d.localName, propsTypeText);
     } else {
@@ -594,6 +599,11 @@ export function emitShouldForwardPropWrappers(ctx: EmitIntrinsicContext): void {
     // When allowAsProp is true, include children support even for void tags
     // because the user might use `as="textarea"` which requires children
     const includeChildrenOuter = allowAsProp || !isVoidTag;
+    const sxId = j.identifier("sx");
+    if (allowSxProp) {
+      styleArgs.push(sxId);
+    }
+
     const patternProps = emitter.buildDestructurePatternProps({
       baseProps: [
         ...(allowAsProp ? [asDestructureProp(tagName)] : []),
@@ -601,6 +611,7 @@ export function emitShouldForwardPropWrappers(ctx: EmitIntrinsicContext): void {
         ...(allowClassNameProp ? [ctx.patternProp("className", classNameId)] : []),
         ...(includeChildrenOuter ? [ctx.patternProp("children", childrenId)] : []),
         ...(allowStyleProp ? [ctx.patternProp("style", styleId)] : []),
+        ...(allowSxProp ? [ctx.patternProp("sx", sxId)] : []),
       ],
       destructureProps: destructureParts,
       propDefaults,
@@ -631,6 +642,7 @@ export function emitShouldForwardPropWrappers(ctx: EmitIntrinsicContext): void {
       styleId,
       allowClassNameProp,
       allowStyleProp,
+      allowSxProp,
       inlineStyleProps: (d.inlineStyleProps ?? []) as InlineStyleProp[],
     });
 
