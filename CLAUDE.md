@@ -53,6 +53,33 @@ StyleX does NOT support CSS shorthand properties. When transforming CSS to Style
 
 When adding new CSS-to-StyleX transformations, always use these existing helpers rather than directly mapping CSS property names.
 
+## StyleX Runtime Behavior
+
+**Deterministic ordering**: StyleX guarantees that later entries in `stylex.props()` override earlier ones for conflicting properties. This is true regardless of whether styles are static or dynamic. The codemod's `variantSourceOrder` tracking preserves the original CSS cascade order by interleaving variant and styleFn entries during emission.
+
+**Dynamic styles use CSS variables, not inline styles**: A dynamic StyleX style like `styles.flexAlignItems(align)` compiles to a CSS class (e.g., `.x123 { align-items: var(--x123) }`) with the variable value set as an inline style (`--x123: center`). The actual CSS property (`align-items`) is still resolved via the CSS class, NOT as a true inline style. This means static and dynamic StyleX styles participate in the same cascade — array ordering in `stylex.props()` determines priority.
+
+**Prefer static styles over dynamic styles for performance**: When a CSS property has a small, known set of values (e.g., `display: flex | inline-flex`, `flex-direction: row | column | row-reverse | column-reverse`), emit separate static styles selected by JavaScript conditionals rather than a single dynamic function call. For example, prefer:
+
+```tsx
+inline ? styles.flexInline : styles.flexDefault; // static: two CSS classes
+```
+
+over:
+
+```tsx
+styles.flexDisplay(inline ? "inline-flex" : "flex"); // dynamic: CSS variable
+```
+
+Static styles produce atomic CSS classes that can be shared and cached, while dynamic styles require a CSS variable indirection per-instance.
+
+**Inline style spread order**: When the codemod emits an inline style object that combines template-computed values with the user's `style` prop, the user's `style` must spread last so it can override template defaults. This matches styled-components behavior where the `style` prop overrides CSS class values:
+
+```tsx
+{ flexDirection: computedValue, ...style }  // ✓ user's style can override
+{ ...style, flexDirection: computedValue }  // ✗ template overrides user's style
+```
+
 ## Scripts
 
 Run repo scripts directly with `node`, see `scripts` folder
