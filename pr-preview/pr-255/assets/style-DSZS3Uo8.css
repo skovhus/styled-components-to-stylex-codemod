@@ -547,14 +547,16 @@ body{font-family:-apple-system,BlinkMacSystemFont,Segoe UI,Roboto,Helvetica Neue
   .x1wk2j8l.x1wk2j8l:not(#\#) {
     padding: 2.5rem;
   }
-
-  .x1i7j8g4.x1i7j8g4:not(#\#) {
-    padding: 2rem;
-  }
 }
 
 @media (width >= 768px) and (width <= 1023.99px) {
   .x1t32qvz.x1t32qvz:not(#\#) {
+    padding: 2rem;
+  }
+}
+
+@media (width >= 1024px) {
+  .x1i7j8g4.x1i7j8g4:not(#\#) {
     padding: 2rem;
   }
 }
@@ -881,6 +883,10 @@ body{font-family:-apple-system,BlinkMacSystemFont,Segoe UI,Roboto,Helvetica Neue
   padding-block: 12px;
 }
 
+.x1xn8qrt:not(#\#):not(#\#) {
+  padding-block: 16px;
+}
+
 .xj8oexa:not(#\#):not(#\#) {
   padding-block: 2px;
 }
@@ -935,6 +941,10 @@ body{font-family:-apple-system,BlinkMacSystemFont,Segoe UI,Roboto,Helvetica Neue
 
 .xnxx81d:not(#\#):not(#\#) {
   padding-inline: 1rem;
+}
+
+.x17qtykl:not(#\#):not(#\#) {
+  padding-inline: 20px;
 }
 
 .x4l9tsp:not(#\#):not(#\#) {
@@ -1403,6 +1413,10 @@ body{font-family:-apple-system,BlinkMacSystemFont,Segoe UI,Roboto,Helvetica Neue
 
 .xjyslct:not(#\#):not(#\#):not(#\#) {
   appearance: none;
+}
+
+.x1efvng4:not(#\#):not(#\#):not(#\#) {
+  background-color: #3b82f6;
 }
 
 .xubpbjk:not(#\#):not(#\#):not(#\#), .x9oods1:not(#\#):not(#\#):not(#\#) {
