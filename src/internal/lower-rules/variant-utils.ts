@@ -187,9 +187,11 @@ export const createPropTestHelpers = (
   };
 
   /**
-   * Parse chained && conditions, returning a combined TestInfo.
+   * Parse chained && / || conditions, returning a combined TestInfo.
    * For: props.a === "x" && props.b === 1
    * Returns: { when: 'a === "x" && b === 1', propName: 'b', allPropNames: ['a', 'b'] }
+   * For: props.$a || props.$b
+   * Returns: { when: '$a || $b', propName: '$b', allPropNames: ['$a', '$b'] }
    */
   const parseChainedTestInfo = (test: ExpressionKind): TestInfo | null => {
     // First try parsing as a simple test
@@ -198,24 +200,21 @@ export const createPropTestHelpers = (
       return simple;
     }
 
-    // Handle chained LogicalExpression with &&
     if (
       test &&
       typeof test === "object" &&
       test.type === "LogicalExpression" &&
-      test.operator === "&&"
+      (test.operator === "&&" || test.operator === "||")
     ) {
       const leftInfo = parseChainedTestInfo(test.left);
-      const rightInfo = parseTestInfo(test.right);
+      const rightInfo =
+        test.operator === "&&" ? parseTestInfo(test.right) : parseChainedTestInfo(test.right);
       if (leftInfo && rightInfo) {
-        // Combine conditions with &&
-        const combinedWhen = `${leftInfo.when} && ${rightInfo.when}`;
-        // Collect all prop names from both sides of the chain
+        const combinedWhen = `${leftInfo.when} ${test.operator} ${rightInfo.when}`;
         const leftProps = leftInfo.allPropNames ?? (leftInfo.propName ? [leftInfo.propName] : []);
-        const rightProps = rightInfo.propName ? [rightInfo.propName] : [];
+        const rightProps =
+          rightInfo.allPropNames ?? (rightInfo.propName ? [rightInfo.propName] : []);
         const allPropNames = [...new Set([...leftProps, ...rightProps])];
-        // For chained conditions, we use the last propName as the primary
-        // (this matches how variants are typically keyed)
         return { when: combinedWhen, propName: rightInfo.propName, allPropNames };
       }
     }
