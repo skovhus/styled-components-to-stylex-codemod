@@ -251,111 +251,47 @@ Troubleshooting prepass failures with `"auto"`:
 
 #### Base component resolution (`resolveBaseComponent`)
 
-This is useful when you want to **replace a base component entirely** by inlining its styles. If your codebase has a shared layout primitive like `<Flex>` or `<Stack>` whose behavior is purely CSS (flexbox props mapped to styles), the codemod can eliminate the runtime import and render a plain intrinsic element instead.
+Use this when you want to **replace a base component entirely** by inlining its styles. If your codebase has a layout primitive like `<Flex>` whose behavior is purely CSS, the codemod can eliminate the runtime import and render a plain `<div>` instead.
 
-Without `resolveBaseComponent`, `styled(Flex)` would produce a wrapper component that still renders `<Flex>` at runtime. With it, the codemod resolves the base component's props to static CSS declarations and inlines everything into a `<div>` (or whichever element you specify).
-
-**Example — inlining base styles via `sx`**
-
-Input:
+The resolver receives `ctx.importSource`, `ctx.importedName`, and `ctx.staticProps` (from `.attrs()` and JSX call sites). Return `{ tagName, consumedProps, sx }` to inline, or `undefined` to skip.
 
 ```tsx
-import styled from "styled-components";
-import { Flex } from "@company/ui";
-
+// Input
 const Container = styled(Flex).attrs({ column: true, gap: 16 })`
   padding: 8px;
-  background-color: #f5f5ff;
 `;
 ```
 
-Adapter:
-
 ```ts
+// Adapter
 resolveBaseComponent(ctx) {
-  if (ctx.importSource !== "@company/ui" || ctx.importedName !== "Flex") {
-    return undefined;
-  }
-
+  if (ctx.importedName !== "Flex") return undefined;
   const sx: Record<string, string> = { display: "flex" };
   if (ctx.staticProps.column === true) sx.flexDirection = "column";
   if (typeof ctx.staticProps.gap === "number") sx.gap = `${ctx.staticProps.gap}px`;
-
-  return {
-    tagName: "div",
-    consumedProps: ["column", "gap", "align", "direction"],
-    sx,
-  };
+  return { tagName: "div", consumedProps: ["column", "gap", "align"], sx };
 },
 ```
 
-Output — `Flex` is gone, its styles are merged into `stylex.create()`:
-
 ```tsx
-import * as stylex from "@stylexjs/stylex";
-
-const Container = <div {...stylex.props(styles.container)} />;
-
+// Output — Flex is gone, its styles are merged into stylex.create()
 const styles = stylex.create({
-  container: {
-    display: "flex",
-    flexDirection: "column",
-    gap: "16px",
-    padding: "8px",
-    backgroundColor: "#f5f5ff",
-  },
+  container: { display: "flex", flexDirection: "column", gap: "16px", padding: "8px" },
 });
 ```
 
-The resolver receives `ctx.importSource`, `ctx.importedName`, and `ctx.staticProps` (literal values resolved from `.attrs()` and JSX call sites). Return `{ tagName, consumedProps, sx }` to inline, or `undefined` to keep the default `styled(Component)` behavior.
-
-**Example — using `mixins` to reference shared StyleX styles**
-
-When the base component's styles already exist as a `stylex.create()` object (e.g. you've already converted `Flex`'s core styles to StyleX), return `mixins` instead of `sx`. The codemod will import the mixin and include it in `stylex.props(...)`:
-
-```ts
-// lib/mixins.stylex.ts
-import * as stylex from "@stylexjs/stylex";
-export const mixins = stylex.create({
-  flex: { display: "flex" },
-});
-```
+If the base component's styles already exist as a `stylex.create()` object, return `mixins` instead of (or alongside) `sx`. The codemod imports the mixin and includes it in `stylex.props(...)`:
 
 ```ts
 resolveBaseComponent(ctx) {
-  if (ctx.importSource !== "@company/ui" || ctx.importedName !== "Flex") {
-    return undefined;
-  }
-
   return {
     tagName: "div",
-    consumedProps: ["column", "gap", "align", "direction"],
-    mixins: [{
-      importSource: "./lib/mixins.stylex",
-      importName: "mixins",
-      styleKey: "flex",
-    }],
+    consumedProps: ["column", "gap"],
+    mixins: [{ importSource: "./lib/mixins.stylex", importName: "mixins", styleKey: "flex" }],
   };
 },
+// Output: <div {...stylex.props(mixins.flex, styles.container)} />
 ```
-
-Output — the mixin is spread into `stylex.props()` alongside the component's own styles:
-
-```tsx
-import * as stylex from "@stylexjs/stylex";
-import { mixins } from "./lib/mixins.stylex";
-
-const Container = <div {...stylex.props(mixins.flex, styles.container)} />;
-
-const styles = stylex.create({
-  container: {
-    padding: "8px",
-    backgroundColor: "#f5f5ff",
-  },
-});
-```
-
-You can combine `sx` and `mixins` — `sx` entries are merged into `stylex.create()` while `mixins` are passed separately to `stylex.props()`.
 
 #### Dynamic interpolations
 
