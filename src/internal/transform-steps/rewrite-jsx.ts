@@ -398,6 +398,7 @@ export function rewriteJsxStep(ctx: TransformContext): StepResult {
             return;
           }
           const n = attr.name.name;
+          const hasTemplateVariant = variantProps.has(n);
 
           // Convert certain interpolated props into dynamic StyleX styles (e.g. padding from `$padding`).
           if (styleFnProps.has(n)) {
@@ -434,15 +435,18 @@ export function rewriteJsxStep(ctx: TransformContext): StepResult {
               inlineVariantDimension.variantObjectName,
               attr,
             );
-            if (!variantLookup) {
+            if (variantLookup) {
+              styleArgs.push(variantLookup);
+              if (!hasTemplateVariant) {
+                return;
+              }
+            } else if (!hasTemplateVariant) {
               output.push(attr);
               return;
             }
-            styleArgs.push(variantLookup);
-            return;
           }
 
-          if (!variantProps.has(n)) {
+          if (!hasTemplateVariant) {
             // Strip transient props (starting with $) only for intrinsic elements.
             // For styled(Component), transient props should still reach the wrapped component
             // (unless consumed by styleFnFromProps, which is handled above).

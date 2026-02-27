@@ -199,7 +199,7 @@ function canResolveBaseFromAttrs(attrsInfo: StyledDecl["attrsInfo"]): boolean {
   if (!attrsInfo) {
     return true;
   }
-  if (attrsInfo.sourceKind === "function") {
+  if (attrsInfo.sourceKind !== "object") {
     return false;
   }
   if (attrsInfo.hasUnsupportedValues) {
@@ -239,10 +239,22 @@ function importSourceToString(source: ImportSource): string {
 
 function isValidBaseResolutionResult(result: {
   tagName: string;
+  consumedProps?: unknown;
   sx?: Record<string, string>;
   mixins?: Array<{ importSource: string; importName: string; styleKey: string }>;
-}): boolean {
+}): result is {
+  tagName: string;
+  consumedProps: string[];
+  sx?: Record<string, string>;
+  mixins?: Array<{ importSource: string; importName: string; styleKey: string }>;
+} {
   if (typeof result.tagName !== "string" || result.tagName.trim() === "") {
+    return false;
+  }
+  if (
+    !Array.isArray(result.consumedProps) ||
+    result.consumedProps.some((prop) => typeof prop !== "string")
+  ) {
     return false;
   }
   const hasSx = !!result.sx && Object.keys(result.sx).length > 0;

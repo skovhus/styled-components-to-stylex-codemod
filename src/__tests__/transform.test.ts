@@ -3253,3 +3253,105 @@ export function App() {
     expect(code).toContain("color");
   });
 });
+
+describe("inline base resolver safety guards", () => {
+  it("should skip base inlining when attrs source cannot be statically resolved", () => {
+    const source = `
+import styled from "styled-components";
+import { Flex } from "./lib/inline-base-flex";
+
+const sharedAttrs = { gap: 8 };
+
+const Container = styled(Flex).attrs(sharedAttrs)\`
+  padding: 4px;
+\`;
+
+export function App() {
+  return <Container>Unknown attrs source</Container>;
+}
+`;
+
+    const result = transformWithWarnings(
+      { source, path: join(testCasesDir, "inlineBase-unknownAttrsSource.input.tsx") },
+      { jscodeshift: j, j, stats: () => {}, report: () => {} },
+      { adapter: fixtureAdapter },
+    );
+
+    expect(result.code).not.toBeNull();
+    const code = result.code ?? "";
+    expect(code).toContain("<Flex");
+    expect(code).not.toContain("containerGapVariants");
+  });
+
+  it("should keep template variants when a prop also drives inline base variants", () => {
+    const source = `
+import styled from "styled-components";
+import { Flex } from "./lib/inline-base-flex";
+
+const Container = styled(Flex)\`
+  \${(props) => props.gap && "margin-top: 2px;"}
+\`;
+
+export function App() {
+  return <Container gap={8}>Overlap</Container>;
+}
+`;
+
+    const result = transformWithWarnings(
+      { source, path: join(testCasesDir, "inlineBase-overlapTemplateAndInline.input.tsx") },
+      { jscodeshift: j, j, stats: () => {}, report: () => {} },
+      { adapter: fixtureAdapter },
+    );
+
+    expect(result.code).not.toBeNull();
+    const code = result.code ?? "";
+    expect(code).toContain("containerGapVariants");
+    expect(code).toContain("styles.containerGap");
+  });
+
+  it("should skip base inlining when resolveBaseComponent returns malformed consumedProps", () => {
+    const source = `
+import styled from "styled-components";
+import { Flex } from "./lib/inline-base-flex";
+
+const Container = styled(Flex)\`
+  padding: 4px;
+\`;
+
+export function App() {
+  return <Container gap={8}>Malformed</Container>;
+}
+`;
+
+    type BaseComponentResult = NonNullable<
+      ReturnType<NonNullable<Adapter["resolveBaseComponent"]>>
+    >;
+
+    const malformedAdapter: Adapter = {
+      ...fixtureAdapter,
+      resolveBaseComponent(ctx) {
+        const resolved = fixtureAdapter.resolveBaseComponent?.(ctx);
+        if (!resolved) {
+          return resolved;
+        }
+        return {
+          tagName: resolved.tagName,
+          sx: resolved.sx,
+          mixins: resolved.mixins,
+        } as unknown as BaseComponentResult;
+      },
+    };
+
+    let result: ReturnType<typeof transformWithWarnings> | undefined;
+    expect(() => {
+      result = transformWithWarnings(
+        { source, path: join(testCasesDir, "inlineBase-malformedResolverResult.input.tsx") },
+        { jscodeshift: j, j, stats: () => {}, report: () => {} },
+        { adapter: malformedAdapter },
+      );
+    }).not.toThrow();
+
+    const code = result?.code ?? "";
+    expect(code).toContain("<Flex");
+  });
+});
