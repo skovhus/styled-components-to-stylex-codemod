@@ -122,6 +122,16 @@ describe("parseChainedTestInfo", () => {
     expect(result).toBeNull();
   });
 
+  it("bails on || with negated || child: $a || !($b || $c)", () => {
+    const { parseChainedTestInfo } = createPropTestHelpers(
+      makeDestructuredBindings("$a", "$b", "$c"),
+    );
+    // "$a || !($b || $c)" would be split by parseVariantWhenToAst on ||
+    // into ["$a", "!($b", "$c)"] — broken tokenization
+    const result = parseChainedTestInfo(parseExpr("$a || !($b || $c)"));
+    expect(result).toBeNull();
+  });
+
   it("bails on && with negated && child: $a && !($b && $c)", () => {
     const { parseChainedTestInfo } = createPropTestHelpers(
       makeDestructuredBindings("$a", "$b", "$c"),

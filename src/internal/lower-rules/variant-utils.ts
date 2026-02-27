@@ -240,12 +240,12 @@ export const createPropTestHelpers = (
         ) {
           return null;
         }
-        // Bail on && when a child has && inside parenthesized groups (e.g.
-        // "!($b && $c)"). The naive split("&&") in parseVariantWhenToAst
-        // would break the parenthesized group into malformed tokens.
+        // Bail when a child has the same operator inside parenthesized groups
+        // (e.g. "!($b && $c)" for && or "!($b || $c)" for ||). The naive
+        // split in parseVariantWhenToAst would break the group into malformed tokens.
         if (
-          test.operator === "&&" &&
-          (hasAndInsideParens(leftInfo.when) || hasAndInsideParens(rightInfo.when))
+          hasOperatorInsideParens(leftInfo.when, test.operator) ||
+          hasOperatorInsideParens(rightInfo.when, test.operator)
         ) {
           return null;
         }
@@ -294,11 +294,12 @@ export const createVariantApplier = (args: {
 // --- Non-exported helpers ---
 
 /**
- * Returns true if the string contains `&&` inside parenthesized groups.
- * Used to detect when strings like `"!($b && $c)"` that would be broken
- * by the naive `split("&&")` in `parseVariantWhenToAst`.
+ * Returns true if the string contains the given operator (`&&` or `||`)
+ * inside parenthesized groups. Used to detect when strings like
+ * `"!($b && $c)"` or `"!($b || $c)"` that would be broken by the naive
+ * split in `parseVariantWhenToAst`.
  */
-function hasAndInsideParens(when: string): boolean {
+function hasOperatorInsideParens(when: string, operator: string): boolean {
   let depth = 0;
   for (let i = 0; i < when.length; i++) {
     const ch = when[i];
@@ -306,7 +307,7 @@ function hasAndInsideParens(when: string): boolean {
       depth++;
     } else if (ch === ")") {
       depth--;
-    } else if (depth > 0 && ch === "&" && when[i + 1] === "&") {
+    } else if (depth > 0 && when[i] === operator[0] && when.startsWith(operator, i)) {
       return true;
     }
   }
