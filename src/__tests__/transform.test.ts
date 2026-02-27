@@ -3337,7 +3337,7 @@ export function App() {
         return {
           tagName: resolved.tagName,
           sx: resolved.sx,
-          mixins: resolved.mixins,
+          ...("mixins" in resolved ? { mixins: resolved.mixins } : {}),
         } as unknown as BaseComponentResult;
       },
     };
