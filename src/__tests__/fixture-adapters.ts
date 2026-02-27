@@ -37,6 +37,7 @@ export const fixtureAdapter = defineAdapter({
     if (
       [
         "attrs-polymorphicAs",
+        "attrs-tabIndex.",
         "basic-jsdocExported",
         "htmlProp-element",
         "wrapper-mergerImported",
