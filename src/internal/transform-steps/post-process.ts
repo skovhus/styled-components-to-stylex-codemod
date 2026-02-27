@@ -78,13 +78,36 @@ export function postProcessStep(ctx: TransformContext): StepResult {
   ctx.needsReactImport = post.needsReactImport;
 
   // Remove local helper functions that were consumed during interpolation processing.
-  // By this point styled declarations have been removed, so template expressions
-  // referencing these helpers are gone and the functions are safely removable.
+  // Only remove when no remaining references exist (the function may be exported
+  // or called from non-styled code elsewhere in the file).
   for (const decl of styledDecls) {
     for (const helperName of decl.consumedLocalHelpers ?? []) {
-      root
-        .find(j.FunctionDeclaration, { id: { name: helperName } })
-        .forEach((p: { prune: () => void }) => p.prune());
+      const fnPaths = root.find(j.FunctionDeclaration, { id: { name: helperName } });
+      if (fnPaths.size() === 0) {
+        continue;
+      }
+      // Skip exported functions — they're part of the module's public API
+      const isExported = fnPaths.some(
+        (p: { parentPath?: { node?: { type?: string } } }) =>
+          p.parentPath?.node?.type === "ExportNamedDeclaration" ||
+          p.parentPath?.node?.type === "ExportDefaultDeclaration",
+      );
+      if (isExported) {
+        continue;
+      }
+      // Check for remaining references outside the declaration itself
+      const refs = root
+        .find(j.Identifier, { name: helperName })
+        .filter((idPath: { parentPath?: { node?: { type?: string; id?: unknown } } }) => {
+          const parent = idPath.parentPath?.node;
+          if (parent?.type === "FunctionDeclaration" && parent.id === idPath.node) {
+            return false;
+          }
+          return true;
+        });
+      if (refs.size() === 0) {
+        fnPaths.forEach((p: { prune: () => void }) => p.prune());
+      }
     }
   }
 
