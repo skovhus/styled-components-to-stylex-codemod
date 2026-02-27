@@ -1,0 +1,1 @@
+import{j as x}from"./index-C89Ove47.js";import{m as k}from"./mergedSx-DRvFb75N.js";function a({children:t,className:o,style:s,sx:e,...r}){return x.jsx("button",{...r,...k([m.base,e],o,s),children:t})}const m={base:{kMzoRj:"xmkeg23",ksu8eU:"x1y0btm7",kVAM5u:"xtb30c9",kaIpWk:"x12oqio5",k8WAf4:"x1vvogim",kg3NbH:"x1hr3lfm",kkrTdU:"x1ypdohk",$$css:!0}};export{a as S};
