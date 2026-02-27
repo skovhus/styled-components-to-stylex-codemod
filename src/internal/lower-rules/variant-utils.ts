@@ -17,6 +17,9 @@ import { toSuffixFromProp } from "../transform/helpers.js";
  * E.g., "!$active" -> "$active", "$x === true" -> "$x !== true"
  */
 export function invertWhen(when: string): string | null {
+  if (when.startsWith("!(") && when.endsWith(")")) {
+    return when.slice(2, -1);
+  }
   if (when.startsWith("!")) {
     return when.slice(1);
   }
@@ -187,9 +190,17 @@ export const createPropTestHelpers = (
   };
 
   /**
-   * Parse chained && conditions, returning a combined TestInfo.
-   * For: props.a === "x" && props.b === 1
-   * Returns: { when: 'a === "x" && b === 1', propName: 'b', allPropNames: ['a', 'b'] }
+   * Parse chained && / || conditions, returning a combined TestInfo.
+   *
+   * Supported patterns:
+   *   props.a && props.b           → { when: 'a && b' }
+   *   props.$a || props.$b         → { when: '$a || $b' }
+   *   props.$a && (props.$b || $c) → { when: '$a && $b || $c' }
+   *   !(props.$a || props.$b)      → { when: '!($a || $b)' }
+   *
+   * Bails (returns null) on || wrapping && children to avoid ambiguous
+   * serialization: "a && b || c" would be reparsed as "a && (b || c)"
+   * by parseVariantWhenToAst, which splits on && first.
    */
   const parseChainedTestInfo = (test: ExpressionKind): TestInfo | null => {
     // First try parsing as a simple test
@@ -198,24 +209,51 @@ export const createPropTestHelpers = (
       return simple;
     }
 
-    // Handle chained LogicalExpression with &&
-    if (
-      test &&
-      typeof test === "object" &&
-      test.type === "LogicalExpression" &&
-      test.operator === "&&"
-    ) {
+    if (!test || typeof test !== "object") {
+      return null;
+    }
+
+    // Handle negated compound expressions: !($a || $b), !($a && $b)
+    if (test.type === "UnaryExpression" && test.operator === "!" && test.argument) {
+      const innerInfo = parseChainedTestInfo(test.argument as ExpressionKind);
+      if (innerInfo) {
+        const allProps = innerInfo.allPropNames ?? (innerInfo.propName ? [innerInfo.propName] : []);
+        return {
+          when: `!(${innerInfo.when})`,
+          propName: innerInfo.propName,
+          allPropNames: allProps,
+        };
+      }
+    }
+
+    // Handle chained LogicalExpression with && or ||
+    if (test.type === "LogicalExpression" && (test.operator === "&&" || test.operator === "||")) {
       const leftInfo = parseChainedTestInfo(test.left);
-      const rightInfo = parseTestInfo(test.right);
+      const rightInfo = parseChainedTestInfo(test.right);
       if (leftInfo && rightInfo) {
-        // Combine conditions with &&
-        const combinedWhen = `${leftInfo.when} && ${rightInfo.when}`;
-        // Collect all prop names from both sides of the chain
+        // Bail on || wrapping && children: the serialized when string would be
+        // ambiguous (e.g. "a && b || c" reparsed as "a && (b || c)" instead of
+        // "(a && b) || c") because parseVariantWhenToAst splits on && first.
+        if (
+          test.operator === "||" &&
+          (leftInfo.when.includes(" && ") || rightInfo.when.includes(" && "))
+        ) {
+          return null;
+        }
+        // Bail when a child has the same operator inside parenthesized groups
+        // (e.g. "!($b && $c)" for && or "!($b || $c)" for ||). The naive
+        // split in parseVariantWhenToAst would break the group into malformed tokens.
+        if (
+          hasOperatorInsideParens(leftInfo.when, test.operator) ||
+          hasOperatorInsideParens(rightInfo.when, test.operator)
+        ) {
+          return null;
+        }
+        const combinedWhen = `${leftInfo.when} ${test.operator} ${rightInfo.when}`;
         const leftProps = leftInfo.allPropNames ?? (leftInfo.propName ? [leftInfo.propName] : []);
-        const rightProps = rightInfo.propName ? [rightInfo.propName] : [];
+        const rightProps =
+          rightInfo.allPropNames ?? (rightInfo.propName ? [rightInfo.propName] : []);
         const allPropNames = [...new Set([...leftProps, ...rightProps])];
-        // For chained conditions, we use the last propName as the primary
-        // (this matches how variants are typically keyed)
         return { when: combinedWhen, propName: rightInfo.propName, allPropNames };
       }
     }
@@ -252,3 +290,26 @@ export const createVariantApplier = (args: {
     dropAllTestInfoProps(testInfo);
   };
 };
+
+// --- Non-exported helpers ---
+
+/**
+ * Returns true if the string contains the given operator (`&&` or `||`)
+ * inside parenthesized groups. Used to detect when strings like
+ * `"!($b && $c)"` or `"!($b || $c)"` that would be broken by the naive
+ * split in `parseVariantWhenToAst`.
+ */
+function hasOperatorInsideParens(when: string, operator: string): boolean {
+  let depth = 0;
+  for (let i = 0; i < when.length; i++) {
+    const ch = when[i];
+    if (ch === "(") {
+      depth++;
+    } else if (ch === ")") {
+      depth--;
+    } else if (depth > 0 && when[i] === operator[0] && when.startsWith(operator, i)) {
+      return true;
+    }
+  }
+  return false;
+}

@@ -1508,6 +1508,105 @@ export const App = () => <Button>Click me</Button>;
   });
 });
 
+describe("conditional logical OR/AND mixed operators", () => {
+  it("should bail when || wraps && to avoid ambiguous condition serialization", () => {
+    // ($a && $b) || $c would serialize as "$a && $b || $c", which
+    // parseVariantWhenToAst would reparse as $a && ($b || $c) — wrong truth table
+    const source = `
+import styled, { css } from "styled-components";
+const Box = styled.div<{ $a?: boolean; $b?: boolean; $c?: boolean }>\`
+  width: 100px;
+  \${({ $a, $b, $c }) =>
+    (($a && $b) || $c) &&
+    css\`
+      background-color: red;
+    \`}
+\`;
+export const App = () => <Box />;
+`;
+    const result = runTransformWithDiagnostics(source);
+    expect(result.code).toBeNull();
+  });
+
+  it("should transform pure || conditions correctly", () => {
+    const source = `
+import styled, { css } from "styled-components";
+const Dot = styled.div<{ $active?: boolean; $completed?: boolean }>\`
+  background-color: white;
+  \${({ $active, $completed }) =>
+    ($active || $completed) &&
+    css\`
+      background-color: blue;
+    \`}
+\`;
+export const App = () => <Dot />;
+`;
+    const result = runTransformWithDiagnostics(source);
+    expect(result.code).not.toBeNull();
+    expect(result.code).toContain("$active || $completed");
+    expect(result.code).toContain("dotActiveOrCompleted");
+  });
+
+  it("should transform negated || conditions correctly", () => {
+    const source = `
+import styled, { css } from "styled-components";
+const Step = styled.div<{ $active?: boolean; $completed?: boolean }>\`
+  background-color: blue;
+  \${({ $active, $completed }) =>
+    !($active || $completed) &&
+    css\`
+      background-color: gray;
+    \`}
+\`;
+export const App = () => <Step />;
+`;
+    const result = runTransformWithDiagnostics(source);
+    expect(result.code).not.toBeNull();
+    expect(result.code).toContain("!($active || $completed)");
+    expect(result.code).toContain("stepNotActiveOrCompleted");
+  });
+
+  it("should transform && wrapping || on the right correctly", () => {
+    const source = `
+import styled, { css } from "styled-components";
+const Badge = styled.span<{ $visible?: boolean; $primary?: boolean; $accent?: boolean }>\`
+  background-color: gray;
+  \${({ $visible, $primary, $accent }) =>
+    $visible &&
+    ($primary || $accent) &&
+    css\`
+      background-color: blue;
+    \`}
+\`;
+export const App = () => <Badge />;
+`;
+    const result = runTransformWithDiagnostics(source);
+    expect(result.code).not.toBeNull();
+    expect(result.code).toContain("$primary || $accent");
+    expect(result.code).toContain("badgeVisiblePrimaryOrAccent");
+  });
+
+  it("should bail when && chain contains negated && group: $a && !($b && $c)", () => {
+    // "!($b && $c)" inside a larger && chain would be mis-tokenized by
+    // parseVariantWhenToAst's naive split("&&")
+    const source = `
+import styled, { css } from "styled-components";
+const Box = styled.div<{ $a?: boolean; $b?: boolean; $c?: boolean }>\`
+  width: 100px;
+  \${({ $a, $b, $c }) =>
+    $a &&
+    !($b && $c) &&
+    css\`
+      background-color: red;
+    \`}
+\`;
+export const App = () => <Box />;
+`;
+    const result = runTransformWithDiagnostics(source);
+    expect(result.code).toBeNull();
+  });
+});
+
 describe("conditional helper call inside pseudo selector", () => {
   it("should warn with cssText hint when adapter resolves styles but omits cssText", () => {
     // When a conditional helper call appears inside a pseudo selector (e.g., &:hover)
