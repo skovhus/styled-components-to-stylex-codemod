@@ -1,1 +1,0 @@
-import{j as s}from"./index-BydeiK4l.js";import{p as e}from"./stylex-DS3CntOa.js";const t={flex:{k1xSpc:"x78zum5",$$css:!0}};function x(){return s.jsx("div",{...e(t.flex,n.container),children:"Mixin mode"})}const n={container:{kmVPX3:"xe8ttls",kWkggS:"xpnvprw",kMzoRj:"xmkeg23",ksu8eU:"x1y0btm7",kVAM5u:"xqu46wi",$$css:!0}};export{x as App};
