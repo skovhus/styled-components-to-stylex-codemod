@@ -757,6 +757,10 @@ describe("runPrepass createExternalInterface snapshot on test-cases", () => {
           "as": false,
           "styles": true,
         },
+        "test-cases/lib/stylex-button.tsx:StyleXButton": {
+          "as": false,
+          "styles": true,
+        },
         "test-cases/lib/text.ts:Text": {
           "as": false,
           "styles": true,

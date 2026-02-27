@@ -413,24 +413,22 @@ export function analyzeBeforeEmitStep(ctx: TransformContext): StepResult {
     decl.supportsAsProp = extResult.as;
   }
 
-  // Determine wrapsStylexComponent: whether a styled(Component) wrapper targets a component
-  // that will have an `sx` prop after transformation. Enables passing styles via `sx` instead
-  // of converting to className/style.
-  for (const decl of styledDecls) {
-    if (decl.isCssHelper || decl.base.kind !== "component") {
-      continue;
-    }
-
-    // Cross-file: check if the imported component is sx-backed (from prepass)
-    if (ctx.sxBackedImports?.has(decl.base.ident)) {
-      decl.wrapsStylexComponent = true;
-      continue;
-    }
-
-    // Same-file: check if the wrapped component is another styled wrapper with sx support
-    const baseDecl = declByLocal.get(decl.base.ident);
-    if (baseDecl?.supportsExternalStyles) {
-      decl.wrapsStylexComponent = true;
+  // Determine wrapsStylexComponent: whether a styled(Component) wrapper targets an
+  // imported component that will have an `sx` prop after transformation. Enables
+  // passing styles via `sx` instead of converting to className/style.
+  //
+  // Only applies to cross-file imports (detected by the prepass). Same-file delegation
+  // chains are not supported because delegation flattening may replace the base component
+  // with its underlying target (e.g., styled(StyledText) → <Text>, not <StyledText>),
+  // which wouldn't have an sx prop.
+  if (ctx.sxBackedImports) {
+    for (const decl of styledDecls) {
+      if (decl.isCssHelper || decl.base.kind !== "component") {
+        continue;
+      }
+      if (ctx.sxBackedImports.has(decl.base.ident)) {
+        decl.wrapsStylexComponent = true;
+      }
     }
   }
 

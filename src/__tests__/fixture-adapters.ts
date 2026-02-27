@@ -40,6 +40,7 @@ export const fixtureAdapter = defineAdapter({
         "basic-jsdocExported",
         "htmlProp-element",
         "wrapper-mergerImported",
+        "wrapper-sxProp",
         "htmlProp-input",
         "transientProp-notForwarded",
       ].some((filePath) => ctx.filePath.includes(filePath))

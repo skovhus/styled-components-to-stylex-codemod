@@ -107,14 +107,32 @@ const prepassResult = scanCrossFileSelectors(
   prepassResolver,
 );
 
+/**
+ * Test cases whose imported components are known to be StyleX-backed
+ * (will have an `sx` prop after transformation). Maps test case base name
+ * to the set of local import names that are sx-backed.
+ */
+const SX_BACKED_IMPORT_MAP: Record<string, string[]> = {
+  "wrapper-sxProp": ["StyleXButton"],
+};
+
 /** Extract per-file cross-file info from the prepass result. */
 function getCrossFileInfo(filePath: string): CrossFileInfo | undefined {
   const absPath = pathResolve(filePath);
   const usages = prepassResult.selectorUsages.get(absPath);
-  if (!usages || usages.length === 0) {
+
+  // Check for sx-backed imports by test case name
+  const baseName = filePath.replace(/.*[\\/]/, "").replace(/\.input\.tsx$/, "");
+  const sxBacked = SX_BACKED_IMPORT_MAP[baseName];
+  const sxBackedImports = sxBacked ? new Set(sxBacked) : undefined;
+
+  if ((!usages || usages.length === 0) && !sxBackedImports) {
     return undefined;
   }
-  return { selectorUsages: usages };
+  return {
+    selectorUsages: usages ?? [],
+    sxBackedImports,
+  };
 }
 
 function readTestCase(

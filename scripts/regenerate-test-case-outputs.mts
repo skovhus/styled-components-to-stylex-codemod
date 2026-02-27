@@ -74,6 +74,15 @@ async function listFixtureNames(): Promise<Array<{ name: string; ext: string }>>
     .sort((a, b) => a.name.localeCompare(b.name));
 }
 
+/**
+ * Test cases whose imported components are known to be StyleX-backed
+ * (will have an `sx` prop after transformation). Maps test case base name
+ * to the set of local import names that are sx-backed.
+ */
+const SX_BACKED_IMPORT_MAP: Record<string, string[]> = {
+  "wrapper-sxProp": ["StyleXButton"],
+};
+
 async function updateFixture(name: string, ext: string) {
   const inputPath = join(testCasesDir, `${name}.input.${ext}`);
   const outputPath = join(testCasesDir, `${name}.output.${ext}`);
@@ -86,9 +95,19 @@ async function updateFixture(name: string, ext: string) {
   // returns { styles: true }) mimics a real-world app config to reproduce
   // TS errors from the verbose className merging pattern.
   const adapter = selectAdapter(name);
+
+  // Build sx-backed imports for test cases that wrap StyleX-backed components
+  const sxBackedImports = new Map<string, Set<string>>();
+  const sxBacked = SX_BACKED_IMPORT_MAP[name];
+  if (sxBacked) {
+    const { resolve: pathResolve } = await import("node:path");
+    sxBackedImports.set(pathResolve(inputPath), new Set(sxBacked));
+  }
+
   const crossFilePrepassResult = {
     selectorUsages: prepassResult.selectorUsages,
     componentsNeedingGlobalSelectorBridge: prepassResult.componentsNeedingGlobalSelectorBridge,
+    sxBackedImports,
   };
   const sidecarFiles = new Map<string, string>();
   const result = applyTransform(
