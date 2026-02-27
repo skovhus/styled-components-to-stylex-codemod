@@ -101,9 +101,12 @@ export function analyzeAfterEmitStep(ctx: TransformContext): StepResult {
     }
     // `withConfig({ shouldForwardProp })` cases need wrappers so we can consume
     // styling props without forwarding them to the DOM.
-    // Skip for inlined base components — consumed props are already stripped from attrs
-    // and the non-wrapper JSX rewriter handles shouldForwardProp filtering.
-    if (decl.shouldForwardProp && !decl.inlinedBaseComponent) {
+    // Skip for inlined base components when shouldForwardProp comes purely from
+    // resolver-consumed props (not from user-configured withConfig).
+    if (
+      decl.shouldForwardProp &&
+      !(decl.inlinedBaseComponent && !decl.shouldForwardPropFromWithConfig)
+    ) {
       decl.needsWrapperComponent = true;
     }
     if (decl.base.kind === "component") {

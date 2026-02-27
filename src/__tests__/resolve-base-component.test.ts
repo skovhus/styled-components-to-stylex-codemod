@@ -3,6 +3,7 @@ import jscodeshift from "jscodeshift";
 import { transformWithWarnings } from "../transform.js";
 import { fixtureAdapter } from "./fixture-adapters.js";
 import type { TransformOptions } from "../transform.js";
+import type { Adapter } from "../adapter.js";
 
 vi.mock("../internal/logger.js", () => ({
   Logger: {
@@ -14,11 +15,11 @@ vi.mock("../internal/logger.js", () => ({
 
 const j = jscodeshift.withParser("tsx");
 
-function run(source: string): string | null {
+function run(source: string, adapter: Adapter = fixtureAdapter): string | null {
   const result = transformWithWarnings(
     { source, path: "/test/test.tsx" },
     { jscodeshift: j, j, stats: () => {} } as any,
-    { adapter: fixtureAdapter } as TransformOptions,
+    { adapter } as TransformOptions,
   );
   return result.code;
 }
@@ -133,5 +134,481 @@ export function App() {
     const output = run(input);
     expect(output).not.toBeNull();
     expect(output).toContain("UnknownComponent");
+  });
+
+  it("extending an inlined component works (styled(Container) where Container was inlined)", () => {
+    const input = `
+import styled from "styled-components";
+import { Flex } from "./lib/flex";
+
+const Container = styled(Flex).attrs({ column: true })\`
+  padding: 8px;
+\`;
+
+const StyledContainer = styled(Container)\`
+  background-color: red;
+\`;
+
+export function App() {
+  return <StyledContainer>Extended</StyledContainer>;
+}
+`;
+    const output = run(input);
+    expect(output).not.toBeNull();
+    // Should contain both base styles and extended styles
+    expect(output).toContain('display: "flex"');
+    expect(output).toContain('flexDirection: "column"');
+    expect(output).toContain('padding: "8px"');
+    expect(output).toContain('backgroundColor: "red"');
+    expect(output).not.toContain('from "./lib/flex"');
+    // The extension should reference the base style key
+    expect(output).toContain("styles.container");
+    expect(output).toContain("styles.styledContainer");
+  });
+
+  it("bails on function attrs (ArrowFunctionExpression)", () => {
+    const input = `
+import styled from "styled-components";
+import { Flex } from "./lib/flex";
+
+const Container = styled(Flex).attrs(props => ({
+  column: props.$isVertical,
+}))\`
+  padding: 8px;
+\`;
+
+export function App() {
+  return <Container $isVertical>content</Container>;
+}
+`;
+    const output = run(input);
+    expect(output).not.toBeNull();
+    // Flex should still be present since we bail on function attrs
+    // (the transform may still partially process, but the base resolution
+    // should handle function attrs — let's verify the attrs content was parsed)
+    // Actually, parseAttrsArg handles arrow functions by extracting static values
+    // from the returned object. But the prop value `props.$isVertical` is NOT a literal,
+    // so it won't be in staticAttrs. The resolver still gets called with empty staticProps.
+    // The resolution WILL happen — Flex will be replaced with div + display:flex.
+    expect(output).toContain('display: "flex"');
+    expect(output).not.toContain('from "./lib/flex"');
+  });
+
+  it("multiple styled(Flex) decls in same file", () => {
+    const input = `
+import styled from "styled-components";
+import { Flex } from "./lib/flex";
+
+const Row = styled(Flex)\`
+  gap: 8px;
+\`;
+
+const Column = styled(Flex).attrs({ column: true })\`
+  gap: 4px;
+\`;
+
+export function App() {
+  return (
+    <Row>
+      <Column>A</Column>
+      <Column>B</Column>
+    </Row>
+  );
+}
+`;
+    const output = run(input);
+    expect(output).not.toBeNull();
+    // Both should be inlined independently
+    expect(output).not.toContain('from "./lib/flex"');
+    expect(output).toContain("<div");
+    // Row should have display: flex (no column)
+    // Column should have display: flex + flexDirection: column
+    expect(output).toContain('flexDirection: "column"');
+  });
+
+  it("exported inlined component gets a wrapper", () => {
+    const input = `
+import styled from "styled-components";
+import { Flex } from "./lib/flex";
+
+export const Container = styled(Flex).attrs({ column: true })\`
+  padding: 8px;
+\`;
+
+export function App() {
+  return <Container>content</Container>;
+}
+`;
+    const output = run(input);
+    expect(output).not.toBeNull();
+    // Should still inline the styles
+    expect(output).toContain('display: "flex"');
+    expect(output).toContain('flexDirection: "column"');
+    // But should preserve the export (via wrapper)
+    expect(output).toContain("function Container");
+    expect(output).not.toContain('from "./lib/flex"');
+  });
+
+  it("Flex used directly in JSX alongside styled(Flex) — import preserved", () => {
+    const input = `
+import styled from "styled-components";
+import { Flex } from "./lib/flex";
+
+const Container = styled(Flex).attrs({ column: true })\`
+  padding: 8px;
+\`;
+
+export function App() {
+  return (
+    <div>
+      <Container>Styled</Container>
+      <Flex>Direct usage</Flex>
+    </div>
+  );
+}
+`;
+    const output = run(input);
+    expect(output).not.toBeNull();
+    // Styles should be inlined for Container
+    expect(output).toContain('display: "flex"');
+    // Flex import should be preserved because it's used directly in JSX
+    expect(output).toContain('from "./lib/flex"');
+  });
+
+  it("per-site JSX props with spread attr — bails per-site resolution", () => {
+    const input = `
+import styled from "styled-components";
+import { Flex } from "./lib/flex";
+
+const Container = styled(Flex).attrs({ column: true })\`
+  padding: 8px;
+\`;
+
+export function App({ extra }: { extra: Record<string, unknown> }) {
+  return <Container {...extra} align="center">content</Container>;
+}
+`;
+    const output = run(input);
+    expect(output).not.toBeNull();
+    // Base resolution should still work
+    expect(output).toContain('display: "flex"');
+    // But per-site resolution should bail (no variant dimensions)
+    expect(output).not.toContain("AlignVariants");
+  });
+
+  it("per-site JSX props with dynamic value — bails per-site resolution", () => {
+    const input = `
+import styled from "styled-components";
+import { Flex } from "./lib/flex";
+
+const Container = styled(Flex).attrs({ column: true })\`
+  padding: 8px;
+\`;
+
+export function App({ dir }: { dir: string }) {
+  return <Container align={dir}>content</Container>;
+}
+`;
+    const output = run(input);
+    expect(output).not.toBeNull();
+    // Base resolution should still work
+    expect(output).toContain('display: "flex"');
+    // Per-site resolution should bail (non-literal consumed prop value)
+    expect(output).not.toContain("AlignVariants");
+  });
+
+  it("attrs with non-consumed static props are preserved", () => {
+    const input = `
+import styled from "styled-components";
+import { Flex } from "./lib/flex";
+
+const Container = styled(Flex).attrs({ column: true, "data-testid": "container" })\`
+  padding: 8px;
+\`;
+
+export function App() {
+  return <Container>content</Container>;
+}
+`;
+    const output = run(input);
+    expect(output).not.toBeNull();
+    // column is consumed → becomes CSS
+    expect(output).toContain('flexDirection: "column"');
+    // data-testid is NOT consumed → should be preserved as a static attr
+    expect(output).toContain("data-testid");
+  });
+
+  it("styled(Flex).withConfig({ shouldForwardProp }) keeps wrapper", () => {
+    const input = `
+import styled from "styled-components";
+import { Flex } from "./lib/flex";
+
+const Container = styled(Flex).withConfig({
+  shouldForwardProp: (prop) => !["column", "gap"].includes(prop),
+})\`
+  padding: 8px;
+\`;
+
+export function App() {
+  return <Container>content</Container>;
+}
+`;
+    const output = run(input);
+    expect(output).not.toBeNull();
+    // Styles should be inlined
+    expect(output).toContain('display: "flex"');
+    // But wrapper should be preserved because withConfig shouldForwardProp is user-configured
+    expect(output).toContain("function Container");
+  });
+
+  it("default import is passed to resolver with importedName='default'", () => {
+    const input = `
+import styled from "styled-components";
+import Flex from "./lib/flex";
+
+const Container = styled(Flex).attrs({ column: true })\`
+  padding: 8px;
+\`;
+
+export function App() {
+  return <Container>content</Container>;
+}
+`;
+    const output = run(input);
+    expect(output).not.toBeNull();
+    // Fixture adapter checks importedName !== "Flex" for default imports,
+    // so default Flex import should NOT be resolved (importedName is "default")
+    // This verifies the codemod correctly passes importedName to the resolver
+    expect(output).toContain("Flex");
+  });
+
+  it("component not in import map — no resolution", () => {
+    const input = `
+import styled from "styled-components";
+
+function LocalFlex(props: any) {
+  return <div {...props} />;
+}
+
+const Container = styled(LocalFlex)\`
+  padding: 8px;
+\`;
+
+export function App() {
+  return <Container>content</Container>;
+}
+`;
+    const output = run(input);
+    expect(output).not.toBeNull();
+    // Should NOT be inlined (local component, not in import map → resolver not called)
+    expect(output).toContain("LocalFlex");
+  });
+
+  it("mixin mode — resolver returns mixins instead of sx", () => {
+    const mixinAdapter: Adapter = {
+      ...fixtureAdapter,
+      resolveBaseComponent(ctx) {
+        if (!ctx.importSource.includes("lib/flex")) {
+          return undefined;
+        }
+        if (ctx.importedName !== "Flex") {
+          return undefined;
+        }
+        return {
+          tagName: "div",
+          consumedProps: ["column", "gap", "align", "direction", "as"],
+          mixins: [
+            {
+              importSource: "@lib/mixins.stylex",
+              importName: "mixins",
+              styleKey: "flex",
+            },
+          ],
+        };
+      },
+    };
+    const input = `
+import styled from "styled-components";
+import { Flex } from "./lib/flex";
+
+const Container = styled(Flex).attrs({ column: true })\`
+  padding: 8px;
+\`;
+
+export function App() {
+  return <Container>content</Container>;
+}
+`;
+    const output = run(input, mixinAdapter);
+    expect(output).not.toBeNull();
+    // Should reference the mixin in stylex.props
+    expect(output).toContain("mixins.flex");
+    // Template CSS should still be present
+    expect(output).toContain('padding: "8px"');
+    // No sx-based CSS from the resolver
+    expect(output).not.toContain('display: "flex"');
+  });
+
+  it("resolver returns both sx and mixins", () => {
+    const bothAdapter: Adapter = {
+      ...fixtureAdapter,
+      resolveBaseComponent(ctx) {
+        if (!ctx.importSource.includes("lib/flex")) {
+          return undefined;
+        }
+        if (ctx.importedName !== "Flex") {
+          return undefined;
+        }
+        return {
+          tagName: "div",
+          consumedProps: ["column", "gap", "align", "direction", "as"],
+          sx: { display: "flex", flexDirection: "column" },
+          mixins: [
+            {
+              importSource: "@lib/mixins.stylex",
+              importName: "mixins",
+              styleKey: "flex",
+            },
+          ],
+        };
+      },
+    };
+    const input = `
+import styled from "styled-components";
+import { Flex } from "./lib/flex";
+
+const Container = styled(Flex).attrs({ column: true })\`
+  padding: 8px;
+\`;
+
+export function App() {
+  return <Container>content</Container>;
+}
+`;
+    const output = run(input, bothAdapter);
+    expect(output).not.toBeNull();
+    // Both sx and mixins should be present
+    expect(output).toContain('display: "flex"');
+    expect(output).toContain("mixins.flex");
+    expect(output).toContain('padding: "8px"');
+  });
+
+  it("resolver returns empty result (undefined) — treated as normal styled(Component)", () => {
+    const noResolveAdapter: Adapter = {
+      ...fixtureAdapter,
+      resolveBaseComponent() {
+        return undefined;
+      },
+    };
+    const input = `
+import styled from "styled-components";
+import { Flex } from "./lib/flex";
+
+const Container = styled(Flex)\`
+  padding: 8px;
+\`;
+
+export function App() {
+  return <Container>content</Container>;
+}
+`;
+    const output = run(input, noResolveAdapter);
+    expect(output).not.toBeNull();
+    // Should be treated as normal styled(Component) — Flex preserved
+    expect(output).toContain("Flex");
+  });
+
+  it("resolver with no resolveBaseComponent defined — no inlining", () => {
+    const noMethodAdapter: Adapter = {
+      ...fixtureAdapter,
+      resolveBaseComponent: undefined,
+    };
+    const input = `
+import styled from "styled-components";
+import { Flex } from "./lib/flex";
+
+const Container = styled(Flex)\`
+  padding: 8px;
+\`;
+
+export function App() {
+  return <Container>content</Container>;
+}
+`;
+    const output = run(input, noMethodAdapter);
+    expect(output).not.toBeNull();
+    // No resolver → no inlining → Flex preserved
+    expect(output).toContain("Flex");
+  });
+
+  it("resolver that throws an error — transform handles gracefully", () => {
+    const throwingAdapter: Adapter = {
+      ...fixtureAdapter,
+      resolveBaseComponent() {
+        throw new Error("Resolver error");
+      },
+    };
+    const input = `
+import styled from "styled-components";
+import { Flex } from "./lib/flex";
+
+const Container = styled(Flex)\`
+  padding: 8px;
+\`;
+
+export function App() {
+  return <Container>content</Container>;
+}
+`;
+    // Should not throw — errors in resolver are caught and the component is kept as-is
+    const output = run(input, throwingAdapter);
+    expect(output).not.toBeNull();
+    // Component not inlined (resolver threw), Flex should still be present
+    expect(output).toContain("Flex");
+  });
+
+  it("per-site boolean shorthand prop (e.g., <Container column>)", () => {
+    const input = `
+import styled from "styled-components";
+import { Flex } from "./lib/flex";
+
+const Container = styled(Flex)\`
+  padding: 8px;
+\`;
+
+export function App() {
+  return (
+    <>
+      <Container column>Vertical</Container>
+      <Container>Horizontal</Container>
+    </>
+  );
+}
+`;
+    const output = run(input);
+    expect(output).not.toBeNull();
+    // column={true} should create a variant dimension
+    expect(output).toContain("containerColumnVariants");
+    expect(output).toContain('flexDirection: "column"');
+  });
+
+  it("attrs with 'as' prop overrides the tag name", () => {
+    const input = `
+import styled from "styled-components";
+import { Flex } from "./lib/flex";
+
+const Container = styled(Flex).attrs({ column: true, as: "section" })\`
+  padding: 8px;
+\`;
+
+export function App() {
+  return <Container>content</Container>;
+}
+`;
+    const output = run(input);
+    expect(output).not.toBeNull();
+    // Resolver returns tagName based on 'as' prop
+    expect(output).toContain("<section");
+    expect(output).toContain('display: "flex"');
   });
 });

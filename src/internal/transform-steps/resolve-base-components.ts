@@ -50,11 +50,21 @@ function resolveBaseComponentsStep(ctx: TransformContext): StepResult {
 
     const importSource = importInfo.source.value;
 
-    const baseResult = resolveBaseComponent({
-      importSource,
-      importedName: importInfo.importedName,
-      staticProps,
-    });
+    let baseResult: ResolveBaseComponentResult | undefined;
+    try {
+      baseResult = resolveBaseComponent({
+        importSource,
+        importedName: importInfo.importedName,
+        staticProps,
+      });
+    } catch {
+      ctx.warnings.push({
+        severity: "warning",
+        type: "resolveBaseComponent threw — skipping inlining for this component",
+        loc: decl.loc,
+      });
+      continue;
+    }
 
     if (!baseResult) {
       continue;
@@ -468,10 +478,15 @@ function buildVariantDimensions(args: {
         [propName]: coerceStringToOriginalType(value),
       };
 
-      const perSiteResult = resolveBaseComponent({
-        ...resolveCtx,
-        staticProps: mergedProps,
-      });
+      let perSiteResult: ResolveBaseComponentResult | undefined;
+      try {
+        perSiteResult = resolveBaseComponent({
+          ...resolveCtx,
+          staticProps: mergedProps,
+        });
+      } catch {
+        continue;
+      }
 
       if (!perSiteResult?.sx) {
         continue;

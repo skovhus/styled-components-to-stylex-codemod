@@ -143,9 +143,11 @@ export function analyzeBeforeEmitStep(ctx: TransformContext): StepResult {
       decl.needsWrapperComponent = true;
     }
     // shouldForwardProp needs wrapper — unless it comes purely from inlined base component
-    // resolution (where consumed props are already stripped from attrs and the non-wrapper
-    // JSX rewriter handles prop filtering).
-    if (decl.shouldForwardProp && !decl.inlinedBaseComponent) {
+    // resolution (where consumed props are from resolver, not user-configured withConfig).
+    if (
+      decl.shouldForwardProp &&
+      !(decl.inlinedBaseComponent && !decl.shouldForwardPropFromWithConfig)
+    ) {
       decl.needsWrapperComponent = true;
     }
     // withConfig.componentId needs wrapper
