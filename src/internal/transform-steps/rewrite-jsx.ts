@@ -6,6 +6,7 @@ import { CONTINUE, type StepResult } from "../transform-types.js";
 import type { StyledDecl } from "../transform-types.js";
 import { TransformContext } from "../transform-context.js";
 import type { ExpressionKind } from "../utilities/jscodeshift-utils.js";
+import { readStaticJsxLiteral } from "./jsx-static-literal.js";
 
 /**
  * Rewrites JSX usages and removes styled declarations when wrappers are not required.
@@ -527,9 +528,9 @@ export function rewriteJsxStep(ctx: TransformContext): StepResult {
 function buildInlineVariantLookupFromAttr(
   j: TransformContext["j"]["jscodeshift"],
   variantObjectName: string,
-  attr: any,
+  attr: unknown,
 ): ExpressionKind | undefined {
-  const value = readStaticJsxAttrValue(attr);
+  const value = readStaticJsxLiteral(attr);
   if (value === undefined) {
     return undefined;
   }
@@ -539,48 +540,4 @@ function buildInlineVariantLookupFromAttr(
     j.literal(variantKey),
     true /* computed */,
   );
-}
-
-function readStaticJsxAttrValue(attr: any): string | number | boolean | undefined {
-  if (!attr || attr.type !== "JSXAttribute") {
-    return undefined;
-  }
-  if (attr.value == null) {
-    // <Comp prop />
-    return true;
-  }
-  const valueNode = attr.value;
-  if (valueNode.type === "StringLiteral") {
-    return valueNode.value;
-  }
-  if (
-    valueNode.type === "Literal" &&
-    (typeof valueNode.value === "string" ||
-      typeof valueNode.value === "number" ||
-      typeof valueNode.value === "boolean")
-  ) {
-    return valueNode.value;
-  }
-  if (valueNode.type === "JSXExpressionContainer") {
-    const expr = valueNode.expression;
-    if (!expr) {
-      return undefined;
-    }
-    if (
-      expr.type === "StringLiteral" ||
-      expr.type === "NumericLiteral" ||
-      expr.type === "BooleanLiteral"
-    ) {
-      return expr.value;
-    }
-    if (
-      expr.type === "Literal" &&
-      (typeof expr.value === "string" ||
-        typeof expr.value === "number" ||
-        typeof expr.value === "boolean")
-    ) {
-      return expr.value;
-    }
-  }
-  return undefined;
 }

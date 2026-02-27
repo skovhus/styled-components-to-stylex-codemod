@@ -13,6 +13,7 @@ import { CONTINUE, returnResult, type StepResult } from "../transform-types.js";
 import type { StyledDecl, VariantDimension } from "../transform-types.js";
 import { toSuffixFromProp } from "../transform/helpers.js";
 import { TransformContext } from "../transform-context.js";
+import { readStaticJsxLiteral } from "./jsx-static-literal.js";
 
 /**
  * Collects styled declarations and merges extracted css helper declarations.
@@ -419,7 +420,7 @@ function collectStaticConsumedJsxProps(args: {
       if (!consumedSet.has(propName)) {
         continue;
       }
-      const literal = parseJsxAttributeStaticLiteral(attr);
+      const literal = readStaticJsxLiteral(attr);
       if (literal === undefined) {
         return "bail";
       }
@@ -459,37 +460,6 @@ function collectStaticConsumedJsxProps(args: {
     return { kind: "bail" };
   }
   return { kind: "ok", propsByUsage };
-}
-
-function parseJsxAttributeStaticLiteral(attr: any): ResolveBaseComponentStaticValue | undefined {
-  // <Comp flag />
-  if (attr.value == null) {
-    return true;
-  }
-  const valueNode = attr.value;
-  if (valueNode.type === "StringLiteral") {
-    return valueNode.value;
-  }
-  if (valueNode.type === "Literal" && isStaticLiteral(valueNode.value)) {
-    return valueNode.value;
-  }
-  if (valueNode.type === "JSXExpressionContainer") {
-    const expr = valueNode.expression;
-    if (!expr) {
-      return undefined;
-    }
-    if (
-      expr.type === "StringLiteral" ||
-      expr.type === "NumericLiteral" ||
-      expr.type === "BooleanLiteral"
-    ) {
-      return expr.value;
-    }
-    if (expr.type === "Literal" && isStaticLiteral(expr.value)) {
-      return expr.value;
-    }
-  }
-  return undefined;
 }
 
 function getChangedConsumedProps(
