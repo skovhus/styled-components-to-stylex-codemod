@@ -70,6 +70,16 @@ body{font-family:-apple-system,BlinkMacSystemFont,Segoe UI,Roboto,Helvetica Neue
   inherits: false
 }
 
+@property --x-fontSize {
+  syntax: "*";
+  inherits: false
+}
+
+@property --x-lineHeight {
+  syntax: "*";
+  inherits: false
+}
+
 @property --x-19zvkyr {
   syntax: "*";
   inherits: false
@@ -95,16 +105,6 @@ body{font-family:-apple-system,BlinkMacSystemFont,Segoe UI,Roboto,Helvetica Neue
   inherits: false
 }
 
-@property --x-fontSize {
-  syntax: "*";
-  inherits: false
-}
-
-@property --x-lineHeight {
-  syntax: "*";
-  inherits: false
-}
-
 @property --x-gap {
   syntax: "*";
   inherits: false
@@ -125,12 +125,12 @@ body{font-family:-apple-system,BlinkMacSystemFont,Segoe UI,Roboto,Helvetica Neue
   inherits: false
 }
 
-@property --x---component-width {
+@property --x-flexShrink {
   syntax: "*";
   inherits: false
 }
 
-@property --x-flexShrink {
+@property --x---component-width {
   syntax: "*";
   inherits: false
 }
@@ -284,18 +284,6 @@ body{font-family:-apple-system,BlinkMacSystemFont,Segoe UI,Roboto,Helvetica Neue
   }
 
   to {
-    transform: translateX(0);
-  }
-}
-
-@keyframes x1mrw2i1-B {
-  from {
-    opacity: 0;
-    transform: translateX(-8px);
-  }
-
-  to {
-    opacity: 1;
     transform: translateX(0);
   }
 }
@@ -1396,10 +1384,6 @@ body{font-family:-apple-system,BlinkMacSystemFont,Segoe UI,Roboto,Helvetica Neue
   animation-name: x18re5ia-B;
 }
 
-.x5sgm85:not(#\#):not(#\#):not(#\#) {
-  animation-name: x1mrw2i1-B;
-}
-
 .xbpkrbd:not(#\#):not(#\#):not(#\#) {
   animation-name: x1q428r6-B;
 }
@@ -1518,10 +1502,6 @@ body{font-family:-apple-system,BlinkMacSystemFont,Segoe UI,Roboto,Helvetica Neue
 
 .x1ba05yr:not(#\#):not(#\#):not(#\#) {
   background-color: #e0f0e0;
-}
-
-.xai882t:not(#\#):not(#\#):not(#\#) {
-  background-color: #e0f2fe;
 }
 
 .x1jxpefe:not(#\#):not(#\#):not(#\#) {
@@ -1866,10 +1846,6 @@ body{font-family:-apple-system,BlinkMacSystemFont,Segoe UI,Roboto,Helvetica Neue
 
 .x1iotiob:not(#\#):not(#\#):not(#\#) {
   box-shadow: var(--x-boxShadow);
-}
-
-.xbsw2ss:not(#\#):not(#\#):not(#\#) {
-  color: #0369a1;
 }
 
 .x25dth7:not(#\#):not(#\#):not(#\#) {
