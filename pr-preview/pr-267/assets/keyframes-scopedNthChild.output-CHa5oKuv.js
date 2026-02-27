@@ -1,1 +1,0 @@
-import{j as x}from"./index-B5wPk2z8.js";const t=()=>x.jsxs("svg",{width:"24",height:"24",viewBox:"0 0 24 24",style:{color:"#bf4f74"},children:[x.jsx("path",{d:"M4 14h16v2H4z",className:"x117rol3 x2haq47 x1s4ax4t x6080k5 x15bw8el xsuvyjz"}),x.jsx("path",{d:"M12 4l4 4H8z",className:"x117rol3 x2haq47 x1s4ax4t x6080k5 x15bw8el xsuvyjz"})]});export{t as App};
