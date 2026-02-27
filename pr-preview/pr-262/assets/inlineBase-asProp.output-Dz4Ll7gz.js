@@ -1,1 +1,0 @@
-import{j as n}from"./index-tADOZih9.js";function s(t){const{as:i="div",children:e,align:r,column:a,direction:x,gap:l}=t;return n.jsx(i,{className:"x78zum5 xdt5ytf xe8ttls xmblloc xmkeg23 x1y0btm7 xvwisar",children:e})}function c(){return n.jsxs("div",{style:{display:"grid",gap:8},children:[n.jsx(s,{children:"Default"}),n.jsx(s,{as:"span",children:"As span"})]})}export{c as App};
