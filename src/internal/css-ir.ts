@@ -175,11 +175,19 @@ export function normalizeStylisAstToIR(
       pendingComment = null;
       lastDecl = null;
 
+      // Stylis stores the combined selector in `props` (e.g., ["::-webkit-slider-thumb:hover"])
+      // while `value` only has the literal text with form-feed separators (e.g., "&\f:hover").
+      // Use `props` when available to get correctly resolved nested selectors.
+      const propsArr = Array.isArray(node.props) ? node.props : null;
+      const resolvedFromProps =
+        propsArr && propsArr.length === 1 && typeof propsArr[0] === "string"
+          ? `&${propsArr[0]}`
+          : null;
       const selectorValue = String(node.value ?? "");
       const selectorRaw = stripFormFeedInSelectors
         ? selectorValue.replaceAll("\f", "")
         : selectorValue;
-      const selector = selectorRaw;
+      const selector = resolvedFromProps ?? selectorRaw;
       const rule = ensureRule(selector, atRuleStack);
       const children = node.children;
       if (children) {

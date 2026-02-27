@@ -24,12 +24,11 @@ const styles = stylex.create({
         ":hover": "#ff6b9d",
       },
       cursor: "pointer",
-      transitionProperty: "background-color",
+      transition: "background-color 0.2s ease-in-out",
       transitionDuration: {
-        default: "0.2s",
+        default: null,
         ":hover": "0s",
       },
-      transitionTimingFunction: "ease-in-out",
     },
   },
 });

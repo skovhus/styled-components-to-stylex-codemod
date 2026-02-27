@@ -695,8 +695,18 @@ export function processDeclRules(ctx: DeclProcessingState): void {
       break;
     }
 
-    const pseudos = parsedSelector.kind === "pseudo" ? parsedSelector.pseudos : null;
-    const pseudoElement = parsedSelector.kind === "pseudoElement" ? parsedSelector.element : null;
+    const pseudos =
+      parsedSelector.kind === "pseudo"
+        ? parsedSelector.pseudos
+        : parsedSelector.kind === "pseudoElementWithPseudo"
+          ? parsedSelector.pseudos
+          : null;
+    const pseudoElement =
+      parsedSelector.kind === "pseudoElement"
+        ? parsedSelector.element
+        : parsedSelector.kind === "pseudoElementWithPseudo"
+          ? parsedSelector.element
+          : null;
     const pseudoElementsList =
       parsedSelector.kind === "pseudoElements" ? parsedSelector.elements : null;
     const attrSel =
@@ -850,12 +860,39 @@ export function processDeclRules(ctx: DeclProcessingState): void {
         return;
       }
 
+      // When both pseudoElement and pseudos are set (e.g., ::-webkit-slider-thumb:hover),
+      // scope the pseudo-class within the pseudo-element using per-property overrides.
+      if (pseudos?.length && pseudoElement) {
+        nestedSelectors[pseudoElement] ??= {};
+        const peTarget = nestedSelectors[pseudoElement]!;
+        const existingVal = peTarget[prop];
+        if (
+          existingVal !== undefined &&
+          (typeof existingVal !== "object" || existingVal === null)
+        ) {
+          const pseudoMap: Record<string, unknown> = { default: existingVal };
+          for (const ps of pseudos) {
+            pseudoMap[ps] = value;
+          }
+          peTarget[prop] = pseudoMap;
+        } else if (existingVal !== undefined && typeof existingVal === "object") {
+          for (const ps of pseudos) {
+            (existingVal as Record<string, unknown>)[ps] = value;
+          }
+        } else {
+          const pseudoMap: Record<string, unknown> = { default: null };
+          for (const ps of pseudos) {
+            pseudoMap[ps] = value;
+          }
+          peTarget[prop] = pseudoMap;
+        }
+        return;
+      }
+
       if (pseudos?.length) {
         perPropPseudo[prop] ??= {};
         const existing = perPropPseudo[prop]!;
         if (!("default" in existing)) {
-          // If the property comes from a composed css helper, use the helper's
-          // value as the default to preserve it during style merging.
           const existingVal = (styleObj as Record<string, unknown>)[prop];
           if (existingVal !== undefined) {
             existing.default = existingVal;
@@ -865,7 +902,6 @@ export function processDeclRules(ctx: DeclProcessingState): void {
             existing.default = null;
           }
         }
-        // Apply to all pseudos (e.g., both :hover and :focus for "&:hover, &:focus")
         for (const ps of pseudos) {
           existing[ps] = value;
         }
