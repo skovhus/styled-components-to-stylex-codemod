@@ -1019,6 +1019,14 @@ export function emitSimpleExportedIntrinsicWrappers(ctx: EmitIntrinsicContext): 
         styleArgs.push(sxId);
       }
 
+      // Add defaultAttrs props to destructureProps for nullish coalescing patterns
+      // (e.g., tabIndex: props.tabIndex ?? 0 needs tabIndex destructured)
+      for (const attr of d.attrsInfo?.defaultAttrs ?? []) {
+        if (!destructureProps.includes(attr.jsxProp)) {
+          destructureProps.push(attr.jsxProp);
+        }
+      }
+
       const patternProps = emitter.buildDestructurePatternProps({
         baseProps: [
           ...(useAsProp

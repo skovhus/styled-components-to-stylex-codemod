@@ -329,18 +329,28 @@ export function emitComponentWrappers(emitter: WrapperEmitter): {
     // the wrapped component already applies its own styles.
     // Track props that need to be destructured for conditional styles
     const destructureProps: string[] = [];
+    // Track props used only for styling (should be destructured out of ...rest but NOT forwarded)
+    const stylingOnlyProps = new Set<string>();
     // Track default values for props (used for destructuring defaults on optional props)
     const propDefaults: WrapperPropDefaults = new Map();
     // Track namespace boolean props (like 'disabled') that need to be passed to wrapped component
     const namespaceBooleanProps: string[] = [];
 
     // Build propsArg expressions first (may be needed for interleaving)
-    const propsArgExprs = d.extraStylexPropsArgs
-      ? emitter.buildExtraStylexPropsExprs({
-          entries: d.extraStylexPropsArgs,
-          destructureProps,
-        })
-      : [];
+    const propsArgExprs = (() => {
+      if (!d.extraStylexPropsArgs) {
+        return [];
+      }
+      const preLenExtra = destructureProps.length;
+      const result = emitter.buildExtraStylexPropsExprs({
+        entries: d.extraStylexPropsArgs,
+        destructureProps,
+      });
+      for (let i = preLenExtra; i < destructureProps.length; i++) {
+        stylingOnlyProps.add(destructureProps[i]!);
+      }
+      return result;
+    })();
 
     // Build interleaved before/after-base args using mixinOrder
     const { beforeBase: extraStyleArgs, afterBase: extraStyleArgsAfterBase } =
@@ -357,6 +367,7 @@ export function emitComponentWrappers(emitter: WrapperEmitter): {
 
     // Add variant style arguments if this component has variants
     if (d.variantStyleKeys) {
+      const preLenVariant = destructureProps.length;
       const sortedEntries = sortVariantEntriesBySpecificity(Object.entries(d.variantStyleKeys));
       for (const [when, variantKey] of sortedEntries) {
         const { cond, isBoolean } = emitter.collectConditionProps({ when, destructureProps });
@@ -364,8 +375,6 @@ export function emitComponentWrappers(emitter: WrapperEmitter): {
           j.identifier(stylesIdentifier),
           j.identifier(variantKey),
         );
-        // Use makeConditionalStyleExpr to handle boolean vs non-boolean conditions correctly.
-        // For boolean conditions, && is used. For non-boolean (could be "" or 0), ternary is used.
         const expr = emitter.makeConditionalStyleExpr({ cond, expr: styleExpr, isBoolean });
         const order = d.variantSourceOrder?.[when];
         if (hasSourceOrder && order !== undefined) {
@@ -373,6 +382,9 @@ export function emitComponentWrappers(emitter: WrapperEmitter): {
         } else {
           styleArgs.push(expr);
         }
+      }
+      for (let i = preLenVariant; i < destructureProps.length; i++) {
+        stylingOnlyProps.add(destructureProps[i]!);
       }
     }
 
@@ -408,24 +420,32 @@ export function emitComponentWrappers(emitter: WrapperEmitter): {
     )) {
       if (!destructureProps.includes(gp)) {
         destructureProps.push(gp);
+        stylingOnlyProps.add(gp);
       }
     }
 
     for (const prop of collectInlineStylePropNames(d.inlineStyleProps ?? [])) {
       if (!destructureProps.includes(prop)) {
         destructureProps.push(prop);
+        stylingOnlyProps.add(prop);
       }
     }
 
     // Add style function calls for dynamic prop-based styles
-    emitter.buildStyleFnExpressions({
-      d,
-      styleArgs,
-      destructureProps,
-      propExprBuilder: (prop) => j.memberExpression(propsIdForExpr, j.identifier(prop)),
-      propsIdentifier: propsIdForExpr,
-      orderedEntries: hasSourceOrder ? orderedEntries : undefined,
-    });
+    {
+      const preLenFn = destructureProps.length;
+      emitter.buildStyleFnExpressions({
+        d,
+        styleArgs,
+        destructureProps,
+        propExprBuilder: (prop) => j.memberExpression(propsIdForExpr, j.identifier(prop)),
+        propsIdentifier: propsIdForExpr,
+        orderedEntries: hasSourceOrder ? orderedEntries : undefined,
+      });
+      for (let i = preLenFn; i < destructureProps.length; i++) {
+        stylingOnlyProps.add(destructureProps[i]!);
+      }
+    }
 
     // Merge ordered entries (variants + styleFns) by source order to preserve CSS cascade
     mergeOrderedEntries(orderedEntries, styleArgs);
@@ -780,15 +800,20 @@ export function emitComponentWrappers(emitter: WrapperEmitter): {
       }
       // Forward base-component props (required or optional) that were destructured for styling.
       // Destructuring removes them from `...rest`, so they must be explicitly re-forwarded.
+      // Skip styling-only props — they're destructured to remove from ...rest but shouldn't
+      // be forwarded to the wrapped component (they'd leak as invalid DOM attributes).
       const baseExplicitProps = baseComponentPropsType
         ? emitter.getExplicitPropNames(baseComponentPropsType)
         : null;
 
       for (const propName of destructureProps) {
         if (propName && propName !== "children" && !propName.startsWith("$")) {
-          // Forward if base accepts this prop (required or optional), or if we can't resolve
-          // the base type (imported component) — safer to forward than silently drop.
-          if (!baseExplicitProps || baseExplicitProps.has(propName)) {
+          if (stylingOnlyProps.has(propName)) {
+            // Only forward styling-only props when the base component explicitly accepts them
+            if (baseExplicitProps?.has(propName)) {
+              pushForwardedProp(propName);
+            }
+          } else if (!baseExplicitProps || baseExplicitProps.has(propName)) {
             pushForwardedProp(propName);
           }
         }
