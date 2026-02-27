@@ -329,28 +329,18 @@ export function emitComponentWrappers(emitter: WrapperEmitter): {
     // the wrapped component already applies its own styles.
     // Track props that need to be destructured for conditional styles
     const destructureProps: string[] = [];
-    // Track props used only for styling (should be destructured out of ...rest but NOT forwarded)
-    const stylingOnlyProps = new Set<string>();
     // Track default values for props (used for destructuring defaults on optional props)
     const propDefaults: WrapperPropDefaults = new Map();
     // Track namespace boolean props (like 'disabled') that need to be passed to wrapped component
     const namespaceBooleanProps: string[] = [];
 
     // Build propsArg expressions first (may be needed for interleaving)
-    const propsArgExprs = (() => {
-      if (!d.extraStylexPropsArgs) {
-        return [];
-      }
-      const preLenExtra = destructureProps.length;
-      const result = emitter.buildExtraStylexPropsExprs({
-        entries: d.extraStylexPropsArgs,
-        destructureProps,
-      });
-      for (let i = preLenExtra; i < destructureProps.length; i++) {
-        stylingOnlyProps.add(destructureProps[i]!);
-      }
-      return result;
-    })();
+    const propsArgExprs = d.extraStylexPropsArgs
+      ? emitter.buildExtraStylexPropsExprs({
+          entries: d.extraStylexPropsArgs,
+          destructureProps,
+        })
+      : [];
 
     // Build interleaved before/after-base args using mixinOrder
     const { beforeBase: extraStyleArgs, afterBase: extraStyleArgsAfterBase } =
@@ -367,7 +357,6 @@ export function emitComponentWrappers(emitter: WrapperEmitter): {
 
     // Add variant style arguments if this component has variants
     if (d.variantStyleKeys) {
-      const preLenVariant = destructureProps.length;
       const sortedEntries = sortVariantEntriesBySpecificity(Object.entries(d.variantStyleKeys));
       for (const [when, variantKey] of sortedEntries) {
         const { cond, isBoolean } = emitter.collectConditionProps({ when, destructureProps });
@@ -382,9 +371,6 @@ export function emitComponentWrappers(emitter: WrapperEmitter): {
         } else {
           styleArgs.push(expr);
         }
-      }
-      for (let i = preLenVariant; i < destructureProps.length; i++) {
-        stylingOnlyProps.add(destructureProps[i]!);
       }
     }
 
@@ -420,32 +406,24 @@ export function emitComponentWrappers(emitter: WrapperEmitter): {
     )) {
       if (!destructureProps.includes(gp)) {
         destructureProps.push(gp);
-        stylingOnlyProps.add(gp);
       }
     }
 
     for (const prop of collectInlineStylePropNames(d.inlineStyleProps ?? [])) {
       if (!destructureProps.includes(prop)) {
         destructureProps.push(prop);
-        stylingOnlyProps.add(prop);
       }
     }
 
     // Add style function calls for dynamic prop-based styles
-    {
-      const preLenFn = destructureProps.length;
-      emitter.buildStyleFnExpressions({
-        d,
-        styleArgs,
-        destructureProps,
-        propExprBuilder: (prop) => j.memberExpression(propsIdForExpr, j.identifier(prop)),
-        propsIdentifier: propsIdForExpr,
-        orderedEntries: hasSourceOrder ? orderedEntries : undefined,
-      });
-      for (let i = preLenFn; i < destructureProps.length; i++) {
-        stylingOnlyProps.add(destructureProps[i]!);
-      }
-    }
+    emitter.buildStyleFnExpressions({
+      d,
+      styleArgs,
+      destructureProps,
+      propExprBuilder: (prop) => j.memberExpression(propsIdForExpr, j.identifier(prop)),
+      propsIdentifier: propsIdForExpr,
+      orderedEntries: hasSourceOrder ? orderedEntries : undefined,
+    });
 
     // Merge ordered entries (variants + styleFns) by source order to preserve CSS cascade
     mergeOrderedEntries(orderedEntries, styleArgs);
@@ -456,13 +434,16 @@ export function emitComponentWrappers(emitter: WrapperEmitter): {
     // Track which transient props are for filtering only (not used in styling).
     // These are transient props that we should strip before forwarding.
     const filterOnlyTransientProps: string[] = [];
-    // Track transient props that are defined in the WRAPPER's explicit type (not the base's).
+    // Track ALL props defined in the WRAPPER's explicit type (not the base's).
     // These should NOT be passed back to the base component because the base doesn't accept them.
     const wrapperOnlyTransientProps: string[] = [];
+    // Track all wrapper-explicit prop names (both transient and non-transient).
+    const wrapperExplicitPropNames = new Set<string>();
     {
-      // Helper to find transient props in a type name
-      const findTransientPropsInTypeName = (typeName: string): string[] => {
-        const props: string[] = [];
+      // Helper to find props in a type name (collects transient $-props AND all prop names)
+      const findPropsInTypeName = (typeName: string): { transient: string[]; all: string[] } => {
+        const transient: string[] = [];
+        const all: string[] = [];
         const collectFromTypeNode = (typeNode: any) => {
           if (!typeNode) {
             return;
@@ -479,12 +460,11 @@ export function emitComponentWrappers(emitter: WrapperEmitter): {
           }
           if (typeNode.type === "TSTypeLiteral" && typeNode.members) {
             for (const member of typeNode.members) {
-              if (
-                member.type === "TSPropertySignature" &&
-                member.key?.type === "Identifier" &&
-                member.key.name.startsWith("$")
-              ) {
-                props.push(member.key.name);
+              if (member.type === "TSPropertySignature" && member.key?.type === "Identifier") {
+                all.push(member.key.name);
+                if (member.key.name.startsWith("$")) {
+                  transient.push(member.key.name);
+                }
               }
             }
           }
@@ -496,12 +476,11 @@ export function emitComponentWrappers(emitter: WrapperEmitter): {
         if (interfaceDecl.size() > 0) {
           const body = interfaceDecl.get().node.body?.body ?? [];
           for (const member of body) {
-            if (
-              member.type === "TSPropertySignature" &&
-              member.key?.type === "Identifier" &&
-              member.key.name.startsWith("$")
-            ) {
-              props.push(member.key.name);
+            if (member.type === "TSPropertySignature" && member.key?.type === "Identifier") {
+              all.push(member.key.name);
+              if (member.key.name.startsWith("$")) {
+                transient.push(member.key.name);
+              }
             }
           }
         }
@@ -513,33 +492,34 @@ export function emitComponentWrappers(emitter: WrapperEmitter): {
           const typeAnnotation = typeAlias.get().node.typeAnnotation;
           collectFromTypeNode(typeAnnotation);
         }
-        return props;
+        return { transient, all };
       };
 
-      // Find all transient props in the explicit props type
+      // Find all props in the explicit props type
       const explicit = d.propsType;
       let transientProps: string[] = [];
 
       // Check if explicit type is a type literal with members
       if (explicit?.type === "TSTypeLiteral" && explicit.members) {
         for (const member of explicit.members) {
-          if (
-            member.type === "TSPropertySignature" &&
-            member.key?.type === "Identifier" &&
-            member.key.name.startsWith("$")
-          ) {
-            transientProps.push(member.key.name);
-            // This is a wrapper-only transient prop (defined in wrapper's explicit type)
-            wrapperOnlyTransientProps.push(member.key.name);
+          if (member.type === "TSPropertySignature" && member.key?.type === "Identifier") {
+            wrapperExplicitPropNames.add(member.key.name);
+            if (member.key.name.startsWith("$")) {
+              transientProps.push(member.key.name);
+              wrapperOnlyTransientProps.push(member.key.name);
+            }
           }
         }
       }
       // Check if explicit type is a reference to an interface/type alias
       else if (explicit?.type === "TSTypeReference" && explicit.typeName?.type === "Identifier") {
         const typeName = explicit.typeName.name;
-        transientProps = findTransientPropsInTypeName(typeName);
-        // These are also wrapper-only transient props
-        wrapperOnlyTransientProps.push(...transientProps);
+        const found = findPropsInTypeName(typeName);
+        transientProps = found.transient;
+        wrapperOnlyTransientProps.push(...found.transient);
+        for (const p of found.all) {
+          wrapperExplicitPropNames.add(p);
+        }
       }
 
       // Also check the wrapped component's props type for transient props
@@ -553,7 +533,7 @@ export function emitComponentWrappers(emitter: WrapperEmitter): {
           const param = funcDecls.get().node.params[0] as any;
           if (param?.typeAnnotation?.typeAnnotation?.typeName?.type === "Identifier") {
             const typeName = param.typeAnnotation.typeAnnotation.typeName.name;
-            transientProps = findTransientPropsInTypeName(typeName);
+            transientProps = findPropsInTypeName(typeName).transient;
           }
         }
         // Also check variable declarators with arrow functions
@@ -566,7 +546,7 @@ export function emitComponentWrappers(emitter: WrapperEmitter): {
             const param = init.params[0] as any;
             if (param?.typeAnnotation?.typeAnnotation?.typeName?.type === "Identifier") {
               const typeName = param.typeAnnotation.typeAnnotation.typeName.name;
-              transientProps = findTransientPropsInTypeName(typeName);
+              transientProps = findPropsInTypeName(typeName).transient;
             }
           }
         }
@@ -800,16 +780,16 @@ export function emitComponentWrappers(emitter: WrapperEmitter): {
       }
       // Forward base-component props (required or optional) that were destructured for styling.
       // Destructuring removes them from `...rest`, so they must be explicitly re-forwarded.
-      // Skip styling-only props — they're destructured to remove from ...rest but shouldn't
-      // be forwarded to the wrapped component (they'd leak as invalid DOM attributes).
+      // Skip props defined in the wrapper's explicit type — the wrapper owns them and the
+      // base component doesn't accept them.
       const baseExplicitProps = baseComponentPropsType
         ? emitter.getExplicitPropNames(baseComponentPropsType)
         : null;
 
       for (const propName of destructureProps) {
         if (propName && propName !== "children" && !propName.startsWith("$")) {
-          if (stylingOnlyProps.has(propName)) {
-            // Only forward styling-only props when the base component explicitly accepts them
+          if (wrapperExplicitPropNames.has(propName)) {
+            // Only forward wrapper-defined props when the base component explicitly accepts them
             if (baseExplicitProps?.has(propName)) {
               pushForwardedProp(propName);
             }

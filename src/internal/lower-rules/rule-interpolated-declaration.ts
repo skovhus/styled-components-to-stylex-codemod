@@ -2185,37 +2185,47 @@ function tryHandleLocalHelperCall(args: {
     return false;
   }
 
-  // Build a CSS string by replacing expressions with a placeholder
+  // Build a CSS string with indexed placeholders to track which expression maps to which property
   let cssString = "";
   for (let i = 0; i < retExpr.quasis.length; i++) {
     cssString += retExpr.quasis[i]?.value?.cooked ?? retExpr.quasis[i]?.value?.raw ?? "";
     if (i < retExpr.expressions.length) {
-      cssString += "__LOCAL_PARAM__";
+      cssString += `__LOCAL_PARAM_${i}__`;
     }
   }
 
-  // Parse the CSS string to extract properties
-  const parsedCss = parseCssDeclarationBlock(cssString.replace(/__LOCAL_PARAM__/g, "0"));
+  // Parse the CSS string to extract properties (replace placeholders with dummy values)
+  const parsedCss = parseCssDeclarationBlock(cssString.replace(/__LOCAL_PARAM_\d+__/g, "0"));
   if (!parsedCss || Object.keys(parsedCss).length === 0) {
     return false;
   }
 
-  // Detect the unit suffix used with the parameter (e.g., "px" in `${size}px`)
-  const unitSuffixes = new Map<string, string>();
-  for (let i = 0; i < retExpr.quasis.length - 1; i++) {
-    const nextQuasi =
-      retExpr.quasis[i + 1]?.value?.cooked ?? retExpr.quasis[i + 1]?.value?.raw ?? "";
-    const unitMatch = nextQuasi.match(/^(px|em|rem|%|vh|vw|ms|s)\b/);
-    if (unitMatch) {
-      // Map the expression index to its unit
-      const exprNode = retExpr.expressions[i] as { type?: string; name?: string } | undefined;
-      if (exprNode?.type === "Identifier" && exprNode.name === fnParamName) {
-        // All expressions that reference the param get this unit
-        unitSuffixes.set(String(i), unitMatch[1]!);
+  // Build a per-property unit map by matching expression indices to CSS properties.
+  // Parse the CSS string with placeholders intact to see which property contains each expression.
+  const parsedWithPlaceholders = parseCssDeclarationBlock(
+    cssString.replace(/__LOCAL_PARAM_(\d+)__/g, "PLACEHOLDER_$1"),
+  );
+  const propToUnit = new Map<string, string>();
+  if (parsedWithPlaceholders) {
+    for (const [cssProp, value] of Object.entries(parsedWithPlaceholders)) {
+      const m = typeof value === "string" ? value.match(/PLACEHOLDER_(\d+)/) : null;
+      if (!m) {
+        continue;
+      }
+      const exprIdx = Number(m[1]);
+      const nextQuasi =
+        retExpr.quasis[exprIdx + 1]?.value?.cooked ?? retExpr.quasis[exprIdx + 1]?.value?.raw ?? "";
+      const unitMatch = nextQuasi.match(/^(px|em|rem|%|vh|vw|ms|s)\b/);
+      if (unitMatch) {
+        const exprNode = retExpr.expressions[exprIdx] as
+          | { type?: string; name?: string }
+          | undefined;
+        if (exprNode?.type === "Identifier" && exprNode.name === fnParamName) {
+          propToUnit.set(cssProp, unitMatch[1]!);
+        }
       }
     }
   }
-  const unit = unitSuffixes.size > 0 ? ([...unitSuffixes.values()][0] ?? "") : "";
 
   // Get the type annotation from the local function parameter
   const fnParamTypeAnnotation = (fnParams[0] as { typeAnnotation?: { typeAnnotation?: unknown } })
@@ -2231,11 +2241,12 @@ function tryHandleLocalHelperCall(args: {
           cloneAstNode(fnParamTypeAnnotation) as Parameters<typeof j.tsTypeAnnotation>[0],
         );
       }
-      const valueExpr = unit
+      const propUnit = propToUnit.get(cssProp) ?? "";
+      const valueExpr = propUnit
         ? j.templateLiteral(
             [
               j.templateElement({ raw: "", cooked: "" }, false),
-              j.templateElement({ raw: unit, cooked: unit }, true),
+              j.templateElement({ raw: propUnit, cooked: propUnit }, true),
             ],
             [j.identifier(jsxProp)],
           )

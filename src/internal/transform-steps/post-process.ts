@@ -98,13 +98,15 @@ export function postProcessStep(ctx: TransformContext): StepResult {
       // Check for remaining references outside the declaration itself
       const refs = root
         .find(j.Identifier, { name: helperName })
-        .filter((idPath: { parentPath?: { node?: { type?: string; id?: unknown } } }) => {
-          const parent = idPath.parentPath?.node;
-          if (parent?.type === "FunctionDeclaration" && parent.id === idPath.node) {
-            return false;
-          }
-          return true;
-        });
+        .filter(
+          (idPath: { node?: unknown; parentPath?: { node?: { type?: string; id?: unknown } } }) => {
+            const parent = idPath.parentPath?.node;
+            if (parent?.type === "FunctionDeclaration" && parent.id === idPath.node) {
+              return false;
+            }
+            return true;
+          },
+        );
       if (refs.size() === 0) {
         fnPaths.forEach((p: { prune: () => void }) => p.prune());
       }
