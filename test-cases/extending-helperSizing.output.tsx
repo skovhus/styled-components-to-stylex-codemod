@@ -3,17 +3,20 @@ import * as stylex from "@stylexjs/stylex";
 
 type AvatarSize = 16 | 20 | 24 | 28 | 32;
 
+function avatarSizeToCSS(size: AvatarSize) {
+  return `width: ${size}px; height: ${size}px;`;
+}
+
 type AvatarContainerProps = Omit<React.ComponentProps<"div">, "className" | "style"> & {
   size: AvatarSize;
   disabled?: boolean;
 };
 
 function AvatarContainer(props: AvatarContainerProps) {
-  const { children, disabled, size, ...rest } = props;
+  const { children, disabled, size } = props;
 
   return (
     <div
-      {...rest}
       {...stylex.props(
         styles.avatarContainer,
         disabled ? styles.avatarContainerDisabled : undefined,
@@ -50,10 +53,10 @@ const styles = stylex.create({
   avatarContainerDisabled: {
     opacity: 0.5,
   },
-  avatarContainerWidth: (width: AvatarSize) => ({
-    width: `${width}px`,
+  avatarContainerWidth: (size: AvatarSize) => ({
+    width: `${size}px`,
   }),
-  avatarContainerHeight: (height: AvatarSize) => ({
-    height: `${height}px`,
+  avatarContainerHeight: (size: AvatarSize) => ({
+    height: `${size}px`,
   }),
 });
