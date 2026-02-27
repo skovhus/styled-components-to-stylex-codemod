@@ -1,0 +1,1 @@
+import{j as n}from"./index-B3SZu-uF.js";function o(t){const{children:e,column:r,gap:i,align:c,direction:s,as:x}=t;return n.jsx("div",{className:"x78zum5 xdt5ytf xou54vl xe8ttls x12peec7",children:e})}function a(){return n.jsx(o,{children:"content"})}export{a as App};
