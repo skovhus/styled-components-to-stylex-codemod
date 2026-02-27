@@ -48,8 +48,7 @@ function resolveBaseComponentsStep(ctx: TransformContext): StepResult {
       continue;
     }
 
-    const importSource =
-      importInfo.source.kind === "specifier" ? importInfo.source.value : importInfo.source.value;
+    const importSource = importInfo.source.value;
 
     const baseResult = resolveBaseComponent({
       importSource,
@@ -368,7 +367,7 @@ function extractJsxLiteralValue(value: unknown): StaticPropValue | undefined {
 
 /**
  * Identify consumed props that vary across JSX sites (different values at different sites,
- * or present at some sites but not others).
+ * or present at some sites but not others) and are NOT already provided by attrs.
  */
 function findVaryingProps(
   siteProps: Array<Record<string, StaticPropValue>>,
@@ -383,15 +382,14 @@ function findVaryingProps(
     }
 
     const values = siteProps.map((site) => site[propName]);
-    const allSame = values.every(
-      (v) => v === values[0] || (v === undefined && values[0] === undefined),
-    );
-    if (!allSame || values.some((v) => v !== undefined)) {
-      if (!allSame) {
-        varying.push(propName);
-      } else if (values[0] !== undefined) {
-        varying.push(propName);
-      }
+    const hasAnyValue = values.some((v) => v !== undefined);
+    if (!hasAnyValue) {
+      continue;
+    }
+
+    const allSame = values.every((v) => v === values[0]);
+    if (!allSame || hasAnyValue) {
+      varying.push(propName);
     }
   }
 
@@ -411,8 +409,9 @@ function collectUniqueValueSets(
   for (const site of siteProps) {
     const subset: Record<string, StaticPropValue> = {};
     for (const name of varyingPropNames) {
-      if (name in site) {
-        subset[name] = site[name]!;
+      const value = site[name];
+      if (value !== undefined) {
+        subset[name] = value;
       }
     }
     if (Object.keys(subset).length > 0) {
@@ -448,7 +447,7 @@ function buildVariantDimensions(args: {
   for (const [, valueSet] of args.uniqueValueSets) {
     for (const propName of varyingPropNames) {
       if (propName in valueSet) {
-        perPropValues.get(propName)!.add(String(valueSet[propName]));
+        perPropValues.get(propName)?.add(String(valueSet[propName]));
       }
     }
   }
