@@ -70,6 +70,16 @@ body{font-family:-apple-system,BlinkMacSystemFont,Segoe UI,Roboto,Helvetica Neue
   inherits: false
 }
 
+@property --x-fontSize {
+  syntax: "*";
+  inherits: false
+}
+
+@property --x-lineHeight {
+  syntax: "*";
+  inherits: false
+}
+
 @property --x-19zvkyr {
   syntax: "*";
   inherits: false
@@ -95,21 +105,6 @@ body{font-family:-apple-system,BlinkMacSystemFont,Segoe UI,Roboto,Helvetica Neue
   inherits: false
 }
 
-@property --x-fontSize {
-  syntax: "*";
-  inherits: false
-}
-
-@property --x-lineHeight {
-  syntax: "*";
-  inherits: false
-}
-
-@property --x-gap {
-  syntax: "*";
-  inherits: false
-}
-
 @property --x-columnGap {
   syntax: "*";
   inherits: false
@@ -121,6 +116,11 @@ body{font-family:-apple-system,BlinkMacSystemFont,Segoe UI,Roboto,Helvetica Neue
 }
 
 @property --x-rowGap {
+  syntax: "*";
+  inherits: false
+}
+
+@property --x-gap {
   syntax: "*";
   inherits: false
 }
@@ -1538,6 +1538,10 @@ body{font-family:-apple-system,BlinkMacSystemFont,Segoe UI,Roboto,Helvetica Neue
 
 .x1pcab6s:not(#\#):not(#\#):not(#\#) {
   background-color: #fffbeb;
+}
+
+.x1m0jlgs:not(#\#):not(#\#):not(#\#) {
+  background-color: #f0f8ff;
 }
 
 .x1t391ir:not(#\#):not(#\#):not(#\#) {
