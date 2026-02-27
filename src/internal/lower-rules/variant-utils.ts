@@ -188,10 +188,16 @@ export const createPropTestHelpers = (
 
   /**
    * Parse chained && / || conditions, returning a combined TestInfo.
-   * For: props.a === "x" && props.b === 1
-   * Returns: { when: 'a === "x" && b === 1', propName: 'b', allPropNames: ['a', 'b'] }
-   * For: props.$a || props.$b
-   * Returns: { when: '$a || $b', propName: '$b', allPropNames: ['$a', '$b'] }
+   *
+   * Supported patterns:
+   *   props.a && props.b           → { when: 'a && b' }
+   *   props.$a || props.$b         → { when: '$a || $b' }
+   *   props.$a && (props.$b || $c) → { when: '$a && $b || $c' }
+   *   !(props.$a || props.$b)      → { when: '!($a || $b)' }
+   *
+   * Bails (returns null) on || wrapping && children to avoid ambiguous
+   * serialization: "a && b || c" would be reparsed as "a && (b || c)"
+   * by parseVariantWhenToAst, which splits on && first.
    */
   const parseChainedTestInfo = (test: ExpressionKind): TestInfo | null => {
     // First try parsing as a simple test
@@ -200,15 +206,27 @@ export const createPropTestHelpers = (
       return simple;
     }
 
-    if (
-      test &&
-      typeof test === "object" &&
-      test.type === "LogicalExpression" &&
-      (test.operator === "&&" || test.operator === "||")
-    ) {
+    if (!test || typeof test !== "object") {
+      return null;
+    }
+
+    // Handle negated compound expressions: !($a || $b), !($a && $b)
+    if (test.type === "UnaryExpression" && test.operator === "!" && test.argument) {
+      const innerInfo = parseChainedTestInfo(test.argument as ExpressionKind);
+      if (innerInfo) {
+        const allProps = innerInfo.allPropNames ?? (innerInfo.propName ? [innerInfo.propName] : []);
+        return {
+          when: `!(${innerInfo.when})`,
+          propName: innerInfo.propName,
+          allPropNames: allProps,
+        };
+      }
+    }
+
+    // Handle chained LogicalExpression with && or ||
+    if (test.type === "LogicalExpression" && (test.operator === "&&" || test.operator === "||")) {
       const leftInfo = parseChainedTestInfo(test.left);
-      const rightInfo =
-        test.operator === "&&" ? parseTestInfo(test.right) : parseChainedTestInfo(test.right);
+      const rightInfo = parseChainedTestInfo(test.right);
       if (leftInfo && rightInfo) {
         // Bail on || wrapping && children: the serialized when string would be
         // ambiguous (e.g. "a && b || c" reparsed as "a && (b || c)" instead of

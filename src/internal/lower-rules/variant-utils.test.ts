@@ -54,7 +54,57 @@ describe("parseChainedTestInfo", () => {
     expect(result!.allPropNames).toEqual(["$a", "$b", "$c"]);
   });
 
-  it("bails on mixed || wrapping && to prevent ambiguous when strings", () => {
+  it("handles && wrapping || on the right: $a && ($b || $c)", () => {
+    const { parseChainedTestInfo } = createPropTestHelpers(
+      makeDestructuredBindings("$a", "$b", "$c"),
+    );
+    // Safe: "$a && $b || $c" is reparsed as $a && ($b || $c) because
+    // parseVariantWhenToAst splits on && first
+    const result = parseChainedTestInfo(parseExpr("$a && ($b || $c)"));
+    expect(result).not.toBeNull();
+    expect(result!.when).toBe("$a && $b || $c");
+    expect(result!.allPropNames).toEqual(["$a", "$b", "$c"]);
+  });
+
+  it("handles || on left of && chain: ($a || $b) && $c", () => {
+    const { parseChainedTestInfo } = createPropTestHelpers(
+      makeDestructuredBindings("$a", "$b", "$c"),
+    );
+    // Safe: "$a || $b && $c" is reparsed as ($a || $b) && $c because
+    // parseVariantWhenToAst splits on && first, keeping "$a || $b" intact
+    const result = parseChainedTestInfo(parseExpr("($a || $b) && $c"));
+    expect(result).not.toBeNull();
+    expect(result!.when).toBe("$a || $b && $c");
+    expect(result!.allPropNames).toEqual(["$a", "$b", "$c"]);
+  });
+
+  it("handles || on both sides of &&: ($a || $b) && ($c || $d)", () => {
+    const { parseChainedTestInfo } = createPropTestHelpers(
+      makeDestructuredBindings("$a", "$b", "$c", "$d"),
+    );
+    const result = parseChainedTestInfo(parseExpr("($a || $b) && ($c || $d)"));
+    expect(result).not.toBeNull();
+    expect(result!.when).toBe("$a || $b && $c || $d");
+    expect(result!.allPropNames).toEqual(["$a", "$b", "$c", "$d"]);
+  });
+
+  it("handles negated || compound: !($a || $b)", () => {
+    const { parseChainedTestInfo } = createPropTestHelpers(makeDestructuredBindings("$a", "$b"));
+    const result = parseChainedTestInfo(parseExpr("!($a || $b)"));
+    expect(result).not.toBeNull();
+    expect(result!.when).toBe("!($a || $b)");
+    expect(result!.allPropNames).toEqual(["$a", "$b"]);
+  });
+
+  it("handles negated && compound: !($a && $b)", () => {
+    const { parseChainedTestInfo } = createPropTestHelpers(makeDestructuredBindings("$a", "$b"));
+    const result = parseChainedTestInfo(parseExpr("!($a && $b)"));
+    expect(result).not.toBeNull();
+    expect(result!.when).toBe("!($a && $b)");
+    expect(result!.allPropNames).toEqual(["$a", "$b"]);
+  });
+
+  it("bails on || wrapping && to prevent ambiguous when strings", () => {
     const { parseChainedTestInfo } = createPropTestHelpers(
       makeDestructuredBindings("$a", "$b", "$c"),
     );
@@ -64,12 +114,11 @@ describe("parseChainedTestInfo", () => {
     expect(result).toBeNull();
   });
 
-  it("bails on mixed && wrapping || on the right", () => {
+  it("bails on || wrapping && on the right side", () => {
     const { parseChainedTestInfo } = createPropTestHelpers(
       makeDestructuredBindings("$a", "$b", "$c"),
     );
-    // $a && ($b || $c) — parseTestInfo can't handle || on the right of &&
-    const result = parseChainedTestInfo(parseExpr("$a && ($b || $c)"));
+    const result = parseChainedTestInfo(parseExpr("$a || ($b && $c)"));
     expect(result).toBeNull();
   });
 });

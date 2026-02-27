@@ -1546,6 +1546,45 @@ export const App = () => <Dot />;
     expect(result.code).toContain("$active || $completed");
     expect(result.code).toContain("dotActiveOrCompleted");
   });
+
+  it("should transform negated || conditions correctly", () => {
+    const source = `
+import styled, { css } from "styled-components";
+const Step = styled.div<{ $active?: boolean; $completed?: boolean }>\`
+  background-color: blue;
+  \${({ $active, $completed }) =>
+    !($active || $completed) &&
+    css\`
+      background-color: gray;
+    \`}
+\`;
+export const App = () => <Step />;
+`;
+    const result = runTransformWithDiagnostics(source);
+    expect(result.code).not.toBeNull();
+    expect(result.code).toContain("!($active || $completed)");
+    expect(result.code).toContain("stepNotActiveOrCompleted");
+  });
+
+  it("should transform && wrapping || on the right correctly", () => {
+    const source = `
+import styled, { css } from "styled-components";
+const Badge = styled.span<{ $visible?: boolean; $primary?: boolean; $accent?: boolean }>\`
+  background-color: gray;
+  \${({ $visible, $primary, $accent }) =>
+    $visible &&
+    ($primary || $accent) &&
+    css\`
+      background-color: blue;
+    \`}
+\`;
+export const App = () => <Badge />;
+`;
+    const result = runTransformWithDiagnostics(source);
+    expect(result.code).not.toBeNull();
+    expect(result.code).toContain("$primary || $accent");
+    expect(result.code).toContain("badgeVisiblePrimaryOrAccent");
+  });
 });
 
 describe("conditional helper call inside pseudo selector", () => {
