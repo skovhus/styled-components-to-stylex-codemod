@@ -1,6 +1,6 @@
 // Template CSS overrides resolver-provided base styles
 import styled from "styled-components";
-import { Flex } from "@linear/orbiter/components/Flex";
+import { Flex } from "./lib/inline-base-flex";
 
 const Container = styled(Flex).attrs({
   column: true,
