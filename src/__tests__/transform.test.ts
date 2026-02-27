@@ -3283,6 +3283,37 @@ export function App() {
     expect(code).not.toContain("containerGapVariants");
   });
 
+  it("should skip base inlining when JSX `as` changes the resolved tag", () => {
+    const source = `
+import styled from "styled-components";
+import { Flex } from "./lib/inline-base-flex";
+
+const Container = styled(Flex)\`
+  padding: 4px;
+\`;
+
+export function App() {
+  return (
+    <Container as="span" gap={8}>
+      As span
+    </Container>
+  );
+}
+`;
+
+    const result = transformWithWarnings(
+      { source, path: join(testCasesDir, "inlineBase-asProp.input.tsx") },
+      { jscodeshift: j, j, stats: () => {}, report: () => {} },
+      { adapter: fixtureAdapter },
+    );
+
+    expect(result.code).not.toBeNull();
+    const code = result.code ?? "";
+    expect(code).toContain('<Container as="span" gap={8}>');
+    expect(code).toContain("as: Component = Flex");
+    expect(code).not.toContain("containerGapVariants");
+  });
+
   it("should keep template variants when a prop also drives inline base variants", () => {
     const source = `
 import styled from "styled-components";
