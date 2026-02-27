@@ -4,7 +4,7 @@
  */
 import { cssDeclarationToStylexDeclarations } from "../css-prop-mapping.js";
 import { cssValueToJs, literalToAst, toStyleKey, toSuffixFromProp } from "../transform/helpers.js";
-import type { StyleFnFromPropsEntry } from "../transform-types.js";
+import type { StyledDecl } from "../transform-types.js";
 import { extractUnionLiteralValues, groupVariantBucketsIntoDimensions } from "./variants.js";
 import {
   getArrowFnSingleParamName,
@@ -741,7 +741,7 @@ function tryResolveConditionalHelperCallInPseudo(
  */
 function mergeVariantBucketsIntoStyleFns(args: {
   j: Parameters<typeof literalToAst>[0];
-  styleFnFromProps: StyleFnFromPropsEntry[];
+  styleFnFromProps: NonNullable<StyledDecl["styleFnFromProps"]>;
   styleFnDecls: Map<string, unknown>;
   remainingBuckets: Map<string, Record<string, unknown>>;
   remainingStyleKeys: Record<string, string>;
@@ -758,10 +758,15 @@ function mergeVariantBucketsIntoStyleFns(args: {
     }
   }
 
-  // Find variant buckets whose condition matches a styleFn condition
+  // Find variant buckets whose condition matches a styleFn condition AND shares the same style key
   for (const [when, variantObj] of remainingBuckets.entries()) {
     const fnKey = conditionToFnKey.get(when);
     if (!fnKey) {
+      continue;
+    }
+    // Only merge when the variant's style key matches the styleFn's key
+    const variantKey = remainingStyleKeys[when];
+    if (variantKey !== fnKey) {
       continue;
     }
     const fnAst = styleFnDecls.get(fnKey);

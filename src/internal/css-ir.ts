@@ -175,19 +175,30 @@ export function normalizeStylisAstToIR(
       pendingComment = null;
       lastDecl = null;
 
-      // Stylis stores the combined selector in `props` (e.g., ["::-webkit-slider-thumb:hover"])
-      // while `value` only has the literal text with form-feed separators (e.g., "&\f:hover").
-      // Use `props` when available to get correctly resolved nested selectors.
-      const propsArr = Array.isArray(node.props) ? node.props : null;
-      const resolvedFromProps =
-        propsArr && propsArr.length === 1 && typeof propsArr[0] === "string"
-          ? `&${propsArr[0]}`
-          : null;
       const selectorValue = String(node.value ?? "");
       const selectorRaw = stripFormFeedInSelectors
         ? selectorValue.replaceAll("\f", "")
         : selectorValue;
-      const selector = resolvedFromProps ?? selectorRaw;
+      // Stylis stores the combined selector in `props` (e.g., ["::-webkit-slider-thumb:hover"])
+      // while `value` only has the literal text with form-feed separators (e.g., "&\f:hover").
+      // When stripping form-feeds loses pseudo-element context (e.g., "&\f:hover" → "&:hover"
+      // when it should be "&::-webkit-slider-thumb:hover"), use `props` to recover it.
+      const propsArr = Array.isArray(node.props) ? node.props : null;
+      const selector = (() => {
+        if (!stripFormFeedInSelectors || !selectorValue.includes("\f") || !propsArr?.length) {
+          return selectorRaw;
+        }
+        // Only use props when form-feed stripping loses pseudo-element context
+        const firstProp = propsArr[0];
+        if (
+          typeof firstProp === "string" &&
+          firstProp.includes("::") &&
+          !selectorRaw.includes("::")
+        ) {
+          return `&${firstProp}`;
+        }
+        return selectorRaw;
+      })();
       const rule = ensureRule(selector, atRuleStack);
       const children = node.children;
       if (children) {

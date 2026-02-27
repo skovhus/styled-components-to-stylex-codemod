@@ -2100,7 +2100,7 @@ function tryHandleLocalHelperCall(args: {
   if (!e || (e.type !== "ArrowFunctionExpression" && e.type !== "FunctionExpression")) {
     return false;
   }
-  const paramName = getArrowFnSingleParamName(e);
+  const paramName = getArrowFnSingleParamName(e as Parameters<typeof getArrowFnSingleParamName>[0]);
   if (!paramName) {
     return false;
   }
@@ -2168,9 +2168,9 @@ function tryHandleLocalHelperCall(args: {
   if (!fnBody?.body) {
     return false;
   }
-  const retStmt = fnBody.body.find((s: { type?: string }) => s.type === "ReturnStatement") as
-    | { argument?: unknown }
-    | undefined;
+  const retStmt = fnBody.body.find(
+    (s: unknown) => (s as { type?: string })?.type === "ReturnStatement",
+  ) as { argument?: unknown } | undefined;
   if (!retStmt?.argument) {
     return false;
   }
