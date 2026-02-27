@@ -105,6 +105,11 @@ body{font-family:-apple-system,BlinkMacSystemFont,Segoe UI,Roboto,Helvetica Neue
   inherits: false
 }
 
+@property --x-gap {
+  syntax: "*";
+  inherits: false
+}
+
 @property --x-columnGap {
   syntax: "*";
   inherits: false
@@ -116,11 +121,6 @@ body{font-family:-apple-system,BlinkMacSystemFont,Segoe UI,Roboto,Helvetica Neue
 }
 
 @property --x-rowGap {
-  syntax: "*";
-  inherits: false
-}
-
-@property --x-gap {
   syntax: "*";
   inherits: false
 }
@@ -284,6 +284,18 @@ body{font-family:-apple-system,BlinkMacSystemFont,Segoe UI,Roboto,Helvetica Neue
   }
 
   to {
+    transform: translateX(0);
+  }
+}
+
+@keyframes x1mrw2i1-B {
+  from {
+    opacity: 0;
+    transform: translateX(-8px);
+  }
+
+  to {
+    opacity: 1;
     transform: translateX(0);
   }
 }
@@ -588,6 +600,34 @@ body{font-family:-apple-system,BlinkMacSystemFont,Segoe UI,Roboto,Helvetica Neue
   border-color: #4f74bf;
 }
 
+.xqu46wi:not(#\#):not(#\#) {
+  border-color: #58a06d;
+}
+
+.xa5l5yx:not(#\#):not(#\#) {
+  border-color: #5aa;
+}
+
+.xvwisar:not(#\#):not(#\#) {
+  border-color: #667;
+}
+
+.x105w5x:not(#\#):not(#\#) {
+  border-color: #6a7ab5;
+}
+
+.xusy9w5:not(#\#):not(#\#) {
+  border-color: #6b7ca8;
+}
+
+.x7bo8i3:not(#\#):not(#\#) {
+  border-color: #b66;
+}
+
+.x1m9dyqn:not(#\#):not(#\#) {
+  border-color: #b97;
+}
+
 .xwoz533:not(#\#):not(#\#) {
   border-color: #bf4f74;
 }
@@ -782,6 +822,10 @@ body{font-family:-apple-system,BlinkMacSystemFont,Segoe UI,Roboto,Helvetica Neue
 
 .x1v2ro7d:not(#\#):not(#\#) {
   gap: 12px;
+}
+
+.xou54vl:not(#\#):not(#\#) {
+  gap: 16px;
 }
 
 .x8fetqu:not(#\#):not(#\#) {
@@ -1352,6 +1396,10 @@ body{font-family:-apple-system,BlinkMacSystemFont,Segoe UI,Roboto,Helvetica Neue
   animation-name: x18re5ia-B;
 }
 
+.x5sgm85:not(#\#):not(#\#):not(#\#) {
+  animation-name: x1mrw2i1-B;
+}
+
 .xbpkrbd:not(#\#):not(#\#):not(#\#) {
   animation-name: x1q428r6-B;
 }
@@ -1472,8 +1520,16 @@ body{font-family:-apple-system,BlinkMacSystemFont,Segoe UI,Roboto,Helvetica Neue
   background-color: #e0f0e0;
 }
 
+.xai882t:not(#\#):not(#\#):not(#\#) {
+  background-color: #e0f2fe;
+}
+
 .x1jxpefe:not(#\#):not(#\#):not(#\#) {
   background-color: #e7f3ff;
+}
+
+.xpnvprw:not(#\#):not(#\#):not(#\#) {
+  background-color: #e7fff1;
 }
 
 .x1s31fwb:not(#\#):not(#\#):not(#\#) {
@@ -1484,8 +1540,20 @@ body{font-family:-apple-system,BlinkMacSystemFont,Segoe UI,Roboto,Helvetica Neue
   background-color: #e8f4e8;
 }
 
+.xg3y8ke:not(#\#):not(#\#):not(#\#) {
+  background-color: #ecf2ff;
+}
+
+.xmblloc:not(#\#):not(#\#):not(#\#) {
+  background-color: #eef;
+}
+
 .x1f4o5zr:not(#\#):not(#\#):not(#\#) {
   background-color: #eef6ff;
+}
+
+.xhniv09:not(#\#):not(#\#):not(#\#) {
+  background-color: #eef9ff;
 }
 
 .x1x08nk5:not(#\#):not(#\#):not(#\#) {
@@ -1504,12 +1572,24 @@ body{font-family:-apple-system,BlinkMacSystemFont,Segoe UI,Roboto,Helvetica Neue
   background-color: #f0f4f8;
 }
 
+.xln26u5:not(#\#):not(#\#):not(#\#) {
+  background-color: #f0f5ff;
+}
+
 .x1ktjzyy:not(#\#):not(#\#):not(#\#) {
   background-color: #f3f3f3;
 }
 
+.xwtm24k:not(#\#):not(#\#):not(#\#) {
+  background-color: #f4f4ff;
+}
+
 .x6cgz0f:not(#\#):not(#\#):not(#\#) {
   background-color: #f5f5f5;
+}
+
+.xcnl8is:not(#\#):not(#\#):not(#\#) {
+  background-color: #f5f5ff;
 }
 
 .xkafh1q:not(#\#):not(#\#):not(#\#) {
@@ -1530,6 +1610,14 @@ body{font-family:-apple-system,BlinkMacSystemFont,Segoe UI,Roboto,Helvetica Neue
 
 .x83z2og:not(#\#):not(#\#):not(#\#) {
   background-color: #fff;
+}
+
+.x1rr6085:not(#\#):not(#\#):not(#\#) {
+  background-color: #fff4e6;
+}
+
+.x3yzco9:not(#\#):not(#\#):not(#\#) {
+  background-color: #fff5f5;
 }
 
 .x1pcab6s:not(#\#):not(#\#):not(#\#) {
@@ -1780,6 +1868,10 @@ body{font-family:-apple-system,BlinkMacSystemFont,Segoe UI,Roboto,Helvetica Neue
   box-shadow: var(--x-boxShadow);
 }
 
+.xbsw2ss:not(#\#):not(#\#):not(#\#) {
+  color: #0369a1;
+}
+
 .x25dth7:not(#\#):not(#\#):not(#\#) {
   color: #0969da;
 }
@@ -1794,6 +1886,10 @@ body{font-family:-apple-system,BlinkMacSystemFont,Segoe UI,Roboto,Helvetica Neue
 
 .xaj10i5:not(#\#):not(#\#):not(#\#) {
   color: #1c1c1c;
+}
+
+.x1so8x8l:not(#\#):not(#\#):not(#\#) {
+  color: #1f2b43;
 }
 
 .xx22bf1:not(#\#):not(#\#):not(#\#) {
