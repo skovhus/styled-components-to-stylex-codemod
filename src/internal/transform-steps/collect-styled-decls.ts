@@ -5,8 +5,10 @@
 import { assertNoNullNodesInArrays } from "../utilities/ast-safety.js";
 import { collectStyledDecls } from "../collect-styled-decls.js";
 import { extractStyledCallArgs } from "../extract-styled-call-args.js";
+import { resolveBaseComponents } from "../resolve-base-component.js";
 import { formatOutput } from "../utilities/format-output.js";
 import { CONTINUE, returnResult, type StepResult } from "../transform-types.js";
+import type { ImportSpec } from "../../adapter.js";
 import { TransformContext } from "../transform-context.js";
 
 /**
@@ -61,6 +63,20 @@ export function collectStyledDeclsStep(ctx: TransformContext): StepResult {
   }
 
   ctx.styledDecls = styledDecls;
+
+  // Resolve base components via adapter.resolveBaseComponent (e.g. styled(Flex) -> div)
+  const resolveBaseComponent = ctx.adapter.resolveBaseComponent;
+  if (resolveBaseComponent && ctx.importMap) {
+    resolveBaseComponents({
+      styledDecls,
+      importMap: ctx.importMap,
+      resolveBaseComponent,
+      j: ctx.j,
+      addMixinImport: (imp: ImportSpec) => {
+        ctx.resolverImports.set(JSON.stringify(imp), imp);
+      },
+    });
+  }
 
   // Check for unparseable shouldForwardProp - bail to avoid semantic changes
   const unparseableSfpDecl = styledDecls.find((d) => d.hasUnparseableShouldForwardProp);

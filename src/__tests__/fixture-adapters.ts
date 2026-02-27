@@ -7,6 +7,8 @@ import {
   type CallResolveResult,
   defineAdapter,
   type ExternalInterfaceResult,
+  type ResolveBaseComponentContext,
+  type ResolveBaseComponentResult,
   type ResolveValueContext,
   type ResolveValueResult,
   type SelectorResolveContext,
@@ -422,6 +424,32 @@ export const fixtureAdapter = defineAdapter({
     }
 
     return undefined;
+  },
+  resolveBaseComponent(ctx: ResolveBaseComponentContext): ResolveBaseComponentResult | undefined {
+    // Match Flex from ./lib/flex (used by inlineBase-* test cases)
+    if (!ctx.importSource.includes("lib/flex") && !ctx.importSource.includes("lib\\flex")) {
+      return undefined;
+    }
+    if (ctx.importedName !== "Flex") {
+      return undefined;
+    }
+
+    const { column, gap, as } = ctx.staticProps;
+    const flexDirection = column === true ? "column" : "row";
+    const gapPx = typeof gap === "number" ? `${gap}px` : typeof gap === "string" ? gap : "0px";
+    const tagName = typeof as === "string" ? as : "div";
+
+    const sx: Record<string, string> = {
+      display: "flex",
+      flexDirection,
+      gap: gapPx,
+    };
+
+    return {
+      tagName,
+      consumedProps: ["column", "gap", "align", "direction", "as"],
+      sx,
+    };
   },
   resolveSelector(ctx) {
     const source = ctx.source.value;

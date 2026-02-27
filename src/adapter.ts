@@ -330,6 +330,42 @@ export interface ExternalInterfaceContext {
 export type ExternalInterfaceResult = { styles: boolean; as: boolean };
 
 // ────────────────────────────────────────────────────────────────────────────
+// Base Component Resolution (Inline)
+// ────────────────────────────────────────────────────────────────────────────
+
+/**
+ * Context for `adapter.resolveBaseComponent(...)`.
+ *
+ * Used when the codemod encounters `styled(Flex)` (or similar) to inline the base
+ * component's styles and replace it with a plain intrinsic element.
+ */
+export interface ResolveBaseComponentContext {
+  /** Package import path, e.g. "@linear/orbiter/components/Flex" */
+  importSource: string;
+  /** Named export, e.g. "Flex" */
+  importedName: string;
+  /**
+   * Static props from .attrs({...}) and/or JSX call sites.
+   * Only includes props with literal values (strings, numbers, booleans).
+   */
+  staticProps: Record<string, string | number | boolean>;
+}
+
+/**
+ * Result for `adapter.resolveBaseComponent(...)`.
+ */
+export interface ResolveBaseComponentResult {
+  /** Intrinsic element to render, e.g. "div", "section" */
+  tagName: string;
+  /** Props consumed by the resolver (will be stripped from attrs/JSX, not forwarded to DOM) */
+  consumedProps: string[];
+  /** StyleX declarations to merge into stylex.create() (camelCase, no shorthands) */
+  sx?: Record<string, string>;
+  /** External style references to include in stylex.props() */
+  mixins?: Array<{ importSource: string; importName: string; styleKey: string }>;
+}
+
+// ────────────────────────────────────────────────────────────────────────────
 // Style Merger Configuration
 // ────────────────────────────────────────────────────────────────────────────
 
@@ -460,6 +496,17 @@ export interface Adapter {
    * `{ functionName: "useTheme", importSource: { kind: "specifier", value: "styled-components" } }`
    */
   themeHook?: ThemeHookConfig;
+
+  /**
+   * Optional resolver for inlining base components (e.g. Flex) into intrinsic elements.
+   *
+   * When `styled(Flex)` is encountered and this returns a result, the codemod inlines
+   * the base component's styles and replaces it with a plain element (e.g. div).
+   * At least one of `sx` or `mixins` must be present in the result.
+   */
+  resolveBaseComponent?: (
+    context: ResolveBaseComponentContext,
+  ) => ResolveBaseComponentResult | undefined;
 }
 
 // ────────────────────────────────────────────────────────────────────────────
@@ -490,6 +537,7 @@ export interface AdapterInput {
 
   styleMerger: Adapter["styleMerger"];
   themeHook?: Adapter["themeHook"];
+  resolveBaseComponent?: Adapter["resolveBaseComponent"];
 }
 
 // ────────────────────────────────────────────────────────────────────────────

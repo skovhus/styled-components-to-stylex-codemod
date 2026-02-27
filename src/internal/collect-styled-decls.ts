@@ -84,9 +84,13 @@ function collectStyledDeclsImpl(args: {
     if (!arg0) {
       return undefined;
     }
-    // Use Omit + Required to make all fields non-optional, then add attrsAsTag back as optional
-    const out: Omit<Required<NonNullable<StyledDecl["attrsInfo"]>>, "attrsAsTag"> & {
+    // Use Omit + Required to make all fields non-optional, then add attrsAsTag and attrsArgIsFunction back as optional
+    const out: Omit<
+      Required<NonNullable<StyledDecl["attrsInfo"]>>,
+      "attrsAsTag" | "attrsArgIsFunction"
+    > & {
       attrsAsTag?: string;
+      attrsArgIsFunction?: boolean;
     } = {
       staticAttrs: {},
       defaultAttrs: [],
@@ -206,7 +210,8 @@ function collectStyledDeclsImpl(args: {
       return out;
     }
 
-    if (arg0.type === "ArrowFunctionExpression") {
+    if (arg0.type === "ArrowFunctionExpression" || arg0.type === "FunctionExpression") {
+      out.attrsArgIsFunction = true;
       const body = arg0.body as any;
       if (body?.type === "ObjectExpression") {
         fillFromObject(body);

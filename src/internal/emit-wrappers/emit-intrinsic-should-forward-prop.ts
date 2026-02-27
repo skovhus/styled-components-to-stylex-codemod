@@ -220,7 +220,12 @@ export function emitShouldForwardPropWrappers(ctx: EmitIntrinsicContext): void {
         allowSxProp,
         skipProps: explicitPropNames,
       });
-      return VOID_TAGS.has(tagName) ? inferred : emitter.withChildren(inferred);
+      const baseInferred = VOID_TAGS.has(tagName) ? inferred : emitter.withChildren(inferred);
+      // When we have extraProps (e.g. dropProps from inlined base) but no explicit type,
+      // add them so destructuring in the wrapper is type-correct.
+      return extraProps.size > 0
+        ? emitter.joinIntersection(baseInferred, extrasTypeText)
+        : baseInferred;
     })();
     const finalTypeTextWithForwardedAs = withForwardedAsType(finalTypeText, includesForwardedAs);
 

@@ -282,6 +282,8 @@ export type StyledDecl = {
   withConfig?: { componentId?: string };
   attrsInfo?: {
     staticAttrs: Record<string, unknown>;
+    /** When true, .attrs() received a function (e.g. attrs(props => ...)). Used for base component resolution bail. */
+    attrsArgIsFunction?: boolean;
     /** Component identifier from `as: ComponentRef` in `.attrs()`, overrides the rendered tag. */
     attrsAsTag?: string;
     /**
@@ -373,4 +375,15 @@ export type StyledDecl = {
   leadingComments?: Comment[];
   /** Deterministic bridge CSS class name for unconverted consumer selectors */
   bridgeClassName?: string;
+
+  /**
+   * When set, the base component was inlined via adapter.resolveBaseComponent.
+   * Stores the resolution result for downstream steps (per-site variant diffing, etc.).
+   */
+  inlinedBaseComponent?: {
+    tagName: string;
+    consumedProps: string[];
+    baseSx?: Record<string, string>;
+    baseMixins?: Array<{ importSource: string; importName: string; styleKey: string }>;
+  };
 };
