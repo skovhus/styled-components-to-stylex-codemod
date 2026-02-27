@@ -390,90 +390,36 @@ export async function runPrepass(options: PrepassOptions): Promise<PrepassResult
     }
 
     // re-styled: resolve imports to find definition files
+    const resolvedCalls = resolveStyledCallImports(styledCallUsages, resolve, cachedRead);
     {
       const seen = new Set<string>();
-      for (const { file, name } of styledCallUsages) {
-        const importInfo = findImportSource(cachedRead(file), name);
-        if (!importInfo) {
-          continue;
-        }
-
-        const { source: importSource, exportedName } = importInfo;
-
-        let defFile = resolve(importSource, file);
-        if (!defFile) {
-          continue;
-        }
-
-        // Follow barrel re-exports (index.ts -> actual definition)
-        defFile = resolveBarrelReExport(defFile, exportedName, resolve, cachedRead) ?? defFile;
-
+      for (const { defFile, exportedName } of resolvedCalls) {
         const key = `${defFile}:${exportedName}`;
         if (seen.has(key)) {
           continue;
         }
         seen.add(key);
-
-        // Verify the component is exported from the definition file
-        try {
-          if (!fileExports(cachedRead(defFile), exportedName)) {
-            continue;
-          }
-        } catch {
-          continue;
-        }
-
         ensure(defFile, exportedName).styles = true;
       }
     }
   }
 
-  // Phase 2.5: Resolve styled(Component) calls for sx prop detection.
-  // This runs regardless of createExternalInterface — we always need to know
-  // which wrapped components are from transform-set files (StyleX-backed).
-  {
-    const seen = new Set<string>();
-    for (const { file, name } of styledCallUsages) {
-      const importInfo = findImportSource(cachedRead(file), name);
-      if (!importInfo) {
-        continue;
-      }
-
-      const { source: importSource, exportedName } = importInfo;
-
-      let defFile = resolve(importSource, file);
-      if (!defFile) {
-        continue;
-      }
-
-      defFile = resolveBarrelReExport(defFile, exportedName, resolve, cachedRead) ?? defFile;
-
-      // Only track components from files being transformed
-      if (!transformSet.has(defFile)) {
-        continue;
-      }
-
-      const key = `${file}\0${name}`;
-      if (seen.has(key)) {
-        continue;
-      }
-      seen.add(key);
-
-      try {
-        if (!fileExports(cachedRead(defFile), exportedName)) {
-          continue;
-        }
-      } catch {
-        continue;
-      }
-
-      let entries = styledCallResolutions.get(file);
-      if (!entries) {
-        entries = [];
-        styledCallResolutions.set(file, entries);
-      }
-      entries.push({ localName: name, defFile, exportedName });
+  // Phase 2.5: Build styledCallResolutions for sx prop detection.
+  // Uses the same resolved calls but filters to transform-set files only.
+  for (const { file, name, defFile, exportedName } of resolveStyledCallImports(
+    styledCallUsages,
+    resolve,
+    cachedRead,
+  )) {
+    if (!transformSet.has(defFile)) {
+      continue;
     }
+    let entries = styledCallResolutions.get(file);
+    if (!entries) {
+      entries = [];
+      styledCallResolutions.set(file, entries);
+    }
+    entries.push({ localName: name, defFile, exportedName });
   }
 
   const crossFileInfo: CrossFileInfo = {
@@ -766,6 +712,53 @@ function scanFileForSelectorsAst(
   }
 
   return usages;
+}
+
+/**
+ * Resolve `styled(Component)` import calls to their definition files.
+ * Returns a flat list of resolved entries with deduplication per (file, name) pair.
+ */
+function resolveStyledCallImports(
+  styledCallUsages: ReadonlyArray<{ file: string; name: string }>,
+  resolve: Resolve,
+  cachedRead: (path: string) => string,
+): Array<{ file: string; name: string; defFile: string; exportedName: string }> {
+  const results: Array<{ file: string; name: string; defFile: string; exportedName: string }> = [];
+  const seen = new Set<string>();
+
+  for (const { file, name } of styledCallUsages) {
+    const importInfo = findImportSource(cachedRead(file), name);
+    if (!importInfo) {
+      continue;
+    }
+
+    const { source: importSource, exportedName } = importInfo;
+
+    let defFile = resolve(importSource, file);
+    if (!defFile) {
+      continue;
+    }
+
+    defFile = resolveBarrelReExport(defFile, exportedName, resolve, cachedRead) ?? defFile;
+
+    const key = `${file}\0${name}\0${defFile}`;
+    if (seen.has(key)) {
+      continue;
+    }
+    seen.add(key);
+
+    try {
+      if (!fileExports(cachedRead(defFile), exportedName)) {
+        continue;
+      }
+    } catch {
+      continue;
+    }
+
+    results.push({ file, name, defFile, exportedName });
+  }
+
+  return results;
 }
 
 /* ── ripgrep pre-filter ───────────────────────────────────────────────── */

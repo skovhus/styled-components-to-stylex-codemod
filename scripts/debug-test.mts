@@ -26,12 +26,34 @@ const testCases = process.argv.slice(2).length > 0 ? process.argv.slice(2) : def
 const projectRoot = join(import.meta.dirname, "..");
 const testCasesDir = join(projectRoot, "test-cases");
 
+/**
+ * Test cases whose imported components are known to be StyleX-backed.
+ * Must match the mapping in regenerate-test-case-outputs.mts and transform.test.ts.
+ */
+const SX_BACKED_IMPORT_MAP: Record<string, string[]> = {
+  "wrapper-sxProp": ["StyleXButton"],
+};
+
 for (const name of testCases) {
   const inputPath = join(testCasesDir, `${name}.input.tsx`);
   const input = readFileSync(inputPath, "utf8");
+
+  const sxBackedImports = new Map<string, Set<string>>();
+  const sxBacked = SX_BACKED_IMPORT_MAP[name];
+  if (sxBacked) {
+    const { resolve: pathResolve } = await import("node:path");
+    sxBackedImports.set(pathResolve(inputPath), new Set(sxBacked));
+  }
+
+  const crossFilePrepassResult = {
+    selectorUsages: new Map(),
+    componentsNeedingGlobalSelectorBridge: new Map(),
+    sxBackedImports,
+  };
+
   const result = applyTransform(
     transform,
-    { adapter: fixtureAdapter },
+    { adapter: fixtureAdapter, crossFilePrepassResult },
     { source: input, path: inputPath },
     { parser: "tsx" },
   );

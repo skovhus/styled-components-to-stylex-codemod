@@ -983,7 +983,7 @@ function appendSxBackedAttrs(args: {
             p.expr,
           ),
         ),
-        j.spreadElement(styleId as ExpressionKind),
+        j.spreadElement(styleId),
       ]);
     } else if (inlineStyleProps.length > 0) {
       styleValue = j.objectExpression(
