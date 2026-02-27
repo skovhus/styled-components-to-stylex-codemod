@@ -1,6 +1,4 @@
-// Logical-OR condition: ($completed || $active) && css`...`.
-// The codemod fails to convert the || test and bails the component entirely,
-// rather than outputting ($active || $completed) ? styles.dotHighlighted : undefined.
+// Logical-OR condition: ($active || $completed) && css`...`
 import * as React from "react";
 import styled, { css } from "styled-components";
 
