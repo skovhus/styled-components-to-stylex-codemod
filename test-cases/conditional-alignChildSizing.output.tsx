@@ -18,8 +18,8 @@ function Container(props: ContainerProps) {
         [
           styles.container,
           align !== "top" && styles.containerAlignNotTop,
-          align === "center" ? styles.containerAlignCenter : undefined,
-          align !== "top" && align !== "center" ? styles.containerAlignBottom : undefined,
+          align !== "top" && align === "center" && styles.containerAlignNotTopAlignCenter,
+          align !== "top" && align !== "center" && styles.containerAlignNotTopAlignNotCenter,
         ],
         undefined,
         style,
@@ -52,10 +52,10 @@ const styles = stylex.create({
   containerAlignNotTop: {
     display: "flex",
   },
-  containerAlignCenter: {
+  containerAlignNotTopAlignCenter: {
     alignItems: "center",
   },
-  containerAlignBottom: {
+  containerAlignNotTopAlignNotCenter: {
     alignItems: "flex-end",
   },
 });
