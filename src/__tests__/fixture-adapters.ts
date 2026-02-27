@@ -15,6 +15,24 @@ import {
 
 const FLEX_PROP_KEYS = ["column", "direction", "gap", "align", "as"];
 
+function flexPropsToSx(
+  staticProps: Record<string, string | number | boolean>,
+): Record<string, string> {
+  const sx: Record<string, string> = {};
+  if (staticProps.column === true) {
+    sx.flexDirection = "column";
+  } else if (typeof staticProps.direction === "string") {
+    sx.flexDirection = staticProps.direction;
+  }
+  if (typeof staticProps.gap === "number") {
+    sx.gap = `${staticProps.gap}px`;
+  }
+  if (typeof staticProps.align === "string") {
+    sx.alignItems = staticProps.align;
+  }
+  return sx;
+}
+
 // Fixtures don't use theme resolution, but the transformer requires an adapter.
 export const fixtureAdapter = defineAdapter({
   // Use mergedSx merger function for cleaner className/style merging output
@@ -80,28 +98,29 @@ export const fixtureAdapter = defineAdapter({
       return undefined;
     }
 
-    const sx: Record<string, string> = { display: "flex" };
-
-    if (ctx.staticProps.column === true) {
-      sx.flexDirection = "column";
-    } else if (typeof ctx.staticProps.direction === "string") {
-      sx.flexDirection = ctx.staticProps.direction;
-    }
-
-    if (typeof ctx.staticProps.gap === "number") {
-      sx.gap = `${ctx.staticProps.gap}px`;
-    }
-
-    if (typeof ctx.staticProps.align === "string") {
-      sx.alignItems = ctx.staticProps.align;
-    }
-
     const tagName = typeof ctx.staticProps.as === "string" ? ctx.staticProps.as : "div";
+
+    const useMixin = ctx.filePath.includes("inlineBase-mixin");
+    if (useMixin) {
+      const sx = flexPropsToSx(ctx.staticProps);
+      return {
+        tagName,
+        consumedProps: FLEX_PROP_KEYS,
+        sx: Object.keys(sx).length > 0 ? sx : undefined,
+        mixins: [
+          {
+            importSource: "./lib/flexStyles.stylex",
+            importName: "flexStyles",
+            styleKey: "flex",
+          },
+        ],
+      };
+    }
 
     return {
       tagName,
       consumedProps: FLEX_PROP_KEYS,
-      sx,
+      sx: { display: "flex", ...flexPropsToSx(ctx.staticProps) },
     };
   },
 

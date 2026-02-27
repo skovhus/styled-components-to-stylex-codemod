@@ -401,6 +401,11 @@ export interface ResolveBaseComponentContext {
    * Only includes props with literal values (strings, numbers, booleans).
    */
   staticProps: Record<string, string | number | boolean>;
+  /**
+   * Absolute path of the file currently being transformed.
+   * Useful for adapter logic that wants to branch by caller file.
+   */
+  filePath: string;
 }
 
 /**

@@ -50,13 +50,17 @@ function resolveBaseComponentsStep(ctx: TransformContext): StepResult {
 
     const importSource = importInfo.source.value;
 
+    const filePath = ctx.file.path;
+    const resolveCtx: ResolveBaseComponentContext = {
+      importSource,
+      importedName: importInfo.importedName,
+      staticProps,
+      filePath,
+    };
+
     let baseResult: ResolveBaseComponentResult | undefined;
     try {
-      baseResult = resolveBaseComponent({
-        importSource,
-        importedName: importInfo.importedName,
-        staticProps,
-      });
+      baseResult = resolveBaseComponent(resolveCtx);
     } catch {
       ctx.warnings.push({
         severity: "warning",
@@ -83,11 +87,7 @@ function resolveBaseComponentsStep(ctx: TransformContext): StepResult {
       baseResult,
       baseStaticProps: staticProps,
       resolveBaseComponent,
-      resolveCtx: {
-        importSource,
-        importedName: importInfo.importedName,
-        staticProps,
-      },
+      resolveCtx,
     });
   }
 
