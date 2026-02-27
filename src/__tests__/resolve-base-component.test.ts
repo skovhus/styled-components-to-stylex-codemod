@@ -691,4 +691,80 @@ export function App() {
     expect(output).toContain('alignItems: "center"');
     expect(output).toContain('alignItems: "start"');
   });
+
+  describe("JSX as prop on inlined component", () => {
+    it('as="span" triggers polymorphic wrapper with inlined styles', () => {
+      const input = `
+import styled from "styled-components";
+import { Flex } from "./lib/flex";
+
+const Container = styled(Flex).attrs({ column: true })\`
+  padding: 8px;
+\`;
+
+export function App() {
+  return (
+    <div>
+      <Container as="span">inline flex</Container>
+      <Container>block flex</Container>
+    </div>
+  );
+}
+`;
+      const output = run(input);
+      expect(output).not.toBeNull();
+      // Styles are inlined from the resolver
+      expect(output).toContain('display: "flex"');
+      expect(output).toContain('flexDirection: "column"');
+      expect(output).not.toContain('from "./lib/flex"');
+      // as="span" triggers a polymorphic wrapper (renders <Component> at runtime)
+      expect(output).toContain("function Container");
+      expect(output).toContain("as: Component");
+      // JSX sites preserved — wrapper handles polymorphism at runtime
+      expect(output).toContain('as="span"');
+    });
+
+    it('as="span" on self-closing inlined component', () => {
+      const input = `
+import styled from "styled-components";
+import { Flex } from "./lib/flex";
+
+const Spacer = styled(Flex)\`
+  min-height: 8px;
+\`;
+
+export function App() {
+  return <Spacer as="span" />;
+}
+`;
+      const output = run(input);
+      expect(output).not.toBeNull();
+      // Styles inlined
+      expect(output).toContain('display: "flex"');
+      // Polymorphic wrapper generated (as="span" usage detected)
+      expect(output).toContain("function Spacer");
+      expect(output).toContain("as: Component");
+    });
+
+    it("as={Component} on inlined component — bails inlining", () => {
+      const input = `
+import styled from "styled-components";
+import { Flex } from "./lib/flex";
+import { Link } from "./lib/link";
+
+const Container = styled(Flex).attrs({ column: true })\`
+  padding: 8px;
+\`;
+
+export function App() {
+  return <Container as={Link}>link flex</Container>;
+}
+`;
+      const output = run(input);
+      expect(output).not.toBeNull();
+      // as={Component} is a non-literal value for the "as" consumed prop.
+      // canSafelyInline detects this and bails — Flex not inlined.
+      expect(output).toContain("Flex");
+    });
+  });
 });
