@@ -248,6 +248,11 @@ export interface ResolveBaseComponentContext {
    * Includes only literal values that can be resolved at codemod time.
    */
   staticProps: Record<string, ResolveBaseComponentStaticValue>;
+  /**
+   * Absolute path of the file currently being transformed.
+   * Useful for resolver logic that branches by caller file.
+   */
+  filePath: string;
 }
 
 export interface ResolveBaseComponentMixinRef {

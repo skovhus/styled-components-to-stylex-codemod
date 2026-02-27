@@ -281,7 +281,7 @@ export async function runTransform(options: RunTransformOptions): Promise<RunTra
       const msg = `adapter.resolveBaseComponent threw an error: ${
         e instanceof Error ? e.message : String(e)
       }`;
-      Logger.logError(msg, "<base-component-resolution>", undefined, ctx);
+      Logger.logError(msg, ctx.filePath, undefined, ctx);
       Logger.markErrorAsLogged(e);
       throw e;
     }
