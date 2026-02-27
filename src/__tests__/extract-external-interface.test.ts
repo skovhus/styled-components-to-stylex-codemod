@@ -721,6 +721,10 @@ describe("runPrepass createExternalInterface snapshot on test-cases", () => {
           "as": false,
           "styles": true,
         },
+        "test-cases/example-actionMenuDivider-exported.input.tsx:TextDividerContainer": {
+          "as": false,
+          "styles": true,
+        },
         "test-cases/example-flex.input.tsx:Flex": {
           "as": false,
           "styles": true,

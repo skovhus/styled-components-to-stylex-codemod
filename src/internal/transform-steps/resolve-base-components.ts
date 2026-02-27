@@ -52,6 +52,41 @@ type InlineResolverVariantsOutcome =
     }
   | { kind: "bail" };
 
+/** Checks whether a local name is exported from the file (named, default, or specifier). */
+function isNameExported(ctx: TransformContext, localName: string): boolean {
+  const { root, j } = ctx;
+  let exported = false;
+  root.find(j.ExportNamedDeclaration).forEach((p) => {
+    if (exported) {
+      return;
+    }
+    const decl = p.node.declaration;
+    if (decl?.type === "VariableDeclaration") {
+      for (const d of decl.declarations) {
+        if (d.type === "VariableDeclarator" && (d.id as { name?: string })?.name === localName) {
+          exported = true;
+        }
+      }
+    }
+    for (const spec of p.node.specifiers ?? []) {
+      if (
+        spec.type === "ExportSpecifier" &&
+        (spec.local as { name?: string })?.name === localName
+      ) {
+        exported = true;
+      }
+    }
+  });
+  if (!exported) {
+    root.find(j.ExportDefaultDeclaration).forEach((p) => {
+      if ((p.node.declaration as { name?: string })?.name === localName) {
+        exported = true;
+      }
+    });
+  }
+  return exported;
+}
+
 /** Constructs an "ok" InlineResolverVariantsOutcome with no variants and empty defaults. */
 function emptyOkVariantOutcome(
   hasLocalCallsites: boolean,
@@ -332,6 +367,9 @@ function buildInlineResolverVariantDimensions(args: {
   }
 
   const bucketsByProp = new Map<string, Map<string, Record<string, unknown>>>();
+  // Track which props have only boolean values (not string "true"/"false").
+  // Used to distinguish `<Comp flag />` (boolean true) from `<Comp mode="true" />` (string).
+  const booleanOnlyProps = new Set<string>();
   for (const { siteProps, sxDiff, changedProps } of resolvedByPropsKey.values()) {
     if (changedProps.length === 0) {
       continue;
@@ -345,6 +383,13 @@ function buildInlineResolverVariantDimensions(args: {
     const value = siteProps[propName];
     if (!isStaticLiteral(value)) {
       return { kind: "bail" };
+    }
+    if (typeof value === "boolean") {
+      if (!bucketsByProp.has(propName)) {
+        booleanOnlyProps.add(propName);
+      }
+    } else {
+      booleanOnlyProps.delete(propName);
     }
     const variantKey = String(value);
     const byValue = bucketsByProp.get(propName) ?? new Map<string, Record<string, unknown>>();
@@ -385,7 +430,18 @@ function buildInlineResolverVariantDimensions(args: {
       return type === "ArrowFunctionExpression" || type === "FunctionExpression";
     });
 
-    if (variantKeys.length === 1 && !hasPropReferencingTemplateExpressions) {
+    // Singleton folding (bake-in / boolean conditional) requires complete callsite
+    // visibility. Exported or value-used components may have external callers with
+    // different prop values, so skip folding and fall through to the variant dimension path.
+    // Note: decl.isExported is not yet set at this step (set in analyzeBeforeEmitStep),
+    // so we check export status directly from the AST.
+    const hasCompleteCallsiteVisibility = !isNameExported(ctx, decl.localName) && !decl.usedAsValue;
+
+    if (
+      variantKeys.length === 1 &&
+      !hasPropReferencingTemplateExpressions &&
+      hasCompleteCallsiteVisibility
+    ) {
       const callSitesWithProp = usageResult.propsByUsage.filter(
         (siteProps) => propName in siteProps,
       ).length;
@@ -403,9 +459,10 @@ function buildInlineResolverVariantDimensions(args: {
 
       // Single variant key, partial call sites: emit as a boolean conditional style
       // in the main `styles` object rather than a separate lookup object.
-      // Only the boolean `true` key maps cleanly to a truthy condition (`prop &&`).
+      // Only actual boolean `true` (not string "true") maps cleanly to a truthy condition
+      // (`prop &&`), since string props can have other truthy values (e.g., "false").
       const [singleKey, singleVariantStyles] = Object.entries(variants)[0]!;
-      if (singleKey === "true") {
+      if (singleKey === "true" && booleanOnlyProps.has(propName)) {
         staticBooleanVariants.push({
           propName,
           styleKey: `${decl.styleKey}${toSuffixFromProp(propName)}`,
@@ -665,9 +722,11 @@ function inlineResolvedBaseComponent(args: {
     }
 
     if (hasLocalCallsites) {
-      // Only drop props that are actually passed at local call sites (excluding baked props,
-      // which have been stripped from call sites entirely). Props not present at any call site
-      // will never appear in `props` at runtime, so there is nothing to filter from `...rest`.
+      // Drop consumed props that appear at local call sites (excluding baked props) from
+      // `...rest` to prevent forwarding non-DOM props to the intrinsic element. Baked
+      // props are excluded because their JSX attributes have been stripped from all local
+      // call sites and cannot leak to the DOM. (Exported components never reach this path
+      // with baked props because singleton folding is gated on complete callsite visibility.)
       const bakedSet = new Set(bakedInConsumedProps);
       const existing = new Set(decl.shouldForwardProp?.dropProps ?? []);
       for (const prop of consumedProps) {
