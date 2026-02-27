@@ -1,1 +1,0 @@
-import{j as r}from"./index-f5OMHEzt.js";function c(t){const{children:n,align:i,as:s,column:x,direction:a,gap:e,...o}=t;return r.jsx("div",{...o,className:"x78zum5 xdt5ytf xou54vl xfawy5m xwtm24k",children:n})}export{c as Container};
