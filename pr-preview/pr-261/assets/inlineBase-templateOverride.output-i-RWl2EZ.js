@@ -1,1 +1,0 @@
-import{j as r}from"./index-BpFxlrxA.js";function e(){return r.jsxs("div",{className:"xrvj5dj xdt5ytf x1o61qjw x167g77z",children:[r.jsx("div",{children:"Cell 1"}),r.jsx("div",{children:"Cell 2"})]})}export{e as App};
