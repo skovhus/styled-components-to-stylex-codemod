@@ -183,19 +183,16 @@ export function normalizeStylisAstToIR(
       // while `value` only has the literal text with form-feed separators (e.g., "&\f:hover").
       // When stripping form-feeds loses pseudo-element context (e.g., "&\f:hover" → "&:hover"
       // when it should be "&::-webkit-slider-thumb:hover"), use `props` to recover it.
+      // Handle multiple branches (e.g., ["::-webkit-slider-thumb:hover", "::-webkit-slider-thumb:focus"]).
       const propsArr = Array.isArray(node.props) ? node.props : null;
       const selector = (() => {
         if (!stripFormFeedInSelectors || !selectorValue.includes("\f") || !propsArr?.length) {
           return selectorRaw;
         }
-        // Only use props when form-feed stripping loses pseudo-element context
-        const firstProp = propsArr[0];
-        if (
-          typeof firstProp === "string" &&
-          firstProp.includes("::") &&
-          !selectorRaw.includes("::")
-        ) {
-          return `&${firstProp}`;
+        const stringProps = propsArr.filter((p): p is string => typeof p === "string");
+        const hasPseudoElement = stringProps.some((p) => p.includes("::"));
+        if (hasPseudoElement && !selectorRaw.includes("::")) {
+          return stringProps.map((p) => `&${p}`).join(",");
         }
         return selectorRaw;
       })();
