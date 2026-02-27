@@ -29,10 +29,15 @@ export function lowerRules(ctx: TransformContext): {
   // Pre-scan all declarations for inline @keyframes definitions.
   // These must be registered before rule processing so animation properties
   // can reference them.
+  const reservedNames = new Set(state.styledDecls.map((d) => d.localName));
   for (const decl of state.styledDecls) {
     const inlineKfs = extractInlineKeyframes(decl.rules);
     for (const [cssName, frames] of inlineKfs) {
-      const jsName = cssKeyframeNameToIdentifier(cssName);
+      let jsName = cssKeyframeNameToIdentifier(cssName);
+      while (reservedNames.has(jsName)) {
+        jsName = `${jsName}Animation`;
+      }
+      reservedNames.add(jsName);
       state.keyframesNames.add(cssName);
       if (!ctx.inlineKeyframes) {
         ctx.inlineKeyframes = new Map();
@@ -44,6 +49,7 @@ export function lowerRules(ctx: TransformContext): {
       ctx.inlineKeyframeNameMap.set(cssName, jsName);
     }
   }
+  state.inlineKeyframeNameMap = ctx.inlineKeyframeNameMap;
 
   for (const decl of state.styledDecls) {
     if (state.bail) {

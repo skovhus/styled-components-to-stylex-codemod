@@ -62,7 +62,8 @@ export function processRuleDeclarations(args: RuleDeclarationContext): void {
     ) {
       const rawName = d.valueRaw.trim();
       if (state.keyframesNames.has(rawName)) {
-        const jsName = cssKeyframeNameToIdentifier(rawName);
+        const jsName =
+          state.inlineKeyframeNameMap?.get(rawName) ?? cssKeyframeNameToIdentifier(rawName);
         const commentSource = {
           leading: (d as any).leadingComment,
           trailingLine: (d as any).trailingLineComment,
@@ -76,7 +77,15 @@ export function processRuleDeclarations(args: RuleDeclarationContext): void {
     // Expand to longhand properties with an identifier reference for the name.
     if (d.property === "animation" && d.value.kind === "static" && state.keyframesNames.size > 0) {
       const expanded: Record<string, unknown> = {};
-      if (expandStaticAnimationShorthand(d.valueRaw, state.keyframesNames, state.j, expanded)) {
+      if (
+        expandStaticAnimationShorthand(
+          d.valueRaw,
+          state.keyframesNames,
+          state.j,
+          expanded,
+          state.inlineKeyframeNameMap,
+        )
+      ) {
         const commentSource = {
           leading: (d as any).leadingComment,
           trailingLine: (d as any).trailingLineComment,
