@@ -248,9 +248,7 @@ function buildInlineResolverVariantDimensions(args: {
     if (!siteResult || !isValidBaseResolutionResult(siteResult)) {
       return { kind: "bail" };
     }
-    if (siteResult.tagName !== baseResult.tagName) {
-      return { kind: "bail" };
-    }
+    const changedProps = getChangedConsumedProps(baseStaticProps, siteProps, consumedProps);
 
     const siteMixins = siteResult.mixins ?? [];
     const siteMixinKeys = new Set(siteMixins.map(toMixinKey));
@@ -270,7 +268,17 @@ function buildInlineResolverVariantDimensions(args: {
     if (sxDiff === "bail") {
       return { kind: "bail" };
     }
-    const changedProps = getChangedConsumedProps(baseStaticProps, siteProps, consumedProps);
+
+    if (siteResult.tagName !== baseResult.tagName) {
+      // `as` may switch the rendered element tag without changing styles.
+      // This remains safe only when the tag switch is driven exclusively by `as`
+      // and does not introduce style or mixin deltas.
+      const isAsOnlyTagSwitch = changedProps.length === 1 && changedProps[0] === "as";
+      if (!isAsOnlyTagSwitch || Object.keys(sxDiff).length > 0) {
+        return { kind: "bail" };
+      }
+    }
+
     resolvedByPropsKey.set(propsKey, {
       siteProps,
       sxDiff,
@@ -509,6 +517,9 @@ function inlineResolvedBaseComponent(args: {
     if (hasLocalCallsites) {
       const existing = new Set(decl.shouldForwardProp?.dropProps ?? []);
       for (const prop of consumedProps) {
+        if (prop === "as") {
+          continue;
+        }
         existing.add(prop);
       }
       decl.shouldForwardProp = {

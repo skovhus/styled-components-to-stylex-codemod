@@ -3305,18 +3305,20 @@ export function App() {
     expect(code).not.toContain("containerGapVariants");
   });
 
-  it("should skip base inlining when JSX `as` changes the resolved tag", () => {
+  it("should inline base styles for JSX `as` tag switches without reintroducing the base dependency", () => {
     const source = `
 import styled from "styled-components";
 import { Flex } from "./lib/inline-base-flex";
 
-const Container = styled(Flex)\`
+const Container = styled(Flex).attrs({
+  column: true,
+})\`
   padding: 4px;
 \`;
 
 export function App() {
   return (
-    <Container as="span" gap={8}>
+    <Container as="span">
       As span
     </Container>
   );
@@ -3331,8 +3333,9 @@ export function App() {
 
     expect(result.code).not.toBeNull();
     const code = result.code ?? "";
-    expect(code).toContain('<Container as="span" gap={8}>');
-    expect(code).toContain("as: Component = Flex");
+    expect(code).toContain('<Container as="span">');
+    expect(code).not.toContain('from "./lib/inline-base-flex"');
+    expect(code).toContain('as: Component = "div"');
     expect(code).not.toContain("containerGapVariants");
   });
 
