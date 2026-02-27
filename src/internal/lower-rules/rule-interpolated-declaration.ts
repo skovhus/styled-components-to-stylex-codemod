@@ -657,15 +657,7 @@ export function handleInterpolatedDeclaration(args: InterpolatedDeclarationConte
 
     // Handle local helper function calls that return CSS strings.
     // Pattern: ${(props) => localFn(props.size)} where localFn returns multi-property CSS.
-    if (
-      tryHandleLocalHelperCall({
-        ctx,
-        d,
-        expr,
-        slotId,
-        applyResolvedPropValue,
-      })
-    ) {
+    if (tryHandleLocalHelperCall({ ctx, d, expr })) {
       continue;
     }
 
@@ -2083,8 +2075,6 @@ function tryHandleLocalHelperCall(args: {
   ctx: InterpolatedDeclarationContext["ctx"];
   d: CssDeclarationIR;
   expr: unknown;
-  slotId: number;
-  applyResolvedPropValue: InterpolatedDeclarationContext["applyResolvedPropValue"];
 }): boolean {
   const { ctx, d, expr } = args;
   const { state, decl, styleFnDecls, styleFnFromProps } = ctx;

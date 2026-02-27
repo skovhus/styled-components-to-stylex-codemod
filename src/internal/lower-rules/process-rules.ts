@@ -866,21 +866,12 @@ export function processDeclRules(ctx: DeclProcessingState): void {
         nestedSelectors[pseudoElement] ??= {};
         const peTarget = nestedSelectors[pseudoElement]!;
         const existingVal = peTarget[prop];
-        if (
-          existingVal !== undefined &&
-          (typeof existingVal !== "object" || existingVal === null)
-        ) {
-          const pseudoMap: Record<string, unknown> = { default: existingVal };
-          for (const ps of pseudos) {
-            pseudoMap[ps] = value;
-          }
-          peTarget[prop] = pseudoMap;
-        } else if (existingVal !== undefined && typeof existingVal === "object") {
+        if (typeof existingVal === "object" && existingVal !== null) {
           for (const ps of pseudos) {
             (existingVal as Record<string, unknown>)[ps] = value;
           }
         } else {
-          const pseudoMap: Record<string, unknown> = { default: null };
+          const pseudoMap: Record<string, unknown> = { default: existingVal ?? null };
           for (const ps of pseudos) {
             pseudoMap[ps] = value;
           }
