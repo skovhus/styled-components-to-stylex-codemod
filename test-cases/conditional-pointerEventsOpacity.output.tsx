@@ -9,14 +9,14 @@ type ContainerProps = Omit<React.ComponentPropsWithRef<typeof Flex>, "className"
 };
 
 function Container(props: ContainerProps) {
-  const { children, $open, $duration, $delay, ...rest } = props;
+  const { children, $duration, $delay, $open, ...rest } = props;
 
   return (
     <Flex
       {...rest}
       {...stylex.props(
         styles.container,
-        styles.containerTransition($duration),
+        styles.containerTransition(props.$duration),
         $open
           ? styles.containerOpen({
               $delay,
@@ -47,8 +47,8 @@ const styles = stylex.create({
     pointerEvents: "none",
   },
   containerOpen: (props) => ({
-    opacity: 1,
     pointerEvents: "inherit",
+    opacity: 1,
     transitionDelay: `${props.$delay}ms`,
   }),
   containerTransition: (transition: number) => ({
