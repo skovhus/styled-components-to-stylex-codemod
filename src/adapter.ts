@@ -226,6 +226,51 @@ export type ImportSource =
 export type ImportSpec = { from: ImportSource; names: Array<{ imported: string; local?: string }> };
 
 // ────────────────────────────────────────────────────────────────────────────
+// Base Component Resolution
+// ────────────────────────────────────────────────────────────────────────────
+
+export type ResolveBaseComponentStaticValue = string | number | boolean;
+
+export interface ResolveBaseComponentContext {
+  /**
+   * Import source for the wrapped base component.
+   * - package import: "@linear/orbiter/components/Flex"
+   * - relative import: resolved absolute path
+   */
+  importSource: string;
+  /**
+   * Imported binding name for the wrapped base component.
+   * Example: `import { Flex as OrbiterFlex } ...` -> importedName: "Flex"
+   */
+  importedName: string;
+  /**
+   * Static props from `.attrs({...})` and/or JSX call sites.
+   * Includes only literal values that can be resolved at codemod time.
+   */
+  staticProps: Record<string, ResolveBaseComponentStaticValue>;
+}
+
+export interface ResolveBaseComponentMixinRef {
+  /** Import source for the mixin namespace/object (module specifier or absolute path) */
+  importSource: string;
+  /** Imported binding name for the mixin namespace/object (e.g., "mixins") */
+  importName: string;
+  /** Property key on the imported namespace/object (e.g., "flex") */
+  styleKey: string;
+}
+
+export interface ResolveBaseComponentResult {
+  /** Intrinsic element to render after inlining (e.g., "div", "section") */
+  tagName: string;
+  /** Props consumed by the resolver and stripped from DOM forwarding */
+  consumedProps: string[];
+  /** Base StyleX declarations merged into stylex.create() (camelCase, no shorthands) */
+  sx?: Record<string, string>;
+  /** External StyleX mixin references included in stylex.props(...) */
+  mixins?: ResolveBaseComponentMixinRef[];
+}
+
+// ────────────────────────────────────────────────────────────────────────────
 // Selector Interpolation Resolution
 // ────────────────────────────────────────────────────────────────────────────
 
@@ -426,6 +471,17 @@ export interface Adapter {
   resolveSelector: (context: SelectorResolveContext) => SelectorResolveResult | undefined;
 
   /**
+   * Optional resolver for inlining `styled(ImportedBase)` components.
+   *
+   * Return:
+   * - `{ tagName, consumedProps, sx?, mixins? }` to inline the base component
+   * - `undefined` to keep normal `styled(Component)` behavior
+   */
+  resolveBaseComponent?: (
+    context: ResolveBaseComponentContext,
+  ) => ResolveBaseComponentResult | undefined;
+
+  /**
    * Called for exported styled components to determine their external interface.
    *
    * Return:
@@ -478,6 +534,7 @@ export interface AdapterInput {
   resolveValue: Adapter["resolveValue"];
   resolveCall: Adapter["resolveCall"];
   resolveSelector: Adapter["resolveSelector"];
+  resolveBaseComponent?: Adapter["resolveBaseComponent"];
 
   /**
    * Called for exported styled components to determine their external interface.

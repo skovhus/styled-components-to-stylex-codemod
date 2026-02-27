@@ -80,6 +80,15 @@ export function rewriteJsxStep(ctx: TransformContext): StepResult {
         const opening = p.node.openingElement;
         const closing = p.node.closingElement;
         let finalTag = decl.base.kind === "intrinsic" ? decl.base.tagName : decl.base.ident;
+        const inlineVariantDimensions = decl.inlinedBaseComponent?.hasInlineJsxVariants
+          ? (decl.variantDimensions ?? [])
+          : [];
+        const inlineVariantByProp = new Map(
+          inlineVariantDimensions.map((dimension) => [dimension.propName, dimension]),
+        );
+        const inlineVariantProps = new Set(
+          inlineVariantDimensions.map((dimension) => dimension.propName),
+        );
 
         // Handle `as="tag"` (styled-components polymorphism) by rewriting the element.
         // `forwardedAs` does NOT switch the outer rendered element; it maps to an `as`
@@ -139,6 +148,9 @@ export function rewriteJsxStep(ctx: TransformContext): StepResult {
           if (decl.shouldForwardProp) {
             const n = attr.name.name;
             if (decl.shouldForwardProp.dropProps.includes(n)) {
+              if (inlineVariantProps.has(n)) {
+                return true;
+              }
               return false;
             }
             if (
@@ -414,6 +426,21 @@ export function rewriteJsxStep(ctx: TransformContext): StepResult {
             return;
           }
 
+          const inlineVariantDimension = inlineVariantByProp.get(n);
+          if (inlineVariantDimension) {
+            const variantLookup = buildInlineVariantLookupFromAttr(
+              j,
+              inlineVariantDimension.variantObjectName,
+              attr,
+            );
+            if (!variantLookup) {
+              output.push(attr);
+              return;
+            }
+            styleArgs.push(variantLookup);
+            return;
+          }
+
           if (!variantProps.has(n)) {
             // Strip transient props (starting with $) only for intrinsic elements.
             // For styled(Component), transient props should still reach the wrapped component
@@ -495,4 +522,65 @@ export function rewriteJsxStep(ctx: TransformContext): StepResult {
   }
 
   return CONTINUE;
+}
+
+function buildInlineVariantLookupFromAttr(
+  j: TransformContext["j"]["jscodeshift"],
+  variantObjectName: string,
+  attr: any,
+): ExpressionKind | undefined {
+  const value = readStaticJsxAttrValue(attr);
+  if (value === undefined) {
+    return undefined;
+  }
+  const variantKey = String(value);
+  return j.memberExpression(
+    j.identifier(variantObjectName),
+    j.literal(variantKey),
+    true /* computed */,
+  );
+}
+
+function readStaticJsxAttrValue(attr: any): string | number | boolean | undefined {
+  if (!attr || attr.type !== "JSXAttribute") {
+    return undefined;
+  }
+  if (attr.value == null) {
+    // <Comp prop />
+    return true;
+  }
+  const valueNode = attr.value;
+  if (valueNode.type === "StringLiteral") {
+    return valueNode.value;
+  }
+  if (
+    valueNode.type === "Literal" &&
+    (typeof valueNode.value === "string" ||
+      typeof valueNode.value === "number" ||
+      typeof valueNode.value === "boolean")
+  ) {
+    return valueNode.value;
+  }
+  if (valueNode.type === "JSXExpressionContainer") {
+    const expr = valueNode.expression;
+    if (!expr) {
+      return undefined;
+    }
+    if (
+      expr.type === "StringLiteral" ||
+      expr.type === "NumericLiteral" ||
+      expr.type === "BooleanLiteral"
+    ) {
+      return expr.value;
+    }
+    if (
+      expr.type === "Literal" &&
+      (typeof expr.value === "string" ||
+        typeof expr.value === "number" ||
+        typeof expr.value === "boolean")
+    ) {
+      return expr.value;
+    }
+  }
+  return undefined;
 }

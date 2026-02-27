@@ -3,7 +3,11 @@
  * Core concepts: step results, styled declarations, and options.
  */
 import type { ASTNode, Comment, JSCodeshift, Options } from "jscodeshift";
-import type { Adapter } from "../adapter.js";
+import type {
+  Adapter,
+  ResolveBaseComponentResult,
+  ResolveBaseComponentStaticValue,
+} from "../adapter.js";
 import type { CssRuleIR } from "./css-ir.js";
 import type { WarningLog } from "./logger.js";
 import type { TransformContext } from "./transform-context.js";
@@ -242,6 +246,21 @@ export type StyledDecl = {
    */
   supportsAsProp?: boolean;
   /**
+   * Metadata for declarations whose imported base component was resolved via
+   * `adapter.resolveBaseComponent(...)` and inlined to an intrinsic element.
+   */
+  inlinedBaseComponent?: {
+    importSource: string;
+    importedName: string;
+    baseResult: ResolveBaseComponentResult;
+    baseStaticProps: Record<string, ResolveBaseComponentStaticValue>;
+    /**
+     * Static per-callsite variant dimensions generated from resolver results.
+     * When true, non-wrapper JSX rewriting can emit direct variant lookups.
+     */
+    hasInlineJsxVariants?: boolean;
+  };
+  /**
    * True when the styled component identifier is used as a value (not only rendered in JSX),
    * e.g. passed as a prop: `<VirtualList outerElementType={StyledDiv} />`.
    *
@@ -282,6 +301,13 @@ export type StyledDecl = {
   withConfig?: { componentId?: string };
   attrsInfo?: {
     staticAttrs: Record<string, unknown>;
+    /** Source kind for `.attrs(...)` argument. Used by base-component resolution bails. */
+    sourceKind?: "object" | "function" | "unknown";
+    /**
+     * True when `.attrs(...)` contains values that are not static literals or
+     * recognized attrs patterns. Used to avoid unsafe base-component inlining.
+     */
+    hasUnsupportedValues?: boolean;
     /** Component identifier from `as: ComponentRef` in `.attrs()`, overrides the rendered tag. */
     attrsAsTag?: string;
     /**

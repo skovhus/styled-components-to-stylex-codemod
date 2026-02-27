@@ -101,7 +101,9 @@ export function analyzeAfterEmitStep(ctx: TransformContext): StepResult {
     }
     // `withConfig({ shouldForwardProp })` cases need wrappers so we can consume
     // styling props without forwarding them to the DOM.
-    if (decl.shouldForwardProp) {
+    const resolverOnlyShouldForwardProp =
+      !!decl.inlinedBaseComponent && !decl.shouldForwardPropFromWithConfig;
+    if (decl.shouldForwardProp && !resolverOnlyShouldForwardProp) {
       decl.needsWrapperComponent = true;
     }
     if (decl.base.kind === "component") {
@@ -173,8 +175,12 @@ export function analyzeAfterEmitStep(ctx: TransformContext): StepResult {
     if (hasAttrsAsOverride(d.attrsInfo)) {
       return true;
     }
-    // shouldForwardProp filters props, so it must be preserved
-    if (d.shouldForwardProp) {
+    // shouldForwardProp from withConfig() filters props at wrapper boundaries and
+    // must be preserved. Resolver-only dropProps for inlined bases are handled
+    // directly in JSX rewrite, so they do not block flattening.
+    const resolverOnlyShouldForwardProp =
+      !!d.inlinedBaseComponent && !d.shouldForwardPropFromWithConfig;
+    if (d.shouldForwardProp && !resolverOnlyShouldForwardProp) {
       return true;
     }
     // Polymorphic intrinsic wrappers render a dynamic element type via the `as` prop.
