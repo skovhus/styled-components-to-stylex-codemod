@@ -72,7 +72,7 @@ export const fixtureAdapter = defineAdapter({
 
   resolveBaseComponent(ctx) {
     if (
-      !isInlineBaseFlexSource(ctx.importSource) ||
+      ctx.importSource !== INLINE_BASE_FLEX_IMPORT_SOURCE ||
       ctx.importedName !== INLINE_BASE_FLEX_IMPORTED_NAME
     ) {
       return undefined;
@@ -559,6 +559,7 @@ export const customAdapter = defineAdapter({
   resolveSelector: customResolveSelector,
 });
 
+const INLINE_BASE_FLEX_IMPORT_SOURCE = "@linear/orbiter/components/Flex";
 const INLINE_BASE_FLEX_IMPORTED_NAME = "Flex";
 const INLINE_BASE_FLEX_CONSUMED_PROPS = [
   "align",
@@ -599,10 +600,4 @@ function resolveInlineBaseFlexSx(
   }
 
   return sx;
-}
-
-function isInlineBaseFlexSource(importSource: string): boolean {
-  return (
-    importSource.includes("lib/inline-base-flex") || importSource.includes("lib\\inline-base-flex")
-  );
 }

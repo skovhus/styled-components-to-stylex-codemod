@@ -1,6 +1,6 @@
 // Uses resolver-provided mixin references for base styles
 import styled from "styled-components";
-import { Flex } from "./lib/inline-base-flex";
+import { Flex } from "@linear/orbiter/components/Flex";
 
 const Container = styled(Flex).attrs({
   inlineBaseMode: "mixin",

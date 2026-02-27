@@ -1,6 +1,6 @@
 // Builds JSX-site variants from static consumed props
 import styled from "styled-components";
-import { Flex } from "./lib/inline-base-flex";
+import { Flex } from "@linear/orbiter/components/Flex";
 
 const Container = styled(Flex).attrs({
   column: true,

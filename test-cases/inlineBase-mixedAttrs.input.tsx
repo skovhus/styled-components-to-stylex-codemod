@@ -1,6 +1,6 @@
 // Keeps non-consumed attrs while inlining consumed Flex attrs
 import styled from "styled-components";
-import { Flex } from "./lib/inline-base-flex";
+import { Flex } from "@linear/orbiter/components/Flex";
 
 const Container = styled(Flex).attrs({
   column: true,

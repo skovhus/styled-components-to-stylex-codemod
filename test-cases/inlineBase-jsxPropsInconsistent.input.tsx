@@ -1,6 +1,6 @@
 // Creates per-value variants for differing JSX consumed prop values
 import styled from "styled-components";
-import { Flex } from "./lib/inline-base-flex";
+import { Flex } from "@linear/orbiter/components/Flex";
 
 const Container = styled(Flex)`
   padding: 8px;
