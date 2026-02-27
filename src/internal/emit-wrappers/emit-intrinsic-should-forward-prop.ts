@@ -92,10 +92,6 @@ export function emitShouldForwardPropWrappers(ctx: EmitIntrinsicContext): void {
         extraProps.add(p);
       }
     }
-    // Baked-in props: folded into base style, destructured and discarded, but still in the type.
-    for (const p of d.shouldForwardProp?.bakedInProps ?? []) {
-      extraProps.add(p);
-    }
     for (const when of Object.keys(d.variantStyleKeys ?? {})) {
       const { props } = emitter.collectConditionProps({ when });
       for (const p of props) {

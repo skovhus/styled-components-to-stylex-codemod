@@ -39,9 +39,20 @@ type InlineResolverVariantsOutcome =
        */
       foldedBaseSx: Record<string, string>;
       /**
-       * Consumed props that were folded into base (accepted in type, not destructured).
+       * Consumed props that were folded into base. Their JSX attributes are stripped
+       * from all call sites — they no longer appear in the component's props.
        */
       bakedInConsumedProps: string[];
+      /**
+       * Single-key boolean variant styles for partial call sites (prop not passed at
+       * every call site). These become entries in the main `styles` object with a
+       * boolean condition guard, rather than a separate lookup object.
+       */
+      staticBooleanVariants: Array<{
+        propName: string;
+        styleKey: string;
+        styles: Record<string, unknown>;
+      }>;
     }
   | { kind: "bail" };
 
@@ -112,6 +123,7 @@ function applyBaseComponentResolution(ctx: TransformContext, styledDecls: Styled
       usedConsumedPropsAtCallSites: variantOutcome.usedConsumedPropsAtCallSites,
       foldedBaseSx: variantOutcome.foldedBaseSx,
       bakedInConsumedProps: variantOutcome.bakedInConsumedProps,
+      staticBooleanVariants: variantOutcome.staticBooleanVariants,
     });
   }
 }
@@ -212,6 +224,7 @@ function buildInlineResolverVariantDimensions(args: {
       usedConsumedPropsAtCallSites: new Set(),
       foldedBaseSx: {},
       bakedInConsumedProps: [],
+      staticBooleanVariants: [],
     };
   }
 
@@ -245,6 +258,7 @@ function buildInlineResolverVariantDimensions(args: {
         usedConsumedPropsAtCallSites,
         foldedBaseSx: {},
         bakedInConsumedProps: [],
+        staticBooleanVariants: [],
       };
     }
     return { kind: "bail" };
@@ -259,6 +273,7 @@ function buildInlineResolverVariantDimensions(args: {
       usedConsumedPropsAtCallSites,
       foldedBaseSx: {},
       bakedInConsumedProps: [],
+      staticBooleanVariants: [],
     };
   }
 
@@ -356,6 +371,11 @@ function buildInlineResolverVariantDimensions(args: {
   const dimensions: VariantDimension[] = [];
   const foldedBaseSx: Record<string, string> = {};
   const bakedInConsumedProps: string[] = [];
+  const staticBooleanVariants: Array<{
+    propName: string;
+    styleKey: string;
+    styles: Record<string, unknown>;
+  }> = [];
 
   const totalCallSites = usageResult.propsByUsage.length;
 
@@ -371,25 +391,42 @@ function buildInlineResolverVariantDimensions(args: {
       continue;
     }
 
-    // Fold into base when there is exactly one unique value AND every call site
-    // passes this prop (no call site relies on the base/default behaviour).
-    // This avoids generating a single-value variant lookup like `variantsObj[prop]`.
-    // Guard: skip folding when the decl has template expressions — they may reference
-    // this prop at runtime (e.g., `${(props) => props.gap && "margin-top: 2px;"}`),
-    // in which case the prop needs to remain a live variant rather than a baked constant.
     const variantKeys = Object.keys(variants);
-    const hasTemplateExpressions = (decl.templateExpressions?.length ?? 0) > 0;
-    if (variantKeys.length === 1 && !hasTemplateExpressions) {
+    // Only block singleton folding when template expressions contain prop-referencing
+    // functions (ArrowFunctionExpression / FunctionExpression). Static references like
+    // `${SomeComponent.HEIGHT}` (MemberExpression) are constants that don't interact
+    // with consumed props and should NOT prevent folding.
+    const hasPropReferencingTemplateExpressions = (decl.templateExpressions ?? []).some((expr) => {
+      const type = (expr as { type?: string })?.type;
+      return type === "ArrowFunctionExpression" || type === "FunctionExpression";
+    });
+
+    if (variantKeys.length === 1 && !hasPropReferencingTemplateExpressions) {
       const callSitesWithProp = usageResult.propsByUsage.filter(
         (siteProps) => propName in siteProps,
       ).length;
+
       if (callSitesWithProp === totalCallSites) {
         // Every call site uses the same constant value — bake it into the base style.
+        // The prop attribute is stripped from all call sites by inlineResolvedBaseComponent.
         const [, singleVariantStyles] = Object.entries(variants)[0]!;
         for (const [cssKey, cssVal] of Object.entries(singleVariantStyles)) {
           foldedBaseSx[cssKey] = String(cssVal);
         }
         bakedInConsumedProps.push(propName);
+        continue;
+      }
+
+      // Single variant key, partial call sites: emit as a boolean conditional style
+      // in the main `styles` object rather than a separate lookup object.
+      // Only the boolean `true` key maps cleanly to a truthy condition (`prop &&`).
+      const [singleKey, singleVariantStyles] = Object.entries(variants)[0]!;
+      if (singleKey === "true") {
+        staticBooleanVariants.push({
+          propName,
+          styleKey: `${decl.styleKey}${toSuffixFromProp(propName)}`,
+          styles: singleVariantStyles,
+        });
         continue;
       }
     }
@@ -413,7 +450,43 @@ function buildInlineResolverVariantDimensions(args: {
     usedConsumedPropsAtCallSites,
     foldedBaseSx,
     bakedInConsumedProps,
+    staticBooleanVariants,
   };
+}
+
+/**
+ * Removes specific JSX prop attributes from every call site of a component.
+ * Used when a prop has been folded into the base style (baked in) and no
+ * longer needs to be passed at the call site.
+ */
+function stripBakedPropsFromCallSites(args: {
+  root: any;
+  j: any;
+  localName: string;
+  propsToStrip: Set<string>;
+}): void {
+  const { root, j, localName, propsToStrip } = args;
+  const stripAttr = (attr: any): boolean => {
+    if (!attr || attr.type !== "JSXAttribute") {
+      return true;
+    }
+    if (attr.name?.type !== "JSXIdentifier") {
+      return true;
+    }
+    return !propsToStrip.has(attr.name.name);
+  };
+  root
+    .find(j.JSXElement, {
+      openingElement: { name: { type: "JSXIdentifier", name: localName } },
+    } as any)
+    .forEach((path: any) => {
+      path.node.openingElement.attributes = path.node.openingElement.attributes.filter(stripAttr);
+    });
+  root
+    .find(j.JSXSelfClosingElement, { name: { type: "JSXIdentifier", name: localName } } as any)
+    .forEach((path: any) => {
+      path.node.attributes = path.node.attributes.filter(stripAttr);
+    });
 }
 
 function collectStaticConsumedJsxProps(args: {
@@ -554,6 +627,11 @@ function inlineResolvedBaseComponent(args: {
   usedConsumedPropsAtCallSites: Set<string>;
   foldedBaseSx: Record<string, string>;
   bakedInConsumedProps: string[];
+  staticBooleanVariants: Array<{
+    propName: string;
+    styleKey: string;
+    styles: Record<string, unknown>;
+  }>;
 }): void {
   const {
     ctx,
@@ -568,6 +646,7 @@ function inlineResolvedBaseComponent(args: {
     usedConsumedPropsAtCallSites,
     foldedBaseSx,
     bakedInConsumedProps,
+    staticBooleanVariants,
   } = args;
 
   // Merge folded styles from singleton variants into the base sx
@@ -606,33 +685,35 @@ function inlineResolvedBaseComponent(args: {
         delete decl.attrsInfo.staticAttrs[prop];
       }
     }
+
+    // Strip baked props from call sites: since every call site passes the same constant
+    // value, the prop is redundant and can be removed from JSX entirely.
+    if (bakedInConsumedProps.length > 0) {
+      stripBakedPropsFromCallSites({
+        root: ctx.root,
+        j: ctx.j,
+        localName: decl.localName,
+        propsToStrip: new Set(bakedInConsumedProps),
+      });
+    }
+
     if (hasLocalCallsites) {
-      // Only drop props that are actually passed at local call sites. Props not present at
-      // any call site will never appear in `props` at runtime (TypeScript prevents them once
-      // the component no longer extends Flex), so there is nothing to filter from `...rest`.
-      // Dropping all consumedProps unconditionally causes TS2339 destructuring errors when
-      // the component has a narrow explicit props type that doesn't include flex props.
+      // Only drop props that are actually passed at local call sites (excluding baked props,
+      // which have been stripped from call sites entirely). Props not present at any call site
+      // will never appear in `props` at runtime, so there is nothing to filter from `...rest`.
+      const bakedSet = new Set(bakedInConsumedProps);
       const existing = new Set(decl.shouldForwardProp?.dropProps ?? []);
       for (const prop of consumedProps) {
-        // All consumed props used at call sites must be destructured from props to prevent
-        // them from being spread onto the DOM element via ...rest. This includes baked-in
-        // props (whose value is folded into the base style and not used at runtime).
-        if (usedConsumedPropsAtCallSites.has(prop)) {
+        if (usedConsumedPropsAtCallSites.has(prop) && !bakedSet.has(prop)) {
           existing.add(prop);
         }
       }
-      // Collect baked-in consumed props: appear in the type but are NOT destructured.
-      const existingBaked = new Set(decl.shouldForwardProp?.bakedInProps ?? []);
-      for (const prop of bakedInConsumedProps) {
-        existingBaked.add(prop);
-      }
-      if (existing.size > 0 || existingBaked.size > 0) {
+      if (existing.size > 0) {
         decl.shouldForwardProp = {
           ...(decl.shouldForwardProp?.dropPrefix
             ? { dropPrefix: decl.shouldForwardProp.dropPrefix }
             : {}),
           dropProps: [...existing],
-          ...(existingBaked.size > 0 ? { bakedInProps: [...existingBaked] } : {}),
         };
       }
     }
@@ -641,6 +722,9 @@ function inlineResolvedBaseComponent(args: {
   decl.base = { kind: "intrinsic", tagName: baseResult.tagName };
   if (variantDimensions.length > 0) {
     decl.variantDimensions = [...(decl.variantDimensions ?? []), ...variantDimensions];
+  }
+  if (staticBooleanVariants.length > 0) {
+    decl.staticBooleanVariants = [...(decl.staticBooleanVariants ?? []), ...staticBooleanVariants];
   }
   decl.inlinedBaseComponent = {
     importSource,

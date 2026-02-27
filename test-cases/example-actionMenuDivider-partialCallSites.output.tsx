@@ -1,5 +1,5 @@
 // ActionMenuDivider: noMinWidth is NOT passed at every call site, so it cannot be folded
-// into the base style and must remain a variant dimension.
+// into the base style. It becomes a boolean conditional style in the main styles object.
 import * as React from "react";
 import * as stylex from "@stylexjs/stylex";
 import { mergedSx } from "./lib/mergedSx";
@@ -19,10 +19,7 @@ function TextDividerContainer(props: TextDividerContainerProps) {
       {...mergedSx(
         [
           styles.textDividerContainer,
-          noMinWidth != null &&
-            textDividerContainerNoMinWidthVariants[
-              noMinWidth as keyof typeof textDividerContainerNoMinWidthVariants
-            ],
+          noMinWidth ? styles.textDividerContainerNoMinWidth : undefined,
         ],
         className,
         style,
@@ -74,10 +71,7 @@ const styles = stylex.create({
     paddingLeft: "14px",
     alignItems: "center",
   },
-});
-
-const textDividerContainerNoMinWidthVariants = stylex.create({
-  true: {
+  textDividerContainerNoMinWidth: {
     minWidth: "0px",
   },
 });

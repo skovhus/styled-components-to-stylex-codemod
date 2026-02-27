@@ -286,12 +286,6 @@ export type StyledDecl = {
   shouldForwardProp?: {
     dropProps: string[];
     dropPrefix?: string;
-    /**
-     * Consumed props whose single constant value was folded into the base style.
-     * These appear in the component's type (so call sites stay valid) but are not
-     * destructured in the wrapper body (they're baked in, no runtime check needed).
-     */
-    bakedInProps?: string[];
   };
   /**
    * True when `withConfig({ shouldForwardProp })` is present but uses an unsupported pattern
@@ -369,6 +363,18 @@ export type StyledDecl = {
   isExported?: boolean;
   preResolvedFnDecls?: Record<string, unknown>;
   inlineStyleProps?: Array<{ prop: string; expr: ExpressionKind; jsxProp?: string }>;
+  /**
+   * Static conditional style entries from base-component resolution for boolean props
+   * where only some call sites pass the prop. Instead of a separate `stylex.create`
+   * lookup object (VariantDimension), these are injected into `resolvedStyleObjects`
+   * as entries in the main `styles` object, guarded by a boolean condition
+   * (via `variantStyleKeys`). Processed in `analyzeBeforeEmitStep`.
+   */
+  staticBooleanVariants?: Array<{
+    propName: string;
+    styleKey: string;
+    styles: Record<string, unknown>;
+  }>;
   /**
    * Additional style keys (from css`` helper blocks) that should be applied
    * alongside this component's base style.

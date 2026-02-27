@@ -1,5 +1,5 @@
 // ActionMenuDivider: noMinWidth is NOT passed at every call site, so it cannot be folded
-// into the base style and must remain a variant dimension.
+// into the base style. It becomes a boolean conditional style in the main styles object.
 import * as React from "react";
 import styled from "styled-components";
 import { Flex } from "./lib/inline-base-flex";
