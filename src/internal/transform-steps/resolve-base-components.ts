@@ -6,7 +6,7 @@ import { isAbsolute as isAbsolutePath } from "node:path";
 import type { ImportSource, ResolveBaseComponentStaticValue } from "../../adapter.js";
 import type { CssRuleIR } from "../css-ir.js";
 import { CONTINUE, type StepResult } from "../transform-types.js";
-import type { StyledDecl, VariantDimension } from "../transform-types.js";
+import type { StaticBooleanVariant, StyledDecl, VariantDimension } from "../transform-types.js";
 import { toSuffixFromProp } from "../transform/helpers.js";
 import { TransformContext } from "../transform-context.js";
 import { readStaticJsxLiteral } from "./jsx-static-literal.js";
@@ -48,13 +48,25 @@ type InlineResolverVariantsOutcome =
        * every call site). These become entries in the main `styles` object with a
        * boolean condition guard, rather than a separate lookup object.
        */
-      staticBooleanVariants: Array<{
-        propName: string;
-        styleKey: string;
-        styles: Record<string, unknown>;
-      }>;
+      staticBooleanVariants: StaticBooleanVariant[];
     }
   | { kind: "bail" };
+
+/** Constructs an "ok" InlineResolverVariantsOutcome with no variants and empty defaults. */
+function emptyOkVariantOutcome(
+  hasLocalCallsites: boolean,
+  usedConsumedPropsAtCallSites: Set<string>,
+): InlineResolverVariantsOutcome {
+  return {
+    kind: "ok",
+    variantDimensions: [],
+    hasLocalCallsites,
+    usedConsumedPropsAtCallSites,
+    foldedBaseSx: {},
+    bakedInConsumedProps: [],
+    staticBooleanVariants: [],
+  };
+}
 
 function applyBaseComponentResolution(ctx: TransformContext, styledDecls: StyledDecl[]): void {
   const resolveBaseComponent = ctx.resolveBaseComponent;
@@ -217,15 +229,7 @@ function buildInlineResolverVariantDimensions(args: {
   const { ctx, decl, consumedProps, baseStaticProps, baseResult, importSource, importedName } =
     args;
   if (consumedProps.length === 0) {
-    return {
-      kind: "ok",
-      variantDimensions: [],
-      hasLocalCallsites: false,
-      usedConsumedPropsAtCallSites: new Set(),
-      foldedBaseSx: {},
-      bakedInConsumedProps: [],
-      staticBooleanVariants: [],
-    };
+    return emptyOkVariantOutcome(false, new Set());
   }
 
   const usageResult = collectStaticConsumedJsxProps({
@@ -251,30 +255,14 @@ function buildInlineResolverVariantDimensions(args: {
     // If all known resolver-driving values are from static attrs, we can still
     // inline the base declaration and skip per-callsite variant generation.
     if (canInlineWithoutLocalCallsites(consumedProps, baseStaticProps)) {
-      return {
-        kind: "ok",
-        variantDimensions: [],
-        hasLocalCallsites: false,
-        usedConsumedPropsAtCallSites,
-        foldedBaseSx: {},
-        bakedInConsumedProps: [],
-        staticBooleanVariants: [],
-      };
+      return emptyOkVariantOutcome(false, usedConsumedPropsAtCallSites);
     }
     return { kind: "bail" };
   }
 
   const resolveBaseComponent = ctx.resolveBaseComponent;
   if (!resolveBaseComponent) {
-    return {
-      kind: "ok",
-      variantDimensions: [],
-      hasLocalCallsites,
-      usedConsumedPropsAtCallSites,
-      foldedBaseSx: {},
-      bakedInConsumedProps: [],
-      staticBooleanVariants: [],
-    };
+    return emptyOkVariantOutcome(hasLocalCallsites, usedConsumedPropsAtCallSites);
   }
 
   const baseSx = baseResult.sx ?? {};
@@ -294,7 +282,7 @@ function buildInlineResolverVariantDimensions(args: {
       ...baseStaticProps,
       ...siteProps,
     };
-    const propsKey = serializeStaticProps(mergedProps);
+    const propsKey = serializeRecord(mergedProps);
     if (resolvedByPropsKey.has(propsKey)) {
       continue;
     }
@@ -361,7 +349,7 @@ function buildInlineResolverVariantDimensions(args: {
     const variantKey = String(value);
     const byValue = bucketsByProp.get(propName) ?? new Map<string, Record<string, unknown>>();
     const existing = byValue.get(variantKey);
-    if (existing && serializeObject(existing) !== serializeObject(sxDiff)) {
+    if (existing && serializeRecord(existing) !== serializeRecord(sxDiff)) {
       return { kind: "bail" };
     }
     byValue.set(variantKey, sxDiff);
@@ -371,11 +359,7 @@ function buildInlineResolverVariantDimensions(args: {
   const dimensions: VariantDimension[] = [];
   const foldedBaseSx: Record<string, string> = {};
   const bakedInConsumedProps: string[] = [];
-  const staticBooleanVariants: Array<{
-    propName: string;
-    styleKey: string;
-    styles: Record<string, unknown>;
-  }> = [];
+  const staticBooleanVariants: StaticBooleanVariant[] = [];
 
   const totalCallSites = usageResult.propsByUsage.length;
 
@@ -459,13 +443,12 @@ function buildInlineResolverVariantDimensions(args: {
  * Used when a prop has been folded into the base style (baked in) and no
  * longer needs to be passed at the call site.
  */
-function stripBakedPropsFromCallSites(args: {
-  root: any;
-  j: any;
-  localName: string;
-  propsToStrip: Set<string>;
-}): void {
-  const { root, j, localName, propsToStrip } = args;
+function stripBakedPropsFromCallSites(
+  ctx: TransformContext,
+  localName: string,
+  propsToStrip: Set<string>,
+): void {
+  const { root, j } = ctx;
   const stripAttr = (attr: any): boolean => {
     if (!attr || attr.type !== "JSXAttribute") {
       return true;
@@ -595,17 +578,10 @@ function diffSx(
   return out;
 }
 
-function serializeStaticProps(props: Record<string, ResolveBaseComponentStaticValue>): string {
-  const ordered = Object.keys(props)
+function serializeRecord(record: Record<string, unknown>): string {
+  const ordered = Object.keys(record)
     .sort()
-    .map((key) => [key, props[key]]);
-  return JSON.stringify(ordered);
-}
-
-function serializeObject(value: Record<string, unknown>): string {
-  const ordered = Object.keys(value)
-    .sort()
-    .map((key) => [key, value[key]]);
+    .map((key) => [key, record[key]]);
   return JSON.stringify(ordered);
 }
 
@@ -627,11 +603,7 @@ function inlineResolvedBaseComponent(args: {
   usedConsumedPropsAtCallSites: Set<string>;
   foldedBaseSx: Record<string, string>;
   bakedInConsumedProps: string[];
-  staticBooleanVariants: Array<{
-    propName: string;
-    styleKey: string;
-    styles: Record<string, unknown>;
-  }>;
+  staticBooleanVariants: StaticBooleanVariant[];
 }): void {
   const {
     ctx,
@@ -689,12 +661,7 @@ function inlineResolvedBaseComponent(args: {
     // Strip baked props from call sites: since every call site passes the same constant
     // value, the prop is redundant and can be removed from JSX entirely.
     if (bakedInConsumedProps.length > 0) {
-      stripBakedPropsFromCallSites({
-        root: ctx.root,
-        j: ctx.j,
-        localName: decl.localName,
-        propsToStrip: new Set(bakedInConsumedProps),
-      });
+      stripBakedPropsFromCallSites(ctx, decl.localName, new Set(bakedInConsumedProps));
     }
 
     if (hasLocalCallsites) {

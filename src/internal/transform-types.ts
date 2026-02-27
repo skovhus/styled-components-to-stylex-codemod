@@ -141,6 +141,13 @@ export type VariantDimension = {
   needsKeyofCast?: boolean;
 };
 
+/** A single boolean-gated style entry from base-component singleton prop folding. */
+export type StaticBooleanVariant = {
+  propName: string;
+  styleKey: string;
+  styles: Record<string, unknown>;
+};
+
 export type StyledDecl = {
   /**
    * Index of the parent top-level statement (VariableDeclaration) within Program.body at
@@ -370,11 +377,7 @@ export type StyledDecl = {
    * as entries in the main `styles` object, guarded by a boolean condition
    * (via `variantStyleKeys`). Processed in `analyzeBeforeEmitStep`.
    */
-  staticBooleanVariants?: Array<{
-    propName: string;
-    styleKey: string;
-    styles: Record<string, unknown>;
-  }>;
+  staticBooleanVariants?: StaticBooleanVariant[];
   /**
    * Additional style keys (from css`` helper blocks) that should be applied
    * alongside this component's base style.
