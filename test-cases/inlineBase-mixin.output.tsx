@@ -1,8 +1,8 @@
 import * as stylex from "@stylexjs/stylex";
-import { inlineBaseMixins } from "./lib/flex-inline-base.stylex";
+import { mixins } from "./lib/mixins.stylex";
 
 export function App() {
-  return <div {...stylex.props(inlineBaseMixins.flex, styles.container)}>Mixin mode</div>;
+  return <div {...stylex.props(mixins.flex, styles.container)}>Mixin mode</div>;
 }
 
 const styles = stylex.create({

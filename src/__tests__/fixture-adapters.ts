@@ -83,13 +83,15 @@ export const fixtureAdapter = defineAdapter({
     const consumedProps = [...INLINE_BASE_FLEX_CONSUMED_PROPS];
 
     if (ctx.staticProps.direction === "row") {
+      const sxWithoutBaseFlex = stripInlineBaseFlexBaseStyles(sx, ctx.staticProps);
       return {
         tagName,
         consumedProps,
+        ...(Object.keys(sxWithoutBaseFlex).length > 0 ? { sx: sxWithoutBaseFlex } : {}),
         mixins: [
           {
-            importSource: "./lib/flex-inline-base.stylex",
-            importName: "inlineBaseMixins",
+            importSource: "./lib/mixins.stylex",
+            importName: "mixins",
             styleKey: "flex",
           },
         ],
@@ -592,6 +594,18 @@ function resolveInlineBaseFlexSx(
   }
 
   return sx;
+}
+
+function stripInlineBaseFlexBaseStyles(
+  sx: Record<string, string>,
+  staticProps: Record<string, string | number | boolean>,
+): Record<string, string> {
+  const next = { ...sx };
+  delete next.display;
+  if (staticProps.direction === "row" && next.flexDirection === "row") {
+    delete next.flexDirection;
+  }
+  return next;
 }
 
 function isInlineBaseFlexSource(importSource: string): boolean {
