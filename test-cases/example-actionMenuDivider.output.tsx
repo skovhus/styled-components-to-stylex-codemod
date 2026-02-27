@@ -13,13 +13,9 @@ type TextDividerContainerProps = React.PropsWithChildren<{
 }>;
 
 function TextDividerContainer(props: TextDividerContainerProps) {
-  const { className, children, style, ...rest } = props;
+  const { className, children, style, noMinWidth } = props;
 
-  return (
-    <div {...rest} {...mergedSx(styles.textDividerContainer, className, style)}>
-      {children}
-    </div>
-  );
+  return <div {...mergedSx(styles.textDividerContainer, className, style)}>{children}</div>;
 }
 
 type ActionMenuTextDividerProps = {

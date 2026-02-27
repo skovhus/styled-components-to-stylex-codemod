@@ -133,6 +133,12 @@ export type VariantDimension = {
   /** Minimum source order from the original variant entries that were grouped into this dimension.
    * Used to preserve CSS cascade order when interleaving with other variant/styleFn entries. */
   sourceOrder?: number;
+  /**
+   * When true, the emitter wraps the computed index with `as keyof typeof variantsObj`.
+   * Set for dimensions from base-component resolution where the prop type is inferred as `any`
+   * (no explicit styled-component props type), since TypeScript rejects `obj[anyProp]`.
+   */
+  needsKeyofCast?: boolean;
 };
 
 export type StyledDecl = {

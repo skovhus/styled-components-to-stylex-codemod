@@ -209,6 +209,7 @@ function buildInlineResolverVariantDimensions(args: {
       kind: "ok",
       variantDimensions: [],
       hasLocalCallsites: false,
+      usedConsumedPropsAtCallSites: new Set(),
       foldedBaseSx: {},
       bakedInConsumedProps: [],
     };
@@ -255,6 +256,7 @@ function buildInlineResolverVariantDimensions(args: {
       kind: "ok",
       variantDimensions: [],
       hasLocalCallsites,
+      usedConsumedPropsAtCallSites,
       foldedBaseSx: {},
       bakedInConsumedProps: [],
     };
@@ -385,9 +387,7 @@ function buildInlineResolverVariantDimensions(args: {
         // Every call site uses the same constant value — bake it into the base style.
         const [, singleVariantStyles] = Object.entries(variants)[0]!;
         for (const [cssKey, cssVal] of Object.entries(singleVariantStyles)) {
-          if (typeof cssVal === "string") {
-            foldedBaseSx[cssKey] = cssVal;
-          }
+          foldedBaseSx[cssKey] = String(cssVal);
         }
         bakedInConsumedProps.push(propName);
         continue;
@@ -398,6 +398,11 @@ function buildInlineResolverVariantDimensions(args: {
       propName,
       variantObjectName: `${decl.styleKey}${toSuffixFromProp(propName)}Variants`,
       variants,
+      // Base-component-resolved props have no explicit type in the styled declaration, so
+      // the emitter falls back to `any`. We need `as keyof typeof` to satisfy TypeScript,
+      // and `isOptional` to emit the null guard (the prop may not be passed).
+      isOptional: true,
+      needsKeyofCast: true,
     });
   }
 
@@ -607,12 +612,12 @@ function inlineResolvedBaseComponent(args: {
       // the component no longer extends Flex), so there is nothing to filter from `...rest`.
       // Dropping all consumedProps unconditionally causes TS2339 destructuring errors when
       // the component has a narrow explicit props type that doesn't include flex props.
-      const bakedSet = new Set(bakedInConsumedProps);
       const existing = new Set(decl.shouldForwardProp?.dropProps ?? []);
       for (const prop of consumedProps) {
-        // Baked-in props are not destructured at runtime — they're folded into the base style.
-        // They remain in the type (via bakedInProps) so call sites stay valid.
-        if (usedConsumedPropsAtCallSites.has(prop) && !bakedSet.has(prop)) {
+        // All consumed props used at call sites must be destructured from props to prevent
+        // them from being spread onto the DOM element via ...rest. This includes baked-in
+        // props (whose value is folded into the base style and not used at runtime).
+        if (usedConsumedPropsAtCallSites.has(prop)) {
           existing.add(prop);
         }
       }
