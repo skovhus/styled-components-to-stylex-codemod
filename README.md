@@ -120,6 +120,30 @@ const adapter = defineAdapter({
   },
 
   /**
+   * Optional: inline styled(ImportedComponent) into an intrinsic element.
+   * When the base component can be resolved statically, return the target
+   * element, consumed props, and base StyleX declarations. Return undefined
+   * to keep normal styled(Component) behavior.
+   */
+  resolveBaseComponent(ctx) {
+    if (ctx.importSource !== "@company/ui" || ctx.importedName !== "Flex") {
+      return undefined;
+    }
+
+    const sx: Record<string, string> = { display: "flex" };
+    const consumedProps = ["column", "gap", "align"];
+
+    if (ctx.staticProps.column === true) {
+      sx.flexDirection = "column";
+    }
+    if (typeof ctx.staticProps.gap === "number") {
+      sx.gap = `${ctx.staticProps.gap}px`;
+    }
+
+    return { tagName: "div", consumedProps, sx };
+  },
+
+  /**
    * Control which exported components accept external className/style
    * and/or polymorphic `as` prop. Return `{ styles, as }` flags.
    */
@@ -172,6 +196,7 @@ Adapters are the main extension point, see full example above. They let you cont
 - which exported components should support external className/style extension and/or polymorphic `as` prop (`externalInterface`)
 - how className/style merging is handled for components accepting external styling (`styleMerger`)
 - which runtime theme hook import/call to use for emitted wrapper theme conditionals (`themeHook`)
+- how `styled(ImportedComponent)` wrapping an external base component can be inlined into an intrinsic element with static StyleX styles (`resolveBaseComponent`)
 
 #### Cross-file selectors (`consumerPaths`)
 
@@ -223,6 +248,58 @@ Troubleshooting prepass failures with `"auto"`:
 - confirm the selected parser matches your source syntax (`parser: "tsx"`, `parser: "ts"`, etc.)
 - check resolver inputs (import paths, tsconfig path aliases, and related module resolution config)
 - if needed, switch to a manual `externalInterface(ctx)` function to continue migration while you fix prepass inputs
+
+#### Base component resolution (`resolveBaseComponent`)
+
+When your codebase wraps an imported UI component with `styled()`, the default output keeps a runtime wrapper that passes styles through. If the base component's behavior can be expressed as static CSS, `resolveBaseComponent` lets the codemod **inline** it directly into an intrinsic element — removing the runtime dependency entirely.
+
+Given this input:
+
+```tsx
+import styled from "styled-components";
+import { Flex } from "@company/ui";
+
+const Container = styled(Flex).attrs({ column: true, gap: 16 })`
+  padding: 8px;
+  background-color: #f5f5ff;
+`;
+```
+
+With a `resolveBaseComponent` that maps `Flex` props to CSS, the codemod produces:
+
+```tsx
+import * as stylex from "@stylexjs/stylex";
+
+const Container = <div {...stylex.props(styles.container)} />;
+
+const styles = stylex.create({
+  container: {
+    display: "flex",
+    flexDirection: "column",
+    gap: "16px",
+    padding: "8px",
+    backgroundColor: "#f5f5ff",
+  },
+});
+```
+
+The resolver receives `ctx.importSource`, `ctx.importedName`, and `ctx.staticProps` (resolved from `.attrs()` and JSX call sites). Return `{ tagName, consumedProps, sx }` to inline, or `undefined` to keep the default `styled(Component)` behavior.
+
+You can also return `mixins` to reference external StyleX style objects that get included in `stylex.props(...)`:
+
+```ts
+resolveBaseComponent(ctx) {
+  return {
+    tagName: "div",
+    consumedProps: ["column", "gap"],
+    mixins: [{
+      importSource: "./lib/mixins.stylex",
+      importName: "mixins",
+      styleKey: "flex",
+    }],
+  };
+}
+```
 
 #### Dynamic interpolations
 
