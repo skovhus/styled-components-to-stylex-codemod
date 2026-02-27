@@ -277,7 +277,16 @@ export type StyledDecl = {
     /** Source order index for CSS cascade ordering against variant entries. */
     sourceOrder?: number;
   }>;
-  shouldForwardProp?: { dropProps: string[]; dropPrefix?: string };
+  shouldForwardProp?: {
+    dropProps: string[];
+    dropPrefix?: string;
+    /**
+     * Consumed props whose single constant value was folded into the base style.
+     * These appear in the component's type (so call sites stay valid) but are not
+     * destructured in the wrapper body (they're baked in, no runtime check needed).
+     */
+    bakedInProps?: string[];
+  };
   /**
    * True when `withConfig({ shouldForwardProp })` is present but uses an unsupported pattern
    * that we cannot safely transform. When set, the transform should bail to avoid semantic changes.
