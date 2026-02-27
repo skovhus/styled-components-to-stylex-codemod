@@ -396,7 +396,7 @@ export function postProcessTransformedAst(args: {
             const jsxOpening = p.parentPath?.parentPath?.node;
             if (jsxOpening?.type === "JSXOpeningElement" && Array.isArray(jsxOpening.attributes)) {
               jsxOpening.attributes = jsxOpening.attributes.filter(
-                (attr: any) => attr !== parentNode,
+                (attr: unknown) => attr !== parentNode,
               );
               changed = true;
             }
