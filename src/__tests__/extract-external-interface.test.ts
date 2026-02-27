@@ -749,6 +749,10 @@ describe("runPrepass createExternalInterface snapshot on test-cases", () => {
           "as": false,
           "styles": true,
         },
+        "test-cases/lib/flex.ts:Flex": {
+          "as": false,
+          "styles": true,
+        },
         "test-cases/lib/loading.tsx:Loading": {
           "as": false,
           "styles": true,

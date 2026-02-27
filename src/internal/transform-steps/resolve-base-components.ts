@@ -13,7 +13,7 @@ import {
 } from "../transform-types.js";
 import { toStyleKey } from "../transform/helpers.js";
 
-export { resolveBaseComponentsStep, sxToCssRules };
+export { resolveBaseComponentsStep };
 
 type ResolveBaseComponentFn = NonNullable<TransformContext["adapter"]["resolveBaseComponent"]>;
 
@@ -111,8 +111,12 @@ function extractStaticPropsFromAttrs(
  * - Prepend sx declarations as CSS rules (before template CSS, so template wins)
  * - Store mixin references as extraStylexPropsArgs
  * - Remove consumed props from staticAttrs
- * - Add consumed props to shouldForwardProp.dropProps
  * - Store result for downstream steps
+ *
+ * Note: consumed props are NOT added to shouldForwardProp here. Per-site variant
+ * props are added later during resolvePerSiteProps. For base-only consumed props
+ * that come from attrs, they're removed from staticAttrs (no DOM leak) and the
+ * non-wrapper JSX rewriter handles stripping any that appear in JSX.
  */
 function applyResolution(
   decl: StyledDecl,
@@ -145,7 +149,6 @@ function applyResolution(
   }
 
   removeConsumedPropsFromAttrs(decl, result.consumedProps);
-  addConsumedPropsToDropList(decl, result.consumedProps);
 
   decl.inlinedBaseComponent = result;
 }
@@ -272,6 +275,9 @@ function resolvePerSiteProps(args: {
   if (dimensions.length > 0) {
     decl.variantDimensions = [...(decl.variantDimensions ?? []), ...dimensions];
     decl.needsWrapperComponent = true;
+
+    const variantPropNames = dimensions.map((d) => d.propName);
+    addConsumedPropsToDropList(decl, variantPropNames);
   }
 }
 

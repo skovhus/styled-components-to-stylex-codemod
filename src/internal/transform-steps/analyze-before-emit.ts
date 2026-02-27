@@ -142,8 +142,10 @@ export function analyzeBeforeEmitStep(ctx: TransformContext): StepResult {
     if (decl.base.kind === "intrinsic" && (decl.attrsInfo?.defaultAttrs?.length ?? 0) > 0) {
       decl.needsWrapperComponent = true;
     }
-    // shouldForwardProp needs wrapper
-    if (decl.shouldForwardProp) {
+    // shouldForwardProp needs wrapper — unless it comes purely from inlined base component
+    // resolution (where consumed props are already stripped from attrs and the non-wrapper
+    // JSX rewriter handles prop filtering).
+    if (decl.shouldForwardProp && !decl.inlinedBaseComponent) {
       decl.needsWrapperComponent = true;
     }
     // withConfig.componentId needs wrapper
@@ -272,9 +274,6 @@ export function analyzeBeforeEmitStep(ctx: TransformContext): StepResult {
     }
     const baseDecl = declByLocal.get(decl.base.ident);
     const isImportedComponent = ctx.importMap?.has(decl.base.ident);
-    // If base is neither a styled-component nor an imported component,
-    // it's a locally-defined non-styled component — force wrapper,
-    // but only if it's declared as a function/class (not a variable assignment)
     if (!baseDecl && !isImportedComponent && isLocalFunctionComponent(root, j, decl.base.ident)) {
       decl.needsWrapperComponent = true;
     }
