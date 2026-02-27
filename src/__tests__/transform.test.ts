@@ -3255,6 +3255,28 @@ export function App() {
 });
 
 describe("inline base resolver safety guards", () => {
+  it("should skip base inlining when no local JSX callsites are available", () => {
+    const source = `
+import styled from "styled-components";
+import { Flex } from "./lib/inline-base-flex";
+
+export const Container = styled(Flex)\`
+  padding: 4px;
+\`;
+`;
+
+    const result = transformWithWarnings(
+      { source, path: join(testCasesDir, "inlineBase-noLocalCallsites.input.tsx") },
+      { jscodeshift: j, j, stats: () => {}, report: () => {} },
+      { adapter: fixtureAdapter },
+    );
+
+    expect(result.code).not.toBeNull();
+    const code = result.code ?? "";
+    expect(code).toContain("<Flex");
+    expect(code).not.toContain('as: Component = "div"');
+  });
+
   it("should skip base inlining when attrs source cannot be statically resolved", () => {
     const source = `
 import styled from "styled-components";

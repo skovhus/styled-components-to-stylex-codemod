@@ -291,7 +291,9 @@ function buildInlineResolverVariantDimensions(args: {
     return "bail";
   }
   if (usageResult.propsByUsage.length === 0) {
-    return [];
+    // No in-file callsites means we cannot safely derive variant mappings
+    // for consumed props (e.g. exported/value-passed components).
+    return "bail";
   }
 
   const resolveBaseComponent = ctx.resolveBaseComponent;
