@@ -1,4 +1,0 @@
-import{j as t,c as e}from"./index-Dva6ZfF5.js";import{T as i}from"./text-Cy7g__b0.js";const r=e(i)`
-  font-size: 24px;
-  font-weight: 600;
-`,a=()=>t.jsx("div",{children:t.jsx(r,{variant:"large",children:"Default Title"})});export{a as App,r as HeaderTitle};
