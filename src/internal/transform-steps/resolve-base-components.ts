@@ -106,18 +106,8 @@ function canSafelyInline(
   decl: StyledDecl,
   consumedPropNames: Set<string>,
 ): boolean {
-  const { root, j } = ctx;
-
-  const jsxSites = root
-    .find(j.JSXElement, {
-      openingElement: {
-        name: { type: "JSXIdentifier", name: decl.localName },
-      },
-    })
-    .paths();
-
-  for (const site of jsxSites) {
-    const attrs = (site.node.openingElement.attributes ?? []) as Array<{
+  for (const site of findAllJsxSites(ctx, decl.localName)) {
+    const attrs = (site.attributes ?? []) as Array<{
       type: string;
       name?: { type: string; name: string };
       value?: unknown;
@@ -144,6 +134,33 @@ function canSafelyInline(
 }
 
 /**
+ * Find all JSX usages of a component, including both regular elements
+ * (`<Foo>children</Foo>`) and self-closing elements (`<Foo />`).
+ * Returns an array of opening-element-like nodes with `attributes`.
+ */
+function findAllJsxSites(
+  ctx: TransformContext,
+  localName: string,
+): Array<{ attributes?: unknown[] }> {
+  const { root, j } = ctx;
+
+  const elements = root
+    .find(j.JSXElement, {
+      openingElement: { name: { type: "JSXIdentifier", name: localName } },
+    })
+    .nodes()
+    .map((n) => n.openingElement as { attributes?: unknown[] });
+
+  const selfClosing = root
+    .find(j.JSXSelfClosingElement, {
+      name: { type: "JSXIdentifier", name: localName },
+    } as object)
+    .nodes() as Array<{ attributes?: unknown[] }>;
+
+  return [...elements, ...selfClosing];
+}
+
+/**
  * Extract static props from `.attrs({...})`. Returns null when attrs contain
  * dynamic behavior that cannot be resolved statically — bail conditions:
  * - Function attrs (ArrowFunctionExpression) — dynamic prop derivation
@@ -160,6 +177,9 @@ function extractStaticPropsFromAttrs(
   }
 
   if (attrs.attrsIsFunction) {
+    return null;
+  }
+  if (attrs.attrsAsTag) {
     return null;
   }
   if ((attrs.defaultAttrs?.length ?? 0) > 0) {
@@ -184,22 +204,26 @@ function extractStaticPropsFromAttrs(
 
 /**
  * Apply the resolver result to a StyledDecl:
+ * - Save original base ident for static property inheritance
  * - Change base to intrinsic
  * - Prepend sx declarations as CSS rules (before template CSS, so template wins)
  * - Store mixin references as extraStylexPropsArgs
  * - Remove consumed props from staticAttrs
+ * - Set $-prefix drop on shouldForwardProp (intrinsic elements don't accept transient props)
  * - Store result for downstream steps
  *
- * Note: consumed props are NOT added to shouldForwardProp here. Per-site variant
- * props are added later during resolvePerSiteProps. For base-only consumed props
- * that come from attrs, they're removed from staticAttrs (no DOM leak) and the
- * non-wrapper JSX rewriter handles stripping any that appear in JSX.
+ * Note: consumed props from attrs are removed from staticAttrs.
+ * Per-site variant props are added to shouldForwardProp.dropProps later during
+ * resolvePerSiteProps. In the non-wrapper inline path, rewrite-jsx strips
+ * $-prefixed transient props for intrinsic elements (line 421).
  */
 function applyResolution(
   decl: StyledDecl,
   result: ResolveBaseComponentResult,
   ctx: TransformContext,
 ): void {
+  (decl as Record<string, unknown>).originalBaseIdent = (decl.base as { ident?: string }).ident;
+
   decl.base = { kind: "intrinsic", tagName: result.tagName };
 
   if (result.sx) {
@@ -226,6 +250,11 @@ function applyResolution(
   }
 
   removeConsumedPropsFromAttrs(decl, result.consumedProps);
+
+  decl.shouldForwardProp = {
+    dropPrefix: decl.shouldForwardProp?.dropPrefix ?? "$",
+    dropProps: decl.shouldForwardProp?.dropProps ?? [],
+  };
 
   decl.inlinedBaseComponent = result;
 }
@@ -309,16 +338,9 @@ function resolvePerSiteProps(args: {
   resolveCtx: ResolveBaseComponentContext;
 }): void {
   const { ctx, decl, baseResult, baseStaticProps, resolveBaseComponent, resolveCtx } = args;
-  const { root, j } = ctx;
   const consumedPropNames = new Set(baseResult.consumedProps);
 
-  const jsxSites = root
-    .find(j.JSXElement, {
-      openingElement: {
-        name: { type: "JSXIdentifier", name: decl.localName },
-      },
-    })
-    .paths();
+  const jsxSites = findAllJsxSites(ctx, decl.localName);
 
   if (jsxSites.length === 0) {
     return;
@@ -363,13 +385,13 @@ function resolvePerSiteProps(args: {
  * Returns null if any site has a spread or a non-literal consumed prop (bail).
  */
 function collectSiteConsumedProps(
-  jsxSites: Array<{ node: { openingElement: { attributes?: unknown[] } } }>,
+  jsxSites: Array<{ attributes?: unknown[] }>,
   consumedPropNames: Set<string>,
 ): Array<Record<string, StaticPropValue>> | null {
   const result: Array<Record<string, StaticPropValue>> = [];
 
   for (const site of jsxSites) {
-    const attrs = (site.node.openingElement.attributes ?? []) as Array<{
+    const attrs = (site.attributes ?? []) as Array<{
       type: string;
       name?: { type: string; name: string };
       value?: unknown;
@@ -460,15 +482,11 @@ function findVaryingProps(
     }
 
     const values = siteProps.map((site) => site[propName]);
-    const hasAnyValue = values.some((v) => v !== undefined);
-    if (!hasAnyValue) {
+    if (!values.some((v) => v !== undefined)) {
       continue;
     }
 
-    const allSame = values.every((v) => v === values[0]);
-    if (!allSame || hasAnyValue) {
-      varying.push(propName);
-    }
+    varying.push(propName);
   }
 
   return varying;

@@ -604,7 +604,7 @@ export function App() {
     expect(output).toContain('flexDirection: "column"');
   });
 
-  it("attrs with 'as' prop overrides the tag name", () => {
+  it("attrs with 'as' string prop overrides the tag name", () => {
     const input = `
 import styled from "styled-components";
 import { Flex } from "./lib/flex";
@@ -619,8 +619,76 @@ export function App() {
 `;
     const output = run(input);
     expect(output).not.toBeNull();
-    // Resolver returns tagName based on 'as' prop
+    // Resolver returns tagName based on 'as' prop (string literal)
     expect(output).toContain("<section");
     expect(output).toContain('display: "flex"');
+  });
+
+  it("attrs with 'as' component ref — bails resolver (attrsAsTag)", () => {
+    const input = `
+import styled from "styled-components";
+import { Flex } from "./lib/flex";
+import { OtherComponent } from "./lib/other";
+
+const Container = styled(Flex).attrs({ column: true, as: OtherComponent })\`
+  padding: 8px;
+\`;
+
+export function App() {
+  return <Container>content</Container>;
+}
+`;
+    const output = run(input);
+    expect(output).not.toBeNull();
+    // as: ComponentRef sets attrsAsTag → resolver bails, normal styled() path handles it
+    // The normal path wraps OtherComponent and renders it
+    expect(output).toContain("OtherComponent");
+    // Resolver did NOT inline — no flex display from resolver
+    expect(output).not.toContain('display: "flex"');
+  });
+
+  it("self-closing JSX element with consumed prop — detected by canSafelyInline", () => {
+    const input = `
+import styled from "styled-components";
+import { Flex } from "./lib/flex";
+
+const Spacer = styled(Flex)\`
+  min-height: 8px;
+\`;
+
+export function App({ dir }: { dir: string }) {
+  return <Spacer align={dir} />;
+}
+`;
+    const output = run(input);
+    expect(output).not.toBeNull();
+    // Dynamic consumed prop on self-closing element → bail inlining
+    expect(output).toContain("Flex");
+  });
+
+  it("self-closing JSX element with static consumed prop — per-site variant created", () => {
+    const input = `
+import styled from "styled-components";
+import { Flex } from "./lib/flex";
+
+const Spacer = styled(Flex)\`
+  min-height: 8px;
+\`;
+
+export function App() {
+  return (
+    <>
+      <Spacer align="center" />
+      <Spacer align="start" />
+    </>
+  );
+}
+`;
+    const output = run(input);
+    expect(output).not.toBeNull();
+    // Static consumed props on self-closing elements → variant dimension
+    expect(output).toContain("spacerAlignVariants");
+    expect(output).toContain('alignItems: "center"');
+    expect(output).toContain('alignItems: "start"');
   });
 });
