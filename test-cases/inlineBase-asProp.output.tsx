@@ -1,10 +1,14 @@
 import * as React from "react";
 import * as stylex from "@stylexjs/stylex";
 
-function Container<C extends React.ElementType = "div">(
-  props: React.ComponentPropsWithRef<C> & { as?: C },
-) {
-  const { as: Component = "div", children } = props;
+type ContainerProps<C extends React.ElementType = "div"> = Omit<
+  React.ComponentPropsWithRef<C>,
+  "className" | "style" | keyof React.PropsWithChildren<{ ref?: React.Ref<HTMLDivElement> }>
+> &
+  Omit<React.PropsWithChildren<{ ref?: React.Ref<HTMLDivElement> }>, "as"> & { as?: C };
+
+function Container<C extends React.ElementType = "div">(props: ContainerProps<C>) {
+  const { as: Component = "div", children, column, direction, gap, align, as } = props;
 
   return <Component {...stylex.props(styles.container)}>{children}</Component>;
 }

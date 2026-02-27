@@ -692,6 +692,30 @@ export function App() {
     expect(output).toContain('alignItems: "start"');
   });
 
+  it("consumed prop from attrs overridden in JSX — prop stripped from DOM", () => {
+    const input = `
+import styled from "styled-components";
+import { Flex } from "./lib/flex";
+
+const Container = styled(Flex).attrs({ column: true })\`
+  padding: 8px;
+\`;
+
+export function App() {
+  return <Container column={false}>overridden</Container>;
+}
+`;
+    const output = run(input);
+    expect(output).not.toBeNull();
+    // Styles should be inlined
+    expect(output).toContain('display: "flex"');
+    expect(output).toContain('flexDirection: "column"');
+    // The consumed prop "column" must NOT leak to the DOM element.
+    // Even though column is set in attrs, the JSX override must be stripped.
+    expect(output).not.toContain("column={false}");
+    expect(output).not.toContain("column=");
+  });
+
   describe("JSX as prop on inlined component", () => {
     it('as="span" triggers polymorphic wrapper with inlined styles', () => {
       const input = `

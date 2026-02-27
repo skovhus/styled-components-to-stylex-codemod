@@ -209,13 +209,10 @@ function extractStaticPropsFromAttrs(
  * - Prepend sx declarations as CSS rules (before template CSS, so template wins)
  * - Store mixin references as extraStylexPropsArgs
  * - Remove consumed props from staticAttrs
- * - Set $-prefix drop on shouldForwardProp (intrinsic elements don't accept transient props)
+ * - Add all consumed props to shouldForwardProp.dropProps (stripped from JSX in both
+ *   wrapper and non-wrapper paths, preventing consumed props from leaking to the DOM)
+ * - Set $-prefix drop (intrinsic elements don't accept transient props)
  * - Store result for downstream steps
- *
- * Note: consumed props from attrs are removed from staticAttrs.
- * Per-site variant props are added to shouldForwardProp.dropProps later during
- * resolvePerSiteProps. In the non-wrapper inline path, rewrite-jsx strips
- * $-prefixed transient props for intrinsic elements (line 421).
  */
 function applyResolution(
   decl: StyledDecl,
@@ -251,9 +248,13 @@ function applyResolution(
 
   removeConsumedPropsFromAttrs(decl, result.consumedProps);
 
+  const existingDropProps = decl.shouldForwardProp?.dropProps ?? [];
+  const existingSet = new Set(existingDropProps);
+  const newDropProps = result.consumedProps.filter((p) => !existingSet.has(p));
+
   decl.shouldForwardProp = {
     dropPrefix: decl.shouldForwardProp?.dropPrefix ?? "$",
-    dropProps: decl.shouldForwardProp?.dropProps ?? [],
+    dropProps: [...existingDropProps, ...newDropProps],
   };
 
   decl.inlinedBaseComponent = result;
