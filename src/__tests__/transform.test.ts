@@ -1585,6 +1585,26 @@ export const App = () => <Badge />;
     expect(result.code).toContain("$primary || $accent");
     expect(result.code).toContain("badgeVisiblePrimaryOrAccent");
   });
+
+  it("should bail when && chain contains negated && group: $a && !($b && $c)", () => {
+    // "!($b && $c)" inside a larger && chain would be mis-tokenized by
+    // parseVariantWhenToAst's naive split("&&")
+    const source = `
+import styled, { css } from "styled-components";
+const Box = styled.div<{ $a?: boolean; $b?: boolean; $c?: boolean }>\`
+  width: 100px;
+  \${({ $a, $b, $c }) =>
+    $a &&
+    !($b && $c) &&
+    css\`
+      background-color: red;
+    \`}
+\`;
+export const App = () => <Box />;
+`;
+    const result = runTransformWithDiagnostics(source);
+    expect(result.code).toBeNull();
+  });
 });
 
 describe("conditional helper call inside pseudo selector", () => {

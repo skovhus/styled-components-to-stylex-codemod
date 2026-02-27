@@ -237,6 +237,15 @@ export const createPropTestHelpers = (
         ) {
           return null;
         }
+        // Bail on && when a child has && inside parenthesized groups (e.g.
+        // "!($b && $c)"). The naive split("&&") in parseVariantWhenToAst
+        // would break the parenthesized group into malformed tokens.
+        if (
+          test.operator === "&&" &&
+          (hasAndInsideParens(leftInfo.when) || hasAndInsideParens(rightInfo.when))
+        ) {
+          return null;
+        }
         const combinedWhen = `${leftInfo.when} ${test.operator} ${rightInfo.when}`;
         const leftProps = leftInfo.allPropNames ?? (leftInfo.propName ? [leftInfo.propName] : []);
         const rightProps =
@@ -278,3 +287,25 @@ export const createVariantApplier = (args: {
     dropAllTestInfoProps(testInfo);
   };
 };
+
+// --- Non-exported helpers ---
+
+/**
+ * Returns true if the string contains `&&` inside parenthesized groups.
+ * Used to detect when strings like `"!($b && $c)"` that would be broken
+ * by the naive `split("&&")` in `parseVariantWhenToAst`.
+ */
+function hasAndInsideParens(when: string): boolean {
+  let depth = 0;
+  for (let i = 0; i < when.length; i++) {
+    const ch = when[i];
+    if (ch === "(") {
+      depth++;
+    } else if (ch === ")") {
+      depth--;
+    } else if (depth > 0 && ch === "&" && when[i + 1] === "&") {
+      return true;
+    }
+  }
+  return false;
+}

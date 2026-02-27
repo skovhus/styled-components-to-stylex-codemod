@@ -121,4 +121,35 @@ describe("parseChainedTestInfo", () => {
     const result = parseChainedTestInfo(parseExpr("$a || ($b && $c)"));
     expect(result).toBeNull();
   });
+
+  it("bails on && with negated && child: $a && !($b && $c)", () => {
+    const { parseChainedTestInfo } = createPropTestHelpers(
+      makeDestructuredBindings("$a", "$b", "$c"),
+    );
+    // "$a && !($b && $c)" would be split by parseVariantWhenToAst on &&
+    // into ["$a", "!($b", "$c)"] — broken tokenization
+    const result = parseChainedTestInfo(parseExpr("$a && !($b && $c)"));
+    expect(result).toBeNull();
+  });
+
+  it("allows standalone negated && compound: !($a && $b)", () => {
+    const { parseChainedTestInfo } = createPropTestHelpers(makeDestructuredBindings("$a", "$b"));
+    // Standalone !($a && $b) is fine — parseVariantWhenToAst handles !(...)
+    // correctly. It's only dangerous when embedded in a larger && chain.
+    const result = parseChainedTestInfo(parseExpr("!($a && $b)"));
+    expect(result).not.toBeNull();
+    expect(result!.when).toBe("!($a && $b)");
+  });
+
+  it("allows && with negated || child: $a && !($b || $c)", () => {
+    const { parseChainedTestInfo } = createPropTestHelpers(
+      makeDestructuredBindings("$a", "$b", "$c"),
+    );
+    // "$a && !($b || $c)" split on && → ["$a", "!($b || $c)"] — safe,
+    // no && inside the parenthesized group
+    const result = parseChainedTestInfo(parseExpr("$a && !($b || $c)"));
+    expect(result).not.toBeNull();
+    expect(result!.when).toBe("$a && !($b || $c)");
+    expect(result!.allPropNames).toEqual(["$a", "$b", "$c"]);
+  });
 });
