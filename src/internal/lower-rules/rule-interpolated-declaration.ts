@@ -183,6 +183,7 @@ export function handleInterpolatedDeclaration(args: InterpolatedDeclarationConte
         styleFnDecls,
         styleFnFromProps,
         filePath,
+        applyResolvedPropValue,
       })
     ) {
       continue;
