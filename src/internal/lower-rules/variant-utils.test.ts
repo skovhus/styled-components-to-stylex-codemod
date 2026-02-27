@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import jscodeshift from "jscodeshift";
-import { createPropTestHelpers } from "./variant-utils.js";
+import { createPropTestHelpers, invertWhen } from "./variant-utils.js";
 import type { ArrowFnParamBindings } from "../utilities/jscodeshift-utils.js";
 
 const j = jscodeshift.withParser("tsx");
@@ -151,5 +151,31 @@ describe("parseChainedTestInfo", () => {
     expect(result).not.toBeNull();
     expect(result!.when).toBe("$a && !($b || $c)");
     expect(result!.allPropNames).toEqual(["$a", "$b", "$c"]);
+  });
+});
+
+describe("invertWhen", () => {
+  it("inverts simple negation: !$a → $a", () => {
+    expect(invertWhen("!$a")).toBe("$a");
+  });
+
+  it("inverts simple boolean: $a → !$a", () => {
+    expect(invertWhen("$a")).toBe("!$a");
+  });
+
+  it("inverts compound negation: !($a || $b) → $a || $b", () => {
+    expect(invertWhen("!($a || $b)")).toBe("$a || $b");
+  });
+
+  it("inverts compound && negation: !($a && $b) → $a && $b", () => {
+    expect(invertWhen("!($a && $b)")).toBe("$a && $b");
+  });
+
+  it("returns null for un-invertible compound: $a || $b", () => {
+    expect(invertWhen("$a || $b")).toBeNull();
+  });
+
+  it("inverts comparison: $a === 'x' → $a !== 'x'", () => {
+    expect(invertWhen('$a === "x"')).toBe('$a !== "x"');
   });
 });

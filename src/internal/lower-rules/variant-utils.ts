@@ -17,6 +17,9 @@ import { toSuffixFromProp } from "../transform/helpers.js";
  * E.g., "!$active" -> "$active", "$x === true" -> "$x !== true"
  */
 export function invertWhen(when: string): string | null {
+  if (when.startsWith("!(") && when.endsWith(")")) {
+    return when.slice(2, -1);
+  }
   if (when.startsWith("!")) {
     return when.slice(1);
   }
