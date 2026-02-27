@@ -89,6 +89,8 @@ function collectStyledDeclsImpl(args: {
       attrsAsTag?: string;
     } = {
       staticAttrs: {},
+      sourceKind: "unknown",
+      hasUnsupportedValues: false,
       defaultAttrs: [],
       conditionalAttrs: [],
       invertedBoolAttrs: [],
@@ -198,15 +200,19 @@ function collectStyledDeclsImpl(args: {
           });
           continue;
         }
+
+        out.hasUnsupportedValues = true;
       }
     };
 
     if (arg0.type === "ObjectExpression") {
+      out.sourceKind = "object";
       fillFromObject(arg0);
       return out;
     }
 
     if (arg0.type === "ArrowFunctionExpression") {
+      out.sourceKind = "function";
       const body = arg0.body as any;
       if (body?.type === "ObjectExpression") {
         fillFromObject(body);

@@ -32,6 +32,7 @@ export class TransformContext {
   resolveValueSafe: Adapter["resolveValue"];
   resolveCallSafe: Adapter["resolveCall"];
   resolveSelectorSafe: Adapter["resolveSelector"];
+  resolveBaseComponent?: Adapter["resolveBaseComponent"];
   resolveValueBailRef: { value: boolean };
   patternProp: (keyName: string, valueId?: any) => any;
   getStaticPropertiesFromImport: (source: ImportSource, componentName: string) => string[];
@@ -148,6 +149,7 @@ export class TransformContext {
     this.resolveValueSafe = resolveValueSafe;
     this.resolveCallSafe = resolveCallSafe;
     this.resolveSelectorSafe = resolveSelectorSafe;
+    this.resolveBaseComponent = adapter.resolveBaseComponent;
     this.resolveValueBailRef = bailRef;
     this.patternProp = patternProp;
     this.getStaticPropertiesFromImport = getStaticPropertiesFromImport;

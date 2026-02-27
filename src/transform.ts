@@ -26,6 +26,7 @@ import { convertKeyframesStep } from "./internal/transform-steps/convert-keyfram
 import { detectCascadeConflictStep } from "./internal/transform-steps/detect-cascade-conflict.js";
 import { detectStringMappingFnsStep } from "./internal/transform-steps/detect-string-mapping-fns.js";
 import { detectUnsupportedPatternsStep } from "./internal/transform-steps/detect-unsupported-patterns.js";
+import { resolveBaseComponentsStep } from "./internal/transform-steps/resolve-base-components.js";
 import { rewriteCssHelpersStep } from "./internal/transform-steps/rewrite-css-helpers.js";
 import { emitStylesStep } from "./internal/transform-steps/emit-styles.js";
 import { emitBridgeExportsStep } from "./internal/transform-steps/emit-bridge-exports.js";
@@ -121,6 +122,7 @@ export function transformWithWarnings(
     detectStringMappingFnsStep,
     detectUnsupportedPatternsStep,
     collectStyledDeclsStep,
+    resolveBaseComponentsStep,
     detectCascadeConflictStep,
     lowerRulesStep,
     analyzeBeforeEmitStep,

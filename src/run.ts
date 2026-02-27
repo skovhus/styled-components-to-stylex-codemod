@@ -14,6 +14,8 @@ import type {
   AdapterInput,
   CallResolveContext,
   CallResolveResult,
+  ResolveBaseComponentContext,
+  ResolveBaseComponentResult,
   ResolveValueContext,
   ResolveValueResult,
   SelectorResolveContext,
@@ -267,6 +269,24 @@ export async function runTransform(options: RunTransformOptions): Promise<RunTra
     }
   };
 
+  const resolveBaseComponentWithLogging = (
+    ctx: ResolveBaseComponentContext,
+  ): ResolveBaseComponentResult | undefined => {
+    if (!adapterInput.resolveBaseComponent) {
+      return undefined;
+    }
+    try {
+      return adapterInput.resolveBaseComponent(ctx);
+    } catch (e) {
+      const msg = `adapter.resolveBaseComponent threw an error: ${
+        e instanceof Error ? e.message : String(e)
+      }`;
+      Logger.logError(msg, ctx.filePath, undefined, ctx);
+      Logger.markErrorAsLogged(e);
+      throw e;
+    }
+  };
+
   // Resolve file paths from glob patterns
   const patterns = Array.isArray(files) ? files : [files];
   const filePaths: string[] = [];
@@ -391,6 +411,9 @@ export async function runTransform(options: RunTransformOptions): Promise<RunTra
     resolveValue: resolveValueWithLogging,
     resolveCall: resolveCallWithLogging,
     resolveSelector: resolveSelectorWithLogging,
+    resolveBaseComponent: adapterInput.resolveBaseComponent
+      ? resolveBaseComponentWithLogging
+      : undefined,
   };
 
   // Path to the transform module.

@@ -66,6 +66,7 @@ function assertAdapterShape(candidate: unknown, where: string, allowAutoExtIf: b
   const resolveValue = obj?.resolveValue;
   const resolveCall = obj?.resolveCall;
   const resolveSelector = obj?.resolveSelector;
+  const resolveBaseComponent = obj?.resolveBaseComponent;
   const externalInterface = obj?.externalInterface;
 
   if (!candidate || typeof candidate !== "object") {
@@ -140,6 +141,24 @@ function assertAdapterShape(candidate: unknown, where: string, allowAutoExtIf: b
         "Adapter shape:",
         "  {",
         '    resolveSelector(context) { return { kind: "media" | "pseudoAlias", ... } | undefined }',
+        "  }",
+        "",
+        `Docs/examples: ${ADAPTER_DOCS_URL}`,
+      ].join("\n"),
+    );
+  }
+
+  if (resolveBaseComponent !== undefined && typeof resolveBaseComponent !== "function") {
+    throw new Error(
+      [
+        `${where}: adapter.resolveBaseComponent must be a function when provided.`,
+        `Received: resolveBaseComponent=${describeValue(resolveBaseComponent)}`,
+        "",
+        "Adapter shape:",
+        "  {",
+        "    resolveBaseComponent(context) {",
+        "      return { tagName, consumedProps, sx?, mixins? } | undefined",
+        "    }",
         "  }",
         "",
         `Docs/examples: ${ADAPTER_DOCS_URL}`,

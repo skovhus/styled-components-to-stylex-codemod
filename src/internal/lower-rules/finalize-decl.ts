@@ -18,6 +18,7 @@ import { PLACEHOLDER_RE } from "../styled-css.js";
 import { ensureShouldForwardPropDrop } from "./types.js";
 import type { DeclProcessingState } from "./decl-setup.js";
 import { getOrCreateRelationOverrideBucket } from "./shared.js";
+import type { VariantDimension } from "../transform-types.js";
 
 export function finalizeDeclProcessing(ctx: DeclProcessingState): void {
   const {
@@ -436,7 +437,7 @@ export function finalizeDeclProcessing(ctx: DeclProcessingState): void {
         }
       }
     }
-    decl.variantDimensions = dimensions;
+    decl.variantDimensions = mergeVariantDimensions(decl.variantDimensions, dimensions);
     decl.needsWrapperComponent = true;
     // Remove CSS props that were moved to variant dimensions from base styles
     for (const prop of propsToStrip) {
@@ -551,6 +552,26 @@ function isEmptyBranch(node: unknown): boolean {
     return true;
   }
   return false;
+}
+
+/**
+ * Merge variant dimensions while preserving existing (pre-lowered) dimensions first.
+ *
+ * Resolver-derived dimensions are collected before lower-rules run. Lowering can
+ * then add template-derived dimensions. Keeping existing dimensions first preserves
+ * cascade order when both write the same CSS properties.
+ */
+function mergeVariantDimensions(
+  existingDimensions: VariantDimension[] | undefined,
+  nextDimensions: VariantDimension[],
+): VariantDimension[] {
+  if (!existingDimensions || existingDimensions.length === 0) {
+    return nextDimensions;
+  }
+  if (nextDimensions.length === 0) {
+    return existingDimensions;
+  }
+  return [...existingDimensions, ...nextDimensions];
 }
 
 type PseudoHelperCallResult =

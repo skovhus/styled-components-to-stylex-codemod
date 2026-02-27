@@ -142,8 +142,11 @@ export function analyzeBeforeEmitStep(ctx: TransformContext): StepResult {
     if (decl.base.kind === "intrinsic" && (decl.attrsInfo?.defaultAttrs?.length ?? 0) > 0) {
       decl.needsWrapperComponent = true;
     }
-    // shouldForwardProp needs wrapper
-    if (decl.shouldForwardProp) {
+    // shouldForwardProp from withConfig() still needs wrappers.
+    // Resolver-added prop drops for inlined imported bases can be handled in JSX rewrite.
+    const resolverOnlyShouldForwardProp =
+      !!decl.inlinedBaseComponent && !decl.shouldForwardPropFromWithConfig;
+    if (decl.shouldForwardProp && !resolverOnlyShouldForwardProp) {
       decl.needsWrapperComponent = true;
     }
     // withConfig.componentId needs wrapper
@@ -183,7 +186,11 @@ export function analyzeBeforeEmitStep(ctx: TransformContext): StepResult {
     if (decl.variantStyleKeys && Object.keys(decl.variantStyleKeys).length > 0) {
       return false;
     }
-    if (decl.variantDimensions && decl.variantDimensions.length > 0) {
+    if (
+      decl.variantDimensions &&
+      decl.variantDimensions.length > 0 &&
+      !decl.inlinedBaseComponent?.hasInlineJsxVariants
+    ) {
       return false;
     }
     // styleFnFromProps CAN be inlined - the JSX rewriter handles extracting
