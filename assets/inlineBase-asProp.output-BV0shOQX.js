@@ -1,0 +1,1 @@
+import{j as s}from"./index-5GMB3Jr1.js";import{F as o}from"./inline-base-flex-J_NR2ds3.js";function t(n){const{as:r=o,...e}=n;return s.jsx(r,{column:!0,...e,className:"xe8ttls xmblloc xmkeg23 x1y0btm7 xvwisar"})}function x(){return s.jsxs("div",{style:{display:"grid",gap:8},children:[s.jsx(t,{children:"Default"}),s.jsx(t,{as:"span",children:"As span"})]})}export{x as App};

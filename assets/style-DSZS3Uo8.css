@@ -3507,12 +3507,20 @@ body{font-family:-apple-system,BlinkMacSystemFont,Segoe UI,Roboto,Helvetica Neue
   overflow-y: scroll;
 }
 
+.x18d9i69:not(#\#):not(#\#):not(#\#):not(#\#) {
+  padding-bottom: 0;
+}
+
 .x1sgudl8:not(#\#):not(#\#):not(#\#):not(#\#) {
   padding-bottom: 48px;
 }
 
 .x1uhho1l:not(#\#):not(#\#):not(#\#):not(#\#) {
   padding-left: 0;
+}
+
+.xzjhap9:not(#\#):not(#\#):not(#\#):not(#\#) {
+  padding-left: 14px;
 }
 
 .x5tiur9:not(#\#):not(#\#):not(#\#):not(#\#) {
@@ -3523,12 +3531,20 @@ body{font-family:-apple-system,BlinkMacSystemFont,Segoe UI,Roboto,Helvetica Neue
   padding-right: 0;
 }
 
+.xnuq7ks:not(#\#):not(#\#):not(#\#):not(#\#) {
+  padding-right: 12px;
+}
+
 .x17apdc0:not(#\#):not(#\#):not(#\#):not(#\#) {
   padding-right: var(--scrollbar-width, 12px);
 }
 
 .x1p5oq8j:not(#\#):not(#\#):not(#\#):not(#\#) {
   padding-top: 24px;
+}
+
+.x1iorvi4:not(#\#):not(#\#):not(#\#):not(#\#) {
+  padding-top: 4px;
 }
 
 @media (width <= 640px) {
