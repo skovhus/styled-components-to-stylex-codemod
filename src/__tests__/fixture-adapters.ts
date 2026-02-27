@@ -82,7 +82,7 @@ export const fixtureAdapter = defineAdapter({
     const sx = resolveInlineBaseFlexSx(ctx.staticProps);
     const consumedProps = [...INLINE_BASE_FLEX_CONSUMED_PROPS];
 
-    if (ctx.staticProps.inlineBaseMode === "mixin") {
+    if (ctx.staticProps.direction === "row") {
       return {
         tagName,
         consumedProps,
@@ -560,14 +560,7 @@ export const customAdapter = defineAdapter({
 });
 
 const INLINE_BASE_FLEX_IMPORTED_NAME = "Flex";
-const INLINE_BASE_FLEX_CONSUMED_PROPS = [
-  "align",
-  "as",
-  "column",
-  "direction",
-  "gap",
-  "inlineBaseMode",
-];
+const INLINE_BASE_FLEX_CONSUMED_PROPS = ["align", "as", "column", "direction", "gap"];
 const INLINE_BASE_ALIGN_MAP: Record<string, string> = {
   start: "flex-start",
   center: "center",

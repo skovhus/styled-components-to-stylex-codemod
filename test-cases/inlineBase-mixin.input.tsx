@@ -3,7 +3,7 @@ import styled from "styled-components";
 import { Flex } from "./lib/inline-base-flex";
 
 const Container = styled(Flex).attrs({
-  inlineBaseMode: "mixin",
+  direction: "row",
 })`
   padding: 8px;
   background-color: #e7fff1;
