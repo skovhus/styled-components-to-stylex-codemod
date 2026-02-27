@@ -251,9 +251,13 @@ Troubleshooting prepass failures with `"auto"`:
 
 #### Base component resolution (`resolveBaseComponent`)
 
-When your codebase wraps an imported UI component with `styled()`, the default output keeps a runtime wrapper that passes styles through. If the base component's behavior can be expressed as static CSS, `resolveBaseComponent` lets the codemod **inline** it directly into an intrinsic element — removing the runtime dependency entirely.
+This is useful when you want to **replace a base component entirely** by inlining its styles. If your codebase has a shared layout primitive like `<Flex>` or `<Stack>` whose behavior is purely CSS (flexbox props mapped to styles), the codemod can eliminate the runtime import and render a plain intrinsic element instead.
 
-Given this input:
+Without `resolveBaseComponent`, `styled(Flex)` would produce a wrapper component that still renders `<Flex>` at runtime. With it, the codemod resolves the base component's props to static CSS declarations and inlines everything into a `<div>` (or whichever element you specify).
+
+**Example — inlining base styles via `sx`**
+
+Input:
 
 ```tsx
 import styled from "styled-components";
@@ -265,7 +269,27 @@ const Container = styled(Flex).attrs({ column: true, gap: 16 })`
 `;
 ```
 
-With a `resolveBaseComponent` that maps `Flex` props to CSS, the codemod produces:
+Adapter:
+
+```ts
+resolveBaseComponent(ctx) {
+  if (ctx.importSource !== "@company/ui" || ctx.importedName !== "Flex") {
+    return undefined;
+  }
+
+  const sx: Record<string, string> = { display: "flex" };
+  if (ctx.staticProps.column === true) sx.flexDirection = "column";
+  if (typeof ctx.staticProps.gap === "number") sx.gap = `${ctx.staticProps.gap}px`;
+
+  return {
+    tagName: "div",
+    consumedProps: ["column", "gap", "align", "direction"],
+    sx,
+  };
+},
+```
+
+Output — `Flex` is gone, its styles are merged into `stylex.create()`:
 
 ```tsx
 import * as stylex from "@stylexjs/stylex";
@@ -283,23 +307,55 @@ const styles = stylex.create({
 });
 ```
 
-The resolver receives `ctx.importSource`, `ctx.importedName`, and `ctx.staticProps` (resolved from `.attrs()` and JSX call sites). Return `{ tagName, consumedProps, sx }` to inline, or `undefined` to keep the default `styled(Component)` behavior.
+The resolver receives `ctx.importSource`, `ctx.importedName`, and `ctx.staticProps` (literal values resolved from `.attrs()` and JSX call sites). Return `{ tagName, consumedProps, sx }` to inline, or `undefined` to keep the default `styled(Component)` behavior.
 
-You can also return `mixins` to reference external StyleX style objects that get included in `stylex.props(...)`:
+**Example — using `mixins` to reference shared StyleX styles**
+
+When the base component's styles already exist as a `stylex.create()` object (e.g. you've already converted `Flex`'s core styles to StyleX), return `mixins` instead of `sx`. The codemod will import the mixin and include it in `stylex.props(...)`:
+
+```ts
+// lib/mixins.stylex.ts
+import * as stylex from "@stylexjs/stylex";
+export const mixins = stylex.create({
+  flex: { display: "flex" },
+});
+```
 
 ```ts
 resolveBaseComponent(ctx) {
+  if (ctx.importSource !== "@company/ui" || ctx.importedName !== "Flex") {
+    return undefined;
+  }
+
   return {
     tagName: "div",
-    consumedProps: ["column", "gap"],
+    consumedProps: ["column", "gap", "align", "direction"],
     mixins: [{
       importSource: "./lib/mixins.stylex",
       importName: "mixins",
       styleKey: "flex",
     }],
   };
-}
+},
 ```
+
+Output — the mixin is spread into `stylex.props()` alongside the component's own styles:
+
+```tsx
+import * as stylex from "@stylexjs/stylex";
+import { mixins } from "./lib/mixins.stylex";
+
+const Container = <div {...stylex.props(mixins.flex, styles.container)} />;
+
+const styles = stylex.create({
+  container: {
+    padding: "8px",
+    backgroundColor: "#f5f5ff",
+  },
+});
+```
+
+You can combine `sx` and `mixins` — `sx` entries are merged into `stylex.create()` while `mixins` are passed separately to `stylex.props()`.
 
 #### Dynamic interpolations
 
