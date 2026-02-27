@@ -1,6 +1,6 @@
-# Orbiter Codemod Bug Fixes
+# Codemod Bug Fixes
 
-Bugs discovered by running the codemod against the `orbiter/` directory in the Linear monorepo. Each bug has a corresponding test case that reproduces the issue as a diff failure.
+Bugs discovered by running the codemod against a real-world codebase. Each bug has a corresponding test case that reproduces the issue as a diff failure.
 
 All 7 test cases fail with `AssertionError` (diff mismatch), not bail-outs — the codemod produces output, but it's incorrect.
 
