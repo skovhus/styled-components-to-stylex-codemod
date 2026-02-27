@@ -1,6 +1,6 @@
 // ActionMenuDivider: exported styled(Flex) where noMinWidth is always passed at local call sites.
-// Because the component is exported, external callers may omit or vary the prop, so singleton
-// folding must NOT bake it into the base style — it should remain a variant.
+// The adapter returns { styles: false, as: false } for this component, so it has no external
+// interface. Singleton folding is safe — noMinWidth is baked into the base style with narrow props.
 import * as React from "react";
 import styled from "styled-components";
 import { Flex } from "./lib/inline-base-flex";

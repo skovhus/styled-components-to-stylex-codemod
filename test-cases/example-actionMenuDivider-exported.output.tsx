@@ -1,35 +1,21 @@
 // ActionMenuDivider: exported styled(Flex) where noMinWidth is always passed at local call sites.
-// Because the component is exported, external callers may omit or vary the prop, so singleton
-// folding must NOT bake it into the base style — it should remain a variant.
+// The adapter returns { styles: false, as: false } for this component, so it has no external
+// interface. Singleton folding is safe — noMinWidth is baked into the base style with narrow props.
 import * as React from "react";
 import * as stylex from "@stylexjs/stylex";
 import { mergedSx } from "./lib/mergedSx";
 
-type TextDividerContainerProps = React.PropsWithChildren<{
-  className?: string;
-  style?: React.CSSProperties;
-  ref?: React.Ref<HTMLDivElement>;
-  noMinWidth?: any;
-}>;
-
-export function TextDividerContainer(props: TextDividerContainerProps) {
-  const { className, children, style, noMinWidth, ...rest } = props;
+export function TextDividerContainer(
+  props: React.PropsWithChildren<{
+    className?: string;
+    style?: React.CSSProperties;
+    ref?: React.Ref<HTMLDivElement>;
+  }>,
+) {
+  const { className, children, style, ...rest } = props;
 
   return (
-    <div
-      {...rest}
-      {...mergedSx(
-        [
-          styles.textDividerContainer,
-          noMinWidth != null &&
-            textDividerContainerNoMinWidthVariants[
-              noMinWidth as keyof typeof textDividerContainerNoMinWidthVariants
-            ],
-        ],
-        className,
-        style,
-      )}
-    >
+    <div {...rest} {...mergedSx(styles.textDividerContainer, className, style)}>
       {children}
     </div>
   );
@@ -43,7 +29,7 @@ type ActionMenuTextDividerProps = {
 
 function ActionMenuTextDivider(props: ActionMenuTextDividerProps) {
   return (
-    <TextDividerContainer noMinWidth className={props.className} style={props.style}>
+    <TextDividerContainer className={props.className} style={props.style}>
       <span>{props.text}</span>
     </TextDividerContainer>
   );
@@ -54,6 +40,7 @@ export const App = () => <ActionMenuTextDivider text="Section" />;
 const styles = stylex.create({
   textDividerContainer: {
     display: "flex",
+    minWidth: "0px",
     userSelect: "none",
     height: "30px",
     paddingTop: "4px",
@@ -61,11 +48,5 @@ const styles = stylex.create({
     paddingBottom: "0px",
     paddingLeft: "14px",
     alignItems: "center",
-  },
-});
-
-const textDividerContainerNoMinWidthVariants = stylex.create({
-  true: {
-    minWidth: "0px",
   },
 });

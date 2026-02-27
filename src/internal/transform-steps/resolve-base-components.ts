@@ -52,19 +52,59 @@ type InlineResolverVariantsOutcome =
     }
   | { kind: "bail" };
 
-/** Checks whether a local name is exported from the file (named, default, or specifier). */
-function isNameExported(ctx: TransformContext, localName: string): boolean {
+/**
+ * Checks whether a styled component will have external interface support
+ * (className/style props + `{...rest}` spread). When true, external callers
+ * can pass arbitrary props, making singleton folding unsafe.
+ *
+ * Mirrors the logic in `analyzeBeforeEmitStep` for determining
+ * `supportsExternalStyles`, but evaluated earlier in the pipeline.
+ */
+function willHaveExternalInterface(
+  ctx: TransformContext,
+  decl: StyledDecl,
+  styledDecls: StyledDecl[],
+): boolean {
+  // 1. Extended by another styled component in the same file → always has external styles
+  const isExtendedBy = styledDecls.some(
+    (d) => d !== decl && d.base.kind === "component" && d.base.ident === decl.localName,
+  );
+  if (isExtendedBy) {
+    return true;
+  }
+
+  // 2. Not exported → no external interface
+  const exportInfo = findExportInfo(ctx, decl.localName);
+  if (!exportInfo) {
+    return false;
+  }
+
+  // 3. Exported → query adapter
+  const result = ctx.adapter.externalInterface({
+    filePath: ctx.file.path,
+    componentName: decl.localName,
+    exportName: exportInfo.exportName,
+    isDefaultExport: exportInfo.isDefault,
+  });
+  return result.styles || result.as;
+}
+
+/** Finds export info for a local name, or undefined if not exported. */
+function findExportInfo(
+  ctx: TransformContext,
+  localName: string,
+): { exportName: string; isDefault: boolean } | undefined {
   const { root, j } = ctx;
-  let exported = false;
+  let result: { exportName: string; isDefault: boolean } | undefined;
   root.find(j.ExportNamedDeclaration).forEach((p) => {
-    if (exported) {
+    if (result) {
       return;
     }
     const decl = p.node.declaration;
     if (decl?.type === "VariableDeclaration") {
       for (const d of decl.declarations) {
         if (d.type === "VariableDeclarator" && (d.id as { name?: string })?.name === localName) {
-          exported = true;
+          result = { exportName: localName, isDefault: false };
         }
       }
     }
@@ -73,18 +113,19 @@ function isNameExported(ctx: TransformContext, localName: string): boolean {
         spec.type === "ExportSpecifier" &&
         (spec.local as { name?: string })?.name === localName
       ) {
-        exported = true;
+        const exportedName = (spec.exported as { name?: string })?.name ?? localName;
+        result = { exportName: exportedName, isDefault: false };
       }
     }
   });
-  if (!exported) {
+  if (!result) {
     root.find(j.ExportDefaultDeclaration).forEach((p) => {
       if ((p.node.declaration as { name?: string })?.name === localName) {
-        exported = true;
+        result = { exportName: "default", isDefault: true };
       }
     });
   }
-  return exported;
+  return result;
 }
 
 /** Constructs an "ok" InlineResolverVariantsOutcome with no variants and empty defaults. */
@@ -147,6 +188,7 @@ function applyBaseComponentResolution(ctx: TransformContext, styledDecls: Styled
     const variantOutcome = buildInlineResolverVariantDimensions({
       ctx,
       decl,
+      styledDecls,
       consumedProps,
       baseStaticProps,
       baseResult,
@@ -251,6 +293,7 @@ function isValidBaseResolutionResult(result: {
 function buildInlineResolverVariantDimensions(args: {
   ctx: TransformContext;
   decl: StyledDecl;
+  styledDecls: StyledDecl[];
   consumedProps: string[];
   baseStaticProps: Record<string, ResolveBaseComponentStaticValue>;
   baseResult: {
@@ -261,8 +304,16 @@ function buildInlineResolverVariantDimensions(args: {
   importSource: string;
   importedName: string;
 }): InlineResolverVariantsOutcome {
-  const { ctx, decl, consumedProps, baseStaticProps, baseResult, importSource, importedName } =
-    args;
+  const {
+    ctx,
+    decl,
+    styledDecls,
+    consumedProps,
+    baseStaticProps,
+    baseResult,
+    importSource,
+    importedName,
+  } = args;
   if (consumedProps.length === 0) {
     return emptyOkVariantOutcome(false, new Set());
   }
@@ -431,11 +482,12 @@ function buildInlineResolverVariantDimensions(args: {
     });
 
     // Singleton folding (bake-in / boolean conditional) requires complete callsite
-    // visibility. Exported or value-used components may have external callers with
-    // different prop values, so skip folding and fall through to the variant dimension path.
-    // Note: decl.isExported is not yet set at this step (set in analyzeBeforeEmitStep),
-    // so we check export status directly from the AST.
-    const hasCompleteCallsiteVisibility = !isNameExported(ctx, decl.localName) && !decl.usedAsValue;
+    // visibility. Components with external interface (className/style + rest spread)
+    // may receive different prop values from external callers, so skip folding.
+    // Exported components WITHOUT external interface have narrow, controlled props,
+    // so folding is safe — the consumed prop is removed from the type entirely.
+    const hasCompleteCallsiteVisibility =
+      !willHaveExternalInterface(ctx, decl, styledDecls) && !decl.usedAsValue;
 
     if (
       variantKeys.length === 1 &&
