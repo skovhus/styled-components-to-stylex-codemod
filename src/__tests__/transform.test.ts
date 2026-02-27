@@ -1508,6 +1508,46 @@ export const App = () => <Button>Click me</Button>;
   });
 });
 
+describe("conditional logical OR/AND mixed operators", () => {
+  it("should bail when || wraps && to avoid ambiguous condition serialization", () => {
+    // ($a && $b) || $c would serialize as "$a && $b || $c", which
+    // parseVariantWhenToAst would reparse as $a && ($b || $c) — wrong truth table
+    const source = `
+import styled, { css } from "styled-components";
+const Box = styled.div<{ $a?: boolean; $b?: boolean; $c?: boolean }>\`
+  width: 100px;
+  \${({ $a, $b, $c }) =>
+    (($a && $b) || $c) &&
+    css\`
+      background-color: red;
+    \`}
+\`;
+export const App = () => <Box />;
+`;
+    const result = runTransformWithDiagnostics(source);
+    expect(result.code).toBeNull();
+  });
+
+  it("should transform pure || conditions correctly", () => {
+    const source = `
+import styled, { css } from "styled-components";
+const Dot = styled.div<{ $active?: boolean; $completed?: boolean }>\`
+  background-color: white;
+  \${({ $active, $completed }) =>
+    ($active || $completed) &&
+    css\`
+      background-color: blue;
+    \`}
+\`;
+export const App = () => <Dot />;
+`;
+    const result = runTransformWithDiagnostics(source);
+    expect(result.code).not.toBeNull();
+    expect(result.code).toContain("$active || $completed");
+    expect(result.code).toContain("dotActiveOrCompleted");
+  });
+});
+
 describe("conditional helper call inside pseudo selector", () => {
   it("should warn with cssText hint when adapter resolves styles but omits cssText", () => {
     // When a conditional helper call appears inside a pseudo selector (e.g., &:hover)

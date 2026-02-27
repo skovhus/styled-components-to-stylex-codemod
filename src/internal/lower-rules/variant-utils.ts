@@ -210,6 +210,15 @@ export const createPropTestHelpers = (
       const rightInfo =
         test.operator === "&&" ? parseTestInfo(test.right) : parseChainedTestInfo(test.right);
       if (leftInfo && rightInfo) {
+        // Bail on || wrapping && children: the serialized when string would be
+        // ambiguous (e.g. "a && b || c" reparsed as "a && (b || c)" instead of
+        // "(a && b) || c") because parseVariantWhenToAst splits on && first.
+        if (
+          test.operator === "||" &&
+          (leftInfo.when.includes(" && ") || rightInfo.when.includes(" && "))
+        ) {
+          return null;
+        }
         const combinedWhen = `${leftInfo.when} ${test.operator} ${rightInfo.when}`;
         const leftProps = leftInfo.allPropNames ?? (leftInfo.propName ? [leftInfo.propName] : []);
         const rightProps =
