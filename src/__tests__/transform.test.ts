@@ -3212,3 +3212,44 @@ export function App() {
     expect(result.code).not.toContain('borderColor: "0.5px"');
   });
 });
+
+describe("inline base resolver variant coexistence", () => {
+  it("should preserve resolver JSX variants when template variants are also present", () => {
+    const source = `
+import styled from "styled-components";
+import { Flex } from "./lib/inline-base-flex";
+
+const Container = styled(Flex)<{ size: "sm" | "lg" }>\`
+  color: black;
+  \${(props) => props.size === "sm" && "color: red;"}
+  \${(props) => props.size === "lg" && "color: blue;"}
+\`;
+
+export function App() {
+  return (
+    <>
+      <Container size="sm" gap={8}>
+        Small
+      </Container>
+      <Container size="lg" gap={16}>
+        Large
+      </Container>
+    </>
+  );
+}
+`;
+
+    const result = transformWithWarnings(
+      { source, path: join(testCasesDir, "inlineBase-templateAndJsxVariants.input.tsx") },
+      { jscodeshift: j, j, stats: () => {}, report: () => {} },
+      { adapter: fixtureAdapter },
+    );
+
+    expect(result.code).not.toBeNull();
+    const code = result.code ?? "";
+    expect(code).toContain("containerGapVariants");
+    expect(code).toContain('"8"');
+    expect(code).toContain('"16"');
+    expect(code).toContain("color");
+  });
+});
