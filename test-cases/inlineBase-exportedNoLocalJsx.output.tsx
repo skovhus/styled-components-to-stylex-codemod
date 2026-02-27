@@ -1,16 +1,18 @@
-import * as React from "react";
+import React from "react";
 import * as stylex from "@stylexjs/stylex";
 
-type ContainerProps = React.PropsWithChildren<{ ref?: React.Ref<HTMLDivElement> }>;
-
-export function Container(props: ContainerProps) {
-  const { children, align, as, column, direction, gap, ...rest } = props;
+export function Container(props: React.PropsWithChildren<{ ref?: React.Ref<HTMLDivElement> }>) {
+  const { children, ...rest } = props;
 
   return (
     <div {...rest} {...stylex.props(styles.container)}>
       {children}
     </div>
   );
+}
+
+export function App() {
+  return <div>Exported only</div>;
 }
 
 const styles = stylex.create({

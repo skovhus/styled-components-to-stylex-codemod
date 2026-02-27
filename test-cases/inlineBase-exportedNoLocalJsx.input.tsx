@@ -9,3 +9,7 @@ export const Container = styled(Flex).attrs({
   padding: 4px;
   background-color: #f4f4ff;
 `;
+
+export function App() {
+  return <div>Exported only</div>;
+}

@@ -26,6 +26,9 @@ export function resolveBaseComponentsStep(ctx: TransformContext): StepResult {
 type JsxPropResolutionOutcome =
   | { kind: "ok"; propsByUsage: Array<Record<string, ResolveBaseComponentStaticValue>> }
   | { kind: "bail" };
+type InlineResolverVariantsOutcome =
+  | { kind: "ok"; variantDimensions: VariantDimension[]; hasLocalCallsites: boolean }
+  | { kind: "bail" };
 
 function applyBaseComponentResolution(ctx: TransformContext, styledDecls: StyledDecl[]): void {
   const resolveBaseComponent = ctx.resolveBaseComponent;
@@ -68,7 +71,7 @@ function applyBaseComponentResolution(ctx: TransformContext, styledDecls: Styled
     }
 
     const consumedProps = [...new Set(baseResult.consumedProps)];
-    const variantDimensions = buildInlineResolverVariantDimensions({
+    const variantOutcome = buildInlineResolverVariantDimensions({
       ctx,
       decl,
       consumedProps,
@@ -77,7 +80,7 @@ function applyBaseComponentResolution(ctx: TransformContext, styledDecls: Styled
       importSource: importSourceForAdapter,
       importedName: importInfo.importedName,
     });
-    if (variantDimensions === "bail") {
+    if (variantOutcome.kind === "bail") {
       continue;
     }
 
@@ -89,7 +92,8 @@ function applyBaseComponentResolution(ctx: TransformContext, styledDecls: Styled
       importedName: importInfo.importedName,
       baseResult,
       consumedProps,
-      variantDimensions,
+      variantDimensions: variantOutcome.variantDimensions,
+      hasLocalCallsites: variantOutcome.hasLocalCallsites,
     });
   }
 }
@@ -179,11 +183,11 @@ function buildInlineResolverVariantDimensions(args: {
   };
   importSource: string;
   importedName: string;
-}): VariantDimension[] | "bail" {
+}): InlineResolverVariantsOutcome {
   const { ctx, decl, consumedProps, baseStaticProps, baseResult, importSource, importedName } =
     args;
   if (consumedProps.length === 0) {
-    return [];
+    return { kind: "ok", variantDimensions: [], hasLocalCallsites: false };
   }
 
   const usageResult = collectStaticConsumedJsxProps({
@@ -193,20 +197,21 @@ function buildInlineResolverVariantDimensions(args: {
     consumedProps,
   });
   if (usageResult.kind === "bail") {
-    return "bail";
+    return { kind: "bail" };
   }
+  const hasLocalCallsites = usageResult.propsByUsage.length > 0;
   if (usageResult.propsByUsage.length === 0) {
     // If all known resolver-driving values are from static attrs, we can still
     // inline the base declaration and skip per-callsite variant generation.
     if (canInlineWithoutLocalCallsites(consumedProps, baseStaticProps)) {
-      return [];
+      return { kind: "ok", variantDimensions: [], hasLocalCallsites: false };
     }
-    return "bail";
+    return { kind: "bail" };
   }
 
   const resolveBaseComponent = ctx.resolveBaseComponent;
   if (!resolveBaseComponent) {
-    return [];
+    return { kind: "ok", variantDimensions: [], hasLocalCallsites };
   }
 
   const baseSx = baseResult.sx ?? {};
@@ -241,29 +246,29 @@ function buildInlineResolverVariantDimensions(args: {
       phase: "site",
     });
     if (!siteResult || !isValidBaseResolutionResult(siteResult)) {
-      return "bail";
+      return { kind: "bail" };
     }
     if (siteResult.tagName !== baseResult.tagName) {
-      return "bail";
+      return { kind: "bail" };
     }
 
     const siteMixins = siteResult.mixins ?? [];
     const siteMixinKeys = new Set(siteMixins.map(toMixinKey));
     for (const baseMixin of baseMixinKeys) {
       if (!siteMixinKeys.has(baseMixin)) {
-        return "bail";
+        return { kind: "bail" };
       }
     }
     for (const siteMixin of siteMixinKeys) {
       if (!baseMixinKeys.has(siteMixin)) {
         // Per-site mixin diffs require conditional props args; keep v1 conservative.
-        return "bail";
+        return { kind: "bail" };
       }
     }
 
     const sxDiff = diffSx(baseSx, siteResult.sx ?? {});
     if (sxDiff === "bail") {
-      return "bail";
+      return { kind: "bail" };
     }
     const changedProps = getChangedConsumedProps(baseStaticProps, siteProps, consumedProps);
     resolvedByPropsKey.set(propsKey, {
@@ -280,19 +285,19 @@ function buildInlineResolverVariantDimensions(args: {
     }
     if (changedProps.length > 1) {
       // Ambiguous multi-prop interactions are out of scope for the simple resolver pass.
-      return "bail";
+      return { kind: "bail" };
     }
 
     const propName = changedProps[0]!;
     const value = siteProps[propName];
     if (!isStaticLiteral(value)) {
-      return "bail";
+      return { kind: "bail" };
     }
     const variantKey = String(value);
     const byValue = bucketsByProp.get(propName) ?? new Map<string, Record<string, unknown>>();
     const existing = byValue.get(variantKey);
     if (existing && serializeObject(existing) !== serializeObject(sxDiff)) {
-      return "bail";
+      return { kind: "bail" };
     }
     byValue.set(variantKey, sxDiff);
     bucketsByProp.set(propName, byValue);
@@ -317,7 +322,7 @@ function buildInlineResolverVariantDimensions(args: {
     });
   }
 
-  return dimensions;
+  return { kind: "ok", variantDimensions: dimensions, hasLocalCallsites };
 }
 
 function collectStaticConsumedJsxProps(args: {
@@ -454,6 +459,7 @@ function inlineResolvedBaseComponent(args: {
   };
   consumedProps: string[];
   variantDimensions: VariantDimension[];
+  hasLocalCallsites: boolean;
 }): void {
   const {
     ctx,
@@ -464,6 +470,7 @@ function inlineResolvedBaseComponent(args: {
     baseResult,
     consumedProps,
     variantDimensions,
+    hasLocalCallsites,
   } = args;
 
   const sxRule = createRuleFromStylexDeclarations(baseResult.sx);
@@ -499,16 +506,18 @@ function inlineResolvedBaseComponent(args: {
         delete decl.attrsInfo.staticAttrs[prop];
       }
     }
-    const existing = new Set(decl.shouldForwardProp?.dropProps ?? []);
-    for (const prop of consumedProps) {
-      existing.add(prop);
+    if (hasLocalCallsites) {
+      const existing = new Set(decl.shouldForwardProp?.dropProps ?? []);
+      for (const prop of consumedProps) {
+        existing.add(prop);
+      }
+      decl.shouldForwardProp = {
+        ...(decl.shouldForwardProp?.dropPrefix
+          ? { dropPrefix: decl.shouldForwardProp.dropPrefix }
+          : {}),
+        dropProps: [...existing],
+      };
     }
-    decl.shouldForwardProp = {
-      ...(decl.shouldForwardProp?.dropPrefix
-        ? { dropPrefix: decl.shouldForwardProp.dropPrefix }
-        : {}),
-      dropProps: [...existing],
-    };
   }
 
   decl.base = { kind: "intrinsic", tagName: baseResult.tagName };
