@@ -389,6 +389,19 @@ export function postProcessTransformedAst(args: {
         if (call.arguments.length !== originalLength) {
           changed = true;
         }
+        // Remove the entire JSX spread attribute when stylex.props() has no arguments
+        if (call.arguments.length === 0) {
+          const parentNode = p.parentPath?.node;
+          if (parentNode?.type === "JSXSpreadAttribute") {
+            const jsxOpening = p.parentPath?.parentPath?.node;
+            if (jsxOpening?.type === "JSXOpeningElement" && Array.isArray(jsxOpening.attributes)) {
+              jsxOpening.attributes = jsxOpening.attributes.filter(
+                (attr: any) => attr !== parentNode,
+              );
+              changed = true;
+            }
+          }
+        }
       }
 
       // Handle style merger calls (e.g., mergedSx([styles.foo, styles.bar], className, style))

@@ -366,8 +366,9 @@ export function rewriteJsxStep(ctx: TransformContext): StepResult {
           }
         }
 
+        const emptyStyleKeys = ctx.emptyStyleKeys;
         const styleArgs: ExpressionKind[] = [
-          ...(decl.extendsStyleKey
+          ...(decl.extendsStyleKey && !emptyStyleKeys?.has(decl.extendsStyleKey)
             ? [
                 j.memberExpression(
                   j.identifier(ctx.stylesIdentifier ?? "styles"),
@@ -376,10 +377,14 @@ export function rewriteJsxStep(ctx: TransformContext): StepResult {
               ]
             : []),
           ...extraMixinArgs,
-          j.memberExpression(
-            j.identifier(ctx.stylesIdentifier ?? "styles"),
-            j.identifier(decl.styleKey),
-          ),
+          ...(emptyStyleKeys?.has(decl.styleKey)
+            ? []
+            : [
+                j.memberExpression(
+                  j.identifier(ctx.stylesIdentifier ?? "styles"),
+                  j.identifier(decl.styleKey),
+                ),
+              ]),
           ...extraAfterBaseArgs,
         ];
 
@@ -505,17 +510,20 @@ export function rewriteJsxStep(ctx: TransformContext): StepResult {
           }
         }
 
-        // Build final rest with stylex.props inserted after last spread
-        const stylexSpread = j.jsxSpreadAttribute(
-          j.callExpression(j.memberExpression(j.identifier("stylex"), j.identifier("props")), [
-            ...styleArgs,
-          ]),
-        );
-        const finalRest = [
-          ...keptRestAfterVariants.slice(0, finalInsertIndex),
-          stylexSpread,
-          ...keptRestAfterVariants.slice(finalInsertIndex),
-        ];
+        // Build final rest with stylex.props inserted after last spread (skip if no style args)
+        const finalRest =
+          styleArgs.length > 0
+            ? [
+                ...keptRestAfterVariants.slice(0, finalInsertIndex),
+                j.jsxSpreadAttribute(
+                  j.callExpression(
+                    j.memberExpression(j.identifier("stylex"), j.identifier("props")),
+                    [...styleArgs],
+                  ),
+                ),
+                ...keptRestAfterVariants.slice(finalInsertIndex),
+              ]
+            : keptRestAfterVariants;
 
         // Final order: leading attrs, rest (with stylex.props inserted), style attr last
         opening.attributes = [
