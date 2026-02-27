@@ -284,6 +284,8 @@ export type StyledDecl = {
     staticAttrs: Record<string, unknown>;
     /** Component identifier from `as: ComponentRef` in `.attrs()`, overrides the rendered tag. */
     attrsAsTag?: string;
+    /** True when `.attrs()` was called with a function argument (dynamic behavior). */
+    attrsIsFunction?: boolean;
     /**
      * Attrs that provide a default when a prop is nullish (undefined / null).
      * Pattern: `attr: props.attr ?? <literal>`

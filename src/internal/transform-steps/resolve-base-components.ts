@@ -70,6 +70,11 @@ function resolveBaseComponentsStep(ctx: TransformContext): StepResult {
       continue;
     }
 
+    const consumedPropNames = new Set(baseResult.consumedProps);
+    if (!canSafelyInline(ctx, decl, consumedPropNames)) {
+      continue;
+    }
+
     applyResolution(decl, baseResult, ctx);
 
     resolvePerSiteProps({
@@ -92,8 +97,59 @@ function resolveBaseComponentsStep(ctx: TransformContext): StepResult {
 // ── Helpers ──────────────────────────────────────────────────────────────────
 
 /**
- * Extract static props from `.attrs({...})`. Returns null if attrs are a function
- * (dynamic) or contain non-literal values for any prop — bail conditions.
+ * Check whether it is safe to inline this component. Returns false (bail) if
+ * any JSX call-site passes a consumed prop with a non-literal value or via a
+ * spread, since those props would leak to the DOM without producing styles.
+ */
+function canSafelyInline(
+  ctx: TransformContext,
+  decl: StyledDecl,
+  consumedPropNames: Set<string>,
+): boolean {
+  const { root, j } = ctx;
+
+  const jsxSites = root
+    .find(j.JSXElement, {
+      openingElement: {
+        name: { type: "JSXIdentifier", name: decl.localName },
+      },
+    })
+    .paths();
+
+  for (const site of jsxSites) {
+    const attrs = (site.node.openingElement.attributes ?? []) as Array<{
+      type: string;
+      name?: { type: string; name: string };
+      value?: unknown;
+    }>;
+
+    if (attrs.some((a) => a.type === "JSXSpreadAttribute")) {
+      return false;
+    }
+
+    for (const attr of attrs) {
+      if (attr.type !== "JSXAttribute" || attr.name?.type !== "JSXIdentifier") {
+        continue;
+      }
+      if (!consumedPropNames.has(attr.name.name)) {
+        continue;
+      }
+      if (extractJsxLiteralValue(attr.value) === undefined) {
+        return false;
+      }
+    }
+  }
+
+  return true;
+}
+
+/**
+ * Extract static props from `.attrs({...})`. Returns null when attrs contain
+ * dynamic behavior that cannot be resolved statically — bail conditions:
+ * - Function attrs (ArrowFunctionExpression) — dynamic prop derivation
+ * - defaultAttrs — `prop ?? default` patterns
+ * - conditionalAttrs — `props.$x ? value : undefined` patterns
+ * - invertedBoolAttrs — `props.x !== true` patterns
  */
 function extractStaticPropsFromAttrs(
   decl: StyledDecl,
@@ -103,12 +159,24 @@ function extractStaticPropsFromAttrs(
     return {};
   }
 
+  if (attrs.attrsIsFunction) {
+    return null;
+  }
+  if ((attrs.defaultAttrs?.length ?? 0) > 0) {
+    return null;
+  }
+  if ((attrs.conditionalAttrs?.length ?? 0) > 0) {
+    return null;
+  }
+  if ((attrs.invertedBoolAttrs?.length ?? 0) > 0) {
+    return null;
+  }
+
   const result: Record<string, string | number | boolean> = {};
   for (const [key, value] of Object.entries(attrs.staticAttrs)) {
     if (typeof value === "string" || typeof value === "number" || typeof value === "boolean") {
       result[key] = value;
     }
-    // Skip undefined/null values — they're not consumed by the resolver
   }
 
   return result;

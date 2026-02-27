@@ -183,15 +183,29 @@ export function App() {
 `;
     const output = run(input);
     expect(output).not.toBeNull();
-    // Flex should still be present since we bail on function attrs
-    // (the transform may still partially process, but the base resolution
-    // should handle function attrs — let's verify the attrs content was parsed)
-    // Actually, parseAttrsArg handles arrow functions by extracting static values
-    // from the returned object. But the prop value `props.$isVertical` is NOT a literal,
-    // so it won't be in staticAttrs. The resolver still gets called with empty staticProps.
-    // The resolution WILL happen — Flex will be replaced with div + display:flex.
-    expect(output).toContain('display: "flex"');
-    expect(output).not.toContain('from "./lib/flex"');
+    // Function attrs have dynamic prop derivation — skip inlining entirely
+    expect(output).toContain("Flex");
+  });
+
+  it("bails on defaultAttrs (props.x ?? value)", () => {
+    const input = `
+import styled from "styled-components";
+import { Flex } from "./lib/flex";
+
+const Container = styled(Flex).attrs(props => ({
+  column: props.column ?? true,
+}))\`
+  padding: 8px;
+\`;
+
+export function App() {
+  return <Container>content</Container>;
+}
+`;
+    const output = run(input);
+    expect(output).not.toBeNull();
+    // defaultAttrs mean the prop has dynamic behavior — skip inlining
+    expect(output).toContain("Flex");
   });
 
   it("multiple styled(Flex) decls in same file", () => {
@@ -275,7 +289,7 @@ export function App() {
     expect(output).toContain('from "./lib/flex"');
   });
 
-  it("per-site JSX props with spread attr — bails per-site resolution", () => {
+  it("JSX spread attr — skips inlining entirely", () => {
     const input = `
 import styled from "styled-components";
 import { Flex } from "./lib/flex";
@@ -290,13 +304,12 @@ export function App({ extra }: { extra: Record<string, unknown> }) {
 `;
     const output = run(input);
     expect(output).not.toBeNull();
-    // Base resolution should still work
-    expect(output).toContain('display: "flex"');
-    // But per-site resolution should bail (no variant dimensions)
-    expect(output).not.toContain("AlignVariants");
+    // Spread means consumed props could arrive dynamically — skip inlining
+    expect(output).toContain("Flex");
+    expect(output).not.toContain('display: "flex"');
   });
 
-  it("per-site JSX props with dynamic value — bails per-site resolution", () => {
+  it("dynamic consumed prop in JSX — skips inlining entirely", () => {
     const input = `
 import styled from "styled-components";
 import { Flex } from "./lib/flex";
@@ -311,10 +324,9 @@ export function App({ dir }: { dir: string }) {
 `;
     const output = run(input);
     expect(output).not.toBeNull();
-    // Base resolution should still work
-    expect(output).toContain('display: "flex"');
-    // Per-site resolution should bail (non-literal consumed prop value)
-    expect(output).not.toContain("AlignVariants");
+    // Dynamic consumed prop cannot be resolved statically — skip inlining
+    expect(output).toContain("Flex");
+    expect(output).not.toContain('display: "flex"');
   });
 
   it("attrs with non-consumed static props are preserved", () => {
