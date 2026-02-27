@@ -77,5 +77,16 @@ export function postProcessStep(ctx: TransformContext): StepResult {
   }
   ctx.needsReactImport = post.needsReactImport;
 
+  // Remove local helper functions that were consumed during interpolation processing.
+  // By this point styled declarations have been removed, so template expressions
+  // referencing these helpers are gone and the functions are safely removable.
+  for (const decl of styledDecls) {
+    for (const helperName of decl.consumedLocalHelpers ?? []) {
+      root
+        .find(j.FunctionDeclaration, { id: { name: helperName } })
+        .forEach((p: { prune: () => void }) => p.prune());
+    }
+  }
+
   return CONTINUE;
 }

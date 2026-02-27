@@ -3,10 +3,6 @@ import * as stylex from "@stylexjs/stylex";
 
 type AvatarSize = 16 | 20 | 24 | 28 | 32;
 
-function avatarSizeToCSS(size: AvatarSize) {
-  return `width: ${size}px; height: ${size}px;`;
-}
-
 type AvatarContainerProps = Omit<React.ComponentProps<"div">, "className" | "style"> & {
   size: AvatarSize;
   disabled?: boolean;

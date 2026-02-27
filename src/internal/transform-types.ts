@@ -423,4 +423,6 @@ export type StyledDecl = {
   leadingComments?: Comment[];
   /** Deterministic bridge CSS class name for unconverted consumer selectors */
   bridgeClassName?: string;
+  /** Local helper functions that were inlined into style functions and should be removed */
+  consumedLocalHelpers?: string[];
 };

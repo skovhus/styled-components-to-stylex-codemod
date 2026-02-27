@@ -2252,6 +2252,15 @@ function tryHandleLocalHelperCall(args: {
 
   ensureShouldForwardPropDrop(decl, jsxProp);
   decl.needsWrapperComponent = true;
+
+  // Track the consumed local helper for later removal in post-processing.
+  // The function declaration can't be removed here because the template expression
+  // still references it; it's cleaned up after the styled declaration is removed.
+  if (!decl.consumedLocalHelpers) {
+    decl.consumedLocalHelpers = [];
+  }
+  decl.consumedLocalHelpers.push(calleeName);
+
   return true;
 }
 
