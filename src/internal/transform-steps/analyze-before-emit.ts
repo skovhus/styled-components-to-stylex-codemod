@@ -666,6 +666,24 @@ export function analyzeBeforeEmitStep(ctx: TransformContext): StepResult {
     ctx.stylesInsertPosition = "afterImports";
   }
 
+  // Inject staticBooleanVariants into resolvedStyleObjects and variantStyleKeys.
+  // This must run after lowerRulesStep (which populates resolvedStyleObjects) and
+  // before emitStylesStep (which reads resolvedStyleObjects to emit stylex.create).
+  if (ctx.resolvedStyleObjects) {
+    for (const decl of styledDecls) {
+      if (!decl.staticBooleanVariants?.length) {
+        continue;
+      }
+      for (const { propName, styleKey, styles } of decl.staticBooleanVariants) {
+        ctx.resolvedStyleObjects.set(styleKey, styles);
+        if (!decl.variantStyleKeys) {
+          decl.variantStyleKeys = {};
+        }
+        decl.variantStyleKeys[propName] = styleKey;
+      }
+    }
+  }
+
   return CONTINUE;
 }
 

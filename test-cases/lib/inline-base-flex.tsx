@@ -6,6 +6,7 @@ export interface FlexProps extends React.ComponentProps<"div"> {
   gap?: number;
   direction?: "row" | "column";
   column?: boolean;
+  noMinWidth?: boolean;
 }
 
 const ALIGN_TO_CSS: Record<NonNullable<FlexProps["align"]>, string> = {

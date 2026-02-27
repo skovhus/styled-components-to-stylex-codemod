@@ -562,7 +562,7 @@ export const customAdapter = defineAdapter({
 });
 
 const INLINE_BASE_FLEX_IMPORTED_NAME = "Flex";
-const INLINE_BASE_FLEX_CONSUMED_PROPS = ["align", "as", "column", "direction", "gap"];
+const INLINE_BASE_FLEX_CONSUMED_PROPS = ["align", "as", "column", "direction", "gap", "noMinWidth"];
 const INLINE_BASE_ALIGN_MAP: Record<string, string> = {
   start: "flex-start",
   center: "center",
@@ -591,6 +591,10 @@ function resolveInlineBaseFlexSx(
 
   if (typeof staticProps.align === "string") {
     sx.alignItems = INLINE_BASE_ALIGN_MAP[staticProps.align] ?? staticProps.align;
+  }
+
+  if (staticProps.noMinWidth === true) {
+    sx.minWidth = "0px";
   }
 
   return sx;

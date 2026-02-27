@@ -133,6 +133,19 @@ export type VariantDimension = {
   /** Minimum source order from the original variant entries that were grouped into this dimension.
    * Used to preserve CSS cascade order when interleaving with other variant/styleFn entries. */
   sourceOrder?: number;
+  /**
+   * When true, the emitter wraps the computed index with `as keyof typeof variantsObj`.
+   * Set for dimensions from base-component resolution where the prop type is inferred as `any`
+   * (no explicit styled-component props type), since TypeScript rejects `obj[anyProp]`.
+   */
+  needsKeyofCast?: boolean;
+};
+
+/** A single boolean-gated style entry from base-component singleton prop folding. */
+export type StaticBooleanVariant = {
+  propName: string;
+  styleKey: string;
+  styles: Record<string, unknown>;
 };
 
 export type StyledDecl = {
@@ -277,7 +290,10 @@ export type StyledDecl = {
     /** Source order index for CSS cascade ordering against variant entries. */
     sourceOrder?: number;
   }>;
-  shouldForwardProp?: { dropProps: string[]; dropPrefix?: string };
+  shouldForwardProp?: {
+    dropProps: string[];
+    dropPrefix?: string;
+  };
   /**
    * True when `withConfig({ shouldForwardProp })` is present but uses an unsupported pattern
    * that we cannot safely transform. When set, the transform should bail to avoid semantic changes.
@@ -354,6 +370,14 @@ export type StyledDecl = {
   isExported?: boolean;
   preResolvedFnDecls?: Record<string, unknown>;
   inlineStyleProps?: Array<{ prop: string; expr: ExpressionKind; jsxProp?: string }>;
+  /**
+   * Static conditional style entries from base-component resolution for boolean props
+   * where only some call sites pass the prop. Instead of a separate `stylex.create`
+   * lookup object (VariantDimension), these are injected into `resolvedStyleObjects`
+   * as entries in the main `styles` object, guarded by a boolean condition
+   * (via `variantStyleKeys`). Processed in `analyzeBeforeEmitStep`.
+   */
+  staticBooleanVariants?: StaticBooleanVariant[];
   /**
    * Additional style keys (from css`` helper blocks) that should be applied
    * alongside this component's base style.

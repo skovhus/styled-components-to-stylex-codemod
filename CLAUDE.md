@@ -204,6 +204,10 @@ Skills are located in `.claude/skills/`.
 - Store implementation plans in `plans/` as markdown files
 - Name format: `YYYY-MM-DD-feature-name.md`
 
+## Pull Request Descriptions
+
+Keep PR descriptions concise: a brief summary of what the PR does and why. Do not add sections like "Test case", "Test plan", or checklists. Context that's obvious from the diff or commit message doesn't need repeating.
+
 ## Post-Implementation Workflow
 
 After implementing any feature or fix, agents MUST:

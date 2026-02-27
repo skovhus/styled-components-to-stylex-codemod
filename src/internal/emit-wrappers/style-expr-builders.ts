@@ -14,6 +14,26 @@ import { collectConditionProps, makeConditionalStyleExpr } from "./variant-condi
 import type { WrapperEmitter } from "./wrapper-emitter.js";
 
 // ---------------------------------------------------------------------------
+// keyof typeof cast helper
+// ---------------------------------------------------------------------------
+
+/**
+ * Builds `propId as keyof typeof variantObjectName` — used when the prop type
+ * is inferred as `any` and TypeScript rejects the computed index access.
+ */
+function buildKeyofTypeofCast(
+  j: JSCodeshift,
+  propId: ExpressionKind,
+  variantObjectName: string,
+): ExpressionKind {
+  return j.tsAsExpression(propId, {
+    type: "TSTypeOperator",
+    operator: "keyof",
+    typeAnnotation: j.tsTypeQuery(j.identifier(variantObjectName)),
+  } as any);
+}
+
+// ---------------------------------------------------------------------------
 // Base style member expression
 // ---------------------------------------------------------------------------
 
@@ -312,12 +332,7 @@ export function buildVariantDimensionLookups(
     const propId = j.identifier(dim.propName);
 
     if (dim.defaultValue === "default") {
-      const keyofExpr = {
-        type: "TSTypeOperator",
-        operator: "keyof",
-        typeAnnotation: j.tsTypeQuery(j.identifier(dim.variantObjectName)),
-      };
-      const castProp = j.tsAsExpression(propId, keyofExpr as any);
+      const castProp = buildKeyofTypeofCast(j, propId, dim.variantObjectName);
       const lookup = j.memberExpression(variantsId, castProp, true /* computed */);
       const defaultAccess = j.memberExpression(
         j.identifier(dim.variantObjectName),
@@ -328,7 +343,12 @@ export function buildVariantDimensionLookups(
       if (dim.defaultValue && dim.isOptional && propDefaults) {
         propDefaults.set(dim.propName, dim.defaultValue);
       }
-      const lookup = j.memberExpression(variantsId, propId, true /* computed */);
+      // When the prop is untyped (any), TypeScript rejects computed index access.
+      // Use `as keyof typeof variantsObj` to satisfy the type checker.
+      const indexExpr = dim.needsKeyofCast
+        ? buildKeyofTypeofCast(j, propId, dim.variantObjectName)
+        : propId;
+      const lookup = j.memberExpression(variantsId, indexExpr, true /* computed */);
       // Guard optional props without defaults to avoid `undefined` index type error
       if (dim.isOptional && !dim.defaultValue) {
         const guard = j.binaryExpression("!=", j.identifier(dim.propName), j.literal(null));
