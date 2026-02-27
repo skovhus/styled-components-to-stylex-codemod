@@ -269,6 +269,7 @@ export function createLowerRulesState(ctx: TransformContext) {
     resolveImportInScope,
     resolveImportForExpr,
     crossFileSelectorsByLocal,
+    inlineKeyframeNameMap: undefined as Map<string, string> | undefined,
     bail: false,
     markBail: () => {
       state.bail = true;
