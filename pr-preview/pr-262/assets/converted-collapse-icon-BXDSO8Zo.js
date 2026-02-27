@@ -1,0 +1,1 @@
+import{j as r}from"./index-f5OMHEzt.js";function a(o){return r.jsx("div",{...o,className:"x1rg5ohu xvy4d1p xxk0z11 x13attxa x1h2kqdt"})}const x=".sc2sx-CollapseArrowIcon-a1b2c3d4";export{a as C,x as a};
