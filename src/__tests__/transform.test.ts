@@ -3507,3 +3507,46 @@ export function App() {
     expect(code).toContain("<Flex");
   });
 });
+
+describe("local helper function with helper-local variables", () => {
+  it("should bail when derived expression references helper-local variables", () => {
+    const source = `
+import styled from "styled-components";
+
+type Size = "small" | "medium" | "large";
+
+const sizeMap: Record<Size, number> = {
+  small: 20,
+  medium: 24,
+  large: 32,
+};
+
+function helperWithLocal(size: Size) {
+  const scale = 2;
+  const px = sizeMap[size] * scale;
+  return \`width: \${px}px;\`;
+}
+
+const Box = styled.div<{ size: Size }>\`
+  display: flex;
+  \${(props) => helperWithLocal(props.size)}
+\`;
+
+export const App = () => (
+  <div>
+    <Box size="small">S</Box>
+  </div>
+);
+`;
+
+    const result = transformWithWarnings(
+      { source, path: join(testCasesDir, "helper-localVariable.input.tsx") },
+      { jscodeshift: j, j, stats: () => {}, report: () => {} },
+      { adapter: fixtureAdapter },
+    );
+
+    // The codemod should bail because `scale` is a helper-local variable
+    // that would not be in scope at the call site
+    expect(result.code).toBeNull();
+  });
+});

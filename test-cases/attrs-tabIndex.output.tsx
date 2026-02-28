@@ -15,6 +15,7 @@ export function ScrollableFlex(props: Props) {
   return (
     <Flex
       tabIndex={tabIndex ?? 0}
+      gutter={gutter}
       {...rest}
       {...mergedSx(
         [

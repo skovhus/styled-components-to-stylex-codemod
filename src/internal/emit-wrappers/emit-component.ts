@@ -788,13 +788,8 @@ export function emitComponentWrappers(emitter: WrapperEmitter): {
         ? emitter.getExplicitPropNames(baseComponentPropsType)
         : null;
 
-      const styleFnOnlyProps = new Set((d.styleFnFromProps ?? []).map((p) => p.jsxProp));
       for (const propName of destructureProps) {
         if (propName && propName !== "children" && !propName.startsWith("$")) {
-          // Don't forward props used only in style functions (not in .attrs())
-          if (styleFnOnlyProps.has(propName) && !defaultAttrs.some((a) => a.jsxProp === propName)) {
-            continue;
-          }
           if (!baseExplicitProps || baseExplicitProps.has(propName)) {
             pushForwardedProp(propName);
           }
