@@ -2307,6 +2307,22 @@ function tryHandleLocalHelperCall(args: {
   const fnParamTypeAnnotation = (fnParams[0] as { typeAnnotation?: { typeAnnotation?: unknown } })
     ?.typeAnnotation?.typeAnnotation;
 
+  // Verify that every CSS property can be traced back to the function parameter.
+  // If any expression can't be resolved (neither direct param reference, unit-suffixed param,
+  // nor a local variable derived from the param), bail rather than silently producing wrong code.
+  for (const cssProp of Object.keys(parsedCss)) {
+    if (!propToUnit.has(cssProp) && !propToCallArg.has(cssProp)) {
+      // Check if the CSS value contains a placeholder at all
+      const rawVal = parsedWithPlaceholders
+        ? (parsedWithPlaceholders as Record<string, unknown>)[cssProp]
+        : null;
+      if (typeof rawVal === "string" && rawVal.includes("PLACEHOLDER_")) {
+        // Expression present but not traceable to the function parameter — bail
+        return false;
+      }
+    }
+  }
+
   // Create style functions for each extracted CSS property
   for (const cssProp of Object.keys(parsedCss)) {
     const fnKey = `${decl.styleKey}${toSuffixFromProp(cssProp)}`;
