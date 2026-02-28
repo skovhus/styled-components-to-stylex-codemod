@@ -273,6 +273,15 @@ export function handleInterpolatedDeclaration(args: InterpolatedDeclarationConte
         prefix,
         suffix,
       );
+      // When pseudoElement is also set (e.g., ::-webkit-slider-thumb:hover),
+      // delegate to applyResolvedPropValue which correctly scopes the pseudo-class
+      // within the pseudo-element's nested selector bucket.
+      if (pseudoElement) {
+        for (const out of cssDeclarationToStylexDeclarations(d)) {
+          applyResolvedPropValue(out.prop, finalValue, null);
+        }
+        return true;
+      }
       for (const out of cssDeclarationToStylexDeclarations(d)) {
         perPropPseudo[out.prop] ??= {};
         const existing = perPropPseudo[out.prop]!;
