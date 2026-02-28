@@ -424,9 +424,11 @@ export function emitComponentWrappers(emitter: WrapperEmitter): {
       if (!destructureProps.includes(prop)) {
         destructureProps.push(prop);
       }
+      styleOnlyConditionProps.add(prop);
     }
 
     // Add style function calls for dynamic prop-based styles
+    const prevLengthStyleFn = destructureProps.length;
     emitter.buildStyleFnExpressions({
       d,
       styleArgs,
@@ -435,6 +437,12 @@ export function emitComponentWrappers(emitter: WrapperEmitter): {
       propsIdentifier: propsIdForExpr,
       orderedEntries: hasSourceOrder ? orderedEntries : undefined,
     });
+    // Track props added by style functions as style-only.
+    // These props are destructured for dynamic style calls (e.g., styles.width(width))
+    // and should not be forwarded unless the base component explicitly accepts them.
+    for (let i = prevLengthStyleFn; i < destructureProps.length; i++) {
+      styleOnlyConditionProps.add(destructureProps[i]!);
+    }
 
     // Merge ordered entries (variants + styleFns) by source order to preserve CSS cascade
     mergeOrderedEntries(orderedEntries, styleArgs);
@@ -738,21 +746,16 @@ export function emitComponentWrappers(emitter: WrapperEmitter): {
         const { as: _omitAs, ...restStaticAttrs } = staticAttrs;
         return restStaticAttrs;
       })();
-      // Add attrs in order: defaultAttrs, staticAttrs, then {...rest}
-      // This allows props passed to the component to override attrs (styled-components semantics)
       // Use buildDefaultAttrsFromProps to preserve nullish coalescing (e.g., tabIndex ?? 0)
+      // Default attrs go first; their ?? operator handles caller overrides internally.
       openingAttrs.push(
         ...emitter.buildDefaultAttrsFromProps({
           defaultAttrs,
           propExprFor: (prop) => j.identifier(prop),
         }),
       );
-      // Add staticAttrs from .attrs({...}) before {...rest} so they can be overridden
-      openingAttrs.push(
-        ...emitter.buildStaticAttrsFromRecord(staticAttrsWithoutForwardedAsFallback, {
-          booleanTrueAsShorthand: false,
-        }),
-      );
+      // NOTE: staticAttrs are added AFTER {...rest} below so they override caller props
+      // (matching styled-components semantics where .attrs() values always win).
       const forwardedProps = new Set<string>();
       // Pre-populate with attr names already emitted as JSX attributes above.
       // defaultAttrs are emitted by buildDefaultAttrsFromProps (e.g., column={column ?? true}).
@@ -830,6 +833,13 @@ export function emitComponentWrappers(emitter: WrapperEmitter): {
         pushForwardedProp(propName);
       }
       openingAttrs.push(j.jsxSpreadAttribute(restId));
+      // Add staticAttrs from .attrs({...}) AFTER {...rest} so attrs override caller props
+      // (styled-components semantics: .attrs() values always win over incoming props).
+      openingAttrs.push(
+        ...emitter.buildStaticAttrsFromRecord(staticAttrsWithoutForwardedAsFallback, {
+          booleanTrueAsShorthand: false,
+        }),
+      );
       if (shouldLowerForwardedAs) {
         const forwardedAsValueExpr =
           hasStaticForwardedAsFallback &&
