@@ -56,8 +56,8 @@ const EXPECTED_FAILURES = new Set<string>([
   // Flaky due to animation timing — keyframe snapshots occasionally differ.
   "keyframes-unionComplexity",
   "keyframes-interpolatedDuration",
-  "keyframes-interpolatedDurationWithDelay",
-  "keyframes-multiAnimationInterpolatedDuration",
+  // Child selector (& > div) is unsupported in StyleX — child sizing is lost.
+  "conditional-alignChildSizing",
 ]);
 
 // Case-specific pixelmatch threshold overrides for known anti-aliasing noise.
