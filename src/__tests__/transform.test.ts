@@ -3583,3 +3583,37 @@ export const App = () => (
     expect(result.code).toContain("opacity");
   });
 });
+
+describe("event handler annotation typing", () => {
+  it("annotates onChange handlers with intrinsic element types", () => {
+    const source = `
+import React from "react";
+import styled from "styled-components";
+
+export const Select = styled.select\`
+  padding: 4px;
+\`;
+
+export const Input = styled.input\`
+  padding: 4px;
+\`;
+
+export const App = () => (
+  <div>
+    <Select onChange={(e) => console.log(e.target.value)} />
+    <Input onChange={(e) => console.log(e.target.value)} />
+  </div>
+);
+`;
+
+    const result = transformWithWarnings(
+      { source, path: join(testCasesDir, "event-handler-annotation.input.tsx") },
+      { jscodeshift: j, j, stats: () => {}, report: () => {} },
+      { adapter: fixtureAdapter },
+    );
+
+    expect(result.code).not.toBeNull();
+    expect(result.code).toContain("React.ChangeEvent<HTMLSelectElement>");
+    expect(result.code).toContain("React.ChangeEvent<HTMLInputElement>");
+  });
+});

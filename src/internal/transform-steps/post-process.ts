@@ -119,7 +119,13 @@ export function postProcessStep(ctx: TransformContext): StepResult {
   // (e.g., `onKeyDown={e => ...}` gets implicit-any). Add explicit React event type annotations.
   if (/\.(ts|tsx)$/.test(file.path)) {
     const convertedNames = new Set(styledDecls.map((d) => d.localName));
-    if (annotateEventHandlerParams({ root, j, convertedNames })) {
+    const componentTagMap = new Map<string, string>();
+    for (const decl of styledDecls) {
+      if (decl.base.kind === "intrinsic") {
+        componentTagMap.set(decl.localName, decl.base.tagName);
+      }
+    }
+    if (annotateEventHandlerParams({ root, j, convertedNames, componentTagMap })) {
       ctx.markChanged();
     }
   }

@@ -45,8 +45,36 @@ const EVENT_TYPE_MAP: Record<string, string> = {
   onTransitionEnd: "React.TransitionEvent",
 };
 
+/** Maps intrinsic JSX tag names to their DOM element interface names. */
+const INTRINSIC_TAG_TO_ELEMENT_TYPE: Record<string, string> = {
+  a: "HTMLAnchorElement",
+  button: "HTMLButtonElement",
+  div: "HTMLDivElement",
+  form: "HTMLFormElement",
+  img: "HTMLImageElement",
+  input: "HTMLInputElement",
+  label: "HTMLLabelElement",
+  li: "HTMLLIElement",
+  ol: "HTMLOListElement",
+  option: "HTMLOptionElement",
+  select: "HTMLSelectElement",
+  span: "HTMLSpanElement",
+  svg: "SVGSVGElement",
+  table: "HTMLTableElement",
+  tbody: "HTMLTableSectionElement",
+  td: "HTMLTableCellElement",
+  textarea: "HTMLTextAreaElement",
+  th: "HTMLTableCellElement",
+  thead: "HTMLTableSectionElement",
+  tr: "HTMLTableRowElement",
+  ul: "HTMLUListElement",
+};
+
 /**
  * Annotates event handler arrow function parameters at JSX usage sites of converted components.
+ *
+ * `componentTagMap` is best-effort and only populated for intrinsic-base conversions.
+ * For wrappers around non-intrinsic components, event annotations stay non-generic.
  *
  * @returns true if any annotations were added
  */
@@ -54,8 +82,9 @@ export function annotateEventHandlerParams(args: {
   root: ReturnType<JSCodeshift>;
   j: JSCodeshift;
   convertedNames: Set<string>;
+  componentTagMap: Map<string, string>;
 }): boolean {
-  const { root, j, convertedNames } = args;
+  const { root, j, convertedNames, componentTagMap } = args;
   if (convertedNames.size === 0) {
     return false;
   }
@@ -73,6 +102,11 @@ export function annotateEventHandlerParams(args: {
       return false;
     })
     .forEach((jsxPath) => {
+      const openingName = jsxPath.node.name;
+      const componentName = openingName.type === "JSXIdentifier" ? openingName.name : null;
+      const intrinsicTag = componentName ? componentTagMap.get(componentName) : undefined;
+      const elementType = intrinsicTag ? INTRINSIC_TAG_TO_ELEMENT_TYPE[intrinsicTag] : undefined;
+
       for (const attr of jsxPath.node.attributes ?? []) {
         if (attr.type !== "JSXAttribute" || !attr.name || attr.name.type !== "JSXIdentifier") {
           continue;
@@ -112,6 +146,11 @@ export function annotateEventHandlerParams(args: {
         const typeRef = j.tsTypeReference(
           j.tsQualifiedName(j.identifier(parts[0]!), j.identifier(parts[1]!)),
         );
+        if (elementType) {
+          (typeRef as { typeParameters?: unknown }).typeParameters = j.tsTypeParameterInstantiation(
+            [j.tsTypeReference(j.identifier(elementType))],
+          );
+        }
         (firstParam as { typeAnnotation?: unknown }).typeAnnotation = j.tsTypeAnnotation(typeRef);
         changed = true;
       }
