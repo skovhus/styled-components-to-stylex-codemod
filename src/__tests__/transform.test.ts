@@ -3550,3 +3550,36 @@ export const App = () => (
     expect(result.code).toBeNull();
   });
 });
+
+describe("local helper function with direct param interpolation", () => {
+  it("should handle direct param usage without a unit suffix", () => {
+    const source = `
+import styled from "styled-components";
+
+function opacityHelper(value: number) {
+  return \`opacity: \${value};\`;
+}
+
+const Box = styled.div<{ opacity: number }>\`
+  display: flex;
+  \${(props) => opacityHelper(props.opacity)}
+\`;
+
+export const App = () => (
+  <div>
+    <Box opacity={0.5}>Faded</Box>
+  </div>
+);
+`;
+
+    const result = transformWithWarnings(
+      { source, path: join(testCasesDir, "helper-directParam.input.tsx") },
+      { jscodeshift: j, j, stats: () => {}, report: () => {} },
+      { adapter: fixtureAdapter },
+    );
+
+    // Should NOT bail — opacity: ${value} is a direct param reference (no unit needed)
+    expect(result.code).not.toBeNull();
+    expect(result.code).toContain("opacity");
+  });
+});

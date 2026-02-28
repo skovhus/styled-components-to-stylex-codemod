@@ -2292,6 +2292,8 @@ function tryHandleLocalHelperCall(args: {
     cssString.replace(/__LOCAL_PARAM_(\d+)__/g, "PLACEHOLDER_$1"),
   );
   const propToUnit = new Map<string, string>();
+  // Track CSS properties that directly reference the function parameter (with or without a unit)
+  const directParamProps = new Set<string>();
   // Track derived call arguments per CSS property when the expression is a local variable
   // derived from the function parameter (e.g., `const px = sizeMap[size]` → callArg = sizeMap[size])
   const propToCallArg = new Map<string, ExpressionKind>();
@@ -2307,6 +2309,7 @@ function tryHandleLocalHelperCall(args: {
       const unitMatch = nextQuasi.match(/^(px|em|rem|%|vh|vw|ms|s)\b/);
       const exprNode = retExpr.expressions[exprIdx] as { type?: string; name?: string } | undefined;
       if (exprNode?.type === "Identifier" && exprNode.name === fnParamName) {
+        directParamProps.add(cssProp);
         if (unitMatch) {
           propToUnit.set(cssProp, unitMatch[1]!);
         }
@@ -2334,7 +2337,7 @@ function tryHandleLocalHelperCall(args: {
   // If any expression can't be resolved (neither direct param reference, unit-suffixed param,
   // nor a local variable derived from the param), bail rather than silently producing wrong code.
   for (const cssProp of Object.keys(parsedCss)) {
-    if (!propToUnit.has(cssProp) && !propToCallArg.has(cssProp)) {
+    if (!directParamProps.has(cssProp) && !propToCallArg.has(cssProp)) {
       // Check if the CSS value contains a placeholder at all
       const rawVal = parsedWithPlaceholders
         ? (parsedWithPlaceholders as Record<string, unknown>)[cssProp]

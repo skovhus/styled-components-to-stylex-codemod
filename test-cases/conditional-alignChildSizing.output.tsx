@@ -40,16 +40,12 @@ export const App = () => (
     <Container align="bottom" style={{ height: "100px", width: "80px" }}>
       <div style={{ background: "#22c55e", padding: "8px", color: "white" }}>Bottom</div>
     </Container>
-    <Container align="center" $property="width" style={{ height: "100px", width: "80px" }}>
-      <div style={{ background: "#eab308", padding: "8px", color: "white" }}>CtrW</div>
-    </Container>
   </div>
 );
 
 const styles = stylex.create({
   container: {
     overflow: "hidden",
-    position: "relative",
     backgroundColor: "#f0f0f0",
   },
   containerAlignNotTopAlignCenter: {

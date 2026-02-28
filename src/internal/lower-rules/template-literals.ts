@@ -129,9 +129,7 @@ export function resolveTemplateLiteralBranch(
     }
     const selector = (rule.selector ?? "").trim();
     if (selector !== "&") {
-      // Skip unsupported selectors (child/descendant selectors etc.) but don't bail
-      // — we can still extract properties from & rules
-      continue;
+      return null;
     }
 
     // Helper to set a value into the correct target (base style or media-scoped)

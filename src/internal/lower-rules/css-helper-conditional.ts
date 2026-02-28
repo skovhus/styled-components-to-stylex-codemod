@@ -428,9 +428,7 @@ export function createCssHelperConditionalHandler(ctx: CssHelperConditionalConte
         }
         const selector = (rule.selector ?? "").trim();
         if (selector !== "&") {
-          // Skip unsupported selectors (child/descendant selectors etc.) but don't bail
-          // — we can still extract properties from & rules
-          continue;
+          return null;
         }
         for (const d of rule.declarations) {
           if (!d.property) {
