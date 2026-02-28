@@ -360,6 +360,11 @@ export function createCssHelperResolver(args: {
           });
           // Use the first pseudo-element's target as the primary target for iteration below
           target = pseudoElementTargets[0]?.obj ?? out;
+        } else if (parsed.kind === "pseudoElementWithPseudo" && parsed.pseudos.length === 1) {
+          const nested = (out[parsed.element] as Record<string, unknown>) ?? {};
+          out[parsed.element] = nested;
+          target = nested;
+          currentPseudoClass = parsed.pseudos[0]!;
         } else if (parsed.kind === "pseudo" && parsed.pseudos.length === 1) {
           const simplePseudo = parsed.pseudos[0]!;
           // Pseudo-classes (:hover, :focus, etc.) use property-first format:

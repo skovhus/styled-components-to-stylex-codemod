@@ -1,15 +1,20 @@
 // Conditional alignment logic with child sizing based on prop values
+// Includes a child selector (& > div) which is the pattern that causes the codemod to drop the block
 import styled from "styled-components";
 
 type Align = "top" | "center" | "bottom";
 
 const Container = styled.div<{ align: Align; $property?: "width" | "height" }>`
   overflow: hidden;
+  position: relative;
   background: #f0f0f0;
   ${(props) =>
     props.align !== "top"
       ? `display: flex;
-         align-items: ${props.align === "center" ? "center" : "flex-end"};`
+         align-items: ${props.align === "center" ? "center" : "flex-end"};
+         & > div {
+           ${props.$property === "height" ? "width" : "height"}: 100%;
+         }`
       : ""}
 `;
 
@@ -23,6 +28,9 @@ export const App = () => (
     </Container>
     <Container align="bottom" style={{ height: "100px", width: "80px" }}>
       <div style={{ background: "#22c55e", padding: "8px", color: "white" }}>Bottom</div>
+    </Container>
+    <Container align="center" $property="width" style={{ height: "100px", width: "80px" }}>
+      <div style={{ background: "#eab308", padding: "8px", color: "white" }}>CtrW</div>
     </Container>
   </div>
 );

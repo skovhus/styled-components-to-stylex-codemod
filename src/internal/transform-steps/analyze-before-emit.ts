@@ -378,14 +378,14 @@ export function analyzeBeforeEmitStep(ctx: TransformContext): StepResult {
     }
   }
 
-  // Intrinsic styled components used with JSX spread attributes need wrappers.
+  // Styled components used with JSX spread attributes need wrappers.
   // Spreads may contain className/style from callers; without a wrapper, the
   // inline stylex.props() placed after the spread would clobber those values.
   for (const decl of styledDecls) {
     if (decl.needsWrapperComponent || decl.isCssHelper) {
       continue;
     }
-    if (decl.base.kind === "intrinsic" && hasSpreadInJsx(decl.localName)) {
+    if (hasSpreadInJsx(decl.localName)) {
       decl.needsWrapperComponent = true;
     }
   }

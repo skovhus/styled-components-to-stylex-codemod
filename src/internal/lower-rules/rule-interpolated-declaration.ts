@@ -2196,6 +2196,9 @@ function tryHandleLocalHelperCall(args: {
     cssString.replace(/__LOCAL_PARAM_(\d+)__/g, "PLACEHOLDER_$1"),
   );
   const propToUnit = new Map<string, string>();
+  // Track derived call arguments per CSS property when the expression is a local variable
+  // derived from the function parameter (e.g., `const px = sizeMap[size]` → callArg = sizeMap[size])
+  const propToCallArg = new Map<string, ExpressionKind>();
   if (parsedWithPlaceholders) {
     for (const [cssProp, value] of Object.entries(parsedWithPlaceholders)) {
       const m = typeof value === "string" ? value.match(/PLACEHOLDER_(\d+)/) : null;
@@ -2206,12 +2209,86 @@ function tryHandleLocalHelperCall(args: {
       const nextQuasi =
         retExpr.quasis[exprIdx + 1]?.value?.cooked ?? retExpr.quasis[exprIdx + 1]?.value?.raw ?? "";
       const unitMatch = nextQuasi.match(/^(px|em|rem|%|vh|vw|ms|s)\b/);
-      if (unitMatch) {
-        const exprNode = retExpr.expressions[exprIdx] as
-          | { type?: string; name?: string }
-          | undefined;
-        if (exprNode?.type === "Identifier" && exprNode.name === fnParamName) {
+      const exprNode = retExpr.expressions[exprIdx] as { type?: string; name?: string } | undefined;
+      if (exprNode?.type === "Identifier" && exprNode.name === fnParamName) {
+        if (unitMatch) {
           propToUnit.set(cssProp, unitMatch[1]!);
+        }
+      } else if (exprNode?.type === "Identifier" && exprNode.name) {
+        // Check if this identifier is a local variable derived from fnParamName
+        const localName = exprNode.name;
+        const stmts = (fnBody as { body: unknown[] }).body;
+        for (const stmt of stmts) {
+          const s = stmt as { type?: string; declarations?: unknown[] };
+          if (s.type !== "VariableDeclaration" || !s.declarations) {
+            continue;
+          }
+          for (const decl_ of s.declarations) {
+            const vd = decl_ as { id?: { type?: string; name?: string }; init?: unknown };
+            if (vd.id?.type !== "Identifier" || vd.id.name !== localName || !vd.init) {
+              continue;
+            }
+            // Check if the initializer references fnParamName
+            const containsParam = (node: unknown): boolean => {
+              if (!node || typeof node !== "object") {
+                return false;
+              }
+              if (Array.isArray(node)) {
+                return node.some(containsParam);
+              }
+              const rec = node as Record<string, unknown>;
+              if (rec.type === "Identifier" && rec.name === fnParamName) {
+                return true;
+              }
+              for (const key of Object.keys(rec)) {
+                if (key === "loc" || key === "comments" || key === "tokens") {
+                  continue;
+                }
+                const child = rec[key];
+                if (child && typeof child === "object") {
+                  if (containsParam(child)) {
+                    return true;
+                  }
+                }
+              }
+              return false;
+            };
+            if (!containsParam(vd.init)) {
+              continue;
+            }
+            // Build the callArg by replacing fnParamName with jsxProp in the initializer
+            const clonedInit = cloneAstNode(vd.init) as ExpressionKind;
+            const replaceParam = (node: unknown): unknown => {
+              if (!node || typeof node !== "object") {
+                return node;
+              }
+              if (Array.isArray(node)) {
+                return node.map(replaceParam);
+              }
+              const rec = node as Record<string, unknown>;
+              if (rec.type === "Identifier" && rec.name === fnParamName) {
+                return j.identifier(jsxProp);
+              }
+              for (const key of Object.keys(rec)) {
+                if (key === "loc" || key === "comments") {
+                  continue;
+                }
+                const child = rec[key];
+                if (child && typeof child === "object") {
+                  rec[key] = replaceParam(child);
+                }
+              }
+              return rec;
+            };
+            const callArg = replaceParam(clonedInit) as ExpressionKind;
+            propToCallArg.set(cssProp, callArg);
+            // For px unit with derived expression, StyleX auto-adds px for numeric values,
+            // so we don't need a unit suffix — just pass the number directly.
+            // For non-px units, append the unit suffix.
+            if (unitMatch && unitMatch[1] !== "px") {
+              propToUnit.set(cssProp, unitMatch[1]!);
+            }
+          }
         }
       }
     }
@@ -2225,29 +2302,45 @@ function tryHandleLocalHelperCall(args: {
   for (const cssProp of Object.keys(parsedCss)) {
     const fnKey = `${decl.styleKey}${toSuffixFromProp(cssProp)}`;
     if (!styleFnDecls.has(fnKey)) {
-      const param = j.identifier(jsxProp);
-      if (fnParamTypeAnnotation) {
+      const derivedCallArg = propToCallArg.get(cssProp);
+      const paramName_ = cssPropertyToIdentifier(cssProp);
+      const param = j.identifier(derivedCallArg ? paramName_ : jsxProp);
+      if (derivedCallArg) {
+        // Derived from a lookup — the result is a number
+        (param as { typeAnnotation?: unknown }).typeAnnotation = j.tsTypeAnnotation(
+          j.tsNumberKeyword(),
+        );
+      } else if (fnParamTypeAnnotation) {
         (param as { typeAnnotation?: unknown }).typeAnnotation = j.tsTypeAnnotation(
           cloneAstNode(fnParamTypeAnnotation) as Parameters<typeof j.tsTypeAnnotation>[0],
         );
       }
       const propUnit = propToUnit.get(cssProp) ?? "";
+      const valueParamName = derivedCallArg ? paramName_ : jsxProp;
       const valueExpr = propUnit
         ? j.templateLiteral(
             [
               j.templateElement({ raw: "", cooked: "" }, false),
               j.templateElement({ raw: propUnit, cooked: propUnit }, true),
             ],
-            [j.identifier(jsxProp)],
+            [j.identifier(valueParamName)],
           )
-        : j.identifier(jsxProp);
-      const bodyExprNode = j.objectExpression([
-        j.property("init", j.identifier(cssProp), valueExpr),
-      ]);
+        : j.identifier(valueParamName);
+      const propKey = j.identifier(cssProp);
+      const prop = j.property("init", propKey, valueExpr);
+      // Use shorthand when key and value are the same identifier (e.g., { width } instead of { width: width })
+      if (!propUnit && valueExpr.type === "Identifier" && valueExpr.name === cssProp) {
+        (prop as { shorthand?: boolean }).shorthand = true;
+      }
+      const bodyExprNode = j.objectExpression([prop]);
       styleFnDecls.set(fnKey, j.arrowFunctionExpression([param], bodyExprNode));
     }
     if (!styleFnFromProps.some((p) => p.fnKey === fnKey)) {
-      styleFnFromProps.push({ fnKey, jsxProp });
+      styleFnFromProps.push({
+        fnKey,
+        jsxProp,
+        ...(propToCallArg.has(cssProp) ? { callArg: propToCallArg.get(cssProp)! } : {}),
+      });
     }
   }
 

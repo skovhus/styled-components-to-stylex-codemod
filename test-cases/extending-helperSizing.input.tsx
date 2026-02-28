@@ -1,10 +1,18 @@
-// Helper function that maps a prop to width/height CSS — local helper, not imported
+// Helper function that maps a string-based size prop to width/height CSS via lookup
+// The helper is non-trivial: it uses a map + conditional logic, so the codemod cannot simply inline it
 import styled from "styled-components";
 
-type AvatarSize = 16 | 20 | 24 | 28 | 32;
+type AvatarSize = "small" | "medium" | "large";
+
+const sizeMap: Record<AvatarSize, number> = {
+  small: 20,
+  medium: 24,
+  large: 32,
+};
 
 function avatarSizeToCSS(size: AvatarSize) {
-  return `width: ${size}px; height: ${size}px;`;
+  const px = sizeMap[size];
+  return `width: ${px}px; height: ${px}px;`;
 }
 
 const AvatarContainer = styled.div<{ size: AvatarSize; disabled?: boolean }>`
@@ -21,11 +29,69 @@ const AvatarContainer = styled.div<{ size: AvatarSize; disabled?: boolean }>`
 
 export const App = () => (
   <div style={{ display: "flex", gap: "8px", alignItems: "center" }}>
-    <AvatarContainer size={16}>16</AvatarContainer>
-    <AvatarContainer size={24}>24</AvatarContainer>
-    <AvatarContainer size={32}>32</AvatarContainer>
-    <AvatarContainer size={20} disabled>
-      20d
+    <AvatarContainer size="small">
+      <div
+        style={{
+          background: "#bf4f74",
+          width: "100%",
+          height: "100%",
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "center",
+          color: "white",
+          fontSize: "10px",
+        }}
+      >
+        S
+      </div>
+    </AvatarContainer>
+    <AvatarContainer size="medium">
+      <div
+        style={{
+          background: "#4f74bf",
+          width: "100%",
+          height: "100%",
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "center",
+          color: "white",
+          fontSize: "10px",
+        }}
+      >
+        M
+      </div>
+    </AvatarContainer>
+    <AvatarContainer size="large">
+      <div
+        style={{
+          background: "#22c55e",
+          width: "100%",
+          height: "100%",
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "center",
+          color: "white",
+          fontSize: "10px",
+        }}
+      >
+        L
+      </div>
+    </AvatarContainer>
+    <AvatarContainer size="medium" disabled>
+      <div
+        style={{
+          background: "#666",
+          width: "100%",
+          height: "100%",
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "center",
+          color: "white",
+          fontSize: "10px",
+        }}
+      >
+        Md
+      </div>
     </AvatarContainer>
   </div>
 );
