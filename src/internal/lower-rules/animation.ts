@@ -81,6 +81,7 @@ export function tryHandleAnimation(args: {
   styleFnDecls: Map<string, unknown>;
   styleFnFromProps: StyleFnFromPropsEntry[];
   filePath: string;
+  avoidNames?: Set<string>;
   applyResolvedPropValue?: (
     prop: string,
     value: unknown,
@@ -376,6 +377,7 @@ export function tryHandleAnimation(args: {
       styleFnFromProps,
       durations,
       delays,
+      args.avoidNames,
     );
 
     return true;
@@ -441,6 +443,7 @@ function emitInterpolatedAnimTimeFunctions(
   styleFnFromProps: StyleFnFromPropsEntry[],
   durations: Array<string | null>,
   delays: Array<string | null>,
+  avoidNames?: Set<string>,
 ): void {
   for (const interp of interpolatedTimes) {
     const expr = (decl as any).templateExpressions[interp.slotId] as any;
@@ -472,7 +475,7 @@ function emitInterpolatedAnimTimeFunctions(
       defaultFallback,
     );
 
-    const cssPropId = cssPropertyToIdentifier(interp.longhand);
+    const cssPropId = cssPropertyToIdentifier(interp.longhand, avoidNames);
     const fnKey = `${decl.styleKey}${toSuffixFromProp(interp.longhand)}`;
     if (!styleFnDecls.has(fnKey)) {
       const param = j.identifier(cssPropId);

@@ -334,6 +334,11 @@ export function emitComponentWrappers(emitter: WrapperEmitter): {
     // Track namespace boolean props (like 'disabled') that need to be passed to wrapped component
     const namespaceBooleanProps: string[] = [];
 
+    // Track props that are destructured solely for styling purposes (variant conditions
+    // and pseudo-alias selectors). These should NOT be forwarded to the wrapped component
+    // because they are style-only concerns and may not be valid HTML/component attributes.
+    const styleOnlyConditionProps = new Set<string>();
+
     // Build propsArg expressions first (may be needed for interleaving)
     const propsArgExprs = d.extraStylexPropsArgs
       ? emitter.buildExtraStylexPropsExprs({
@@ -359,7 +364,12 @@ export function emitComponentWrappers(emitter: WrapperEmitter): {
     if (d.variantStyleKeys) {
       const sortedEntries = sortVariantEntriesBySpecificity(Object.entries(d.variantStyleKeys));
       for (const [when, variantKey] of sortedEntries) {
+        const prevLength = destructureProps.length;
         const { cond, isBoolean } = emitter.collectConditionProps({ when, destructureProps });
+        // Track newly added props as style-only (variant condition props)
+        for (let i = prevLength; i < destructureProps.length; i++) {
+          styleOnlyConditionProps.add(destructureProps[i]!);
+        }
         const styleExpr = j.memberExpression(
           j.identifier(stylesIdentifier),
           j.identifier(variantKey),
@@ -406,6 +416,7 @@ export function emitComponentWrappers(emitter: WrapperEmitter): {
     )) {
       if (!destructureProps.includes(gp)) {
         destructureProps.push(gp);
+        styleOnlyConditionProps.add(gp);
       }
     }
 
@@ -790,6 +801,15 @@ export function emitComponentWrappers(emitter: WrapperEmitter): {
 
       for (const propName of destructureProps) {
         if (propName && propName !== "children" && !propName.startsWith("$")) {
+          if (styleOnlyConditionProps.has(propName)) {
+            // Props added purely for variant conditions or pseudo-alias selectors are
+            // style-only concerns. Only forward them when the base component explicitly
+            // accepts them (e.g., the prop doubles as a rendering prop on the inner component).
+            if (baseExplicitProps?.has(propName)) {
+              pushForwardedProp(propName);
+            }
+            continue;
+          }
           if (!baseExplicitProps || baseExplicitProps.has(propName)) {
             pushForwardedProp(propName);
           }

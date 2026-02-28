@@ -125,6 +125,7 @@ export function handleInterpolatedDeclaration(args: InterpolatedDeclarationConte
     resolveImportInScope,
     resolveImportForExpr,
   } = state;
+  const avoidNames = new Set(importMap.keys());
 
   if (state.bail) {
     return;
@@ -188,6 +189,7 @@ export function handleInterpolatedDeclaration(args: InterpolatedDeclarationConte
         styleFnDecls,
         styleFnFromProps,
         filePath,
+        avoidNames,
         applyResolvedPropValue,
       })
     ) {
@@ -1467,6 +1469,7 @@ export function handleInterpolatedDeclaration(args: InterpolatedDeclarationConte
         setBail: () => {
           bail = true;
         },
+        avoidNames,
       })
     ) {
       if (bail) {
@@ -1514,7 +1517,7 @@ export function handleInterpolatedDeclaration(args: InterpolatedDeclarationConte
         styleFnFromProps.push({ fnKey, jsxProp });
 
         if (!styleFnDecls.has(fnKey)) {
-          const outParamName = cssPropertyToIdentifier(out.prop);
+          const outParamName = cssPropertyToIdentifier(out.prop, avoidNames);
           const param = j.identifier(outParamName);
           if (jsxProp !== "__props") {
             annotateParamFromJsxProp(param, jsxProp);
@@ -1559,7 +1562,7 @@ export function handleInterpolatedDeclaration(args: InterpolatedDeclarationConte
             // IMPORTANT: don't reuse the same Identifier node for both the function param and
             // expression positions. If the param identifier has a TS annotation, reusing it
             // in expression positions causes printers to emit `value: any` inside templates.
-            const outParamName = cssPropertyToIdentifier(out.prop);
+            const outParamName = cssPropertyToIdentifier(out.prop, avoidNames);
             const param = j.identifier(outParamName);
             const valueId = j.identifier(outParamName);
             // Be permissive: callers might pass numbers (e.g. `${props => props.$width}px`)
@@ -1691,7 +1694,7 @@ export function handleInterpolatedDeclaration(args: InterpolatedDeclarationConte
             const propKey = makeCssPropKey(j, out.prop);
             const p = j.property("init", propKey, getPropValue()) as any;
             // Only use shorthand if the key is an identifier (not a string literal for CSS vars)
-            const paramName = cssPropertyToIdentifier(out.prop);
+            const paramName = cssPropertyToIdentifier(out.prop, avoidNames);
             p.shorthand =
               propKey.type === "Identifier" &&
               valueExpr?.type === "Identifier" &&
@@ -2175,6 +2178,7 @@ function tryHandleLocalHelperCall(args: {
   const { ctx, d, expr } = args;
   const { state, decl, styleFnDecls, styleFnFromProps } = ctx;
   const { j, root } = state;
+  const avoidNames = new Set(state.importMap.keys());
 
   // Only handle standalone interpolations (no property name)
   if (d.property) {
@@ -2354,7 +2358,7 @@ function tryHandleLocalHelperCall(args: {
     const fnKey = `${decl.styleKey}${toSuffixFromProp(cssProp)}`;
     const derivedCallArg = propToCallArg.get(cssProp);
     if (!styleFnDecls.has(fnKey)) {
-      const paramName_ = cssPropertyToIdentifier(cssProp);
+      const paramName_ = cssPropertyToIdentifier(cssProp, avoidNames);
       const param = j.identifier(derivedCallArg ? paramName_ : jsxProp);
       if (derivedCallArg) {
         // Derived from a lookup — the result is a number

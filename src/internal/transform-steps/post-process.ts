@@ -1,6 +1,6 @@
 /**
  * Step: post-process transformed AST and cleanup imports.
- * Core concepts: relation overrides and import reconciliation.
+ * Core concepts: relation overrides, import reconciliation, and event handler annotations.
  */
 import path from "node:path";
 import { postProcessTransformedAst } from "../rewrite-jsx.js";
@@ -8,6 +8,7 @@ import { CONTINUE, type StepResult } from "../transform-types.js";
 import type { StyledDecl } from "../transform-types.js";
 import type { ImportSource } from "../../adapter.js";
 import { TransformContext } from "../transform-context.js";
+import { annotateEventHandlerParams } from "../post-process/event-handler-annotations.js";
 
 /**
  * Performs post-processing rewrites, import cleanup, and descendant/ancestor selector adjustments.
@@ -110,6 +111,16 @@ export function postProcessStep(ctx: TransformContext): StepResult {
       if (refs.size() === 0) {
         fnPaths.forEach((p: { prune: () => void }) => p.prune());
       }
+    }
+  }
+
+  // Annotate event handler parameters at usage sites of converted components.
+  // After conversion, inline arrow function event handlers may lose type inference
+  // (e.g., `onKeyDown={e => ...}` gets implicit-any). Add explicit React event type annotations.
+  if (/\.(ts|tsx)$/.test(file.path)) {
+    const convertedNames = new Set(styledDecls.map((d) => d.localName));
+    if (annotateEventHandlerParams({ root, j, convertedNames })) {
+      ctx.markChanged();
     }
   }
 

@@ -58,6 +58,7 @@ type CssHelperConditionalContext = Pick<
   | "isCssHelperTaggedTemplate"
   | "resolveCssHelperTemplate"
   | "markBail"
+  | "importMap"
 > & {
   decl: StyledDecl;
   handlerContext: InternalHandlerContext;
@@ -106,9 +107,11 @@ export function createCssHelperConditionalHandler(ctx: CssHelperConditionalConte
     findJsxPropTsType,
     isJsxPropOptional,
     markBail,
+    importMap,
     extraStyleObjects,
     resolvedStyleObjects,
   } = ctx;
+  const avoidNames = new Set(importMap.keys());
 
   /**
    * Resolve the TS type node for a prop used in a style function parameter object.
@@ -540,7 +543,7 @@ export function createCssHelperConditionalHandler(ctx: CssHelperConditionalConte
           for (const dyn of dynamicProps) {
             const fnKey = `${decl.styleKey}${toSuffixFromProp(dyn.stylexProp)}`;
             if (!styleFnDecls.has(fnKey)) {
-              const dynParamName = cssPropertyToIdentifier(dyn.stylexProp);
+              const dynParamName = cssPropertyToIdentifier(dyn.stylexProp, avoidNames);
               const param = j.identifier(dynParamName);
               annotateParamFromJsxProp(param, dyn.jsxProp);
               const p = makeCssProperty(j, dyn.stylexProp, dynParamName);
@@ -630,7 +633,7 @@ export function createCssHelperConditionalHandler(ctx: CssHelperConditionalConte
             for (const entry of dynamicEntries) {
               const fnKey = `${decl.styleKey}${toSuffixFromProp(entry.stylexProp)}`;
               if (!styleFnDecls.has(fnKey)) {
-                const entryParamName = cssPropertyToIdentifier(entry.stylexProp);
+                const entryParamName = cssPropertyToIdentifier(entry.stylexProp, avoidNames);
                 const param = j.identifier(entryParamName);
                 annotateParamFromJsxProp(param, entry.jsxProp);
                 const p = makeCssProperty(j, entry.stylexProp, entryParamName);
@@ -719,7 +722,7 @@ export function createCssHelperConditionalHandler(ctx: CssHelperConditionalConte
       for (const entry of entries) {
         const fnKey = `${decl.styleKey}${toSuffixFromProp(entry.stylexProp)}`;
         if (!styleFnDecls.has(fnKey)) {
-          const entryParamName = cssPropertyToIdentifier(entry.stylexProp);
+          const entryParamName = cssPropertyToIdentifier(entry.stylexProp, avoidNames);
           const param = j.identifier(entryParamName);
           const inferredParamType = inferParamTypeFromCallArg(entry.callArg);
           if (inferredParamType) {
