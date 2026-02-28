@@ -1,0 +1,1 @@
+import{j as x}from"./index-CKQgOe7l.js";const p=()=>x.jsx("div",{style:{display:"flex",flexDirection:"column",gap:"16px",padding:"16px"},children:x.jsx("input",{type:"range",min:"0",max:"100",defaultValue:"50",className:"x1lugfcp x1oysuqx xqu0tyb xehhe6p x1cum3z5 x1a2a7pz x1hzk0bc x1xow3sz x1v4l21s xfiu4hc x1lcacrf x73k27x x5pni9w x1whbebe x22q2bb"})});export{p as App};
