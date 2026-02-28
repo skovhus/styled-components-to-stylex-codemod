@@ -3,7 +3,8 @@
  * Core concepts: merge pseudo/media buckets, rewrite CSS vars, and emit variants.
  */
 import { cssDeclarationToStylexDeclarations } from "../css-prop-mapping.js";
-import { cssValueToJs, toStyleKey, toSuffixFromProp } from "../transform/helpers.js";
+import { cssValueToJs, literalToAst, toStyleKey, toSuffixFromProp } from "../transform/helpers.js";
+import type { StyledDecl } from "../transform-types.js";
 import { extractUnionLiteralValues, groupVariantBucketsIntoDimensions } from "./variants.js";
 import {
   getArrowFnSingleParamName,
@@ -477,6 +478,20 @@ export function finalizeDeclProcessing(ctx: DeclProcessingState): void {
   }
   if (styleFnFromProps.length) {
     decl.styleFnFromProps = styleFnFromProps;
+
+    // When a style function and a variant bucket share the same style key (same
+    // condition), merge the variant's static properties into the style function's
+    // return object and remove the duplicate variant reference.
+    mergeVariantBucketsIntoStyleFns({
+      j: state.j,
+      styleFnFromProps,
+      styleFnDecls,
+      remainingBuckets,
+      remainingStyleKeys,
+      resolvedStyleObjects,
+      variantSourceOrder: decl.variantSourceOrder,
+    });
+
     for (const [k, v] of styleFnDecls.entries()) {
       resolvedStyleObjects.set(k, v);
     }
@@ -714,4 +729,96 @@ function tryResolveConditionalHelperCallInPseudo(
   // the inlined CSS properties (from cssText) rather than the opaque style reference.
 
   return { outcome: "handled" };
+}
+
+/**
+ * Merges variant bucket properties into style functions that share the same
+ * condition key. When a ternary condition (e.g., `$open`) produces both static
+ * variant values (e.g., `opacity: 1`, `pointerEvents: "inherit"`) and a
+ * dynamic style function (e.g., `transitionDelay: \`${props.$delay}ms\``),
+ * the static values must be folded into the function's return object to
+ * avoid a duplicate bare style reference in `stylex.props()`.
+ */
+function mergeVariantBucketsIntoStyleFns(args: {
+  j: Parameters<typeof literalToAst>[0];
+  styleFnFromProps: NonNullable<StyledDecl["styleFnFromProps"]>;
+  styleFnDecls: Map<string, unknown>;
+  remainingBuckets: Map<string, Record<string, unknown>>;
+  remainingStyleKeys: Record<string, string>;
+  resolvedStyleObjects: Map<string, unknown>;
+  variantSourceOrder?: Record<string, number>;
+}): void {
+  const { j, styleFnFromProps, styleFnDecls, remainingBuckets, remainingStyleKeys } = args;
+
+  // Build a map from condition ("when") to the styleFn key that handles it
+  const conditionToFnKey = new Map<string, string>();
+  for (const sfp of styleFnFromProps) {
+    if (sfp.conditionWhen && sfp.fnKey) {
+      conditionToFnKey.set(sfp.conditionWhen, sfp.fnKey);
+    }
+  }
+
+  // Find variant buckets whose condition matches a styleFn condition AND shares the same style key
+  for (const [when, variantObj] of remainingBuckets.entries()) {
+    const fnKey = conditionToFnKey.get(when);
+    if (!fnKey) {
+      continue;
+    }
+    // Only merge when the variant's style key matches the styleFn's key
+    const variantKey = remainingStyleKeys[when];
+    if (variantKey !== fnKey) {
+      continue;
+    }
+    const fnAst = styleFnDecls.get(fnKey);
+    if (!fnAst || typeof fnAst !== "object") {
+      continue;
+    }
+
+    // Extract the function body (ObjectExpression) from the arrow function
+    const body = getFunctionBodyExpr(fnAst);
+    if (!body || (body as { type?: string }).type !== "ObjectExpression") {
+      continue;
+    }
+    const bodyObj = body as { properties?: unknown[] };
+    if (!Array.isArray(bodyObj.properties)) {
+      continue;
+    }
+
+    // Get existing property keys in the function body
+    const existingKeys = new Set<string>();
+    for (const prop of bodyObj.properties) {
+      const key = (prop as { key?: { name?: string } }).key?.name;
+      if (key) {
+        existingKeys.add(key);
+      }
+    }
+
+    // Merge variant properties that aren't already in the function body
+    let merged = false;
+    for (const [cssProp, cssValue] of Object.entries(variantObj)) {
+      if (existingKeys.has(cssProp)) {
+        continue;
+      }
+      const valueAst = literalToAst(j, cssValue);
+      bodyObj.properties.unshift(j.property("init", j.identifier(cssProp), valueAst));
+      merged = true;
+    }
+
+    if (merged) {
+      // Remove the variant from remainingBuckets/remainingStyleKeys so it
+      // doesn't produce a duplicate bare reference in stylex.props()
+      remainingBuckets.delete(when);
+      delete remainingStyleKeys[when];
+      if (args.variantSourceOrder) {
+        delete args.variantSourceOrder[when];
+      }
+      // Also remove the resolved style object that was set for this variant
+      const variantStyleObjKey = Object.entries(args.remainingStyleKeys).find(
+        ([w]) => w === when,
+      )?.[1];
+      if (variantStyleObjKey) {
+        args.resolvedStyleObjects.delete(variantStyleObjKey);
+      }
+    }
+  }
 }

@@ -364,8 +364,6 @@ export function emitComponentWrappers(emitter: WrapperEmitter): {
           j.identifier(stylesIdentifier),
           j.identifier(variantKey),
         );
-        // Use makeConditionalStyleExpr to handle boolean vs non-boolean conditions correctly.
-        // For boolean conditions, && is used. For non-boolean (could be "" or 0), ternary is used.
         const expr = emitter.makeConditionalStyleExpr({ cond, expr: styleExpr, isBoolean });
         const order = d.variantSourceOrder?.[when];
         if (hasSourceOrder && order !== undefined) {
@@ -430,6 +428,9 @@ export function emitComponentWrappers(emitter: WrapperEmitter): {
     // Merge ordered entries (variants + styleFns) by source order to preserve CSS cascade
     mergeOrderedEntries(orderedEntries, styleArgs);
 
+    // For component wrappers, filter out transient props ($-prefixed) that are NOT used in styling.
+    // In styled-components, transient props are automatically filtered before passing to wrapped component.
+    // We need to mimic this behavior by destructuring them out when not used for conditional styles.
     // For component wrappers, filter out transient props ($-prefixed) that are NOT used in styling.
     // In styled-components, transient props are automatically filtered before passing to wrapped component.
     // We need to mimic this behavior by destructuring them out when not used for conditional styles.
@@ -780,14 +781,15 @@ export function emitComponentWrappers(emitter: WrapperEmitter): {
       }
       // Forward base-component props (required or optional) that were destructured for styling.
       // Destructuring removes them from `...rest`, so they must be explicitly re-forwarded.
+      // In styled-components all non-transient props are forwarded to the wrapped component,
+      // so when the base type can't be resolved we preserve that semantic.
+      // Only suppress forwarding when the base type is resolvable and explicitly excludes the prop.
       const baseExplicitProps = baseComponentPropsType
         ? emitter.getExplicitPropNames(baseComponentPropsType)
         : null;
 
       for (const propName of destructureProps) {
         if (propName && propName !== "children" && !propName.startsWith("$")) {
-          // Forward if base accepts this prop (required or optional), or if we can't resolve
-          // the base type (imported component) — safer to forward than silently drop.
           if (!baseExplicitProps || baseExplicitProps.has(propName)) {
             pushForwardedProp(propName);
           }

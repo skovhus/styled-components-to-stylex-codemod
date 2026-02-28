@@ -1110,10 +1110,62 @@ export function tryResolveConditionalCssBlockTernary(
     }
 
     const consText = literalToString(ce.consequent);
-    if (consText === null) {
-      return null;
+    let consStyle: Record<string, unknown> | null = null;
+    let innerConsVariants: VariantWithStyle[] = [];
+
+    if (consText !== null) {
+      consStyle = consText.trim() ? parseCssDeclarationBlock(consText) : null;
+    } else {
+      // Handle TemplateLiteral consequent with inner ternary (multi-property CSS string).
+      // e.g., `display: flex; align-items: ${align === "center" ? "center" : "flex-end"};`
+      const parsed = parseCssTemplateLiteralWithTernary(ce.consequent);
+      if (!parsed) {
+        return null;
+      }
+      const innerCondInfo = parseConditionTest(parsed.innerTest);
+      if (!innerCondInfo) {
+        return null;
+      }
+      const truthyCss = `${parsed.prefix}${parsed.truthyValue}${parsed.suffix}`;
+      const falsyCss = `${parsed.prefix}${parsed.falsyValue}${parsed.suffix}`;
+      const truthyStyle = truthyCss.trim() ? parseCssDeclarationBlock(truthyCss) : null;
+      const falsyStyle = falsyCss.trim() ? parseCssDeclarationBlock(falsyCss) : null;
+
+      // Split into shared properties (same in both branches) and
+      // differing properties (conditional on inner ternary)
+      const sharedStyle: Record<string, unknown> = {};
+      if (truthyStyle && falsyStyle) {
+        for (const [prop, val] of Object.entries(truthyStyle)) {
+          if (prop in falsyStyle && falsyStyle[prop] === val) {
+            sharedStyle[prop] = val;
+          }
+        }
+      }
+      consStyle = Object.keys(sharedStyle).length > 0 ? sharedStyle : truthyStyle;
+
+      // Create inner variants for differing properties
+      if (truthyStyle && falsyStyle) {
+        const outerWhen = buildWhenCondition(condInfo, true);
+        for (const [prop, val] of Object.entries(truthyStyle)) {
+          if (!(prop in sharedStyle)) {
+            innerConsVariants.push({
+              nameHint: buildNameHint(innerCondInfo, true),
+              when: `${outerWhen} && ${buildWhenCondition(innerCondInfo, true)}`,
+              style: { [prop]: val },
+            });
+          }
+        }
+        for (const [prop, val] of Object.entries(falsyStyle)) {
+          if (!(prop in sharedStyle)) {
+            innerConsVariants.push({
+              nameHint: buildNameHint(innerCondInfo, false),
+              when: `${outerWhen} && ${buildWhenCondition(innerCondInfo, false)}`,
+              style: { [prop]: val },
+            });
+          }
+        }
+      }
     }
-    const consStyle = consText.trim() ? parseCssDeclarationBlock(consText) : null;
 
     // Recursively process the alternate branch
     const nested = extractVariantsFromTernary(ce.alternate, condInfo.propName);
@@ -1123,7 +1175,7 @@ export function tryResolveConditionalCssBlockTernary(
 
     const variants: VariantWithStyle[] = [];
 
-    // Add the consequent as a variant
+    // Add the consequent as a variant (shared properties)
     if (consStyle) {
       variants.push({
         nameHint: buildNameHint(condInfo, true),
@@ -1132,9 +1184,10 @@ export function tryResolveConditionalCssBlockTernary(
       });
     }
 
+    // Add inner variants from template literal ternary (differing properties)
+    variants.push(...innerConsVariants);
+
     // Add nested variants, combining with outer condition's falsy branch
-    // All nested variants are in the else branch, so they need the outer falsy guard.
-    // This is always correct, even for enum chains where conditions are mutually exclusive.
     const outerFalsyCondition = buildWhenCondition(condInfo, false);
     for (const nestedVariant of nested.variants) {
       variants.push({

@@ -1,5 +1,4 @@
 import React from "react";
-import * as stylex from "@stylexjs/stylex";
 import { color } from "./lib/helpers";
 
 // Test: When a local function shadows an imported helper inside a nested scope,
@@ -35,4 +34,3 @@ export const App = () => {
   const ThemedBox = createThemedComponents();
   return <ThemedBox>Colored text</ThemedBox>;
 };
-const styles = stylex.create({});

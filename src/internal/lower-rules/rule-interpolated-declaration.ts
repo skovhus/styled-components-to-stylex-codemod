@@ -20,10 +20,13 @@ import { buildThemeStyleKeys } from "../utilities/style-key-naming.js";
 import {
   cloneAstNode,
   extractRootAndPath,
+  getArrowFnSingleParamName,
   getFunctionBodyExpr,
+  getMemberPathFromIdentifier,
   getNodeLocStart,
   staticValueToLiteral,
 } from "../utilities/jscodeshift-utils.js";
+import { parseCssDeclarationBlock } from "../builtin-handlers/css-parsing.js";
 import { tryHandleAnimation } from "./animation.js";
 import { tryHandleInterpolatedBorder } from "./borders.js";
 import {
@@ -183,6 +186,7 @@ export function handleInterpolatedDeclaration(args: InterpolatedDeclarationConte
         styleFnDecls,
         styleFnFromProps,
         filePath,
+        applyResolvedPropValue,
       })
     ) {
       continue;
@@ -650,6 +654,12 @@ export function handleInterpolatedDeclaration(args: InterpolatedDeclarationConte
     const slotId = slotPart && slotPart.kind === "slot" ? slotPart.slotId : 0;
     const expr = decl.templateExpressions[slotId];
     const loc = getNodeLocStart(expr as any);
+
+    // Handle local helper function calls that return CSS strings.
+    // Pattern: ${(props) => localFn(props.size)} where localFn returns multi-property CSS.
+    if (tryHandleLocalHelperCall({ ctx, d, expr })) {
+      continue;
+    }
 
     const res = resolveDynamicNode(
       {
@@ -2050,6 +2060,208 @@ function applyThemeBooleanValue(
 
   // Default: camelCase the property name
   target[cssPropertyToStylexProp(cssProp)] = value;
+  return true;
+}
+
+/**
+ * Handles local helper function calls in template interpolations.
+ * Pattern: ${(props) => localFn(props.size)} where localFn is defined in the same file
+ * and returns a CSS string like "width: ${size}px; height: ${size}px;".
+ *
+ * Extracts each CSS property from the helper's return value and creates
+ * dynamic style functions for them.
+ */
+function tryHandleLocalHelperCall(args: {
+  ctx: InterpolatedDeclarationContext["ctx"];
+  d: CssDeclarationIR;
+  expr: unknown;
+}): boolean {
+  const { ctx, d, expr } = args;
+  const { state, decl, styleFnDecls, styleFnFromProps } = ctx;
+  const { j, root } = state;
+
+  // Only handle standalone interpolations (no property name)
+  if (d.property) {
+    return false;
+  }
+
+  // Must be an arrow function
+  const e = expr as { type?: string; params?: unknown[]; body?: unknown } | undefined;
+  if (!e || (e.type !== "ArrowFunctionExpression" && e.type !== "FunctionExpression")) {
+    return false;
+  }
+  const paramName = getArrowFnSingleParamName(e as Parameters<typeof getArrowFnSingleParamName>[0]);
+  if (!paramName) {
+    return false;
+  }
+
+  const body = getFunctionBodyExpr(e);
+  if (!body || typeof body !== "object") {
+    return false;
+  }
+  const bodyNode = body as {
+    type?: string;
+    callee?: { type?: string; name?: string };
+    arguments?: unknown[];
+  };
+  if (bodyNode.type !== "CallExpression") {
+    return false;
+  }
+  // Only support simple identifier callees (localFn)
+  if (bodyNode.callee?.type !== "Identifier" || !bodyNode.callee.name) {
+    return false;
+  }
+  const calleeName = bodyNode.callee.name;
+
+  // Check it's NOT an imported function (those are handled by resolveCall)
+  const importInfo = state.resolveImportInScope(calleeName, bodyNode.callee);
+  if (importInfo) {
+    return false;
+  }
+
+  // Must have a single argument that's a prop access: props.size
+  const callArgs = bodyNode.arguments ?? [];
+  if (callArgs.length !== 1) {
+    return false;
+  }
+  const arg0 = callArgs[0] as { type?: string } | undefined;
+  if (!arg0 || arg0.type !== "MemberExpression") {
+    return false;
+  }
+  const propPath = getMemberPathFromIdentifier(
+    arg0 as Parameters<typeof getMemberPathFromIdentifier>[0],
+    paramName,
+  );
+  if (!propPath || propPath.length !== 1 || !propPath[0]) {
+    return false;
+  }
+  const jsxProp = propPath[0];
+
+  // Find the local function definition
+  const fnDecls = root.find(j.FunctionDeclaration, { id: { name: calleeName } });
+  if (fnDecls.size() === 0) {
+    return false;
+  }
+  const fnNode = fnDecls.get().node;
+  const fnParams = fnNode.params ?? [];
+  if (fnParams.length !== 1) {
+    return false;
+  }
+  const fnParamNode = fnParams[0] as { type?: string; name?: string };
+  if (fnParamNode.type !== "Identifier" || !fnParamNode.name) {
+    return false;
+  }
+  const fnParamName = fnParamNode.name;
+
+  // Extract the return value
+  const fnBody = fnNode.body as { body?: unknown[] } | undefined;
+  if (!fnBody?.body) {
+    return false;
+  }
+  const retStmt = fnBody.body.find(
+    (s: unknown) => (s as { type?: string })?.type === "ReturnStatement",
+  ) as { argument?: unknown } | undefined;
+  if (!retStmt?.argument) {
+    return false;
+  }
+
+  // The return value should be a template literal containing CSS declarations
+  const retExpr = retStmt.argument as {
+    type?: string;
+    quasis?: Array<{ value?: { raw?: string; cooked?: string } }>;
+    expressions?: unknown[];
+  };
+  if (retExpr.type !== "TemplateLiteral" || !retExpr.quasis || !retExpr.expressions) {
+    return false;
+  }
+
+  // Build a CSS string with indexed placeholders to track which expression maps to which property
+  let cssString = "";
+  for (let i = 0; i < retExpr.quasis.length; i++) {
+    cssString += retExpr.quasis[i]?.value?.cooked ?? retExpr.quasis[i]?.value?.raw ?? "";
+    if (i < retExpr.expressions.length) {
+      cssString += `__LOCAL_PARAM_${i}__`;
+    }
+  }
+
+  // Parse the CSS string to extract properties (replace placeholders with dummy values)
+  const parsedCss = parseCssDeclarationBlock(cssString.replace(/__LOCAL_PARAM_\d+__/g, "0"));
+  if (!parsedCss || Object.keys(parsedCss).length === 0) {
+    return false;
+  }
+
+  // Build a per-property unit map by matching expression indices to CSS properties.
+  // Parse the CSS string with placeholders intact to see which property contains each expression.
+  const parsedWithPlaceholders = parseCssDeclarationBlock(
+    cssString.replace(/__LOCAL_PARAM_(\d+)__/g, "PLACEHOLDER_$1"),
+  );
+  const propToUnit = new Map<string, string>();
+  if (parsedWithPlaceholders) {
+    for (const [cssProp, value] of Object.entries(parsedWithPlaceholders)) {
+      const m = typeof value === "string" ? value.match(/PLACEHOLDER_(\d+)/) : null;
+      if (!m) {
+        continue;
+      }
+      const exprIdx = Number(m[1]);
+      const nextQuasi =
+        retExpr.quasis[exprIdx + 1]?.value?.cooked ?? retExpr.quasis[exprIdx + 1]?.value?.raw ?? "";
+      const unitMatch = nextQuasi.match(/^(px|em|rem|%|vh|vw|ms|s)\b/);
+      if (unitMatch) {
+        const exprNode = retExpr.expressions[exprIdx] as
+          | { type?: string; name?: string }
+          | undefined;
+        if (exprNode?.type === "Identifier" && exprNode.name === fnParamName) {
+          propToUnit.set(cssProp, unitMatch[1]!);
+        }
+      }
+    }
+  }
+
+  // Get the type annotation from the local function parameter
+  const fnParamTypeAnnotation = (fnParams[0] as { typeAnnotation?: { typeAnnotation?: unknown } })
+    ?.typeAnnotation?.typeAnnotation;
+
+  // Create style functions for each extracted CSS property
+  for (const cssProp of Object.keys(parsedCss)) {
+    const fnKey = `${decl.styleKey}${toSuffixFromProp(cssProp)}`;
+    if (!styleFnDecls.has(fnKey)) {
+      const param = j.identifier(jsxProp);
+      if (fnParamTypeAnnotation) {
+        (param as { typeAnnotation?: unknown }).typeAnnotation = j.tsTypeAnnotation(
+          cloneAstNode(fnParamTypeAnnotation) as Parameters<typeof j.tsTypeAnnotation>[0],
+        );
+      }
+      const propUnit = propToUnit.get(cssProp) ?? "";
+      const valueExpr = propUnit
+        ? j.templateLiteral(
+            [
+              j.templateElement({ raw: "", cooked: "" }, false),
+              j.templateElement({ raw: propUnit, cooked: propUnit }, true),
+            ],
+            [j.identifier(jsxProp)],
+          )
+        : j.identifier(jsxProp);
+      const bodyExprNode = j.objectExpression([
+        j.property("init", j.identifier(cssProp), valueExpr),
+      ]);
+      styleFnDecls.set(fnKey, j.arrowFunctionExpression([param], bodyExprNode));
+    }
+    if (!styleFnFromProps.some((p) => p.fnKey === fnKey)) {
+      styleFnFromProps.push({ fnKey, jsxProp });
+    }
+  }
+
+  ensureShouldForwardPropDrop(decl, jsxProp);
+  decl.needsWrapperComponent = true;
+
+  // Track the consumed local helper for later removal in post-processing.
+  // The function declaration can't be removed here because the template expression
+  // still references it; it's cleaned up after the styled declaration is removed.
+  if (!decl.consumedLocalHelpers) {
+    decl.consumedLocalHelpers = [];
+  }
+  decl.consumedLocalHelpers.push(calleeName);
+
   return true;
 }
 

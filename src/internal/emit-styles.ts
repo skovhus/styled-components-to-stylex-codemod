@@ -505,39 +505,43 @@ export function emitStylesAndImports(ctx: TransformContext): { emptyStyleKeys: S
   }
 
   // Insert `const styles = stylex.create(...)` (or stylexStyles if styles is already used) near top (after imports)
-  const stylesDecl = j.variableDeclaration("const", [
-    j.variableDeclarator(
-      j.identifier(stylesIdentifier),
-      j.callExpression(j.memberExpression(j.identifier("stylex"), j.identifier("create")), [
-        j.objectExpression(
-          [...resolvedStyleObjects.entries()]
-            // Filter out empty style objects
-            .filter(([k]) => !emptyStyleKeys.has(k))
-            .map(([k, v]) => {
-              const prop = j.property(
-                "init",
-                j.identifier(k),
-                v && typeof v === "object" && !isAstNode(v)
-                  ? objectToAst(j, v as Record<string, unknown>)
-                  : literalToAst(j, v),
-              );
-              const comments = styleKeyToComments.get(k);
-              if (comments && comments.length > 0) {
-                (prop as any).comments = comments.map((c: any) => ({
-                  ...c,
-                  leading: true,
-                  trailing: false,
-                }));
-              }
-              return prop;
-            }),
-        ),
-      ]),
-    ),
-  ]);
+  const nonEmptyStyleEntries = [...resolvedStyleObjects.entries()].filter(
+    ([k]) => !emptyStyleKeys.has(k),
+  );
+
+  const stylesDecl =
+    nonEmptyStyleEntries.length > 0
+      ? j.variableDeclaration("const", [
+          j.variableDeclarator(
+            j.identifier(stylesIdentifier),
+            j.callExpression(j.memberExpression(j.identifier("stylex"), j.identifier("create")), [
+              j.objectExpression(
+                nonEmptyStyleEntries.map(([k, v]) => {
+                  const prop = j.property(
+                    "init",
+                    j.identifier(k),
+                    v && typeof v === "object" && !isAstNode(v)
+                      ? objectToAst(j, v as Record<string, unknown>)
+                      : literalToAst(j, v),
+                  );
+                  const comments = styleKeyToComments.get(k);
+                  if (comments && comments.length > 0) {
+                    (prop as any).comments = comments.map((c: any) => ({
+                      ...c,
+                      leading: true,
+                      trailing: false,
+                    }));
+                  }
+                  return prop;
+                }),
+              ),
+            ]),
+          ),
+        ])
+      : null;
 
   // Attach migrated leading comments (from the first styled declaration) to `styles`.
-  if (migratedStyledDeclLeadingComments.length > 0) {
+  if (stylesDecl && migratedStyledDeclLeadingComments.length > 0) {
     const merged = [
       ...migratedStyledDeclLeadingComments,
       ...(Array.isArray((stylesDecl as any).leadingComments)
@@ -575,22 +579,23 @@ export function emitStylesAndImports(ctx: TransformContext): { emptyStyleKeys: S
   }
 
   const programBody = root.get().node.program.body as any[];
-  if (stylesInsertPosition === "afterImports") {
-    const lastImportIdx = (() => {
-      let last = -1;
-      for (let i = 0; i < programBody.length; i++) {
-        if (programBody[i]?.type === "ImportDeclaration") {
-          last = i;
+  const insertNodes = [...inlineKeyframeDecls, ...(stylesDecl ? [stylesDecl as any] : [])];
+  if (insertNodes.length > 0) {
+    if (stylesInsertPosition === "afterImports") {
+      const lastImportIdx = (() => {
+        let last = -1;
+        for (let i = 0; i < programBody.length; i++) {
+          if (programBody[i]?.type === "ImportDeclaration") {
+            last = i;
+          }
         }
-      }
-      return last;
-    })();
-    const insertAt = lastImportIdx >= 0 ? lastImportIdx + 1 : 0;
-    programBody.splice(insertAt, 0, ...inlineKeyframeDecls, stylesDecl as any);
-  } else {
-    // Place inline keyframes and `styles` at the very end of the file.
-    // This keeps component logic first, styles last for better readability.
-    programBody.push(...inlineKeyframeDecls, stylesDecl as any);
+        return last;
+      })();
+      const insertAt = lastImportIdx >= 0 ? lastImportIdx + 1 : 0;
+      programBody.splice(insertAt, 0, ...insertNodes);
+    } else {
+      programBody.push(...insertNodes);
+    }
   }
 
   // Emit separate stylex.create declarations for variant dimensions

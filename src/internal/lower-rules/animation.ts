@@ -81,8 +81,18 @@ export function tryHandleAnimation(args: {
   styleFnDecls: Map<string, unknown>;
   styleFnFromProps: StyleFnFromPropsEntry[];
   filePath: string;
+  applyResolvedPropValue?: (
+    prop: string,
+    value: unknown,
+    commentSource: { leading?: string; trailingLine?: string } | null,
+  ) => void;
 }): boolean {
   const { j, decl, d, keyframesNames, styleObj, styleFnDecls, styleFnFromProps } = args;
+  const applyProp =
+    args.applyResolvedPropValue ??
+    ((prop: string, value: unknown) => {
+      styleObj[prop] = value;
+    });
   // Handle keyframes-based animation declarations before handler pipeline.
   if (!keyframesNames.size) {
     return false;
@@ -169,7 +179,7 @@ export function tryHandleAnimation(args: {
     if (!kf) {
       return false;
     }
-    styleObj.animationName = j.identifier(kf);
+    applyProp("animationName", j.identifier(kf), null);
     return true;
   }
 
@@ -323,9 +333,9 @@ export function tryHandleAnimation(args: {
 
     const firstAnim = animNames[0];
     if (animNames.length === 1 && firstAnim && firstAnim.kind === "ident") {
-      styleObj.animationName = j.identifier(firstAnim.name);
+      applyProp("animationName", j.identifier(firstAnim.name), null);
     } else {
-      styleObj.animationName = buildCommaTemplate(animNames);
+      applyProp("animationName", buildCommaTemplate(animNames), null);
     }
     const anyValues = (values: Array<string | null>): boolean =>
       values.some((value) => value !== null);
@@ -333,28 +343,28 @@ export function tryHandleAnimation(args: {
       values.map((value) => value ?? fallback).join(", ");
 
     if (anyValues(durations)) {
-      styleObj.animationDuration = joinWithDefaults(durations, "0s");
+      applyProp("animationDuration", joinWithDefaults(durations, "0s"), null);
     }
     if (anyValues(timings)) {
-      styleObj.animationTimingFunction = joinWithDefaults(timings, "ease");
+      applyProp("animationTimingFunction", joinWithDefaults(timings, "ease"), null);
     }
     if (anyValues(delays)) {
-      styleObj.animationDelay = joinWithDefaults(delays, "0s");
+      applyProp("animationDelay", joinWithDefaults(delays, "0s"), null);
     }
     if (anyValues(iterations)) {
-      styleObj.animationIterationCount = joinWithDefaults(iterations, "1");
+      applyProp("animationIterationCount", joinWithDefaults(iterations, "1"), null);
     }
     if (anyValues(directions)) {
-      styleObj.animationDirection = joinWithDefaults(directions, "normal");
+      applyProp("animationDirection", joinWithDefaults(directions, "normal"), null);
     }
     if (anyValues(fillModes)) {
-      styleObj.animationFillMode = joinWithDefaults(fillModes, "none");
+      applyProp("animationFillMode", joinWithDefaults(fillModes, "none"), null);
     }
     if (anyValues(playStates)) {
-      styleObj.animationPlayState = joinWithDefaults(playStates, "running");
+      applyProp("animationPlayState", joinWithDefaults(playStates, "running"), null);
     }
     if (anyValues(timelines)) {
-      styleObj.animationTimeline = joinWithDefaults(timelines, "auto");
+      applyProp("animationTimeline", joinWithDefaults(timelines, "auto"), null);
     }
 
     // Emit style functions for interpolated animation time tokens

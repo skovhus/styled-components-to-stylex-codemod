@@ -12,6 +12,7 @@ type ParsedSelector =
   | { kind: "base" } // Just "&"
   | { kind: "pseudo"; pseudos: string[] } // ":hover", ":focus:not(:disabled)", etc.
   | { kind: "pseudoElement"; element: string } // "::before", "::after"
+  | { kind: "pseudoElementWithPseudo"; element: string; pseudos: string[] } // "::-webkit-slider-thumb:hover"
   | { kind: "pseudoElements"; elements: string[] } // comma-separated: "::before", "::after"
   | { kind: "attribute"; attr: ParsedAttributeSelector }
   | { kind: "unsupported"; reason: string };
@@ -203,13 +204,17 @@ function parseSingleSelector(selector: selectorParser.Selector): ParsedSelector 
     if (pseudoElements.length > 1) {
       return { kind: "unsupported", reason: "multiple pseudo-elements" };
     }
-    if (pseudoClasses.length > 0) {
-      // Pseudo-classes with pseudo-elements is complex
-      return { kind: "unsupported", reason: "pseudo-class with pseudo-element" };
-    }
     const firstPseudoEl = pseudoElements[0];
     if (!firstPseudoEl) {
       return { kind: "unsupported", reason: "pseudo-element access error" };
+    }
+    if (pseudoClasses.length > 0) {
+      const pseudoString = buildPseudoString(pseudoClasses);
+      return {
+        kind: "pseudoElementWithPseudo",
+        element: normalizePseudoElementColon(firstPseudoEl.value),
+        pseudos: [pseudoString],
+      };
     }
     return { kind: "pseudoElement", element: normalizePseudoElementColon(firstPseudoEl.value) };
   }

@@ -179,7 +179,23 @@ export function normalizeStylisAstToIR(
       const selectorRaw = stripFormFeedInSelectors
         ? selectorValue.replaceAll("\f", "")
         : selectorValue;
-      const selector = selectorRaw;
+      // Stylis stores the combined selector in `props` (e.g., ["::-webkit-slider-thumb:hover"])
+      // while `value` only has the literal text with form-feed separators (e.g., "&\f:hover").
+      // When stripping form-feeds loses pseudo-element context (e.g., "&\f:hover" → "&:hover"
+      // when it should be "&::-webkit-slider-thumb:hover"), use `props` to recover it.
+      // Handle multiple branches (e.g., ["::-webkit-slider-thumb:hover", "::-webkit-slider-thumb:focus"]).
+      const propsArr = Array.isArray(node.props) ? node.props : null;
+      const selector = (() => {
+        if (!stripFormFeedInSelectors || !selectorValue.includes("\f") || !propsArr?.length) {
+          return selectorRaw;
+        }
+        const stringProps = propsArr.filter((p): p is string => typeof p === "string");
+        const hasPseudoElement = stringProps.some((p) => p.includes("::"));
+        if (hasPseudoElement && !selectorRaw.includes("::")) {
+          return stringProps.map((p) => `&${p}`).join(",");
+        }
+        return selectorRaw;
+      })();
       const rule = ensureRule(selector, atRuleStack);
       const children = node.children;
       if (children) {
