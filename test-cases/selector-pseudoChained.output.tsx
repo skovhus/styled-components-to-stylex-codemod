@@ -1,4 +1,5 @@
 import * as stylex from "@stylexjs/stylex";
+import { $colors } from "./tokens.stylex";
 
 export const App = () => (
   <div>
@@ -6,6 +7,9 @@ export const App = () => (
     <input disabled placeholder="Disabled" {...stylex.props(styles.input)} />
     <input type="checkbox" {...stylex.props(styles.checkbox)} />
     <input type="checkbox" disabled {...stylex.props(styles.checkbox)} />
+    <div {...stylex.props(styles.listItem)}>Item 1</div>
+    <div {...stylex.props(styles.listItem)}>Item 2</div>
+    <div {...stylex.props(styles.listItem)}>Item 3 (no border)</div>
   </div>
 );
 
@@ -51,6 +55,22 @@ const styles = stylex.create({
     outlineOffset: {
       default: null,
       ":focus:not(:disabled)": "2px",
+    },
+  },
+  // Border on :not(:last-child) with interpolation — should retain the pseudo condition
+  listItem: {
+    padding: "8px",
+    borderBottomWidth: {
+      default: null,
+      ":not(:last-child)": "1px",
+    },
+    borderBottomStyle: {
+      default: null,
+      ":not(:last-child)": "solid",
+    },
+    borderBottomColor: {
+      default: null,
+      ":not(:last-child)": $colors.bgBorderSolid,
     },
   },
 });

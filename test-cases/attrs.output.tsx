@@ -163,6 +163,28 @@ export function AlignedFlex(props: AlignedFlexProps) {
   );
 }
 
+type DynamicHeightBoxProps = Omit<React.ComponentProps<"div">, "className" | "style"> & {
+  $height: number;
+};
+
+// Pattern 10: dynamic attrs with computed style object
+// The dynamic inline styles should be preserved as a dynamic StyleX style
+function DynamicHeightBox(props: DynamicHeightBoxProps) {
+  const { children, $height, ...rest } = props;
+
+  return (
+    <div
+      {...rest}
+      {...stylex.props(
+        styles.dynamicHeightBox,
+        $height ? styles.dynamicHeightBoxHeight(`${$height}px`) : undefined,
+      )}
+    >
+      {children}
+    </div>
+  );
+}
+
 export const App = () => (
   <>
     <Input $small placeholder="Small" />
@@ -175,6 +197,8 @@ export const App = () => (
     <FocusableScroll focusIndex={5}>Focus content</FocusableScroll>
     <Box>Box content</Box>
     <AlignedFlex>Aligned content</AlignedFlex>
+    <span {...stylex.props(styles.noWrapText)}>No wrapping text</span>
+    <DynamicHeightBox $height={50}>Dynamic height</DynamicHeightBox>
   </>
 );
 
@@ -229,4 +253,19 @@ const styles = stylex.create({
   alignedFlex: {
     alignItems: "center",
   },
+  // Pattern 9: static attrs with a style object
+  // The inline style properties should be preserved in the output
+  noWrapText: {
+    whiteSpace: "nowrap",
+    color: "blue",
+  },
+  // Pattern 10: dynamic attrs with computed style object
+  // The dynamic inline styles should be preserved as a dynamic StyleX style
+  dynamicHeightBox: {
+    display: "flex",
+    alignItems: "center",
+  },
+  dynamicHeightBoxHeight: (height: string) => ({
+    height,
+  }),
 });

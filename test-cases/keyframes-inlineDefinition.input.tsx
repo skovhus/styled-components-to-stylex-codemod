@@ -1,4 +1,4 @@
-import styled from "styled-components";
+import styled, { css } from "styled-components";
 
 const FadeIn = styled.div`
   @keyframes fadeIn {
@@ -46,12 +46,36 @@ const BounceIn = styled.div`
   padding: 20px;
 `;
 
+// Pattern 4: @keyframes in a css helper, animation shorthand references by name
+const DashAnimation = css`
+  @keyframes Dash {
+    to {
+      stroke-dashoffset: 0;
+    }
+  }
+`;
+
+const Circle = styled.path<{ $isAnimated?: boolean }>`
+  ${DashAnimation}
+  stroke-dasharray: 100;
+  stroke-dashoffset: 100;
+  ${(props) =>
+    props.$isAnimated &&
+    css`
+      animation: Dash 1s ease-out forwards;
+    `}
+`;
+
 export function App() {
   return (
     <div style={{ display: "flex", gap: 16, padding: 20 }}>
       <FadeIn>Fading In</FadeIn>
       <SlideUp>Sliding Up</SlideUp>
       <BounceIn>Bouncing In</BounceIn>
+      <svg>
+        <Circle $isAnimated d="M10,80 Q95,10 180,80" />
+        <Circle d="M10,80 Q95,10 180,80" />
+      </svg>
     </div>
   );
 }

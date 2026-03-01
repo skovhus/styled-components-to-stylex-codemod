@@ -24,4 +24,24 @@ const Container = styled.div`
   }
 `;
 
-export const App = () => <Container>Responsive container</Container>;
+/**
+ * Tests that a shorthand override in a media query correctly resets longhand
+ * values set at the default level:
+ * - Default: padding 0 24px, then padding-bottom: 12px
+ * - Phone: padding 0 16px (should reset padding-bottom back to 0)
+ */
+const Details = styled.div`
+  padding: 0 24px;
+  padding-bottom: 12px;
+
+  ${screenSize.phone} {
+    padding: 0 16px;
+  }
+`;
+
+export const App = () => (
+  <div>
+    <Container>Responsive container</Container>
+    <Details>Details column</Details>
+  </div>
+);

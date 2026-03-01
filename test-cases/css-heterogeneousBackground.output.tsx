@@ -51,6 +51,7 @@ export const App = () => (
     <NestedColorBackground $color="red">Red</NestedColorBackground>
     <NestedColorBackground $color="blue">Blue</NestedColorBackground>
     <NestedColorBackground $color="default">Default</NestedColorBackground>
+    <div {...stylex.props(styles.resetBackground)}>No Background</div>
   </div>
 );
 
@@ -63,6 +64,13 @@ const styles = stylex.create({
   },
   nestedColorBackground: {
     backgroundColor: "gray",
+  },
+  // Pattern 3: background: none should become background: "none", not backgroundColor: "none"
+  // "none" is a valid CSS value for `background` shorthand (resets all background layers)
+  // but is NOT a valid value for `background-color` (which only accepts <color> values)
+  resetBackground: {
+    background: "none",
+    padding: "8px",
   },
 });
 

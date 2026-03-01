@@ -1,4 +1,22 @@
+import * as React from "react";
 import * as stylex from "@stylexjs/stylex";
+
+type CircleProps = Omit<React.ComponentProps<"path">, "className" | "style"> & {
+  $isAnimated?: boolean;
+};
+
+function Circle(props: CircleProps) {
+  const { children, $isAnimated, ...rest } = props;
+
+  return (
+    <path
+      {...rest}
+      {...stylex.props(styles.circle, $isAnimated ? styles.circleAnimated : undefined)}
+    >
+      {children}
+    </path>
+  );
+}
 
 export function App() {
   return (
@@ -6,6 +24,10 @@ export function App() {
       <div {...stylex.props(styles.fadeIn)}>Fading In</div>
       <div {...stylex.props(styles.slideUp)}>Sliding Up</div>
       <div {...stylex.props(styles.bounceIn)}>Bouncing In</div>
+      <svg>
+        <Circle $isAnimated d="M10,80 Q95,10 180,80" />
+        <Circle d="M10,80 Q95,10 180,80" />
+      </svg>
     </div>
   );
 }
@@ -44,6 +66,12 @@ const bounceIn = stylex.keyframes({
   },
 });
 
+const Dash = stylex.keyframes({
+  to: {
+    strokeDashoffset: 0,
+  },
+});
+
 const styles = stylex.create({
   fadeIn: {
     animationName: fadeIn,
@@ -66,5 +94,15 @@ const styles = stylex.create({
     animationTimingFunction: "cubic-bezier(0.68, -0.55, 0.27, 1.55)",
     backgroundColor: "lightgreen",
     padding: "20px",
+  },
+  circle: {
+    strokeDasharray: 100,
+    strokeDashoffset: 100,
+  },
+  circleAnimated: {
+    animationName: Dash,
+    animationDuration: "1s",
+    animationTimingFunction: "ease-out",
+    animationFillMode: "forwards",
   },
 });
