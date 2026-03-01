@@ -200,6 +200,7 @@ export function createDeclProcessingState(state: LowerRulesState, decl: StyledDe
   } = createValuePatternHandlers({
     ...sharedFromState,
     api,
+    importMap,
     decl,
     styleObj,
     variantBuckets,
@@ -341,6 +342,7 @@ export function createDeclProcessingState(state: LowerRulesState, decl: StyledDe
 
   const tryHandleCssHelperConditionalBlock = createCssHelperConditionalHandler({
     ...sharedFromState,
+    importMap,
     decl,
     componentInfo,
     handlerContext,

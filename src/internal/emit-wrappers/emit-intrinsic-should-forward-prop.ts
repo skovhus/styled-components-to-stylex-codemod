@@ -219,8 +219,10 @@ export function emitShouldForwardPropWrappers(ctx: EmitIntrinsicContext): void {
         allowStyleProp,
         allowSxProp,
         skipProps: explicitPropNames,
+        includeRef: true,
       });
-      return VOID_TAGS.has(tagName) ? inferred : emitter.withChildren(inferred);
+      // inferredIntrinsicPropsTypeText already includes children for non-void tags
+      return inferred;
     })();
     const finalTypeTextWithForwardedAs = withForwardedAsType(finalTypeText, includesForwardedAs);
 

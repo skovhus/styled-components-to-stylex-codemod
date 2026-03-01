@@ -1,7 +1,13 @@
 import * as React from "react";
 import * as stylex from "@stylexjs/stylex";
 
-type AvatarSize = 16 | 20 | 24 | 28 | 32;
+type AvatarSize = "small" | "medium" | "large";
+
+const sizeMap: Record<AvatarSize, number> = {
+  small: 20,
+  medium: 24,
+  large: 32,
+};
 
 type AvatarContainerProps = Omit<React.ComponentProps<"div">, "className" | "style"> & {
   size: AvatarSize;
@@ -16,8 +22,8 @@ function AvatarContainer(props: AvatarContainerProps) {
       {...stylex.props(
         styles.avatarContainer,
         disabled ? styles.avatarContainerDisabled : undefined,
-        styles.avatarContainerWidth(size),
-        styles.avatarContainerHeight(size),
+        styles.avatarContainerWidth(sizeMap[size]),
+        styles.avatarContainerHeight(sizeMap[size]),
       )}
     >
       {children}
@@ -27,11 +33,69 @@ function AvatarContainer(props: AvatarContainerProps) {
 
 export const App = () => (
   <div style={{ display: "flex", gap: "8px", alignItems: "center" }}>
-    <AvatarContainer size={16}>16</AvatarContainer>
-    <AvatarContainer size={24}>24</AvatarContainer>
-    <AvatarContainer size={32}>32</AvatarContainer>
-    <AvatarContainer size={20} disabled>
-      20d
+    <AvatarContainer size="small">
+      <div
+        style={{
+          background: "#bf4f74",
+          width: "100%",
+          height: "100%",
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "center",
+          color: "white",
+          fontSize: "10px",
+        }}
+      >
+        S
+      </div>
+    </AvatarContainer>
+    <AvatarContainer size="medium">
+      <div
+        style={{
+          background: "#4f74bf",
+          width: "100%",
+          height: "100%",
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "center",
+          color: "white",
+          fontSize: "10px",
+        }}
+      >
+        M
+      </div>
+    </AvatarContainer>
+    <AvatarContainer size="large">
+      <div
+        style={{
+          background: "#22c55e",
+          width: "100%",
+          height: "100%",
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "center",
+          color: "white",
+          fontSize: "10px",
+        }}
+      >
+        L
+      </div>
+    </AvatarContainer>
+    <AvatarContainer size="medium" disabled>
+      <div
+        style={{
+          background: "#666",
+          width: "100%",
+          height: "100%",
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "center",
+          color: "white",
+          fontSize: "10px",
+        }}
+      >
+        Md
+      </div>
     </AvatarContainer>
   </div>
 );
@@ -49,10 +113,10 @@ const styles = stylex.create({
   avatarContainerDisabled: {
     opacity: 0.5,
   },
-  avatarContainerWidth: (size: AvatarSize) => ({
-    width: `${size}px`,
+  avatarContainerWidth: (width: number | string) => ({
+    width,
   }),
-  avatarContainerHeight: (size: AvatarSize) => ({
-    height: `${size}px`,
+  avatarContainerHeight: (height: number | string) => ({
+    height,
   }),
 });

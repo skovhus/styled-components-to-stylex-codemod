@@ -2,7 +2,7 @@ import React from "react";
 import * as stylex from "@stylexjs/stylex";
 import { pixelVars } from "./tokens.stylex";
 
-export function StyledHeader(props: React.PropsWithChildren<{ ref?: React.Ref<HTMLElement> }>) {
+export function StyledHeader(props: { ref?: React.Ref<HTMLElement>; children?: React.ReactNode }) {
   const { children, ...rest } = props;
 
   return (

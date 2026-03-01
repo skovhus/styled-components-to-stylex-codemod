@@ -133,7 +133,6 @@ export function finalizeDeclProcessing(ctx: DeclProcessingState): void {
       /&:[a-z-]+(?:\([^)]*\))?\s+__SC_EXPR_\d+__\s*\{/i.test(decl.rawCss) ||
       hasPseudoBlockInterpolation)
   ) {
-    let didApply = false;
     // ancestorPseudo is null for base styles, or the pseudo string (e.g., ":hover", ":focus-visible")
     const applyBlock = (slotId: number, declsText: string, ancestorPseudo: string | null) => {
       const expr = decl.templateExpressions[slotId] as any;
@@ -156,7 +155,6 @@ export function finalizeDeclProcessing(ctx: DeclProcessingState): void {
         relationOverrides,
         relationOverridePseudoBuckets,
       );
-      didApply = true;
 
       const declLines = declsText
         .split(";")
@@ -265,13 +263,6 @@ export function finalizeDeclProcessing(ctx: DeclProcessingState): void {
     }
     if (state.bail) {
       return;
-    }
-
-    if (didApply) {
-      delete styleObj.width;
-      delete styleObj.height;
-      delete styleObj.opacity;
-      delete styleObj.transform;
     }
   }
 

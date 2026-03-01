@@ -1,7 +1,7 @@
 import React from "react";
 import * as stylex from "@stylexjs/stylex";
 
-export function Container(props: React.PropsWithChildren<{ ref?: React.Ref<HTMLDivElement> }>) {
+export function Container(props: { ref?: React.Ref<HTMLDivElement>; children?: React.ReactNode }) {
   const { children, ...rest } = props;
 
   return (

@@ -22,7 +22,7 @@ function Box(props: BoxProps) {
   );
 }
 
-function BorderedBox(props: React.PropsWithChildren<{ ref?: React.Ref<HTMLDivElement> }>) {
+function BorderedBox(props: { children?: React.ReactNode }) {
   const { children } = props;
 
   return <div {...stylex.props(styles.border)}>{children}</div>;

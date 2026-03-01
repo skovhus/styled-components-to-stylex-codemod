@@ -2556,7 +2556,7 @@ export const App = () => <Box>Hello</Box>;
       import * as stylex from "@stylexjs/stylex";
       import { useTheme } from "styled-components";
 
-      function Box(props: React.PropsWithChildren<{ ref?: React.Ref<HTMLDivElement> }>) {
+      function Box(props: { children?: React.ReactNode }) {
         const {
           children,
         } = props;
@@ -2602,7 +2602,7 @@ export const App = () => <Box>Hello</Box>;
       import * as stylex from "@stylexjs/stylex";
       import { useTheme } from "styled-components";
 
-      function Box(props: React.PropsWithChildren<{ ref?: React.Ref<HTMLDivElement> }>) {
+      function Box(props: { children?: React.ReactNode }) {
         const {
           children,
         } = props;
@@ -2654,7 +2654,7 @@ export const App = () => <Box>Hello</Box>;
       import * as stylex from "@stylexjs/stylex";
       import { useTheme } from "styled-components";
 
-      function Box(props: React.PropsWithChildren<{ ref?: React.Ref<HTMLDivElement> }>) {
+      function Box(props: { children?: React.ReactNode }) {
         const {
           children,
         } = props;
@@ -3505,5 +3505,115 @@ export function App() {
 
     const code = result?.code ?? "";
     expect(code).toContain("<Flex");
+  });
+});
+
+describe("local helper function with helper-local variables", () => {
+  it("should bail when derived expression references helper-local variables", () => {
+    const source = `
+import styled from "styled-components";
+
+type Size = "small" | "medium" | "large";
+
+const sizeMap: Record<Size, number> = {
+  small: 20,
+  medium: 24,
+  large: 32,
+};
+
+function helperWithLocal(size: Size) {
+  const scale = 2;
+  const px = sizeMap[size] * scale;
+  return \`width: \${px}px;\`;
+}
+
+const Box = styled.div<{ size: Size }>\`
+  display: flex;
+  \${(props) => helperWithLocal(props.size)}
+\`;
+
+export const App = () => (
+  <div>
+    <Box size="small">S</Box>
+  </div>
+);
+`;
+
+    const result = transformWithWarnings(
+      { source, path: join(testCasesDir, "helper-localVariable.input.tsx") },
+      { jscodeshift: j, j, stats: () => {}, report: () => {} },
+      { adapter: fixtureAdapter },
+    );
+
+    // The codemod should bail because `scale` is a helper-local variable
+    // that would not be in scope at the call site
+    expect(result.code).toBeNull();
+  });
+});
+
+describe("local helper function with direct param interpolation", () => {
+  it("should handle direct param usage without a unit suffix", () => {
+    const source = `
+import styled from "styled-components";
+
+function opacityHelper(value: number) {
+  return \`opacity: \${value};\`;
+}
+
+const Box = styled.div<{ opacity: number }>\`
+  display: flex;
+  \${(props) => opacityHelper(props.opacity)}
+\`;
+
+export const App = () => (
+  <div>
+    <Box opacity={0.5}>Faded</Box>
+  </div>
+);
+`;
+
+    const result = transformWithWarnings(
+      { source, path: join(testCasesDir, "helper-directParam.input.tsx") },
+      { jscodeshift: j, j, stats: () => {}, report: () => {} },
+      { adapter: fixtureAdapter },
+    );
+
+    // Should NOT bail — opacity: ${value} is a direct param reference (no unit needed)
+    expect(result.code).not.toBeNull();
+    expect(result.code).toContain("opacity");
+  });
+});
+
+describe("event handler annotation typing", () => {
+  it("annotates onChange handlers with intrinsic element types", () => {
+    const source = `
+import React from "react";
+import styled from "styled-components";
+
+export const Select = styled.select\`
+  padding: 4px;
+\`;
+
+export const Input = styled.input\`
+  padding: 4px;
+\`;
+
+export const App = () => (
+  <div>
+    <Select onChange={(e) => console.log(e.target.value)} />
+    <Input onChange={(e) => console.log(e.target.value)} />
+  </div>
+);
+`;
+
+    const result = transformWithWarnings(
+      { source, path: join(testCasesDir, "event-handler-annotation.input.tsx") },
+      { jscodeshift: j, j, stats: () => {}, report: () => {} },
+      { adapter: fixtureAdapter },
+    );
+
+    expect(result.code).not.toBeNull();
+    expect(result.code).toContain("React.ChangeEvent<HTMLSelectElement>");
+    expect(result.code).toContain("React.ChangeEvent<HTMLInputElement>");
   });
 });

@@ -17,7 +17,6 @@ function Container(props: ContainerProps) {
       {...mergedSx(
         [
           styles.container,
-          align !== "top" && styles.containerAlignNotTop,
           align !== "top" && align === "center" && styles.containerAlignNotTopAlignCenter,
           align !== "top" && align !== "center" && styles.containerAlignNotTopAlignNotCenter,
         ],
@@ -49,13 +48,12 @@ const styles = stylex.create({
     overflow: "hidden",
     backgroundColor: "#f0f0f0",
   },
-  containerAlignNotTop: {
-    display: "flex",
-  },
   containerAlignNotTopAlignCenter: {
+    display: "flex",
     alignItems: "center",
   },
   containerAlignNotTopAlignNotCenter: {
+    display: "flex",
     alignItems: "flex-end",
   },
 });

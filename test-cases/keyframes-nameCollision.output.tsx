@@ -2,7 +2,7 @@
 import * as React from "react";
 import * as stylex from "@stylexjs/stylex";
 
-export function Move(props: React.PropsWithChildren<{ ref?: React.Ref<HTMLDivElement> }>) {
+export function Move(props: { ref?: React.Ref<HTMLDivElement>; children?: React.ReactNode }) {
   const { children, ...rest } = props;
 
   return (

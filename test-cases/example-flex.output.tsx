@@ -148,7 +148,7 @@ export function Flex(props: FlexProps & Omit<React.ComponentProps<"div">, "class
 }
 
 /** A flex spacer */
-export function FlexSpacer(props: React.PropsWithChildren<{ ref?: React.Ref<HTMLDivElement> }>) {
+export function FlexSpacer(props: { ref?: React.Ref<HTMLDivElement>; children?: React.ReactNode }) {
   const { children, ...rest } = props;
 
   return (

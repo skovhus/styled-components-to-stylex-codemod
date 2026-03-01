@@ -4,9 +4,10 @@ import { CollapseArrowIcon } from "./lib/converted-collapse-icon";
 
 import { StyledCollapseButtonMarker } from "./selector-crossFileBridgeForward.input.stylex";
 
-export function StyledCollapseButton(
-  props: React.PropsWithChildren<{ ref?: React.Ref<HTMLDivElement> }>,
-) {
+export function StyledCollapseButton(props: {
+  ref?: React.Ref<HTMLDivElement>;
+  children?: React.ReactNode;
+}) {
   const { children, ...rest } = props;
 
   return (

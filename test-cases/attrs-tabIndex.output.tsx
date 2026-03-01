@@ -59,9 +59,17 @@ export function ScrollableDiv(
 }
 
 export const App = () => (
-  <div>
-    <ScrollableFlex>Flex: Tab me!</ScrollableFlex>
-    <ScrollableDiv>Div: Tab me!</ScrollableDiv>
+  <div style={{ display: "flex", flexDirection: "column", gap: "8px", height: "200px" }}>
+    <ScrollableFlex gutter="stable" $applyBackground>
+      <div style={{ height: "400px", padding: "8px" }}>
+        Flex: Tab me! (scrollable with stable gutter)
+      </div>
+    </ScrollableFlex>
+    <ScrollableDiv gutter="stable">
+      <div style={{ height: "400px", padding: "8px" }}>
+        Div: Tab me! (scrollable with stable gutter)
+      </div>
+    </ScrollableDiv>
   </div>
 );
 

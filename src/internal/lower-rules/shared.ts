@@ -24,15 +24,26 @@ export function makeCssPropKey(j: JSCodeshift, prop: string): ExpressionKind {
  * Converts a CSS property name to a valid JavaScript identifier.
  * For CSS variables (e.g., --component-width), converts to camelCase (componentWidth).
  * For regular property names (e.g., backgroundColor), returns as-is.
+ *
+ * When `avoidNames` is provided, appends "Value" to the result if it would
+ * conflict with an existing binding (e.g., a top-level import). This prevents
+ * `no-shadow` lint errors when the generated identifier becomes a function
+ * parameter name.
  */
-export function cssPropertyToIdentifier(prop: string): string {
+export function cssPropertyToIdentifier(prop: string, avoidNames?: Set<string>): string {
+  let name: string;
   // CSS variables: --component-width -> componentWidth
   if (prop.startsWith("--")) {
     const withoutDashes = prop.slice(2);
     // Convert kebab-case to camelCase
-    return withoutDashes.replace(/-([a-z])/g, (_, letter) => letter.toUpperCase());
+    name = withoutDashes.replace(/-([a-z])/g, (_, letter) => letter.toUpperCase());
+  } else {
+    name = prop;
   }
-  return prop;
+  if (avoidNames?.has(name)) {
+    return `${name}Value`;
+  }
+  return name;
 }
 
 /**

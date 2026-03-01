@@ -58,6 +58,7 @@ type CssHelperConditionalContext = Pick<
   | "isCssHelperTaggedTemplate"
   | "resolveCssHelperTemplate"
   | "markBail"
+  | "importMap"
 > & {
   decl: StyledDecl;
   handlerContext: InternalHandlerContext;
@@ -106,9 +107,11 @@ export function createCssHelperConditionalHandler(ctx: CssHelperConditionalConte
     findJsxPropTsType,
     isJsxPropOptional,
     markBail,
+    importMap,
     extraStyleObjects,
     resolvedStyleObjects,
   } = ctx;
+  const avoidNames = new Set(importMap.keys());
 
   /**
    * Resolve the TS type node for a prop used in a style function parameter object.
@@ -540,7 +543,7 @@ export function createCssHelperConditionalHandler(ctx: CssHelperConditionalConte
           for (const dyn of dynamicProps) {
             const fnKey = `${decl.styleKey}${toSuffixFromProp(dyn.stylexProp)}`;
             if (!styleFnDecls.has(fnKey)) {
-              const dynParamName = cssPropertyToIdentifier(dyn.stylexProp);
+              const dynParamName = cssPropertyToIdentifier(dyn.stylexProp, avoidNames);
               const param = j.identifier(dynParamName);
               annotateParamFromJsxProp(param, dyn.jsxProp);
               const p = makeCssProperty(j, dyn.stylexProp, dynParamName);
@@ -630,7 +633,7 @@ export function createCssHelperConditionalHandler(ctx: CssHelperConditionalConte
             for (const entry of dynamicEntries) {
               const fnKey = `${decl.styleKey}${toSuffixFromProp(entry.stylexProp)}`;
               if (!styleFnDecls.has(fnKey)) {
-                const entryParamName = cssPropertyToIdentifier(entry.stylexProp);
+                const entryParamName = cssPropertyToIdentifier(entry.stylexProp, avoidNames);
                 const param = j.identifier(entryParamName);
                 annotateParamFromJsxProp(param, entry.jsxProp);
                 const p = makeCssProperty(j, entry.stylexProp, entryParamName);
@@ -719,7 +722,7 @@ export function createCssHelperConditionalHandler(ctx: CssHelperConditionalConte
       for (const entry of entries) {
         const fnKey = `${decl.styleKey}${toSuffixFromProp(entry.stylexProp)}`;
         if (!styleFnDecls.has(fnKey)) {
-          const entryParamName = cssPropertyToIdentifier(entry.stylexProp);
+          const entryParamName = cssPropertyToIdentifier(entry.stylexProp, avoidNames);
           const param = j.identifier(entryParamName);
           const inferredParamType = inferParamTypeFromCallArg(entry.callArg);
           if (inferredParamType) {
@@ -1049,11 +1052,13 @@ export function createCssHelperConditionalHandler(ctx: CssHelperConditionalConte
     //   consTpl: `column-gap: ${wrapGap}px`, altTpl: `row-gap: ${wrapGap}px`
     const findTernaryPropertySplit = (
       tplNode: ExpressionKind,
+      skipIndices?: Set<number>,
     ): {
       ternaryTest: ExpressionKind;
       consTpl: ExpressionKind;
       altTpl: ExpressionKind;
       ternaryCondName: string | null;
+      ternaryIdx: number;
     } | null => {
       const tpl = tplNode as {
         type: string;
@@ -1068,7 +1073,11 @@ export function createCssHelperConditionalHandler(ctx: CssHelperConditionalConte
 
       // Find a ConditionalExpression whose next quasi contains ":" (property name position)
       let ternaryIdx = -1;
+      let fallbackIdx = -1;
       for (let i = 0; i < expressions.length; i++) {
+        if (skipIndices?.has(i)) {
+          continue;
+        }
         const exprNode = expressions[i]!;
         if (exprNode.type !== "ConditionalExpression") {
           continue;
@@ -1089,6 +1098,14 @@ export function createCssHelperConditionalHandler(ctx: CssHelperConditionalConte
           ternaryIdx = i;
           break;
         }
+        // Track first valid ternary as fallback for value-position ternaries
+        if (fallbackIdx < 0) {
+          fallbackIdx = i;
+        }
+      }
+      // Prefer property-name position ternary; fall back to value-position ternary
+      if (ternaryIdx < 0) {
+        ternaryIdx = fallbackIdx;
       }
       if (ternaryIdx < 0) {
         return null;
@@ -1130,6 +1147,7 @@ export function createCssHelperConditionalHandler(ctx: CssHelperConditionalConte
         consTpl: buildSubstitutedTpl(consStrVal) as ExpressionKind,
         altTpl: buildSubstitutedTpl(altStrVal) as ExpressionKind,
         ternaryCondName: extractConditionName(ternaryExpr.test),
+        ternaryIdx,
       };
     };
 
@@ -1517,82 +1535,94 @@ export function createCssHelperConditionalHandler(ctx: CssHelperConditionalConte
     // e.g., `${column ? "column" : "row"}-gap: ${wrapGap}px` splits into
     // separate "column-gap" and "row-gap" style functions.
     const tryResolveDynamicPropertyNameTpl = (tplNode: ExpressionKind): boolean => {
-      const split = findTernaryPropertySplit(tplNode);
-      if (!split) {
-        return false;
-      }
-      const { ternaryTest } = split;
+      const skipIndices = new Set<number>();
+      // Retry with different ternaries if the first attempt fails
+      for (let attempt = 0; attempt < 5; attempt++) {
+        const split = findTernaryPropertySplit(
+          tplNode,
+          skipIndices.size > 0 ? skipIndices : undefined,
+        );
+        if (!split) {
+          return false;
+        }
+        const { ternaryTest } = split;
 
-      const ternaryTestInfo = parseChainedTestInfo(ternaryTest);
-      if (!ternaryTestInfo) {
-        return false;
-      }
-      const invertedTernaryWhen = invertWhen(ternaryTestInfo.when);
-      if (!invertedTernaryWhen) {
-        return false;
-      }
+        const ternaryTestInfo = parseChainedTestInfo(ternaryTest);
+        if (!ternaryTestInfo) {
+          skipIndices.add(split.ternaryIdx);
+          continue;
+        }
+        const invertedTernaryWhen = invertWhen(ternaryTestInfo.when);
+        if (!invertedTernaryWhen) {
+          skipIndices.add(split.ternaryIdx);
+          continue;
+        }
 
-      const consResolved = resolveTemplateLiteralBranch(tplCtx, {
-        node: split.consTpl as Parameters<typeof resolveTemplateLiteralBranch>[1]["node"],
-        paramName,
-        bindings,
-      });
-      const altResolved = resolveTemplateLiteralBranch(tplCtx, {
-        node: split.altTpl as Parameters<typeof resolveTemplateLiteralBranch>[1]["node"],
-        paramName,
-        bindings,
-      });
-      if (!consResolved || !altResolved) {
-        return false;
-      }
+        const consResolved = resolveTemplateLiteralBranch(tplCtx, {
+          node: split.consTpl as Parameters<typeof resolveTemplateLiteralBranch>[1]["node"],
+          paramName,
+          bindings,
+        });
+        const altResolved = resolveTemplateLiteralBranch(tplCtx, {
+          node: split.altTpl as Parameters<typeof resolveTemplateLiteralBranch>[1]["node"],
+          paramName,
+          bindings,
+        });
+        if (!consResolved || !altResolved) {
+          skipIndices.add(split.ternaryIdx);
+          continue;
+        }
 
-      const composeWhen = (innerWhen: string): string => `${testInfo.when} && ${innerWhen}`;
-      const outerProps = testInfo.allPropNames ?? (testInfo.propName ? [testInfo.propName] : []);
-      const innerProps =
-        ternaryTestInfo.allPropNames ??
-        (ternaryTestInfo.propName ? [ternaryTestInfo.propName] : []);
-      const composedPropNames = [...new Set([...outerProps, ...innerProps])];
-      const buildComposedTestInfo = (when: string): TestInfo => ({
-        when,
-        propName: testInfo.propName ?? ternaryTestInfo.propName,
-        allPropNames: composedPropNames.length > 0 ? composedPropNames : undefined,
-      });
+        const composeWhen = (innerWhen: string): string => `${testInfo.when} && ${innerWhen}`;
+        const outerProps = testInfo.allPropNames ?? (testInfo.propName ? [testInfo.propName] : []);
+        const innerProps =
+          ternaryTestInfo.allPropNames ??
+          (ternaryTestInfo.propName ? [ternaryTestInfo.propName] : []);
+        const composedPropNames = [...new Set([...outerProps, ...innerProps])];
+        const buildComposedTestInfo = (when: string): TestInfo => ({
+          when,
+          propName: testInfo.propName ?? ternaryTestInfo.propName,
+          allPropNames: composedPropNames.length > 0 ? composedPropNames : undefined,
+        });
 
-      const consWhen = composeWhen(ternaryTestInfo.when);
-      const altWhen = composeWhen(invertedTernaryWhen);
-      let handled = false;
+        const consWhen = composeWhen(ternaryTestInfo.when);
+        const altWhen = composeWhen(invertedTernaryWhen);
+        let handled = false;
 
-      if (Object.keys(consResolved.style).length > 0) {
-        applyVariant(buildComposedTestInfo(consWhen), consResolved.style);
-        handled = true;
-      }
-      if (Object.keys(altResolved.style).length > 0) {
-        applyVariant(buildComposedTestInfo(altWhen), altResolved.style);
-        handled = true;
-      }
-      if (consResolved.dynamicEntries.length > 0) {
-        applyDynamicEntries(consResolved.dynamicEntries, consWhen);
-        handled = true;
-      }
-      if (altResolved.dynamicEntries.length > 0) {
-        applyDynamicEntries(altResolved.dynamicEntries, altWhen);
-        handled = true;
-      }
-      if (consResolved.inlineEntries.length > 0) {
-        applyInlineEntries(consResolved.inlineEntries, consWhen);
-        handled = true;
-      }
-      if (altResolved.inlineEntries.length > 0) {
-        applyInlineEntries(altResolved.inlineEntries, altWhen);
-        handled = true;
-      }
+        if (Object.keys(consResolved.style).length > 0) {
+          applyVariant(buildComposedTestInfo(consWhen), consResolved.style);
+          handled = true;
+        }
+        if (Object.keys(altResolved.style).length > 0) {
+          applyVariant(buildComposedTestInfo(altWhen), altResolved.style);
+          handled = true;
+        }
+        if (consResolved.dynamicEntries.length > 0) {
+          applyDynamicEntries(consResolved.dynamicEntries, consWhen);
+          handled = true;
+        }
+        if (altResolved.dynamicEntries.length > 0) {
+          applyDynamicEntries(altResolved.dynamicEntries, altWhen);
+          handled = true;
+        }
+        if (consResolved.inlineEntries.length > 0) {
+          applyInlineEntries(consResolved.inlineEntries, consWhen);
+          handled = true;
+        }
+        if (altResolved.inlineEntries.length > 0) {
+          applyInlineEntries(altResolved.inlineEntries, altWhen);
+          handled = true;
+        }
 
-      if (!handled) {
-        return false;
-      }
+        if (!handled) {
+          skipIndices.add(split.ternaryIdx);
+          continue;
+        }
 
-      dropAllTestInfoProps(ternaryTestInfo);
-      return true;
+        dropAllTestInfoProps(ternaryTestInfo);
+        return true;
+      }
+      return false;
     };
 
     // Check altIsEmpty BEFORE altIsTpl since empty templates are also template literals

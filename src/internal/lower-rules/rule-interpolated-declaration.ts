@@ -2,6 +2,7 @@
  * Handles interpolated CSS declarations during rule processing.
  * Core concepts: resolve dynamic values, map StyleX props, and emit wrappers.
  */
+import type { JSCodeshift } from "jscodeshift";
 import type { CssDeclarationIR, CssRuleIR } from "../css-ir.js";
 import type { ResolveValueContext } from "../../adapter.js";
 import type { CallValueTransform } from "../builtin-handlers/types.js";
@@ -19,6 +20,7 @@ import {
 import { buildThemeStyleKeys } from "../utilities/style-key-naming.js";
 import {
   cloneAstNode,
+  collectIdentifiers,
   extractRootAndPath,
   getArrowFnSingleParamName,
   getFunctionBodyExpr,
@@ -123,6 +125,7 @@ export function handleInterpolatedDeclaration(args: InterpolatedDeclarationConte
     resolveImportInScope,
     resolveImportForExpr,
   } = state;
+  const avoidNames = new Set(importMap.keys());
 
   if (state.bail) {
     return;
@@ -186,6 +189,7 @@ export function handleInterpolatedDeclaration(args: InterpolatedDeclarationConte
         styleFnDecls,
         styleFnFromProps,
         filePath,
+        avoidNames,
         applyResolvedPropValue,
       })
     ) {
@@ -273,6 +277,15 @@ export function handleInterpolatedDeclaration(args: InterpolatedDeclarationConte
         prefix,
         suffix,
       );
+      // When pseudoElement is also set (e.g., ::-webkit-slider-thumb:hover),
+      // delegate to applyResolvedPropValue which correctly scopes the pseudo-class
+      // within the pseudo-element's nested selector bucket.
+      if (pseudoElement) {
+        for (const out of cssDeclarationToStylexDeclarations(d)) {
+          applyResolvedPropValue(out.prop, finalValue, null);
+        }
+        return true;
+      }
       for (const out of cssDeclarationToStylexDeclarations(d)) {
         perPropPseudo[out.prop] ??= {};
         const existing = perPropPseudo[out.prop]!;
@@ -721,7 +734,8 @@ export function handleInterpolatedDeclaration(args: InterpolatedDeclarationConte
             ? { localName: decl.localName, res, ...resolveCallMeta }
             : { localName: decl.localName, res },
         });
-        continue;
+        bail = true;
+        break;
       }
       // Track mixinOrder for correct cascade interleaving
       const hasStaticPropsBefore =
@@ -767,7 +781,8 @@ export function handleInterpolatedDeclaration(args: InterpolatedDeclarationConte
             ? { localName: decl.localName, res, ...resolveCallMeta }
             : { localName: decl.localName, res },
         });
-        continue;
+        bail = true;
+        break;
       }
       const outs = cssDeclarationToStylexDeclarations(d);
       for (let i = 0; i < outs.length; i++) {
@@ -991,10 +1006,14 @@ export function handleInterpolatedDeclaration(args: InterpolatedDeclarationConte
             loc,
             context: { localName: decl.localName, variant: v },
           });
-          continue;
+          bail = true;
+          break;
         }
         decl.extraStylexPropsArgs ??= [];
         decl.extraStylexPropsArgs.push({ when: v.when, expr: exprAst as any });
+      }
+      if (bail) {
+        break;
       }
       decl.needsWrapperComponent = true;
       continue;
@@ -1456,6 +1475,7 @@ export function handleInterpolatedDeclaration(args: InterpolatedDeclarationConte
         setBail: () => {
           bail = true;
         },
+        avoidNames,
       })
     ) {
       if (bail) {
@@ -1503,7 +1523,7 @@ export function handleInterpolatedDeclaration(args: InterpolatedDeclarationConte
         styleFnFromProps.push({ fnKey, jsxProp });
 
         if (!styleFnDecls.has(fnKey)) {
-          const outParamName = cssPropertyToIdentifier(out.prop);
+          const outParamName = cssPropertyToIdentifier(out.prop, avoidNames);
           const param = j.identifier(outParamName);
           if (jsxProp !== "__props") {
             annotateParamFromJsxProp(param, jsxProp);
@@ -1548,7 +1568,7 @@ export function handleInterpolatedDeclaration(args: InterpolatedDeclarationConte
             // IMPORTANT: don't reuse the same Identifier node for both the function param and
             // expression positions. If the param identifier has a TS annotation, reusing it
             // in expression positions causes printers to emit `value: any` inside templates.
-            const outParamName = cssPropertyToIdentifier(out.prop);
+            const outParamName = cssPropertyToIdentifier(out.prop, avoidNames);
             const param = j.identifier(outParamName);
             const valueId = j.identifier(outParamName);
             // Be permissive: callers might pass numbers (e.g. `${props => props.$width}px`)
@@ -1680,7 +1700,7 @@ export function handleInterpolatedDeclaration(args: InterpolatedDeclarationConte
             const propKey = makeCssPropKey(j, out.prop);
             const p = j.property("init", propKey, getPropValue()) as any;
             // Only use shorthand if the key is an identifier (not a string literal for CSS vars)
-            const paramName = cssPropertyToIdentifier(out.prop);
+            const paramName = cssPropertyToIdentifier(out.prop, avoidNames);
             p.shorthand =
               propKey.type === "Identifier" &&
               valueExpr?.type === "Identifier" &&
@@ -1707,7 +1727,7 @@ export function handleInterpolatedDeclaration(args: InterpolatedDeclarationConte
       break;
     }
 
-    if (decl.shouldForwardProp) {
+    if (decl.shouldForwardProp && d.property) {
       for (const out of cssDeclarationToStylexDeclarations(d)) {
         if (!out.prop) {
           continue;
@@ -1910,6 +1930,91 @@ export function handleInterpolatedDeclaration(args: InterpolatedDeclarationConte
   }
 }
 
+/**
+ * Searches the function body for a local variable with the given name whose
+ * initializer references `fnParamName`. Returns a cloned expression with
+ * `fnParamName` replaced by `jsxProp`, or null if no such variable is found.
+ *
+ * Returns null when the derived expression references other helper-local variables
+ * that would not be in scope at the call site.
+ */
+function resolveDerivedLocalVariable(
+  j: JSCodeshift,
+  fnBody: unknown,
+  fnParamName: string,
+  localName: string,
+  jsxProp: string,
+): ExpressionKind | null {
+  const stmts = (fnBody as { body: unknown[] }).body;
+
+  // Collect all local variable names declared in the function body
+  const helperLocals = new Set<string>();
+  for (const stmt of stmts) {
+    const s = stmt as { type?: string; declarations?: unknown[] };
+    if (s.type !== "VariableDeclaration" || !s.declarations) {
+      continue;
+    }
+    for (const decl_ of s.declarations) {
+      const vd = decl_ as { id?: { type?: string; name?: string } };
+      if (vd.id?.type === "Identifier" && vd.id.name) {
+        helperLocals.add(vd.id.name);
+      }
+    }
+  }
+
+  for (const stmt of stmts) {
+    const s = stmt as { type?: string; declarations?: unknown[] };
+    if (s.type !== "VariableDeclaration" || !s.declarations) {
+      continue;
+    }
+    for (const decl_ of s.declarations) {
+      const vd = decl_ as { id?: { type?: string; name?: string }; init?: unknown };
+      if (vd.id?.type !== "Identifier" || vd.id.name !== localName || !vd.init) {
+        continue;
+      }
+      // Check if the initializer references fnParamName
+      const initIds = new Set<string>();
+      collectIdentifiers(vd.init, initIds);
+      if (!initIds.has(fnParamName)) {
+        continue;
+      }
+      // Bail if the initializer also references other helper-local variables
+      // that would not be in scope at the call site
+      for (const id of initIds) {
+        if (id !== fnParamName && helperLocals.has(id)) {
+          return null;
+        }
+      }
+      // Build the callArg by replacing fnParamName with jsxProp in the initializer
+      const clonedInit = cloneAstNode(vd.init) as ExpressionKind;
+      const replaceParam = (node: unknown): unknown => {
+        if (!node || typeof node !== "object") {
+          return node;
+        }
+        if (Array.isArray(node)) {
+          return node.map(replaceParam);
+        }
+        const rec = node as Record<string, unknown>;
+        if (rec.type === "Identifier" && rec.name === fnParamName) {
+          return j.identifier(jsxProp);
+        }
+        for (const key of Object.keys(rec)) {
+          if (key === "loc" || key === "comments") {
+            continue;
+          }
+          const child = rec[key];
+          if (child && typeof child === "object") {
+            rec[key] = replaceParam(child);
+          }
+        }
+        return rec;
+      };
+      return replaceParam(clonedInit) as ExpressionKind;
+    }
+  }
+  return null;
+}
+
 function isPseudoElementSelector(pseudoElement: string | null): boolean {
   return pseudoElement === "::before" || pseudoElement === "::after";
 }
@@ -2079,6 +2184,7 @@ function tryHandleLocalHelperCall(args: {
   const { ctx, d, expr } = args;
   const { state, decl, styleFnDecls, styleFnFromProps } = ctx;
   const { j, root } = state;
+  const avoidNames = new Set(state.importMap.keys());
 
   // Only handle standalone interpolations (no property name)
   if (d.property) {
@@ -2187,7 +2293,13 @@ function tryHandleLocalHelperCall(args: {
   // Parse the CSS string to extract properties (replace placeholders with dummy values)
   const parsedCss = parseCssDeclarationBlock(cssString.replace(/__LOCAL_PARAM_\d+__/g, "0"));
   if (!parsedCss || Object.keys(parsedCss).length === 0) {
-    return false;
+    // The local helper function returns CSS that cannot be parsed into individual declarations.
+    // This happens with child selectors (& > div), at-rules, or other complex CSS constructs.
+    state.bailUnsupported(
+      decl,
+      `Local helper function returns CSS that cannot be decomposed into individual properties`,
+    );
+    return true;
   }
 
   // Build a per-property unit map by matching expression indices to CSS properties.
@@ -2196,6 +2308,11 @@ function tryHandleLocalHelperCall(args: {
     cssString.replace(/__LOCAL_PARAM_(\d+)__/g, "PLACEHOLDER_$1"),
   );
   const propToUnit = new Map<string, string>();
+  // Track CSS properties that directly reference the function parameter (with or without a unit)
+  const directParamProps = new Set<string>();
+  // Track derived call arguments per CSS property when the expression is a local variable
+  // derived from the function parameter (e.g., `const px = sizeMap[size]` → callArg = sizeMap[size])
+  const propToCallArg = new Map<string, ExpressionKind>();
   if (parsedWithPlaceholders) {
     for (const [cssProp, value] of Object.entries(parsedWithPlaceholders)) {
       const m = typeof value === "string" ? value.match(/PLACEHOLDER_(\d+)/) : null;
@@ -2206,12 +2323,23 @@ function tryHandleLocalHelperCall(args: {
       const nextQuasi =
         retExpr.quasis[exprIdx + 1]?.value?.cooked ?? retExpr.quasis[exprIdx + 1]?.value?.raw ?? "";
       const unitMatch = nextQuasi.match(/^(px|em|rem|%|vh|vw|ms|s)\b/);
-      if (unitMatch) {
-        const exprNode = retExpr.expressions[exprIdx] as
-          | { type?: string; name?: string }
-          | undefined;
-        if (exprNode?.type === "Identifier" && exprNode.name === fnParamName) {
+      const exprNode = retExpr.expressions[exprIdx] as { type?: string; name?: string } | undefined;
+      if (exprNode?.type === "Identifier" && exprNode.name === fnParamName) {
+        directParamProps.add(cssProp);
+        if (unitMatch) {
           propToUnit.set(cssProp, unitMatch[1]!);
+        }
+      } else if (exprNode?.type === "Identifier" && exprNode.name) {
+        // Check if this identifier is a local variable derived from fnParamName
+        const callArg = resolveDerivedLocalVariable(j, fnBody, fnParamName, exprNode.name, jsxProp);
+        if (callArg) {
+          propToCallArg.set(cssProp, callArg);
+          // For px unit with derived expression, StyleX auto-adds px for numeric values,
+          // so we don't need a unit suffix — just pass the number directly.
+          // For non-px units, append the unit suffix.
+          if (unitMatch && unitMatch[1] !== "px") {
+            propToUnit.set(cssProp, unitMatch[1]!);
+          }
         }
       }
     }
@@ -2221,33 +2349,73 @@ function tryHandleLocalHelperCall(args: {
   const fnParamTypeAnnotation = (fnParams[0] as { typeAnnotation?: { typeAnnotation?: unknown } })
     ?.typeAnnotation?.typeAnnotation;
 
+  // Verify that every CSS property can be traced back to the function parameter.
+  // If any expression can't be resolved (neither direct param reference, unit-suffixed param,
+  // nor a local variable derived from the param), bail rather than silently producing wrong code.
+  for (const cssProp of Object.keys(parsedCss)) {
+    if (!directParamProps.has(cssProp) && !propToCallArg.has(cssProp)) {
+      // Check if the CSS value contains a placeholder at all
+      const rawVal = parsedWithPlaceholders
+        ? (parsedWithPlaceholders as Record<string, unknown>)[cssProp]
+        : null;
+      if (typeof rawVal === "string" && rawVal.includes("PLACEHOLDER_")) {
+        // The local helper function computes CSS property values with logic that can't be
+        // statically traced back to the function parameter (e.g., conditional assignments,
+        // chained lookups). Bail rather than silently dropping these styles.
+        state.bailUnsupported(
+          decl,
+          `Local helper function computes CSS values that cannot be statically traced to the component prop`,
+        );
+        return true;
+      }
+    }
+  }
+
   // Create style functions for each extracted CSS property
   for (const cssProp of Object.keys(parsedCss)) {
     const fnKey = `${decl.styleKey}${toSuffixFromProp(cssProp)}`;
+    const derivedCallArg = propToCallArg.get(cssProp);
     if (!styleFnDecls.has(fnKey)) {
-      const param = j.identifier(jsxProp);
-      if (fnParamTypeAnnotation) {
+      const paramName_ = cssPropertyToIdentifier(cssProp, avoidNames);
+      const param = j.identifier(derivedCallArg ? paramName_ : jsxProp);
+      if (derivedCallArg) {
+        // Derived from a lookup expression (e.g., `sizeMap[size]`). The style function
+        // receives the lookup result, which is typically numeric for CSS property values.
+        // Use `number | string` to handle both numeric and token-based lookup tables.
+        (param as { typeAnnotation?: unknown }).typeAnnotation = j.tsTypeAnnotation(
+          j.tsUnionType([j.tsNumberKeyword(), j.tsStringKeyword()]),
+        );
+      } else if (fnParamTypeAnnotation) {
         (param as { typeAnnotation?: unknown }).typeAnnotation = j.tsTypeAnnotation(
           cloneAstNode(fnParamTypeAnnotation) as Parameters<typeof j.tsTypeAnnotation>[0],
         );
       }
       const propUnit = propToUnit.get(cssProp) ?? "";
+      const valueParamName = derivedCallArg ? paramName_ : jsxProp;
       const valueExpr = propUnit
         ? j.templateLiteral(
             [
               j.templateElement({ raw: "", cooked: "" }, false),
               j.templateElement({ raw: propUnit, cooked: propUnit }, true),
             ],
-            [j.identifier(jsxProp)],
+            [j.identifier(valueParamName)],
           )
-        : j.identifier(jsxProp);
-      const bodyExprNode = j.objectExpression([
-        j.property("init", j.identifier(cssProp), valueExpr),
-      ]);
+        : j.identifier(valueParamName);
+      const propKey = j.identifier(cssProp);
+      const prop = j.property("init", propKey, valueExpr);
+      // Use shorthand when key and value are the same identifier (e.g., { width } instead of { width: width })
+      if (!propUnit && valueExpr.type === "Identifier" && valueExpr.name === cssProp) {
+        (prop as { shorthand?: boolean }).shorthand = true;
+      }
+      const bodyExprNode = j.objectExpression([prop]);
       styleFnDecls.set(fnKey, j.arrowFunctionExpression([param], bodyExprNode));
     }
     if (!styleFnFromProps.some((p) => p.fnKey === fnKey)) {
-      styleFnFromProps.push({ fnKey, jsxProp });
+      styleFnFromProps.push({
+        fnKey,
+        jsxProp,
+        ...(derivedCallArg ? { callArg: derivedCallArg } : {}),
+      });
     }
   }
 

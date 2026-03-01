@@ -866,7 +866,13 @@ export function processDeclRules(ctx: DeclProcessingState): void {
         nestedSelectors[pseudoElement] ??= {};
         const peTarget = nestedSelectors[pseudoElement]!;
         const existingVal = peTarget[prop];
-        if (typeof existingVal === "object" && existingVal !== null) {
+        // Check if the existing value is already a pseudo map (plain object with "default" key),
+        // not an AST node or other object. AST nodes should be wrapped in a new pseudo map.
+        if (
+          typeof existingVal === "object" &&
+          existingVal !== null &&
+          "default" in (existingVal as Record<string, unknown>)
+        ) {
           for (const ps of pseudos) {
             (existingVal as Record<string, unknown>)[ps] = value;
           }

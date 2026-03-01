@@ -1,8 +1,18 @@
 import * as stylex from "@stylexjs/stylex";
+import { $colors } from "./tokens.stylex";
 
 export const App = () => (
   <div style={{ display: "flex", flexDirection: "column", gap: "16px", padding: "16px" }}>
-    <input type="range" min="0" max="100" defaultValue="50" {...stylex.props(styles.rangeInput)} />
+    <label>
+      Hover the thumb — it should change color:
+      <input
+        type="range"
+        min="0"
+        max="100"
+        defaultValue="50"
+        {...stylex.props(styles.rangeInput)}
+      />
+    </label>
   </div>
 );
 
@@ -11,7 +21,7 @@ const styles = stylex.create({
     WebkitAppearance: "none",
     width: "200px",
     height: "4px",
-    backgroundColor: "#ccc",
+    backgroundColor: $colors.bgBorderSolid,
     borderRadius: "2px",
     outline: "none",
     "::-webkit-slider-thumb": {
@@ -20,8 +30,8 @@ const styles = stylex.create({
       height: "16px",
       borderRadius: "50%",
       backgroundColor: {
-        default: "#bf4f74",
-        ":hover": "#ff6b9d",
+        default: $colors.controlPrimary,
+        ":hover": $colors.controlPrimaryHover,
       },
       cursor: "pointer",
       transition: "background-color 0.2s ease-in-out",

@@ -77,6 +77,21 @@ export function emitSimpleWithConfigWrappers(ctx: EmitIntrinsicContext): void {
     const allowStyleProp = emitter.shouldAllowStyleProp(d);
     const allowSxProp = emitter.shouldAllowSxProp(d);
     const allowAsProp = shouldAllowAsProp(d, tagName);
+    // Determine whether the component will forward ref (via {...rest}) so we can
+    // include ref in the narrow type only when it's actually forwarded.
+    const willForwardRef =
+      allowClassNameProp ||
+      allowStyleProp ||
+      (() => {
+        const used = emitter.getUsedAttrs(d.localName);
+        return (
+          used.has("*") ||
+          !!d.usedAsValue ||
+          (d.isExported ?? false) ||
+          used.size > 0 ||
+          hasElementPropsInDefaultAttrs(d)
+        );
+      })();
     {
       const explicit = emitter.stringifyTsType(d.propsType);
       const shouldUseIntrinsicProps = (() => {
@@ -97,12 +112,17 @@ export function emitSimpleWithConfigWrappers(ctx: EmitIntrinsicContext): void {
             allowClassNameProp,
             allowStyleProp,
             allowSxProp,
+            includeRef: willForwardRef,
           })
         : "{}";
 
-      // For non-void tags without explicit type, wrap in PropsWithChildren
+      // For non-void tags without explicit type, ensure children are included.
+      // inferredIntrinsicPropsTypeText already includes children for non-void tags,
+      // so only wrap when using the fallback "{}" type.
       const typeWithChildren =
-        !explicit && !VOID_TAGS.has(tagName) ? emitter.withChildren(baseTypeText) : baseTypeText;
+        !explicit && !VOID_TAGS.has(tagName) && !shouldUseIntrinsicProps
+          ? emitter.withChildren(baseTypeText)
+          : baseTypeText;
       // When there's an explicit user type, create a wrapper type that combines element props
       // with the user type (don't modify the user type)
       const needsElementProps = hasElementPropsInDefaultAttrs(d);
@@ -116,6 +136,7 @@ export function emitSimpleWithConfigWrappers(ctx: EmitIntrinsicContext): void {
               allowClassNameProp,
               allowStyleProp,
               allowSxProp,
+              includeRef: willForwardRef,
             });
             ctx.markNeedsReactTypeImport();
             return emitter.joinIntersection(intrinsicBaseType, explicit);
@@ -460,6 +481,14 @@ export function emitSimpleExportedIntrinsicWrappers(ctx: EmitIntrinsicContext): 
     // d.isExported is already set from exportedComponents during analyze-before-emit
     const isExportedComponent = d.isExported ?? false;
     const usePolymorphicPattern = allowAsProp && isExportedComponent;
+    // Include ref in narrow type only when the component will forward it via {...rest}.
+    // When needsRestForType is true, the broad type (ComponentProps<"tag">) is used instead
+    // and ref is included naturally. These conditions cover the gap where shouldIncludeRest
+    // is true but needsRestForType is false.
+    const willForwardRef =
+      isExportedComponent ||
+      hasComplementaryVariantPairs(d) ||
+      !!d.variantDimensions?.some((dim) => dim.namespaceBooleanProp);
     {
       const explicit = emitter.stringifyTsType(d.propsType);
       const explicitPropNames = d.propsType
@@ -472,6 +501,7 @@ export function emitSimpleExportedIntrinsicWrappers(ctx: EmitIntrinsicContext): 
         allowStyleProp,
         allowSxProp,
         skipProps: explicitPropNames,
+        includeRef: willForwardRef,
       });
 
       const variantPropsForType = new Set([

@@ -14,24 +14,19 @@ export function App() {
 }
 App.displayName = "App";
 
-function Sentence(props: React.PropsWithChildren<{ ref?: React.Ref<HTMLDivElement> }>) {
+function Sentence(props: { children?: React.ReactNode }) {
   const { children } = props;
 
   return <div {...stylex.props(styles.sentence)}>{children}</div>;
 }
 
-function PaddedSentence(props: React.PropsWithChildren<{ ref?: React.Ref<HTMLDivElement> }>) {
+function PaddedSentence(props: { children?: React.ReactNode }) {
   const { children } = props;
 
   return <div {...stylex.props(styles.sentence, styles.paddedSentence)}>{children}</div>;
 }
 
-function PaddedMutedSentence(
-  props: React.PropsWithChildren<{
-    style?: React.CSSProperties;
-    ref?: React.Ref<HTMLDivElement>;
-  }>,
-) {
+function PaddedMutedSentence(props: { style?: React.CSSProperties; children?: React.ReactNode }) {
   const { children, style } = props;
 
   return (

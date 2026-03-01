@@ -37,7 +37,7 @@ export function Input(props: Omit<React.ComponentProps<"input">, "className" | "
 export function Form() {
   return (
     <Box bordered bg="lightgray">
-      <Input onChange={(e) => console.log(e.target.value)} />
+      <Input onChange={(e: React.ChangeEvent<HTMLInputElement>) => console.log(e.target.value)} />
     </Box>
   );
 }

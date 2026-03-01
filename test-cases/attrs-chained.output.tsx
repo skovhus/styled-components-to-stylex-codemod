@@ -24,7 +24,7 @@ type StyledButtonProps = React.ComponentPropsWithRef<typeof Text> & {
 function StyledButton(props: StyledButtonProps) {
   const { className, style, sx, ...rest } = props;
 
-  return <Text as="button" {...rest} {...mergedSx([styles.styledButton, sx], className, style)} />;
+  return <Text {...rest} as="button" {...mergedSx([styles.styledButton, sx], className, style)} />;
 }
 
 // A extends B - this MUST preserve B's as="button" semantics

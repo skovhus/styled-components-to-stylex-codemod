@@ -53,6 +53,7 @@ type InlineStyleFromPropsContext = {
     loc: { line: number; column: number } | null | undefined,
   ) => void;
   setBail: () => void;
+  avoidNames?: Set<string>;
 };
 
 export function handleInlineStyleValueFromProps(ctx: InlineStyleFromPropsContext): boolean {
@@ -230,7 +231,7 @@ export function handleInlineStyleValueFromProps(ctx: InlineStyleFromPropsContext
           ? decl.styleKey
           : `${decl.styleKey}${toSuffixFromProp(out.prop)}`;
         if (!styleFnDecls.has(fnKey)) {
-          const paramName = cssPropertyToIdentifier(out.prop);
+          const paramName = cssPropertyToIdentifier(out.prop, ctx.avoidNames);
           const param = j.identifier(paramName);
           if (/\.(ts|tsx)$/.test(filePath)) {
             (param as any).typeAnnotation = j.tsTypeAnnotation(

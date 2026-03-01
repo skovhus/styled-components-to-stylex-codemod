@@ -3,7 +3,7 @@ import { useTheme } from "styled-components";
 import * as stylex from "@stylexjs/stylex";
 import { $colors } from "./tokens.stylex";
 
-export function Chip(props: React.PropsWithChildren<{ ref?: React.Ref<HTMLDivElement> }>) {
+export function Chip(props: { ref?: React.Ref<HTMLDivElement>; children?: React.ReactNode }) {
   const { children, ...rest } = props;
 
   const theme = useTheme();
