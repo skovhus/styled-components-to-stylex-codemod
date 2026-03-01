@@ -4,12 +4,13 @@ import * as React from "react";
 import * as stylex from "@stylexjs/stylex";
 import { mergedSx } from "./lib/mergedSx";
 
-type TextDividerContainerProps = React.PropsWithChildren<{
+type TextDividerContainerProps = {
   className?: string;
   style?: React.CSSProperties;
   ref?: React.Ref<HTMLDivElement>;
+  children?: React.ReactNode;
   noMinWidth?: any;
-}>;
+};
 
 function TextDividerContainer(props: TextDividerContainerProps) {
   const { className, children, style, noMinWidth } = props;

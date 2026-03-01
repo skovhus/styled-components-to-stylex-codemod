@@ -3,7 +3,7 @@ import * as stylex from "@stylexjs/stylex";
 import { useTheme } from "styled-components";
 import { $colors } from "./tokens.stylex";
 
-function Container(props: React.PropsWithChildren<{ ref?: React.Ref<HTMLDivElement> }>) {
+function Container(props: { children?: React.ReactNode }) {
   const { children } = props;
 
   const theme = useTheme();

@@ -2556,7 +2556,7 @@ export const App = () => <Box>Hello</Box>;
       import * as stylex from "@stylexjs/stylex";
       import { useTheme } from "styled-components";
 
-      function Box(props: React.PropsWithChildren<{ ref?: React.Ref<HTMLDivElement> }>) {
+      function Box(props: { children?: React.ReactNode }) {
         const {
           children,
         } = props;
@@ -2602,7 +2602,7 @@ export const App = () => <Box>Hello</Box>;
       import * as stylex from "@stylexjs/stylex";
       import { useTheme } from "styled-components";
 
-      function Box(props: React.PropsWithChildren<{ ref?: React.Ref<HTMLDivElement> }>) {
+      function Box(props: { children?: React.ReactNode }) {
         const {
           children,
         } = props;
@@ -2654,7 +2654,7 @@ export const App = () => <Box>Hello</Box>;
       import * as stylex from "@stylexjs/stylex";
       import { useTheme } from "styled-components";
 
-      function Box(props: React.PropsWithChildren<{ ref?: React.Ref<HTMLDivElement> }>) {
+      function Box(props: { children?: React.ReactNode }) {
         const {
           children,
         } = props;

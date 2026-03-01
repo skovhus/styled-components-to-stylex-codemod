@@ -824,8 +824,11 @@ export class WrapperEmitter {
     allowStyleProp: boolean;
     allowSxProp?: boolean;
     skipProps?: Set<string>;
+    /** Include ref in the narrow type. Only set to true when the component forwards ref (e.g., via {...rest}). */
+    includeRef?: boolean;
   }): string {
-    const { d, tagName, allowClassNameProp, allowStyleProp, allowSxProp, skipProps } = args;
+    const { d, tagName, allowClassNameProp, allowStyleProp, allowSxProp, skipProps, includeRef } =
+      args;
     const used = this.getUsedAttrs(d.localName);
     const needsBroadAttrs = used.has("*") || !!(d as any).usedAsValue;
 
@@ -840,8 +843,13 @@ export class WrapperEmitter {
       if (allowSxProp) {
         lines.push(SX_PROP_TYPE_TEXT);
       }
-      const elementType = TAG_TO_HTML_ELEMENT[tagName] ?? "HTMLElement";
-      lines.push(`ref?: React.Ref<${elementType}>`);
+      if (includeRef) {
+        const elementType = TAG_TO_HTML_ELEMENT[tagName] ?? "HTMLElement";
+        lines.push(`ref?: React.Ref<${elementType}>`);
+      }
+      if (!VOID_TAGS.has(tagName)) {
+        lines.push(`children?: React.ReactNode`);
+      }
     } else if (allowSxProp) {
       lines.push(SX_PROP_TYPE_TEXT);
     }
@@ -889,7 +897,8 @@ export class WrapperEmitter {
         }
         return baseType;
       }
-      return this.withChildren(literal);
+      // For non-void tags, children is already included in `lines` — return literal directly.
+      return literal;
     }
 
     const base = this.reactIntrinsicAttrsType(tagName);

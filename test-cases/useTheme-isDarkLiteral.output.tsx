@@ -3,7 +3,7 @@ import { useTheme } from "styled-components";
 import * as stylex from "@stylexjs/stylex";
 
 // Basic literal values with isDark conditional
-function Box(props: React.PropsWithChildren<{ ref?: React.Ref<HTMLDivElement> }>) {
+function Box(props: { children?: React.ReactNode }) {
   const { children } = props;
 
   const theme = useTheme();

@@ -734,7 +734,8 @@ export function handleInterpolatedDeclaration(args: InterpolatedDeclarationConte
             ? { localName: decl.localName, res, ...resolveCallMeta }
             : { localName: decl.localName, res },
         });
-        continue;
+        bail = true;
+        break;
       }
       // Track mixinOrder for correct cascade interleaving
       const hasStaticPropsBefore =
@@ -780,7 +781,8 @@ export function handleInterpolatedDeclaration(args: InterpolatedDeclarationConte
             ? { localName: decl.localName, res, ...resolveCallMeta }
             : { localName: decl.localName, res },
         });
-        continue;
+        bail = true;
+        break;
       }
       const outs = cssDeclarationToStylexDeclarations(d);
       for (let i = 0; i < outs.length; i++) {
@@ -1004,10 +1006,14 @@ export function handleInterpolatedDeclaration(args: InterpolatedDeclarationConte
             loc,
             context: { localName: decl.localName, variant: v },
           });
-          continue;
+          bail = true;
+          break;
         }
         decl.extraStylexPropsArgs ??= [];
         decl.extraStylexPropsArgs.push({ when: v.when, expr: exprAst as any });
+      }
+      if (bail) {
+        break;
       }
       decl.needsWrapperComponent = true;
       continue;
@@ -1721,7 +1727,7 @@ export function handleInterpolatedDeclaration(args: InterpolatedDeclarationConte
       break;
     }
 
-    if (decl.shouldForwardProp) {
+    if (decl.shouldForwardProp && d.property) {
       for (const out of cssDeclarationToStylexDeclarations(d)) {
         if (!out.prop) {
           continue;
@@ -2287,7 +2293,13 @@ function tryHandleLocalHelperCall(args: {
   // Parse the CSS string to extract properties (replace placeholders with dummy values)
   const parsedCss = parseCssDeclarationBlock(cssString.replace(/__LOCAL_PARAM_\d+__/g, "0"));
   if (!parsedCss || Object.keys(parsedCss).length === 0) {
-    return false;
+    // The local helper function returns CSS that cannot be parsed into individual declarations.
+    // This happens with child selectors (& > div), at-rules, or other complex CSS constructs.
+    state.bailUnsupported(
+      decl,
+      `Local helper function returns CSS that cannot be decomposed into individual properties`,
+    );
+    return true;
   }
 
   // Build a per-property unit map by matching expression indices to CSS properties.
@@ -2347,8 +2359,14 @@ function tryHandleLocalHelperCall(args: {
         ? (parsedWithPlaceholders as Record<string, unknown>)[cssProp]
         : null;
       if (typeof rawVal === "string" && rawVal.includes("PLACEHOLDER_")) {
-        // Expression present but not traceable to the function parameter — bail
-        return false;
+        // The local helper function computes CSS property values with logic that can't be
+        // statically traced back to the function parameter (e.g., conditional assignments,
+        // chained lookups). Bail rather than silently dropping these styles.
+        state.bailUnsupported(
+          decl,
+          `Local helper function computes CSS values that cannot be statically traced to the component prop`,
+        );
+        return true;
       }
     }
   }

@@ -3,7 +3,7 @@ import * as stylex from "@stylexjs/stylex";
 import { scrollFadeMaskStyles, helpers } from "./lib/helpers.stylex";
 
 // Pattern 1: css helper used alongside regular CSS properties
-function Container(props: React.PropsWithChildren<{ ref?: React.Ref<HTMLDivElement> }>) {
+function Container(props: { children?: React.ReactNode }) {
   const { children } = props;
 
   return (
@@ -16,14 +16,14 @@ function Container(props: React.PropsWithChildren<{ ref?: React.Ref<HTMLDivEleme
 }
 
 // Pattern 2: css helper as the only interpolation
-function FadeBox(props: React.PropsWithChildren<{ ref?: React.Ref<HTMLDivElement> }>) {
+function FadeBox(props: { children?: React.ReactNode }) {
   const { children } = props;
 
   return <div {...stylex.props(scrollFadeMaskStyles(24, "bottom"))}>{children}</div>;
 }
 
 // Pattern 3: Multiple css helpers
-function ComplexFade(props: React.PropsWithChildren<{ ref?: React.Ref<HTMLDivElement> }>) {
+function ComplexFade(props: { children?: React.ReactNode }) {
   const { children } = props;
 
   return (
@@ -43,7 +43,7 @@ function ComplexFade(props: React.PropsWithChildren<{ ref?: React.Ref<HTMLDivEle
 // Pattern 4: Helper with overlapping property — the static display:block after the helper
 // must override flexCenter's display:flex. If cascade order is wrong, children would be
 // centered (flex) instead of stacking normally (block), producing a visible pixel diff.
-function OverrideDisplay(props: React.PropsWithChildren<{ ref?: React.Ref<HTMLDivElement> }>) {
+function OverrideDisplay(props: { children?: React.ReactNode }) {
   const { children } = props;
 
   return (

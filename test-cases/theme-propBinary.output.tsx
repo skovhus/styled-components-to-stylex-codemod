@@ -3,7 +3,7 @@ import * as stylex from "@stylexjs/stylex";
 import { useTheme } from "styled-components";
 
 // Block-level theme binary conditional: theme.mode === "dark" controls entire CSS block
-function Box(props: React.PropsWithChildren<{ ref?: React.Ref<HTMLDivElement> }>) {
+function Box(props: { children?: React.ReactNode }) {
   const { children } = props;
 
   const theme = useTheme();
