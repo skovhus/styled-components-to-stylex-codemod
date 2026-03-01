@@ -113,10 +113,10 @@ const styles = stylex.create({
   avatarContainerDisabled: {
     opacity: 0.5,
   },
-  avatarContainerWidth: (width: number) => ({
+  avatarContainerWidth: (width: number | string) => ({
     width,
   }),
-  avatarContainerHeight: (height: number) => ({
+  avatarContainerHeight: (height: number | string) => ({
     height,
   }),
 });

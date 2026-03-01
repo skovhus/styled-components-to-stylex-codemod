@@ -14,6 +14,7 @@ function TooltipContainer(props: TooltipContainerProps) {
 
   return (
     <Flex
+      position={position}
       {...rest}
       {...stylex.props(
         styles.tooltipContainer,

@@ -118,10 +118,14 @@ export function postProcessStep(ctx: TransformContext): StepResult {
   // After conversion, inline arrow function event handlers may lose type inference
   // (e.g., `onKeyDown={e => ...}` gets implicit-any). Add explicit React event type annotations.
   if (/\.(ts|tsx)$/.test(file.path)) {
-    const convertedNames = new Set(styledDecls.map((d) => d.localName));
+    // Only annotate event handlers for intrinsic-based components (styled.div, etc.).
+    // Wrappers around custom components may use callback props with non-React payloads,
+    // so injecting React.*Event annotations could make those handlers type-incompatible.
+    const convertedNames = new Set<string>();
     const componentTagMap = new Map<string, string>();
     for (const decl of styledDecls) {
       if (decl.base.kind === "intrinsic") {
+        convertedNames.add(decl.localName);
         componentTagMap.set(decl.localName, decl.base.tagName);
       }
     }

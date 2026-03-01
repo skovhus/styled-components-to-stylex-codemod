@@ -2379,9 +2379,11 @@ function tryHandleLocalHelperCall(args: {
       const paramName_ = cssPropertyToIdentifier(cssProp, avoidNames);
       const param = j.identifier(derivedCallArg ? paramName_ : jsxProp);
       if (derivedCallArg) {
-        // Derived from a lookup — the result is a number
+        // Derived from a lookup expression (e.g., `sizeMap[size]`). The style function
+        // receives the lookup result, which is typically numeric for CSS property values.
+        // Use `number | string` to handle both numeric and token-based lookup tables.
         (param as { typeAnnotation?: unknown }).typeAnnotation = j.tsTypeAnnotation(
-          j.tsNumberKeyword(),
+          j.tsUnionType([j.tsNumberKeyword(), j.tsStringKeyword()]),
         );
       } else if (fnParamTypeAnnotation) {
         (param as { typeAnnotation?: unknown }).typeAnnotation = j.tsTypeAnnotation(

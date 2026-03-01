@@ -806,9 +806,10 @@ export function emitComponentWrappers(emitter: WrapperEmitter): {
         if (propName && propName !== "children" && !propName.startsWith("$")) {
           if (styleOnlyConditionProps.has(propName)) {
             // Props added purely for variant conditions or pseudo-alias selectors are
-            // style-only concerns. Only forward them when the base component explicitly
-            // accepts them (e.g., the prop doubles as a rendering prop on the inner component).
-            if (baseExplicitProps?.has(propName)) {
+            // style-only concerns. Forward them when the base component explicitly
+            // accepts them, or when the base type can't be resolved (styled-components
+            // forwards all non-transient props to wrapped components by default).
+            if (!baseExplicitProps || baseExplicitProps.has(propName)) {
               pushForwardedProp(propName);
             }
             continue;

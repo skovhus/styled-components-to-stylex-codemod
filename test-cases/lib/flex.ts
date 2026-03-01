@@ -6,6 +6,7 @@ export interface FlexProps extends React.ComponentProps<"div"> {
   gutter?: string;
   direction?: "row" | "column";
   column?: boolean;
+  position?: string;
 }
 
 export function Flex(props: FlexProps) {

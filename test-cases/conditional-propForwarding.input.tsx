@@ -1,4 +1,5 @@
-// Variant condition prop (position) should NOT be forwarded to the wrapped Flex component
+// Variant condition prop (position) is forwarded to the wrapped Flex component,
+// matching styled-components semantics (all non-transient props are forwarded).
 import styled from "styled-components";
 import { Flex } from "./lib/flex";
 
