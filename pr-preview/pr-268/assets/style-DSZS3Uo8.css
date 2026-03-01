@@ -115,6 +115,11 @@ body{font-family:-apple-system,BlinkMacSystemFont,Segoe UI,Roboto,Helvetica Neue
   inherits: false
 }
 
+@property --x-gap {
+  syntax: "*";
+  inherits: false
+}
+
 @property --x-columnGap {
   syntax: "*";
   inherits: false
@@ -126,11 +131,6 @@ body{font-family:-apple-system,BlinkMacSystemFont,Segoe UI,Roboto,Helvetica Neue
 }
 
 @property --x-rowGap {
-  syntax: "*";
-  inherits: false
-}
-
-@property --x-gap {
   syntax: "*";
   inherits: false
 }
@@ -220,22 +220,22 @@ body{font-family:-apple-system,BlinkMacSystemFont,Segoe UI,Roboto,Helvetica Neue
   }
 }
 
-@keyframes xekv6nw-B {
-  0% {
-    opacity: 0;
-  }
-
-  100% {
-    opacity: 1;
-  }
-}
-
 @keyframes x18re5ia-B {
   from {
     opacity: 0;
   }
 
   to {
+    opacity: 1;
+  }
+}
+
+@keyframes xekv6nw-B {
+  0% {
+    opacity: 0;
+  }
+
+  100% {
     opacity: 1;
   }
 }
@@ -587,14 +587,16 @@ body{font-family:-apple-system,BlinkMacSystemFont,Segoe UI,Roboto,Helvetica Neue
   .x1wk2j8l.x1wk2j8l:not(#\#) {
     padding: 2.5rem;
   }
-
-  .x1i7j8g4.x1i7j8g4:not(#\#) {
-    padding: 2rem;
-  }
 }
 
 @media (width >= 768px) and (width <= 1023.99px) {
   .x1t32qvz.x1t32qvz:not(#\#) {
+    padding: 2rem;
+  }
+}
+
+@media (width >= 1024px) {
+  .x1i7j8g4.x1i7j8g4:not(#\#) {
     padding: 2rem;
   }
 }
@@ -2575,6 +2577,10 @@ body{font-family:-apple-system,BlinkMacSystemFont,Segoe UI,Roboto,Helvetica Neue
   transform: scale(.9);
 }
 
+.x3oybdh:not(#\#):not(#\#):not(#\#) {
+  transform: scale(1);
+}
+
 .xxa6egd:not(#\#):not(#\#):not(#\#) {
   transform: scaleY(0);
 }
@@ -3296,6 +3302,10 @@ body{font-family:-apple-system,BlinkMacSystemFont,Segoe UI,Roboto,Helvetica Neue
   height: 32px;
 }
 
+.xqvfhly:not(#\#):not(#\#):not(#\#):not(#\#) {
+  height: 45px;
+}
+
 .xsdox4t:not(#\#):not(#\#):not(#\#):not(#\#) {
   height: 48px;
 }
@@ -3700,6 +3710,10 @@ body{font-family:-apple-system,BlinkMacSystemFont,Segoe UI,Roboto,Helvetica Neue
 
 .x1fsd2vl:not(#\#):not(#\#):not(#\#):not(#\#) {
   width: 10px;
+}
+
+.x1p6a1jd:not(#\#):not(#\#):not(#\#):not(#\#) {
+  width: 123px;
 }
 
 .xsmyaan:not(#\#):not(#\#):not(#\#):not(#\#) {
