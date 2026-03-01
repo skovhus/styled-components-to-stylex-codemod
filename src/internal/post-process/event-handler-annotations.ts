@@ -141,7 +141,7 @@ export function annotateEventHandlerParams(args: {
           continue;
         }
 
-        // Parse the React event type into an AST annotation
+        // Build the React event type annotation
         const parts = eventType.split(".");
         const typeRef = j.tsTypeReference(
           j.tsQualifiedName(j.identifier(parts[0]!), j.identifier(parts[1]!)),
@@ -151,7 +151,19 @@ export function annotateEventHandlerParams(args: {
             [j.tsTypeReference(j.identifier(elementType))],
           );
         }
-        (firstParam as { typeAnnotation?: unknown }).typeAnnotation = j.tsTypeAnnotation(typeRef);
+
+        // Build a new annotated parameter and replace the entire arrow function
+        // so recast reprints it with parentheses around the typed parameter.
+        const annotatedParam = j.identifier(firstParam.name);
+        annotatedParam.typeAnnotation = j.tsTypeAnnotation(typeRef);
+        const newArrow = j.arrowFunctionExpression(
+          [annotatedParam, ...expr.params.slice(1)],
+          expr.body,
+          expr.expression,
+        );
+        newArrow.async = expr.async ?? false;
+        newArrow.returnType = expr.returnType ?? null;
+        value.expression = newArrow;
         changed = true;
       }
     });

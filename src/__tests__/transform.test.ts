@@ -3616,4 +3616,34 @@ export const App = () => (
     expect(result.code).toContain("React.ChangeEvent<HTMLSelectElement>");
     expect(result.code).toContain("React.ChangeEvent<HTMLInputElement>");
   });
+
+  it("wraps unparenthesized arrow params in parens when adding type annotations", () => {
+    const source = `
+import React from "react";
+import styled from "styled-components";
+
+export const Overlay = styled.div\`
+  position: fixed;
+\`;
+
+export const App = () => (
+  <Overlay onKeyDown={e => e.stopPropagation()} onClick={e => console.log(e)} />
+);
+`;
+
+    const result = transformWithWarnings(
+      { source, path: join(testCasesDir, "event-handler-annotation-parens.input.tsx") },
+      { jscodeshift: j, j, stats: () => {}, report: () => {} },
+      { adapter: fixtureAdapter },
+    );
+
+    expect(result.code).not.toBeNull();
+    // Must have parentheses around the typed parameter — not `e: Type =>`
+    expect(result.code).toContain(
+      "(e: React.KeyboardEvent<HTMLDivElement>) => e.stopPropagation()",
+    );
+    expect(result.code).toContain("(e: React.MouseEvent<HTMLDivElement>) => console.log(e)");
+    // Must NOT have the broken unparenthesized form
+    expect(result.code).not.toContain("{e: React.");
+  });
 });
