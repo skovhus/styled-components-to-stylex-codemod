@@ -23,11 +23,11 @@ function Text<C extends React.ElementType = "span">(props: TextProps & { as?: C 
   );
 }
 
-type LabelProps = React.ComponentPropsWithRef<typeof Text> & {
+type LabelProps = {
   sx?: stylex.StyleXStyles;
   htmlFor?: string;
   ref?: React.Ref<HTMLLabelElement>;
-};
+} & React.ComponentPropsWithRef<typeof Text>;
 
 /**
  * Label component using .attrs to set as="label"

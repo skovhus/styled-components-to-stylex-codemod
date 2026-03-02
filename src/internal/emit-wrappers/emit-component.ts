@@ -312,7 +312,7 @@ export function emitComponentWrappers(emitter: WrapperEmitter): {
           // which carries `children` when the wrapped component accepts them. Wrapping the
           // explicit extra props in `PropsWithChildren` is redundant and can cause extra churn.
           const typeText = explicitWithRef
-            ? emitter.joinIntersection(inferred, explicitWithRef)
+            ? emitter.joinIntersection(explicitWithRef, inferred)
             : inferred;
           // When there are no custom props, skip emitting named type and use inline type instead
           const hasNoCustomProps = !explicitWithRef;

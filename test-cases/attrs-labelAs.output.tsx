@@ -3,11 +3,11 @@ import * as stylex from "@stylexjs/stylex";
 import { mergedSx } from "./lib/mergedSx";
 
 // Simplified Text component for test case
-type TextProps = { sx?: stylex.StyleXStyles } & React.PropsWithChildren<{
+type TextProps = React.PropsWithChildren<{
   as?: React.ElementType;
   className?: string;
   style?: React.CSSProperties;
-}>;
+}> & { sx?: stylex.StyleXStyles };
 
 function Text(props: TextProps & React.ComponentProps<"span"> & { sx?: stylex.StyleXStyles }) {
   const { as: Component = "span", className, children, style, sx, ...rest } = props;
@@ -19,10 +19,10 @@ function Text(props: TextProps & React.ComponentProps<"span"> & { sx?: stylex.St
   );
 }
 
-type LabelProps = Omit<React.ComponentPropsWithRef<typeof Text>, "className" | "style"> & {
+type LabelProps = {
   htmlFor?: string;
   ref?: React.Ref<HTMLLabelElement>;
-};
+} & Omit<React.ComponentPropsWithRef<typeof Text>, "className" | "style">;
 
 /**
  * Label component that can be used with htmlFor to target an input.

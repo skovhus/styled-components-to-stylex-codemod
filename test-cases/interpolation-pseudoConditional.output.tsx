@@ -8,7 +8,7 @@ import { TouchDeviceToggle } from "./lib/TouchDeviceToggle";
  * `&:${highlight}` expands to `:active` and `:hover` pseudo style objects,
  * wrapped in `highlightStyles({ active: ..., hover: ... })` for runtime selection.
  */
-function Button(props: { children?: React.ReactNode }) {
+function Button(props: React.PropsWithChildren<{}>) {
   return (
     <button
       {...stylex.props(
@@ -28,7 +28,7 @@ function Button(props: { children?: React.ReactNode }) {
  * Same as Button but with `&&:${highlight}` specificity hack.
  * The `&&` should be stripped and the pseudo alias still applied.
  */
-function SpecificButton(props: { children?: React.ReactNode }) {
+function SpecificButton(props: React.PropsWithChildren<{}>) {
   return (
     <button
       {...stylex.props(

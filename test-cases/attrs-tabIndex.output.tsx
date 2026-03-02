@@ -4,10 +4,10 @@ import { mergedSx } from "./lib/mergedSx";
 import { $colors } from "./tokens.stylex";
 import { Flex } from "./lib/flex";
 
-type Props = React.ComponentPropsWithRef<typeof Flex> & { sx?: stylex.StyleXStyles } & {
+type Props = {
   $applyBackground?: boolean;
   gutter?: string;
-};
+} & React.ComponentPropsWithRef<typeof Flex> & { sx?: stylex.StyleXStyles };
 
 export function ScrollableFlex(props: Props) {
   const { className, children, style, sx, $applyBackground, gutter, tabIndex, ...rest } = props;

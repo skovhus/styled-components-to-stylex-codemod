@@ -77,6 +77,7 @@ export function emitSimpleWithConfigWrappers(ctx: EmitIntrinsicContext): void {
     const allowStyleProp = emitter.shouldAllowStyleProp(d);
     const allowSxProp = emitter.shouldAllowSxProp(d);
     const allowAsProp = shouldAllowAsProp(d, tagName);
+    const useSlimType = !(d.isExported ?? false) && !supportsExternalStyles && !d.usedAsValue;
     // Determine whether the component will forward ref (via explicit forwarding
     // and/or {...rest}) so we can include ref in the narrow type only when it's
     // actually forwarded.
@@ -115,6 +116,7 @@ export function emitSimpleWithConfigWrappers(ctx: EmitIntrinsicContext): void {
             allowStyleProp,
             allowSxProp,
             includeRef: willForwardRef,
+            forceNarrow: useSlimType,
           })
         : "{}";
 
@@ -141,7 +143,7 @@ export function emitSimpleWithConfigWrappers(ctx: EmitIntrinsicContext): void {
               includeRef: willForwardRef,
             });
             ctx.markNeedsReactTypeImport();
-            return emitter.joinIntersection(intrinsicBaseType, explicit);
+            return emitter.joinIntersection(explicit, intrinsicBaseType);
           }
           return explicit;
         }
@@ -489,30 +491,25 @@ export function emitSimpleExportedIntrinsicWrappers(ctx: EmitIntrinsicContext): 
     // d.isExported is already set from exportedComponents during analyze-before-emit
     const isExportedComponent = d.isExported ?? false;
     const usePolymorphicPattern = allowAsProp && isExportedComponent;
-    // Include ref in narrow type only when the component will forward it
-    // (via explicit forwarding and/or {...rest}).
-    // When needsRestForType is true, the broad type (ComponentProps<"tag">) is used instead
-    // and ref is included naturally. These conditions cover the gap where shouldIncludeRest
-    // is true but needsRestForType is false.
     const willForwardRef =
       (d.supportsRefProp ?? false) ||
       isExportedComponent ||
       hasComplementaryVariantPairs(d) ||
       !!d.variantDimensions?.some((dim) => dim.namespaceBooleanProp);
+    // Non-exported components use slim literal types listing only actually-used
+    // props instead of the broad React.ComponentProps<"tag">.
+    // Disable when defaultAttrs reference element props (e.g. tabIndex: props.tabIndex ?? 0)
+    // because those props need to be in the type even if no callsite passes them.
+    const useSlimType =
+      !isExportedComponent &&
+      !(d.supportsExternalStyles ?? false) &&
+      !d.usedAsValue &&
+      !hasElementPropsInDefaultAttrs(d);
     {
       const explicit = emitter.stringifyTsType(d.propsType);
       const explicitPropNames = d.propsType
         ? emitter.getExplicitPropNames(d.propsType)
         : new Set<string>();
-      const baseTypeText = emitter.inferredIntrinsicPropsTypeText({
-        d,
-        tagName,
-        allowClassNameProp,
-        allowStyleProp,
-        allowSxProp,
-        skipProps: explicitPropNames,
-        includeRef: willForwardRef,
-      });
 
       const variantPropsForType = new Set([
         ...Object.keys(d.variantStyleKeys ?? {}).flatMap((when: string) => {
@@ -546,6 +543,21 @@ export function emitSimpleExportedIntrinsicWrappers(ctx: EmitIntrinsicContext): 
         ...invertedPropsForType,
         ...staticAttrNames,
       ]);
+
+      // All style-driving props are excluded from Pick<ComponentProps> — they
+      // appear in customStyleDrivingPropsTypeText instead, because custom props
+      // like `active` are not keys of intrinsic element types.
+      const skipProps = new Set([...explicitPropNames, ...handledProps]);
+      const baseTypeText = emitter.inferredIntrinsicPropsTypeText({
+        d,
+        tagName,
+        allowClassNameProp,
+        allowStyleProp,
+        allowSxProp,
+        skipProps,
+        includeRef: willForwardRef,
+        forceNarrow: useSlimType,
+      });
       const supportsExternalStyles = d.supportsExternalStyles ?? false;
       const needsRestForType =
         !!d.usedAsValue ||
@@ -585,9 +597,8 @@ export function emitSimpleExportedIntrinsicWrappers(ctx: EmitIntrinsicContext): 
 
       const customStyleDrivingPropsTypeText = (() => {
         // These are props that influence styles/attrs and are consumed by the wrapper.
-        // They are often not part of intrinsic element props (e.g. `hasError`, `$size`),
-        // so we keep them in the public props type even when we otherwise rely on
-        // React's intrinsic props typing for pass-through props.
+        // They are excluded from Pick<ComponentProps> via skipProps because custom
+        // props like `active` are not keys of intrinsic element types.
         const keys = new Set<string>();
         const addIfString = (k: unknown) => {
           if (typeof k === "string") {
@@ -613,12 +624,16 @@ export function emitSimpleExportedIntrinsicWrappers(ctx: EmitIntrinsicContext): 
             k !== "className" &&
             k !== "style" &&
             k !== "as" &&
-            k !== "forwardedAs",
+            k !== "forwardedAs" &&
+            !explicitPropNames.has(k),
         );
         if (filtered.length === 0) {
           return "{}";
         }
-        const lines = filtered.map((k) => `  ${k}?: any;`);
+        const lines = filtered.map((k) => {
+          const attrType = k.startsWith("data-") ? "string" : "any";
+          return `  ${k}?: ${attrType};`;
+        });
         return `{\n${lines.join("\n")}\n}`;
       })();
 
@@ -626,9 +641,19 @@ export function emitSimpleExportedIntrinsicWrappers(ctx: EmitIntrinsicContext): 
 
       const typeText = (() => {
         if (!explicit) {
-          // If we forward `...rest`, prefer full intrinsic props typing so common
-          // props (e.g. onChange) get correct types. Keep any style-driving custom
-          // props intersected in so the wrapper can consume them.
+          if (useSlimType) {
+            // Non-exported: slim literal listing only actually-used props,
+            // intersected with any custom style-driving props.  Wrap with
+            // PropsWithChildren so custom props end up inside the wrapper.
+            const combined = emitter.joinIntersection(
+              customStyleDrivingPropsTypeText,
+              baseTypeText,
+              sxTypeIntersection,
+            );
+            return VOID_TAGS.has(tagName) ? combined : emitter.withChildren(combined);
+          }
+          // Exported / external: prefer full intrinsic props typing so common
+          // props (e.g. onChange) get correct types when forwarding `...rest`.
           return needsRestForType
             ? emitter.joinIntersection(
                 extendBaseTypeText,
@@ -637,8 +662,14 @@ export function emitSimpleExportedIntrinsicWrappers(ctx: EmitIntrinsicContext): 
               )
             : baseTypeText;
         }
+        if (useSlimType) {
+          // Non-exported with explicit type: intersect the user type with only
+          // the actually-used element props.
+          const combined = emitter.joinIntersection(explicit, baseTypeText, sxTypeIntersection);
+          return VOID_TAGS.has(tagName) ? combined : emitter.withChildren(combined);
+        }
         if (VOID_TAGS.has(tagName)) {
-          return emitter.joinIntersection(extendBaseTypeText, explicit, sxTypeIntersection);
+          return emitter.joinIntersection(explicit, extendBaseTypeText, sxTypeIntersection);
         }
         if (needsRestForType) {
           // For non-exported components that only use transient props ($-prefixed)
@@ -652,7 +683,7 @@ export function emitSimpleExportedIntrinsicWrappers(ctx: EmitIntrinsicContext): 
           ) {
             return emitter.withChildren(explicit);
           }
-          return emitter.joinIntersection(extendBaseTypeText, explicit, sxTypeIntersection);
+          return emitter.joinIntersection(explicit, extendBaseTypeText, sxTypeIntersection);
         }
         if (allowClassNameProp || allowStyleProp) {
           const extras: string[] = [];
@@ -745,16 +776,21 @@ export function emitSimpleExportedIntrinsicWrappers(ctx: EmitIntrinsicContext): 
             inlineTypeText = `${emitter.propsTypeNameFor(d.localName)}<C>`;
           }
         } else if (explicitIsExistingTypeRef && explicit) {
-          // User's existing type first in the intersection for readability
-          const inlineBase = emitter.joinIntersection(
-            explicit,
-            extendBaseTypeText,
-            sxTypeIntersection,
-          );
-          inlineTypeText = withForwardedAsType(
-            withSimpleAsPropType(inlineBase, allowAsProp),
-            includesForwardedAs,
-          );
+          if (useSlimType) {
+            // Non-exported: use the computed slim type directly
+            inlineTypeText = typeTextWithForwardedAs;
+          } else {
+            // User's existing type first in the intersection for readability
+            const inlineBase = emitter.joinIntersection(
+              explicit,
+              extendBaseTypeText,
+              sxTypeIntersection,
+            );
+            inlineTypeText = withForwardedAsType(
+              withSimpleAsPropType(inlineBase, allowAsProp),
+              includesForwardedAs,
+            );
+          }
         } else {
           // Use the computed typeText (which may be an intersection) as the inline type.
           inlineTypeText = withSimpleAsPropType(typeTextWithForwardedAs, allowAsProp);

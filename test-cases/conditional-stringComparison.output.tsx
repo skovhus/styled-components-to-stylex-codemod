@@ -3,12 +3,10 @@ import * as stylex from "@stylexjs/stylex";
 
 const IconButton = (props: React.ComponentProps<"button">) => <button {...props} />;
 
-type StyledIconButtonProps = Omit<
+type StyledIconButtonProps = { useRoundStyle?: boolean } & Omit<
   React.ComponentPropsWithRef<typeof IconButton>,
   "className" | "style"
-> & {
-  useRoundStyle?: boolean;
-};
+>;
 
 function StyledIconButton(props: StyledIconButtonProps) {
   const { children, useRoundStyle, ...rest } = props;

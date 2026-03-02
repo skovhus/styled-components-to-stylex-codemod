@@ -372,9 +372,8 @@ export function createEmitIntrinsicHelpers(env: EmitIntrinsicHelpersEnv): EmitIn
         const typeExprText = `${extra} & ${baseWithExtraOmit} & { ${sxPropPart}as?: C }${forwardedAsPart}`;
         return { typeExprText, genericParams };
       }
-      // Omit as from extra since we're adding our own as?: C
       const extraWithoutAs = `Omit<${extra}, "as">`;
-      const typeExprText = `${baseWithExtraOmit} & ${extraWithoutAs} & { ${sxPropPart}as?: C }${forwardedAsPart}`;
+      const typeExprText = `${extraWithoutAs} & ${baseWithExtraOmit} & { ${sxPropPart}as?: C }${forwardedAsPart}`;
       return { typeExprText, genericParams };
     }
     // Just element props with as?: C (and optional sx)

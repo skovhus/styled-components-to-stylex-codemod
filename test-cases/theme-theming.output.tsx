@@ -3,7 +3,7 @@ import * as stylex from "@stylexjs/stylex";
 import { ThemeProvider } from "styled-components";
 import { testCaseTheme, $colors } from "./tokens.stylex";
 
-function Button(props: { children?: React.ReactNode }) {
+function Button(props: React.PropsWithChildren<{}>) {
   return <button {...stylex.props(styles.button)}>{props.children}</button>;
 }
 

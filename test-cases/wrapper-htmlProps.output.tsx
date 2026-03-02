@@ -1,9 +1,10 @@
 import * as React from "react";
 import * as stylex from "@stylexjs/stylex";
 
-type OptionLabelProps = Omit<React.ComponentProps<"label">, "className" | "style"> & {
-  $disabled?: boolean;
-};
+type OptionLabelProps = { $disabled?: boolean } & Pick<
+  React.ComponentProps<"label">,
+  "children" | "onClick" | "title"
+>;
 
 // When a styled component wrapper spreads ...rest to the element,
 // the wrapper type should include HTML element props like title, onClick, etc.

@@ -3,6 +3,7 @@ import * as stylex from "@stylexjs/stylex";
 
 type ErrorMessageProps = React.PropsWithChildren<{
   $inline?: boolean;
+  ref?: React.Ref<HTMLDivElement>;
 }>;
 
 function ErrorMessage(props: ErrorMessageProps) {

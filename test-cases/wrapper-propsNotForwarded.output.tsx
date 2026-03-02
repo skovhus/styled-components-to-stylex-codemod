@@ -24,10 +24,10 @@ function Badge_({
   );
 }
 
-type BadgeProps = React.ComponentPropsWithRef<typeof Badge_> & {
+type BadgeProps = {
   selected?: boolean;
   highlighted?: boolean;
-};
+} & React.ComponentPropsWithRef<typeof Badge_>;
 
 function Badge(props: BadgeProps) {
   const { className, children, style, highlighted, ...rest } = props;

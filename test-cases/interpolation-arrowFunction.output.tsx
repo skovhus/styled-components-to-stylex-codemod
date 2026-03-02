@@ -23,6 +23,7 @@ function GradientBox(props: GradientBoxProps) {
 
 type TabItemProps = React.PropsWithChildren<{
   $isActive?: boolean;
+  ref?: React.Ref<HTMLDivElement>;
 }>;
 
 // Arrow function in border-bottom (6 occurrences)

@@ -13,7 +13,14 @@ export type Props = {
   size?: Size;
 };
 
-function StyledBadge(props: Props & React.ComponentProps<"span">) {
+function StyledBadge(
+  props: React.PropsWithChildren<
+    Props & {
+      className?: string;
+      style?: React.CSSProperties;
+    }
+  >,
+) {
   const { className, children, style, ...rest } = props;
 
   return (

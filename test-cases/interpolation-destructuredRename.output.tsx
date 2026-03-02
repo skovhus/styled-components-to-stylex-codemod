@@ -1,9 +1,9 @@
 import * as React from "react";
 import * as stylex from "@stylexjs/stylex";
 
-type ButtonProps = Omit<React.ComponentProps<"button">, "className" | "style"> & {
+type ButtonProps = React.PropsWithChildren<{
   color?: string;
-};
+}>;
 
 // Simple renamed destructured prop with static base style
 function Button(props: ButtonProps) {

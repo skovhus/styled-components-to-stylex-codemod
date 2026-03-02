@@ -1562,7 +1562,7 @@ export const App = () => <Box>Hello</Box>;
     );
 
     expect(result.code).not.toBeNull();
-    expect(result.code).toContain("ref?: React.Ref<HTMLDivElement>");
+    expect(result.code).toContain('React.ComponentProps<"div">');
   });
 
   it("should explicitly destructure and forward ref when wrapper supports external refs", async () => {
@@ -2878,7 +2878,7 @@ export const App = () => <Box>Hello</Box>;
       import * as stylex from "@stylexjs/stylex";
       import { useTheme } from "styled-components";
 
-      function Box(props: { children?: React.ReactNode }) {
+      function Box(props: React.PropsWithChildren<{}>) {
         const theme = useTheme();
         return <div {...stylex.props(theme.isDark ? styles.boxDark : styles.boxLight)}>{props.children}</div>;
       }
@@ -2920,7 +2920,7 @@ export const App = () => <Box>Hello</Box>;
       import * as stylex from "@stylexjs/stylex";
       import { useTheme } from "styled-components";
 
-      function Box(props: { children?: React.ReactNode }) {
+      function Box(props: React.PropsWithChildren<{}>) {
         const theme = useTheme();
 
         return (
@@ -2968,7 +2968,7 @@ export const App = () => <Box>Hello</Box>;
       import * as stylex from "@stylexjs/stylex";
       import { useTheme } from "styled-components";
 
-      function Box(props: { children?: React.ReactNode }) {
+      function Box(props: React.PropsWithChildren<{}>) {
         const theme = useTheme();
 
         return (

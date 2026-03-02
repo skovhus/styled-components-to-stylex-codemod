@@ -2,7 +2,7 @@ import React from "react";
 import * as stylex from "@stylexjs/stylex";
 import { $colors } from "./tokens.stylex";
 
-function Input(props: Omit<React.ComponentProps<"input">, "className" | "style">) {
+function Input(props: Pick<React.ComponentProps<"input">, "placeholder">) {
   return <input {...props} {...stylex.props(styles.input)} />;
 }
 

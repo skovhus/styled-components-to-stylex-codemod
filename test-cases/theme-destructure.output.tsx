@@ -4,7 +4,7 @@ import { $colors } from "./tokens.stylex";
 
 type Props = { enabled?: boolean };
 
-function StatusBadge(props: Props & Omit<React.ComponentProps<"div">, "className" | "style">) {
+function StatusBadge(props: React.PropsWithChildren<Props>) {
   const { children, enabled } = props;
 
   return (

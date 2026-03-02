@@ -4,10 +4,11 @@ import { mergedSx } from "./lib/mergedSx";
 
 type Align = "top" | "center" | "bottom";
 
-type ContainerProps = Omit<React.ComponentProps<"div">, "className"> & {
+type ContainerProps = React.PropsWithChildren<{
   align: Align;
   $property?: "width" | "height";
-};
+  style?: React.CSSProperties;
+}>;
 
 function Container(props: ContainerProps) {
   const { children, style, align } = props;

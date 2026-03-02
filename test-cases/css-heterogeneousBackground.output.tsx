@@ -3,6 +3,7 @@ import * as stylex from "@stylexjs/stylex";
 
 type MixedBackgroundProps = React.PropsWithChildren<{
   $useGradient: boolean;
+  ref?: React.Ref<HTMLDivElement>;
 }>;
 
 // This pattern mixes gradients (which need backgroundImage) and colors

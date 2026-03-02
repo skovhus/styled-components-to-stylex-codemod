@@ -2,7 +2,7 @@ import React from "react";
 import * as stylex from "@stylexjs/stylex";
 import { calcVars } from "./css-calc.stylex";
 
-function FlexItem(props: { children?: React.ReactNode }) {
+function FlexItem(props: React.PropsWithChildren<{}>) {
   return <div {...stylex.props(styles.flexItem)}>{props.children}</div>;
 }
 

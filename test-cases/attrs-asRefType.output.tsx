@@ -3,9 +3,9 @@ import * as stylex from "@stylexjs/stylex";
 import { mergedSx } from "./lib/mergedSx";
 
 // A polymorphic Text component that defaults to span
-type TextProps = { sx?: stylex.StyleXStyles } & React.PropsWithChildren<{
+type TextProps = React.PropsWithChildren<{
   variant?: "small" | "regular" | "large";
-}>;
+}> & { sx?: stylex.StyleXStyles };
 
 function Text<C extends React.ElementType = "span">(
   props: TextProps & React.ComponentProps<"span"> & { sx?: stylex.StyleXStyles } & { as?: C },
@@ -27,10 +27,10 @@ function Text<C extends React.ElementType = "span">(
   );
 }
 
-type LabelProps = Omit<React.ComponentPropsWithRef<typeof Text>, "className" | "style"> & {
+type LabelProps = {
   htmlFor?: string;
   ref?: React.Ref<HTMLLabelElement>;
-};
+} & Omit<React.ComponentPropsWithRef<typeof Text>, "className" | "style">;
 
 // When .attrs({ as: "label" }) is used, the component should accept:
 // 1. HTMLLabelElement-specific props like htmlFor

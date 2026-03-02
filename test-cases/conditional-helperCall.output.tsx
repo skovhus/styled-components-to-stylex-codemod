@@ -24,10 +24,10 @@ function TextAlt(props: TextAltProps) {
   return <p {...stylex.props(styles.textAlt, !$noTruncate && helpers.truncate)}>{children}</p>;
 }
 
-type TitleProps = Omit<React.ComponentProps<"div">, "className" | "style"> & {
+type TitleProps = React.PropsWithChildren<{
   maxWidth?: number;
   $truncateTitle?: boolean;
-};
+}>;
 
 function Title(props: TitleProps) {
   const { children, maxWidth, $truncateTitle } = props;

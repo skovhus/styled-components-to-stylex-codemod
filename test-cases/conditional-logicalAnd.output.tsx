@@ -21,9 +21,7 @@ function LayeredBox(props: LayeredBoxProps) {
   );
 }
 
-type GrayscaleImageProps = Omit<React.ComponentProps<"img">, "className" | "style"> & {
-  $isBw?: boolean;
-};
+type GrayscaleImageProps = { $isBw?: boolean } & Pick<React.ComponentProps<"img">, "src">;
 
 // Pattern 2: Simple logical AND with css helper (using destructured props)
 function GrayscaleImage(props: GrayscaleImageProps) {

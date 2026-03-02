@@ -3,17 +3,17 @@ import * as stylex from "@stylexjs/stylex";
 import { $colors } from "./tokens.stylex";
 
 // Chained pseudo-selectors with :not()
-function Input(props: Omit<React.ComponentProps<"input">, "className" | "style">) {
+function Input(props: Pick<React.ComponentProps<"input">, "disabled" | "placeholder">) {
   return <input {...props} {...stylex.props(styles.input)} />;
 }
 
 // Checkbox with chained pseudos
-function Checkbox(props: Omit<React.ComponentProps<"input">, "className" | "style">) {
+function Checkbox(props: Pick<React.ComponentProps<"input">, "disabled" | "type">) {
   return <input {...props} {...stylex.props(styles.checkbox)} />;
 }
 
 // Border on :not(:last-child) with interpolation — should retain the pseudo condition
-function ListItem(props: { children?: React.ReactNode }) {
+function ListItem(props: React.PropsWithChildren<{}>) {
   return <div {...stylex.props(styles.listItem)}>{props.children}</div>;
 }
 

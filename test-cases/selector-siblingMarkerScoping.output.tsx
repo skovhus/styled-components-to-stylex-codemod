@@ -5,7 +5,7 @@ import * as stylex from "@stylexjs/stylex";
 // If another component in the same file also uses defaultMarker() (e.g. for
 // an ancestor relation override), its marker could incorrectly activate
 // Row's sibling styles. Use defineMarker() for strict scoping.
-function Row(props: { children?: React.ReactNode }) {
+function Row(props: React.PropsWithChildren<{}>) {
   return <div {...stylex.props(styles.row, stylex.defaultMarker())}>{props.children}</div>;
 }
 

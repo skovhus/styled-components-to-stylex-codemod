@@ -3,6 +3,7 @@ import * as stylex from "@stylexjs/stylex";
 
 type BannerProps = React.PropsWithChildren<{
   $prominent: boolean;
+  ref?: React.Ref<HTMLDivElement>;
 }>;
 
 /**

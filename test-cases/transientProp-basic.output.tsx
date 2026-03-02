@@ -21,9 +21,7 @@ const Link = ({ className, text, ...props }: { className?: string; text: string 
   </a>
 );
 
-type StyledLinkProps = Omit<React.ComponentPropsWithRef<typeof Link>, "style"> & {
-  $red?: boolean;
-};
+type StyledLinkProps = { $red?: boolean } & Omit<React.ComponentPropsWithRef<typeof Link>, "style">;
 
 function StyledLink(props: StyledLinkProps) {
   const { className, $red, ...rest } = props;
@@ -33,9 +31,11 @@ function StyledLink(props: StyledLinkProps) {
   );
 }
 
-type PointProps = Omit<React.ComponentProps<"div">, "className"> & {
+type PointProps = React.PropsWithChildren<{
   $size?: number;
-};
+  "data-testid"?: string;
+  style?: React.CSSProperties;
+}>;
 
 // Pattern 3: Transient prop with dynamic value passed to inlined component
 // The prop is declared in type but not used in styles - must be stripped when inlined

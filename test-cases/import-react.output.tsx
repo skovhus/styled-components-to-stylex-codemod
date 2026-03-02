@@ -4,7 +4,7 @@ import { $colors } from "./tokens.stylex";
 
 // This component uses JSX but has no explicit React import
 // (modern JSX transform doesn't require it for styled-components)
-export function Card(props: { ref?: React.Ref<HTMLDivElement>; children?: React.ReactNode }) {
+export function Card(props: Pick<React.ComponentProps<"div">, "ref" | "children">) {
   const { children, ...rest } = props;
 
   return (
@@ -15,7 +15,7 @@ export function Card(props: { ref?: React.Ref<HTMLDivElement>; children?: React.
 }
 
 // Another component to ensure multiple components work
-export function Button(props: { ref?: React.Ref<HTMLButtonElement>; children?: React.ReactNode }) {
+export function Button(props: Pick<React.ComponentProps<"button">, "ref" | "children">) {
   const { children, ...rest } = props;
 
   return (

@@ -583,11 +583,11 @@ export class WrapperEmitter {
         if (alreadyIncludes) {
           return;
         }
-        // Add to existing intersection
-        existingType.types = [baseTypeNode, ...types];
+        // Append to existing intersection (user's type first for readability)
+        existingType.types = [...types, baseTypeNode];
       } else {
-        // Convert to intersection type: BaseType & ExistingType
-        alias.typeAnnotation = j.tsIntersectionType([baseTypeNode, existingType]);
+        // Convert to intersection type: ExistingType & BaseType
+        alias.typeAnnotation = j.tsIntersectionType([existingType, baseTypeNode]);
       }
     });
     return true;
@@ -679,24 +679,14 @@ export class WrapperEmitter {
     if (t.startsWith("React.PropsWithChildren<")) {
       return t;
     }
-    if (
-      t.startsWith("React.ComponentProps<") ||
-      t.startsWith("React.ComponentPropsWithRef<") ||
-      t.startsWith("React.HTMLAttributes<") ||
-      t.startsWith("React.AnchorHTMLAttributes<") ||
-      t.startsWith("React.ButtonHTMLAttributes<") ||
-      t.startsWith("React.InputHTMLAttributes<") ||
-      t.startsWith("React.ImgHTMLAttributes<") ||
-      t.startsWith("React.LabelHTMLAttributes<") ||
-      t.startsWith("React.SelectHTMLAttributes<") ||
-      t.startsWith("React.TextareaHTMLAttributes<") ||
-      /^(Omit|Pick|Partial|Required|Readonly|ReadonlyArray|NonNullable|Extract|Exclude)<\s*React\.ComponentProps(?:WithRef)?</.test(
+    // Types that already include children — skip wrapping.
+    // Matches ComponentProps, Pick<ComponentProps, "children" | …>, etc.
+    // at the start OR after `&` in an intersection.
+    const alreadyHasChildren =
+      /(?:^|&\s*)(?:React\.ComponentProps(?:WithRef)?<|(?:Omit|Pick|Partial|Required|Readonly|ReadonlyArray|NonNullable|Extract|Exclude)<\s*React\.ComponentProps(?:WithRef)?<)/.test(
         t,
-      ) ||
-      /^(Omit|Pick|Partial|Required|Readonly|ReadonlyArray|NonNullable|Extract|Exclude)<\s*React\..*HTMLAttributes</.test(
-        t,
-      )
-    ) {
+      );
+    if (alreadyHasChildren) {
       return t;
     }
     return `React.PropsWithChildren<${t}>`;
@@ -713,7 +703,50 @@ export class WrapperEmitter {
     if (xs.length === 1 && xs[0]) {
       return xs[0];
     }
-    return xs.join(" & ");
+    // Merge consecutive object-literal parts into a single literal
+    // so `{ a } & { b }` becomes `{ a, b }` instead.
+    const merged: string[] = [];
+    let pendingMembers: string[] = [];
+    const seenKeys = new Set<string>();
+    const addMember = (member: string): void => {
+      const key = member.replace(/\??\s*:.*$/, "").trim();
+      if (seenKeys.has(key)) {
+        return;
+      }
+      seenKeys.add(key);
+      pendingMembers.push(member);
+    };
+    const flush = (): void => {
+      if (pendingMembers.length === 0) {
+        return;
+      }
+      merged.push(
+        pendingMembers.length === 1
+          ? `{ ${pendingMembers[0]} }`
+          : `{\n  ${pendingMembers.join(",\n  ")}\n}`,
+      );
+      pendingMembers = [];
+      seenKeys.clear();
+    };
+    for (const part of xs) {
+      const members = extractObjectLiteralMembers(part);
+      if (members) {
+        for (const m of members) {
+          addMember(m);
+        }
+      } else {
+        flush();
+        merged.push(part);
+      }
+    }
+    flush();
+    if (merged.length === 0) {
+      return "{}";
+    }
+    if (merged.length === 1 && merged[0]) {
+      return merged[0];
+    }
+    return merged.join(" & ");
   }
 
   private isValidTypeKeyIdentifier(name: string): boolean {
@@ -722,31 +755,6 @@ export class WrapperEmitter {
 
   private toTypeKey(name: string): string {
     return this.isValidTypeKeyIdentifier(name) ? name : JSON.stringify(name);
-  }
-
-  reactIntrinsicAttrsType(tagName: string): string {
-    switch (tagName) {
-      case "a":
-        return "React.AnchorHTMLAttributes<HTMLAnchorElement>";
-      case "button":
-        return "React.ButtonHTMLAttributes<HTMLButtonElement>";
-      case "div":
-        return "React.HTMLAttributes<HTMLDivElement>";
-      case "input":
-        return 'React.ComponentProps<"input">';
-      case "img":
-        return "React.ImgHTMLAttributes<HTMLImageElement>";
-      case "label":
-        return "React.LabelHTMLAttributes<HTMLLabelElement>";
-      case "select":
-        return "React.SelectHTMLAttributes<HTMLSelectElement>";
-      case "span":
-        return "React.HTMLAttributes<HTMLSpanElement>";
-      case "textarea":
-        return "React.TextareaHTMLAttributes<HTMLTextAreaElement>";
-      default:
-        return "React.HTMLAttributes<HTMLElement>";
-    }
   }
 
   getExplicitPropNames(propsType: AstNodeOrNull): Set<string> {
@@ -826,36 +834,53 @@ export class WrapperEmitter {
     skipProps?: Set<string>;
     /** Include ref in the narrow type. Only set to true when the component forwards ref (e.g., via {...rest}). */
     includeRef?: boolean;
+    /**
+     * When true, return a slim object literal for ALL tags (including void tags
+     * like input/img) listing only the props that are actually used at callsites.
+     * When false (default), void tags fall back to the broad element-attributes
+     * type (e.g. `React.InputHTMLAttributes<…>`).
+     */
+    forceNarrow?: boolean;
   }): string {
-    const { d, tagName, allowClassNameProp, allowStyleProp, allowSxProp, skipProps, includeRef } =
-      args;
+    const {
+      d,
+      tagName,
+      allowClassNameProp,
+      allowStyleProp,
+      allowSxProp,
+      skipProps,
+      includeRef,
+      forceNarrow,
+    } = args;
     const used = this.getUsedAttrs(d.localName);
     const needsBroadAttrs = used.has("*") || !!(d as any).usedAsValue;
 
     const lines: string[] = [];
+    // Standard props go into Pick<ComponentProps<"tag">, ...> for proper types.
+    // Custom props (sx, $-prefixed, data-*, forwardedAs) stay in the literal.
+    const pickedAttrKeys: string[] = [];
     if (!needsBroadAttrs) {
       if (allowClassNameProp) {
-        lines.push(`className?: string`);
+        pickedAttrKeys.push("className");
       }
       if (allowStyleProp) {
-        lines.push(`style?: React.CSSProperties`);
+        pickedAttrKeys.push("style");
       }
       if (allowSxProp) {
         lines.push(SX_PROP_TYPE_TEXT);
       }
       if (includeRef) {
-        const elementType = TAG_TO_HTML_ELEMENT[tagName] ?? "HTMLElement";
-        lines.push(`ref?: React.Ref<${elementType}>`);
+        pickedAttrKeys.push("ref");
       }
       if (!VOID_TAGS.has(tagName)) {
-        lines.push(`children?: React.ReactNode`);
+        pickedAttrKeys.push("children");
       }
     } else if (allowSxProp) {
       lines.push(SX_PROP_TYPE_TEXT);
     }
 
     for (const attr of [...used].sort((a, b) => a.localeCompare(b))) {
-      if (attr === "*" || attr === "children") {
+      if (attr === "*" || attr === "children" || attr === "ref") {
         continue;
       }
       if (attr === "as") {
@@ -871,7 +896,38 @@ export class WrapperEmitter {
       if (skipProps?.has(attr)) {
         continue;
       }
-      lines.push(`${this.toTypeKey(attr)}?: any`);
+      if (!attr.startsWith("$") && !attr.includes("-")) {
+        if (!needsBroadAttrs) {
+          pickedAttrKeys.push(attr);
+        }
+        // When needsBroadAttrs, ComponentProps base already covers this attr
+        continue;
+      }
+      const attrType = attr.startsWith("data-") ? "string" : "any";
+      lines.push(`${this.toTypeKey(attr)}?: ${attrType}`);
+    }
+
+    // When all picked keys can be inlined (universal types like className/style,
+    // plus children and ref when forceNarrow), avoid Pick<ComponentProps> entirely.
+    // Pick is only valuable for element-specific attrs (disabled, src, d, href).
+    const canInline = (k: string): boolean =>
+      k in UNIVERSAL_PROP_TYPES || k === "children" || (forceNarrow === true && k === "ref");
+    const hasElementSpecificPicks = pickedAttrKeys.some((k) => !canInline(k));
+    if (!hasElementSpecificPicks) {
+      for (const k of pickedAttrKeys) {
+        if (k in UNIVERSAL_PROP_TYPES) {
+          lines.push(UNIVERSAL_PROP_TYPES[k]!);
+        } else if (k === "ref") {
+          const elementType = TAG_TO_HTML_ELEMENT[tagName] ?? "HTMLElement";
+          lines.push(`ref?: React.Ref<${elementType}>`);
+        }
+      }
+      // Keep children in Pick only when !forceNarrow (caller won't wrap)
+      const keepChildren = !forceNarrow && pickedAttrKeys.includes("children");
+      pickedAttrKeys.length = 0;
+      if (keepChildren) {
+        pickedAttrKeys.push("children");
+      }
     }
 
     const literal =
@@ -881,27 +937,38 @@ export class WrapperEmitter {
           ? `{ ${lines[0]} }`
           : "{}";
 
+    const intrinsicBase = `React.ComponentProps<"${tagName}">`;
+    const pickExpr =
+      pickedAttrKeys.length > 0
+        ? `Pick<${intrinsicBase}, ${pickedAttrKeys.map((k) => `"${k}"`).join(" | ")}>`
+        : undefined;
+
     if (!needsBroadAttrs) {
+      const narrowResult = this.joinIntersection(literal, pickExpr);
+      // When forceNarrow is set, return without children — the caller wraps
+      // with PropsWithChildren after merging all type parts.
+      if (forceNarrow) {
+        return narrowResult;
+      }
       if (VOID_TAGS.has(tagName)) {
-        const base = this.reactIntrinsicAttrsType(tagName);
-        const omitted: string[] = [];
+        const omittedVoid: string[] = [];
         if (!allowClassNameProp) {
-          omitted.push('"className"');
+          omittedVoid.push('"className"');
         }
         if (!allowStyleProp) {
-          omitted.push('"style"');
+          omittedVoid.push('"style"');
         }
-        const baseType = omitted.length ? `Omit<${base}, ${omitted.join(" | ")}>` : base;
+        const baseType = omittedVoid.length
+          ? `Omit<${intrinsicBase}, ${omittedVoid.join(" | ")}>`
+          : intrinsicBase;
         if (allowSxProp) {
           return this.joinIntersection(baseType, `{ ${SX_PROP_TYPE_TEXT} }`);
         }
         return baseType;
       }
-      // For non-void tags, children is already included in `lines` — return literal directly.
-      return literal;
+      return narrowResult;
     }
 
-    const base = this.reactIntrinsicAttrsType(tagName);
     const omitted: string[] = [];
     if (!allowClassNameProp) {
       omitted.push('"className"');
@@ -909,8 +976,10 @@ export class WrapperEmitter {
     if (!allowStyleProp) {
       omitted.push('"style"');
     }
-    const baseMaybeOmitted = omitted.length ? `Omit<${base}, ${omitted.join(" | ")}>` : base;
-    const composed = this.joinIntersection(baseMaybeOmitted, literal);
+    const baseMaybeOmitted = omitted.length
+      ? `Omit<${intrinsicBase}, ${omitted.join(" | ")}>`
+      : intrinsicBase;
+    const composed = this.joinIntersection(literal, baseMaybeOmitted);
     return VOID_TAGS.has(tagName) ? composed : this.withChildren(composed);
   }
 
@@ -972,7 +1041,7 @@ export class WrapperEmitter {
       omitted.push('"style"');
     }
     const baseMaybeOmitted = omitted.length ? `Omit<${base}, ${omitted.join(" | ")}>` : base;
-    return literal !== "{}" ? this.joinIntersection(baseMaybeOmitted, literal) : baseMaybeOmitted;
+    return literal !== "{}" ? this.joinIntersection(literal, baseMaybeOmitted) : baseMaybeOmitted;
   }
 
   isPropRequiredInPropsTypeLiteral(propsType: any, propName: string): boolean {
@@ -1576,4 +1645,69 @@ export class WrapperEmitter {
   }): void {
     seb.collectDestructurePropsFromStyleFns(this, args);
   }
+}
+
+// ---------------------------------------------------------------------------
+// Non-exported helpers
+// ---------------------------------------------------------------------------
+
+/** Props whose types are the same on every element and can be inlined. */
+const UNIVERSAL_PROP_TYPES: Record<string, string> = {
+  className: "className?: string",
+  style: "style?: React.CSSProperties",
+};
+
+/**
+ * If `typeText` is a simple `{ prop?: type; … }` object literal, returns the
+ * individual member strings.  Returns `null` for any other shape (Pick, Omit,
+ * intersections, mapped types, etc.).
+ */
+function extractObjectLiteralMembers(typeText: string): string[] | null {
+  const t = typeText.trim();
+  if (!t.startsWith("{") || !t.endsWith("}")) {
+    return null;
+  }
+  const inner = t.slice(1, -1).trim();
+  if (!inner) {
+    return null;
+  }
+  // Reject complex types (mapped types, arrow types)
+  if (inner.includes("[") || inner.includes("=>")) {
+    return null;
+  }
+  // Depth-aware split: only split on `;` or `,` at the top level,
+  // skipping over `<…>`, `(…)`, `"…"`, `'…'` nesting.
+  const members: string[] = [];
+  let depth = 0;
+  let start = 0;
+  let inString: string | null = null;
+  for (let i = 0; i < inner.length; i++) {
+    const ch = inner[i]!;
+    if (inString) {
+      if (ch === inString && inner[i - 1] !== "\\") {
+        inString = null;
+      }
+      continue;
+    }
+    if (ch === '"' || ch === "'") {
+      inString = ch;
+      continue;
+    }
+    if (ch === "<" || ch === "(") {
+      depth++;
+    } else if (ch === ">" || ch === ")") {
+      depth--;
+    } else if (depth === 0 && (ch === ";" || ch === ",")) {
+      const member = inner.slice(start, i).trim();
+      if (member) {
+        members.push(member);
+      }
+      start = i + 1;
+    }
+  }
+  const last = inner.slice(start).trim();
+  if (last) {
+    members.push(last);
+  }
+  return members.length > 0 ? members : null;
 }

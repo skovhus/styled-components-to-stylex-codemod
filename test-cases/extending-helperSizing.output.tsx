@@ -9,10 +9,10 @@ const sizeMap: Record<AvatarSize, number> = {
   large: 32,
 };
 
-type AvatarContainerProps = Omit<React.ComponentProps<"div">, "className" | "style"> & {
+type AvatarContainerProps = React.PropsWithChildren<{
   size: AvatarSize;
   disabled?: boolean;
-};
+}>;
 
 function AvatarContainer(props: AvatarContainerProps) {
   const { children, disabled, size } = props;

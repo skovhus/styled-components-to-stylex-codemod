@@ -1,9 +1,10 @@
 import * as React from "react";
 import * as stylex from "@stylexjs/stylex";
 
-type TransientButtonProps = Omit<React.ComponentProps<"button">, "className" | "style"> & {
-  $variant?: "primary" | "secondary";
-};
+type TransientButtonProps = { $variant?: "primary" | "secondary" } & Omit<
+  React.ComponentProps<"button">,
+  "className" | "style"
+>;
 
 // Exported component with shouldForwardProp using dropPrefix pattern
 // The cleanup loop should filter unknown $-prefixed props from rest
@@ -30,10 +31,10 @@ export function TransientButton(props: TransientButtonProps) {
   );
 }
 
-type ExplicitFilterButtonProps = Omit<React.ComponentProps<"button">, "className" | "style"> & {
+type ExplicitFilterButtonProps = {
   customProp?: string;
   anotherProp?: number;
-};
+} & Omit<React.ComponentProps<"button">, "className" | "style">;
 
 // Exported component with explicit list-based shouldForwardProp
 export function ExplicitFilterButton(props: ExplicitFilterButtonProps) {

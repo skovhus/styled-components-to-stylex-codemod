@@ -1,10 +1,10 @@
 import * as React from "react";
 import * as stylex from "@stylexjs/stylex";
 
-type ButtonProps = Omit<React.ComponentProps<"button">, "className" | "style"> & {
+type ButtonProps = React.PropsWithChildren<{
   $primary?: boolean;
   hollow?: boolean;
-};
+}>;
 
 function Button(props: ButtonProps) {
   const { children, hollow, $primary } = props;
@@ -24,9 +24,9 @@ function Button(props: ButtonProps) {
   );
 }
 
-type BadgeProps = Omit<React.ComponentProps<"span">, "className" | "style"> & {
+type BadgeProps = React.PropsWithChildren<{
   size?: "small" | "medium" | "large";
-};
+}>;
 
 // Test case: inner ternary tests the same prop as outer
 // The inner variants must be guarded by the outer falsy condition

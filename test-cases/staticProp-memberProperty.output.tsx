@@ -11,7 +11,7 @@ Divider.HEIGHT = 10;
 Divider.WIDTH = 200;
 Divider.BG_COLOR = "#e0e0e0";
 
-function DividerContainer(props: Omit<React.ComponentProps<"div">, "className">) {
+function DividerContainer(props: Pick<React.ComponentProps<"div">, "style" | "children" | "role">) {
   const { children, style, ...rest } = props;
 
   return (

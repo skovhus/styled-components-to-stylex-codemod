@@ -3,9 +3,10 @@ import * as stylex from "@stylexjs/stylex";
 import { mergedSx } from "./lib/mergedSx";
 
 function Button<C extends React.ElementType = "button">(
-  props: React.ComponentPropsWithRef<C> & { sx?: stylex.StyleXStyles; as?: C } & {
-    forwardedAs?: React.ElementType;
-  },
+  props: React.ComponentPropsWithRef<C> & {
+    sx?: stylex.StyleXStyles;
+    as?: C;
+  } & { forwardedAs?: React.ElementType },
 ) {
   const { as: Component = "button", forwardedAs, className, children, style, sx, ...rest } = props;
 
@@ -18,9 +19,10 @@ function Button<C extends React.ElementType = "button">(
 
 // Wrapper that always renders as a specific element but passes `as` through
 function ButtonWrapper(
-  props: Omit<React.ComponentPropsWithRef<typeof Button>, "className" | "style"> & {
-    forwardedAs?: React.ElementType;
-  },
+  props: { forwardedAs?: React.ElementType } & Omit<
+    React.ComponentPropsWithRef<typeof Button>,
+    "className" | "style"
+  >,
 ) {
   return <Button {...props} {...stylex.props(styles.buttonWrapper)} />;
 }

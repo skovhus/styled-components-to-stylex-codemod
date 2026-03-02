@@ -5,11 +5,12 @@ import * as React from "react";
 import * as stylex from "@stylexjs/stylex";
 import { mergedSx } from "./lib/mergedSx";
 
-function TextDividerContainer(props: {
-  className?: string;
-  style?: React.CSSProperties;
-  children?: React.ReactNode;
-}) {
+function TextDividerContainer(
+  props: React.PropsWithChildren<{
+    className?: string;
+    style?: React.CSSProperties;
+  }>,
+) {
   const { className, children, style } = props;
 
   return <div {...mergedSx(styles.textDividerContainer, className, style)}>{children}</div>;

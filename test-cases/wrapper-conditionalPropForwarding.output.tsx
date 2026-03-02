@@ -26,10 +26,10 @@ function BaseCard(props: BaseProps) {
   );
 }
 
-type CardProps = React.ComponentPropsWithRef<typeof BaseCard> & {
+type CardProps = {
   compact?: boolean;
   highlighted?: boolean;
-};
+} & React.ComponentPropsWithRef<typeof BaseCard>;
 
 /** Styled wrapper that adds conditional transform based on props, but the base component also needs those props */
 export function Card(props: CardProps) {

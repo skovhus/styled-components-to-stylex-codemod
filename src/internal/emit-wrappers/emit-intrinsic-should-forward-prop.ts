@@ -143,11 +143,18 @@ export function emitShouldForwardPropWrappers(ctx: EmitIntrinsicContext): void {
       : [];
     const knownPrefixPropsSet = new Set(knownPrefixProps);
 
+    const isExportedComponent = d.isExported ?? false;
+    const useSlimType =
+      !isExportedComponent && !(d.supportsExternalStyles ?? false) && !d.usedAsValue;
+
     const explicit = emitter.stringifyTsType(d.propsType);
     // Extract prop names from explicit type to avoid duplicating them in inferred type
     const explicitPropNames = d.propsType
       ? emitter.getExplicitPropNames(d.propsType)
       : new Set<string>();
+    // SFP consumed/dropped props are custom component props (not standard element
+    // attrs), so they must be excluded from Pick<ComponentProps>.
+    const skipProps = new Set([...explicitPropNames, ...extraProps]);
     const extrasTypeText = (() => {
       // If input provided an explicit props type, prefer it and avoid emitting `any` overrides
       // for the same keys (e.g. `color?: string` should not become `color?: any`).
@@ -159,26 +166,37 @@ export function emitShouldForwardPropWrappers(ctx: EmitIntrinsicContext): void {
       }
       const lines: string[] = [];
       for (const p of extraProps) {
-        // Only emit valid identifier keys (fixtures use simple identifiers like `hasError` / `$foo`).
         if (!isValidIdentifier(p)) {
           continue;
         }
-        lines.push(`  ${p}?: any;`);
+        const attrType = p.startsWith("data-") ? "string" : "any";
+        lines.push(`  ${p}?: ${attrType};`);
       }
       const literal = lines.length > 0 ? `{\n${lines.join("\n")}\n}` : "{}";
       if (dropPrefixFromFilter === "$") {
-        // Allow any `$...` transient prop when the filter is prefix-based.
         return `${literal} & { [K in \`$\${string}\`]?: any }`;
       }
       return literal;
     })();
+    // Compute the narrow base once — reused across finalTypeText and extendBaseTypeText.
+    const slimBaseTypeText = useSlimType
+      ? emitter.inferredIntrinsicPropsTypeText({
+          d,
+          tagName,
+          allowClassNameProp,
+          allowStyleProp,
+          allowSxProp,
+          skipProps,
+          includeRef: d.supportsRefProp ?? false,
+          forceNarrow: true,
+        })
+      : undefined;
+
+    const wrapSlimWithChildren = (typeText: string): string =>
+      VOID_TAGS.has(tagName) ? typeText : emitter.withChildren(typeText);
+
     const finalTypeText = (() => {
       if (explicit) {
-        // For non-exported components that only use transient props ($-prefixed)
-        // and were NOT user-configured via withConfig({ shouldForwardProp }),
-        // use simple PropsWithChildren instead of verbose intersection type.
-        // User-configured shouldForwardProp always needs full element props type
-        // because it implies rest spread forwarding of HTML attributes.
         if (
           !d.shouldForwardPropFromWithConfig &&
           canUseSimplePropsType({
@@ -189,17 +207,8 @@ export function emitShouldForwardPropWrappers(ctx: EmitIntrinsicContext): void {
         ) {
           return emitter.withChildren(extrasTypeText);
         }
-        if (VOID_TAGS.has(tagName)) {
-          const base = emitter.reactIntrinsicAttrsType(tagName);
-          const omitted: string[] = [];
-          if (!allowClassNameProp) {
-            omitted.push('"className"');
-          }
-          if (!allowStyleProp) {
-            omitted.push('"style"');
-          }
-          const baseWithOmit = omitted.length ? `Omit<${base}, ${omitted.join(" | ")}>` : base;
-          return emitter.joinIntersection(baseWithOmit, extrasTypeText);
+        if (slimBaseTypeText !== undefined) {
+          return wrapSlimWithChildren(emitter.joinIntersection(extrasTypeText, slimBaseTypeText));
         }
         const base = `React.ComponentProps<"${tagName}">`;
         const omitted: string[] = [];
@@ -210,19 +219,20 @@ export function emitShouldForwardPropWrappers(ctx: EmitIntrinsicContext): void {
           omitted.push('"style"');
         }
         const baseWithOmit = omitted.length ? `Omit<${base}, ${omitted.join(" | ")}>` : base;
-        return emitter.joinIntersection(baseWithOmit, extrasTypeText);
+        return emitter.joinIntersection(extrasTypeText, baseWithOmit);
       }
-      const inferred = emitter.inferredIntrinsicPropsTypeText({
+      if (slimBaseTypeText !== undefined) {
+        return wrapSlimWithChildren(emitter.joinIntersection(extrasTypeText, slimBaseTypeText));
+      }
+      return emitter.inferredIntrinsicPropsTypeText({
         d,
         tagName,
         allowClassNameProp,
         allowStyleProp,
         allowSxProp,
-        skipProps: explicitPropNames,
+        skipProps,
         includeRef: true,
       });
-      // inferredIntrinsicPropsTypeText already includes children for non-void tags
-      return inferred;
     })();
     const finalTypeTextWithForwardedAs = withForwardedAsType(finalTypeText, includesForwardedAs);
 
@@ -251,8 +261,9 @@ export function emitShouldForwardPropWrappers(ctx: EmitIntrinsicContext): void {
     let sfpInlineTypeText: string | undefined;
     if (!allowAsProp && explicit) {
       const extendBaseTypeText = (() => {
-        // Prefer ComponentProps for intrinsic wrappers so event handlers/attrs
-        // are typed like real JSX usage (and so we can reliably omit className/style).
+        if (slimBaseTypeText !== undefined) {
+          return slimBaseTypeText;
+        }
         const base = `React.ComponentProps<"${tagName}">`;
         const omitted: string[] = [];
         if (!allowClassNameProp) {
@@ -264,9 +275,12 @@ export function emitShouldForwardPropWrappers(ctx: EmitIntrinsicContext): void {
         return omitted.length ? `Omit<${base}, ${omitted.join(" | ")}>` : base;
       })();
       if (explicitIsExistingTypeRef) {
-        // User's existing type first in the intersection for readability
-        const sxPart = allowSxProp ? `{ ${SX_PROP_TYPE_TEXT} }` : undefined;
-        sfpInlineTypeText = emitter.joinIntersection(explicit, extendBaseTypeText, sxPart);
+        if (useSlimType) {
+          sfpInlineTypeText = finalTypeTextWithForwardedAs;
+        } else {
+          const sxPart = allowSxProp ? `{ ${SX_PROP_TYPE_TEXT} }` : undefined;
+          sfpInlineTypeText = emitter.joinIntersection(explicit, extendBaseTypeText, sxPart);
+        }
       } else {
         const propsTypeName = emitter.propsTypeNameFor(d.localName);
         emitter.extendExistingType(propsTypeName, extendBaseTypeText);
@@ -526,9 +540,6 @@ export function emitShouldForwardPropWrappers(ctx: EmitIntrinsicContext): void {
       ignoreTransientAttrs: true,
     });
 
-    // Skip rest spread omission for exported components - external consumers may pass additional props
-    // d.isExported is already set from exportedComponents during analyze-before-emit
-    const isExportedComponent = d.isExported ?? false;
     const shouldOmitRestSpread =
       !isExportedComponent &&
       !dropPrefix &&
