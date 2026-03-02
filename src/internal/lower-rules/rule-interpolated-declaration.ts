@@ -2547,8 +2547,9 @@ function tryHandleMultiSlotTernary(ctx: DeclProcessingState, d: CssDeclarationIR
     return result;
   };
 
-  const consFullValue = buildFullValue("consequent");
-  const altFullValue = buildFullValue("alternate");
+  const importantSuffix = d.important ? " !important" : "";
+  const consFullValue = buildFullValue("consequent") + importantSuffix;
+  const altFullValue = buildFullValue("alternate") + importantSuffix;
 
   // Apply CSS property mapping (e.g., transform stays as transform)
   for (const out of cssDeclarationToStylexDeclarations(d)) {

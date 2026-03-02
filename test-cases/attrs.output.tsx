@@ -255,8 +255,8 @@ const styles = stylex.create({
   // Pattern 9: static attrs with a style object
   // The inline style properties should be preserved in the output
   noWrapText: {
-    whiteSpace: "nowrap",
     color: "blue",
+    whiteSpace: "nowrap",
   },
   // Pattern 10: dynamic attrs with computed style object
   // The dynamic inline styles should be preserved as inline style prop

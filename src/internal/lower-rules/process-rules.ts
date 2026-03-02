@@ -168,9 +168,6 @@ export function processDeclRules(ctx: DeclProcessingState): void {
     return "continue";
   };
 
-  // Merge CSS properties from `.attrs({ style: { ... } })` into the style object.
-  mergeAttrsStyles(ctx);
-
   for (const rule of decl.rules) {
     if (state.bail) {
       break;
@@ -959,6 +956,11 @@ export function processDeclRules(ctx: DeclProcessingState): void {
       break;
     }
   }
+
+  // Merge CSS properties from `.attrs({ style: { ... } })` into the style object.
+  // Merged AFTER template rules so attrs styles take precedence (matching
+  // styled-components inline-style semantics where attrs style wins over class CSS).
+  mergeAttrsStyles(ctx);
 }
 
 // --- Non-exported helpers ---
