@@ -9,26 +9,34 @@ import { getRootJsxIdentifierName } from "./jscodeshift-utils.js";
 /**
  * Checks if a component name is used in JSX within the given AST root.
  */
-export function isComponentUsedInJsx(
+function isComponentUsedInJsx(root: Collection<ASTNode>, j: JSCodeshift, name: string): boolean {
+  return countComponentJsxUsages(root, j, name) > 0;
+}
+
+/**
+ * Counts JSX usages for a component (e.g. `<Comp />`, `<Comp>...</Comp>`, `<Comp.Slot />`).
+ */
+export function countComponentJsxUsages(
   root: Collection<ASTNode>,
   j: JSCodeshift,
   name: string,
-): boolean {
-  const hasMemberExpressionUsage =
-    root
-      .find(j.JSXMemberExpression)
-      .filter((p) => getRootJsxIdentifierName(p.node) === name)
-      .size() > 0;
+): number {
+  let usageCount = 0;
 
-  return (
-    root
-      .find(j.JSXElement, {
-        openingElement: { name: { type: "JSXIdentifier", name } },
-      })
-      .size() > 0 ||
-    root.find(j.JSXOpeningElement, { name: { type: "JSXIdentifier", name } }).size() > 0 ||
-    hasMemberExpressionUsage
-  );
+  root.find(j.JSXElement).forEach((p) => {
+    if (getRootJsxIdentifierName(p.node.openingElement?.name) === name) {
+      usageCount += 1;
+    }
+  });
+
+  root.find(j.JSXSelfClosingElement).forEach((p) => {
+    const selfClosing = p.node as { name?: unknown };
+    if (getRootJsxIdentifierName(selfClosing.name) === name) {
+      usageCount += 1;
+    }
+  });
+
+  return usageCount;
 }
 
 /**

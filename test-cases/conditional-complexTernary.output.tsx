@@ -26,16 +26,22 @@ function CardContainer(props: CardContainerProps) {
   );
 }
 
+function CardContent(props: { children?: React.ReactNode }) {
+  const { children } = props;
+
+  return <div {...stylex.props(styles.cardContent)}>{children}</div>;
+}
+
 export const App = () => (
   <div style={{ display: "flex", flexDirection: "column" }}>
     <CardContainer checked={false} disabled={false}>
-      <div {...stylex.props(styles.cardContent)}>Unchecked, not disabled</div>
+      <CardContent>Unchecked, not disabled</CardContent>
     </CardContainer>
     <CardContainer checked={true} disabled={false}>
-      <div {...stylex.props(styles.cardContent)}>Checked, not disabled</div>
+      <CardContent>Checked, not disabled</CardContent>
     </CardContainer>
     <CardContainer checked={true} disabled={true}>
-      <div {...stylex.props(styles.cardContent)}>Checked, disabled</div>
+      <CardContent>Checked, disabled</CardContent>
     </CardContainer>
   </div>
 );

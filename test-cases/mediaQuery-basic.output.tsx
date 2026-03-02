@@ -1,27 +1,40 @@
+import React from "react";
 import * as stylex from "@stylexjs/stylex";
+
+function Card(props: { children?: React.ReactNode }) {
+  const { children } = props;
+
+  return <div {...stylex.props(styles.card)}>{children}</div>;
+}
+
+function CardTitle(props: { children?: React.ReactNode }) {
+  const { children } = props;
+
+  return <h3 {...stylex.props(styles.cardTitle)}>{children}</h3>;
+}
+
+function CardText(props: { children?: React.ReactNode }) {
+  const { children } = props;
+
+  return <p {...stylex.props(styles.cardText)}>{children}</p>;
+}
 
 export const App = () => (
   <div {...stylex.props(styles.container)}>
     <h2 {...stylex.props(styles.title)}>Responsive Media Queries</h2>
     <div {...stylex.props(styles.grid)}>
-      <div {...stylex.props(styles.card)}>
-        <h3 {...stylex.props(styles.cardTitle)}>Card One</h3>
-        <p {...stylex.props(styles.cardText)}>
-          Resize the window to see the layout change from 1 to 2 to 3 columns.
-        </p>
-      </div>
-      <div {...stylex.props(styles.card)}>
-        <h3 {...stylex.props(styles.cardTitle)}>Card Two</h3>
-        <p {...stylex.props(styles.cardText)}>
-          The background color also changes at different breakpoints.
-        </p>
-      </div>
-      <div {...stylex.props(styles.card)}>
-        <h3 {...stylex.props(styles.cardTitle)}>Card Three</h3>
-        <p {...stylex.props(styles.cardText)}>
-          Hover over cards to see the hover effect (on devices that support it).
-        </p>
-      </div>
+      <Card>
+        <CardTitle>Card One</CardTitle>
+        <CardText>Resize the window to see the layout change from 1 to 2 to 3 columns.</CardText>
+      </Card>
+      <Card>
+        <CardTitle>Card Two</CardTitle>
+        <CardText>The background color also changes at different breakpoints.</CardText>
+      </Card>
+      <Card>
+        <CardTitle>Card Three</CardTitle>
+        <CardText>Hover over cards to see the hover effect (on devices that support it).</CardText>
+      </Card>
     </div>
     <button {...stylex.props(styles.button)}>Interactive Button</button>
   </div>

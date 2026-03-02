@@ -1,11 +1,16 @@
+import React from "react";
 import * as stylex from "@stylexjs/stylex";
+
+function Thing(props: { children?: React.ReactNode }) {
+  const { children } = props;
+
+  return <div {...stylex.props(styles.thing, stylex.defaultMarker())}>{children}</div>;
+}
 
 export const App = () => (
   <div style={{ padding: 16 }}>
-    <div {...stylex.props(styles.thing, stylex.defaultMarker())}>First</div>
-    <div {...stylex.props(styles.thing, stylex.defaultMarker())}>
-      Second (margin-top on wide screens)
-    </div>
+    <Thing>First</Thing>
+    <Thing>Second (margin-top on wide screens)</Thing>
   </div>
 );
 

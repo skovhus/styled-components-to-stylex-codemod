@@ -1,20 +1,37 @@
+import React from "react";
 import * as stylex from "@stylexjs/stylex";
 import { $colors } from "./tokens.stylex";
 
+// Chained pseudo-selectors with :not()
+function Input(props: Omit<React.ComponentProps<"input">, "className" | "style">) {
+  return <input {...props} {...stylex.props(styles.input)} />;
+}
+
+// Checkbox with chained pseudos
+function Checkbox(props: Omit<React.ComponentProps<"input">, "className" | "style">) {
+  return <input {...props} {...stylex.props(styles.checkbox)} />;
+}
+
+// Border on :not(:last-child) with interpolation — should retain the pseudo condition
+function ListItem(props: { children?: React.ReactNode }) {
+  const { children } = props;
+
+  return <div {...stylex.props(styles.listItem)}>{children}</div>;
+}
+
 export const App = () => (
   <div>
-    <input placeholder="Focus me..." {...stylex.props(styles.input)} />
-    <input disabled placeholder="Disabled" {...stylex.props(styles.input)} />
-    <input type="checkbox" {...stylex.props(styles.checkbox)} />
-    <input type="checkbox" disabled {...stylex.props(styles.checkbox)} />
-    <div {...stylex.props(styles.listItem)}>Item 1</div>
-    <div {...stylex.props(styles.listItem)}>Item 2</div>
-    <div {...stylex.props(styles.listItem)}>Item 3 (no border)</div>
+    <Input placeholder="Focus me..." />
+    <Input disabled placeholder="Disabled" />
+    <Checkbox type="checkbox" />
+    <Checkbox type="checkbox" disabled />
+    <ListItem>Item 1</ListItem>
+    <ListItem>Item 2</ListItem>
+    <ListItem>Item 3 (no border)</ListItem>
   </div>
 );
 
 const styles = stylex.create({
-  // Chained pseudo-selectors with :not()
   input: {
     paddingBlock: "8px",
     paddingInline: "12px",
@@ -39,7 +56,6 @@ const styles = stylex.create({
       ":disabled": "not-allowed",
     },
   },
-  // Checkbox with chained pseudos
   checkbox: {
     width: "20px",
     height: "20px",
@@ -57,7 +73,6 @@ const styles = stylex.create({
       ":focus:not(:disabled)": "2px",
     },
   },
-  // Border on :not(:last-child) with interpolation — should retain the pseudo condition
   listItem: {
     padding: "8px",
     borderBottomWidth: {

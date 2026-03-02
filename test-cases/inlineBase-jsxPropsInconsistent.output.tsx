@@ -1,11 +1,33 @@
+import * as React from "react";
 import * as stylex from "@stylexjs/stylex";
+
+type ContainerProps = {
+  ref?: React.Ref<HTMLDivElement>;
+  children?: React.ReactNode;
+  align?: any;
+};
+
+function Container(props: ContainerProps) {
+  const { children, align } = props;
+
+  return (
+    <div
+      {...stylex.props(
+        styles.container,
+        align != null && containerAlignVariants[align as keyof typeof containerAlignVariants],
+      )}
+    >
+      {children}
+    </div>
+  );
+}
 
 export function App() {
   return (
     <div style={{ display: "grid", gap: 8 }}>
-      <div {...stylex.props(styles.container, containerAlignVariants["start"])}>Start</div>
-      <div {...stylex.props(styles.container, containerAlignVariants["center"])}>Center</div>
-      <div {...stylex.props(styles.container, containerAlignVariants["end"])}>End</div>
+      <Container align="start">Start</Container>
+      <Container align="center">Center</Container>
+      <Container align="end">End</Container>
     </div>
   );
 }

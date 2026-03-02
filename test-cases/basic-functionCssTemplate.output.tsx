@@ -20,18 +20,33 @@ function FlexContainer(props: FlexContainerProps) {
   );
 }
 
+type ColoredBoxProps = React.PropsWithChildren<{
+  $color?: string;
+}>;
+
+function ColoredBox(props: ColoredBoxProps) {
+  const { children, $color } = props;
+
+  return (
+    <div
+      {...stylex.props(
+        styles.coloredBox,
+        $color != null && styles.coloredBoxBackgroundColor($color),
+      )}
+    >
+      {children}
+    </div>
+  );
+}
+
 export const App = () => (
   <div>
     <FlexContainer $align="left">
-      <div {...stylex.props(styles.coloredBox, styles.coloredBoxBackgroundColor("lightblue"))}>
-        Left aligned
-      </div>
-      <div {...stylex.props(styles.coloredBox, styles.coloredBoxBackgroundColor("lightgreen"))}>
-        Item
-      </div>
+      <ColoredBox $color="lightblue">Left aligned</ColoredBox>
+      <ColoredBox $color="lightgreen">Item</ColoredBox>
     </FlexContainer>
     <FlexContainer $align="right">
-      <div {...stylex.props(styles.coloredBox)}>Right aligned</div>
+      <ColoredBox>Right aligned</ColoredBox>
     </FlexContainer>
     <div {...stylex.props(styles.borderBox, styles.borderBoxBorderColor("red"))}>Red border</div>
     <div

@@ -1,19 +1,48 @@
+import React from "react";
 import * as stylex from "@stylexjs/stylex";
+
+function Button(props: Omit<React.ComponentProps<"button">, "className" | "style">) {
+  const { children, ...rest } = props;
+
+  return (
+    <button {...rest} {...stylex.props(styles.button)}>
+      {children}
+    </button>
+  );
+}
+
+function Select(props: Omit<React.ComponentProps<"select">, "className" | "style">) {
+  const { children, ...rest } = props;
+
+  return (
+    <select {...rest} {...stylex.props(styles.select)}>
+      {children}
+    </select>
+  );
+}
+
+function Textarea(props: Omit<React.ComponentProps<"textarea">, "className" | "style">) {
+  const { children, ...rest } = props;
+
+  return (
+    <textarea {...rest} {...stylex.props(styles.textarea)}>
+      {children}
+    </textarea>
+  );
+}
 
 export const App = () => (
   <div style={{ display: "flex", flexDirection: "column", gap: "12px", padding: "16px" }}>
-    <button {...stylex.props(styles.button)}>Enabled</button>
-    <button disabled {...stylex.props(styles.button)}>
-      Disabled
-    </button>
-    <select {...stylex.props(styles.select)}>
+    <Button>Enabled</Button>
+    <Button disabled>Disabled</Button>
+    <Select>
       <option>Enabled</option>
-    </select>
-    <select disabled {...stylex.props(styles.select)}>
+    </Select>
+    <Select disabled>
       <option>Disabled</option>
-    </select>
-    <textarea defaultValue="Enabled" {...stylex.props(styles.textarea)} />
-    <textarea disabled defaultValue="Disabled" {...stylex.props(styles.textarea)} />
+    </Select>
+    <Textarea defaultValue="Enabled" />
+    <Textarea disabled defaultValue="Disabled" />
   </div>
 );
 

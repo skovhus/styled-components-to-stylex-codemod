@@ -1,10 +1,15 @@
+import React from "react";
 import * as stylex from "@stylexjs/stylex";
 import { $colors } from "./tokens.stylex";
 
+function Input(props: Omit<React.ComponentProps<"input">, "className" | "style">) {
+  return <input {...props} {...stylex.props(styles.input)} />;
+}
+
 export const App = () => (
   <div style={{ display: "grid", gap: 12, padding: 16 }}>
-    <input placeholder="Muted placeholder" {...stylex.props(styles.input)} />
-    <input placeholder="Second input" {...stylex.props(styles.input)} />
+    <Input placeholder="Muted placeholder" />
+    <Input placeholder="Second input" />
   </div>
 );
 

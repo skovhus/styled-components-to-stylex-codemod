@@ -8,6 +8,12 @@ const styles = stylex.create({
   },
 });
 
+function StyledFallback(props: { children?: React.ReactNode }) {
+  const { children } = props;
+
+  return <div {...stylex.props(styles.styledFallback)}>{children}</div>;
+}
+
 // Simulate a HOC that takes options
 const withFallback = <T extends object>(
   Component: React.ComponentType<T>,
@@ -18,12 +24,12 @@ export const MyComponent = withFallback(
   function MyComponent_() {
     return <div>Hello</div>;
   },
-  { fallback: <div {...stylex.props(styles.styledFallback)}>Loading...</div> },
+  { fallback: <StyledFallback>Loading...</StyledFallback> },
 );
 
 export const App = () => (
   <div>
-    <div {...stylex.props(styles.styledFallback)}>Fallback content</div>
+    <StyledFallback>Fallback content</StyledFallback>
     <MyComponent />
   </div>
 );

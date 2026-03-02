@@ -1,15 +1,28 @@
+import React from "react";
 import * as stylex from "@stylexjs/stylex";
 import { ThemeProvider } from "styled-components";
 import { testCaseTheme, $colors } from "./tokens.stylex";
 
 const baseTheme = testCaseTheme;
 
+function Button(props: { children?: React.ReactNode }) {
+  const { children } = props;
+
+  return <button {...stylex.props(styles.button)}>{children}</button>;
+}
+
+function Card(props: { children?: React.ReactNode }) {
+  const { children } = props;
+
+  return <div {...stylex.props(styles.card)}>{children}</div>;
+}
+
 export const App = () => (
   <ThemeProvider theme={baseTheme}>
     <div style={{ display: "flex", gap: "12px", padding: "12px" }}>
-      <div {...stylex.props(styles.card)}>
-        <button {...stylex.props(styles.button)}>Base Theme</button>
-      </div>
+      <Card>
+        <Button>Base Theme</Button>
+      </Card>
       {/* Function theme that extends parent theme */}
       <ThemeProvider
         theme={(parentTheme) => {
@@ -20,9 +33,9 @@ export const App = () => (
           };
         }}
       >
-        <div {...stylex.props(styles.card)}>
-          <button {...stylex.props(styles.button)}>Extended Theme</button>
-        </div>
+        <Card>
+          <Button>Extended Theme</Button>
+        </Card>
       </ThemeProvider>
     </div>
   </ThemeProvider>

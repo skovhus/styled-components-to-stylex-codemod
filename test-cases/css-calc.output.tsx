@@ -1,11 +1,18 @@
+import React from "react";
 import * as stylex from "@stylexjs/stylex";
 import { calcVars } from "./css-calc.stylex";
+
+function FlexItem(props: { children?: React.ReactNode }) {
+  const { children } = props;
+
+  return <div {...stylex.props(styles.flexItem)}>{children}</div>;
+}
 
 export const App = () => (
   <div {...stylex.props(styles.container)}>
     <div {...stylex.props(styles.grid)}>
-      <div {...stylex.props(styles.flexItem)}>Item 1</div>
-      <div {...stylex.props(styles.flexItem)}>Item 2</div>
+      <FlexItem>Item 1</FlexItem>
+      <FlexItem>Item 2</FlexItem>
     </div>
     <aside {...stylex.props(styles.sidebar)}>Sidebar content</aside>
     <div {...stylex.props(styles.complexCalc)}>Complex calc</div>

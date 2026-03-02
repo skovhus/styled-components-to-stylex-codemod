@@ -1,15 +1,22 @@
+import React from "react";
 import * as stylex from "@stylexjs/stylex";
+
+// The adjacent sibling rule appears BEFORE the base color declaration.
+// The base value must still be preserved as the default.
+function Thing(props: { children?: React.ReactNode }) {
+  const { children } = props;
+
+  return <div {...stylex.props(styles.thing, stylex.defaultMarker())}>{children}</div>;
+}
 
 export const App = () => (
   <div style={{ display: "flex", flexDirection: "column", gap: 4, padding: 16 }}>
-    <div {...stylex.props(styles.thing, stylex.defaultMarker())}>First (blue)</div>
-    <div {...stylex.props(styles.thing, stylex.defaultMarker())}>Second (red - adjacent)</div>
+    <Thing>First (blue)</Thing>
+    <Thing>Second (red - adjacent)</Thing>
   </div>
 );
 
 const styles = stylex.create({
-  // The adjacent sibling rule appears BEFORE the base color declaration.
-  // The base value must still be preserved as the default.
   thing: {
     color: {
       default: "blue",

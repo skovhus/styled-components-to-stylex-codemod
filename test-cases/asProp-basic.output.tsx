@@ -51,7 +51,6 @@ export const App = () => (
 );
 
 const styles = stylex.create({
-  // Pattern 1: styled.element with as prop at call site
   button: {
     display: "inline-block",
     color: "#bf4f74",
