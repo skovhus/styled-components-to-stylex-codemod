@@ -1,0 +1,1 @@
+import{j as s}from"./index-Dh_E0E_m.js";const i=()=>s.jsx("div",{style:{display:"flex",gap:16,padding:16},children:s.jsx("div",{className:"x13o1wqe x1vvogim x1hr3lfm",children:"Toggle"})});export{i as App};

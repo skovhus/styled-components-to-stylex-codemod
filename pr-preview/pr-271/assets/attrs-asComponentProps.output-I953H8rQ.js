@@ -1,0 +1,1 @@
+import{j as e}from"./index-Dh_E0E_m.js";import{F as r}from"./flex-BWRXKQ_Y.js";function t(s){return e.jsx(r,{...s,column:!0,className:"x12peec7 x12oqio5"})}const x=()=>e.jsxs(t,{children:[e.jsx("div",{children:"Item 1"}),e.jsx("div",{children:"Item 2"})]});export{x as App};
