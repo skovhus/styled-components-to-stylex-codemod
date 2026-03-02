@@ -4,9 +4,10 @@ import { mergedSx } from "./lib/mergedSx";
 import { transitionSpeed } from "./tokens.stylex";
 import "./cssVariable-basic.css";
 
-type AnimatedPathProps = Pick<React.ComponentProps<"path">, "style" | "children" | "d"> & {
-  $width: number;
-};
+type AnimatedPathProps = { $width: number } & Pick<
+  React.ComponentProps<"path">,
+  "style" | "children" | "d"
+>;
 
 function AnimatedPath(props: AnimatedPathProps) {
   const { children, style, $width, ...rest } = props;

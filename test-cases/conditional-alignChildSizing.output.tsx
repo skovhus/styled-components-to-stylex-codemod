@@ -5,9 +5,9 @@ import { mergedSx } from "./lib/mergedSx";
 type Align = "top" | "center" | "bottom";
 
 type ContainerProps = React.PropsWithChildren<{
-  style?: React.CSSProperties;
   align: Align;
   $property?: "width" | "height";
+  style?: React.CSSProperties;
 }>;
 
 function Container(props: ContainerProps) {

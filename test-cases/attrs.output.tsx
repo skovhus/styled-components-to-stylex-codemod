@@ -9,10 +9,10 @@ const Flex = (
   return <div data-focus-index={focusIndex} {...rest} />;
 };
 
-type InputProps = Pick<React.ComponentProps<"input">, "placeholder"> & {
+type InputProps = {
   $padding?: string;
   $small?: boolean;
-};
+} & Pick<React.ComponentProps<"input">, "placeholder">;
 
 // Pattern 1: styled.input.attrs (dot notation)
 function Input(props: InputProps) {

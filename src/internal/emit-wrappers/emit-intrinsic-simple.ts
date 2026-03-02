@@ -646,8 +646,8 @@ export function emitSimpleExportedIntrinsicWrappers(ctx: EmitIntrinsicContext): 
             // intersected with any custom style-driving props.  Wrap with
             // PropsWithChildren so custom props end up inside the wrapper.
             const combined = emitter.joinIntersection(
-              baseTypeText,
               customStyleDrivingPropsTypeText,
+              baseTypeText,
               sxTypeIntersection,
             );
             return VOID_TAGS.has(tagName) ? combined : emitter.withChildren(combined);

@@ -208,7 +208,7 @@ export function emitShouldForwardPropWrappers(ctx: EmitIntrinsicContext): void {
           return emitter.withChildren(extrasTypeText);
         }
         if (slimBaseTypeText !== undefined) {
-          return wrapSlimWithChildren(emitter.joinIntersection(slimBaseTypeText, extrasTypeText));
+          return wrapSlimWithChildren(emitter.joinIntersection(extrasTypeText, slimBaseTypeText));
         }
         const base = `React.ComponentProps<"${tagName}">`;
         const omitted: string[] = [];
@@ -222,7 +222,7 @@ export function emitShouldForwardPropWrappers(ctx: EmitIntrinsicContext): void {
         return emitter.joinIntersection(extrasTypeText, baseWithOmit);
       }
       if (slimBaseTypeText !== undefined) {
-        return wrapSlimWithChildren(emitter.joinIntersection(slimBaseTypeText, extrasTypeText));
+        return wrapSlimWithChildren(emitter.joinIntersection(extrasTypeText, slimBaseTypeText));
       }
       return emitter.inferredIntrinsicPropsTypeText({
         d,

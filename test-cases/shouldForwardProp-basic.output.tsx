@@ -24,7 +24,7 @@ function Button(props: ButtonProps) {
   );
 }
 
-type LinkProps = Pick<React.ComponentProps<"a">, "children" | "href"> & { isActive?: boolean };
+type LinkProps = { isActive?: boolean } & Pick<React.ComponentProps<"a">, "children" | "href">;
 
 // Using isPropValid from @emotion
 function Link(props: LinkProps) {

@@ -3,9 +3,9 @@ import * as stylex from "@stylexjs/stylex";
 import { mergedSx } from "./lib/mergedSx";
 
 type DynamicBoxProps = React.PropsWithChildren<{
-  style?: React.CSSProperties;
   $background?: string;
   $size?: string;
+  style?: React.CSSProperties;
 }>;
 
 function DynamicBox(props: DynamicBoxProps) {

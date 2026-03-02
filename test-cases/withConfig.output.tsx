@@ -8,7 +8,7 @@ function Card(props: CardProps) {
   return <div {...stylex.props(styles.card)}>{props.children}</div>;
 }
 
-type InputProps = Pick<React.ComponentProps<"input">, "placeholder"> & { hasError?: boolean };
+type InputProps = { hasError?: boolean } & Pick<React.ComponentProps<"input">, "placeholder">;
 
 // Combining withConfig options
 function Input(props: InputProps) {

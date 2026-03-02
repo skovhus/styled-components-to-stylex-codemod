@@ -5,9 +5,9 @@ import * as stylex from "@stylexjs/stylex";
 import { mergedSx } from "./lib/mergedSx";
 
 type TextDividerContainerProps = React.PropsWithChildren<{
+  noMinWidth?: any;
   className?: string;
   style?: React.CSSProperties;
-  noMinWidth?: any;
 }>;
 
 function TextDividerContainer(props: TextDividerContainerProps) {
