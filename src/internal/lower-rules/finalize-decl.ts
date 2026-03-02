@@ -92,6 +92,8 @@ export function finalizeDeclProcessing(ctx: DeclProcessingState): void {
     styleObj[sel] = obj;
   }
 
+  resolveDirectionalConflicts(styleObj);
+
   const varsToDrop = new Set<string>();
   rewriteCssVarsInStyleObject(styleObj, localVarValues, varsToDrop);
   for (const name of varsToDrop) {
@@ -499,6 +501,127 @@ export function finalizeDeclProcessing(ctx: DeclProcessingState): void {
 }
 
 // --- Non-exported helpers ---
+
+/**
+ * Axis shorthand → longhand pairs that StyleX treats as conflicting.
+ * When both a shorthand (e.g., `paddingBlock`) and one of its longhands
+ * (e.g., `paddingBottom`) appear in the same style object, StyleX cannot
+ * resolve the overlap. This table drives `resolveDirectionalConflicts`.
+ */
+const AXIS_PAIRS: Array<{
+  shorthand: string;
+  start: string;
+  end: string;
+}> = [
+  { shorthand: "paddingBlock", start: "paddingTop", end: "paddingBottom" },
+  { shorthand: "paddingInline", start: "paddingLeft", end: "paddingRight" },
+  { shorthand: "marginBlock", start: "marginTop", end: "marginBottom" },
+  { shorthand: "marginInline", start: "marginLeft", end: "marginRight" },
+];
+
+/**
+ * Checks whether a value is a media/pseudo map (object with `default` or `@`/`:` keys).
+ */
+function isMediaOrPseudoMap(v: unknown): v is Record<string, unknown> {
+  if (!v || typeof v !== "object" || Array.isArray(v) || isAstNode(v)) {
+    return false;
+  }
+  const keys = Object.keys(v as Record<string, unknown>);
+  return keys.includes("default") || keys.some((k) => k.startsWith(":") || k.startsWith("@"));
+}
+
+/**
+ * Resolves conflicts between directional shorthand properties (e.g., `paddingBlock`)
+ * and their individual longhand overrides (e.g., `paddingBottom`).
+ *
+ * CSS cascade allows `padding: 0 12px; padding-bottom: 10px;` — the shorthand sets
+ * both top and bottom to 0, then the longhand overrides bottom to 10px. After
+ * `splitDirectionalProperty`, this becomes `paddingBlock: 0` + `paddingBottom: "10px"`.
+ * StyleX can't have both `paddingBlock` and `paddingBottom` — they conflict.
+ *
+ * This function detects such conflicts and splits the shorthand into individual
+ * longhands, preserving the override. It also handles media/pseudo map values where
+ * the shorthand at a media level needs to reset the overridden longhand.
+ *
+ * Property ordering is preserved: the split longhands replace the shorthand's
+ * position in the object to maintain a natural CSS property order.
+ */
+function resolveDirectionalConflicts(styleObj: Record<string, unknown>): void {
+  for (const { shorthand, start, end } of AXIS_PAIRS) {
+    const shorthandVal = styleObj[shorthand];
+    if (shorthandVal === undefined) {
+      continue;
+    }
+
+    const hasStart = start in styleObj;
+    const hasEnd = end in styleObj;
+    if (!hasStart && !hasEnd) {
+      continue;
+    }
+
+    // Compute replacement values for start/end longhands.
+    let startVal: unknown;
+    let endVal: unknown;
+
+    if (isMediaOrPseudoMap(shorthandVal)) {
+      const shorthandMap = shorthandVal as Record<string, unknown>;
+      startVal = hasStart
+        ? computeMergedLonghand(styleObj[start], shorthandMap)
+        : { ...shorthandMap };
+      endVal = hasEnd ? computeMergedLonghand(styleObj[end], shorthandMap) : { ...shorthandMap };
+    } else {
+      startVal = hasStart ? styleObj[start] : shorthandVal;
+      endVal = hasEnd ? styleObj[end] : shorthandVal;
+    }
+
+    // Rebuild the object in order: replace the shorthand position with start+end,
+    // and remove any existing start/end entries from their old positions.
+    const entries = Object.entries(styleObj);
+    // Clear all keys
+    for (const key of Object.keys(styleObj)) {
+      delete styleObj[key];
+    }
+    for (const [key, val] of entries) {
+      if (key === shorthand) {
+        // Replace shorthand with the two longhands in order
+        styleObj[start] = startVal;
+        styleObj[end] = endVal;
+      } else if (key === start || key === end) {
+        // Skip — already inserted at the shorthand's position
+        continue;
+      } else {
+        styleObj[key] = val;
+      }
+    }
+  }
+}
+
+/**
+ * Computes the merged value for a longhand property that overrides a shorthand.
+ * If the shorthand has media/pseudo keys, they get merged into the longhand's value.
+ */
+function computeMergedLonghand(
+  longhandVal: unknown,
+  shorthandMap: Record<string, unknown>,
+): unknown {
+  if (isMediaOrPseudoMap(longhandVal)) {
+    const merged = { ...(longhandVal as Record<string, unknown>) };
+    for (const [key, val] of Object.entries(shorthandMap)) {
+      if (!(key in merged)) {
+        merged[key] = val;
+      }
+    }
+    return merged;
+  }
+  // Longhand is a simple scalar — wrap as default and add shorthand's media keys
+  const merged: Record<string, unknown> = { default: longhandVal };
+  for (const [key, val] of Object.entries(shorthandMap)) {
+    if (key !== "default") {
+      merged[key] = val;
+    }
+  }
+  return merged;
+}
 
 /**
  * Extracts a scalar default value from a style property value.

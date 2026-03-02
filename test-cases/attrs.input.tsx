@@ -116,6 +116,27 @@ export const AlignedFlex = styled(Flex).attrs((props) => ({
   align-items: center;
 `;
 
+// Pattern 9: static attrs with a style object
+// The inline style properties should be preserved in the output
+const NoWrapText = styled.span.attrs({
+  style: {
+    whiteSpace: "nowrap" as const,
+  },
+})`
+  color: blue;
+`;
+
+// Pattern 10: dynamic attrs with computed style object
+// The dynamic inline styles should be preserved as inline style prop
+const DynamicHeightBox = styled.div.attrs<{ $height: number }>(({ $height }) => ({
+  style: {
+    height: $height ? `${$height}px` : undefined,
+  },
+}))`
+  display: flex;
+  align-items: center;
+`;
+
 export const App = () => (
   <>
     <Input $small placeholder="Small" />
@@ -128,5 +149,7 @@ export const App = () => (
     <FocusableScroll focusIndex={5}>Focus content</FocusableScroll>
     <Box>Box content</Box>
     <AlignedFlex>Aligned content</AlignedFlex>
+    <NoWrapText>No wrapping text</NoWrapText>
+    <DynamicHeightBox $height={50}>Dynamic height</DynamicHeightBox>
   </>
 );

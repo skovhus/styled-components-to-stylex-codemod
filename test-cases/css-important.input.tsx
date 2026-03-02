@@ -35,6 +35,12 @@ const ImportantHover = styled.a`
   }
 `;
 
+// Important on interpolated theme values — both properties should keep !important
+const OverrideText = styled.span`
+  color: ${(props) => props.theme.color.labelMuted} !important;
+  font-size: 10px !important;
+`;
+
 export const App = () => (
   <div>
     <OverrideButton style={{ background: "blue" }}>
@@ -45,5 +51,6 @@ export const App = () => (
       Color and margin should be overridden
     </MixedStyles>
     <ImportantHover href="#">Hover me</ImportantHover>
+    <OverrideText>Override text</OverrideText>
   </div>
 );

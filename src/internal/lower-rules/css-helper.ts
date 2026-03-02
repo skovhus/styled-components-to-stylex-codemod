@@ -17,6 +17,7 @@ import { parseStyledTemplateLiteral } from "../styled-css.js";
 import { parseSelector } from "../selectors.js";
 import { wrapExprWithStaticParts } from "./interpolations.js";
 import { cssValueToJs } from "../transform/helpers.js";
+import { expandStaticAnimationShorthand } from "../keyframes.js";
 
 type ImportMapEntry = {
   importedName: string;
@@ -80,6 +81,9 @@ export function createCssHelperResolver(args: {
   parseExpr: (exprSource: string) => any;
   resolverImports: Map<string, ImportSpec>;
   warnings: WarningLog[];
+  keyframesNames?: Set<string>;
+  inlineKeyframeNameMap?: Map<string, string>;
+  j?: import("jscodeshift").JSCodeshift;
 }): {
   isCssHelperTaggedTemplate: (expr: any) => expr is { quasi: any };
   resolveCssHelperTemplate: (
@@ -413,6 +417,29 @@ export function createCssHelperResolver(args: {
           return bail("Conditional `css` block: missing CSS property name");
         }
         if (d.value.kind === "static") {
+          // Expand animation shorthand referencing inline @keyframes
+          if (
+            d.property === "animation" &&
+            args.keyframesNames &&
+            args.keyframesNames.size > 0 &&
+            args.j
+          ) {
+            const expanded: Record<string, unknown> = {};
+            if (
+              expandStaticAnimationShorthand(
+                d.valueRaw,
+                args.keyframesNames,
+                args.j,
+                expanded,
+                args.inlineKeyframeNameMap,
+              )
+            ) {
+              for (const [prop, value] of Object.entries(expanded)) {
+                (target as any)[prop] = mergeIntoContext(value, prop, target as any) as any;
+              }
+              continue;
+            }
+          }
           for (const mapped of cssDeclarationToStylexDeclarations(d)) {
             let value = cssValueToJs(mapped.value, d.important, mapped.prop);
             if (mapped.prop === "content" && typeof value === "string") {

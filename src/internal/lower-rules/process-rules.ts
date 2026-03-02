@@ -25,7 +25,11 @@ import {
 } from "../utilities/jscodeshift-utils.js";
 import { cssValueToJs, toStyleKey, toSuffixFromProp } from "../transform/helpers.js";
 import { capitalize, kebabToCamelCase } from "../utilities/string-utils.js";
-import { getOrCreateRelationOverrideBucket } from "./shared.js";
+import {
+  cssPropertyToIdentifier,
+  getOrCreateRelationOverrideBucket,
+  makeCssProperty,
+} from "./shared.js";
 import type { RelationOverride } from "./state.js";
 import { createPropTestHelpers } from "./variant-utils.js";
 import { PLACEHOLDER_RE } from "../styled-css.js";
@@ -639,7 +643,7 @@ export function processDeclRules(ctx: DeclProcessingState): void {
       }
     }
 
-    let media = rule.atRuleStack.find((a) => a.startsWith("@media"));
+    let media = rule.atRuleStack.find((a) => a.startsWith("@media") || a.startsWith("@container"));
 
     const intrinsicTagName = decl.base.kind === "intrinsic" ? decl.base.tagName : null;
     let selector = normalizeSelectorForAttributePseudos(rule.selector, intrinsicTagName);
@@ -660,7 +664,10 @@ export function processDeclRules(ctx: DeclProcessingState): void {
       }
     }
 
-    if (!media && selector.trim().startsWith("@media")) {
+    if (
+      !media &&
+      (selector.trim().startsWith("@media") || selector.trim().startsWith("@container"))
+    ) {
       media = selector.trim();
       selector = "&";
     }
@@ -949,6 +956,11 @@ export function processDeclRules(ctx: DeclProcessingState): void {
       break;
     }
   }
+
+  // Merge CSS properties from `.attrs({ style: { ... } })` into the style object.
+  // Merged AFTER template rules so attrs styles take precedence (matching
+  // styled-components inline-style semantics where attrs style wins over class CSS).
+  mergeAttrsStyles(ctx);
 }
 
 // --- Non-exported helpers ---
@@ -1757,13 +1769,58 @@ function handleSiblingSelector(
       [j.literal(":is(*)")],
     );
 
-  // Wrap values in media condition objects when inside an @media at-rule
-  const media = rule.atRuleStack.find((a) => a.startsWith("@media"));
+  // Wrap values in media/container condition objects when inside an @media or @container at-rule
+  const media = rule.atRuleStack.find((a) => a.startsWith("@media") || a.startsWith("@container"));
 
   // Add each property to perPropComputedMedia with the sibling computed key
   for (const [prop, value] of Object.entries(bucket)) {
     const siblingValue = media ? { default: null, [media]: value } : value;
     const entry = getOrCreateComputedMediaEntry(prop, ctx);
     entry.entries.push({ keyExpr: makeSiblingKeyExpr(), value: siblingValue });
+  }
+}
+
+/**
+ * Merges CSS properties from `.attrs({ style: { ... } })` into the styled component's
+ * style object and style functions.
+ *
+ * - Static properties (e.g., `whiteSpace: "nowrap"`) are added to `styleObj`
+ * - Dynamic properties (e.g., `height: $prop ? expr : undefined`) become
+ *   `styleFnFromProps` entries with corresponding `styleFnDecls`
+ */
+function mergeAttrsStyles(ctx: DeclProcessingState): void {
+  const { state, decl, styleObj } = ctx;
+  const attrsInfo = decl.attrsInfo;
+  if (!attrsInfo) {
+    return;
+  }
+
+  // Merge static style properties into the style object
+  if (attrsInfo.attrsStaticStyles) {
+    for (const [prop, value] of Object.entries(attrsInfo.attrsStaticStyles)) {
+      styleObj[prop] = value;
+    }
+  }
+
+  // Convert dynamic style properties into styleFnFromProps entries
+  if (attrsInfo.attrsDynamicStyles?.length) {
+    const { j } = state;
+    for (const entry of attrsInfo.attrsDynamicStyles) {
+      const fnKey = `${decl.styleKey}${toSuffixFromProp(entry.cssProp)}`;
+      const paramName = cssPropertyToIdentifier(entry.cssProp);
+      const param = j.identifier(paramName);
+      (param as any).typeAnnotation = j.tsTypeAnnotation(j.tsStringKeyword());
+      const p = makeCssProperty(j, entry.cssProp, paramName);
+      const body = j.objectExpression([p]);
+      ctx.styleFnDecls.set(fnKey, j.arrowFunctionExpression([param], body));
+      ctx.styleFnFromProps.push({
+        fnKey,
+        jsxProp: entry.jsxProp,
+        condition: "truthy",
+        callArg: entry.callArgExpr as any,
+      });
+      ensureShouldForwardPropDrop(decl, entry.jsxProp);
+      decl.needsWrapperComponent = true;
+    }
   }
 }

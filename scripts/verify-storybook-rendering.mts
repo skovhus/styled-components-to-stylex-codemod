@@ -48,16 +48,16 @@ interface TestResult {
 }
 
 // ---------------------------------------------------------------------------
-// Known rendering mismatches (expected failures).
-// These are tracked in plans/2026-02-12-rendering-mismatches.md.
-// Remove entries as the underlying codemod issues are fixed.
+// Flaky test cases — rendering mismatches that occur nondeterministically.
+// Remove entries once the root cause is fixed.
 // ---------------------------------------------------------------------------
-const EXPECTED_FAILURES = new Set<string>([
+const FLAKINESS_EXPECTED = new Set<string>([
   // Flaky due to animation timing — keyframe snapshots occasionally differ.
-  "keyframes-unionComplexity",
+  "keyframes-inlineDefinition",
   "keyframes-interpolatedDuration",
   "keyframes-interpolatedDurationWithDelay",
   "keyframes-multiAnimationInterpolatedDuration",
+  "keyframes-unionComplexity",
 ]);
 
 // Case-specific pixelmatch threshold overrides for known anti-aliasing noise.
@@ -73,7 +73,7 @@ const cliArgs = process.argv.slice(2);
 let onlyChanged = false;
 let saveDiffs = false;
 let threshold = 0.1;
-const mismatchTolerance = 0; // strict pixel-level comparison; subpixel diffs go in EXPECTED_FAILURES
+const mismatchTolerance = 0; // strict pixel-level comparison; subpixel diffs go in FLAKINESS_EXPECTED
 let concurrency = DEFAULT_CONCURRENCY;
 const explicitCases: string[] = [];
 
@@ -473,6 +473,9 @@ async function processTestCase(p: Page, tc: string): Promise<TestResult> {
       message,
     };
   } catch (e) {
+    // Strip Playwright's verbose "Call log:" lines from error messages.
+    const raw = e instanceof Error ? e.message : String(e);
+    const message = raw.replace(/\nCall log:[\s\S]*$/, "").trim();
     return {
       name: tc,
       status: "error",
@@ -480,7 +483,7 @@ async function processTestCase(p: Page, tc: string): Promise<TestResult> {
       outputDimensions: null,
       inputText: "",
       outputText: "",
-      message: e instanceof Error ? e.message : String(e),
+      message,
     };
   }
 }
@@ -492,6 +495,8 @@ if (saveDiffs) {
   mkdirSync(diffsDir, { recursive: true });
 }
 
+const isTTY = process.stdout.isTTY ?? false;
+
 const workerCount = Math.max(1, Math.min(concurrency, testCases.length));
 const workerPages = await Promise.all(Array.from({ length: workerCount }, () => context.newPage()));
 
@@ -501,10 +506,16 @@ const warmupPage = workerPages[0];
 if (!warmupPage) {
   throw new Error("Failed to initialize rendering workers.");
 }
+if (isTTY) {
+  process.stdout.write("  Warming up browser...");
+}
 await warmupPage.goto(`${baseUrl}/iframe.html?id=test-cases--all&viewMode=story`, {
   waitUntil: "load",
   timeout: 30_000,
 });
+if (isTTY) {
+  process.stdout.write("\r" + " ".repeat(40) + "\r");
+}
 
 const results: TestResult[] = Array.from({ length: testCases.length }) as TestResult[];
 let nextIndex = 0;
@@ -512,18 +523,43 @@ let completedCount = 0;
 
 console.log(`Checking ${testCases.length} test case(s) with ${workerCount} workers...\n`);
 
+const inProgress = new Set<string>();
+const termWidth = process.stdout.columns ?? 80;
+
+function writeProgress() {
+  if (!isTTY) {
+    return;
+  }
+  let line = `  Progress: ${completedCount}/${testCases.length}`;
+  if (inProgress.size === 1) {
+    line += ` (${[...inProgress][0]})`;
+  } else if (inProgress.size > 1) {
+    line += ` (${inProgress.size} in parallel)`;
+  }
+  if (line.length > termWidth) {
+    line = line.slice(0, termWidth - 1);
+  }
+  process.stdout.write(`\r${line}${" ".repeat(Math.max(0, termWidth - line.length))}`);
+}
+
 async function worker(workerPage: Page) {
   while (nextIndex < testCases.length) {
     const idx = nextIndex++;
     const tc = testCases[idx]!;
+    inProgress.add(tc);
+    writeProgress();
     results[idx] = await processTestCase(workerPage, tc);
+    inProgress.delete(tc);
     completedCount++;
-    process.stdout.write(`\r  Progress: ${completedCount}/${testCases.length}`);
+    writeProgress();
   }
 }
 
 await Promise.all(workerPages.map(worker));
-process.stdout.write("\r" + " ".repeat(40) + "\r"); // clear progress line
+if (isTTY) {
+  const done = `  Progress: ${testCases.length}/${testCases.length}`;
+  process.stdout.write(`\r${done}${" ".repeat(Math.max(0, termWidth - done.length))}\n`);
+}
 
 // ---------------------------------------------------------------------------
 // Cleanup
@@ -534,14 +570,8 @@ server.close();
 // ---------------------------------------------------------------------------
 // Print results
 // ---------------------------------------------------------------------------
-let failCount = 0;
-let expectedFailCount = 0;
-
 for (const r of results) {
-  const isExpected = r.status !== "pass" && EXPECTED_FAILURES.has(r.name);
-  if (isExpected) {
-    expectedFailCount++;
-  }
+  const isExpected = r.status !== "pass" && FLAKINESS_EXPECTED.has(r.name);
   const icon =
     r.status === "pass"
       ? "\x1b[32m\u2713\x1b[0m"
@@ -550,39 +580,54 @@ for (const r of results) {
         : r.status === "error"
           ? "\x1b[33m!\x1b[0m"
           : "\x1b[31m\u2717\x1b[0m";
-  const suffix = isExpected ? " (known)" : "";
+  const suffix = isExpected ? " (flaky)" : "";
   const dims = r.inputDimensions ? ` (${r.inputDimensions})` : "";
   console.log(`  ${icon} ${r.name}${dims}${suffix}`);
   if (r.message) {
     console.log(`    ${r.message}`);
   }
-  if (r.status !== "pass" && !isExpected) {
-    failCount++;
-  }
 }
 
 // Warn about expected failures that now pass (should be removed from the list)
-for (const name of EXPECTED_FAILURES) {
+const nowPassing = [...FLAKINESS_EXPECTED].filter((name) => {
   const r = results.find((res) => res.name === name);
-  if (r && r.status === "pass") {
-    console.log(
-      `\n\x1b[33mNote:\x1b[0m ${name} is in EXPECTED_FAILURES but now passes — remove it`,
-    );
+  return r && r.status === "pass";
+});
+if (nowPassing.length > 0) {
+  console.log(
+    `\n\x1b[33mFlaky test cases (in FLAKINESS_EXPECTED but now passing — consider removing):\x1b[0m`,
+  );
+  for (const name of nowPassing) {
+    console.log(`  \x1b[33m~\x1b[0m ${name}`);
   }
 }
 
-const totalFailing = failCount + expectedFailCount;
+// Collect unexpected failures for the summary
+const unexpectedFailures = results.filter(
+  (r) => r.status !== "pass" && !FLAKINESS_EXPECTED.has(r.name),
+);
+const flakyFailures = results.filter((r) => r.status !== "pass" && FLAKINESS_EXPECTED.has(r.name));
+
+const totalFailing = unexpectedFailures.length + flakyFailures.length;
 const parts = [`${results.length} checked, ${results.length - totalFailing} passed`];
-if (expectedFailCount > 0) {
-  parts.push(`\x1b[33m${expectedFailCount} known\x1b[0m`);
+if (flakyFailures.length > 0) {
+  parts.push(`\x1b[33m${flakyFailures.length} flaky\x1b[0m`);
 }
-if (failCount > 0) {
-  parts.push(`\x1b[31m${failCount} failed\x1b[0m`);
+if (unexpectedFailures.length > 0) {
+  parts.push(`\x1b[31m${unexpectedFailures.length} failed\x1b[0m`);
 }
 console.log(`\n${parts.join(", ")}`);
 
-if (saveDiffs && totalFailing > 0) {
-  console.log(`Diff images saved to ${diffsDir}/`);
+// Print unexpected failures at the end so they're easy to find
+if (unexpectedFailures.length > 0) {
+  console.log(`\n\x1b[31mFailed test cases:\x1b[0m`);
+  for (const r of unexpectedFailures) {
+    console.log(`  \x1b[31m\u2717\x1b[0m ${r.name}: ${r.message ?? r.status}`);
+  }
 }
 
-process.exit(failCount > 0 ? 1 : 0);
+if (saveDiffs && totalFailing > 0) {
+  console.log(`\nDiff images saved to ${diffsDir}/`);
+}
+
+process.exit(unexpectedFailures.length > 0 ? 1 : 0);

@@ -663,6 +663,14 @@ export function handleInterpolatedDeclaration(args: InterpolatedDeclarationConte
       continue;
     }
 
+    // Handle multiple interpolation slots that all branch on the same prop ternary.
+    // Pattern: transform: translateY(-50%) translateX(${p => p.$expanded ? "0" : "-8px"}) scale(${p => p.$expanded ? 1 : 0.9})
+    // When all slots are ternaries on the same condition with literal branches, produce
+    // two static variant styles by evaluating each branch direction.
+    if (d.property && d.value.kind === "interpolated" && tryHandleMultiSlotTernary(ctx, d)) {
+      continue;
+    }
+
     const slotPart = d.value.parts.find((p: any) => p.kind === "slot");
     const slotId = slotPart && slotPart.kind === "slot" ? slotPart.slotId : 0;
     const expr = decl.templateExpressions[slotId];
@@ -762,7 +770,9 @@ export function handleInterpolatedDeclaration(args: InterpolatedDeclarationConte
 
       // Extract and wrap static prefix/suffix (skip for border-color since expansion handled it)
       const { prefix, suffix } = extractStaticPartsForDecl(d);
-      const wrappedExpr = wrapExprWithStaticParts(res.expr, prefix, suffix);
+      // Preserve !important by appending it to the suffix
+      const effectiveSuffix = d.important ? `${suffix} !important` : suffix;
+      const wrappedExpr = wrapExprWithStaticParts(res.expr, prefix, effectiveSuffix);
 
       const exprAst = parseExpr(wrappedExpr);
       if (!exprAst) {
@@ -2429,6 +2439,134 @@ function tryHandleLocalHelperCall(args: {
     decl.consumedLocalHelpers = [];
   }
   decl.consumedLocalHelpers.push(calleeName);
+
+  return true;
+}
+
+/**
+ * Handles declarations with multiple interpolation slots where all slots are
+ * ternary expressions branching on the same prop.
+ *
+ * Pattern: `transform: translateY(-50%) translateX(${p => p.$expanded ? "0" : "-8px"}) scale(${p => p.$expanded ? 1 : 0.9})`
+ *
+ * Produces two static variant styles by evaluating each branch direction:
+ *   popover: { transform: "translateY(-50%) translateX(-8px) scale(0.9)" }
+ *   popoverExpanded: { transform: "translateY(-50%) translateX(0) scale(1)" }
+ */
+function tryHandleMultiSlotTernary(ctx: DeclProcessingState, d: CssDeclarationIR): boolean {
+  const { decl, styleObj } = ctx;
+  const parts = d.value.kind === "interpolated" ? d.value.parts : [];
+  const slotParts = parts.filter(
+    (p: { kind: string }): p is { kind: "slot"; slotId: number } => p.kind === "slot",
+  );
+
+  if (slotParts.length < 2) {
+    return false;
+  }
+
+  // Extract and validate all slot expressions: each must be an arrow/function
+  // with a ConditionalExpression body testing the same prop.
+  let commonPropName: string | null = null;
+  const branchValues: Array<{ consequent: string; alternate: string }> = [];
+
+  for (const slot of slotParts) {
+    const expr = decl.templateExpressions[slot.slotId] as
+      | {
+          type?: string;
+          body?: unknown;
+        }
+      | undefined;
+    if (!expr || (expr.type !== "ArrowFunctionExpression" && expr.type !== "FunctionExpression")) {
+      return false;
+    }
+    const paramName = getArrowFnSingleParamName(
+      expr as Parameters<typeof getArrowFnSingleParamName>[0],
+    );
+    if (!paramName) {
+      return false;
+    }
+    const body = getFunctionBodyExpr(expr) as {
+      type?: string;
+      test?: unknown;
+      consequent?: unknown;
+      alternate?: unknown;
+    } | null;
+    if (!body || body.type !== "ConditionalExpression") {
+      return false;
+    }
+
+    // Extract the tested prop name (e.g., "$expanded" from "props.$expanded")
+    const testPath =
+      body.test && typeof body.test === "object"
+        ? getMemberPathFromIdentifier(
+            body.test as Parameters<typeof getMemberPathFromIdentifier>[0],
+            paramName,
+          )
+        : null;
+    if (!testPath || testPath.length !== 1 || !testPath[0]) {
+      return false;
+    }
+    const propName = testPath[0];
+
+    if (commonPropName === null) {
+      commonPropName = propName;
+    } else if (commonPropName !== propName) {
+      return false; // Different conditions — can't merge
+    }
+
+    // Both branches must be static literals
+    const consVal = literalToStaticValue(body.consequent);
+    const altVal = literalToStaticValue(body.alternate);
+    if (consVal === null || altVal === null) {
+      return false;
+    }
+    branchValues.push({
+      consequent: String(consVal),
+      alternate: String(altVal),
+    });
+  }
+
+  if (!commonPropName) {
+    return false;
+  }
+
+  // Build the full value string for each branch direction by combining
+  // static parts with the evaluated branch values.
+  const buildFullValue = (direction: "consequent" | "alternate"): string => {
+    let result = "";
+    let slotIndex = 0;
+    for (const part of parts) {
+      if (part.kind === "static") {
+        result += (part as { value: string }).value;
+      } else if (part.kind === "slot") {
+        const branch = branchValues[slotIndex];
+        result += branch ? branch[direction] : "";
+        slotIndex++;
+      }
+    }
+    return result;
+  };
+
+  const importantSuffix = d.important ? " !important" : "";
+  const consFullValue = buildFullValue("consequent") + importantSuffix;
+  const altFullValue = buildFullValue("alternate") + importantSuffix;
+
+  // Apply CSS property mapping (e.g., transform stays as transform)
+  for (const out of cssDeclarationToStylexDeclarations(d)) {
+    // Default (false/alternate branch) goes to base styles
+    styleObj[out.prop] = altFullValue;
+    // True (consequent) branch goes to a variant
+    ctx.applyVariant(
+      { when: commonPropName, propName: commonPropName },
+      { [out.prop]: consFullValue },
+    );
+  }
+
+  // Drop the transient prop from forwarding
+  if (commonPropName.startsWith("$")) {
+    ensureShouldForwardPropDrop(decl, commonPropName);
+  }
+  decl.needsWrapperComponent = true;
 
   return true;
 }

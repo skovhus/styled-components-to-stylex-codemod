@@ -350,6 +350,18 @@ export type StyledDecl = {
       jsxProp: string;
       attrName: string;
     }>;
+    /** Static CSS properties extracted from `style: { ... }` in attrs. */
+    attrsStaticStyles?: Record<string, unknown>;
+    /**
+     * Dynamic CSS properties from `style: { prop: cond ? value : undefined }` in attrs.
+     * Each entry stores the CSS property, the JSX prop that controls it, and the
+     * call arg expression (the ternary's consequent) as an AST node.
+     */
+    attrsDynamicStyles?: Array<{
+      cssProp: string;
+      jsxProp: string;
+      callArgExpr: unknown;
+    }>;
   };
   attrWrapper?: {
     kind: "input" | "link";

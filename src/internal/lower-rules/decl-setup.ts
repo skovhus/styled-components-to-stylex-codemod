@@ -18,6 +18,7 @@ import { addStyleKeyMixin } from "./precompute.js";
 import type { LowerRulesState } from "./state.js";
 import { extractRootAndPath } from "../utilities/jscodeshift-utils.js";
 import { cssValueToJs, toStyleKey, type ComputedKeyEntry } from "../transform/helpers.js";
+import { expandStaticAnimationShorthand } from "../keyframes.js";
 
 export type DeclProcessingState = ReturnType<typeof createDeclProcessingState>;
 
@@ -266,12 +267,14 @@ export function createDeclProcessingState(state: LowerRulesState, decl: StyledDe
     // Track @media values per property: mediaQuery → prop → value
     const mediaStyles = new Map<string, Record<string, unknown>>();
     for (const rule of rules) {
-      const media = rule.atRuleStack.find((a) => a.startsWith("@media"));
-      // Only support @media at-rules; bail on others (@supports, @container, etc.)
+      const media = rule.atRuleStack.find(
+        (a) => a.startsWith("@media") || a.startsWith("@container"),
+      );
+      // Only support @media and @container at-rules; bail on others (@supports, etc.)
       if (rule.atRuleStack.length > 0 && !media) {
         warnings.push({
           severity: "warning",
-          type: "CSS block contains unsupported at-rule (only @media is supported; @supports, @container, etc. require manual handling)",
+          type: "CSS block contains unsupported at-rule (only @media and @container are supported; @supports, etc. require manual handling)",
           loc: decl.loc,
         });
         return null;
@@ -287,6 +290,38 @@ export function createDeclProcessingState(state: LowerRulesState, decl: StyledDe
         if (d.value.kind !== "static") {
           return null;
         }
+
+        // Expand animation shorthand referencing inline @keyframes
+        if (
+          d.property === "animation" &&
+          d.value.kind === "static" &&
+          state.keyframesNames.size > 0
+        ) {
+          const expanded: Record<string, unknown> = {};
+          if (
+            expandStaticAnimationShorthand(
+              d.valueRaw,
+              state.keyframesNames,
+              state.j,
+              expanded,
+              state.inlineKeyframeNameMap,
+            )
+          ) {
+            const target: Record<string, unknown> = media
+              ? (mediaStyles.get(media) ??
+                (() => {
+                  const t: Record<string, unknown> = {};
+                  mediaStyles.set(media, t);
+                  return t;
+                })())
+              : out;
+            for (const [prop, value] of Object.entries(expanded)) {
+              target[prop] = value;
+            }
+            continue;
+          }
+        }
+
         for (const mapped of cssDeclarationToStylexDeclarations(d)) {
           let value = cssValueToJs(mapped.value, d.important, mapped.prop);
           if (mapped.prop === "content" && typeof value === "string") {
@@ -360,6 +395,8 @@ export function createDeclProcessingState(state: LowerRulesState, decl: StyledDe
     isJsxPropOptional,
     extraStyleObjects,
     resolvedStyleObjects: state.resolvedStyleObjects,
+    keyframesNames: state.keyframesNames,
+    inlineKeyframeNameMap: state.inlineKeyframeNameMap,
   });
 
   return {

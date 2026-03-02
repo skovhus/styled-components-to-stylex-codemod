@@ -14,6 +14,14 @@ const NestedColorBackground = styled.div<{ $color: "red" | "blue" | "default" }>
     props.$color === "red" ? "crimson" : props.$color === "blue" ? "navy" : "gray"};
 `;
 
+// Pattern 3: background: none should become background: "none", not backgroundColor: "none"
+// "none" is a valid CSS value for `background` shorthand (resets all background layers)
+// but is NOT a valid value for `background-color` (which only accepts <color> values)
+const ResetBackground = styled.div`
+  background: none;
+  padding: 8px;
+`;
+
 export const App = () => (
   <div>
     <MixedBackground $useGradient={false}>Solid Color</MixedBackground>
@@ -21,5 +29,6 @@ export const App = () => (
     <NestedColorBackground $color="red">Red</NestedColorBackground>
     <NestedColorBackground $color="blue">Blue</NestedColorBackground>
     <NestedColorBackground $color="default">Default</NestedColorBackground>
+    <ResetBackground>No Background</ResetBackground>
   </div>
 );

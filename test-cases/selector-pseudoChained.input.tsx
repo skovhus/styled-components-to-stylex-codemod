@@ -38,11 +38,22 @@ const Checkbox = styled.input`
   }
 `;
 
+// Border on :not(:last-child) with interpolation — should retain the pseudo condition
+const ListItem = styled.div`
+  padding: 8px;
+  &:not(:last-child) {
+    border-bottom: 1px solid ${(props) => props.theme.color.bgBorderSolid};
+  }
+`;
+
 export const App = () => (
   <div>
     <Input placeholder="Focus me..." />
     <Input disabled placeholder="Disabled" />
     <Checkbox type="checkbox" />
     <Checkbox type="checkbox" disabled />
+    <ListItem>Item 1</ListItem>
+    <ListItem>Item 2</ListItem>
+    <ListItem>Item 3 (no border)</ListItem>
   </div>
 );

@@ -1,6 +1,7 @@
 import React from "react";
 import * as stylex from "@stylexjs/stylex";
 import { mergedSx } from "./lib/mergedSx";
+import { $colors } from "./tokens.stylex";
 
 // Using !important to override inline styles or third-party CSS
 function OverrideButton(props: { style?: React.CSSProperties; children?: React.ReactNode }) {
@@ -28,6 +29,7 @@ export const App = () => (
     <a href="#" {...stylex.props(styles.importantHover)}>
       Hover me
     </a>
+    <span {...stylex.props(styles.overrideText)}>Override text</span>
   </div>
 );
 
@@ -68,5 +70,10 @@ const styles = stylex.create({
       default: "none",
       ":hover": "underline !important",
     },
+  },
+  // Important on interpolated theme values — both properties should keep !important
+  overrideText: {
+    color: `${$colors.labelMuted} !important`,
+    fontSize: "10px !important",
   },
 });

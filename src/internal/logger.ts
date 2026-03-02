@@ -31,7 +31,7 @@ export type WarningType =
   | "Component selectors like `${OtherComponent}:hover &` are not directly representable in StyleX. Manual refactor is required"
   | "Conditional `css` block: !important is not supported in StyleX"
   | "Conditional `css` block: @-rules (e.g., @media, @supports) are not supported"
-  | "CSS block contains unsupported at-rule (only @media is supported; @supports, @container, etc. require manual handling)"
+  | "CSS block contains unsupported at-rule (only @media and @container are supported; @supports, etc. require manual handling)"
   | "Conditional `css` block: dynamic interpolation could not be resolved to a single component prop"
   | "Conditional `css` block: failed to parse expression"
   | "Conditional `css` block: missing CSS property name"
