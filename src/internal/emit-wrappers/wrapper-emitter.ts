@@ -876,7 +876,7 @@ export class WrapperEmitter {
         lines.push("forwardedAs?: React.ElementType");
         continue;
       }
-      if (attr === "className" || attr === "style") {
+      if (attr === "className" || attr === "style" || attr === "ref") {
         continue;
       }
       if (skipProps?.has(attr)) {
