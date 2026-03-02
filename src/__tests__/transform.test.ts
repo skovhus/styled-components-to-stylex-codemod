@@ -33,6 +33,11 @@ const __dirname = dirname(fileURLToPath(import.meta.url));
 
 const testCasesDir = join(__dirname, "..", "..", "test-cases");
 const j = jscodeshift.withParser("tsx");
+const testCasesTypeHelpersOutputPath = join(testCasesDir, "stylex-codemod.d.ts");
+const testCasesTypeHelpersOptions: Partial<TransformOptions> = {
+  typeHelpersModuleSpecifier: "./stylex-codemod",
+  typeHelpersOutputFilePath: testCasesTypeHelpersOutputPath,
+};
 
 type FixtureCase = {
   name: string;
@@ -168,6 +173,7 @@ function runTransform(
 ): string {
   const opts: TransformOptions = {
     adapter: fixtureAdapter,
+    ...testCasesTypeHelpersOptions,
     ...options,
   };
   const result = applyTransform(transform, opts, { source, path: filePath }, { parser });
@@ -187,6 +193,7 @@ function runTransformWithDiagnostics(
 ): ReturnType<typeof transformWithWarnings> {
   const opts: TransformOptions = {
     adapter: fixtureAdapter,
+    ...testCasesTypeHelpersOptions,
     ...options,
   };
   const jWithParser = jscodeshift.withParser(parser);

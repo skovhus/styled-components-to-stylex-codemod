@@ -25,17 +25,28 @@ const testCases = process.argv.slice(2).length > 0 ? process.argv.slice(2) : def
 
 const projectRoot = join(import.meta.dirname, "..");
 const testCasesDir = join(projectRoot, "test-cases");
+const testCasesTypeHelpersModuleSpecifier = "./stylex-codemod";
+const testCasesTypeHelpersOutputPath = join(testCasesDir, "stylex-codemod.d.ts");
 
 for (const name of testCases) {
   const inputPath = join(testCasesDir, `${name}.input.tsx`);
   const input = readFileSync(inputPath, "utf8");
+  const typeHelperFiles = new Map<string, string>();
   const result = applyTransform(
     transform,
-    { adapter: fixtureAdapter },
+    {
+      adapter: fixtureAdapter,
+      typeHelperFiles,
+      typeHelpersModuleSpecifier: testCasesTypeHelpersModuleSpecifier,
+      typeHelpersOutputFilePath: testCasesTypeHelpersOutputPath,
+    },
     { source: input, path: inputPath },
     { parser: "tsx" },
   );
   writeFileSync(join(testCasesDir, `${name}.actual.tsx`), result);
+  for (const [dtsPath, content] of typeHelperFiles) {
+    writeFileSync(dtsPath, content);
+  }
 
   // oxlint-disable-next-line no-console
   console.log(`Wrote ${name}.actual.tsx`);

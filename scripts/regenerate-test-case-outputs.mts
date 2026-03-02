@@ -38,6 +38,8 @@ const [
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const repoRoot = join(__dirname, "..");
 const testCasesDir = join(repoRoot, "test-cases");
+const testCasesTypeHelpersModuleSpecifier = "./stylex-codemod";
+const testCasesTypeHelpersOutputPath = join(testCasesDir, "stylex-codemod.d.ts");
 
 // Test cases that use the app-like adapter (styleMerger: null) to reproduce
 // real-world TS errors with the verbose className/style merging pattern.
@@ -91,9 +93,17 @@ async function updateFixture(name: string, ext: string) {
     componentsNeedingGlobalSelectorBridge: prepassResult.componentsNeedingGlobalSelectorBridge,
   };
   const sidecarFiles = new Map<string, string>();
+  const typeHelperFiles = new Map<string, string>();
   const result = applyTransform(
     transform,
-    { adapter, crossFilePrepassResult, sidecarFiles },
+    {
+      adapter,
+      crossFilePrepassResult,
+      sidecarFiles,
+      typeHelperFiles,
+      typeHelpersModuleSpecifier: testCasesTypeHelpersModuleSpecifier,
+      typeHelpersOutputFilePath: testCasesTypeHelpersOutputPath,
+    },
     { source: input, path: inputPath },
     { parser },
   );
@@ -103,6 +113,9 @@ async function updateFixture(name: string, ext: string) {
   // Write sidecar .stylex.ts files (defineMarker declarations)
   for (const [sidecarPath, content] of sidecarFiles) {
     await writeFile(sidecarPath, content, "utf-8");
+  }
+  for (const [dtsPath, content] of typeHelperFiles) {
+    await writeFile(dtsPath, content, "utf-8");
   }
 
   return outputPath;
