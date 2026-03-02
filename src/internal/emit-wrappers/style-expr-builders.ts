@@ -343,12 +343,7 @@ export function buildVariantDimensionLookups(
       if (dim.defaultValue && dim.isOptional && propDefaults) {
         propDefaults.set(dim.propName, dim.defaultValue);
       }
-      // When the prop is untyped (any), TypeScript rejects computed index access.
-      // Use `as keyof typeof variantsObj` to satisfy the type checker.
-      const indexExpr = dim.needsKeyofCast
-        ? buildKeyofTypeofCast(j, propId, dim.variantObjectName)
-        : propId;
-      const lookup = j.memberExpression(variantsId, indexExpr, true /* computed */);
+      const lookup = j.memberExpression(variantsId, propId, true /* computed */);
       // Guard optional props without defaults to avoid `undefined` index type error
       if (dim.isOptional && !dim.defaultValue) {
         const guard = j.binaryExpression("!=", j.identifier(dim.propName), j.literal(null));

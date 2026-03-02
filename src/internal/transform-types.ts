@@ -134,11 +134,11 @@ export type VariantDimension = {
    * Used to preserve CSS cascade order when interleaving with other variant/styleFn entries. */
   sourceOrder?: number;
   /**
-   * When true, the emitter wraps the computed index with `as keyof typeof variantsObj`.
-   * Set for dimensions from base-component resolution where the prop type is inferred as `any`
-   * (no explicit styled-component props type), since TypeScript rejects `obj[anyProp]`.
+   * When true, the prop type is derived from the variant object (`keyof typeof variantsObj`)
+   * instead of `any`, eliminating the need for runtime `as keyof typeof` casts.
+   * Set for dimensions from base-component resolution where the variant values are known.
    */
-  needsKeyofCast?: boolean;
+  propTypeFromKeyof?: boolean;
 };
 
 /** A single boolean-gated style entry from base-component singleton prop folding. */

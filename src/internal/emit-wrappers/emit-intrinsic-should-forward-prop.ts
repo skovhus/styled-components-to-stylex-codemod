@@ -10,7 +10,11 @@ import { buildStyleFnConditionExpr } from "../utilities/jscodeshift-utils.js";
 import { type ExpressionKind, type InlineStyleProp, type WrapperPropDefaults } from "./types.js";
 import { SX_PROP_TYPE_TEXT, type JsxAttr, type StatementKind } from "./wrapper-emitter.js";
 import { emitStyleMerging } from "./style-merger.js";
-import { sortVariantEntriesBySpecificity, VOID_TAGS } from "./type-helpers.js";
+import {
+  buildVariantDimPropTypeMap,
+  sortVariantEntriesBySpecificity,
+  VOID_TAGS,
+} from "./type-helpers.js";
 import { withLeadingComments } from "./comments.js";
 import { getCompoundVariantWhenKeys, type EmitIntrinsicContext } from "./emit-intrinsic-helpers.js";
 import { appendPseudoAliasStyleArgs } from "./emit-intrinsic-simple.js";
@@ -164,9 +168,15 @@ export function emitShouldForwardPropWrappers(ctx: EmitIntrinsicContext): void {
           ? `${explicit} & { [K in \`$\${string}\`]?: any }`
           : explicit;
       }
+      const variantDimByProp = buildVariantDimPropTypeMap(d);
       const lines: string[] = [];
       for (const p of extraProps) {
         if (!isValidIdentifier(p)) {
+          continue;
+        }
+        const variantObj = variantDimByProp.get(p);
+        if (variantObj) {
+          lines.push(`  ${p}?: keyof typeof ${variantObj};`);
           continue;
         }
         const attrType = p.startsWith("data-") ? "string" : "any";

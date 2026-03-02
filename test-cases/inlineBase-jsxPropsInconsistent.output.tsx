@@ -2,19 +2,14 @@ import * as React from "react";
 import * as stylex from "@stylexjs/stylex";
 
 type ContainerProps = React.PropsWithChildren<{
-  align?: any;
+  align?: keyof typeof containerAlignVariants;
 }>;
 
 function Container(props: ContainerProps) {
   const { children, align } = props;
 
   return (
-    <div
-      {...stylex.props(
-        styles.container,
-        align != null && containerAlignVariants[align as keyof typeof containerAlignVariants],
-      )}
-    >
+    <div {...stylex.props(styles.container, align != null && containerAlignVariants[align])}>
       {children}
     </div>
   );

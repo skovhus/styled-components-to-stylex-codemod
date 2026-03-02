@@ -15,7 +15,11 @@ import {
 } from "./types.js";
 import { SX_PROP_TYPE_TEXT, type JsxAttr, type StatementKind } from "./wrapper-emitter.js";
 import { emitStyleMerging } from "./style-merger.js";
-import { sortVariantEntriesBySpecificity, VOID_TAGS } from "./type-helpers.js";
+import {
+  buildVariantDimPropTypeMap,
+  sortVariantEntriesBySpecificity,
+  VOID_TAGS,
+} from "./type-helpers.js";
 import { withLeadingCommentsOnFirstFunction } from "./comments.js";
 import { getCompoundVariantWhenKeys, type EmitIntrinsicContext } from "./emit-intrinsic-helpers.js";
 import { cloneAstNode, collectIdentifiers } from "../utilities/jscodeshift-utils.js";
@@ -630,7 +634,13 @@ export function emitSimpleExportedIntrinsicWrappers(ctx: EmitIntrinsicContext): 
         if (filtered.length === 0) {
           return "{}";
         }
+        const variantDimByProp = buildVariantDimPropTypeMap(d);
+
         const lines = filtered.map((k) => {
+          const variantObj = variantDimByProp.get(k);
+          if (variantObj) {
+            return `  ${k}?: keyof typeof ${variantObj};`;
+          }
           const attrType = k.startsWith("data-") ? "string" : "any";
           return `  ${k}?: ${attrType};`;
         });

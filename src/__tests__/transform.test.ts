@@ -3657,8 +3657,10 @@ export function App() {
     expect(result.code).not.toBeNull();
     const code = result.code ?? "";
     expect(code).toContain("containerGapVariants");
-    expect(code).toContain('"8"');
-    expect(code).toContain('"16"');
+    // Numeric variant keys are emitted as number literals (not strings)
+    // so `keyof typeof` yields number types matching JSX `gap={8}`.
+    expect(code).toMatch(/\b8:\s*\{/);
+    expect(code).toMatch(/\b16:\s*\{/);
     expect(code).toContain("color");
   });
 });
