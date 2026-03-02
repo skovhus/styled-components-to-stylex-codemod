@@ -425,31 +425,54 @@ function buildInlineResolverVariantDimensions(args: {
     if (changedProps.length === 0) {
       continue;
     }
-    if (changedProps.length > 1) {
-      // Ambiguous multi-prop interactions are out of scope for the simple resolver pass.
-      return { kind: "bail" };
+
+    // Decompose multi-prop diffs into independent per-prop entries.
+    // Single-prop case is handled inline (no decomposition call needed).
+    let perPropEntries: Array<{ propName: string; propSxDiff: Record<string, unknown> }>;
+    if (changedProps.length === 1) {
+      perPropEntries = [{ propName: changedProps[0]!, propSxDiff: sxDiff }];
+    } else {
+      const decomposed = decomposeMultiPropSxDiff({
+        ctx,
+        decl,
+        resolveBaseComponent,
+        importSource,
+        importedName,
+        baseStaticProps,
+        baseSx,
+        baseMixinKeys,
+        baseTagName: baseResult.tagName,
+        siteProps,
+        changedProps,
+        combinedSxDiff: sxDiff,
+      });
+      if (decomposed === "bail") {
+        return { kind: "bail" };
+      }
+      perPropEntries = decomposed;
     }
 
-    const propName = changedProps[0]!;
-    const value = siteProps[propName];
-    if (!isStaticLiteral(value)) {
-      return { kind: "bail" };
-    }
-    if (typeof value === "boolean") {
-      if (!bucketsByProp.has(propName)) {
-        booleanOnlyProps.add(propName);
+    for (const { propName, propSxDiff } of perPropEntries) {
+      const value = siteProps[propName];
+      if (!isStaticLiteral(value)) {
+        return { kind: "bail" };
       }
-    } else {
-      booleanOnlyProps.delete(propName);
+      if (typeof value === "boolean") {
+        if (!bucketsByProp.has(propName)) {
+          booleanOnlyProps.add(propName);
+        }
+      } else {
+        booleanOnlyProps.delete(propName);
+      }
+      const variantKey = String(value);
+      const byValue = bucketsByProp.get(propName) ?? new Map<string, Record<string, unknown>>();
+      const existing = byValue.get(variantKey);
+      if (existing && serializeRecord(existing) !== serializeRecord(propSxDiff)) {
+        return { kind: "bail" };
+      }
+      byValue.set(variantKey, propSxDiff);
+      bucketsByProp.set(propName, byValue);
     }
-    const variantKey = String(value);
-    const byValue = bucketsByProp.get(propName) ?? new Map<string, Record<string, unknown>>();
-    const existing = byValue.get(variantKey);
-    if (existing && serializeRecord(existing) !== serializeRecord(sxDiff)) {
-      return { kind: "bail" };
-    }
-    byValue.set(variantKey, sxDiff);
-    bucketsByProp.set(propName, byValue);
   }
 
   const dimensions: VariantDimension[] = [];
@@ -528,11 +551,11 @@ function buildInlineResolverVariantDimensions(args: {
       propName,
       variantObjectName: `${decl.styleKey}${toSuffixFromProp(propName)}Variants`,
       variants,
-      // Base-component-resolved props have no explicit type in the styled declaration, so
-      // the emitter falls back to `any`. We need `as keyof typeof` to satisfy TypeScript,
-      // and `isOptional` to emit the null guard (the prop may not be passed).
+      // Base-component-resolved props have no explicit type in the styled declaration.
+      // Derive the prop type from the variant object (`keyof typeof`) so the emitter
+      // produces precise types and no runtime cast is needed.
       isOptional: true,
-      needsKeyofCast: true,
+      propTypeFromKeyof: true,
     });
   }
 
@@ -664,6 +687,124 @@ function getChangedConsumedProps(
     }
   }
   return changed;
+}
+
+/**
+ * Attempts to decompose a multi-prop sx diff into independent per-prop diffs.
+ *
+ * For each changed prop, creates a single-prop probe (baseStaticProps + just that prop),
+ * resolves it, and computes its individual sx diff. Then verifies:
+ * 1. Each probe has the same tagName and mixin set as the base
+ * 2. CSS key independence (no overlap between per-prop diffs)
+ * 3. Additivity (union of per-prop diffs === the combined diff)
+ *
+ * Returns the per-prop entries on success, or "bail" if any check fails.
+ */
+function decomposeMultiPropSxDiff(args: {
+  ctx: TransformContext;
+  decl: StyledDecl;
+  resolveBaseComponent: NonNullable<TransformContext["resolveBaseComponent"]>;
+  importSource: string;
+  importedName: string;
+  baseStaticProps: Record<string, ResolveBaseComponentStaticValue>;
+  baseSx: Record<string, string>;
+  baseMixinKeys: Set<string>;
+  baseTagName: string;
+  siteProps: Record<string, ResolveBaseComponentStaticValue>;
+  changedProps: string[];
+  combinedSxDiff: Record<string, unknown>;
+}): Array<{ propName: string; propSxDiff: Record<string, unknown> }> | "bail" {
+  const {
+    ctx,
+    decl,
+    resolveBaseComponent,
+    importSource,
+    importedName,
+    baseStaticProps,
+    baseSx,
+    baseMixinKeys,
+    baseTagName,
+    siteProps,
+    changedProps,
+    combinedSxDiff,
+  } = args;
+
+  const perPropDiffs: Array<{ propName: string; propSxDiff: Record<string, unknown> }> = [];
+  const allCssKeys = new Set<string>();
+
+  for (const prop of changedProps) {
+    // Single-prop probe: base props + just this one changed prop
+    const probeProps: Record<string, ResolveBaseComponentStaticValue> = {
+      ...baseStaticProps,
+      [prop]: siteProps[prop]!,
+    };
+
+    const probeResult = callResolveBaseComponentSafely({
+      ctx,
+      decl,
+      resolveBaseComponent,
+      importSource,
+      importedName,
+      staticProps: probeProps,
+      phase: "site",
+    });
+    if (!probeResult || !isValidBaseResolutionResult(probeResult)) {
+      return "bail";
+    }
+
+    // Verify same tagName
+    if (probeResult.tagName !== baseTagName) {
+      return "bail";
+    }
+
+    // Verify same mixin set
+    const probeMixinKeys = new Set((probeResult.mixins ?? []).map(toMixinKey));
+    if (probeMixinKeys.size !== baseMixinKeys.size) {
+      return "bail";
+    }
+    for (const key of baseMixinKeys) {
+      if (!probeMixinKeys.has(key)) {
+        return "bail";
+      }
+    }
+
+    const propDiff = diffSx(baseSx, probeResult.sx ?? {});
+    if (propDiff === "bail") {
+      return "bail";
+    }
+
+    // Check CSS key independence: no overlap with any previously seen keys
+    for (const cssKey of Object.keys(propDiff)) {
+      if (allCssKeys.has(cssKey)) {
+        return "bail";
+      }
+      allCssKeys.add(cssKey);
+    }
+
+    perPropDiffs.push({ propName: prop, propSxDiff: propDiff });
+  }
+
+  // Verify additivity: union of per-prop diffs must equal the combined diff
+  const combinedKeys = Object.keys(combinedSxDiff).sort();
+  const unionKeys = [...allCssKeys].sort();
+  if (combinedKeys.length !== unionKeys.length) {
+    return "bail";
+  }
+  for (let i = 0; i < combinedKeys.length; i++) {
+    if (combinedKeys[i] !== unionKeys[i]) {
+      return "bail";
+    }
+  }
+  // Verify values match
+  for (const { propSxDiff } of perPropDiffs) {
+    for (const [cssKey, cssVal] of Object.entries(propSxDiff)) {
+      if (combinedSxDiff[cssKey] !== cssVal) {
+        return "bail";
+      }
+    }
+  }
+
+  return perPropDiffs;
 }
 
 function diffSx(

@@ -2,19 +2,14 @@ import * as React from "react";
 import * as stylex from "@stylexjs/stylex";
 
 type ContainerProps = React.PropsWithChildren<{
-  gap?: any;
+  gap?: keyof typeof containerGapVariants;
 }>;
 
 function Container(props: ContainerProps) {
   const { children, gap } = props;
 
   return (
-    <div
-      {...stylex.props(
-        styles.container,
-        gap != null && containerGapVariants[gap as keyof typeof containerGapVariants],
-      )}
-    >
+    <div {...stylex.props(styles.container, gap != null && containerGapVariants[gap])}>
       {children}
     </div>
   );
@@ -43,10 +38,11 @@ const styles = stylex.create({
 });
 
 const containerGapVariants = stylex.create({
-  "8": {
+  8: {
     gap: "8px",
   },
-  "16": {
+
+  16: {
     gap: "16px",
   },
 });

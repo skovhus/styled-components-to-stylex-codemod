@@ -538,10 +538,5 @@ function buildInlineVariantLookupFromAttr(
   if (value === undefined) {
     return undefined;
   }
-  const variantKey = String(value);
-  return j.memberExpression(
-    j.identifier(variantObjectName),
-    j.literal(variantKey),
-    true /* computed */,
-  );
+  return j.memberExpression(j.identifier(variantObjectName), j.literal(value), true /* computed */);
 }

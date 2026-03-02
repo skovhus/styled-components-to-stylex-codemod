@@ -671,10 +671,14 @@ export function emitStylesAndImports(ctx: TransformContext): { emptyStyleKeys: S
  */
 function emitVariantDimensionDecl(j: any, dimension: VariantDimension): any {
   const properties = Object.entries(dimension.variants).map(([variantValue, styles]) => {
-    // Use identifier for valid JS identifiers, string literal for hyphenated/special keys
+    // Use identifier for valid JS identifiers, numeric literal for numeric strings
+    // (so `keyof typeof` yields number types matching JSX usage like `gap={8}`),
+    // and string literal for hyphenated/special keys.
     const key = /^[a-zA-Z_$][a-zA-Z0-9_$]*$/.test(variantValue)
       ? j.identifier(variantValue)
-      : j.literal(variantValue);
+      : isFiniteNumericString(variantValue)
+        ? j.literal(Number(variantValue))
+        : j.literal(variantValue);
     return j.property(
       "init",
       key,
@@ -694,6 +698,19 @@ function emitVariantDimensionDecl(j: any, dimension: VariantDimension): any {
   ]);
 
   return variantDecl;
+}
+
+/**
+ * Returns true when `s` is a canonical numeric string (round-trips through Number).
+ * Rejects non-canonical forms like "08", "0x10", "1e2" where `String(Number(s)) !== s`,
+ * since emitting those as numeric keys would change the lookup semantics.
+ */
+function isFiniteNumericString(s: string): boolean {
+  if (s === "") {
+    return false;
+  }
+  const n = Number(s);
+  return Number.isFinite(n) && String(n) === s;
 }
 
 // ---------------------------------------------------------------------------

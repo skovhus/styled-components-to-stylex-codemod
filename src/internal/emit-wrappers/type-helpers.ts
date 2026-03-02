@@ -82,6 +82,19 @@ export const TAG_TO_HTML_ELEMENT: Record<string, string> = {
   use: "SVGUseElement",
 };
 
+/**
+ * Builds a map from prop name to variant object name for dimensions
+ * that derive their prop type via `keyof typeof variantObj`.
+ * Shared by emit-intrinsic-simple and emit-intrinsic-should-forward-prop.
+ */
+export function buildVariantDimPropTypeMap(d: StyledDecl): Map<string, string> {
+  return new Map(
+    (d.variantDimensions ?? [])
+      .filter((dim) => dim.propTypeFromKeyof)
+      .map((dim) => [dim.propName, dim.variantObjectName]),
+  );
+}
+
 export function getAttrsAsString(d: StyledDecl): string | null {
   const v = d.attrsInfo?.staticAttrs?.as;
   return typeof v === "string" ? v : null;

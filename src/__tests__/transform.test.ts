@@ -3657,9 +3657,45 @@ export function App() {
     expect(result.code).not.toBeNull();
     const code = result.code ?? "";
     expect(code).toContain("containerGapVariants");
-    expect(code).toContain('"8"');
-    expect(code).toContain('"16"');
+    // Numeric variant keys are emitted as number literals (not strings)
+    // so `keyof typeof` yields number types matching JSX `gap={8}`.
+    expect(code).toMatch(/\b8:\s*\{/);
+    expect(code).toMatch(/\b16:\s*\{/);
     expect(code).toContain("color");
+  });
+
+  it("should preserve non-canonical numeric-like variant keys as strings", () => {
+    const source = `
+import styled from "styled-components";
+import { Flex } from "./lib/inline-base-flex";
+
+const Container = styled(Flex)\`
+  padding: 4px;
+\`;
+
+export function App() {
+  return (
+    <>
+      <Container gap="08">A</Container>
+      <Container gap="16">B</Container>
+    </>
+  );
+}
+`;
+
+    const result = transformWithWarnings(
+      { source, path: join(testCasesDir, "inlineBase-nonCanonicalNumericKeys.input.tsx") },
+      { jscodeshift: j, j, stats: () => {}, report: () => {} },
+      { adapter: fixtureAdapter },
+    );
+
+    expect(result.code).not.toBeNull();
+    const code = result.code ?? "";
+    // "08" must NOT be converted to numeric key 8, since String(Number("08")) !== "08".
+    // The key must remain the string "08" so lookups like variants["08"] work.
+    expect(code).toMatch(/"08":\s*\{/);
+    // "16" is canonical (String(Number("16")) === "16") so it can be a numeric key
+    expect(code).toMatch(/\b16:\s*\{/);
   });
 });
 
