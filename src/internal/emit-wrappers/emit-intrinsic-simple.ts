@@ -77,6 +77,7 @@ export function emitSimpleWithConfigWrappers(ctx: EmitIntrinsicContext): void {
     const allowStyleProp = emitter.shouldAllowStyleProp(d);
     const allowSxProp = emitter.shouldAllowSxProp(d);
     const allowAsProp = shouldAllowAsProp(d, tagName);
+    const useSlimType = !(d.isExported ?? false) && !supportsExternalStyles && !d.usedAsValue;
     // Determine whether the component will forward ref (via explicit forwarding
     // and/or {...rest}) so we can include ref in the narrow type only when it's
     // actually forwarded.
@@ -115,6 +116,7 @@ export function emitSimpleWithConfigWrappers(ctx: EmitIntrinsicContext): void {
             allowStyleProp,
             allowSxProp,
             includeRef: willForwardRef,
+            forceNarrow: useSlimType,
           })
         : "{}";
 
@@ -489,16 +491,20 @@ export function emitSimpleExportedIntrinsicWrappers(ctx: EmitIntrinsicContext): 
     // d.isExported is already set from exportedComponents during analyze-before-emit
     const isExportedComponent = d.isExported ?? false;
     const usePolymorphicPattern = allowAsProp && isExportedComponent;
-    // Include ref in narrow type only when the component will forward it
-    // (via explicit forwarding and/or {...rest}).
-    // When needsRestForType is true, the broad type (ComponentProps<"tag">) is used instead
-    // and ref is included naturally. These conditions cover the gap where shouldIncludeRest
-    // is true but needsRestForType is false.
     const willForwardRef =
       (d.supportsRefProp ?? false) ||
       isExportedComponent ||
       hasComplementaryVariantPairs(d) ||
       !!d.variantDimensions?.some((dim) => dim.namespaceBooleanProp);
+    // Non-exported components use slim literal types listing only actually-used
+    // props instead of the broad React.ComponentProps<"tag">.
+    // Disable when defaultAttrs reference element props (e.g. tabIndex: props.tabIndex ?? 0)
+    // because those props need to be in the type even if no callsite passes them.
+    const useSlimType =
+      !isExportedComponent &&
+      !(d.supportsExternalStyles ?? false) &&
+      !d.usedAsValue &&
+      !hasElementPropsInDefaultAttrs(d);
     {
       const explicit = emitter.stringifyTsType(d.propsType);
       const explicitPropNames = d.propsType
@@ -512,6 +518,7 @@ export function emitSimpleExportedIntrinsicWrappers(ctx: EmitIntrinsicContext): 
         allowSxProp,
         skipProps: explicitPropNames,
         includeRef: willForwardRef,
+        forceNarrow: useSlimType,
       });
 
       const variantPropsForType = new Set([
@@ -626,9 +633,17 @@ export function emitSimpleExportedIntrinsicWrappers(ctx: EmitIntrinsicContext): 
 
       const typeText = (() => {
         if (!explicit) {
-          // If we forward `...rest`, prefer full intrinsic props typing so common
-          // props (e.g. onChange) get correct types. Keep any style-driving custom
-          // props intersected in so the wrapper can consume them.
+          if (useSlimType) {
+            // Non-exported: slim literal listing only actually-used props,
+            // intersected with any custom style-driving props.
+            return emitter.joinIntersection(
+              baseTypeText,
+              customStyleDrivingPropsTypeText,
+              sxTypeIntersection,
+            );
+          }
+          // Exported / external: prefer full intrinsic props typing so common
+          // props (e.g. onChange) get correct types when forwarding `...rest`.
           return needsRestForType
             ? emitter.joinIntersection(
                 extendBaseTypeText,
@@ -636,6 +651,11 @@ export function emitSimpleExportedIntrinsicWrappers(ctx: EmitIntrinsicContext): 
                 sxTypeIntersection,
               )
             : baseTypeText;
+        }
+        if (useSlimType) {
+          // Non-exported with explicit type: intersect the user type with only
+          // the actually-used element props (children, style, ref, etc.)
+          return emitter.joinIntersection(baseTypeText, explicit, sxTypeIntersection);
         }
         if (VOID_TAGS.has(tagName)) {
           return emitter.joinIntersection(extendBaseTypeText, explicit, sxTypeIntersection);

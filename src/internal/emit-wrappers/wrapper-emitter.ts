@@ -826,9 +826,24 @@ export class WrapperEmitter {
     skipProps?: Set<string>;
     /** Include ref in the narrow type. Only set to true when the component forwards ref (e.g., via {...rest}). */
     includeRef?: boolean;
+    /**
+     * When true, return a slim object literal for ALL tags (including void tags
+     * like input/img) listing only the props that are actually used at callsites.
+     * When false (default), void tags fall back to the broad element-attributes
+     * type (e.g. `React.InputHTMLAttributes<…>`).
+     */
+    forceNarrow?: boolean;
   }): string {
-    const { d, tagName, allowClassNameProp, allowStyleProp, allowSxProp, skipProps, includeRef } =
-      args;
+    const {
+      d,
+      tagName,
+      allowClassNameProp,
+      allowStyleProp,
+      allowSxProp,
+      skipProps,
+      includeRef,
+      forceNarrow,
+    } = args;
     const used = this.getUsedAttrs(d.localName);
     const needsBroadAttrs = used.has("*") || !!(d as any).usedAsValue;
 
@@ -882,6 +897,11 @@ export class WrapperEmitter {
           : "{}";
 
     if (!needsBroadAttrs) {
+      // When forceNarrow is set, return the slim literal for all tags
+      // (including void tags like input/img).
+      if (forceNarrow) {
+        return literal;
+      }
       if (VOID_TAGS.has(tagName)) {
         const base = this.reactIntrinsicAttrsType(tagName);
         const omitted: string[] = [];
@@ -897,7 +917,6 @@ export class WrapperEmitter {
         }
         return baseType;
       }
-      // For non-void tags, children is already included in `lines` — return literal directly.
       return literal;
     }
 

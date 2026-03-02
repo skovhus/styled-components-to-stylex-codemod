@@ -143,6 +143,10 @@ export function emitShouldForwardPropWrappers(ctx: EmitIntrinsicContext): void {
       : [];
     const knownPrefixPropsSet = new Set(knownPrefixProps);
 
+    const isExportedComponent = d.isExported ?? false;
+    const useSlimType =
+      !isExportedComponent && !(d.supportsExternalStyles ?? false) && !d.usedAsValue;
+
     const explicit = emitter.stringifyTsType(d.propsType);
     // Extract prop names from explicit type to avoid duplicating them in inferred type
     const explicitPropNames = d.propsType
@@ -189,6 +193,20 @@ export function emitShouldForwardPropWrappers(ctx: EmitIntrinsicContext): void {
         ) {
           return emitter.withChildren(extrasTypeText);
         }
+        if (useSlimType) {
+          // Non-exported: intersect explicit type with slim literal of used props
+          const narrowBase = emitter.inferredIntrinsicPropsTypeText({
+            d,
+            tagName,
+            allowClassNameProp,
+            allowStyleProp,
+            allowSxProp,
+            skipProps: explicitPropNames,
+            includeRef: d.supportsRefProp ?? false,
+            forceNarrow: true,
+          });
+          return emitter.joinIntersection(narrowBase, extrasTypeText);
+        }
         if (VOID_TAGS.has(tagName)) {
           const base = emitter.reactIntrinsicAttrsType(tagName);
           const omitted: string[] = [];
@@ -219,9 +237,9 @@ export function emitShouldForwardPropWrappers(ctx: EmitIntrinsicContext): void {
         allowStyleProp,
         allowSxProp,
         skipProps: explicitPropNames,
-        includeRef: true,
+        includeRef: useSlimType ? (d.supportsRefProp ?? false) : true,
+        forceNarrow: useSlimType,
       });
-      // inferredIntrinsicPropsTypeText already includes children for non-void tags
       return inferred;
     })();
     const finalTypeTextWithForwardedAs = withForwardedAsType(finalTypeText, includesForwardedAs);
@@ -251,8 +269,19 @@ export function emitShouldForwardPropWrappers(ctx: EmitIntrinsicContext): void {
     let sfpInlineTypeText: string | undefined;
     if (!allowAsProp && explicit) {
       const extendBaseTypeText = (() => {
-        // Prefer ComponentProps for intrinsic wrappers so event handlers/attrs
-        // are typed like real JSX usage (and so we can reliably omit className/style).
+        if (useSlimType) {
+          // Non-exported: slim literal of actually-used props
+          return emitter.inferredIntrinsicPropsTypeText({
+            d,
+            tagName,
+            allowClassNameProp,
+            allowStyleProp,
+            allowSxProp,
+            skipProps: explicitPropNames,
+            includeRef: d.supportsRefProp ?? false,
+            forceNarrow: true,
+          });
+        }
         const base = `React.ComponentProps<"${tagName}">`;
         const omitted: string[] = [];
         if (!allowClassNameProp) {
@@ -526,9 +555,6 @@ export function emitShouldForwardPropWrappers(ctx: EmitIntrinsicContext): void {
       ignoreTransientAttrs: true,
     });
 
-    // Skip rest spread omission for exported components - external consumers may pass additional props
-    // d.isExported is already set from exportedComponents during analyze-before-emit
-    const isExportedComponent = d.isExported ?? false;
     const shouldOmitRestSpread =
       !isExportedComponent &&
       !dropPrefix &&
