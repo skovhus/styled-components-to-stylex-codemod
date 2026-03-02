@@ -218,6 +218,12 @@ function normalizeStaticCssValueWhitespace(raw: string, propName?: string): stri
   if (propName !== "backgroundImage") {
     return raw;
   }
+  // Skip URL values — they may contain gradient-like text inside the payload
+  // (e.g., data URIs with embedded SVG or filenames like "icon-linear-gradient.svg")
+  // that should not be modified. Only normalize actual top-level gradient functions.
+  if (/^\s*url\s*\(/i.test(raw)) {
+    return raw;
+  }
   if (
     !/\b(linear|radial|conic|repeating-linear|repeating-radial|repeating-conic)-gradient\s*\(/.test(
       raw,
