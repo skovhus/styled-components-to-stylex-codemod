@@ -4,9 +4,9 @@ import { mergedSx } from "./lib/mergedSx";
 
 type SizeBoxProps<C extends React.ElementType = "div"> = Omit<
   React.ComponentPropsWithRef<C>,
-  keyof (React.ComponentProps<"div"> & { $size: number })
+  keyof ({ $size: number } & React.ComponentProps<"div">)
 > &
-  Omit<React.ComponentProps<"div"> & { $size: number }, "as"> & {
+  Omit<{ $size: number } & React.ComponentProps<"div">, "as"> & {
     sx?: stylex.StyleXStyles;
     as?: C;
   };

@@ -6,9 +6,10 @@ export enum Status {
   inactive = "inactive",
 }
 
-type IconWithTeamColorProps = Omit<React.ComponentProps<"svg">, "className" | "style"> & {
-  $color?: string;
-};
+type IconWithTeamColorProps = { $color?: string } & Omit<
+  React.ComponentProps<"svg">,
+  "className" | "style"
+>;
 
 // Styled component with conditional CSS based on prop
 // Uses ternary: props.$color ? `fill: ${props.$color};` : ""

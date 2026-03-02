@@ -143,7 +143,7 @@ export function emitSimpleWithConfigWrappers(ctx: EmitIntrinsicContext): void {
               includeRef: willForwardRef,
             });
             ctx.markNeedsReactTypeImport();
-            return emitter.joinIntersection(intrinsicBaseType, explicit);
+            return emitter.joinIntersection(explicit, intrinsicBaseType);
           }
           return explicit;
         }
@@ -669,7 +669,7 @@ export function emitSimpleExportedIntrinsicWrappers(ctx: EmitIntrinsicContext): 
           return VOID_TAGS.has(tagName) ? combined : emitter.withChildren(combined);
         }
         if (VOID_TAGS.has(tagName)) {
-          return emitter.joinIntersection(extendBaseTypeText, explicit, sxTypeIntersection);
+          return emitter.joinIntersection(explicit, extendBaseTypeText, sxTypeIntersection);
         }
         if (needsRestForType) {
           // For non-exported components that only use transient props ($-prefixed)
@@ -683,7 +683,7 @@ export function emitSimpleExportedIntrinsicWrappers(ctx: EmitIntrinsicContext): 
           ) {
             return emitter.withChildren(explicit);
           }
-          return emitter.joinIntersection(extendBaseTypeText, explicit, sxTypeIntersection);
+          return emitter.joinIntersection(explicit, extendBaseTypeText, sxTypeIntersection);
         }
         if (allowClassNameProp || allowStyleProp) {
           const extras: string[] = [];

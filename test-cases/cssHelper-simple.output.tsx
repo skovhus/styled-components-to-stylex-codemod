@@ -1,10 +1,10 @@
 import * as React from "react";
 import * as stylex from "@stylexjs/stylex";
 
-type ContainerProps = Omit<React.ComponentProps<"div">, "className" | "style"> & {
+type ContainerProps = {
   size: number;
   padding: number;
-};
+} & Omit<React.ComponentProps<"div">, "className" | "style">;
 
 export function Container(props: ContainerProps) {
   const { children, size, padding, ...rest } = props;

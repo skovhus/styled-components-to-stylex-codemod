@@ -2,9 +2,10 @@ import * as React from "react";
 import * as stylex from "@stylexjs/stylex";
 import { Browser } from "./lib/helpers";
 
-type EmojiContainerProps = Omit<React.ComponentProps<"div">, "className" | "style"> & {
-  $size: number;
-};
+type EmojiContainerProps = { $size: number } & Omit<
+  React.ComponentProps<"div">,
+  "className" | "style"
+>;
 
 /** A container for emojis that standardizes sizing across browsers */
 export function EmojiContainer(props: EmojiContainerProps) {

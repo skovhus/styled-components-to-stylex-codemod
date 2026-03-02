@@ -2,10 +2,10 @@ import * as React from "react";
 import * as stylex from "@stylexjs/stylex";
 import { mergedSx } from "./lib/mergedSx";
 
-type ColumnContainerProps = Omit<React.ComponentProps<"div">, "className"> & {
+type ColumnContainerProps = {
   $noGrowOrShrink?: boolean;
   $basis?: number;
-};
+} & Omit<React.ComponentProps<"div">, "className">;
 
 /**
  * Arrow function returns a template literal with nested conditionals.

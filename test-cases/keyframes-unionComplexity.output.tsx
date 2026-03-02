@@ -14,9 +14,9 @@ const pulse = stylex.keyframes({
 
 type LoaderCaretProps<C extends React.ElementType = "div"> = Omit<
   React.ComponentPropsWithRef<C>,
-  keyof (React.ComponentProps<"div"> & { $delay?: number })
+  keyof ({ $delay?: number } & React.ComponentProps<"div">)
 > &
-  Omit<React.ComponentProps<"div"> & { $delay?: number }, "as"> & {
+  Omit<{ $delay?: number } & React.ComponentProps<"div">, "as"> & {
     sx?: stylex.StyleXStyles;
     as?: C;
   };

@@ -27,9 +27,10 @@ export function Box(props: BoxProps) {
   );
 }
 
-type ImageProps = Omit<React.ComponentProps<"img">, "className" | "style"> & {
-  $isInactive?: boolean;
-};
+type ImageProps = { $isInactive?: boolean } & Omit<
+  React.ComponentProps<"img">,
+  "className" | "style"
+>;
 
 export function Image(props: ImageProps) {
   const { $isInactive, ...rest } = props;
