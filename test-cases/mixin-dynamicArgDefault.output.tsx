@@ -2,7 +2,9 @@ import * as React from "react";
 import * as stylex from "@stylexjs/stylex";
 import { helpers } from "./lib/helpers.stylex";
 
-type TitleTextProps = Pick<React.ComponentProps<"div">, "children"> & { $oneLine?: boolean };
+type TitleTextProps = React.PropsWithChildren<{
+  $oneLine?: boolean;
+}>;
 
 // Destructured default should preserve `undefined` semantics:
 // omitted $oneLine uses the default true branch.
@@ -21,7 +23,9 @@ function TitleText(props: TitleTextProps) {
   );
 }
 
-type ColorTitleTextProps = Pick<React.ComponentProps<"div">, "children"> & { $oneLine?: boolean };
+type ColorTitleTextProps = React.PropsWithChildren<{
+  $oneLine?: boolean;
+}>;
 
 // When the same prop also drives another interpolation, wrapper-level defaulting
 // must not be hoisted globally (it would change the second interpolation semantics).

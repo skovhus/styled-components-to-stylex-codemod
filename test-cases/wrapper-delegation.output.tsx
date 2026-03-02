@@ -14,15 +14,15 @@ export function App() {
 }
 App.displayName = "App";
 
-function Sentence(props: Pick<React.ComponentProps<"div">, "children">) {
+function Sentence(props: React.PropsWithChildren<{}>) {
   return <div {...stylex.props(styles.sentence)}>{props.children}</div>;
 }
 
-function PaddedSentence(props: Pick<React.ComponentProps<"div">, "children">) {
+function PaddedSentence(props: React.PropsWithChildren<{}>) {
   return <div {...stylex.props(styles.sentence, styles.paddedSentence)}>{props.children}</div>;
 }
 
-function PaddedMutedSentence(props: Pick<React.ComponentProps<"div">, "style" | "children">) {
+function PaddedMutedSentence(props: React.PropsWithChildren<{ style?: React.CSSProperties }>) {
   const { children, style } = props;
 
   return (

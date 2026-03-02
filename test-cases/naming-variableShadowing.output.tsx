@@ -2,7 +2,10 @@ import * as React from "react";
 import * as stylex from "@stylexjs/stylex";
 import { mergedSx } from "./lib/mergedSx";
 
-type ContainerProps = Pick<React.ComponentProps<"div">, "style" | "children"> & { align: string };
+type ContainerProps = React.PropsWithChildren<{
+  style?: React.CSSProperties;
+  align: string;
+}>;
 
 // When a local variable named `styles` exists, the generated stylex constant
 // should use a different name to avoid shadowing.

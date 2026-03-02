@@ -4,14 +4,14 @@ import { mergedSx } from "./lib/mergedSx";
 import { $colors } from "./tokens.stylex";
 
 // Using !important to override inline styles or third-party CSS
-function OverrideButton(props: Pick<React.ComponentProps<"button">, "style" | "children">) {
+function OverrideButton(props: React.PropsWithChildren<{ style?: React.CSSProperties }>) {
   const { children, style } = props;
 
   return <button {...mergedSx(styles.overrideButton, undefined, style)}>{children}</button>;
 }
 
 // Mixed important and normal
-function MixedStyles(props: Pick<React.ComponentProps<"p">, "style" | "children">) {
+function MixedStyles(props: React.PropsWithChildren<{ style?: React.CSSProperties }>) {
   const { children, style } = props;
 
   return <p {...mergedSx(styles.mixedStyles, undefined, style)}>{children}</p>;

@@ -3,7 +3,7 @@ import * as stylex from "@stylexjs/stylex";
 
 // The adjacent sibling rule appears BEFORE the base color declaration.
 // The base value must still be preserved as the default.
-function Thing(props: Pick<React.ComponentProps<"div">, "children">) {
+function Thing(props: React.PropsWithChildren<{}>) {
   return <div {...stylex.props(styles.thing, stylex.defaultMarker())}>{props.children}</div>;
 }
 

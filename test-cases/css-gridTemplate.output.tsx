@@ -1,11 +1,11 @@
 import React from "react";
 import * as stylex from "@stylexjs/stylex";
 
-function Gutter(props: Pick<React.ComponentProps<"div">, "children">) {
+function Gutter(props: React.PropsWithChildren<{}>) {
   return <div {...stylex.props(styles.gutter)}>{props.children}</div>;
 }
 
-function Code(props: Pick<React.ComponentProps<"div">, "children">) {
+function Code(props: React.PropsWithChildren<{}>) {
   return <div {...stylex.props(styles.code)}>{props.children}</div>;
 }
 

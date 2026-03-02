@@ -12,7 +12,7 @@ interface Props {
   $enabled: boolean;
 }
 
-function Container(props: Props & Pick<React.ComponentProps<"div">, "children">) {
+function Container(props: React.PropsWithChildren<Props>) {
   const { children, $collapsed, $enabled } = props;
 
   return (

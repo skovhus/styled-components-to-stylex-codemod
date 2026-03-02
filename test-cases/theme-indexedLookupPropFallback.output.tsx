@@ -5,7 +5,9 @@ import { $colors } from "./tokens.stylex";
 
 type Color = "labelBase" | "labelMuted";
 
-type ViewProps = Pick<React.ComponentProps<"div">, "children"> & { backgroundColor: Color };
+type ViewProps = React.PropsWithChildren<{
+  backgroundColor: Color;
+}>;
 
 function View(props: ViewProps) {
   const { children, backgroundColor } = props;

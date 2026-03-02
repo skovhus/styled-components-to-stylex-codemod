@@ -8,7 +8,7 @@ const styles = stylex.create({
   },
 });
 
-function StyledFallback(props: Pick<React.ComponentProps<"div">, "children">) {
+function StyledFallback(props: React.PropsWithChildren<{}>) {
   return <div {...stylex.props(styles.styledFallback)}>{props.children}</div>;
 }
 

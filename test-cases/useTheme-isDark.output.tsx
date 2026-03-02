@@ -3,7 +3,7 @@ import { useTheme } from "styled-components";
 import * as stylex from "@stylexjs/stylex";
 import { $colors } from "./tokens.stylex";
 
-function Text(props: Pick<React.ComponentProps<"span">, "children">) {
+function Text(props: React.PropsWithChildren<{}>) {
   const theme = useTheme();
 
   return (

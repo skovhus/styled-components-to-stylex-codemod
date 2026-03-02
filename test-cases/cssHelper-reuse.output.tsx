@@ -2,7 +2,9 @@ import * as React from "react";
 import * as stylex from "@stylexjs/stylex";
 import { $colors } from "./tokens.stylex";
 
-type CheckMarkProps = Pick<React.ComponentProps<"div">, "children"> & { $opaque: boolean };
+type CheckMarkProps = React.PropsWithChildren<{
+  $opaque: boolean;
+}>;
 
 function CheckMark(props: CheckMarkProps) {
   const { children, $opaque } = props;

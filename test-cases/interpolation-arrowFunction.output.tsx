@@ -1,9 +1,9 @@
 import React from "react";
 import * as stylex from "@stylexjs/stylex";
 
-type GradientBoxProps = Pick<React.ComponentProps<"div">, "children"> & {
+type GradientBoxProps = React.PropsWithChildren<{
   $direction?: "horizontal" | "vertical";
-};
+}>;
 
 // Arrow function in background (10 occurrences)
 function GradientBox(props: GradientBoxProps) {

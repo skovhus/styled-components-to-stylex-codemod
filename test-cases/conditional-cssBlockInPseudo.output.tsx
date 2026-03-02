@@ -3,7 +3,7 @@ import * as stylex from "@stylexjs/stylex";
 import { useTheme } from "styled-components";
 import { $colors } from "./tokens.stylex";
 
-function Tab(props: { "data-state"?: string } & Pick<React.ComponentProps<"button">, "children">) {
+function Tab(props: React.PropsWithChildren<{ "data-state"?: string }>) {
   const { children, ...rest } = props;
 
   const theme = useTheme();

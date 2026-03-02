@@ -2878,7 +2878,7 @@ export const App = () => <Box>Hello</Box>;
       import * as stylex from "@stylexjs/stylex";
       import { useTheme } from "styled-components";
 
-      function Box(props: Pick<React.ComponentProps<"div">, "children">) {
+      function Box(props: React.PropsWithChildren<{}>) {
         const theme = useTheme();
         return <div {...stylex.props(theme.isDark ? styles.boxDark : styles.boxLight)}>{props.children}</div>;
       }
@@ -2920,7 +2920,7 @@ export const App = () => <Box>Hello</Box>;
       import * as stylex from "@stylexjs/stylex";
       import { useTheme } from "styled-components";
 
-      function Box(props: Pick<React.ComponentProps<"div">, "children">) {
+      function Box(props: React.PropsWithChildren<{}>) {
         const theme = useTheme();
 
         return (
@@ -2968,7 +2968,7 @@ export const App = () => <Box>Hello</Box>;
       import * as stylex from "@stylexjs/stylex";
       import { useTheme } from "styled-components";
 
-      function Box(props: Pick<React.ComponentProps<"div">, "children">) {
+      function Box(props: React.PropsWithChildren<{}>) {
         const theme = useTheme();
 
         return (

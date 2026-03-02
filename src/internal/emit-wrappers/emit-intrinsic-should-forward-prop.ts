@@ -207,7 +207,8 @@ export function emitShouldForwardPropWrappers(ctx: EmitIntrinsicContext): void {
             includeRef: d.supportsRefProp ?? false,
             forceNarrow: true,
           });
-          return emitter.joinIntersection(narrowBase, extrasTypeText);
+          const combined = emitter.joinIntersection(narrowBase, extrasTypeText);
+          return VOID_TAGS.has(tagName) ? combined : emitter.withChildren(combined);
         }
         if (VOID_TAGS.has(tagName)) {
           const base = `React.ComponentProps<"${tagName}">`;
@@ -242,9 +243,11 @@ export function emitShouldForwardPropWrappers(ctx: EmitIntrinsicContext): void {
         includeRef: useSlimType ? (d.supportsRefProp ?? false) : true,
         forceNarrow: useSlimType,
       });
-      // For slim types, intersect with extrasTypeText to include
-      // style-driving props (which were excluded from skipProps/Pick).
-      return useSlimType ? emitter.joinIntersection(inferred, extrasTypeText) : inferred;
+      if (useSlimType) {
+        const combined = emitter.joinIntersection(inferred, extrasTypeText);
+        return VOID_TAGS.has(tagName) ? combined : emitter.withChildren(combined);
+      }
+      return inferred;
     })();
     const finalTypeTextWithForwardedAs = withForwardedAsType(finalTypeText, includesForwardedAs);
 
@@ -297,9 +300,12 @@ export function emitShouldForwardPropWrappers(ctx: EmitIntrinsicContext): void {
         return omitted.length ? `Omit<${base}, ${omitted.join(" | ")}>` : base;
       })();
       if (explicitIsExistingTypeRef) {
-        // User's existing type first in the intersection for readability
-        const sxPart = allowSxProp ? `{ ${SX_PROP_TYPE_TEXT} }` : undefined;
-        sfpInlineTypeText = emitter.joinIntersection(explicit, extendBaseTypeText, sxPart);
+        if (useSlimType) {
+          sfpInlineTypeText = finalTypeTextWithForwardedAs;
+        } else {
+          const sxPart = allowSxProp ? `{ ${SX_PROP_TYPE_TEXT} }` : undefined;
+          sfpInlineTypeText = emitter.joinIntersection(explicit, extendBaseTypeText, sxPart);
+        }
       } else {
         const propsTypeName = emitter.propsTypeNameFor(d.localName);
         emitter.extendExistingType(propsTypeName, extendBaseTypeText);

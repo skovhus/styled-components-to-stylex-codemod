@@ -2,7 +2,9 @@ import * as React from "react";
 import * as stylex from "@stylexjs/stylex";
 import { highlightStyles } from "./lib/helpers";
 
-type ButtonProps = Pick<React.ComponentProps<"button">, "children"> & { $active?: boolean };
+type ButtonProps = React.PropsWithChildren<{
+  $active?: boolean;
+}>;
 
 function Button(props: ButtonProps) {
   const { children, $active } = props;
@@ -24,9 +26,9 @@ function Button(props: ButtonProps) {
   );
 }
 
-type InvertedButtonProps = Pick<React.ComponentProps<"button">, "children"> & {
+type InvertedButtonProps = React.PropsWithChildren<{
   $disabled?: boolean;
-};
+}>;
 
 /**
  * Ternary with CSS in alternate branch: the guard must be negated.

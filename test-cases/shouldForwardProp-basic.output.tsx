@@ -1,10 +1,10 @@
 import * as React from "react";
 import * as stylex from "@stylexjs/stylex";
 
-type ButtonProps = Pick<React.ComponentProps<"button">, "children"> & {
+type ButtonProps = React.PropsWithChildren<{
   color?: string;
   size?: "small" | "large";
-};
+}>;
 
 // Using shouldForwardProp to filter props (v5 pattern)
 function Button(props: ButtonProps) {
@@ -37,10 +37,10 @@ function Link(props: LinkProps) {
   );
 }
 
-type BoxProps = Pick<React.ComponentProps<"div">, "children"> & {
+type BoxProps = React.PropsWithChildren<{
   $background?: string;
   $padding?: string;
-};
+}>;
 
 // Custom prop filtering logic (transient props pattern)
 function Box(props: BoxProps) {
@@ -60,11 +60,11 @@ function Box(props: BoxProps) {
   );
 }
 
-type CardProps = Pick<React.ComponentProps<"div">, "children"> & {
+type CardProps = React.PropsWithChildren<{
   variant?: "primary" | "secondary";
   elevation?: number;
   rounded?: boolean;
-};
+}>;
 
 // Filter multiple custom props
 function Card(props: CardProps) {

@@ -6,7 +6,10 @@ import * as stylex from "@stylexjs/stylex";
 import { mergedSx } from "./lib/mergedSx";
 
 function TextDividerContainer(
-  props: Pick<React.ComponentProps<"div">, "className" | "style" | "children">,
+  props: React.PropsWithChildren<{
+    className?: string;
+    style?: React.CSSProperties;
+  }>,
 ) {
   const { className, children, style } = props;
 

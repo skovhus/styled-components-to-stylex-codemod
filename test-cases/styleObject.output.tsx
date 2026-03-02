@@ -2,10 +2,11 @@ import * as React from "react";
 import * as stylex from "@stylexjs/stylex";
 import { mergedSx } from "./lib/mergedSx";
 
-type DynamicBoxProps = Pick<React.ComponentProps<"div">, "style" | "children"> & {
+type DynamicBoxProps = React.PropsWithChildren<{
+  style?: React.CSSProperties;
   $background?: string;
   $size?: string;
-};
+}>;
 
 function DynamicBox(props: DynamicBoxProps) {
   const { children, style, $background, $size } = props;

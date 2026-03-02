@@ -1,7 +1,9 @@
 import * as React from "react";
 import * as stylex from "@stylexjs/stylex";
 
-type ButtonProps = Pick<React.ComponentProps<"button">, "children"> & { color?: string };
+type ButtonProps = React.PropsWithChildren<{
+  color?: string;
+}>;
 
 // Simple renamed destructured prop with static base style
 function Button(props: ButtonProps) {
@@ -14,7 +16,9 @@ function Button(props: ButtonProps) {
   );
 }
 
-type CardProps = Pick<React.ComponentProps<"div">, "children"> & { padding?: string };
+type CardProps = React.PropsWithChildren<{
+  padding?: string;
+}>;
 
 // Destructured prop with default value
 function Card(props: CardProps) {
@@ -27,7 +31,9 @@ function Card(props: CardProps) {
   );
 }
 
-type BoxProps = Pick<React.ComponentProps<"div">, "children"> & { margin?: string };
+type BoxProps = React.PropsWithChildren<{
+  margin?: string;
+}>;
 
 // Renamed destructured prop with default value
 function Box(props: BoxProps) {

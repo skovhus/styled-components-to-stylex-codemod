@@ -893,6 +893,36 @@ export class WrapperEmitter {
       lines.push(`${this.toTypeKey(attr)}?: ${attrType}`);
     }
 
+    // Props with universal types (same on every element) can be inlined
+    // directly instead of going through Pick<ComponentProps>.  Pick is only
+    // valuable for element-specific attrs (disabled, placeholder, src, d, …).
+    // `children` uses PropsWithChildren wrapping instead of inlining.
+    const UNIVERSAL_PROP_TYPES: Record<string, string> = {
+      className: "className?: string",
+      style: "style?: React.CSSProperties",
+    };
+    // When forceNarrow AND all picked keys are universal (children, className,
+    // style), inline them and let the caller wrap with PropsWithChildren so
+    // custom props end up inside the wrapper.
+    // When NOT forceNarrow, children stays in Pick alongside other attrs.
+    const allUniversalOrChildren = pickedAttrKeys.every(
+      (k) => k in UNIVERSAL_PROP_TYPES || k === "children",
+    );
+    if (allUniversalOrChildren && (forceNarrow || !pickedAttrKeys.includes("children"))) {
+      for (const k of pickedAttrKeys) {
+        if (k in UNIVERSAL_PROP_TYPES) {
+          lines.push(UNIVERSAL_PROP_TYPES[k]!);
+        }
+      }
+      const hadChildren = pickedAttrKeys.includes("children");
+      pickedAttrKeys.length = 0;
+      // For forceNarrow: don't inline children — caller wraps with PropsWithChildren
+      // For non-forceNarrow: children wasn't present, nothing to do
+      if (!forceNarrow && hadChildren) {
+        pickedAttrKeys.push("children");
+      }
+    }
+
     const literal =
       lines.length > 1
         ? `{\n  ${lines.join(",\n  ")}\n}`
@@ -906,10 +936,11 @@ export class WrapperEmitter {
         : undefined;
 
     if (!needsBroadAttrs) {
-      // When forceNarrow is set, return the slim literal for all tags
-      // (including void tags like input/img).
+      const narrowResult = this.joinIntersection(literal, pickExpr);
+      // When forceNarrow is set, return without children — the caller wraps
+      // with PropsWithChildren after merging all type parts.
       if (forceNarrow) {
-        return this.joinIntersection(literal, pickExpr);
+        return narrowResult;
       }
       if (VOID_TAGS.has(tagName)) {
         const base = `React.ComponentProps<"${tagName}">`;
@@ -926,7 +957,7 @@ export class WrapperEmitter {
         }
         return baseType;
       }
-      return this.joinIntersection(literal, pickExpr);
+      return narrowResult;
     }
 
     const base = `React.ComponentProps<"${tagName}">`;

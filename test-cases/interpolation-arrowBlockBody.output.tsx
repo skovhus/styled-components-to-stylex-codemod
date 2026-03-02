@@ -2,7 +2,10 @@ import React from "react";
 import * as stylex from "@stylexjs/stylex";
 import { mergedSx } from "./lib/mergedSx";
 
-type BoxProps = Pick<React.ComponentProps<"div">, "style" | "children"> & { $large?: boolean };
+type BoxProps = React.PropsWithChildren<{
+  style?: React.CSSProperties;
+  $large?: boolean;
+}>;
 
 // Arrow function with block body (contains comment)
 // Should be equivalent to expression-body: ${props => props.$large ? 34 : 6}px

@@ -12,7 +12,7 @@ type ContainerProps = {
  * Test case for transitionDelay with number value.
  * The codemod should convert number 0 to "0ms" string for CSS properties.
  */
-function Container(props: ContainerProps & React.ComponentProps<"div">) {
+function Container(props: React.ComponentProps<"div"> & ContainerProps) {
   const { className, children, style, $delay, $open, ...rest } = props;
 
   return (

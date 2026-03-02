@@ -2,7 +2,9 @@ import * as React from "react";
 import * as stylex from "@stylexjs/stylex";
 import { helpers } from "./lib/helpers.stylex";
 
-type TitleTextProps = Pick<React.ComponentProps<"div">, "children"> & { $oneLine: boolean };
+type TitleTextProps = React.PropsWithChildren<{
+  $oneLine: boolean;
+}>;
 
 function TitleText(props: TitleTextProps) {
   const { children, $oneLine } = props;

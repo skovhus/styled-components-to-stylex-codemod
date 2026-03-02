@@ -23,9 +23,9 @@ function MixedBackground(props: MixedBackgroundProps) {
   );
 }
 
-type NestedColorBackgroundProps = Pick<React.ComponentProps<"div">, "children"> & {
+type NestedColorBackgroundProps = React.PropsWithChildren<{
   $color: "red" | "blue" | "default";
-};
+}>;
 
 // Nested ternary with all colors (homogeneous) but using || in the default condition
 // Tests that "!(A || B)" condition parsing produces valid identifier suffixes

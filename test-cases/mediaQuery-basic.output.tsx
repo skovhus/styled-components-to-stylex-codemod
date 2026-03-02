@@ -1,15 +1,15 @@
 import React from "react";
 import * as stylex from "@stylexjs/stylex";
 
-function Card(props: Pick<React.ComponentProps<"div">, "children">) {
+function Card(props: React.PropsWithChildren<{}>) {
   return <div {...stylex.props(styles.card)}>{props.children}</div>;
 }
 
-function CardTitle(props: Pick<React.ComponentProps<"h3">, "children">) {
+function CardTitle(props: React.PropsWithChildren<{}>) {
   return <h3 {...stylex.props(styles.cardTitle)}>{props.children}</h3>;
 }
 
-function CardText(props: Pick<React.ComponentProps<"p">, "children">) {
+function CardText(props: React.PropsWithChildren<{}>) {
   return <p {...stylex.props(styles.cardText)}>{props.children}</p>;
 }
 

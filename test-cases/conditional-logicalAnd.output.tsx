@@ -35,10 +35,10 @@ function GrayscaleImage(props: GrayscaleImageProps) {
   );
 }
 
-type DialogTextProps = Pick<React.ComponentProps<"p">, "children"> & {
+type DialogTextProps = React.PropsWithChildren<{
   $renderingContext?: "dialog" | "page";
   $lines?: number;
-};
+}>;
 
 // Pattern 3: Chained logical expressions with multiple conditions
 function DialogText(props: DialogTextProps) {

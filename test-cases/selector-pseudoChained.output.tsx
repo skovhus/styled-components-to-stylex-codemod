@@ -13,7 +13,7 @@ function Checkbox(props: Pick<React.ComponentProps<"input">, "disabled" | "type"
 }
 
 // Border on :not(:last-child) with interpolation — should retain the pseudo condition
-function ListItem(props: Pick<React.ComponentProps<"div">, "children">) {
+function ListItem(props: React.PropsWithChildren<{}>) {
   return <div {...stylex.props(styles.listItem)}>{props.children}</div>;
 }
 

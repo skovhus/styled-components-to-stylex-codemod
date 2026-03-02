@@ -648,12 +648,14 @@ export function emitSimpleExportedIntrinsicWrappers(ctx: EmitIntrinsicContext): 
         if (!explicit) {
           if (useSlimType) {
             // Non-exported: slim literal listing only actually-used props,
-            // intersected with any custom style-driving props.
-            return emitter.joinIntersection(
+            // intersected with any custom style-driving props.  Wrap with
+            // PropsWithChildren so custom props end up inside the wrapper.
+            const combined = emitter.joinIntersection(
               baseTypeText,
               customStyleDrivingPropsTypeText,
               sxTypeIntersection,
             );
+            return VOID_TAGS.has(tagName) ? combined : emitter.withChildren(combined);
           }
           // Exported / external: prefer full intrinsic props typing so common
           // props (e.g. onChange) get correct types when forwarding `...rest`.
@@ -667,8 +669,9 @@ export function emitSimpleExportedIntrinsicWrappers(ctx: EmitIntrinsicContext): 
         }
         if (useSlimType) {
           // Non-exported with explicit type: intersect the user type with only
-          // the actually-used element props (children, style, ref, etc.)
-          return emitter.joinIntersection(baseTypeText, explicit, sxTypeIntersection);
+          // the actually-used element props.
+          const combined = emitter.joinIntersection(baseTypeText, explicit, sxTypeIntersection);
+          return VOID_TAGS.has(tagName) ? combined : emitter.withChildren(combined);
         }
         if (VOID_TAGS.has(tagName)) {
           return emitter.joinIntersection(extendBaseTypeText, explicit, sxTypeIntersection);
@@ -778,16 +781,21 @@ export function emitSimpleExportedIntrinsicWrappers(ctx: EmitIntrinsicContext): 
             inlineTypeText = `${emitter.propsTypeNameFor(d.localName)}<C>`;
           }
         } else if (explicitIsExistingTypeRef && explicit) {
-          // User's existing type first in the intersection for readability
-          const inlineBase = emitter.joinIntersection(
-            explicit,
-            extendBaseTypeText,
-            sxTypeIntersection,
-          );
-          inlineTypeText = withForwardedAsType(
-            withSimpleAsPropType(inlineBase, allowAsProp),
-            includesForwardedAs,
-          );
+          if (useSlimType) {
+            // Non-exported: use the computed slim type directly
+            inlineTypeText = typeTextWithForwardedAs;
+          } else {
+            // User's existing type first in the intersection for readability
+            const inlineBase = emitter.joinIntersection(
+              explicit,
+              extendBaseTypeText,
+              sxTypeIntersection,
+            );
+            inlineTypeText = withForwardedAsType(
+              withSimpleAsPropType(inlineBase, allowAsProp),
+              includesForwardedAs,
+            );
+          }
         } else {
           // Use the computed typeText (which may be an intersection) as the inline type.
           inlineTypeText = withSimpleAsPropType(typeTextWithForwardedAs, allowAsProp);

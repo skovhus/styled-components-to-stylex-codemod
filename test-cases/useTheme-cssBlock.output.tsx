@@ -3,7 +3,7 @@ import * as stylex from "@stylexjs/stylex";
 import { useTheme } from "styled-components";
 import { pixelVars } from "./tokens.stylex";
 
-function Box(props: Pick<React.ComponentProps<"div">, "children">) {
+function Box(props: React.PropsWithChildren<{}>) {
   const theme = useTheme();
   return <div {...stylex.props(theme.isDark ? undefined : styles.boxLight)}>{props.children}</div>;
 }

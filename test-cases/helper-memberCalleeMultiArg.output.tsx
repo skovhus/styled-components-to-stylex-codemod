@@ -3,7 +3,7 @@ import * as stylex from "@stylexjs/stylex";
 import { useTheme } from "styled-components";
 import { ColorConverter } from "./lib/helpers";
 
-function Toggle(props: Pick<React.ComponentProps<"div">, "children">) {
+function Toggle(props: React.PropsWithChildren<{}>) {
   const theme = useTheme();
 
   return (
