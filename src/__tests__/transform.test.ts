@@ -3328,7 +3328,7 @@ export const App = () => (
       { adapter: fixtureAdapter },
     );
     expect(result.code).not.toBeNull();
-    expect(result.code).toContain("forwardedAs?: React.ElementType");
+    expect(result.code).toContain("forwardedAs?:");
     expect(result.code).toContain('as={forwardedAs ?? "span"}');
     expect(result.code).not.toContain('as="span"');
   });

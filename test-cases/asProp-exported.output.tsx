@@ -25,14 +25,13 @@ interface CustomProps {
   variant: "primary" | "secondary";
 }
 
-type StyledWrapperProps<C extends React.ElementType = typeof BaseComponent> =
-  React.ComponentPropsWithRef<typeof BaseComponent> &
-    Omit<
-      React.ComponentPropsWithRef<C>,
-      keyof React.ComponentPropsWithRef<typeof BaseComponent> | "className" | "style"
-    > & {
-      as?: C;
-    } & CustomProps;
+type StyledWrapperProps<C extends React.ElementType = typeof BaseComponent> = NoInfer<
+  Omit<
+    React.ComponentPropsWithRef<typeof BaseComponent> & CustomProps,
+    keyof Omit<React.ComponentPropsWithRef<C>, "className" | "style" | "as" | "forwardedAs">
+  > &
+    Omit<React.ComponentPropsWithRef<C>, "className" | "style" | "as" | "forwardedAs">
+> & { as?: C };
 
 export function StyledWrapper<C extends React.ElementType = typeof BaseComponent>(
   props: StyledWrapperProps<C>,

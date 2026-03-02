@@ -168,6 +168,11 @@ export function emitComponentWrappers(emitter: WrapperEmitter): {
     const forceStyleOptional = !!wrappedStyleRequired;
     const hasForwardedAsUsage = emitter.hasForwardedAsUsage(d.localName);
     const shouldLowerForwardedAs = hasForwardedAsUsage && !wrappedComponentHasAs;
+    const needsForwardedAsTargetParam = hasForwardedAsUsage && !wrappedComponentHasAs;
+    const polymorphicTypeParamsDecl = needsForwardedAsTargetParam
+      ? `C extends React.ElementType = ${polymorphicDefaultAsType}, ForwardedAsC extends React.ElementType = ${polymorphicDefaultAsType}`
+      : `C extends React.ElementType = ${polymorphicDefaultAsType}`;
+    const polymorphicTypeParamsUse = needsForwardedAsTargetParam ? "<C, ForwardedAsC>" : "<C>";
     const propsIdForExpr = j.identifier("props");
     // Track which type name to use for the function parameter
     let functionParamTypeName: string | null = null;
@@ -229,22 +234,6 @@ export function emitComponentWrappers(emitter: WrapperEmitter): {
       } else {
         if (shouldEmitPolymorphicAsType) {
           const basePropsRaw = `React.ComponentPropsWithRef<typeof ${renderedComponent}>`;
-          // When wrapping an already-polymorphic local wrapper, avoid omitting all keys from the
-          // wrapped component's default element props (e.g. `onChange` from default "div"/"button").
-          // Prefer omitting only wrapped custom prop keys if known.
-          const wrappedCustomProps = wrappedComponentHasAs
-            ? emitter.stringifyTsType(wrappedDecl?.propsType)
-            : null;
-          const polymorphicCollisionKeysExpr =
-            wrappedComponentHasAs && wrappedCustomProps
-              ? `keyof (${wrappedCustomProps})`
-              : wrappedComponentHasAs
-                ? "never"
-                : `keyof ${basePropsRaw}`;
-          const polymorphicOmittedKeys =
-            polymorphicCollisionKeysExpr === "never"
-              ? '"className" | "style"'
-              : `${polymorphicCollisionKeysExpr} | "className" | "style"`;
           // When forcing optional, omit className/style from base to prevent inheriting requiredness
           const baseOmitted: string[] = [];
           if (forceClassNameOptional) {
@@ -256,13 +245,6 @@ export function emitComponentWrappers(emitter: WrapperEmitter): {
           const baseProps = baseOmitted.length
             ? `Omit<${basePropsRaw}, ${baseOmitted.join(" | ")}>`
             : basePropsRaw;
-          const omitted: string[] = [];
-          if (!allowClassNameProp) {
-            omitted.push('"className"');
-          }
-          if (!allowStyleProp) {
-            omitted.push('"style"');
-          }
           // Add optional className/style/sx when forcing optional or when sx is enabled
           const optionalStyleProps: string[] = [];
           if (forceClassNameOptional) {
@@ -274,20 +256,50 @@ export function emitComponentWrappers(emitter: WrapperEmitter): {
           if (allowSxProp) {
             optionalStyleProps.push(SX_PROP_TYPE_TEXT);
           }
-          const typeText = [
-            baseProps,
-            `Omit<React.ComponentPropsWithRef<C>, ${polymorphicOmittedKeys}>`,
-            "{\n  as?: C;\n}",
-            ...(hasForwardedAsUsage ? ["{ forwardedAs?: React.ElementType }"] : []),
-            ...(optionalStyleProps.length > 0 ? [`{ ${optionalStyleProps.join("; ")} }`] : []),
-            // Include user's explicit props type if it exists
-            ...(explicit ? [explicit] : []),
-          ].join(" & ");
-          emitNamedPropsType(
-            d.localName,
-            typeText,
-            `C extends React.ElementType = ${polymorphicDefaultAsType}`,
-          );
+          const buildKnownBasePolymorphicType = (): string => {
+            const wrappedCustomProps = emitter.stringifyTsType(wrappedDecl?.propsType);
+            const polymorphicCollisionKeysExpr = wrappedCustomProps
+              ? `keyof (${wrappedCustomProps})`
+              : "never";
+            const polymorphicOmittedKeys =
+              polymorphicCollisionKeysExpr === "never"
+                ? '"className" | "style"'
+                : `${polymorphicCollisionKeysExpr} | "className" | "style"`;
+            return [
+              baseProps,
+              `Omit<React.ComponentPropsWithRef<C>, ${polymorphicOmittedKeys}>`,
+              "{ as?: C }",
+              ...(hasForwardedAsUsage ? ["{ forwardedAs?: React.ElementType }"] : []),
+              ...(optionalStyleProps.length > 0 ? [`{ ${optionalStyleProps.join("; ")} }`] : []),
+              ...(explicit ? [explicit] : []),
+            ].join(" & ");
+          };
+          const buildOpaqueBasePolymorphicType = (): string => {
+            const baseWithCustomProps = emitter.joinIntersection(
+              baseProps,
+              ...(optionalStyleProps.length > 0 ? [`{ ${optionalStyleProps.join("; ")} }`] : []),
+              ...(explicit ? [explicit] : []),
+            );
+            // Mirror styled-components polymorphic override order for imported/opaque bases:
+            // Base props -> forwardedAs target props -> as target props (as wins).
+            const asTargetProps =
+              'Omit<React.ComponentPropsWithRef<C>, "className" | "style" | "as" | "forwardedAs">';
+            const forwardedAsTargetProps = needsForwardedAsTargetParam
+              ? 'Omit<React.ComponentPropsWithRef<ForwardedAsC>, "className" | "style" | "as" | "forwardedAs">'
+              : null;
+            const forwardedThenAs = forwardedAsTargetProps
+              ? `Omit<${forwardedAsTargetProps}, keyof (${asTargetProps})> & ${asTargetProps}`
+              : asTargetProps;
+            return emitter.joinIntersection(
+              `NoInfer<Omit<${baseWithCustomProps}, keyof (${forwardedThenAs})> & ${forwardedThenAs}>`,
+              "{ as?: C }",
+              ...(needsForwardedAsTargetParam ? ["{ forwardedAs?: ForwardedAsC }"] : []),
+            );
+          };
+          const typeText = wrappedComponentHasAs
+            ? buildKnownBasePolymorphicType()
+            : buildOpaqueBasePolymorphicType();
+          emitNamedPropsType(d.localName, typeText, polymorphicTypeParamsDecl);
         } else {
           // Check if the wrapped component is one of our styled component wrappers.
           // If so, it already has className/style in its props and we don't need to add them.
@@ -610,10 +622,10 @@ export function emitComponentWrappers(emitter: WrapperEmitter): {
     let polymorphicFnTypeParams: any = null;
     if (shouldEmitPolymorphicAsType && emitTypes) {
       polymorphicFnTypeParams = j(
-        `function _<C extends React.ElementType = ${polymorphicDefaultAsType}>() { return null }`,
+        `function _<${polymorphicTypeParamsDecl}>() { return null }`,
       ).get().node.program.body[0].typeParameters;
       (propsParamId as any).typeAnnotation = j(
-        `const x: ${emitter.propsTypeNameFor(d.localName)}<C> = null`,
+        `const x: ${emitter.propsTypeNameFor(d.localName)}${polymorphicTypeParamsUse} = null`,
       ).get().node.program.body[0].declarations[0].id.typeAnnotation;
     }
     // If we extended an existing type directly, use that type name for the parameter.

@@ -15,15 +15,13 @@ function Button<C extends React.ElementType = "button">(
   );
 }
 
-type StyledTextProps<C extends React.ElementType = typeof Text> = React.ComponentPropsWithRef<
-  typeof Text
-> &
+type StyledTextProps<C extends React.ElementType = typeof Text> = NoInfer<
   Omit<
-    React.ComponentPropsWithRef<C>,
-    keyof React.ComponentPropsWithRef<typeof Text> | "className" | "style"
-  > & {
-    as?: C;
-  };
+    React.ComponentPropsWithRef<typeof Text>,
+    keyof Omit<React.ComponentPropsWithRef<C>, "className" | "style" | "as" | "forwardedAs">
+  > &
+    Omit<React.ComponentPropsWithRef<C>, "className" | "style" | "as" | "forwardedAs">
+> & { as?: C };
 
 // Pattern 2: styled(Component) where Component has custom props (like variant)
 // When used with as="label", the component's props must be preserved

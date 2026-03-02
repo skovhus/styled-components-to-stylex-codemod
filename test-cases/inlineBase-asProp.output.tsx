@@ -2,15 +2,13 @@ import * as React from "react";
 import * as stylex from "@stylexjs/stylex";
 import { Flex } from "./lib/inline-base-flex";
 
-type ContainerProps<C extends React.ElementType = typeof Flex> = React.ComponentPropsWithRef<
-  typeof Flex
-> &
+type ContainerProps<C extends React.ElementType = typeof Flex> = NoInfer<
   Omit<
-    React.ComponentPropsWithRef<C>,
-    keyof React.ComponentPropsWithRef<typeof Flex> | "className" | "style"
-  > & {
-    as?: C;
-  };
+    React.ComponentPropsWithRef<typeof Flex>,
+    keyof Omit<React.ComponentPropsWithRef<C>, "className" | "style" | "as" | "forwardedAs">
+  > &
+    Omit<React.ComponentPropsWithRef<C>, "className" | "style" | "as" | "forwardedAs">
+> & { as?: C };
 
 function Container<C extends React.ElementType = typeof Flex>(props: ContainerProps<C>) {
   const { as: Component = Flex, ...rest } = props;
