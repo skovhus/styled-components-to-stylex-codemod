@@ -9,9 +9,7 @@ const styles = stylex.create({
 });
 
 function StyledFallback(props: { children?: React.ReactNode }) {
-  const { children } = props;
-
-  return <div {...stylex.props(styles.styledFallback)}>{children}</div>;
+  return <div {...stylex.props(styles.styledFallback)}>{props.children}</div>;
 }
 
 // Simulate a HOC that takes options

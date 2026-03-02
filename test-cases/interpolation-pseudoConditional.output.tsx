@@ -9,8 +9,6 @@ import { TouchDeviceToggle } from "./lib/TouchDeviceToggle";
  * wrapped in `highlightStyles({ active: ..., hover: ... })` for runtime selection.
  */
 function Button(props: { children?: React.ReactNode }) {
-  const { children } = props;
-
   return (
     <button
       {...stylex.props(
@@ -21,7 +19,7 @@ function Button(props: { children?: React.ReactNode }) {
         }),
       )}
     >
-      {children}
+      {props.children}
     </button>
   );
 }
@@ -31,8 +29,6 @@ function Button(props: { children?: React.ReactNode }) {
  * The `&&` should be stripped and the pseudo alias still applied.
  */
 function SpecificButton(props: { children?: React.ReactNode }) {
-  const { children } = props;
-
   return (
     <button
       {...stylex.props(
@@ -43,7 +39,7 @@ function SpecificButton(props: { children?: React.ReactNode }) {
         }),
       )}
     >
-      {children}
+      {props.children}
     </button>
   );
 }

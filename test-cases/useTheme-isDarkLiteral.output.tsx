@@ -4,13 +4,11 @@ import * as stylex from "@stylexjs/stylex";
 
 // Basic literal values with isDark conditional
 function Box(props: { children?: React.ReactNode }) {
-  const { children } = props;
-
   const theme = useTheme();
 
   return (
     <div {...stylex.props(styles.box, theme.isDark ? styles.boxDark : styles.boxLight)}>
-      {children}
+      {props.children}
     </div>
   );
 }

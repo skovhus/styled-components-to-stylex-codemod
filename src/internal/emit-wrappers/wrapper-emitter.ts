@@ -1237,6 +1237,7 @@ export class WrapperEmitter {
     }
     const usePropsDirectlyForRest =
       includeRest && patternProps.length === 1 && patternProps[0]?.type === "RestElement";
+    const usePropsChildrenDirectly = this.isChildrenOnlyDestructurePattern(patternProps);
     if (usePropsDirectlyForRest) {
       restId = propsId;
     }
@@ -1377,14 +1378,17 @@ export class WrapperEmitter {
 
     const renderedTagName = allowAsProp ? "Component" : (attrsAsTag ?? tagName);
     const openingEl = j.jsxOpeningElement(j.jsxIdentifier(renderedTagName), jsxAttrs, isVoidTag);
+    const childrenExpr = usePropsChildrenDirectly
+      ? j.memberExpression(propsId, j.identifier("children"))
+      : j.identifier("children");
     const jsx = j.jsxElement(
       openingEl,
       isVoidTag ? null : j.jsxClosingElement(j.jsxIdentifier(renderedTagName)),
-      isVoidTag ? [] : [j.jsxExpressionContainer(j.identifier("children"))],
+      isVoidTag ? [] : [j.jsxExpressionContainer(childrenExpr)],
     );
 
     const bodyStmts: BlockStatementBody = [];
-    if (!usePropsDirectlyForRest) {
+    if (!usePropsDirectlyForRest && !usePropsChildrenDirectly) {
       bodyStmts.push(
         j.variableDeclaration("const", [
           j.variableDeclarator(j.objectPattern(patternProps), propsId),
@@ -1509,6 +1513,10 @@ export class WrapperEmitter {
     restId?: Identifier;
   }): Array<Property | RestElement> {
     return jb.buildDestructurePatternProps(this.j, this.patternProp, args);
+  }
+
+  isChildrenOnlyDestructurePattern(patternProps: Array<Property | RestElement>): boolean {
+    return jb.isChildrenOnlyDestructurePattern(patternProps);
   }
 
   baseStyleExpr(d: StyledDecl) {

@@ -23,9 +23,7 @@ function Box(props: BoxProps) {
 }
 
 function BorderedBox(props: { children?: React.ReactNode }) {
-  const { children } = props;
-
-  return <div {...stylex.props(styles.border)}>{children}</div>;
+  return <div {...stylex.props(styles.border)}>{props.children}</div>;
 }
 
 export const App = () => (

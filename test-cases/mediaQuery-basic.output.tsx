@@ -2,21 +2,15 @@ import React from "react";
 import * as stylex from "@stylexjs/stylex";
 
 function Card(props: { children?: React.ReactNode }) {
-  const { children } = props;
-
-  return <div {...stylex.props(styles.card)}>{children}</div>;
+  return <div {...stylex.props(styles.card)}>{props.children}</div>;
 }
 
 function CardTitle(props: { children?: React.ReactNode }) {
-  const { children } = props;
-
-  return <h3 {...stylex.props(styles.cardTitle)}>{children}</h3>;
+  return <h3 {...stylex.props(styles.cardTitle)}>{props.children}</h3>;
 }
 
 function CardText(props: { children?: React.ReactNode }) {
-  const { children } = props;
-
-  return <p {...stylex.props(styles.cardText)}>{children}</p>;
+  return <p {...stylex.props(styles.cardText)}>{props.children}</p>;
 }
 
 export const App = () => (

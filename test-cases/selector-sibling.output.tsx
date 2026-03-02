@@ -2,9 +2,7 @@ import React from "react";
 import * as stylex from "@stylexjs/stylex";
 
 function Thing(props: { children?: React.ReactNode }) {
-  const { children } = props;
-
-  return <div {...stylex.props(styles.thing, stylex.defaultMarker())}>{children}</div>;
+  return <div {...stylex.props(styles.thing, stylex.defaultMarker())}>{props.children}</div>;
 }
 
 // NOTE: StyleX siblingBefore() emits `~ *` (general sibling), not `+ *`

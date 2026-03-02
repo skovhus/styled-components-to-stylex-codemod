@@ -4,16 +4,12 @@ import { pixelVars, $colors } from "./tokens.stylex";
 
 // Directional border: expands to borderLeftWidth, borderLeftStyle, borderLeftColor
 function BorderedLeft(props: { children?: React.ReactNode }) {
-  const { children } = props;
-
-  return <div {...stylex.props(styles.borderLeft)}>{children}</div>;
+  return <div {...stylex.props(styles.borderLeft)}>{props.children}</div>;
 }
 
 // Non-directional border: expands to borderWidth, borderStyle, borderColor
 function BorderedBox(props: { children?: React.ReactNode }) {
-  const { children } = props;
-
-  return <div {...stylex.props(styles.border)}>{children}</div>;
+  return <div {...stylex.props(styles.border)}>{props.children}</div>;
 }
 
 export const App = () => (

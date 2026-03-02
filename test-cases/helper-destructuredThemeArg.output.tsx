@@ -3,9 +3,7 @@ import * as stylex from "@stylexjs/stylex";
 import { $colors } from "./tokens.stylex";
 
 function Box(props: { children?: React.ReactNode }) {
-  const { children } = props;
-
-  return <div {...stylex.props(styles.box, styles.borderBottom)}>{children}</div>;
+  return <div {...stylex.props(styles.box, styles.borderBottom)}>{props.children}</div>;
 }
 
 export const App = () => (

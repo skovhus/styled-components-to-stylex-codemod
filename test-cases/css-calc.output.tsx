@@ -3,9 +3,7 @@ import * as stylex from "@stylexjs/stylex";
 import { calcVars } from "./css-calc.stylex";
 
 function FlexItem(props: { children?: React.ReactNode }) {
-  const { children } = props;
-
-  return <div {...stylex.props(styles.flexItem)}>{children}</div>;
+  return <div {...stylex.props(styles.flexItem)}>{props.children}</div>;
 }
 
 export const App = () => (

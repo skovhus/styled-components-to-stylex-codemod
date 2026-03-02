@@ -4,8 +4,6 @@ import { useTheme } from "styled-components";
 import { $colors } from "./tokens.stylex";
 
 function Container(props: { children?: React.ReactNode }) {
-  const { children } = props;
-
   const theme = useTheme();
 
   return (
@@ -15,7 +13,7 @@ function Container(props: { children?: React.ReactNode }) {
         theme.isDark ? styles.containerDark : styles.containerLight,
       )}
     >
-      {children}
+      {props.children}
     </div>
   );
 }

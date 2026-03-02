@@ -14,9 +14,7 @@ function Checkbox(props: Omit<React.ComponentProps<"input">, "className" | "styl
 
 // Border on :not(:last-child) with interpolation — should retain the pseudo condition
 function ListItem(props: { children?: React.ReactNode }) {
-  const { children } = props;
-
-  return <div {...stylex.props(styles.listItem)}>{children}</div>;
+  return <div {...stylex.props(styles.listItem)}>{props.children}</div>;
 }
 
 export const App = () => (

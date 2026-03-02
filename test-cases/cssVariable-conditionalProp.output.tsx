@@ -23,9 +23,7 @@ function ContainerWrapper(props: ContainerWrapperProps) {
 
 // A container that uses the CSS custom property with calc()
 function Container(props: { children?: React.ReactNode }) {
-  const { children } = props;
-
-  return <div {...stylex.props(styles.container)}>{children}</div>;
+  return <div {...stylex.props(styles.container)}>{props.children}</div>;
 }
 
 export const App = () => (

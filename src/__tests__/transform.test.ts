@@ -2629,12 +2629,8 @@ export const App = () => <Box>Hello</Box>;
       import { useTheme } from "styled-components";
 
       function Box(props: { children?: React.ReactNode }) {
-        const {
-          children,
-        } = props;
-
         const theme = useTheme();
-        return <div {...stylex.props(theme.isDark ? styles.boxDark : styles.boxLight)}>{children}</div>;
+        return <div {...stylex.props(theme.isDark ? styles.boxDark : styles.boxLight)}>{props.children}</div>;
       }
 
       export const App = () => <Box>Hello</Box>;
@@ -2675,15 +2671,11 @@ export const App = () => <Box>Hello</Box>;
       import { useTheme } from "styled-components";
 
       function Box(props: { children?: React.ReactNode }) {
-        const {
-          children,
-        } = props;
-
         const theme = useTheme();
 
         return (
           <div
-            {...stylex.props(theme.isHighContrast ? styles.boxHighContrast : styles.boxNotHighContrast)}>{children}</div>
+            {...stylex.props(theme.isHighContrast ? styles.boxHighContrast : styles.boxNotHighContrast)}>{props.children}</div>
         );
       }
 
@@ -2727,10 +2719,6 @@ export const App = () => <Box>Hello</Box>;
       import { useTheme } from "styled-components";
 
       function Box(props: { children?: React.ReactNode }) {
-        const {
-          children,
-        } = props;
-
         const theme = useTheme();
 
         return (
@@ -2738,7 +2726,7 @@ export const App = () => <Box>Hello</Box>;
             {...stylex.props(
               theme.isDark ? styles.boxDark : styles.boxLight,
               theme.isHighContrast ? styles.boxHighContrast : styles.boxNotHighContrast,
-            )}>{children}</div>
+            )}>{props.children}</div>
         );
       }
 

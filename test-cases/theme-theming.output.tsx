@@ -4,9 +4,7 @@ import { ThemeProvider } from "styled-components";
 import { testCaseTheme, $colors } from "./tokens.stylex";
 
 function Button(props: { children?: React.ReactNode }) {
-  const { children } = props;
-
-  return <button {...stylex.props(styles.button)}>{children}</button>;
+  return <button {...stylex.props(styles.button)}>{props.children}</button>;
 }
 
 const theme = testCaseTheme;

@@ -2,9 +2,7 @@ import React from "react";
 import * as stylex from "@stylexjs/stylex";
 
 function Row(props: { children?: React.ReactNode }) {
-  const { children } = props;
-
-  return <div {...stylex.props(styles.row, stylex.defaultMarker())}>{children}</div>;
+  return <div {...stylex.props(styles.row, stylex.defaultMarker())}>{props.children}</div>;
 }
 
 export const App = () => (

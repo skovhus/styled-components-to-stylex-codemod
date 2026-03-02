@@ -14,9 +14,7 @@ interface ContainerProps {
 }
 
 function Wrapper(props: { children?: React.ReactNode }) {
-  const { children } = props;
-
-  return <div {...stylex.props(styles.wrapper)}>{children}</div>;
+  return <div {...stylex.props(styles.wrapper)}>{props.children}</div>;
 }
 
 function Container(
