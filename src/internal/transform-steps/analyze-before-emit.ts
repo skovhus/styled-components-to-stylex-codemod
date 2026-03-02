@@ -132,6 +132,9 @@ export function analyzeBeforeEmitStep(ctx: TransformContext): StepResult {
     if (decl.isCssHelper) {
       continue;
     }
+    if (decl.isDirectJsxResolution) {
+      continue;
+    }
     // Intrinsic components with prop-conditional attrs (e.g. `size: props.$small ? 5 : undefined`)
     // tend to produce very noisy inline substitutions when there are multiple callsite variations.
     // Prefer emitting a wrapper function component in these cases.
@@ -345,6 +348,9 @@ export function analyzeBeforeEmitStep(ctx: TransformContext): StepResult {
   // Without a wrapper, passing `className` would replace the stylex className instead of merging.
   // Also track which components receive className/style in JSX for merger import determination.
   for (const decl of styledDecls) {
+    if (decl.isDirectJsxResolution) {
+      continue;
+    }
     const { className, style } = getJsxAttributeUsage(decl.localName);
     if (className || style) {
       (decl as any).receivesClassNameOrStyleInJsx = true;
@@ -359,6 +365,9 @@ export function analyzeBeforeEmitStep(ctx: TransformContext): StepResult {
   // a wrapper would swallow `ref` and change behavior versus inline DOM output.
   for (const decl of styledDecls) {
     if (decl.isCssHelper || decl.needsWrapperComponent) {
+      continue;
+    }
+    if (decl.isDirectJsxResolution) {
       continue;
     }
     if (decl.base.kind !== "intrinsic") {
@@ -427,6 +436,9 @@ export function analyzeBeforeEmitStep(ctx: TransformContext): StepResult {
     if (decl.needsWrapperComponent || decl.isCssHelper) {
       continue;
     }
+    if (decl.isDirectJsxResolution) {
+      continue;
+    }
     if (hasSpreadInJsx(decl.localName)) {
       decl.needsWrapperComponent = true;
     }
@@ -466,6 +478,9 @@ export function analyzeBeforeEmitStep(ctx: TransformContext): StepResult {
   // Early detection of components used as values (before emitStylesAndImports for merger import)
   // Components passed as props (e.g., <Component elementType={StyledDiv} />) need className/style merging
   for (const decl of styledDecls) {
+    if (decl.isDirectJsxResolution) {
+      continue;
+    }
     const usedAsValue =
       root
         .find(j.Identifier, { name: decl.localName })
@@ -541,7 +556,7 @@ export function analyzeBeforeEmitStep(ctx: TransformContext): StepResult {
   // still need wrappers so the namespace binding remains in the output.
   if (jsxNamespaceRoots.size > 0) {
     for (const decl of styledDecls) {
-      if (decl.isCssHelper) {
+      if (decl.isCssHelper || decl.isDirectJsxResolution) {
         continue;
       }
       if (jsxNamespaceRoots.has(decl.localName)) {

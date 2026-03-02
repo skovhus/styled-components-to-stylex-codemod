@@ -204,6 +204,11 @@ export type StyledDecl = {
         outerFalsyInnerFalsyKey: string;
       }
   >;
+  /**
+   * True for synthetic decls created by direct JSX resolution (e.g. `<Flex>` without
+   * `styled(Flex)`). These are always inlined, never wrapped.
+   */
+  isDirectJsxResolution?: boolean;
   needsWrapperComponent?: boolean;
   /** When true, the base `styles.{styleKey}` reference is omitted from `stylex.props()` because
    *  the styleKey is a dynamic function (not a static style object). */

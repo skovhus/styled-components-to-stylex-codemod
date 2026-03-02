@@ -7,17 +7,20 @@ import type { ImportSource, ResolveBaseComponentStaticValue } from "../../adapte
 import type { CssRuleIR } from "../css-ir.js";
 import { CONTINUE, type StepResult } from "../transform-types.js";
 import type { StaticBooleanVariant, StyledDecl, VariantDimension } from "../transform-types.js";
-import { toSuffixFromProp } from "../transform/helpers.js";
+import { toStyleKey, toSuffixFromProp } from "../transform/helpers.js";
 import { TransformContext } from "../transform-context.js";
 import { readStaticJsxLiteral } from "./jsx-static-literal.js";
 
 export function resolveBaseComponentsStep(ctx: TransformContext): StepResult {
   const styledDecls = ctx.styledDecls as StyledDecl[] | undefined;
-  if (!styledDecls || styledDecls.length === 0) {
+  if (!styledDecls) {
     return CONTINUE;
   }
 
-  applyBaseComponentResolution(ctx, styledDecls);
+  if (styledDecls.length > 0) {
+    applyBaseComponentResolution(ctx, styledDecls);
+  }
+  resolveDirectJsxUsages(ctx, styledDecls);
   return CONTINUE;
 }
 
@@ -1029,4 +1032,200 @@ function canInlineWithoutLocalCallsites(
     Object.hasOwn(baseStaticProps, prop),
   ).length;
   return staticConsumedCount > 0;
+}
+
+/**
+ * Resolves direct JSX usages of imported components (e.g. `<Flex gap={8}>`)
+ * that the adapter's `resolveBaseComponent` can resolve to an intrinsic element + StyleX styles.
+ * Creates synthetic StyledDecl objects that flow through the existing pipeline.
+ */
+function resolveDirectJsxUsages(ctx: TransformContext, styledDecls: StyledDecl[]): void {
+  const resolveBaseComponent = ctx.resolveBaseComponent;
+  if (!resolveBaseComponent) {
+    return;
+  }
+  const importMap = ctx.importMap;
+  if (!importMap) {
+    return;
+  }
+
+  const styledDeclNames = new Set(styledDecls.map((d) => d.localName));
+  const usedStyleKeys = new Set(styledDecls.map((d) => d.styleKey));
+
+  const jsxComponentNames = collectJsxImportedComponentNames(ctx, importMap);
+
+  for (const name of jsxComponentNames) {
+    if (styledDeclNames.has(name)) {
+      continue;
+    }
+    if (isUsedAsNonJsxValue(ctx, name)) {
+      continue;
+    }
+
+    const importInfo = importMap.get(name);
+    if (!importInfo) {
+      continue;
+    }
+
+    const importSourceStr = importSourceToString(importInfo.source);
+    const baseStaticProps: Record<string, ResolveBaseComponentStaticValue> = {};
+
+    const syntheticDecl: StyledDecl = {
+      localName: name,
+      base: { kind: "component", ident: name },
+      styleKey: deduplicateStyleKey(toStyleKey(name), usedStyleKeys),
+      rules: [],
+      templateExpressions: [],
+      isDirectJsxResolution: true,
+    };
+
+    const baseResult = callResolveBaseComponentSafely({
+      ctx,
+      decl: syntheticDecl,
+      resolveBaseComponent,
+      importSource: importSourceStr,
+      importedName: importInfo.importedName,
+      staticProps: baseStaticProps,
+      phase: "base",
+    });
+    if (!baseResult || !isValidBaseResolutionResult(baseResult)) {
+      continue;
+    }
+
+    const consumedProps = [...new Set(baseResult.consumedProps)];
+    const variantOutcome = buildInlineResolverVariantDimensions({
+      ctx,
+      decl: syntheticDecl,
+      styledDecls,
+      consumedProps,
+      baseStaticProps,
+      baseResult,
+      importSource: importSourceStr,
+      importedName: importInfo.importedName,
+    });
+    if (variantOutcome.kind === "bail") {
+      continue;
+    }
+
+    inlineResolvedBaseComponent({
+      ctx,
+      decl: syntheticDecl,
+      baseStaticProps,
+      importSource: importSourceStr,
+      importedName: importInfo.importedName,
+      baseResult,
+      consumedProps,
+      variantDimensions: variantOutcome.variantDimensions,
+      hasLocalCallsites: variantOutcome.hasLocalCallsites,
+      usedConsumedPropsAtCallSites: variantOutcome.usedConsumedPropsAtCallSites,
+      foldedBaseSx: variantOutcome.foldedBaseSx,
+      bakedInConsumedProps: variantOutcome.bakedInConsumedProps,
+      staticBooleanVariants: variantOutcome.staticBooleanVariants,
+    });
+
+    usedStyleKeys.add(syntheticDecl.styleKey);
+    styledDecls.push(syntheticDecl);
+  }
+}
+
+/** Scans JSX elements for uppercase identifiers that exist in importMap. */
+function collectJsxImportedComponentNames(
+  ctx: TransformContext,
+  importMap: Map<string, { importedName: string; source: ImportSource }>,
+): Set<string> {
+  const { root, j } = ctx;
+  const names = new Set<string>();
+
+  root.find(j.JSXElement).forEach((p: any) => {
+    const openingName = p.node.openingElement?.name;
+    if (openingName?.type === "JSXIdentifier") {
+      const n = openingName.name as string;
+      if (/^[A-Z]/.test(n) && importMap.has(n)) {
+        names.add(n);
+      }
+    }
+  });
+  root.find(j.JSXSelfClosingElement).forEach((p: any) => {
+    const n = p.node.name;
+    if (n?.type === "JSXIdentifier") {
+      const nm = n.name as string;
+      if (/^[A-Z]/.test(nm) && importMap.has(nm)) {
+        names.add(nm);
+      }
+    }
+  });
+
+  return names;
+}
+
+/** Checks if an identifier is used outside JSX/import/styled() contexts. */
+function isUsedAsNonJsxValue(ctx: TransformContext, localName: string): boolean {
+  const { root, j } = ctx;
+  return (
+    root
+      .find(j.Identifier, { name: localName })
+      .filter((p) => {
+        const parentType = p.parentPath?.node?.type;
+        // Skip JSX element names
+        if (parentType === "JSXOpeningElement" || parentType === "JSXClosingElement") {
+          return false;
+        }
+        // Skip JSX member expressions
+        if (parentType === "JSXMemberExpression" && (p.parentPath.node as any).object === p.node) {
+          return false;
+        }
+        // Skip import specifiers
+        if (
+          parentType === "ImportSpecifier" ||
+          parentType === "ImportDefaultSpecifier" ||
+          parentType === "ImportNamespaceSpecifier"
+        ) {
+          return false;
+        }
+        // Skip styled(Component) calls
+        if (parentType === "CallExpression") {
+          const callee = (p.parentPath.node as any).callee;
+          if (callee?.type === "Identifier" && callee.name === ctx.styledDefaultImport) {
+            return false;
+          }
+          if (
+            callee?.type === "MemberExpression" &&
+            callee.object?.type === "CallExpression" &&
+            callee.object.callee?.type === "Identifier" &&
+            callee.object.callee.name === ctx.styledDefaultImport
+          ) {
+            return false;
+          }
+        }
+        // Skip TaggedTemplateExpression tags
+        if (parentType === "TaggedTemplateExpression") {
+          return false;
+        }
+        // Skip styled(Component) call in TaggedTemplateExpression
+        if (
+          parentType === "CallExpression" &&
+          p.parentPath.parentPath?.node?.type === "TaggedTemplateExpression"
+        ) {
+          return false;
+        }
+        // Skip template literal interpolations
+        if (parentType === "TemplateLiteral") {
+          return false;
+        }
+        return true;
+      })
+      .size() > 0
+  );
+}
+
+/** Returns a styleKey that doesn't collide with existing keys. */
+function deduplicateStyleKey(base: string, usedKeys: Set<string>): string {
+  if (!usedKeys.has(base)) {
+    return base;
+  }
+  let i = 1;
+  while (usedKeys.has(`${base}${i}`)) {
+    i += 1;
+  }
+  return `${base}${i}`;
 }
