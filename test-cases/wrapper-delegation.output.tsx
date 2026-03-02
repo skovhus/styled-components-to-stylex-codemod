@@ -15,15 +15,11 @@ export function App() {
 App.displayName = "App";
 
 function Sentence(props: { children?: React.ReactNode }) {
-  const { children } = props;
-
-  return <div {...stylex.props(styles.sentence)}>{children}</div>;
+  return <div {...stylex.props(styles.sentence)}>{props.children}</div>;
 }
 
 function PaddedSentence(props: { children?: React.ReactNode }) {
-  const { children } = props;
-
-  return <div {...stylex.props(styles.sentence, styles.paddedSentence)}>{children}</div>;
+  return <div {...stylex.props(styles.sentence, styles.paddedSentence)}>{props.children}</div>;
 }
 
 function PaddedMutedSentence(props: { style?: React.CSSProperties; children?: React.ReactNode }) {

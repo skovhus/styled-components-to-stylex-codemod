@@ -121,10 +121,43 @@ export function postProcessStep(ctx: TransformContext): StepResult {
     // Only annotate event handlers for intrinsic-based components (styled.div, etc.).
     // Wrappers around custom components may use callback props with non-React payloads,
     // so injecting React.*Event annotations could make those handlers type-incompatible.
+    // Also skip components with polymorphic `as` support - their element type is
+    // intentionally inferred from props, so hard-coding the base tag event type
+    // (e.g. HTMLDivElement) can be misleading.
+    const hasLocalAsUsage = (componentName: string): boolean => {
+      const hasAsAttr = (
+        attrs: Array<{ type?: string; name?: { type?: string; name?: string } }> | undefined,
+      ): boolean =>
+        (attrs ?? []).some(
+          (attr) =>
+            attr?.type === "JSXAttribute" &&
+            attr.name?.type === "JSXIdentifier" &&
+            (attr.name.name === "as" || attr.name.name === "forwardedAs"),
+        );
+
+      const jsxElementHasAs = root
+        .find(j.JSXElement, {
+          openingElement: { name: { type: "JSXIdentifier", name: componentName } },
+        } as any)
+        .some((p: { node?: { openingElement?: { attributes?: unknown[] } } }) =>
+          hasAsAttr(p.node?.openingElement?.attributes as any),
+        );
+      if (jsxElementHasAs) {
+        return true;
+      }
+
+      return root
+        .find(j.JSXSelfClosingElement, {
+          name: { type: "JSXIdentifier", name: componentName },
+        } as any)
+        .some((p: { node?: { attributes?: unknown[] } }) => hasAsAttr(p.node?.attributes as any));
+    };
+
     const convertedNames = new Set<string>();
     const componentTagMap = new Map<string, string>();
     for (const decl of styledDecls) {
-      if (decl.base.kind === "intrinsic") {
+      const isPolymorphic = !!decl.supportsAsProp || hasLocalAsUsage(decl.localName);
+      if (decl.base.kind === "intrinsic" && !isPolymorphic) {
         convertedNames.add(decl.localName);
         componentTagMap.set(decl.localName, decl.base.tagName);
       }

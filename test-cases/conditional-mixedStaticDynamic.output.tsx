@@ -13,6 +13,10 @@ interface ContainerProps {
   $position?: Position;
 }
 
+function Wrapper(props: { children?: React.ReactNode }) {
+  return <div {...stylex.props(styles.wrapper)}>{props.children}</div>;
+}
+
 function Container(
   props: ContainerProps & Omit<React.ComponentProps<"div">, "className" | "style">,
 ) {
@@ -37,27 +41,27 @@ export const App = () => (
   <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
     <div>
       <div>Position fixed + sidebar expanded (24px margins):</div>
-      <div {...stylex.props(styles.wrapper)}>
+      <Wrapper>
         <Container $sidebarCollapsed={false} $position="fixed">
           Content
         </Container>
-      </div>
+      </Wrapper>
     </div>
     <div>
       <div>Position fixed + sidebar collapsed (0px margins):</div>
-      <div {...stylex.props(styles.wrapper)}>
+      <Wrapper>
         <Container $sidebarCollapsed={true} $position="fixed">
           Content
         </Container>
-      </div>
+      </Wrapper>
     </div>
     <div>
       <div>Position relative (no absolute positioning, normal flow):</div>
-      <div {...stylex.props(styles.wrapper)}>
+      <Wrapper>
         <Container $sidebarCollapsed={false} $position="relative">
           Content
         </Container>
-      </div>
+      </Wrapper>
     </div>
   </div>
 );

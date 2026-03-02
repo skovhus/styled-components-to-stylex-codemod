@@ -4,13 +4,11 @@ import * as stylex from "@stylexjs/stylex";
 import { $colors } from "./tokens.stylex";
 
 function Text(props: { children?: React.ReactNode }) {
-  const { children } = props;
-
   const theme = useTheme();
 
   return (
     <span {...stylex.props(styles.text, theme.isDark ? styles.textDark : styles.textLight)}>
-      {children}
+      {props.children}
     </span>
   );
 }

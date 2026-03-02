@@ -4,8 +4,6 @@ import { useTheme } from "styled-components";
 
 // Block-level theme binary conditional: theme.mode === "dark" controls entire CSS block
 function Box(props: { children?: React.ReactNode }) {
-  const { children } = props;
-
   const theme = useTheme();
 
   return (
@@ -15,7 +13,7 @@ function Box(props: { children?: React.ReactNode }) {
         theme.mode === "dark" ? styles.boxThemeModeDark : styles.boxThemeModeNotDark,
       )}
     >
-      {children}
+      {props.children}
     </div>
   );
 }

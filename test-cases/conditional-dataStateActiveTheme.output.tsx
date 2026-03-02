@@ -4,8 +4,6 @@ import { useTheme } from "styled-components";
 import { $colors } from "./tokens.stylex";
 
 function Container(props: { children?: React.ReactNode }) {
-  const { children } = props;
-
   const theme = useTheme();
 
   return (
@@ -15,22 +13,26 @@ function Container(props: { children?: React.ReactNode }) {
         theme.isDark ? styles.containerDark : styles.containerLight,
       )}
     >
-      {children}
+      {props.children}
     </div>
+  );
+}
+
+function Tab(props: Omit<React.ComponentProps<"button">, "className" | "style">) {
+  const { children, ...rest } = props;
+
+  return (
+    <button {...rest} {...stylex.props(styles.tab)}>
+      {children}
+    </button>
   );
 }
 
 export const App = () => (
   <Container>
-    <button data-state="active" {...stylex.props(styles.tab)}>
-      Active Tab
-    </button>
-    <button data-state="inactive" {...stylex.props(styles.tab)}>
-      Inactive Tab
-    </button>
-    <button data-state="active" {...stylex.props(styles.tab)}>
-      Another Active
-    </button>
+    <Tab data-state="active">Active Tab</Tab>
+    <Tab data-state="inactive">Inactive Tab</Tab>
+    <Tab data-state="active">Another Active</Tab>
   </Container>
 );
 

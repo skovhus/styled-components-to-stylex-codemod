@@ -315,3 +315,30 @@ export function buildDestructurePatternProps(
 
   return patternProps;
 }
+
+/**
+ * Returns true when an object-destructure pattern only extracts `children`.
+ */
+export function isChildrenOnlyDestructurePattern(
+  patternProps: Array<Property | RestElement>,
+): boolean {
+  if (patternProps.length !== 1) {
+    return false;
+  }
+  const onlyProp = patternProps[0] as unknown as {
+    type?: string;
+    computed?: boolean;
+    key?: { type?: string; name?: string };
+    value?: { type?: string; name?: string };
+  };
+  if (!onlyProp || (onlyProp.type !== "Property" && onlyProp.type !== "ObjectProperty")) {
+    return false;
+  }
+  if (onlyProp.computed) {
+    return false;
+  }
+  if (onlyProp.key?.type !== "Identifier" || onlyProp.key.name !== "children") {
+    return false;
+  }
+  return onlyProp.value?.type === "Identifier" && onlyProp.value.name === "children";
+}

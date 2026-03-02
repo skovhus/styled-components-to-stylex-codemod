@@ -4,10 +4,8 @@ import { useTheme } from "styled-components";
 import { pixelVars } from "./tokens.stylex";
 
 function Box(props: { children?: React.ReactNode }) {
-  const { children } = props;
-
   const theme = useTheme();
-  return <div {...stylex.props(theme.isDark ? undefined : styles.boxLight)}>{children}</div>;
+  return <div {...stylex.props(theme.isDark ? undefined : styles.boxLight)}>{props.children}</div>;
 }
 
 export const App = () => <Box />;

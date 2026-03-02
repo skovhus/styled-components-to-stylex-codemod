@@ -8,7 +8,7 @@ import { CONTINUE, type StepResult } from "../transform-types.js";
 import type { StyledDecl } from "../transform-types.js";
 import { TransformContext, type ExportInfo } from "../transform-context.js";
 import {
-  isComponentUsedInJsx,
+  countComponentJsxUsages,
   propagateDelegationWrapperRequirements,
 } from "../utilities/delegation-utils.js";
 import { generateBridgeClassName } from "../utilities/bridge-classname.js";
@@ -16,6 +16,7 @@ import { getRootJsxIdentifierName, isFunctionNode } from "../utilities/jscodeshi
 import { typeContainsPolymorphicAs } from "../utilities/polymorphic-as-detection.js";
 
 type JsxAttr = JSXAttribute | JSXSpreadAttribute;
+const INLINE_USAGE_THRESHOLD = 1;
 
 /**
  * Analyzes declarations to determine wrappers, exports, usage patterns, and import aliasing before emit.
@@ -178,7 +179,18 @@ export function analyzeBeforeEmitStep(ctx: TransformContext): StepResult {
   }
 
   // Helper to check if a component is used in JSX
-  const isUsedInJsx = (name: string): boolean => isComponentUsedInJsx(root, j, name);
+  const jsxUsageCountCache = new Map<string, number>();
+  const relationChildStyleKeys = new Set((ctx.relationOverrides ?? []).map((o) => o.childStyleKey));
+  const getJsxUsageCount = (name: string): number => {
+    const cached = jsxUsageCountCache.get(name);
+    if (cached !== undefined) {
+      return cached;
+    }
+    const usageCount = countComponentJsxUsages(root, j, name);
+    jsxUsageCountCache.set(name, usageCount);
+    return usageCount;
+  };
+  const isUsedInJsx = (name: string): boolean => getJsxUsageCount(name) > 0;
 
   // Helper to determine if a styled(ImportedComponent) wrapper is simple enough to inline.
   // Returns true if there's no complex logic that requires a wrapper function.
@@ -291,11 +303,14 @@ export function analyzeBeforeEmitStep(ctx: TransformContext): StepResult {
   // If className is passed, it needs to be a wrapper to merge with stylex className.
   // Check if a styled component receives className or style props in JSX callsites.
   // These components need wrapper functions to merge external className/style with stylex output.
-  const receivesClassNameOrStyleInJsx = (name: string): { className: boolean; style: boolean } => {
+  const getJsxAttributeUsage = (
+    name: string,
+  ): { className: boolean; style: boolean; ref: boolean } => {
     let foundClassName = false;
     let foundStyle = false;
+    let foundRef = false;
     const collectFromOpening = (opening: any) => {
-      if (foundClassName && foundStyle) {
+      if (foundClassName && foundStyle && foundRef) {
         return;
       }
       for (const a of (opening?.attributes ?? []) as any[]) {
@@ -309,6 +324,9 @@ export function analyzeBeforeEmitStep(ctx: TransformContext): StepResult {
           if (a.name.name === "style") {
             foundStyle = true;
           }
+          if (a.name.name === "ref") {
+            foundRef = true;
+          }
         }
       }
     };
@@ -320,19 +338,43 @@ export function analyzeBeforeEmitStep(ctx: TransformContext): StepResult {
     root
       .find(j.JSXSelfClosingElement, { name: { type: "JSXIdentifier", name } } as any)
       .forEach((p: any) => collectFromOpening(p.node));
-    return { className: foundClassName, style: foundStyle };
+    return { className: foundClassName, style: foundStyle, ref: foundRef };
   };
 
   // Styled components that receive className/style props in JSX need wrappers to merge them.
   // Without a wrapper, passing `className` would replace the stylex className instead of merging.
   // Also track which components receive className/style in JSX for merger import determination.
   for (const decl of styledDecls) {
-    const { className, style } = receivesClassNameOrStyleInJsx(decl.localName);
+    const { className, style } = getJsxAttributeUsage(decl.localName);
     if (className || style) {
       (decl as any).receivesClassNameOrStyleInJsx = true;
       if (!decl.needsWrapperComponent) {
         decl.needsWrapperComponent = true;
       }
+    }
+  }
+
+  // Preserve locally reusable intrinsic components by emitting wrappers when used more than once.
+  // Skip ref callsites: generated wrappers are plain functions (not forwardRef), so forcing
+  // a wrapper would swallow `ref` and change behavior versus inline DOM output.
+  for (const decl of styledDecls) {
+    if (decl.isCssHelper || decl.needsWrapperComponent) {
+      continue;
+    }
+    if (decl.base.kind !== "intrinsic") {
+      continue;
+    }
+    // Relation overrides (`Parent > Child`, `${Parent} &`, etc.) are attached at callsites.
+    // Keep these children inlined so post-process can inject override style keys conditionally.
+    if (relationChildStyleKeys.has(decl.styleKey)) {
+      continue;
+    }
+    const { ref } = getJsxAttributeUsage(decl.localName);
+    if (ref) {
+      continue;
+    }
+    if (getJsxUsageCount(decl.localName) > INLINE_USAGE_THRESHOLD) {
+      decl.needsWrapperComponent = true;
     }
   }
 

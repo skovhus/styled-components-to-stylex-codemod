@@ -1,10 +1,15 @@
+import React from "react";
 import * as stylex from "@stylexjs/stylex";
+
+function Thing(props: { children?: React.ReactNode }) {
+  return <div {...stylex.props(styles.thing, stylex.defaultMarker())}>{props.children}</div>;
+}
 
 export const App = () => (
   <div style={{ padding: 16 }}>
-    <div {...stylex.props(styles.thing, stylex.defaultMarker())}>First</div>
-    <div {...stylex.props(styles.thing, stylex.defaultMarker())}>Second (border-bottom in CSS)</div>
-    <div {...stylex.props(styles.thing, stylex.defaultMarker())}>Third (border-bottom in CSS)</div>
+    <Thing>First</Thing>
+    <Thing>Second (border-bottom in CSS)</Thing>
+    <Thing>Third (border-bottom in CSS)</Thing>
   </div>
 );
 

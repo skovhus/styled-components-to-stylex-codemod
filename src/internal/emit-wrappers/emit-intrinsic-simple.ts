@@ -1082,9 +1082,12 @@ export function emitSimpleExportedIntrinsicWrappers(ctx: EmitIntrinsicContext): 
         includeRest: Boolean(restId),
         restId: restId ?? undefined,
       });
-      const declStmt = j.variableDeclaration("const", [
-        j.variableDeclarator(j.objectPattern(patternProps as any), propsId),
-      ]);
+      const usePropsChildrenDirectly = emitter.isChildrenOnlyDestructurePattern(patternProps);
+      const declStmt = usePropsChildrenDirectly
+        ? null
+        : j.variableDeclaration("const", [
+            j.variableDeclarator(j.objectPattern(patternProps as any), propsId),
+          ]);
 
       // Use the style merger helper
       const { attrsInfo, staticClassNameExpr } = emitter.splitAttrsInfo(
@@ -1132,10 +1135,15 @@ export function emitSimpleExportedIntrinsicWrappers(ctx: EmitIntrinsicContext): 
         tagName: useAsProp ? "Component" : tagName,
         attrs: openingAttrs,
         includeChildren,
-        childrenExpr: childrenId,
+        childrenExpr: usePropsChildrenDirectly
+          ? j.memberExpression(propsId, j.identifier("children"))
+          : childrenId,
       });
 
-      const bodyStmts: StatementKind[] = [declStmt];
+      const bodyStmts: StatementKind[] = [];
+      if (declStmt) {
+        bodyStmts.push(declStmt);
+      }
       if (needsUseTheme) {
         bodyStmts.push(buildUseThemeDeclaration(j, emitter.themeHook.functionName));
       }

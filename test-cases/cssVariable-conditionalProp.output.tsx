@@ -21,16 +21,21 @@ function ContainerWrapper(props: ContainerWrapperProps) {
   );
 }
 
+// A container that uses the CSS custom property with calc()
+function Container(props: { children?: React.ReactNode }) {
+  return <div {...stylex.props(styles.container)}>{props.children}</div>;
+}
+
 export const App = () => (
   <div style={{ display: "flex", flexDirection: "column", gap: "16px" }}>
     <ContainerWrapper $width={100}>
-      <div {...stylex.props(styles.container)}>Width: 100px + 60px = 160px</div>
+      <Container>Width: 100px + 60px = 160px</Container>
     </ContainerWrapper>
     <ContainerWrapper $width={200}>
-      <div {...stylex.props(styles.container)}>Width: 200px + 60px = 260px</div>
+      <Container>Width: 200px + 60px = 260px</Container>
     </ContainerWrapper>
     <ContainerWrapper $width={undefined}>
-      <div {...stylex.props(styles.container)}>Width: undefined (no custom property)</div>
+      <Container>Width: undefined (no custom property)</Container>
     </ContainerWrapper>
   </div>
 );
@@ -43,7 +48,6 @@ const styles = stylex.create({
   containerWrapper: {
     overflow: "hidden",
   },
-  // A container that uses the CSS custom property with calc()
   container: {
     backgroundColor: "coral",
     width: "calc(var(--component-width) + 60px)",

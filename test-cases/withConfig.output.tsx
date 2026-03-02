@@ -5,9 +5,7 @@ type CardProps = React.PropsWithChildren<{}>;
 
 // withConfig for componentId (stable class names)
 function Card(props: CardProps) {
-  const { children } = props;
-
-  return <div {...stylex.props(styles.card)}>{children}</div>;
+  return <div {...stylex.props(styles.card)}>{props.children}</div>;
 }
 
 type InputProps = Omit<React.ComponentProps<"input">, "className" | "style"> & {

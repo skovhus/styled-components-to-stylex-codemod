@@ -1,15 +1,29 @@
 import React from "react";
 import * as stylex from "@stylexjs/stylex";
 
+type DividerProps = Omit<React.ComponentProps<"hr">, "className" | "style"> & {
+  $color?: string;
+};
+
+// Styled hr
+function Divider(props: DividerProps) {
+  const { $color } = props;
+
+  return (
+    <hr
+      {...stylex.props(styles.divider, $color != null && styles.dividerBackgroundColor($color))}
+    />
+  );
+}
+
 export const App = () => (
   <div>
-    <hr {...stylex.props(styles.divider)} />
-    <hr {...stylex.props(styles.divider, styles.dividerBackgroundColor("#bf4f74"))} />
+    <Divider />
+    <Divider $color="#bf4f74" />
   </div>
 );
 
 const styles = stylex.create({
-  // Styled hr
   divider: {
     borderWidth: 0,
     borderStyle: "none",

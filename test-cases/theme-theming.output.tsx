@@ -1,14 +1,19 @@
+import React from "react";
 import * as stylex from "@stylexjs/stylex";
 import { ThemeProvider } from "styled-components";
 import { testCaseTheme, $colors } from "./tokens.stylex";
+
+function Button(props: { children?: React.ReactNode }) {
+  return <button {...stylex.props(styles.button)}>{props.children}</button>;
+}
 
 const theme = testCaseTheme;
 
 export const App = () => (
   <div style={{ display: "flex", gap: "12px", padding: "12px" }}>
-    <button {...stylex.props(styles.button)}>Normal</button>
+    <Button>Normal</Button>
     <ThemeProvider theme={theme}>
-      <button {...stylex.props(styles.button)}>Themed</button>
+      <Button>Themed</Button>
     </ThemeProvider>
   </div>
 );

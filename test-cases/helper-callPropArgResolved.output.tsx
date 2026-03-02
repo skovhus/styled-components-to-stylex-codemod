@@ -1,18 +1,29 @@
 import React from "react";
 import * as stylex from "@stylexjs/stylex";
 import { $shadow } from "./tokens.stylex";
+import { shadow } from "./lib/helpers";
+
+type BoxProps = React.PropsWithChildren<{
+  shadow: "dark" | "light";
+}>;
+
+// Test: adapter resolution for helper calls with dynamic prop args.
+// The adapter remaps `shadow` → `$shadow` from tokens.stylex.
+
+function Box(props: BoxProps) {
+  const { children, shadow } = props;
+
+  return <div {...stylex.props(styles.box, styles.boxBoxShadow(shadow))}>{children}</div>;
+}
 
 export const App = () => (
   <div style={{ display: "flex", gap: "16px", padding: "16px" }}>
-    <div {...stylex.props(styles.box, styles.boxBoxShadow("dark"))}>Dark shadow</div>
-    <div {...stylex.props(styles.box, styles.boxBoxShadow("light"))}>Light shadow</div>
+    <Box shadow="dark">Dark shadow</Box>
+    <Box shadow="light">Light shadow</Box>
   </div>
 );
 
 const styles = stylex.create({
-  // Test: adapter resolution for helper calls with dynamic prop args.
-  // The adapter remaps `shadow` → `$shadow` from tokens.stylex.
-
   box: {
     height: "50px",
     width: "50px",
