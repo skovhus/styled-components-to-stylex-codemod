@@ -94,12 +94,12 @@ export function Scrollable(props: ScrollableProps) {
 
 // Pattern 5: styled(Component).attrs with TYPE ALIAS (not interface)
 // This is the exact pattern from a design system's Scrollable.tsx
-type TypeAliasProps = Omit<React.ComponentPropsWithRef<typeof Flex>, "className" | "style"> & {
+type TypeAliasProps = {
   /** Whether scrollbar gutter should be stable */
   gutter?: "auto" | "stable" | string;
   /** Whether to apply background color */
   $applyBackground?: boolean;
-};
+} & Omit<React.ComponentPropsWithRef<typeof Flex>, "className" | "style">;
 
 export function ScrollableWithType(props: TypeAliasProps) {
   const { children, $applyBackground, tabIndex, ...rest } = props;

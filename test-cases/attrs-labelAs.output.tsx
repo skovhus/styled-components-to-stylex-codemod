@@ -3,11 +3,11 @@ import * as stylex from "@stylexjs/stylex";
 import { mergedSx } from "./lib/mergedSx";
 
 // Simplified Text component for test case
-type TextProps = { sx?: stylex.StyleXStyles } & React.PropsWithChildren<{
+type TextProps = React.PropsWithChildren<{
   as?: React.ElementType;
   className?: string;
   style?: React.CSSProperties;
-}>;
+}> & { sx?: stylex.StyleXStyles };
 
 function Text(props: TextProps & React.ComponentProps<"span"> & { sx?: stylex.StyleXStyles }) {
   const { as: Component = "span", className, children, style, sx, ...rest } = props;

@@ -583,11 +583,11 @@ export class WrapperEmitter {
         if (alreadyIncludes) {
           return;
         }
-        // Add to existing intersection
-        existingType.types = [baseTypeNode, ...types];
+        // Append to existing intersection (user's type first for readability)
+        existingType.types = [...types, baseTypeNode];
       } else {
-        // Convert to intersection type: BaseType & ExistingType
-        alias.typeAnnotation = j.tsIntersectionType([baseTypeNode, existingType]);
+        // Convert to intersection type: ExistingType & BaseType
+        alias.typeAnnotation = j.tsIntersectionType([existingType, baseTypeNode]);
       }
     });
     return true;
