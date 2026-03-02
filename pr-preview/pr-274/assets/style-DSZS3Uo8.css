@@ -175,17 +175,17 @@ body{font-family:-apple-system,BlinkMacSystemFont,Segoe UI,Roboto,Helvetica Neue
   inherits: false
 }
 
-@property --x-animationDuration {
-  syntax: "*";
-  inherits: false
-}
-
 @property --x-1113oo7 {
   syntax: "*";
   inherits: false
 }
 
 @property --x-64unvl {
+  syntax: "*";
+  inherits: false
+}
+
+@property --x-animationDuration {
   syntax: "*";
   inherits: false
 }
@@ -593,14 +593,16 @@ body{font-family:-apple-system,BlinkMacSystemFont,Segoe UI,Roboto,Helvetica Neue
   .x1wk2j8l.x1wk2j8l:not(#\#) {
     padding: 2.5rem;
   }
-
-  .x1i7j8g4.x1i7j8g4:not(#\#) {
-    padding: 2rem;
-  }
 }
 
 @media (width >= 768px) and (width <= 1023.99px) {
   .x1t32qvz.x1t32qvz:not(#\#) {
+    padding: 2rem;
+  }
+}
+
+@media (width >= 1024px) {
+  .x1i7j8g4.x1i7j8g4:not(#\#) {
     padding: 2rem;
   }
 }
@@ -2722,7 +2724,7 @@ body{font-family:-apple-system,BlinkMacSystemFont,Segoe UI,Roboto,Helvetica Neue
   outline-offset: 5px;
 }
 
-.xry1jez.xry1jez:where(.x1rnikca:hover *):not(#\#):not(#\#):not(#\#), .x1308hcw.x1308hcw:where(.x19pepp0:hover *):not(#\#):not(#\#):not(#\#) {
+.x1308hcw.x1308hcw:where(.x19pepp0:hover *):not(#\#):not(#\#):not(#\#), .xry1jez.xry1jez:where(.x1rnikca:hover *):not(#\#):not(#\#):not(#\#) {
   background-color: #639;
 }
 
