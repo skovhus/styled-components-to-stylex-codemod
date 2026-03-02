@@ -938,6 +938,86 @@ export const App = () => <Box tone="muted">Hello</Box>;
     // Original helper call should be preserved since the adapter didn't remap it
     expect(code).toContain("color(");
   });
+
+  it("should keep static helper resolution when preserveRuntimeCall is not set", () => {
+    const source = `
+import styled from "styled-components";
+import { ColorConverter } from "./lib/helpers";
+
+const Toggle = styled.div\`
+  background-color: \${({ theme }) => ColorConverter.cssWithAlpha(theme.color.bgBase, 0.4)};
+  padding: 8px 16px;
+\`;
+
+export const App = () => <Toggle>Toggle</Toggle>;
+`;
+
+    const adapterWithStaticColorMix = {
+      externalInterface() {
+        return { styles: false, as: false, ref: false };
+      },
+      resolveValue(ctx: ResolveValueContext) {
+        if (ctx.kind !== "theme") {
+          return undefined;
+        }
+        if (ctx.path === "color.bgBase") {
+          return {
+            expr: "$colors.bgBase",
+            imports: [
+              {
+                from: { kind: "specifier" as const, value: "./tokens.stylex" },
+                names: [{ imported: "$colors" }],
+              },
+            ],
+          };
+        }
+        return undefined;
+      },
+      resolveCall(ctx: {
+        calleeImportedName: string;
+        calleeMemberPath?: string[];
+        args: Array<{ kind: string; value?: unknown }>;
+      }) {
+        if (
+          ctx.calleeImportedName !== "ColorConverter" ||
+          ctx.calleeMemberPath?.[0] !== "cssWithAlpha"
+        ) {
+          return undefined;
+        }
+        const alphaArg = ctx.args[1];
+        const alpha =
+          alphaArg?.kind === "literal" && typeof alphaArg.value === "number" ? alphaArg.value : 1;
+        return {
+          usage: "create" as const,
+          expr: `\`color-mix(in srgb, \${$colors.bgBase} ${alpha * 100}%, transparent)\``,
+          imports: [
+            {
+              from: { kind: "specifier" as const, value: "./tokens.stylex" },
+              names: [{ imported: "$colors" }],
+            },
+          ],
+        };
+      },
+      resolveSelector() {
+        return undefined;
+      },
+      styleMerger: null,
+    } satisfies Adapter;
+
+    const result = transformWithWarnings(
+      { source, path: "helper-static-colormix.tsx" },
+      { jscodeshift: j, j, stats: () => {}, report: () => {} },
+      { adapter: adapterWithStaticColorMix },
+    );
+
+    expect(result.code).not.toBeNull();
+    const code = result.code ?? "";
+    expect(code).toContain("color-mix(in srgb");
+    expect(code).toContain("$colors.bgBase");
+    expect(code).not.toContain("useTheme");
+    expect(code).not.toContain("ColorConverter.cssWithAlpha(");
+    expect(code).not.toContain("toggleBackgroundColor");
+  });
 });
 
 describe("import resolution scope", () => {
@@ -1386,11 +1466,15 @@ export const App = () => <Box $color="red">Hello</Box>;
     };
 
     const source = `
+import * as React from "react";
 import styled from 'styled-components';
 export const Box = styled.div\`
   color: red;
 \`;
-export const App = () => <Box>Hello</Box>;
+export const App = () => {
+  const ref = React.useRef<HTMLDivElement>(null);
+  return <Box ref={ref}>Hello</Box>;
+};
 `;
 
     const result = transformWithWarnings(
@@ -1401,6 +1485,8 @@ export const App = () => <Box>Hello</Box>;
 
     expect(result.code).not.toBeNull();
     expect(result.code).toContain("ref?: React.Ref<HTMLDivElement>");
+    expect(result.code).toMatch(/const\s*\{\s*children,\s*\.\.\.rest\s*\}\s*=\s*props;/);
+    expect(result.code).toMatch(/<div\s+\{\.\.\.rest\}\s+\{\.\.\.stylex\.props\(styles\.box\)\}>/);
   });
 
   it("should not include ref in type when externalInterface returns ref: false", async () => {

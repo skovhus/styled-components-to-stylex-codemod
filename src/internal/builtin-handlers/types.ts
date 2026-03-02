@@ -79,6 +79,17 @@ export type HandlerResult =
     }
   | {
       /**
+       * Keep only the original helper call at runtime (no static adapter expression).
+       *
+       * Emitted when `adapter.resolveCall(...)` returns `{ preserveRuntimeCall: true }`
+       * without an `expr` fallback.
+       */
+      type: "runtimeCallOnly";
+      resolveCallContext: CallResolveContext;
+      resolveCallResult: CallResolveResult;
+    }
+  | {
+      /**
        * Emit a wrapper inline style from a raw CSS string snippet.
        *
        * This is intentionally narrow and primarily used for keeping runtime parity

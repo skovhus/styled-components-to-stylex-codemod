@@ -28,6 +28,9 @@ import type {
  * 2. Otherwise, infer from context: cssProperty present -> CSS value, absent -> StyleX reference
  */
 export function isAdapterResultCssValue(result: CallResolveResult, cssProperty?: string): boolean {
+  if (!("expr" in result)) {
+    return true;
+  }
   return result.usage === "create" || (result.usage === undefined && Boolean(cssProperty));
 }
 
@@ -42,6 +45,12 @@ export function buildResolvedHandlerResult(
   cssProperty: string | undefined,
   payload: { resolveCallContext: CallResolveContext; resolveCallResult: CallResolveResult },
 ): HandlerResult {
+  if (!("expr" in result)) {
+    return {
+      type: "runtimeCallOnly",
+      ...payload,
+    };
+  }
   const isCssValue = isAdapterResultCssValue(result, cssProperty);
   return isCssValue
     ? {
