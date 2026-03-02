@@ -781,7 +781,7 @@ function resolveStaticTemplateExpressionAst(args: {
             args: innerArgs,
             ...(callLoc ? { loc: { line: callLoc.line, column: callLoc.column } } : {}),
           });
-          if (callRes && callRes.usage !== "props") {
+          if (callRes && "expr" in callRes && callRes.usage !== "props") {
             for (const callImp of callRes.imports ?? []) {
               resolverImports.set(JSON.stringify(callImp), callImp);
             }

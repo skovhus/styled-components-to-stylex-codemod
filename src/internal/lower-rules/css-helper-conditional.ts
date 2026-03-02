@@ -18,6 +18,7 @@ import {
   collectPropsFromArrowFn,
   collectPropsFromExpressions,
   normalizeDollarProps,
+  rewritePropsThemeToThemeVar,
 } from "./inline-styles.js";
 import { mergeStyleObjects } from "./utils.js";
 import { extractConditionName } from "../utilities/style-key-naming.js";
@@ -1830,54 +1831,6 @@ export function createCssHelperConditionalHandler(ctx: CssHelperConditionalConte
 // ---------------------------------------------------------------------------
 
 /**
- * Rewrites `props.theme.X` → `theme.X` in a cloned AST node.
- * Used to transform condition expressions for the useTheme() wrapper pattern.
- */
-function rewriteThemeToUseThemeVar(node: ExpressionKind): ExpressionKind {
-  const rewrite = (n: unknown): unknown => {
-    if (!n || typeof n !== "object") {
-      return n;
-    }
-    if (Array.isArray(n)) {
-      return n.map((child) => rewrite(child));
-    }
-    const rec = n as ASTNodeRecord;
-    // Match MemberExpression(MemberExpression(Identifier("props"), "theme"), <rest>)
-    // and replace with MemberExpression(Identifier("theme"), <rest>)
-    if (rec.type === "MemberExpression" || rec.type === "OptionalMemberExpression") {
-      const obj = rec.object as ASTNodeRecord | undefined;
-      if (
-        obj &&
-        (obj.type === "MemberExpression" || obj.type === "OptionalMemberExpression") &&
-        (obj.object as { type?: string; name?: string })?.type === "Identifier" &&
-        (obj.object as { name?: string })?.name === "props" &&
-        (obj.property as { type?: string; name?: string })?.type === "Identifier" &&
-        (obj.property as { name?: string })?.name === "theme" &&
-        obj.computed === false
-      ) {
-        rec.object = { type: "Identifier", name: "theme" } as unknown as ASTNodeRecord;
-        rec.property = rewrite(rec.property) as ASTNodeRecord;
-        return rec;
-      }
-      rec.object = rewrite(rec.object) as ASTNodeRecord;
-      rec.property = rewrite(rec.property) as ASTNodeRecord;
-      return rec;
-    }
-    if (rec.type === "BinaryExpression" || rec.type === "LogicalExpression") {
-      rec.left = rewrite(rec.left) as ASTNodeRecord;
-      rec.right = rewrite(rec.right) as ASTNodeRecord;
-      return rec;
-    }
-    if (rec.type === "UnaryExpression") {
-      rec.argument = rewrite(rec.argument) as ASTNodeRecord;
-      return rec;
-    }
-    return rec;
-  };
-  return rewrite(node) as ExpressionKind;
-}
-
-/**
  * Extracts theme property info from a condition expression for style key naming.
  *
  * Returns the primary theme property name and optional comparison value:
@@ -2053,7 +2006,7 @@ function tryResolveBlockLevelThemeConditional(args: BlockThemeConditionalArgs): 
   // 1. replaceParamWithProps: rewrites param refs (handles destructured ({ theme }) patterns)
   // 2. rewriteThemeToUseThemeVar: replaces `props.theme.X` → `theme.X`
   const propsCondition = replaceParamWithProps(conditional.test);
-  const conditionExpr = rewriteThemeToUseThemeVar(propsCondition);
+  const conditionExpr = rewritePropsThemeToThemeVar(propsCondition);
 
   const themeInfo = extractThemeConditionInfo(conditionExpr);
   if (!themeInfo) {

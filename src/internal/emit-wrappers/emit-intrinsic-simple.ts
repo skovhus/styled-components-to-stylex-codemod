@@ -77,8 +77,9 @@ export function emitSimpleWithConfigWrappers(ctx: EmitIntrinsicContext): void {
     const allowStyleProp = emitter.shouldAllowStyleProp(d);
     const allowSxProp = emitter.shouldAllowSxProp(d);
     const allowAsProp = shouldAllowAsProp(d, tagName);
-    // Determine whether the component will forward ref (via {...rest}) so we can
-    // include ref in the narrow type only when it's actually forwarded.
+    // Determine whether the component will forward ref (via explicit forwarding
+    // and/or {...rest}) so we can include ref in the narrow type only when it's
+    // actually forwarded.
     const willForwardRef =
       (d.supportsRefProp ?? false) ||
       allowClassNameProp ||
@@ -198,6 +199,7 @@ export function emitSimpleWithConfigWrappers(ctx: EmitIntrinsicContext): void {
     const classNameId = j.identifier("className");
     const childrenId = j.identifier("children");
     const styleId = j.identifier("style");
+    const refId = j.identifier("ref");
     const restId = j.identifier("rest");
 
     const isVoidTag = VOID_TAGS.has(tagName);
@@ -293,6 +295,7 @@ export function emitSimpleWithConfigWrappers(ctx: EmitIntrinsicContext): void {
             allowAsProp,
             allowClassNameProp: false,
             allowStyleProp: false,
+            includeRefProp: d.supportsRefProp ?? false,
             includeRest,
             defaultAttrs: d.attrsInfo?.defaultAttrs ?? [],
             conditionalAttrs: d.attrsInfo?.conditionalAttrs ?? [],
@@ -319,6 +322,7 @@ export function emitSimpleWithConfigWrappers(ctx: EmitIntrinsicContext): void {
         emitter.patternProp("className", classNameId),
         ...(isVoidTag ? [] : [emitter.patternProp("children", childrenId)]),
         emitter.patternProp("style", styleId),
+        ...((d.supportsRefProp ?? false) ? [emitter.patternProp("ref", refId)] : []),
         ...(allowSxProp ? [emitter.patternProp("sx", sxId)] : []),
       ],
       destructureProps: [...pseudoGuardProps],
@@ -352,6 +356,9 @@ export function emitSimpleWithConfigWrappers(ctx: EmitIntrinsicContext): void {
         attrsInfo,
         propExprFor: (prop) => j.identifier(prop),
       }),
+      ...((d.supportsRefProp ?? false)
+        ? [j.jsxAttribute(j.jsxIdentifier("ref"), j.jsxExpressionContainer(refId))]
+        : []),
       j.jsxSpreadAttribute(restId),
     ];
     emitter.appendMergingAttrs(openingAttrs, merging);
@@ -482,7 +489,8 @@ export function emitSimpleExportedIntrinsicWrappers(ctx: EmitIntrinsicContext): 
     // d.isExported is already set from exportedComponents during analyze-before-emit
     const isExportedComponent = d.isExported ?? false;
     const usePolymorphicPattern = allowAsProp && isExportedComponent;
-    // Include ref in narrow type only when the component will forward it via {...rest}.
+    // Include ref in narrow type only when the component will forward it
+    // (via explicit forwarding and/or {...rest}).
     // When needsRestForType is true, the broad type (ComponentProps<"tag">) is used instead
     // and ref is included naturally. These conditions cover the gap where shouldIncludeRest
     // is true but needsRestForType is false.
@@ -1044,6 +1052,7 @@ export function emitSimpleExportedIntrinsicWrappers(ctx: EmitIntrinsicContext): 
       const childrenId = j.identifier("children");
       const styleId = j.identifier("style");
       const sxId = j.identifier("sx");
+      const refId = j.identifier("ref");
       const restId = shouldIncludeRest ? j.identifier("rest") : null;
       const forwardedAsId = j.identifier("forwardedAs");
 
@@ -1075,6 +1084,7 @@ export function emitSimpleExportedIntrinsicWrappers(ctx: EmitIntrinsicContext): 
           ...(allowClassNameProp ? [ctx.patternProp("className", classNameId)] : []),
           ...(includeChildren ? [ctx.patternProp("children", childrenId)] : []),
           ...(allowStyleProp ? [ctx.patternProp("style", styleId)] : []),
+          ...((d.supportsRefProp ?? false) ? [ctx.patternProp("ref", refId)] : []),
           ...(allowSxProp ? [ctx.patternProp("sx", sxId)] : []),
         ],
         destructureProps,
@@ -1117,6 +1127,9 @@ export function emitSimpleExportedIntrinsicWrappers(ctx: EmitIntrinsicContext): 
           attrsInfo: attrsInfoWithoutForwardedAsStatic,
           propExprFor: (prop) => j.identifier(prop),
         }),
+        ...((d.supportsRefProp ?? false)
+          ? [j.jsxAttribute(j.jsxIdentifier("ref"), j.jsxExpressionContainer(refId))]
+          : []),
         ...(restId ? [j.jsxSpreadAttribute(restId)] : []),
         ...(includesForwardedAs
           ? [
@@ -1188,6 +1201,7 @@ export function emitSimpleExportedIntrinsicWrappers(ctx: EmitIntrinsicContext): 
           allowAsProp,
           allowClassNameProp: false,
           allowStyleProp: false,
+          includeRefProp: d.supportsRefProp ?? false,
           includeRest: shouldIncludeRest,
           defaultAttrs: d.attrsInfo?.defaultAttrs ?? [],
           conditionalAttrs: d.attrsInfo?.conditionalAttrs ?? [],

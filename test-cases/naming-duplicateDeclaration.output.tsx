@@ -26,10 +26,11 @@ function SizeBox<C extends React.ElementType = "div">(
     }
   > & { sx?: stylex.StyleXStyles; as?: C },
 ) {
-  const { as: Component = "div", className, children, style, sx, $size, ...rest } = props;
+  const { as: Component = "div", className, children, style, ref, sx, $size, ...rest } = props;
 
   return (
     <Component
+      ref={ref}
       {...rest}
       {...mergedSx(
         [

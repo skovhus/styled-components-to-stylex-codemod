@@ -157,7 +157,7 @@ export type ResolveValueResult = {
   usage?: "props";
 };
 
-export type CallResolveResult = {
+export type CallResolveResultWithExpr = {
   /**
    * JS expression string to inline into generated output.
    *
@@ -212,7 +212,41 @@ export type CallResolveResult = {
    * Example: `"white-space: nowrap; overflow: hidden; text-overflow: ellipsis;"`
    */
   cssText?: string;
+
+  /**
+   * When true, keeps the original helper call as a runtime style-function override
+   * in addition to the resolved static value.
+   *
+   * This is useful for incremental migrations where you still want to run an
+   * existing runtime helper (for example `ColorConverter.cssWithAlpha(...)`) while
+   * also emitting a static StyleX fallback.
+   *
+   * Behavior notes:
+   * - In `CallResolveResultWithExpr`, `expr`/`imports` are used as a static fallback in
+   *   `stylex.create(...)`.
+   * - In `CallResolveRuntimeOnlyResult`, no static fallback is emitted.
+   * - The runtime override is only emitted for arrow-function helper call interpolations.
+   * - Theme access in the original call is rewritten to use the wrapper `useTheme()` value.
+   */
+  preserveRuntimeCall?: boolean;
 };
+
+export type CallResolveRuntimeOnlyResult = {
+  /**
+   * Keep the original helper call as a runtime style-function override, without
+   * requiring a static fallback expression.
+   *
+   * This mode is only supported for helper calls used as CSS values (not StyleX
+   * style-object references).
+   */
+  preserveRuntimeCall: true;
+  /**
+   * Optional usage hint. Runtime-only results are treated as CSS-value usage.
+   */
+  usage?: "create";
+};
+
+export type CallResolveResult = CallResolveResultWithExpr | CallResolveRuntimeOnlyResult;
 
 // Note: we intentionally do NOT expose “unified” ResolveContext/ResolveResult types anymore.
 // Consumers should use the specific contexts/results:
@@ -461,6 +495,10 @@ export interface Adapter {
    *
    * Return:
    * - `{ expr, imports }` with the resolved expression
+   * - `{ preserveRuntimeCall: true }` to keep only the original runtime helper call
+   *   (no static fallback)
+   * - Optional: add `preserveRuntimeCall: true` to also keep the original helper
+   *   call at runtime as a wrapper style-function override
    * - `undefined` to bail/skip the file
    */
   resolveCall: (context: CallResolveContext) => CallResolveResult | undefined;

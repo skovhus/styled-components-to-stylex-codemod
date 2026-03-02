@@ -5,10 +5,10 @@ import * as stylex from "@stylexjs/stylex";
 import { mergedSx } from "./lib/mergedSx";
 
 function OptionsList(props: React.ComponentProps<"ul">) {
-  const { className, children, style, ...rest } = props;
+  const { className, children, style, ref, ...rest } = props;
 
   return (
-    <ul {...rest} {...mergedSx(styles.optionsList, className, style)}>
+    <ul ref={ref} {...rest} {...mergedSx(styles.optionsList, className, style)}>
       {children}
     </ul>
   );

@@ -404,6 +404,9 @@ function tryResolveArrowFnCallWithConditionalArgs(
   if (!altResult) {
     return null;
   }
+  if (!("expr" in consResult) || !("expr" in altResult)) {
+    return null;
+  }
 
   // Both branches must agree on usage type
   const consIsCss = isAdapterResultCssValue(consResult, node.css.property);
@@ -586,7 +589,7 @@ function tryResolveCalleeViaAdapter(
       args: [{ kind: "unknown" }],
       cssProperty: node.css.property,
     });
-    if (result) {
+    if (result && "expr" in result) {
       return {
         resolvedExpr: result.expr,
         resolvedImports: result.imports,

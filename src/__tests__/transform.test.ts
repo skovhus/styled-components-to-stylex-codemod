@@ -938,6 +938,168 @@ export const App = () => <Box tone="muted">Hello</Box>;
     // Original helper call should be preserved since the adapter didn't remap it
     expect(code).toContain("color(");
   });
+
+  it("should keep static helper resolution when preserveRuntimeCall is not set", () => {
+    const source = `
+import styled from "styled-components";
+import { ColorConverter } from "./lib/helpers";
+
+const Toggle = styled.div\`
+  background-color: \${({ theme }) => ColorConverter.cssWithAlpha(theme.color.bgBase, 0.4)};
+  padding: 8px 16px;
+\`;
+
+export const App = () => <Toggle>Toggle</Toggle>;
+`;
+
+    const adapterWithStaticColorMix = {
+      externalInterface() {
+        return { styles: false, as: false, ref: false };
+      },
+      resolveValue(ctx: ResolveValueContext) {
+        if (ctx.kind !== "theme") {
+          return undefined;
+        }
+        if (ctx.path === "color.bgBase") {
+          return {
+            expr: "$colors.bgBase",
+            imports: [
+              {
+                from: { kind: "specifier" as const, value: "./tokens.stylex" },
+                names: [{ imported: "$colors" }],
+              },
+            ],
+          };
+        }
+        return undefined;
+      },
+      resolveCall(ctx: {
+        calleeImportedName: string;
+        calleeMemberPath?: string[];
+        args: Array<{ kind: string; value?: unknown }>;
+      }) {
+        if (
+          ctx.calleeImportedName !== "ColorConverter" ||
+          ctx.calleeMemberPath?.[0] !== "cssWithAlpha"
+        ) {
+          return undefined;
+        }
+        const alphaArg = ctx.args[1];
+        const alpha =
+          alphaArg?.kind === "literal" && typeof alphaArg.value === "number" ? alphaArg.value : 1;
+        return {
+          usage: "create" as const,
+          expr: `\`color-mix(in srgb, \${$colors.bgBase} ${alpha * 100}%, transparent)\``,
+          imports: [
+            {
+              from: { kind: "specifier" as const, value: "./tokens.stylex" },
+              names: [{ imported: "$colors" }],
+            },
+          ],
+        };
+      },
+      resolveSelector() {
+        return undefined;
+      },
+      styleMerger: null,
+    } satisfies Adapter;
+
+    const result = transformWithWarnings(
+      { source, path: "helper-static-colormix.tsx" },
+      { jscodeshift: j, j, stats: () => {}, report: () => {} },
+      { adapter: adapterWithStaticColorMix },
+    );
+
+    expect(result.code).not.toBeNull();
+    const code = result.code ?? "";
+    expect(code).toContain("color-mix(in srgb");
+    expect(code).toContain("$colors.bgBase");
+    expect(code).not.toContain("useTheme");
+    expect(code).not.toContain("ColorConverter.cssWithAlpha(");
+    expect(code).not.toContain("toggleBackgroundColor");
+  });
+
+  it("should preserve static suffix in runtime call override (P1 fix)", () => {
+    const source = `
+import styled from "styled-components";
+import { ColorConverter } from "./lib/helpers";
+
+const Box = styled.div\`
+  transform: \${({ theme }) => ColorConverter.cssWithAlpha(theme.color.primary, 0.5)} translateX(8px);
+\`;
+
+export const App = () => <Box>Box</Box>;
+`;
+
+    const result = transformWithWarnings(
+      { source, path: "runtime-call-suffix.tsx" },
+      { jscodeshift: j, j, stats: () => {}, report: () => {} },
+      { adapter: fixtureAdapter },
+    );
+
+    expect(result.code).not.toBeNull();
+    const code = result.code ?? "";
+    // The static suffix " translateX(8px)" should be preserved in the runtime call
+    expect(code).toContain("translateX(8px)");
+    expect(code).toContain("boxTransform");
+    expect(code).toContain("ColorConverter.cssWithAlpha");
+  });
+
+  it("should preserve !important in runtime call override (P1 fix)", () => {
+    const source = `
+import styled from "styled-components";
+import { ColorConverter } from "./lib/helpers";
+
+const Box = styled.div\`
+  color: \${({ theme }) => ColorConverter.cssWithAlpha(theme.color.primary, 0.5)} !important;
+\`;
+
+export const App = () => <Box>Box</Box>;
+`;
+
+    const result = transformWithWarnings(
+      { source, path: "runtime-call-important.tsx" },
+      { jscodeshift: j, j, stats: () => {}, report: () => {} },
+      { adapter: fixtureAdapter },
+    );
+
+    expect(result.code).not.toBeNull();
+    const code = result.code ?? "";
+    // The !important should be preserved in the runtime call
+    expect(code).toContain("!important");
+    expect(code).toContain("ColorConverter.cssWithAlpha");
+  });
+
+  it("should allow later runtime call overrides to win over earlier ones (P2 fix)", () => {
+    const source = `
+import styled from "styled-components";
+import { ColorConverter } from "./lib/helpers";
+
+const Box = styled.div\`
+  color: \${({ theme }) => ColorConverter.cssWithAlpha(theme.color.primary, 0.3)};
+  color: \${({ theme }) => ColorConverter.cssWithAlpha(theme.color.secondary, 0.5)};
+\`;
+
+export const App = () => <Box>Box</Box>;
+`;
+
+    const result = transformWithWarnings(
+      { source, path: "runtime-call-override.tsx" },
+      { jscodeshift: j, j, stats: () => {}, report: () => {} },
+      { adapter: fixtureAdapter },
+    );
+
+    expect(result.code).not.toBeNull();
+    const code = result.code ?? "";
+    // Only the second color declaration should be in the output (secondary, 0.5)
+    expect(code).toContain("secondary");
+    expect(code).toContain("0.5");
+    // The first declaration should NOT be present (primary, 0.3 should be overridden)
+    expect(code).not.toMatch(/primary.*0\.3/);
+    // Only one boxColor style function call should be present
+    const colorFnMatches = code.match(/styles\.boxColor\(/g);
+    expect(colorFnMatches?.length).toBe(1);
+  });
 });
 
 describe("import resolution scope", () => {
@@ -1401,6 +1563,94 @@ export const App = () => <Box>Hello</Box>;
 
     expect(result.code).not.toBeNull();
     expect(result.code).toContain("ref?: React.Ref<HTMLDivElement>");
+  });
+
+  it("should explicitly destructure and forward ref when wrapper supports external refs", async () => {
+    const adapterWithRef = {
+      styleMerger: null,
+      externalInterface() {
+        return { styles: false, as: false, ref: true } as const;
+      },
+      resolveValue() {
+        return undefined;
+      },
+      resolveCall() {
+        return undefined;
+      },
+      resolveSelector() {
+        return undefined;
+      },
+    };
+
+    const source = `
+import * as React from "react";
+import styled from 'styled-components';
+export const Box = styled.div\`
+  color: red;
+\`;
+export const App = () => {
+  const ref = React.useRef<HTMLDivElement>(null);
+  return <Box ref={ref}>Hello</Box>;
+};
+`;
+
+    const result = transformWithWarnings(
+      { source, path: "test.tsx" },
+      { jscodeshift: j, j, stats: () => {}, report: () => {} },
+      { adapter: adapterWithRef },
+    );
+
+    expect(result.code).not.toBeNull();
+    expect(result.code).toMatch(/const\s*\{\s*children,\s*ref,\s*\.\.\.rest\s*\}\s*=\s*props;/);
+    expect(result.code).toMatch(
+      /<div\s+ref=\{ref\}\s+\{\.\.\.rest\}\s+\{\.\.\.stylex\.props\(styles\.box\)\}>/,
+    );
+  });
+
+  it("should explicitly destructure and forward ref for component wrappers", async () => {
+    const adapterWithRef = {
+      styleMerger: null,
+      externalInterface() {
+        return { styles: false, as: false, ref: true } as const;
+      },
+      resolveValue() {
+        return undefined;
+      },
+      resolveCall() {
+        return undefined;
+      },
+      resolveSelector() {
+        return undefined;
+      },
+    };
+
+    const source = `
+import * as React from "react";
+import styled from "styled-components";
+
+function Base(props: React.ComponentProps<"div">) {
+  return <div {...props} />;
+}
+
+export const Wrapped = styled(Base)\`
+  color: red;
+\`;
+
+export const App = () => {
+  const ref = React.useRef<HTMLDivElement>(null);
+  return <Wrapped ref={ref}>Hello</Wrapped>;
+};
+`;
+
+    const result = transformWithWarnings(
+      { source, path: "test.tsx" },
+      { jscodeshift: j, j, stats: () => {}, report: () => {} },
+      { adapter: adapterWithRef },
+    );
+
+    expect(result.code).not.toBeNull();
+    expect(result.code).toMatch(/const\s*\{[^}]*\bref\b[^}]*\.\.\.rest\s*\}\s*=\s*props;/);
+    expect(result.code).toContain("ref={ref}");
   });
 
   it("should not include ref in type when externalInterface returns ref: false", async () => {

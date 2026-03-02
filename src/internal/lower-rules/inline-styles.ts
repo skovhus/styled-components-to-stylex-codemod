@@ -39,6 +39,68 @@ export function buildTemplateWithStaticParts(
   );
 }
 
+/**
+ * Rewrites `props.theme.X` member access to `theme.X` in a cloned AST node.
+ *
+ * This is used when wrapper emission introduces `const theme = useTheme();`
+ * and a preserved runtime expression should read from that variable.
+ */
+export function rewritePropsThemeToThemeVar(node: ExpressionKind): ExpressionKind {
+  const rewrite = (n: unknown): unknown => {
+    if (!n || typeof n !== "object") {
+      return n;
+    }
+    if (Array.isArray(n)) {
+      return n.map((child) => rewrite(child));
+    }
+    const rec = n as ASTNodeRecord;
+    if (rec.type === "MemberExpression" || rec.type === "OptionalMemberExpression") {
+      const obj = rec.object as ASTNodeRecord | undefined;
+      if (
+        obj &&
+        (obj.type === "MemberExpression" || obj.type === "OptionalMemberExpression") &&
+        (obj.object as { type?: string; name?: string })?.type === "Identifier" &&
+        (obj.object as { name?: string })?.name === "props" &&
+        (obj.property as { type?: string; name?: string })?.type === "Identifier" &&
+        (obj.property as { name?: string })?.name === "theme" &&
+        obj.computed === false
+      ) {
+        rec.object = { type: "Identifier", name: "theme" } as unknown as ASTNodeRecord;
+        if (rec.computed) {
+          rec.property = rewrite(rec.property) as ASTNodeRecord;
+        }
+        return rec;
+      }
+      rec.object = rewrite(rec.object) as ASTNodeRecord;
+      if (rec.computed) {
+        rec.property = rewrite(rec.property) as ASTNodeRecord;
+      }
+      return rec;
+    }
+    if (rec.type === "BinaryExpression" || rec.type === "LogicalExpression") {
+      rec.left = rewrite(rec.left) as ASTNodeRecord;
+      rec.right = rewrite(rec.right) as ASTNodeRecord;
+      return rec;
+    }
+    if (rec.type === "UnaryExpression") {
+      rec.argument = rewrite(rec.argument) as ASTNodeRecord;
+      return rec;
+    }
+    for (const key of Object.keys(rec)) {
+      if (key === "loc" || key === "comments") {
+        continue;
+      }
+      const child = rec[key];
+      if (child && typeof child === "object") {
+        rec[key] = rewrite(child) as ASTNodeRecord;
+      }
+    }
+    return rec;
+  };
+
+  return rewrite(cloneAstNode(node)) as ExpressionKind;
+}
+
 export function unwrapArrowFunctionToPropsExpr(
   j: JSCodeshift,
   expr: any,

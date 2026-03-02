@@ -1061,6 +1061,7 @@ export class WrapperEmitter {
     allowClassNameProp?: boolean;
     allowStyleProp?: boolean;
     allowAsProp?: boolean;
+    includeRefProp?: boolean;
     includeRest?: boolean;
     defaultAttrs?: Array<{ jsxProp: string; attrName: string; value: unknown }>;
     conditionalAttrs?: Array<{ jsxProp: string; attrName: string; value: unknown }>;
@@ -1083,6 +1084,7 @@ export class WrapperEmitter {
       allowClassNameProp = false,
       allowStyleProp = false,
       allowAsProp = false,
+      includeRefProp = false,
       includeRest = true,
       defaultAttrs = [],
       conditionalAttrs = [],
@@ -1200,6 +1202,9 @@ export class WrapperEmitter {
     if (!isVoidTag) {
       patternProps.push(this.patternProp("children"));
     }
+    if (includeRefProp) {
+      patternProps.push(this.patternProp("ref"));
+    }
     if (allowClassNameProp) {
       patternProps.push(this.patternProp("className"));
     }
@@ -1211,7 +1216,8 @@ export class WrapperEmitter {
         name !== "children" &&
         name !== "style" &&
         name !== "className" &&
-        name !== "forwardedAs"
+        name !== "forwardedAs" &&
+        name !== "ref"
       ) {
         const defaultVal = propDefaults?.get(name);
         if (defaultVal !== undefined) {
@@ -1316,6 +1322,12 @@ export class WrapperEmitter {
             j.binaryExpression("!==", j.identifier(inv.jsxProp), j.booleanLiteral(true)),
           ),
         ),
+      );
+    }
+
+    if (includeRefProp) {
+      jsxAttrs.push(
+        j.jsxAttribute(j.jsxIdentifier("ref"), j.jsxExpressionContainer(j.identifier("ref"))),
       );
     }
 

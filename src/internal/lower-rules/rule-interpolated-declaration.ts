@@ -4,7 +4,7 @@
  */
 import type { JSCodeshift } from "jscodeshift";
 import type { CssDeclarationIR, CssRuleIR } from "../css-ir.js";
-import type { ResolveValueContext } from "../../adapter.js";
+import type { CallResolveResult, ResolveValueContext } from "../../adapter.js";
 import type { CallValueTransform } from "../builtin-handlers/types.js";
 import type { StyledDecl } from "../transform-types.js";
 import type { WarningType } from "../logger.js";
@@ -43,6 +43,7 @@ import {
   hasThemeAccessInArrowFn,
   hasUnsupportedConditionalTest,
   inlineArrowFunctionBody,
+  rewritePropsThemeToThemeVar,
   unwrapArrowFunctionToPropsExpr,
 } from "./inline-styles.js";
 import { addStyleKeyMixin, trackMixinPropertyValues } from "./precompute.js";
@@ -170,6 +171,124 @@ export function handleInterpolatedDeclaration(args: InterpolatedDeclarationConte
       ensureShouldForwardPropDrop(decl, jsxProp);
     }
     return true;
+  };
+
+  const maybeEmitPreservedRuntimeCallOverride = (args: {
+    resolveCallResult: CallResolveResult | undefined;
+    originalExpr: unknown;
+    loc: { line: number; column: number } | null | undefined;
+  }): "not-requested" | "emitted" | "failed" => {
+    const { resolveCallResult, originalExpr, loc } = args;
+    if (!resolveCallResult?.preserveRuntimeCall) {
+      return "not-requested";
+    }
+    if (!d.property) {
+      warnings.push({
+        severity: "error",
+        type: "Unsupported interpolation: call expression",
+        loc,
+      });
+      bail = true;
+      return "failed";
+    }
+    if (
+      !originalExpr ||
+      typeof originalExpr !== "object" ||
+      ((originalExpr as { type?: string }).type !== "ArrowFunctionExpression" &&
+        (originalExpr as { type?: string }).type !== "FunctionExpression")
+    ) {
+      warnings.push({
+        severity: "error",
+        type: "Arrow function: helper call body is not supported",
+        loc,
+      });
+      bail = true;
+      return "failed";
+    }
+
+    const fnExpr = originalExpr as Parameters<typeof inlineArrowFunctionBody>[1];
+    const inlinedExpr = inlineArrowFunctionBody(j, fnExpr);
+    if (!inlinedExpr) {
+      warnings.push({
+        severity: "error",
+        type: "Unsupported prop-based inline style expression cannot be safely inlined",
+        loc,
+      });
+      bail = true;
+      return "failed";
+    }
+
+    const hasThemeAccess = hasThemeAccessInArrowFn(fnExpr);
+    const baseRuntimeExpr = hasThemeAccess
+      ? rewritePropsThemeToThemeVar(inlinedExpr as ExpressionKind)
+      : (inlinedExpr as ExpressionKind);
+
+    // P1 fix: Wrap with static prefix/suffix and !important (same as static branch)
+    const { prefix, suffix } = extractStaticPartsForDecl(d);
+    const effectiveSuffix = d.important ? `${suffix} !important` : suffix;
+    const runtimeCallArg =
+      prefix || effectiveSuffix
+        ? buildTemplateWithStaticParts(j, baseRuntimeExpr, prefix, effectiveSuffix)
+        : baseRuntimeExpr;
+
+    if (hasThemeAccess) {
+      if (!decl.needsUseThemeHook) {
+        decl.needsUseThemeHook = [];
+      }
+      if (!decl.needsUseThemeHook.some((entry) => entry.themeProp === "__runtimeCall")) {
+        decl.needsUseThemeHook.push({
+          themeProp: "__runtimeCall",
+          trueStyleKey: null,
+          falseStyleKey: null,
+        });
+      }
+    }
+
+    const outs = cssDeclarationToStylexDeclarations(d);
+    if (outs.length !== 1 || !outs[0]?.prop) {
+      warnings.push({
+        severity: "error",
+        type: "Arrow function: helper call body is not supported",
+        loc,
+      });
+      bail = true;
+      return "failed";
+    }
+
+    const out = outs[0]!;
+    const fnKey = `${decl.styleKey}${toSuffixFromProp(out.prop)}`;
+    if (!styleFnDecls.has(fnKey)) {
+      const outParamName = cssPropertyToIdentifier(out.prop, avoidNames);
+      const param = j.identifier(outParamName);
+      if (/\.(ts|tsx)$/.test(filePath)) {
+        (param as { typeAnnotation?: unknown }).typeAnnotation = j.tsTypeAnnotation(
+          j.tsStringKeyword(),
+        );
+      }
+      const body = j.objectExpression([makeCssProperty(j, out.prop, outParamName)]);
+      styleFnDecls.set(fnKey, j.arrowFunctionExpression([param], body));
+    }
+
+    // P2 fix: Later declarations should override earlier ones (CSS source order).
+    // Find and replace existing entry instead of skipping, or add new if not found.
+    const existingIdx = styleFnFromProps.findIndex(
+      (entry) =>
+        entry.fnKey === fnKey && entry.jsxProp === "__props" && entry.condition === "always",
+    );
+    const newEntry = {
+      fnKey,
+      jsxProp: "__props" as const,
+      condition: "always" as const,
+      callArg: cloneAstNode(runtimeCallArg) as ExpressionKind,
+    };
+    if (existingIdx >= 0) {
+      styleFnFromProps[existingIdx] = newEntry;
+    } else {
+      styleFnFromProps.push(newEntry);
+    }
+
+    decl.needsWrapperComponent = true;
+    return "emitted";
   };
 
   for (let _i = 0; _i < 1; _i++) {
@@ -805,6 +924,27 @@ export function handleInterpolatedDeclaration(args: InterpolatedDeclarationConte
               }
             : null;
         applyResolvedPropValue(out.prop, exprAst as any, commentSource);
+      }
+
+      const runtimeOverride = maybeEmitPreservedRuntimeCallOverride({
+        resolveCallResult: res.resolveCallResult,
+        originalExpr: expr,
+        loc,
+      });
+      if (runtimeOverride === "failed") {
+        break;
+      }
+      continue;
+    }
+
+    if (res && res.type === "runtimeCallOnly") {
+      const runtimeOverride = maybeEmitPreservedRuntimeCallOverride({
+        resolveCallResult: res.resolveCallResult,
+        originalExpr: expr,
+        loc,
+      });
+      if (runtimeOverride === "failed") {
+        break;
       }
       continue;
     }

@@ -110,7 +110,7 @@ export function preScanCssHelperPlaceholders(ctx: DeclProcessingState): boolean 
                   calleeSource: importEntry.source,
                   args: [],
                 });
-                if (!resolved) {
+                if (!resolved || !("expr" in resolved)) {
                   // Can't resolve this imported function call - bail for safety
                   hasImportedCssHelper = true;
                 }

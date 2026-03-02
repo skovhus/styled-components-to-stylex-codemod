@@ -331,27 +331,14 @@ export const fixtureAdapter = defineAdapter({
     }
 
     // Handle ColorConverter.cssWithAlpha(theme.color.*, alpha) helper
-    // ColorConverter.cssWithAlpha(theme.color.bgBase, 0.4) -> `color-mix(in srgb, ${$colors.bgBase} 40%, transparent)`
-    // Note: inlined as a template literal because stylex.create() requires statically analyzable values
-    // (function calls like ColorConverter.cssWithAlpha() are not supported by the StyleX babel plugin)
+    // Keep this as a runtime helper call in the generated wrapper (no static fallback).
     if (
       ctx.calleeImportedName === "ColorConverter" &&
       ctx.calleeMemberPath?.[0] === "cssWithAlpha" &&
       themeColorKey
     ) {
-      const alphaLiteral = ctx.args.find(
-        (a): a is { kind: "literal"; value: number } =>
-          a.kind === "literal" && typeof a.value === "number",
-      );
-      const alphaPercent = alphaLiteral ? alphaLiteral.value * 100 : 100;
       return {
-        expr: `\`color-mix(in srgb, \${$colors.${themeColorKey}} ${alphaPercent}%, transparent)\``,
-        imports: [
-          {
-            from: { kind: "specifier", value: "./tokens.stylex" },
-            names: [{ imported: "$colors" }],
-          },
-        ],
+        preserveRuntimeCall: true,
       };
     }
 

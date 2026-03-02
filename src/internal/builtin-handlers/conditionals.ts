@@ -276,7 +276,7 @@ export function tryResolveConditionalValue(
       cssProperty: string | undefined,
     ): { expr: string; imports: ImportSpec[]; usage?: "create" | "props" } | null => {
       const res = resolveImportedHelperCall(call, ctx, undefined, cssProperty);
-      if (res.kind === "resolved") {
+      if (res.kind === "resolved" && "expr" in res.result) {
         return res.result;
       }
       // Try curried pattern: helper(...)(propsParam)
@@ -285,7 +285,7 @@ export function tryResolveConditionalValue(
         const outerArgs = call.arguments ?? [];
         if (outerArgs.length === 1 && outerArgs[0] && typeof outerArgs[0] === "object") {
           const innerRes = resolveImportedHelperCall(inner, ctx, undefined, cssProperty);
-          if (innerRes.kind === "resolved") {
+          if (innerRes.kind === "resolved" && "expr" in innerRes.result) {
             return innerRes.result;
           }
         }

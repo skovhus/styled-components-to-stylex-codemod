@@ -512,6 +512,7 @@ export function emitShouldForwardPropWrappers(ctx: EmitIntrinsicContext): void {
     const classNameId = j.identifier("className");
     const childrenId = j.identifier("children");
     const styleId = j.identifier("style");
+    const refId = j.identifier("ref");
     const restId = j.identifier("rest");
     const forwardedAsId = j.identifier("forwardedAs");
     const isVoidTag = tagName === "input";
@@ -560,6 +561,7 @@ export function emitShouldForwardPropWrappers(ctx: EmitIntrinsicContext): void {
           ...(allowAsProp ? [asDestructureProp(tagName)] : []),
           ...(includesForwardedAs ? [ctx.patternProp("forwardedAs", forwardedAsId)] : []),
           ...(includeChildrenInner ? [ctx.patternProp("children", childrenId)] : []),
+          ...((d.supportsRefProp ?? false) ? [ctx.patternProp("ref", refId)] : []),
         ],
         destructureProps: destructureParts,
         propDefaults,
@@ -609,6 +611,9 @@ export function emitShouldForwardPropWrappers(ctx: EmitIntrinsicContext): void {
           attrsInfo: attrsInfoWithoutForwardedAsStatic,
           propExprFor: (prop) => j.identifier(prop),
         }),
+        ...((d.supportsRefProp ?? false)
+          ? [j.jsxAttribute(j.jsxIdentifier("ref"), j.jsxExpressionContainer(refId))]
+          : []),
         ...(includeRest ? [j.jsxSpreadAttribute(restId)] : []),
         ...(includesForwardedAs
           ? [
@@ -673,6 +678,7 @@ export function emitShouldForwardPropWrappers(ctx: EmitIntrinsicContext): void {
         ...(allowClassNameProp ? [ctx.patternProp("className", classNameId)] : []),
         ...(includeChildrenOuter ? [ctx.patternProp("children", childrenId)] : []),
         ...(allowStyleProp ? [ctx.patternProp("style", styleId)] : []),
+        ...((d.supportsRefProp ?? false) ? [ctx.patternProp("ref", refId)] : []),
         ...(allowSxProp ? [ctx.patternProp("sx", sxId)] : []),
       ],
       destructureProps: destructureParts,
@@ -713,6 +719,9 @@ export function emitShouldForwardPropWrappers(ctx: EmitIntrinsicContext): void {
 
     // Build attrs: {...rest} then {...mergedStylexProps(...)} so stylex styles override
     const openingAttrs: JsxAttr[] = [];
+    if (d.supportsRefProp ?? false) {
+      openingAttrs.push(j.jsxAttribute(j.jsxIdentifier("ref"), j.jsxExpressionContainer(refId)));
+    }
     if (includeRest) {
       openingAttrs.push(j.jsxSpreadAttribute(restId));
     }

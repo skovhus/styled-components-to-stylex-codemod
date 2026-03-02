@@ -1,16 +1,35 @@
+import React from "react";
 import * as stylex from "@stylexjs/stylex";
-import { $colors } from "./tokens.stylex";
+import { useTheme } from "styled-components";
+import { ColorConverter } from "./lib/helpers";
+
+function Toggle(props: { children?: React.ReactNode }) {
+  const theme = useTheme();
+
+  return (
+    <div
+      {...stylex.props(
+        styles.toggle,
+        styles.toggleBackgroundColor(ColorConverter.cssWithAlpha(theme.color.bgBase, 0.4)),
+      )}
+    >
+      {props.children}
+    </div>
+  );
+}
 
 export const App = () => (
   <div style={{ display: "flex", gap: 16, padding: 16 }}>
-    <div {...stylex.props(styles.toggle)}>Toggle</div>
+    <Toggle>Toggle</Toggle>
   </div>
 );
 
 const styles = stylex.create({
   toggle: {
-    backgroundColor: `color-mix(in srgb, ${$colors.bgBase} 40%, transparent)`,
     paddingBlock: "8px",
     paddingInline: "16px",
   },
+  toggleBackgroundColor: (backgroundColor: string) => ({
+    backgroundColor,
+  }),
 });
