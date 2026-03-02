@@ -600,11 +600,14 @@ export function emitShouldForwardPropWrappers(ctx: EmitIntrinsicContext): void {
         d.attrsInfo,
         getBridgeClassVar(d),
       );
-      const { attrsInfo: attrsInfoWithoutForwardedAsStatic, forwardedAsStaticFallback } =
-        splitForwardedAsStaticAttrs({
-          attrsInfo,
-          includeForwardedAs: includesForwardedAs,
-        });
+      const { attrsInfo: attrsInfoRaw, forwardedAsStaticFallback } = splitForwardedAsStaticAttrs({
+        attrsInfo,
+        includeForwardedAs: includesForwardedAs,
+      });
+      const attrsInfoWithoutForwardedAsStatic = filterAttrsForShouldForwardProp(
+        attrsInfoRaw,
+        d.shouldForwardProp,
+      );
       const merging = emitStyleMerging({
         j,
         emitter,
@@ -779,4 +782,42 @@ export function emitShouldForwardPropWrappers(ctx: EmitIntrinsicContext): void {
       ),
     );
   }
+}
+
+/**
+ * Filter attrs entries that shouldForwardProp would prevent from reaching the DOM.
+ * When `.withConfig({ shouldForwardProp })` and `.attrs(...)` are both present,
+ * attrs whose attrName matches a dropped prop should not be emitted as DOM attributes.
+ */
+function filterAttrsForShouldForwardProp(
+  attrsInfo: StyledDecl["attrsInfo"],
+  sfp: StyledDecl["shouldForwardProp"],
+): StyledDecl["attrsInfo"] {
+  if (!attrsInfo || !sfp) {
+    return attrsInfo;
+  }
+
+  const dropSet = new Set(sfp.dropProps);
+  const dropPrefix = sfp.dropPrefix;
+  const shouldDrop = (name: string): boolean =>
+    dropSet.has(name) || (dropPrefix != null && name.startsWith(dropPrefix));
+
+  const hasDroppedAttrs =
+    (attrsInfo.defaultAttrs ?? []).some((a) => shouldDrop(a.attrName)) ||
+    attrsInfo.conditionalAttrs.some((a) => shouldDrop(a.attrName)) ||
+    (attrsInfo.invertedBoolAttrs ?? []).some((a) => shouldDrop(a.attrName)) ||
+    Object.keys(attrsInfo.staticAttrs).some(shouldDrop);
+  if (!hasDroppedAttrs) {
+    return attrsInfo;
+  }
+
+  return {
+    ...attrsInfo,
+    defaultAttrs: (attrsInfo.defaultAttrs ?? []).filter((a) => !shouldDrop(a.attrName)),
+    conditionalAttrs: attrsInfo.conditionalAttrs.filter((a) => !shouldDrop(a.attrName)),
+    invertedBoolAttrs: (attrsInfo.invertedBoolAttrs ?? []).filter((a) => !shouldDrop(a.attrName)),
+    staticAttrs: Object.fromEntries(
+      Object.entries(attrsInfo.staticAttrs).filter(([key]) => !shouldDrop(key)),
+    ),
+  };
 }

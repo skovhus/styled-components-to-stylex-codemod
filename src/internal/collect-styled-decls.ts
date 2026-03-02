@@ -651,6 +651,119 @@ function collectStyledDeclsImpl(args: {
     };
   };
 
+  /**
+   * Peel .attrs() and .withConfig() method calls from a tagged-template tag expression.
+   * Handles single-method chains (e.g., .attrs(...)) and two-level chains
+   * (e.g., .withConfig(...).attrs(...)) in any order.
+   * Returns null if no chain methods were found.
+   */
+  const peelChainMethods = (
+    tag: any,
+  ): {
+    base: any;
+    attrsArg: any;
+    withConfigArg: any;
+    chainPropsType: any;
+  } | null => {
+    let cur = tag;
+    let attrsArg: any;
+    let withConfigArg: any;
+    let chainPropsType: any;
+    let peeled = false;
+
+    while (
+      cur?.type === "CallExpression" &&
+      cur.callee?.type === "MemberExpression" &&
+      cur.callee.property?.type === "Identifier" &&
+      (cur.callee.property.name === "attrs" || cur.callee.property.name === "withConfig")
+    ) {
+      peeled = true;
+      if (cur.callee.property.name === "attrs") {
+        attrsArg = cur.arguments?.[0];
+      } else {
+        withConfigArg = cur.arguments?.[0];
+      }
+      if (!chainPropsType) {
+        chainPropsType = readFirstTypeArgFromNode(cur);
+      }
+      cur = cur.callee.object;
+      const unwrapped = unwrapTypeInstantiation(cur);
+      if (unwrapped.propsType && !chainPropsType) {
+        chainPropsType = unwrapped.propsType;
+      }
+      cur = unwrapped.expr;
+    }
+
+    if (!peeled) {
+      return null;
+    }
+    return { base: cur, attrsArg, withConfigArg, chainPropsType };
+  };
+
+  /**
+   * Identify the styled base expression after chain methods have been peeled.
+   * Recognizes styled.tag, styled("tag"), styled(Component), and styled(Component.sub).
+   * Returns null if the base is not recognized.
+   */
+  const identifyStyledBase = (
+    baseExpr: any,
+    localName: string,
+  ): {
+    baseInfo: StyledDecl["base"];
+    styleKey: string;
+  } | null => {
+    if (
+      baseExpr?.type === "MemberExpression" &&
+      baseExpr.object?.type === "Identifier" &&
+      baseExpr.object.name === styledDefaultImport &&
+      baseExpr.property?.type === "Identifier"
+    ) {
+      return {
+        baseInfo: { kind: "intrinsic", tagName: baseExpr.property.name },
+        styleKey: toStyleKey(localName),
+      };
+    }
+
+    if (
+      baseExpr?.type === "CallExpression" &&
+      baseExpr.callee?.type === "Identifier" &&
+      baseExpr.callee.name === styledDefaultImport &&
+      baseExpr.arguments?.length === 1
+    ) {
+      const arg = baseExpr.arguments[0];
+
+      if (
+        arg?.type === "StringLiteral" ||
+        (arg?.type === "Literal" && typeof arg.value === "string")
+      ) {
+        return {
+          baseInfo: { kind: "intrinsic", tagName: arg.value as string },
+          styleKey: toStyleKey(localName),
+        };
+      }
+
+      if (arg?.type === "Identifier") {
+        return {
+          baseInfo: { kind: "component", ident: arg.name },
+          styleKey: resolveStyledComponentStyleKey(localName, arg.name, styledDecls),
+        };
+      }
+
+      if (arg?.type === "MemberExpression") {
+        const ident = memberExprToIdent(arg);
+        if (!ident) {
+          return null;
+        }
+        return {
+          baseInfo: { kind: "component", ident },
+          styleKey: toStyleKey(localName),
+        };
+      }
+    }
+
+    return null;
+  };
+
   // Collect: const X = styled.h1`...`;
   root
     .find(j.VariableDeclarator, {
@@ -714,193 +827,54 @@ function collectStyledDeclsImpl(args: {
         return;
       }
 
-      // styled.h1.attrs(... )`...` or styled.h1.withConfig(... )`...`
-      if (
-        tag.type === "CallExpression" &&
-        tag.callee.type === "MemberExpression" &&
-        tag.callee.property.type === "Identifier" &&
-        (tag.callee.property.name === "attrs" || tag.callee.property.name === "withConfig") &&
-        tag.callee.object.type === "MemberExpression" &&
-        tag.callee.object.object.type === "Identifier" &&
-        tag.callee.object.object.name === styledDefaultImport &&
-        tag.callee.object.property.type === "Identifier"
-      ) {
-        const localName = id.name;
-        const tagName = tag.callee.object.property.name;
-        const template = init.quasi;
-        const templateLoc = getTemplateLoc(template);
-        const parsed = parseStyledTemplateLiteral(template);
-        const rules = normalizeStylisAstToIR(parsed.stylisAst, parsed.slots, {
-          rawCss: parsed.rawCss,
-        });
-        if (hasUniversalSelectorInRules(rules)) {
-          noteUniversalSelector(template, parsed.rawCss);
-        }
-        const attrsInfo =
-          tag.callee.property.name === "attrs" ? parseAttrsArg(tag.arguments[0]) : undefined;
-        const sfpResult =
-          tag.callee.property.name === "withConfig"
-            ? parseShouldForwardProp(tag.arguments[0])
-            : undefined;
-        const shouldForwardProp = sfpResult?.parsed;
-        const hasUnparseableShouldForwardProp = sfpResult?.unparseable;
-        const withConfigMeta =
-          tag.callee.property.name === "withConfig"
-            ? parseWithConfigMeta(tag.arguments[0])
-            : undefined;
+      // Unified handler: .attrs() and/or .withConfig() in any order and depth.
+      {
+        const peeled = peelChainMethods(tag);
+        if (peeled != null) {
+          const styledBase = identifyStyledBase(peeled.base, id.name);
+          if (!styledBase) {
+            return;
+          }
+          const localName = id.name;
+          const template = init.quasi;
+          const templateLoc = getTemplateLoc(template);
+          const parsed = parseStyledTemplateLiteral(template);
+          const rules = normalizeStylisAstToIR(parsed.stylisAst, parsed.slots, {
+            rawCss: parsed.rawCss,
+          });
+          if (hasUniversalSelectorInRules(rules)) {
+            noteUniversalSelector(template, parsed.rawCss);
+          }
 
-        styledDecls.push({
-          ...placementHints,
-          localName,
-          base: { kind: "intrinsic", tagName },
-          styleKey: toStyleKey(localName),
-          rules,
-          templateExpressions: parsed.slots.map((s) => s.expression),
-          rawCss: parsed.rawCss,
-          ...(templateLoc ? { loc: templateLoc } : {}),
-          ...(attrsInfo ? { attrsInfo } : {}),
-          ...(shouldForceWrapperForAttrs(attrsInfo) ? { needsWrapperComponent: true } : {}),
-          ...(shouldForwardProp ? { shouldForwardProp } : {}),
-          ...(shouldForwardProp ? { shouldForwardPropFromWithConfig: true } : {}),
-          ...(hasUnparseableShouldForwardProp ? { hasUnparseableShouldForwardProp } : {}),
-          ...(withConfigMeta ? { withConfig: withConfigMeta } : {}),
-          ...(propsType ? { propsType } : {}),
-          ...(leadingComments ? { leadingComments } : {}),
-        });
-        return;
-      }
+          const attrsInfo = peeled.attrsArg != null ? parseAttrsArg(peeled.attrsArg) : undefined;
+          const sfpResult =
+            peeled.withConfigArg != null ? parseShouldForwardProp(peeled.withConfigArg) : undefined;
+          const shouldForwardProp = sfpResult?.parsed;
+          const hasUnparseableShouldForwardProp = sfpResult?.unparseable;
+          const withConfigMeta =
+            peeled.withConfigArg != null ? parseWithConfigMeta(peeled.withConfigArg) : undefined;
+          const finalPropsType = propsType ?? peeled.chainPropsType;
 
-      // styled("tagName").attrs(... )`...` - function call syntax with string argument + attrs
-      if (
-        tag.type === "CallExpression" &&
-        tag.callee.type === "MemberExpression" &&
-        tag.callee.property.type === "Identifier" &&
-        tag.callee.property.name === "attrs" &&
-        tag.callee.object.type === "CallExpression" &&
-        tag.callee.object.callee.type === "Identifier" &&
-        tag.callee.object.callee.name === styledDefaultImport &&
-        tag.callee.object.arguments.length === 1 &&
-        (tag.callee.object.arguments[0]?.type === "StringLiteral" ||
-          (tag.callee.object.arguments[0]?.type === "Literal" &&
-            typeof (tag.callee.object.arguments[0] as any).value === "string"))
-      ) {
-        const localName = id.name;
-        const arg0 = tag.callee.object.arguments[0] as any;
-        const tagName = arg0.type === "StringLiteral" ? arg0.value : arg0.value;
-        const template = init.quasi;
-        const templateLoc = getTemplateLoc(template);
-        const parsed = parseStyledTemplateLiteral(template);
-        const rules = normalizeStylisAstToIR(parsed.stylisAst, parsed.slots, {
-          rawCss: parsed.rawCss,
-        });
-        if (hasUniversalSelectorInRules(rules)) {
-          noteUniversalSelector(template, parsed.rawCss);
-        }
-        const attrsInfo = parseAttrsArg(tag.arguments[0]);
-
-        styledDecls.push({
-          ...placementHints,
-          localName,
-          base: { kind: "intrinsic", tagName },
-          styleKey: toStyleKey(localName),
-          rules,
-          templateExpressions: parsed.slots.map((s) => s.expression),
-          rawCss: parsed.rawCss,
-          ...(templateLoc ? { loc: templateLoc } : {}),
-          ...(attrsInfo ? { attrsInfo } : {}),
-          ...(shouldForceWrapperForAttrs(attrsInfo) ? { needsWrapperComponent: true } : {}),
-          ...(propsType ? { propsType } : {}),
-          ...(leadingComments ? { leadingComments } : {}),
-        });
-        return;
-      }
-
-      // styled(Component).attrs(...)`...` - component with attrs (Identifier)
-      if (
-        tag.type === "CallExpression" &&
-        tag.callee.type === "MemberExpression" &&
-        tag.callee.property.type === "Identifier" &&
-        tag.callee.property.name === "attrs" &&
-        tag.callee.object.type === "CallExpression" &&
-        tag.callee.object.callee.type === "Identifier" &&
-        tag.callee.object.callee.name === styledDefaultImport &&
-        tag.callee.object.arguments.length === 1 &&
-        tag.callee.object.arguments[0]?.type === "Identifier"
-      ) {
-        const localName = id.name;
-        const ident = tag.callee.object.arguments[0].name;
-        const styleKey = resolveStyledComponentStyleKey(localName, ident, styledDecls);
-        const template = init.quasi;
-        const templateLoc = getTemplateLoc(template);
-        const parsed = parseStyledTemplateLiteral(template);
-        const rules = normalizeStylisAstToIR(parsed.stylisAst, parsed.slots, {
-          rawCss: parsed.rawCss,
-        });
-        if (hasUniversalSelectorInRules(rules)) {
-          noteUniversalSelector(template, parsed.rawCss);
-        }
-        const attrsInfo = parseAttrsArg(tag.arguments[0]);
-
-        styledDecls.push({
-          ...placementHints,
-          localName,
-          base: { kind: "component", ident },
-          styleKey,
-          rules,
-          templateExpressions: parsed.slots.map((s) => s.expression),
-          rawCss: parsed.rawCss,
-          ...(templateLoc ? { loc: templateLoc } : {}),
-          ...(attrsInfo ? { attrsInfo } : {}),
-          ...(shouldForceWrapperForAttrs(attrsInfo) ? { needsWrapperComponent: true } : {}),
-          ...(propsType ? { propsType } : {}),
-          ...(leadingComments ? { leadingComments } : {}),
-        });
-        return;
-      }
-
-      // styled(Component.sub).attrs(...)`...` - MemberExpression component with attrs (e.g., animated.div)
-      if (
-        tag.type === "CallExpression" &&
-        tag.callee.type === "MemberExpression" &&
-        tag.callee.property.type === "Identifier" &&
-        tag.callee.property.name === "attrs" &&
-        tag.callee.object.type === "CallExpression" &&
-        tag.callee.object.callee.type === "Identifier" &&
-        tag.callee.object.callee.name === styledDefaultImport &&
-        tag.callee.object.arguments.length === 1 &&
-        tag.callee.object.arguments[0]?.type === "MemberExpression"
-      ) {
-        const localName = id.name;
-        const ident = memberExprToIdent(tag.callee.object.arguments[0]);
-        if (!ident) {
+          styledDecls.push({
+            ...placementHints,
+            localName,
+            base: styledBase.baseInfo,
+            styleKey: styledBase.styleKey,
+            rules,
+            templateExpressions: parsed.slots.map((s) => s.expression),
+            rawCss: parsed.rawCss,
+            ...(templateLoc ? { loc: templateLoc } : {}),
+            ...(attrsInfo ? { attrsInfo } : {}),
+            ...(shouldForceWrapperForAttrs(attrsInfo) ? { needsWrapperComponent: true } : {}),
+            ...(shouldForwardProp ? { shouldForwardProp } : {}),
+            ...(shouldForwardProp ? { shouldForwardPropFromWithConfig: true } : {}),
+            ...(hasUnparseableShouldForwardProp ? { hasUnparseableShouldForwardProp } : {}),
+            ...(withConfigMeta ? { withConfig: withConfigMeta } : {}),
+            ...(finalPropsType ? { propsType: finalPropsType } : {}),
+            ...(leadingComments ? { leadingComments } : {}),
+          });
           return;
         }
-        const template = init.quasi;
-        const templateLoc = getTemplateLoc(template);
-        const parsed = parseStyledTemplateLiteral(template);
-        const rules = normalizeStylisAstToIR(parsed.stylisAst, parsed.slots, {
-          rawCss: parsed.rawCss,
-        });
-        if (hasUniversalSelectorInRules(rules)) {
-          noteUniversalSelector(template, parsed.rawCss);
-        }
-        const attrsInfo = parseAttrsArg(tag.arguments[0]);
-
-        styledDecls.push({
-          ...placementHints,
-          localName,
-          base: { kind: "component", ident },
-          styleKey: toStyleKey(localName),
-          rules,
-          templateExpressions: parsed.slots.map((s) => s.expression),
-          rawCss: parsed.rawCss,
-          ...(templateLoc ? { loc: templateLoc } : {}),
-          ...(attrsInfo ? { attrsInfo } : {}),
-          ...(shouldForceWrapperForAttrs(attrsInfo) ? { needsWrapperComponent: true } : {}),
-          ...(propsType ? { propsType } : {}),
-          ...(leadingComments ? { leadingComments } : {}),
-        });
-        return;
       }
 
       // styled(Component) - where Component is an Identifier
@@ -1007,101 +981,6 @@ function collectStyledDeclsImpl(args: {
           templateExpressions: parsed.slots.map((s) => s.expression),
           rawCss: parsed.rawCss,
           ...(templateLoc ? { loc: templateLoc } : {}),
-          ...(propsType ? { propsType } : {}),
-          ...(leadingComments ? { leadingComments } : {}),
-        });
-      }
-
-      // styled(Base).withConfig(...)`...`
-      if (
-        tag.type === "CallExpression" &&
-        tag.callee.type === "MemberExpression" &&
-        tag.callee.property.type === "Identifier" &&
-        tag.callee.property.name === "withConfig" &&
-        tag.callee.object.type === "CallExpression" &&
-        tag.callee.object.callee.type === "Identifier" &&
-        tag.callee.object.callee.name === styledDefaultImport &&
-        tag.callee.object.arguments.length === 1 &&
-        tag.callee.object.arguments[0]?.type === "Identifier"
-      ) {
-        const localName = id.name;
-        const ident = tag.callee.object.arguments[0].name;
-        const template = init.quasi;
-        const templateLoc = getTemplateLoc(template);
-        const parsed = parseStyledTemplateLiteral(template);
-        const rules = normalizeStylisAstToIR(parsed.stylisAst, parsed.slots, {
-          rawCss: parsed.rawCss,
-        });
-        if (hasUniversalSelectorInRules(rules)) {
-          noteUniversalSelector(template, parsed.rawCss);
-        }
-        const sfpResult = parseShouldForwardProp(tag.arguments[0]);
-        const shouldForwardProp = sfpResult?.parsed;
-        const hasUnparseableShouldForwardProp = sfpResult?.unparseable;
-        const withConfigMeta = parseWithConfigMeta(tag.arguments[0]);
-
-        styledDecls.push({
-          ...placementHints,
-          localName,
-          base: { kind: "component", ident },
-          styleKey: toStyleKey(localName),
-          rules,
-          templateExpressions: parsed.slots.map((s) => s.expression),
-          rawCss: parsed.rawCss,
-          ...(templateLoc ? { loc: templateLoc } : {}),
-          ...(shouldForwardProp ? { shouldForwardProp } : {}),
-          ...(shouldForwardProp ? { shouldForwardPropFromWithConfig: true } : {}),
-          ...(hasUnparseableShouldForwardProp ? { hasUnparseableShouldForwardProp } : {}),
-          ...(withConfigMeta ? { withConfig: withConfigMeta } : {}),
-          ...(propsType ? { propsType } : {}),
-          ...(leadingComments ? { leadingComments } : {}),
-        });
-      }
-
-      // styled("div").withConfig(...)`...` - intrinsic element with string argument
-      if (
-        tag.type === "CallExpression" &&
-        tag.callee.type === "MemberExpression" &&
-        tag.callee.property.type === "Identifier" &&
-        tag.callee.property.name === "withConfig" &&
-        tag.callee.object.type === "CallExpression" &&
-        tag.callee.object.callee.type === "Identifier" &&
-        tag.callee.object.callee.name === styledDefaultImport &&
-        tag.callee.object.arguments.length === 1 &&
-        (tag.callee.object.arguments[0]?.type === "StringLiteral" ||
-          (tag.callee.object.arguments[0]?.type === "Literal" &&
-            typeof (tag.callee.object.arguments[0] as any).value === "string"))
-      ) {
-        const localName = id.name;
-        const arg0 = tag.callee.object.arguments[0] as any;
-        const tagName = arg0.type === "StringLiteral" ? arg0.value : arg0.value;
-        const template = init.quasi;
-        const templateLoc = getTemplateLoc(template);
-        const parsed = parseStyledTemplateLiteral(template);
-        const rules = normalizeStylisAstToIR(parsed.stylisAst, parsed.slots, {
-          rawCss: parsed.rawCss,
-        });
-        if (hasUniversalSelectorInRules(rules)) {
-          noteUniversalSelector(template, parsed.rawCss);
-        }
-        const sfpResult = parseShouldForwardProp(tag.arguments[0]);
-        const shouldForwardProp = sfpResult?.parsed;
-        const hasUnparseableShouldForwardProp = sfpResult?.unparseable;
-        const withConfigMeta = parseWithConfigMeta(tag.arguments[0]);
-
-        styledDecls.push({
-          ...placementHints,
-          localName,
-          base: { kind: "intrinsic", tagName },
-          styleKey: toStyleKey(localName),
-          rules,
-          templateExpressions: parsed.slots.map((s) => s.expression),
-          rawCss: parsed.rawCss,
-          ...(templateLoc ? { loc: templateLoc } : {}),
-          ...(shouldForwardProp ? { shouldForwardProp } : {}),
-          ...(shouldForwardProp ? { shouldForwardPropFromWithConfig: true } : {}),
-          ...(hasUnparseableShouldForwardProp ? { hasUnparseableShouldForwardProp } : {}),
-          ...(withConfigMeta ? { withConfig: withConfigMeta } : {}),
           ...(propsType ? { propsType } : {}),
           ...(leadingComments ? { leadingComments } : {}),
         });
