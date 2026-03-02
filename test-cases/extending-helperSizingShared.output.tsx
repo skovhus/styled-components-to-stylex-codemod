@@ -7,10 +7,7 @@ export function avatarSizeToCSS(size: AvatarSize) {
   return `width: ${size}px; height: ${size}px;`;
 }
 
-type AvatarContainerProps = {
-  children?: React.ReactNode;
-  size: AvatarSize;
-};
+type AvatarContainerProps = Pick<React.ComponentProps<"div">, "children"> & { size: AvatarSize };
 
 function AvatarContainer(props: AvatarContainerProps) {
   const { children, size } = props;

@@ -6,7 +6,7 @@ type BoxProps = {
   children?: React.ReactNode;
 };
 
-function Box(props: BoxProps & { children?: React.ReactNode }) {
+function Box(props: BoxProps & Pick<React.ComponentProps<"div">, "children">) {
   const { children, $delay } = props;
 
   return (

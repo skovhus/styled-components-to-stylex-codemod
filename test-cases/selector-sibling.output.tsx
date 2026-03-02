@@ -1,7 +1,7 @@
 import React from "react";
 import * as stylex from "@stylexjs/stylex";
 
-function Thing(props: { children?: React.ReactNode }) {
+function Thing(props: Pick<React.ComponentProps<"div">, "children">) {
   return <div {...stylex.props(styles.thing, stylex.defaultMarker())}>{props.children}</div>;
 }
 

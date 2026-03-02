@@ -2,10 +2,7 @@ import * as React from "react";
 import * as stylex from "@stylexjs/stylex";
 import { pixelVars } from "./tokens.stylex";
 
-type ContainerProps = {
-  children?: React.ReactNode;
-  $compact: boolean;
-};
+type ContainerProps = Pick<React.ComponentProps<"div">, "children"> & { $compact: boolean };
 
 function Container(props: ContainerProps) {
   const { children, $compact } = props;

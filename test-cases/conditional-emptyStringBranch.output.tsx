@@ -1,10 +1,7 @@
 import * as React from "react";
 import * as stylex from "@stylexjs/stylex";
 
-type BoxProps = {
-  children?: React.ReactNode;
-  $disableMinWidth?: boolean;
-};
+type BoxProps = Pick<React.ComponentProps<"div">, "children"> & { $disableMinWidth?: boolean };
 
 // Empty string in conditional - should omit property when truthy
 function Box(props: BoxProps) {
@@ -17,10 +14,7 @@ function Box(props: BoxProps) {
   );
 }
 
-type BoxAltProps = {
-  children?: React.ReactNode;
-  $enableMinWidth?: boolean;
-};
+type BoxAltProps = Pick<React.ComponentProps<"div">, "children"> & { $enableMinWidth?: boolean };
 
 // Empty string alternate - should apply property when truthy
 function BoxAlt(props: BoxAltProps) {
@@ -35,10 +29,7 @@ function BoxAlt(props: BoxAltProps) {
   );
 }
 
-type ContainerProps = {
-  children?: React.ReactNode;
-  $compact?: boolean;
-};
+type ContainerProps = Pick<React.ComponentProps<"div">, "children"> & { $compact?: boolean };
 
 // Multiple CSS declarations in string
 function Container(props: ContainerProps) {
@@ -51,10 +42,7 @@ function Container(props: ContainerProps) {
   );
 }
 
-type WrapperProps = {
-  children?: React.ReactNode;
-  $fullWidth?: boolean;
-};
+type WrapperProps = Pick<React.ComponentProps<"div">, "children"> & { $fullWidth?: boolean };
 
 // css`` tagged template with empty string consequent
 function Wrapper(props: WrapperProps) {
@@ -67,10 +55,7 @@ function Wrapper(props: WrapperProps) {
   );
 }
 
-type WrapperAltProps = {
-  children?: React.ReactNode;
-  $narrow?: boolean;
-};
+type WrapperAltProps = Pick<React.ComponentProps<"div">, "children"> & { $narrow?: boolean };
 
 // css`` tagged template with empty string alternate
 function WrapperAlt(props: WrapperAltProps) {

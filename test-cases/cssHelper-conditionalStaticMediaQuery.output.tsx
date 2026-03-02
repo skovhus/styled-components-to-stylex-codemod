@@ -1,10 +1,7 @@
 import * as React from "react";
 import * as stylex from "@stylexjs/stylex";
 
-type CardProps = {
-  children?: React.ReactNode;
-  $compact: boolean;
-};
+type CardProps = Pick<React.ComponentProps<"div">, "children"> & { $compact: boolean };
 
 /**
  * Tests that static CSS blocks (no interpolations) inside conditional

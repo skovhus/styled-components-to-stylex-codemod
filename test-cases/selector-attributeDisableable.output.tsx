@@ -1,9 +1,7 @@
 import React from "react";
 import * as stylex from "@stylexjs/stylex";
 
-function Button(
-  props: { children?: React.ReactNode } & Pick<React.ComponentProps<"button">, "disabled">,
-) {
+function Button(props: Pick<React.ComponentProps<"button">, "children" | "disabled">) {
   const { children, ...rest } = props;
 
   return (
@@ -13,9 +11,7 @@ function Button(
   );
 }
 
-function Select(
-  props: { children?: React.ReactNode } & Pick<React.ComponentProps<"select">, "disabled">,
-) {
+function Select(props: Pick<React.ComponentProps<"select">, "children" | "disabled">) {
   const { children, ...rest } = props;
 
   return (
@@ -26,10 +22,7 @@ function Select(
 }
 
 function Textarea(
-  props: { children?: React.ReactNode } & Pick<
-    React.ComponentProps<"textarea">,
-    "defaultValue" | "disabled"
-  >,
+  props: Pick<React.ComponentProps<"textarea">, "children" | "defaultValue" | "disabled">,
 ) {
   const { children, ...rest } = props;
 

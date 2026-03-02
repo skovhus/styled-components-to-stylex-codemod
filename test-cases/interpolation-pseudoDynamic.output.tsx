@@ -2,10 +2,7 @@ import * as React from "react";
 import * as stylex from "@stylexjs/stylex";
 import { highlightStyles } from "./lib/helpers";
 
-type ButtonProps = {
-  children?: React.ReactNode;
-  $active?: boolean;
-};
+type ButtonProps = Pick<React.ComponentProps<"button">, "children"> & { $active?: boolean };
 
 function Button(props: ButtonProps) {
   const { children, $active } = props;
@@ -27,8 +24,7 @@ function Button(props: ButtonProps) {
   );
 }
 
-type InvertedButtonProps = {
-  children?: React.ReactNode;
+type InvertedButtonProps = Pick<React.ComponentProps<"button">, "children"> & {
   $disabled?: boolean;
 };
 

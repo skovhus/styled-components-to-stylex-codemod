@@ -3,7 +3,7 @@ import * as stylex from "@stylexjs/stylex";
 
 type Props = { size: "tiny" | "small" | "medium" };
 
-function Indicator(props: Props & { children?: React.ReactNode }) {
+function Indicator(props: Props & Pick<React.ComponentProps<"div">, "children">) {
   const { children, size } = props;
 
   return <div {...stylex.props(styles.indicator, sizeVariants[size])}>{children}</div>;

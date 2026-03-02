@@ -16,7 +16,7 @@ import type { StyleMergerConfig, ThemeHookConfig } from "../../adapter.js";
 import type { StyledDecl, VariantDimension } from "../transform-types.js";
 import { emitStyleMerging } from "./style-merger.js";
 import type { ExportInfo, ExpressionKind, InlineStyleProp, WrapperPropDefaults } from "./types.js";
-import { TAG_TO_HTML_ELEMENT, VOID_TAGS } from "./type-helpers.js";
+import { VOID_TAGS } from "./type-helpers.js";
 import { isIdentifierNode } from "../utilities/jscodeshift-utils.js";
 import type { JsxAttr, JsxTagName, StatementKind } from "./jsx-builders.js";
 import * as jb from "./jsx-builders.js";
@@ -842,31 +842,31 @@ export class WrapperEmitter {
     const needsBroadAttrs = used.has("*") || !!(d as any).usedAsValue;
 
     const lines: string[] = [];
+    // Standard props go into Pick<ComponentProps<"tag">, ...> for proper types.
+    // Custom props (sx, $-prefixed, data-*, forwardedAs) stay in the literal.
+    const pickedAttrKeys: string[] = [];
     if (!needsBroadAttrs) {
       if (allowClassNameProp) {
-        lines.push(`className?: string`);
+        pickedAttrKeys.push("className");
       }
       if (allowStyleProp) {
-        lines.push(`style?: React.CSSProperties`);
+        pickedAttrKeys.push("style");
       }
       if (allowSxProp) {
         lines.push(SX_PROP_TYPE_TEXT);
       }
       if (includeRef) {
-        const elementType = TAG_TO_HTML_ELEMENT[tagName] ?? "HTMLElement";
-        lines.push(`ref?: React.Ref<${elementType}>`);
+        pickedAttrKeys.push("ref");
       }
       if (!VOID_TAGS.has(tagName)) {
-        lines.push(`children?: React.ReactNode`);
+        pickedAttrKeys.push("children");
       }
     } else if (allowSxProp) {
       lines.push(SX_PROP_TYPE_TEXT);
     }
 
-    // Attrs that can be Pick-ed from React.ComponentProps<"tag"> for proper types
-    const pickedAttrKeys: string[] = [];
     for (const attr of [...used].sort((a, b) => a.localeCompare(b))) {
-      if (attr === "*" || attr === "children") {
+      if (attr === "*" || attr === "children" || attr === "ref") {
         continue;
       }
       if (attr === "as") {
@@ -876,17 +876,12 @@ export class WrapperEmitter {
         lines.push("forwardedAs?: React.ElementType");
         continue;
       }
-      if (attr === "className" || attr === "style" || attr === "ref") {
+      if (attr === "className" || attr === "style") {
         continue;
       }
       if (skipProps?.has(attr)) {
         continue;
       }
-      // In the narrow path, use Pick<ComponentProps> for standard element attrs
-      // to get proper types instead of `any`.  Keep `any` for:
-      // - data-*/aria-* (string-keyed, not named props in React types)
-      // - $-prefixed (transient/custom)
-      // - broad-attrs path (the base type already provides correct types)
       if (!needsBroadAttrs && !attr.startsWith("$") && !attr.includes("-")) {
         pickedAttrKeys.push(attr);
       } else {

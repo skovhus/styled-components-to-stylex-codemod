@@ -2,10 +2,7 @@ import * as React from "react";
 import * as stylex from "@stylexjs/stylex";
 import { pixelVars, $colors } from "./tokens.stylex";
 
-type BoxProps = {
-  children?: React.ReactNode;
-  position: "top" | "bottom";
-};
+type BoxProps = Pick<React.ComponentProps<"div">, "children"> & { position: "top" | "bottom" };
 
 function Box(props: BoxProps) {
   const { children, position } = props;
@@ -23,7 +20,7 @@ function Box(props: BoxProps) {
   );
 }
 
-function BorderedBox(props: { children?: React.ReactNode }) {
+function BorderedBox(props: Pick<React.ComponentProps<"div">, "children">) {
   return <div {...stylex.props(styles.border)}>{props.children}</div>;
 }
 

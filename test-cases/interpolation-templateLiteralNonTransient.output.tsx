@@ -1,10 +1,7 @@
 import * as React from "react";
 import * as stylex from "@stylexjs/stylex";
 
-type BoxProps = {
-  children?: React.ReactNode;
-  size?: number;
-};
+type BoxProps = Pick<React.ComponentProps<"div">, "children"> & { size?: number };
 
 // Template literal with non-transient props should emit StyleX style functions.
 // These are props without the $ prefix that are used in template literal interpolations.

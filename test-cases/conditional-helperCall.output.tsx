@@ -2,10 +2,7 @@ import * as React from "react";
 import * as stylex from "@stylexjs/stylex";
 import { helpers } from "./lib/helpers.stylex";
 
-type TextProps = {
-  children?: React.ReactNode;
-  $truncate?: boolean;
-};
+type TextProps = Pick<React.ComponentProps<"p">, "children"> & { $truncate?: boolean };
 
 // Helper call in conditional - should apply truncation when truthy
 function Text(props: TextProps) {
@@ -14,10 +11,7 @@ function Text(props: TextProps) {
   return <p {...stylex.props(styles.text, $truncate ? helpers.truncate : undefined)}>{children}</p>;
 }
 
-type TextAltProps = {
-  children?: React.ReactNode;
-  $noTruncate?: boolean;
-};
+type TextAltProps = Pick<React.ComponentProps<"p">, "children"> & { $noTruncate?: boolean };
 
 // Helper call in alternate - should apply truncation when falsy
 function TextAlt(props: TextAltProps) {
@@ -26,8 +20,7 @@ function TextAlt(props: TextAltProps) {
   return <p {...stylex.props(styles.textAlt, !$noTruncate && helpers.truncate)}>{children}</p>;
 }
 
-type TitleProps = {
-  children?: React.ReactNode;
+type TitleProps = Pick<React.ComponentProps<"div">, "children"> & {
   maxWidth?: number;
   $truncateTitle?: boolean;
 };

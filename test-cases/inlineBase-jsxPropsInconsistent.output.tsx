@@ -1,10 +1,7 @@
 import * as React from "react";
 import * as stylex from "@stylexjs/stylex";
 
-type ContainerProps = {
-  children?: React.ReactNode;
-  align?: any;
-};
+type ContainerProps = Pick<React.ComponentProps<"div">, "children"> & { align?: any };
 
 function Container(props: ContainerProps) {
   const { children, align } = props;

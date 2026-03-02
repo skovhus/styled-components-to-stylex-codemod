@@ -35,8 +35,7 @@ function GrayscaleImage(props: GrayscaleImageProps) {
   );
 }
 
-type DialogTextProps = {
-  children?: React.ReactNode;
+type DialogTextProps = Pick<React.ComponentProps<"p">, "children"> & {
   $renderingContext?: "dialog" | "page";
   $lines?: number;
 };

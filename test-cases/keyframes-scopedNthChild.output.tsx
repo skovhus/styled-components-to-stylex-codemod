@@ -11,9 +11,7 @@ const bounce = stylex.keyframes({
   },
 });
 
-function AnimatedPath(
-  props: { children?: React.ReactNode } & Pick<React.ComponentProps<"path">, "d">,
-) {
+function AnimatedPath(props: Pick<React.ComponentProps<"path">, "children" | "d">) {
   const { children, ...rest } = props;
 
   return (

@@ -1,10 +1,7 @@
 import * as stylex from "@stylexjs/stylex";
 import { mergedSx } from "./lib/mergedSx";
 
-type CompProps = {
-  children?: React.ReactNode;
-  $draggable?: boolean;
-};
+type CompProps = Pick<React.ComponentProps<"div">, "children"> & { $draggable?: boolean };
 
 function Comp(props: CompProps) {
   const { children, $draggable } = props;
@@ -32,12 +29,10 @@ function StyledLink(props: StyledLinkProps) {
   );
 }
 
-type PointProps = {
-  style?: React.CSSProperties;
-  children?: React.ReactNode;
-  "data-testid"?: any;
-  $size?: number;
-};
+type PointProps = { "data-testid"?: any } & Pick<
+  React.ComponentProps<"div">,
+  "style" | "children"
+> & { $size?: number };
 
 // Pattern 3: Transient prop with dynamic value passed to inlined component
 // The prop is declared in type but not used in styles - must be stripped when inlined

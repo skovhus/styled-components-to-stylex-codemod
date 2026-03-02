@@ -2,10 +2,7 @@ import * as React from "react";
 import * as stylex from "@stylexjs/stylex";
 import { $colors } from "./tokens.stylex";
 
-type TitleProps = {
-  children?: React.ReactNode;
-  $upsideDown?: boolean;
-};
+type TitleProps = Pick<React.ComponentProps<"h1">, "children"> & { $upsideDown?: boolean };
 
 // Test logical AND with static template literal
 function Title(props: TitleProps) {

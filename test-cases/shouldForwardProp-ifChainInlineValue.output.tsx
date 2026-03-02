@@ -2,8 +2,7 @@
 import * as React from "react";
 import * as stylex from "@stylexjs/stylex";
 
-type FlexContainerProps = {
-  children?: React.ReactNode;
+type FlexContainerProps = Pick<React.ComponentProps<"div">, "children"> & {
   column?: boolean;
   reverse?: boolean;
 };

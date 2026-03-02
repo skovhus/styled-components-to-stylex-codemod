@@ -2,10 +2,7 @@ import * as React from "react";
 import * as stylex from "@stylexjs/stylex";
 import { $colors } from "./tokens.stylex";
 
-type StepLineProps = {
-  children?: React.ReactNode;
-  $faded: boolean;
-};
+type StepLineProps = Pick<React.ComponentProps<"div">, "children"> & { $faded: boolean };
 
 function StepLine(props: StepLineProps) {
   const { children, $faded } = props;

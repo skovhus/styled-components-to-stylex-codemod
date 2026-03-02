@@ -2,7 +2,7 @@ import React from "react";
 import * as stylex from "@stylexjs/stylex";
 import { $colors } from "./tokens.stylex";
 
-function Box(props: { children?: React.ReactNode }) {
+function Box(props: Pick<React.ComponentProps<"div">, "children">) {
   return <div {...stylex.props(styles.borderBottom)}>{props.children}</div>;
 }
 

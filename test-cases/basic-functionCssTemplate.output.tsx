@@ -3,10 +3,7 @@ import * as stylex from "@stylexjs/stylex";
 
 type Align = "left" | "right";
 
-type FlexContainerProps = {
-  children?: React.ReactNode;
-  $align?: Align;
-};
+type FlexContainerProps = Pick<React.ComponentProps<"div">, "children"> & { $align?: Align };
 
 // Function call form returning a css template literal (not object syntax)
 function FlexContainer(props: FlexContainerProps) {
@@ -21,10 +18,7 @@ function FlexContainer(props: FlexContainerProps) {
   );
 }
 
-type ColoredBoxProps = {
-  children?: React.ReactNode;
-  $color?: string;
-};
+type ColoredBoxProps = Pick<React.ComponentProps<"div">, "children"> & { $color?: string };
 
 function ColoredBox(props: ColoredBoxProps) {
   const { children, $color } = props;

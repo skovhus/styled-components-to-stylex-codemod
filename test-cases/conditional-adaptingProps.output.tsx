@@ -1,8 +1,7 @@
 import * as React from "react";
 import * as stylex from "@stylexjs/stylex";
 
-type ButtonProps = {
-  children?: React.ReactNode;
+type ButtonProps = Pick<React.ComponentProps<"button">, "children"> & {
   $primary?: boolean;
   hollow?: boolean;
 };
@@ -25,8 +24,7 @@ function Button(props: ButtonProps) {
   );
 }
 
-type BadgeProps = {
-  children?: React.ReactNode;
+type BadgeProps = Pick<React.ComponentProps<"span">, "children"> & {
   size?: "small" | "medium" | "large";
 };
 

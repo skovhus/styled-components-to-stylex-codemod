@@ -35,9 +35,7 @@ type LinkProps = {
   disabled?: boolean;
 };
 
-function Link(
-  props: LinkProps & { children?: React.ReactNode } & Pick<React.ComponentProps<"a">, "href">,
-) {
+function Link(props: LinkProps & Pick<React.ComponentProps<"a">, "children" | "href">) {
   const { children, disabled, color = "secondary", ...rest } = props;
 
   return (

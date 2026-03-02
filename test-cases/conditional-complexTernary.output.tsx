@@ -2,8 +2,7 @@ import * as React from "react";
 import * as stylex from "@stylexjs/stylex";
 import { $colors } from "./tokens.stylex";
 
-type CardContainerProps = {
-  children?: React.ReactNode;
+type CardContainerProps = Pick<React.ComponentProps<"label">, "children"> & {
   checked: boolean;
   disabled?: boolean;
 };
@@ -27,7 +26,7 @@ function CardContainer(props: CardContainerProps) {
   );
 }
 
-function CardContent(props: { children?: React.ReactNode }) {
+function CardContent(props: Pick<React.ComponentProps<"div">, "children">) {
   return <div {...stylex.props(styles.cardContent)}>{props.children}</div>;
 }
 

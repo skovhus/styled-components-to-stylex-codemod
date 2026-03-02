@@ -1,8 +1,7 @@
 import React from "react";
 import * as stylex from "@stylexjs/stylex";
 
-type GradientBoxProps = {
-  children?: React.ReactNode;
+type GradientBoxProps = Pick<React.ComponentProps<"div">, "children"> & {
   $direction?: "horizontal" | "vertical";
 };
 
@@ -22,11 +21,7 @@ function GradientBox(props: GradientBoxProps) {
   );
 }
 
-type TabItemProps = {
-  ref?: React.Ref<HTMLDivElement>;
-  children?: React.ReactNode;
-  $isActive?: boolean;
-};
+type TabItemProps = Pick<React.ComponentProps<"div">, "ref" | "children"> & { $isActive?: boolean };
 
 // Arrow function in border-bottom (6 occurrences)
 function TabItem(props: TabItemProps) {

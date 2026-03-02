@@ -1,9 +1,7 @@
 import * as React from "react";
 import * as stylex from "@stylexjs/stylex";
 
-type ErrorMessageProps = {
-  ref?: React.Ref<HTMLDivElement>;
-  children?: React.ReactNode;
+type ErrorMessageProps = Pick<React.ComponentProps<"div">, "ref" | "children"> & {
   $inline?: boolean;
 };
 

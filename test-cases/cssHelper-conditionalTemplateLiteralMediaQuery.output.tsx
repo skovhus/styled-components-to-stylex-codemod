@@ -1,11 +1,7 @@
 import * as React from "react";
 import * as stylex from "@stylexjs/stylex";
 
-type BannerProps = {
-  ref?: React.Ref<HTMLDivElement>;
-  children?: React.ReactNode;
-  $prominent: boolean;
-};
+type BannerProps = Pick<React.ComponentProps<"div">, "ref" | "children"> & { $prominent: boolean };
 
 /**
  * Tests that template literal CSS blocks inside ternary conditional

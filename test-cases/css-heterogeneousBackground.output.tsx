@@ -1,9 +1,7 @@
 import * as React from "react";
 import * as stylex from "@stylexjs/stylex";
 
-type MixedBackgroundProps = {
-  ref?: React.Ref<HTMLDivElement>;
-  children?: React.ReactNode;
+type MixedBackgroundProps = Pick<React.ComponentProps<"div">, "ref" | "children"> & {
   $useGradient: boolean;
 };
 
@@ -25,8 +23,7 @@ function MixedBackground(props: MixedBackgroundProps) {
   );
 }
 
-type NestedColorBackgroundProps = {
-  children?: React.ReactNode;
+type NestedColorBackgroundProps = Pick<React.ComponentProps<"div">, "children"> & {
   $color: "red" | "blue" | "default";
 };
 

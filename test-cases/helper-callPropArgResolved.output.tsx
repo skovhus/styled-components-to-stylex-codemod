@@ -3,10 +3,7 @@ import * as stylex from "@stylexjs/stylex";
 import { $shadow } from "./tokens.stylex";
 import { shadow } from "./lib/helpers";
 
-type BoxProps = {
-  children?: React.ReactNode;
-  shadow: "dark" | "light";
-};
+type BoxProps = Pick<React.ComponentProps<"div">, "children"> & { shadow: "dark" | "light" };
 
 // Test: adapter resolution for helper calls with dynamic prop args.
 // The adapter remaps `shadow` → `$shadow` from tokens.stylex.

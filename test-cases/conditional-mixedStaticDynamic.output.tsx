@@ -13,11 +13,11 @@ interface ContainerProps {
   $position?: Position;
 }
 
-function Wrapper(props: { children?: React.ReactNode }) {
+function Wrapper(props: Pick<React.ComponentProps<"div">, "children">) {
   return <div {...stylex.props(styles.wrapper)}>{props.children}</div>;
 }
 
-function Container(props: ContainerProps & { children?: React.ReactNode }) {
+function Container(props: ContainerProps & Pick<React.ComponentProps<"div">, "children">) {
   const { children, $sidebarCollapsed, $position } = props;
 
   return (

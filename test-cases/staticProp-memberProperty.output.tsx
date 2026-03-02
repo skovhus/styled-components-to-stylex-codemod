@@ -11,12 +11,7 @@ Divider.HEIGHT = 10;
 Divider.WIDTH = 200;
 Divider.BG_COLOR = "#e0e0e0";
 
-function DividerContainer(
-  props: {
-    style?: React.CSSProperties;
-    children?: React.ReactNode;
-  } & Pick<React.ComponentProps<"div">, "role">,
-) {
+function DividerContainer(props: Pick<React.ComponentProps<"div">, "style" | "children" | "role">) {
   const { children, style, ...rest } = props;
 
   return (

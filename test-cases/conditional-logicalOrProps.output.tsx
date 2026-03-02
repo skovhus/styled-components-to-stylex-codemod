@@ -2,8 +2,7 @@
 import * as React from "react";
 import * as stylex from "@stylexjs/stylex";
 
-type DotProps = {
-  children?: React.ReactNode;
+type DotProps = Pick<React.ComponentProps<"div">, "children"> & {
   $active?: boolean;
   $completed?: boolean;
 };
@@ -21,8 +20,7 @@ function Dot(props: DotProps) {
   );
 }
 
-type StepProps = {
-  children?: React.ReactNode;
+type StepProps = Pick<React.ComponentProps<"div">, "children"> & {
   $active?: boolean;
   $completed?: boolean;
 };
@@ -40,8 +38,7 @@ function Step(props: StepProps) {
   );
 }
 
-type BadgeProps = {
-  children?: React.ReactNode;
+type BadgeProps = Pick<React.ComponentProps<"span">, "children"> & {
   $visible?: boolean;
   $primary?: boolean;
   $accent?: boolean;

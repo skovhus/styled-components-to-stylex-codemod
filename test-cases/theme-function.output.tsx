@@ -5,11 +5,11 @@ import { testCaseTheme, $colors } from "./tokens.stylex";
 
 const baseTheme = testCaseTheme;
 
-function Button(props: { children?: React.ReactNode }) {
+function Button(props: Pick<React.ComponentProps<"button">, "children">) {
   return <button {...stylex.props(styles.button)}>{props.children}</button>;
 }
 
-function Card(props: { children?: React.ReactNode }) {
+function Card(props: Pick<React.ComponentProps<"div">, "children">) {
   return <div {...stylex.props(styles.card)}>{props.children}</div>;
 }
 
