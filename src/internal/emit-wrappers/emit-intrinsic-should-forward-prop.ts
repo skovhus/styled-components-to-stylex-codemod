@@ -178,13 +178,25 @@ export function emitShouldForwardPropWrappers(ctx: EmitIntrinsicContext): void {
       }
       return literal;
     })();
+    // Compute the narrow base once — reused across finalTypeText and extendBaseTypeText.
+    const slimBaseTypeText = useSlimType
+      ? emitter.inferredIntrinsicPropsTypeText({
+          d,
+          tagName,
+          allowClassNameProp,
+          allowStyleProp,
+          allowSxProp,
+          skipProps,
+          includeRef: d.supportsRefProp ?? false,
+          forceNarrow: true,
+        })
+      : undefined;
+
+    const wrapSlimWithChildren = (typeText: string): string =>
+      VOID_TAGS.has(tagName) ? typeText : emitter.withChildren(typeText);
+
     const finalTypeText = (() => {
       if (explicit) {
-        // For non-exported components that only use transient props ($-prefixed)
-        // and were NOT user-configured via withConfig({ shouldForwardProp }),
-        // use simple PropsWithChildren instead of verbose intersection type.
-        // User-configured shouldForwardProp always needs full element props type
-        // because it implies rest spread forwarding of HTML attributes.
         if (
           !d.shouldForwardPropFromWithConfig &&
           canUseSimplePropsType({
@@ -195,32 +207,8 @@ export function emitShouldForwardPropWrappers(ctx: EmitIntrinsicContext): void {
         ) {
           return emitter.withChildren(extrasTypeText);
         }
-        if (useSlimType) {
-          // Non-exported: intersect explicit type with slim literal of used props
-          const narrowBase = emitter.inferredIntrinsicPropsTypeText({
-            d,
-            tagName,
-            allowClassNameProp,
-            allowStyleProp,
-            allowSxProp,
-            skipProps,
-            includeRef: d.supportsRefProp ?? false,
-            forceNarrow: true,
-          });
-          const combined = emitter.joinIntersection(narrowBase, extrasTypeText);
-          return VOID_TAGS.has(tagName) ? combined : emitter.withChildren(combined);
-        }
-        if (VOID_TAGS.has(tagName)) {
-          const base = `React.ComponentProps<"${tagName}">`;
-          const omitted: string[] = [];
-          if (!allowClassNameProp) {
-            omitted.push('"className"');
-          }
-          if (!allowStyleProp) {
-            omitted.push('"style"');
-          }
-          const baseWithOmit = omitted.length ? `Omit<${base}, ${omitted.join(" | ")}>` : base;
-          return emitter.joinIntersection(baseWithOmit, extrasTypeText);
+        if (slimBaseTypeText !== undefined) {
+          return wrapSlimWithChildren(emitter.joinIntersection(slimBaseTypeText, extrasTypeText));
         }
         const base = `React.ComponentProps<"${tagName}">`;
         const omitted: string[] = [];
@@ -233,21 +221,18 @@ export function emitShouldForwardPropWrappers(ctx: EmitIntrinsicContext): void {
         const baseWithOmit = omitted.length ? `Omit<${base}, ${omitted.join(" | ")}>` : base;
         return emitter.joinIntersection(baseWithOmit, extrasTypeText);
       }
-      const inferred = emitter.inferredIntrinsicPropsTypeText({
+      if (slimBaseTypeText !== undefined) {
+        return wrapSlimWithChildren(emitter.joinIntersection(slimBaseTypeText, extrasTypeText));
+      }
+      return emitter.inferredIntrinsicPropsTypeText({
         d,
         tagName,
         allowClassNameProp,
         allowStyleProp,
         allowSxProp,
         skipProps,
-        includeRef: useSlimType ? (d.supportsRefProp ?? false) : true,
-        forceNarrow: useSlimType,
+        includeRef: true,
       });
-      if (useSlimType) {
-        const combined = emitter.joinIntersection(inferred, extrasTypeText);
-        return VOID_TAGS.has(tagName) ? combined : emitter.withChildren(combined);
-      }
-      return inferred;
     })();
     const finalTypeTextWithForwardedAs = withForwardedAsType(finalTypeText, includesForwardedAs);
 
@@ -276,18 +261,8 @@ export function emitShouldForwardPropWrappers(ctx: EmitIntrinsicContext): void {
     let sfpInlineTypeText: string | undefined;
     if (!allowAsProp && explicit) {
       const extendBaseTypeText = (() => {
-        if (useSlimType) {
-          // Non-exported: slim literal of actually-used props
-          return emitter.inferredIntrinsicPropsTypeText({
-            d,
-            tagName,
-            allowClassNameProp,
-            allowStyleProp,
-            allowSxProp,
-            skipProps,
-            includeRef: d.supportsRefProp ?? false,
-            forceNarrow: true,
-          });
+        if (slimBaseTypeText !== undefined) {
+          return slimBaseTypeText;
         }
         const base = `React.ComponentProps<"${tagName}">`;
         const omitted: string[] = [];

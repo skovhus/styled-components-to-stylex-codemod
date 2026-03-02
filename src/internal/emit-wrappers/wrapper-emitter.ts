@@ -893,32 +893,24 @@ export class WrapperEmitter {
       lines.push(`${this.toTypeKey(attr)}?: ${attrType}`);
     }
 
-    // Props with universal types (same on every element) can be inlined
-    // directly instead of going through Pick<ComponentProps>.  Pick is only
-    // valuable for element-specific attrs (disabled, placeholder, src, d, …).
-    // `children` uses PropsWithChildren wrapping instead of inlining.
-    const UNIVERSAL_PROP_TYPES: Record<string, string> = {
-      className: "className?: string",
-      style: "style?: React.CSSProperties",
-    };
-    // When forceNarrow AND all picked keys are universal (children, className,
-    // style), inline them and let the caller wrap with PropsWithChildren so
-    // custom props end up inside the wrapper.
-    // When NOT forceNarrow, children stays in Pick alongside other attrs.
-    const allUniversalOrChildren = pickedAttrKeys.every(
-      (k) => k in UNIVERSAL_PROP_TYPES || k === "children",
+    // When all picked keys have universal types (same on every element:
+    // className, style, children), inline them instead of Pick<ComponentProps>.
+    // Pick is only valuable for element-specific attrs (ref, disabled, src, d).
+    // For forceNarrow, children is excluded from inlining — the caller wraps
+    // with PropsWithChildren so custom props end up inside the wrapper.
+    const hasElementSpecificPicks = pickedAttrKeys.some(
+      (k) => !(k in UNIVERSAL_PROP_TYPES) && k !== "children",
     );
-    if (allUniversalOrChildren && (forceNarrow || !pickedAttrKeys.includes("children"))) {
+    if (!hasElementSpecificPicks) {
       for (const k of pickedAttrKeys) {
         if (k in UNIVERSAL_PROP_TYPES) {
           lines.push(UNIVERSAL_PROP_TYPES[k]!);
         }
       }
-      const hadChildren = pickedAttrKeys.includes("children");
+      // Keep children in Pick only when !forceNarrow (caller won't wrap)
+      const keepChildren = !forceNarrow && pickedAttrKeys.includes("children");
       pickedAttrKeys.length = 0;
-      // For forceNarrow: don't inline children — caller wraps with PropsWithChildren
-      // For non-forceNarrow: children wasn't present, nothing to do
-      if (!forceNarrow && hadChildren) {
+      if (keepChildren) {
         pickedAttrKeys.push("children");
       }
     }
@@ -1640,6 +1632,12 @@ export class WrapperEmitter {
 // ---------------------------------------------------------------------------
 // Non-exported helpers
 // ---------------------------------------------------------------------------
+
+/** Props whose types are the same on every element and can be inlined. */
+const UNIVERSAL_PROP_TYPES: Record<string, string> = {
+  className: "className?: string",
+  style: "style?: React.CSSProperties",
+};
 
 /**
  * If `typeText` is a simple `{ prop?: type; … }` object literal, returns the
