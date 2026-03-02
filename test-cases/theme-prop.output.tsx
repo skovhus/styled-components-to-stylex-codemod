@@ -4,7 +4,7 @@ import { useTheme } from "styled-components";
 import { pixelVars } from "./tokens.stylex";
 
 // Block-level theme boolean conditional: theme.isDark controls entire CSS block
-function Box(props: React.PropsWithChildren<{ ref?: React.Ref<HTMLDivElement> }>) {
+function Box(props: { children?: React.ReactNode }) {
   const { children } = props;
 
   const theme = useTheme();

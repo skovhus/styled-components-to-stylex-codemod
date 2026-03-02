@@ -13,13 +13,20 @@ import {
   type InlineStyleProp,
   type WrapperPropDefaults,
 } from "./types.js";
-import type { JsxAttr, StatementKind } from "./wrapper-emitter.js";
+import { SX_PROP_TYPE_TEXT, type JsxAttr, type StatementKind } from "./wrapper-emitter.js";
 import { emitStyleMerging } from "./style-merger.js";
 import { sortVariantEntriesBySpecificity, VOID_TAGS } from "./type-helpers.js";
 import { withLeadingCommentsOnFirstFunction } from "./comments.js";
-import type { EmitIntrinsicContext } from "./emit-intrinsic-helpers.js";
+import { getCompoundVariantWhenKeys, type EmitIntrinsicContext } from "./emit-intrinsic-helpers.js";
 import { cloneAstNode, collectIdentifiers } from "../utilities/jscodeshift-utils.js";
-import { makeConditionalStyleExpr, parseVariantWhenToAst } from "./variant-condition.js";
+import {
+  areEquivalentWhen,
+  getPositiveWhen,
+  makeConditionalStyleExpr,
+  parseVariantWhenToAst,
+} from "./variant-condition.js";
+import { typeContainsPolymorphicAs } from "../utilities/polymorphic-as-detection.js";
+import { mergeOrderedEntries, type OrderedStyleEntry } from "./style-expr-builders.js";
 
 export function emitSimpleWithConfigWrappers(ctx: EmitIntrinsicContext): void {
   const { emitter, j, emitTypes, wrapperDecls, wrapperNames, stylesIdentifier, emitted } = ctx;
@@ -68,7 +75,23 @@ export function emitSimpleWithConfigWrappers(ctx: EmitIntrinsicContext): void {
     const supportsExternalStyles = d.supportsExternalStyles ?? false;
     const allowClassNameProp = emitter.shouldAllowClassNameProp(d);
     const allowStyleProp = emitter.shouldAllowStyleProp(d);
+    const allowSxProp = emitter.shouldAllowSxProp(d);
     const allowAsProp = shouldAllowAsProp(d, tagName);
+    // Determine whether the component will forward ref (via {...rest}) so we can
+    // include ref in the narrow type only when it's actually forwarded.
+    const willForwardRef =
+      allowClassNameProp ||
+      allowStyleProp ||
+      (() => {
+        const used = emitter.getUsedAttrs(d.localName);
+        return (
+          used.has("*") ||
+          !!d.usedAsValue ||
+          (d.isExported ?? false) ||
+          used.size > 0 ||
+          hasElementPropsInDefaultAttrs(d)
+        );
+      })();
     {
       const explicit = emitter.stringifyTsType(d.propsType);
       const shouldUseIntrinsicProps = (() => {
@@ -88,12 +111,18 @@ export function emitSimpleWithConfigWrappers(ctx: EmitIntrinsicContext): void {
             tagName,
             allowClassNameProp,
             allowStyleProp,
+            allowSxProp,
+            includeRef: willForwardRef,
           })
         : "{}";
 
-      // For non-void tags without explicit type, wrap in PropsWithChildren
+      // For non-void tags without explicit type, ensure children are included.
+      // inferredIntrinsicPropsTypeText already includes children for non-void tags,
+      // so only wrap when using the fallback "{}" type.
       const typeWithChildren =
-        !explicit && !VOID_TAGS.has(tagName) ? emitter.withChildren(baseTypeText) : baseTypeText;
+        !explicit && !VOID_TAGS.has(tagName) && !shouldUseIntrinsicProps
+          ? emitter.withChildren(baseTypeText)
+          : baseTypeText;
       // When there's an explicit user type, create a wrapper type that combines element props
       // with the user type (don't modify the user type)
       const needsElementProps = hasElementPropsInDefaultAttrs(d);
@@ -106,6 +135,8 @@ export function emitSimpleWithConfigWrappers(ctx: EmitIntrinsicContext): void {
               tagName,
               allowClassNameProp,
               allowStyleProp,
+              allowSxProp,
+              includeRef: willForwardRef,
             });
             ctx.markNeedsReactTypeImport();
             return emitter.joinIntersection(intrinsicBaseType, explicit);
@@ -121,6 +152,7 @@ export function emitSimpleWithConfigWrappers(ctx: EmitIntrinsicContext): void {
         allowAsProp,
         allowClassNameProp,
         allowStyleProp,
+        allowSxProp,
       });
     }
     const { beforeBase: extraStyleArgs, afterBase: extraStyleArgsAfterBase } =
@@ -130,7 +162,7 @@ export function emitSimpleWithConfigWrappers(ctx: EmitIntrinsicContext): void {
         ? [j.memberExpression(j.identifier(stylesIdentifier), j.identifier(d.extendsStyleKey))]
         : []),
       ...extraStyleArgs,
-      j.memberExpression(j.identifier(stylesIdentifier), j.identifier(d.styleKey)),
+      ...emitter.baseStyleExpr(d),
       ...extraStyleArgsAfterBase,
     ];
 
@@ -140,7 +172,7 @@ export function emitSimpleWithConfigWrappers(ctx: EmitIntrinsicContext): void {
       styleArgs,
       j,
       stylesIdentifier,
-      ctx,
+      () => ctx.markNeedsUseThemeImport(),
     );
 
     // Handle pseudo-alias selectors (e.g., &:${highlight})
@@ -275,12 +307,18 @@ export function emitSimpleWithConfigWrappers(ctx: EmitIntrinsicContext): void {
       continue;
     }
 
+    const sxId = j.identifier("sx");
+    if (allowSxProp) {
+      styleArgs.push(sxId);
+    }
+
     const patternProps = emitter.buildDestructurePatternProps({
       baseProps: [
         ...(allowAsProp ? [asDestructureProp(tagName)] : []),
         emitter.patternProp("className", classNameId),
         ...(isVoidTag ? [] : [emitter.patternProp("children", childrenId)]),
         emitter.patternProp("style", styleId),
+        ...(allowSxProp ? [emitter.patternProp("sx", sxId)] : []),
       ],
       destructureProps: [...pseudoGuardProps],
       includeRest: true,
@@ -303,6 +341,7 @@ export function emitSimpleWithConfigWrappers(ctx: EmitIntrinsicContext): void {
       styleId,
       allowClassNameProp,
       allowStyleProp,
+      allowSxProp,
       inlineStyleProps: [],
       staticClassNameExpr,
     });
@@ -337,7 +376,7 @@ export function emitSimpleWithConfigWrappers(ctx: EmitIntrinsicContext): void {
 
     const bodyStmts: StatementKind[] = [declStmt];
     if (needsUseThemeWithConfig) {
-      bodyStmts.push(buildUseThemeDeclaration(j));
+      bodyStmts.push(buildUseThemeDeclaration(j, emitter.themeHook.functionName));
     }
     if (merging.sxDecl) {
       bodyStmts.push(merging.sxDecl);
@@ -424,13 +463,32 @@ export function emitSimpleExportedIntrinsicWrappers(ctx: EmitIntrinsicContext): 
     const tagName = d.base.tagName;
     const allowClassNameProp = emitter.shouldAllowClassNameProp(d);
     const allowStyleProp = emitter.shouldAllowStyleProp(d);
+    const allowSxProp = emitter.shouldAllowSxProp(d);
     const usedAttrsForType = emitter.getUsedAttrs(d.localName);
     const includesForwardedAs = hasForwardedAsUsage(d);
     const allowAsProp = shouldAllowAsProp(d, tagName);
+    // When the user's props type already has `as?: React.ElementType`, we don't
+    // upgrade to our generic pattern (to avoid TypeScript inference issues), but
+    // we still need to destructure `as` and use it as the JSX tag so that
+    // downstream `.attrs({ as: "element" })` wrappers actually work at runtime.
+    // Use the AST-based check (not the regex-based propsTypeHasExistingPolymorphicAs)
+    // to ensure we only match `as?: React.ElementType`, not narrow string unions.
+    const hasExistingAs = d.propsType
+      ? typeContainsPolymorphicAs({ root: emitter.root, j, typeNode: d.propsType })
+      : false;
+    const useAsProp = allowAsProp || hasExistingAs;
     let inlineTypeText: string | undefined;
     // d.isExported is already set from exportedComponents during analyze-before-emit
     const isExportedComponent = d.isExported ?? false;
     const usePolymorphicPattern = allowAsProp && isExportedComponent;
+    // Include ref in narrow type only when the component will forward it via {...rest}.
+    // When needsRestForType is true, the broad type (ComponentProps<"tag">) is used instead
+    // and ref is included naturally. These conditions cover the gap where shouldIncludeRest
+    // is true but needsRestForType is false.
+    const willForwardRef =
+      isExportedComponent ||
+      hasComplementaryVariantPairs(d) ||
+      !!d.variantDimensions?.some((dim) => dim.namespaceBooleanProp);
     {
       const explicit = emitter.stringifyTsType(d.propsType);
       const explicitPropNames = d.propsType
@@ -441,7 +499,9 @@ export function emitSimpleExportedIntrinsicWrappers(ctx: EmitIntrinsicContext): 
         tagName,
         allowClassNameProp,
         allowStyleProp,
+        allowSxProp,
         skipProps: explicitPropNames,
+        includeRef: willForwardRef,
       });
 
       const variantPropsForType = new Set([
@@ -552,17 +612,23 @@ export function emitSimpleExportedIntrinsicWrappers(ctx: EmitIntrinsicContext): 
         return `{\n${lines.join("\n")}\n}`;
       })();
 
+      const sxTypeIntersection = allowSxProp ? `{ ${SX_PROP_TYPE_TEXT} }` : undefined;
+
       const typeText = (() => {
         if (!explicit) {
           // If we forward `...rest`, prefer full intrinsic props typing so common
           // props (e.g. onChange) get correct types. Keep any style-driving custom
           // props intersected in so the wrapper can consume them.
           return needsRestForType
-            ? emitter.joinIntersection(extendBaseTypeText, customStyleDrivingPropsTypeText)
+            ? emitter.joinIntersection(
+                extendBaseTypeText,
+                customStyleDrivingPropsTypeText,
+                sxTypeIntersection,
+              )
             : baseTypeText;
         }
         if (VOID_TAGS.has(tagName)) {
-          return emitter.joinIntersection(extendBaseTypeText, explicit);
+          return emitter.joinIntersection(extendBaseTypeText, explicit, sxTypeIntersection);
         }
         if (needsRestForType) {
           // For non-exported components that only use transient props ($-prefixed)
@@ -576,7 +642,7 @@ export function emitSimpleExportedIntrinsicWrappers(ctx: EmitIntrinsicContext): 
           ) {
             return emitter.withChildren(explicit);
           }
-          return emitter.joinIntersection(extendBaseTypeText, explicit);
+          return emitter.joinIntersection(extendBaseTypeText, explicit, sxTypeIntersection);
         }
         if (allowClassNameProp || allowStyleProp) {
           const extras: string[] = [];
@@ -585,6 +651,9 @@ export function emitSimpleExportedIntrinsicWrappers(ctx: EmitIntrinsicContext): 
           }
           if (allowStyleProp) {
             extras.push("style?: React.CSSProperties");
+          }
+          if (allowSxProp) {
+            extras.push(SX_PROP_TYPE_TEXT);
           }
           extras.push("children?: React.ReactNode");
           return emitter.joinIntersection(explicit, `{ ${extras.join("; ")} }`);
@@ -599,8 +668,15 @@ export function emitSimpleExportedIntrinsicWrappers(ctx: EmitIntrinsicContext): 
       // For non-exported components, use simple `as?: React.ElementType` without generics.
       // Detect if there are no custom user-defined props (just intrinsic element props)
       const hasNoCustomProps = !explicit && customStyleDrivingPropsTypeText === "{}";
+      // When the user already has a well-named type (e.g. `styled("div")<Props>` where Props
+      // exists in the file), skip creating a new type alias and use the existing type inline.
+      const explicitIsExistingTypeRef = !!emitter.getExplicitTypeNameIfExists(d.propsType);
       let typeAliasEmitted: boolean;
-      if (usePolymorphicPattern) {
+      if (explicitIsExistingTypeRef && !usePolymorphicPattern) {
+        // User already has a well-named type — skip creating a new type alias
+        typeAliasEmitted = false;
+        ctx.markNeedsReactTypeImport();
+      } else if (usePolymorphicPattern) {
         typeAliasEmitted = emitPropsType({
           localName: d.localName,
           tagName,
@@ -608,12 +684,21 @@ export function emitSimpleExportedIntrinsicWrappers(ctx: EmitIntrinsicContext): 
           allowAsProp,
           allowClassNameProp,
           allowStyleProp,
-          hasNoCustomProps,
+          allowSxProp,
+          hasNoCustomProps: hasNoCustomProps || explicitIsExistingTypeRef,
         });
       } else if (!hasNoCustomProps) {
         typeAliasEmitted = emitSimplePropsType(d.localName, typeTextWithForwardedAs, allowAsProp);
       } else {
         typeAliasEmitted = false;
+      }
+
+      // When the named type already exists, inject sx prop into it if needed.
+      if (!typeAliasEmitted && allowSxProp) {
+        const propsTypeName = emitter.propsTypeNameFor(d.localName);
+        if (emitter.typeExistsInFile(propsTypeName)) {
+          emitter.injectSxPropIntoExistingType(propsTypeName);
+        }
       }
 
       // If we couldn't emit the named `${localName}Props` type (because it already exists in-file
@@ -628,6 +713,7 @@ export function emitSimpleExportedIntrinsicWrappers(ctx: EmitIntrinsicContext): 
               tagName,
               allowClassNameProp,
               allowStyleProp,
+              allowSxProp,
               includeForwardedAs: includesForwardedAs,
             });
             inlineTypeText = poly.typeExprText;
@@ -638,44 +724,59 @@ export function emitSimpleExportedIntrinsicWrappers(ctx: EmitIntrinsicContext): 
               tagName,
               allowClassNameProp,
               allowStyleProp,
+              allowSxProp,
               includeForwardedAs: includesForwardedAs,
               extra: explicit,
+              extraFirst: explicitIsExistingTypeRef,
             });
             inlineTypeText = poly.typeExprText;
           } else {
             // Fallback: use the polymorphic props type with generic (shouldn't happen often)
             inlineTypeText = `${emitter.propsTypeNameFor(d.localName)}<C>`;
           }
+        } else if (explicitIsExistingTypeRef && explicit) {
+          // User's existing type first in the intersection for readability
+          const inlineBase = emitter.joinIntersection(
+            explicit,
+            extendBaseTypeText,
+            sxTypeIntersection,
+          );
+          inlineTypeText = withForwardedAsType(
+            withSimpleAsPropType(inlineBase, allowAsProp),
+            includesForwardedAs,
+          );
         } else {
           // Use the computed typeText (which may be an intersection) as the inline type.
           inlineTypeText = withSimpleAsPropType(typeTextWithForwardedAs, allowAsProp);
         }
       }
     }
-    const { beforeBase: extraStyleArgs, afterBase: extraStyleArgsAfterBase } =
-      emitter.splitExtraStyleArgs(d);
+    const destructureProps: string[] = [];
+    // Track default values for props (for destructuring defaults)
+    const propDefaults: WrapperPropDefaults = new Map();
+
+    // Build propsArg expressions first (may be needed for interleaving)
+    const propsArgExprs = d.extraStylexPropsArgs
+      ? emitter.buildExtraStylexPropsExprs({
+          entries: d.extraStylexPropsArgs,
+          destructureProps,
+        })
+      : [];
+
+    // Build interleaved before/after-base args using mixinOrder
+    const {
+      beforeBase: extraStyleArgs,
+      afterBase: extraStyleArgsAfterBase,
+      afterVariants: afterVariantStyleArgs,
+    } = emitter.buildInterleavedExtraStyleArgs(d, propsArgExprs);
     const styleArgs: ExpressionKind[] = [
       ...(d.extendsStyleKey
         ? [j.memberExpression(j.identifier(stylesIdentifier), j.identifier(d.extendsStyleKey))]
         : []),
       ...extraStyleArgs,
-      j.memberExpression(j.identifier(stylesIdentifier), j.identifier(d.styleKey)),
+      ...emitter.baseStyleExpr(d),
       ...extraStyleArgsAfterBase,
     ];
-
-    const destructureProps: string[] = [];
-    // Track default values for props (for destructuring defaults)
-    const propDefaults: WrapperPropDefaults = new Map();
-
-    // Add adapter-resolved StyleX styles (emitted directly into stylex.props args).
-    if (d.extraStylexPropsArgs) {
-      styleArgs.push(
-        ...emitter.buildExtraStylexPropsExprs({
-          entries: d.extraStylexPropsArgs,
-          destructureProps,
-        }),
-      );
-    }
 
     // Handle theme boolean conditionals - add conditional true/false style args
     const needsUseTheme = appendThemeBooleanStyleArgs(
@@ -683,7 +784,7 @@ export function emitSimpleExportedIntrinsicWrappers(ctx: EmitIntrinsicContext): 
       styleArgs,
       j,
       stylesIdentifier,
-      ctx,
+      () => ctx.markNeedsUseThemeImport(),
     );
 
     // Handle pseudo-alias selectors (e.g., &:${highlight})
@@ -701,18 +802,64 @@ export function emitSimpleExportedIntrinsicWrappers(ctx: EmitIntrinsicContext): 
     // Collect keys used by compound variants (they're handled separately)
     const compoundVariantKeys = new Set<string>();
     for (const cv of d.compoundVariants ?? []) {
-      compoundVariantKeys.add(cv.outerProp);
-      compoundVariantKeys.add(`${cv.innerProp}True`);
-      compoundVariantKeys.add(`${cv.innerProp}False`);
+      for (const k of getCompoundVariantWhenKeys(cv)) {
+        compoundVariantKeys.add(k);
+      }
     }
+
+    // Collect variant and styleFn expressions with source order for interleaving.
+    // When source order is available, entries are sorted to preserve CSS cascade order.
+    const hasSourceOrder = !!(d.variantSourceOrder && Object.keys(d.variantSourceOrder).length > 0);
+    const orderedEntries: OrderedStyleEntry[] = [];
 
     if (d.variantStyleKeys) {
       const sortedEntries = sortVariantEntriesBySpecificity(Object.entries(d.variantStyleKeys));
-      for (const [when, variantKey] of sortedEntries) {
+      const consumedVariantIndices = new Set<number>();
+      for (let vi = 0; vi < sortedEntries.length; vi++) {
+        if (consumedVariantIndices.has(vi)) {
+          continue;
+        }
+        const [when, variantKey] = sortedEntries[vi]!;
         // Skip keys handled by compound variants
         if (compoundVariantKeys.has(when)) {
           continue;
         }
+
+        // Look for a complementary pair to merge into a ternary expression
+        const complementIdx = findComplementaryVariantEntry(
+          sortedEntries,
+          vi,
+          consumedVariantIndices,
+        );
+        if (complementIdx !== null) {
+          consumedVariantIndices.add(complementIdx);
+          const complementEntry = sortedEntries[complementIdx];
+          const otherWhen = complementEntry?.[0] ?? "";
+          const otherKey = complementEntry?.[1] ?? "";
+          const positiveWhen = getPositiveWhen(when, otherWhen) ?? when;
+          const { cond } = emitter.collectConditionProps({ when: positiveWhen, destructureProps });
+
+          const isCurrentPositive = areEquivalentWhen(when, positiveWhen);
+          const trueKey = isCurrentPositive ? variantKey : otherKey;
+          const falseKey = isCurrentPositive ? otherKey : variantKey;
+          const trueExpr = j.memberExpression(
+            j.identifier(stylesIdentifier),
+            j.identifier(trueKey),
+          );
+          const falseExpr = j.memberExpression(
+            j.identifier(stylesIdentifier),
+            j.identifier(falseKey),
+          );
+          const expr = j.conditionalExpression(cond, trueExpr, falseExpr);
+          const order = d.variantSourceOrder?.[when];
+          if (hasSourceOrder && order !== undefined) {
+            orderedEntries.push({ order, expr });
+          } else {
+            styleArgs.push(expr);
+          }
+          continue;
+        }
+
         const { cond, isBoolean } = emitter.collectConditionProps({ when, destructureProps });
         const styleExpr = j.memberExpression(
           j.identifier(stylesIdentifier),
@@ -720,7 +867,13 @@ export function emitSimpleExportedIntrinsicWrappers(ctx: EmitIntrinsicContext): 
         );
         // Use makeConditionalStyleExpr to handle boolean vs non-boolean conditions correctly.
         // For boolean conditions, && is used. For non-boolean (could be "" or 0), ternary is used.
-        styleArgs.push(emitter.makeConditionalStyleExpr({ cond, expr: styleExpr, isBoolean }));
+        const expr = emitter.makeConditionalStyleExpr({ cond, expr: styleExpr, isBoolean });
+        const order = d.variantSourceOrder?.[when];
+        if (hasSourceOrder && order !== undefined) {
+          orderedEntries.push({ order, expr });
+        } else {
+          styleArgs.push(expr);
+        }
       }
     }
 
@@ -745,6 +898,7 @@ export function emitSimpleExportedIntrinsicWrappers(ctx: EmitIntrinsicContext): 
         styleArgs,
         destructureProps,
         propDefaults,
+        orderedEntries: hasSourceOrder ? orderedEntries : undefined,
       });
     }
 
@@ -764,8 +918,18 @@ export function emitSimpleExportedIntrinsicWrappers(ctx: EmitIntrinsicContext): 
       d,
       styleArgs,
       destructureProps,
+      orderedEntries: hasSourceOrder ? orderedEntries : undefined,
     });
     emitter.collectDestructurePropsFromStyleFns({ d, styleArgs, destructureProps });
+
+    // Merge ordered entries (variants + styleFns) by source order to preserve CSS cascade
+    mergeOrderedEntries(orderedEntries, styleArgs);
+
+    // Add adapter-resolved StyleX styles that should come after variant styles
+    // to preserve CSS cascade order (e.g., unconditional border-bottom after conditional border).
+    if (afterVariantStyleArgs.length > 0) {
+      styleArgs.push(...afterVariantStyleArgs);
+    }
 
     if (d.attrsInfo?.conditionalAttrs?.length) {
       for (const c of d.attrsInfo.conditionalAttrs) {
@@ -831,14 +995,30 @@ export function emitSimpleExportedIntrinsicWrappers(ctx: EmitIntrinsicContext): 
       hasExplicitPropsToPassThrough,
       ignoreTransientAttrs: true,
     });
+    // Components with complementary variant pairs (two-branch conditional CSS blocks)
+    // are behavioral wrappers that should preserve prop forwarding
+    if (hasComplementaryVariantPairs(d)) {
+      shouldIncludeRest = true;
+    }
     // When defaultAttrs reference element props (like tabIndex: props.tabIndex ?? 0),
     // include rest spread so user can pass/override these props
     if (hasElementPropsInDefaultAttrs(d)) {
       shouldIncludeRest = true;
     }
+    // Recipe-pattern components with namespace boolean dimensions (e.g.,
+    // disabled ? disabledVariants[color] : enabledVariants[color]) are behavioral
+    // wrappers that need rest spread to forward HTML props (id, onClick, aria-*, etc.)
+    if (d.variantDimensions?.some((dim) => dim.namespaceBooleanProp)) {
+      shouldIncludeRest = true;
+    }
     // Exported components should always include rest spread so that all element props
     // (id, onClick, aria-*, etc.) are forwarded to the element.
     if (isExportedComponent) {
+      shouldIncludeRest = true;
+    }
+    // Components extended by other styled components (supportsExternalStyles) need rest
+    // spread so extending components can pass through HTML attributes (aria-*, data-*, id, etc.)
+    if (d.supportsExternalStyles) {
       shouldIncludeRest = true;
     }
     if (shouldIncludeRest) {
@@ -849,11 +1029,11 @@ export function emitSimpleExportedIntrinsicWrappers(ctx: EmitIntrinsicContext): 
       }
     }
 
-    if (allowAsProp || allowClassNameProp || allowStyleProp || needsUseTheme) {
+    if (useAsProp || allowClassNameProp || allowStyleProp || needsUseTheme) {
       const isVoidTag = VOID_TAGS.has(tagName);
-      // When allowAsProp is true, include children support even for void tags
+      // When useAsProp is true, include children support even for void tags
       // because the user might use `as="textarea"` which requires children
-      const includeChildren = allowAsProp || !isVoidTag;
+      const includeChildren = useAsProp || !isVoidTag;
       const propsParamId = j.identifier("props");
       emitter.annotatePropsParam(propsParamId, d.localName, inlineTypeText);
       const propsId = j.identifier("props");
@@ -861,12 +1041,25 @@ export function emitSimpleExportedIntrinsicWrappers(ctx: EmitIntrinsicContext): 
       const classNameId = j.identifier("className");
       const childrenId = j.identifier("children");
       const styleId = j.identifier("style");
+      const sxId = j.identifier("sx");
       const restId = shouldIncludeRest ? j.identifier("rest") : null;
       const forwardedAsId = j.identifier("forwardedAs");
 
+      if (allowSxProp) {
+        styleArgs.push(sxId);
+      }
+
+      // Add defaultAttrs props to destructureProps for nullish coalescing patterns
+      // (e.g., tabIndex: props.tabIndex ?? 0 needs tabIndex destructured)
+      for (const attr of d.attrsInfo?.defaultAttrs ?? []) {
+        if (!destructureProps.includes(attr.jsxProp)) {
+          destructureProps.push(attr.jsxProp);
+        }
+      }
+
       const patternProps = emitter.buildDestructurePatternProps({
         baseProps: [
-          ...(allowAsProp
+          ...(useAsProp
             ? [
                 j.property.from({
                   kind: "init",
@@ -880,6 +1073,7 @@ export function emitSimpleExportedIntrinsicWrappers(ctx: EmitIntrinsicContext): 
           ...(allowClassNameProp ? [ctx.patternProp("className", classNameId)] : []),
           ...(includeChildren ? [ctx.patternProp("children", childrenId)] : []),
           ...(allowStyleProp ? [ctx.patternProp("style", styleId)] : []),
+          ...(allowSxProp ? [ctx.patternProp("sx", sxId)] : []),
         ],
         destructureProps,
         propDefaults,
@@ -908,6 +1102,7 @@ export function emitSimpleExportedIntrinsicWrappers(ctx: EmitIntrinsicContext): 
         styleId,
         allowClassNameProp,
         allowStyleProp,
+        allowSxProp,
         inlineStyleProps: (d.inlineStyleProps ?? []) as InlineStyleProp[],
         staticClassNameExpr,
       });
@@ -932,7 +1127,7 @@ export function emitSimpleExportedIntrinsicWrappers(ctx: EmitIntrinsicContext): 
       emitter.appendMergingAttrs(openingAttrs, merging);
 
       const jsx = emitter.buildJsxElement({
-        tagName: allowAsProp ? "Component" : tagName,
+        tagName: useAsProp ? "Component" : tagName,
         attrs: openingAttrs,
         includeChildren,
         childrenExpr: childrenId,
@@ -940,7 +1135,7 @@ export function emitSimpleExportedIntrinsicWrappers(ctx: EmitIntrinsicContext): 
 
       const bodyStmts: StatementKind[] = [declStmt];
       if (needsUseTheme) {
-        bodyStmts.push(buildUseThemeDeclaration(j));
+        bodyStmts.push(buildUseThemeDeclaration(j, emitter.themeHook.functionName));
       }
       if (merging.sxDecl) {
         bodyStmts.push(merging.sxDecl);
@@ -1050,6 +1245,49 @@ function maybeApplySafeTruthyDefaultFromExtraStyleConditionals(args: {
       expr.test = j.identifier(propName);
     }
   }
+}
+
+/**
+ * Finds the next unconsumed entry in sorted variant entries that has a
+ * complementary "when" condition to the entry at `index`.
+ */
+function findComplementaryVariantEntry(
+  entries: ReadonlyArray<readonly [string, string]>,
+  index: number,
+  consumed: ReadonlySet<number>,
+): number | null {
+  const when = entries[index]?.[0];
+  if (!when) {
+    return null;
+  }
+  let next = index + 1;
+  while (next < entries.length && consumed.has(next)) {
+    next++;
+  }
+  if (next >= entries.length) {
+    return null;
+  }
+  const otherWhen = entries[next]?.[0];
+  if (otherWhen && getPositiveWhen(when, otherWhen) !== null) {
+    return next;
+  }
+  return null;
+}
+
+/**
+ * Checks whether a StyledDecl has at least one complementary variant pair
+ * (e.g., `"$inline === true"` and `"!($inline === true)"`).
+ */
+function hasComplementaryVariantPairs(d: StyledDecl): boolean {
+  const keys = Object.keys(d.variantStyleKeys ?? {});
+  for (let i = 0; i < keys.length; i++) {
+    for (let k = i + 1; k < keys.length; k++) {
+      if (getPositiveWhen(keys[i]!, keys[k]!) !== null) {
+        return true;
+      }
+    }
+  }
+  return false;
 }
 
 function collectPropsUsedOutsideExtraStyleConditionals(
@@ -1213,17 +1451,17 @@ function collectPropsFromPropsMemberAccess(node: ExpressionKind, out: Set<string
 }
 
 /** Appends theme boolean conditional style args (e.g., `theme.isDark ? styles.boxDark : styles.boxLight`) to `styleArgs`. */
-function appendThemeBooleanStyleArgs(
+export function appendThemeBooleanStyleArgs(
   hooks: StyledDecl["needsUseThemeHook"],
   styleArgs: ExpressionKind[],
   j: JSCodeshift,
   stylesIdentifier: string,
-  ctx: EmitIntrinsicContext,
+  markNeedsUseThemeImport: () => void,
 ): boolean {
   if (!hooks || hooks.length === 0) {
     return false;
   }
-  ctx.markNeedsUseThemeImport();
+  markNeedsUseThemeImport();
   for (const entry of hooks) {
     // Skip entries used only for triggering useTheme import/declaration
     // (e.g., when the theme conditional uses inline styles instead of style buckets)
@@ -1296,8 +1534,14 @@ export function appendPseudoAliasStyleArgs(
 }
 
 /** Builds a `const theme = useTheme();` variable declaration. */
-function buildUseThemeDeclaration(j: JSCodeshift): StatementKind {
+export function buildUseThemeDeclaration(
+  j: JSCodeshift,
+  themeHookFunctionName: string,
+): StatementKind {
   return j.variableDeclaration("const", [
-    j.variableDeclarator(j.identifier("theme"), j.callExpression(j.identifier("useTheme"), [])),
+    j.variableDeclarator(
+      j.identifier("theme"),
+      j.callExpression(j.identifier(themeHookFunctionName), []),
+    ),
   ]);
 }

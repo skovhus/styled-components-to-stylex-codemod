@@ -3,11 +3,13 @@ import * as stylex from "@stylexjs/stylex";
 import { $colors } from "./tokens.stylex";
 import type { Colors } from "./lib/colors";
 
-export interface BadgeProps extends Omit<React.ComponentProps<"div">, "className" | "style"> {
+export interface BadgeProps {
   textColor?: Colors;
 }
 
-export function Badge(props: BadgeProps) {
+export function Badge(
+  props: BadgeProps & Omit<React.ComponentProps<"div">, "className" | "style">,
+) {
   const { children, textColor, ...rest } = props;
 
   return (

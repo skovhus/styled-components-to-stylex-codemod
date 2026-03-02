@@ -1,12 +1,12 @@
 import React from "react";
 import * as stylex from "@stylexjs/stylex";
 
-type BoxProps = Omit<React.ComponentProps<"div">, "className" | "style"> & {
+type BoxProps = {
   $delay?: number;
   children?: React.ReactNode;
 };
 
-function Box(props: BoxProps) {
+function Box(props: BoxProps & Omit<React.ComponentProps<"div">, "className" | "style">) {
   const { children, $delay } = props;
 
   return (

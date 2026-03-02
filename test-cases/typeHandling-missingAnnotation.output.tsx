@@ -12,7 +12,7 @@ interface BoxProps {
 }
 
 // Component with props that affect styles
-export function Box(props: React.PropsWithChildren<BoxProps>) {
+export function Box(props: BoxProps & Omit<React.ComponentProps<"div">, "className" | "style">) {
   const { children, bordered, bg, ...rest } = props;
 
   return (
@@ -20,8 +20,7 @@ export function Box(props: React.PropsWithChildren<BoxProps>) {
       {...rest}
       {...stylex.props(
         styles.box,
-        !bordered && styles.boxNotBordered,
-        bordered ? styles.boxBordered : undefined,
+        bordered ? styles.boxBordered : styles.boxNotBordered,
         bg != null && styles.boxBackgroundColor(bg),
       )}
     >
@@ -38,7 +37,7 @@ export function Input(props: Omit<React.ComponentProps<"input">, "className" | "
 export function Form() {
   return (
     <Box bordered bg="lightgray">
-      <Input onChange={(e) => console.log(e.target.value)} />
+      <Input onChange={(e: React.ChangeEvent<HTMLInputElement>) => console.log(e.target.value)} />
     </Box>
   );
 }

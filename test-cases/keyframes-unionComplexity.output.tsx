@@ -12,26 +12,36 @@ const pulse = stylex.keyframes({
   },
 });
 
-type LoaderCaretProps<C extends React.ElementType = "div"> = React.ComponentPropsWithRef<C> &
+type LoaderCaretProps<C extends React.ElementType = "div"> = Omit<
+  React.ComponentPropsWithRef<C>,
+  keyof (React.ComponentProps<"div"> & {
+    $delay?: number;
+  })
+> &
   Omit<
     React.ComponentProps<"div"> & {
       $delay?: number;
     },
     "as"
-  > & { as?: C };
+  > & { sx?: stylex.StyleXStyles; as?: C };
 
 export function LoaderCaret<C extends React.ElementType = "div">(
   props: {
     $delay?: number;
-  } & React.ComponentPropsWithRef<C> & { as?: C },
+  } & Omit<
+    React.ComponentPropsWithRef<C>,
+    keyof {
+      $delay?: number;
+    }
+  > & { sx?: stylex.StyleXStyles; as?: C },
 ) {
-  const { as: Component = "div", className, children, style, $delay, ...rest } = props;
+  const { as: Component = "div", className, children, style, sx, $delay, ...rest } = props;
 
   return (
     <Component
       {...rest}
       {...mergedSx(
-        [styles.loaderCaret, styles.loaderCaretAnimationDelay(`${$delay ?? 1000}ms`)],
+        [styles.loaderCaret, styles.loaderCaretAnimationDelay(`${$delay ?? 1000}ms`), sx],
         className,
         style,
       )}

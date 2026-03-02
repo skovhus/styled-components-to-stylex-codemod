@@ -171,9 +171,6 @@ export function cssValueToJs(value: any, important = false, propName?: string): 
     // Preserve `!important` by emitting a string value that includes it.
     // (StyleX supports `!important` in values and this is necessary to override inline styles.)
     if (important) {
-      if (propName === "borderStyle") {
-        return raw;
-      }
       return raw.includes("!important") ? raw : `${raw} !important`;
     }
 

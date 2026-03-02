@@ -2,7 +2,9 @@
  * Inserts emitted wrapper nodes into the AST and preserves comments.
  * Core concepts: wrapper ordering and React type import management.
  */
+import nodePath from "node:path";
 import type { ASTNode, Comment } from "jscodeshift";
+import type { ImportSource } from "../../adapter.js";
 import type { WrapperEmitter } from "./wrapper-emitter.js";
 import { ensureReactBinding } from "../utilities/ensure-react-binding.js";
 import { extractDefaultAsTagFromDestructure } from "../utilities/polymorphic-as-detection.js";
@@ -232,42 +234,80 @@ export function insertEmittedWrappers(args: {
     ensureReactBinding({ root, j, useNamespaceStyle: true });
   }
 
-  // Add useTheme import from styled-components when needed for theme boolean conditionals
+  // Add configured theme hook import when needed for theme boolean conditionals.
   if (needsUseThemeImport) {
-    // Check if useTheme is already imported from styled-components
-    // Filter out type-only imports (import type) since we need a runtime binding
-    const existingImport = root
+    const { functionName: themeHookFunctionName, importSource: themeHookImportSource } =
+      emitter.themeHook;
+    const themeHookModuleSpecifier = toModuleSpecifier(themeHookImportSource, emitter.filePath);
+
+    // Check runtime imports from the configured module.
+    const runtimeImports = root
       .find(j.ImportDeclaration, {
-        source: { value: "styled-components" },
+        source: { value: themeHookModuleSpecifier },
       } as any)
       .filter((path: any) => path.node.importKind !== "type");
 
-    if (existingImport.size() > 0) {
-      // Check if useTheme is already in the import
-      const hasUseTheme = existingImport.find(j.ImportSpecifier, {
-        imported: { name: "useTheme" },
-      } as any);
+    const hasThemeHookSpecifier =
+      runtimeImports
+        .find(j.ImportSpecifier)
+        .filter((specifierPath: any) => {
+          const importedName =
+            specifierPath.node.imported?.name ?? specifierPath.node.imported?.value;
+          const localName = specifierPath.node.local?.name ?? importedName;
+          // Local binding identity is what matters for wrapper calls.
+          // Aliased imports like `import { useDesignTheme as useTheme } ...`
+          // already provide the `useTheme` local symbol and should not trigger injection.
+          return localName === themeHookFunctionName;
+        })
+        .size() > 0;
 
-      if (hasUseTheme.size() === 0) {
-        // Add useTheme to existing import (only the first non-type import)
-        existingImport.at(0).forEach((path: any) => {
-          const specifiers = path.node.specifiers ?? [];
-          specifiers.push(j.importSpecifier(j.identifier("useTheme")));
-        });
-      }
-    } else {
-      // No runtime import from styled-components exists, create a new one
-      const useThemeImport = j.importDeclaration(
-        [j.importSpecifier(j.identifier("useTheme"))],
-        j.literal("styled-components"),
+    if (!hasThemeHookSpecifier) {
+      // Prefer appending to an existing import declaration that can host named specifiers.
+      const importWithoutNamespaceSpecifier = runtimeImports.filter(
+        (importPath: any) =>
+          !((importPath.node.specifiers ?? []) as any[]).some(
+            (specifier: any) => specifier?.type === "ImportNamespaceSpecifier",
+          ),
       );
-      // Insert after the first import
-      const firstImport = root.find(j.ImportDeclaration).at(0);
-      if (firstImport.size() > 0) {
-        firstImport.insertAfter(useThemeImport);
+
+      if (importWithoutNamespaceSpecifier.size() > 0) {
+        importWithoutNamespaceSpecifier.at(0).forEach((path: any) => {
+          const specifiers = path.node.specifiers ?? [];
+          specifiers.push(j.importSpecifier(j.identifier(themeHookFunctionName)));
+        });
       } else {
-        root.get().node.program.body.unshift(useThemeImport);
+        const themeHookImport = j.importDeclaration(
+          [j.importSpecifier(j.identifier(themeHookFunctionName))],
+          j.literal(themeHookModuleSpecifier),
+        );
+
+        // If the module is already imported via namespace import, place the new named import
+        // after the last import from the same module to keep imports grouped.
+        if (runtimeImports.size() > 0) {
+          runtimeImports.at(runtimeImports.size() - 1).insertAfter(themeHookImport);
+        } else {
+          // Insert after the first import.
+          const firstImport = root.find(j.ImportDeclaration).at(0);
+          if (firstImport.size() > 0) {
+            firstImport.insertAfter(themeHookImport);
+          } else {
+            root.get().node.program.body.unshift(themeHookImport);
+          }
+        }
       }
     }
   }
+}
+
+function toModuleSpecifier(from: ImportSource, filePath: string): string {
+  if (from.kind === "specifier") {
+    return from.value;
+  }
+  const baseDir = nodePath.dirname(String(filePath));
+  let relativePath = nodePath.relative(baseDir, from.value);
+  relativePath = relativePath.split(nodePath.sep).join("/");
+  if (!relativePath.startsWith(".")) {
+    relativePath = `./${relativePath}`;
+  }
+  return relativePath;
 }

@@ -414,6 +414,85 @@ const isReturnStatementNode = (
 ): node is { type: "ReturnStatement"; argument?: unknown } =>
   isAstNode(node) && node.type === "ReturnStatement";
 
+const isIfStatementNode = (
+  node: unknown,
+): node is {
+  type: "IfStatement";
+  test: unknown;
+  consequent: unknown;
+  alternate: unknown;
+} => isAstNode(node) && node.type === "IfStatement";
+
+/**
+ * Extracts the single ReturnStatement expression from a statement.
+ * Handles both bare ReturnStatements and BlockStatements containing exactly one ReturnStatement.
+ */
+function extractReturnExpr(stmt: unknown): ExpressionKind | undefined {
+  if (isReturnStatementNode(stmt)) {
+    return isExpressionKindNode(stmt.argument) ? stmt.argument : undefined;
+  }
+  if (isAstNode(stmt) && stmt.type === "BlockStatement") {
+    const body = (stmt as { body?: unknown[] }).body;
+    if (Array.isArray(body) && body.length === 1) {
+      return extractReturnExpr(body[0]);
+    }
+  }
+  return undefined;
+}
+
+/**
+ * Converts a series of if/return statements into a nested ternary (ConditionalExpression).
+ *
+ * Handles patterns like:
+ * ```
+ * if (A) { return E1; }
+ * if (B) { return E2; }
+ * return E3;
+ * ```
+ * → `A ? E1 : B ? E2 : E3`
+ *
+ * Constraints (returns undefined if not met):
+ * - All statements are IfStatement (no else) or ReturnStatement
+ * - Last statement must be ReturnStatement with an expression argument
+ * - Each IfStatement consequent has exactly one ReturnStatement
+ */
+function tryFlattenIfReturnChainToExpr(blockBody: unknown[]): ExpressionKind | undefined {
+  const last = blockBody[blockBody.length - 1];
+  if (!isReturnStatementNode(last) || !isExpressionKindNode(last.argument)) {
+    return undefined;
+  }
+
+  // Build the ternary chain from right to left (last return is the final alternate)
+  let result: ExpressionKind = last.argument;
+
+  for (let i = blockBody.length - 2; i >= 0; i--) {
+    const stmt = blockBody[i];
+    if (!isIfStatementNode(stmt)) {
+      return undefined;
+    }
+    // Reject if-else chains — only bare if (no alternate)
+    if (stmt.alternate != null) {
+      return undefined;
+    }
+    const test = stmt.test;
+    if (!isExpressionKindNode(test)) {
+      return undefined;
+    }
+    const consequentExpr = extractReturnExpr(stmt.consequent);
+    if (!consequentExpr) {
+      return undefined;
+    }
+    result = {
+      type: "ConditionalExpression",
+      test,
+      consequent: consequentExpr,
+      alternate: result,
+    } as ExpressionKind;
+  }
+
+  return result;
+}
+
 /**
  * Extracts the expression from an arrow/function expression body.
  * - For expression bodies: returns the expression directly
@@ -428,8 +507,11 @@ export function getFunctionBodyExpr(fn: { body?: unknown }): ExpressionKind | nu
   }
   if (isAstNode(body) && body.type === "BlockStatement") {
     const blockBody = (body as { body?: unknown }).body;
-    if (!Array.isArray(blockBody) || blockBody.length !== 1) {
+    if (!Array.isArray(blockBody) || blockBody.length === 0) {
       return undefined;
+    }
+    if (blockBody.length !== 1) {
+      return tryFlattenIfReturnChainToExpr(blockBody);
     }
     const statement = blockBody[0];
     // Only accept block bodies with exactly one ReturnStatement (no other logic)

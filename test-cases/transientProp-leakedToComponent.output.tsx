@@ -1,5 +1,6 @@
 import React from "react";
 import * as stylex from "@stylexjs/stylex";
+import { mergedSx } from "./lib/mergedSx";
 
 function SubmitButton(props: {
   onlyIcon?: boolean;
@@ -14,22 +15,22 @@ function SubmitButton(props: {
   );
 }
 
-type StyledSubmitButtonProps = Omit<
-  React.ComponentPropsWithRef<typeof SubmitButton>,
-  "className" | "style"
-> & {
+type StyledSubmitButtonProps = Omit<React.ComponentPropsWithRef<typeof SubmitButton>, "style"> & {
   $hasLabel: boolean;
 };
 
 // .attrs sets onlyIcon to undefined, and styled wraps with $hasLabel prop
 function StyledSubmitButton(props: StyledSubmitButtonProps) {
-  const { children, $hasLabel, ...rest } = props;
+  const { className, children, $hasLabel, ...rest } = props;
 
   return (
     <SubmitButton
-      onlyIcon={undefined}
       {...rest}
-      {...stylex.props(styles.submitButton, $hasLabel ? styles.submitButtonHasLabel : undefined)}
+      onlyIcon={undefined}
+      {...mergedSx(
+        [styles.submitButton, $hasLabel ? styles.submitButtonHasLabel : undefined],
+        className,
+      )}
     >
       {children}
     </SubmitButton>

@@ -32,20 +32,15 @@ type ColorTitleTextProps = React.PropsWithChildren<{
 function ColorTitleText(props: ColorTitleTextProps) {
   const { children, $oneLine } = props;
 
-  const sx = stylex.props(
-    styles.colorTitleText,
-    $oneLine === undefined || $oneLine
-      ? helpers.truncateMultiline(1)
-      : helpers.truncateMultiline(2),
-  );
-
   return (
     <div
-      {...sx}
-      style={{
-        ...sx.style,
-        color: props.$oneLine === undefined ? "purple" : "teal",
-      }}
+      {...stylex.props(
+        styles.colorTitleText,
+        $oneLine === undefined || $oneLine
+          ? helpers.truncateMultiline(1)
+          : helpers.truncateMultiline(2),
+        styles.colorTitleTextColor(props.$oneLine === undefined ? "purple" : "teal"),
+      )}
     >
       {children}
     </div>
@@ -68,4 +63,7 @@ const styles = stylex.create({
   colorTitleText: {
     lineHeight: "1rem",
   },
+  colorTitleTextColor: (color: string | undefined) => ({
+    color,
+  }),
 });

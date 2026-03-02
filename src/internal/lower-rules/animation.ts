@@ -4,7 +4,17 @@
  */
 import valueParser from "postcss-value-parser";
 import type { StyledDecl } from "../transform-types.js";
+import type { StyleFnFromPropsEntry } from "./decl-types.js";
 import { cssDeclarationToStylexDeclarations } from "../css-prop-mapping.js";
+import { getFunctionBodyExpr, literalToStaticValue } from "../utilities/jscodeshift-utils.js";
+import {
+  buildTemplateWithStaticParts,
+  collectPropsFromArrowFn,
+  unwrapArrowFunctionToPropsExpr,
+} from "./inline-styles.js";
+import { ensureShouldForwardPropDrop } from "./types.js";
+import { cssPropertyToIdentifier, makeCssProperty } from "./shared.js";
+import { toSuffixFromProp } from "../transform/helpers.js";
 
 // --- Shared animation token classifiers ---
 
@@ -68,8 +78,22 @@ export function tryHandleAnimation(args: {
   d: any;
   keyframesNames: Set<string>;
   styleObj: Record<string, unknown>;
+  styleFnDecls: Map<string, unknown>;
+  styleFnFromProps: StyleFnFromPropsEntry[];
+  filePath: string;
+  avoidNames?: Set<string>;
+  applyResolvedPropValue?: (
+    prop: string,
+    value: unknown,
+    commentSource: { leading?: string; trailingLine?: string } | null,
+  ) => void;
 }): boolean {
-  const { j, decl, d, keyframesNames, styleObj } = args;
+  const { j, decl, d, keyframesNames, styleObj, styleFnDecls, styleFnFromProps } = args;
+  const applyProp =
+    args.applyResolvedPropValue ??
+    ((prop: string, value: unknown) => {
+      styleObj[prop] = value;
+    });
   // Handle keyframes-based animation declarations before handler pipeline.
   if (!keyframesNames.size) {
     return false;
@@ -156,7 +180,7 @@ export function tryHandleAnimation(args: {
     if (!kf) {
       return false;
     }
-    styleObj.animationName = j.identifier(kf);
+    applyProp("animationName", j.identifier(kf), null);
     return true;
   }
 
@@ -177,7 +201,11 @@ export function tryHandleAnimation(args: {
     const playStates: Array<string | null> = [];
     const timelines: Array<string | null> = [];
 
-    for (const tokens of segments) {
+    // Track interpolated time tokens (e.g., __SC_EXPR_1__ms) for style function emission
+    const interpolatedAnimTimes: InterpolatedAnimTime[] = [];
+
+    for (let segmentIndex = 0; segmentIndex < segments.length; segmentIndex++) {
+      const tokens = segments[segmentIndex]!;
       if (!tokens.length) {
         return false;
       }
@@ -193,8 +221,77 @@ export function tryHandleAnimation(args: {
       }
       animNames.push({ kind: "ident", name: kf });
 
-      // Classify remaining tokens into animation longhand categories
+      // Track ALL time tokens (static and interpolated) with their original indices.
+      // CSS animation shorthand: first time = duration, second time = delay.
+      type TimeSlot =
+        | { kind: "static"; value: string; originalIndex: number }
+        | { kind: "interpolated"; slotId: number; unit: string; originalIndex: number };
+      const timeSlots: TimeSlot[] = [];
+
+      // First pass: collect all time tokens with original indices
+      for (let i = 0; i < tokens.length; i++) {
+        const token = tokens[i]!;
+        const interpMatch = token.match(INTERPOLATED_TIME_RE);
+        if (interpMatch) {
+          timeSlots.push({
+            kind: "interpolated",
+            slotId: Number(interpMatch[1]),
+            unit: interpMatch[2]!,
+            originalIndex: i,
+          });
+        } else if (isTimeToken(token)) {
+          timeSlots.push({ kind: "static", value: token, originalIndex: i });
+        }
+      }
+
+      // Sort by original index to preserve CSS shorthand order
+      timeSlots.sort((a, b) => a.originalIndex - b.originalIndex);
+
+      // Remove interpolated time tokens from the array for classifyAnimationTokens
+      for (let i = tokens.length - 1; i >= 0; i--) {
+        if (INTERPOLATED_TIME_RE.test(tokens[i]!)) {
+          tokens.splice(i, 1);
+        }
+      }
+
+      // Classify remaining (non-interpolated) tokens into animation longhand categories
       const classified = classifyAnimationTokens(tokens);
+
+      // Reset duration/delay from classified — we'll reassign based on original order
+      classified.duration = null;
+      classified.delay = null;
+
+      // Assign time tokens to duration/delay based on original CSS shorthand order
+      for (let i = 0; i < timeSlots.length && i < 2; i++) {
+        const slot = timeSlots[i]!;
+        const longhand: "animationDuration" | "animationDelay" =
+          i === 0 ? "animationDuration" : "animationDelay";
+
+        if (slot.kind === "static") {
+          if (longhand === "animationDuration") {
+            classified.duration = slot.value;
+          } else {
+            classified.delay = slot.value;
+          }
+        } else {
+          const fallbackValue = computeInterpolatedTimeFallback(decl, slot.slotId, slot.unit);
+
+          if (longhand === "animationDuration") {
+            classified.duration = fallbackValue ?? `0${slot.unit}`;
+          } else {
+            classified.delay = fallbackValue ?? `0${slot.unit}`;
+          }
+
+          interpolatedAnimTimes.push({
+            slotId: slot.slotId,
+            unit: slot.unit,
+            longhand,
+            fallbackValue,
+            segmentIndex,
+          });
+        }
+      }
+
       durations.push(classified.duration);
       delays.push(classified.delay);
       timings.push(classified.timing);
@@ -212,6 +309,10 @@ export function tryHandleAnimation(args: {
           return true;
         }
         if (!/^[a-zA-Z_][\w-]*$/.test(t)) {
+          return false;
+        }
+        // Exclude placeholder-containing tokens (already handled above)
+        if (PLACEHOLDER_TOKEN_RE.test(t)) {
           return false;
         }
         return (
@@ -233,9 +334,9 @@ export function tryHandleAnimation(args: {
 
     const firstAnim = animNames[0];
     if (animNames.length === 1 && firstAnim && firstAnim.kind === "ident") {
-      styleObj.animationName = j.identifier(firstAnim.name);
+      applyProp("animationName", j.identifier(firstAnim.name), null);
     } else {
-      styleObj.animationName = buildCommaTemplate(animNames);
+      applyProp("animationName", buildCommaTemplate(animNames), null);
     }
     const anyValues = (values: Array<string | null>): boolean =>
       values.some((value) => value !== null);
@@ -243,31 +344,195 @@ export function tryHandleAnimation(args: {
       values.map((value) => value ?? fallback).join(", ");
 
     if (anyValues(durations)) {
-      styleObj.animationDuration = joinWithDefaults(durations, "0s");
+      applyProp("animationDuration", joinWithDefaults(durations, "0s"), null);
     }
     if (anyValues(timings)) {
-      styleObj.animationTimingFunction = joinWithDefaults(timings, "ease");
+      applyProp("animationTimingFunction", joinWithDefaults(timings, "ease"), null);
     }
     if (anyValues(delays)) {
-      styleObj.animationDelay = joinWithDefaults(delays, "0s");
+      applyProp("animationDelay", joinWithDefaults(delays, "0s"), null);
     }
     if (anyValues(iterations)) {
-      styleObj.animationIterationCount = joinWithDefaults(iterations, "1");
+      applyProp("animationIterationCount", joinWithDefaults(iterations, "1"), null);
     }
     if (anyValues(directions)) {
-      styleObj.animationDirection = joinWithDefaults(directions, "normal");
+      applyProp("animationDirection", joinWithDefaults(directions, "normal"), null);
     }
     if (anyValues(fillModes)) {
-      styleObj.animationFillMode = joinWithDefaults(fillModes, "none");
+      applyProp("animationFillMode", joinWithDefaults(fillModes, "none"), null);
     }
     if (anyValues(playStates)) {
-      styleObj.animationPlayState = joinWithDefaults(playStates, "running");
+      applyProp("animationPlayState", joinWithDefaults(playStates, "running"), null);
     }
     if (anyValues(timelines)) {
-      styleObj.animationTimeline = joinWithDefaults(timelines, "auto");
+      applyProp("animationTimeline", joinWithDefaults(timelines, "auto"), null);
     }
+
+    // Emit style functions for interpolated animation time tokens
+    emitInterpolatedAnimTimeFunctions(
+      j,
+      decl,
+      interpolatedAnimTimes,
+      styleFnDecls,
+      styleFnFromProps,
+      durations,
+      delays,
+      args.avoidNames,
+    );
+
     return true;
   }
 
   return false;
+}
+
+// --- Interpolated animation time helpers ---
+
+/** Matches placeholder tokens with optional time unit suffix (e.g., `__SC_EXPR_1__ms`). */
+const INTERPOLATED_TIME_RE = /^__SC_EXPR_(\d+)__(ms|s)$/;
+
+/** Matches any placeholder token (with or without suffix) to exclude from timeline detection. */
+const PLACEHOLDER_TOKEN_RE = /__SC_EXPR_\d+__/;
+
+type InterpolatedAnimTime = {
+  slotId: number;
+  unit: string;
+  longhand: "animationDuration" | "animationDelay";
+  fallbackValue: string | null;
+  segmentIndex: number;
+};
+
+/**
+ * Computes a static fallback value from an interpolated expression's default.
+ * E.g., `(props) => props.$fadeInDuration ?? 200` with unit `ms` → `"200ms"`.
+ */
+function computeInterpolatedTimeFallback(
+  decl: StyledDecl,
+  slotId: number,
+  unit: string,
+): string | null {
+  const expr = (decl as any).templateExpressions[slotId] as any;
+  if (!expr || expr.type !== "ArrowFunctionExpression") {
+    return null;
+  }
+  const bodyExpr = getFunctionBodyExpr(expr);
+  if (bodyExpr?.type === "LogicalExpression" && bodyExpr.operator === "??") {
+    const staticVal = literalToStaticValue(bodyExpr.right);
+    if (staticVal !== null) {
+      return `${staticVal}${unit}`;
+    }
+  }
+  return null;
+}
+
+/**
+ * Emits dynamic style functions for interpolated animation time tokens.
+ * For each interpolated token, creates a style function like:
+ *   `fadeInContainerAnimationDuration: (animationDuration: string) => ({ animationDuration })`
+ * and pushes a `styleFnFromProps` entry with a `callArg` that wraps the unwrapped
+ * expression with the static unit suffix.
+ *
+ * For multi-animation shorthands, the callArg preserves the full comma-separated list
+ * of durations/delays, with the interpolated segment being dynamic.
+ */
+function emitInterpolatedAnimTimeFunctions(
+  j: any,
+  decl: StyledDecl,
+  interpolatedTimes: InterpolatedAnimTime[],
+  styleFnDecls: Map<string, unknown>,
+  styleFnFromProps: StyleFnFromPropsEntry[],
+  durations: Array<string | null>,
+  delays: Array<string | null>,
+  avoidNames?: Set<string>,
+): void {
+  for (const interp of interpolatedTimes) {
+    const expr = (decl as any).templateExpressions[interp.slotId] as any;
+    if (!expr || expr.type !== "ArrowFunctionExpression") {
+      continue;
+    }
+
+    const propsUsed = collectPropsFromArrowFn(expr);
+    for (const p of propsUsed) {
+      if (p.startsWith("$")) {
+        ensureShouldForwardPropDrop(decl, p);
+      }
+    }
+
+    const unwrapped = unwrapArrowFunctionToPropsExpr(j, expr);
+    if (!unwrapped) {
+      continue;
+    }
+
+    // Build the call argument: for multi-animation, include the full comma-separated list
+    const valuesList = interp.longhand === "animationDuration" ? durations : delays;
+    const defaultFallback = interp.longhand === "animationDuration" ? "0s" : "0s";
+    const callArg = buildMultiAnimationCallArg(
+      j,
+      unwrapped.expr,
+      interp.unit,
+      interp.segmentIndex,
+      valuesList,
+      defaultFallback,
+    );
+
+    const cssPropId = cssPropertyToIdentifier(interp.longhand, avoidNames);
+    const fnKey = `${decl.styleKey}${toSuffixFromProp(interp.longhand)}`;
+    if (!styleFnDecls.has(fnKey)) {
+      const param = j.identifier(cssPropId);
+      (param as any).typeAnnotation = j.tsTypeAnnotation(j.tsStringKeyword());
+      const body = j.objectExpression([makeCssProperty(j, interp.longhand, cssPropId)]);
+      styleFnDecls.set(fnKey, j.arrowFunctionExpression([param], body));
+    }
+
+    const jsxProp = [...propsUsed][0];
+    if (jsxProp) {
+      styleFnFromProps.push({ fnKey, jsxProp, callArg });
+    }
+
+    decl.needsWrapperComponent = true;
+  }
+}
+
+/**
+ * Builds a call argument for multi-animation shorthands.
+ * For single animation, returns a simple template like `${$duration ?? 200}ms`.
+ * For multi-animation, returns a template like `${$duration ?? 200}ms, 1s`
+ * that preserves all animation durations/delays.
+ */
+function buildMultiAnimationCallArg(
+  j: any,
+  interpExpr: any,
+  unit: string,
+  segmentIndex: number,
+  valuesList: Array<string | null>,
+  defaultFallback: string,
+): any {
+  // Single animation: use simple template
+  if (valuesList.length === 1) {
+    return buildTemplateWithStaticParts(j, interpExpr, "", unit);
+  }
+
+  // Multi-animation: build template with full list
+  const quasis: any[] = [];
+  const exprs: any[] = [];
+
+  let prefix = "";
+  for (let i = 0; i < valuesList.length; i++) {
+    if (i > 0) {
+      prefix += ", ";
+    }
+
+    if (i === segmentIndex) {
+      // This is the interpolated segment
+      quasis.push(j.templateElement({ raw: prefix, cooked: prefix }, false));
+      exprs.push(interpExpr);
+      prefix = unit;
+    } else {
+      // Static segment
+      prefix += valuesList[i] ?? defaultFallback;
+    }
+  }
+
+  quasis.push(j.templateElement({ raw: prefix, cooked: prefix }, true));
+  return j.templateLiteral(quasis, exprs);
 }

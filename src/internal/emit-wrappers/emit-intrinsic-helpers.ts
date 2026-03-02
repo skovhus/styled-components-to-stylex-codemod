@@ -8,7 +8,26 @@
 import type { ASTNode, Collection, Identifier, JSCodeshift, Property } from "jscodeshift";
 import type { StyledDecl } from "../transform-types.js";
 import type { ExpressionKind } from "./types.js";
-import type { WrapperEmitter } from "./wrapper-emitter.js";
+import { SX_PROP_TYPE_TEXT, type WrapperEmitter } from "./wrapper-emitter.js";
+
+/**
+ * Returns the variant bucket "when" keys for a compound variant entry.
+ * Used to exclude these entries from regular variant emission (they are
+ * emitted as a single compound ternary expression instead).
+ */
+export function getCompoundVariantWhenKeys(
+  cv: NonNullable<StyledDecl["compoundVariants"]>[number],
+): string[] {
+  if (cv.kind === "4branch") {
+    return [
+      `${cv.outerProp}_${cv.innerProp}`,
+      `${cv.outerProp}_!${cv.innerProp}`,
+      `!${cv.outerProp}_${cv.innerProp}`,
+      `!${cv.outerProp}_!${cv.innerProp}`,
+    ];
+  }
+  return [cv.outerProp, `${cv.innerProp}True`, `${cv.innerProp}False`];
+}
 
 export type EmitIntrinsicHelpers = {
   hasForwardedAsUsage: (d: StyledDecl) => boolean;
@@ -32,6 +51,7 @@ export type EmitIntrinsicHelpers = {
     allowAsProp: boolean;
     allowClassNameProp: boolean;
     allowStyleProp: boolean;
+    allowSxProp?: boolean;
     /** When true, there are no custom user-defined props. Skip generating a named type for polymorphic wrappers. */
     hasNoCustomProps?: boolean;
   }) => boolean;
@@ -60,8 +80,10 @@ export type EmitIntrinsicHelpers = {
     tagName: string;
     allowClassNameProp: boolean;
     allowStyleProp: boolean;
+    allowSxProp?: boolean;
     includeForwardedAs?: boolean;
     extra?: string | null;
+    extraFirst?: boolean;
   }) => { typeExprText: string; genericParams: string };
   propsTypeHasExistingPolymorphicAs: (d: StyledDecl) => boolean;
   shouldAllowAsProp: (d: StyledDecl, tagName: string) => boolean;
@@ -232,29 +254,31 @@ export function createEmitIntrinsicHelpers(env: EmitIntrinsicHelpersEnv): EmitIn
         }
       }
 
-      // Build: outerProp ? styles.outerKey : innerProp ? styles.innerTrueKey : styles.innerFalseKey
       const outerPropId = j.identifier(cv.outerProp);
       const innerPropId = j.identifier(cv.innerProp);
-      const outerStyle = j.memberExpression(
-        j.identifier(stylesIdentifier),
-        j.identifier(cv.outerTruthyKey),
-      );
-      const innerTrueStyle = j.memberExpression(
-        j.identifier(stylesIdentifier),
-        j.identifier(cv.innerTruthyKey),
-      );
-      const innerFalseStyle = j.memberExpression(
-        j.identifier(stylesIdentifier),
-        j.identifier(cv.innerFalsyKey),
-      );
+      const stylesId = j.identifier(stylesIdentifier);
 
-      // Build inner ternary: innerProp ? innerTrueStyle : innerFalseStyle
-      const innerTernary = j.conditionalExpression(innerPropId, innerTrueStyle, innerFalseStyle);
-
-      // Build outer ternary: outerProp ? outerStyle : innerTernary
-      const outerTernary = j.conditionalExpression(outerPropId, outerStyle, innerTernary);
-
-      styleArgs.push(outerTernary);
+      if (cv.kind === "4branch") {
+        // Build: outer ? (inner ? styles.OTIT : styles.OTIF) : (inner ? styles.OFIT : styles.OFIF)
+        const outerTrue = j.conditionalExpression(
+          innerPropId,
+          j.memberExpression(stylesId, j.identifier(cv.outerTruthyInnerTruthyKey)),
+          j.memberExpression(stylesId, j.identifier(cv.outerTruthyInnerFalsyKey)),
+        );
+        const outerFalse = j.conditionalExpression(
+          j.identifier(cv.innerProp),
+          j.memberExpression(stylesId, j.identifier(cv.outerFalsyInnerTruthyKey)),
+          j.memberExpression(stylesId, j.identifier(cv.outerFalsyInnerFalsyKey)),
+        );
+        styleArgs.push(j.conditionalExpression(outerPropId, outerTrue, outerFalse));
+      } else {
+        // 3-branch: outerProp ? styles.outerKey : innerProp ? styles.innerTrueKey : styles.innerFalseKey
+        const outerStyle = j.memberExpression(stylesId, j.identifier(cv.outerTruthyKey));
+        const innerTrueStyle = j.memberExpression(stylesId, j.identifier(cv.innerTruthyKey));
+        const innerFalseStyle = j.memberExpression(stylesId, j.identifier(cv.innerFalsyKey));
+        const innerTernary = j.conditionalExpression(innerPropId, innerTrueStyle, innerFalseStyle);
+        styleArgs.push(j.conditionalExpression(outerPropId, outerStyle, innerTernary));
+      }
     }
   };
 
@@ -305,10 +329,21 @@ export function createEmitIntrinsicHelpers(env: EmitIntrinsicHelpersEnv): EmitIn
     tagName: string;
     allowClassNameProp: boolean;
     allowStyleProp: boolean;
+    allowSxProp?: boolean;
     includeForwardedAs?: boolean;
     extra?: string | null;
+    /** When true, place the user's existing type first in the intersection for readability. */
+    extraFirst?: boolean;
   }): { typeExprText: string; genericParams: string } => {
-    const { tagName, allowClassNameProp, allowStyleProp, includeForwardedAs, extra } = args;
+    const {
+      tagName,
+      allowClassNameProp,
+      allowStyleProp,
+      allowSxProp,
+      includeForwardedAs,
+      extra,
+      extraFirst,
+    } = args;
     const genericParams = `C extends React.ElementType = "${tagName}"`;
 
     // Simple polymorphic pattern:
@@ -327,15 +362,23 @@ export function createEmitIntrinsicHelpers(env: EmitIntrinsicHelpersEnv): EmitIn
         ? `Omit<React.ComponentPropsWithRef<C>, ${omitted.join(" | ")}>`
         : "React.ComponentPropsWithRef<C>";
     const forwardedAsPart = includeForwardedAs ? ` & ${FORWARDED_AS_TYPE}` : "";
+    const sxPropPart = allowSxProp ? `${SX_PROP_TYPE_TEXT}; ` : "";
     if (extra) {
+      // Omit extra's keys from base so custom props take precedence over native element props
+      const allOmitted = [...omitted, `keyof (${extra})`];
+      const baseWithExtraOmit = `Omit<React.ComponentPropsWithRef<C>, ${allOmitted.join(" | ")}>`;
+      if (extraFirst) {
+        // User's existing type first for readability (e.g. Props & Omit<...> & { as?: C })
+        const typeExprText = `${extra} & ${baseWithExtraOmit} & { ${sxPropPart}as?: C }${forwardedAsPart}`;
+        return { typeExprText, genericParams };
+      }
       // Omit as from extra since we're adding our own as?: C
       const extraWithoutAs = `Omit<${extra}, "as">`;
-      // Combine: base props, then custom props (overriding), then polymorphic as
-      const typeExprText = `${base} & ${extraWithoutAs} & { as?: C }${forwardedAsPart}`;
+      const typeExprText = `${baseWithExtraOmit} & ${extraWithoutAs} & { ${sxPropPart}as?: C }${forwardedAsPart}`;
       return { typeExprText, genericParams };
     }
-    // Just element props with as?: C
-    const typeExprText = `${base} & { as?: C }${forwardedAsPart}`;
+    // Just element props with as?: C (and optional sx)
+    const typeExprText = `${base} & { ${sxPropPart}as?: C }${forwardedAsPart}`;
     return { typeExprText, genericParams };
   };
 
@@ -386,6 +429,7 @@ export function createEmitIntrinsicHelpers(env: EmitIntrinsicHelpersEnv): EmitIn
     allowAsProp: boolean;
     allowClassNameProp: boolean;
     allowStyleProp: boolean;
+    allowSxProp?: boolean;
     /** When true, there are no custom user-defined props. Skip generating a named type for polymorphic wrappers. */
     hasNoCustomProps?: boolean;
   }): boolean => {
@@ -396,6 +440,7 @@ export function createEmitIntrinsicHelpers(env: EmitIntrinsicHelpersEnv): EmitIn
       allowAsProp,
       allowClassNameProp,
       allowStyleProp,
+      allowSxProp,
       hasNoCustomProps,
     } = args;
     if (!allowAsProp) {
@@ -415,6 +460,7 @@ export function createEmitIntrinsicHelpers(env: EmitIntrinsicHelpersEnv): EmitIn
       tagName,
       allowClassNameProp,
       allowStyleProp,
+      allowSxProp,
       extra: typeText,
     });
     // Try to emit a named props type. If it already exists (user-defined), the inline

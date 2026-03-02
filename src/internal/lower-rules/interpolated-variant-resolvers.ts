@@ -14,7 +14,7 @@ import {
   resolveBackgroundStylexProp,
   resolveBackgroundStylexPropForVariants,
 } from "../css-prop-mapping.js";
-import { extractStaticParts, wrapExprWithStaticParts } from "./interpolations.js";
+import { extractStaticPartsForDecl, wrapExprWithStaticParts } from "./interpolations.js";
 import { splitDirectionalProperty } from "../stylex-shorthands.js";
 import { isAstNode } from "../utilities/jscodeshift-utils.js";
 import { toSuffixFromProp } from "../transform/helpers.js";
@@ -85,10 +85,7 @@ export function handleSplitVariantsResolvedValue(ctx: SplitVariantsContext): boo
 
   // Extract static prefix/suffix from CSS value for wrapping resolved values
   // e.g., `rotate(${...})` should wrap the resolved value with `rotate(...)`.
-  const { prefix: staticPrefix, suffix: staticSuffix } = extractStaticParts(d.value, {
-    skipForProperty: /^border(-top|-right|-bottom|-left)?-color$/,
-    property: cssProp,
-  });
+  const { prefix: staticPrefix, suffix: staticSuffix } = extractStaticPartsForDecl(d);
 
   const parseResolved = (
     expr: string,
@@ -246,73 +243,82 @@ export function handleSplitVariantsResolvedValue(ctx: SplitVariantsContext): boo
     target: Record<string, unknown>,
     parsed: { exprAst: unknown; imports: any[] },
     stylexPropOverride?: string,
-  ): void => {
+  ): boolean => {
     const effectiveStylexProp = stylexPropOverride ?? stylexProp;
     for (const imp of parsed.imports) {
       resolverImports.set(JSON.stringify(imp), imp);
     }
+
+    // Helper: apply a single prop value to target, respecting media/pseudo context.
+    const applyWithContext = (prop: string, valueAst: unknown): void => {
+      if (media) {
+        const existing = target[prop];
+        const map =
+          existing &&
+          typeof existing === "object" &&
+          !Array.isArray(existing) &&
+          !isAstNode(existing)
+            ? (existing as Record<string, unknown>)
+            : ({} as Record<string, unknown>);
+        if (!("default" in map)) {
+          const baseValue = existing ?? styleObj[prop];
+          map.default = baseValue ?? null;
+        }
+        map[media] = valueAst as any;
+        target[prop] = map;
+        return;
+      }
+      if (pseudos?.length) {
+        const existing = target[prop];
+        const map =
+          existing &&
+          typeof existing === "object" &&
+          !Array.isArray(existing) &&
+          !isAstNode(existing)
+            ? (existing as Record<string, unknown>)
+            : ({} as Record<string, unknown>);
+        if (!("default" in map)) {
+          const baseValue = existing ?? styleObj[prop];
+          map.default = baseValue ?? null;
+        }
+        for (const ps of pseudos) {
+          map[ps] = valueAst as any;
+        }
+        target[prop] = map;
+        return;
+      }
+      target[prop] = valueAst as any;
+    };
+
     // Special handling for border shorthand (including directional borders)
     const borderMatch = cssProp.match(/^border(-top|-right|-bottom|-left)?$/);
     if (borderMatch) {
       const direction = borderMatch[1]
         ? borderMatch[1].slice(1).charAt(0).toUpperCase() + borderMatch[1].slice(2)
         : "";
-      if (expandBorderShorthand(target, parsed.exprAst, direction)) {
-        return;
+      const tempBucket: Record<string, unknown> = {};
+      if (expandBorderShorthand(tempBucket, parsed.exprAst, direction)) {
+        for (const [prop, val] of Object.entries(tempBucket)) {
+          applyWithContext(prop, val);
+        }
+        return true;
       }
+      // Border shorthand couldn't be expanded — bail to prevent shorthand leak
+      return false;
     }
-    if (
-      (cssProp === "padding" || cssProp === "margin") &&
-      expandBoxShorthand(target, parsed.exprAst, cssProp)
-    ) {
-      return;
-    }
-    // Default: use the property from cssDeclarationToStylexDeclarations.
-    // Preserve media/pseudo selectors by writing a per-prop map instead of
-    // overwriting the base/default value.
-    if (media) {
-      const existing = target[effectiveStylexProp];
-      const map =
-        existing && typeof existing === "object" && !Array.isArray(existing) && !isAstNode(existing)
-          ? (existing as Record<string, unknown>)
-          : ({} as Record<string, unknown>);
-      // Set default from target first, then fall back to base styleObj.
-      // Only use null if neither has a value (for properties like outlineStyle that need explicit null).
-      if (!("default" in map)) {
-        const baseValue = existing ?? styleObj[effectiveStylexProp];
-        map.default = baseValue ?? null;
+    if (cssProp === "padding" || cssProp === "margin") {
+      const tempBucket: Record<string, unknown> = {};
+      if (expandBoxShorthand(tempBucket, parsed.exprAst, cssProp)) {
+        for (const [prop, val] of Object.entries(tempBucket)) {
+          applyWithContext(prop, val);
+        }
+        return true;
       }
-      map[media] = parsed.exprAst as any;
-      target[effectiveStylexProp] = map;
-      return;
-    }
-    if (pseudos?.length) {
-      const existing = target[effectiveStylexProp];
-      // `existing` may be:
-      // - a scalar (string/number)
-      // - an AST node (e.g. { type: "StringLiteral", ... })
-      // - an already-built pseudo map (plain object with `default` / `:hover` keys)
-      //
-      // Only treat it as an existing pseudo map when it's a plain object *and* not an AST node.
-      const map =
-        existing && typeof existing === "object" && !Array.isArray(existing) && !isAstNode(existing)
-          ? (existing as Record<string, unknown>)
-          : ({} as Record<string, unknown>);
-      // Set default from target first, then fall back to base styleObj.
-      // Only use null if neither has a value (for properties like outlineStyle that need explicit null).
-      if (!("default" in map)) {
-        const baseValue = existing ?? styleObj[effectiveStylexProp];
-        map.default = baseValue ?? null;
-      }
-      // Apply to all pseudos (e.g., both :hover and :focus for "&:hover, &:focus")
-      for (const ps of pseudos) {
-        map[ps] = parsed.exprAst as any;
-      }
-      target[effectiveStylexProp] = map;
-      return;
+      // Fall through to default handler — StyleX accepts single-value margin/padding
     }
 
-    target[effectiveStylexProp] = parsed.exprAst as any;
+    applyWithContext(effectiveStylexProp, parsed.exprAst);
+    return true;
   };
 
   // IMPORTANT: stage parsing first. If either branch fails to parse, skip this declaration entirely
@@ -382,7 +388,10 @@ export function handleSplitVariantsResolvedValue(ctx: SplitVariantsContext): boo
   }
 
   if (negParsed) {
-    applyParsed(styleObj as any, negParsed);
+    if (!applyParsed(styleObj as any, negParsed)) {
+      setBail();
+      return true;
+    }
   }
   // Apply all positive variants
   // For nested ternaries (multiple variants), use simpler nameHint-based naming.
@@ -391,7 +400,10 @@ export function handleSplitVariantsResolvedValue(ctx: SplitVariantsContext): boo
   for (const { when, nameHint, parsed } of allPosParsed) {
     const whenClean = when.replace(/^!/, "");
     const bucket = { ...variantBuckets.get(whenClean) } as Record<string, unknown>;
-    applyParsed(bucket, parsed);
+    if (!applyParsed(bucket, parsed)) {
+      setBail();
+      return true;
+    }
     variantBuckets.set(whenClean, bucket);
     // Use nameHint only for nested ternaries and when it's meaningful.
     // Generic hints like "truthy", "falsy", "default", "match" should fall back to toSuffixFromProp
@@ -451,11 +463,14 @@ export function handleSplitMultiPropVariantsResolvedValue(ctx: SplitVariantsCont
     stylexPropMulti = cssPropertyToStylexProp(cssProp);
   }
 
+  // Bail on border shorthands — compound variant expansion for these is unsupported
+  if (/^border(Top|Right|Bottom|Left)?$/.test(stylexPropMulti)) {
+    setBail();
+    return true;
+  }
+
   // Extract static prefix/suffix from CSS value for wrapping resolved values
-  const { prefix: staticPrefix, suffix: staticSuffix } = extractStaticParts(d.value, {
-    skipForProperty: /^border(-top|-right|-bottom|-left)?-color$/,
-    property: cssProp,
-  });
+  const { prefix: staticPrefix, suffix: staticSuffix } = extractStaticPartsForDecl(d);
 
   const parseResolved = (
     expr: string,
@@ -543,11 +558,148 @@ export function handleSplitMultiPropVariantsResolvedValue(ctx: SplitVariantsCont
   // Store compound variant info for emit phase
   decl.compoundVariants ??= [];
   decl.compoundVariants.push({
+    kind: "3branch",
     outerProp: res.outerProp,
     outerTruthyKey: outerKey,
     innerProp: res.innerProp,
     innerTruthyKey,
     innerFalsyKey,
+  });
+
+  decl.needsWrapperComponent = true;
+  return true;
+}
+
+export function handleDualBranchCompoundVariantsResolvedValue(ctx: SplitVariantsContext): boolean {
+  const {
+    decl,
+    d,
+    res,
+    variantBuckets,
+    variantStyleKeys,
+    pseudos,
+    parseExpr,
+    resolverImports,
+    warnings,
+    setBail,
+    bailUnsupported,
+  } = ctx;
+
+  if (!res || res.type !== "dualBranchCompoundVariantsResolvedValue") {
+    return false;
+  }
+
+  const cssProp = (d.property ?? "").trim();
+  const stylexProp = cssPropertyToStylexProp(cssProp);
+
+  // Bail on border shorthands — compound variant expansion for these is unsupported
+  if (/^border(Top|Right|Bottom|Left)?$/.test(stylexProp)) {
+    setBail();
+    return true;
+  }
+
+  // Extract static prefix/suffix from CSS value for wrapping resolved values
+  const { prefix: staticPrefix, suffix: staticSuffix } = extractStaticPartsForDecl(d);
+
+  const parseResolved = (
+    expr: string,
+    imports: any[],
+  ): { exprAst: unknown; imports: any[] } | null => {
+    const wrappedExpr = wrapExprWithStaticParts(expr, staticPrefix, staticSuffix);
+    const exprAst = parseExpr(wrappedExpr);
+    if (!exprAst) {
+      warnings.push({
+        severity: "error",
+        type: "Adapter resolveCall returned an unparseable styles expression",
+        loc: decl.loc,
+        context: { localName: decl.localName, expr },
+      });
+      return null;
+    }
+    return { exprAst, imports: imports ?? [] };
+  };
+
+  const applyParsed = (
+    target: Record<string, unknown>,
+    parsed: { exprAst: unknown; imports: any[] },
+  ): void => {
+    for (const imp of parsed.imports) {
+      resolverImports.set(JSON.stringify(imp), imp);
+    }
+    if (pseudos?.length) {
+      const existing = target[stylexProp];
+      const map =
+        existing && typeof existing === "object" && !Array.isArray(existing) && !isAstNode(existing)
+          ? (existing as Record<string, unknown>)
+          : ({} as Record<string, unknown>);
+      if (!("default" in map)) {
+        map.default = existing ?? null;
+      }
+      for (const ps of pseudos) {
+        map[ps] = parsed.exprAst as any;
+      }
+      target[stylexProp] = map;
+      return;
+    }
+    target[stylexProp] = parsed.exprAst as any;
+  };
+
+  // Parse all four branches
+  const otitParsed = parseResolved(
+    res.outerTruthyInnerTruthy.expr,
+    res.outerTruthyInnerTruthy.imports,
+  );
+  const otifParsed = parseResolved(
+    res.outerTruthyInnerFalsy.expr,
+    res.outerTruthyInnerFalsy.imports,
+  );
+  const ofitParsed = parseResolved(
+    res.outerFalsyInnerTruthy.expr,
+    res.outerFalsyInnerTruthy.imports,
+  );
+  const ofifParsed = parseResolved(res.outerFalsyInnerFalsy.expr, res.outerFalsyInnerFalsy.imports);
+
+  if (!otitParsed || !otifParsed || !ofitParsed || !ofifParsed) {
+    bailUnsupported(decl, "Adapter resolveCall returned an unparseable styles expression");
+    setBail();
+    return true;
+  }
+
+  // Generate style keys for each of the 4 branches
+  const outerCap = capitalize(res.outerProp);
+  const innerCap = capitalize(res.innerProp);
+  const otitKey = `${decl.styleKey}${outerCap}${innerCap}`;
+  const otifKey = `${decl.styleKey}${outerCap}`;
+  const ofitKey = `${decl.styleKey}${innerCap}`;
+  const ofifKey = `${decl.styleKey}Default`;
+
+  // Create variant buckets with compound "when" keys
+  const applyBucket = (
+    when: string,
+    styleKey: string,
+    parsed: { exprAst: unknown; imports: any[] },
+  ): void => {
+    const bucket = { ...variantBuckets.get(when) } as Record<string, unknown>;
+    applyParsed(bucket, parsed);
+    variantBuckets.set(when, bucket);
+    variantStyleKeys[when] ??= styleKey;
+  };
+
+  applyBucket(`${res.outerProp}_${res.innerProp}`, otitKey, otitParsed);
+  applyBucket(`${res.outerProp}_!${res.innerProp}`, otifKey, otifParsed);
+  applyBucket(`!${res.outerProp}_${res.innerProp}`, ofitKey, ofitParsed);
+  applyBucket(`!${res.outerProp}_!${res.innerProp}`, ofifKey, ofifParsed);
+
+  // Store compound variant info for emit phase
+  decl.compoundVariants ??= [];
+  decl.compoundVariants.push({
+    kind: "4branch",
+    outerProp: res.outerProp,
+    innerProp: res.innerProp,
+    outerTruthyInnerTruthyKey: otitKey,
+    outerTruthyInnerFalsyKey: otifKey,
+    outerFalsyInnerTruthyKey: ofitKey,
+    outerFalsyInnerFalsyKey: ofifKey,
   });
 
   decl.needsWrapperComponent = true;

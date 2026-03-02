@@ -6,7 +6,7 @@ interface ButtonProps {
 }
 
 // This styled component has props which will generate React.PropsWithChildren
-function Button(props: Omit<React.ComponentProps<"button">, "className" | "style"> & ButtonProps) {
+function Button(props: ButtonProps & Omit<React.ComponentProps<"button">, "className" | "style">) {
   const { children, variant } = props;
 
   return (

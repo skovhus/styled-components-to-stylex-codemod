@@ -2,7 +2,7 @@
  * Maps CSS declarations to StyleX properties and expands shorthands.
  * Core concepts: background resolution and shorthand splitting.
  */
-import type { CssDeclarationIR, CssValue } from "./css-ir.js";
+import type { CssDeclarationIR, CssValue, CssValuePart } from "./css-ir.js";
 import { splitDirectionalProperty } from "./stylex-shorthands.js";
 import { isBackgroundImageValue, looksLikeLength } from "./utilities/string-utils.js";
 
@@ -162,15 +162,45 @@ export function cssDeclarationToStylexDeclarations(decl: CssDeclarationIR): Styl
     }
   }
 
+  if (prop === "scroll-padding" && decl.value.kind === "static") {
+    const entries = splitDirectionalProperty({
+      prop: "scrollPadding",
+      rawValue: decl.valueRaw.trim(),
+      important: decl.important,
+      alwaysExpand: true,
+    });
+    if (entries.length > 0) {
+      const order = new Map([
+        ["scrollPaddingLeft", 0],
+        ["scrollPaddingTop", 1],
+        ["scrollPaddingRight", 2],
+        ["scrollPaddingBottom", 3],
+      ]);
+      return entries
+        .slice()
+        .sort((a, b) => (order.get(a.prop) ?? 99) - (order.get(b.prop) ?? 99))
+        .map((entry) => ({
+          prop: entry.prop,
+          value: { kind: "static", value: entry.value },
+        }));
+    }
+  }
+
   if (prop === "background") {
-    const stylexProp = resolveBackgroundStylexProp(decl.valueRaw ?? "");
+    const rawVal = (decl.valueRaw ?? "").trim();
+    // `background: none` resets all background layers — keep as the shorthand
+    // since `none` is not a valid `background-color` value.
+    if (rawVal === "none") {
+      return [{ prop: "background", value: decl.value }];
+    }
+    const stylexProp = resolveBackgroundStylexProp(rawVal);
     return [{ prop: stylexProp, value: decl.value }];
   }
 
   if (prop === "border") {
     const raw = decl.valueRaw.trim();
     if (decl.value.kind === "interpolated") {
-      return [{ prop: "border", value: decl.value }];
+      return expandInterpolatedBorder(prop, "", decl.value);
     }
     return borderShorthandToStylex(raw, "");
   }
@@ -182,7 +212,7 @@ export function cssDeclarationToStylexDeclarations(decl: CssDeclarationIR): Styl
     const directionCapitalized = direction.charAt(0).toUpperCase() + direction.slice(1);
     const raw = decl.valueRaw.trim();
     if (decl.value.kind === "interpolated") {
-      return [{ prop: cssPropertyToStylexProp(prop), value: decl.value }];
+      return expandInterpolatedBorder(prop, directionCapitalized, decl.value);
     }
     return borderShorthandToStylex(raw, directionCapitalized);
   }
@@ -212,6 +242,64 @@ export const BORDER_STYLES = new Set([
 ]);
 
 /**
+ * Expands an interpolated border shorthand into separate width/style/color properties.
+ * Extracts static width and style tokens from the value parts, leaving the interpolated
+ * expression(s) as the color value.
+ */
+function expandInterpolatedBorder(
+  prop: string,
+  direction: string,
+  value: CssValue & { kind: "interpolated" },
+): StylexPropDecl[] {
+  const parts = value.parts;
+  const slotParts = parts.filter((p): p is CssValuePart & { kind: "slot" } => p.kind === "slot");
+  const singleSlot = slotParts.length === 1 ? slotParts[0] : undefined;
+  if (!singleSlot) {
+    // Multiple slots — can't reliably determine which is the color
+    return [{ prop: direction ? `border${direction}` : "border", value }];
+  }
+
+  // Extract prefix (static text before the slot) and suffix (after)
+  const slotIndex = parts.indexOf(singleSlot);
+  const prefix = parts
+    .slice(0, slotIndex)
+    .filter((p): p is CssValuePart & { kind: "static" } => p.kind === "static")
+    .map((p) => p.value)
+    .join("")
+    .trim();
+  const suffix = parts
+    .slice(slotIndex + 1)
+    .filter((p): p is CssValuePart & { kind: "static" } => p.kind === "static")
+    .map((p) => p.value)
+    .join("")
+    .trim();
+
+  const borderParts = parseInterpolatedBorderStaticParts({ prop, prefix, suffix });
+  if (!borderParts) {
+    return [{ prop: direction ? `border${direction}` : "border", value }];
+  }
+
+  const result: StylexPropDecl[] = [];
+  if (borderParts.width) {
+    result.push({
+      prop: borderParts.widthProp,
+      value: { kind: "static", value: borderParts.width },
+    });
+  }
+  if (borderParts.style) {
+    result.push({
+      prop: borderParts.styleProp,
+      value: { kind: "static", value: borderParts.style },
+    });
+  }
+  // Color gets the interpolated value — strip static prefix/suffix so the value
+  // contains only the slot expression(s)
+  const colorParts: CssValuePart[] = [{ kind: "slot", slotId: singleSlot.slotId }];
+  result.push({ prop: borderParts.colorProp, value: { kind: "interpolated", parts: colorParts } });
+  return result;
+}
+
+/**
  * Expands a border shorthand value into separate width/style/color properties.
  * @param valueRaw - The raw CSS value like "1px solid red"
  * @param direction - Optional direction suffix like "Top", "Right", "Bottom", "Left"
@@ -228,6 +316,7 @@ function borderShorthandToStylex(valueRaw: string, direction: string): StylexPro
     return [
       { prop: widthProp, value: { kind: "static", value: "0" } },
       { prop: styleProp, value: { kind: "static", value: "none" } },
+      { prop: colorProp, value: { kind: "static", value: "initial" } },
     ];
   }
 

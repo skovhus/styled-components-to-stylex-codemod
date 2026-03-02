@@ -1,8 +1,25 @@
+import * as React from "react";
 import * as stylex from "@stylexjs/stylex";
 
 const color1 = "#ff0000";
 const color2 = "#0000ff";
 const color3 = "#00ff00";
+
+type PopoverProps = React.PropsWithChildren<{
+  $expanded: boolean;
+}>;
+
+// Multiple interpolations in a transform value
+// Should produce a single template literal preserving all transform functions
+function Popover(props: PopoverProps) {
+  const { children, $expanded } = props;
+
+  return (
+    <div {...stylex.props(styles.popover, $expanded ? styles.popoverExpanded : undefined)}>
+      {children}
+    </div>
+  );
+}
 
 export const App = () => (
   <>
@@ -10,6 +27,8 @@ export const App = () => (
     <div {...stylex.props(styles.radialGradientBox)}>Radial</div>
     <div {...stylex.props(styles.conicGradientBox)}>Conic</div>
     <div {...stylex.props(styles.repeatingLinearGradientBox)}>Repeating</div>
+    <Popover $expanded={true}>Expanded</Popover>
+    <Popover $expanded={false}>Collapsed</Popover>
   </>
 );
 
@@ -33,5 +52,15 @@ const styles = stylex.create({
     backgroundImage: `repeating-linear-gradient(${color1} 0%, ${color2} 10%)`,
     width: "200px",
     height: "100px",
+  },
+  // Multiple interpolations in a transform value
+  // Should produce a single template literal preserving all transform functions
+  popover: {
+    transform: "translateY(-50%) translateX(-8px) scale(0.9)",
+    opacity: 0,
+  },
+  popoverExpanded: {
+    transform: "translateY(-50%) translateX(0) scale(1)",
+    opacity: 1,
   },
 });

@@ -97,6 +97,50 @@ describe("public API runtime validation (DX)", () => {
     ).not.toThrow();
   });
 
+  it("defineAdapter: throws a helpful message when themeHook.functionName is empty", () => {
+    expect(() =>
+      defineAdapter({
+        resolveValue() {
+          return undefined;
+        },
+        resolveCall() {
+          return undefined;
+        },
+        resolveSelector() {
+          return undefined;
+        },
+        externalInterface: "auto",
+        styleMerger: null,
+        themeHook: {
+          functionName: "",
+          importSource: { kind: "specifier", value: "@company/theme-hooks" },
+        },
+      } as any),
+    ).toThrowError(/themeHook\.functionName/);
+  });
+
+  it("defineAdapter: accepts valid themeHook configuration", () => {
+    expect(() =>
+      defineAdapter({
+        resolveValue() {
+          return undefined;
+        },
+        resolveCall() {
+          return undefined;
+        },
+        resolveSelector() {
+          return undefined;
+        },
+        externalInterface: "auto",
+        styleMerger: null,
+        themeHook: {
+          functionName: "useDesignTheme",
+          importSource: { kind: "specifier", value: "@company/theme-hooks" },
+        },
+      }),
+    ).not.toThrow();
+  });
+
   it("runTransform: throws a helpful message when options is missing", async () => {
     await expect(runTransform(undefined as any)).rejects.toThrowError(/runTransform\(options\)/);
     await expect(runTransform(undefined as any)).rejects.toThrowError(/Example \(plain JS\)/);

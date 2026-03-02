@@ -169,8 +169,16 @@ export function toSuffixFromProp(propName: string): string {
     if (rhsRaw && !isSimpleRhs) {
       return "CondTruthy";
     }
-    const rhs = rhsRaw || (eq === "!==" ? "NotMatch" : "Match");
     const lhsSuffix = lhs.charAt(0).toUpperCase() + lhs.slice(1);
+    // Boolean literal RHS: treat as simple boolean condition
+    // $x === true → X, $x !== true → NotX, $x === false → NotX, $x !== false → X
+    if (rhsRaw === "true") {
+      return eq === "===" ? lhsSuffix : `Not${lhsSuffix}`;
+    }
+    if (rhsRaw === "false") {
+      return eq === "===" ? `Not${lhsSuffix}` : lhsSuffix;
+    }
+    const rhs = rhsRaw || (eq === "!==" ? "NotMatch" : "Match");
     const rhsSuffix = rhs.charAt(0).toUpperCase() + rhs.slice(1);
     const combined = eq === "!==" ? `${lhsSuffix}Not${rhsSuffix}` : `${lhsSuffix}${rhsSuffix}`;
     return dedupeWords(combined);
@@ -238,6 +246,19 @@ export function extractConditionName(test: ExpressionKind): string | null {
     const left = extractConditionName(test.left as ExpressionKind);
     const right = extractConditionName(test.right as ExpressionKind);
     return left && right ? `${left}And${right}` : null;
+  }
+
+  // Binary comparison with typeof: typeof gap === "number" → "Gap"
+  if (
+    test.type === "BinaryExpression" &&
+    (test.operator === "===" || test.operator === "!==") &&
+    (test.left as ExpressionKind).type === "UnaryExpression" &&
+    (test.left as { operator?: string }).operator === "typeof"
+  ) {
+    const inner = extractConditionName((test.left as { argument: ExpressionKind }).argument);
+    if (inner) {
+      return inner;
+    }
   }
 
   // Call expression with no arguments: Browser.isSafari() → "BrowserIsSafari"

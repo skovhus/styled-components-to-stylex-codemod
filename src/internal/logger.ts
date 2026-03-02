@@ -15,6 +15,7 @@ export type WarningType =
   | "Adapter resolveCall returned an unparseable value expression"
   | "Adapter resolveCall returned StyleX styles for helper call where a CSS value was expected"
   | "Adapter resolveCall returned undefined for helper call"
+  | "Adapter resolveBaseComponent threw an error"
   | "Adapter resolved StyleX styles cannot be applied under nested selectors/at-rules"
   | "Adapter resolved StyleX styles inside pseudo selector but did not provide cssText for property expansion — add cssText to resolveCall result to enable pseudo-wrapping"
   | 'Adapter resolveCall cssText could not be parsed as CSS declarations — expected semicolon-separated property: value pairs (e.g. "white-space: nowrap; overflow: hidden;")'
@@ -30,6 +31,8 @@ export type WarningType =
   | "Component selectors like `${OtherComponent}:hover &` are not directly representable in StyleX. Manual refactor is required"
   | "Conditional `css` block: !important is not supported in StyleX"
   | "Conditional `css` block: @-rules (e.g., @media, @supports) are not supported"
+  | "CSS block contains unsupported at-rule (only @media and @container are supported; @supports, etc. require manual handling)"
+  | "Conditional `css` block: dynamic interpolation could not be resolved to a single component prop"
   | "Conditional `css` block: failed to parse expression"
   | "Conditional `css` block: missing CSS property name"
   | "Conditional `css` block: missing interpolation expression"
@@ -46,6 +49,8 @@ export type WarningType =
   | "Heterogeneous background values (mix of gradients and colors) not currently supported"
   | "Higher-order styled factory wrappers (e.g. hoc(styled)) are not supported"
   | "Imported CSS helper mixins: cannot determine inherited properties for correct pseudo selector handling"
+  | "Local helper function returns CSS that cannot be decomposed into individual properties"
+  | "Local helper function computes CSS values that cannot be statically traced to the component prop"
   | "Styled-components specificity hacks like `&&` / `&&&` are not representable in StyleX"
   | "Theme-dependent block-level conditional could not be fully resolved (branches may contain dynamic interpolations)"
   | "Theme-dependant call expression could not be resolved (e.g. theme helper calls like theme.highlight() are not supported)"
@@ -92,7 +97,8 @@ export type WarningType =
   | "Unsupported css`` mixin: cannot infer base default for after-base contextual override (base value is non-literal)"
   | "css`` helper function interpolation references closure variable that cannot be hoisted"
   | "Sibling selector broadened: & + & (adjacent) becomes general sibling (~) in StyleX — interleaved non-matching elements will no longer block the match"
-  | "Using styled-components components as mixins is not supported; use css`` mixins or strings instead";
+  | "Using styled-components components as mixins is not supported; use css`` mixins or strings instead"
+  | "styled(ImportedComponent) wraps a component whose file contains internal styled-components — convert the base component's file first to avoid CSS cascade conflicts";
 
 export interface WarningLog {
   severity: Severity;

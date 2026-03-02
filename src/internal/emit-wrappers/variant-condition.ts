@@ -80,7 +80,10 @@ export function parseVariantWhenToAst(j: JSCodeshift, when: string): VariantCond
       }
       const memberExpr = buildMemberExpr(trimmedRaw);
       if (memberExpr) {
-        return { propName: null, expr: memberExpr };
+        // Treat dotted refs as prop-root conditions (e.g., user.role, $layer.isTop)
+        // so wrapper emitters can destructure the root identifier. Theme refs are
+        // resolved via useTheme and should not be pulled from component props.
+        return { propName: root === "theme" ? null : (root ?? null), expr: memberExpr };
       }
       return { propName: null, expr: j.identifier(trimmedRaw) };
     }
@@ -166,7 +169,9 @@ export function parseVariantWhenToAst(j: JSCodeshift, when: string): VariantCond
         ? j.literal(JSON.parse(rhsRaw.replace(/^'/, '"').replace(/'$/, '"')))
         : /^-?\d+(\.\d+)?$/.test(rhsRaw)
           ? j.literal(Number(rhsRaw))
-          : (buildMemberExpr(rhsRaw) ?? j.identifier(rhsRaw));
+          : rhsRaw === "true" || rhsRaw === "false"
+            ? j.literal(rhsRaw === "true")
+            : (buildMemberExpr(rhsRaw) ?? j.identifier(rhsRaw));
     const propName = lhsInfo.propName ?? "";
     // Comparison always produces boolean
     return {
@@ -224,6 +229,32 @@ export function makeConditionalStyleExpr(
     return j.logicalExpression("&&", cond, expr);
   }
   return j.conditionalExpression(cond, expr, j.identifier("undefined"));
+}
+
+/**
+ * If two "when" strings represent complementary conditions (e.g., "prop" and
+ * "!prop", or "x === v" and "x !== v"), returns the positive condition string.
+ * Returns null otherwise.
+ */
+export function getPositiveWhen(whenA: string, whenB: string): string | null {
+  const a = whenA.trim();
+  const b = whenB.trim();
+  if (isNegationOf(b, a)) {
+    return a;
+  }
+  if (isNegationOf(a, b)) {
+    return b;
+  }
+  // Detect === / !== pairs as complementary: "x === v" and "x !== v"
+  const compResult = areComparisonInverses(a, b);
+  if (compResult) {
+    return compResult;
+  }
+  return null;
+}
+
+export function areEquivalentWhen(left: string, right: string): boolean {
+  return normalizeWhenForComparison(left) === normalizeWhenForComparison(right);
 }
 
 /**
@@ -318,24 +349,32 @@ function findComplementaryEntry(
 }
 
 /**
- * If two "when" strings represent complementary conditions (e.g., "prop" and
- * "!prop"), returns the positive (non-negated) condition string. Returns null
- * otherwise.
+ * Detects if two "when" strings differ only in === vs !==.
+ * Returns the "===" variant (the positive one) or null if they're not inverses.
  */
-function getPositiveWhen(whenA: string, whenB: string): string | null {
-  const a = whenA.trim();
-  const b = whenB.trim();
-  if (isNegationOf(b, a)) {
-    return a;
+function areComparisonInverses(a: string, b: string): string | null {
+  const aNorm = normalizeWhenForComparison(a);
+  const bNorm = normalizeWhenForComparison(b);
+  const eqOp = "===";
+  const neqOp = "!==";
+  const aHasEq = aNorm.includes(eqOp);
+  const aHasNeq = aNorm.includes(neqOp);
+  const bHasEq = bNorm.includes(eqOp);
+  const bHasNeq = bNorm.includes(neqOp);
+
+  // One must have === and the other !==
+  if (aHasEq && !aHasNeq && bHasNeq && !bHasEq) {
+    // a is "===", b is "!==". Check they match when operator is swapped.
+    if (aNorm.replace(eqOp, neqOp) === bNorm) {
+      return a.trim(); // a is the positive (===) form
+    }
   }
-  if (isNegationOf(a, b)) {
-    return b;
+  if (bHasEq && !bHasNeq && aHasNeq && !aHasEq) {
+    if (bNorm.replace(eqOp, neqOp) === aNorm) {
+      return b.trim(); // b is the positive (===) form
+    }
   }
   return null;
-}
-
-function areEquivalentWhen(left: string, right: string): boolean {
-  return normalizeWhenForComparison(left) === normalizeWhenForComparison(right);
 }
 
 function isNegationOf(candidate: string, base: string): boolean {

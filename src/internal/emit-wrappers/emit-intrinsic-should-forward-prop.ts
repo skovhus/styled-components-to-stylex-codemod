@@ -8,12 +8,13 @@ import type { StyledDecl } from "../transform-types.js";
 import { getBridgeClassVar } from "../utilities/bridge-classname.js";
 import { buildStyleFnConditionExpr } from "../utilities/jscodeshift-utils.js";
 import { type ExpressionKind, type InlineStyleProp, type WrapperPropDefaults } from "./types.js";
-import type { JsxAttr, StatementKind } from "./wrapper-emitter.js";
+import { SX_PROP_TYPE_TEXT, type JsxAttr, type StatementKind } from "./wrapper-emitter.js";
 import { emitStyleMerging } from "./style-merger.js";
 import { sortVariantEntriesBySpecificity, VOID_TAGS } from "./type-helpers.js";
 import { withLeadingComments } from "./comments.js";
-import type { EmitIntrinsicContext } from "./emit-intrinsic-helpers.js";
+import { getCompoundVariantWhenKeys, type EmitIntrinsicContext } from "./emit-intrinsic-helpers.js";
 import { appendPseudoAliasStyleArgs } from "./emit-intrinsic-simple.js";
+import { mergeOrderedEntries, type OrderedStyleEntry } from "./style-expr-builders.js";
 import type { JSCodeshift, Identifier } from "jscodeshift";
 
 /**
@@ -81,6 +82,7 @@ export function emitShouldForwardPropWrappers(ctx: EmitIntrinsicContext): void {
     const tagName = d.base.tagName;
     const allowClassNameProp = emitter.shouldAllowClassNameProp(d);
     const allowStyleProp = emitter.shouldAllowStyleProp(d);
+    const allowSxProp = emitter.shouldAllowSxProp(d);
     const includesForwardedAs = hasForwardedAsUsage(d);
     const allowAsProp = shouldAllowAsProp(d, tagName);
 
@@ -172,9 +174,13 @@ export function emitShouldForwardPropWrappers(ctx: EmitIntrinsicContext): void {
     })();
     const finalTypeText = (() => {
       if (explicit) {
-        // For non-exported components that only use transient props ($-prefixed),
-        // use simple PropsWithChildren instead of verbose intersection type
+        // For non-exported components that only use transient props ($-prefixed)
+        // and were NOT user-configured via withConfig({ shouldForwardProp }),
+        // use simple PropsWithChildren instead of verbose intersection type.
+        // User-configured shouldForwardProp always needs full element props type
+        // because it implies rest spread forwarding of HTML attributes.
         if (
+          !d.shouldForwardPropFromWithConfig &&
           canUseSimplePropsType({
             isExported: d.isExported ?? false,
             usedAttrs,
@@ -211,31 +217,39 @@ export function emitShouldForwardPropWrappers(ctx: EmitIntrinsicContext): void {
         tagName,
         allowClassNameProp,
         allowStyleProp,
+        allowSxProp,
         skipProps: explicitPropNames,
+        includeRef: true,
       });
-      return VOID_TAGS.has(tagName) ? inferred : emitter.withChildren(inferred);
+      // inferredIntrinsicPropsTypeText already includes children for non-void tags
+      return inferred;
     })();
     const finalTypeTextWithForwardedAs = withForwardedAsType(finalTypeText, includesForwardedAs);
 
     // Detect if there are no custom user-defined props (just intrinsic element props)
     const hasNoCustomProps = !explicit && extraProps.size === 0;
+    // When the user already has a well-named type, skip creating a new type alias
+    const explicitIsExistingTypeRef = !!emitter.getExplicitTypeNameIfExists(d.propsType);
 
-    // Emit props type (result not used - inline type is always used in function parameter)
-    emitPropsType({
-      localName: d.localName,
-      tagName,
-      typeText: finalTypeTextWithForwardedAs,
-      allowAsProp,
-      allowClassNameProp,
-      allowStyleProp,
-      hasNoCustomProps,
-    });
+    // Emit props type (skip when user already has a well-named type)
+    if (!explicitIsExistingTypeRef) {
+      emitPropsType({
+        localName: d.localName,
+        tagName,
+        typeText: finalTypeTextWithForwardedAs,
+        allowAsProp,
+        allowClassNameProp,
+        allowStyleProp,
+        allowSxProp,
+        hasNoCustomProps,
+      });
+    }
     // For NON-POLYMORPHIC components (without `as` support), extend user-defined types
     // to include element props like children, className, style.
     // For POLYMORPHIC components (with `as` support), we don't modify the type -
     // instead we add element props as an inline intersection in the function parameter.
+    let sfpInlineTypeText: string | undefined;
     if (!allowAsProp && explicit) {
-      const propsTypeName = emitter.propsTypeNameFor(d.localName);
       const extendBaseTypeText = (() => {
         // Prefer ComponentProps for intrinsic wrappers so event handlers/attrs
         // are typed like real JSX usage (and so we can reliably omit className/style).
@@ -249,31 +263,44 @@ export function emitShouldForwardPropWrappers(ctx: EmitIntrinsicContext): void {
         }
         return omitted.length ? `Omit<${base}, ${omitted.join(" | ")}>` : base;
       })();
-      emitter.extendExistingType(propsTypeName, extendBaseTypeText);
+      if (explicitIsExistingTypeRef) {
+        // User's existing type first in the intersection for readability
+        const sxPart = allowSxProp ? `{ ${SX_PROP_TYPE_TEXT} }` : undefined;
+        sfpInlineTypeText = emitter.joinIntersection(explicit, extendBaseTypeText, sxPart);
+      } else {
+        const propsTypeName = emitter.propsTypeNameFor(d.localName);
+        emitter.extendExistingType(propsTypeName, extendBaseTypeText);
+        if (allowSxProp) {
+          emitter.injectSxPropIntoExistingType(propsTypeName);
+        }
+      }
     }
     ctx.markNeedsReactTypeImport();
 
-    const { beforeBase: extraStyleArgs, afterBase: extraStyleArgsAfterBase } =
-      emitter.splitExtraStyleArgs(d);
+    // Track default values for props (for destructuring defaults)
+    const propDefaults: WrapperPropDefaults = new Map();
+
+    // Build propsArg expressions first (may be needed for interleaving)
+    const propsArgExprs = d.extraStylexPropsArgs
+      ? emitter.buildExtraStylexPropsExprs({
+          entries: d.extraStylexPropsArgs,
+        })
+      : [];
+
+    // Build interleaved before/after-base args using mixinOrder
+    const {
+      beforeBase: extraStyleArgs,
+      afterBase: extraStyleArgsAfterBase,
+      afterVariants: afterVariantStyleArgs,
+    } = emitter.buildInterleavedExtraStyleArgs(d, propsArgExprs);
     const styleArgs: ExpressionKind[] = [
       ...(d.extendsStyleKey
         ? [j.memberExpression(j.identifier(stylesIdentifier), j.identifier(d.extendsStyleKey))]
         : []),
       ...extraStyleArgs,
-      j.memberExpression(j.identifier(stylesIdentifier), j.identifier(d.styleKey)),
+      ...emitter.baseStyleExpr(d),
       ...extraStyleArgsAfterBase,
     ];
-    // Track default values for props (for destructuring defaults)
-    const propDefaults: WrapperPropDefaults = new Map();
-
-    // Add adapter-resolved StyleX styles (emitted directly into stylex.props args).
-    if (d.extraStylexPropsArgs) {
-      styleArgs.push(
-        ...emitter.buildExtraStylexPropsExprs({
-          entries: d.extraStylexPropsArgs,
-        }),
-      );
-    }
 
     // Handle pseudo-alias selectors (e.g., &:${highlight})
     const pseudoGuardProps = appendPseudoAliasStyleArgs(
@@ -286,10 +313,15 @@ export function emitShouldForwardPropWrappers(ctx: EmitIntrinsicContext): void {
     // Collect keys used by compound variants (they're handled separately)
     const compoundVariantKeys = new Set<string>();
     for (const cv of d.compoundVariants ?? []) {
-      compoundVariantKeys.add(cv.outerProp);
-      compoundVariantKeys.add(`${cv.innerProp}True`);
-      compoundVariantKeys.add(`${cv.innerProp}False`);
+      for (const k of getCompoundVariantWhenKeys(cv)) {
+        compoundVariantKeys.add(k);
+      }
     }
+
+    // Collect variant and styleFn expressions with source order for interleaving.
+    // When source order is available, entries are sorted to preserve CSS cascade order.
+    const hasSourceOrder = !!(d.variantSourceOrder && Object.keys(d.variantSourceOrder).length > 0);
+    const orderedEntries: OrderedStyleEntry[] = [];
 
     if (d.variantStyleKeys) {
       const sortedEntries = sortVariantEntriesBySpecificity(Object.entries(d.variantStyleKeys));
@@ -305,7 +337,13 @@ export function emitShouldForwardPropWrappers(ctx: EmitIntrinsicContext): void {
         );
         // Use makeConditionalStyleExpr to handle boolean vs non-boolean conditions correctly.
         // For boolean conditions, && is used. For non-boolean (could be "" or 0), ternary is used.
-        styleArgs.push(emitter.makeConditionalStyleExpr({ cond, expr: styleExpr, isBoolean }));
+        const expr = emitter.makeConditionalStyleExpr({ cond, expr: styleExpr, isBoolean });
+        const order = d.variantSourceOrder?.[when];
+        if (hasSourceOrder && order !== undefined) {
+          orderedEntries.push({ order, expr });
+        } else {
+          styleArgs.push(expr);
+        }
       }
     }
 
@@ -365,6 +403,7 @@ export function emitShouldForwardPropWrappers(ctx: EmitIntrinsicContext): void {
         styleArgs,
         destructureProps: destructureParts,
         propDefaults,
+        orderedEntries: hasSourceOrder ? orderedEntries : undefined,
       });
     }
 
@@ -393,16 +432,23 @@ export function emitShouldForwardPropWrappers(ctx: EmitIntrinsicContext): void {
         j.memberExpression(j.identifier(stylesIdentifier), j.identifier(p.fnKey)),
         [callArg],
       );
+      let expr: ExpressionKind;
       if (p.conditionWhen) {
-        const { cond, isBoolean } = emitter.collectConditionProps({ when: p.conditionWhen });
-        styleArgs.push(emitter.makeConditionalStyleExpr({ cond, expr: call, isBoolean }));
+        const { cond, isBoolean } = emitter.collectConditionProps({
+          when: p.conditionWhen,
+          destructureProps: destructureParts,
+        });
+        expr = emitter.makeConditionalStyleExpr({ cond, expr: call, isBoolean });
       } else {
         const isRequired =
           p.jsxProp === "__props" ||
           emitter.isPropRequiredInPropsTypeLiteral(d.propsType, p.jsxProp);
-        styleArgs.push(
-          buildStyleFnConditionExpr({ j, condition: p.condition, propExpr, call, isRequired }),
-        );
+        expr = buildStyleFnConditionExpr({ j, condition: p.condition, propExpr, call, isRequired });
+      }
+      if (hasSourceOrder && p.sourceOrder !== undefined) {
+        orderedEntries.push({ order: p.sourceOrder, expr });
+      } else {
+        styleArgs.push(expr);
       }
       // Ensure the prop is destructured from props
       if (
@@ -413,6 +459,15 @@ export function emitShouldForwardPropWrappers(ctx: EmitIntrinsicContext): void {
       ) {
         destructureParts.push(p.jsxProp);
       }
+    }
+
+    // Merge ordered entries (variants + styleFns) by source order to preserve CSS cascade
+    mergeOrderedEntries(orderedEntries, styleArgs);
+
+    // Add adapter-resolved StyleX styles that should come after variant styles
+    // to preserve CSS cascade order (e.g., unconditional border-bottom after conditional border).
+    if (afterVariantStyleArgs.length > 0) {
+      styleArgs.push(...afterVariantStyleArgs);
     }
     for (const p of knownPrefixProps) {
       if (!destructureParts.includes(p)) {
@@ -439,16 +494,17 @@ export function emitShouldForwardPropWrappers(ctx: EmitIntrinsicContext): void {
     if (allowAsProp && emitTypes) {
       // When there are no custom props, use inline type
       // When there ARE custom props (explicit), use inline intersection with user-defined type
+      const sxPart = allowSxProp ? `${SX_PROP_TYPE_TEXT}; ` : "";
+      const asPropLiteral = `{ ${sxPart}as?: C }`;
+      const forwardedAsPart = includesForwardedAs ? " & { forwardedAs?: React.ElementType }" : "";
       const propsTypeText = hasNoCustomProps
-        ? includesForwardedAs
-          ? "React.ComponentPropsWithRef<C> & { as?: C } & { forwardedAs?: React.ElementType }"
-          : "React.ComponentPropsWithRef<C> & { as?: C }"
+        ? `React.ComponentPropsWithRef<C> & ${asPropLiteral}${forwardedAsPart}`
         : explicit
-          ? includesForwardedAs
-            ? `${explicit} & React.ComponentPropsWithRef<C> & { as?: C } & { forwardedAs?: React.ElementType }`
-            : `${explicit} & React.ComponentPropsWithRef<C> & { as?: C }`
+          ? `${explicit} & Omit<React.ComponentPropsWithRef<C>, keyof (${explicit})> & ${asPropLiteral}${forwardedAsPart}`
           : `${emitter.propsTypeNameFor(d.localName)}<C>`;
       emitter.annotatePropsParam(propsParamId, d.localName, propsTypeText);
+    } else if (sfpInlineTypeText) {
+      emitter.annotatePropsParam(propsParamId, d.localName, sfpInlineTypeText);
     } else {
       emitter.annotatePropsParam(propsParamId, d.localName);
     }
@@ -479,9 +535,20 @@ export function emitShouldForwardPropWrappers(ctx: EmitIntrinsicContext): void {
       dropProps.every((p: string) => p.startsWith("$")) &&
       !usedAttrs.has("*") &&
       [...usedAttrs].every((n) => n === "children" || dropProps.includes(n));
-    // Exported components should always include rest spread so that all element props
-    // (id, onClick, aria-*, etc.) are forwarded to the element.
-    const includeRest = isExportedComponent || (!shouldOmitRestSpread && shouldIncludeRest);
+    // For user-configured shouldForwardProp (withConfig), always include rest spread.
+    // The purpose of shouldForwardProp is to filter specific props from the DOM;
+    // all other props (id, onClick, aria-*, data-*, etc.) should be forwarded.
+    // Auto-inferred shouldForwardProp (from lower-rules) keeps original heuristics,
+    // except for recipe-pattern components with namespace boolean dimensions
+    // (e.g., disabled ? disabledVariants[color] : enabledVariants[color]).
+    // Components extended by other styled components (supportsExternalStyles) also
+    // need rest spread so extending wrappers can pass through HTML attributes.
+    const includeRest =
+      d.shouldForwardPropFromWithConfig ||
+      d.variantDimensions?.some((dim) => dim.namespaceBooleanProp) ||
+      isExportedComponent ||
+      (d.supportsExternalStyles ?? false) ||
+      (!shouldOmitRestSpread && shouldIncludeRest);
 
     if (!allowClassNameProp && !allowStyleProp) {
       const isVoid = VOID_TAGS.has(tagName);
@@ -505,10 +572,13 @@ export function emitShouldForwardPropWrappers(ctx: EmitIntrinsicContext): void {
 
       // Generate cleanup loop for prefix props when:
       // - There's a dropPrefix (like "$" for transient props)
-      // - Either: local usage of unknown prefix props, OR exported component (external callers may pass unknown prefix props)
+      // - Either: local usage of unknown prefix props, OR exported/extended component
+      //   (external callers or extending wrappers may pass unknown prefix props)
       // - Rest spread is included
       const needsCleanupLoop =
-        dropPrefix && (isExportedComponent || shouldAllowAnyPrefixProps) && includeRest;
+        dropPrefix &&
+        (isExportedComponent || (d.supportsExternalStyles ?? false) || shouldAllowAnyPrefixProps) &&
+        includeRest;
       const cleanupPrefixStmt = needsCleanupLoop
         ? buildPrefixCleanupStatements(j, restId, dropPrefix)
         : null;
@@ -591,6 +661,11 @@ export function emitShouldForwardPropWrappers(ctx: EmitIntrinsicContext): void {
     // When allowAsProp is true, include children support even for void tags
     // because the user might use `as="textarea"` which requires children
     const includeChildrenOuter = allowAsProp || !isVoidTag;
+    const sxId = j.identifier("sx");
+    if (allowSxProp) {
+      styleArgs.push(sxId);
+    }
+
     const patternProps = emitter.buildDestructurePatternProps({
       baseProps: [
         ...(allowAsProp ? [asDestructureProp(tagName)] : []),
@@ -598,6 +673,7 @@ export function emitShouldForwardPropWrappers(ctx: EmitIntrinsicContext): void {
         ...(allowClassNameProp ? [ctx.patternProp("className", classNameId)] : []),
         ...(includeChildrenOuter ? [ctx.patternProp("children", childrenId)] : []),
         ...(allowStyleProp ? [ctx.patternProp("style", styleId)] : []),
+        ...(allowSxProp ? [ctx.patternProp("sx", sxId)] : []),
       ],
       destructureProps: destructureParts,
       propDefaults,
@@ -611,10 +687,13 @@ export function emitShouldForwardPropWrappers(ctx: EmitIntrinsicContext): void {
 
     // Generate cleanup loop for prefix props when:
     // - There's a dropPrefix (like "$" for transient props)
-    // - Either: local usage of unknown prefix props, OR exported component (external callers may pass unknown prefix props)
+    // - Either: local usage of unknown prefix props, OR exported/extended component
+    //   (external callers or extending wrappers may pass unknown prefix props)
     // - Rest spread is included
     const needsCleanupLoopOuter =
-      dropPrefix && (isExportedComponent || shouldAllowAnyPrefixProps) && includeRest;
+      dropPrefix &&
+      (isExportedComponent || (d.supportsExternalStyles ?? false) || shouldAllowAnyPrefixProps) &&
+      includeRest;
     const cleanupPrefixStmt = needsCleanupLoopOuter
       ? buildPrefixCleanupStatements(j, restId, dropPrefix)
       : null;
@@ -628,6 +707,7 @@ export function emitShouldForwardPropWrappers(ctx: EmitIntrinsicContext): void {
       styleId,
       allowClassNameProp,
       allowStyleProp,
+      allowSxProp,
       inlineStyleProps: (d.inlineStyleProps ?? []) as InlineStyleProp[],
     });
 

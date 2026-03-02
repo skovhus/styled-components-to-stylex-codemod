@@ -68,6 +68,7 @@ export function emitStyleMerging(args: {
   styleId: Identifier;
   allowClassNameProp: boolean;
   allowStyleProp: boolean;
+  allowSxProp?: boolean;
   inlineStyleProps?: Array<{ prop: string; expr: ExpressionKind }>;
   staticClassNameExpr?: ExpressionKind;
 }): StyleMergingResult {
@@ -79,6 +80,7 @@ export function emitStyleMerging(args: {
     styleId,
     allowClassNameProp,
     allowStyleProp,
+    allowSxProp,
     inlineStyleProps = [],
     staticClassNameExpr,
   } = args;
@@ -143,8 +145,9 @@ export function emitStyleMerging(args: {
     };
   }
 
-  // If a merger function is configured and external className/style merging is needed, use it
-  if (styleMerger && (allowClassNameProp || allowStyleProp) && !staticClassNameExpr) {
+  // If a merger function is configured and external className/style merging is needed, use it.
+  // Static className expressions (attrs/bridge class) are folded into the merger's className arg.
+  if (styleMerger && (allowClassNameProp || allowStyleProp)) {
     return emitWithMerger({
       j,
       styleMerger,
@@ -154,6 +157,7 @@ export function emitStyleMerging(args: {
       allowClassNameProp,
       allowStyleProp,
       inlineStyleProps,
+      staticClassNameExpr,
       emitTypes,
     });
   }
@@ -166,6 +170,7 @@ export function emitStyleMerging(args: {
     styleId,
     allowClassNameProp,
     allowStyleProp,
+    allowSxProp,
     inlineStyleProps,
     staticClassNameExpr,
     emitTypes,
@@ -231,8 +236,8 @@ function emitWithoutStylex(args: {
       styleAttr = maybeCastStyleForCustomProps(
         j,
         j.objectExpression([
-          j.spreadElement(styleId),
           ...inlineStyleProps.map((p) => j.property("init", inlineStylePropKey(j, p.prop), p.expr)),
+          j.spreadElement(styleId),
         ]),
         inlineStyleProps,
         emitTypes,
@@ -273,6 +278,7 @@ function emitWithMerger(args: {
   allowClassNameProp: boolean;
   allowStyleProp: boolean;
   inlineStyleProps: Array<{ prop: string; expr: ExpressionKind }>;
+  staticClassNameExpr?: ExpressionKind;
   emitTypes: boolean;
 }): StyleMergingResult {
   const {
@@ -284,6 +290,7 @@ function emitWithMerger(args: {
     allowClassNameProp,
     allowStyleProp,
     inlineStyleProps,
+    staticClassNameExpr,
     emitTypes,
   } = args;
 
@@ -297,11 +304,17 @@ function emitWithMerger(args: {
   // Build the merger function call arguments
   // Signature: merger(styles, className?, style?)
   const mergerArgs: ExpressionKind[] = [stylesArg];
+  const classNameArg = buildMergerClassNameArg({
+    j,
+    classNameId,
+    allowClassNameProp,
+    staticClassNameExpr,
+  });
 
-  if (allowClassNameProp || allowStyleProp) {
+  if (allowClassNameProp || allowStyleProp || classNameArg) {
     // Add className argument (or undefined if not needed but style is)
-    if (allowClassNameProp) {
-      mergerArgs.push(classNameId);
+    if (classNameArg) {
+      mergerArgs.push(classNameArg);
     } else if (allowStyleProp) {
       mergerArgs.push(j.identifier("undefined"));
     }
@@ -314,10 +327,10 @@ function emitWithMerger(args: {
           maybeCastStyleForCustomProps(
             j,
             j.objectExpression([
-              j.spreadElement(styleId),
               ...inlineStyleProps.map((p) =>
                 j.property("init", inlineStylePropKey(j, p.prop), p.expr),
               ),
+              j.spreadElement(styleId),
             ]),
             inlineStyleProps,
             emitTypes,
@@ -354,6 +367,38 @@ function emitWithMerger(args: {
   };
 }
 
+function buildMergerClassNameArg(args: {
+  j: JSCodeshift;
+  classNameId: Identifier;
+  allowClassNameProp: boolean;
+  staticClassNameExpr?: ExpressionKind;
+}): ExpressionKind | null {
+  const { j, classNameId, allowClassNameProp, staticClassNameExpr } = args;
+  const parts: ExpressionKind[] = [];
+  if (staticClassNameExpr) {
+    parts.push(staticClassNameExpr);
+  }
+  if (allowClassNameProp) {
+    parts.push(classNameId);
+  }
+  if (parts.length === 0) {
+    return null;
+  }
+  if (parts.length === 1) {
+    const first = parts[0];
+    return first ?? null;
+  }
+  return j.callExpression(
+    j.memberExpression(
+      j.callExpression(j.memberExpression(j.arrayExpression(parts), j.identifier("filter")), [
+        j.identifier("Boolean"),
+      ]),
+      j.identifier("join"),
+    ),
+    [j.literal(" ")],
+  );
+}
+
 /**
  * Generates the verbose className/style merging pattern.
  */
@@ -364,6 +409,7 @@ function emitVerbosePattern(args: {
   styleId: any;
   allowClassNameProp: boolean;
   allowStyleProp: boolean;
+  allowSxProp?: boolean;
   inlineStyleProps: Array<{ prop: string; expr: any }>;
   staticClassNameExpr?: ExpressionKind;
   emitTypes: boolean;
@@ -375,10 +421,15 @@ function emitVerbosePattern(args: {
     styleId,
     allowClassNameProp,
     allowStyleProp,
+    allowSxProp,
     inlineStyleProps,
     staticClassNameExpr,
     emitTypes,
   } = args;
+
+  // When the component accepts an `sx` prop, rename the internal variable to avoid
+  // shadowing the destructured `sx` prop identifier.
+  const sxVarName = allowSxProp ? "_sx" : "sx";
 
   // Create the stylex.props() call
   const stylexPropsCall = j.callExpression(
@@ -388,7 +439,7 @@ function emitVerbosePattern(args: {
 
   // Create the sx variable declaration
   const sxDecl = j.variableDeclaration("const", [
-    j.variableDeclarator(j.identifier("sx"), stylexPropsCall),
+    j.variableDeclarator(j.identifier(sxVarName), stylexPropsCall),
   ]);
 
   // Create className merging expression if needed
@@ -396,7 +447,7 @@ function emitVerbosePattern(args: {
   if (allowClassNameProp || staticClassNameExpr) {
     const parts = [
       ...(staticClassNameExpr ? [staticClassNameExpr] : []),
-      j.memberExpression(j.identifier("sx"), j.identifier("className")),
+      j.memberExpression(j.identifier(sxVarName), j.identifier("className")),
       ...(allowClassNameProp ? [classNameId] : []),
     ];
     classNameAttr = j.callExpression(
@@ -414,9 +465,9 @@ function emitVerbosePattern(args: {
   let styleAttr: any = null;
   if (allowStyleProp || inlineStyleProps.length > 0) {
     const spreads: any[] = [
-      j.spreadElement(j.memberExpression(j.identifier("sx"), j.identifier("style"))),
-      ...(allowStyleProp ? [j.spreadElement(styleId)] : []),
+      j.spreadElement(j.memberExpression(j.identifier(sxVarName), j.identifier("style"))),
       ...inlineStyleProps.map((p) => j.property("init", inlineStylePropKey(j, p.prop), p.expr)),
+      ...(allowStyleProp ? [j.spreadElement(styleId)] : []),
     ];
     styleAttr = maybeCastStyleForCustomProps(
       j,
@@ -429,7 +480,7 @@ function emitVerbosePattern(args: {
   return {
     needsSxVar: true,
     sxDecl,
-    jsxSpreadExpr: j.identifier("sx"),
+    jsxSpreadExpr: j.identifier(sxVarName),
     classNameAttr,
     // Always emit the merged className AFTER `{...sx}` so it cannot be overwritten by `sx.className`.
     classNameBeforeSpread: false,

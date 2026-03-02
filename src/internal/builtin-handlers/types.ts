@@ -220,6 +220,48 @@ export type HandlerResult =
     }
   | {
       /**
+       * Split a 4-branch compound ternary where both branches of the outer test
+       * are themselves ternaries testing the same inner boolean prop.
+       *
+       * Pattern: `outer ? (inner ? A : B) : (inner ? C : D)`
+       *
+       * Example: `column ? (reverse ? "column-reverse" : "column") : (reverse ? "row-reverse" : "row")`
+       *
+       * Each of the 4 leaf values becomes a static StyleX style variant.
+       */
+      type: "dualBranchCompoundVariantsResolvedValue";
+      outerProp: string;
+      innerProp: string;
+      outerTruthyInnerTruthy: { expr: string; imports: ImportSpec[] };
+      outerTruthyInnerFalsy: { expr: string; imports: ImportSpec[] };
+      outerFalsyInnerTruthy: { expr: string; imports: ImportSpec[] };
+      outerFalsyInnerFalsy: { expr: string; imports: ImportSpec[] };
+    }
+  | {
+      /**
+       * Decompose a conditional interpolation where one branch is a static literal
+       * and the other is a dynamic expression referencing props.
+       *
+       * Pattern: `(props) => (props.$open ? props.$delay : 0)`
+       *
+       * The static branch becomes a base style value (e.g., `transitionDelay: "0ms"`),
+       * and the dynamic branch merges into an existing variant bucket or creates a new
+       * conditional style function.
+       */
+      type: "splitConditionalWithDynamicBranch";
+      /** Prop name used in the ternary test (e.g., "$open") */
+      conditionProp: string;
+      /** The static branch's literal value */
+      staticValue: string | number;
+      /** AST node for the dynamic branch expression */
+      dynamicBranchExpr: unknown;
+      /** Prop names referenced in the dynamic branch (e.g., ["$delay"]) */
+      dynamicProps: string[];
+      /** true = the false/alternate branch is the static one */
+      isStaticWhenFalse: boolean;
+    }
+  | {
+      /**
        * Signal that this handler does not know how to transform the node.
        *
        * The caller typically falls back to other strategies (or drops the declaration)

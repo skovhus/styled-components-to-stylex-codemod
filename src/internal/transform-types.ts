@@ -3,7 +3,11 @@
  * Core concepts: step results, styled declarations, and options.
  */
 import type { ASTNode, Comment, JSCodeshift, Options } from "jscodeshift";
-import type { Adapter } from "../adapter.js";
+import type {
+  Adapter,
+  ResolveBaseComponentResult,
+  ResolveBaseComponentStaticValue,
+} from "../adapter.js";
 import type { CssRuleIR } from "./css-ir.js";
 import type { WarningLog } from "./logger.js";
 import type { TransformContext } from "./transform-context.js";
@@ -81,6 +85,8 @@ export interface CrossFileInfo {
   selectorUsages: CrossFileSelectorUsage[];
   /** Component names in this file that need a global selector bridge className (consumer not transformed) */
   bridgeComponentNames?: Set<string>;
+  /** Global map: files that define styled-components → set of local names. Used for cascade conflict detection. */
+  styledDefFiles?: Map<string, Set<string>>;
 }
 
 export interface CrossFileSelectorUsage {
@@ -124,6 +130,22 @@ export type VariantDimension = {
   isDisabledNamespace?: boolean;
   /** Whether the prop is optional (has ? in its type annotation) - used for emitting destructuring defaults */
   isOptional?: boolean;
+  /** Minimum source order from the original variant entries that were grouped into this dimension.
+   * Used to preserve CSS cascade order when interleaving with other variant/styleFn entries. */
+  sourceOrder?: number;
+  /**
+   * When true, the emitter wraps the computed index with `as keyof typeof variantsObj`.
+   * Set for dimensions from base-component resolution where the prop type is inferred as `any`
+   * (no explicit styled-component props type), since TypeScript rejects `obj[anyProp]`.
+   */
+  needsKeyofCast?: boolean;
+};
+
+/** A single boolean-gated style entry from base-component singleton prop folding. */
+export type StaticBooleanVariant = {
+  propName: string;
+  styleKey: string;
+  styles: Record<string, unknown>;
 };
 
 export type StyledDecl = {
@@ -148,6 +170,8 @@ export type StyledDecl = {
   styleKey: string;
   extendsStyleKey?: string;
   variantStyleKeys?: Record<string, string>; // conditionProp -> styleKey
+  /** Source order indices for variant style keys, used to interleave with styleFnFromProps during emission. */
+  variantSourceOrder?: Record<string, number>;
   /**
    * Variant dimensions for StyleX variants recipe pattern.
    * When present, generates separate `stylex.create` calls per dimension
@@ -161,14 +185,29 @@ export type StyledDecl = {
    * Each entry contains variant style keys for all three branches and
    * instructs the emit phase to generate a compound ternary expression.
    */
-  compoundVariants?: Array<{
-    outerProp: string;
-    outerTruthyKey: string;
-    innerProp: string;
-    innerTruthyKey: string;
-    innerFalsyKey: string;
-  }>;
+  compoundVariants?: Array<
+    | {
+        kind: "3branch";
+        outerProp: string;
+        outerTruthyKey: string;
+        innerProp: string;
+        innerTruthyKey: string;
+        innerFalsyKey: string;
+      }
+    | {
+        kind: "4branch";
+        outerProp: string;
+        innerProp: string;
+        outerTruthyInnerTruthyKey: string;
+        outerTruthyInnerFalsyKey: string;
+        outerFalsyInnerTruthyKey: string;
+        outerFalsyInnerFalsyKey: string;
+      }
+  >;
   needsWrapperComponent?: boolean;
+  /** When true, the base `styles.{styleKey}` reference is omitted from `stylex.props()` because
+   *  the styleKey is a dynamic function (not a static style object). */
+  skipBaseStyleRef?: boolean;
   /**
    * Pseudo-alias selectors from `&:${expr}` patterns resolved via
    * `adapter.resolveSelector()` with `kind: "pseudoAlias"`.
@@ -220,6 +259,21 @@ export type StyledDecl = {
    */
   supportsAsProp?: boolean;
   /**
+   * Metadata for declarations whose imported base component was resolved via
+   * `adapter.resolveBaseComponent(...)` and inlined to an intrinsic element.
+   */
+  inlinedBaseComponent?: {
+    importSource: string;
+    importedName: string;
+    baseResult: ResolveBaseComponentResult;
+    baseStaticProps: Record<string, ResolveBaseComponentStaticValue>;
+    /**
+     * Static per-callsite variant dimensions generated from resolver results.
+     * When true, non-wrapper JSX rewriting can emit direct variant lookups.
+     */
+    hasInlineJsxVariants?: boolean;
+  };
+  /**
    * True when the styled component identifier is used as a value (not only rendered in JSX),
    * e.g. passed as a prop: `<VirtualList outerElementType={StyledDiv} />`.
    *
@@ -233,8 +287,13 @@ export type StyledDecl = {
     condition?: "truthy" | "always";
     conditionWhen?: string;
     callArg?: ExpressionKind;
+    /** Source order index for CSS cascade ordering against variant entries. */
+    sourceOrder?: number;
   }>;
-  shouldForwardProp?: { dropProps: string[]; dropPrefix?: string };
+  shouldForwardProp?: {
+    dropProps: string[];
+    dropPrefix?: string;
+  };
   /**
    * True when `withConfig({ shouldForwardProp })` is present but uses an unsupported pattern
    * that we cannot safely transform. When set, the transform should bail to avoid semantic changes.
@@ -258,6 +317,13 @@ export type StyledDecl = {
   withConfig?: { componentId?: string };
   attrsInfo?: {
     staticAttrs: Record<string, unknown>;
+    /** Source kind for `.attrs(...)` argument. Used by base-component resolution bails. */
+    sourceKind?: "object" | "function" | "unknown";
+    /**
+     * True when `.attrs(...)` contains values that are not static literals or
+     * recognized attrs patterns. Used to avoid unsafe base-component inlining.
+     */
+    hasUnsupportedValues?: boolean;
     /** Component identifier from `as: ComponentRef` in `.attrs()`, overrides the rendered tag. */
     attrsAsTag?: string;
     /**
@@ -284,6 +350,18 @@ export type StyledDecl = {
       jsxProp: string;
       attrName: string;
     }>;
+    /** Static CSS properties extracted from `style: { ... }` in attrs. */
+    attrsStaticStyles?: Record<string, unknown>;
+    /**
+     * Dynamic CSS properties from `style: { prop: cond ? value : undefined }` in attrs.
+     * Each entry stores the CSS property, the JSX prop that controls it, and the
+     * call arg expression (the ternary's consequent) as an AST node.
+     */
+    attrsDynamicStyles?: Array<{
+      cssProp: string;
+      jsxProp: string;
+      callArgExpr: unknown;
+    }>;
   };
   attrWrapper?: {
     kind: "input" | "link";
@@ -305,6 +383,14 @@ export type StyledDecl = {
   preResolvedFnDecls?: Record<string, unknown>;
   inlineStyleProps?: Array<{ prop: string; expr: ExpressionKind; jsxProp?: string }>;
   /**
+   * Static conditional style entries from base-component resolution for boolean props
+   * where only some call sites pass the prop. Instead of a separate `stylex.create`
+   * lookup object (VariantDimension), these are injected into `resolvedStyleObjects`
+   * as entries in the main `styles` object, guarded by a boolean condition
+   * (via `variantStyleKeys`). Processed in `analyzeBeforeEmitStep`.
+   */
+  staticBooleanVariants?: StaticBooleanVariant[];
+  /**
    * Additional style keys (from css`` helper blocks) that should be applied
    * alongside this component's base style.
    */
@@ -321,7 +407,14 @@ export type StyledDecl = {
    * These are emitted as extra args (optionally guarded by `when`) rather than being placed
    * inside `stylex.create(...)`.
    */
-  extraStylexPropsArgs?: Array<{ when?: string; expr: ExpressionKind }>;
+  extraStylexPropsArgs?: Array<{
+    when?: string;
+    expr: ExpressionKind;
+    afterBase?: boolean;
+    /** When true, this entry should be placed after variant conditional styles to preserve CSS cascade order. */
+    afterVariants?: boolean;
+  }>;
+
   /**
    * Tracks the interleaved order of extra mixins. Each entry indicates which array
    * to take the next item from: 'styleKey' for extraStyleKeys, 'propsArg' for extraStylexPropsArgs.
@@ -342,4 +435,6 @@ export type StyledDecl = {
   leadingComments?: Comment[];
   /** Deterministic bridge CSS class name for unconverted consumer selectors */
   bridgeClassName?: string;
+  /** Local helper functions that were inlined into style functions and should be removed */
+  consumedLocalHelpers?: string[];
 };

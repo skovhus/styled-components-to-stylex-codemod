@@ -36,12 +36,14 @@ export const App = () => (
 // The codemod should preserve the imported type, not convert to `string`
 import type { Colors } from "./lib/colors";
 
-interface TextColorProps extends Omit<React.ComponentProps<"span">, "className" | "style"> {
+interface TextColorProps {
   /** The color from the theme */
   color: Colors;
 }
 
-export function TextColor(props: TextColorProps) {
+export function TextColor(
+  props: TextColorProps & Omit<React.ComponentProps<"span">, "className" | "style">,
+) {
   const { children, color, ...rest } = props;
 
   return (

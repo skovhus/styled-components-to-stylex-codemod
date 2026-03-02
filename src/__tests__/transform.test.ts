@@ -284,6 +284,33 @@ describe("bail-out fixtures (_unsupported + _unimplemented)", () => {
   });
 });
 
+describe("cascade conflict detection", () => {
+  const WARNING_TYPE =
+    "styled(ImportedComponent) wraps a component whose file contains internal styled-components — convert the base component's file first to avoid CSS cascade conflicts";
+
+  it("bails on default-imported component wrapping internal styled-components", () => {
+    const source = `
+import * as React from "react";
+import styled from "styled-components";
+import GroupHeader from "./lib/styled-group-header";
+
+const CustomGroupHeader = styled(GroupHeader)\`
+  padding-inline: 14px;
+\`;
+
+export const App = () => <CustomGroupHeader label="test" id="t" />;
+`;
+    const result = transformWithWarnings(
+      { source, path: join(testCasesDir, "cascade-default.input.tsx") },
+      { jscodeshift: j, j, stats: () => {}, report: () => {} },
+      { adapter: fixtureAdapter },
+    );
+    expect(result.code).toBeNull();
+    expect(result.warnings).toHaveLength(1);
+    expect(result.warnings[0]?.type).toBe(WARNING_TYPE);
+  });
+});
+
 describe("test case exports", () => {
   it.each(fixtureCases)(
     "$outputFile should export App in both input and output",
@@ -630,7 +657,6 @@ export const x = 1;
 `;
     const result = runTransform(source, {}, "css-import-safety.tsx");
     const expected = `import * as stylex from "@stylexjs/stylex";
-import { mergedSx } from "./lib/mergedSx";
 
 const styles = stylex.create({
   helper: {
@@ -1005,6 +1031,27 @@ describe("styleMerger configuration", () => {
       importSource: { kind: "specifier" as const, value: "@company/ui-utils" },
     },
   };
+  const absolutePathMergerAdapter = {
+    externalInterface() {
+      return { styles: true, as: false } as const;
+    },
+    resolveValue() {
+      return undefined;
+    },
+    resolveCall() {
+      return undefined;
+    },
+    resolveSelector() {
+      return undefined;
+    },
+    styleMerger: {
+      functionName: "stylexProps",
+      importSource: {
+        kind: "absolutePath" as const,
+        value: pathResolve(__dirname, "fixtures", "stylexProps.ts"),
+      },
+    },
+  };
 
   it("should use merger function instead of verbose pattern when configured", async () => {
     const source = `
@@ -1032,6 +1079,59 @@ export const App = () => <Button>Click</Button>;
     expect(result.code).not.toContain(".filter(Boolean).join");
   });
 
+  it("should use merger when static className attrs are present", async () => {
+    const source = `
+import styled from 'styled-components';
+
+export const Button = styled.button.attrs({
+  className: 'static-class',
+})\`
+  color: blue;
+\`;
+
+export const App = () => <Button className="external">Click</Button>;
+`;
+
+    const result = transformWithWarnings(
+      { source, path: "test.tsx" },
+      { jscodeshift: j, j, stats: () => {}, report: () => {} },
+      { adapter: mergerAdapter },
+    );
+
+    expect(result.code).not.toBeNull();
+    expect(result.code).toContain("stylexProps");
+    expect(result.code).not.toMatch(/const\s+sx\s*=\s*stylex\.props/);
+    expect(result.code).toContain("static-class");
+  });
+
+  it("should use merger when bridge className is present", async () => {
+    const source = `
+import styled from 'styled-components';
+
+export const Button = styled.button\`
+  color: blue;
+\`;
+
+export const App = () => <Button className="external">Click</Button>;
+`;
+
+    const result = transformWithWarnings(
+      { source, path: "test.tsx" },
+      { jscodeshift: j, j, stats: () => {}, report: () => {} },
+      {
+        adapter: mergerAdapter,
+        crossFileInfo: {
+          selectorUsages: [],
+          bridgeComponentNames: new Set(["Button"]),
+        },
+      },
+    );
+
+    expect(result.code).not.toBeNull();
+    expect(result.code).toContain("stylexProps");
+    expect(result.code).not.toMatch(/const\s+sx\s*=\s*stylex\.props/);
+  });
+
   it("should import the merger function from configured source", async () => {
     const source = `
 import styled from 'styled-components';
@@ -1052,6 +1152,29 @@ export const App = () => <Button>Click</Button>;
     expect(result.code).not.toBeNull();
     // Should import stylexProps from @company/ui-utils
     expect(result.code).toMatch(/import\s*{\s*stylexProps\s*}\s*from\s*["']@company\/ui-utils["']/);
+  });
+
+  it("should import merger from absolutePath source when merger call is emitted", async () => {
+    const source = `
+import styled from 'styled-components';
+
+export const Button = styled.button\`
+  color: blue;
+\`;
+
+export const App = () => <Button>Click</Button>;
+`;
+    const testPath = pathResolve(__dirname, "fixtures", "components", "test.tsx");
+
+    const result = transformWithWarnings(
+      { source, path: testPath },
+      { jscodeshift: j, j, stats: () => {}, report: () => {} },
+      { adapter: absolutePathMergerAdapter },
+    );
+
+    expect(result.code).not.toBeNull();
+    expect(result.code).toContain("stylexProps(");
+    expect(result.code).toContain('import { stylexProps } from "../stylexProps.ts";');
   });
 
   it("should wrap multiple styles in array", async () => {
@@ -1188,12 +1311,61 @@ export const App = () => <Button>Click</Button>;
     );
 
     expect(result.code).not.toBeNull();
-    // Should use the verbose sx variable pattern
-    expect(result.code).toMatch(/const\s+sx\s*=\s*stylex\.props/);
+    // Should use the verbose _sx variable pattern (renamed from sx to avoid
+    // shadowing the destructured sx prop)
+    expect(result.code).toMatch(/const\s+_sx\s*=\s*stylex\.props/);
     // Should have the verbose className merging
     expect(result.code).toContain(".filter(Boolean).join");
     // Should have style spread
-    expect(result.code).toContain("...sx.style");
+    expect(result.code).toContain("..._sx.style");
+  });
+
+  it("should include sx in polymorphic shouldForwardProp wrapper type", async () => {
+    const adapterWithSxAndAs = {
+      styleMerger: {
+        functionName: "mergedSx",
+        importSource: { kind: "specifier" as const, value: "./lib/mergedSx" },
+      },
+      externalInterface() {
+        return { styles: true, as: true } as const;
+      },
+      resolveValue() {
+        return undefined;
+      },
+      resolveCall() {
+        return undefined;
+      },
+      resolveSelector() {
+        return undefined;
+      },
+    };
+
+    const source = `
+import styled from 'styled-components';
+
+interface BoxProps {
+  $color?: string;
+}
+
+export const Box = styled.div.withConfig({
+  shouldForwardProp: (prop) => !prop.startsWith('$'),
+})<BoxProps>\`
+  color: \${(props) => props.$color ?? 'black'};
+\`;
+
+export const App = () => <Box $color="red">Hello</Box>;
+`;
+
+    const result = transformWithWarnings(
+      { source, path: "test.tsx" },
+      { jscodeshift: j, j, stats: () => {}, report: () => {} },
+      { adapter: adapterWithSxAndAs },
+    );
+
+    expect(result.code).not.toBeNull();
+    // The polymorphic type should include sx alongside as
+    expect(result.code).toContain("sx?: stylex.StyleXStyles");
+    expect(result.code).toContain("as?: C");
   });
 });
 
@@ -1333,6 +1505,105 @@ export const App = () => <Button>Click me</Button>;
 
     // Should succeed because adapter resolved the call
     expect(result.code).not.toBeNull();
+  });
+});
+
+describe("conditional logical OR/AND mixed operators", () => {
+  it("should bail when || wraps && to avoid ambiguous condition serialization", () => {
+    // ($a && $b) || $c would serialize as "$a && $b || $c", which
+    // parseVariantWhenToAst would reparse as $a && ($b || $c) — wrong truth table
+    const source = `
+import styled, { css } from "styled-components";
+const Box = styled.div<{ $a?: boolean; $b?: boolean; $c?: boolean }>\`
+  width: 100px;
+  \${({ $a, $b, $c }) =>
+    (($a && $b) || $c) &&
+    css\`
+      background-color: red;
+    \`}
+\`;
+export const App = () => <Box />;
+`;
+    const result = runTransformWithDiagnostics(source);
+    expect(result.code).toBeNull();
+  });
+
+  it("should transform pure || conditions correctly", () => {
+    const source = `
+import styled, { css } from "styled-components";
+const Dot = styled.div<{ $active?: boolean; $completed?: boolean }>\`
+  background-color: white;
+  \${({ $active, $completed }) =>
+    ($active || $completed) &&
+    css\`
+      background-color: blue;
+    \`}
+\`;
+export const App = () => <Dot />;
+`;
+    const result = runTransformWithDiagnostics(source);
+    expect(result.code).not.toBeNull();
+    expect(result.code).toContain("$active || $completed");
+    expect(result.code).toContain("dotActiveOrCompleted");
+  });
+
+  it("should transform negated || conditions correctly", () => {
+    const source = `
+import styled, { css } from "styled-components";
+const Step = styled.div<{ $active?: boolean; $completed?: boolean }>\`
+  background-color: blue;
+  \${({ $active, $completed }) =>
+    !($active || $completed) &&
+    css\`
+      background-color: gray;
+    \`}
+\`;
+export const App = () => <Step />;
+`;
+    const result = runTransformWithDiagnostics(source);
+    expect(result.code).not.toBeNull();
+    expect(result.code).toContain("!($active || $completed)");
+    expect(result.code).toContain("stepNotActiveOrCompleted");
+  });
+
+  it("should transform && wrapping || on the right correctly", () => {
+    const source = `
+import styled, { css } from "styled-components";
+const Badge = styled.span<{ $visible?: boolean; $primary?: boolean; $accent?: boolean }>\`
+  background-color: gray;
+  \${({ $visible, $primary, $accent }) =>
+    $visible &&
+    ($primary || $accent) &&
+    css\`
+      background-color: blue;
+    \`}
+\`;
+export const App = () => <Badge />;
+`;
+    const result = runTransformWithDiagnostics(source);
+    expect(result.code).not.toBeNull();
+    expect(result.code).toContain("$primary || $accent");
+    expect(result.code).toContain("badgeVisiblePrimaryOrAccent");
+  });
+
+  it("should bail when && chain contains negated && group: $a && !($b && $c)", () => {
+    // "!($b && $c)" inside a larger && chain would be mis-tokenized by
+    // parseVariantWhenToAst's naive split("&&")
+    const source = `
+import styled, { css } from "styled-components";
+const Box = styled.div<{ $a?: boolean; $b?: boolean; $c?: boolean }>\`
+  width: 100px;
+  \${({ $a, $b, $c }) =>
+    $a &&
+    !($b && $c) &&
+    css\`
+      background-color: red;
+    \`}
+\`;
+export const App = () => <Box />;
+`;
+    const result = runTransformWithDiagnostics(source);
+    expect(result.code).toBeNull();
   });
 });
 
@@ -2115,6 +2386,153 @@ export const App = () => <Box />;
 });
 
 describe("theme boolean conditionals", () => {
+  it("should use adapter-configured theme hook import and function name", () => {
+    const source = `
+import styled from "styled-components";
+
+const Box = styled.div\`
+  opacity: \${(props) => props.theme.isDark ? 1 : 0.8};
+\`;
+
+export const App = () => <Box>Hello</Box>;
+`;
+
+    const adapterWithCustomThemeHook = {
+      externalInterface() {
+        return { styles: false, as: false };
+      },
+      resolveValue() {
+        return undefined;
+      },
+      resolveCall() {
+        return undefined;
+      },
+      resolveSelector() {
+        return undefined;
+      },
+      styleMerger: null,
+      themeHook: {
+        functionName: "useDesignTheme",
+        importSource: { kind: "specifier" as const, value: "@company/theme-hooks" },
+      },
+    } as Adapter;
+
+    const result = transformWithWarnings(
+      { source, path: "theme-custom-hook.tsx" },
+      { jscodeshift: j, j, stats: () => {}, report: () => {} },
+      { adapter: adapterWithCustomThemeHook },
+    );
+
+    expect(result.code).not.toBeNull();
+    expect(result.code).toContain('import { useDesignTheme } from "@company/theme-hooks";');
+    expect(result.code).toContain("const theme = useDesignTheme();");
+    expect(result.code).not.toContain('import { useTheme } from "styled-components";');
+  });
+
+  it("should support absolutePath importSource for adapter-configured theme hook", () => {
+    const source = `
+import styled from "styled-components";
+
+const Box = styled.div\`
+  opacity: \${(props) => props.theme.isDark ? 1 : 0.8};
+\`;
+
+export const App = () => <Box>Hello</Box>;
+`;
+
+    const inputPath = pathResolve(__dirname, "fixtures", "components", "theme-custom-hook-abs.tsx");
+    const adapterWithAbsoluteThemeHook = {
+      externalInterface() {
+        return { styles: false, as: false };
+      },
+      resolveValue() {
+        return undefined;
+      },
+      resolveCall() {
+        return undefined;
+      },
+      resolveSelector() {
+        return undefined;
+      },
+      styleMerger: null,
+      themeHook: {
+        functionName: "useDesignTheme",
+        importSource: {
+          kind: "absolutePath" as const,
+          value: pathResolve(__dirname, "fixtures", "theme-hooks.ts"),
+        },
+      },
+    } as Adapter;
+
+    const result = transformWithWarnings(
+      { source, path: inputPath },
+      { jscodeshift: j, j, stats: () => {}, report: () => {} },
+      { adapter: adapterWithAbsoluteThemeHook },
+    );
+
+    expect(result.code).not.toBeNull();
+    expect(result.code).toContain('import { useDesignTheme } from "../theme-hooks.ts";');
+    expect(result.code).toContain("const theme = useDesignTheme();");
+  });
+
+  it("should not inject duplicate local binding when configured hook is already imported via alias", () => {
+    const source = `
+import styled from "styled-components";
+import { useDesignTheme as useTheme } from "@company/theme-hooks";
+
+const Box = styled.div\`
+  opacity: \${(props) => props.theme.isDark ? 1 : 0.8};
+\`;
+
+export const App = () => <Box>Hello</Box>;
+`;
+
+    const adapterWithAliasedThemeHookImport = {
+      externalInterface() {
+        return { styles: false, as: false };
+      },
+      resolveValue() {
+        return undefined;
+      },
+      resolveCall() {
+        return undefined;
+      },
+      resolveSelector() {
+        return undefined;
+      },
+      styleMerger: null,
+      themeHook: {
+        functionName: "useTheme",
+        importSource: { kind: "specifier" as const, value: "@company/theme-hooks" },
+      },
+    } as Adapter;
+
+    const result = transformWithWarnings(
+      { source, path: "theme-hook-alias-existing.tsx" },
+      { jscodeshift: j, j, stats: () => {}, report: () => {} },
+      { adapter: adapterWithAliasedThemeHookImport },
+    );
+
+    expect(result.code).not.toBeNull();
+    expect(result.code).toContain("const theme = useTheme();");
+    const outputRoot = j(result.code ?? "");
+    let useThemeLocalBindingCount = 0;
+    outputRoot
+      .find(j.ImportDeclaration, { source: { value: "@company/theme-hooks" } } as any)
+      .forEach((importPath: any) => {
+        for (const specifier of (importPath.node.specifiers ?? []) as any[]) {
+          if (specifier.type !== "ImportSpecifier") {
+            continue;
+          }
+          const localName = specifier.local?.name ?? specifier.imported?.name;
+          if (localName === "useTheme") {
+            useThemeLocalBindingCount++;
+          }
+        }
+      });
+    expect(useThemeLocalBindingCount).toBe(1);
+  });
+
   it("should handle negated !theme.isDark conditional", () => {
     const source = `
 import styled from "styled-components";
@@ -2138,7 +2556,7 @@ export const App = () => <Box>Hello</Box>;
       import * as stylex from "@stylexjs/stylex";
       import { useTheme } from "styled-components";
 
-      function Box(props: React.PropsWithChildren<{ ref?: React.Ref<HTMLDivElement> }>) {
+      function Box(props: { children?: React.ReactNode }) {
         const {
           children,
         } = props;
@@ -2184,7 +2602,7 @@ export const App = () => <Box>Hello</Box>;
       import * as stylex from "@stylexjs/stylex";
       import { useTheme } from "styled-components";
 
-      function Box(props: React.PropsWithChildren<{ ref?: React.Ref<HTMLDivElement> }>) {
+      function Box(props: { children?: React.ReactNode }) {
         const {
           children,
         } = props;
@@ -2236,7 +2654,7 @@ export const App = () => <Box>Hello</Box>;
       import * as stylex from "@stylexjs/stylex";
       import { useTheme } from "styled-components";
 
-      function Box(props: React.PropsWithChildren<{ ref?: React.Ref<HTMLDivElement> }>) {
+      function Box(props: { children?: React.ReactNode }) {
         const {
           children,
         } = props;
@@ -2891,5 +3309,341 @@ export function App() {
     // Should NOT have the reversed (wrong) assignment
     expect(result.code).not.toContain('borderWidth: "red"');
     expect(result.code).not.toContain('borderColor: "0.5px"');
+  });
+});
+
+describe("inline base resolver variant coexistence", () => {
+  it("should preserve resolver JSX variants when template variants are also present", () => {
+    const source = `
+import styled from "styled-components";
+import { Flex } from "./lib/inline-base-flex";
+
+const Container = styled(Flex)<{ size: "sm" | "lg" }>\`
+  color: black;
+  \${(props) => props.size === "sm" && "color: red;"}
+  \${(props) => props.size === "lg" && "color: blue;"}
+\`;
+
+export function App() {
+  return (
+    <>
+      <Container size="sm" gap={8}>
+        Small
+      </Container>
+      <Container size="lg" gap={16}>
+        Large
+      </Container>
+    </>
+  );
+}
+`;
+
+    const result = transformWithWarnings(
+      { source, path: join(testCasesDir, "inlineBase-templateAndJsxVariants.input.tsx") },
+      { jscodeshift: j, j, stats: () => {}, report: () => {} },
+      { adapter: fixtureAdapter },
+    );
+
+    expect(result.code).not.toBeNull();
+    const code = result.code ?? "";
+    expect(code).toContain("containerGapVariants");
+    expect(code).toContain('"8"');
+    expect(code).toContain('"16"');
+    expect(code).toContain("color");
+  });
+});
+
+describe("inline base resolver safety guards", () => {
+  it("should skip base inlining when no local JSX callsites are available", () => {
+    const source = `
+import styled from "styled-components";
+import { Flex } from "./lib/inline-base-flex";
+
+export const Container = styled(Flex)\`
+  padding: 4px;
+\`;
+`;
+
+    const result = transformWithWarnings(
+      { source, path: join(testCasesDir, "inlineBase-noLocalCallsites.input.tsx") },
+      { jscodeshift: j, j, stats: () => {}, report: () => {} },
+      { adapter: fixtureAdapter },
+    );
+
+    expect(result.code).not.toBeNull();
+    const code = result.code ?? "";
+    expect(code).toContain("<Flex");
+    expect(code).not.toContain('as: Component = "div"');
+  });
+
+  it("should skip base inlining when attrs source cannot be statically resolved", () => {
+    const source = `
+import styled from "styled-components";
+import { Flex } from "./lib/inline-base-flex";
+
+const sharedAttrs = { gap: 8 };
+
+const Container = styled(Flex).attrs(sharedAttrs)\`
+  padding: 4px;
+\`;
+
+export function App() {
+  return <Container>Unknown attrs source</Container>;
+}
+`;
+
+    const result = transformWithWarnings(
+      { source, path: join(testCasesDir, "inlineBase-unknownAttrsSource.input.tsx") },
+      { jscodeshift: j, j, stats: () => {}, report: () => {} },
+      { adapter: fixtureAdapter },
+    );
+
+    expect(result.code).not.toBeNull();
+    const code = result.code ?? "";
+    expect(code).toContain("<Flex");
+    expect(code).not.toContain("containerGapVariants");
+  });
+
+  it("should skip base inlining when JSX `as` changes the resolved tag", () => {
+    const source = `
+import styled from "styled-components";
+import { Flex } from "./lib/inline-base-flex";
+
+const Container = styled(Flex)\`
+  padding: 4px;
+\`;
+
+export function App() {
+  return (
+    <Container as="span" gap={8}>
+      As span
+    </Container>
+  );
+}
+`;
+
+    const result = transformWithWarnings(
+      { source, path: join(testCasesDir, "inlineBase-asProp.input.tsx") },
+      { jscodeshift: j, j, stats: () => {}, report: () => {} },
+      { adapter: fixtureAdapter },
+    );
+
+    expect(result.code).not.toBeNull();
+    const code = result.code ?? "";
+    expect(code).toContain('<Container as="span" gap={8}>');
+    expect(code).toContain("as: Component = Flex");
+    expect(code).not.toContain("containerGapVariants");
+  });
+
+  it("should keep template variants when a prop also drives inline base variants", () => {
+    const source = `
+import styled from "styled-components";
+import { Flex } from "./lib/inline-base-flex";
+
+const Container = styled(Flex)\`
+  \${(props) => props.gap && "margin-top: 2px;"}
+\`;
+
+export function App() {
+  return <Container gap={8}>Overlap</Container>;
+}
+`;
+
+    const result = transformWithWarnings(
+      { source, path: join(testCasesDir, "inlineBase-overlapTemplateAndInline.input.tsx") },
+      { jscodeshift: j, j, stats: () => {}, report: () => {} },
+      { adapter: fixtureAdapter },
+    );
+
+    expect(result.code).not.toBeNull();
+    const code = result.code ?? "";
+    expect(code).toContain("containerGapVariants");
+    expect(code).toContain("styles.containerGap");
+  });
+
+  it("should skip base inlining when resolveBaseComponent returns malformed consumedProps", () => {
+    const source = `
+import styled from "styled-components";
+import { Flex } from "./lib/inline-base-flex";
+
+const Container = styled(Flex)\`
+  padding: 4px;
+\`;
+
+export function App() {
+  return <Container gap={8}>Malformed</Container>;
+}
+`;
+
+    type BaseComponentResult = NonNullable<
+      ReturnType<NonNullable<Adapter["resolveBaseComponent"]>>
+    >;
+
+    const malformedAdapter: Adapter = {
+      ...fixtureAdapter,
+      resolveBaseComponent(ctx) {
+        const resolved = fixtureAdapter.resolveBaseComponent?.(ctx);
+        if (!resolved) {
+          return resolved;
+        }
+        return {
+          tagName: resolved.tagName,
+          sx: resolved.sx,
+          ...("mixins" in resolved ? { mixins: resolved.mixins } : {}),
+        } as unknown as BaseComponentResult;
+      },
+    };
+
+    let result: ReturnType<typeof transformWithWarnings> | undefined;
+    expect(() => {
+      result = transformWithWarnings(
+        { source, path: join(testCasesDir, "inlineBase-malformedResolverResult.input.tsx") },
+        { jscodeshift: j, j, stats: () => {}, report: () => {} },
+        { adapter: malformedAdapter },
+      );
+    }).not.toThrow();
+
+    const code = result?.code ?? "";
+    expect(code).toContain("<Flex");
+  });
+});
+
+describe("local helper function with helper-local variables", () => {
+  it("should bail when derived expression references helper-local variables", () => {
+    const source = `
+import styled from "styled-components";
+
+type Size = "small" | "medium" | "large";
+
+const sizeMap: Record<Size, number> = {
+  small: 20,
+  medium: 24,
+  large: 32,
+};
+
+function helperWithLocal(size: Size) {
+  const scale = 2;
+  const px = sizeMap[size] * scale;
+  return \`width: \${px}px;\`;
+}
+
+const Box = styled.div<{ size: Size }>\`
+  display: flex;
+  \${(props) => helperWithLocal(props.size)}
+\`;
+
+export const App = () => (
+  <div>
+    <Box size="small">S</Box>
+  </div>
+);
+`;
+
+    const result = transformWithWarnings(
+      { source, path: join(testCasesDir, "helper-localVariable.input.tsx") },
+      { jscodeshift: j, j, stats: () => {}, report: () => {} },
+      { adapter: fixtureAdapter },
+    );
+
+    // The codemod should bail because `scale` is a helper-local variable
+    // that would not be in scope at the call site
+    expect(result.code).toBeNull();
+  });
+});
+
+describe("local helper function with direct param interpolation", () => {
+  it("should handle direct param usage without a unit suffix", () => {
+    const source = `
+import styled from "styled-components";
+
+function opacityHelper(value: number) {
+  return \`opacity: \${value};\`;
+}
+
+const Box = styled.div<{ opacity: number }>\`
+  display: flex;
+  \${(props) => opacityHelper(props.opacity)}
+\`;
+
+export const App = () => (
+  <div>
+    <Box opacity={0.5}>Faded</Box>
+  </div>
+);
+`;
+
+    const result = transformWithWarnings(
+      { source, path: join(testCasesDir, "helper-directParam.input.tsx") },
+      { jscodeshift: j, j, stats: () => {}, report: () => {} },
+      { adapter: fixtureAdapter },
+    );
+
+    // Should NOT bail — opacity: ${value} is a direct param reference (no unit needed)
+    expect(result.code).not.toBeNull();
+    expect(result.code).toContain("opacity");
+  });
+});
+
+describe("event handler annotation typing", () => {
+  it("annotates onChange handlers with intrinsic element types", () => {
+    const source = `
+import React from "react";
+import styled from "styled-components";
+
+export const Select = styled.select\`
+  padding: 4px;
+\`;
+
+export const Input = styled.input\`
+  padding: 4px;
+\`;
+
+export const App = () => (
+  <div>
+    <Select onChange={(e) => console.log(e.target.value)} />
+    <Input onChange={(e) => console.log(e.target.value)} />
+  </div>
+);
+`;
+
+    const result = transformWithWarnings(
+      { source, path: join(testCasesDir, "event-handler-annotation.input.tsx") },
+      { jscodeshift: j, j, stats: () => {}, report: () => {} },
+      { adapter: fixtureAdapter },
+    );
+
+    expect(result.code).not.toBeNull();
+    expect(result.code).toContain("React.ChangeEvent<HTMLSelectElement>");
+    expect(result.code).toContain("React.ChangeEvent<HTMLInputElement>");
+  });
+
+  it("wraps unparenthesized arrow params in parens when adding type annotations", () => {
+    const source = `
+import React from "react";
+import styled from "styled-components";
+
+export const Overlay = styled.div\`
+  position: fixed;
+\`;
+
+export const App = () => (
+  <Overlay onKeyDown={e => e.stopPropagation()} onClick={e => console.log(e)} />
+);
+`;
+
+    const result = transformWithWarnings(
+      { source, path: join(testCasesDir, "event-handler-annotation-parens.input.tsx") },
+      { jscodeshift: j, j, stats: () => {}, report: () => {} },
+      { adapter: fixtureAdapter },
+    );
+
+    expect(result.code).not.toBeNull();
+    // Must have parentheses around the typed parameter — not `e: Type =>`
+    expect(result.code).toContain(
+      "(e: React.KeyboardEvent<HTMLDivElement>) => e.stopPropagation()",
+    );
+    expect(result.code).toContain("(e: React.MouseEvent<HTMLDivElement>) => console.log(e)");
+    // Must NOT have the broken unparenthesized form
+    expect(result.code).not.toContain("{e: React.");
   });
 });

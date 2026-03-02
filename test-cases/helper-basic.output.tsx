@@ -4,23 +4,23 @@ import { helpers } from "./lib/helpers.stylex";
 import { $colors } from "./tokens.stylex";
 
 // Using CSS snippet helper for truncation
-function TruncatedText(props: React.PropsWithChildren<{ ref?: React.Ref<HTMLParagraphElement> }>) {
+function TruncatedText(props: { children?: React.ReactNode }) {
   const { children } = props;
 
-  return <p {...stylex.props(styles.truncatedText, helpers.truncate)}>{children}</p>;
+  return <p {...stylex.props(helpers.truncate, styles.truncatedText)}>{children}</p>;
 }
 
 // Using CSS snippet helper for flex centering
-function CenteredContainer(props: React.PropsWithChildren<{ ref?: React.Ref<HTMLDivElement> }>) {
+function CenteredContainer(props: { children?: React.ReactNode }) {
   const { children } = props;
 
-  return <div {...stylex.props(styles.centeredContainer, helpers.flexCenter)}>{children}</div>;
+  return <div {...stylex.props(helpers.flexCenter, styles.centeredContainer)}>{children}</div>;
 }
 
-function CardTitle(props: React.PropsWithChildren<{ ref?: React.Ref<HTMLHeadingElement> }>) {
+function CardTitle(props: { children?: React.ReactNode }) {
   const { children } = props;
 
-  return <h3 {...stylex.props(styles.cardTitle, helpers.truncate)}>{children}</h3>;
+  return <h3 {...stylex.props(helpers.truncate, styles.cardTitle)}>{children}</h3>;
 }
 
 export const App = () => (

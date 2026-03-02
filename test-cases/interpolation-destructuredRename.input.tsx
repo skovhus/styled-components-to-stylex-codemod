@@ -1,7 +1,8 @@
 import styled from "styled-components";
 
-// Simple renamed destructured prop
+// Simple renamed destructured prop with static base style
 const Button = styled.button<{ color?: string }>`
+  height: 100px;
   color: ${({ color: color_ }) => color_ || "hotpink"};
 `;
 

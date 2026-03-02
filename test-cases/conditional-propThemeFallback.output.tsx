@@ -9,10 +9,11 @@ type Props = {
   hollow?: boolean;
   size?: Size;
 };
-type ColorBadgeProps = Omit<React.ComponentProps<"div">, "className" | "style"> & Props;
 
-export function ColorBadge(props: ColorBadgeProps) {
-  const { children, hollow, color, size: size = "normal", ...rest } = props;
+export function ColorBadge(
+  props: Props & Omit<React.ComponentProps<"div">, "className" | "style">,
+) {
+  const { children, hollow, color, size = "normal", ...rest } = props;
 
   return (
     <div
@@ -20,9 +21,9 @@ export function ColorBadge(props: ColorBadgeProps) {
       {...stylex.props(
         styles.colorBadge,
         hollow ? styles.colorBadgeHollow : undefined,
-        sizeVariants[size],
         hollow ? styles.colorBadgeBorderColor(color ? color : $colors.labelMuted) : undefined,
         !hollow && styles.colorBadgeBackgroundColor(color ? color : $colors.labelMuted),
+        sizeVariants[size],
       )}
     >
       {children}

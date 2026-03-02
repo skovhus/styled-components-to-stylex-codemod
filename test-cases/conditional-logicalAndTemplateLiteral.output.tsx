@@ -102,7 +102,7 @@ const styles = stylex.create({
     boxShadow: "0px 1px 2px rgba(0, 0, 0, 0.06)",
   },
   dropZoneDraggingOver: {
-    boxShadow: `inset 0 0 0 1px ${$colors.primaryColor}, 0px 1px 2px rgba(0, 0, 0, 0.06)`,
+    boxShadow: `inset 0 0 0 1px ${$colors.primaryColor},0px 1px 2px rgba(0, 0, 0, 0.06)`,
   },
   card: {
     padding: "16px",
@@ -110,13 +110,13 @@ const styles = stylex.create({
   cardHighlighted: {
     borderWidth: "1px",
     borderStyle: "solid",
-    borderColor: `${$colors.primaryColor}`,
+    borderColor: $colors.primaryColor,
     boxShadow: `0 0 8px ${$colors.bgSub}`,
   },
   statusBar: {
     padding: "8px",
   },
   statusBarDisconnected: {
-    backgroundColor: `${$colors.bgSub}`,
+    backgroundColor: $colors.bgSub,
   },
 });

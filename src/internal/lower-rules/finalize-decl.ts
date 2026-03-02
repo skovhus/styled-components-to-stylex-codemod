@@ -2,8 +2,9 @@
  * Finalizes per-declaration style objects after rule processing.
  * Core concepts: merge pseudo/media buckets, rewrite CSS vars, and emit variants.
  */
-import { cssPropertyToStylexProp, resolveBackgroundStylexProp } from "../css-prop-mapping.js";
-import { cssValueToJs, toStyleKey, toSuffixFromProp } from "../transform/helpers.js";
+import { cssDeclarationToStylexDeclarations } from "../css-prop-mapping.js";
+import { cssValueToJs, literalToAst, toStyleKey, toSuffixFromProp } from "../transform/helpers.js";
+import type { StyledDecl } from "../transform-types.js";
 import { extractUnionLiteralValues, groupVariantBucketsIntoDimensions } from "./variants.js";
 import {
   getArrowFnSingleParamName,
@@ -18,6 +19,7 @@ import { PLACEHOLDER_RE } from "../styled-css.js";
 import { ensureShouldForwardPropDrop } from "./types.js";
 import type { DeclProcessingState } from "./decl-setup.js";
 import { getOrCreateRelationOverrideBucket } from "./shared.js";
+import type { VariantDimension } from "../transform-types.js";
 
 export function finalizeDeclProcessing(ctx: DeclProcessingState): void {
   const {
@@ -30,6 +32,7 @@ export function finalizeDeclProcessing(ctx: DeclProcessingState): void {
     nestedSelectors,
     variantBuckets,
     variantStyleKeys,
+    variantSourceOrder,
     extraStyleObjects,
     styleFnFromProps,
     styleFnDecls,
@@ -89,6 +92,8 @@ export function finalizeDeclProcessing(ctx: DeclProcessingState): void {
     styleObj[sel] = obj;
   }
 
+  resolveDirectionalConflicts(styleObj);
+
   const varsToDrop = new Set<string>();
   rewriteCssVarsInStyleObject(styleObj, localVarValues, varsToDrop);
   for (const name of varsToDrop) {
@@ -130,7 +135,6 @@ export function finalizeDeclProcessing(ctx: DeclProcessingState): void {
       /&:[a-z-]+(?:\([^)]*\))?\s+__SC_EXPR_\d+__\s*\{/i.test(decl.rawCss) ||
       hasPseudoBlockInterpolation)
   ) {
-    let didApply = false;
     // ancestorPseudo is null for base styles, or the pseudo string (e.g., ":hover", ":focus-visible")
     const applyBlock = (slotId: number, declsText: string, ancestorPseudo: string | null) => {
       const expr = decl.templateExpressions[slotId] as any;
@@ -153,7 +157,6 @@ export function finalizeDeclProcessing(ctx: DeclProcessingState): void {
         relationOverrides,
         relationOverridePseudoBuckets,
       );
-      didApply = true;
 
       const declLines = declsText
         .split(";")
@@ -171,12 +174,19 @@ export function finalizeDeclProcessing(ctx: DeclProcessingState): void {
         if (PLACEHOLDER_RE.test(value)) {
           continue;
         }
-        // Convert CSS property name to camelCase (e.g., outline-offset -> outlineOffset)
-        const outProp = cssPropertyToStylexProp(
-          prop === "background" ? resolveBackgroundStylexProp(value) : prop,
-        );
-        const jsVal = cssValueToJs({ kind: "static", value } as any, false, outProp);
-        (bucket as Record<string, unknown>)[outProp] = jsVal;
+        // Use cssDeclarationToStylexDeclarations for proper shorthand expansion
+        // (border → borderWidth/Style/Color, background → backgroundColor, etc.)
+        for (const out of cssDeclarationToStylexDeclarations({
+          property: prop,
+          value: { kind: "static", value },
+          important: false,
+          valueRaw: value,
+        })) {
+          if (out.value.kind === "static") {
+            const jsVal = cssValueToJs(out.value, false, out.prop);
+            (bucket as Record<string, unknown>)[out.prop] = jsVal;
+          }
+        }
       }
     };
 
@@ -255,13 +265,6 @@ export function finalizeDeclProcessing(ctx: DeclProcessingState): void {
     }
     if (state.bail) {
       return;
-    }
-
-    if (didApply) {
-      delete styleObj.width;
-      delete styleObj.height;
-      delete styleObj.opacity;
-      delete styleObj.transform;
     }
   }
 
@@ -409,7 +412,26 @@ export function finalizeDeclProcessing(ctx: DeclProcessingState): void {
 
   // Store dimensions for separate stylex.create calls
   if (dimensions.length > 0) {
-    decl.variantDimensions = dimensions;
+    // Compute source order for each dimension from its constituent variant entries.
+    // Entries consumed by dimensions were removed from remainingStyleKeys but their
+    // original source order is still in variantSourceOrder.
+    if (Object.keys(variantSourceOrder).length > 0) {
+      for (const dim of dimensions) {
+        let minOrder: number | undefined;
+        for (const [when, order] of Object.entries(variantSourceOrder)) {
+          // Match variant entries belonging to this dimension (e.g., "size === \"tiny\"" for propName "size")
+          if (when.startsWith(`${dim.propName} ===`) || when === dim.propName) {
+            if (minOrder === undefined || order < minOrder) {
+              minOrder = order;
+            }
+          }
+        }
+        if (minOrder !== undefined) {
+          dim.sourceOrder = minOrder;
+        }
+      }
+    }
+    decl.variantDimensions = mergeVariantDimensions(decl.variantDimensions, dimensions);
     decl.needsWrapperComponent = true;
     // Remove CSS props that were moved to variant dimensions from base styles
     for (const prop of propsToStrip) {
@@ -427,6 +449,21 @@ export function finalizeDeclProcessing(ctx: DeclProcessingState): void {
   }
   if (Object.keys(remainingStyleKeys).length) {
     decl.variantStyleKeys = remainingStyleKeys;
+    // Copy source order for variant keys that survived into remainingStyleKeys
+    if (Object.keys(variantSourceOrder).length > 0) {
+      const filteredOrder: Record<string, number> = {};
+      for (const key of Object.keys(remainingStyleKeys)) {
+        if (key in variantSourceOrder) {
+          const order = variantSourceOrder[key];
+          if (order !== undefined) {
+            filteredOrder[key] = order;
+          }
+        }
+      }
+      if (Object.keys(filteredOrder).length > 0) {
+        decl.variantSourceOrder = filteredOrder;
+      }
+    }
     // If we have variant styles keyed off props (e.g. `disabled`),
     // we need a wrapper component to evaluate those conditions at runtime and
     // avoid forwarding custom variant props to DOM nodes.
@@ -434,8 +471,28 @@ export function finalizeDeclProcessing(ctx: DeclProcessingState): void {
   }
   if (styleFnFromProps.length) {
     decl.styleFnFromProps = styleFnFromProps;
+
+    // When a style function and a variant bucket share the same style key (same
+    // condition), merge the variant's static properties into the style function's
+    // return object and remove the duplicate variant reference.
+    mergeVariantBucketsIntoStyleFns({
+      j: state.j,
+      styleFnFromProps,
+      styleFnDecls,
+      remainingBuckets,
+      remainingStyleKeys,
+      resolvedStyleObjects,
+      variantSourceOrder: decl.variantSourceOrder,
+    });
+
     for (const [k, v] of styleFnDecls.entries()) {
       resolvedStyleObjects.set(k, v);
+    }
+    // When the base styleKey is a dynamic function (not a static style object),
+    // skip the bare `styles.{styleKey}` reference in stylex.props() to avoid
+    // passing a function instead of a style object.
+    if (styleFnDecls.has(decl.styleKey) && Object.keys(styleObj).length === 0) {
+      decl.skipBaseStyleRef = true;
     }
   }
   if (inlineStyleProps.length) {
@@ -444,6 +501,127 @@ export function finalizeDeclProcessing(ctx: DeclProcessingState): void {
 }
 
 // --- Non-exported helpers ---
+
+/**
+ * Axis shorthand → longhand pairs that StyleX treats as conflicting.
+ * When both a shorthand (e.g., `paddingBlock`) and one of its longhands
+ * (e.g., `paddingBottom`) appear in the same style object, StyleX cannot
+ * resolve the overlap. This table drives `resolveDirectionalConflicts`.
+ */
+const AXIS_PAIRS: Array<{
+  shorthand: string;
+  start: string;
+  end: string;
+}> = [
+  { shorthand: "paddingBlock", start: "paddingTop", end: "paddingBottom" },
+  { shorthand: "paddingInline", start: "paddingLeft", end: "paddingRight" },
+  { shorthand: "marginBlock", start: "marginTop", end: "marginBottom" },
+  { shorthand: "marginInline", start: "marginLeft", end: "marginRight" },
+];
+
+/**
+ * Checks whether a value is a media/pseudo map (object with `default` or `@`/`:` keys).
+ */
+function isMediaOrPseudoMap(v: unknown): v is Record<string, unknown> {
+  if (!v || typeof v !== "object" || Array.isArray(v) || isAstNode(v)) {
+    return false;
+  }
+  const keys = Object.keys(v as Record<string, unknown>);
+  return keys.includes("default") || keys.some((k) => k.startsWith(":") || k.startsWith("@"));
+}
+
+/**
+ * Resolves conflicts between directional shorthand properties (e.g., `paddingBlock`)
+ * and their individual longhand overrides (e.g., `paddingBottom`).
+ *
+ * CSS cascade allows `padding: 0 12px; padding-bottom: 10px;` — the shorthand sets
+ * both top and bottom to 0, then the longhand overrides bottom to 10px. After
+ * `splitDirectionalProperty`, this becomes `paddingBlock: 0` + `paddingBottom: "10px"`.
+ * StyleX can't have both `paddingBlock` and `paddingBottom` — they conflict.
+ *
+ * This function detects such conflicts and splits the shorthand into individual
+ * longhands, preserving the override. It also handles media/pseudo map values where
+ * the shorthand at a media level needs to reset the overridden longhand.
+ *
+ * Property ordering is preserved: the split longhands replace the shorthand's
+ * position in the object to maintain a natural CSS property order.
+ */
+function resolveDirectionalConflicts(styleObj: Record<string, unknown>): void {
+  for (const { shorthand, start, end } of AXIS_PAIRS) {
+    const shorthandVal = styleObj[shorthand];
+    if (shorthandVal === undefined) {
+      continue;
+    }
+
+    const hasStart = start in styleObj;
+    const hasEnd = end in styleObj;
+    if (!hasStart && !hasEnd) {
+      continue;
+    }
+
+    // Compute replacement values for start/end longhands.
+    let startVal: unknown;
+    let endVal: unknown;
+
+    if (isMediaOrPseudoMap(shorthandVal)) {
+      const shorthandMap = shorthandVal as Record<string, unknown>;
+      startVal = hasStart
+        ? computeMergedLonghand(styleObj[start], shorthandMap)
+        : { ...shorthandMap };
+      endVal = hasEnd ? computeMergedLonghand(styleObj[end], shorthandMap) : { ...shorthandMap };
+    } else {
+      startVal = hasStart ? styleObj[start] : shorthandVal;
+      endVal = hasEnd ? styleObj[end] : shorthandVal;
+    }
+
+    // Rebuild the object in order: replace the shorthand position with start+end,
+    // and remove any existing start/end entries from their old positions.
+    const entries = Object.entries(styleObj);
+    // Clear all keys
+    for (const key of Object.keys(styleObj)) {
+      delete styleObj[key];
+    }
+    for (const [key, val] of entries) {
+      if (key === shorthand) {
+        // Replace shorthand with the two longhands in order
+        styleObj[start] = startVal;
+        styleObj[end] = endVal;
+      } else if (key === start || key === end) {
+        // Skip — already inserted at the shorthand's position
+        continue;
+      } else {
+        styleObj[key] = val;
+      }
+    }
+  }
+}
+
+/**
+ * Computes the merged value for a longhand property that overrides a shorthand.
+ * If the shorthand has media/pseudo keys, they get merged into the longhand's value.
+ */
+function computeMergedLonghand(
+  longhandVal: unknown,
+  shorthandMap: Record<string, unknown>,
+): unknown {
+  if (isMediaOrPseudoMap(longhandVal)) {
+    const merged = { ...(longhandVal as Record<string, unknown>) };
+    for (const [key, val] of Object.entries(shorthandMap)) {
+      if (!(key in merged)) {
+        merged[key] = val;
+      }
+    }
+    return merged;
+  }
+  // Longhand is a simple scalar — wrap as default and add shorthand's media keys
+  const merged: Record<string, unknown> = { default: longhandVal };
+  for (const [key, val] of Object.entries(shorthandMap)) {
+    if (key !== "default") {
+      merged[key] = val;
+    }
+  }
+  return merged;
+}
 
 /**
  * Extracts a scalar default value from a style property value.
@@ -503,6 +681,26 @@ function isEmptyBranch(node: unknown): boolean {
     return true;
   }
   return false;
+}
+
+/**
+ * Merge variant dimensions while preserving existing (pre-lowered) dimensions first.
+ *
+ * Resolver-derived dimensions are collected before lower-rules run. Lowering can
+ * then add template-derived dimensions. Keeping existing dimensions first preserves
+ * cascade order when both write the same CSS properties.
+ */
+function mergeVariantDimensions(
+  existingDimensions: VariantDimension[] | undefined,
+  nextDimensions: VariantDimension[],
+): VariantDimension[] {
+  if (!existingDimensions || existingDimensions.length === 0) {
+    return nextDimensions;
+  }
+  if (nextDimensions.length === 0) {
+    return existingDimensions;
+  }
+  return [...existingDimensions, ...nextDimensions];
 }
 
 type PseudoHelperCallResult =
@@ -645,4 +843,96 @@ function tryResolveConditionalHelperCallInPseudo(
   // the inlined CSS properties (from cssText) rather than the opaque style reference.
 
   return { outcome: "handled" };
+}
+
+/**
+ * Merges variant bucket properties into style functions that share the same
+ * condition key. When a ternary condition (e.g., `$open`) produces both static
+ * variant values (e.g., `opacity: 1`, `pointerEvents: "inherit"`) and a
+ * dynamic style function (e.g., `transitionDelay: \`${props.$delay}ms\``),
+ * the static values must be folded into the function's return object to
+ * avoid a duplicate bare style reference in `stylex.props()`.
+ */
+function mergeVariantBucketsIntoStyleFns(args: {
+  j: Parameters<typeof literalToAst>[0];
+  styleFnFromProps: NonNullable<StyledDecl["styleFnFromProps"]>;
+  styleFnDecls: Map<string, unknown>;
+  remainingBuckets: Map<string, Record<string, unknown>>;
+  remainingStyleKeys: Record<string, string>;
+  resolvedStyleObjects: Map<string, unknown>;
+  variantSourceOrder?: Record<string, number>;
+}): void {
+  const { j, styleFnFromProps, styleFnDecls, remainingBuckets, remainingStyleKeys } = args;
+
+  // Build a map from condition ("when") to the styleFn key that handles it
+  const conditionToFnKey = new Map<string, string>();
+  for (const sfp of styleFnFromProps) {
+    if (sfp.conditionWhen && sfp.fnKey) {
+      conditionToFnKey.set(sfp.conditionWhen, sfp.fnKey);
+    }
+  }
+
+  // Find variant buckets whose condition matches a styleFn condition AND shares the same style key
+  for (const [when, variantObj] of remainingBuckets.entries()) {
+    const fnKey = conditionToFnKey.get(when);
+    if (!fnKey) {
+      continue;
+    }
+    // Only merge when the variant's style key matches the styleFn's key
+    const variantKey = remainingStyleKeys[when];
+    if (variantKey !== fnKey) {
+      continue;
+    }
+    const fnAst = styleFnDecls.get(fnKey);
+    if (!fnAst || typeof fnAst !== "object") {
+      continue;
+    }
+
+    // Extract the function body (ObjectExpression) from the arrow function
+    const body = getFunctionBodyExpr(fnAst);
+    if (!body || (body as { type?: string }).type !== "ObjectExpression") {
+      continue;
+    }
+    const bodyObj = body as { properties?: unknown[] };
+    if (!Array.isArray(bodyObj.properties)) {
+      continue;
+    }
+
+    // Get existing property keys in the function body
+    const existingKeys = new Set<string>();
+    for (const prop of bodyObj.properties) {
+      const key = (prop as { key?: { name?: string } }).key?.name;
+      if (key) {
+        existingKeys.add(key);
+      }
+    }
+
+    // Merge variant properties that aren't already in the function body
+    let merged = false;
+    for (const [cssProp, cssValue] of Object.entries(variantObj)) {
+      if (existingKeys.has(cssProp)) {
+        continue;
+      }
+      const valueAst = literalToAst(j, cssValue);
+      bodyObj.properties.unshift(j.property("init", j.identifier(cssProp), valueAst));
+      merged = true;
+    }
+
+    if (merged) {
+      // Remove the variant from remainingBuckets/remainingStyleKeys so it
+      // doesn't produce a duplicate bare reference in stylex.props()
+      remainingBuckets.delete(when);
+      delete remainingStyleKeys[when];
+      if (args.variantSourceOrder) {
+        delete args.variantSourceOrder[when];
+      }
+      // Also remove the resolved style object that was set for this variant
+      const variantStyleObjKey = Object.entries(args.remainingStyleKeys).find(
+        ([w]) => w === when,
+      )?.[1];
+      if (variantStyleObjKey) {
+        args.resolvedStyleObjects.delete(variantStyleObjKey);
+      }
+    }
+  }
 }

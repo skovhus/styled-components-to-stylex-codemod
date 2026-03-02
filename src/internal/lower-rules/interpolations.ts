@@ -12,6 +12,28 @@ import { normalizeWhitespace } from "../utilities/string-utils.js";
 import { splitDirectionalProperty } from "../stylex-shorthands.js";
 import { addPropComments } from "./comments.js";
 
+/**
+ * Regex matching border-color properties where the border handler already extracted
+ * width/style from the value. Reusing `extractStaticParts` on a rewritten declaration
+ * would incorrectly re-apply the stale static prefix (e.g., "1px solid ").
+ */
+const BORDER_COLOR_SKIP_REGEX = /^border(-top|-right|-bottom|-left)?-color$/;
+
+/**
+ * Convenience wrapper around `extractStaticParts` that automatically applies the
+ * border-color skip guard based on the declaration's property.
+ */
+export function extractStaticPartsForDecl(d: { property?: string; value: unknown }): {
+  prefix: string;
+  suffix: string;
+} {
+  const cssProp = (d.property ?? "").trim();
+  return extractStaticParts(d.value, {
+    skipForProperty: BORDER_COLOR_SKIP_REGEX,
+    property: cssProp,
+  });
+}
+
 export function extractStaticParts(
   cssValue: any,
   options?: { skipForProperty?: RegExp; property?: string },

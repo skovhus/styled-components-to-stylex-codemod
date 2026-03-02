@@ -84,11 +84,18 @@ function collectStyledDeclsImpl(args: {
     if (!arg0) {
       return undefined;
     }
-    // Use Omit + Required to make all fields non-optional, then add attrsAsTag back as optional
-    const out: Omit<Required<NonNullable<StyledDecl["attrsInfo"]>>, "attrsAsTag"> & {
+    // Use Omit + Required to make all fields non-optional, then add optional fields back
+    const out: Omit<
+      Required<NonNullable<StyledDecl["attrsInfo"]>>,
+      "attrsAsTag" | "attrsStaticStyles" | "attrsDynamicStyles"
+    > & {
       attrsAsTag?: string;
+      attrsStaticStyles?: Record<string, unknown>;
+      attrsDynamicStyles?: Array<{ cssProp: string; jsxProp: string; callArgExpr: unknown }>;
     } = {
       staticAttrs: {},
+      sourceKind: "unknown",
+      hasUnsupportedValues: false,
       defaultAttrs: [],
       conditionalAttrs: [],
       invertedBoolAttrs: [],
@@ -198,15 +205,24 @@ function collectStyledDeclsImpl(args: {
           });
           continue;
         }
+
+        // Support: style: { whiteSpace: "nowrap" } or style: { height: $prop ? value : undefined }
+        if (key === "style" && v.type === "ObjectExpression" && tryExtractStyleObject(v, out)) {
+          continue;
+        }
+
+        out.hasUnsupportedValues = true;
       }
     };
 
     if (arg0.type === "ObjectExpression") {
+      out.sourceKind = "object";
       fillFromObject(arg0);
       return out;
     }
 
     if (arg0.type === "ArrowFunctionExpression") {
+      out.sourceKind = "function";
       const body = arg0.body as any;
       if (body?.type === "ObjectExpression") {
         fillFromObject(body);
@@ -253,6 +269,31 @@ function collectStyledDeclsImpl(args: {
     | { parsed: StyledDecl["shouldForwardProp"]; unparseable?: false }
     | { parsed?: undefined; unparseable: true };
 
+  const isModuleScopeDeclarator = (path: any): boolean => {
+    if (path?.scope?.isGlobal === true) {
+      return true;
+    }
+
+    // Fallback for parser/path variants where scope metadata is missing:
+    // walk up and ensure we hit Program without entering a function body.
+    let cur = path?.parentPath;
+    while (cur?.node) {
+      const nodeType = cur.node.type;
+      if (nodeType === "Program") {
+        return true;
+      }
+      if (
+        nodeType === "FunctionDeclaration" ||
+        nodeType === "FunctionExpression" ||
+        nodeType === "ArrowFunctionExpression"
+      ) {
+        return false;
+      }
+      cur = cur.parentPath;
+    }
+    return false;
+  };
+
   const parseShouldForwardProp = (arg0: any): ShouldForwardPropResult | undefined => {
     if (!arg0 || arg0.type !== "ObjectExpression") {
       return undefined;
@@ -296,7 +337,7 @@ function collectStyledDeclsImpl(args: {
         return;
       }
 
-      // !["a","b"].includes(prop)
+      // !["a","b"].includes(prop) or !varRef.includes(prop)
       if (expr.type === "UnaryExpression" && expr.operator === "!") {
         const inner = expr.argument;
         if (
@@ -304,19 +345,41 @@ function collectStyledDeclsImpl(args: {
           inner.callee?.type === "MemberExpression" &&
           inner.callee.property?.type === "Identifier" &&
           inner.callee.property.name === "includes" &&
-          inner.callee.object?.type === "ArrayExpression" &&
           inner.arguments?.[0]?.type === "Identifier" &&
           inner.arguments[0].name === paramName
         ) {
-          for (const el of inner.callee.object.elements ?? []) {
-            if (el?.type === "Literal" && typeof el.value === "string") {
-              dropProps.add(el.value);
-            }
-            if (el?.type === "StringLiteral") {
-              dropProps.add(el.value);
+          // Resolve the array — either an inline ArrayExpression or a variable reference.
+          // Restrict to module-scope declarations to avoid resolving shadowed variables
+          // in nested scopes. shouldForwardProp configs and their referenced arrays are
+          // always at module scope.
+          let arrayNode = inner.callee.object;
+          if (arrayNode?.type === "Identifier") {
+            const varName = arrayNode.name;
+            const decls = root.find(j.VariableDeclarator).filter((path) => {
+              const idNode = (path.node as any).id;
+              if (idNode?.type !== "Identifier" || idNode.name !== varName) {
+                return false;
+              }
+              return isModuleScopeDeclarator(path);
+            });
+            if (decls.length > 0) {
+              const init = (decls.get().node as any).init;
+              if (init?.type === "ArrayExpression") {
+                arrayNode = init;
+              }
             }
           }
-          return;
+          if (arrayNode?.type === "ArrayExpression") {
+            for (const el of arrayNode.elements ?? []) {
+              if (el?.type === "Literal" && typeof el.value === "string") {
+                dropProps.add(el.value);
+              }
+              if (el?.type === "StringLiteral") {
+                dropProps.add(el.value);
+              }
+            }
+            return;
+          }
         }
 
         // !prop.startsWith("$")
@@ -1432,4 +1495,101 @@ function resolveStyledComponentStyleKey(
   return localName === `Styled${baseName}` && !baseIsLocalStyledDecl
     ? toStyleKey(baseName)
     : toStyleKey(localName);
+}
+
+/**
+ * Extracts CSS style properties from an `attrs({ style: { ... } })` object.
+ *
+ * Handles two patterns:
+ * - Static values: `style: { whiteSpace: "nowrap" }` → stored in `attrsStaticStyles`
+ * - Dynamic ternary: `style: { height: $prop ? expr : undefined }` → stored in `attrsDynamicStyles`
+ *
+ * Returns true if all properties were handled, false if any property is unsupported.
+ */
+function tryExtractStyleObject(
+  styleObj: { properties?: unknown[] },
+  out: {
+    attrsStaticStyles?: Record<string, unknown>;
+    attrsDynamicStyles?: Array<{ cssProp: string; jsxProp: string; callArgExpr: unknown }>;
+  },
+): boolean {
+  const staticStyles: Record<string, unknown> = {};
+  const dynamicStyles: Array<{ cssProp: string; jsxProp: string; callArgExpr: unknown }> = [];
+
+  for (const prop of styleObj.properties ?? []) {
+    const p = prop as { type?: string; key?: any; value?: any };
+    if (!p || (p.type !== "ObjectProperty" && p.type !== "Property")) {
+      return false;
+    }
+    const cssProp = p.key?.type === "Identifier" ? (p.key.name as string) : null;
+    if (!cssProp) {
+      return false;
+    }
+
+    const v = p.value;
+    // Static string literal (including `as const`)
+    if (v?.type === "StringLiteral" || v?.type === "NumericLiteral") {
+      staticStyles[cssProp] = v.value;
+      continue;
+    }
+    // TSAsExpression wrapping a literal: `"nowrap" as const`
+    if (v?.type === "TSAsExpression" && v.expression?.type === "StringLiteral") {
+      staticStyles[cssProp] = v.expression.value;
+      continue;
+    }
+
+    // Dynamic ternary: `$prop ? expr : undefined`
+    if (v?.type === "ConditionalExpression") {
+      const jsxProp = extractTernaryJsxProp(v);
+      if (jsxProp && isUndefinedNode(v.alternate)) {
+        dynamicStyles.push({ cssProp, jsxProp, callArgExpr: v.consequent });
+        continue;
+      }
+    }
+
+    return false;
+  }
+
+  if (Object.keys(staticStyles).length > 0) {
+    out.attrsStaticStyles = staticStyles;
+  }
+  if (dynamicStyles.length > 0) {
+    out.attrsDynamicStyles = dynamicStyles;
+  }
+  return true;
+}
+
+/**
+ * Extracts the JSX prop name from a ternary test expression.
+ * Handles:
+ * - Bare identifier (destructured param): `$height` → "$height"
+ * - Member access: `props.$height` → "$height"
+ */
+function extractTernaryJsxProp(ternary: { test?: any }): string | null {
+  const test = ternary.test;
+  if (!test) {
+    return null;
+  }
+  // Bare identifier from destructured param: ({ $height }) => $height ? ...
+  if (test.type === "Identifier" && typeof test.name === "string") {
+    return test.name;
+  }
+  // Member expression: (props) => props.$height ? ...
+  if (
+    test.type === "MemberExpression" &&
+    test.property?.type === "Identifier" &&
+    typeof test.property.name === "string"
+  ) {
+    return test.property.name;
+  }
+  return null;
+}
+
+/** Checks if a node represents `undefined`. */
+function isUndefinedNode(node: unknown): boolean {
+  if (!node || typeof node !== "object") {
+    return false;
+  }
+  const n = node as { type?: string; name?: string };
+  return n.type === "Identifier" && n.name === "undefined";
 }

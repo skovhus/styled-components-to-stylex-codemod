@@ -1,26 +1,17 @@
 import React from "react";
 import * as stylex from "@stylexjs/stylex";
 import { mergedSx } from "./lib/mergedSx";
+import { $colors } from "./tokens.stylex";
 
 // Using !important to override inline styles or third-party CSS
-function OverrideButton(
-  props: React.PropsWithChildren<{
-    style?: React.CSSProperties;
-    ref?: React.Ref<HTMLButtonElement>;
-  }>,
-) {
+function OverrideButton(props: { style?: React.CSSProperties; children?: React.ReactNode }) {
   const { children, style } = props;
 
   return <button {...mergedSx(styles.overrideButton, undefined, style)}>{children}</button>;
 }
 
 // Mixed important and normal
-function MixedStyles(
-  props: React.PropsWithChildren<{
-    style?: React.CSSProperties;
-    ref?: React.Ref<HTMLParagraphElement>;
-  }>,
-) {
+function MixedStyles(props: { style?: React.CSSProperties; children?: React.ReactNode }) {
   const { children, style } = props;
 
   return <p {...mergedSx(styles.mixedStyles, undefined, style)}>{children}</p>;
@@ -38,6 +29,7 @@ export const App = () => (
     <a href="#" {...stylex.props(styles.importantHover)}>
       Hover me
     </a>
+    <span {...stylex.props(styles.overrideText)}>Override text</span>
   </div>
 );
 
@@ -46,7 +38,8 @@ const styles = stylex.create({
     backgroundColor: "#bf4f74 !important",
     color: "white !important",
     borderWidth: "0 !important",
-    borderStyle: "none",
+    borderStyle: "none !important",
+    borderColor: "initial !important",
     paddingBlock: "8px",
     paddingInline: "16px",
     borderRadius: "4px",
@@ -77,5 +70,10 @@ const styles = stylex.create({
       default: "none",
       ":hover": "underline !important",
     },
+  },
+  // Important on interpolated theme values — both properties should keep !important
+  overrideText: {
+    color: `${$colors.labelMuted} !important`,
+    fontSize: "10px !important",
   },
 });

@@ -34,6 +34,12 @@ const adapter = defineAdapter({
   },
   // Optional: use a helper for merging StyleX styles with external className/style
   styleMerger: null,
+  // Optional: customize the runtime theme hook import/call used for theme conditionals
+  // Defaults to { functionName: "useTheme", importSource: { kind: "specifier", value: "styled-components" } }
+  themeHook: {
+    functionName: "useTheme",
+    importSource: { kind: "specifier", value: "styled-components" },
+  },
 });
 
 await runTransform({
@@ -114,6 +120,30 @@ const adapter = defineAdapter({
   },
 
   /**
+   * Optional: inline styled(ImportedComponent) into an intrinsic element.
+   * When the base component can be resolved statically, return the target
+   * element, consumed props, and base StyleX declarations. Return undefined
+   * to keep normal styled(Component) behavior.
+   */
+  resolveBaseComponent(ctx) {
+    if (ctx.importSource !== "@company/ui" || ctx.importedName !== "Flex") {
+      return undefined;
+    }
+
+    const sx: Record<string, string> = { display: "flex" };
+    const consumedProps = ["column", "gap", "align"];
+
+    if (ctx.staticProps.column === true) {
+      sx.flexDirection = "column";
+    }
+    if (typeof ctx.staticProps.gap === "number") {
+      sx.gap = `${ctx.staticProps.gap}px`;
+    }
+
+    return { tagName: "div", consumedProps, sx };
+  },
+
+  /**
    * Control which exported components accept external className/style
    * and/or polymorphic `as` prop. Return `{ styles, as }` flags.
    */
@@ -132,6 +162,15 @@ const adapter = defineAdapter({
   styleMerger: {
     functionName: "mergedSx",
     importSource: { kind: "specifier", value: "./lib/mergedSx" },
+  },
+
+  /**
+   * Optional: customize the runtime theme hook used when wrappers need theme booleans.
+   * Defaults to useTheme from styled-components.
+   */
+  themeHook: {
+    functionName: "useDesignTheme",
+    importSource: { kind: "specifier", value: "@company/theme-hooks" },
   },
 });
 
@@ -156,6 +195,8 @@ Adapters are the main extension point, see full example above. They let you cont
 - how helper calls are resolved (via `resolveCall({ ... })` returning `{ expr, imports }`; `null`/`undefined` bails the file)
 - which exported components should support external className/style extension and/or polymorphic `as` prop (`externalInterface`)
 - how className/style merging is handled for components accepting external styling (`styleMerger`)
+- which runtime theme hook import/call to use for emitted wrapper theme conditionals (`themeHook`)
+- how `styled(ImportedComponent)` wrapping an external base component can be inlined into an intrinsic element with static StyleX styles (`resolveBaseComponent`)
 
 #### Cross-file selectors (`consumerPaths`)
 
@@ -207,6 +248,50 @@ Troubleshooting prepass failures with `"auto"`:
 - confirm the selected parser matches your source syntax (`parser: "tsx"`, `parser: "ts"`, etc.)
 - check resolver inputs (import paths, tsconfig path aliases, and related module resolution config)
 - if needed, switch to a manual `externalInterface(ctx)` function to continue migration while you fix prepass inputs
+
+#### Base component resolution (`resolveBaseComponent`)
+
+Use this when you want to **replace a base component entirely** by inlining its styles. If your codebase has a layout primitive like `<Flex>` whose behavior is purely CSS, the codemod can eliminate the runtime import and render a plain `<div>` instead.
+
+The resolver receives `ctx.importSource`, `ctx.importedName`, and `ctx.staticProps` (from `.attrs()` and JSX call sites). Return `{ tagName, consumedProps, sx }` to inline, or `undefined` to skip.
+
+```tsx
+// Input
+const Container = styled(Flex).attrs({ column: true, gap: 16 })`
+  padding: 8px;
+`;
+```
+
+```ts
+// Adapter
+resolveBaseComponent(ctx) {
+  if (ctx.importedName !== "Flex") return undefined;
+  const sx: Record<string, string> = { display: "flex" };
+  if (ctx.staticProps.column === true) sx.flexDirection = "column";
+  if (typeof ctx.staticProps.gap === "number") sx.gap = `${ctx.staticProps.gap}px`;
+  return { tagName: "div", consumedProps: ["column", "gap", "align"], sx };
+},
+```
+
+```tsx
+// Output — Flex is gone, its styles are merged into stylex.create()
+const styles = stylex.create({
+  container: { display: "flex", flexDirection: "column", gap: "16px", padding: "8px" },
+});
+```
+
+If the base component's styles already exist as a `stylex.create()` object, return `mixins` instead of (or alongside) `sx`. The codemod imports the mixin and includes it in `stylex.props(...)`:
+
+```ts
+resolveBaseComponent(ctx) {
+  return {
+    tagName: "div",
+    consumedProps: ["column", "gap"],
+    mixins: [{ importSource: "./lib/mixins.stylex", importName: "mixins", styleKey: "flex" }],
+  };
+},
+// Output: <div {...stylex.props(mixins.flex, styles.container)} />
+```
 
 #### Dynamic interpolations
 
@@ -263,7 +348,11 @@ export const truncate = stylex.create({
 
 The adapter maps your project's `props.theme.*` access, CSS variables, and helper calls to the StyleX equivalents from step 1. See [Usage](#usage) for the full API.
 
-### 3. Verify, iterate, clean up
+### 3. Convert bottom-up (leaf components first)
+
+When a component wraps another component that internally uses styled-components (e.g. `styled(GroupHeader)` where `GroupHeader` renders a `StyledHeader`), CSS cascade conflicts can arise after migration. Convert leaf files — the ones that don't wrap other styled-components — first, then work your way up. The codemod will bail with a warning if it detects this pattern.
+
+### 4. Verify, iterate, clean up
 
 Build and test your project. Review warnings — they tell you which files were skipped and why. Fix adapter gaps, re-run on remaining files, and repeat until done. [Report issues](https://github.com/skovhus/styled-components-to-stylex-codemod/issues) with input/output examples if the codemod produces incorrect results.
 

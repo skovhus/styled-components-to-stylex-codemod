@@ -1,7 +1,7 @@
 import * as stylex from "@stylexjs/stylex";
 
 export const App = () => (
-  <div {...stylex.props(styles.hiddenOnMobile, styles.elementWithMixin)}>Red with mixin</div>
+  <div {...stylex.props(styles.elementWithMixin, styles.hiddenOnMobile)}>Red with mixin</div>
 );
 
 const styles = stylex.create({

@@ -5,10 +5,7 @@
 import { CONTINUE, type StepResult } from "../transform-types.js";
 import type { StyledDecl } from "../transform-types.js";
 import { TransformContext } from "../transform-context.js";
-import {
-  isComponentUsedInJsx,
-  propagateDelegationWrapperRequirements,
-} from "../utilities/delegation-utils.js";
+import { propagateDelegationWrapperRequirements } from "../utilities/delegation-utils.js";
 import { typeContainsPolymorphicAs } from "../utilities/polymorphic-as-detection.js";
 
 /**
@@ -104,7 +101,9 @@ export function analyzeAfterEmitStep(ctx: TransformContext): StepResult {
     }
     // `withConfig({ shouldForwardProp })` cases need wrappers so we can consume
     // styling props without forwarding them to the DOM.
-    if (decl.shouldForwardProp) {
+    const resolverOnlyShouldForwardProp =
+      !!decl.inlinedBaseComponent && !decl.shouldForwardPropFromWithConfig;
+    if (decl.shouldForwardProp && !resolverOnlyShouldForwardProp) {
       decl.needsWrapperComponent = true;
     }
     if (decl.base.kind === "component") {
@@ -170,13 +169,24 @@ export function analyzeAfterEmitStep(ctx: TransformContext): StepResult {
   // These are behaviors that change the rendered output beyond just styles:
   // - .attrs({ as: "element" }) - changes the rendered element type
   // - shouldForwardProp - filters which props are forwarded to the DOM
+  // - isPolymorphicIntrinsicWrapper - renders a dynamic element via `as` prop
   const hasWrapperSemantics = (d: StyledDecl): boolean => {
     // .attrs({ as: ... }) changes the rendered element (string tag or component reference)
     if (hasAttrsAsOverride(d.attrsInfo)) {
       return true;
     }
-    // shouldForwardProp filters props, so it must be preserved
-    if (d.shouldForwardProp) {
+    // shouldForwardProp from withConfig() filters props at wrapper boundaries and
+    // must be preserved. Resolver-only dropProps for inlined bases are handled
+    // directly in JSX rewrite, so they do not block flattening.
+    const resolverOnlyShouldForwardProp =
+      !!d.inlinedBaseComponent && !d.shouldForwardPropFromWithConfig;
+    if (d.shouldForwardProp && !resolverOnlyShouldForwardProp) {
+      return true;
+    }
+    // Polymorphic intrinsic wrappers render a dynamic element type via the `as` prop.
+    // Flattening through them would lose the polymorphic type resolution and
+    // forwardedAs delegation semantics.
+    if ((d as any).isPolymorphicIntrinsicWrapper) {
       return true;
     }
     return false;
@@ -191,6 +201,17 @@ export function analyzeAfterEmitStep(ctx: TransformContext): StepResult {
   // IMPORTANT: Skip flattening when any intermediate component in the chain has wrapper semantics
   // (e.g., due to .attrs({ as: "button" }) or shouldForwardProp). Otherwise we would drop those
   // wrapper semantics, changing the rendered element or prop forwarding behavior.
+  //
+  // We collect all flattening decisions first, then apply them. This prevents order-dependent bugs
+  // where an earlier decl's base is mutated to intrinsic before a later decl can traverse through it.
+  type FlattenResult = {
+    decl: StyledDecl;
+    newBase: StyledDecl["base"];
+    intermediateStyleKeys: string[];
+    clearExtendsStyleKey: boolean;
+  };
+  const flattenResults: FlattenResult[] = [];
+
   for (const decl of styledDecls) {
     if (decl.base.kind === "component") {
       // Resolve the chain of styled components to find the ultimate base.
@@ -236,56 +257,82 @@ export function analyzeAfterEmitStep(ctx: TransformContext): StepResult {
       }
 
       if (currentBase.kind === "intrinsic") {
-        // If the immediate base component is used in JSX AND this component needs a wrapper,
-        // keep as component reference so the wrapper can delegate to the base wrapper.
-        // Otherwise flatten to intrinsic tag for inline style merging.
-        const immediateBaseIdent = decl.base.ident;
-        const baseUsedInJsx = isComponentUsedInJsx(root, j, immediateBaseIdent);
-        const shouldDelegate = baseUsedInJsx && decl.needsWrapperComponent;
         // Don't flatten if this component has .attrs({ as: ... }) that specifies
         // a different element - it needs to render that element directly.
         const hasAsAttr = hasAttrsAsOverride(decl.attrsInfo);
-        if (!shouldDelegate && !hasAsAttr) {
-          // Flatten to intrinsic tag for inline style merging
-          decl.base = { kind: "intrinsic", tagName: currentBase.tagName };
-          // Add intermediate style keys (excluding the one we already set via extendsStyleKey)
-          if (intermediateStyleKeys.length > 1) {
-            const extras = decl.extraStyleKeys ?? [];
-            // Add all intermediate keys except the first one (which is already in extendsStyleKey)
-            for (const key of intermediateStyleKeys.slice(1)) {
-              if (!extras.includes(key)) {
-                extras.push(key);
-              }
-            }
-            decl.extraStyleKeys = extras;
-          }
+        if (!hasAsAttr) {
+          flattenResults.push({
+            decl,
+            newBase: { kind: "intrinsic", tagName: currentBase.tagName },
+            intermediateStyleKeys,
+            clearExtendsStyleKey: false,
+          });
         }
       } else if (currentBase.kind === "component") {
-        // The ultimate base is an external component (not in declByLocal).
-        // Update the base to point directly to the external component.
-        const immediateBaseIdent = decl.base.ident;
-        const immediateBaseDecl = declByLocal.get(immediateBaseIdent);
-        const baseUsedInJsx = isComponentUsedInJsx(root, j, immediateBaseIdent);
-        const shouldDelegate = baseUsedInJsx && decl.needsWrapperComponent && immediateBaseDecl;
-
-        if (!shouldDelegate) {
-          // Flatten to the ultimate external component
-          decl.base = currentBase;
-          // Add intermediate style keys (all of them, since we're skipping the intermediate components)
-          if (intermediateStyleKeys.length > 0) {
-            const extras = decl.extraStyleKeys ?? [];
-            for (const key of intermediateStyleKeys) {
-              if (!extras.includes(key)) {
-                extras.push(key);
-              }
-            }
-            decl.extraStyleKeys = extras;
-          }
-          // Clear extendsStyleKey since we're not extending a local styled component anymore
-          // (the styles are now in extraStyleKeys)
-          delete decl.extendsStyleKey;
-        }
+        flattenResults.push({
+          decl,
+          newBase: currentBase,
+          intermediateStyleKeys,
+          clearExtendsStyleKey: true,
+        });
       }
+    }
+  }
+
+  // Apply all flattening decisions after chain resolution is complete.
+  // Intermediate style keys are collected parent-first (immediate → grandparent),
+  // but in stylex.props() last argument wins, so we reverse to grandparent-first.
+  for (const { decl, newBase, intermediateStyleKeys, clearExtendsStyleKey } of flattenResults) {
+    decl.base = newBase;
+    const reversed = [...intermediateStyleKeys].reverse();
+    if (clearExtendsStyleKey) {
+      // External component: all intermediate keys go into extraStyleKeys (grandparent-first)
+      if (reversed.length > 0) {
+        const extras = decl.extraStyleKeys ?? [];
+        for (const key of reversed) {
+          if (!extras.includes(key)) {
+            extras.push(key);
+          }
+        }
+        decl.extraStyleKeys = extras;
+      }
+      // Clear extendsStyleKey since we're not extending a local styled component anymore
+      delete decl.extendsStyleKey;
+    } else {
+      // Intrinsic: deepest ancestor goes to extendsStyleKey (first in stylex.props()),
+      // remaining intermediates go to extraStyleKeys (in ascending priority order).
+      if (reversed.length > 0) {
+        decl.extendsStyleKey = reversed[0];
+      }
+      if (reversed.length > 1) {
+        const extras = decl.extraStyleKeys ?? [];
+        for (const key of reversed.slice(1)) {
+          if (!extras.includes(key)) {
+            extras.push(key);
+          }
+        }
+        decl.extraStyleKeys = extras;
+      }
+    }
+  }
+
+  // After flattening, some parents in extendedBy may no longer have children delegating to them.
+  // Clear supportsExternalStyles for non-exported parents that no child delegates to anymore,
+  // to avoid unnecessary className/style/mergedSx handling on the parent's wrapper.
+  for (const [parentName] of extendedBy.entries()) {
+    const parentDecl = declByLocal.get(parentName);
+    if (!parentDecl || exportedComponents.has(parentName)) {
+      continue;
+    }
+    // Check if any child still delegates to this parent (i.e., has base.kind === "component"
+    // with base.ident pointing to the parent after flattening)
+    const hasDelegate = styledDecls.some(
+      (d) => d.base.kind === "component" && d.base.ident === parentName,
+    );
+    if (!hasDelegate) {
+      parentDecl.supportsExternalStyles = false;
+      // Leave supportsAsProp untouched (undefined for extendedBy parents) so that
+      // shouldAllowAsPropForIntrinsic can still auto-derive `as` from JSX usage.
     }
   }
 

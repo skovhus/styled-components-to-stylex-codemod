@@ -12,6 +12,7 @@ type ParsedSelector =
   | { kind: "base" } // Just "&"
   | { kind: "pseudo"; pseudos: string[] } // ":hover", ":focus:not(:disabled)", etc.
   | { kind: "pseudoElement"; element: string } // "::before", "::after"
+  | { kind: "pseudoElementWithPseudo"; element: string; pseudos: string[] } // "::-webkit-slider-thumb:hover"
   | { kind: "pseudoElements"; elements: string[] } // comma-separated: "::before", "::after"
   | { kind: "attribute"; attr: ParsedAttributeSelector }
   | { kind: "unsupported"; reason: string };
@@ -203,13 +204,17 @@ function parseSingleSelector(selector: selectorParser.Selector): ParsedSelector 
     if (pseudoElements.length > 1) {
       return { kind: "unsupported", reason: "multiple pseudo-elements" };
     }
-    if (pseudoClasses.length > 0) {
-      // Pseudo-classes with pseudo-elements is complex
-      return { kind: "unsupported", reason: "pseudo-class with pseudo-element" };
-    }
     const firstPseudoEl = pseudoElements[0];
     if (!firstPseudoEl) {
       return { kind: "unsupported", reason: "pseudo-element access error" };
+    }
+    if (pseudoClasses.length > 0) {
+      const pseudoString = buildPseudoString(pseudoClasses);
+      return {
+        kind: "pseudoElementWithPseudo",
+        element: normalizePseudoElementColon(firstPseudoEl.value),
+        pseudos: [pseudoString],
+      };
     }
     return { kind: "pseudoElement", element: normalizePseudoElementColon(firstPseudoEl.value) };
   }
@@ -524,19 +529,33 @@ export function normalizeInterpolatedSelector(selectorRaw: string): string {
   );
 }
 
-export function normalizeSelectorForInputAttributePseudos(
+export function normalizeSelectorForAttributePseudos(
   selector: string,
-  isInput: boolean,
+  tagName: string | null,
 ): string {
-  if (!isInput) {
+  if (!tagName) {
     return selector;
   }
 
-  // Convert [disabled] to :disabled (semantically equivalent for <input> elements).
+  // Only convert [disabled] → :disabled for <input> elements.
+  //
+  // While [disabled] and :disabled are semantically equivalent when the attribute
+  // is set directly, :disabled also matches elements disabled *indirectly* (e.g.,
+  // a <button> inside <fieldset disabled>). This broader matching would change the
+  // CSS behavior for non-input form elements, so we only apply this conversion for
+  // <input> where the tradeoff is accepted and where other attribute-specific
+  // handling (type=checkbox, type=radio, readonly) is already in place.
+  //
+  // Non-input elements with [disabled] fall through to parseSelector() which wraps
+  // them in :is([disabled]) — a lossless, semantically-equivalent transformation.
+  //
   // NOTE: [readonly] is NOT converted to :read-only because :read-only matches much
   // more broadly (disabled inputs, checkbox/radio, etc.) while [readonly] only matches
   // elements with the readonly attribute explicitly set. [readonly] is instead handled
   // as a JS prop conditional via the attrWrapper pattern.
+  if (tagName.toLowerCase() !== "input") {
+    return selector;
+  }
   const m = selector.match(/^&\[(.+)\]$/) ?? selector.match(/^\[(.+)\]$/);
   if (!m || !m[1]) {
     return selector;

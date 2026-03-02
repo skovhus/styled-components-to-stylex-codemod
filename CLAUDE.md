@@ -53,6 +53,33 @@ StyleX does NOT support CSS shorthand properties. When transforming CSS to Style
 
 When adding new CSS-to-StyleX transformations, always use these existing helpers rather than directly mapping CSS property names.
 
+## StyleX Runtime Behavior
+
+**Deterministic ordering**: StyleX guarantees that later entries in `stylex.props()` override earlier ones for conflicting properties. This is true regardless of whether styles are static or dynamic. The codemod's `variantSourceOrder` tracking preserves the original CSS cascade order by interleaving variant and styleFn entries during emission.
+
+**Dynamic styles use CSS variables, not inline styles**: A dynamic StyleX style like `styles.flexAlignItems(align)` compiles to a CSS class (e.g., `.x123 { align-items: var(--x123) }`) with the variable value set as an inline style (`--x123: center`). The actual CSS property (`align-items`) is still resolved via the CSS class, NOT as a true inline style. This means static and dynamic StyleX styles participate in the same cascade — array ordering in `stylex.props()` determines priority.
+
+**Prefer static styles over dynamic styles for performance**: When a CSS property has a small, known set of values (e.g., `display: flex | inline-flex`, `flex-direction: row | column | row-reverse | column-reverse`), emit separate static styles selected by JavaScript conditionals rather than a single dynamic function call. For example, prefer:
+
+```tsx
+inline ? styles.flexInline : styles.flexDefault; // static: two CSS classes
+```
+
+over:
+
+```tsx
+styles.flexDisplay(inline ? "inline-flex" : "flex"); // dynamic: CSS variable
+```
+
+Static styles produce atomic CSS classes that can be shared and cached, while dynamic styles require a CSS variable indirection per-instance.
+
+**Inline style spread order**: When the codemod emits an inline style object that combines template-computed values with the user's `style` prop, the user's `style` must spread last so it can override template defaults. This matches styled-components behavior where the `style` prop overrides CSS class values:
+
+```tsx
+{ flexDirection: computedValue, ...style }  // ✓ user's style can override
+{ ...style, flexDirection: computedValue }  // ✗ template overrides user's style
+```
+
 ## Scripts
 
 Run repo scripts directly with `node`, see `scripts` folder
@@ -77,6 +104,44 @@ Test cases that the codemod cannot transform use two prefixes to distinguish the
 - **`_unimplemented.<case>.input.tsx`** — StyleX **has the APIs** to express this, but the codemod **hasn't built the transform yet** (e.g., sibling selectors via `stylex.when.siblingBefore()`, cross-file component selectors via `stylex.defineMarker()`). These are planned future work.
 
 Both prefixes should **NOT** have an output file. Both are excluded from supported test runs, Storybook, and the playground.
+
+### Creating a Test Case Step-by-Step
+
+1. **Write the `.input.tsx` file** in `test-cases/` with a styled-components example:
+   - First line should be a short comment describing what pattern is being tested
+   - Import `styled` from `"styled-components"` (and `* as React` if needed)
+   - Define styled component(s) demonstrating the pattern
+   - Export `const App` or `function App` rendering all variations with visible CSS
+   - For theme access, use `props.theme.color.<key>` or `props.theme.isDark` — the fixture adapter resolves `theme.color.*` to `$colors.*` from `./tokens.stylex`
+
+2. **Generate the `.output.tsx` file** using the regeneration script:
+
+   ```bash
+   node scripts/regenerate-test-case-outputs.mts --only <case-name>
+   ```
+
+   This runs the codemod with the fixture adapter and writes the output. Verify it's correct.
+
+3. **For bug-reproduction test cases** where the codemod produces wrong output:
+   - Write the `.output.tsx` manually showing the **correct** expected transformation
+   - The test will fail, clearly showing the diff between actual (buggy) and expected (correct) output
+   - Use `node scripts/debug-test.mts` to generate `.actual.tsx` files for comparison
+
+4. **Run and verify**:
+   ```bash
+   pnpm test:run                    # All tests
+   npx vitest run -t "<case-name>"  # Single test case
+   pnpm storybook                   # Visual comparison
+   ```
+
+**Key conventions for output files:**
+
+- Import `* as stylex from "@stylexjs/stylex"` and `{ mergedSx } from "./lib/mergedSx"` when the component accepts external className/style
+- Theme colors become `$colors.<key>` from `"./tokens.stylex"`
+- CSS shorthand properties must be expanded (e.g., `padding: "4px 8px"` → `paddingBlock: "4px"`, `paddingInline: "8px"`)
+- Unexported intrinsic-only styled components get inlined (no wrapper function)
+- Exported or component-wrapping styled components become function components
+- Conditional styles use separate style objects: `styles.base`, `styles.baseActive`
 
 ### Promoting Bail-Out Test Cases
 
@@ -138,6 +203,10 @@ Skills are located in `.claude/skills/`.
 
 - Store implementation plans in `plans/` as markdown files
 - Name format: `YYYY-MM-DD-feature-name.md`
+
+## Pull Request Descriptions
+
+Keep PR descriptions concise: a brief summary of what the PR does and why. Do not add sections like "Test case", "Test plan", or checklists. Context that's obvious from the diff or commit message doesn't need repeating.
 
 ## Post-Implementation Workflow
 

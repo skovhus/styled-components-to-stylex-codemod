@@ -12,11 +12,12 @@ import {
   type WrapperPropDefaults,
 } from "./types.js";
 import { withLeadingComments } from "./comments.js";
-import type { JsxAttr, StatementKind } from "./wrapper-emitter.js";
+import { SX_PROP_TYPE_TEXT, type JsxAttr, type StatementKind } from "./wrapper-emitter.js";
 import { emitStyleMerging } from "./style-merger.js";
 import { sortVariantEntriesBySpecificity, VOID_TAGS } from "./type-helpers.js";
-import type { EmitIntrinsicContext } from "./emit-intrinsic-helpers.js";
+import { getCompoundVariantWhenKeys, type EmitIntrinsicContext } from "./emit-intrinsic-helpers.js";
 import { appendPseudoAliasStyleArgs } from "./emit-intrinsic-simple.js";
+import { mergeOrderedEntries, type OrderedStyleEntry } from "./style-expr-builders.js";
 
 export function emitIntrinsicPolymorphicWrappers(ctx: EmitIntrinsicContext): void {
   const { emitter, j, emitTypes, wrapperDecls, wrapperNames, stylesIdentifier, emitted } = ctx;
@@ -61,6 +62,7 @@ export function emitIntrinsicPolymorphicWrappers(ctx: EmitIntrinsicContext): voi
       const tagName = d.base.tagName;
       const allowClassNameProp = emitter.shouldAllowClassNameProp(d);
       const allowStyleProp = emitter.shouldAllowStyleProp(d);
+      const allowSxProp = emitter.shouldAllowSxProp(d);
       const allowAsProp = shouldAllowAsProp(d, tagName);
       const includesForwardedAs = hasForwardedAsUsage(d);
       const explicit = emitter.stringifyTsType(d.propsType);
@@ -69,6 +71,8 @@ export function emitIntrinsicPolymorphicWrappers(ctx: EmitIntrinsicContext): voi
       // influences allowed props (e.g. htmlFor when as="label", react-spring style props when as={animated.span}).
       // Detect if there are no custom user-defined props (just intrinsic element props)
       const hasNoCustomProps = !explicit;
+      // When the user already has a well-named type, skip creating a new type alias
+      const explicitIsExistingTypeRef = !!emitter.getExplicitTypeNameIfExists(d.propsType);
 
       const typeText = (() => {
         const base = "React.ComponentPropsWithRef<C>";
@@ -80,21 +84,40 @@ export function emitIntrinsicPolymorphicWrappers(ctx: EmitIntrinsicContext): voi
         if (!allowStyleProp) {
           omitted.push('"style"');
         }
+        // When there's a custom props type, omit its keys from element props
+        // so custom props take precedence over native element props
+        if (explicit) {
+          omitted.push(`keyof (${explicit})`);
+        }
         const baseMaybeOmitted =
           omitted.length > 0 ? `Omit<${base}, ${omitted.join(" | ")}>` : base;
-        const withAs = allowAsProp
-          ? emitter.joinIntersection(baseMaybeOmitted, "{ as?: C }")
-          : baseMaybeOmitted;
+        const asPropParts: string[] = [];
+        if (allowSxProp) {
+          asPropParts.push(SX_PROP_TYPE_TEXT);
+        }
+        if (allowAsProp) {
+          asPropParts.push("as?: C");
+        }
+        const withAs =
+          asPropParts.length > 0
+            ? emitter.joinIntersection(baseMaybeOmitted, `{ ${asPropParts.join("; ")} }`)
+            : baseMaybeOmitted;
         const withForwardedAs = withForwardedAsType(withAs, includesForwardedAs);
-        return explicit ? emitter.joinIntersection(withForwardedAs, explicit) : withForwardedAs;
+        if (!explicit) {
+          return withForwardedAs;
+        }
+        // Put user's existing type first for readability when it's a named type in the file
+        return explicitIsExistingTypeRef
+          ? emitter.joinIntersection(explicit, withForwardedAs)
+          : emitter.joinIntersection(withForwardedAs, explicit);
       })();
 
       // When there are no custom props, skip generating a named type.
       // The function parameter will use inline `React.ComponentPropsWithRef<C> & { as?: C }`.
-      // When there ARE custom props but a user-defined type already exists, the inline
-      // function parameter will use the intersection pattern instead.
+      // When the user already has a well-named type (explicitIsExistingTypeRef), also skip
+      // creating a new type alias — use the existing type inline instead.
       let typeAliasEmitted = false;
-      if (!hasNoCustomProps) {
+      if (!hasNoCustomProps && !explicitIsExistingTypeRef) {
         typeAliasEmitted = emitNamedPropsType(
           d.localName,
           typeText,
@@ -103,29 +126,44 @@ export function emitIntrinsicPolymorphicWrappers(ctx: EmitIntrinsicContext): voi
       }
       ctx.markNeedsReactTypeImport();
 
-      const { beforeBase: extraStyleArgs, afterBase: extraStyleArgsAfterBase } =
-        emitter.splitExtraStyleArgs(d);
-      const styleArgs: ExpressionKind[] = [
-        ...(d.extendsStyleKey
-          ? [j.memberExpression(j.identifier(stylesIdentifier), j.identifier(d.extendsStyleKey))]
-          : []),
-        ...extraStyleArgs,
-        j.memberExpression(j.identifier(stylesIdentifier), j.identifier(d.styleKey)),
-        ...extraStyleArgsAfterBase,
-      ];
-
       // Track props that need to be destructured for variant styles
       const destructureProps: string[] = [];
       // Track default values for props (for destructuring defaults)
       const propDefaults: WrapperPropDefaults = new Map();
 
+      // Build propsArg expressions first (may be needed for interleaving)
+      const propsArgExprs = d.extraStylexPropsArgs
+        ? emitter.buildExtraStylexPropsExprs({
+            entries: d.extraStylexPropsArgs,
+            destructureProps,
+          })
+        : [];
+
+      // Build interleaved before/after-base args using mixinOrder
+      const { beforeBase: extraStyleArgs, afterBase: extraStyleArgsAfterBase } =
+        emitter.buildInterleavedExtraStyleArgs(d, propsArgExprs);
+      const styleArgs: ExpressionKind[] = [
+        ...(d.extendsStyleKey
+          ? [j.memberExpression(j.identifier(stylesIdentifier), j.identifier(d.extendsStyleKey))]
+          : []),
+        ...extraStyleArgs,
+        ...emitter.baseStyleExpr(d),
+        ...extraStyleArgsAfterBase,
+      ];
+
       // Collect keys used by compound variants (they're handled separately)
       const compoundVariantKeys = new Set<string>();
       for (const cv of d.compoundVariants ?? []) {
-        compoundVariantKeys.add(cv.outerProp);
-        compoundVariantKeys.add(`${cv.innerProp}True`);
-        compoundVariantKeys.add(`${cv.innerProp}False`);
+        for (const k of getCompoundVariantWhenKeys(cv)) {
+          compoundVariantKeys.add(k);
+        }
       }
+
+      // Collect variant and styleFn expressions with source order for interleaving.
+      const hasSourceOrder = !!(
+        d.variantSourceOrder && Object.keys(d.variantSourceOrder).length > 0
+      );
+      const orderedEntries: OrderedStyleEntry[] = [];
 
       // Add variant style arguments if this component has variants
       if (d.variantStyleKeys) {
@@ -142,7 +180,13 @@ export function emitIntrinsicPolymorphicWrappers(ctx: EmitIntrinsicContext): voi
           );
           // Use makeConditionalStyleExpr to handle boolean vs non-boolean conditions correctly.
           // For boolean conditions, && is used. For non-boolean (could be "" or 0), ternary is used.
-          styleArgs.push(emitter.makeConditionalStyleExpr({ cond, expr: styleExpr, isBoolean }));
+          const expr = emitter.makeConditionalStyleExpr({ cond, expr: styleExpr, isBoolean });
+          const order = d.variantSourceOrder?.[when];
+          if (hasSourceOrder && order !== undefined) {
+            orderedEntries.push({ order, expr });
+          } else {
+            styleArgs.push(expr);
+          }
         }
       }
 
@@ -153,22 +197,13 @@ export function emitIntrinsicPolymorphicWrappers(ctx: EmitIntrinsicContext): voi
           styleArgs,
           destructureProps,
           propDefaults,
+          orderedEntries: hasSourceOrder ? orderedEntries : undefined,
         });
       }
 
       // Add compound variant expressions (multi-prop nested ternaries)
       if (d.compoundVariants) {
         buildCompoundVariantExpressions(d.compoundVariants, styleArgs, destructureProps);
-      }
-
-      // Add adapter-resolved StyleX styles (emitted directly into stylex.props args).
-      if (d.extraStylexPropsArgs) {
-        styleArgs.push(
-          ...emitter.buildExtraStylexPropsExprs({
-            entries: d.extraStylexPropsArgs,
-            destructureProps,
-          }),
-        );
       }
 
       // Handle pseudo-alias selectors (e.g., &:${highlight})
@@ -194,8 +229,12 @@ export function emitIntrinsicPolymorphicWrappers(ctx: EmitIntrinsicContext): voi
         d,
         styleArgs,
         destructureProps,
+        orderedEntries: hasSourceOrder ? orderedEntries : undefined,
       });
       emitter.collectDestructurePropsFromStyleFns({ d, styleArgs, destructureProps });
+
+      // Merge ordered entries (variants + styleFns) by source order to preserve CSS cascade
+      mergeOrderedEntries(orderedEntries, styleArgs);
 
       const isVoidTag = VOID_TAGS.has(tagName);
       // When allowAsProp is true, include children support even for void tags
@@ -218,43 +257,39 @@ export function emitIntrinsicPolymorphicWrappers(ctx: EmitIntrinsicContext): voi
       const restId = j.identifier("rest");
       const classNameId = j.identifier("className");
       const styleId = j.identifier("style");
+      const sxId = j.identifier("sx");
       const forwardedAsId = j.identifier("forwardedAs");
 
-      const declStmt = j.variableDeclaration("const", [
-        j.variableDeclarator(
-          j.objectPattern([
-            ...(allowAsProp
-              ? [
-                  j.property.from({
-                    kind: "init",
-                    key: j.identifier("as"),
-                    value: j.assignmentPattern(j.identifier("Component"), j.literal(tagName)),
-                    shorthand: false,
-                  }),
-                ]
-              : []),
-            ...(includesForwardedAs ? [ctx.patternProp("forwardedAs", forwardedAsId)] : []),
-            ...(allowClassNameProp ? [ctx.patternProp("className", classNameId)] : []),
-            ...(includeChildren ? [ctx.patternProp("children", childrenId)] : []),
-            ...(allowStyleProp ? [ctx.patternProp("style", styleId)] : []),
-            // Add variant props to destructuring (with defaults when available)
-            ...destructureProps.filter(Boolean).map((name) => {
-              const defaultVal = propDefaults.get(name);
-              if (defaultVal !== undefined) {
-                // Create property with default: { name = "defaultValue" }
-                return j.property.from({
+      if (allowSxProp) {
+        styleArgs.push(sxId);
+      }
+
+      const patternProps = emitter.buildDestructurePatternProps({
+        baseProps: [
+          ...(allowAsProp
+            ? [
+                j.property.from({
                   kind: "init",
-                  key: j.identifier(name),
-                  value: j.assignmentPattern(j.identifier(name), j.literal(defaultVal)),
+                  key: j.identifier("as"),
+                  value: j.assignmentPattern(j.identifier("Component"), j.literal(tagName)),
                   shorthand: false,
-                });
-              }
-              return ctx.patternProp(name);
-            }),
-            j.restElement(restId),
-          ] as any),
-          propsId,
-        ),
+                }),
+              ]
+            : []),
+          ...(includesForwardedAs ? [ctx.patternProp("forwardedAs", forwardedAsId)] : []),
+          ...(allowClassNameProp ? [ctx.patternProp("className", classNameId)] : []),
+          ...(includeChildren ? [ctx.patternProp("children", childrenId)] : []),
+          ...(allowStyleProp ? [ctx.patternProp("style", styleId)] : []),
+          ...(allowSxProp ? [ctx.patternProp("sx", sxId)] : []),
+        ],
+        destructureProps,
+        propDefaults,
+        includeRest: true,
+        restId,
+      });
+
+      const declStmt = j.variableDeclaration("const", [
+        j.variableDeclarator(j.objectPattern(patternProps as any), propsId),
       ]);
 
       const { attrsInfo, staticClassNameExpr } = emitter.splitAttrsInfo(
@@ -274,6 +309,7 @@ export function emitIntrinsicPolymorphicWrappers(ctx: EmitIntrinsicContext): voi
         styleId,
         allowClassNameProp,
         allowStyleProp,
+        allowSxProp,
         inlineStyleProps: [],
         staticClassNameExpr,
       });

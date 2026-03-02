@@ -19,6 +19,7 @@ const styles = stylex.create({
     backgroundColor: "papayawhip",
     borderWidth: 0,
     borderStyle: "none",
+    borderColor: "initial",
     borderRadius: "3px",
   },
 });

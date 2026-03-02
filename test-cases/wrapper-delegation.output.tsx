@@ -1,4 +1,4 @@
-import * as React from "react";
+import React from "react";
 import * as stylex from "@stylexjs/stylex";
 import { mergedSx } from "./lib/mergedSx";
 import { $colors } from "./tokens.stylex";
@@ -14,33 +14,31 @@ export function App() {
 }
 App.displayName = "App";
 
-function Sentence<C extends React.ElementType = "div">(
-  props: React.ComponentProps<"div"> & { as?: C },
-) {
-  const { as: Component = "div", className, children, style } = props;
+function Sentence(props: { children?: React.ReactNode }) {
+  const { children } = props;
 
-  return <Component {...mergedSx(styles.sentence, className, style)}>{children}</Component>;
+  return <div {...stylex.props(styles.sentence)}>{children}</div>;
 }
 
-function PaddedSentence(props: React.ComponentPropsWithRef<typeof Sentence>) {
-  const { className, children, style, ...rest } = props;
+function PaddedSentence(props: { children?: React.ReactNode }) {
+  const { children } = props;
 
-  return (
-    <Sentence {...rest} {...mergedSx(styles.paddedSentence, className, style)}>
-      {children}
-    </Sentence>
-  );
+  return <div {...stylex.props(styles.sentence, styles.paddedSentence)}>{children}</div>;
 }
 
-function PaddedMutedSentence(
-  props: Omit<React.ComponentPropsWithRef<typeof PaddedSentence>, "className">,
-) {
-  const { children, style, ...rest } = props;
+function PaddedMutedSentence(props: { style?: React.CSSProperties; children?: React.ReactNode }) {
+  const { children, style } = props;
 
   return (
-    <PaddedSentence {...rest} {...mergedSx(styles.paddedMutedSentence, undefined, style)}>
+    <div
+      {...mergedSx(
+        [styles.sentence, styles.paddedSentence, styles.paddedMutedSentence],
+        undefined,
+        style,
+      )}
+    >
       {children}
-    </PaddedSentence>
+    </div>
   );
 }
 

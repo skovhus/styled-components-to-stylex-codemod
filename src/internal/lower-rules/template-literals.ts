@@ -10,16 +10,19 @@ import {
   cssDeclarationToStylexDeclarations,
   cssPropertyToStylexProp,
   parseInterpolatedBorderStaticParts,
+  resolveBackgroundStylexProp,
 } from "../css-prop-mapping.js";
 import { isStylexLonghandOnlyShorthand } from "../stylex-shorthands.js";
 import { normalizeStylisAstToIR } from "../css-ir.js";
 import {
+  cloneAstNode,
   extractRootAndPath,
   getMemberPathFromIdentifier,
   getNodeLocStart,
   isCallExpressionNode,
   isConditionalExpressionNode,
   isLogicalExpressionNode,
+  type ArrowFnParamBindings,
   type CallExpressionNode,
 } from "../utilities/jscodeshift-utils.js";
 import { parseStyledTemplateLiteral } from "../styled-css.js";
@@ -28,6 +31,9 @@ import { buildTemplateWithStaticParts } from "./inline-styles.js";
 import { literalToStaticValue } from "./types.js";
 import { cssValueToJs } from "../transform/helpers.js";
 import type { ExpressionKind } from "./decl-types.js";
+import type { WarningLog } from "../logger.js";
+import { mergeMediaIntoStyles } from "./utils.js";
+import { expandStaticAnimationShorthand } from "../keyframes.js";
 
 type ImportMeta = { importedName: string; source: ImportSource };
 
@@ -51,6 +57,7 @@ type TemplateDynamicEntry = {
   jsxProp: string;
   stylexProp: string;
   callArg: ExpressionKind;
+  condition?: "always";
 };
 
 type TemplateInlineEntry = {
@@ -75,11 +82,16 @@ export type TemplateLiteralContext = {
   resolverImports: Map<string, ImportSpec>;
   componentInfo: ComponentInfo;
   handlerContext: InternalHandlerContext;
+  warnings?: WarningLog[];
+  /** Keyframe names available for animation shorthand expansion. */
+  keyframesNames?: Set<string>;
+  /** Map from original keyframe name to JS identifier name. */
+  inlineKeyframeNameMap?: Map<string, string>;
 };
 
 export function resolveTemplateLiteralBranch(
   ctx: TemplateLiteralContext,
-  args: { node: TemplateLiteral; paramName: string | null },
+  args: { node: TemplateLiteral; paramName: string | null; bindings?: ArrowFnParamBindings },
 ): TemplateLiteralBranchResult | null {
   const {
     j,
@@ -92,7 +104,7 @@ export function resolveTemplateLiteralBranch(
     componentInfo,
     handlerContext,
   } = ctx;
-  const { node, paramName } = args;
+  const { node, paramName, bindings } = args;
 
   const parsed = parseStyledTemplateLiteral(node);
   const wrappedRawCss = `& { ${parsed.rawCss} }`;
@@ -106,20 +118,66 @@ export function resolveTemplateLiteralBranch(
   const style: Record<string, unknown> = {};
   const dynamicEntries: TemplateDynamicEntry[] = [];
   const inlineEntries: TemplateInlineEntry[] = [];
+  // Track @media values per property: mediaQuery → prop → value
+  const mediaStyles = new Map<string, Record<string, unknown>>();
 
   for (const rule of rules) {
-    if (rule.atRuleStack.length > 0) {
+    const media = rule.atRuleStack.find(
+      (a) => a.startsWith("@media") || a.startsWith("@container"),
+    );
+    // Only support @media and @container at-rules; bail on others (@supports, etc.)
+    if (rule.atRuleStack.length > 0 && !media) {
+      ctx.warnings?.push({
+        severity: "warning",
+        type: "CSS block contains unsupported at-rule (only @media and @container are supported; @supports, etc. require manual handling)",
+        loc: null,
+      });
       return null;
     }
     const selector = (rule.selector ?? "").trim();
     if (selector !== "&") {
       return null;
     }
+
+    // Helper to set a value into the correct target (base style or media-scoped)
+    const setStyleValue = (prop: string, value: unknown): void => {
+      if (media) {
+        const target = mediaStyles.get(media) ?? {};
+        mediaStyles.set(media, target);
+        target[prop] = value;
+      } else {
+        style[prop] = value;
+      }
+    };
+
     for (const d of rule.declarations) {
       if (!d.property) {
         return null;
       }
+      // Dynamic property names (slot placeholders in property position) are handled
+      // by higher-level branch splitting logic, not direct template resolution.
+      if (d.property.includes("__SC_EXPR_")) {
+        return null;
+      }
       if (d.value.kind === "static") {
+        // Expand animation shorthand referencing inline @keyframes
+        if (d.property === "animation" && ctx.keyframesNames && ctx.keyframesNames.size > 0) {
+          const expanded: Record<string, unknown> = {};
+          if (
+            expandStaticAnimationShorthand(
+              d.valueRaw,
+              ctx.keyframesNames,
+              j,
+              expanded,
+              ctx.inlineKeyframeNameMap,
+            )
+          ) {
+            for (const [prop, value] of Object.entries(expanded)) {
+              setStyleValue(prop, value);
+            }
+            continue;
+          }
+        }
         for (const mapped of cssDeclarationToStylexDeclarations(d)) {
           let value = cssValueToJs(mapped.value, d.important, mapped.prop);
           if (mapped.prop === "content" && typeof value === "string") {
@@ -130,12 +188,9 @@ export function resolveTemplateLiteralBranch(
               value = `"${value}"`;
             }
           }
-          style[mapped.prop] = value;
+          setStyleValue(mapped.prop, value);
         }
         continue;
-      }
-      if (d.important) {
-        return null;
       }
       if (d.value.kind !== "interpolated") {
         return null;
@@ -148,7 +203,7 @@ export function resolveTemplateLiteralBranch(
 
       const resolvedSlots = new Map<
         number,
-        | { kind: "dynamic"; jsxProp: string; callArg: ExpressionKind }
+        | { kind: "dynamic"; jsxProp: string; callArg: ExpressionKind; condition?: "always" }
         | { kind: "static"; exprAst: ExpressionKind }
       >();
 
@@ -163,6 +218,7 @@ export function resolveTemplateLiteralBranch(
           j,
           expr,
           paramName,
+          bindings,
           filePath,
           parseExpr,
           resolveValue,
@@ -173,8 +229,25 @@ export function resolveTemplateLiteralBranch(
             kind: "dynamic",
             jsxProp: propResolved.jsxProp,
             callArg: propResolved.callArg,
+            condition: propResolved.condition,
           });
           continue;
+        }
+
+        // Try bare theme member resolution (e.g., props.theme.color.bgShade inside css`` blocks)
+        if (paramName) {
+          const themeExprAst = resolveThemeFromPropsMember({
+            expr,
+            paramName,
+            filePath,
+            parseExpr,
+            resolveValue,
+            resolverImports,
+          });
+          if (themeExprAst) {
+            resolvedSlots.set(slotId, { kind: "static", exprAst: themeExprAst });
+            continue;
+          }
         }
 
         const resolvedExprAst = resolveStaticTemplateExpressionAst({
@@ -218,22 +291,115 @@ export function resolveTemplateLiteralBranch(
             }
           }
         }
+        // Append ` !important` to the final static part when the declaration has the flag
+        if (d.important) {
+          currentStaticPart += " !important";
+        }
         quasis.push(j.templateElement({ raw: currentStaticPart, cooked: currentStaticPart }, true));
 
         // Simplify trivial template literals: `${expr}` → expr
         // Avoids TS2731 when expr is a symbol type (e.g. StyleXVar<string>)
+        // (Don't simplify when !important is appended — we need the template literal)
         const styleValue =
-          expressions.length === 1 && quasis.every((q) => !q.value.raw && !q.value.cooked)
+          expressions.length === 1 &&
+          !d.important &&
+          quasis.every((q) => !q.value.raw && !q.value.cooked)
             ? expressions[0]
             : j.templateLiteral(quasis, expressions);
+        // Handle border shorthand expansion for static interpolated values
+        const propName = d.property?.trim() ?? "";
+        const { prefix, suffix } = extractStaticParts(d.value, { property: propName });
+        const borderParts = parseInterpolatedBorderStaticParts({ prop: propName, prefix, suffix });
+        if (borderParts) {
+          if (borderParts.width) {
+            setStyleValue(borderParts.widthProp, borderParts.width);
+          }
+          if (borderParts.style) {
+            setStyleValue(borderParts.styleProp, borderParts.style);
+          }
+          // Use just the expression for color (static prefix/suffix already extracted as width/style)
+          const colorValue = expressions.length === 1 ? expressions[0] : styleValue;
+          setStyleValue(borderParts.colorProp, colorValue);
+          continue;
+        }
+        // Handle background shorthand → backgroundColor/backgroundImage
+        if (propName === "background") {
+          setStyleValue(resolveBackgroundStylexProp(d.valueRaw ?? ""), styleValue);
+          continue;
+        }
         for (const mapped of cssDeclarationToStylexDeclarations(d)) {
-          style[mapped.prop] = styleValue;
+          setStyleValue(mapped.prop, styleValue);
         }
         continue;
       }
 
-      if (slotParts.length !== 1) {
+      // Dynamic entries (prop-based) inside @media are not supported —
+      // the downstream style function machinery doesn't handle nested media objects
+      if (media) {
         return null;
+      }
+
+      // !important with dynamic prop-based slots is not supported —
+      // only static (theme-resolved) interpolations can carry the flag
+      if (d.important) {
+        return null;
+      }
+
+      // Multiple dynamic slots in one property value — support when all share
+      // the same jsxProp by building a composite template literal
+      if (slotParts.length > 1) {
+        const dynamicSlots = slotParts
+          .map((sp) => resolvedSlots.get(sp.slotId))
+          .filter(
+            (
+              r,
+            ): r is {
+              kind: "dynamic";
+              jsxProp: string;
+              callArg: ExpressionKind;
+              condition?: "always";
+            } => r?.kind === "dynamic",
+          );
+        if (dynamicSlots.length !== slotParts.length) {
+          return null;
+        }
+        const firstJsxProp = dynamicSlots[0]?.jsxProp;
+        if (!firstJsxProp || !dynamicSlots.every((s) => s.jsxProp === firstJsxProp)) {
+          return null;
+        }
+        // Build composite template: `staticPart${callArg1}staticPart${callArg2}staticPart`
+        const compositeQuasis: Array<ReturnType<JSCodeshift["templateElement"]>> = [];
+        const compositeExpressions: ExpressionKind[] = [];
+        let currentPart = "";
+        for (const part of parts) {
+          if (part.kind === "static") {
+            currentPart += part.value;
+          } else if (part.kind === "slot") {
+            compositeQuasis.push(
+              j.templateElement({ raw: currentPart, cooked: currentPart }, false),
+            );
+            currentPart = "";
+            const r = resolvedSlots.get(part.slotId);
+            if (r?.kind === "dynamic") {
+              compositeExpressions.push(r.callArg);
+            }
+          }
+        }
+        compositeQuasis.push(j.templateElement({ raw: currentPart, cooked: currentPart }, true));
+        const compositeCallArg = j.templateLiteral(
+          compositeQuasis,
+          compositeExpressions,
+        ) as ExpressionKind;
+
+        for (const mapped of cssDeclarationToStylexDeclarations(d)) {
+          dynamicEntries.push({
+            jsxProp: firstJsxProp,
+            stylexProp: mapped.prop,
+            callArg: compositeCallArg,
+            condition: dynamicSlots[0]?.condition,
+          });
+        }
+        continue;
       }
       const slotPart = slotParts[0];
       if (!slotPart) {
@@ -261,6 +427,7 @@ export function resolveTemplateLiteralBranch(
           jsxProp: resolved.jsxProp,
           stylexProp: borderParts.colorProp,
           callArg: resolved.callArg,
+          condition: resolved.condition,
         });
         continue;
       }
@@ -282,10 +449,15 @@ export function resolveTemplateLiteralBranch(
           jsxProp: resolved.jsxProp,
           stylexProp: mapped.prop,
           callArg,
+          condition: resolved.condition,
         });
       }
     }
   }
+
+  // Merge @media values into the base style as nested StyleX objects
+  mergeMediaIntoStyles(style, mediaStyles);
+
   return { style, dynamicEntries, inlineEntries };
 }
 
@@ -352,12 +524,29 @@ function resolveDynamicTemplateExpr(args: {
   j: JSCodeshift;
   expr: Expression;
   paramName: string | null;
+  bindings?: ArrowFnParamBindings;
   filePath: string;
   parseExpr: (exprSource: string) => ExpressionKind | null;
   resolveValue: Adapter["resolveValue"];
   resolverImports: Map<string, ImportSpec>;
-}): { jsxProp: string; callArg: ExpressionKind } | null {
-  const { j, expr, paramName, filePath, parseExpr, resolveValue, resolverImports } = args;
+}): { jsxProp: string; callArg: ExpressionKind; condition?: "always" } | null {
+  const { j, expr, paramName, bindings, filePath, parseExpr, resolveValue, resolverImports } = args;
+
+  // Handle destructured param bindings: bare Identifier matching a destructured prop
+  // e.g., ({ alignSelf }) => `align-self: ${alignSelf};`
+  if (!paramName && bindings?.kind === "destructured" && expr.type === "Identifier") {
+    const identName = (expr as unknown as { name: string }).name;
+    if (bindings.bindings.has(identName)) {
+      const jsxProp = bindings.bindings.get(identName)!;
+      const defaultValue = bindings.defaults?.get(jsxProp);
+      return {
+        jsxProp,
+        callArg: buildPropAccessExpr(j, jsxProp, defaultValue),
+        condition: defaultValue !== undefined ? "always" : undefined,
+      };
+    }
+  }
+
   if (!paramName) {
     return null;
   }
@@ -609,9 +798,17 @@ function resolveStaticTemplateExpressionAst(args: {
   return null;
 }
 
-function buildPropAccessExpr(j: JSCodeshift, propName: string): ExpressionKind {
+function buildPropAccessExpr(
+  j: JSCodeshift,
+  propName: string,
+  defaultValue?: unknown,
+): ExpressionKind {
   const isIdent = /^[$A-Z_][0-9A-Z_$]*$/i.test(propName);
-  return isIdent
-    ? j.identifier(propName)
-    : j.memberExpression(j.identifier("props"), j.literal(propName), true);
+  const baseExpr = isIdent
+    ? (j.identifier(propName) as ExpressionKind)
+    : (j.memberExpression(j.identifier("props"), j.literal(propName), true) as ExpressionKind);
+  if (defaultValue !== undefined) {
+    return j.logicalExpression("??", baseExpr, cloneAstNode(defaultValue) as ExpressionKind);
+  }
+  return baseExpr;
 }

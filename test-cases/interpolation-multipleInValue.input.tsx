@@ -28,11 +28,20 @@ const RepeatingLinearGradientBox = styled.div`
   height: 100px;
 `;
 
+// Multiple interpolations in a transform value
+// Should produce a single template literal preserving all transform functions
+const Popover = styled.div<{ $expanded: boolean }>`
+  transform: translateY(-50%) translateX(${(props) => (props.$expanded ? "0" : "-8px")}) scale(${(props) => (props.$expanded ? 1 : 0.9)});
+  opacity: ${(props) => (props.$expanded ? 1 : 0)};
+`;
+
 export const App = () => (
   <>
     <LinearGradientBox>Linear</LinearGradientBox>
     <RadialGradientBox>Radial</RadialGradientBox>
     <ConicGradientBox>Conic</ConicGradientBox>
     <RepeatingLinearGradientBox>Repeating</RepeatingLinearGradientBox>
+    <Popover $expanded={true}>Expanded</Popover>
+    <Popover $expanded={false}>Collapsed</Popover>
   </>
 );

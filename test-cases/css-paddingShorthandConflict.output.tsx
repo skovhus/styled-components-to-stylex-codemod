@@ -1,0 +1,28 @@
+import * as stylex from "@stylexjs/stylex";
+
+export const App = () => (
+  <div style={{ display: "flex", flexDirection: "column", gap: 8, padding: 16 }}>
+    <div {...stylex.props(styles.progressBar)}>Progress Bar</div>
+    <div {...stylex.props(styles.header)}>Header</div>
+  </div>
+);
+
+const styles = stylex.create({
+  // Pattern 1: padding shorthand with longhand override
+  // padding: 0 12px sets paddingBlock: 0, paddingInline: 12px
+  // padding-bottom: 10px then overrides just the bottom
+  progressBar: {
+    paddingTop: 0,
+    paddingBottom: "10px",
+    paddingInline: "12px",
+    backgroundColor: "#eee",
+  },
+  // Pattern 2: directional padding with same-axis longhand override
+  // padding-top and padding-bottom set block axis individually
+  header: {
+    paddingTop: 0,
+    paddingBottom: "8px",
+    paddingInline: "16px",
+    backgroundColor: "lightblue",
+  },
+});

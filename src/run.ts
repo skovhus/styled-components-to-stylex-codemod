@@ -14,6 +14,8 @@ import type {
   AdapterInput,
   CallResolveContext,
   CallResolveResult,
+  ResolveBaseComponentContext,
+  ResolveBaseComponentResult,
   ResolveValueContext,
   ResolveValueResult,
   SelectorResolveContext,
@@ -267,6 +269,24 @@ export async function runTransform(options: RunTransformOptions): Promise<RunTra
     }
   };
 
+  const resolveBaseComponentWithLogging = (
+    ctx: ResolveBaseComponentContext,
+  ): ResolveBaseComponentResult | undefined => {
+    if (!adapterInput.resolveBaseComponent) {
+      return undefined;
+    }
+    try {
+      return adapterInput.resolveBaseComponent(ctx);
+    } catch (e) {
+      const msg = `adapter.resolveBaseComponent threw an error: ${
+        e instanceof Error ? e.message : String(e)
+      }`;
+      Logger.logError(msg, ctx.filePath, undefined, ctx);
+      Logger.markErrorAsLogged(e);
+      throw e;
+    }
+  };
+
   // Resolve file paths from glob patterns
   const patterns = Array.isArray(files) ? files : [files];
   const filePaths: string[] = [];
@@ -384,12 +404,16 @@ export async function runTransform(options: RunTransformOptions): Promise<RunTra
 
   const adapterWithLogging: Adapter = {
     styleMerger: resolvedAdapter.styleMerger,
+    themeHook: resolvedAdapter.themeHook,
     externalInterface(ctx) {
       return resolvedAdapter.externalInterface(ctx);
     },
     resolveValue: resolveValueWithLogging,
     resolveCall: resolveCallWithLogging,
     resolveSelector: resolveSelectorWithLogging,
+    resolveBaseComponent: adapterInput.resolveBaseComponent
+      ? resolveBaseComponentWithLogging
+      : undefined,
   };
 
   // Path to the transform module.
@@ -425,6 +449,10 @@ export async function runTransform(options: RunTransformOptions): Promise<RunTra
     import("./internal/transform-types.js").BridgeComponentResult[]
   >();
 
+  // Set populated by the per-file transform to track which files were actually transformed.
+  // Used to detect consumers that were expected to transform but bailed, so they can be bridge-patched.
+  const transformedFiles = new Set<string>();
+
   const result = await jscodeshiftRun(transformPath, filePaths, {
     parser,
     dry: dryRun,
@@ -433,6 +461,7 @@ export async function runTransform(options: RunTransformOptions): Promise<RunTra
     crossFilePrepassResult,
     sidecarFiles,
     bridgeResults,
+    transformedFiles,
     // Programmatic use passes an Adapter object (functions). That cannot be
     // serialized across process boundaries, so we must run in-band.
     runInBand: true,
@@ -454,6 +483,7 @@ export async function runTransform(options: RunTransformOptions): Promise<RunTra
     const consumerReplacements = buildConsumerReplacements(
       crossFilePrepassResult.selectorUsages,
       bridgeResults,
+      transformedFiles,
     );
     const patchedFiles: string[] = [];
     for (const [consumerPath, replacements] of consumerReplacements) {

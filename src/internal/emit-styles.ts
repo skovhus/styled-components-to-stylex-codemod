@@ -11,14 +11,30 @@ import { literalToAst, objectToAst } from "./transform/helpers.js";
 import type { TransformContext } from "./transform-context.js";
 import { splitDirectionalProperty } from "./stylex-shorthands.js";
 
+/**
+ * CSS shorthands that must NEVER appear as property names in stylex.create() output.
+ * These are shorthands that StyleX cannot handle at all — they must always be expanded
+ * to longhands by the codemod.
+ *
+ * Note: `margin`/`padding`/`scrollMargin`/`scrollPadding` are NOT listed because
+ * StyleX's Babel plugin accepts them as single-value shorthands.
+ */
+const FORBIDDEN_STYLEX_SHORTHANDS = new Set([
+  "border",
+  "borderTop",
+  "borderRight",
+  "borderBottom",
+  "borderLeft",
+  "background",
+]);
+
 export function emitStylesAndImports(ctx: TransformContext): { emptyStyleKeys: Set<string> } {
-  const { root, j, file, resolverImports, adapter } = ctx;
+  const { root, j, file, resolverImports } = ctx;
   const filePath = file.path;
   const styledImports = ctx.styledImports!;
   const resolvedStyleObjects = ctx.resolvedStyleObjects ?? new Map();
   const styledDecls = ctx.styledDecls as StyledDecl[];
   const stylesIdentifier = ctx.stylesIdentifier ?? "styles";
-  const styleMerger = adapter.styleMerger;
   const stylesInsertPosition = ctx.stylesInsertPosition ?? "end";
 
   // Preserve file header directives (e.g. `// oxlint-disable ...`). Depending on the parser/printer,
@@ -442,32 +458,6 @@ export function emitStylesAndImports(ctx: TransformContext): { emptyStyleKeys: S
     for (const spec of resolverImports.values() as Iterable<ImportSpec>) {
       ensureImportDecl(spec);
     }
-
-    // Add style merger function import if configured and at least one component needs className/style merging.
-    // Requirements:
-    // 1. Component must have a wrapper (needsWrapperComponent) - inlined components don't merge
-    // 2. Component must NOT be a polymorphic intrinsic wrapper - these pass style through directly
-    // 3. Component must accept external styles (supportsExternalStyles, usedAsValue, or receivesClassNameOrStyleInJsx)
-    const needsMergerImport = styledDecls.some((d) => {
-      // Must have a wrapper to use the merger
-      if (!d.needsWrapperComponent) {
-        return false;
-      }
-      // Polymorphic intrinsic wrappers only need the merger when they support external styling.
-      if ((d as any).isPolymorphicIntrinsicWrapper) {
-        return (
-          d.supportsExternalStyles || d.usedAsValue || (d as any).receivesClassNameOrStyleInJsx
-        );
-      }
-      // Component must support external styling to need the merger
-      return d.supportsExternalStyles || d.usedAsValue || (d as any).receivesClassNameOrStyleInJsx;
-    });
-    if (styleMerger && needsMergerImport) {
-      ensureImportDecl({
-        from: styleMerger.importSource,
-        names: [{ imported: styleMerger.functionName }],
-      });
-    }
   }
 
   // Build a map from styleKey to leadingComments for comment preservation.
@@ -499,6 +489,11 @@ export function emitStylesAndImports(ctx: TransformContext): { emptyStyleKeys: S
   // longhands (physical or logical).
   normalizeShorthandLonghandConflicts(styledDecls, resolvedStyleObjects);
 
+  // Safety net: assert no unexpanded CSS shorthands leaked into style objects.
+  // Shorthands in FORBIDDEN_STYLEX_SHORTHANDS (border/background) should have been
+  // expanded by cssDeclarationToStylexDeclarations() or equivalent handlers upstream.
+  assertNoUnexpandedShorthands(resolvedStyleObjects);
+
   // Compute the set of empty style keys (style objects with no properties)
   const emptyStyleKeys = new Set<string>();
   for (const [k, v] of resolvedStyleObjects.entries()) {
@@ -510,39 +505,43 @@ export function emitStylesAndImports(ctx: TransformContext): { emptyStyleKeys: S
   }
 
   // Insert `const styles = stylex.create(...)` (or stylexStyles if styles is already used) near top (after imports)
-  const stylesDecl = j.variableDeclaration("const", [
-    j.variableDeclarator(
-      j.identifier(stylesIdentifier),
-      j.callExpression(j.memberExpression(j.identifier("stylex"), j.identifier("create")), [
-        j.objectExpression(
-          [...resolvedStyleObjects.entries()]
-            // Filter out empty style objects
-            .filter(([k]) => !emptyStyleKeys.has(k))
-            .map(([k, v]) => {
-              const prop = j.property(
-                "init",
-                j.identifier(k),
-                v && typeof v === "object" && !isAstNode(v)
-                  ? objectToAst(j, v as Record<string, unknown>)
-                  : literalToAst(j, v),
-              );
-              const comments = styleKeyToComments.get(k);
-              if (comments && comments.length > 0) {
-                (prop as any).comments = comments.map((c: any) => ({
-                  ...c,
-                  leading: true,
-                  trailing: false,
-                }));
-              }
-              return prop;
-            }),
-        ),
-      ]),
-    ),
-  ]);
+  const nonEmptyStyleEntries = [...resolvedStyleObjects.entries()].filter(
+    ([k]) => !emptyStyleKeys.has(k),
+  );
+
+  const stylesDecl =
+    nonEmptyStyleEntries.length > 0
+      ? j.variableDeclaration("const", [
+          j.variableDeclarator(
+            j.identifier(stylesIdentifier),
+            j.callExpression(j.memberExpression(j.identifier("stylex"), j.identifier("create")), [
+              j.objectExpression(
+                nonEmptyStyleEntries.map(([k, v]) => {
+                  const prop = j.property(
+                    "init",
+                    j.identifier(k),
+                    v && typeof v === "object" && !isAstNode(v)
+                      ? objectToAst(j, v as Record<string, unknown>)
+                      : literalToAst(j, v),
+                  );
+                  const comments = styleKeyToComments.get(k);
+                  if (comments && comments.length > 0) {
+                    (prop as any).comments = comments.map((c: any) => ({
+                      ...c,
+                      leading: true,
+                      trailing: false,
+                    }));
+                  }
+                  return prop;
+                }),
+              ),
+            ]),
+          ),
+        ])
+      : null;
 
   // Attach migrated leading comments (from the first styled declaration) to `styles`.
-  if (migratedStyledDeclLeadingComments.length > 0) {
+  if (stylesDecl && migratedStyledDeclLeadingComments.length > 0) {
     const merged = [
       ...migratedStyledDeclLeadingComments,
       ...(Array.isArray((stylesDecl as any).leadingComments)
@@ -580,22 +579,23 @@ export function emitStylesAndImports(ctx: TransformContext): { emptyStyleKeys: S
   }
 
   const programBody = root.get().node.program.body as any[];
-  if (stylesInsertPosition === "afterImports") {
-    const lastImportIdx = (() => {
-      let last = -1;
-      for (let i = 0; i < programBody.length; i++) {
-        if (programBody[i]?.type === "ImportDeclaration") {
-          last = i;
+  const insertNodes = [...inlineKeyframeDecls, ...(stylesDecl ? [stylesDecl as any] : [])];
+  if (insertNodes.length > 0) {
+    if (stylesInsertPosition === "afterImports") {
+      const lastImportIdx = (() => {
+        let last = -1;
+        for (let i = 0; i < programBody.length; i++) {
+          if (programBody[i]?.type === "ImportDeclaration") {
+            last = i;
+          }
         }
-      }
-      return last;
-    })();
-    const insertAt = lastImportIdx >= 0 ? lastImportIdx + 1 : 0;
-    programBody.splice(insertAt, 0, ...inlineKeyframeDecls, stylesDecl as any);
-  } else {
-    // Place inline keyframes and `styles` at the very end of the file.
-    // This keeps component logic first, styles last for better readability.
-    programBody.push(...inlineKeyframeDecls, stylesDecl as any);
+        return last;
+      })();
+      const insertAt = lastImportIdx >= 0 ? lastImportIdx + 1 : 0;
+      programBody.splice(insertAt, 0, ...insertNodes);
+    } else {
+      programBody.push(...insertNodes);
+    }
   }
 
   // Emit separate stylex.create declarations for variant dimensions
@@ -671,9 +671,13 @@ export function emitStylesAndImports(ctx: TransformContext): { emptyStyleKeys: S
  */
 function emitVariantDimensionDecl(j: any, dimension: VariantDimension): any {
   const properties = Object.entries(dimension.variants).map(([variantValue, styles]) => {
+    // Use identifier for valid JS identifiers, string literal for hyphenated/special keys
+    const key = /^[a-zA-Z_$][a-zA-Z0-9_$]*$/.test(variantValue)
+      ? j.identifier(variantValue)
+      : j.literal(variantValue);
     return j.property(
       "init",
-      j.identifier(variantValue),
+      key,
       styles && typeof styles === "object" && !isAstNode(styles)
         ? objectToAst(j, styles as Record<string, unknown>)
         : literalToAst(j, styles),
@@ -697,7 +701,7 @@ function emitVariantDimensionDecl(j: any, dimension: VariantDimension): any {
 // ---------------------------------------------------------------------------
 
 /** Mapping from CSS shorthand to the longhands that conflict with it */
-const SHORTHAND_LONGHANDS: Record<string, { physical: string[]; logical: string[] }> = {
+export const SHORTHAND_LONGHANDS: Record<string, { physical: string[]; logical: string[] }> = {
   margin: {
     physical: ["marginTop", "marginRight", "marginBottom", "marginLeft"],
     logical: ["marginBlock", "marginInline"],
@@ -705,6 +709,19 @@ const SHORTHAND_LONGHANDS: Record<string, { physical: string[]; logical: string[
   padding: {
     physical: ["paddingTop", "paddingRight", "paddingBottom", "paddingLeft"],
     logical: ["paddingBlock", "paddingInline"],
+  },
+  scrollMargin: {
+    physical: ["scrollMarginTop", "scrollMarginRight", "scrollMarginBottom", "scrollMarginLeft"],
+    logical: ["scrollMarginBlock", "scrollMarginInline"],
+  },
+  scrollPadding: {
+    physical: [
+      "scrollPaddingTop",
+      "scrollPaddingRight",
+      "scrollPaddingBottom",
+      "scrollPaddingLeft",
+    ],
+    logical: ["scrollPaddingBlock", "scrollPaddingInline"],
   },
 };
 
@@ -753,6 +770,45 @@ function replacePropsInPlace(
  * Expand shorthand properties in style objects when they conflict with longhands
  * in other style objects of the same component.
  *
+ * Safety net: detects unexpanded CSS shorthands that leaked into resolved style objects.
+ * Should never fire in production — if it does, it indicates a missing shorthand expansion
+ * in one of the CSS-to-StyleX transform paths.
+ *
+ * Only checks shorthands that StyleX truly cannot handle:
+ * - `border`/`borderTop`/etc. must always expand to width/style/color
+ * - `background` must always map to `backgroundColor` or `backgroundImage`
+ *
+ * Note: `margin`/`padding`/`scrollMargin`/`scrollPadding` as single values are valid
+ * in StyleX (its Babel plugin expands them), so they are NOT checked here.
+ */
+function assertNoUnexpandedShorthands(resolvedStyleObjects: Map<string, unknown>): void {
+  for (const [styleKey, style] of resolvedStyleObjects) {
+    if (!style || typeof style !== "object" || isAstNode(style)) {
+      continue;
+    }
+    for (const prop of Object.keys(style as Record<string, unknown>)) {
+      if (FORBIDDEN_STYLEX_SHORTHANDS.has(prop)) {
+        // Allow `background: "none"` — this is a CSS reset value that StyleX accepts
+        // as-is; expanding to `backgroundColor: "none"` would be invalid CSS.
+        const val = (style as Record<string, unknown>)[prop];
+        if (
+          prop === "background" &&
+          typeof val === "string" &&
+          val.replace(/ !important$/, "") === "none"
+        ) {
+          continue;
+        }
+        throw new Error(
+          `Unexpanded CSS shorthand "${prop}" in style object "${styleKey}". ` +
+            `This property must be expanded to longhands before reaching StyleX output. ` +
+            `Use cssDeclarationToStylexDeclarations() or the appropriate shorthand handler.`,
+        );
+      }
+    }
+  }
+}
+
+/**
  * Example: component has base `marginBottom: "8px"` and conditional `margin: "24px"`.
  * StyleX's atomic CSS won't reliably resolve `margin` overriding `marginBottom`,
  * so we expand `margin: "24px"` → `marginTop/Right/Bottom/Left: "24px"`.
@@ -935,7 +991,7 @@ function expandShorthandInStyle(
   if (useLogical) {
     // Use splitDirectionalProperty to correctly parse multi-value shorthands
     // into block/inline components (e.g., "8px 12px" → block: "8px", inline: "12px")
-    const prop = shorthand as "margin" | "padding" | "scrollMargin";
+    const prop = shorthand as "margin" | "padding" | "scrollMargin" | "scrollPadding";
     const entries = splitDirectionalProperty({
       prop,
       rawValue: typeof value === "number" ? String(value) : value,

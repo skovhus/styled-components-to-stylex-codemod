@@ -142,8 +142,11 @@ export function analyzeBeforeEmitStep(ctx: TransformContext): StepResult {
     if (decl.base.kind === "intrinsic" && (decl.attrsInfo?.defaultAttrs?.length ?? 0) > 0) {
       decl.needsWrapperComponent = true;
     }
-    // shouldForwardProp needs wrapper
-    if (decl.shouldForwardProp) {
+    // shouldForwardProp from withConfig() still needs wrappers.
+    // Resolver-added prop drops for inlined imported bases can be handled in JSX rewrite.
+    const resolverOnlyShouldForwardProp =
+      !!decl.inlinedBaseComponent && !decl.shouldForwardPropFromWithConfig;
+    if (decl.shouldForwardProp && !resolverOnlyShouldForwardProp) {
       decl.needsWrapperComponent = true;
     }
     // withConfig.componentId needs wrapper
@@ -183,7 +186,11 @@ export function analyzeBeforeEmitStep(ctx: TransformContext): StepResult {
     if (decl.variantStyleKeys && Object.keys(decl.variantStyleKeys).length > 0) {
       return false;
     }
-    if (decl.variantDimensions && decl.variantDimensions.length > 0) {
+    if (
+      decl.variantDimensions &&
+      decl.variantDimensions.length > 0 &&
+      !decl.inlinedBaseComponent?.hasInlineJsxVariants
+    ) {
       return false;
     }
     // styleFnFromProps CAN be inlined - the JSX rewriter handles extracting
@@ -368,6 +375,18 @@ export function analyzeBeforeEmitStep(ctx: TransformContext): StepResult {
       if (hasSpreadInJsx(decl.localName)) {
         decl.needsWrapperComponent = true;
       }
+    }
+  }
+
+  // Styled components used with JSX spread attributes need wrappers.
+  // Spreads may contain className/style from callers; without a wrapper, the
+  // inline stylex.props() placed after the spread would clobber those values.
+  for (const decl of styledDecls) {
+    if (decl.needsWrapperComponent || decl.isCssHelper) {
+      continue;
+    }
+    if (hasSpreadInJsx(decl.localName)) {
+      decl.needsWrapperComponent = true;
     }
   }
 
@@ -645,6 +664,24 @@ export function analyzeBeforeEmitStep(ctx: TransformContext): StepResult {
   // If any styled component is used at module level, hoist styles to avoid TDZ errors.
   if (!ctx.stylesInsertPosition && isUsedAtModuleLevel()) {
     ctx.stylesInsertPosition = "afterImports";
+  }
+
+  // Inject staticBooleanVariants into resolvedStyleObjects and variantStyleKeys.
+  // This must run after lowerRulesStep (which populates resolvedStyleObjects) and
+  // before emitStylesStep (which reads resolvedStyleObjects to emit stylex.create).
+  if (ctx.resolvedStyleObjects) {
+    for (const decl of styledDecls) {
+      if (!decl.staticBooleanVariants?.length) {
+        continue;
+      }
+      for (const { propName, styleKey, styles } of decl.staticBooleanVariants) {
+        ctx.resolvedStyleObjects.set(styleKey, styles);
+        if (!decl.variantStyleKeys) {
+          decl.variantStyleKeys = {};
+        }
+        decl.variantStyleKeys[propName] = styleKey;
+      }
+    }
   }
 
   return CONTINUE;

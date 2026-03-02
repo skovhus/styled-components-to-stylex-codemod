@@ -2,6 +2,7 @@
  * Handles interpolated CSS declarations during rule processing.
  * Core concepts: resolve dynamic values, map StyleX props, and emit wrappers.
  */
+import type { JSCodeshift } from "jscodeshift";
 import type { CssDeclarationIR, CssRuleIR } from "../css-ir.js";
 import type { ResolveValueContext } from "../../adapter.js";
 import type { CallValueTransform } from "../builtin-handlers/types.js";
@@ -13,19 +14,25 @@ import { resolveDynamicNode } from "../builtin-handlers.js";
 import {
   cssDeclarationToStylexDeclarations,
   cssPropertyToStylexProp,
+  parseBorderShorthandParts,
+  resolveBackgroundStylexProp,
 } from "../css-prop-mapping.js";
 import { buildThemeStyleKeys } from "../utilities/style-key-naming.js";
 import {
   cloneAstNode,
+  collectIdentifiers,
   extractRootAndPath,
+  getArrowFnSingleParamName,
   getFunctionBodyExpr,
+  getMemberPathFromIdentifier,
   getNodeLocStart,
   staticValueToLiteral,
 } from "../utilities/jscodeshift-utils.js";
+import { parseCssDeclarationBlock } from "../builtin-handlers/css-parsing.js";
 import { tryHandleAnimation } from "./animation.js";
 import { tryHandleInterpolatedBorder } from "./borders.js";
 import {
-  extractStaticParts,
+  extractStaticPartsForDecl,
   tryHandleInterpolatedStringValue,
   wrapExprWithStaticParts,
 } from "./interpolations.js";
@@ -41,11 +48,13 @@ import {
 import { addStyleKeyMixin, trackMixinPropertyValues } from "./precompute.js";
 import { buildSafeIndexedParamName } from "./import-resolution.js";
 import {
+  handleDualBranchCompoundVariantsResolvedValue,
   handleSplitMultiPropVariantsResolvedValue,
   handleSplitVariantsResolvedValue,
 } from "./interpolated-variant-resolvers.js";
 import { handleInlineStyleValueFromProps } from "./inline-style-props.js";
 import { buildPseudoMediaPropValue } from "./variant-utils.js";
+import { extractUnionLiteralValues } from "./variants.js";
 import { toStyleKey, toSuffixFromProp } from "../transform/helpers.js";
 import { cssPropertyToIdentifier, makeCssProperty, makeCssPropKey } from "./shared.js";
 type CommentSource = { leading?: string; trailingLine?: string } | null;
@@ -70,6 +79,7 @@ export function handleInterpolatedDeclaration(args: InterpolatedDeclarationConte
     perPropPseudo,
     variantBuckets,
     variantStyleKeys,
+    variantSourceOrder,
     extraStyleObjects,
     styleFnFromProps,
     styleFnDecls,
@@ -86,7 +96,10 @@ export function handleInterpolatedDeclaration(args: InterpolatedDeclarationConte
     tryHandleCssHelperFunctionSwitchBlock,
     tryHandleCssHelperConditionalBlock,
     findJsxPropTsType,
+    findJsxPropTsTypeForVariantExtraction,
     annotateParamFromJsxProp,
+    applyVariant,
+    notifyResolvedStylesArg,
   } = ctx;
   const {
     api,
@@ -112,6 +125,7 @@ export function handleInterpolatedDeclaration(args: InterpolatedDeclarationConte
     resolveImportInScope,
     resolveImportForExpr,
   } = state;
+  const avoidNames = new Set(importMap.keys());
 
   if (state.bail) {
     return;
@@ -127,6 +141,37 @@ export function handleInterpolatedDeclaration(args: InterpolatedDeclarationConte
     state.bailUnsupported(declArg, type);
   };
 
+  /**
+   * Try to convert an identity prop with a finite string union type into static variant
+   * buckets. Returns true if the optimization applied and the caller should `continue`.
+   * @param skipValue — For props with a default, the default value is handled as base style
+   *   and should be skipped in the variant buckets.
+   */
+  const tryEmitIdentityVariantBuckets = (
+    jsxProp: string,
+    stylexProp: string,
+    skipValue?: string,
+  ): boolean => {
+    const propType = findJsxPropTsTypeForVariantExtraction(jsxProp);
+    const unionValues = extractUnionLiteralValues(propType);
+    if (!unionValues || unionValues.length < 2 || unionValues.length > 20) {
+      return false;
+    }
+    for (const value of unionValues) {
+      if (value === skipValue) {
+        continue;
+      }
+      applyVariant(
+        { when: `${jsxProp} === "${value}"`, propName: jsxProp },
+        { [stylexProp]: value },
+      );
+    }
+    if (jsxProp.startsWith("$")) {
+      ensureShouldForwardPropDrop(decl, jsxProp);
+    }
+    return true;
+  };
+
   for (let _i = 0; _i < 1; _i++) {
     if (bail) {
       break;
@@ -134,7 +179,20 @@ export function handleInterpolatedDeclaration(args: InterpolatedDeclarationConte
     if (tryHandleMappedFunctionColor(d)) {
       continue;
     }
-    if (tryHandleAnimation({ j, decl, d, keyframesNames, styleObj })) {
+    if (
+      tryHandleAnimation({
+        j,
+        decl,
+        d,
+        keyframesNames,
+        styleObj,
+        styleFnDecls,
+        styleFnFromProps,
+        filePath,
+        avoidNames,
+        applyResolvedPropValue,
+      })
+    ) {
       continue;
     }
     // Dynamic styles inside ::before/::after pseudo-elements are not natively supported
@@ -211,6 +269,23 @@ export function handleInterpolatedDeclaration(args: InterpolatedDeclarationConte
       if (!resolved) {
         return false;
       }
+      // Preserve static text surrounding the interpolation slot (e.g. "0 0 0 1px ${theme} , ...")
+      const { prefix, suffix } = extractStaticPartsForDecl(d);
+      const finalValue = buildTemplateWithStaticParts(
+        j,
+        resolved as ExpressionKind,
+        prefix,
+        suffix,
+      );
+      // When pseudoElement is also set (e.g., ::-webkit-slider-thumb:hover),
+      // delegate to applyResolvedPropValue which correctly scopes the pseudo-class
+      // within the pseudo-element's nested selector bucket.
+      if (pseudoElement) {
+        for (const out of cssDeclarationToStylexDeclarations(d)) {
+          applyResolvedPropValue(out.prop, finalValue, null);
+        }
+        return true;
+      }
       for (const out of cssDeclarationToStylexDeclarations(d)) {
         perPropPseudo[out.prop] ??= {};
         const existing = perPropPseudo[out.prop]!;
@@ -248,7 +323,7 @@ export function handleInterpolatedDeclaration(args: InterpolatedDeclarationConte
           }
         }
         for (const ps of pseudos) {
-          existing[ps] = resolved;
+          existing[ps] = finalValue;
         }
       }
       return true;
@@ -480,7 +555,7 @@ export function handleInterpolatedDeclaration(args: InterpolatedDeclarationConte
               const order = decl.mixinOrder ?? [];
               const parsedExpr = parseExpr(resolved.expr);
               if (parsedExpr) {
-                extras.push({ expr: parsedExpr });
+                extras.push({ expr: parsedExpr, afterBase: true });
                 order.push("propsArg");
                 decl.extraStylexPropsArgs = extras;
                 decl.mixinOrder = order;
@@ -516,9 +591,9 @@ export function handleInterpolatedDeclaration(args: InterpolatedDeclarationConte
     if (tryHandlePropertyTernaryTemplateLiteral(d)) {
       continue;
     }
-    // Only apply to base declarations; variant expansion for pseudo/media/attr buckets is more complex.
-    if (!media && !attrTarget && !pseudos?.length) {
-      if (tryHandleCssHelperConditionalBlock(d)) {
+    // Apply to base declarations and pseudo/attr selectors (not media).
+    if (!media && !attrTarget) {
+      if (tryHandleCssHelperConditionalBlock(d, pseudos ?? null)) {
         continue;
       }
     }
@@ -588,10 +663,24 @@ export function handleInterpolatedDeclaration(args: InterpolatedDeclarationConte
       continue;
     }
 
+    // Handle multiple interpolation slots that all branch on the same prop ternary.
+    // Pattern: transform: translateY(-50%) translateX(${p => p.$expanded ? "0" : "-8px"}) scale(${p => p.$expanded ? 1 : 0.9})
+    // When all slots are ternaries on the same condition with literal branches, produce
+    // two static variant styles by evaluating each branch direction.
+    if (d.property && d.value.kind === "interpolated" && tryHandleMultiSlotTernary(ctx, d)) {
+      continue;
+    }
+
     const slotPart = d.value.parts.find((p: any) => p.kind === "slot");
     const slotId = slotPart && slotPart.kind === "slot" ? slotPart.slotId : 0;
     const expr = decl.templateExpressions[slotId];
     const loc = getNodeLocStart(expr as any);
+
+    // Handle local helper function calls that return CSS strings.
+    // Pattern: ${(props) => localFn(props.size)} where localFn returns multi-property CSS.
+    if (tryHandleLocalHelperCall({ ctx, d, expr })) {
+      continue;
+    }
 
     const res = resolveDynamicNode(
       {
@@ -653,10 +742,23 @@ export function handleInterpolatedDeclaration(args: InterpolatedDeclarationConte
             ? { localName: decl.localName, res, ...resolveCallMeta }
             : { localName: decl.localName, res },
         });
-        continue;
+        bail = true;
+        break;
       }
+      // Track mixinOrder for correct cascade interleaving
+      const hasStaticPropsBefore =
+        Object.keys(styleObj).length > 0 || ctx.getBaseStyleTarget() !== styleObj;
+      const order = decl.mixinOrder ?? [];
+      order.push("propsArg");
+      decl.mixinOrder = order;
       decl.extraStylexPropsArgs ??= [];
-      decl.extraStylexPropsArgs.push({ expr: exprAst as any });
+      decl.extraStylexPropsArgs.push({
+        expr: exprAst as any,
+        afterBase: hasStaticPropsBefore,
+      });
+      // Create an after-base segment so subsequent static properties
+      // are placed after this helper in the stylex.props() call
+      notifyResolvedStylesArg();
       decl.needsWrapperComponent = true;
       continue;
     }
@@ -667,12 +769,10 @@ export function handleInterpolatedDeclaration(args: InterpolatedDeclarationConte
       }
 
       // Extract and wrap static prefix/suffix (skip for border-color since expansion handled it)
-      const cssProp = (d.property ?? "").trim();
-      const { prefix, suffix } = extractStaticParts(d.value, {
-        skipForProperty: /^border(-top|-right|-bottom|-left)?-color$/,
-        property: cssProp,
-      });
-      const wrappedExpr = wrapExprWithStaticParts(res.expr, prefix, suffix);
+      const { prefix, suffix } = extractStaticPartsForDecl(d);
+      // Preserve !important by appending it to the suffix
+      const effectiveSuffix = d.important ? `${suffix} !important` : suffix;
+      const wrappedExpr = wrapExprWithStaticParts(res.expr, prefix, effectiveSuffix);
 
       const exprAst = parseExpr(wrappedExpr);
       if (!exprAst) {
@@ -691,7 +791,8 @@ export function handleInterpolatedDeclaration(args: InterpolatedDeclarationConte
             ? { localName: decl.localName, res, ...resolveCallMeta }
             : { localName: decl.localName, res },
         });
-        continue;
+        bail = true;
+        break;
       }
       const outs = cssDeclarationToStylexDeclarations(d);
       for (let i = 0; i < outs.length; i++) {
@@ -717,9 +818,6 @@ export function handleInterpolatedDeclaration(args: InterpolatedDeclarationConte
       for (const imp of res.falseImports ?? []) {
         resolverImports.set(JSON.stringify(imp), imp);
       }
-
-      // Map CSS prop to StyleX prop
-      const stylexProp = cssPropertyToStylexProp(res.cssProp);
 
       const { trueKey: trueStyleKey, falseKey: falseStyleKey } = buildThemeStyleKeys(
         decl.styleKey,
@@ -750,8 +848,15 @@ export function handleInterpolatedDeclaration(args: InterpolatedDeclarationConte
       const trueStyle = extraStyleObjects.get(trueStyleKey) ?? {};
       const falseStyle = extraStyleObjects.get(falseStyleKey) ?? {};
 
-      trueStyle[stylexProp] = res.trueValue;
-      falseStyle[stylexProp] = res.falseValue;
+      // Expand CSS shorthands (border → width/style/color, background → backgroundColor)
+      if (!applyThemeBooleanValue(j, res.cssProp, res.trueValue, trueStyle)) {
+        bail = true;
+        continue;
+      }
+      if (!applyThemeBooleanValue(j, res.cssProp, res.falseValue, falseStyle)) {
+        bail = true;
+        continue;
+      }
 
       extraStyleObjects.set(trueStyleKey, trueStyle);
       extraStyleObjects.set(falseStyleKey, falseStyle);
@@ -831,12 +936,32 @@ export function handleInterpolatedDeclaration(args: InterpolatedDeclarationConte
         // Pattern: prop === "a" ? A : prop === "b" ? B : C
         // → C is default, A and B are conditional
         const neg = negVariants[0]!;
-        Object.assign(styleObj, neg.style);
+
+        // Check whether the neg variant's CSS properties overlap with the pos variants'.
+        // When they differ (e.g., truthy sets padding/position, falsy sets margin/border),
+        // both branches are meaningful variant buckets — folding neg into base would lose it.
+        const negPropKeys = Object.keys(neg.style);
+        const allPosPropKeys = new Set(posVariants.flatMap((v) => Object.keys(v.style)));
+        // Fold neg into base when: neg is empty (no-op), or neg has the same property
+        // set as the pos variants (classic default/conditional pattern).
+        const shouldFoldNegIntoBase =
+          negPropKeys.length === 0 ||
+          (negPropKeys.length === allPosPropKeys.size &&
+            negPropKeys.every((k) => allPosPropKeys.has(k)));
+
+        // Process pos variants (same in both branches)
         for (const pos of posVariants) {
           variantBuckets.set(pos.when, { ...variantBuckets.get(pos.when), ...pos.style });
-          // toSuffixFromProp handles both simple props ($dim → Dim) and
-          // comparison expressions (variant === "micro" → VariantMicro)
           variantStyleKeys[pos.when] ??= `${decl.styleKey}${toSuffixFromProp(pos.when)}`;
+        }
+
+        if (shouldFoldNegIntoBase) {
+          // Same property sets — fold neg into base (default branch)
+          Object.assign(styleObj, neg.style);
+        } else {
+          // Different property sets — keep neg as a variant bucket too
+          variantBuckets.set(neg.when, { ...variantBuckets.get(neg.when), ...neg.style });
+          variantStyleKeys[neg.when] ??= `${decl.styleKey}${toSuffixFromProp(neg.when)}`;
         }
       } else if (negVariants.length === 1 && posVariants.length === 0) {
         // Only negated variant: style is conditional on !prop
@@ -891,10 +1016,14 @@ export function handleInterpolatedDeclaration(args: InterpolatedDeclarationConte
             loc,
             context: { localName: decl.localName, variant: v },
           });
-          continue;
+          bail = true;
+          break;
         }
         decl.extraStylexPropsArgs ??= [];
         decl.extraStylexPropsArgs.push({ when: v.when, expr: exprAst as any });
+      }
+      if (bail) {
+        break;
       }
       decl.needsWrapperComponent = true;
       continue;
@@ -925,6 +1054,29 @@ export function handleInterpolatedDeclaration(args: InterpolatedDeclarationConte
 
     if (
       handleSplitMultiPropVariantsResolvedValue({
+        j,
+        decl,
+        d,
+        res,
+        styleObj,
+        variantBuckets,
+        variantStyleKeys,
+        pseudos,
+        media,
+        parseExpr,
+        resolverImports,
+        warnings,
+        setBail: () => {
+          bail = true;
+        },
+        bailUnsupported: bailUnsupportedLocal,
+      })
+    ) {
+      continue;
+    }
+
+    if (
+      handleDualBranchCompoundVariantsResolvedValue({
         j,
         decl,
         d,
@@ -1117,6 +1269,120 @@ export function handleInterpolatedDeclaration(args: InterpolatedDeclarationConte
       continue;
     }
 
+    if (res && res.type === "splitConditionalWithDynamicBranch") {
+      if (!d.property) {
+        // Only intended for value interpolations on concrete properties.
+      } else {
+        const { conditionProp, staticValue, dynamicBranchExpr, dynamicProps, isStaticWhenFalse } =
+          res;
+
+        // --- A. Static branch → base style ---
+        const { prefix, suffix } = extractStaticPartsForDecl(d);
+        const cssValueStr = `${prefix}${staticValue}${suffix}`;
+        for (const out of cssDeclarationToStylexDeclarations(d)) {
+          styleObj[out.prop] = cssValueStr;
+        }
+
+        // --- B. Dynamic branch → merge with existing variant or create new ---
+        const clonedDynamic = cloneAstNode(dynamicBranchExpr) as ExpressionKind;
+        const dynamicValueExpr =
+          prefix || suffix
+            ? buildTemplateWithStaticParts(j, clonedDynamic, prefix, suffix)
+            : clonedDynamic;
+
+        // Mark dynamic props for DOM exclusion
+        for (const propName of dynamicProps) {
+          ensureShouldForwardPropDrop(decl, propName);
+        }
+        // Also mark the condition prop for DOM exclusion
+        ensureShouldForwardPropDrop(decl, conditionProp);
+
+        const conditionWhen = isStaticWhenFalse ? conditionProp : `!${conditionProp}`;
+
+        // Build call argument: object shorthand for dynamic props only
+        const callArg = j.objectExpression(
+          dynamicProps.map((name) => {
+            const prop = j.property("init", j.identifier(name), j.identifier(name)) as any;
+            prop.shorthand = true;
+            return prop;
+          }),
+        );
+
+        const existingBucket = variantBuckets.get(conditionProp);
+        if (existingBucket) {
+          // --- Merge path: combine existing variant bucket with dynamic branch ---
+          const existingFnKey = variantStyleKeys[conditionProp];
+          if (!existingFnKey) {
+            // Shouldn't happen, but bail gracefully
+            break;
+          }
+          const capturedSourceOrder = variantSourceOrder[conditionProp];
+
+          // Build combined arrow function: (props) => ({ ...existingStatic, ...newDynamic })
+          const properties: unknown[] = [];
+
+          // Clone existing static properties from the variant bucket.
+          // Values may be raw primitives or AST nodes depending on how they were inserted.
+          for (const [propKey, propValue] of Object.entries(existingBucket)) {
+            const valueNode =
+              propValue !== null && typeof propValue === "object" && "type" in propValue
+                ? (cloneAstNode(propValue) as ExpressionKind)
+                : (staticValueToLiteral(
+                    j,
+                    propValue as string | number | boolean,
+                  ) as ExpressionKind);
+            properties.push(j.property("init", makeCssPropKey(j, propKey), valueNode));
+          }
+
+          // Add the new dynamic properties
+          for (const out of cssDeclarationToStylexDeclarations(d)) {
+            properties.push(
+              j.property("init", makeCssPropKey(j, out.prop), dynamicValueExpr as any),
+            );
+          }
+
+          const param = j.identifier("props");
+          const body = j.objectExpression(properties as any);
+          styleFnDecls.set(existingFnKey, j.arrowFunctionExpression([param], body));
+
+          // Remove from variant buckets — now handled as a style function
+          variantBuckets.delete(conditionProp);
+          delete variantStyleKeys[conditionProp];
+
+          styleFnFromProps.push({
+            fnKey: existingFnKey,
+            jsxProp: "__props",
+            callArg,
+            conditionWhen,
+            ...(capturedSourceOrder !== undefined ? { sourceOrder: capturedSourceOrder } : {}),
+          });
+        } else {
+          // --- Standalone path: create new conditional style function ---
+          for (const out of cssDeclarationToStylexDeclarations(d)) {
+            const fnKey = `${decl.styleKey}${toSuffixFromProp(out.prop)}`;
+            if (!styleFnDecls.has(fnKey)) {
+              const param = j.identifier("props");
+              const body = j.objectExpression([
+                j.property("init", makeCssPropKey(j, out.prop), dynamicValueExpr as any),
+              ]);
+              styleFnDecls.set(fnKey, j.arrowFunctionExpression([param], body));
+            }
+            if (!styleFnFromProps.some((p) => p.fnKey === fnKey)) {
+              styleFnFromProps.push({
+                fnKey,
+                jsxProp: "__props",
+                callArg,
+                conditionWhen,
+              });
+            }
+          }
+        }
+
+        decl.needsWrapperComponent = true;
+        continue;
+      }
+    }
+
     if (res && res.type === "emitStyleFunctionFromPropsObject") {
       if (!d.property) {
         // This handler is only intended for value interpolations on concrete properties.
@@ -1159,7 +1425,13 @@ export function handleInterpolatedDeclaration(args: InterpolatedDeclarationConte
           }
           const fnKey = `${decl.styleKey}${toSuffixFromProp(out.prop)}`;
           if (!styleFnDecls.has(fnKey)) {
-            const valueExpr = cloneAstNode(bodyExpr);
+            const valueExprRaw = cloneAstNode(bodyExpr);
+            // Apply CSS value prefix/suffix (e.g., `${...}ms`) to the expression
+            const { prefix, suffix } = extractStaticPartsForDecl(d);
+            const valueExpr =
+              prefix || suffix
+                ? buildTemplateWithStaticParts(j, valueExprRaw, prefix, suffix)
+                : valueExprRaw;
             const param = j.identifier(paramName);
             const body = j.objectExpression([
               j.property(
@@ -1205,6 +1477,7 @@ export function handleInterpolatedDeclaration(args: InterpolatedDeclarationConte
         filePath,
         loc,
         warnings,
+        styleObj,
         styleFnDecls,
         styleFnFromProps,
         inlineStyleProps,
@@ -1212,6 +1485,7 @@ export function handleInterpolatedDeclaration(args: InterpolatedDeclarationConte
         setBail: () => {
           bail = true;
         },
+        avoidNames,
       })
     ) {
       if (bail) {
@@ -1228,6 +1502,24 @@ export function handleInterpolatedDeclaration(args: InterpolatedDeclarationConte
       // Extract the static default value
       const defaultStaticValue = literalToStaticValue(res.defaultValue);
 
+      // Identity prop with default + finite union type → static variant lookups
+      // (e.g., `({ padding = "16px" }) => padding` with `padding: "8px" | "16px" | "24px"`)
+      if (
+        !res.valueTransform &&
+        !res.wrapValueInTemplateLiteral &&
+        !media &&
+        (!pseudos || pseudos.length === 0) &&
+        outs.length === 1 &&
+        defaultStaticValue !== null &&
+        typeof defaultStaticValue === "string"
+      ) {
+        const out = outs[0]!;
+        if (tryEmitIdentityVariantBuckets(jsxProp, out.prop, defaultStaticValue)) {
+          styleObj[out.prop] = defaultStaticValue;
+          continue;
+        }
+      }
+
       for (let i = 0; i < outs.length; i++) {
         const out = outs[i]!;
 
@@ -1241,7 +1533,7 @@ export function handleInterpolatedDeclaration(args: InterpolatedDeclarationConte
         styleFnFromProps.push({ fnKey, jsxProp });
 
         if (!styleFnDecls.has(fnKey)) {
-          const outParamName = cssPropertyToIdentifier(out.prop);
+          const outParamName = cssPropertyToIdentifier(out.prop, avoidNames);
           const param = j.identifier(outParamName);
           if (jsxProp !== "__props") {
             annotateParamFromJsxProp(param, jsxProp);
@@ -1260,6 +1552,21 @@ export function handleInterpolatedDeclaration(args: InterpolatedDeclarationConte
 
     if (res && res.type === "emitStyleFunction") {
       const jsxProp = res.call;
+
+      // Identity prop with finite union type → static variant lookups
+      // (e.g., `align-items: ${({ align }) => align}` with `align: "stretch" | "center" | ...`)
+      if (
+        !res.valueTransform &&
+        !res.wrapValueInTemplateLiteral &&
+        !media &&
+        (!pseudos || pseudos.length === 0)
+      ) {
+        const outs = cssDeclarationToStylexDeclarations(d);
+        if (outs.length === 1 && tryEmitIdentityVariantBuckets(jsxProp, outs[0]!.prop)) {
+          continue;
+        }
+      }
+
       {
         const outs = cssDeclarationToStylexDeclarations(d);
         for (let i = 0; i < outs.length; i++) {
@@ -1271,7 +1578,7 @@ export function handleInterpolatedDeclaration(args: InterpolatedDeclarationConte
             // IMPORTANT: don't reuse the same Identifier node for both the function param and
             // expression positions. If the param identifier has a TS annotation, reusing it
             // in expression positions causes printers to emit `value: any` inside templates.
-            const outParamName = cssPropertyToIdentifier(out.prop);
+            const outParamName = cssPropertyToIdentifier(out.prop, avoidNames);
             const param = j.identifier(outParamName);
             const valueId = j.identifier(outParamName);
             // Be permissive: callers might pass numbers (e.g. `${props => props.$width}px`)
@@ -1403,7 +1710,7 @@ export function handleInterpolatedDeclaration(args: InterpolatedDeclarationConte
             const propKey = makeCssPropKey(j, out.prop);
             const p = j.property("init", propKey, getPropValue()) as any;
             // Only use shorthand if the key is an identifier (not a string literal for CSS vars)
-            const paramName = cssPropertyToIdentifier(out.prop);
+            const paramName = cssPropertyToIdentifier(out.prop, avoidNames);
             p.shorthand =
               propKey.type === "Identifier" &&
               valueExpr?.type === "Identifier" &&
@@ -1430,7 +1737,7 @@ export function handleInterpolatedDeclaration(args: InterpolatedDeclarationConte
       break;
     }
 
-    if (decl.shouldForwardProp) {
+    if (decl.shouldForwardProp && d.property) {
       for (const out of cssDeclarationToStylexDeclarations(d)) {
         if (!out.prop) {
           continue;
@@ -1481,7 +1788,7 @@ export function handleInterpolatedDeclaration(args: InterpolatedDeclarationConte
           baseExpr = inlineExpr;
         }
         // Build template literal when there's static prefix/suffix (e.g., `${...}ms`)
-        const { prefix, suffix } = extractStaticParts(d.value);
+        const { prefix, suffix } = extractStaticPartsForDecl(d);
         const expr =
           prefix || suffix ? buildTemplateWithStaticParts(j, baseExpr, prefix, suffix) : baseExpr;
         const fnKey = `${decl.styleKey}${toSuffixFromProp(out.prop)}`;
@@ -1633,6 +1940,91 @@ export function handleInterpolatedDeclaration(args: InterpolatedDeclarationConte
   }
 }
 
+/**
+ * Searches the function body for a local variable with the given name whose
+ * initializer references `fnParamName`. Returns a cloned expression with
+ * `fnParamName` replaced by `jsxProp`, or null if no such variable is found.
+ *
+ * Returns null when the derived expression references other helper-local variables
+ * that would not be in scope at the call site.
+ */
+function resolveDerivedLocalVariable(
+  j: JSCodeshift,
+  fnBody: unknown,
+  fnParamName: string,
+  localName: string,
+  jsxProp: string,
+): ExpressionKind | null {
+  const stmts = (fnBody as { body: unknown[] }).body;
+
+  // Collect all local variable names declared in the function body
+  const helperLocals = new Set<string>();
+  for (const stmt of stmts) {
+    const s = stmt as { type?: string; declarations?: unknown[] };
+    if (s.type !== "VariableDeclaration" || !s.declarations) {
+      continue;
+    }
+    for (const decl_ of s.declarations) {
+      const vd = decl_ as { id?: { type?: string; name?: string } };
+      if (vd.id?.type === "Identifier" && vd.id.name) {
+        helperLocals.add(vd.id.name);
+      }
+    }
+  }
+
+  for (const stmt of stmts) {
+    const s = stmt as { type?: string; declarations?: unknown[] };
+    if (s.type !== "VariableDeclaration" || !s.declarations) {
+      continue;
+    }
+    for (const decl_ of s.declarations) {
+      const vd = decl_ as { id?: { type?: string; name?: string }; init?: unknown };
+      if (vd.id?.type !== "Identifier" || vd.id.name !== localName || !vd.init) {
+        continue;
+      }
+      // Check if the initializer references fnParamName
+      const initIds = new Set<string>();
+      collectIdentifiers(vd.init, initIds);
+      if (!initIds.has(fnParamName)) {
+        continue;
+      }
+      // Bail if the initializer also references other helper-local variables
+      // that would not be in scope at the call site
+      for (const id of initIds) {
+        if (id !== fnParamName && helperLocals.has(id)) {
+          return null;
+        }
+      }
+      // Build the callArg by replacing fnParamName with jsxProp in the initializer
+      const clonedInit = cloneAstNode(vd.init) as ExpressionKind;
+      const replaceParam = (node: unknown): unknown => {
+        if (!node || typeof node !== "object") {
+          return node;
+        }
+        if (Array.isArray(node)) {
+          return node.map(replaceParam);
+        }
+        const rec = node as Record<string, unknown>;
+        if (rec.type === "Identifier" && rec.name === fnParamName) {
+          return j.identifier(jsxProp);
+        }
+        for (const key of Object.keys(rec)) {
+          if (key === "loc" || key === "comments") {
+            continue;
+          }
+          const child = rec[key];
+          if (child && typeof child === "object") {
+            rec[key] = replaceParam(child);
+          }
+        }
+        return rec;
+      };
+      return replaceParam(clonedInit) as ExpressionKind;
+    }
+  }
+  return null;
+}
+
 function isPseudoElementSelector(pseudoElement: string | null): boolean {
   return pseudoElement === "::before" || pseudoElement === "::after";
 }
@@ -1688,7 +2080,7 @@ function tryHandleDynamicPseudoElementViaCustomProperty(
   const { expr: inlineExpr, propsUsed } = unwrapped;
 
   // Handle static parts (prefix/suffix like `${value}px`)
-  const { prefix, suffix } = extractStaticParts(d.value);
+  const { prefix, suffix } = extractStaticPartsForDecl(d);
   const valueExpr: ExpressionKind =
     prefix || suffix ? buildTemplateWithStaticParts(j, inlineExpr, prefix, suffix) : inlineExpr;
 
@@ -1726,6 +2118,456 @@ function tryHandleDynamicPseudoElementViaCustomProperty(
   }
 
   decl.needsWrapperComponent = true;
+  return true;
+}
+
+/**
+ * Apply a resolved theme boolean value to a style object, expanding CSS shorthands.
+ * Returns false if the value cannot be expanded (caller should bail).
+ */
+function applyThemeBooleanValue(
+  j: { literal: (value: string) => unknown },
+  cssProp: string,
+  value: unknown,
+  target: Record<string, unknown>,
+): boolean {
+  // Try to extract string value from AST node (shared across border/background paths)
+  const node = value as { type?: string; value?: unknown; expression?: unknown } | null;
+  const unwrapped = node?.type === "ExpressionStatement" ? (node.expression as typeof node) : node;
+  const strValue =
+    unwrapped &&
+    (unwrapped.type === "StringLiteral" || unwrapped.type === "Literal") &&
+    typeof unwrapped.value === "string"
+      ? unwrapped.value
+      : null;
+
+  // Border shorthand → expand to width/style/color
+  const borderMatch = cssProp.match(/^border(-top|-right|-bottom|-left)?$/);
+  if (borderMatch) {
+    if (strValue === null) {
+      return false;
+    }
+    const direction = borderMatch[1]
+      ? borderMatch[1].slice(1).charAt(0).toUpperCase() + borderMatch[1].slice(2)
+      : "";
+    const parsed = parseBorderShorthandParts(strValue);
+    if (!parsed) {
+      return false;
+    }
+    if (parsed.width) {
+      target[`border${direction}Width`] = j.literal(parsed.width);
+    }
+    if (parsed.style) {
+      target[`border${direction}Style`] = j.literal(parsed.style);
+    }
+    if (parsed.color) {
+      target[`border${direction}Color`] = j.literal(parsed.color);
+    }
+    return true;
+  }
+
+  // Background shorthand → backgroundColor or backgroundImage
+  // Use the actual branch value (not valueRaw which contains placeholders)
+  if (cssProp === "background") {
+    target[resolveBackgroundStylexProp(strValue ?? "")] = value;
+    return true;
+  }
+
+  // Default: camelCase the property name
+  target[cssPropertyToStylexProp(cssProp)] = value;
+  return true;
+}
+
+/**
+ * Handles local helper function calls in template interpolations.
+ * Pattern: ${(props) => localFn(props.size)} where localFn is defined in the same file
+ * and returns a CSS string like "width: ${size}px; height: ${size}px;".
+ *
+ * Extracts each CSS property from the helper's return value and creates
+ * dynamic style functions for them.
+ */
+function tryHandleLocalHelperCall(args: {
+  ctx: InterpolatedDeclarationContext["ctx"];
+  d: CssDeclarationIR;
+  expr: unknown;
+}): boolean {
+  const { ctx, d, expr } = args;
+  const { state, decl, styleFnDecls, styleFnFromProps } = ctx;
+  const { j, root } = state;
+  const avoidNames = new Set(state.importMap.keys());
+
+  // Only handle standalone interpolations (no property name)
+  if (d.property) {
+    return false;
+  }
+
+  // Must be an arrow function
+  const e = expr as { type?: string; params?: unknown[]; body?: unknown } | undefined;
+  if (!e || (e.type !== "ArrowFunctionExpression" && e.type !== "FunctionExpression")) {
+    return false;
+  }
+  const paramName = getArrowFnSingleParamName(e as Parameters<typeof getArrowFnSingleParamName>[0]);
+  if (!paramName) {
+    return false;
+  }
+
+  const body = getFunctionBodyExpr(e);
+  if (!body || typeof body !== "object") {
+    return false;
+  }
+  const bodyNode = body as {
+    type?: string;
+    callee?: { type?: string; name?: string };
+    arguments?: unknown[];
+  };
+  if (bodyNode.type !== "CallExpression") {
+    return false;
+  }
+  // Only support simple identifier callees (localFn)
+  if (bodyNode.callee?.type !== "Identifier" || !bodyNode.callee.name) {
+    return false;
+  }
+  const calleeName = bodyNode.callee.name;
+
+  // Check it's NOT an imported function (those are handled by resolveCall)
+  const importInfo = state.resolveImportInScope(calleeName, bodyNode.callee);
+  if (importInfo) {
+    return false;
+  }
+
+  // Must have a single argument that's a prop access: props.size
+  const callArgs = bodyNode.arguments ?? [];
+  if (callArgs.length !== 1) {
+    return false;
+  }
+  const arg0 = callArgs[0] as { type?: string } | undefined;
+  if (!arg0 || arg0.type !== "MemberExpression") {
+    return false;
+  }
+  const propPath = getMemberPathFromIdentifier(
+    arg0 as Parameters<typeof getMemberPathFromIdentifier>[0],
+    paramName,
+  );
+  if (!propPath || propPath.length !== 1 || !propPath[0]) {
+    return false;
+  }
+  const jsxProp = propPath[0];
+
+  // Find the local function definition
+  const fnDecls = root.find(j.FunctionDeclaration, { id: { name: calleeName } });
+  if (fnDecls.size() === 0) {
+    return false;
+  }
+  const fnNode = fnDecls.get().node;
+  const fnParams = fnNode.params ?? [];
+  if (fnParams.length !== 1) {
+    return false;
+  }
+  const fnParamNode = fnParams[0] as { type?: string; name?: string };
+  if (fnParamNode.type !== "Identifier" || !fnParamNode.name) {
+    return false;
+  }
+  const fnParamName = fnParamNode.name;
+
+  // Extract the return value
+  const fnBody = fnNode.body as { body?: unknown[] } | undefined;
+  if (!fnBody?.body) {
+    return false;
+  }
+  const retStmt = fnBody.body.find(
+    (s: unknown) => (s as { type?: string })?.type === "ReturnStatement",
+  ) as { argument?: unknown } | undefined;
+  if (!retStmt?.argument) {
+    return false;
+  }
+
+  // The return value should be a template literal containing CSS declarations
+  const retExpr = retStmt.argument as {
+    type?: string;
+    quasis?: Array<{ value?: { raw?: string; cooked?: string } }>;
+    expressions?: unknown[];
+  };
+  if (retExpr.type !== "TemplateLiteral" || !retExpr.quasis || !retExpr.expressions) {
+    return false;
+  }
+
+  // Build a CSS string with indexed placeholders to track which expression maps to which property
+  let cssString = "";
+  for (let i = 0; i < retExpr.quasis.length; i++) {
+    cssString += retExpr.quasis[i]?.value?.cooked ?? retExpr.quasis[i]?.value?.raw ?? "";
+    if (i < retExpr.expressions.length) {
+      cssString += `__LOCAL_PARAM_${i}__`;
+    }
+  }
+
+  // Parse the CSS string to extract properties (replace placeholders with dummy values)
+  const parsedCss = parseCssDeclarationBlock(cssString.replace(/__LOCAL_PARAM_\d+__/g, "0"));
+  if (!parsedCss || Object.keys(parsedCss).length === 0) {
+    // The local helper function returns CSS that cannot be parsed into individual declarations.
+    // This happens with child selectors (& > div), at-rules, or other complex CSS constructs.
+    state.bailUnsupported(
+      decl,
+      `Local helper function returns CSS that cannot be decomposed into individual properties`,
+    );
+    return true;
+  }
+
+  // Build a per-property unit map by matching expression indices to CSS properties.
+  // Parse the CSS string with placeholders intact to see which property contains each expression.
+  const parsedWithPlaceholders = parseCssDeclarationBlock(
+    cssString.replace(/__LOCAL_PARAM_(\d+)__/g, "PLACEHOLDER_$1"),
+  );
+  const propToUnit = new Map<string, string>();
+  // Track CSS properties that directly reference the function parameter (with or without a unit)
+  const directParamProps = new Set<string>();
+  // Track derived call arguments per CSS property when the expression is a local variable
+  // derived from the function parameter (e.g., `const px = sizeMap[size]` → callArg = sizeMap[size])
+  const propToCallArg = new Map<string, ExpressionKind>();
+  if (parsedWithPlaceholders) {
+    for (const [cssProp, value] of Object.entries(parsedWithPlaceholders)) {
+      const m = typeof value === "string" ? value.match(/PLACEHOLDER_(\d+)/) : null;
+      if (!m) {
+        continue;
+      }
+      const exprIdx = Number(m[1]);
+      const nextQuasi =
+        retExpr.quasis[exprIdx + 1]?.value?.cooked ?? retExpr.quasis[exprIdx + 1]?.value?.raw ?? "";
+      const unitMatch = nextQuasi.match(/^(px|em|rem|%|vh|vw|ms|s)\b/);
+      const exprNode = retExpr.expressions[exprIdx] as { type?: string; name?: string } | undefined;
+      if (exprNode?.type === "Identifier" && exprNode.name === fnParamName) {
+        directParamProps.add(cssProp);
+        if (unitMatch) {
+          propToUnit.set(cssProp, unitMatch[1]!);
+        }
+      } else if (exprNode?.type === "Identifier" && exprNode.name) {
+        // Check if this identifier is a local variable derived from fnParamName
+        const callArg = resolveDerivedLocalVariable(j, fnBody, fnParamName, exprNode.name, jsxProp);
+        if (callArg) {
+          propToCallArg.set(cssProp, callArg);
+          // For px unit with derived expression, StyleX auto-adds px for numeric values,
+          // so we don't need a unit suffix — just pass the number directly.
+          // For non-px units, append the unit suffix.
+          if (unitMatch && unitMatch[1] !== "px") {
+            propToUnit.set(cssProp, unitMatch[1]!);
+          }
+        }
+      }
+    }
+  }
+
+  // Get the type annotation from the local function parameter
+  const fnParamTypeAnnotation = (fnParams[0] as { typeAnnotation?: { typeAnnotation?: unknown } })
+    ?.typeAnnotation?.typeAnnotation;
+
+  // Verify that every CSS property can be traced back to the function parameter.
+  // If any expression can't be resolved (neither direct param reference, unit-suffixed param,
+  // nor a local variable derived from the param), bail rather than silently producing wrong code.
+  for (const cssProp of Object.keys(parsedCss)) {
+    if (!directParamProps.has(cssProp) && !propToCallArg.has(cssProp)) {
+      // Check if the CSS value contains a placeholder at all
+      const rawVal = parsedWithPlaceholders
+        ? (parsedWithPlaceholders as Record<string, unknown>)[cssProp]
+        : null;
+      if (typeof rawVal === "string" && rawVal.includes("PLACEHOLDER_")) {
+        // The local helper function computes CSS property values with logic that can't be
+        // statically traced back to the function parameter (e.g., conditional assignments,
+        // chained lookups). Bail rather than silently dropping these styles.
+        state.bailUnsupported(
+          decl,
+          `Local helper function computes CSS values that cannot be statically traced to the component prop`,
+        );
+        return true;
+      }
+    }
+  }
+
+  // Create style functions for each extracted CSS property
+  for (const cssProp of Object.keys(parsedCss)) {
+    const fnKey = `${decl.styleKey}${toSuffixFromProp(cssProp)}`;
+    const derivedCallArg = propToCallArg.get(cssProp);
+    if (!styleFnDecls.has(fnKey)) {
+      const paramName_ = cssPropertyToIdentifier(cssProp, avoidNames);
+      const param = j.identifier(derivedCallArg ? paramName_ : jsxProp);
+      if (derivedCallArg) {
+        // Derived from a lookup expression (e.g., `sizeMap[size]`). The style function
+        // receives the lookup result, which is typically numeric for CSS property values.
+        // Use `number | string` to handle both numeric and token-based lookup tables.
+        (param as { typeAnnotation?: unknown }).typeAnnotation = j.tsTypeAnnotation(
+          j.tsUnionType([j.tsNumberKeyword(), j.tsStringKeyword()]),
+        );
+      } else if (fnParamTypeAnnotation) {
+        (param as { typeAnnotation?: unknown }).typeAnnotation = j.tsTypeAnnotation(
+          cloneAstNode(fnParamTypeAnnotation) as Parameters<typeof j.tsTypeAnnotation>[0],
+        );
+      }
+      const propUnit = propToUnit.get(cssProp) ?? "";
+      const valueParamName = derivedCallArg ? paramName_ : jsxProp;
+      const valueExpr = propUnit
+        ? j.templateLiteral(
+            [
+              j.templateElement({ raw: "", cooked: "" }, false),
+              j.templateElement({ raw: propUnit, cooked: propUnit }, true),
+            ],
+            [j.identifier(valueParamName)],
+          )
+        : j.identifier(valueParamName);
+      const propKey = j.identifier(cssProp);
+      const prop = j.property("init", propKey, valueExpr);
+      // Use shorthand when key and value are the same identifier (e.g., { width } instead of { width: width })
+      if (!propUnit && valueExpr.type === "Identifier" && valueExpr.name === cssProp) {
+        (prop as { shorthand?: boolean }).shorthand = true;
+      }
+      const bodyExprNode = j.objectExpression([prop]);
+      styleFnDecls.set(fnKey, j.arrowFunctionExpression([param], bodyExprNode));
+    }
+    if (!styleFnFromProps.some((p) => p.fnKey === fnKey)) {
+      styleFnFromProps.push({
+        fnKey,
+        jsxProp,
+        ...(derivedCallArg ? { callArg: derivedCallArg } : {}),
+      });
+    }
+  }
+
+  ensureShouldForwardPropDrop(decl, jsxProp);
+  decl.needsWrapperComponent = true;
+
+  // Track the consumed local helper for later removal in post-processing.
+  // The function declaration can't be removed here because the template expression
+  // still references it; it's cleaned up after the styled declaration is removed.
+  if (!decl.consumedLocalHelpers) {
+    decl.consumedLocalHelpers = [];
+  }
+  decl.consumedLocalHelpers.push(calleeName);
+
+  return true;
+}
+
+/**
+ * Handles declarations with multiple interpolation slots where all slots are
+ * ternary expressions branching on the same prop.
+ *
+ * Pattern: `transform: translateY(-50%) translateX(${p => p.$expanded ? "0" : "-8px"}) scale(${p => p.$expanded ? 1 : 0.9})`
+ *
+ * Produces two static variant styles by evaluating each branch direction:
+ *   popover: { transform: "translateY(-50%) translateX(-8px) scale(0.9)" }
+ *   popoverExpanded: { transform: "translateY(-50%) translateX(0) scale(1)" }
+ */
+function tryHandleMultiSlotTernary(ctx: DeclProcessingState, d: CssDeclarationIR): boolean {
+  const { decl, styleObj } = ctx;
+  const parts = d.value.kind === "interpolated" ? d.value.parts : [];
+  const slotParts = parts.filter(
+    (p: { kind: string }): p is { kind: "slot"; slotId: number } => p.kind === "slot",
+  );
+
+  if (slotParts.length < 2) {
+    return false;
+  }
+
+  // Extract and validate all slot expressions: each must be an arrow/function
+  // with a ConditionalExpression body testing the same prop.
+  let commonPropName: string | null = null;
+  const branchValues: Array<{ consequent: string; alternate: string }> = [];
+
+  for (const slot of slotParts) {
+    const expr = decl.templateExpressions[slot.slotId] as
+      | {
+          type?: string;
+          body?: unknown;
+        }
+      | undefined;
+    if (!expr || (expr.type !== "ArrowFunctionExpression" && expr.type !== "FunctionExpression")) {
+      return false;
+    }
+    const paramName = getArrowFnSingleParamName(
+      expr as Parameters<typeof getArrowFnSingleParamName>[0],
+    );
+    if (!paramName) {
+      return false;
+    }
+    const body = getFunctionBodyExpr(expr) as {
+      type?: string;
+      test?: unknown;
+      consequent?: unknown;
+      alternate?: unknown;
+    } | null;
+    if (!body || body.type !== "ConditionalExpression") {
+      return false;
+    }
+
+    // Extract the tested prop name (e.g., "$expanded" from "props.$expanded")
+    const testPath =
+      body.test && typeof body.test === "object"
+        ? getMemberPathFromIdentifier(
+            body.test as Parameters<typeof getMemberPathFromIdentifier>[0],
+            paramName,
+          )
+        : null;
+    if (!testPath || testPath.length !== 1 || !testPath[0]) {
+      return false;
+    }
+    const propName = testPath[0];
+
+    if (commonPropName === null) {
+      commonPropName = propName;
+    } else if (commonPropName !== propName) {
+      return false; // Different conditions — can't merge
+    }
+
+    // Both branches must be static literals
+    const consVal = literalToStaticValue(body.consequent);
+    const altVal = literalToStaticValue(body.alternate);
+    if (consVal === null || altVal === null) {
+      return false;
+    }
+    branchValues.push({
+      consequent: String(consVal),
+      alternate: String(altVal),
+    });
+  }
+
+  if (!commonPropName) {
+    return false;
+  }
+
+  // Build the full value string for each branch direction by combining
+  // static parts with the evaluated branch values.
+  const buildFullValue = (direction: "consequent" | "alternate"): string => {
+    let result = "";
+    let slotIndex = 0;
+    for (const part of parts) {
+      if (part.kind === "static") {
+        result += (part as { value: string }).value;
+      } else if (part.kind === "slot") {
+        const branch = branchValues[slotIndex];
+        result += branch ? branch[direction] : "";
+        slotIndex++;
+      }
+    }
+    return result;
+  };
+
+  const importantSuffix = d.important ? " !important" : "";
+  const consFullValue = buildFullValue("consequent") + importantSuffix;
+  const altFullValue = buildFullValue("alternate") + importantSuffix;
+
+  // Apply CSS property mapping (e.g., transform stays as transform)
+  for (const out of cssDeclarationToStylexDeclarations(d)) {
+    // Default (false/alternate branch) goes to base styles
+    styleObj[out.prop] = altFullValue;
+    // True (consequent) branch goes to a variant
+    ctx.applyVariant(
+      { when: commonPropName, propName: commonPropName },
+      { [out.prop]: consFullValue },
+    );
+  }
+
+  // Drop the transient prop from forwarding
+  if (commonPropName.startsWith("$")) {
+    ensureShouldForwardPropDrop(decl, commonPropName);
+  }
+  decl.needsWrapperComponent = true;
+
   return true;
 }
 

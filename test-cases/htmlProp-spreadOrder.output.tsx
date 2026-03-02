@@ -1,22 +1,40 @@
 import * as React from "react";
 import * as stylex from "@stylexjs/stylex";
+import { mergedSx } from "./lib/mergedSx";
 
 type Props = {
   src: string;
   alt?: string;
 };
 
+// Original styled component - spread props first, then override src
+function Thumbnail(props: React.ComponentProps<"img">) {
+  const { className, style, ...rest } = props;
+
+  return <img {...rest} {...mergedSx(styles.thumbnail, className, style)} />;
+}
+
 export function SecureThumbnail(props: Props) {
   const secureSrc = `https://proxy.example.com/${props.src}`;
-  return <img {...props} {...stylex.props(styles.thumbnail)} src={secureSrc} />;
+  return <Thumbnail {...props} src={secureSrc} />;
 }
 
 // Multiple spreads with explicit attr in between:
 // The explicit attr foo="1" should stay between {...a} and {...b}
 type BoxProps = { className?: string };
 
+function Box(props: React.ComponentProps<"div">) {
+  const { className, children, style, ...rest } = props;
+
+  return (
+    <div {...rest} {...mergedSx(styles.box, className, style)}>
+      {children}
+    </div>
+  );
+}
+
 export function MultiSpread(a: BoxProps, b: BoxProps) {
-  return <div {...a} data-test="middle" {...b} {...stylex.props(styles.box)} />;
+  return <Box {...a} data-test="middle" {...b} />;
 }
 
 export function App() {
@@ -24,7 +42,6 @@ export function App() {
 }
 
 const styles = stylex.create({
-  // Original styled component - spread props first, then override src
   thumbnail: {
     maxWidth: "180px",
     objectFit: "cover",

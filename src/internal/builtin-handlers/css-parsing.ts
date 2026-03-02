@@ -401,11 +401,12 @@ function parseSimpleExpression(exprText: string, j: JSCodeshift): ExpressionKind
  * - `padding: ${p}` - same issue
  * - `background: ${bg}` - could be color or image, can't determine at compile time
  */
-const UNSUPPORTED_SHORTHANDS_FOR_TEMPLATE_EXPR = new Set([
+export const UNSUPPORTED_SHORTHANDS_FOR_TEMPLATE_EXPR = new Set([
   "margin",
   "padding",
   "background",
   "scroll-margin",
+  "scroll-padding",
 ]);
 
 function isUnsupportedShorthandForTemplateExpr(property: string): boolean {

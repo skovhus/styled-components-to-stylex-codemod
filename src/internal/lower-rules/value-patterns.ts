@@ -5,7 +5,7 @@
 import type { StyledDecl } from "../transform-types.js";
 import type { ExpressionKind, StyleFnFromPropsEntry } from "./decl-types.js";
 import { cssDeclarationToStylexDeclarations } from "../css-prop-mapping.js";
-import { extractStaticParts } from "./interpolations.js";
+import { extractStaticPartsForDecl } from "./interpolations.js";
 import { buildTemplateWithStaticParts } from "./inline-styles.js";
 import { ensureShouldForwardPropDrop, literalToStaticValue } from "./types.js";
 import {
@@ -30,6 +30,7 @@ type ValuePatternContext = Pick<
   | "stringMappingFns"
   | "hasLocalThemeBinding"
   | "markBail"
+  | "importMap"
 > & {
   decl: StyledDecl;
   styleObj: Record<string, unknown>;
@@ -61,7 +62,13 @@ export const createValuePatternHandlers = (ctx: ValuePatternContext) => {
     annotateParamFromJsxProp,
     findJsxPropTsType,
     markBail,
+    importMap,
   } = ctx;
+
+  // Names to avoid when generating style function parameter names.
+  // Prevents no-shadow lint errors when a CSS property name (e.g., "zIndex")
+  // matches a top-level import binding.
+  const avoidNames = new Set(importMap.keys());
 
   const tryHandleMappedFunctionColor = (d: any): boolean => {
     // Handle: background: ${(props) => getColor(props.variant)}
@@ -186,7 +193,7 @@ export const createValuePatternHandlers = (ctx: ValuePatternContext) => {
     }
 
     // Extract static prefix/suffix (e.g., unit suffixes like "ms" or "px")
-    const { prefix, suffix } = extractStaticParts(d.value);
+    const { prefix, suffix } = extractStaticPartsForDecl(d);
     const hasStaticParts = !!(prefix || suffix);
 
     // When there are static parts, we need a wrapper component to evaluate the template literal at runtime
@@ -218,7 +225,7 @@ export const createValuePatternHandlers = (ctx: ValuePatternContext) => {
       }
 
       if (!styleFnDecls.has(fnKey)) {
-        const paramName = cssPropertyToIdentifier(out.prop);
+        const paramName = cssPropertyToIdentifier(out.prop, avoidNames);
         const param = j.identifier(paramName);
         // When there are static parts, the param type should be string (since we pass template literal)
         if (hasStaticParts) {
@@ -367,7 +374,7 @@ export const createValuePatternHandlers = (ctx: ValuePatternContext) => {
         fnKey = `${baseFnKey}Alt${idx}`;
       }
       if (!styleFnDecls.has(fnKey)) {
-        const paramName = cssPropertyToIdentifier(out.prop);
+        const paramName = cssPropertyToIdentifier(out.prop, avoidNames);
         const param = j.identifier(paramName);
         annotateParamFromJsxProp(param, nullishPropName);
         const bodyExpr = j.objectExpression([makeCssProperty(j, out.prop, paramName)]);

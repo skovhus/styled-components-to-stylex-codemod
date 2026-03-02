@@ -12,7 +12,7 @@ import { cssDeclarationToStylexDeclarations } from "../css-prop-mapping.js";
 import { addPropComments } from "./comments.js";
 import { processRuleDeclarations } from "./process-rule-declarations.js";
 import {
-  normalizeSelectorForInputAttributePseudos,
+  normalizeSelectorForAttributePseudos,
   normalizeInterpolatedSelector,
   normalizeSpecificityHacks,
   parseElementSelectorPattern,
@@ -25,7 +25,11 @@ import {
 } from "../utilities/jscodeshift-utils.js";
 import { cssValueToJs, toStyleKey, toSuffixFromProp } from "../transform/helpers.js";
 import { capitalize, kebabToCamelCase } from "../utilities/string-utils.js";
-import { getOrCreateRelationOverrideBucket } from "./shared.js";
+import {
+  cssPropertyToIdentifier,
+  getOrCreateRelationOverrideBucket,
+  makeCssProperty,
+} from "./shared.js";
 import type { RelationOverride } from "./state.js";
 import { createPropTestHelpers } from "./variant-utils.js";
 import { PLACEHOLDER_RE } from "../styled-css.js";
@@ -639,10 +643,10 @@ export function processDeclRules(ctx: DeclProcessingState): void {
       }
     }
 
-    let media = rule.atRuleStack.find((a) => a.startsWith("@media"));
+    let media = rule.atRuleStack.find((a) => a.startsWith("@media") || a.startsWith("@container"));
 
-    const isInputIntrinsic = decl.base.kind === "intrinsic" && decl.base.tagName === "input";
-    let selector = normalizeSelectorForInputAttributePseudos(rule.selector, isInputIntrinsic);
+    const intrinsicTagName = decl.base.kind === "intrinsic" ? decl.base.tagName : null;
+    let selector = normalizeSelectorForAttributePseudos(rule.selector, intrinsicTagName);
     selector = normalizeInterpolatedSelector(selector);
     // Normalize specificity hacks (&&) to base selector (&).
     // Higher tiers (&&&) are caught in the heuristic check above.
@@ -660,7 +664,10 @@ export function processDeclRules(ctx: DeclProcessingState): void {
       }
     }
 
-    if (!media && selector.trim().startsWith("@media")) {
+    if (
+      !media &&
+      (selector.trim().startsWith("@media") || selector.trim().startsWith("@container"))
+    ) {
       media = selector.trim();
       selector = "&";
     }
@@ -695,8 +702,18 @@ export function processDeclRules(ctx: DeclProcessingState): void {
       break;
     }
 
-    const pseudos = parsedSelector.kind === "pseudo" ? parsedSelector.pseudos : null;
-    const pseudoElement = parsedSelector.kind === "pseudoElement" ? parsedSelector.element : null;
+    const pseudos =
+      parsedSelector.kind === "pseudo"
+        ? parsedSelector.pseudos
+        : parsedSelector.kind === "pseudoElementWithPseudo"
+          ? parsedSelector.pseudos
+          : null;
+    const pseudoElement =
+      parsedSelector.kind === "pseudoElement"
+        ? parsedSelector.element
+        : parsedSelector.kind === "pseudoElementWithPseudo"
+          ? parsedSelector.element
+          : null;
     const pseudoElementsList =
       parsedSelector.kind === "pseudoElements" ? parsedSelector.elements : null;
     const attrSel =
@@ -850,12 +867,36 @@ export function processDeclRules(ctx: DeclProcessingState): void {
         return;
       }
 
+      // When both pseudoElement and pseudos are set (e.g., ::-webkit-slider-thumb:hover),
+      // scope the pseudo-class within the pseudo-element using per-property overrides.
+      if (pseudos?.length && pseudoElement) {
+        nestedSelectors[pseudoElement] ??= {};
+        const peTarget = nestedSelectors[pseudoElement]!;
+        const existingVal = peTarget[prop];
+        // Check if the existing value is already a pseudo map (plain object with "default" key),
+        // not an AST node or other object. AST nodes should be wrapped in a new pseudo map.
+        if (
+          typeof existingVal === "object" &&
+          existingVal !== null &&
+          "default" in (existingVal as Record<string, unknown>)
+        ) {
+          for (const ps of pseudos) {
+            (existingVal as Record<string, unknown>)[ps] = value;
+          }
+        } else {
+          const pseudoMap: Record<string, unknown> = { default: existingVal ?? null };
+          for (const ps of pseudos) {
+            pseudoMap[ps] = value;
+          }
+          peTarget[prop] = pseudoMap;
+        }
+        return;
+      }
+
       if (pseudos?.length) {
         perPropPseudo[prop] ??= {};
         const existing = perPropPseudo[prop]!;
         if (!("default" in existing)) {
-          // If the property comes from a composed css helper, use the helper's
-          // value as the default to preserve it during style merging.
           const existingVal = (styleObj as Record<string, unknown>)[prop];
           if (existingVal !== undefined) {
             existing.default = existingVal;
@@ -865,7 +906,6 @@ export function processDeclRules(ctx: DeclProcessingState): void {
             existing.default = null;
           }
         }
-        // Apply to all pseudos (e.g., both :hover and :focus for "&:hover, &:focus")
         for (const ps of pseudos) {
           existing[ps] = value;
         }
@@ -890,9 +930,12 @@ export function processDeclRules(ctx: DeclProcessingState): void {
         return;
       }
 
-      styleObj[prop] = value;
+      // Use getBaseStyleTarget() to respect after-base segments created by
+      // resolvedStyles helpers, preserving CSS cascade order.
+      const target = ctx.getBaseStyleTarget();
+      target[prop] = value;
       if (commentSource) {
-        addPropComments(styleObj, prop, {
+        addPropComments(target, prop, {
           leading: commentSource.leading,
           trailingLine: commentSource.trailingLine,
         });
@@ -913,6 +956,11 @@ export function processDeclRules(ctx: DeclProcessingState): void {
       break;
     }
   }
+
+  // Merge CSS properties from `.attrs({ style: { ... } })` into the style object.
+  // Merged AFTER template rules so attrs styles take precedence (matching
+  // styled-components inline-style semantics where attrs style wins over class CSS).
+  mergeAttrsStyles(ctx);
 }
 
 // --- Non-exported helpers ---
@@ -952,7 +1000,15 @@ function processDeclarationsIntoBucket(
       }
       if (resolveResult) {
         for (const out of cssDeclarationToStylexDeclarations(d)) {
-          bucket[out.prop] = buildInterpolatedValue(j, d, resolveResult);
+          if (out.value.kind === "static") {
+            // Shorthand expansion produced a static component (e.g., borderWidth from border)
+            const v = cssValueToJs(out.value, d.important, out.prop);
+            bucket[out.prop] = v;
+          } else {
+            // Build interpolated value using the output's parts (may differ from original d
+            // when shorthand expansion strips the static prefix, e.g., border → borderColor)
+            bucket[out.prop] = buildInterpolatedValue(j, { value: out.value }, resolveResult);
+          }
           writtenProps.add(out.prop);
         }
       }
@@ -1713,13 +1769,58 @@ function handleSiblingSelector(
       [j.literal(":is(*)")],
     );
 
-  // Wrap values in media condition objects when inside an @media at-rule
-  const media = rule.atRuleStack.find((a) => a.startsWith("@media"));
+  // Wrap values in media/container condition objects when inside an @media or @container at-rule
+  const media = rule.atRuleStack.find((a) => a.startsWith("@media") || a.startsWith("@container"));
 
   // Add each property to perPropComputedMedia with the sibling computed key
   for (const [prop, value] of Object.entries(bucket)) {
     const siblingValue = media ? { default: null, [media]: value } : value;
     const entry = getOrCreateComputedMediaEntry(prop, ctx);
     entry.entries.push({ keyExpr: makeSiblingKeyExpr(), value: siblingValue });
+  }
+}
+
+/**
+ * Merges CSS properties from `.attrs({ style: { ... } })` into the styled component's
+ * style object and style functions.
+ *
+ * - Static properties (e.g., `whiteSpace: "nowrap"`) are added to `styleObj`
+ * - Dynamic properties (e.g., `height: $prop ? expr : undefined`) become
+ *   `styleFnFromProps` entries with corresponding `styleFnDecls`
+ */
+function mergeAttrsStyles(ctx: DeclProcessingState): void {
+  const { state, decl, styleObj } = ctx;
+  const attrsInfo = decl.attrsInfo;
+  if (!attrsInfo) {
+    return;
+  }
+
+  // Merge static style properties into the style object
+  if (attrsInfo.attrsStaticStyles) {
+    for (const [prop, value] of Object.entries(attrsInfo.attrsStaticStyles)) {
+      styleObj[prop] = value;
+    }
+  }
+
+  // Convert dynamic style properties into styleFnFromProps entries
+  if (attrsInfo.attrsDynamicStyles?.length) {
+    const { j } = state;
+    for (const entry of attrsInfo.attrsDynamicStyles) {
+      const fnKey = `${decl.styleKey}${toSuffixFromProp(entry.cssProp)}`;
+      const paramName = cssPropertyToIdentifier(entry.cssProp);
+      const param = j.identifier(paramName);
+      (param as any).typeAnnotation = j.tsTypeAnnotation(j.tsStringKeyword());
+      const p = makeCssProperty(j, entry.cssProp, paramName);
+      const body = j.objectExpression([p]);
+      ctx.styleFnDecls.set(fnKey, j.arrowFunctionExpression([param], body));
+      ctx.styleFnFromProps.push({
+        fnKey,
+        jsxProp: entry.jsxProp,
+        condition: "truthy",
+        callArg: entry.callArgExpr as any,
+      });
+      ensureShouldForwardPropDrop(decl, entry.jsxProp);
+      decl.needsWrapperComponent = true;
+    }
   }
 }

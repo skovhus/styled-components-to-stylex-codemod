@@ -14,6 +14,46 @@ import { collectConditionProps, makeConditionalStyleExpr } from "./variant-condi
 import type { WrapperEmitter } from "./wrapper-emitter.js";
 
 // ---------------------------------------------------------------------------
+// keyof typeof cast helper
+// ---------------------------------------------------------------------------
+
+/**
+ * Builds `propId as keyof typeof variantObjectName` — used when the prop type
+ * is inferred as `any` and TypeScript rejects the computed index access.
+ */
+function buildKeyofTypeofCast(
+  j: JSCodeshift,
+  propId: ExpressionKind,
+  variantObjectName: string,
+): ExpressionKind {
+  return j.tsAsExpression(propId, {
+    type: "TSTypeOperator",
+    operator: "keyof",
+    typeAnnotation: j.tsTypeQuery(j.identifier(variantObjectName)),
+  } as any);
+}
+
+// ---------------------------------------------------------------------------
+// Base style member expression
+// ---------------------------------------------------------------------------
+
+/**
+ * Returns the `styles.{styleKey}` member expression for the base style,
+ * or an empty array when the key is a dynamic function (no static styles).
+ * Suitable for spreading into `styleArgs`.
+ */
+export function baseStyleExpr(
+  j: JSCodeshift,
+  stylesIdentifier: string,
+  d: StyledDecl,
+): ExpressionKind[] {
+  if (d.skipBaseStyleRef) {
+    return [];
+  }
+  return [j.memberExpression(j.identifier(stylesIdentifier), j.identifier(d.styleKey))];
+}
+
+// ---------------------------------------------------------------------------
 // Extra style key splitting
 // ---------------------------------------------------------------------------
 
@@ -41,6 +81,98 @@ export function splitExtraStyleArgs(
     }
   }
   return { beforeBase, afterBase };
+}
+
+/**
+ * Builds interleaved before-base, after-base, and after-variants style args
+ * using mixinOrder to correctly interleave extra style keys and extra
+ * stylex.props args.
+ *
+ * When mixinOrder is present, it dictates the precise ordering of both
+ * style keys and props args. The afterBase flag on props args determines
+ * whether they appear before or after the base style. The afterVariants
+ * flag places entries after all variant conditional styles (for CSS cascade).
+ */
+export function buildInterleavedExtraStyleArgs(
+  j: JSCodeshift,
+  stylesIdentifier: string,
+  d: StyledDecl,
+  propsArgExprs: ExpressionKind[],
+): {
+  beforeBase: ExpressionKind[];
+  afterBase: ExpressionKind[];
+  afterVariants: ExpressionKind[];
+} {
+  const mixinOrder = d.mixinOrder;
+  const afterBaseKeys = new Set(d.extraStyleKeysAfterBase ?? []);
+  const extraStyleKeys = d.extraStyleKeys ?? [];
+  const propsArgs = d.extraStylexPropsArgs ?? [];
+
+  if (!mixinOrder || mixinOrder.length === 0) {
+    // No mixinOrder: fall back to legacy behavior
+    const { beforeBase, afterBase } = splitExtraStyleArgs(j, stylesIdentifier, d);
+    // Legacy: propsArgs go after base, unless afterVariants
+    const afterVariants: ExpressionKind[] = [];
+    for (let i = 0; i < propsArgExprs.length; i++) {
+      if (propsArgs[i]?.afterVariants) {
+        afterVariants.push(propsArgExprs[i]!);
+      } else {
+        afterBase.push(propsArgExprs[i]!);
+      }
+    }
+    return { beforeBase, afterBase, afterVariants };
+  }
+
+  const beforeBase: ExpressionKind[] = [];
+  const afterBase: ExpressionKind[] = [];
+  const afterVariants: ExpressionKind[] = [];
+  let styleKeyIdx = 0;
+  let propsArgIdx = 0;
+
+  for (const entry of mixinOrder) {
+    if (entry === "styleKey" && styleKeyIdx < extraStyleKeys.length) {
+      const key = extraStyleKeys[styleKeyIdx]!;
+      styleKeyIdx++;
+      const expr = j.memberExpression(j.identifier(stylesIdentifier), j.identifier(key));
+      if (afterBaseKeys.has(key)) {
+        afterBase.push(expr);
+      } else {
+        beforeBase.push(expr);
+      }
+    } else if (entry === "propsArg" && propsArgIdx < propsArgExprs.length) {
+      const arg = propsArgs[propsArgIdx];
+      const argExpr = propsArgExprs[propsArgIdx]!;
+      propsArgIdx++;
+      if (arg?.afterVariants) {
+        afterVariants.push(argExpr);
+      } else if (arg?.afterBase) {
+        afterBase.push(argExpr);
+      } else {
+        beforeBase.push(argExpr);
+      }
+    }
+  }
+
+  // Append any remaining items not covered by mixinOrder
+  for (; styleKeyIdx < extraStyleKeys.length; styleKeyIdx++) {
+    const key = extraStyleKeys[styleKeyIdx]!;
+    const expr = j.memberExpression(j.identifier(stylesIdentifier), j.identifier(key));
+    if (afterBaseKeys.has(key)) {
+      afterBase.push(expr);
+    } else {
+      beforeBase.push(expr);
+    }
+  }
+  for (; propsArgIdx < propsArgExprs.length; propsArgIdx++) {
+    const arg = propsArgs[propsArgIdx];
+    if (arg?.afterVariants) {
+      afterVariants.push(propsArgExprs[propsArgIdx]!);
+    } else {
+      afterBase.push(propsArgExprs[propsArgIdx]!);
+    }
+  }
+
+  return { beforeBase, afterBase, afterVariants };
 }
 
 // ---------------------------------------------------------------------------
@@ -155,9 +287,19 @@ export function buildVariantDimensionLookups(
     destructureProps?: string[];
     propDefaults?: WrapperPropDefaults;
     namespaceBooleanProps?: string[];
+    orderedEntries?: OrderedStyleEntry[];
   },
 ): void {
   const { dimensions, styleArgs, destructureProps, propDefaults, namespaceBooleanProps } = args;
+
+  /** Push a style expression to orderedEntries (if source order available) or styleArgs. */
+  const pushExpr = (expr: ExpressionKind, dim: VariantDimension): void => {
+    if (args.orderedEntries && dim.sourceOrder !== undefined) {
+      args.orderedEntries.push({ order: dim.sourceOrder, expr });
+    } else {
+      styleArgs.push(expr);
+    }
+  };
 
   // Group namespace dimensions by their boolean prop and propName
   const namespacePairs = new Map<
@@ -190,24 +332,30 @@ export function buildVariantDimensionLookups(
     const propId = j.identifier(dim.propName);
 
     if (dim.defaultValue === "default") {
-      const keyofExpr = {
-        type: "TSTypeOperator",
-        operator: "keyof",
-        typeAnnotation: j.tsTypeQuery(j.identifier(dim.variantObjectName)),
-      };
-      const castProp = j.tsAsExpression(propId, keyofExpr as any);
+      const castProp = buildKeyofTypeofCast(j, propId, dim.variantObjectName);
       const lookup = j.memberExpression(variantsId, castProp, true /* computed */);
       const defaultAccess = j.memberExpression(
         j.identifier(dim.variantObjectName),
         j.identifier("default"),
       );
-      styleArgs.push(j.logicalExpression("??", lookup, defaultAccess));
+      pushExpr(j.logicalExpression("??", lookup, defaultAccess), dim);
     } else {
       if (dim.defaultValue && dim.isOptional && propDefaults) {
         propDefaults.set(dim.propName, dim.defaultValue);
       }
-      const lookup = j.memberExpression(variantsId, propId, true /* computed */);
-      styleArgs.push(lookup);
+      // When the prop is untyped (any), TypeScript rejects computed index access.
+      // Use `as keyof typeof variantsObj` to satisfy the type checker.
+      const indexExpr = dim.needsKeyofCast
+        ? buildKeyofTypeofCast(j, propId, dim.variantObjectName)
+        : propId;
+      const lookup = j.memberExpression(variantsId, indexExpr, true /* computed */);
+      // Guard optional props without defaults to avoid `undefined` index type error
+      if (dim.isOptional && !dim.defaultValue) {
+        const guard = j.binaryExpression("!=", j.identifier(dim.propName), j.literal(null));
+        pushExpr(j.logicalExpression("&&", guard, lookup), dim);
+      } else {
+        pushExpr(lookup, dim);
+      }
     }
   }
 
@@ -228,7 +376,7 @@ export function buildVariantDimensionLookups(
           j.identifier(dim.propName),
           true,
         );
-        styleArgs.push(lookup);
+        pushExpr(lookup, dim);
       }
       continue;
     }
@@ -271,13 +419,33 @@ export function buildVariantDimensionLookups(
       true,
     );
 
-    styleArgs.push(j.conditionalExpression(boolPropId, disabledLookup, enabledLookup));
+    pushExpr(j.conditionalExpression(boolPropId, disabledLookup, enabledLookup), enabled);
   }
 }
 
 // ---------------------------------------------------------------------------
 // Style-function expressions from props
 // ---------------------------------------------------------------------------
+
+/** Entry with a source-order tag for CSS cascade interleaving. */
+export type OrderedStyleEntry = { order: number; expr: ExpressionKind };
+
+/**
+ * Sort ordered entries by source order and append them to styleArgs.
+ * Used to merge variant and styleFn entries while preserving CSS cascade order.
+ */
+export function mergeOrderedEntries(
+  orderedEntries: OrderedStyleEntry[],
+  styleArgs: ExpressionKind[],
+): void {
+  if (orderedEntries.length === 0) {
+    return;
+  }
+  orderedEntries.sort((a, b) => a.order - b.order);
+  for (const entry of orderedEntries) {
+    styleArgs.push(entry.expr);
+  }
+}
 
 /**
  * Build style function call expressions for dynamic prop-based styles.
@@ -290,6 +458,8 @@ export function buildVariantDimensionLookups(
  * @param args.destructureProps - Optional array to track props that need destructuring
  * @param args.propExprBuilder - Function to build the expression for accessing a prop
  * @param args.propsIdentifier - Identifier to use for "props" in __props case (defaults to "props")
+ * @param args.orderedEntries - When provided, entries with sourceOrder are pushed here instead
+ *   of styleArgs. The caller is responsible for sorting and merging them into styleArgs.
  */
 export function buildStyleFnExpressions(
   emitter: WrapperEmitter,
@@ -299,6 +469,7 @@ export function buildStyleFnExpressions(
     destructureProps?: string[];
     propExprBuilder?: (jsxProp: string) => ExpressionKind;
     propsIdentifier?: ExpressionKind;
+    orderedEntries?: OrderedStyleEntry[];
   },
 ): void {
   const { j, stylesIdentifier } = emitter;
@@ -385,20 +556,35 @@ export function buildStyleFnExpressions(
       destructureProps.push(p.jsxProp);
     }
 
+    /** Push a style expression to orderedEntries (if source order available) or styleArgs. */
+    const pushExpr = (expr: ExpressionKind): void => {
+      if (args.orderedEntries && p.sourceOrder !== undefined) {
+        args.orderedEntries.push({ order: p.sourceOrder, expr });
+      } else {
+        styleArgs.push(expr);
+      }
+    };
+
     // Handle conditional style based on conditionWhen
     if (p.conditionWhen) {
       const { cond, isBoolean } = collectConditionProps(j, {
         when: p.conditionWhen,
         destructureProps,
       });
-      styleArgs.push(makeConditionalStyleExpr(j, { cond, expr: call, isBoolean }));
+      pushExpr(makeConditionalStyleExpr(j, { cond, expr: call, isBoolean }));
       continue;
     }
 
     const isRequired =
       p.jsxProp === "__props" || emitter.isPropRequiredInPropsTypeLiteral(d.propsType, p.jsxProp);
-    styleArgs.push(
-      buildStyleFnConditionExpr({ j, condition: p.condition, propExpr, call, isRequired }),
+    pushExpr(
+      buildStyleFnConditionExpr({
+        j,
+        condition: p.condition,
+        propExpr,
+        call,
+        isRequired,
+      }),
     );
   }
 }

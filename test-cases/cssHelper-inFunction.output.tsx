@@ -1,5 +1,4 @@
 import * as stylex from "@stylexjs/stylex";
-import { mergedSx } from "./lib/mergedSx";
 import { $colors } from "./tokens.stylex";
 
 const styles = stylex.create({
@@ -19,5 +18,5 @@ export function getPrimaryStyles() {
 }
 
 export const App = () => (
-  <button {...stylex.props(styles.getPrimaryStyles, styles.button)}>Click me</button>
+  <button {...stylex.props(styles.button, styles.getPrimaryStyles)}>Click me</button>
 );

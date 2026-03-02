@@ -74,8 +74,12 @@ describe("scanCrossFileSelectors", () => {
     expect(styleAcceptance).toBeDefined();
     expect(styleAcceptance!.has("CollapseArrowIcon")).toBe(true);
 
-    // No bridge needed (consumer is transformed)
-    expect(info.componentsNeedingGlobalSelectorBridge.size).toBe(0);
+    // Bridge is also emitted as fallback (in case consumer bails during transform)
+    const bridge = info.componentsNeedingGlobalSelectorBridge.get(
+      fixture("lib/collapse-arrow-icon.tsx"),
+    );
+    expect(bridge).toBeDefined();
+    expect(bridge!.has("CollapseArrowIcon")).toBe(true);
   });
 
   it("flags bridge when consumer is NOT in the transform set", () => {
@@ -366,6 +370,64 @@ export const App = () => (
     // AND the override styles.crossFileIconInContainer
     expect(code).toMatch(/stylex\.props\(iconStyles\.icon.*styles\./);
   });
+
+  it("bridge forward in conditional JSX: adds marker on parent and override on imported child", () => {
+    const source = `
+import styled from "styled-components";
+import { Button } from "./lib/button";
+import { CollapseArrowIcon, CollapseArrowIconGlobalSelector } from "./lib/converted-collapse-icon";
+
+const TitleContainer = styled(Button)\`
+  &:hover \${CollapseArrowIconGlobalSelector} {
+    background-color: rebeccapurple;
+  }
+\`;
+
+export const App = ({ show = true }: { show?: boolean }) => (
+  <div>
+    {show ? (
+      <TitleContainer>
+        <CollapseArrowIcon />
+      </TitleContainer>
+    ) : null}
+  </div>
+);
+`;
+
+    const crossFileInfo = {
+      selectorUsages: [
+        {
+          localName: "CollapseArrowIconGlobalSelector",
+          importSource: "./lib/converted-collapse-icon",
+          importedName: "CollapseArrowIconGlobalSelector",
+          resolvedPath: fixture("lib/converted-collapse-icon.tsx"),
+          bridgeComponentName: "CollapseArrowIcon",
+          bridgeComponentLocalName: "CollapseArrowIcon",
+        },
+      ],
+    };
+
+    const result = transformWithWarnings(
+      { source, path: fixture("consumer-bridge-conditional.tsx") },
+      api,
+      { adapter: fixtureAdapter, crossFileInfo },
+    );
+
+    expect(result.code).not.toBeNull();
+    const code = result.code!;
+
+    // Bridge selector import is consumed during conversion.
+    expect(code).not.toContain("CollapseArrowIconGlobalSelector");
+
+    // Parent marker must be attached even when JSX is nested in a conditional expression.
+    // (When the parent has no base styles, stylex.props may contain only the marker.)
+    expect(code).toMatch(/<Button[^>]*stylex\.props\([^)]*TitleContainerMarker/);
+
+    // Imported bridge child must receive the override style at its JSX usage site.
+    expect(code).toMatch(
+      /CollapseArrowIcon\s*\{\.\.\.stylex\.props\(styles\.collapseArrowIconInTitleContainer\)\}/,
+    );
+  });
 });
 
 /* ── Bridge className utilities ──────────────────────────────────────── */
@@ -589,7 +651,7 @@ describe("buildConsumerReplacements", () => {
     expect(result.size).toBe(0);
   });
 
-  it("skips transformed consumers (only patch unconverted consumers)", () => {
+  it("skips consumers that were actually transformed (in transformedFiles set)", () => {
     const selectorUsages = new Map<string, CrossFileSelectorUsage[]>([
       [
         "/src/consumer.tsx",
@@ -619,6 +681,85 @@ describe("buildConsumerReplacements", () => {
       ],
     ]);
 
+    const transformedFiles = new Set(["/src/consumer.tsx"]);
+    const result = buildConsumerReplacements(selectorUsages, bridgeResults, transformedFiles);
+    expect(result.size).toBe(0);
+  });
+
+  it("patches consumer that was in filesToTransform but bailed (not in transformedFiles)", () => {
+    const selectorUsages = new Map<string, CrossFileSelectorUsage[]>([
+      [
+        "/src/consumer.tsx",
+        [
+          {
+            localName: "Icon",
+            importSource: "./lib/icon",
+            importedName: "Icon",
+            resolvedPath: "/src/lib/icon.tsx",
+            consumerPath: "/src/consumer.tsx",
+            consumerIsTransformed: true, // prepass predicted it would be transformed
+          },
+        ],
+      ],
+    ]);
+
+    const bridgeResults = new Map([
+      [
+        "/src/lib/icon.tsx",
+        [
+          {
+            componentName: "Icon",
+            className: "sc2sx-Icon-abc12345",
+            globalSelectorVarName: "IconGlobalSelector",
+          },
+        ],
+      ],
+    ]);
+
+    // Consumer bailed — not in transformedFiles
+    const transformedFiles = new Set<string>();
+    const result = buildConsumerReplacements(selectorUsages, bridgeResults, transformedFiles);
+    expect(result.size).toBe(1);
+    const replacements = result.get("/src/consumer.tsx")!;
+    expect(replacements).toHaveLength(1);
+    expect(replacements[0]).toMatchObject({
+      localName: "Icon",
+      importSource: "./lib/icon",
+      globalSelectorVarName: "IconGlobalSelector",
+    });
+  });
+
+  it("falls back to consumerIsTransformed when transformedFiles is not provided", () => {
+    const selectorUsages = new Map<string, CrossFileSelectorUsage[]>([
+      [
+        "/src/consumer.tsx",
+        [
+          {
+            localName: "Icon",
+            importSource: "./lib/icon",
+            importedName: "Icon",
+            resolvedPath: "/src/lib/icon.tsx",
+            consumerPath: "/src/consumer.tsx",
+            consumerIsTransformed: true,
+          },
+        ],
+      ],
+    ]);
+
+    const bridgeResults = new Map([
+      [
+        "/src/lib/icon.tsx",
+        [
+          {
+            componentName: "Icon",
+            className: "sc2sx-Icon-abc12345",
+            globalSelectorVarName: "IconGlobalSelector",
+          },
+        ],
+      ],
+    ]);
+
+    // No transformedFiles — should fall back to consumerIsTransformed flag
     const result = buildConsumerReplacements(selectorUsages, bridgeResults);
     expect(result.size).toBe(0);
   });

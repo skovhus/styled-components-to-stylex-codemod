@@ -18,8 +18,8 @@ function CheckMark(props: CheckMarkProps) {
 
 export const App = () => (
   <div>
-    <div {...stylex.props(styles.rowBase, styles.groupHeaderRow)}>Group</div>
-    <div {...stylex.props(styles.rowBase, styles.projectRow)}>Project</div>
+    <div {...stylex.props(styles.groupHeaderRow, styles.rowBase)}>Group</div>
+    <div {...stylex.props(styles.projectRow, styles.rowBase)}>Project</div>
     <CheckMark $opaque={true} />
     <CheckMark $opaque={false} />
   </div>

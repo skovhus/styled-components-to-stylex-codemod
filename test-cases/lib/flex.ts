@@ -3,8 +3,10 @@ import * as React from "react";
 export interface FlexProps extends React.ComponentProps<"div"> {
   align?: "start" | "center" | "end" | "stretch";
   gap?: number;
+  gutter?: string;
   direction?: "row" | "column";
   column?: boolean;
+  position?: string;
 }
 
 export function Flex(props: FlexProps) {

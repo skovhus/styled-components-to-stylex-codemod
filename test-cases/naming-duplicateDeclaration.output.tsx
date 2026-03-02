@@ -2,21 +2,31 @@ import * as React from "react";
 import * as stylex from "@stylexjs/stylex";
 import { mergedSx } from "./lib/mergedSx";
 
-type SizeBoxProps<C extends React.ElementType = "div"> = React.ComponentPropsWithRef<C> &
+type SizeBoxProps<C extends React.ElementType = "div"> = Omit<
+  React.ComponentPropsWithRef<C>,
+  keyof (React.ComponentProps<"div"> & {
+    $size: number;
+  })
+> &
   Omit<
     React.ComponentProps<"div"> & {
       $size: number;
     },
     "as"
-  > & { as?: C };
+  > & { sx?: stylex.StyleXStyles; as?: C };
 
 /** A container that scales based on a dynamic size prop */
 function SizeBox<C extends React.ElementType = "div">(
   props: {
     $size: number;
-  } & React.ComponentPropsWithRef<C> & { as?: C },
+  } & Omit<
+    React.ComponentPropsWithRef<C>,
+    keyof {
+      $size: number;
+    }
+  > & { sx?: stylex.StyleXStyles; as?: C },
 ) {
-  const { as: Component = "div", className, children, style, $size, ...rest } = props;
+  const { as: Component = "div", className, children, style, sx, $size, ...rest } = props;
 
   return (
     <Component
@@ -27,6 +37,7 @@ function SizeBox<C extends React.ElementType = "div">(
           styles.sizeBoxWidth($size),
           styles.sizeBoxMaxWidth($size),
           styles.sizeBoxMaxHeight($size),
+          sx,
         ],
         className,
         style,

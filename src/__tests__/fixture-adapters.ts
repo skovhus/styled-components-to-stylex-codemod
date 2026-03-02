@@ -37,6 +37,7 @@ export const fixtureAdapter = defineAdapter({
     if (
       [
         "attrs-polymorphicAs",
+        "attrs-tabIndex.",
         "basic-jsdocExported",
         "htmlProp-element",
         "wrapper-mergerImported",
@@ -68,6 +69,41 @@ export const fixtureAdapter = defineAdapter({
     }
 
     return { styles: false, as: false };
+  },
+
+  resolveBaseComponent(ctx) {
+    if (
+      !isInlineBaseFlexSource(ctx.importSource) ||
+      ctx.importedName !== INLINE_BASE_FLEX_IMPORTED_NAME
+    ) {
+      return undefined;
+    }
+
+    const tagName = typeof ctx.staticProps.as === "string" ? ctx.staticProps.as : "div";
+    const sx = resolveInlineBaseFlexSx(ctx.staticProps);
+    const consumedProps = [...INLINE_BASE_FLEX_CONSUMED_PROPS];
+
+    if (ctx.staticProps.direction === "row") {
+      const sxWithoutBaseFlex = stripInlineBaseFlexBaseStyles(sx, ctx.staticProps);
+      return {
+        tagName,
+        consumedProps,
+        ...(Object.keys(sxWithoutBaseFlex).length > 0 ? { sx: sxWithoutBaseFlex } : {}),
+        mixins: [
+          {
+            importSource: "./lib/mixins.stylex",
+            importName: "mixins",
+            styleKey: "flex",
+          },
+        ],
+      };
+    }
+
+    return {
+      tagName,
+      consumedProps,
+      sx,
+    };
   },
 
   resolveValue(ctx) {
@@ -127,11 +163,6 @@ export const fixtureAdapter = defineAdapter({
         "--spacing-lg": "spacingLg",
         "--border-radius": "borderRadius",
       };
-      const textVarsMap: Record<string, string> = {
-        "--text-color": "textColor",
-        "--font-size": "fontSize",
-        "--line-height": "lineHeight",
-      };
       const fontWeightVarsMap: Record<string, string> = {
         "--font-weight-medium": "fontWeightVars.medium",
       };
@@ -143,19 +174,7 @@ export const fixtureAdapter = defineAdapter({
           imports: [
             {
               from: { kind: "specifier" as const, value: "./css-variables.stylex" },
-              names: [{ imported: "vars" }, { imported: "textVars" }],
-            },
-          ],
-        };
-      }
-      const t = textVarsMap[name];
-      if (t) {
-        return {
-          expr: `textVars.${t}`,
-          imports: [
-            {
-              from: { kind: "specifier" as const, value: "./css-variables.stylex" },
-              names: [{ imported: "textVars" }],
+              names: [{ imported: "vars" }],
             },
           ],
         };
@@ -542,3 +561,60 @@ export const customAdapter = defineAdapter({
   },
   resolveSelector: customResolveSelector,
 });
+
+const INLINE_BASE_FLEX_IMPORTED_NAME = "Flex";
+const INLINE_BASE_FLEX_CONSUMED_PROPS = ["align", "as", "column", "direction", "gap", "noMinWidth"];
+const INLINE_BASE_ALIGN_MAP: Record<string, string> = {
+  start: "flex-start",
+  center: "center",
+  end: "flex-end",
+  stretch: "stretch",
+};
+
+function resolveInlineBaseFlexSx(
+  staticProps: Record<string, string | number | boolean>,
+): Record<string, string> {
+  const sx: Record<string, string> = {
+    display: "flex",
+  };
+
+  if (staticProps.column === true) {
+    sx.flexDirection = "column";
+  } else if (typeof staticProps.direction === "string") {
+    sx.flexDirection = staticProps.direction;
+  }
+
+  if (typeof staticProps.gap === "number") {
+    sx.gap = `${staticProps.gap}px`;
+  } else if (typeof staticProps.gap === "string") {
+    sx.gap = staticProps.gap;
+  }
+
+  if (typeof staticProps.align === "string") {
+    sx.alignItems = INLINE_BASE_ALIGN_MAP[staticProps.align] ?? staticProps.align;
+  }
+
+  if (staticProps.noMinWidth === true) {
+    sx.minWidth = "0px";
+  }
+
+  return sx;
+}
+
+function stripInlineBaseFlexBaseStyles(
+  sx: Record<string, string>,
+  staticProps: Record<string, string | number | boolean>,
+): Record<string, string> {
+  const next = { ...sx };
+  delete next.display;
+  if (staticProps.direction === "row" && next.flexDirection === "row") {
+    delete next.flexDirection;
+  }
+  return next;
+}
+
+function isInlineBaseFlexSource(importSource: string): boolean {
+  return (
+    importSource.includes("lib/inline-base-flex") || importSource.includes("lib\\inline-base-flex")
+  );
+}

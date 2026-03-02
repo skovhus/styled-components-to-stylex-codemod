@@ -4,8 +4,10 @@
  */
 import type { ImportSpec } from "../../adapter.js";
 import {
+  type ArrowFnParamBindings,
   type CallExpressionNode,
   cloneAstNode,
+  getArrowFnParamBindings,
   getArrowFnSingleParamName,
   getFunctionBodyExpr,
   getMemberPathFromIdentifier,
@@ -15,6 +17,7 @@ import {
   isConditionalExpressionNode,
   literalToStaticValue,
   literalToString,
+  resolveIdentifierToPropName,
 } from "../utilities/jscodeshift-utils.js";
 import { parseExpr } from "../transform-parse-expr.js";
 import {
@@ -53,6 +56,11 @@ export function tryResolveConditionalValue(
   }
   const info = getArrowFnThemeParamInfo(expr);
   const paramName = info?.kind === "propsParam" ? info.propsName : null;
+
+  // For destructured params like ({ inline, column }) => ..., resolve bindings
+  // so we can map bare Identifiers in the test to prop names.
+  const paramBindings: ArrowFnParamBindings | null =
+    !paramName && !info ? getArrowFnParamBindings(expr) : null;
 
   // Use getFunctionBodyExpr to handle both expression-body and block-body arrow functions.
   // Block bodies with a single return statement (possibly with comments) are supported.
@@ -347,30 +355,70 @@ export function tryResolveConditionalValue(
     return branchToExpr(value);
   };
 
-  // Helper to extract condition info from a binary expression test
-  type CondInfo = { propName: string; rhsValue: string; rhsRaw: unknown; cond: string } | null;
-  const extractConditionInfo = (test: any): CondInfo => {
+  // Helper: resolve a 4-branch compound ternary once both the outer prop and inner prop
+  // have been identified. Returns null if leaf branches can't all be resolved as "create".
+  const tryBuildDualBranchResult = (outerProp: string, innerProp: string): HandlerResult | null => {
+    const otit = getBranch((consequent as any).consequent);
+    const otif = getBranch((consequent as any).alternate);
+    const ofit = getBranch((alternate as any).consequent);
+    const ofif = getBranch((alternate as any).alternate);
     if (
-      !paramName ||
-      test.type !== "BinaryExpression" ||
-      (test.operator !== "===" && test.operator !== "!==") ||
-      test.left.type !== "MemberExpression"
+      !otit ||
+      !otif ||
+      !ofit ||
+      !ofif ||
+      otit.usage !== "create" ||
+      otif.usage !== "create" ||
+      ofit.usage !== "create" ||
+      ofif.usage !== "create"
     ) {
       return null;
     }
-    const leftPath = getMemberPathFromIdentifier(test.left, paramName);
-    const firstLeftPath = leftPath?.[0];
-    if (!leftPath || leftPath.length !== 1 || !firstLeftPath) {
+    return {
+      type: "dualBranchCompoundVariantsResolvedValue",
+      outerProp,
+      innerProp,
+      outerTruthyInnerTruthy: { expr: otit.expr, imports: otit.imports },
+      outerTruthyInnerFalsy: { expr: otif.expr, imports: otif.imports },
+      outerFalsyInnerTruthy: { expr: ofit.expr, imports: ofit.imports },
+      outerFalsyInnerFalsy: { expr: ofif.expr, imports: ofif.imports },
+    };
+  };
+
+  // Helper to extract condition info from a binary expression test.
+  // Supports both `props.foo === "x"` (MemberExpression) and destructured `foo === "x"` (Identifier).
+  type CondInfo = { propName: string; rhsValue: string; rhsRaw: unknown; cond: string } | null;
+  const extractConditionInfo = (test: any): CondInfo => {
+    if (test.type !== "BinaryExpression" || (test.operator !== "===" && test.operator !== "!==")) {
       return null;
     }
-    const propName = firstLeftPath;
     const rhsRaw = literalToStaticValue(test.right as any);
     if (rhsRaw === null) {
       return null;
     }
-    const rhsValue = JSON.stringify(rhsRaw);
-    const cond = `${propName} ${test.operator} ${rhsValue}`;
-    return { propName, rhsValue, rhsRaw, cond };
+    // 1) MemberExpression: props.foo === "x"
+    if (paramName && test.left.type === "MemberExpression") {
+      const leftPath = getMemberPathFromIdentifier(test.left, paramName);
+      const firstLeftPath = leftPath?.[0];
+      if (leftPath && leftPath.length === 1 && firstLeftPath) {
+        const rhsValue = JSON.stringify(rhsRaw);
+        return {
+          propName: firstLeftPath,
+          rhsValue,
+          rhsRaw,
+          cond: `${firstLeftPath} ${test.operator} ${rhsValue}`,
+        };
+      }
+    }
+    // 2) Identifier with destructured bindings: ({ center }) => center === true
+    if (paramBindings?.kind === "destructured" && test.left.type === "Identifier") {
+      const propName = resolveIdentifierToPropName(test.left, paramBindings);
+      if (propName) {
+        const rhsValue = JSON.stringify(rhsRaw);
+        return { propName, rhsValue, rhsRaw, cond: `${propName} ${test.operator} ${rhsValue}` };
+      }
+    }
+    return null;
   };
 
   // Recursively extract variants from nested ternaries
@@ -526,6 +574,42 @@ export function tryResolveConditionalValue(
       }
     }
 
+    // Check for 4-branch compound ternary: outerProp ? (innerProp ? A : B) : (innerProp ? C : D)
+    // where both consequent and alternate are conditionals testing the same inner prop
+    if (
+      !cons &&
+      !alt &&
+      consequent.type === "ConditionalExpression" &&
+      alternate.type === "ConditionalExpression" &&
+      paramName
+    ) {
+      const consInnerTest = (consequent as any).test;
+      const altInnerTest = (alternate as any).test;
+      const consInnerPath =
+        consInnerTest?.type === "MemberExpression"
+          ? getMemberPathFromIdentifier(consInnerTest, paramName)
+          : null;
+      const altInnerPath =
+        altInnerTest?.type === "MemberExpression"
+          ? getMemberPathFromIdentifier(altInnerTest, paramName)
+          : null;
+      const consInnerProp = consInnerPath?.[0];
+      const altInnerProp = altInnerPath?.[0];
+
+      if (
+        consInnerPath?.length === 1 &&
+        altInnerPath?.length === 1 &&
+        consInnerProp &&
+        consInnerProp === altInnerProp &&
+        consInnerProp !== outerProp
+      ) {
+        const result = tryBuildDualBranchResult(outerProp, consInnerProp);
+        if (result) {
+          return result;
+        }
+      }
+    }
+
     // Check for conditional indexed theme lookup:
     //   props.textColor ? props.theme.color[props.textColor] : props.theme.color.labelTitle
     // Where the test prop is also used as the index into a theme object.
@@ -608,6 +692,52 @@ export function tryResolveConditionalValue(
         return usage === "props"
           ? { type: "splitVariantsResolvedStyles", variants }
           : { type: "splitVariantsResolvedValue", variants };
+      }
+    }
+  }
+
+  // 1c) Destructured params + bare Identifier test: ({ inline }) => inline ? "inline-flex" : "flex"
+  // When the arrow function has destructured params (not theme), a bare Identifier in the test
+  // refers to a destructured prop. Resolve it and handle like MemberExpression test.
+  if (
+    paramBindings?.kind === "destructured" &&
+    test.type === "Identifier" &&
+    typeof test.name === "string"
+  ) {
+    const resolvedProp = resolveIdentifierToPropName(test, paramBindings);
+    if (resolvedProp) {
+      const cons = getBranch(consequent);
+      const alt = getBranch(alternate);
+      if (cons && alt) {
+        const allUsages = new Set([cons.usage, alt.usage]);
+        if (allUsages.size === 1) {
+          const usage = cons.usage;
+          const variants = [
+            { nameHint: "truthy", when: resolvedProp, expr: cons.expr, imports: cons.imports },
+            { nameHint: "falsy", when: `!${resolvedProp}`, expr: alt.expr, imports: alt.imports },
+          ];
+          return usage === "props"
+            ? { type: "splitVariantsResolvedStyles", variants }
+            : { type: "splitVariantsResolvedValue", variants };
+        }
+      }
+
+      // 4-branch compound ternary with destructured params:
+      //   ({ column, reverse }) => column ? (reverse ? A : B) : (reverse ? C : D)
+      if (
+        !cons &&
+        !alt &&
+        consequent.type === "ConditionalExpression" &&
+        alternate.type === "ConditionalExpression"
+      ) {
+        const innerPropCons = resolveIdentifierToPropName((consequent as any).test, paramBindings);
+        const innerPropAlt = resolveIdentifierToPropName((alternate as any).test, paramBindings);
+        if (innerPropCons && innerPropCons === innerPropAlt && innerPropCons !== resolvedProp) {
+          const result = tryBuildDualBranchResult(resolvedProp, innerPropCons);
+          if (result) {
+            return result;
+          }
+        }
       }
     }
   }
@@ -701,13 +831,15 @@ export function tryResolveConditionalCssBlock(
     return null;
   }
   const paramName = getArrowFnSingleParamName(expr);
-  if (!paramName) {
+  const bindings = !paramName ? getArrowFnParamBindings(expr) : null;
+  if (!paramName && bindings?.kind !== "destructured") {
     return null;
   }
 
   // Support patterns like:
   //   ${(props) => props.$upsideDown && "transform: rotate(180deg);"}
   //   ${(props) => props.$upsideDown && `box-shadow: ${props.theme.color.x};`}
+  //   ${({ wrap }) => wrap && "flex-wrap: wrap;"}
   // Also supports arrow functions with a block body containing only a return statement:
   //   ${(props) => { return props.$upsideDown && "transform: rotate(180deg);"; }}
   const body = getFunctionBodyExpr(expr) as {
@@ -720,7 +852,12 @@ export function tryResolveConditionalCssBlock(
     return null;
   }
   const { left, right } = body;
-  const testProp = extractSinglePropFromTest(left, paramName);
+  // Resolve test to a prop name: props.$x → $x, or bare Identifier → prop name via bindings
+  const testProp = paramName
+    ? extractSinglePropFromTest(left, paramName)
+    : bindings?.kind === "destructured"
+      ? resolveIdentifierToPropName(left, bindings)
+      : null;
   if (!testProp) {
     return null;
   }
@@ -738,7 +875,10 @@ export function tryResolveConditionalCssBlock(
     };
   }
 
-  // Try template literal with theme expressions
+  // Try template literal with theme expressions (only for simple param form)
+  if (!paramName) {
+    return null;
+  }
   return resolveThemeTemplateToCssVariant(right, paramName, ctx, {
     nameHint: "truthy",
     when: testProp,
@@ -754,7 +894,8 @@ export function tryResolveConditionalCssBlockTernary(
     return null;
   }
   const paramName = getArrowFnSingleParamName(expr);
-  if (!paramName) {
+  const bindings = !paramName ? getArrowFnParamBindings(expr) : null;
+  if (!paramName && bindings?.kind !== "destructured") {
     return null;
   }
   // Support both expression bodies and block bodies with a single return statement
@@ -786,8 +927,8 @@ export function tryResolveConditionalCssBlockTernary(
       right?: unknown;
     };
 
-    // Simple prop access: props.$dim
-    if (t.type === "MemberExpression") {
+    // Simple prop access: props.$dim (MemberExpression with simple param)
+    if (paramName && t.type === "MemberExpression") {
       const testPath = getMemberPathFromIdentifier(t as any, paramName);
       const firstProp = testPath?.[0];
       if (!testPath || testPath.length !== 1 || !firstProp) {
@@ -796,10 +937,18 @@ export function tryResolveConditionalCssBlockTernary(
       return { kind: "boolean", propName: firstProp, isNegated: false };
     }
 
-    // Negated prop access: !props.$open
+    // Bare Identifier with destructured bindings: ({ center }) => center ? ...
+    if (bindings?.kind === "destructured" && t.type === "Identifier") {
+      const propName = resolveIdentifierToPropName(t, bindings);
+      if (propName) {
+        return { kind: "boolean", propName, isNegated: false };
+      }
+    }
+
+    // Negated prop access: !props.$open or !destructuredProp
     if (t.type === "UnaryExpression" && t.operator === "!") {
       const arg = t.argument as { type?: string } | undefined;
-      if (arg?.type === "MemberExpression") {
+      if (paramName && arg?.type === "MemberExpression") {
         const testPath = getMemberPathFromIdentifier(arg as any, paramName);
         const firstProp = testPath?.[0];
         if (!testPath || testPath.length !== 1 || !firstProp) {
@@ -807,31 +956,50 @@ export function tryResolveConditionalCssBlockTernary(
         }
         return { kind: "boolean", propName: firstProp, isNegated: true };
       }
+      if (bindings?.kind === "destructured" && arg?.type === "Identifier") {
+        const propName = resolveIdentifierToPropName(arg, bindings);
+        if (propName) {
+          return { kind: "boolean", propName, isNegated: true };
+        }
+      }
       return null;
     }
 
-    // Comparison: props.variant === "micro" or props.variant !== "micro"
+    // Comparison: props.variant === "micro" or destructuredVar === "micro"
     if (t.type === "BinaryExpression" && (t.operator === "===" || t.operator === "!==")) {
-      const left = t.left as { type?: string } | undefined;
-      if (left?.type !== "MemberExpression") {
-        return null;
-      }
-      const testPath = getMemberPathFromIdentifier(left as any, paramName);
-      const firstProp = testPath?.[0];
-      if (!testPath || testPath.length !== 1 || !firstProp) {
-        return null;
-      }
       const rhsRaw = literalToStaticValue(t.right);
       if (rhsRaw === null) {
         return null;
       }
-      return {
-        kind: "comparison",
-        propName: firstProp,
-        operator: t.operator as "===" | "!==",
-        rhsValue: JSON.stringify(rhsRaw),
-        rhsRaw,
-      };
+      const left = t.left as { type?: string } | undefined;
+      // MemberExpression: props.variant === "micro"
+      if (paramName && left?.type === "MemberExpression") {
+        const testPath = getMemberPathFromIdentifier(left as any, paramName);
+        const firstProp = testPath?.[0];
+        if (testPath && testPath.length === 1 && firstProp) {
+          return {
+            kind: "comparison",
+            propName: firstProp,
+            operator: t.operator as "===" | "!==",
+            rhsValue: JSON.stringify(rhsRaw),
+            rhsRaw,
+          };
+        }
+      }
+      // Identifier with destructured bindings: center === true
+      if (bindings?.kind === "destructured" && left?.type === "Identifier") {
+        const propName = resolveIdentifierToPropName(left, bindings);
+        if (propName) {
+          return {
+            kind: "comparison",
+            propName,
+            operator: t.operator as "===" | "!==",
+            rhsValue: JSON.stringify(rhsRaw),
+            rhsRaw,
+          };
+        }
+      }
+      return null;
     }
 
     return null;
@@ -942,10 +1110,62 @@ export function tryResolveConditionalCssBlockTernary(
     }
 
     const consText = literalToString(ce.consequent);
-    if (consText === null) {
-      return null;
+    let consStyle: Record<string, unknown> | null = null;
+    let innerConsVariants: VariantWithStyle[] = [];
+
+    if (consText !== null) {
+      consStyle = consText.trim() ? parseCssDeclarationBlock(consText) : null;
+    } else {
+      // Handle TemplateLiteral consequent with inner ternary (multi-property CSS string).
+      // e.g., `display: flex; align-items: ${align === "center" ? "center" : "flex-end"};`
+      const parsed = parseCssTemplateLiteralWithTernary(ce.consequent);
+      if (!parsed) {
+        return null;
+      }
+      const innerCondInfo = parseConditionTest(parsed.innerTest);
+      if (!innerCondInfo) {
+        return null;
+      }
+      const truthyCss = `${parsed.prefix}${parsed.truthyValue}${parsed.suffix}`;
+      const falsyCss = `${parsed.prefix}${parsed.falsyValue}${parsed.suffix}`;
+      const truthyStyle = truthyCss.trim() ? parseCssDeclarationBlock(truthyCss) : null;
+      const falsyStyle = falsyCss.trim() ? parseCssDeclarationBlock(falsyCss) : null;
+
+      // Split into shared properties (same in both branches) and
+      // differing properties (conditional on inner ternary)
+      const sharedStyle: Record<string, unknown> = {};
+      if (truthyStyle && falsyStyle) {
+        for (const [prop, val] of Object.entries(truthyStyle)) {
+          if (prop in falsyStyle && falsyStyle[prop] === val) {
+            sharedStyle[prop] = val;
+          }
+        }
+      }
+      consStyle = Object.keys(sharedStyle).length > 0 ? sharedStyle : truthyStyle;
+
+      // Create inner variants for differing properties
+      if (truthyStyle && falsyStyle) {
+        const outerWhen = buildWhenCondition(condInfo, true);
+        for (const [prop, val] of Object.entries(truthyStyle)) {
+          if (!(prop in sharedStyle)) {
+            innerConsVariants.push({
+              nameHint: buildNameHint(innerCondInfo, true),
+              when: `${outerWhen} && ${buildWhenCondition(innerCondInfo, true)}`,
+              style: { [prop]: val },
+            });
+          }
+        }
+        for (const [prop, val] of Object.entries(falsyStyle)) {
+          if (!(prop in sharedStyle)) {
+            innerConsVariants.push({
+              nameHint: buildNameHint(innerCondInfo, false),
+              when: `${outerWhen} && ${buildWhenCondition(innerCondInfo, false)}`,
+              style: { [prop]: val },
+            });
+          }
+        }
+      }
     }
-    const consStyle = consText.trim() ? parseCssDeclarationBlock(consText) : null;
 
     // Recursively process the alternate branch
     const nested = extractVariantsFromTernary(ce.alternate, condInfo.propName);
@@ -955,7 +1175,7 @@ export function tryResolveConditionalCssBlockTernary(
 
     const variants: VariantWithStyle[] = [];
 
-    // Add the consequent as a variant
+    // Add the consequent as a variant (shared properties)
     if (consStyle) {
       variants.push({
         nameHint: buildNameHint(condInfo, true),
@@ -964,9 +1184,10 @@ export function tryResolveConditionalCssBlockTernary(
       });
     }
 
+    // Add inner variants from template literal ternary (differing properties)
+    variants.push(...innerConsVariants);
+
     // Add nested variants, combining with outer condition's falsy branch
-    // All nested variants are in the else branch, so they need the outer falsy guard.
-    // This is always correct, even for enum chains where conditions are mutually exclusive.
     const outerFalsyCondition = buildWhenCondition(condInfo, false);
     for (const nestedVariant of nested.variants) {
       variants.push({
@@ -984,7 +1205,11 @@ export function tryResolveConditionalCssBlockTernary(
     // Fallback: handle ternary where one branch is a template literal with theme expressions
     // and the other is empty (undefined/null/""/false). This is semantically equivalent to
     // the LogicalExpression && form handled by tryResolveConditionalCssBlock.
-    return tryResolveTemplateLiteralTernaryWithEmptyBranch(body, paramName, ctx);
+    // Only available when we have a single param name (not destructured params).
+    if (paramName) {
+      return tryResolveTemplateLiteralTernaryWithEmptyBranch(body, paramName, ctx);
+    }
+    return null;
   }
 
   const { variants, defaultStyle } = result;

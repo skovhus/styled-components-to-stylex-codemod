@@ -6,6 +6,7 @@ import { CONTINUE, type StepResult } from "../transform-types.js";
 import type { StyledDecl } from "../transform-types.js";
 import { TransformContext } from "../transform-context.js";
 import type { ExpressionKind } from "../utilities/jscodeshift-utils.js";
+import { readStaticJsxLiteral } from "./jsx-static-literal.js";
 
 /**
  * Rewrites JSX usages and removes styled declarations when wrappers are not required.
@@ -80,6 +81,15 @@ export function rewriteJsxStep(ctx: TransformContext): StepResult {
         const opening = p.node.openingElement;
         const closing = p.node.closingElement;
         let finalTag = decl.base.kind === "intrinsic" ? decl.base.tagName : decl.base.ident;
+        const inlineVariantDimensions = decl.inlinedBaseComponent?.hasInlineJsxVariants
+          ? (decl.variantDimensions ?? [])
+          : [];
+        const inlineVariantByProp = new Map(
+          inlineVariantDimensions.map((dimension) => [dimension.propName, dimension]),
+        );
+        const inlineVariantProps = new Set(
+          inlineVariantDimensions.map((dimension) => dimension.propName),
+        );
 
         // Handle `as="tag"` (styled-components polymorphism) by rewriting the element.
         // `forwardedAs` does NOT switch the outer rendered element; it maps to an `as`
@@ -139,6 +149,9 @@ export function rewriteJsxStep(ctx: TransformContext): StepResult {
           if (decl.shouldForwardProp) {
             const n = attr.name.name;
             if (decl.shouldForwardProp.dropProps.includes(n)) {
+              if (inlineVariantProps.has(n)) {
+                return true;
+              }
               return false;
             }
             if (
@@ -327,7 +340,11 @@ export function rewriteJsxStep(ctx: TransformContext): StepResult {
               const arg = extraStylexPropsArgs[propsArgIdx];
               propsArgIdx++;
               if (arg) {
-                extraMixinArgs.push(arg.expr);
+                if (arg.afterBase) {
+                  extraAfterBaseArgs.push(arg.expr);
+                } else {
+                  extraMixinArgs.push(arg.expr);
+                }
               }
             }
           }
@@ -381,6 +398,7 @@ export function rewriteJsxStep(ctx: TransformContext): StepResult {
             return;
           }
           const n = attr.name.name;
+          const hasTemplateVariant = variantProps.has(n);
 
           // Convert certain interpolated props into dynamic StyleX styles (e.g. padding from `$padding`).
           if (styleFnProps.has(n)) {
@@ -410,7 +428,25 @@ export function rewriteJsxStep(ctx: TransformContext): StepResult {
             return;
           }
 
-          if (!variantProps.has(n)) {
+          const inlineVariantDimension = inlineVariantByProp.get(n);
+          if (inlineVariantDimension) {
+            const variantLookup = buildInlineVariantLookupFromAttr(
+              j,
+              inlineVariantDimension.variantObjectName,
+              attr,
+            );
+            if (variantLookup) {
+              styleArgs.push(variantLookup);
+              if (!hasTemplateVariant) {
+                return;
+              }
+            } else if (!hasTemplateVariant) {
+              output.push(attr);
+              return;
+            }
+          }
+
+          if (!hasTemplateVariant) {
             // Strip transient props (starting with $) only for intrinsic elements.
             // For styled(Component), transient props should still reach the wrapped component
             // (unless consumed by styleFnFromProps, which is handled above).
@@ -491,4 +527,21 @@ export function rewriteJsxStep(ctx: TransformContext): StepResult {
   }
 
   return CONTINUE;
+}
+
+function buildInlineVariantLookupFromAttr(
+  j: TransformContext["j"]["jscodeshift"],
+  variantObjectName: string,
+  attr: unknown,
+): ExpressionKind | undefined {
+  const value = readStaticJsxLiteral(attr);
+  if (value === undefined) {
+    return undefined;
+  }
+  const variantKey = String(value);
+  return j.memberExpression(
+    j.identifier(variantObjectName),
+    j.literal(variantKey),
+    true /* computed */,
+  );
 }
