@@ -1,0 +1,1 @@
+import{j as a}from"./index-_CM7_uFs.js";const r=()=>a.jsx("div",{style:{padding:16,background:"#111"},children:a.jsx("div",{className:"x1xv9y83 x1awj2ng xc7ga6q",children:"Gradient Card"})});export{r as App};
