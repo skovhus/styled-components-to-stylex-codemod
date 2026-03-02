@@ -259,6 +259,11 @@ export type StyledDecl = {
    */
   supportsAsProp?: boolean;
   /**
+   * Whether this component should include `ref` in its public type.
+   * True when the adapter opts-in or ref usage is detected (prepass or in-file).
+   */
+  supportsRefProp?: boolean;
+  /**
    * Metadata for declarations whose imported base component was resolved via
    * `adapter.resolveBaseComponent(...)` and inlined to an intrinsic element.
    */

@@ -372,12 +372,16 @@ export interface ExternalInterfaceContext {
 /**
  * Result type for `adapter.externalInterface(...)`.
  *
- * - `{ styles: true, as: false }` → enable className/style support only
- * - `{ styles: true, as: true }` → enable className/style support AND polymorphic `as` prop
- * - `{ styles: false, as: true }` → enable only polymorphic `as` prop (no style merging)
- * - `{ styles: false, as: false }` → no external interface support
+ * - `styles` — accept external className/style props
+ * - `as` — accept polymorphic `as` prop
+ * - `ref` — include `ref` in the component's public type
+ *
+ * Examples:
+ * - `{ styles: true, as: false, ref: false }` → className/style support only
+ * - `{ styles: true, as: true, ref: true }` → full external interface
+ * - `{ styles: false, as: false, ref: false }` → no external interface support
  */
-export type ExternalInterfaceResult = { styles: boolean; as: boolean };
+export type ExternalInterfaceResult = { styles: boolean; as: boolean; ref: boolean };
 
 // ────────────────────────────────────────────────────────────────────────────
 // Style Merger Configuration
@@ -490,10 +494,10 @@ export interface Adapter {
    * Called for exported styled components to determine their external interface.
    *
    * Return:
-   * - `{ styles: false, as: false }` → no external interface
-   * - `{ styles: true, as: false }` → accept className/style props only
-   * - `{ styles: true, as: true }` → accept className/style props AND polymorphic `as` prop
-   * - `{ styles: false, as: true }` → accept only polymorphic `as` prop
+   * - `{ styles: false, as: false, ref: false }` → no external interface
+   * - `{ styles: true, as: false, ref: false }` → accept className/style props only
+   * - `{ styles: true, as: true, ref: true }` → full external interface
+   * - `{ styles: false, as: true, ref: false }` → accept only polymorphic `as` prop
    */
   externalInterface: (context: ExternalInterfaceContext) => ExternalInterfaceResult;
 
@@ -598,11 +602,11 @@ export interface AdapterInput {
  *
  *     // Configure external interface for exported components
  *     externalInterface(ctx) {
- *       // Example: Enable styles and `as` for shared components folder
+ *       // Example: Enable styles, `as`, and `ref` for shared components folder
  *       if (ctx.filePath.includes("/shared/components/")) {
- *         return { styles: true, as: true };
+ *         return { styles: true, as: true, ref: true };
  *       }
- *       return { styles: false, as: false };
+ *       return { styles: false, as: false, ref: false };
  *     },
  *
  *     // Optional: provide a custom merger, or use `null` for the default verbose merge output

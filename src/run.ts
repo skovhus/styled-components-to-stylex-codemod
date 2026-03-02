@@ -394,6 +394,7 @@ export async function runTransform(options: RunTransformOptions): Promise<RunTra
             analysisMap.get(`${realPath}:${ctx.componentName}`) ?? {
               styles: false,
               as: false,
+              ref: false,
             }
           );
         },

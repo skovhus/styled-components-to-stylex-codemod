@@ -177,7 +177,7 @@ describe("runTransform prepass failure contract", () => {
       resolveValue: () => undefined,
       resolveCall: () => undefined,
       resolveSelector: () => undefined,
-      externalInterface: () => ({ styles: false, as: false }),
+      externalInterface: () => ({ styles: false, as: false, ref: false }),
       styleMerger: null,
     };
 

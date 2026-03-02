@@ -80,6 +80,7 @@ export function emitSimpleWithConfigWrappers(ctx: EmitIntrinsicContext): void {
     // Determine whether the component will forward ref (via {...rest}) so we can
     // include ref in the narrow type only when it's actually forwarded.
     const willForwardRef =
+      (d.supportsRefProp ?? false) ||
       allowClassNameProp ||
       allowStyleProp ||
       (() => {
@@ -486,6 +487,7 @@ export function emitSimpleExportedIntrinsicWrappers(ctx: EmitIntrinsicContext): 
     // and ref is included naturally. These conditions cover the gap where shouldIncludeRest
     // is true but needsRestForType is false.
     const willForwardRef =
+      (d.supportsRefProp ?? false) ||
       isExportedComponent ||
       hasComplementaryVariantPairs(d) ||
       !!d.variantDimensions?.some((dim) => dim.namespaceBooleanProp);
