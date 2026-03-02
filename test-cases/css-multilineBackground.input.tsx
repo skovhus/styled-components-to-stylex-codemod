@@ -1,8 +1,14 @@
 import styled from "styled-components";
 
 // Multiline gradient formatting should normalize to a compact backgroundImage value
+// prettier-ignore
 const Card = styled.div`
-  background: linear-gradient(to right, transparent, black 80%, hotpink);
+  background: linear-gradient(
+    to right,
+    transparent,
+    black 80%,
+    hotpink
+  );
   color: white;
   padding: 12px;
 `;
